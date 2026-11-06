@@ -41,7 +41,7 @@ from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批�
 from . import orders  # 共用規則層（軍令，全部拆包第 40 批收進）
 from . import plans  # 共用規則層（盤算，全部拆包第 40 批收進）
 from . import ranks  # 共用規則層（晉升，全部拆包第 40 批收進）
-from . import seal_acts  # 過渡：待搬（第 51 批：璽效查詢進共用規則層）
+from . import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from . import stance_world as stance_rules  # 人物心意（減法季批 6；世界那一半在共用規則層，全部拆包第 19 批）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .core import features as features_core  # 世界層的掛鉤（core_world：全部拆包第 25 批）
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent

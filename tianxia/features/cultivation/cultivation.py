@@ -16,7 +16,7 @@ import random
 from tianxia import arts as arts_mod  # noqa: I001
 from . import ascend as ascend_mod
 from tianxia import library, naming
-from tianxia import seal_acts  # 過渡：待搬（玉璽頒詔的倍數 edict_cultivate）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia import silver, team, treasures
 from tianxia.martial_arts import MAX_LEVEL, next_quality
 from tianxia.models import Content

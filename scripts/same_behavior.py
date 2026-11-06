@@ -23337,5 +23337,347 @@ def _placard_register_track(name: str, scenario: type, mutation: tuple, profile:
 _placard_register_track("placard", PlacardScenario, (("tianxia/engine.py", "tianxia/features/bounties/actions.py"), ("看上面貼了些什麼。", "看上面貼了些什麼！")), "week7")
 
 
+# ═══════════════════════════ carve：玉璽二軌（全部拆包第 28 批「玉璽二」，dev/seal-2） ═══════════════════════════
+# 玉璽一軌（relic）沒走到的：七種獨門行動（/api/do/seal_use，七片各一種，含目標不對、同一片再按一次）、碎片卡（/api/main 的 seal.act）、
+# 單挑卡與背景輪詢（status.seal_duel、seal_watch）、單挑每一回合的出招（/api/choose 的 seal:<招>：不認得的招、已出招的灰鈕、對手也出了就結算）、
+# 放手一搏（/api/do/seal_text：鎖外三段式，假模型連不上、評 DEFAULT_FREE_TEXT_SUCCESS_RATE）、管理者的 seal_fix（單挑前、單挑中）、
+# 管理頁的玉璽一組（admin_seal_choices，指定後的樣子）、假人在單挑裡（選單上 seal: 一顆都不按，被代打）。
+# 半舊半新切在單挑第一回合：一方（應長庚）出了招、另一方（卓遠岑）還沒——新程式接手後對方才出招、結算。
+# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md。這一段整塊是這一批的：接在檔尾、最後一行登記（_carve_register_track），
+# PM 合的時候不跟別人的行穿插。角色與名字都是原創的（PM 11/04）。
+
+
+class CarveScenario(RelicScenario):
+    """玉璽二軌（--track carve，自己一個資料庫）。借 relic 的 setup、seat（固定密鹽、七片、角色與陣營）；單挑的節奏在記憶體裡縮短
+    （兩半各自的行程在 __init__ 裡一樣縮）：下戰書 120 秒、一回合最多等 3000 秒（後半開頭的登入要走十步，單挑不能在那幾步裡自己走完）、在場看
+    900 秒，qa_tools 開著（管理者不必有決戰就能開單挑）。"""
+
+    BOT_SEATS = ["執璽丙", "挑璽丁"]  # 第一個是持璽的假人、第二個是來挑的假人
+    PHASES_FIRST = ["setup", "seat", "uses", "hang", "first_move", "halt"]
+    PHASES_SECOND = ["wake", "rounds", "gamble", "finish_up", "bot_duel", "last_views"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        cfg = self.c.config.seal
+        cfg.qa_tools, cfg.muster_seconds, cfg.round_seconds, cfg.presence_window = True, 120.0, 3000.0, 900.0
+
+    # ── 小工具 ──
+
+    def card_of(self, who: str) -> dict:
+        data = self.main(who)
+        main = data.get("main", data) if isinstance(data, dict) else {}
+        status = main.get("status") if isinstance(main, dict) else None
+        return (status or {}).get("seal") or {}
+
+    def seal_moves(self, who: str) -> list[str]:
+        return [i for i, o in self.ids(self.main(who)).items() if i.startswith("seal:") and o.get("enabled")]
+
+    # ── 前半 ──
+
+    def uses(self) -> None:
+        """七片各由藺秋禾拿一次（管理者指定），每一片：不認得的目標、照碎片卡上第一個能選的目標按、再按一次（次數與間隔）。"""
+        for n, shard in enumerate(sorted(self.c.seal)):
+            self.do(ADMIN, "seal_assign", {"id": shard, "name": self.WORKER, "state": "held"})
+            act = self.card_of(self.WORKER).get("act") or {}
+            rows = act.get("targets") or []
+            row = next((r for r in rows if not r.get("why")), rows[0] if rows else None)
+            sides = act.get("sides") or []
+            side = (sides[0].get("id", "") if isinstance(sides[0], dict) else str(sides[0])) if sides else ""
+            target = row.get("id", "") if row else ""
+            emit(f"獨門行動 第 {n} 片", [shard, act.get("kind"), act.get("ok"), act.get("why"), act.get("left"), target, side, len(rows)])
+            self.do(self.WORKER, "seal_use", {"target": "沒有這個目標", "side": "沒有這一軍"})
+            self.do(self.WORKER, "seal_use", {"target": target, "side": side})
+            self.do(self.WORKER, "seal_use", {"target": target, "side": side})
+            self.card_of(self.WORKER)
+            self.relic_view(f"第 {n} 片起用之後")
+            self.do(ADMIN, "seal_assign", {"id": shard, "name": "", "state": "hidden"})  # 收回（一人一片，下一片才指定得上）
+        self.do(ADMIN, "seal_assign", {"id": sorted(self.c.seal)[-1], "name": "", "state": "held"})  # 空名字：看它怎麼擋
+        self.call(ADMIN, "GET", "/api/admin")
+
+    def hang(self) -> None:
+        """管理者把第一片記到應長庚名下、對卓遠岑開單挑；單挑前後各按一次「定結果」（沒有單挑、有單挑）。"""
+        shard = sorted(self.c.seal)[0]
+        self.do(ADMIN, "seal_assign", {"id": shard, "name": self.KEEPER, "state": "held"})
+        self.do(ADMIN, "seal_fix", {"take": True})
+        self.do(ADMIN, "seal_duel", {"id": shard, "name": self.FOE, "factor": 1.0})
+        self.do(ADMIN, "seal_fix", {"take": False})
+        self.call(ADMIN, "GET", "/api/admin")
+        for who in (self.KEEPER, self.FOE):
+            self.card_of(who)
+        self.relic_view("單挑掛起來")
+
+    def first_move(self) -> None:
+        """下戰書的時間過了（開打）：兩個人都在場；應長庚先出一招（不認得的招、真的一招、已出招再按一次），卓遠岑還沒。"""
+        STEP[0] += 3
+        for who in (self.KEEPER, self.FOE):
+            emit(f"{who} 此刻的招", self.seal_moves(who))
+        mine = self.seal_moves(self.KEEPER)
+        self.choose(self.KEEPER, "seal:沒有這一招")
+        if mine:
+            self.choose(self.KEEPER, mine[0])
+            self.choose(self.KEEPER, mine[0])
+        self.card_of(self.KEEPER)
+        self.card_of(self.FOE)
+
+    def halt(self) -> None:
+        for who in (self.KEEPER, self.FOE):
+            self.relic_me(who, "前半停在這裡")
+        self.relic_view("前半停在這裡")
+
+    # ── 後半 ──
+
+    def wake(self) -> None:
+        self.login_all()
+        for who in (self.FOE, self.KEEPER):
+            emit(f"{who} 接手之後的招", self.seal_moves(who))
+
+    def rounds(self) -> None:
+        """卓遠岑出招（結算第一回合），之後兩邊輪流出招兩回合（第二回合應長庚搶先、第三回合卓遠岑搶先；挑第幾個可選的招輪著換）。"""
+        for n in range(3):
+            order = (self.FOE, self.KEEPER) if n % 2 == 0 else (self.KEEPER, self.FOE)
+            for k, who in enumerate(order):
+                moves = self.seal_moves(who)
+                if moves:
+                    self.choose(who, moves[(n + k) % len(moves)])
+            STEP[0] += 5
+            self.card_of(self.KEEPER)
+            self.relic_view(f"出招第 {n + 1} 輪之後")
+
+    def gamble(self) -> None:
+        """放手一搏：空字串、太長、真的一句（假模型評不到、用預設）、同一回合再搏、第三次搏（一場最多兩次）。"""
+        for who in (self.FOE, self.KEEPER):
+            self.do(who, "seal_text", {"text": ""})
+            self.do(who, "seal_text", {"text": "劍出如電，直取咽喉"})
+            self.do(who, "seal_text", {"text": "再搏一次"})
+            STEP[0] += 5
+            self.card_of(who)
+        self.do(self.FOE, "seal_text", {"text": "第三次搏"})
+        self.relic_view("放手一搏之後")
+
+    def finish_up(self) -> None:
+        """單挑推到收場（兩邊各看，缺的招代打），雙方看戰報與紀錄。"""
+        self.duel_out((self.KEEPER, self.FOE))
+        for who in (self.KEEPER, self.FOE):
+            self.main(who)
+            self.relic_me(who, "單挑收場之後")
+        self.relic_view("單挑收場")
+
+    def bot_duel(self) -> None:
+        """假人在單挑裡：執璽丙持第二片、挑璽丁來挑（管理者開）；BotRunner 跑幾輪（選單上的 seal: 一顆都不按，單挑由代打走完）。"""
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        shard = sorted(self.c.seal)[1]
+        season = self.world.get_season_number()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction="guan" if i == 0 else "huang", season_number=season)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, self.hub(), None
+            p.visited.add(self.hub())
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        self.do(ADMIN, "seal_assign", {"id": shard, "name": self.BOT_SEATS[0], "state": "held"})
+        self.do(ADMIN, "seal_duel", {"id": shard, "name": self.BOT_SEATS[1], "factor": 1.0})
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(47), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {91, 92}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        try:
+            for _ in range(int(os.environ.get("SB_CARVE_TICKS", "6"))):
+                STEP[0] += 3
+                self.begin()
+                report = runner.tick()
+                emit("假人一輪", [report.acted, report.added, report.skipped, report.failed])
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        for name in self.BOT_SEATS:
+            s = self.chars.load(name)
+            emit(f"假人 {name}", {"seal_seen": s.player.seal_seen, "journal": [[e.title, list(e.lines)[:3]] for e in s.journal[:4]],
+                                  "state": hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest()})
+        self.relic_view("假人單挑之後")
+        self.duel_out((self.KEEPER, self.FOE))
+
+    def last_views(self) -> None:
+        self.call(ADMIN, "GET", "/api/admin")
+        for who in (self.KEEPER, self.FOE, self.WORKER, self.RIVAL):
+            self.card_of(who)
+            self.relic_me(who, "最後")
+        self.relic_view("最後")
+
+
+def _carve_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _relic_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：選單上一招的回話（Game._seal_act；搬之前在 engine.py，搬進包之後在 tianxia/features/seal/duel_actions.py
+# 〔計畫 2.1 的檔名；搬的人照實際的檔名改第 1 項〕），first_move 那一段抓到
+_carve_register_track("carve", CarveScenario, (("tianxia/engine.py", "tianxia/features/seal/duel_actions.py"),
+                                              ('out.append(f"你出了{move}。")', 'out.append(f"你出了{move}！")')), "week7")
+
+
+# ═══════════════════════════ garnet：玉璽三軌（全部拆包第 51 批「玉璽三」，dev/seal-3） ═══════════════════════════
+# 玉璽二軌（carve）走到七種獨門行動的起用與碎片卡，但起用之後的「效果」沒有一處寫進輸出：頒詔多幾分的感悟、衝絕學的倍數、承露的體力與療傷、
+# 傳檄的推力倍數、收心的情誼倍數、鎮地的那一塊（誰都推不動、那一天不回）、引將釘住的人物與期滿回原處（期滿那一句天下大事）。
+# 這一軌專走這些璽效查詢：七片各起用一次，每一次之後把共用規則層的查詢（edict_sense、edict_cultivate、dew_factor、dew_clinic、writ_factor、
+# heart_open、warmer、held、held_during、pinned、next_end、region_of、ends）照季上現在的樣子問一遍寫進輸出；
+# **半舊半新切在引將、鎮地、承露都生效中、還沒期滿的那一刻**（舊程式起用、新程式接著問、快轉到期滿）；
+# 後半：快轉過引將的期滿（回原處、天下大事一句）、鎮地期滿、換季前的終點；假人（BotRunner）在生效中的季裡跑幾輪（人物活起來、走動問 pinned）。
+# 這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。角色與名字都是原創的（PM 11/04）。
+
+
+class GarnetScenario(CarveScenario):
+    """玉璽三軌（--track garnet，自己一個資料庫）。借 carve 的設定（碎片卡、card_of）與 relic 的 setup、seat。"""
+
+    PHASES_FIRST = ["setup", "seat", "shards", "queries", "half"]
+    PHASES_SECOND = ["resume", "queries_again", "bots_walk", "advance", "last"]
+    KINDS = ("yinjiang", "chenglu", "chuanxi", "shouxin", "banzhao", "zhendi", "bujue")
+
+    def shard_of_kind(self, kind: str) -> str:
+        return next(k for k in sorted(self.c.seal) if getattr(self.c.seal[k], "act", None) == kind)
+
+    def query_state(self):
+        """帶著現在這一季的世界的玩家存檔（問承露的體力與療傷要 GameState）。"""
+        state = self.chars.load(self.WORKER)
+        state.world = self.world.get_season()
+        return state
+
+    def shards(self) -> None:
+        """七片各由藺秋禾拿一次（管理者指定），照碎片卡上第一個能選的目標與第一軍起用；起用之後收回（一人一片）。"""
+        for kind in self.KINDS:
+            shard = self.shard_of_kind(kind)
+            self.do(ADMIN, "seal_assign", {"id": shard, "name": self.WORKER, "state": "held"})
+            act = self.card_of(self.WORKER).get("act") or {}
+            rows = act.get("targets") or []
+            free = [r for r in rows if not r.get("why")]
+            row = (free[-1] if kind == "yinjiang" else free[0]) if free else None  # 引將挑最後一位：時刻表不動他，期滿才回原處
+            sides = act.get("sides") or []
+            side = (sides[0].get("id", "") if isinstance(sides[0], dict) else str(sides[0])) if sides else ""
+            target = row.get("id", "") if row else ""
+            emit(f"起用前 {kind}", [shard, act.get("ok"), act.get("why"), target, side, len(rows)])
+            self.do(self.WORKER, "seal_use", {"target": target, "side": side})
+            self.do(ADMIN, "seal_assign", {"id": shard, "name": "", "state": "hidden"})
+            STEP[0] += 2
+
+    def queries(self) -> None:
+        self.garnet_queries("起用之後")
+
+    def garnet_queries(self, tag: str) -> None:
+        """共用規則層的璽效查詢，照季上現在生效的每一筆問一遍。"""
+        from tianxia import conquest, figures, seal_acts
+
+        c, w = self.c, self.world.get_season()
+        state = self.query_state()
+        acts = [[a.kind, a.target, a.side, a.place, a.origin, round(a.start, 1), round(a.until, 1), a.ended, round(seal_acts.ends(a), 1)]
+                for a in w.seal_acts]
+        lines = [a.target for a in w.seal_acts if a.kind == "chuanxi"]
+        sides = [f.id for f in c.scenario.factions] if getattr(c.scenario, "factions", None) else []
+        locs = [a.target for a in w.seal_acts if a.kind in ("zhendi", "bujue")]
+        folks = [a.target for a in w.seal_acts if a.kind in ("shouxin", "yinjiang")]
+        emit(f"璽效 {tag}", {
+            "on": seal_acts.on(c), "now": round(w.time, 1), "acts": acts, "next_end": seal_acts.next_end(w),
+            "sense": seal_acts.edict_sense(w, c), "cultivate": seal_acts.edict_cultivate(w, c),
+            "dew": [round(seal_acts.dew_factor(state, c, s), 4) for s in (0.0, 600.0, 3600.0, 86400.0)],
+            "clinic": seal_acts.dew_clinic(state, c), "region": seal_acts.region_of(c, state.player.location),
+            "writ": {f"{ln}/{sd}": [seal_acts.writ_factor(w, c, ln, sd), seal_acts.writ_factor(w, c, ln, sd, 1.0),
+                                    seal_acts.writ_factor(w, c, ln, sd, -1.0)] for ln in lines for sd in sides},
+            "heart": {f: [seal_acts.heart_open(w, c, f), seal_acts.warmer(w, c, f, 4), seal_acts.warmer(w, c, f, -3)] for f in folks},
+            "held": {loc: [None if (a := seal_acts.held(w, c, loc, sd)) is None else round(seal_acts.ends(a), 1)
+                           for sd in (None, *sides)] for loc in locs},
+            "held_why": {loc: conquest._held_why(w, c, loc) for loc in locs},  # noqa: SLF001  conquest 問的那一句
+            "held_during": {loc: [seal_acts.held_during(w, c, loc, w.time - 100, w.time + 100),
+                                  seal_acts.held_during(w, c, loc, w.time + 10 ** 9, w.time + 10 ** 9 + 1)] for loc in locs},
+            "pinned": {f: seal_acts.pinned(w, f) is not None for f in folks},
+            "figure_at": {f: figures.state_of(state, c, f).location for f in folks},
+            "rumors": [r.text for r in w.rumors][-4:], "chronicle": [r.text for r in w.chronicle][-3:]})
+
+    def half(self) -> None:
+        self.card_of(self.WORKER)
+        self.relic_me(self.WORKER, "前半停在這裡（引將、鎮地、承露都還生效中）")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+        self.card_of(self.WORKER)
+
+    def queries_again(self) -> None:
+        self.garnet_queries("新程式接手")
+
+    def bots_walk(self) -> None:
+        """假人（BotRunner）在生效中的季裡跑幾輪：人物活起來的走動、跟隨、趕往都問 pinned；假人自己不起用碎片。"""
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        season = self.world.get_season_number()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction="guan" if i == 0 else "huang", season_number=season)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, self.hub(), None
+            p.visited.add(self.hub())
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(47), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {91, 92}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        try:
+            for _ in range(3):
+                STEP[0] += 3
+                self.begin()
+                report = runner.tick()
+                emit("假人一輪", [report.acted, report.added, report.skipped, report.failed])
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        self.garnet_queries("假人跑過之後")
+
+    def advance(self) -> None:
+        """快轉過去：每半日一段，引將期滿回原處（天下大勢一句）、鎮地期滿、承露期滿；每段之後問一遍。"""
+        for n in range(8):
+            self.do(ADMIN, "fast_forward", {"hours": 12})
+            self.garnet_queries(f"快轉第 {n + 1} 段")
+
+    def last(self) -> None:
+        self.relic_me(self.WORKER, "最後")
+        self.relic_view("最後")
+        self.call(ADMIN, "GET", "/api/admin")
+
+
+# 改一個字（selftest）：引將期滿回原處那一句天下大事（seal_acts 的 BACK，進共用規則層之後還在 tianxia/seal_acts.py），advance 那幾段抓到
+_carve_register_track("garnet", GarnetScenario, (("tianxia/seal_acts.py",), ("坐鎮期滿，回到了{place}。", "坐鎮期滿，回到了{place}！")), "week7")
+
+
 if __name__ == "__main__":
     sys.exit(main())

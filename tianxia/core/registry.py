@@ -248,4 +248,19 @@ SHARED: dict[str, str] = {
     # map2（全部拆包第 50 批「輿圖二」：atlas 拆兩半，這一半不再 import 出陣包、讀包認領的 fs_asking、tagalong 改問核心的 omen_base、travel_base）
     "atlas": "江湖輿圖的地點、大區、路線與走法時間、軍令卡的寫法與打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py）："
              "核心的 engine、content、rules 讀；移動、地盤、設伏、軍情、出陣、人物情誼、酒肆、決戰、引導、輿圖十包與假人都讀",
+    # seal（全部拆包第 51 批「玉璽三」：seal_acts 拆兩半，包這一半是 features/seal/acts.py）
+    "seal_acts": "璽效查詢（引將釘人、頒詔、承露、傳檄、收心、鎮地的此刻生效與期滿回原處）：核心的 world、rules、team 讀；"
+                 "懸賞、人物、宴客、修練、有所感、出陣包與領地爭奪、人物活起來、盤算都讀",
 }
+
+# seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；
+# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第3批.md）：集中在這一段，上面別人的行不動，conquest、figures、figure_life、plans 四格的說明在這裡改寫。
+for _name, _old in (("conquest", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）"),
+                    ("figures", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）"),
+                    ("plans", "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）")):
+    assert _old in SHARED[_name], _name
+    SHARED[_name] = SHARED[_name].replace(_old, "（讀璽效 seal_acts：第 51 批進了這一層）")
+_old = "讀璽效 seal_acts、懸賞 bounties 記在 SHARED_PENDING；"
+assert _old in SHARED["figure_life"]
+SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層、懸賞 bounties 記在 SHARED_PENDING；")
+

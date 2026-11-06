@@ -16,6 +16,7 @@ from conftest import no_plans, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import annals, biography, calendar, conquest, renown, seal, seal_acts, tavern
+from tianxia.features.seal import acts
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
@@ -70,7 +71,7 @@ def test_scatter_clears_the_act_counts(sealed):
 
     acts_on(sealed)
     reg = _registry(sealed, yunzhuan="懷璽")
-    seal_acts.note_use(reg.shards["yunzhuan"], 3, 100.0)
+    acts.note_use(reg.shards["yunzhuan"], 3, 100.0)
     seal.scatter(reg, 3)
     shard = reg.shards["yunzhuan"]
     assert (shard.act_season, shard.act_uses, shard.act_last) == (None, 0, None)
@@ -78,10 +79,10 @@ def test_scatter_clears_the_act_counts(sealed):
 
 def test_switched_off_there_is_no_act(sealed):
     acts_on(sealed)
-    assert seal_acts.act_of(sealed, "yunzhuan") == "banzhao"
-    assert seal_acts.act_of(sealed, "chishou") is None  # 測試內容只裝這五片的行動（acts_on）
+    assert acts.act_of(sealed, "yunzhuan") == "banzhao"
+    assert acts.act_of(sealed, "chishou") is None  # 測試內容只裝這五片的行動（acts_on）
     sealed.config.seal.revamp.enabled = False
-    assert seal_acts.act_of(sealed, "yunzhuan") is None
+    assert acts.act_of(sealed, "yunzhuan") is None
 
 
 # ── Task 2：純規則 ──
@@ -91,8 +92,8 @@ def test_a_day_is_a_world_day_without_the_calendar(sealed):
     acts_on(sealed)
     w = WorldState()
     assert not calendar.season_one_on(w, sealed)
-    assert seal_acts.day_seconds(sealed, w) == DAY
-    assert seal_acts.span(sealed, w) == DAY and seal_acts.gap(sealed, w) == 3 * DAY
+    assert acts.day_seconds(sealed, w) == DAY
+    assert acts.span(sealed, w) == DAY and acts.gap(sealed, w) == 3 * DAY
 
 
 @pytest.mark.slow
@@ -104,23 +105,23 @@ def test_a_day_follows_the_season_calendar(profile, day):
     w = open_world(Path(tempfile.mkdtemp(prefix="seal2d-")) / "t.db")
     w.seed_first_season(c)
     season = w.get_season()
-    assert seal_acts.day_seconds(c, season) == pytest.approx(day)
-    assert seal_acts.gap(c, season) == pytest.approx(3 * day)
+    assert acts.day_seconds(c, season) == pytest.approx(day)
+    assert acts.gap(c, season) == pytest.approx(3 * day)
 
 
 def test_two_uses_a_season_three_days_apart(sealed):
     acts_on(sealed)
     w = WorldState()
     shard = SealShard(id="yunzhuan", state="held", holder="懷璽")
-    assert seal_acts.left(shard, 2, sealed) == 2 and seal_acts.ready_at(shard, 2, sealed, w) is None
-    seal_acts.note_use(shard, 2, 1000.0)
-    assert seal_acts.left(shard, 2, sealed) == 1
-    assert seal_acts.ready_at(shard, 2, sealed, w) == pytest.approx(1000.0 + 3 * DAY)
-    seal_acts.note_use(shard, 2, 1000.0 + 3 * DAY)
-    assert seal_acts.left(shard, 2, sealed) == 0
+    assert acts.left(shard, 2, sealed) == 2 and acts.ready_at(shard, 2, sealed, w) is None
+    acts.note_use(shard, 2, 1000.0)
+    assert acts.left(shard, 2, sealed) == 1
+    assert acts.ready_at(shard, 2, sealed, w) == pytest.approx(1000.0 + 3 * DAY)
+    acts.note_use(shard, 2, 1000.0 + 3 * DAY)
+    assert acts.left(shard, 2, sealed) == 0
     # 換季歸零（記的是上一季）
-    assert seal_acts.left(shard, 3, sealed) == 2 and seal_acts.ready_at(shard, 3, sealed, w) is None
-    seal_acts.note_use(shard, 3, 5.0)
+    assert acts.left(shard, 3, sealed) == 2 and acts.ready_at(shard, 3, sealed, w) is None
+    acts.note_use(shard, 3, 5.0)
     assert (shard.act_season, shard.act_uses) == (3, 1)
 
 
@@ -128,9 +129,9 @@ def test_the_count_follows_the_shard_not_the_holder(sealed):
     """次數記在碎片上：同一季被搶走，新主人只剩還沒用掉的次數（設計第三章）。"""
     acts_on(sealed)
     shard = SealShard(id="yunzhuan", state="held", holder="甲")
-    seal_acts.note_use(shard, 1, 10.0)
+    acts.note_use(shard, 1, 10.0)
     shard.holder = "乙"
-    assert seal_acts.left(shard, 1, sealed) == 1
+    assert acts.left(shard, 1, sealed) == 1
 
 
 def _act(kind, start=0.0, until=DAY, **fields):
@@ -179,7 +180,7 @@ def test_switched_off_the_hooks_stay_neutral_even_with_acts_on_the_books(sealed)
 
 def test_the_public_line_names_nobody(sealed):
     acts_on(sealed)
-    line = seal_acts.public_text(sealed, _act("banzhao"))
+    line = acts.public_text(sealed, _act("banzhao"))
     assert line.startswith("有人起用了『雲篆』") and "{" not in line
 
 
@@ -256,7 +257,7 @@ def test_using_an_act_books_it_on_the_shard_and_the_season():
     assert (act.kind, act.shard) == ("banzhao", "yunzhuan") and act.until == pytest.approx(act.start + DAY)
     assert "懷璽" not in act.model_dump_json()
     public = [r.text for r in season.rumors if "雲篆" in r.text]
-    assert public == [seal_acts.public_text(c, act)] and "懷璽" not in public[0]
+    assert public == [acts.public_text(c, act)] and "懷璽" not in public[0]
     assert [r.text for r in season.chronicle if "雲篆" in r.text] == public
     me = CharacterStore(w.db).load("懷璽")
     entry = next(e for e in me.journal if e.title == seal.SEAL_TITLE)
@@ -284,17 +285,17 @@ def test_the_refusals_change_nothing():
     c.seal["chishou"].act = None  # 第 3 批起七片都有行動：沒有行動的那一條路（測試內容、改版關著還走它）拿掉這一片的行動來測
     assert "沒有能起用的碎片" in _use(c, w)[0]
     c, w, g = _holder("xuanniu")
-    assert seal_acts.NO_TARGET in _use(c, w)[0]
-    assert seal_acts.BAD_TARGET in _use(c, w, target="nobody")[0]
+    assert acts.NO_TARGET in _use(c, w)[0]
+    assert acts.BAD_TARGET in _use(c, w, target="nobody")[0]
 
     def on_road(game):
         game.state.player.journey = game.state.player.journey or _journey(game)
         return game.seal_use("bocai")
 
-    assert seal_acts.ON_ROAD in _do(c, w, "懷璽", on_road)[0]
+    assert acts.ON_ROAD in _do(c, w, "懷璽", on_road)[0]
     c, w, g = _holder("chizhang", side=None)  # 散人傳檄：要挑邊
-    assert seal_acts.PICK_SIDE in _use(c, w, target="yingru")[0]
-    assert seal_acts.BAD_SIDE in _use(c, w, target="yingru", side="haoqiang")[0]
+    assert acts.PICK_SIDE in _use(c, w, target="yingru")[0]
+    assert acts.BAD_SIDE in _use(c, w, target="yingru", side="haoqiang")[0]
     for world in (w,):
         assert _uses(world) == [] and world.get_season().seal_acts == []
 
@@ -314,7 +315,7 @@ def test_the_season_must_be_running():
     g = Game.new(c, "懷璽", rng=random.Random(0), world=w2)
     g.sync(0.0)
     assert w2.season_phase() == "preparing"
-    assert seal_acts.NOT_RUNNING in g.seal_use()[0]
+    assert acts.NOT_RUNNING in g.seal_use()[0]
     assert g.seal_view()["act"]["ok"] is False
 
 
@@ -325,9 +326,9 @@ def test_the_card_carries_the_act_for_the_holder_only():
     act = server.main_view(g)["status"]["seal"]["act"]
     assert (act["kind"], act["name"], act["left"], act["ok"], act["why"]) == ("yinjiang", "引將", 2, True, "")
     ids = {t["id"]: t for t in act["targets"]}
-    assert ids["huangfusong"]["why"] == seal_acts.HERE  # 皇甫嵩就在長社
+    assert ids["huangfusong"]["why"] == acts.HERE  # 皇甫嵩就在長社
     assert ids["qinjie"]["why"] == "" and "秦頡" in ids["qinjie"]["name"]  # 沒有行程的人照舊按得下去
-    assert ids["bocai"]["why"] == seal_acts.CLASH_PLAN  # 波才的盤算公告（長社那一件）就在第一天之內：FB-9038，行程要動他
+    assert ids["bocai"]["why"] == acts.CLASH_PLAN  # 波才的盤算公告（長社那一件）就在第一天之內：FB-9038，行程要動他
     assert "pengtuo" not in ids  # 還沒出場
     assert "{target}" in act["confirm"] and "長社" in act["confirm"]
     other = _person(c, w, "旁人", side="huang")
@@ -495,10 +496,10 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
     )
     at, fid = pairs[0]
     first = min(t for t, f in pairs if f == fid)
-    assert seal_acts.clash(v, c, fid, first + 1)
-    assert not seal_acts.clash(v, c, fid, first - 1)
-    rows = {t["id"]: t["why"] for t in seal_acts.figure_targets(v, c, first + 1)}
-    assert rows[fid] == seal_acts.CLASH
+    assert acts.clash(v, c, fid, first + 1)
+    assert not acts.clash(v, c, fid, first - 1)
+    rows = {t["id"]: t["why"] for t in acts.figure_targets(v, c, first + 1)}
+    assert rows[fid] == acts.CLASH
 
 
 @pytest.mark.slow
@@ -510,7 +511,7 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
 ])
 def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day, place, plans_on, usable):
     """FB-9038：行程比照時刻表，窗口（一日）內會把人搬離他此刻所在的地方，目標灰掉、起用按下去被拒、不記次數、人不動；
-    起用那一下的檢查跟目標清單是同一條（seal_acts.figure_targets）。7 天季第 1.7 天孫堅動身那種情形（QA develop-red7）。"""
+    起用那一下的檢查跟目標清單是同一條（acts.figure_targets）。7 天季第 1.7 天孫堅動身那種情形（QA develop-red7）。"""
     from tianxia import figures
     from tianxia.models import Itinerary, ItineraryStop
 
@@ -525,14 +526,14 @@ def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day,
     number = w.get_season_number()
     if usable:
         [act] = season.seal_acts
-        assert (act.target, act.origin) == ("qinjie", origin) and seal_acts.used(shard, number) == 1
+        assert (act.target, act.origin) == ("qinjie", origin) and acts.used(shard, number) == 1
         assert figures.state_of(_vehicle(c, season), c, "qinjie").location == "changshe"
     else:
-        assert msgs == [f"（秦頡{seal_acts.CLASH_PLAN}。）"]  # 灰掉的原因就是按下去被拒的那一句
-        assert season.seal_acts == [] and _uses(w) == [] and seal_acts.used(shard, number) == 0  # 不扣次數
+        assert msgs == [f"（秦頡{acts.CLASH_PLAN}。）"]  # 灰掉的原因就是按下去被拒的那一句
+        assert season.seal_acts == [] and _uses(w) == [] and acts.used(shard, number) == 0  # 不扣次數
         assert figures.state_of(_vehicle(c, season), c, "qinjie").location == origin  # 人不動
         view = _do(c, w, "懷璽", lambda game: game.seal_view()["act"])  # 碎片卡的目標清單也灰著
-        assert {t["id"]: t["why"] for t in view["targets"]}["qinjie"] == seal_acts.CLASH_PLAN
+        assert {t["id"]: t["why"] for t in view["targets"]}["qinjie"] == acts.CLASH_PLAN
 
 
 # ── Task 5：頒詔、承露、收心 ──

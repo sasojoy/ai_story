@@ -20,7 +20,7 @@ def test_the_package_declares_what_it_owns_and_the_old_name_is_the_same_module()
     from tianxia.features.seal import seal
 
     assert old is seal and FEATURE in FEATURES  # 登記了就好：下一個新包照 new_feature.py 排在最後，不該讓這一條紅
-    assert FEATURE.name == "seal" and FEATURE.prefix is None and FEATURE.content == ("seal.json",)
+    assert FEATURE.name == "seal" and FEATURE.prefix == "seal" and FEATURE.content == ("seal.json",)
     assert FEATURE.player_fields == ("heirloom", "seal_seen") and FEATURE.carried == ("seal_seen",)
     assert [(h.event, h.slot) for h in FEATURE.bus()] == [("outing", "seal"), ("battle_end", "seal")]
     assert [(h.at, h.slot) for h in FEATURE.world()] == [
@@ -53,3 +53,16 @@ def test_exploring_the_hiding_place_picks_up_the_shard():
     assert game.state.player.heirloom is not None and game.state.player.heirloom.template == cache.shard
     assert game.state.player.seal_seen == reg.seq
     assert any(e.title == seal.SEAL_TITLE for e in game.state.journal)
+
+
+@pytest.mark.smoke
+def test_the_package_owns_the_seal_prefix_and_the_old_duel_name_is_the_same_module():
+    """第 28 批：前綴 seal: 登記在玉璽包（假人看到 seal: 一律不按，bot_pick 問 bots.score）；tianxia.seal_duel 是 features/seal/duel_rules.py 的別名。"""
+    from tianxia import seal_duel
+    from tianxia.core import features as features_core
+    from tianxia.core.option import Option
+    from tianxia.features.seal import bots, duel_rules
+
+    assert seal_duel is duel_rules
+    assert features_core.owner_of("seal:強攻").name == "seal"
+    assert bots.score(Option(id="seal:強攻", label="強攻")) is None

@@ -14,6 +14,7 @@ from conftest import real_content
 from conquest_kit import conquest_rules
 from test_seal_acts import _do, _give, _person, _uses
 from tianxia import calendar, conquest, seal, seal_acts
+from tianxia.features.seal import acts
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
@@ -63,11 +64,11 @@ def test_the_two_shards_get_their_acts_and_numbers():
     """設計第三章：螭首鎮地、金角補缺；鎮地 12 個季曆小時、補缺的窗口 1 個季曆天（PM 五之一 5）是【預設】。"""
     c = real_content()
     assert (c.seal["chishou"].act, c.seal["jinjiao"].act) == ("zhendi", "bujue")
-    acts = c.config.seal.revamp.acts
-    assert (acts.hold_hours, acts.mend_days) == (12, 1)
-    assert seal_acts.act_of(c, "chishou") == "zhendi"
+    tune = c.config.seal.revamp.acts  # 區域名不叫 acts：包的 acts 模組在上面 import
+    assert (tune.hold_hours, tune.mend_days) == (12, 1)
+    assert acts.act_of(c, "chishou") == "zhendi"
     c.config.seal.revamp.enabled = False
-    assert seal_acts.act_of(c, "chishou") is None and seal_acts.act_of(c, "jinjiao") is None
+    assert acts.act_of(c, "chishou") is None and acts.act_of(c, "jinjiao") is None
 
 
 def test_a_flip_remembers_who_held_the_block():
@@ -96,9 +97,9 @@ def test_zhendi_lists_your_own_blocks_and_greys_a_cooling_one():
     assert "替黃巾軍鎮住{target}半日" in act["confirm"]
     _season(c, w, lambda wd: conquest.push(wd, c, "yingchuan_wilds", "huang", "甲", 100, "attack"), now=20.0)
     rows = {t["id"]: t for t in _act(c, w, now=30.0)["targets"]}
-    assert rows["yingchuan_wilds"]["why"] == seal_acts.LAND_COOLING  # 剛翻下來、還在冷卻：鎮不了（設計）
+    assert rows["yingchuan_wilds"]["why"] == acts.LAND_COOLING  # 剛翻下來、還在冷卻：鎮不了（設計）
     refused = _use(c, w, target="yingchuan_wilds", now=40.0)
-    assert seal_acts.LAND_COOLING in refused[0] and _uses(w) == [] and w.get_season().seal_acts == []
+    assert acts.LAND_COOLING in refused[0] and _uses(w) == [] and w.get_season().seal_acts == []
 
 
 def test_zhendi_books_a_half_day_hold_and_names_nobody():
@@ -194,7 +195,7 @@ def test_switched_off_a_hold_on_the_books_blocks_nothing():
 def test_bujue_lists_what_was_flipped_away_within_a_day():
     c, w, g = _holder("jinjiao")
     act = _act(c, w)
-    assert not act["ok"] and act["why"] == seal_acts.NOTHING["bujue"] and act["targets"] == []  # 還沒丟過地：灰著
+    assert not act["ok"] and act["why"] == acts.NOTHING["bujue"] and act["targets"] == []  # 還沒丟過地：灰著
     _season(c, w, lambda wd: conquest.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=100.0)
     _season(c, w, lambda wd: conquest.push(wd, c, "hilltop_wilds", "guan", "官甲", 100, "attack"), now=110.0)  # 中立地：沒有原主
     act = _act(c, w, now=200.0)
@@ -202,7 +203,7 @@ def test_bujue_lists_what_was_flipped_away_within_a_day():
     assert act["targets"][0]["info"].startswith("被官軍翻走・")
     assert "把{target}退回黃巾軍手中" in act["confirm"]
     late = _act(c, w, now=100.0 + DAY + 60)  # 一日過了
-    assert late["why"] == seal_acts.NOTHING["bujue"]
+    assert late["why"] == acts.NOTHING["bujue"]
 
 
 def test_bujue_hands_the_block_back_like_a_flip():
@@ -229,7 +230,7 @@ def test_bujue_hands_the_block_back_like_a_flip():
     _season(c, w, lambda wd: conquest.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=again)
     game = Game(c, CharacterStore(w.db).load("懷璽"), random.Random(0), w)
     game.sync(again + 60)
-    assert [(t["id"], t["why"]) for t in seal_acts.land_rows(game.state, c, "bujue")] == [("runan", seal_acts.MENDED)]
+    assert [(t["id"], t["why"]) for t in acts.land_rows(game.state, c, "bujue")] == [("runan", acts.MENDED)]
 
 
 def test_bujue_greys_a_block_whose_siege_is_mustering():
@@ -247,11 +248,11 @@ def test_bujue_greys_a_block_whose_siege_is_mustering():
     _season(c, w, muster, now=200.0)
     game = Game(c, CharacterStore(w.db).load("懷璽"), random.Random(0), w)
     game.sync(210.0)
-    assert [(t["id"], t["why"]) for t in seal_acts.land_rows(game.state, c, "bujue")] == [("runan", seal_acts.SIEGING)]
+    assert [(t["id"], t["why"]) for t in acts.land_rows(game.state, c, "bujue")] == [("runan", acts.SIEGING)]
     act = _act(c, w, now=210.0)
     # 唯一的一塊灰著：整顆按不下去，那一塊照樣列出來、寫原因（FB-645 起；以前是 NOTHING、不列）
-    assert act["why"] == seal_acts.ALL_GREY["bujue"] and [(t["id"], t["why"]) for t in act["targets"]] == [("runan", seal_acts.SIEGING)]
-    assert seal_acts.ALL_GREY["bujue"] in _use(c, w, target="runan", now=220.0)[0]
+    assert act["why"] == acts.ALL_GREY["bujue"] and [(t["id"], t["why"]) for t in act["targets"]] == [("runan", acts.SIEGING)]
+    assert acts.ALL_GREY["bujue"] in _use(c, w, target="runan", now=220.0)[0]
     assert _uses(w) == []
 
 
@@ -264,10 +265,10 @@ def test_fb645_when_every_flipped_block_is_greyed_they_are_still_listed():
     _season(c, w, lambda wd: wd.seal_acts.append(SealAct(kind="bujue", shard="jinjiao", start=50.0, until=50.0, target="runan",
                                                          side="huang")), now=110.0)  # 這一季補過汝南（之後又被翻走）
     act = _act(c, w, now=200.0)
-    assert (act["ok"], act["why"], act["idle"]) == (False, seal_acts.ALL_GREY["bujue"], False)
-    assert [(t["id"], t["side"], t["why"]) for t in act["targets"]] == [("runan", "huang", seal_acts.MENDED)]
+    assert (act["ok"], act["why"], act["idle"]) == (False, acts.ALL_GREY["bujue"], False)
+    assert [(t["id"], t["side"], t["why"]) for t in act["targets"]] == [("runan", "huang", acts.MENDED)]
     assert act["targets"][0]["info"].startswith("被官軍翻走・")
-    assert _use(c, w, target="runan", now=210.0) == [f"（{seal_acts.ALL_GREY['bujue']}）"] and _uses(w) == []
+    assert _use(c, w, target="runan", now=210.0) == [f"（{acts.ALL_GREY['bujue']}）"] and _uses(w) == []
     assert conquest.holder(w.get_season(), c, "runan") == "guan"
 
 
@@ -275,20 +276,20 @@ def test_fb645_zhendi_with_every_block_cooling_lists_them_greyed(monkeypatch):
     c, w, g = _holder("chishou")
     monkeypatch.setattr(conquest, "cooling", lambda world, content, loc_id: True)
     act = _act(c, w)
-    assert (act["ok"], act["why"]) == (False, seal_acts.ALL_GREY["zhendi"])
-    assert [(t["id"], t["why"]) for t in act["targets"]] == [(loc, seal_acts.LAND_COOLING) for loc in HUANG_BLOCKS]
-    assert _use(c, w, target="runan") == [f"（{seal_acts.ALL_GREY['zhendi']}）"] and _uses(w) == []
+    assert (act["ok"], act["why"]) == (False, acts.ALL_GREY["zhendi"])
+    assert [(t["id"], t["why"]) for t in act["targets"]] == [(loc, acts.LAND_COOLING) for loc in HUANG_BLOCKS]
+    assert _use(c, w, target="runan") == [f"（{acts.ALL_GREY['zhendi']}）"] and _uses(w) == []
 
 
 def test_mend_rows_only_count_flips():
     """時刻表與管理者指定的易手不起冷卻、不算「翻走」；翻走之後又被這樣拿回來的，也不列（此刻已經是自家的）。"""
     c, w, g = _holder("jinjiao")
     _season(c, w, lambda wd: conquest.set_control(wd, c, "runan", "guan"), now=100.0)
-    assert _act(c, w, now=200.0)["why"] == seal_acts.NOTHING["bujue"]
+    assert _act(c, w, now=200.0)["why"] == acts.NOTHING["bujue"]
     _season(c, w, lambda wd: conquest.push(wd, c, "runan_academy", "guan", "官甲", 100, "attack"), now=300.0)
     assert [t["id"] for t in _act(c, w, now=400.0)["targets"]] == ["runan_academy"]
     _season(c, w, lambda wd: conquest.assign(wd, c, {"runan_academy": "huang"}), now=500.0)  # 時刻表指定回黃巾
-    assert _act(c, w, now=600.0)["why"] == seal_acts.NOTHING["bujue"]
+    assert _act(c, w, now=600.0)["why"] == acts.NOTHING["bujue"]
 
 
 def test_fb644_with_conquest_a_pause_is_still_a_pause():
@@ -296,7 +297,7 @@ def test_fb644_with_conquest_a_pause_is_still_a_pause():
     c, w, g = _holder("chishou")
     assert w.pause_clock(15.0)
     act = _act(c, w, now=20.0)
-    assert (act["ok"], act["why"], act["idle"]) == (False, seal_acts.PAUSED, False)
+    assert (act["ok"], act["why"], act["idle"]) == (False, acts.PAUSED, False)
 
 
 def test_other_acts_are_never_idle():
@@ -310,13 +311,13 @@ def test_a_ranger_picks_a_side_and_only_that_armys_blocks_count():
     """散人起用要看陣營的三片：每次挑一軍（企劃者）。鎮地的目標兩軍都列（每一列寫是哪一軍的），挑了哪一軍只認那一軍的。"""
     c, w, g = _holder("chishou", side=None, at="yingchuan")
     act = _act(c, w)
-    assert [s["id"] for s in act["sides"]] == ["guan", "huang"] and act["side_note"] == seal_acts.PICK_SIDE
+    assert [s["id"] for s in act["sides"]] == ["guan", "huang"] and act["side_note"] == acts.PICK_SIDE
     sides = {t["id"]: t["side"] for t in act["targets"]}
     assert sides["runan"] == "huang" and sides["yingchuan_wilds"] == "guan"
     assert "{side}" in act["confirm"]
-    assert seal_acts.PICK_SIDE in _use(c, w, target="runan")[0]
-    assert seal_acts.BAD_SIDE in _use(c, w, target="runan", side="haoqiang")[0]
-    assert seal_acts.BAD_TARGET in _use(c, w, target="runan", side="guan")[0]  # 汝南是黃巾的
+    assert acts.PICK_SIDE in _use(c, w, target="runan")[0]
+    assert acts.BAD_SIDE in _use(c, w, target="runan", side="haoqiang")[0]
+    assert acts.BAD_TARGET in _use(c, w, target="runan", side="guan")[0]  # 汝南是黃巾的
     assert _uses(w) == []
     _use(c, w, target="runan", side="huang")
     assert w.get_season().seal_acts[0].side == "huang"
@@ -324,7 +325,7 @@ def test_a_ranger_picks_a_side_and_only_that_armys_blocks_count():
 
 def test_a_faction_member_cannot_pick_the_other_army():
     c, w, g = _holder("chishou", side="huang")
-    assert seal_acts.BAD_TARGET in _use(c, w, target="yingchuan_wilds", side="guan")[0]
+    assert acts.BAD_TARGET in _use(c, w, target="yingchuan_wilds", side="guan")[0]
     _use(c, w, target="runan", side="guan")  # 送來的 side 不理：照自家
     assert w.get_season().seal_acts[0].side == "huang"
 

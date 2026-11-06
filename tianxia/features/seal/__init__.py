@@ -8,7 +8,13 @@
 - admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（殼的 ADMIN_ACTIONS 叫）
 - season.py：開季藏一片、天命之季的章、舊季收尾（原本核心 sqlite_world 的三段）
 
-沒有選項前綴（seal: 是第 28 批：碎片卡、七種獨門行動、奪璽單挑）、沒有路由（管理者的 seal_* 留在殼的 ADMIN_ACTIONS、叫委派）。
+第 28 批「玉璽二」再搬進來（計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
+- duel_rules.py：奪璽單挑的純規則（原 tianxia/seal_duel.py 整份，舊名留成別名）
+- duel_actions.py：奪璽單挑的玩法（挑挑戰者與開單挑、推進、三招、放手一搏、奪璽卡、背景輪詢）；Game 留一行委派
+- card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
+- bots.py：假人看到 seal: 一律不按
+
+選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
@@ -19,7 +25,7 @@ from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
 
 class SealFeature(Feature):
     name = "seal"
-    prefix = None
+    prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（engine 的 options／choose 原位叫委派）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
     # 核心換季（_reset_player_for_new_season）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
@@ -32,6 +38,12 @@ class SealFeature(Feature):
         from . import seal  # noqa: PLC0415
 
         return seal.on(ctx.content)
+
+    def bot_pick(self, ctx, option):
+        """假人看到 seal: 那一顆的分數（原本 bot_policy.score 的 seal 那一段）：一律不按。"""
+        from . import bots  # noqa: PLC0415
+
+        return bots.score(option)
 
     # 接縫掛鉤（第 11 批）
     def deliver_results(self, ctx) -> None:

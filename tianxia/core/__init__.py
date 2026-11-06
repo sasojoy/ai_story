@@ -9,7 +9,7 @@
   三段式；本體從 Game 搬來，Game 留一行委派。核心本體的一部分（tianxia/core/ 底下的檔本來就算核心：功能包可以 import、它不 import 包），
   不進 MODULES（那一份是 tianxia/<名字>.py 頂層的核心模組）、不進 FEATURES（它不是包、沒有掛鉤與前綴）。
 - duel_base.py（bout：全部拆包第 12 批）：單挑底層——剋、推力、挨打、防具、放手一搏擲一次、勝負、架勢、氣勢的字、選單上的一招、Scene；
-  頭目戰、擂台（單挑包）與奪璽單挑（seal_duel.py）共用，單挑包的 duel_rules re-export 同一批函式物件。同 event_check 不進 MODULES。
+  頭目戰、擂台（單挑包）與奪璽單挑（已進玉璽包 features/seal/duel_rules.py）共用，單挑包的 duel_rules re-export 同一批函式物件。同 event_check 不進 MODULES。
 - arena_ranks.py（bout：全部拆包第 12 批）：擂台的名次與稱號（on、entry_of、ladder、title_of、title_for、record_text、board、歷屆擂主）
   ——查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史讀它；單挑包的 arena_rules re-export 同一批。同 event_check 不進 MODULES。
 - annal_base.py（zhuan：全部拆包第 29 批之二）：行狀「記一筆」的那一半——note、entry、trim、kept_names、clip、first_sentence、figure_name、on、heard、

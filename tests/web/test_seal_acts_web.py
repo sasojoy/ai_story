@@ -18,6 +18,7 @@ import server
 import webharness
 from conftest import real_content
 from tianxia import seal, seal_acts
+from tianxia.features.seal import acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -114,7 +115,7 @@ def test_the_layer_lists_every_figure_with_where_he_is_and_greys_the_ones_here()
     assert '<span class="shop-sign">引將</span>' in html and "剩 2 次" in html and 'data-act="seal-act-close"' in html
     rows = {name: (tid, off, why) for name, tid, off, why in _rows(html)}
     assert rows["秦頡"] == ("qinjie", False, "") and "此刻在宛城" in html  # 沒有行程的人照舊按得下去
-    assert rows["波才"] == ("bocai", True, seal_acts.CLASH_PLAN) and "此刻在黃巾別部營寨" in html  # FB-9038：他的盤算公告就在第一天之內，灰掉寫原因
+    assert rows["波才"] == ("bocai", True, acts.CLASH_PLAN) and "此刻在黃巾別部營寨" in html  # FB-9038：他的盤算公告就在第一天之內，灰掉寫原因
     assert rows["皇甫嵩"] == ("huangfusong", True, "已經在這裡") and rows["朱儁"][1:] == (True, "已經在這裡")
     assert "彭脫" not in rows
     assert html.count("<b>") == len(m["status"]["seal"]["act"]["targets"])
