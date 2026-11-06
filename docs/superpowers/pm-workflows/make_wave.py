@@ -277,6 +277,7 @@ def main():
     ap.add_argument("--finish", default="", help="開發回來的 built（JSON 檔）；有給就只合併、閘門、審查、修正")
     ap.add_argument("--merge-base", default="")
     ap.add_argument("--merge-extra", default="", help="合併時要多合的東西（文字檔）")
+    ap.add_argument("--opus", action="store_true", help="每一批都用 Opus（沒有逐批審查時比較保險）")
     ap.add_argument("--leftovers", default="", help="上一波開發回來的 built（JSON 檔）：寫到某一批的 leftovers 接進那一批的派工")
     a = ap.parse_args()
     w = WAVES[a.wave]
@@ -293,6 +294,10 @@ def main():
         args["stop_after_build"] = True
         args["lines"] = [dict(name=l["name"], base=a.base, batches=[f() for f in l["batches"]]) for l in w["lines"]]
         left = leftovers_for(a.leftovers) if a.leftovers else {}
+        if a.opus:
+            for line in args["lines"]:
+                for b in line["batches"]:
+                    b.pop("model", None)
         for line in args["lines"]:
             for b in line["batches"]:
                 if left.get(b["n"]):
