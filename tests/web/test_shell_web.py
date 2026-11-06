@@ -3,6 +3,7 @@ registerPage、切出去的 web/cultivation.js、web/craft.js。
 
 webharness.app_source() 把每支 js 接成一個 IIFE，函式全提升，**抓不到跨檔的載入順序錯**。這裡照 / 的順序把每支檔當獨立的 script 載進
 同一個 vm context（跟瀏覽器一樣：頂層的 const 下一支看得到，還沒載入的碰了就 ReferenceError）。沒有 node 的那幾條略過。"""
+# 畫法在 web/smithy.js、web/gear.js、web/outlets.js、web/tavern.js、web/bounties.js、web/bout.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

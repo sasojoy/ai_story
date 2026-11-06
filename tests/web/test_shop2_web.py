@@ -1,5 +1,6 @@
 """店面第二批的網頁（店面獨立介面設計第三、四節）：假瀏覽器照 test_prologue_web 的那一套跑整支 app.js（同 tests/test_shop_web.py）。
 斷言只看 T.els.app.innerHTML——外殼與店面那一層；江湖頁的舊選單畫在 T.els.page，所以斷言裡的 data-act="choose" 都是店面上的鈕。"""
+# 畫法在 web/smithy.js、web/gear.js、web/bounties.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

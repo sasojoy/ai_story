@@ -1,4 +1,5 @@
 """店面第一批的網頁（店面獨立介面設計第一、二、五節）：假瀏覽器照 test_prologue_web 的那一套跑整支 app.js。"""
+# 畫法在 web/smithy.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

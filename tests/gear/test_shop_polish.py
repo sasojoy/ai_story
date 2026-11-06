@@ -1,4 +1,5 @@
 """店面微調（企劃者 2026-10-14 看了 QA 列的「跟草圖不一樣」，四件都照草圖改；店面獨立介面設計第十一節），加上 FB-194、FB-195。"""
+# 畫法在 web/bounties.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 from test_shop import _smith
