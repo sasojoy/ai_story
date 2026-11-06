@@ -1093,7 +1093,7 @@ def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monk
 
 @pytest.mark.parametrize("module", sorted(test_for.CORE_LISTS))
 def test_the_core_hooks_and_lists_still_pick_only_the_core_tests_and_smoke(module):
-    """掛鉤（features.py）與清單（services.py 服務清單、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊只跑核心測試＋煙霧：
+    """掛鉤（features.py）、服務與共用的字（services.py；清單在 services_list.md，下一條）與清單（registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊只跑核心測試＋煙霧：
     名字（options、choose、FEATURES）到處都寫得到，照名字挑等於整套。"""
     assert (ROOT / "tianxia" / "core" / f"{module}.py").is_file(), module
     rel = f"tianxia/core/{module}.py"
@@ -1108,6 +1108,31 @@ def test_the_service_list_file_picks_only_the_boundary_test():
     picked = test_for.pick(["tianxia/core/services_list.md"])
     assert {p.name for p in picked.files} == {"test_feature_boundaries.py"}
     assert not picked.core and not picked.smoke
+
+
+@pytest.mark.parametrize("path", ["scripts/sb/harness.py", "scripts/sb/base.py", "scripts/sb/tracks/relay.py", "scripts/sb/tracks/world.py", "scripts/sb/tracks/map.py"])
+def test_the_scenarios_pick_only_the_boundary_test_and_point_at_the_selftest(path):
+    """scripts/sb/**：第 70 批量到照檔名字根挑 198 個檔（軌名撞 world、map 這種模組名），它們都不讀這些檔。"""
+    picked = test_for.pick([path])
+    assert {p.name for p in picked.files} == {"test_feature_boundaries.py"}
+    assert not picked.core and not picked.smoke
+    assert any("same_behavior selftest" in why for why in picked.why)
+
+
+@pytest.mark.parametrize("path", ["scripts/webqa/gate.py", "scripts/webqa/driver.mjs", "scripts/webqa/flows/extra.mjs", "scripts/webqa/must_reach.txt"])
+def test_the_web_compare_tool_picks_its_own_test(path):
+    picked = test_for.pick([path])
+    assert {p.name for p in picked.files} == {"test_webqa.py"}
+    assert not picked.core and not picked.smoke
+
+
+def test_a_package_tuning_file_picks_only_that_package():
+    """tianxia/core/tuning/<包>.py 是那一包的 Config 子模型，不走核心測試＋煙霧（第 74 批留的）。"""
+    picked = test_for.pick(["tianxia/core/tuning/tavern.py"])
+    assert picked.files == set((test_for.FEATURES / "tavern" / "tests").rglob("test_*.py"))
+    assert picked.files and not picked.core and not picked.smoke
+    for not_a_package in ("tianxia/core/tuning/__init__.py", "tianxia/core/tuning/no_such_package.py"):
+        assert test_for.pick([not_a_package]).core, not_a_package
 
 
 # core_step（全部拆包第 36 批「你這一步」）

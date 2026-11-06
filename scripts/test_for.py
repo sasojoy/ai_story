@@ -25,6 +25,7 @@
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
   tianxia/core/services_list.md（服務清單，第二輪第 74 批）只有邊界測試讀，只挑 test_feature_boundaries.py。
+  tianxia/core/tuning/<包>.py（新包的 Config 子模型，第二輪第 74 批）只挑那一包的 tests/；沒有那一包的 tests/ 照核心。
   核心服務檔（CORE_SERVICES：combat、pushing、pills、status_view、page_view、scene_view，第二輪第 75 批）不走這一條：hunk 落在函式、類別、常數上 →
   名字的功能群（檔名有名字第一個認得的字的測試檔，連模組裡用到它的；service_groups）＋這個檔的底＋自己檔名的＋邊界測試；函式以外或指名了卻沒有差 → 核心測試＋煙霧。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
@@ -43,6 +44,8 @@
   核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
   （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔（registered_actions；
   搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
+- scripts/sb/**（情境，第二輪第 70 批）：不照檔名字根挑（量到 198 個檔，軌名撞 world、map 這種模組名，它們都不讀這些檔），只跑邊界測試；
+  情境改了跑那一軌的 same_behavior selftest。scripts/webqa/**（網頁比對工具，第二輪第 77 批，有 .mjs、.txt）：tests/web/test_webqa.py。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
   包裡的內容檔（tianxia/features/<包>/content/，全部拆包第 62 批）兩條都走：內容這一條＋那一包的 tests/＋核心契約。
@@ -97,6 +100,7 @@ BASE_ENV = "TIANXIA_TEST_BASE"
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 PACK_CONTENT_TEST = "test_content_packs.py"  # 內容改了也跟：包裡新檔忘了宣告（Feature.content）時載入不報錯、事件靜靜少掉，只有這支抓得到，新檔名又不會寫在它裡面
 SERVER_TEST = "test_server.py"
+WEBQA_TEST = "test_webqa.py"  # scripts/webqa/** 的工具自測
 SHELL_TEST = re.compile(r"test_\w+_shell\.py")  # 第 61 批從 test_server 拆進各包的路由與殼的測試
 
 CORE_INIT = ROOT / "tianxia" / "core" / "__init__.py"
@@ -735,7 +739,7 @@ def game_api_callers(f: str, base: str, hunks_of: dict | None) -> set[Path]:
 
 
 # ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心本體裡掛鉤、清單以外的模組 ─────────────
-# tianxia/core/ 底下的掛鉤與清單（features.py 掛鉤、services.py 服務清單、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊
+# tianxia/core/ 底下的掛鉤與清單（features.py 掛鉤、services.py 服務與共用的字〔清單在 services_list.md，上面另一條〕、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊
 # 只跑核心測試＋煙霧：裡面的名字（options、choose、FEATURES）到處都寫得到，照名字挑等於整套。其餘的核心本體（event_check.py 這種
 # 從 Game 搬來的）照第 11 批修正輪的做法，再並上寫到改到的函式名或 Game 委派名的測試檔（core_module_callers）：搬之前照方法名
 # 挑得到的隨口應對、端出事件的回歸，搬進核心之後 test_for 一條都挑不到（dev/core-events-1 審查 M1、M4、M8、M9）。
@@ -1142,6 +1146,18 @@ def pick(files: list[str], base: str | None = None,
             else:
                 core_and_smoke()
                 result.why.append(f"{f}：功能包的登記 → 核心測試＋煙霧")
+            continue
+        if f.startswith("scripts/sb/"):  # 情境（第二輪第 70 批）：照下面的檔名字根挑會挑到 198 個不相干的檔，它們都不讀這些檔
+            result.files |= {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：情境 → 邊界測試；情境改了跑那一軌的 same_behavior selftest")
+            continue
+        if f.startswith("scripts/webqa/"):  # 網頁比對工具（第二輪第 77 批）：有 .mjs、.txt，下面 .py 那一條接不到
+            result.files |= {t for t in tests if t.name == WEBQA_TEST}
+            result.why.append(f"{f}：網頁比對工具 → {WEBQA_TEST}")
+            continue
+        if f.startswith("tianxia/core/tuning/") and path.suffix == ".py" and (FEATURES / path.stem / "tests").is_dir():  # 新包的 Config 子模型（第二輪第 74 批）：只有那一包讀，不算改核心
+            result.files |= set((FEATURES / path.stem / "tests").rglob("test_*.py"))
+            result.why.append(f"{f}：{path.stem} 這一包的 Config 子模型 → 那一包的 tests/")
             continue
         if f == "tianxia/core/services_list.md":  # core_api（第二輪第 74 批）：只有邊界測試讀，不算改核心
             result.files |= {t for t in tests if t.name == BOUNDARY_TEST}

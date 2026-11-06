@@ -2567,8 +2567,9 @@ def test_the_page_names_every_file_with_a_version_from_its_content(client):
     assert urls and all("?v=" in url for url in urls)
 
 
-def test_the_versioned_urls_are_served_and_the_browser_must_ask_each_time(client):
+def test_the_versioned_urls_are_served_and_the_browser_must_ask_each_time(client, monkeypatch):
     """no-cache：每次都向伺服器確認（/static 有 ETag，沒變就是 304）；改了檔沒重開伺服器也不會被瀏覽器釘住舊檔。"""
+    monkeypatch.delenv("TIANXIA_PUBLIC_URL", raising=False)  # 設了這個變數 /static 走長快取（第二輪第 78 批），跑測試的 shell 可能設著
     app_js = _version_of((server.WEB / "app.js").read_bytes())
     style_css = _version_of((server.WEB / "style.css").read_bytes())
     journal_css = _version_of(server.JOURNAL_CSS.encode("utf-8"))
