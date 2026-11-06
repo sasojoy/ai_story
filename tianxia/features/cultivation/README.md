@@ -31,6 +31,8 @@
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
 - 修練頁：`tests/arts/test_arts_pages_two.py`（70 條，連煉製頁與網頁）、`tests/web/test_arts_pages.py`（18 條，網頁；這一批不切網頁）、`tests/arts/test_ultimates.py`（14 條，連鑄器配招 `smithing`）。
 - 配點與境界卡：`tests/battle/test_stat_milestones_engine.py`（10 條，整檔 slow；連假人配點、江湖水漲、戰報那一句）。
+- 成長配比（屬性 v2，合回 2A）：`tests/core/test_attrset.py`、`tests/web/test_season_prep_web.py`、`tianxia/features/legacy/tests/test_legacy.py`、`tianxia/features/guide/tests/test_guide_smoke.py`、`tests/figures/test_checkin.py`（`growth:`）；same_behavior 的 `growth` 軌。
+- 成長配比的拆法（合回 2A）：`Game.pick_growth` 留三步（籌備中擋、這一季沒有配比、已定回 `Refused`；`Refused` 只在 engine），其餘本體是 `actions.pick_growth`，經一行私有委派 `Game._apply_growth`（不進 `GAME_DIRECT`、算上面的委派之外多一個）。`growth:` 前綴與 `GROWTH_*` 常數、`_season_prep`、`season_prep_view`、`_attr_rows` 留核心；存檔欄位 `growth_preset`、`growth_custom`、`attr_event`、`attr_alloc`、`attrs_v2` 原名、不由本包認領。
 - 大的混合檔（叫到這一包 33 個委派的）：`tests/core/test_engine.py`、`tests/core/test_prologue.py`、`tests/core/test_journal.py`、`tests/arts/test_hints.py`、`tests/arts/test_skillview.py`、`tests/arts/test_library.py`、`tests/arts/test_fusion.py`、`tests/arts/test_pr21_merge.py`、`tests/seal/test_seal_acts.py`、`tests/seal/test_seal_revamp.py`、`tests/figures/test_figures.py`（契機）、`tests/server/test_server.py`、`tests/bots/test_bot.py`、`tests/bots/test_bot_policy.py`、`tests/season/test_real_content.py`、決戰包的 `test_showdown_delivery.py`（收場的契機）。
 - 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/arts/test_arts_pages_two.py tests/arts/test_ultimates.py tests/battle/test_stat_milestones_engine.py`（直接給的測試檔連 slow 一起跑）；要不要讓 `test_for` 把混合檔算進包，照第 1、17 批的答，交 PM 定。
 

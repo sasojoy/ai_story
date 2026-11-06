@@ -4746,14 +4746,11 @@ class Game:
             return self._log(["（這一季沒有成長配比。）"])
         if s.player.growth_preset is not None:
             return Refused(self._log([GROWTH_LOCKED]))
-        custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
-        problem = attrset.growth_problem(c, preset, custom)
-        if problem:
-            return self._log([problem])
-        line = attrset.pick(s, c, preset, custom)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", lines=[line]))  # 一整句：寫成敘事（數值變化的小框放不下，手機上會撐出畫面）
-        self._guide(self._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
-        return self._log([line])
+        return self._apply_growth(preset, custom)
+
+    def _apply_growth(self, preset: str, custom: dict | None) -> list[str]:
+        """挑成長配比的本體（修練包 actions.pick_growth；籌備中、沒有配比、已定這三步留在 pick_growth）。"""
+        return cultivation_actions.pick_growth(self, preset, custom)
 
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（修練包 actions.allocate_stat；配點那一句 actions.allocate_line；籌備中被擋）。"""
