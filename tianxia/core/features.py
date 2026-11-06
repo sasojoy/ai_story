@@ -62,6 +62,8 @@
 | steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
   （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格；懸賞榜兩格第 45 批
   由懸賞榜包登記），不問 enabled |
+| howto()（HowtoHook） | 玩法說明的格（全部拆包第 59 批「引導二」）：設定抽屜那一頁（guide/howto.py 的 page）照檔尾寫死的順序表 HOWTO_ORDER 一格一格接；
+  別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -76,7 +78,7 @@ from .option import Option
 if TYPE_CHECKING:
     from ..engine import Game
     from ..models import Content, Location, Squad
-    from ..state import BattleRecord, GameState
+    from ..state import BattleRecord, GameState, WorldState
 
 
 @dataclass(frozen=True)
@@ -179,6 +181,8 @@ class FeatureHooks(Protocol):
     def bus(self) -> tuple[BusHook, ...]: ...
     # core_step（全部拆包第 36 批：「你這一步」的格，先後在 STEP_ORDER；不問 enabled）
     def steps(self) -> tuple[StepHook, ...]: ...
+    # howto（全部拆包第 59 批：玩法說明的格，先後在 HOWTO_ORDER；不問 enabled）
+    def howto(self) -> tuple[HowtoHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
     def threads(self, shell: Any) -> None: ...
 
@@ -294,6 +298,9 @@ class Feature:
         return ()
 
     def steps(self) -> tuple[StepHook, ...]:
+        return ()
+
+    def howto(self) -> tuple[HowtoHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -971,3 +978,86 @@ def step_table(core: dict[str, StepHook]) -> list[StepHook]:
 def step_places(core: dict[str, StepHook]) -> dict[str, Callable[..., Any]]:
     """{ref: place}：step.finish 照每一件 _ref 的第一個字找回那一格補目標（沒有 ref 或沒有 place 的格不列）。"""
     return {h.ref: h.place for h in step_table(core) if h.ref is not None and h.place is not None}
+
+
+# howto（全部拆包第 59 批「引導二」；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第二節）
+
+
+@dataclass(frozen=True)
+class HowtoPage:
+    """玩法說明那一頁呼叫端算好傳進來的兩樣（guide/howto.py 的 page）。recruitable：內容裡有沒有能招募的人物；rule：收季規則那一句。"""
+
+    recruitable: bool = False
+    rule: str = ""
+
+
+@dataclass(frozen=True)
+class HowtoHook:
+    """玩法說明的一格（Feature.howto() 回一串）：lines(content, season, page) 回這一格的那幾行（空行與標題都算在格裡，全部接起來 "\n".join 之後
+    才一字不差；這一格沒有句子回 []，不准回字串、None）。不看 enabled：判斷都在各節自己裡面（換成掛鉤之前也不看）。包的函式在叫的那一下才照模組屬性找。"""
+
+    slot: str
+    lines: Callable[..., list[str]]
+
+
+# 玩法說明的順序表：照換成掛鉤之前 howto.page 一段一段接的先後。先後就是行為（那一頁由上往下寫），寫死在這裡、不照 FEATURES。改這張表先過 PM；
+# tests/core/test_contract_core.py 逐字鎖住。
+#
+# 格         主人                 回什麼
+# season     新手引導 guide       「這一季在打什麼」一節
+# act_head   新手引導 guide       「行動」的標題
+# explore    探索 explore         探索那一行（探索一顆或舊探索）
+# growth     新手引導 guide       減法季的成長那幾行
+# sortie     出陣 sortie          出陣那幾行（地盤開著）或舊遊歷
+# socialize  交友求見 socialize   交友那一行
+# travel     移動 travel          移動那一行
+# ambush     體力玩法 stamina_plays 設伏那一行（開著才有）
+# stamina    新手引導 guide       「體力」一節（開頭多一個空行）
+# fame       新手引導 guide       「名聲」或「名望」一節
+# join       陣營 faction         「投靠與軍令」一節
+# factions   陣營 faction         「各陣營有什麼不同」一節
+# land       地盤行動 territory_acts 「地盤」一節（地盤開著才有）
+# bond       人物情誼 companions  「情誼」一節
+# challenge  大勢人物 figure_acts 「挑戰大勢人物」一節（有句子才有）
+# xinde      修練 cultivation     「心得」一節
+# pages      修練 cultivation     「修練與煉製」一節
+# forge      鐵匠鋪 smithy        「鐵匠鋪與神器」一節
+# insight    有所感 sense         「意境」一節
+# bag        新手引導 guide       「背包」一節（沒有末尾空行）
+# economy    銀兩出口 outlets     「素材的出路」一節（有句子才有，開頭多一個空行）
+# mall       商城 mall            「商城」一節（有句子才有，開頭多一個空行）
+HOWTO_ORDER: tuple[str, ...] = (
+    "season", "act_head", "explore", "growth", "sortie", "socialize", "travel", "ambush", "stamina", "fame", "join", "factions", "land",
+    "bond", "challenge", "xinde", "pages", "forge", "insight", "bag", "economy", "mall",
+)
+# 別節中間的那幾句（那一節的主人寫到這一格就問，判斷在別包）：fame_seal、fame_tavern 在名聲的來源裡（guide 的 _fame_sources），land_seal 在
+# 地盤那一節倒數第二句（territory_acts 的 conquest_lines）。主人是玉璽 seal、酒肆 tavern。
+HOWTO_INSERTS: tuple[str, ...] = ("fame_seal", "fame_tavern", "land_seal")
+
+
+def howto_hooks() -> dict[str, HowtoHook]:
+    """包登記的格 {slot: HowtoHook}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 step_hooks）。"""
+    own: dict[str, HowtoHook] = {}
+    for f in registered():
+        for hook in f.howto():
+            if hook.slot not in HOWTO_ORDER and hook.slot not in HOWTO_INSERTS:
+                raise ValueError(f"{f.name} 登記了玩法說明表上沒有的格 {hook.slot}")
+            if hook.slot in own:
+                raise ValueError(f"玩法說明的 {hook.slot} 登記了兩次（{f.name}）")
+            own[hook.slot] = hook
+    return own
+
+
+def howto_table() -> list[HowtoHook]:
+    """照 HOWTO_ORDER 排好的每一格；沒人登記的格跳過（那一格的包沒登記：契約測試換掉 FEATURES 時）。"""
+    own = howto_hooks()
+    return [own[slot] for slot in HOWTO_ORDER if slot in own]
+
+
+def howto_insert(slot: str, content: Content, season: WorldState) -> list[str]:
+    """別節中間的那幾句：只認 HOWTO_INSERTS（寫錯丟 ValueError）；沒人登記回 []。"""
+    if slot not in HOWTO_INSERTS:
+        raise ValueError(f"玩法說明沒有 {slot} 這個插句")
+    hook = howto_hooks().get(slot)
+    return [] if hook is None else hook.lines(content, season, HowtoPage())

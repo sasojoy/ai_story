@@ -55,6 +55,10 @@
   open_bounties）、標題與怎麼完成（title、how、issuer、enemy_name）、接不接得了（can_take、stranded、join_note、drop_stranded、hunting、official_hit）、委託（open_commissions、commission_line）、
   掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
 
+# guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md）
+- howto_base.py：玩法說明兩包以上要用的那幾樣——一節的寫法 section、一成兩成 tenth、會推戰況的陣營 order_pushers、SOME_PLACES；各節在各包的 howto.py，
+  順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。
+
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
 
