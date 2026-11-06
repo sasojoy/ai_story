@@ -5,7 +5,7 @@
 鎖外三段式（A 開單、B 叫模型、C 重驗）照舊：
 - 開爐：A forge_request（鎖內、只讀）→ B server.prepare_forge（naming.generate，鎖外）→ C forge(proposed=...) 整個重驗；
   proposed 沒給（整季機器人、腳本、測試）時 fusion.merge 在鎖內用 ctx._quick_client()
-- 立意：A intent_request → B server.create_intent（create.read，鎖外）→ C intent；重讀同（reread_request／reread，B 叫 create.read_or_none）
+- 立意：A intent_request → B routes.create_intent（create.read，鎖外）→ C intent；重讀同（reread_request／reread，B 叫 create.read_or_none）
 B 段留在 server.py（鎖外工作的掛鉤是總表第 69 批）。
 
 「forge」兩個意思：這一包的 forge* 是煉製頁的意境開爐；鐵匠鋪的打造（smith_forge、forge_plan、forge_secrets）不在這裡。"""

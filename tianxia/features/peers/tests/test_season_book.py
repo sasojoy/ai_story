@@ -14,7 +14,7 @@ def test_the_title_book_keeps_the_old_order_and_skips_a_repeat(content):
     p.season_number = 3
     p.top_merits = 2  # 這一季掙到「決戰首功二次」
     art_id = "basic_fist"
-    p.arts.append(art_id)  # 功法庫裡一門（測試內容的新角色身上沒有武學；同 tests/arts/test_arts_pages_two.py）
+    p.arts.append(art_id)  # 功法庫裡一門（測試內容的新角色身上沒有武學；同 tianxia/features/cultivation/tests/test_arts_pages_two.py）
     p.art_quality[art_id] = "絕學"  # 這一季也掙到「練成絕學一門」
     assert library.owned_arts(a.state) == [art_id]
     p.title_book = ["第1季 天下第一", "第3季 決戰首功二次", "第2季 名人榜第一"]  # 中間那一條跟這一季的重複

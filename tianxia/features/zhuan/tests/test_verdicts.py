@@ -17,6 +17,7 @@ from wins_kit import save, wins_content, wins_game
 from tianxia import zhuan_end
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 
 NOW = 1_800_000_000.0
 ADMIN = "論功官"
@@ -153,7 +154,7 @@ def test_a_bought_quote_adds_a_writer_and_a_rewrite_picks_it_up():
     low.state.player.affinities["zhujun"] = 45
     CharacterStore(w.db).save(low.state)
     Wallet(w.db).post(name_key("官乙"), 1000, "grant", "test:quote", time=NOW)
-    assert low.mall_buy("zhuan_quote", "q1")[0].startswith("買下")
+    assert mall_actions.buy(low, "zhuan_quote", "q1")[0].startswith("買下")
     assert "zhuan:quote:caocao" in {o.id for o in low.options()} and "zhuan:quote:zhujun" in {o.id for o in low.options()}
     low.choose("zhuan:quote:zhujun")
     req = low.biography_request(1)

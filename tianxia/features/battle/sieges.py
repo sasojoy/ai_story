@@ -3,7 +3,7 @@
 這裡是 Game 那一側——好幾場並存時的那一串、推一場、收兵、取消、收場。Game 留 6 個一行委派（核心原位在叫：_battle_status 每一場推一次、
 收季與開下一季收兵、取消一場攻城、收場分進攻城那一支、選單與「我在哪一場」問定義），siege_guards 只有這裡叫。第 8 批推進與結算搬進
 progress.py、收季的收兵換成接縫掛鉤之後，_shelve_siege 沒人叫了、拿掉，Game 上剩 5 個（_sieges、_definition_of、_tick_siege、
-_cancel_siege、_settle_siege：核心不再叫它，可是 tests/test_siege_settle.py 直接叫 game._settle_siege，留著）。
+_cancel_siege、_settle_siege：核心不再叫它，可是 tianxia/features/battle/tests/test_siege_settle.py 直接叫 game._settle_siege，留著）。
 
 - sieges：還沒收場的攻城戰（這一季沒開領地爭奪是空的、不讀資料庫）
 - definition_of：這一場的定義（決戰照內容；攻城戰是那個大區的範本，名字換成「攻城・地點」）——view.py 與這裡都經 ctx 叫（測試直接叫）

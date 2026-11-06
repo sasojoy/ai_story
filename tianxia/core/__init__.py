@@ -26,8 +26,10 @@
 - feast_base.py（core_world2：全部拆包第 40 批）：宴席「讀」的那一半——on、find、is_open、open_feasts、hosting、toasted；人物活起來 figure_life
   （共用規則層）問誰在擺宴、書信的邀宴問開著的宴，宴客包的 rules re-export 同一批。設宴（寫）是世界層 life 那一格。同 event_check 不進 MODULES。
 - smith_base.py（core_world2：全部拆包第 40 批，第 41 批 PM 認定第 4 條）：打造單子「讀」的那一小半——GO_VERB、is_forge_step、is_step_line、
-  draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose、_drop_stale_references、sync 讀它，鐵匠鋪包的 smithing
+  draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose 與鐵匠鋪包收店那兩格（第 55 批）讀它，鐵匠鋪包的 smithing
   re-export 同一批。同 event_check 不進 MODULES。
+- signature_base.py（core_seams：全部拆包第 55 批）：本命兵器「清失效參照」那一小半——owned、refresh_names；stale.mid 的 signature 那一格（engine._SEAM_CORE）讀它，
+  裝備包的 signature_arms re-export 同一批。同 event_check 不進 MODULES。
 # map2（全部拆包第 50 批「輿圖二」：atlas 收進共用規則層，讀包認領的欄位改問核心；計畫 docs/superpowers/plans/2026-11-07-輿圖包-第2批.md 1.5、1.6）
 - explore_base.py：探索表的小字與小函式——LOSE_WORD、六種地點（TOWN…CAMP）、四類事（EVENT…INSIGHT、KINDS、FILL）、PLACE_WORDS、BEAT_MOSTLY、
   BALANCED、match、kind_of、mostly_of、table_weights、mostly_in、hint_in、terrain_tags；第 49 批寄放在 services.py 檔尾 # map 那一段，第 50 批
@@ -37,6 +39,7 @@
   atlas.travel_block 經它問，只讀移動包認領的 PlayerState.tagalong，不寫（寫與清照舊是移動包的 party）。移動包的 party re-export 同一個。
   同 event_check 不進 MODULES。
 - omen_base.py 再收 fs_answering（正在答最後一步的題：PlayerState.fs_asking 有值）：atlas.travel_block 經它問，軍情包的 fs_rules re-export 同一個。
+- omen_base.py 再收 heard_any（聽過伏筆片段了嗎：PlayerState.fragments 有值）：引導包碰到才說的提示 h_foreshadow 經它問（第 34 批認定第 9 條）。
 - seal_base.py（seal：全部拆包第 27 批，PM 認定甲案）：玉璽碎片「讀」的那一小半——on、revamp_on、filled、key、holders、天命之爭（mandate_event、
   mandate_battle、is_mandate_battle、mandate_now）、保底收場 deserted、天命未定的兩句、挑戰者門檻與「戰功居前」（threshold、challenger_ok、
   hint_names、merit_hint）、璽動那一句 stir_text、起點偏移與那一句（lean_shift、lean_text、shift_text、MANDATE_SCENE、MANDATE_WEIGHT）、江湖史七格
@@ -54,6 +57,13 @@
 - bounty_base.py：懸賞榜「別人讀」的那一半——字句（ENEMY、BOARD、OFFICIAL、STRANDED_*、LAPSED_SIDE、LAPSED_LEAN、BEATEN_OFFICIAL、RALLY_POSTED……）、榜（active、board_here、close_board、mine、visible、
   open_bounties）、標題與怎麼完成（title、how、issuer、enemy_name）、接不接得了（can_take、stranded、join_note、drop_stranded、hunting、official_hit）、委託（open_commissions、commission_line）、
   掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
+
+# mall（全部拆包第 58 批：商城收尾）
+- name_base.py：保留的名號——FAMOUS_NAMES、reserved_names（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名共用，
+  商城包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。
+# guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md）
+- howto_base.py：玩法說明兩包以上要用的那幾樣——一節的寫法 section、一成兩成 tenth、會推戰況的陣營 order_pushers、SOME_PLACES；各節在各包的 howto.py，
+  順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

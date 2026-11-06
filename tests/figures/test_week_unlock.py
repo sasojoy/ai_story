@@ -13,7 +13,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 HOUR, DAY = 3600, 86400
-MON = 1792339200  # 2026-10-19 週一 00:00（台灣），同 tests/test_checkin.py
+MON = 1792339200  # 2026-10-19 週一 00:00（台灣），同 tianxia/features/checkin/tests/test_checkin.py
 TOWN = "yingchuan"  # 城鎮類的地點：懸賞榜、鐵匠鋪在這種地方
 
 
@@ -150,7 +150,7 @@ def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
 def test_stage_three_writes_the_win_gap_on_the_card_and_the_world_map(profile):
     """第 3 段：本週卡多一句「離贏還差多少」，輿圖天下層同一句；前兩段沒有。批 3c 接上之後（四勝利開著，這兩種季都開）寫兩軍各自離
     勝利條件還差多少（wins.gap_line）；以前這裡是留位、鎖的是結局門檻那一句（rules.stance_rule_note），四勝利關著的季照舊是它
-    （tests/test_sides_card.py::test_last_week_says_how_far_from_winning）。"""
+    （tianxia/features/faction/tests/test_sides_card.py::test_last_week_says_how_far_from_winning）。"""
     g = _game(profile)
     assert _card(g)["gap"] is None and g.map_state()["gap"] is None
     _at(g, _stage(g, 2))

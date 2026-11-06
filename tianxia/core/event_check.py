@@ -20,8 +20,8 @@ event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西
 
 改這一份要跑的測試（dev/core-events-1 審查修正，PM 2026-11-03；導覽〈核心與存檔〉「事件檢定」）：
 - scripts/test_for.py：核心測試＋煙霧，再並上寫到改到的函式（連模組裡直接叫它、用到它的，一路往上）的 Game 委派名、模組名＋函式名、
-  類別與常數的測試檔（test_for.core_module_callers）。tale_clue 挑到 tests/arts/test_secret_recipes.py、tests/gear/test_forge_secrets.py；
-  present 挑到寫 _present 的 tests/ranger/test_stances_fix6.py（人物心意那一則）、tests/figures/test_seats.py、tests/core/test_events.py……；
+  類別與常數的測試檔（test_for.core_module_callers）。tale_clue 挑到 tests/arts/test_secret_recipes.py、tianxia/features/smithy/tests/test_forge_secrets.py；
+  present 挑到寫 _present 的 tianxia/features/companions/tests/test_stances_fix6.py（人物心意那一則）、tests/figures/test_seats.py、tests/core/test_events.py……；
   沒留委派的 answer_branch、deed_credit 照叫它的 answer_event 挑到隨口應對那幾個（test_free_text_and_marks、test_outcomes_answer……）。
 - present、event_text、choice_label_of、resolve_choice、apply 是每一則事件都走的（端出卡、選單上的字、按下固定選項、套效果），只挑那一個
   函式的不夠：改了，提交之後照整個檔挑一次 `scripts/test_for.py tianxia/core/event_check.py --base HEAD --slow`（工作樹跟 HEAD 沒有差
@@ -31,8 +31,8 @@ event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西
     （slow：test_bot_plays_a_full_season）——審查把 seen_events.add 拿掉，test_for 挑的與原本列的 18 個檔都沒紅，只有這兩個紅
   - 端出事件與固定選項：tests/bots/test_event_llm.py、tests/core/test_event_ease.py、tests/core/test_event_reward_caps.py、
     tests/core/test_event_tiers.py（整檔 slow；event_tier 沒有測試寫到它的名字）、tests/core/test_events_new_regions.py、
-    tests/core/test_faction_events.py、tests/figures/test_foreshadow.py、tests/figures/test_item7_foreshadow_cooldown.py、
-    tests/season/test_real_foreshadows.py
+    tests/core/test_faction_events.py、tianxia/features/military/tests/test_foreshadow.py、tianxia/features/military/tests/test_item7_foreshadow_cooldown.py、
+    tianxia/features/military/tests/test_real_foreshadows.py
 - 與 scripts/same_behavior.py 的 events 一軌（compare --tracks events；見計畫第五、六節）
 """
 from __future__ import annotations

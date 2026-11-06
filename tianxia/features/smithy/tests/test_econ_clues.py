@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
-from jianfa_kit import classic_explore  # 殘譜在探索三選一的幾顆裡擲（減法季探索一顆開著時出門一趟擲一次，tests/test_explore_one.py）
+from jianfa_kit import classic_explore  # 殘譜在探索三選一的幾顆裡擲（減法季探索一顆開著時出門一趟擲一次，tianxia/features/explore/tests/test_explore_one.py）
 from tianxia import forge_secrets
 from tianxia.engine import Game
 from tianxia.world_state import fresh_season

@@ -1,5 +1,5 @@
 """減法季批 4（主機側計畫 Task 4-2 的純規則那一半；整合設計 5.1、5.9）：模型把玩家那句話歸到一種後果（event_llm.classify_outcome），
-引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）見 tests/test_outcomes_answer.py。
+引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）見 tests/core/test_outcomes_answer.py。
 模型一律是假的（mock.Mock().chat_structured.return_value）：不打 11434。"""
 import json
 from unittest import mock

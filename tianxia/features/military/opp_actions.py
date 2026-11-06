@@ -52,7 +52,7 @@ def give_opportunity(ctx, name: str, opp_id: str) -> list[str]:
 
 
 def place_options(ctx, loc_id: str) -> list:
-    """閒著的選單上機緣的選項：交東西、天時地利、拼圖、推理、密謀（正式版乙一）。核心原位夾在 _rank_action_options 與伏筆最後一步、託付之間。"""
+    """閒著的選單上機緣的選項：交東西、天時地利、拼圖、推理、密謀（正式版乙一）。MENU_ORDER["here"] 的 omen 那一格夾在 rank 與 errand 之間，伏筆最後一步排在它後面。"""
     return opp_rules.place_options(ctx.state, ctx.content, loc_id)
 
 
@@ -82,3 +82,13 @@ def hear_topic(ctx, companion_id: str, topic: str) -> list[str]:
 def after_success(ctx, kind: str, loc_id: str) -> list[str]:
     """第 2 階行動成功、守勢行動之後替累積型機緣記一次（kind 是 rank2 或 duty）。"""
     return opp_rules.after_success(ctx.state, ctx.content, kind, loc_id, ctx.rng)
+
+
+def deliver_plots(ctx) -> list[str]:
+    """sync.deliver 的 plots 那一格（core_seams，全部拆包第 55 批；照原位搬）：不在線時收場的密謀，回來第一次同步就結算（正式版乙二）。
+    經 ctx._settle_plots：test_seats、test_weapons_forge 換掉 Game 上的名字才打得到。回的那幾句進同步的回話。"""
+    settled = ctx._settle_plots()
+    if settled:
+        ctx._write("密謀", settled)
+        ctx._save_season()  # 逾期的密謀在這裡改成作罷，那是共用賽季的一份
+    return settled

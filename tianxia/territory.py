@@ -18,6 +18,7 @@ RETAKE_LINE = "{side}收復{place}。"  # 待 joy 潤（FB-252）：這一季佔
 CONTROL_LINE = "此刻由{side}控制"  # 待 joy 潤：輿圖詳情欄局勢那一行
 
 
+SORTIE_NAME = "出陣"  # 待 joy 潤（玩法說明兩包要用：guide、figure_acts 讀這裡；出陣包 rules.NAME 就是它）
 SIDES = ("guan", "huang")  # 交戰兩軍（領地爭奪設計 4.1：豪強不佔地；conquest.SIDES 同一份）
 
 

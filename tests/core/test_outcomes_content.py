@@ -1,7 +1,7 @@
 """減法季批 4（主機側計畫 Task 4-1）：正式內容的隨口應對分岔——草稿（content/events_outcomes.json，PM 2026-10-24 初版、待 joy 潤）
 併進 content/events/*.json 之後，四種設定都載得起來、每則最後一種是 fallback、作惡的那一種只在原事件有作惡選項的那八則。
 yc_wilds_plow（人拉犁）本來沒有隨口應對：接線那一批跟開關一起補（PM 2026-10-25 第 7 件），寫成 outcomes_only——只在分岔開著的季
-才畫那一顆，關著的季不多一顆鈕（tests/test_outcomes_answer.py 測選單）。"""
+才畫那一顆，關著的季不多一顆鈕（tests/core/test_outcomes_answer.py 測選單）。"""
 from collections import Counter
 from pathlib import Path
 

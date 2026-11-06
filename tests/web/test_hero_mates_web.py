@@ -1,6 +1,7 @@
 """俠客頁「門下」一人一張卡（Joy 2026-10-26「裝備跟門下顯示優化」）：伺服器的 roster_cards（skillview.roster_cards）照名冊的順序
 給本人、同伴、部下各一張（名字、本人／出戰／在門下、等級、氣血、身上兩門），網頁畫成卡，點一張在底下攤開戰法、加入移出、傳功，
 卡頭已經寫了的（名字、等級、內功、武學、裝備）不再寫一次。正式內容；沒有 node 的網頁那幾條略過。"""
+# 畫法在 web/cultivation.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

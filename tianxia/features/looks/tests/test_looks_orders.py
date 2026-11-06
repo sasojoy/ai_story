@@ -11,6 +11,7 @@ from conftest import next_season
 from test_looks import T0, _game
 
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.features.looks import actions, orders
 from tianxia.models import Look, MallItem
 from tianxia.wallet import Wallet
@@ -121,8 +122,8 @@ def test_names_and_prompts_are_checked(on):
 
 def test_the_shelf_never_sells_the_order_item(on):
     game = _game(on)
-    assert "look_order" not in [i["id"] for i in game.mall_view()["items"]]
-    assert game.mall_buy("look_order", "buy-ref-0011")[-1] == "沒有這件商品。"
+    assert "look_order" not in [i["id"] for i in mall_actions.view(game)["items"]]
+    assert mall_actions.buy(game, "look_order", "buy-ref-0011")[-1] == "沒有這件商品。"
 
 
 def test_png_and_webp_headers():

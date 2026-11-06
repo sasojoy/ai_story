@@ -9,17 +9,17 @@
   mingtie_actions.py：名帖的動作與管理者看檢舉、撤下、放回——原本是 Game 上的 31 個方法（Game 留一行委派）
 - routes.py：/api/peer、/api/peer/act、/api/mingtie、/api/mingtie/{op}；bots.py：假人收到打招呼、結伴邀請、名帖的回法與做名帖、遞名帖、答切磋、答論武、截殺
 - 玩家互動二（全部拆包第 38 批）：spar.py／spar_actions.py（切磋）、discuss.py／discuss_actions.py（論武，三段式首創取名的 A 段 request、C 段 discuss；B 段殼的接線
-  server.prepare_peer、screen_peer 留在 server.py，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py（那三個名字留成別名），
+  第 69 批從 server.py 搬進 routes.py 的 prepare_peer、screen_peer，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py（那三個名字留成別名），
   動作原本是 Game 上的 28 個方法（Game 留 13 個一行委派）
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，
 答應時照邀請的種類分派；切磋 spar_actions.spar、論武 discuss_actions.discuss（第 38 批）在包裡、包內直接叫，結伴同行（移動包 party.join，Game._join 留一行委派）經 ctx 叫。
-enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排（Game._everyday_options 的 _invite_options）
-位置固定，留原位叫委派。
+enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排是 MENU_ORDER["here"] 的 invite 那一格
+（第 56 批）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, StatusHook
 
 from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）；原本 engine.py 頂端 import tianxia.discuss（全部拆包第 38 批）
@@ -30,8 +30,8 @@ from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動�
 class PeersFeature(Feature):
     name = "peers"
     prefix = "invite"  # invite:yes|no|cancel:<編號>：打招呼的回禮（invite:cold|retort|…）也是同一個前綴
-    web = ()  # app.js 的 MT_INKS 等歸這一包，網頁第 3 階才切
-    content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照舊讀（MingtieContent）
+    web = ("peers.js", "peers.css")  # 名帖的畫法與畫布（全部拆包第 66 批從 app.js 切出來）；此地還有誰、邀請、玩家卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；點擊分派的 case 照舊在 app.js（殼）
+    content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照它到這一包的 content/ 載（MingtieContent）
     bot_always = ("invite:",)  # 邀請的選項一直按得下去（收回、回禮）：整季機器人不按（bot.py 的排除清單原本也寫了一個，拿掉那一個，只剩這裡）
     # 名帖與贈物一天的次數：自己那一張、收到的、檢舉過的、不接誰的挑釁話、定稿與遞帖的次數記在哪一天、贈物的次數——全部跨季帶走
     # （Game._reset_player_for_new_season 照抄；title_book 也是名帖的，但換季時要加上這一季掙到的頭銜，由 on_season_start 接，不算原樣帶走）
@@ -62,6 +62,53 @@ class PeersFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 peers 那一格（順序在 SEAM_ORDER；不看開關）：名帖與一天的次數（actions.carry_season）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("season.carry", "peers", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：玩家之間的邀請：別人發給你的、你發出去還在等的。"""
+        if self._menus is None:
+            from . import invite_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "invite", lambda ctx, loc, cost, odds: invite_actions.options(ctx)),
+            )
+        return self._menus
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from tianxia import rules  # noqa: PLC0415
+
+            from . import actions, invite_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 玩家卡要的邀請：收到的與發出去還在等的（第一季才有）
+                StatusHook("status", "invites", lambda ctx, frame: {"invites": invite_actions.status(ctx)} if rules.season_one(ctx.content, ctx.state.world) else {}),
+                # 此地還有誰（玩家之間的互動第一層）：[{name, side}]，路上、序章裡是空的；別人遞給你、還沒回的邀請（第二層），回應鈕是選單上的 invite: 選項
+                StatusHook("main", "peers", lambda ctx, frame: {"here": actions.peers_here(ctx), "calls": actions.calls_here(ctx)}),
+            )
+        return self._status_slots
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
 
 
 FEATURE = PeersFeature()

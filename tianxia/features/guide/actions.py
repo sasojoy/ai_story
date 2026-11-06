@@ -8,17 +8,16 @@ from typing import TYPE_CHECKING
 
 from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批收進、大勢人物 figures 第 40 批收進）
 from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
-from tianxia import howto  # 過渡：待搬
 from tianxia.characters import name_key
 from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
-from tianxia.core import seal_base, services  # 核心：碰到才說的玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
+from tianxia.core import omen_base, seal_base, services  # 核心：碰到才說的伏筆、玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
-from tianxia.rules import season_one
+from tianxia.rules import season_one, stance_rule_note
 from tianxia.state import HintNote
 
-from . import enlist, newbie, opening, rules
+from . import enlist, howto, newbie, opening, rules
 from . import hints as hint_rules  # 跟 engine 一樣叫 hint_rules：函式裡有區域變數叫 hints
 
 if TYPE_CHECKING:
@@ -324,7 +323,7 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     if want("h_spectator") and status is not None and p.faction is None and p.name not in status[0].participants \
             and ctx._at_battle(status[1]):
         on.append("h_spectator")
-    if want("h_foreshadow") and any(p.fragments.values()):
+    if want("h_foreshadow") and omen_base.heard_any(s):
         on.append("h_foreshadow")
     if want("h_event_reveal") and p.events_seen:
         on.append("h_event_reveal")
@@ -651,3 +650,80 @@ def mark_veteran(ctx: Game) -> bool:
 
 def enlist_expire(ctx: Game) -> list[str]:
     return enlist.expire(ctx.state, ctx.content)
+
+
+def deliver_enlist(ctx: Game) -> None:
+    """sync.deliver 的 enlist 那一格（core_seams，全部拆包第 55 批）：第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄。不進回話。"""
+    ctx._guide(enlist_expire(ctx))
+
+
+def carry_season(ctx: Game, old, fresh) -> None:
+    """season.carry 的 guide 那一格，排最前面（core_seams，全部拆包第 55 批；照原位搬，不看開關）。序章的 begin、skip_onboarding 會寫 fresh，後面的格照蓋，跟原本一樣。"""
+    c = ctx.content
+    # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
+    # 舊存檔先換算成新引導的步數（設計 7.2）
+    step = prologue_rules.migrated_step(old.player, c)
+    carried = step >= base_step_count(ctx)
+    if carried:
+        fresh.player.tutorial_step = step
+        fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
+    elif prologue_rules.has(c):
+        if step < c.tutorial.prologue_steps and not old.player.bot:
+            prologue_rules.begin(fresh, c)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
+        else:
+            # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬；假人不走初入江湖
+            t = c.tutorial
+            fresh.player.tutorial_step = t.prologue_steps
+            if old.player.bot:
+                prologue_rules.skip_onboarding(fresh, c)
+    if enlist_done(ctx, old):
+        fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
+    # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
+    # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
+    fresh.player.hints_seen = set(old.player.hints_seen)
+    fresh.player.hints_off = old.player.hints_off
+    book = c.hints
+    if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
+        fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
+    fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪
+
+
+# ── 玩法說明（全部拆包第 59 批「引導二」）：Game 留一行委派的四個；句子在 howto.py，這裡只照這個人此刻的狀態把引數算好 ──
+
+
+def top_up_line(ctx: Game, added: int) -> str:
+    """回體丹補到送的數字那一行（Game._top_up_pills：讀檔那一刻，沒有掛鉤）。"""
+    return howto.top_up_line(ctx.content, added)
+
+
+def howto_text(ctx: Game) -> str:
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
+        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
+        真的有人能招募時才寫。"""
+        c = ctx.content
+        rule = stance_rule_note(ctx.state, c) if season_one(c, ctx.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
+        return howto.page(
+            c, ctx.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
+        )
+
+
+def stamina_help(ctx: Game, newbie: bool, button: bool) -> list[str]:
+    """點體力條看的說明（status_data 表 help 那一格的 stamina_help；第 66 批的表裡，那一格留在核心、照舊叫委派）。button：體力條上有沒有那顆鈕。"""
+    s, c = ctx.state, ctx.content
+    return howto.stamina_lines(
+        c, s.world, newbie, s.player.stamina_pills, button=button, today=ctx.pills_left_today(),
+        card=ctx._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
+    )
+
+
+def war_help(ctx: Game) -> dict[str, list[str]]:
+    """點戰況圖卡、態勢、大事、主線看的說明（status_data 表 war 那一格的 war_help：同上）。"""
+    return howto.war_help(ctx.state, ctx.content)
+
+
+def glow_slot(ctx: Game, frame) -> dict:
+    """main 表的 glow 那一格（全部拆包第 66 批）：入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開。
+    改 guide 那一格已經合進去的 view["guide"]，自己沒有鍵。"""
+    if frame.view["guide"] is not None:
+        frame.view["guide"]["glow"] = enlist_glow(ctx, [o.id for o in frame.options if o.enabled])
+    return {}

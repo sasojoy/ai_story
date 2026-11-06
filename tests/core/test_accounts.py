@@ -37,7 +37,7 @@ def test_register_stores_a_salted_hash_not_the_password(store):
 
 
 def test_the_production_scrypt_parameters_are_pinned():
-    """正式的 scrypt 參數與雜湊（測試整併第 4 區）：tests/test_server.py 為了快把參數換成最便宜的一組（那裡測的不是密碼），
+    """正式的 scrypt 參數與雜湊（測試整併第 4 區）：tests/server/test_server.py 為了快把參數換成最便宜的一組（那裡測的不是密碼），
     這個檔照舊用正式參數，這一條把參數本身釘住——帳號只存鹽與雜湊、不存參數，改了參數，已經設好的密碼就全部對不上。"""
     import hashlib
 

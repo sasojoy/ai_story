@@ -80,7 +80,7 @@ def final_options(ctx, loc_id: str) -> list:
 
 
 def omen_options(ctx, loc_id: str) -> list:
-    """閒著的選單上機緣與伏筆最後一步的選項（機緣先、伏筆後；核心原位夾在 _rank_action_options 與託付之間，順序算行為）。"""
+    """閒著的選單上機緣與伏筆最後一步的選項（機緣先、伏筆後；MENU_ORDER["here"] 夾在 rank 與 errand 之間，順序算行為）。"""
     return opp_actions.place_options(ctx, loc_id) + final_options(ctx, loc_id)
 
 

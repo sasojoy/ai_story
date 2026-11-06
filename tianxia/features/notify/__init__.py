@@ -11,13 +11,13 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, StatusHook
 
 
 class NotifyFeature(Feature):
     name = "notify"
     prefix = None  # 沒有選項：通知是設定頁與看守的事
-    web: tuple[str, ...] = ()  # 設定頁的「手機通知」與 sw.js 歸網頁殼化（總表第 66 批）
+    web = ("notify.js", "notify.css")  # 設定頁的手機通知、怎麼收到那一頁、信底下問一次與訂閱（全部拆包第 66 批從 app.js 切出來；樣子第 67 批從 style.css 切出來）；web/sw.js 留原位不宣告（web_scripts 會把 .js 排成 script，/sw.js 由這一包的路由讀）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
@@ -33,6 +33,18 @@ class NotifyFeature(Feature):
     def threads(self, shell) -> None:
         """看守的執行緒：殼開（server.main 經 start_threads 叫到這裡），測試不叫、自己叫 start_web_push；NOTICE_STOP、NOTICE_THREAD 留殼（tests/conftest.py 收尾認這兩個名字）。"""
         shell.start_web_push(shell.CONTENT.config)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            self._status_slots = (
+                # 手機通知（減法季批 9）：設定頁畫不畫那一顆、第一次來信問不問（WEB_PUSH 是殼的 state）
+                StatusHook("main", "web_push", lambda ctx, frame: {"web_push": frame.shell.WEB_PUSH is not None}),
+            )
+        return self._status_slots
 
 
 FEATURE = NotifyFeature()

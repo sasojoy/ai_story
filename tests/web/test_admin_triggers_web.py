@@ -1,7 +1,7 @@
 """管理者觸發鈕的伺服器路由與網頁（brief 2026-10-07-管理者觸發鈕）：
 
 - 路由：每一顆鈕走 /api/do/<op>（管理者以外 400「只有管理者能這麼做。」），查玩家個人劇情走 /api/admin/player（管理者以外 403）。
-- 網頁：管理頁（/admin，2026-11-01 從設定抽屜搬出來）畫新的鈕；按了先問一次，確定才送到對的路由（照 tests/test_prologue_web.py 的做法把整支
+- 網頁：管理頁（/admin，2026-11-01 從設定抽屜搬出來）畫新的鈕；按了先問一次，確定才送到對的路由（照 tests/web/test_prologue_web.py 的做法把整支
   app.js 放進 node 的假瀏覽器跑；沒有 node 就略過那幾個）。
 
 伺服器用正式內容的 7 天季（第一季的規則開著、軍令每天一道）、自己的一份（不碰別的測試的 server.CONTENT）。"""
@@ -44,7 +44,7 @@ def client():
 
 
 def _admin(client):
-    """管理者的帳號（主機端腳本綁的，照 tests/test_server.py 的 _admin）登入；回傳他的 Game。"""
+    """管理者的帳號（主機端腳本綁的，照 tests/server/test_server.py 的 _admin）登入；回傳他的 Game。"""
     boss = server.open_game(ADMIN)
     open_characters().save(boss.state)
     store = server.account_store()

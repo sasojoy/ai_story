@@ -1,4 +1,4 @@
-"""content/personas.json 的檢查（功能包的 check_content）：人物要在、一人最多三條、id 與兩頭的叫法不重複、叫法不是 NONE、五段都有字。"""
+"""這一包的 content/personas.json 的檢查（功能包的 check_content）：人物要在、一人最多三條、id 與兩頭的叫法不重複、叫法不是 NONE、五段都有字。"""
 from __future__ import annotations
 
 from . import rules

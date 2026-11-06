@@ -13,15 +13,16 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook
 
 from . import zhuan_end
 
 
 class ZhuanFeature(Feature):
     name = "zhuan"
+    web = ("zhuan.js",)  # 玩家傳那一層與行狀（全部拆包第 66 批從 app.js 切出來）
     prefix = "zhuan"
-    content = ("verdicts.json",)  # content.py 照舊讀（核心沒有 import 這一包）；驗證在下面的 check_content
+    content = ("verdicts.json",)  # content.py 照它到這一包的 content/ 載（核心沒有 import 這一包）；驗證在下面的 check_content
     # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 core/annal_base.py 管；列傳存在資料庫的 biographies 表、票在錢包裡
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
@@ -46,6 +47,43 @@ class ZhuanFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 zhuan 那一格（順序在 SEAM_ORDER；不問 enabled）：〈天下形勢〉寫到名號、季末論功各記一則行狀（心意的行狀之後、書信之前）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "zhuan", lambda ctx: actions.tick(ctx)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：休季那一顆後面，列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("rest", "zhuan", lambda ctx: actions.options(ctx)),
+            )
+        return self._menus
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "zhuan", lambda ctx, frame: actions.main_slot(ctx, frame)),
+            )
+        return self._status_slots
 
 
 FEATURE = ZhuanFeature()

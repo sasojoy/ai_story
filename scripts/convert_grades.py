@@ -97,11 +97,18 @@ def _check_difficulties(root: Path) -> list[tuple[str, int]]:
     return out
 
 
+def _json_files(root: Path) -> list[Path]:
+    """這個根底下每一個 json，排好。真實內容走 real_files：各包宣告的檔不在 content/ 底下（全部拆包第 62 批）；其他的根攤平。"""
+    from tianxia.content import REAL_ROOT, real_files  # noqa: PLC0415
+
+    return sorted(real_files().values() if root.resolve() == REAL_ROOT else root.rglob("*.json"))
+
+
 def checks(root: Path, apply: bool) -> None:
     before = _check_difficulties(root) if apply else []
     total: collections.Counter = collections.Counter()
     originals: dict[Path, bytes] = {}
-    for path in sorted(root.rglob("*.json")):
+    for path in _json_files(root):
         raw = path.read_bytes()
         text = raw.decode("utf-8")
         new, tally = convert_text(text)
@@ -143,7 +150,7 @@ def rewards(root: Path) -> None:
                 for v in obj:
                     walk(v)
 
-        for path in sorted(root.rglob("*.json")):
+        for path in _json_files(root):
             walk(json.loads(path.read_text(encoding="utf-8")))
         changed = 0
         print(f"{kind}（{'、'.join(f'{n} {a}' for n, a in zip(names, row))}）：")

@@ -11,7 +11,7 @@ arena_sign）、報名與挑擂的標題（choose 掛鉤 → arena_title）、�
   補送：deliver_arena
 
 留在 Game 的經 ctx：單打服務（_player_hp_and_cap、_battle_power、_battle_scores、_battle_role、_file_battle）、記錄（_write、_save_season）、
-回體丹那一套的今天（_pill_day）、模型（client、_quick_client）、形象包的 arena_look、arena_move（查詢服務；這一包的 tests/test_arena.py
+回體丹那一套的今天（_pill_day）、模型（client、_quick_client）、形象包的 arena_look、arena_move（查詢服務；這一包的 tianxia/features/bout/tests/test_arena.py
 換掉 Game.arena_look）；這一包被換掉的委派 _arena_bare（tianxia/features/seal/tests/test_seal_revamp_hidden.py 換掉它）也經 ctx。
 """
 from __future__ import annotations
@@ -23,6 +23,7 @@ from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import MOVES, Squad
 from tianxia.rules import add_rumor
 from tianxia.state import ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, CrowdNote
@@ -479,7 +480,7 @@ def fight_menu(ctx) -> list[Option]:
 
 
 def entry_option(ctx) -> Option | None:
-    """「此地還能做」裡那一顆（原本 _everyday_options 最後那一行的 _arena_entry；店面登記 Shop.entry 回一顆或 None）。"""
+    """「此地還能做」裡那一顆（原本 _everyday_options 最後那一行；店面登記 Shop.entry 回一顆或 None；閉關中、路上是 busy、road 那兩格，第 56 批）。"""
     found = arena_entry(ctx)
     return found[0] if found else None
 
@@ -513,3 +514,15 @@ def arena_fight_problem(ctx, option_id: str) -> str | None:
     foe = ctx.state.world.arena.get(option_id.removeprefix("arena:fight:"))
     return foe and arena.challenge_problem(ctx.state.world, ctx.state.player.name, foe, ctx.content.config.arena,
                                            arena_left(ctx), ctx.content.config.time_scale)
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/bout 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字與先後一字不動）：頭目戰打到一半、擂台打到一半、坐在擂台邊。"""
+    p = state.player
+    if p.duel is not None:  # 單人頭目戰打到一半
+        return TravelBlock("正跟人交手，先分出勝負或抽身退走", to_jianghu=True)
+    if p.arena is not None:  # 擂台打到一半
+        return TravelBlock("正在擂台上，先分出勝負或認輸下台", to_jianghu=True)
+    if p.picking_arena:
+        return TravelBlock("還在擂台邊，先返回才能安排前往", to_jianghu=True)
+    return None

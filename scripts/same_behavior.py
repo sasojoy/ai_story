@@ -1370,7 +1370,16 @@ class DuelScenario(Scenario):
         self.main("乙一")
 
 
-TRACKS = {"sortie": Scenario, "duel": DuelScenario}  # 第 1 批的一軌（出陣）、第 2 批的一軌（約戰）：各自一個資料庫、各自切一半
+class _TrackTable(dict):
+    """軌的表：同一個名字再登記一次就丟 ValueError。各批都有自己的 _*_register_track，全部走到這裡；不擋的話後登記的默默蓋掉前面那一軌，那一軌就少驗了（第 B 波碰到 loom、abacus 各撞一次）。"""
+
+    def __setitem__(self, name: str, scenario: type) -> None:
+        if name in self:
+            raise ValueError(f"軌名 {name} 登記了兩次：{self[name].__name__} 與 {scenario.__name__}")
+        super().__setitem__(name, scenario)
+
+
+TRACKS = _TrackTable({"sortie": Scenario, "duel": DuelScenario})  # 第 1 批的一軌（出陣）、第 2 批的一軌（約戰）：各自一個資料庫、各自切一半
 
 
 # ═══════════════════════════ 子行程：假人 ═══════════════════════════
@@ -3433,7 +3442,7 @@ class BattleScenario(Scenario):
                      and self.world.get_companion(cid).owner is None), None)
 
     def give_mate(self, who: str, side: str | None) -> None:
-        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tests/battle/test_companions_battle._ride_in。"""
+        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tianxia/features/battle/tests/test_companions_battle._ride_in。"""
         cid = self.mate_for(side)
         if cid is None:
             emit(f"{who} 名下的同伴（歷史武將同行關著）", None)
@@ -12392,6 +12401,7 @@ class ZhuanScenario(Scenario):
         from tianxia import annals
         from tianxia.characters import name_key
         from tianxia.engine import Game
+        from tianxia.features.mall import actions as mall_actions
         from tianxia.state import BotProfile
         from tianxia.wallet import Wallet
 
@@ -12411,7 +12421,7 @@ class ZhuanScenario(Scenario):
                 self.begin()
                 g2 = Game(self.c, self.chars.load(name), world=self.world)
                 g2.client = None
-                emit(f"{name} 買紀念印", g2.mall_buy("zhuan_seal", "zhuan-bot-1"))
+                emit(f"{name} 買紀念印", mall_actions.buy(g2, "zhuan_seal", "zhuan-bot-1"))
                 self.chars.save(g2.state)
 
     def bot_rounds(self, tag: str, rounds: int) -> None:
@@ -23130,10 +23140,10 @@ class PlacardScenario(HeraldScenario):
     梅子衿手上有求援與兩件書信委託；蘇硯冰押著一張通緝還沒到期；陸觀潮坐在榜前、bounty_pick 指著一張求兵還沒交。
     後半：新程式接著交那一件、跨過掛單那一刻、交差（打贏、探索、抵達）、護衛辦成求援、退押金；假人（BotRunner 官軍、黃巾各一，走 bot_policy 的
     act:bounties 與 bounty:；整季機器人 bot.take_bounties）；收季時還坐在榜前的人、開下一季。
-    測試內容沒有陣營：開場在記憶體裡補三個陣營（同 tests/ranger/test_bounties.py 的 beta_setup；前半、後半各補一次），規則關著的季走 start、step 兩格。
+    測試內容沒有陣營：開場在記憶體裡補三個陣營（同 tianxia/features/bounties/tests/test_bounties.py 的 beta_setup；前半、後半各補一次），規則關著的季走 start、step 兩格。
     掛單（head 上讀輸出量的）：season21、week7 都是每天一批（issue_day：bounty_day 動、bounty_week 是 0），week 那一格的 issue 回空；issue 的本體只有測試內容經 tick 走到。
     這一軌走不到的（讀輸出量過）：測試內容的求兵（兵器關著，交不出）、大勢人物、人物倒下、改幫、事件拜入門派、酒肆、系統通緝（名聲關著）；season21 的新手揭通緝（新手連榜都看不到）、
-    season21 開局那封信（快轉到開榜那一段時過了期，week7 走到）；任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tests/gear/test_shop2.py 直接叫 _bounty）；
+    season21 開局那封信（快轉到開榜那一段時過了期，week7 走到）；任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tianxia/features/gear/tests/test_shop2.py 直接叫 _bounty）；
     榜開著動身（atlas.travel_block 擋掉，departure 那一行 close_board 只清掌櫃那一句，每一軌動身都走到）；官府通緝的惡名 BEATEN_OFFICIAL（crossblade 那一軌）；
     一類一顆關著的三句討伐說法（STRIKE_PRECISE 那幾句：直接叫 how 的那一軌）。"""
 
@@ -25091,6 +25101,2945 @@ def _beacon_register_track(name: str, scenario: type, mutation: tuple, profile: 
 # 改一個字（selftest）：來信那一句通知（notices.LETTER；第 53 批搬進包，舊名的檔、搬進包的檔兩處找）
 _beacon_register_track("beacon", BeaconScenario, (("tianxia/features/notify/notices.py", "tianxia/notices.py"),
                                                   ('LETTER = "{who}派人送來一封信。"', 'LETTER = "{who}派人送來一封信！"')), "week7")
+
+
+# core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 第七節）：這一段整段是第 55 批加的——
+# 情境 ReckonScenario（--track reckon，自己一個資料庫、自己切一半），最後一行登記。現有 51 軌逐行量過（計畫第七節那張表）：sync、advance、world_tick 的主幹都走到了，
+# 走不到的是髒存檔那幾支（收鐵匠鋪、收馬市、舊的同伴確認、所在地被拿掉）、同一份 Game 裡的收店、換季帶走的欄位（別軌帶的多半是預設值，帶丟了也看不出來）、
+# 排程那一下推奪璽單挑。角色的名字都是原創的（PM 11/04）；既有的軌一個字不動。
+
+
+class ReckonScenario(CarveScenario):
+    """補算與換季一軌（全部拆包第 55 批；--track reckon，自己一個資料庫）。借 carve 的 setup、seat（固定密鹽、七片、單挑節奏縮短）。
+    前半切在 smear：舊程式存下來的髒存檔沒有人讀過，新程式第一次讀（半舊半新）。後半：接手那一次清失效參照、同一份 Game 裡收店、
+    管理者快轉（advance：抵達、跨 22:00、補送寄放）、排程那一下（world_tick：奪璽單挑）、假人輪一輪、把換季帶走的欄位都擺成非預設、收季與開下一季。"""
+
+    BOT_SEATS = ["晏歸舟", "岑照影"]
+    PHASES_FIRST = ["setup", "seat", "smear"]
+    PHASES_SECOND = ["wake", "same_game", "pace", "watch", "machines", "marks", "turnover", "read_back"]
+    LEFT = ("location", "journey", "picking_smith", "smith_draft", "picking_market", "picking_bounty", "bounty_pick", "pending_companion",
+            "snubbed_until", "leg_actions", "recent_sights", "busy_until", "fortune")
+    CARRIED = ("tutorial_step", "guide_skipped", "enlist_step", "hints_seen", "hints_off", "hint_queue", "newbie_marks", "newbie_done", "renown_told",
+               "affinities", "past_notes", "dialogue_history", "history_start", "used_dialogue_options", "turns_since_consolidation", "gender",
+               "gender_chosen", "stamina_pills", "legend_items", "create_rerolls", "pills_topped_to", "pill_day", "pills_today", "sortie_day",
+               "sorties_today", "drill_day", "drills_today", "upgrade_day", "upgrades_today", "donate_day", "donated_today", "battle_results_seen",
+               "heirloom", "seal_seen", "rack", "weapon_serial", "divine_solved", "mingtie", "mingtie_box", "mingtie_hidden", "taunt_muted", "mingtie_day",
+               "mingtie_made", "mingtie_sent", "gift_day", "gifts_today", "keepsakes", "lasting", "flags", "legacy", "season_number")
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        if profile == "test":  # 福緣送上門：只有測試內容有可招募的人（正式內容沒人可給、一類一顆回空）；季短，等不到第 7 天，這裡讓它一補算就到期
+            self.c.config.fortune_day_max = 0
+
+    def looks(self, who: str, tag: str, fields: tuple[str, ...]) -> None:
+        """資料庫裡這個人的這幾個欄位（集合排序，輸出才穩）。"""
+        dump = self.chars.load(who).player.model_dump(include=set(fields))
+        emit(tag, json.loads(json.dumps(dump, ensure_ascii=False, default=sorted)))
+
+    def tick_world(self, tag: str) -> None:
+        """伺服器排程的一下（server.world_step：沒有玩家的 Game；同 DuelScenario 的那一下）。"""
+        self.begin()
+        msgs = self.server.world_step(time.time)
+        self.server.GAMES.clear()
+        emit(f"排程 {tag}", msgs)
+
+    # ── 前半 ──
+
+    def smear(self) -> None:
+        """切點：直接改資料庫，後面沒有任何一下請求讀過。藺秋禾站在野地還開著三間店、帶著舊的同伴確認與找不到的人物、景、路上的事；
+        聞岫川的所在地與路都被內容拿掉了；季聽瀾在此地開著鐵匠鋪、單子上的料沒了；符靜淵的閉關到期了（下一次同步出關，紀錄自己寫一則）。"""
+        from tianxia.core.services import ROAD_TASKS
+        from tianxia.state import Journey, SmithDraft
+
+        spot = self.wild_spot() or self.hub()
+        figure = sorted(self.c.figures)[:1]
+        sights = sorted(self.c.road_sights)[:1]
+
+        def dirty(p):
+            p.location, p.journey = spot, None
+            p.picking_smith, p.smith_draft = True, SmithDraft(kind="劍")
+            p.picking_market = True
+            p.picking_bounty, p.bounty_pick = True, "沒有這一張"
+            p.pending_companion = "沒有這個人"
+            p.snubbed_until = {"沒有這一位": 1.0, **{f: 2.0 for f in figure}}
+            p.recent_sights = ["沒有這一景", *sights]
+            p.leg_actions = {"沒有這件事", *sorted(ROAD_TASKS)[:1]}
+
+        def lost(p):
+            p.location = "沒有這個地方"
+            p.journey = Journey(mode="walk", path=["沒有這一站"], arrive_at=[1.0e12])
+            p.leg_actions = {"沒有這件事"}
+
+        def stale_order(p):
+            p.picking_smith, p.smith_draft = True, SmithDraft(kind="劍", main="沒有這一料")
+
+        def retreat(p):
+            p.busy_until = 0.0
+
+        self.edit(self.WORKER, dirty)
+        self.edit(self.HUNTER, lost)
+        self.edit(self.RIVAL, stale_order)
+        self.edit(self.ABSENT, retreat)
+
+    # ── 後半 ──
+
+    def wake(self) -> None:
+        """新程式第一次讀（建 Game 清失效參照、接著同步）：每一位看選單、再看資料庫裡那幾個欄位。"""
+        self.login_all()
+        for who in (self.WORKER, self.HUNTER, self.RIVAL, self.ABSENT):
+            self.main(who)
+            self.looks(who, f"{who} 接手第一次同步之後", self.LEFT)
+
+    def same_game(self) -> None:
+        """同一份 Game 裡店才開著、人不在那裡（管理者挪人、開關關了：建 Game 那一次清失效參照已經過了，只有同步那幾行收得到）：
+        三樣都開著；只有單子。照 server 的做法拿鎖、重讀，只叫 sync，再存回。"""
+        from tianxia.state import SmithDraft
+
+        for tag, smith, market in (("三樣都開著", True, True), ("只有單子", False, False)):
+            self.begin()
+            game = self.server.game_for(self.WORKER)
+            with self.server._locked(game):
+                p = game.state.player
+                p.picking_smith, p.smith_draft, p.picking_market = smith, SmithDraft(kind="劍"), market
+                msgs = game.sync(time.time())
+                emit(f"同一份 Game 同步 {tag}", [msgs, p.picking_smith, p.smith_draft is None, p.picking_market])
+                self.server.open_characters().save(game.state)
+            self.server.GAMES.clear()
+
+    def pace(self) -> None:
+        """管理者在路上、寄放著一匹馬：快轉（/api/do/fast_forward → Game.advance）一下抵達、寄放補上（正式內容；測試內容坐騎關著，留著），
+        再一下跨過 22:00（正式內容：季時間 96 小時約合現實 11 小時，領地爭奪換天）。"""
+        from tianxia import mounts
+        from tianxia.state import Journey
+
+        when = self.world.get_season().time + 3.0 * 3600
+
+        def go(state):
+            p = state.player
+            dest = next(loc for loc in sorted(self.c.locations) if loc != p.location)
+            p.journey = Journey(mode="walk", path=[dest], arrive_at=[when])
+            p.held_gear.append(mounts.new_mount(state, name="寄放馬", tier=2, quality="中品"))
+
+        self.edit_state(ADMIN, go)
+        self.do(ADMIN, "fast_forward", {"hours": 4})
+        self.looks(ADMIN, "管理者抵達之後", ("location", "journey", "held_gear"))
+        self.do(ADMIN, "fast_forward", {"hours": 24 if self.profile == "test" else 96})  # 測試內容的季短，96 小時整季就收了
+        self.looks(ADMIN, "管理者跨日之後", ("location", "journey", "held_gear"))
+
+    def watch(self) -> None:
+        """排程那一下（world_tick）推奪璽單挑：沒有人同步，一回合一回合等到期；剩下的照 carve 同步推到收場。"""
+        shard = sorted(self.c.seal)[0]
+        self.do(ADMIN, "seal_assign", {"id": shard, "name": self.KEEPER, "state": "held"})
+        self.do(ADMIN, "seal_duel", {"id": shard, "name": self.FOE, "factor": 1.0})
+        for n in range(4):
+            STEP[0] += 60
+            self.tick_world(f"第 {n} 下")
+            emit(f"排程第 {n} 下之後的單挑", [d.model_dump() for d in self.world.seal_state().duels])
+            self.relic_view(f"排程第 {n} 下之後")
+        self.duel_out((self.KEEPER, self.FOE))
+
+    def bot_rounds(self, rounds: int) -> None:
+        """BotRunner 跑幾輪（那兩位一定在線；同 carve 的 bot_duel）。"""
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(47), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {91, 92}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        try:
+            for _ in range(rounds):
+                STEP[0] += 3
+                self.begin()
+                report = runner.tick()
+                emit("假人一輪", [report.acted, report.added, report.skipped, report.failed])
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+
+    def machines(self) -> None:
+        """假人碰得到：兩位假人的存檔也髒（店開著、舊的同伴確認、路上的事）；輪一輪（建 Game 清失效參照、同步、系統通緝那一輪）。"""
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile, SmithDraft
+
+        season = self.world.get_season_number()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction="guan" if i == 0 else "huang", season_number=season)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, self.hub(), None
+            p.visited.add(self.hub())
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            p.picking_smith, p.smith_draft, p.picking_market = True, SmithDraft(kind="劍", main="沒有這一料"), True
+            p.pending_companion, p.leg_actions = "沒有這個人", {"沒有這件事"}
+            self.chars.save(g.state)
+        self.bot_rounds(3)
+        for name in self.BOT_SEATS:
+            self.looks(name, f"假人 {name} 輪過之後", self.LEFT)
+
+    def marks(self) -> None:
+        """換季帶走的每一樣都擺成非預設（別軌帶的多半是預設值，帶丟了看不出來）：藺秋禾與第一位假人。序章走完、後面的步驟還沒做完的人（卓遠岑；第二位假人多跳過初入江湖）。
+        裝備庫放一把收藏的神器（綁了招、流水號接著走）。"""
+        from tianxia import weapons
+        from tianxia.state import LegacyBook, Mingtie, MingtieCopy
+
+        cid = sorted(self.c.characters)[0]
+
+        def everything(state):
+            p = state.player
+            p.renown_told, p.affinities = True, {cid: 87}
+            p.past_notes, p.relationship_notes = {"舊識": "舊事"}, {cid: "新事"}
+            p.hints_seen, p.hints_off = {"沒有這一句"}, True
+            p.newbie_marks, p.newbie_done = {"沒有這一步"}, {"沒有這一項"}
+            p.dialogue_history = {cid: [{"role": "user", "content": "久仰"}, {"role": "assistant", "content": "幸會"}]}
+            p.used_dialogue_options, p.turns_since_consolidation = {cid: ["甲"]}, {cid: 3}
+            p.gender, p.gender_chosen = "女", True
+            p.stamina_pills, p.legend_items, p.create_rerolls, p.pills_topped_to = 7, 3, 2, 5
+            p.pill_day, p.pills_today = 11, 2
+            p.sortie_day, p.sorties_today, p.drill_day, p.drills_today = 12, 3, 13, 4
+            p.upgrade_day, p.upgrades_today, p.donate_day, p.donated_today = 14, {3: 1}, 15, 5
+            p.battle_results_seen = [901, 902]
+            p.divine_solved = {"沒有這一譜": "沒有這一器"}
+            p.mingtie, p.mingtie_hidden, p.taunt_muted = Mingtie(motto="此帖不換", version=2), ["路人甲"], ["路人乙"]
+            p.mingtie_box = [MingtieCopy(name="路人丙", card=Mingtie(motto="後會有期", version=1), when="第 1 週", place="此地", season=1)]
+            p.mingtie_day, p.mingtie_made, p.mingtie_sent, p.gift_day, p.gifts_today = 21, 1, 2, 22, 3
+            p.keepsakes, p.lasting = ["沒有這一物"], ["沒有這一旗"]
+            p.legacy = LegacyBook(zheng=1.5, xie=0.5, luck=0.25)
+            item = weapons.new_weapon(state, name="收著的劍", kind="劍", attribute="剛", tier=2, quality="中品", collected=True)
+            item.bound_art = "沒有這一門"
+            p.rack.append(item)
+
+        tutorial = self.c.tutorial
+
+        def half_way(p):
+            p.tutorial_step = tutorial.prologue_steps
+
+        for who in (self.WORKER, self.BOT_SEATS[0]):
+            self.edit_state(who, everything)
+            self.looks(who, f"{who} 換季之前", self.CARRIED)
+        for who in (self.FOE, self.BOT_SEATS[1]):
+            self.edit(who, half_way)
+            self.looks(who, f"{who} 換季之前", ("tutorial_step", "onboarding", "bot"))
+
+    def turnover(self) -> None:
+        """收季、開下一季；每一位第一次同步換成新角色（真人經 API、假人經 BotRunner），看資料庫裡帶走的那幾樣。"""
+        self.do(ADMIN, "end_season")
+        self.do(ADMIN, "next_season")
+        for who in (self.WORKER, self.FOE, self.KEEPER, self.ABSENT):
+            self.main(who)
+            self.looks(who, f"{who} 換季之後", self.CARRIED)
+        self.bot_rounds(2)
+        for name in self.BOT_SEATS:
+            self.looks(name, f"假人 {name} 換季之後", self.CARRIED)
+
+    def read_back(self) -> None:
+        self.call(ADMIN, "GET", "/api/admin")
+        self.tick_world("換季之後")
+        self.relic_view("最後")
+
+
+def _reckon_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _carve_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：換季帶走的一天贈物次數（Game._reset_player_for_new_season；換成掛鉤之後在玩家互動包，第 2 段搬的時候這一句一字不動、檔名照實補）：marks 擺的 3 帶丟了
+_reckon_register_track("reckon", ReckonScenario, (("tianxia/engine.py", "tianxia/features/peers/actions.py"),
+                                                  ("fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, old.player.gifts_today",
+                                                   "fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, 0")), "season21")
+
+
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 第七節）：這一段整段是第 56 批加的——
+# 情境 StackScenario（--track stack，自己一個資料庫、自己切一半），最後一行登記。現有軌每一包只走自己那一層：兩層以上同時擺著誰排前面（選單接管、動身被擋那一句、閒著、哪一間店）
+# 只有 map 一軌碰過最後五格，這一軌把它們一層一層疊滿再剝。角色的名字都是原創的（PM 11/04）；既有的軌一個字不動。
+
+
+class StackScenario(MapScenario):
+    """選單的先後一軌（全部拆包第 56 批；--track stack，自己一個資料庫）。借 map 的 setup、seat 與小工具。站的地方是自家大本營（測試內容是起點），
+    記憶體裡補上城鎮、馬市、酒肆、醫館四個標籤、關掉照週解鎖、組一條答題的線（兩份程式同一步補，不寫輸出）：不然清失效參照一讀就把店收了，疊不起來。
+
+    前半切在 pile：甄牧雲、殷照川、喬問樵疊滿了還沒有任何一下請求讀過。後半新程式第一次讀（實跑讀過輸出）：
+    - take_order：甄牧雲照選單接管的先後一層一層剝，每一層看 /api/main、按前往（/api/travel、/api/map/state）、鎖裡讀閒著、哪一間店、選單、行動列底下那幾行、走不走得成。
+      season21 走到事件 → 頭目戰 → 擂台 → 有所感 → 答題 → 談著 → 投靠 → 叛投 → 求見 → 懸賞榜 → 鐵匠鋪 → 馬市 → 酒肆 → 軍需官 → 打點 → 擂台邊 → 答話（前往那一句照另一張先後，下一段才一句一句看）。
+      剝到閉關再疊上「跟著別人走在路上」：閉關 → 跟著（分道揚鑣那一顆）→ 自己走（折返、帶路的跟他說一句、喊停）→ 到了守著埋伏 → 全部拿掉。
+    - block_order：殷照川照動身被擋的先後一層一層剝（擂台邊、談著、求見……的先後跟選單接管不一樣，一次剝看不出來）：頭目戰 → 擂台 → 擂台邊 → 談著 → 求見 → 懸賞榜 →
+      鐵匠鋪 → 馬市 → 打點 → 軍需官 → 酒肆 → 投靠 → 叛投 → 答話 → 閉關，每一句都讀過。
+    - gentry：聶停雲三格都在（選單是空的：待投靠的那一邊沒有可依附的，空的也算接管，選單接管不能拿「不是空的」判斷）→ 還沒挑邊 → 叛投 → 都了結（閒著與選單上有探索不一樣的那一層也在這裡）。
+    - draft：鐵匠鋪單子開著時哪一間店回 None、選單是那一步的兩顆；拿掉單子回鐵匠鋪（只有武器開著的內容）。
+    - doors：只有不是一類一顆的內容（測試內容）：此地一位人物的「求見某某」見得到、閉門不見、談滿了、名望不夠與行動列底下那一行，兩位人物的「求見」。
+    - leave_town：不坐在店裡、身上留著舊的掌櫃那一句、停在哪一頁、挑到哪一張、帶路的人，動身之後一起清掉（出發那幾行不看坐不坐在店裡）。
+    - machines：兩位假人也疊著（談著、求見、懸賞榜、鐵匠鋪、馬市、酒肆、答話），BotRunner 三輪照先後一層一層按掉（正式內容才上線）。ended：喬問樵疊著收季：休季的選單、賽季已結束那一句。
+
+    **這一軌走不到的**（實跑數過）：序章那三支（測試內容與正式內容都不在序章：前往的「師父的話」、行動列底下回空、此地還能做的調息與體力玩法回空；tianxia/features/guide/tests/test_prologue.py 守）；
+    宴席那一層（features_core.menu 這一批不動，宴客的軌走到）；休季用列傳的票（zhuan 一軌走到）；測試內容沒有頭目戰、有所感、陣營、懸賞榜、鐵匠鋪、馬市、軍需官、打點、答話，
+    擺了也一讀就收（「疊上去的」那一行照寫，下一層看得到）；week7 馬市關著（同上）。"""
+
+    TAKER, BLOCKED, ENDER = "甄牧雲", "殷照川", "喬問樵"
+    DRAFTER, DOORS, ALLIED, LEAVER = "閔書硯", "溫叔夜", "聶停雲", "杜若衡"
+    BOT_SEATS = ["疊甲", "疊乙"]
+    QUIZ = "sb_stack"
+    PHASES_FIRST = ["setup", "seat", "pile"]
+    PHASES_SECOND = ["resume", "take_order", "block_order", "gentry", "draft", "doors", "leave_town", "machines", "ended"]
+    TAKE_ORDER = ("event", "duel", "arena", "sense", "story", "talk", "faction", "defect", "audience", "bounty", "smith", "market",
+                  "tavern", "donate", "dadian", "ring", "asking", "busy")
+    BLOCK_ORDER = ("event", "duel", "arena", "ring", "talk", "audience", "bounty", "smith", "market", "dadian", "donate", "tavern",
+                   "faction", "defect", "asking", "busy")
+    FLAT = {"audience": "picking_audience", "bounty": "picking_bounty", "smith": "picking_smith", "market": "picking_market",
+            "tavern": "picking_tavern", "donate": "picking_donate", "dadian": "picking_dadian", "ring": "picking_arena"}
+    SINGLE = {"duel": "duel", "arena": "arena", "sense": "sensing", "talk": "pending_companion", "faction": "pending_faction",
+              "defect": "pending_defect", "asking": "fs_asking", "busy": "busy_until"}
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        from tianxia import clinic, equipment, mounts
+        from tianxia.features.tavern import rules as tavern_rules
+
+        guan = next((f for f in self.c.scenario.factions if f.id == "guan"), None)
+        self.spot = guan.join_at[0] if guan is not None and guan.join_at else self.hub()
+        loc = self.c.locations[self.spot]
+        tags = list(loc.tags or [])
+        for tag in (equipment.TOWN_TAG, mounts.MARKET_TAG, tavern_rules.TAG, clinic.CLINIC_TAG):
+            if tag not in tags:
+                tags.append(tag)
+        self.c.locations[self.spot] = loc.model_copy(update={"tags": tags})
+        self.c.config.jianfa.week_unlock = False  # 懸賞榜與擂台照週解鎖：關掉才疊得上（同 bout 一軌；兩個行程都關，不寫輸出）
+        self.c.storylines[self.QUIZ] = self.quiz_line()  # 答題那一段：正式內容沒有這一種，自己組一條（同 story 一軌；start 是 None，只有這裡擺得上）
+
+    def quiz_line(self):
+        from tianxia.models import StoryAnswer, StoryDef, StoryEnding, StoryQuestion, StoryStage
+
+        question = StoryQuestion(text="疊到這一層，你如何？", answers=[StoryAnswer(text="往前", marks={"攻": 1}), StoryAnswer(text="往後", marks={"守": 1})])
+        ending = StoryEnding(id="done", title="收場", text="這一問就這樣收了。", annal="{name}答完了那一問。", weight=3)
+        return StoryDef(id=self.QUIZ, title="疊層一問", intro="有人攔路問你一件事。", endings=[ending],
+                        stages=[StoryStage(id="ask", kind="quiz", hint="答這一問", next="done", questions=[question])])
+
+    def edit_state(self, name: str, fn) -> None:
+        with self.world.action_lock():
+            state = self.chars.load(name)
+            fn(state)
+            self.chars.save(state)
+
+    # ── 一層一層 ──
+
+    def other_side(self) -> str | None:
+        return "huang" if self.factions_on() else None
+
+    def value_of(self, who: str, name: str):
+        """這一層要擺的值；這份內容沒有這一層回 None。"""
+        from tianxia import insights
+        from tianxia.state import ArenaFight, ArenaSide, DuelState, Sensing
+
+        c = self.c
+        if name == "duel":
+            return DuelState(boss=sorted(c.duels)[0], foe=0, hp=100.0, hp_cap=100.0, hp_start=100.0, power=50.0) if c.duels else None
+        if name == "arena":
+            side = {"power": 50.0, "hp": 100.0, "hp_cap": 100.0}
+            return ArenaFight(id=1, foe_key="無此人", me=ArenaSide(name=who, **side), foe=ArenaSide(name="無此人", **side))
+        if name == "sense":
+            scenes = insights.scenes_for(c.locations[self.spot], c)
+            if not scenes:
+                return None
+            return Sensing(location=self.spot, scene=scenes[0].id, order=list(range(len(scenes[0].methods))))
+        if name == "talk":
+            return sorted(c.characters)[0] if c.characters else None
+        if name in ("faction", "defect"):
+            return self.other_side()
+        if name == "asking":
+            return self.chain_id()
+        if name == "busy":
+            return 4.0e9
+        return True
+
+    def event_of(self) -> str | None:
+        return sorted(self.c.events)[0] if self.c.events else None
+
+    def put(self, who: str, name: str) -> bool:
+        """擺上一層；這份內容擺不上回 False（寫進輸出）。"""
+        from tianxia.state import StoryProgress
+
+        if name == "event":
+            event = self.event_of()
+            if event is None:
+                return False
+            self.edit_state(who, lambda s: setattr(s, "pending_event", event))
+        elif name == "story":
+            def open_quiz(p):
+                p.storylines[self.QUIZ] = StoryProgress(line=self.QUIZ, stage="ask", opened=True)
+                p.story_open = self.QUIZ
+
+            self.edit(who, open_quiz)
+        else:
+            value = self.value_of(who, name)
+            if value is None:
+                return False
+            field = self.FLAT.get(name) or self.SINGLE[name]
+            self.edit(who, lambda p, field=field, value=value: setattr(p, field, value))
+        return True
+
+    def take_off(self, who: str, name: str) -> None:
+        if name == "event":
+            self.edit_state(who, lambda s: setattr(s, "pending_event", None))
+        elif name == "story":
+            self.edit(who, lambda p: setattr(p, "story_open", None))
+        elif name in self.FLAT:
+            self.edit(who, lambda p, field=self.FLAT[name]: setattr(p, field, False))
+        else:
+            self.edit(who, lambda p, field=self.SINGLE[name]: setattr(p, field, None))
+
+    def stack(self, who: str, order: tuple[str, ...]) -> None:
+        """由下往上疊（直接改資料庫，這一下之後沒有請求讀過）。"""
+        placed = [name for name in reversed(order) if self.put(who, name)]
+        emit(f"{who} 疊上去的（下面的先擺）", placed)
+
+    def inner(self, who: str, tag: str, other: str | None) -> None:
+        """鎖裡讀：閒著（_idle、is_idle）、哪一間店、那一串是不是眼前的選單、行動列底下那幾行（五種 id 都問，不只選單上有的）、走不走得成。"""
+        self.begin()
+        game = self.server.game_for(who)
+        ids = ["act:explore", "act:train", "act:socialize", "act:call", *(f"call:{cid}" for cid in sorted(self.c.characters)[:1])]
+        with self.server._locked(game):
+            emit(f"{who} {tag} 鎖裡", {"idle": game._idle(), "is_idle": game.is_idle(), "shop": game._shop_open(), "live": game._shop_live(),
+                                     "ids": [o.id for o in game.options(odds=False, tick=False)],
+                                     "notes": list(game.action_notes(ids).items()),
+                                     "refusal": None if other is None else game.travel_refusal(other)})
+        self.server.GAMES.clear()
+
+    def view(self, who: str, tag: str, other: str | None) -> None:
+        self.main(who)
+        self.go_to(who, other)
+        self.inner(who, tag, other)
+
+    def enroll_at(self, who: str, side: str | None) -> None:
+        self.enroll(who, side, self.spot)
+        self.edit(who, lambda p: p.stats.update({"silver": 200}))
+
+    # ── 前半 ──
+
+    def pile(self) -> None:
+        """切點：疊滿了，後面沒有任何一下請求讀過。"""
+        for who in (self.TAKER, self.BLOCKED, self.ENDER, self.DRAFTER, self.DOORS, self.ALLIED, self.LEAVER):
+            self.enroll_at(who, "guan")
+        self.stack(self.TAKER, self.TAKE_ORDER)
+        self.stack(self.BLOCKED, self.BLOCK_ORDER)
+        self.stack(self.ENDER, ("event", "talk", "audience", "bounty", "smith", "market", "tavern", "ring", "asking"))
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def peel(self, who: str, order: tuple[str, ...], tag: str) -> str | None:
+        other = next((i for i in sorted(self.c.locations) if i != self.spot and not self.c.locations[i].prologue_only and not self.c.locations[i].unlock_flag), None)
+        for name in order:
+            self.view(who, f"{tag} 最上面是 {name}", other)
+            self.take_off(who, name)
+        return other
+
+    def take_order(self) -> None:
+        other = self.peel(self.TAKER, self.TAKE_ORDER[:-1], "照選單接管的先後")
+        self.road_tail(self.TAKER, other)
+
+    def road_tail(self, who: str, other: str | None) -> None:
+        """閉關還擺著，疊上跟著別人走在路上：閉關 → 跟著 → 自己走（帶路的那一顆）→ 到了守著埋伏 → 全部拿掉。"""
+        from tianxia.state import Journey
+
+        path = sorted(i for i in self.c.locations[self.spot].connections)[:1]
+        path = [*path, next(i for i in sorted(self.c.locations) if i not in (self.spot, *path) and not self.c.locations[i].prologue_only)]
+        escort = sorted(self.c.characters)[0] if self.c.characters else None
+
+        def walking(p):
+            p.journey = Journey(mode="walk", path=path, arrive_at=[4.0e9, 4.1e9])
+            p.parley_escort = escort
+
+        self.edit(who, walking)
+        self.follow(who, self.GUAN)
+        self.view(who, "閉關又跟著人走在路上", other)
+        self.take_off(who, "busy")
+        self.view(who, "跟著人走在路上", other)
+        self.edit(who, lambda p: setattr(p, "tagalong", None))
+        self.view(who, "自己走在路上（帶路的人在）", other)
+
+        def arrived(p):
+            p.journey, p.parley_escort = None, None
+
+        self.edit(who, arrived)
+        self.lay_ambush(who)
+        self.view(who, "到了守著埋伏", other)
+        self.edit(who, lambda p: setattr(p, "ambush", None))
+        self.main(who)
+        self.inner(who, "全部拿掉", other)
+
+    def block_order(self) -> None:
+        other = self.peel(self.BLOCKED, self.BLOCK_ORDER, "照動身被擋的先後")
+        self.main(self.BLOCKED)
+        self.inner(self.BLOCKED, "全部拿掉", other)
+
+    def gentry(self) -> None:
+        """投靠待確認 → 拜入了還沒挑邊 → 叛投待確認（動身被擋的先後在陣營那一格裡；選單接管的先後是還沒挑邊在前）。"""
+        gentry = next((f for f in self.c.scenario.factions if f.allies), None)
+        if gentry is None:
+            emit("這份內容沒有要依附的陣營", None)
+            return
+        who = self.ALLIED
+        other = next(i for i in sorted(self.c.locations) if i != self.spot and not self.c.locations[i].prologue_only)
+
+        def pending(p):
+            p.faction, p.ally = gentry.id, None
+            p.pending_faction, p.pending_defect = self.other_side(), self.other_side()
+
+        self.edit(who, pending)
+        self.view(who, "三格都在", other)
+        self.take_off(who, "faction")
+        self.view(who, "還沒挑邊與叛投", other)
+        self.edit(who, lambda p: setattr(p, "ally", "guan"))
+        self.view(who, "叛投", other)
+        self.take_off(who, "defect")
+        self.view(who, "都了結", other)
+
+    def draft(self) -> None:
+        """鐵匠鋪的單子開著：哪一間店回 None（店面上的鈕在單子那一步不在選單上）；拿掉單子回鐵匠鋪。"""
+        from tianxia.state import SmithDraft
+
+        who = self.DRAFTER
+
+        def sit(p):
+            p.picking_smith, p.smith_draft = True, SmithDraft(kind="劍")
+
+        self.edit(who, sit)
+        self.main(who)
+        self.inner(who, "鐵匠鋪單子開著", None)
+        self.edit(who, lambda p: setattr(p, "smith_draft", None))
+        self.main(who)
+        self.inner(who, "鐵匠鋪單子拿掉", None)
+
+    def doors(self) -> None:
+        """此地一位人物（不是一類一顆的內容才有這一顆）：見得到、閉門不見、名望不夠、談滿了；兩位人物是「求見」打開名單。人物表照內容補在記憶體裡。"""
+        from tianxia import precise, rules
+        from tianxia.engine import Game
+
+        who = self.DOORS
+        if precise.on(self.c, self.world.get_season()):
+            emit("一類一顆開著，沒有單人求見那一顆", None)
+            return
+        chars = sorted(self.c.characters)
+        one = chars[0]
+        self.c.characters[one] = self.c.characters[one].model_copy(update={"deep_interaction": True, "talk_at": self.spot, "audience_fame": 0})
+        self.main(who)
+        self.inner(who, "一位人物見得到", None)
+        snubbed = Game._snubbed_character  # 測試內容沒有大勢人物表，閉門不見只能這樣擺（同 tests/core/test_engine.py 那一條）
+        Game._snubbed_character = lambda self, character_id: True
+        try:
+            self.main(who)
+            self.inner(who, "一位人物閉門不見", None)
+        finally:
+            Game._snubbed_character = snubbed
+        day = rules.game_day(self.c, self.world.get_season())
+        self.edit(who, lambda p: setattr(p, "talks_today", {one: [day, 99]}))
+        self.main(who)
+        self.inner(who, "一位人物談滿了", None)
+        self.edit(who, lambda p: setattr(p, "talks_today", {}))
+        self.c.characters[one] = self.c.characters[one].model_copy(update={"audience_fame": 10 ** 6})
+        self.main(who)
+        self.inner(who, "一位人物名望不夠", None)
+        self.c.characters[one] = self.c.characters[one].model_copy(update={"audience_fame": 0})
+        if len(chars) > 1:
+            self.c.characters[chars[1]] = self.c.characters[chars[1]].model_copy(update={"deep_interaction": True, "talk_at": self.spot})
+            self.main(who)
+            self.inner(who, "兩位人物", None)
+
+    def leave_town(self) -> None:
+        """不坐在店裡、身上留著舊的掌櫃那一句、停在哪一頁、挑到哪一張、帶路的人：動身之後一起清掉（出發那幾行不看坐不坐在店裡）。"""
+        who = self.LEAVER
+        fields = ("shop_line", "shop_clue", "shop_hold", "smith_page", "smith_rule", "bounty_pick", "parley_escort", "picking_bounty", "picking_smith", "picking_market")
+        other = next(i for i in sorted(self.c.locations) if i != self.spot and not self.c.locations[i].prologue_only and not self.c.locations[i].unlock_flag)
+
+        def leftovers(p):
+            p.shop_line, p.shop_clue, p.shop_hold = "舊話", "舊線索", "舊留話"
+            p.smith_page, p.smith_rule, p.bounty_pick = "armor", "舊規矩", "沒有這一張"
+            p.parley_escort = sorted(self.c.characters)[0] if self.c.characters else None
+
+        self.edit(who, leftovers)
+        ReckonScenario.looks(self, who, "動身之前", fields)
+        self.go_to(who, other)
+        ReckonScenario.looks(self, who, "動身之後", fields)
+
+    def machines(self) -> None:
+        """假人碰得到：兩位假人也疊著（談著、求見、三間店、酒肆、答題），BotRunner 三輪；看選單與欄位。"""
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        if not self.factions_on():
+            emit("這份內容沒有陣營，假人不上線", None)
+            return
+        season = self.world.get_season_number()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            side = "guan" if i == 0 else "huang"
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction=side, season_number=season)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = side, self.spot, None
+            p.visited.add(self.spot)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        ReckonScenario.bot_rounds(self, 2)  # 先輪兩輪：剛上線那幾下（入伍的事件）過掉，疊起來的才是眼前的選單
+
+        def back_here(s):
+            s.pending_event, s.player.location, s.player.journey = None, self.spot, None
+            s.player.busy_until, s.player.stamina = None, float(self.c.config.stamina_max)
+
+        for name in self.BOT_SEATS:
+            self.edit_state(name, back_here)
+            self.stack(name, ("talk", "audience", "bounty", "smith", "market", "tavern", "asking"))
+        ReckonScenario.bot_rounds(self, 3)
+        for name in self.BOT_SEATS:
+            ReckonScenario.looks(self, name, f"假人 {name} 輪過之後", ("pending_companion", *self.FLAT.values(), "fs_asking", "location", "journey", "stamina"))
+            self.begin()
+            game = Game(self.c, self.chars.load(name), random.Random(5), self.world)  # 同 BotRunner 建 Game（server.game_for 認不得假人的名號）
+            emit(f"假人 {name} 此刻的選單", {"ids": [o.id for o in game.options(odds=False, tick=False)], "idle": game._idle(), "shop": game._shop_open()})
+
+    def ended(self) -> None:
+        """喬問樵還疊著就收季：休季的選單、賽季已結束那一句；_idle 照舊是假的。"""
+        other = next(i for i in sorted(self.c.locations) if i != self.spot and not self.c.locations[i].prologue_only and not self.c.locations[i].unlock_flag)
+        self.view(self.ENDER, "收季之前", other)
+        self.do(ADMIN, "end_season")
+        self.view(self.ENDER, "收季之後", other)
+
+
+def _stack_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _reckon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：投靠待確認時動身被擋的那一句（第 2 段搬進陣營包 join_actions.py，這一句一字不動；搬到別的檔就補這裡的檔清單）
+_stack_register_track("stack", StackScenario, (("tianxia/atlas.py", "tianxia/features/faction/join_actions.py"),
+                                               ("投靠還沒決定，先決定再安排前往", "投靠還沒決定，先決定再安排前往！")), "season21")
+
+
+# ═══════════════════════════ core_seams（全部拆包第 57 批：分派與標題收接縫，act 子動詞帶後綴、公開的路走不到的那幾格） ═══════════════════════════
+class LevyScenario(CompanionsScenario):
+    """act 子動詞裡現有的軌走不到的那幾格一軌（全部拆包第 57 批；--track levy，自己一個資料庫）。借 companions 的 setup、seat 與小工具。
+    開工那一筆 53 軌 × 三種設定逐一量過（記 Game._act 收到的 what）：act:recruit:<人物>（按下去、紀錄標題、FB-363）與 act:rest 沒有任何一軌走到——season21、week7 是五項屬性的季，
+    歷史武將不同行（roster.on），companions 一軌招募那一段的鈕是空的；測試內容沒有十五位；調息那一顆序章才有。其餘子動詞都有軌走到（計畫第七節那張表）。
+    這一軌在記憶體裡關掉五項屬性、打開歷史武將同行；測試內容把舊招募那幾位標成 recruitable、deep_interaction（兩個行程都做，不寫輸出）。
+
+    前半切在 half：褚明遠按了一次招募被婉拒（「招募・某某」那一則是舊程式寫的）；測試內容的沈硯冰按了求見、名單開著。後半新程式接手（實跑讀過輸出）：
+    - recruit_on：沈硯冰按返回；褚明遠再按一次被要求決鬥，再按到招到（季上 owners 記他、紀錄標題「招募・某某」）。
+    - taken：葉聽瀾站到有主那一位旁邊，鈕不在選單上卻還按，回「【某某】已經被褚明遠招攬走了」（FB-363，Refused）；不認得的 id 照舊「此刻無法」；站到第二位旁邊：正式內容那一位只追隨官軍，
+      鈕灰掉、按了「此刻無法」；測試內容沒寫陣營，照常招。
+    - rest_door：沈硯冰在鎖裡走 choose（換掉 prologue.instant_rest，同 tests/conftest.py；同 guide 一軌在鎖裡直接叫 _rest），選單上有 act:rest、回那一句、標題「調息・此地」，不存。
+    - machines：兩位假人站在第二位旁邊、情誼到門檻（正式內容官軍那位鈕亮、黃巾那位灰掉）：整季機器人（bot.pick）六顆種子都不挑 act:recruit:<人物>（測試內容會挑到舊的 act:recruit）；
+      BotRunner 三輪（正式內容才出手）之後 owners 裡沒有他們。
+
+    **這一軌走不到的**（實跑讀過）：正式內容這時候沒有兩位以上人物站著的地方，沈硯冰那一段沒有鈕、按了「此刻無法」、call:back 也是（act:call 是 here、socialize 兩軌走到）；
+    舊招募那一顆（act:recruit）測試內容這裡只畫不按（companions 等四軌按）；測試內容沒有陣營，假人不上線、站到第二位旁邊的那一段照樣印。"""
+
+    RECRUITER, RIVAL, DRIFTER, PREP = "褚明遠", "葉聽瀾", "沈硯冰", "方遠岑"
+    PLAYERS = {RECRUITER: "guan", RIVAL: "huang", DRIFTER: None}
+    BOT_SEATS = ["徵甲", "徵乙"]
+    PHASES_FIRST = ["setup", "seat", "warm", "half"]
+    PHASES_SECOND = ["resume", "recruit_on", "taken", "rest_door", "machines"]
+    REST_LINE = "（調息：一坐就回滿。）"
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        cfg = self.c.config
+        cfg.attributes.v2.enabled = False  # 五項屬性的季歷史武將不同行（roster.on）：記憶體裡關掉才招得到（兩個行程都關，不寫輸出）
+        cfg.companions.enabled = True
+        chars = self.c.characters
+        named = sorted(cid for cid, ch in chars.items() if ch.recruitable)
+        self.old_book = not named  # 測試內容沒有十五位：把舊招募（recruit_at）那幾位也標成 recruitable，同一地點兩種鈕都畫得出來
+        if self.old_book:
+            named = sorted(cid for cid, ch in chars.items() if ch.kind == "recruitable")
+            for cid in named:
+                chars[cid] = chars[cid].model_copy(update={"recruitable": True, "deep_interaction": True})
+        self.named = named
+        self.first = next((cid for cid in named if chars[cid].side == "guan"), named[0])
+        self.second = next((cid for cid in named if cid != self.first and chars[cid].side == "guan"), next((cid for cid in named if cid != self.first), self.first))
+
+    def stand(self, who: str, cid: str) -> None:
+        """站到這一位旁邊：正式內容照他此刻在的地方（beside），測試內容照 recruit_at。"""
+        if self.old_book:
+            self.place(who, self.c.characters[cid].recruit_at)
+        else:
+            self.beside(who, cid)
+
+    def crowded(self) -> str | None:
+        """照地點名排第一個有兩位以上人物站著的地方（行動列上才有 act:call，同 socialize 一軌的 open_list）：拿一份不存的 Game 換地點問 _figures_here。"""
+        from tianxia.engine import Game
+
+        g = Game(self.c, self.chars.load(self.DRIFTER), random.Random(0), self.world)
+        g.state.world = self.world.get_season()
+        for loc in sorted(self.c.locations):
+            g.state.player.location = loc
+            if len(g._figures_here()) >= 2:
+                return loc
+        return None
+
+    def titles(self, who: str, tag: str) -> None:
+        emit(f"{who} {tag}：最新三則紀錄的標題", [e.title for e in self.chars.load(who).journal[:3]])
+
+    def warm(self) -> None:
+        """三個人的情誼補到招募門檻，按鈕才畫得出來（roster.affinity_ok）；褚明遠站到第一位旁邊。"""
+        need = self.c.config.recruit_min_affinity
+        for who in self.PLAYERS:
+            self.edit(who, lambda p: p.affinities.update({cid: need for cid in self.named}))
+        self.stand(self.RECRUITER, self.first)
+        emit("第一位旁邊的招募鈕", self.buttons(self.RECRUITER, "act:recruit"))
+
+    def half(self) -> None:
+        """前半切在這裡：褚明遠按了一次招募被婉拒（那一則的標題是舊程式寫的），沈硯冰的求見名單開著（act:call，picking_audience）還沒按任何一顆。"""
+        with self.tuned(recruit_base_chance=-9.0, recruit_affinity_bonus=0.0, duel_chance_on_fail=0.0):
+            self.choose(self.RECRUITER, f"act:recruit:{self.first}")
+        self.me(self.RECRUITER, "招募被婉拒")
+        self.place(self.DRIFTER, self.crowded())
+        emit("沈硯冰的求見鈕", self.buttons(self.DRIFTER, "act:call"))
+        self.choose(self.DRIFTER, "act:call")
+        self.titles(self.DRIFTER, "按了求見")
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def recruit_on(self) -> None:
+        """新程式接手：舊程式開著的求見名單按返回；褚明遠再按一次被要求決鬥、再按到招到（名下、標題「招募・某某」）。"""
+        who, first = self.RECRUITER, self.first
+        self.choose(self.DRIFTER, "call:back")
+        self.titles(self.DRIFTER, "收回名帖")
+        self.titles(who, "舊程式寫的")
+        with self.tuned(recruit_base_chance=-9.0, recruit_affinity_bonus=0.0, duel_chance_on_fail=1.0):
+            self.choose(who, f"act:recruit:{first}")
+        self.me(who, "招募被要求決鬥")
+        with self.tuned(recruit_base_chance=9.0):
+            for _ in range(4):
+                if self.world.get_companion(first).owner is not None:
+                    break
+                self.stand(who, first)
+                self.choose(who, f"act:recruit:{first}")
+            self.me(who, "招到一位")
+            self.season_view("招到之後")
+            emit("招到之後的招募鈕", self.buttons(who, "act:recruit"))
+
+    def taken(self) -> None:
+        """慢一步（FB-363）：葉聽瀾站到有主的那一位旁邊，鈕不在選單上卻還按，回「已經被某某招攬走了」（Refused）；不認得的 id 照舊「此刻無法」；
+        站到第二位旁邊：正式內容只追隨官軍，灰掉，按了「此刻無法」；測試內容沒寫陣營，照常招。"""
+        who = self.RIVAL
+        self.stand(who, self.first)
+        emit("有主那一位旁邊的招募鈕", self.buttons(who, "act:recruit"))
+        self.choose(who, f"act:recruit:{self.first}")
+        self.choose(who, "act:recruit:nobody")
+        self.stand(who, self.second)
+        emit("第二位旁邊的招募鈕", self.buttons(who, "act:recruit"))
+        with self.tuned(recruit_base_chance=9.0):
+            self.choose(who, f"act:recruit:{self.second}")
+        self.me(who, "按第二位")
+        self.season_view("都按完")
+
+    def rest_door(self) -> None:
+        """act:rest（序章教體力那一步的調息）：正式內容的草廬已經沒有那一步，公開的路走不到。同 guide 一軌在鎖裡直接叫，只是這裡走 choose（照 tests/conftest.py 換掉
+        prologue.instant_rest）：選單上那一顆、按下去的回話、那一下江湖紀錄的標題、體力，不存。"""
+        from unittest import mock
+
+        from tianxia.engine import Game
+
+        with self.world.action_lock():
+            g = Game(self.c, self.chars.load(self.DRIFTER), random.Random(0), self.world)
+            g.state.player.stamina = 0.0
+            with mock.patch("tianxia.prologue.instant_rest", return_value=self.REST_LINE):
+                emit("調息那一顆", [o.id for o in g.options(odds=False) if o.id == "act:rest"])
+                emit("按調息", g.choose("act:rest"))
+            emit("調息之後", [g.state.journal[0].title, g.state.player.stamina])
+
+    def machines(self) -> None:
+        """假人碰得到：兩位假人站在第二位旁邊、情誼到門檻（招募鈕在選單上）。BotRunner 三輪；整季機器人（bot.pick）再挑一次（照常避開 act:recruit:<人物>，測試內容照挑舊的 act:recruit）。"""
+        from tianxia import bot
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        sides = [f.id for f in self.c.scenario.factions]
+        need = self.c.config.recruit_min_affinity
+        at = self.c.characters[self.second].recruit_at if self.old_book else None
+        if at is None:
+            from tianxia import figure_life
+
+            at = figure_life.where(GameStateHolder(self.world.get_season()), self.c, self.second)
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction=sides[i % 2] if sides else None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, at, None
+            p.visited.add(at)
+            p.affinities.update({cid: need for cid in self.named})
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        for name in self.BOT_SEATS:
+            self.begin()
+            g = Game(self.c, self.chars.load(name), random.Random(0), self.world)
+            g.client = None
+            options = g.options(odds=False)
+            emit(f"{name} 站在第二位旁邊", {"recruit": [[o.id, o.enabled] for o in options if o.id.startswith("act:recruit")],
+                                       "pick": [bot.pick(g, options, random.Random(i)) for i in range(6)]})
+        ReckonScenario.bot_rounds(self, 3)
+        for name in self.BOT_SEATS:
+            state = self.chars.load(name)
+            emit(f"{name} 三輪之後", {"at": state.player.location, "journal": [e.title for e in state.journal[:3]]})
+        self.season_view("假人之後")
+
+
+def _levy_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _stack_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：招募某一位那一下的紀錄標題（第 57 批第 2 段從 engine._action_title 搬進人物情誼包 __init__.py 的 Verb，那一行寫 f"招募・{ctx.content.characters[tail].name}"；搬到別的檔就補這裡的檔清單）
+_levy_register_track("levy", LevyScenario, (("tianxia/engine.py", "tianxia/features/companions/__init__.py"), ("招募・{c", "招募！{c")), "season21")
+
+
+# ═══════════════════════════ 假人殼收尾（全部拆包第 60 批）：--track tally ═══════════════════════════
+
+
+class TallyScenario(CompanionsScenario):
+    """假人的分數與「不按」現有的軌走不到的那幾支一軌（全部拆包第 60 批；--track tally，自己一個資料庫）。借 companions 的 setup、seat 與小工具。
+    開工那一筆量過（sys.monitoring 記 bot_policy.score、bot.pick 走到的行與遞進去的 id；54 軌＋三支假人子命令 × season21、week7，計畫第六節）：act: 那一段
+    內傷走不動不出陣、守城記功、沒有走一趟時的打探懸賞、接下糧車、應召沒有一軌走到；挑戰本人一直是 None、守勢一直是 0.5、療傷一直是 20、出陣只有 None 與 11.6；
+    bot.pick 的排除清單裡 act:rest、act:halt、arena:yield、talk:*、parley:* 這幾種沒有一軌遞進去過；_tavern 打手得手那一支沒有一軌走到。
+
+    這一軌不靠運氣走到：照舊叫公開的 bot_policy.score、bot_policy.pick、bot.pick，每一格直接問；條件用 mock 換掉（dials 那張表）。換的名字兩份程式都叫得到：
+    Game 的公開方法、orders、precise、bot、bounties 的模組屬性、bot_policy 留著的小函式（_crippled、_cannot_push、_outmatched、_train_value、_bounty_here、wants_heal）、鐵匠鋪包的 bots.want。
+    前半切在 half：假人坐在店裡（鐵匠鋪、馬市、酒肆，week7 還有懸賞榜；season21 那一位的選單上沒有亮的 act:bounties），那幾格是舊程式按開、寫進存檔的。後半新程式接手（實跑讀過輸出）：
+    - sitting：坐在店裡的選單每一顆的分數、兩種 pick 各挑四次；BotRunner 兩輪之後再看一次（鐵匠鋪、馬市坐著的走出來了，籌丁走進別間；week7 懸賞榜那一位還在揭）。
+    - scores：三個位子（官軍在大本營、黃巾在中立地、散人在路上）× 每一格條件 × 全部 act:<子動詞>（含沒有主人的 act:heal、act:on_road、不認得的、帶後綴的）；別人的名牌（profile 不是存檔那一份）；
+      season:、nokind 這些落到最後的前綴。挑戰本人 None、1.5、31.5，守勢 0.5、30.5，療傷 None、20、100，探索 None、0.7、1.0、1.3、8.0、17.0，出陣十種值都有。
+    - picks：bot.pick 一次只遞一顆（全部前綴），回那一顆是會按、None 是排除：名望不夠的 call:<人物> 排除、夠的不排除；看過的 sect:zz 排除、沒看過的 sect:yy 不排除；凶險的挑戰本人排除，等契機時五五波整張都挑它；
+      整張遞進去挑八次（先後與亂數）。
+    - tavern_walk：bot_policy._tavern（TAVERN_CHANCE 換成 1）三種局面 × 種子：打聽、查人、問素材，查到過人時打手那一支（「你把銀子推過去」）；沒查過人時打手改打聽；沒錢回 None。
+    - machines：大家站回開酒肆的城，BotRunner 八輪。
+
+    **這一軌走不到的**（實跑讀過）：測試內容沒有陣營與店：「走到開…的地方」都是 null、坐店那一段是一般選單、tavern_walk 全是 None、假人不上線（一輪全是 0）、call:<人物> 一直見得到；season21 沒有坐懸賞榜那一位。
+    bot.pick 的選邊、投效、結識、開季準備卡、有所感（allied.pick_side、enlist_pick、effect.recruit、growth:、sense:）這一批不動，不在這一軌（整季機器人那幾軌走到）。duel_play 的應戰與同去是 bots --seats duel 走到。"""
+
+    PLAYERS = {"陸少游": "guan", "馮敬亭": "huang", "葛長風": None}
+    PREP = "程子安"
+    BOT_SEATS = [("籌甲", "guan", "act:smith"), ("籌乙", "huang", "act:market"), ("籌丙", None, "act:bounties"), ("籌丁", "guan", "act:tavern")]
+    PHASES_FIRST = ["setup", "seat", "bot_seats", "half"]
+    PHASES_SECOND = ["resume", "sitting", "scores", "picks", "tavern_walk", "machines"]
+    ROUNDS = 8
+
+    # ── 小工具 ──
+
+    def game_of(self, name: str):
+        """照假人程式的做法建一份（鎖裡讀存檔、同步）；這一軌大多只問不存。"""
+        from tianxia.engine import Game
+
+        g = Game(self.c, self.chars.load(name), random.Random(STEP[0]), self.world)
+        g.client = None
+        g.sync(CLOCK[0])
+        return g
+
+    @staticmethod
+    def safe(fn):
+        """問到不認得的 id（例：測試內容沒有的人物）丟例外也照寫：兩份程式要丟一樣的。"""
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001
+            return f"!{type(e).__name__}"
+
+    def act_ids(self) -> list[str]:
+        """全部 act:<子動詞>：有主人的那幾格（第 57 批那張表）、沒有主人的 act:heal 與 act:on_road、不認得的、帶後綴的。"""
+        fid = next(iter(sorted(self.c.figures)), "nobody")
+        return ["act:explore", "act:train", "act:duty", "act:rank2", "act:rank:x", "act:convoy", "act:summons", "act:bounties", "act:smith", "act:market",
+                "act:heal", "act:socialize", "act:call", "act:tavern", "act:arena", "act:donate", "act:dadian", "act:rest", "act:halt", "act:part", "act:break",
+                "act:silver_donate", "act:mentor", "act:furnace", "act:buy_legend", "act:bribe:x", "act:recruit", "act:recruit:x", f"act:challenge:{fid}",
+                "act:on_road", "act:nosuch"]
+
+    def pick_ids(self) -> list[str]:
+        """bot.pick 一次遞一顆：每種前綴都有，排除清單上的與長得很像、不該排除的並排。"""
+        cid = next(iter(sorted(self.c.characters)), "nobody")
+        return [*self.act_ids(), "duel:flee", "duel:a", "arena:yield", "arena:a", "arena:join", "dunwu:own", "dunwu:think", "dunwu:0", "story:x", "story:x:a0", "story:x:later",
+                "sect:zz", "sect:yy", "call:back", f"call:{cid}", "fs:x", "opp:x", "talk:clue:x", "talk:opp:x", "talk:say", "talk:plan", "talk:leave", "talk:x", "parley:road", "parley:x",
+                "defect:x", "invite:x", "errand:x", "feast:x", "road:x", "tavern:x", "donate:x", "dadian:x", "smith:page:x", "smith:x", "ambush:x", "works:x", "aid:x", "plan:x",
+                "legacy:skip", "legacy:x", "hire:x", "seal:x", "bounty:x", "market:x", "move:x", "learn:x", "battle:x", "faction:lean:x", "faction:x", "sense:x", "choice:free", "nokind"]
+
+    def dials(self):
+        """一格條件：（名字, [換掉的東西], 這一份存檔另外改的）。每一格新建一份 Game、新開一組 mock。"""
+        from types import SimpleNamespace as NS
+        from unittest import mock
+
+        from tianxia import bot, bot_policy as bp, bounties, orders, precise
+        from tianxia.engine import Game
+        from tianxia.features.smithy import bots as smithy_bots
+
+        patch = mock.patch.object
+
+        def odds(word):
+            return patch(Game, "challenge_odds", return_value=word)
+
+        def here(kind):
+            return patch(bp, "_bounty_here", side_effect=lambda game, k: k == kind)
+
+        def trip(how, **weights):
+            return patch(Game, "outing_plan", return_value=NS(weights=weights, how=how))
+
+        def plenty(g):
+            g.state.player.materials = {m: 99 for m, x in self.c.materials.items() if x.tier == 1}
+
+        crippled = lambda: patch(bp, "_crippled", return_value=True)  # noqa: E731
+        return [
+            ("照實", [], None),
+            ("內傷走不動", [crippled()], None),
+            *[(f"勝算 {w}", [odds(w)], None) for w in ("穩勝", "有把握", "五五波", "難分勝負", "凶險", "必敗")],
+            ("打擊軍令＋五五波", [patch(orders, "strike_on", return_value=True), odds("五五波")], None),
+            ("打擊軍令＋凶險", [patch(orders, "strike_on", return_value=True), odds("凶險")], None),
+            ("內傷走不動＋穩勝", [crippled(), odds("穩勝")], None),
+            ("沒有走一趟", [patch(Game, "outing_plan", return_value=None)], None),
+            ("沒有走一趟＋打探懸賞", [patch(Game, "outing_plan", return_value=None), here("scout")], None),
+            ("走一趟多半遇敵", [trip("plain", encounter=3, material=1, event=1), patch(Game, "fatigue_next", return_value=0.5)], None),
+            ("走一趟多半遇敵＋內傷走不動", [trip("plain", encounter=3, material=1, event=1), crippled()], None),
+            ("走一趟討伐懸賞＋打探懸賞", [trip("bounty", encounter=1), here("scout")], None),
+            ("走一趟素材多", [trip("plain", encounter=1, material=2)], None),
+            ("走一趟素材多＋背包滿", [trip("plain", encounter=1, material=2)], plenty),
+            ("走一趟空的", [trip("plain")], None),
+            ("醫館輕傷", [patch(bp, "wants_heal", return_value=True), patch(bot, "injury_share", return_value=0.1)], None),
+            ("醫館重傷", [patch(bp, "wants_heal", return_value=True), patch(bot, "injury_share", return_value=0.9)], None),
+            ("交友開口是對話", [patch(Game, "socialize_starts_dialogue", return_value=True)], None),
+            ("交友白跑", [patch(Game, "socialize_is_futile", return_value=True)], None),
+            ("交友照常", [patch(Game, "socialize_starts_dialogue", return_value=False), patch(Game, "socialize_is_futile", return_value=False)], None),
+            ("推不動", [patch(bp, "_cannot_push", return_value=True)], None),
+            ("推不動＋截糧", [patch(bp, "_cannot_push", return_value=True), patch(Game, "duel_on", return_value=True), patch(Game, "duel_convoy_here", return_value=True)], None),
+            ("贏面太低", [patch(bp, "_outmatched", return_value=True)], None),
+            ("出陣能打", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False)], None),
+            ("軍令記功", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(orders, "win_counts", return_value=True)], None),
+            ("守城記功", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="hold"),
+                       patch(orders, "duty_counts", return_value=True)], None),
+            ("不是守城", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="attack"),
+                       patch(orders, "duty_counts", return_value=True)], None),
+            ("討伐懸賞", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), here("strike")], None),
+            ("一類一顆開", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(precise, "on", return_value=True)], None),
+            ("一類一顆關", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(precise, "on", return_value=False)], None),
+            ("大勢分", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(bp, "_train_value", return_value=2.5)], None),
+            ("守勢記功", [patch(orders, "duty_counts", return_value=True), patch(Game, "duel_on", return_value=False)], None),
+            ("守勢記功＋約戰開著", [patch(orders, "duty_counts", return_value=True), patch(Game, "duel_on", return_value=True)], None),
+            ("鐵匠有事", [patch(smithy_bots, "want", return_value="smith:repair")], None),
+            ("鐵匠有事＋爐開得成", [patch(smithy_bots, "want", return_value="smith:repair"), patch(bot, "forge_ready", return_value=True)], None),
+            ("鐵匠沒事＋爐開得成", [patch(smithy_bots, "want", return_value=None), patch(bot, "forge_ready", return_value=True)], None),
+            ("馬市有事", [patch(bot, "market_want", return_value="market:buy")], None),
+            ("馬市沒事", [patch(bot, "market_want", return_value=None)], None),
+            ("榜上交得出", [patch(bounties, "give_choice", return_value=("a", "b"))], None),
+            ("榜上沒事", [patch(bounties, "give_choice", return_value=None), patch(bounties, "open_bounties", return_value=[])], None),
+        ]
+
+    def view_seat(self, name: str, tag: str) -> None:
+        """這個人此刻的選單：每一顆亮不亮、分數；兩種 pick 各挑四次。"""
+        from tianxia import bot, bot_policy as bp
+
+        self.begin()
+        g = self.game_of(name)
+        profile = g.state.player.bot
+        options = g.options(odds=False, tick=False)
+        enabled = [o for o in options if o.enabled]
+        emit(f"{name} {tag}：選單", [[o.id, o.enabled, self.safe(lambda o=o: bp.score(g, o, profile))] for o in options])
+        emit(f"{name} {tag}：bot.pick", [self.safe(lambda i=i: bot.pick(g, options, random.Random(i))) for i in range(4)])
+        emit(f"{name} {tag}：bot_policy.pick", [self.safe(lambda i=i: bp.pick(g, enabled, profile, random.Random(i))) for i in range(4)])
+
+    # ── 情境 ──
+
+    def bot_seats(self) -> None:
+        """四個假人：照 bot_runner._add_bot 的先後（建好就標成假人），序章與開季準備卡按掉，站好、銀兩補夠（打不打得開店看選單）。"""
+        from tianxia import bot
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        self.do(ADMIN, "cancel_battle")  # 開季那一場決戰（season21、week7 的長社之火）的集結與開打會接管選單，店按不開
+        sides = {f.id: f for f in self.c.scenario.factions}
+        season = self.world.get_season_number()
+        for i, (name, side, _) in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            side = side if side in sides else None
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction=side, season_number=season)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(8):
+                ids = [o.id for o in g.options(odds=False) if o.enabled]
+                step = next((x for x in ids if x.startswith("choice:") and x != "choice:free"), None)
+                if step is None and any(x.startswith("growth:") for x in ids):
+                    step = f"growth:{bot.growth_key(g)}"
+                if step is None and "legacy:skip" in ids:
+                    step = "legacy:skip"
+                if step is None:
+                    break
+                g.choose(step)
+            p.faction, p.journey = side, None
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            p.stats["silver"] = 5000
+            self.chars.save(g.state)
+
+    @staticmethod
+    def stand_up(p) -> None:
+        p.picking_smith = p.picking_market = p.picking_bounty = p.picking_tavern = False
+
+    def spot_for(self, name: str, press: str) -> str | None:
+        """照地點名排第一個這顆亮著的地方（拿一份不存的 Game 換地點問選單；後半接手時他可能還坐在店裡，選單照站著的算）。"""
+        g = self.game_of(name)
+        self.stand_up(g.state.player)
+        for loc in sorted(self.c.locations):
+            g.state.player.location, g.state.player.journey = loc, None
+            if press in {o.id for o in g.options(odds=False, tick=False) if o.enabled}:
+                return loc
+        return None
+
+    def tavern_town(self) -> str:
+        return self.spot_for(self.BOT_SEATS[3][0], "act:tavern") or sorted(self.c.locations)[0]
+
+    def half(self) -> None:
+        """前半切在這裡：四個假人坐在店裡（picking_smith、picking_market、picking_bounty、picking_tavern），那幾格是舊程式按開、寫進存檔的。"""
+        for name, _, press in self.BOT_SEATS:
+            self.begin()
+            spot = self.spot_for(name, press)
+            emit(f"{name} 走到開 {press} 的地方", spot)
+            if spot is None:  # 測試內容沒有的店
+                continue
+            self.place(name, spot)
+            with self.world.action_lock():
+                g = self.game_of(name)
+                emit(f"{name} 按 {press}", g.choose(press))
+                self.chars.save(g.state)
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def sitting(self) -> None:
+        """舊程式按開的店：每一顆的分數、兩種 pick；BotRunner 兩輪，新程式替他們按（走 Feature.bot_pick 那幾支）。"""
+        for name, _, _ in self.BOT_SEATS:
+            self.view_seat(name, "坐在店裡")
+        self.bot_rounds(2)
+        for name, _, _ in self.BOT_SEATS:
+            self.view_seat(name, "兩輪之後")
+
+    def scores(self) -> None:
+        """三個位子 × 每一格條件 × 全部 act:<子動詞>；官軍站大本營、黃巾站中立地、散人站路上（這一格只讀，不存）。"""
+        from tianxia import bot_policy as bp
+        from tianxia.core.option import Option
+        from tianxia.state import BotProfile
+
+        sides = {f.id: f for f in self.c.scenario.factions}
+        home = sides["guan"].join_at[0] if "guan" in sides and sides["guan"].join_at else None
+        spots = [("籌甲", home), ("籌乙", "runan_wilds"), ("籌丙", "nanyang_road")]
+        for name, loc in spots:
+            self.place(name, loc)
+            self.edit(name, self.stand_up)
+            self.begin()
+            for tag, patches, tweak in self.dials():
+                g = self.game_of(name)
+                if tweak is not None:
+                    tweak(g)
+                profile = g.state.player.bot
+                for p in patches:
+                    p.start()
+                try:
+                    row = {i: self.safe(lambda i=i: bp.score(g, Option(id=i, label=""), profile)) for i in self.act_ids()}
+                finally:
+                    for p in reversed(patches):
+                        p.stop()
+                emit(f"{name} 分數 {tag}", row)
+            g = self.game_of(name)
+            stranger = BotProfile(personality="普通", seed=1, faction="huang" if "huang" in sides else None)
+            emit(f"{name} 分數 別人的名牌", {i: self.safe(lambda i=i: bp.score(g, Option(id=i, label=""), stranger)) for i in self.act_ids()})
+            others = {i: self.safe(lambda i=i: bp.score(g, Option(id=i, label=""), g.state.player.bot)) for i in (*self.pick_ids(), "season:paused", "growth:x")}
+            emit(f"{name} 分數 別的前綴", others)
+            options = [Option(id=i, label="") for i in self.act_ids()]
+            emit(f"{name} bot_policy.pick 整張", [self.safe(lambda i=i: bp.pick(g, options, g.state.player.bot, random.Random(i))) for i in range(8)])
+
+    def picks(self) -> None:
+        """bot.pick 一次只遞一顆：回那一顆是會按、None 是排除。名望夠不夠（call:）、看過沒（sect:zz 看過、sect:yy 沒有）、挑戰本人的勝算與等契機；整張遞進去挑八次（先後與亂數）。"""
+        from unittest import mock
+
+        from tianxia import bot
+        from tianxia.core.option import Option
+        from tianxia.engine import Game
+
+        def one(g) -> dict:
+            return {i: self.safe(lambda i=i: bot.pick(g, [Option(id=i, label="")], random.Random(0))) for i in self.pick_ids()}
+
+        def seen(g) -> None:
+            g.state.player.seen_events.add("zz")
+
+        def famous(g) -> None:
+            g.state.player.stats["fame"] = 10 ** 6
+            g.state.player.seen_events.add("zz")
+
+        for name in ("籌甲", "籌丙"):
+            self.begin()
+            for tag, tweak, odds, chance in (("照實", seen, "凶險", False), ("名望夠", famous, "穩勝", False), ("等契機＋五五波", seen, "五五波", True), ("等契機＋凶險", seen, "凶險", True)):
+                g = self.game_of(name)
+                tweak(g)
+                with mock.patch.object(Game, "challenge_odds", return_value=odds), mock.patch.object(bot, "awaits_chance", return_value=chance):
+                    emit(f"{name} 一次一顆 {tag}", one(g))
+                    full = [Option(id=i, label="") for i in self.pick_ids()]
+                    emit(f"{name} 整張挑 {tag}", [self.safe(lambda i=i: bot.pick(g, full, random.Random(i))) for i in range(8)])
+
+    def tavern_walk(self) -> None:
+        """bot_policy._tavern（TAVERN_CHANCE 換成 1，照舊是 bot_policy 的模組屬性）：站在開酒肆的城，三種局面（查到過那三位真人、沒查過人、沒錢）。問到什麼、扣多少、走不走得出來；只問不存。"""
+        from unittest import mock
+
+        from tianxia import bot_policy as bp
+
+        name = self.BOT_SEATS[3][0]
+        town = self.tavern_town()
+        emit("開酒肆的城", town)
+        for tag, silver, known, seeds in (("查到過人", 10 ** 5, list(self.PLAYERS), 30), ("沒查過人", 10 ** 5, [], 30), ("沒錢", 0, list(self.PLAYERS), 3)):
+            for seed in range(seeds):
+                self.begin()
+                with self.world.action_lock():
+                    g = self.game_of(name)
+                    p = g.state.player
+                    self.stand_up(p)
+                    p.location, p.journey = town, None
+                    p.stats["silver"] = silver
+                    p.tavern_known = list(known)
+                    with mock.patch.object(bp, "TAVERN_CHANCE", 1.0):
+                        got = self.safe(lambda seed=seed: bp._tavern(g, random.Random(seed)))
+                    emit(f"{name} 酒肆 {tag} 種子 {seed}", {"got": got, "silver": p.stats["silver"], "open": p.picking_tavern})
+
+    def bot_rounds(self, rounds: int) -> None:
+        """BotRunner 跑幾輪（四位一定在線；同 reckon 的 bot_rounds）。"""
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(53 + rounds), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {91 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        try:
+            for _ in range(rounds):
+                STEP[0] += 3
+                self.begin()
+                report = runner.tick()
+                emit("假人一輪", [report.acted, report.added, report.skipped, report.failed])
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+
+    def machines(self) -> None:
+        """假人碰得到：大家站回開酒肆的城，BotRunner 再跑幾輪；每個人最後在哪、哪一間店還開著、最新三則紀錄。"""
+        town = self.tavern_town()
+        for name, _, _ in self.BOT_SEATS:
+            self.place(name, town)
+        self.bot_rounds(self.ROUNDS)
+        for name, _, _ in self.BOT_SEATS:
+            state = self.chars.load(name)
+            p = state.player
+            emit(f"{name} 幾輪之後", {"at": p.location, "shops": [p.picking_smith, p.picking_market, p.picking_bounty, p.picking_tavern],
+                                 "journal": [e.title for e in state.journal[:3]]})
+            self.view_seat(name, "幾輪之後")
+        self.season_view("假人之後")
+
+
+def _tally_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _levy_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：守勢行動替守城記功的那一道分（第 60 批第 2 段從 bot_policy.score 搬進出陣包的 bots.py，那一句照寫，兩處找）。
+_tally_register_track("tally", TallyScenario, (("tianxia/bot_policy.py", "tianxia/features/sortie/bots.py"), ("if counts else 0.0", "if not counts else 0.0")), "season21")
+
+
+# ── 商城收尾一軌（全部拆包第 58 批；--track abacus）：六條 /api/mall、三個管理者工具每一條都打到，切在舊程式賣了、新程式才用的那一刻 ──
+
+
+class AbacusScenario(Scenario):
+    """商城收尾一軌（全部拆包第 58 批；--track abacus，自己一個資料庫）。班底的名字都是原創（PM 11/04）。這一批動到 routes.py，所以六條路由
+    （GET /api/mall、/api/mall/records，POST /api/mall/buy、/api/mall/claim、/api/mall/rename、/api/admin/mall）與 /api/do 的三個工具（mall_reissue、
+    mall_revoke、mall_refund）每一條都打到；別軌只碰 mall_reissue 與 /api/mall/buy（當發錢買票用）。
+
+    前半（舊程式）：shelf 第一次進來、沒登入 401、不是管理者 403、管理者照名號、照帳號、查無此人；grant 補發（同編號、沒原因、壞金額、不是管理者、
+    沒送編號由伺服器產〔secrets 固定〕）；buying 買成、同編號重送（already）、幾件、限購夾件數、限購滿、沒這件、元寶不夠、各種效果、還沒上架的列傳那幾件、
+    暫停中被擋（管理者照做）；card 月卡回饋與今天的份；early_name 舊程式就改了名；half 停在寫到一半：硯田生買下一件、回應沒收到，易安客手上一張舊程式賣的帖，
+    月卡明天的份還沒領，遲歸人還沒輪到過自己（封測發放沒發）。
+    後半（新程式）：resume 重新登入、舊程式買好的編號重送（already）、新程式發封測元寶（week7）、舊程式改的名照新名號讀；claim 隔天領；refund 硯田生每一筆逐一退
+    （回體丹用掉的不追、月卡少天數與回饋扣回、票與形象收回）與退不了的幾種；revoke 扣回與扣不了的幾種、管理者與本人看帳、把新手扣到 0 再買（一件的元寶不夠）；
+    rename 舊程式賣的帖由新程式用：沒帖、空的、太長、看不見的字元、同名、有人用、保留的名號（經 server.name_taken）、撞內容的 id、管理者、奪璽單挑還沒打完、改成、
+    沒帖了；direct 不經路由直接叫包：rename_left、entry、view、records 與不給 taken 的 rename_self（actions 自己查角色表與 reserved_names：三國名人、管理者、內容人物、
+    有人用、同名、改成）；bots 假人那一輪照拿封測發放（week7 帳上 5000、沒有購買紀錄）、手上有帖也不讓用；season 休季的貨架、帳上不寫季曆、紀念印上架買得到、
+    開下一季限購重算、重悟帖與破境丹帶著走、藏經匣第一次回來時歸零。
+    開關關著的設定（test）同一串 API 照打：路由與工具一律 404，直接叫包回「商城沒有開。」。
+
+    這一軌走不到的：列傳插畫白送（ART_FREE：要休季得第一階；散人不賣 ART_NO_SIDE 有走到）；zhuan_art 買成（要第 3 週起，列傳一軌買過）；rename 成了之後
+    GAMES 換鍵看不出來（begin() 每一步清空 GAMES，那兩行有跑、下一步用不到）；決戰還沒打完擋改名（只走奪璽單挑那一半，兩者同一句判斷）。"""
+
+    PLAYERS = {"硯田生": "guan", "易安客": "huang", "守拙叟": "guan"}
+    NEWBIE = "寒窗客"
+    LATE = "遲歸人"
+    BOT_SEATS = ["盤甲", "盤乙"]
+    PHASES_FIRST = ["setup", "shelf", "grant", "buying", "card", "early_name", "half"]
+    PHASES_SECOND = ["resume", "claim", "refund", "revoke", "rename", "direct", "bots", "season"]
+    BUYER, NAMER, EARLY = "硯田生", "易安客", "守拙叟"
+
+    # ── 小工具 ──
+
+    def buy(self, who: str, item: str, ref: str, **extra):
+        return self.call(who, "POST", "/api/mall/buy", {"item": item, "ref": ref, **extra})[1]
+
+    def renamed(self, who: str, name: str):
+        return self.call(who, "POST", "/api/mall/rename", {"name": name})[1]
+
+    def claim_today(self, who: str):
+        return self.call(who, "POST", "/api/mall/claim")[1]
+
+    def ledger(self, name: str, who: str = ADMIN):
+        return self.call(who, "POST", "/api/admin/mall", {"name": name})[1]
+
+    def reissue(self, name: str, amount, ref: str, note: str = "算盤", who: str = ADMIN):
+        return self.do(who, "mall_reissue", {"name": name, "amount": amount, "note": note, "ref": ref})
+
+    def stranger(self, method: str, url: str, body: dict | None = None) -> None:
+        """沒登入的人。"""
+        self.begin()
+        client = self.TestClient(self.server.app)
+        r = client.post(url, json=body if body is not None else {}) if method == "POST" else client.get(url)
+        emit(f"沒登入 {method} {url} {r.status_code}", r.text[:200])
+
+    def purchases(self, name: str) -> list:
+        from tianxia.characters import name_key
+        from tianxia.wallet import Wallet
+
+        return Wallet(self.world.db).purchases(name_key(name))
+
+    def wallet_of(self, name: str) -> int:
+        from tianxia.characters import name_key
+        from tianxia.wallet import Wallet
+
+        return Wallet(self.world.db).balance(name_key(name))
+
+    def named(self, who: str, new: str) -> str:
+        """改成了就是新名號，沒改成（商城關著）還是舊的。"""
+        return new if self.chars.load(new) is not None else who
+
+    @contextlib.contextmanager
+    def server_ref(self, text: str):
+        """網頁沒送合格的編號時伺服器自己產（secrets.token_urlsafe，會進帳）：這一下固定成 text，跑兩次才比得了。"""
+        import secrets
+
+        real = secrets.token_urlsafe
+        secrets.token_urlsafe = lambda nbytes=None: text
+        try:
+            yield
+        finally:
+            secrets.token_urlsafe = real
+
+    def at_hand(self, name: str, tag: str, fn) -> None:
+        """不經路由、直接叫包（rename_left 沒有路由；rename_self 不給 taken 那一條只有測試、腳本走）：照伺服器那樣拿鎖、同步、做、存。"""
+        from tianxia.engine import Game
+        from tianxia.features.mall import actions
+
+        self.begin()
+        with self.world.action_lock():
+            g = Game(self.c, self.chars.load(name), world=self.world)
+            g.client = None
+            g.sync(CLOCK[0])
+            out = fn(g, actions)
+            g._save_season()
+            self.chars.save(g.state)
+        emit(f"{name} 直接叫包 {tag}", out)
+
+    # ── 前半（舊程式） ──
+
+    def shelf(self) -> None:
+        """第一次進來：貨架、帳、沒登入的人、不是管理者查帳、管理者照名號、照帳號、查無此人。"""
+        self.call(self.BUYER, "GET", "/api/mall")
+        self.call(self.BUYER, "GET", "/api/mall/records")
+        self.stranger("GET", "/api/mall")
+        self.stranger("POST", "/api/mall/buy", {"item": "pills_5", "ref": "abacus-nobody"})
+        self.ledger(self.BUYER, who=self.BUYER)
+        self.ledger(self.BUYER)
+        self.ledger(self.login_of(self.BUYER))
+        self.ledger("查無此人")
+
+    def grant(self) -> None:
+        """補發：成了、同一個編號再送、沒寫原因、金額不對、照帳號、查無此人、不是管理者、沒送編號（伺服器產）。"""
+        self.reissue(self.BUYER, 9000, "abacus-g-buyer")
+        self.reissue(self.BUYER, 9000, "abacus-g-buyer")
+        self.reissue(self.BUYER, 100, "abacus-g-nonote", note="")
+        self.reissue(self.BUYER, -5, "abacus-g-bad")
+        self.reissue(self.login_of(self.NAMER), 1000, "abacus-g-namer")
+        self.reissue("查無此人", 100, "abacus-g-nobody")
+        self.reissue(self.NAMER, 100, "abacus-g-self", who=self.NAMER)
+        self.reissue(self.EARLY, 1500, "abacus-g-early")
+        self.reissue(ADMIN, 1000, "abacus-g-admin")
+        with self.server_ref("abacus-server-ref-1"):
+            self.do(ADMIN, "mall_reissue", {"name": self.EARLY, "amount": 1, "note": "算盤"})
+
+    def buying(self) -> None:
+        """買：成了；同一個編號再送（already）；一次好幾件；限購夾件數；沒有這件；元寶不夠；各種效果；還沒上架；編號不合格（伺服器產）；暫停中被擋。"""
+        self.buy(self.BUYER, "pills_5", "abacus-b-1")
+        self.buy(self.BUYER, "pills_5", "abacus-b-1")
+        self.buy(self.BUYER, "pills_5", "abacus-b-2", qty=2)
+        self.buy(self.BUYER, "pills_5", "abacus-b-3", qty=9)
+        self.buy(self.BUYER, "pills_5", "abacus-b-4")
+        self.buy(self.BUYER, "沒有這件", "abacus-b-5")
+        self.buy(self.BUYER, "pills_30", "abacus-b-6", qty=99)
+        for item in ("holding_15", "reroll_1", "legend_1", "inscribe_ink", "rewrite_zhuan", "look_moying"):
+            self.buy(self.BUYER, item, f"abacus-e-{item}")
+        for item in ("zhuan_art", "zhuan_seal", "zhuan_quote"):  # 列傳那幾件：還沒到週數、休季才賣
+            self.buy(self.BUYER, item, f"abacus-w-{item}")
+        with self.server_ref("abacus-server-ref-2"):
+            self.buy(self.BUYER, "inscribe_ink", "短")
+        self.buy(self.NEWBIE, "pills_5", "abacus-n-1")  # 新手還在序章或開局；有沒有封測發放看設定（沒有的是元寶不夠）
+        self.buy(self.NAMER, "rename", "abacus-r-1")  # 這一張留到後半（新程式）才用
+        self.buy(self.NAMER, "rename", "abacus-r-2")  # 一季限一張
+        for item in ("reroll_1", "legend_1", "holding_15"):  # 不退的這一份：收季時看換季帶著走的（重悟帖、破境丹）與只這一季的（藏經匣）
+            self.buy(self.NAMER, item, f"abacus-k-{item}")
+        self.do(ADMIN, "pause_clock")
+        self.buy(self.BUYER, "inscribe_ink", "abacus-p-1")
+        self.claim_today(self.BUYER)
+        self.reissue(self.BUYER, 1, "abacus-p-2")  # 帳跟季無關：暫停中管理者照做
+        self.do(ADMIN, "resume_clock")
+
+    def card(self) -> None:
+        """月卡：買下（當場回饋）、領今天的份、領過了、沒有卡的人。"""
+        self.buy(self.BUYER, "card_30", "abacus-c-1")
+        self.claim_today(self.BUYER)
+        self.claim_today(self.BUYER)
+        self.claim_today(self.NAMER)
+
+    def early_name(self) -> None:
+        """舊程式就改了名：後半登入、讀帳都照新名號。"""
+        self.buy(self.EARLY, "rename", "abacus-r-3")
+        self.renamed(self.EARLY, "抱樸叟")
+
+    def half(self) -> None:
+        """停在寫到一半：硯田生買下一件、回應沒收到（後半新程式收到同一個編號）；易安客手上一張舊程式賣的帖；硯田生的月卡明天的份還沒領；
+        遲歸人帳號角色都建好了、還沒輪到過自己（封測發放由新程式發）。"""
+        from tianxia.accounts import AccountStore
+        from tianxia.engine import Game
+
+        self.buy(self.BUYER, "inscribe_ink", "abacus-h-1")
+        store = AccountStore(self.world.db)
+        self.begin()
+        self.passwords[self.LATE] = "pw-" + self.login_of(self.LATE)
+        with self.world.db.transaction():
+            store.register(self.login_of(self.LATE), self.passwords[self.LATE])
+            game = Game.new(self.c, self.LATE, world=self.world)
+            self.chars.save(game.state)
+            store.bind_character(self.login_of(self.LATE), self.LATE)
+        self.clients[self.LATE] = self.TestClient(self.server.app)
+        emit("遲歸人 還沒輪到過自己", [p.item for p in self.purchases(self.LATE)])
+
+    # ── 後半（新程式） ──
+
+    def resume(self) -> None:
+        self.login_all()
+        self.buy(self.BUYER, "inscribe_ink", "abacus-h-1")  # 舊程式買好的編號重送：已經買好了（already）
+        self.main(self.LATE)  # 新程式發封測元寶
+        self.call(self.LATE, "GET", "/api/mall/records")
+        self.main(self.EARLY)
+        self.call(self.EARLY, "GET", "/api/mall/records")
+        self.ledger("抱樸叟")
+        self.ledger(self.EARLY)  # 舊名號：查不到
+
+    def claim(self) -> None:
+        """隔天：舊程式賣的月卡，新程式領今天的份；再領一次；貨架與入口跟著換。"""
+        STEP[0] += 1440
+        self.claim_today(self.BUYER)
+        self.claim_today(self.BUYER)
+        self.call(self.BUYER, "GET", "/api/mall")
+
+    def refund(self) -> None:
+        """退：硯田生買過的每一筆逐一退（回體丹用掉幾顆不追、月卡少天數與回饋扣回、票作廢）；退過了、沒有這一筆、沒寫原因、不是管理者。"""
+        self.edit(self.BUYER, lambda p: setattr(p, "stamina_pills", 1))
+        bought = self.purchases(self.BUYER)
+        emit("硯田生 買過的", [[x.item, x.price, x.refunded] for x in bought])
+        for i, x in enumerate(bought):
+            self.do(ADMIN, "mall_refund", {"name": self.BUYER, "id": x.id, "note": f"算盤 {i}"})
+        first = bought[0].id if bought else 1
+        self.do(ADMIN, "mall_refund", {"name": self.BUYER, "id": first, "note": "算盤"})
+        self.do(ADMIN, "mall_refund", {"name": self.BUYER, "id": 10 ** 6, "note": "算盤"})
+        self.do(ADMIN, "mall_refund", {"name": self.BUYER, "id": first, "note": ""})
+        self.do(self.NAMER, "mall_refund", {"name": self.BUYER, "id": first, "note": "算盤"})
+        self.do(ADMIN, "mall_refund", {"name": "查無此人", "id": first, "note": "算盤"})
+        self.call(self.BUYER, "GET", "/api/mall/records")
+
+    def revoke(self) -> None:
+        """扣回：成了、扣不了那麼多、沒寫原因、同一個編號、不是管理者；管理者看帳、本人看帳。"""
+        self.do(ADMIN, "mall_revoke", {"name": self.BUYER, "amount": 10, "note": "算盤", "ref": "abacus-v-1"})
+        self.do(ADMIN, "mall_revoke", {"name": self.BUYER, "amount": 10, "note": "算盤", "ref": "abacus-v-1"})
+        self.do(ADMIN, "mall_revoke", {"name": self.BUYER, "amount": 10 ** 7, "note": "算盤", "ref": "abacus-v-2"})
+        self.do(ADMIN, "mall_revoke", {"name": self.BUYER, "amount": 10, "note": "", "ref": "abacus-v-3"})
+        self.do(self.NAMER, "mall_revoke", {"name": self.BUYER, "amount": 10, "note": "算盤", "ref": "abacus-v-4"})
+        self.ledger(self.BUYER)
+        self.call(self.BUYER, "GET", "/api/mall/records")
+        left = self.wallet_of(self.NEWBIE)
+        self.do(ADMIN, "mall_revoke", {"name": self.NEWBIE, "amount": left, "note": "算盤", "ref": "abacus-v-5"})
+        self.buy(self.NEWBIE, "pills_30", "abacus-n-2")  # 一件的元寶不夠
+
+    def rename(self) -> None:
+        """易名帖：沒有帖、空的、太長、看不見的字元、同名、有人用（真人、保留的名號）、撞到內容的 id、管理者、奪璽單挑還沒打完；舊程式賣的那一張由新程式改成；再改一次沒帖了。"""
+        from tianxia.world_state import SealDuel, SealSide
+
+        self.renamed(self.BUYER, "換個名")
+        self.renamed(self.NAMER, "")
+        self.renamed(self.NAMER, "名" * (self.server.NAME_MAX + 1))
+        self.renamed(self.NAMER, "零​寬")
+        self.renamed(self.NAMER, self.NAMER)
+        self.renamed(self.NAMER, self.BUYER)
+        self.renamed(self.NAMER, "曹操")
+        self.renamed(self.NAMER, "Rayal")
+        self.renamed(self.NAMER, next(iter(self.c.locations)))
+        self.buy(ADMIN, "rename", "abacus-r-admin")
+        self.renamed(ADMIN, "新掌門")
+
+        def side(name: str) -> SealSide:
+            return SealSide(name=name, hp=100.0, hp_cap=100.0)
+
+        self.world.mutate(lambda s: s.seal_duels.append(SealDuel(id="abacus:0", shard="abacus", starts_real=CLOCK[0],
+                                                                 challenger=side(self.NAMER), holder=side(self.BUYER))))
+        emit("擺一場奪璽單挑", None)
+        self.renamed(self.NAMER, "易水生")
+        self.world.mutate(lambda s: s.seal_duels.clear())
+        emit("單挑清掉", None)
+        self.renamed(self.NAMER, "易水生")
+        self.main(self.NAMER)
+        self.call(self.NAMER, "GET", "/api/mall/records")
+        self.renamed(self.NAMER, "再易名")
+        self.ledger("易水生")
+
+    def direct(self) -> None:
+        """不經路由的：手上幾張帖（rename_left 沒有路由）、狀態列入口、不給 taken 的改名（照角色表與保留的名號查：伺服器一律給 taken，這一條只有測試、腳本走）。"""
+        self.reissue(self.LATE, 1000, "abacus-g-late")
+        self.buy(self.LATE, "rename", "abacus-r-late")
+        self.at_hand(self.LATE, "手上幾張帖", lambda g, a: a.rename_left(g))
+        self.at_hand(self.LATE, "入口", lambda g, a: a.entry(g))
+        self.at_hand(self.LATE, "三國名人", lambda g, a: a.rename_self(g, "曹操"))
+        self.at_hand(self.LATE, "管理者的名號", lambda g, a: a.rename_self(g, "Rayal"))
+        figure = next((f.name for f in self.c.figures.values()), "沒有人物")
+        self.at_hand(self.LATE, "內容裡的人物", lambda g, a: a.rename_self(g, figure))
+        self.at_hand(self.LATE, "有人用", lambda g, a: a.rename_self(g, self.BUYER))
+        self.at_hand(self.LATE, "同名", lambda g, a: a.rename_self(g, self.LATE))
+        self.at_hand(self.LATE, "改成", lambda g, a: a.rename_self(g, "晚歸客"))
+        late = self.named(self.LATE, "晚歸客")
+        self.at_hand(late, "手上幾張帖", lambda g, a: a.rename_left(g))
+        self.at_hand(late, "貨架與帳", lambda g, a: [a.view(g), a.records(g)])
+        self.main(self.LATE)
+
+    def bots(self) -> None:
+        """假人：自己那一輪照樣拿封測發放（on_own_turn）、從不買（帳上沒有購買紀錄）；手上就算有帖也不讓用。"""
+        from tianxia.characters import name_key
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+        from tianxia.wallet import Wallet
+
+        sides = [f.id for f in self.c.scenario.factions]
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction=sides[i % 2] if sides else None, season_number=self.world.get_season_number())
+            g.client = None
+            p.faction = p.bot.faction
+            self.chars.save(g.state)
+        ZhuanScenario.bot_rounds(self, "封測發放", 3)
+        for name in self.BOT_SEATS:
+            emit(f"假人 {name} 的帳", [self.wallet_of(name), [x.item for x in self.purchases(name)]])
+        first = self.BOT_SEATS[0]
+        Wallet(self.world.db).post(name_key(first), 500, "grant", "abacus:bot", time=CLOCK[0])
+        self.at_hand(first, "塞一張帖", lambda g, a: a.buy(g, "rename", "abacus-bot-1"))
+        self.at_hand(first, "易名帖不讓用", lambda g, a: a.rename_self(g, "盤丙"))
+        ZhuanScenario.bot_rounds(self, "之後", 2)
+
+    def season(self) -> None:
+        """收季：休季的貨架（紀念印、親筆評曰上架）、帳上不寫季曆、管理者照做；開下一季：限購一季的又能買、換季帶著走的票還在、月卡照領。"""
+        self.do(ADMIN, "end_season")
+        self.call(self.BUYER, "GET", "/api/mall")
+        self.call(self.BUYER, "GET", "/api/mall/records")
+        self.buy(self.BUYER, "zhuan_seal", "abacus-s-1")
+        self.buy(self.BUYER, "card_30", "abacus-s-2")
+        self.claim_today(self.BUYER)
+        self.reissue(self.BUYER, 5, "abacus-s-3")
+        self.ledger(self.BUYER)
+        self.do(ADMIN, "next_season")
+        self.main(self.BUYER)
+        self.call(self.BUYER, "GET", "/api/mall")
+        self.call(self.BUYER, "GET", "/api/mall/records")
+        STEP[0] += 1440
+        self.claim_today(self.BUYER)
+        self.buy(self.EARLY, "rename", "abacus-s-4")
+        self.renamed(self.EARLY, "歸真叟")
+        self.main(self.EARLY)
+        self.ledger(self.BUYER)
+        namer = self.chars.load(self.named(self.NAMER, "易水生")).player
+        emit("易水生 帶到下一季的", [namer.create_rerolls, namer.legend_items, namer.holding_bonus, namer.stamina_pills])
+        self.main(self.NAMER)
+        namer = self.chars.load(self.named(self.NAMER, "易水生")).player
+        emit("易水生 第一次回來之後", [namer.create_rerolls, namer.legend_items, namer.holding_bonus, namer.stamina_pills])
+
+
+def _abacus_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _beacon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：同一個編號再送回的那一句（mall.DUPLICATE：前半買好、後半新程式收到重送，FB-491）
+_abacus_register_track("abacus", AbacusScenario, (("tianxia/features/mall/rules.py", "tianxia/mall.py"),
+                                                  ('DUPLICATE = "這一筆已經買好了：「{name}」。"', 'DUPLICATE = "這一筆已經買好了：「{name}」！"')), "week7")
+
+
+# ═══════════════════════════ primer：玩法說明（全部拆包第 59 批，dev/guide-howto） ═══════════════════
+
+
+class PrimerScenario(StripScenario):
+    """玩法說明（全部拆包第 59 批；--track primer，自己一個資料庫）。平常的 /api/howto、status 的 stamina_help 與 war_help、行動列底下探索、出陣、交友那幾行，
+    strip、shut、sortie、duel 幾軌已經走到；這一軌補它們走不到的兩塊。
+    一、說明頁不看個人、只看內容與這一季，三種設定各只走得到一條路：pages 換一批記憶體裡的設定（兩份程式同一步換、同一步換回），每一種打一次 /api/howto、讀一次狀態列的兩份說明。
+    二、行動列底下「求見」那幾行（只有一位人物時的 call:<人物>、兩位以上的 act:call）：一類一顆開著的季沒有這兩顆、測試內容沒有大勢人物，所以別的軌一次也沒走到。doors 把一類一顆
+    關掉（測試內容另外把三位人物擺成大勢人物），名望夠、名望不夠、談滿、閉門不見、名單開著各看一次。
+    半舊半新切在 half：名單開著（行動列底下不寫 call: 那幾行）、舊角色的回體丹還沒補（讀檔那一刻才補、才寫那一行）；後半第一件事是新程式接手；還有新人建角色那一行新手福利。
+    假人：說明頁與行動列底下那幾行都是 server 才讀，假人碰得到的只有建角色那一行，bots 照拿掉一那一軌走一遍、紀錄標題與存檔都寫。
+    這一軌走不到的（要假的比重或內容，pytest 守）：見計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第七節。"""
+
+    OPENER, LISTER, TOPPED, RANGER = "溫如晦", "柏青崖", "鮑遲暮", "籍長風"
+    ARRIVAL, ARRIVAL2 = "甄小滿", "蓋聽瀾"  # 後半才建角色
+    PLAYERS = {OPENER: "guan", LISTER: "guan", TOPPED: "huang", RANGER: None}
+    NEWBIE = "晏初晴"
+    BOT_SEATS = [("燈甲", "yingshui"), ("燈乙", "yingchuan")]
+    PHASES_FIRST = ["setup", "pages", "doors", "half"]
+    PHASES_SECOND = ["resume", "taken_over", "pages", "doors", "arrival", "bots", "season"]
+
+    layout = SocializeScenario.layout
+    hall_spot = SocializeScenario.hall_spot
+    alone_spot = SocializeScenario.alone_spot
+    fame = SocializeScenario.fame
+    fresh = ShutScenario.fresh
+
+    # ── 小工具 ──
+
+    def tunes(self) -> list[tuple[str, list[tuple[object, dict]]]]:
+        """說明頁的每一種：(叫法, [(設定物件, 換成什麼), …])。"""
+        c = self.c.config
+        return [
+            ("一類一顆關著", [(c, {"precise_actions": False})]),
+            ("約戰關著", [(c.jianfa, {"sortie_duel": False})]),
+            ("探索一顆關著", [(c.jianfa, {"explore_one": False})]),
+            ("減法季的閘關著", [(c.jianfa, {"drill_gates": False, "stat_milestones": False})]),
+            ("屬性五段開著", [(c.jianfa, {"drill_gates": True, "stat_milestones": True})]),
+            ("名聲關著", [(c.renown, {"titles": False})]),
+            ("第一季規則關著", [(c, {"season_one": False})]),
+            ("地盤關著", [(self.c.scenario, {"territory": None})]),
+            ("新手期照季曆", [(c, {"newbie_real_hours": 0, "newbie_stamina_multiplier": 2.0})]),
+            ("新手期回復加快", [(c, {"newbie_real_hours": 48, "newbie_stamina_multiplier": 2.0})]),
+            ("新手期沒有好處", [(c, {"newbie_real_hours": 48, "newbie_stamina_multiplier": 1.0, "newbie_pills_per_day": 0}), (c.raid, {"enabled": False})]),
+            ("一鍵補滿", [(c, {"beta_free_refill": True})]),
+            ("回體丹關著", [(c, {"stamina_pills_per_day": 0})]),
+            ("兵器防具關著", [(c.weapons, {"enabled": False}), (c.armor, {"enabled": False})]),
+            ("素材四階關著", [(c.four_tiers, {"enabled": False})]),
+            ("商城關著", [(c.mall, {"enabled": False})]),
+            ("酒肆關著", [(c.tavern, {"enabled": False})]),
+            ("設伏關著", [(c.ambush, {"enabled": False})]),
+            ("玉璽關著", [(c.seal, {"enabled": False})]),
+            ("意境最濃與地利關著", [(c.insight_strong, {"enabled": False}), (c.terrain_arts, {"enabled": False})]),
+            ("兩份意境的算法換了", [(c.arts, {"stack_share": 0.4, "stack_ceiling": 2.0}), (c.sortie, {"hold_share": 0.3})]),
+            ("挑戰本人的數字都是零", [(c, {"figure_prestige_regen": 0, "figure_daily_loss_cap": 0, "snub_hours": 0, "figure_draw_share": 0}), (c.rise, {"enabled": False})]),
+            ("破境丹撿不到", [(c, {"explore_legend_chance": 0})]),
+            ("殘譜與線索的開關關著", [(c.forge_secrets, {"split_clues": False, "scrap_every_mode": False})]),
+        ]
+
+    @contextlib.contextmanager
+    def tuned_all(self, rows: list[tuple[object, dict]]):
+        """幾個設定物件一起換（這份內容沒有那一格的略過：測試內容少幾樣），出來照原樣還原。"""
+        saved = [(o, {k: getattr(o, k) for k in vals if hasattr(o, k)}) for o, vals in rows]
+        emit("這一下的設定", [sorted(vals.items(), key=str) for _, vals in rows])
+        for (o, vals), (_, old) in zip(rows, saved):
+            for k in old:
+                setattr(o, k, vals[k])
+        try:
+            yield
+        finally:
+            for o, old in saved:
+                for k, v in old.items():
+                    setattr(o, k, v)
+
+    @contextlib.contextmanager
+    def stamped(self, **values):
+        """這一季開季蓋的章這幾步換掉（改資料庫，兩份程式同一步換、同一步換回）。"""
+        with self.world.action_lock():
+            season = self.world.get_season()
+            old = {k: getattr(season, k) for k in values}
+            for k, v in values.items():
+                setattr(season, k, v)
+            self.world.save_season(season)
+        emit("這一季的章", sorted(values.items()))
+        try:
+            yield
+        finally:
+            with self.world.action_lock():
+                season = self.world.get_season()
+                for k, v in old.items():
+                    setattr(season, k, v)
+                self.world.save_season(season)
+
+    def read_help(self, who: str, tag: str) -> None:
+        """玩法說明那一頁（/api/howto）與狀態列點開的兩份說明（stamina_help、war_help；第一季才有 war_help）。"""
+        self.call(who, "GET", "/api/howto")
+        self.begin()
+        status = self.game(who).status_data()
+        emit(f"{who} {tag} 狀態列的說明", {"stamina": status.get("stamina_help"), "war": status.get("war_help"), "entry": status.get("howto_entry")})
+
+    @contextlib.contextmanager
+    def staged(self):
+        """(只有一位的地點, 那一位, 兩位以上的地點, 那幾位)：一類一顆關著；測試內容沒有大勢人物，另外把三位人物擺上去（audience_fame 3，名望 0 的見不到）。"""
+        cfg = self.c.config
+        if any(ch.deep_interaction for ch in self.c.characters.values()):
+            with self.tuned_all([(cfg, {"precise_actions": False})]):
+                yield (*self.alone_spot(), *self.hall_spot())
+            return
+        spots, cids = sorted(self.c.locations), sorted(self.c.characters)
+        rows = [(self.c.characters[cid], {"deep_interaction": True, "audience_fame": 3, "talk_at": spot, "recruit_at": spot})
+                for cid, spot in zip(cids, [spots[0], spots[1], spots[1]])]
+        with self.tuned_all([(cfg, {"precise_actions": False}), *rows]):
+            yield spots[0], cids[0], spots[1], cids[1:3]
+
+    def notes(self, who: str, tag: str) -> None:
+        view = self.main(who)
+        emit(f"{who} {tag}", {"options": [o for o in view.get("options", []) if str(o.get("id", "")).startswith(("act:socialize", "act:call", "call:"))],
+                              "notes": view.get("action_notes")})
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        StripScenario.setup(self)
+        for who in self.PLAYERS:
+            self.edit(who, lambda p: setattr(p, "fortune", True))  # 福緣先記成領過：這一軌不看交友事件
+
+    def pages(self) -> None:
+        """說明頁換一批設定各看一次（有陣營的一位、散人照舊不一樣的只有狀態列那幾句：散人看平常那一次）。"""
+        self.read_help(self.RANGER, "平常")
+        self.read_help(self.OPENER, "平常")
+        for tag, rows in self.tunes():
+            with self.tuned_all(rows):
+                self.read_help(self.OPENER, tag)
+        with self.stamped(forge_divine_per_kind=False, forge_split_clues=False):
+            self.read_help(self.OPENER, "這一季沒蓋鑄譜的章")
+            with self.tuned_all([(self.c.config.forge_secrets, {"split_clues": False, "scrap_every_mode": False})]):
+                self.read_help(self.OPENER, "鑄譜的章與開關都沒有")
+        before = self.chars.load(self.RANGER).player.stamina_pills
+        self.edit(self.RANGER, lambda p: (setattr(p, "stamina_pills", 0), setattr(p, "pills_topped_to", 10 ** 6)))
+        self.read_help(self.RANGER, "手上沒丹")
+        self.edit(self.RANGER, lambda p: setattr(p, "stamina_pills", before))
+
+    def doors(self) -> None:
+        """行動列底下求見那幾行（Game.action_notes 的最後一段）：名望夠、名望不夠、談滿、閉門不見；兩位以上的地點 act:call；名單開著不寫 call:。"""
+        from tianxia import figures, rules
+
+        who = self.OPENER
+        with self.staged() as (spot, lone, hall, figs):
+            if spot is not None:
+                self.place(who, spot)
+                self.edit(who, lambda p: (p.talks_today.clear(), p.snubbed_until.clear()))
+                self.fame(who, 9999)
+                self.notes(who, "只有一位・名望夠")
+                self.fame(who, 0)
+                self.notes(who, "只有一位・名望不夠")
+                self.fame(who, 9999)
+                day = rules.game_day(self.c, self.world.get_season())
+                self.edit(who, lambda p: p.talks_today.update({lone: [day, self.c.config.talk_turns_per_day]}))
+                self.notes(who, "只有一位・談滿")
+                self.edit(who, lambda p: p.talks_today.clear())
+                fig = figures.of_character(self.c, lone)
+                if fig is not None:  # 測試內容擺上去的人物不在人物表上，閉不了門
+                    self.edit(who, lambda p: p.snubbed_until.update({fig: 1.0e12}))
+                    self.notes(who, "只有一位・閉門不見")
+                    self.edit(who, lambda p: p.snubbed_until.clear())
+            if hall is not None:
+                self.place(who, hall)
+                self.fame(who, 9999)
+                self.notes(who, "兩位以上")
+                self.choose(who, "act:call")
+                self.notes(who, "兩位以上・名單開著")
+                self.choose(who, "call:back")
+
+    def half(self) -> None:
+        """切在寫到一半：一位的求見名單開著；一位的回體丹還沒補（舊存檔的 pills_topped_to 是 0，讀檔那一刻才補、才寫那一行）。"""
+        with self.staged() as (_, _, hall, _):
+            if hall is not None:
+                self.place(self.LISTER, hall)
+                self.fame(self.LISTER, 9999)
+                self.main(self.LISTER)
+                self.choose(self.LISTER, "act:call")
+            self.notes(self.LISTER, "名單開著")
+        self.edit(self.TOPPED, lambda p: (setattr(p, "pills_topped_to", 0), setattr(p, "stamina_pills", 0)))
+
+    # ── 後半 ──
+
+    def taken_over(self) -> None:
+        """新程式接手：名單接著開著（一類一顆照舊關著）、回體丹這時候才補。"""
+        with self.staged():
+            self.notes(self.LISTER, "接手之後")
+            self.choose(self.LISTER, "call:back")
+        self.read_help(self.TOPPED, "接手之後")
+        self.me(self.TOPPED, "回體丹補了")
+
+    def arrival(self) -> None:
+        """新人建角色：江湖紀錄開場那一行新手福利（一鍵補滿開著與關著各一位）。"""
+        self.fresh(self.ARRIVAL)
+        with self.tuned_all([(self.c.config, {"beta_free_refill": True})]):
+            self.fresh(self.ARRIVAL2)
+        self.begin()
+        for who in (self.ARRIVAL, self.ARRIVAL2):
+            emit(f"{who} 開場", [[e.title, e.tag, list(e.lines)] for e in self.chars.load(who).journal[-1:]])
+        self.read_help(self.ARRIVAL, "新人")
+
+    def season(self) -> None:
+        """收季、開下一季：說明頁、狀態列的說明跟著新的一季。"""
+        self.do(ADMIN, "end_season")
+        self.read_help(self.RANGER, "休季")
+        self.do(ADMIN, "next_season")
+        self.read_help(self.OPENER, "下一季")
+
+
+def _primer_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _beacon_register_track，名字分開免得幾塊同時接到檔尾時撞名）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：玩法說明體力那一節最後一句（第 59 批搬進包，舊名的檔、搬進包的檔兩處找）
+_primer_register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py", "tianxia/howto.py"),
+                                                  ("點狀態列的體力條，也看得到這幾句。", "點狀態列的體力條，也看得到這幾句！")), "week7")
+
+
+# ═══════════════════════════ shelf（全部拆包第 62 批：內容照包分；core_content） ═══════════════════════════
+# core_content：這一段整段是第 62 批加的，上面別人的行一個字不動。
+# 為什麼另開一軌：別的軌只看得到走到的那幾筆內容。載入時「沒有這個檔就是空的」，沒人抽到的句子、沒人打得出的名器，檔案搬丟了照樣全綠。
+
+
+class ShelfScenario(Scenario):
+    """整份內容一軌（全部拆包第 62 批；--track shelf，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+
+    前半（照段落順序）：setup、seat 開季、兩個人就位；ledger_front 重新載入一份內容（season21、week7 讀 content/，test 讀測試內容），
+    Content 前一半的欄位一格一行（筆數、整格的雜湊、第一個與最後一個鍵：dict 的先後算行為，同名蓋掉的先後也在裡面），再加人物簡介
+    （FIGURE_INTROS：殼在 import 時自己讀，不經過 Content）；walk 兩個人看畫面；half 停在寫到一半：翻書人身上掛著 events/sects.json 的
+    yingchuan_join、抄經客掛著 events/social_runan.json 的 sc_rn_feast，都還沒選（測試內容沒有這兩則，都掛測試內容的第一則）。
+    後半是重開的行程：resume 重新登入、看畫面；ledger_back 重新載入一份內容，後一半的欄位一格一行；settle 接手的程式照事件 id 找到內容、
+    選掉第一個選項；bots 兩個假人（一軍一個）擺好之後 BotRunner 跑 4 輪；season 收季、開下一季。
+
+    這一軌走不到的：內容裡一筆一筆的規則（別的軌按得到才按得到；這一軌只釘內容的字與先後）；content.validate 的錯誤訊息（tests/core/test_content.py 守）；
+    測試內容的假人沒有上線（online 0，一輪什麼也不做），假人那一段只有 season21、week7 真的在動。"""
+
+    PLAYERS = {"翻書人": "guan", "抄經客": "huang"}
+    NEWBIE = "初開卷"
+    BOT_SEATS = [("架甲", "guan"), ("架乙", "huang")]
+    READER, COPIER = "翻書人", "抄經客"
+    PENDING = {READER: "yingchuan_join", COPIER: "sc_rn_feast"}
+    PHASES_FIRST = ["setup", "seat", "ledger_front", "walk", "half"]
+    PHASES_SECOND = ["resume", "ledger_back", "settle", "bots", "season"]
+
+    def factions_on(self) -> bool:
+        return {"guan", "huang"} <= {f.id for f in self.c.scenario.factions}
+
+    def seat(self) -> None:
+        for who, side in self.PLAYERS.items():
+            self.place(who, self.c.scenario.start_location, side if self.factions_on() else None)
+
+    def fresh(self):
+        """重新載入一份內容（不用 server.CONTENT：那一份一路被情境改設定，整段與接手的行程看到的才會一樣）。"""
+        from tianxia.content import load_content
+
+        if self.profile == "test":
+            return load_content(self.root / "tests" / "fixtures" / "content")
+        return load_content(self.root / "content", profile=self.profile)
+
+    def ledger(self, part: str) -> None:
+        c = self.fresh()
+        names = list(type(c).model_fields)
+        cut = len(names) // 2
+        whole = c.model_dump(mode="json")
+        for name in names[:cut] if part == "前" else names[cut:]:
+            value = whole.get(name)  # Content 的序列化會拿掉沒寫的那幾格（_drop_unset）：測試內容沒有痕跡規則就是 None
+            row = {"雜湊": hashlib.sha256(json.dumps(value, ensure_ascii=False).encode("utf-8")).hexdigest()}
+            if isinstance(value, (dict, list)):
+                row["筆數"] = len(value)
+            if isinstance(value, dict) and value:
+                keys = list(value)
+                row["頭尾"] = [keys[0], keys[-1]]
+            emit(f"內容 {name}", row)
+
+    def ledger_front(self) -> None:
+        self.ledger("前")
+        intros = self.server.FIGURE_INTROS
+        emit("人物簡介", {"筆數": len(intros), "雜湊": hashlib.sha256(json.dumps(intros, ensure_ascii=False).encode("utf-8")).hexdigest()})
+
+    def walk(self) -> None:
+        for who in self.PLAYERS:
+            self.main(who)
+
+    def half(self) -> None:
+        events = self.c.events
+        for who, wanted in self.PENDING.items():
+            event = wanted if wanted in events else next(iter(events))
+            with self.world.action_lock():
+                state = self.chars.load(who)
+                state.pending_event = event
+                self.chars.save(state)
+            emit(f"{who} 掛著的事件", event)
+            self.main(who)
+
+    def resume(self) -> None:
+        self.login_all()
+        for who in self.PLAYERS:
+            self.main(who)
+
+    def ledger_back(self) -> None:
+        self.ledger("後")
+
+    def settle(self) -> None:
+        for who in self.PLAYERS:
+            options = self.ids(self.main(who))
+            emit(f"{who} 接手之後的選項", {i: o.get("enabled") for i, o in options.items() if i.startswith("choice:")})
+            first = [i for i, o in options.items() if i.startswith("choice:") and o.get("enabled")]
+            if first:
+                self.choose(who, first[0])
+            self.main(who)
+
+    def bots(self) -> None:
+        from collections import Counter
+
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        on = self.factions_on()
+        for i, (name, side) in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=97 + i, faction=side if on else None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, self.c.scenario.start_location, None
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(53), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {97 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(4):
+                STEP[0] += 4
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+
+    def season(self) -> None:
+        self.do(ADMIN, "end_season")
+        self.main(self.READER)
+        self.do(ADMIN, "next_season")
+        self.main(self.READER)
+
+
+def _shelf_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（四張表一起登記；同 _beacon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：四階名器一件的說明（沒有一軌打得出這一件，別的軌抓不到）；搬進包的檔、舊位置兩處找
+_shelf_register_track("shelf", ShelfScenario, (("tianxia/features/smithy/content/tier4_named.json", "content/tier4_named.json"),
+                                               ("握著像握一捧井水。", "握著像握一捧井水！")), "week7")
+TRACK_REQUIRES["shelf"] = "content/figure_intros.json"  # 這一軌讀 server.FIGURE_INTROS；合回 develop 第 1 段之前的主幹沒有這個檔（_tracks_on 看的是 base）
+
+
+# ── shell_web（全部拆包第 64 批：網頁殼化）────────────────────────────────────────
+import re  # noqa: E402（這幾段以前都在函式裡 import；這一段的模組層要用）
+
+# 以前就在 / 上的 js：照現在的先後。殼化切出來的新檔（base 沒有）從 / 的比對裡拿掉，它們的內容算進「所有 js 的行」。
+FACADE_SCRIPTS = ("main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js")
+LOOM_OLD_SHEETS = ("style.css", "mall.css", "zhuan.css", "legacy.css")  # 以前就在 / 上的樣式：照現在的先後（第 67 批切出去的新檔排在 style.css 與 mall.css 之間）
+FACADE_SHELL_FILES = {"shell.js"}  # 殼的掛鉤本身（新加的，不是切出來的）：base 沒有這一支，由網頁測試守
+# 殼化本來就要改的那幾行（renderPage 那張分頁表、包檔尾的登記）：兩邊都不算，其餘每一行要一樣多
+FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pageJianghu\b")
+
+
+def _facade_page(html: str) -> str:
+    """/ 的 HTML 除了多出來的 script 標籤與版本號之外一個字不變：?v= 抹掉（檔案變了版本本來就變，對不對另外驗），新檔的標籤連那一行拿掉。
+    第 67 批：從 style.css 切出去的樣式同樣（新檔的 link 與它們上面那一行註解拿掉，它們的內容與先後由 drape 軌比）。"""
+    html = re.sub(r"\?v=[0-9a-f]{10}", "", html)
+    html = re.sub(r"<!-- 第 67 批從 style\.css 切出去的樣式[^\n]*-->\r?\n", "", html)
+    html = re.sub(r'<link rel="stylesheet" href="/static/([^"]+)">\r?\n', lambda m: m[0] if m[1] in LOOM_OLD_SHEETS else "", html)
+    return re.sub(r'<script src="/static/([^"]+)"></script>\r?\n', lambda m: m[0] if m[1] in FACADE_SCRIPTS else "", html)
+
+
+class FacadeScenario(Scenario):
+    """網頁的門面一軌（全部拆包第 64 批；--track facade，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    這一批搬的是網頁（web/app.js 切出修練、煉製）與 / 怎麼生出來；API 一條都沒動，別的軌比的是 API，走不到這裡。
+    page 三種人（沒登入、玩家、管理者）各打 / 與 /admin：狀態碼、型別、快取標頭、整份 HTML（照 _facade_page，連行尾都比）、/admin 跟 / 是不是同一份。
+    scripts 照 / 真的載入的那幾支一支一支抓：以前就有的（FACADE_SCRIPTS）寫狀態碼、型別、快取標頭；每一支的 ?v= 是不是那支檔內容的前十碼；
+    「所有 js 的行」：每一支去掉檔頭（"use strict"; 以前的說明）之後的每一行（不含空行與 FACADE_SHELL_LINES）排序取 sha256，加上行數——
+    切檔只換位置，所以這一個數字兩邊要一樣；改到任何一行就紅（selftest 的改一個字就是這一條抓的）。只驗每一行還在，不驗先後：先後由切檔腳本的逐段比對與網頁測試守。
+    半舊半新：這一包沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣三種人再打一遍。
+    這一軌走不到的：瀏覽器真的執行這些檔（切檔之後的載入順序由網頁測試與波末實機驗）；/static/index.html 這個沒有人連的裸檔。
+    假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
+
+    PLAYERS = {"簷下客": "guan"}
+    NEWBIE = "叩門人"
+    PHASES_FIRST = ["setup", "page", "scripts", "half"]
+    PHASES_SECOND = ["resume", "page_again", "scripts_again"]
+    GUEST = "簷下客"
+
+    def viewers(self) -> list[tuple[str, object]]:
+        return [("沒登入", self.TestClient(self.server.app)), (self.GUEST, self.clients[self.GUEST]), (ADMIN, self.clients[ADMIN])]
+
+    def page(self) -> None:
+        for who, client in self.viewers():
+            self.begin()
+            root, admin = client.get("/"), client.get("/admin")
+            emit(f"{who} GET /", [root.status_code, root.headers.get("content-type"), root.headers.get("cache-control"), _facade_page(root.text)])
+            emit(f"{who} GET /admin", [admin.status_code, admin.headers.get("content-type"), admin.headers.get("cache-control"), admin.text == root.text])
+
+    def page_again(self) -> None:
+        self.page()
+
+    def scripts(self) -> None:
+        self.begin()
+        client = self.clients[self.GUEST]
+        html = client.get("/").text
+        lines: list[str] = []
+        versions_ok = True
+        for name, version in re.findall(r'<script src="/static/([^"?]+)\?v=([0-9a-f]{10})"></script>', html):
+            r = client.get(f"/static/{name}")
+            versions_ok &= hashlib.sha256(r.content).hexdigest()[:10] == version
+            if name in FACADE_SCRIPTS:
+                emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
+            if name not in FACADE_SHELL_FILES:
+                body = r.text.replace("\r\n", "\n").split('"use strict";', 1)[1]
+                lines += [ln for ln in body.split("\n") if ln.strip() and not FACADE_SHELL_LINES.search(ln)]
+        emit("每一支的版本號都是內容的前十碼", versions_ok)
+        emit("所有 js 的行（排序）", [len(lines), hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()])
+        emit("/ 沒帶版本號的 script", re.findall(r'<script src="([^"?]+)"></script>', html))
+
+    def scripts_again(self) -> None:
+        self.scripts()
+
+    def half(self) -> None:
+        """切點：玩家登入著、/ 拿過了（這一包沒有別的半途狀態）；存檔裡有什麼照資料庫雜湊比。"""
+        self.main(self.GUEST)
+
+    def resume(self) -> None:
+        self.login_all()
+
+
+def _facade_map_web(self: MapScenario) -> None:
+    """map 軌的網頁檔段（取代 MapScenario.web）：map.js 照舊比整檔 sha256、/ 載入它的那一行與 link 的版本號。
+    以前還比 /static/app.js 整檔與 / 的每一支 script：殼化每一批都切 app.js、加新檔，那兩樣改由 facade 軌比（整份 HTML、所有 js 的行）。"""
+    who = self.GUAN
+    self.begin()
+    client = self.clients[who]
+    for url in ("/static/map.js", "/static/沒有這個檔.js"):
+        r = client.get(url)
+        emit(f"GET {url}", [r.status_code, len(r.content), hashlib.sha256(r.content).hexdigest(),
+                            r.headers.get("content-type"), r.headers.get("cache-control")])
+    page = client.get("/")
+    # 第 67 批起 style.css 會變、也切出新的樣式：link 只比以前就有的那幾支、版本號抹掉（樣式的內容與先後由 drape 軌比）
+    links = [re.sub(r"\?v=[0-9a-f]{10}$", "", h) for h in re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)]
+    emit("GET / 載入的檔", [page.status_code, [s for s in re.findall(r'<script src="([^"]+)"', page.text) if s.startswith("/static/map.js")],
+                             [h for h in links if not h.startswith("/static/") or h[len("/static/"):] in LOOM_OLD_SHEETS]])
+
+
+MapScenario.web = _facade_map_web
+
+
+def _facade_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _beacon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：修練頁換一門的那一句（swapListHtml；第 64 批從 app.js 切到 cultivation.js，兩處找）
+_facade_register_track("facade", FacadeScenario, (("web/cultivation.js", "web/app.js"), ("功法庫裡沒有別的", "功法庫裡沒有其他的")), "week7")
+
+
+# ── shell_web（全部拆包第 67 批：style.css 照包分）─────────────────────────────────────
+LOOM_HEAD = re.compile(r"^/\* 天下大勢：.*全部拆包第 67 批從 style\.css 切出來.*\*/$")  # 新檔第一行的說明（base 沒有）
+
+
+def _drape_rules(css: str, media: str, sink: dict) -> None:
+    """照瀏覽器讀的順序把樣式攤平：(media 條件, 選擇器, 屬性) → [值, ...]。多一個 } 不吃掉（瀏覽器會把它算進下一條的選擇器、那一條作廢），所以指紋連這種作廢也比。"""
+    i, n = 0, len(css)
+    while i < n:
+        brace = css.find("{", i)
+        if brace < 0:
+            return
+        semi = css.find(";", i, brace)  # 頂層的 @import 這種
+        if semi >= 0 and css[i:semi].lstrip().startswith("@"):
+            i = semi + 1
+            continue
+        depth, j = 1, brace + 1
+        while j < n and depth:
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+            j += 1
+        head, body = " ".join(css[i:brace].split()), css[brace + 1:j - 1]
+        if head.startswith(("@media", "@supports")):
+            _drape_rules(body, f"{media} & {head}" if media else head, sink)
+        elif head.startswith("@"):
+            sink.setdefault((media, head, ""), []).append(" ".join(body.split()))  # @keyframes 同名後蓋前、@font-face：整段當一個值
+        else:
+            for sel in re.split(r",(?![^()]*\))", head):
+                for decl in re.split(r";(?![^()\"']*[\"')])", body):
+                    if ":" in decl:
+                        prop, value = decl.split(":", 1)
+                        sink.setdefault((media, sel.strip(), prop.strip().lower()), []).append(" ".join(value.split()))
+        i = j
+
+
+class DrapeScenario(FacadeScenario):
+    """樣式的一軌（全部拆包第 67 批；--track drape，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    別的軌比的是 API 與 js，樣式一個字都走不到；這一批把 web/style.css 切到各包的 web/<包>.css，同權重後蓋前，先後就是行為，所以另開這一軌。
+    sheets 照 / 真的載入的 link 一支一支抓：
+    以前就有的（LOOM_OLD_SHEETS）寫狀態碼、型別、快取標頭與先後；每一支的 ?v= 是不是內容的前十碼；
+    「所有 css 的行」：每一支去掉新檔第一行說明之後的每一行（不含空行）排序取 sha256，加上行數——切檔只換位置，這個數字兩邊要一樣，改到任何一行就紅（selftest 改一個字就是這一條抓的）；
+    「同選擇器同屬性的值」：照載入順序把規則攤平，(media, 選擇器, 屬性) → 值的序列，整張取 sha256——同一個選擇器在兩處寫同一個屬性、搬完誰蓋誰反了就紅，多一個 } 作廢的那一條也算在裡面。
+    這一軌走不到的：兩個不同的選擇器打到同一個元素時誰蓋誰（要看畫面，切檔時由 scripts/css_order_check.py 與波末實機守）；瀏覽器真的算出來的樣子。
+    半舊半新：樣式沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣再抓一遍。
+    假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
+
+    PLAYERS = {"織機客": "guan"}
+    NEWBIE = "穿梭人"
+    PHASES_FIRST = ["setup", "sheets", "half"]
+    PHASES_SECOND = ["resume", "sheets_again"]
+    GUEST = "織機客"
+
+    def sheets(self) -> None:
+        self.begin()
+        client = self.clients[self.GUEST]
+        html = client.get("/").text
+        found = re.findall(r'<link rel="stylesheet" href="/static/([^"?]+)\?v=([0-9a-f]{10})">', html)
+        emit("/ 載入的舊樣式（先後）", [name for name, _ in found if name in LOOM_OLD_SHEETS])
+        lines: list[str] = []
+        rules: dict = {}
+        versions_ok = True
+        for name, version in found:
+            r = client.get(f"/static/{name}")
+            versions_ok &= hashlib.sha256(r.content).hexdigest()[:10] == version
+            if name in LOOM_OLD_SHEETS:
+                emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
+            body = r.text.replace("\r\n", "\n")
+            lines += [ln for ln in body.split("\n") if ln.strip() and not LOOM_HEAD.match(ln)]
+            _drape_rules(re.sub(r"/\*.*?\*/", "", body, flags=re.S), "", rules)
+        emit("每一支的版本號都是內容的前十碼", versions_ok)
+        emit("所有 css 的行（排序）", [len(lines), hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()])
+        flat = json.dumps(sorted((list(k), v) for k, v in rules.items()), ensure_ascii=False)
+        emit("同選擇器同屬性的值（照載入順序）", [len(rules), hashlib.sha256(flat.encode("utf-8")).hexdigest()])
+        emit("/ 沒帶版本號的樣式", re.findall(r'<link rel="stylesheet" href="(/static/[^"?]+)">', html))
+
+    def sheets_again(self) -> None:
+        self.sheets()
+
+
+# 改一個字（selftest）：簽到第四階小字的字級（第 67 批從 style.css 切到 checkin.css，兩處找）
+_facade_register_track("drape", DrapeScenario, (("web/checkin.css", "web/style.css"), (".ck-p4 small { font: 10.5px", ".ck-p4 small { font: 10.6px")), "week7")
+
+
+# ═══════════════════════════ 動作表一軌（全部拆包第 68 批：伺服器分包一）═══════════════════════════
+
+
+# 三張動作表的每一個 op → body 的鍵（順序照表；寫死在這裡：表搬去哪、合起來的順序變不變，這裡都不跟著變）
+SWITCH_MAIN = {
+    "seclude": ("hours",), "smith_forge": ("kind", "main", "aux"), "smith_sell": ("material", "count"), "smith_upgrade": ("attribute", "tier"), "smith_furnace": (),
+    "donate": ("material", "count"), "tavern": ("op", "target", "text"), "anonymous": ("value",), "gender": ("value",), "story_seen": (),
+    "letter_read": ("id",), "letter_decline": ("id",), "hints_off": ("value",), "skip_tutorial": (), "view_map": (), "view_orders": (), "view_tab": ("tab",),
+    "guide_ack": (), "allocate": ("stat",), "growth": ("preset", "split"), "newbie_drifter": (), "pill": (), "checkin": ("attribute",), "conquest_letter": ("loc",),
+    "seal_use": ("target", "side"), "sortie_go": ("moves",), "sortie_answer": ("id", "moves"), "sortie_join": ("id",), "outing": ("n",),
+}
+SWITCH_ADMIN = {
+    "outing_erase": ("id",), "open_season": (), "end_season": (), "next_season": (), "pause_clock": (), "resume_clock": (), "fast_forward": ("hours",),
+    "start_battle": ("id",), "fire": ("id",), "push_trend": ("id", "amount"), "schedule": ("id", "at"), "jump_next": (), "set_trend": ("id", "value"),
+    "resolve_event": ("id", "key"), "clear_lock": ("id",), "cancel_battle": (), "revive_figure": ("id",), "issue_orders": (), "rotate_seats": (),
+    "start_showdown": ("id",), "summon": ("name",), "give_opportunity": ("name", "id"), "give_fragment": ("name", "id"), "seal_emerge": ("id",), "seal_stir": ("id",),
+    "seal_assign": ("id", "name", "state"), "seal_duel": ("id", "name", "factor"), "seal_fix": ("take",), "seal_cancel": (), "seal_sink_check": (), "seal_mandate": ("when",),
+    "mingtie_remove": ("name", "version"), "mingtie_restore": ("name", "version"),
+}
+SWITCH_MENXIA = {
+    "practice": ("kind",), "heal": (), "forge": ("art", "insights"), "switch": ("art",), "slot": ("art", "insight", "index"), "unslot": ("art", "insight"),
+    "create_begin": ("kind", "form"), "create_pose": ("pose",), "create_back": ("to",), "create_name": ("name", "move"), "create_cancel": (), "create_reroll": (),
+    "ascend_dismiss": (), "cultivate": ("art", "use_legend"), "melt": ("art",), "melt_insight": ("insight",), "melt_many": ("arts", "insights"), "name": ("name",),
+    "name_divine": ("weapon", "name", "keep"), "bind_art": ("weapon", "art"), "join": ("person",), "leave": ("person",), "release": ("person",), "wield": ("weapon",),
+    "dismantle": ("weapon",), "feed": (), "repair_item": ("item", "weapon"), "temper_item": ("item", "weapon"), "dismantle_many": ("items",), "chuangong": ("person", "what"),
+}
+# 換位置的那 20 個管理者工具（暫停中照做 paused_ok 是表的一部分，一個一個打；留在殼的那 13 個一個字沒動）
+SWITCH_TOOLS = (
+    "outing_erase", "start_battle", "cancel_battle", "revive_figure", "issue_orders", "rotate_seats", "start_showdown", "summon", "give_opportunity", "give_fragment",
+    "seal_emerge", "seal_stir", "seal_assign", "seal_duel", "seal_fix", "seal_cancel", "seal_sink_check", "seal_mandate", "mingtie_remove", "mingtie_restore",
+)
+SWITCH_JUNK = (None, -3, True, "長" * 90, ["甲"], {"鍵": 1})  # 型別不對、負的、太長：每一格的轉型與預設值都在這幾樣上分得出來
+SWITCH_MORE = {  # 只有這樣送才走得到的那一條（清單、布林只認 True、切字數、夾下限）
+    "seclude": ({"hours": 3},),
+    "smith_sell": ({"material": "rou_1", "count": 0},),
+    "smith_upgrade": ({"attribute": "剛", "tier": 2},),
+    "donate": ({"items": [{"material": "rou_1", "count": 2}, {"count": 3}, "壞的"]}, {"items": "不是清單"}, {"material": "rou_1", "count": 3}),
+    "tavern": ({"op": "news"}, {"op": "wall", "text": "長" * 60}, {"op": "seek", "target": "長" * 30}),
+    "growth": ({"preset": "custom", "split": {"str": 1}},),
+    "checkin": ({"attribute": "剛柔快慢"},),
+    "seal_use": ({"target": "長" * 50, "side": "長" * 30},),
+    "sortie_go": ({"moves": "強攻、固守，奇襲,再一招,又一招,第六招,第七招"},),
+    "sortie_answer": ({"id": "長" * 100, "moves": "強攻,固守,奇襲"},),
+    "sortie_join": ({"id": "長" * 100},),
+    "outing": ({"n": 3},),
+    "practice": ({"kind": "內功"},),
+    "slot": ({"art": "a", "insight": "b", "index": 2}, {"art": "a", "insight": "b", "index": -2}),
+    "melt_many": ({"arts": ["a", 1, None], "insights": ["b"]},),
+    "dismantle_many": ({"items": ["兵:1", 5, None]},),
+    "repair_item": ({"weapon": "兵:9"},),
+    "temper_item": ({"weapon": "兵:9"},),
+    "create_name": ({"name": "名", "move": "長" * 60},),
+    "cultivate": ({"art": "a", "use_legend": "true"},),
+    "name_divine": ({"weapon": "兵:1", "keep": "true"}, {"weapon": "兵:1", "keep": True}),
+    "chuangong": ({"person": "player", "what": "str"},),
+    "join": ({"person": "player"},),  # 名冊上的人（其他都在名冊那一關就回了，碰不到表上那一條）
+    "leave": ({"person": "player"},),
+    "release": ({"person": "player"},),
+    "seal_duel": ({"id": "x", "name": "y", "factor": "壞"},),
+    "seal_fix": ({"take": "true"},),
+    "seal_assign": ({"id": "x", "name": "y"},),
+}
+SWITCH_SPIES = {  # 表上的 lambda 最後叫到的那一支（包裡的函式；Game 的委派與搬過去之後的表都經過模組的屬性叫它）：它收到什麼一個字一個字記下來
+    "tianxia.features.seclusion.actions": ("seclude",),
+    "tianxia.features.smithy.forge_actions": ("smith_forge", "smith_furnace"),
+    "tianxia.features.smithy.trade_actions": ("smith_sell", "smith_upgrade"),
+    "tianxia.features.smithy.divine_actions": ("name_divine", "bind_art"),
+    "tianxia.features.smithy.gear_actions": ("repair_item", "temper_item"),
+    "tianxia.features.outlets.donate_actions": ("donate", "donate_items"),
+    "tianxia.features.tavern.actions": ("tavern_do",),
+    "tianxia.features.story.actions": ("story_seen",),
+    "tianxia.features.companions.actions": ("read_letter", "decline_letter", "add_to_team", "remove_from_team", "release_companion"),
+    "tianxia.features.guide.actions": ("set_hints_off", "skip_tutorial", "view_map", "view_orders", "view_tab", "guide_ack", "newbie_drifter"),
+    "tianxia.features.cultivation.actions": ("allocate_stat", "practice", "switch_art", "slot_insight", "unslot_insight", "ascend_dismiss", "cultivate", "melt_art",
+                                             "melt_insight", "melt_many", "name_mastered", "chuangong"),
+    "tianxia.features.checkin.actions": ("check_in",),
+    "tianxia.features.territory_acts.letter_actions": ("conquest_letter",),
+    "tianxia.features.seal.card": ("use",),
+    "tianxia.features.seal.admin": ("emerge", "stir", "assign", "duel", "fix", "cancel", "sink_check", "mandate"),
+    "tianxia.features.sortie.duel_actions": ("sortie_go", "sortie_answer", "sortie_join"),
+    "tianxia.features.explore.outing_actions": ("outing_go", "admin_erase_inscription"),
+    "tianxia.features.battle.admin": ("admin_start_battle", "admin_cancel_battle", "admin_start_showdown"),
+    "tianxia.features.figure_acts.admin_actions": ("revive_figure",),
+    "tianxia.features.military.admin_actions": ("issue_orders", "rotate_seats", "summon"),
+    "tianxia.features.military.opp_actions": ("give_opportunity",),
+    "tianxia.features.military.fs_actions": ("give_fragment",),
+    "tianxia.features.peers.mingtie_actions": ("admin_remove", "admin_restore"),
+    "tianxia.features.craft.actions": ("begin", "pose", "back", "name", "cancel", "reroll"),
+    "tianxia.features.gear.bench_actions": ("wield_weapon", "dismantle_weapon", "feed_mount", "dismantle_many"),
+}
+
+
+class SwitchboardScenario(Scenario):
+    """三張動作表一軌（全部拆包第 68 批；--track switchboard，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    每一個 op 照表的順序打一次，對照的是「表怎麼把網頁送來的東西轉成參數、擋在哪裡」，所以：叫到包裡那一支時把它收到的參數逐字記下來（spy，
+    Game 的委派與搬過去之後的表都經過模組的屬性叫它）；每打一下把人的存檔放回去（閉關、走一趟不擋住下一個 op）；回應只記狀態碼、回話與畫面的雜湊，整段才不會太大。
+
+    前半（照段落順序）：setup 籌備中建人（test 設定開局就開季）；tables 三張表的鍵（順序算數）、管理者兩張表合起來的名字、暫停中照做與動到別人存檔的那兩張；
+    strangers 沒登入每個 op 打一次（401）、跨表與不認得的 op（/api/do 沒登入 401、登入了 404；/api/menxia 一律先 404）；not_admin 玩家按每個管理者動作（400）；
+    preparing 籌備中按每個玩家動作：checkin、name_divine、bind_art、join、leave、release 六個擋在 Game 委派的裝飾器上、包裡的函式不擋（這六支 spy 一次都沒響；test 把 Game._preparing 換成真）；
+    opened 開季、過教學、兩軍擺到同一處；main_ops、menxia_ops 兩張表每一個 op：空的 body、六種壞值、SWITCH_MORE 那幾個（回話大多是拒絕，看的是轉型之後的參數）；
+    half 寫到一半：墨衡自創起了手、貼了約戰（test 約戰關著，回「此刻無法」），管理者把季暫停——舊程式停在這裡。
+    後半是重開的伺服器：resume 重新登入；paused 接手舊程式暫停的季：玩家動作照 PAUSE_OK_ACTIONS 分兩邊（其餘 400「賽季暫停中」）、換位置的 20 個管理者工具一律進得了引擎（引擎自己回「先按繼續」的也算）；
+    unpaused 繼續、接著做舊程式寫到一半的：聞笛應戰、墨衡擺式成了（「此式偏剛」）、立名回「先立意」（立意是三段式、不在動作表）、擱下；
+    core_ops 別軌都沒打到、留在殼裡的 8 個：匿名開關、性別（定了改不了那一句）、療傷（氣血無恙那一句）、推得動的大勢線、定戰況、排時間（test 沒有時刻表，回一句）、清鎖定、跳下一件；
+    admin_ops 管理者表每一個 op（季的三顆除外）：空的 body、六種壞值；targets 動到別人存檔的 op 帶真的名字（_tell_tabs 第二個參數是那個名字；mingtie_restore、outing_erase 不在那張表，是空字串）；
+    bots 假人兩個若干輪（假人走 Game 的公開方法、不走動作表，這一段確定委派沒被動到；test 沒有輪到假人，online 0）；season 收季、休季每個玩家動作打一次、開下一季。
+    管理頁（/api/admin、/api/admin/player）在 setup、opened、half、core_ops、admin_ops、season 的尾巴整份記下來（畫面逐字不變）。
+
+    這一軌走不到的：動作成功的那一條大多在各包自己的軌（計畫第二節有表）；/api/do 在查表之前先接走的十一個 op（outing_say 到 persuade_text，不在表上，三段式是第 69 批）；真的瀏覽器（web/ 沒動）。"""
+
+    PLAYERS = {"墨衡": "guan", "聞笛": "huang"}
+    NEWBIE = "未央客"
+    BOT_SEATS = ["衡甲", "衡乙"]
+    MO, WEN = "墨衡", "聞笛"
+    LOC = "runan_wilds"
+    PHASES_FIRST = ["setup", "tables", "strangers", "not_admin", "preparing", "opened", "main_ops", "menxia_ops", "half"]
+    PHASES_SECOND = ["resume", "paused", "unpaused", "core_ops", "admin_ops", "targets", "bots", "season"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        import importlib
+
+        self.spying = False
+        for path, names in SWITCH_SPIES.items():
+            module = importlib.import_module(path)
+            for name in names:
+                setattr(module, name, self._spy(path.rsplit(".", 2)[-2], name, getattr(module, name)))
+        real_tell = self.server._tell_tabs
+
+        def tell(game, also: str = "") -> None:
+            if self.spying:
+                emit("→ _tell_tabs", also)
+            return real_tell(game, also)
+
+        self.server._tell_tabs = tell
+
+    def _spy(self, package: str, name: str, real):
+        def spied(*args, **kwargs):
+            if self.spying:
+                emit(f"→ {package}.{name}", json.dumps([args[1:], kwargs], ensure_ascii=False, default=str))
+            return real(*args, **kwargs)
+
+        return spied
+
+    # ── 小工具 ──
+
+    def factions_on(self) -> bool:
+        return {"guan", "huang"} <= {f.id for f in self.c.scenario.factions}
+
+    def probe(self, who: str | None, path: str, body: dict | None = None, *, keep: bool = False) -> None:
+        """打一支（who 是 None：沒登入的人）；回應只記狀態碼、回話與畫面的雜湊。keep 以外打完把這個人的存檔放回去（下一個 op 從同一個局面打）。"""
+        saved = self.chars.load(who) if who and not keep else None
+        self.begin()
+        client = self.clients[who] if who else self.TestClient(self.server.app)
+        self.spying = True
+        try:
+            r = client.post(path, json=body if body is not None else {})
+            try:
+                raw = r.json()
+            except Exception:  # noqa: BLE001
+                raw = r.text[:200]
+            data = ({k: hashlib.sha256(json.dumps(v, ensure_ascii=False).encode("utf-8")).hexdigest()[:16] if k in ("main", "menxia") else v for k, v in raw.items()}
+                    if isinstance(raw, dict) else raw)
+            status = r.status_code
+        except Exception as exc:  # noqa: BLE001  伺服器丟出來的例外（TestClient 照丟）：兩份程式要丟一樣的
+            status, data = "例外", f"{type(exc).__name__}: {exc}"
+        finally:
+            self.spying = False
+        emit(f"{who or '沒登入'} {path} {json.dumps(body, ensure_ascii=False) if body else ''} {status}", data)
+        if saved is not None:
+            with self.world.action_lock():
+                self.chars.save(saved)
+
+    def bodies(self, op: str, keys: tuple) -> list[dict]:
+        junk = [{k: v for k in keys} for v in SWITCH_JUNK] if keys else []
+        return [{}, *junk, *SWITCH_MORE.get(op, ())]
+
+    def sweep(self, who: str, table: dict, prefix: str, *, keep: bool = False, full: bool = True, skip: tuple = ()) -> None:
+        for op, keys in table.items():
+            if op not in skip:
+                for body in self.bodies(op, keys) if full else [{}]:
+                    self.probe(who, f"{prefix}/{op}", body, keep=keep)
+
+    def admin_page(self, tag: str) -> None:
+        """管理頁的兩條（畫面逐字不變：整份記）。"""
+        self.begin()
+        r = self.clients[ADMIN].get("/api/admin")
+        emit(f"管理頁 {tag} {r.status_code}", r.json())
+        self.begin()
+        r = self.clients[ADMIN].post("/api/admin/player", json={"name": self.MO})
+        emit(f"管理頁查人 {tag} {r.status_code}", r.json())
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        """同 Scenario.setup，但不開季：籌備中建人（test 設定開局就開季）。"""
+        from tianxia.accounts import AccountStore
+        from tianxia.engine import Game
+
+        store = AccountStore(self.world.db)
+        self.passwords[ADMIN] = "pw-admin-123456"
+        with self.world.db.transaction():
+            store.register(self.login_of(ADMIN), self.passwords[ADMIN])
+            game = Game.new(self.c, ADMIN, world=self.world)
+            self.chars.save(game.state)
+            store.bind_character(self.login_of(ADMIN), ADMIN)
+        self.clients[ADMIN] = self.TestClient(self.server.app)
+        self.call(ADMIN, "POST", "/api/login", {"login": self.login_of(ADMIN), "password": self.passwords[ADMIN]})
+        for who in [self.NEWBIE, *self.PLAYERS]:
+            self.clients[who] = self.TestClient(self.server.app)
+            self.passwords[who] = "pw-" + self.login_of(who)
+            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+            self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
+        self.admin_page("籌備中")
+
+    def tables(self) -> None:
+        """表本身：MAIN、MENXIA 的鍵照順序（分包之後合起來的順序不變）；管理者那一張會拆到功能包的工具，合起來照名字排；還有這一軌沒列到的 op。"""
+        s = self.server
+        emit("MAIN_ACTIONS 的鍵", list(s.MAIN_ACTIONS))
+        emit("MENXIA_ACTIONS 的鍵", list(s.MENXIA_ACTIONS))
+        admin = set(s.ADMIN_ACTIONS) | set(s.FEATURE_ADMIN_ACTIONS)
+        emit("管理者動作（兩張表合起來）", sorted(admin))
+        emit("暫停中照做", sorted(s.PAUSE_OK_ACTIONS))
+        emit("動到別人的存檔", sorted(s.PLAYER_ADMIN_ACTIONS))
+        emit("這一軌沒列到的 op", [sorted(set(s.MAIN_ACTIONS) - set(SWITCH_MAIN)), sorted(set(s.MENXIA_ACTIONS) - set(SWITCH_MENXIA)), sorted(set(s.ADMIN_ACTIONS) - set(SWITCH_ADMIN))])
+
+    def strangers(self) -> None:
+        """沒登入：每一個 op 一下（功能包的管理者工具也要 401、不是 404）；跨表的、不認得的 op。"""
+        self.sweep(None, SWITCH_MAIN, "/api/do", keep=True, full=False)
+        self.sweep(None, SWITCH_ADMIN, "/api/do", keep=True, full=False)
+        self.sweep(None, SWITCH_MENXIA, "/api/menxia", keep=True, full=False)
+        for path in ("/api/do/沒有這個", "/api/do/wield", "/api/do/practice", "/api/menxia/沒有這個", "/api/menxia/seclude", "/api/menxia/summon"):
+            self.probe(None, path)
+            self.probe(self.MO, path)
+
+    def not_admin(self) -> None:
+        """玩家按每一個管理者動作：一律「只有管理者能這麼做」，季的三顆也一樣。"""
+        self.sweep(self.MO, SWITCH_ADMIN, "/api/do", full=False)
+
+    def preparing(self) -> None:
+        """籌備中：每一個玩家動作按一下。六個擋在 Game 委派裝飾器上的（checkin、name_divine、bind_art、join、leave、release）搬過去要照樣擋。"""
+        from tianxia.engine import Game
+
+        real = Game._preparing
+        if self.profile == "test":  # 測試內容開局就開季：換成真（同 SenseScenario.preparing）
+            Game._preparing = lambda game: True
+        try:
+            self.sweep(self.MO, SWITCH_MAIN, "/api/do", full=False)
+            self.sweep(self.MO, SWITCH_MENXIA, "/api/menxia", full=False)
+            self.probe(self.MO, "/api/do/checkin", {"attribute": "剛"})
+            for op in ("join", "leave", "release"):  # 名冊上的人（不帶 person 的那一下在名冊那一關就回了，碰不到裝飾器）
+                self.probe(self.MO, f"/api/menxia/{op}", {"person": "player"})
+            self.probe(self.MO, "/api/menxia/name_divine", {"weapon": "兵:1", "keep": True})
+        finally:
+            Game._preparing = real
+
+    def opened(self) -> None:
+        """開季、過教學、兩軍擺到同一處。"""
+        self.do(ADMIN, "open_season")
+        for who, side in self.PLAYERS.items():
+            self.do(who, "skip_tutorial")
+            self.settle_choices(who)
+            self.place(who, self.LOC, side if self.factions_on() else None)
+            self.main(who)
+        self.main(self.NEWBIE)  # 開季準備卡先按掉（暫停中按不掉，重新登入那一下會卡住）
+        self.main(ADMIN)
+        self.admin_page("開季")
+
+    def main_ops(self) -> None:
+        self.sweep(self.MO, SWITCH_MAIN, "/api/do")
+
+    def menxia_ops(self) -> None:
+        self.sweep(self.MO, SWITCH_MENXIA, "/api/menxia")
+
+    def half(self) -> None:
+        """前半停在寫到一半：墨衡自創起了手、貼了一張約戰（窗還開著），管理者把季暫停；接手的程式要接得起來。"""
+        self.edit(self.MO, lambda p: p.stats.__setitem__("xinde", 20000))
+        self.call(self.MO, "POST", "/api/menxia/create_begin", {"kind": "武學", "form": "拳腳"})
+        self.do(self.MO, "sortie_go", {"moves": "強攻,固守,奇襲"})
+        self.do(ADMIN, "pause_clock")
+        self.admin_page("暫停")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def paused(self) -> None:
+        """接手舊程式暫停的季：玩家動作照 PAUSE_OK_ACTIONS 分兩邊，換位置的 20 個管理者工具都照做（paused_ok）。"""
+        self.sweep(self.MO, SWITCH_MAIN, "/api/do", full=False)
+        self.sweep(self.MO, SWITCH_MENXIA, "/api/menxia", full=False)
+        for op in SWITCH_TOOLS:
+            self.probe(ADMIN, f"/api/do/{op}", keep=True)
+
+    def unpaused(self) -> None:
+        """繼續，接著把舊程式寫到一半的做完：應戰（約戰關著的 test 回一句）、擺式、立名（回「先立意」）、擱下。"""
+        from tianxia import create
+
+        self.do(ADMIN, "resume_clock")
+        duels = sorted(self.world.sortie_duels().values(), key=lambda d: (d.opened_at, d.id))
+        posted = next((d.id for d in reversed(duels) if d.attacker.name == self.MO), "s0-none")
+        self.probe(self.WEN, "/api/do/sortie_answer", {"id": posted, "moves": "固守,固守,固守"}, keep=True)
+        self.probe(self.MO, "/api/menxia/create_pose", {"pose": create.preset(self.c, "進擊")}, keep=True)
+        self.probe(self.MO, "/api/menxia/create_name", {"name": "衡山一式", "move": "接雲式"}, keep=True)  # 立意是三段式、不在動作表：這一下回「先立意」
+        self.probe(self.MO, "/api/menxia/create_cancel", keep=True)
+        self.main(self.MO)
+
+    def core_ops(self) -> None:
+        """別軌都沒打到、留在殼裡的 8 個：匿名、性別、療傷、推大勢、定戰況、排時間、跳下一件、清鎖定。"""
+        self.begin()
+        page = self.clients[ADMIN].get("/api/admin").json()
+        trend = next((t["id"] for t in page.get("trends") or []), "")  # 照這一季的規則推得動的第一條（黃巾聲勢是合成的，不列）
+        rows = page.get("timetable") or []
+        emit("推得動的大勢線、時刻表", [trend, rows])
+        item = next((r["id"] for r in rows if r.get("schedulable")), "")  # 排得了時間的第一件（三場決戰與季末；測試內容沒有時刻表）
+        self.probe(self.MO, "/api/do/anonymous", {"value": True}, keep=True)
+        self.probe(self.MO, "/api/do/anonymous", {"value": False}, keep=True)
+        self.probe(self.NEWBIE, "/api/do/gender", {"value": "女"}, keep=True)
+        self.probe(self.MO, "/api/menxia/heal", keep=True)
+        self.probe(ADMIN, "/api/do/push_trend", {"id": trend, "amount": 5}, keep=True)
+        self.probe(ADMIN, "/api/do/set_trend", {"id": trend, "value": 40}, keep=True)
+        self.probe(ADMIN, "/api/do/schedule", {"id": item, "at": CLOCK[0] + 7200.0}, keep=True)
+        self.probe(ADMIN, "/api/do/clear_lock", {"id": item}, keep=True)
+        self.probe(ADMIN, "/api/do/jump_next", keep=True)
+        self.admin_page("救場之後")
+
+    def admin_ops(self) -> None:
+        """管理者表每一個 op：空的 body、六種壞值。季的三顆最後才按（season），暫停、繼續成對。"""
+        self.sweep(ADMIN, SWITCH_ADMIN, "/api/do", keep=True, skip=("open_season", "end_season", "next_season"))
+        self.probe(ADMIN, "/api/do/resume_clock", keep=True)
+        self.admin_page("管理者動作之後")
+
+    def targets(self) -> None:
+        """動到別人存檔的四個 op 帶真的名字：_tell_tabs 第二個參數要是那個名字（PLAYER_ADMIN_ACTIONS）；其他管理者工具是空字串。"""
+        self.probe(ADMIN, "/api/do/summon", {"name": self.MO}, keep=True)
+        self.probe(ADMIN, "/api/do/give_opportunity", {"name": self.MO, "id": "沒有這個機緣"}, keep=True)
+        self.probe(ADMIN, "/api/do/give_fragment", {"name": self.MO, "id": "沒有這個片段"}, keep=True)
+        self.probe(ADMIN, "/api/do/mingtie_remove", {"name": self.MO, "version": 0}, keep=True)
+        self.probe(ADMIN, "/api/do/mingtie_restore", {"name": self.MO, "version": 0}, keep=True)
+        self.probe(ADMIN, "/api/do/outing_erase", {"name": self.MO, "id": 1}, keep=True)
+
+    def bots(self) -> None:
+        """假人：BotRunner 兩個（官軍）若干輪。假人走 Game 的公開方法、不走動作表，這一段看的是委派沒被動到。"""
+        from collections import Counter
+
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        on = self.factions_on()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=91 + i, faction="guan" if on else None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, self.c.scenario.start_location, None
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(53), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {91 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(6):
+                STEP[0] += 4
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+
+    def season(self) -> None:
+        """收季、休季每個玩家動作按一下、開下一季。"""
+        self.do(ADMIN, "end_season")
+        self.admin_page("休季")
+        self.sweep(self.MO, SWITCH_MAIN, "/api/do", full=False)
+        self.sweep(self.MO, SWITCH_MENXIA, "/api/menxia", full=False)
+        self.do(ADMIN, "next_season")
+        self.main(self.MO)
+        self.admin_page("下一季")
+
+
+def _switchboard_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _beacon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：閉關的預設時數（MAIN_ACTIONS["seclude"]：第 68 批搬進閉關包，搬進包的檔、殼兩處找）
+_switchboard_register_track("switchboard", SwitchboardScenario, (("tianxia/features/seclusion/routes.py", "server.py"),
+                                                                 ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7")
+
+
+# ═══════════════════════════ 全部拆包第 69 批：三段式的鎖外那一段（relay 一軌）═══════════════════════════
+# 計畫 docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md 第二節。這一段整塊是這一批的：接在檔尾、最後一行登記（_relay_register_track）。
+
+RELAY_THREADS = ("battle-tales", "arena-crowd", "tavern-chatter", "letter", "yuedan", "xingshi", "event-flavor")  # 名字算行為（看守、Scribe 都認）
+RELAY_ONCE = ("crowd_once", "chatter_once", "letter_once", "yuedan_once", "xingshi_once")  # 測試與腳本直接叫的那幾支（殼留一行包裝）
+# 三段式走的每一條路：（路徑、body、Game 的 A 段、Game 的 C 段）。A、C 換成記參數的假身（這一批不動 Game），看的是 B 段排隊那一下帶了什麼、擋下來之後走不走 C。
+# None 是那一段不換（照真的走，回一句拒絕）：對話的 C 段是 Game.choose；挑釁那一句沒有 A，C 是玩家卡的 peer_act。
+RELAY_GATES = (
+    ("/api/do/outing_tale", {}, "outing_tale_request", "outing_set_tale"),
+    ("/api/do/battle_text", {"text": "火燒連營"}, "battle_text_request", "submit_battle_custom_action"),
+    ("/api/do/seal_text", {"text": "劍出如電"}, "seal_text_request", "seal_gamble"),
+    ("/api/do/duel_text", {"text": "閉眼亂揮"}, "duel_text_request", "duel_gamble"),
+    ("/api/do/create_intent", {"text": "風過林梢"}, "create_request", "create_intent"),
+    ("/api/do/create_reread", {"text": "寒潭映月"}, "create_reread_request", "create_reread"),
+    ("/api/do/ascend_line", {}, "ascend_request", "ascend_line"),
+    ("/api/do/tavern_ask", {"text": "近來如何"}, "tavern_ask_request", "tavern_ask"),
+    ("/api/do/feast_text", {"text": "願天下太平"}, "feast_text_request", "feast_toast"),
+    ("/api/do/persuade_text", {"id": "e1", "text": "放下刀槍"}, "persuade_request", "persuade"),
+    ("/api/do/outing_say", {"text": "到此一遊"}, None, "outing_say"),
+    ("/api/menxia/forge", {"insights": ["甲", "乙"]}, "forge_request", "forge"),
+    ("/api/sense", {"points": [[1, 1, 0]], "png": "x"}, "sense_request", "sense_draw"),
+    ("/api/choose", {"id": "dunwu:think"}, "epiphany_request", "epiphany_names"),
+    ("/api/say", {"text": "不如持重些"}, "dialogue_request", None),
+    ("/api/choose", {"id": "talk:0"}, "dialogue_request", None),
+    ("/api/peer/act", {"name": "晚舟", "action": "discuss", "arg": "invite:x"}, "peer_request", None),
+    ("/api/peer/act", {"name": "晚舟", "action": "greet", "arg": "taunt", "text": "有種來比"}, None, None),
+)
+
+
+def _relay_repr(value) -> str:
+    import re
+
+    return re.sub(r" at 0x[0-9A-Fa-f]+", "", repr(value))
+
+
+class RelayGate:
+    """佇列的假身：busy（同一個人已經有一件）、timeout（排太久）、full（假人滿了，佇列直接給 fallback）。記下排隊那一下的名號、是不是當假人排、等多久、退路。"""
+
+    def __init__(self, kind: str):
+        self.kind = kind
+
+    def run(self, owner, job, *, fallback=None, bot=False, wait=None):
+        from llm_queue import Busy, QueueTimeout
+
+        emit("→ 排隊", [self.kind, owner, bot, wait, _relay_repr(fallback)])
+        if self.kind == "busy":
+            raise Busy("relay")
+        if self.kind == "timeout":
+            raise QueueTimeout("relay")
+        return fallback
+
+
+class RelayScenario(Scenario):
+    """三段式的鎖外那一段一軌（全部拆包第 69 批；--track relay，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    這一批搬的是殼的接線，所以看接線：B 段排隊那一下帶了什麼（名號、當不當假人排、等多久、退路）、擋下來走不走 C、C 收到什麼；放鎖之後背景那幾條開不開、照什麼順序開。
+    Game 的 A、C 這一批不動（各軌走真的），gates、zhuan_gate 把它們換成記參數的假身；模型那一趟也不跑（假模型在各軌）。
+
+    前半：setup 開季建人；quiet 開關開著開頁（week7、season21 開局就有一封信，開 letter 一條；test 一條都不開），擺好等著的、開關關著開頁（一條都不開、單子留著）；
+    feast 宴客自己寫的那一句（別軌沒有人打到 /api/do/feast_text，這一軌走真的：沒坐在席上、模型叫不動照保底分記了、同一場再敬一次、空的、模型回了記 90；test 沒有宴客，都回一句）；
+    table_forge 動作表那一條 forge（帶 NO_NAME，端點不走它）與 forge_args 的轉型；
+    gates 十八條路（/api/do 查表之前先接走的十一個、開爐、畫完那一筆、靜心思名、自己說、talk:N、論武取名、挑釁那一句）× 佇列三種回法（busy、timeout、full）；
+    half 舊程式寫到一半：五格都等著，形勢的單被舊程式拿走了（taken）還沒寫回來——舊程式停在這裡。
+    後半是重開的伺服器：resume 重新登入；picked_up 拿走了的單不再開、放回去才開，開頁（act_look）照 arena-crowd、tavern-chatter、letter、yuedan、xingshi 的順序一條一條就地跑完；
+    acted 同一件事走 act（按一顆鈕）；held 背景那幾條攔著不跑，下一個請求一條都不多開，跑完再擺才開；failing 畫面丟例外：一條都不開、例外原樣丟出去、單子留著，下一個請求才開；
+    queued 背景五支（crowd_once、chatter_once、letter_once、yuedan_once、xingshi_once）× 佇列三種回法（名號、等多久、退路，形勢的單放回去）；
+    zhuan_gate 寫傳那一條（正文沒給 busy 拿退路、評曰逐條排、沒有評曰的那一支、同一篇已經在寫）；bots 假人兩個若干輪（假人走自己的三段式，不走這一批搬的東西；test 沒有輪到假人）；season 收季、休季開頁、下一季。
+    test 設定沒有決戰、酒肆、書信、月旦評、形勢：那幾格寫一行略過，背景只開 arena-crowd。
+
+    這一軌走不到的：模型真的回話的那一趟（各包自己的軌：talk、socialize、craft、arts、sense、crossblade、bout、ring、tavern、companions、figact、landturn、zhuan、carve、explore、battle）；
+    決戰那一格 battle-tales（scribe 一軌）；write_* 開頭「已經有一條」那一支（只有兩個請求同時過了 waiting 才走到，held 擋在 waiting 那一步）；真的瀏覽器（web/ 沒動）。"""
+
+    PLAYERS = {"岑渡": "guan", "晚舟": "huang"}
+    NEWBIE = "遠山客"
+    BOT_SEATS = ["渡甲", "渡乙"]
+    CEN = "岑渡"
+    PHASES_FIRST = ["setup", "quiet", "feast", "table_forge", "gates", "half"]
+    PHASES_SECOND = ["resume", "picked_up", "acted", "held", "failing", "queued", "zhuan_gate", "bots", "season"]
+
+    # ── 小工具 ──
+
+    def factions_on(self) -> bool:
+        return {"guan", "huang"} <= {f.id for f in self.c.scenario.factions}
+
+    @contextlib.contextmanager
+    def threads_on(self, *, hold: bool = False):
+        """打開 TALE_THREADS（只開這一段：別的背景寫字看同一個開關）。這一批的背景執行緒開的那一下記名字；hold 是攔著不跑（一人一條的那幾張表一直佔著），否則就地跑完（背景那一條跟主線搶假時鐘，跑兩次就不一樣）。"""
+        import threading
+
+        real = threading.Thread
+        held: list = []
+
+        class Caught(real):
+            def start(self):
+                if self.name in RELAY_THREADS or self.name.startswith("zhuan-"):
+                    emit("→ 開背景執行緒", self.name)
+                    if hold:
+                        held.append(self)
+                    else:
+                        self.run()
+                else:
+                    super().start()
+
+        threading.Thread = Caught
+        self.server.TALE_THREADS = True
+        try:
+            yield held
+        finally:
+            threading.Thread = real
+            self.server.TALE_THREADS = False
+
+    def seed(self, who: str) -> None:
+        """擺好六格裡五格等著鎖外工作的東西（決戰那一格在 scribe 一軌）：一封還沒重寫的信、一句場邊那一句、該換閒談的酒肆、一批月旦評、一張〈天下形勢〉的單。這份內容沒有的那一格略過（寫出來）。"""
+        from tianxia import arena_crowd, letters, tavern, xingshi, yuedan
+        from tianxia.state import CrowdNote, Letter, XingshiTicket, YuedanEntry
+
+        place = next((i for i in sorted(self.c.locations) if tavern.tavern_at(self.c, i)), None) if tavern.on(self.c) else None
+        sender = next(iter(sorted(self.c.characters)), "")
+
+        def fn(p) -> None:
+            if letters.on(self.c) and sender:
+                p.letters.append(Letter(id=len(p.letters) + 900, kind="道賀", sender=sender, at=0.0, text="聽聞閣下近來的作為。"))
+            p.arena_crowd_note = CrowdNote(fight_id=7, round=1, kind=next(iter(arena_crowd.WHAT)), side="me", name=who, rival="對手", fixed="台下一陣騷動。", text="台下一陣騷動。")
+            if place:
+                p.location, p.journey, p.picking_tavern = place, None, True
+
+        self.edit(who, fn)
+
+        def world(s) -> None:
+            if place:
+                s.tavern_chatter.pop(place, None)
+            if yuedan.on(self.c):
+                s.yuedan.append(YuedanEntry(week=1, name=who, board="名人", fact="名望 9", line=yuedan.fixed_line("名人", who), at=s.time))
+            if xingshi.on(self.c, s):
+                s.xingshi_ticket = XingshiTicket(n=len(s.xingshi) + 1, key=STEP[0], opened_real=CLOCK[0], facts=["甲地易手"], line="是日：甲地易手。")
+
+        self.world.mutate_season(world)
+        emit("擺好等著的", {"酒肆": place, "信": letters.on(self.c) and bool(sender), "月旦評": yuedan.on(self.c), "形勢": xingshi.on(self.c, self.world.get_season())})
+
+    def me(self, who: str, tag: str) -> None:
+        p = self.chars.load(who).player
+        w = self.world.get_season()
+        emit(f"{who} {tag}", {
+            "letters": [[x.id, x.written, x.read, x.text] for x in p.letters], "crowd": p.arena_crowd_note.model_dump(mode="json") if p.arena_crowd_note else None,
+            "chatter": {k: list(v) for k, v in sorted(w.tavern_chatter.items())}, "yuedan": [x.model_dump(mode="json") for x in w.yuedan],
+            "ticket": w.xingshi_ticket.model_dump(mode="json") if w.xingshi_ticket else None, "xingshi": [x.model_dump(mode="json") for x in w.xingshi],
+        })
+
+    def canned(self):
+        """A 段的假單子：B 段排隊之前會讀到的欄位都有；模型那一趟不會跑（佇列擋掉或直接給退路）。"""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            text="一句話", option_id="talk:0", companion_id="無名", player_action="問候", battle_id=next(iter(sorted(self.c.battles)), ""), act_index=0, faction_name="官軍",
+            name=self.CEN, target=None, sex=None, title="題", scene="景", setting="", place="", boss="boss", secret=False, question="問", via="seize", needs_name=True, facts=[], png="",
+        )
+
+    def through(self, who: str, kind: str, path: str, body: dict, a: str | None, c: str | None, req) -> None:
+        """打一條三段式：佇列是 kind，A、C 換成假身；回應只記狀態碼、回話與畫面的雜湊；打完把人的存檔放回去。"""
+        from tianxia.engine import Game
+
+        saved = self.chars.load(who)
+        swapped = []
+
+        def spy(name: str, back) -> None:
+            swapped.append((name, getattr(Game, name)))
+
+            def fake(_g, *args, **kw):
+                emit(f"→ Game.{name}", _relay_repr([args, kw]))
+                return back
+
+            setattr(Game, name, fake)
+
+        if a:
+            spy(a, req)
+        if c:
+            spy(c, ["（C 段）"])
+        self.begin()
+        self.server.QUEUE = RelayGate(kind)
+        try:
+            r = self.clients[who].post(path, json=body)
+            raw = r.json()
+            data = {k: hashlib.sha256(json.dumps(v, ensure_ascii=False).encode("utf-8")).hexdigest()[:16] if k in ("main", "menxia") else v for k, v in raw.items()} if isinstance(raw, dict) else raw
+            status = r.status_code
+        except Exception as exc:  # noqa: BLE001  伺服器丟出來的例外：兩份程式要丟一樣的
+            status, data = "例外", f"{type(exc).__name__}: {exc}"
+        finally:
+            self.server.QUEUE = None
+            for name, real in swapped:
+                setattr(Game, name, real)
+        emit(f"{who} {kind} {path} {json.dumps(body, ensure_ascii=False)} {status}", data)
+        with self.world.action_lock():
+            self.chars.save(saved)
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        super().setup()
+        for who, side in self.PLAYERS.items():
+            self.place(who, None, faction=side if self.factions_on() else "keep")
+
+    def quiet(self) -> None:
+        """沒有等著的：開關開著也一條都不開。有等著的、開關關著（測試與假人程式的情形）：一樣一條都不開，單子留著。"""
+        with self.threads_on():
+            self.main(self.CEN)
+        self.seed(self.CEN)
+        self.begin()
+        emit("形勢的單 開關關著", self.server._xingshi_waiting(self.server.game_for(self.CEN)))
+        self.main(self.CEN)
+        self.me(self.CEN, "開關關著")
+
+    def feast(self) -> None:
+        """宴客自己寫的那一句（別軌沒有人打到 /api/do/feast_text）：沒坐在席上、坐下了模型叫不動（照保底分）、同一場再敬一次、空的；模型回了（feasts.score 換成回 90）。"""
+        from tianxia.features.feast import rules as feasts
+        from tianxia.state import Feast
+
+        who, peer = self.CEN, "晚舟"
+        self.do(who, "feast_text", {"text": "願天下太平"})
+        host = "xushao" if "xushao" in self.c.characters else next(iter(sorted(self.c.characters)), "")
+        if not host:
+            emit("這份內容沒有人物", None)
+            return
+        seats = {}
+
+        def open_feast(s) -> None:
+            for name in (who, peer):
+                s.feast_seq += 1
+                seats[name] = s.feast_seq
+                s.feasts.append(Feast(id=s.feast_seq, host=host, place=self.chars.load(name).player.location, start=s.time, end=s.time + 2 * feasts.HOUR))
+
+        self.world.mutate_season(open_feast)
+        self.edit(who, lambda p: setattr(p, "feasting", seats[who]))
+        self.edit(peer, lambda p: setattr(p, "feasting", seats[peer]))
+        self.do(who, "feast_text", {"text": "願天下太平"})
+        self.do(who, "feast_text", {"text": "再敬一杯"})
+        self.do(who, "feast_text", {"text": ""})
+        real = feasts.score
+        feasts.score = lambda client, req: 90
+        try:
+            self.do(peer, "feast_text", {"text": "四海昇平"})
+        finally:
+            feasts.score = real
+        self.edit(who, lambda p: setattr(p, "feasting", None))
+        self.edit(peer, lambda p: setattr(p, "feasting", None))
+        emit("席上敬的酒", [x.model_dump(mode="json") for x in self.world.get_season().feasts])
+
+    def table_forge(self) -> None:
+        """動作表那一條 forge（端點走三段式、不走它；帶 NO_NAME，就算在鎖裡叫也不叫模型）與煉製頁送來的東西怎麼轉。"""
+        self.begin()
+        game = self.server.game_for(self.CEN)
+        with self.server._locked(game):
+            emit("MENXIA_ACTIONS forge", self.server.MENXIA_ACTIONS["forge"](game, {"insights": ["甲", "乙"]}))
+        emit("forge_args", [self.server.forge_args(b) for b in ({}, {"art": "劍", "insights": ["甲", 1]}, {"insights": "甲"}, {"art": 0})])
+
+    def gates(self) -> None:
+        """每一條三段式、佇列的三種回法：同一個人已經有一件、排太久（給了 busy 的丟那一句、C 段不走；沒給的拿退路），假人滿了（拿退路走 C）。"""
+        req = self.canned()
+        for kind in ("busy", "timeout", "full"):
+            for path, body, a, c in RELAY_GATES:
+                if path.endswith("battle_text") and not req.battle_id:
+                    emit("這份內容沒有決戰", path)
+                    continue
+                self.through(self.CEN, kind, path, body, a, c, req)
+
+    def half(self) -> None:
+        """舊程式寫到一半：五格都等著，形勢的單被舊程式拿走了（A 段記了 taken）還沒寫回來，伺服器就重開了。"""
+        self.seed(self.CEN)
+        self.begin()
+        game = self.server.game_for(self.CEN)
+        with self.server._locked(game):
+            request = game.xingshi_request()
+        emit("舊程式拿走的單", request.model_dump(mode="json") if hasattr(request, "model_dump") else _relay_repr(request))
+        self.me(self.CEN, "舊程式停在這裡")
+
+    # ── 後半（重開的伺服器接同一個資料庫） ──
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def picked_up(self) -> None:
+        """新程式接手：形勢的單被拿走了不再開（放回去才開）；開頁那一下（act_look）照 crowd、chatter、letter、yuedan、xingshi 的順序一條一條開。"""
+        self.begin()
+        game = self.server.game_for(self.CEN)
+        emit("形勢的單 被拿走了", self.server._xingshi_waiting(game))
+        emit("形勢的單 被拿走了 xingshi_once", self.server.xingshi_once(game))
+
+        def release(s) -> None:
+            if s.xingshi_ticket is not None:
+                s.xingshi_ticket.taken = False
+
+        self.world.mutate_season(release)
+        with self.threads_on():
+            self.main(self.CEN)
+        self.me(self.CEN, "開頁之後")
+
+    def acted(self) -> None:
+        """同一件事走 act（按一顆鈕之後）：一樣的順序。"""
+        self.seed(self.CEN)
+        with self.threads_on():
+            self.do(self.CEN, "guide_ack")
+        self.me(self.CEN, "按鈕之後")
+
+    def held(self) -> None:
+        """還在寫（背景那一條沒跑完）：下一個請求一條都不多開；跑完之後（一人一條的表空了）再有等著的才開下一條。"""
+        self.seed(self.CEN)
+        with self.threads_on(hold=True) as held:
+            self.main(self.CEN)
+            self.main(self.CEN)
+            self.me(self.CEN, "還在寫")
+            emit("攔著的", [t.name for t in held])
+            for t in held:
+                self.begin()
+                t.run()
+        self.me(self.CEN, "寫完了")
+        self.seed(self.CEN)
+        with self.threads_on():
+            self.main(self.CEN)
+        self.me(self.CEN, "再開一輪")
+
+    def failing(self) -> None:
+        """畫面丟例外（act_look）：同步與存檔留著、鎖外工作一條都不開，例外原樣丟出去；下一個請求才開。"""
+        self.seed(self.CEN)
+        real = self.server.main_view
+
+        def boom(_game):
+            raise RuntimeError("relay：畫面丟例外")
+
+        self.server.main_view = boom
+        try:
+            with self.threads_on():
+                self.begin()
+                try:
+                    r = self.clients[self.CEN].get("/api/main")
+                    emit("畫面丟例外 回應", r.status_code)
+                except RuntimeError as exc:
+                    emit("畫面丟例外 丟出來", str(exc))
+        finally:
+            self.server.main_view = real
+        self.me(self.CEN, "畫面丟例外之後")
+        with self.threads_on():
+            self.main(self.CEN)
+        self.me(self.CEN, "畫面好了")
+
+    def queued(self) -> None:
+        """背景那幾件排隊：名號（這個人、§史官、§說書）、當假人排、等多久、退路；擋下來時信與那一句照固定句，形勢的單放回去。"""
+        for kind in ("busy", "timeout", "full"):
+            self.seed(self.CEN)
+            self.server.QUEUE = RelayGate(kind)
+            try:
+                for name in RELAY_ONCE:
+                    self.begin()
+                    emit(f"{kind} {name}", getattr(self.server, name)(self.server.game_for(self.CEN)))
+            finally:
+                self.server.QUEUE = None
+            self.me(self.CEN, f"{kind} 之後")
+
+    def zhuan_gate(self) -> None:
+        """寫傳的背景那一條（write_zhuan；真的那一條在 zhuan 一軌）：正文走 model_call、沒給 busy 拿退路；評曰逐條排、名號帶 #評曰；沒有評曰的走另一支。"""
+        from types import SimpleNamespace
+
+        from tianxia.engine import Game
+
+        season = self.world.get_season_number()
+        real_req, real_write = Game.biography_request, Game.write_biography
+
+        def write(_g, request, text, now, **kw):
+            emit("→ Game.write_biography", [_relay_repr(text), kw])
+
+        Game.write_biography = write
+        try:
+            for kind, verdicts in (("busy", [SimpleNamespace(fid="甲"), SimpleNamespace(fid="乙")]), ("timeout", [SimpleNamespace(fid="丙")]), ("full", [])):
+                Game.biography_request = lambda _g, _s, _r, v=verdicts: SimpleNamespace(verdicts=v)
+                self.server.QUEUE = RelayGate(kind)
+                try:
+                    with self.threads_on():
+                        self.begin()
+                        emit(f"{kind} write_zhuan", self.server.write_zhuan(self.server.game_for(self.CEN), season, False))
+                finally:
+                    self.server.QUEUE = None
+        finally:
+            Game.biography_request, Game.write_biography = real_req, real_write
+        self.begin()
+        game = self.server.game_for(self.CEN)
+        self.server.ZHUAN_JOBS[self.server._zhuan_key(game, season)] = 0.0
+        try:
+            emit("同一篇已經在寫", self.server.write_zhuan(game, season, False))
+        finally:
+            self.server.ZHUAN_JOBS.clear()
+
+    def bots(self) -> None:
+        """假人（走 Game 的公開方法、自己的三段式，不走這一批搬的東西）：兩個若干輪之後，真人開頁照常接得上。"""
+        SwitchboardScenario.bots(self)
+        self.main(self.CEN)
+
+    def season(self) -> None:
+        """收季、休季開頁（信、那一句還在）、下一季。"""
+        self.seed(self.CEN)
+        self.do(ADMIN, "end_season")
+        with self.threads_on():
+            self.main(self.CEN)
+        self.me(self.CEN, "休季")
+        self.do(ADMIN, "next_season")
+        with self.threads_on():
+            self.main(self.CEN)
+        self.me(self.CEN, "下一季")
+
+
+def _relay_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _switchboard_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：宴客敬酒詞評不到時的保底分（第 69 批搬進宴客包 routes.py；搬進包的檔、殼兩處找）。gates 段排隊那一下照字寫退路、full 走 C 段也帶它。
+_relay_register_track("relay", RelayScenario, (("tianxia/features/feast/routes.py", "server.py"),
+                                               ("fallback=feasts.DEFAULT_SCORE", "fallback=feasts.DEFAULT_SCORE + 1")), "week7")
 
 
 if __name__ == "__main__":

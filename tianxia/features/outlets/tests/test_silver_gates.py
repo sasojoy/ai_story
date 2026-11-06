@@ -18,12 +18,12 @@ trend.json、youzhou.json。"""
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
 from conftest import FixedRandom, real_content
 from tianxia import bot
+from tianxia.content import real_event_files
 from tianxia.engine import FREE_TEXT_OPTION, Game
 from tianxia.team import WIN_TIERS
 from tianxia.models import Check, Choice, Condition, Content, Effect, Event, FreeTextChoice, Squad
@@ -114,10 +114,9 @@ def test_every_paying_choice_is_gated_or_whitelisted(real):
 
 
 def test_this_file_names_every_event_file():
-    """scripts/test_for.py 改到一個內容檔時，只挑寫到那個檔名的測試檔：開頭那份清單要列出 content/events/ 的每一個檔，
+    """scripts/test_for.py 改到一個內容檔時，只挑寫到那個檔名的測試檔：開頭那份清單要列出每一個事件檔（real_event_files，含各包宣告的），
     joy 改哪一個事件檔都會跑到這裡。新增事件檔時把名字補進開頭那一段。"""
-    events = Path(__file__).parents[4] / "content" / "events"
-    missing = sorted(p.name for p in events.glob("*.json") if p.name not in (__doc__ or ""))
+    missing = sorted(p.name for p in real_event_files() if p.name not in (__doc__ or ""))
     assert not missing, f"開頭的清單少了這幾個事件檔（scripts/test_for.py 會挑不到這裡）：{'、'.join(missing)}"
 
 

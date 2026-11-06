@@ -14,7 +14,7 @@ from tianxia.models import Condition
 from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[4] / "content"
-SOCIAL_FILES = sorted((CONTENT_DIR / "events").glob("social_*.json"))
+SOCIAL_FILES = sorted((Path(__file__).parents[1] / "content" / "events").glob("social_*.json"))  # 這一包的內容檔（全部拆包第 62 批搬進包）
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +67,7 @@ def test_storytellers_retell_every_location_trace(content):
 
 @pytest.mark.parametrize("path", SOCIAL_FILES, ids=[p.stem for p in SOCIAL_FILES])
 def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content, path):
-    """每個選項結果（含隨口應對）的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（social-<檔名>）。"""
+    """每個選項結果（含隨口應對）的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/core/test_event_reward_caps.py（social-<檔名>）。"""
     events = json.loads(path.read_text(encoding="utf-8"))
     assert events
     for e in events:

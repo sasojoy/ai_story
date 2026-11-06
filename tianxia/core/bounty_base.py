@@ -12,7 +12,7 @@
 
 `how` 原本問 sortie.on，出陣包不能讀，換成它的本體 territory.on（同第 49、50 批）。同 event_check 不進 MODULES。
 改這一份 scripts/test_for.py 照名字挑寫到它的測試檔（core/*_base 那一條）；懸賞榜包 README「另外要跑的」那一串另外跑。
-本模組裡彼此叫的名字（mine、title、issuer……）測試換的是包 rules 那一份（tests/battle/test_drill_gates_engine.py 換 _complete 讀的 title、issuer，那幾個函式留在 rules）；
+本模組裡彼此叫的名字（mine、title、issuer……）測試換的是包 rules 那一份（tianxia/features/explore/tests/test_drill_gates_engine.py 換 _complete 讀的 title、issuer，那幾個函式留在 rules）；
 探索包 explore_actions 經 bounty_base.mine 叫（test_explore_one 換這一份）。
 """
 from __future__ import annotations
@@ -77,6 +77,16 @@ def close_board(p: PlayerState) -> None:
     都走這裡（離開、讀檔修補、出發），同 equipment.close_smith。"""
     p.picking_bounty, p.bounty_pick = False, None
     p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
+
+
+def sit_at_board(p: PlayerState) -> None:
+    """坐到榜前（core_seams，全部拆包第 56 批）：酒肆牆上的懸賞榜那一下只打開榜，不像 bounties.actions.enter 另外清挑到哪一張、掌櫃那一句。"""
+    p.picking_bounty = True
+
+
+def done_count(p: PlayerState) -> int:
+    """這一季完成了幾張懸賞（core_seams，全部拆包第 56 批）：新手目標、傳、傳承的量表讀它，不直接碰懸賞榜包認領的欄位。"""
+    return p.bounties_done
 
 
 def quota(content: Content) -> int:

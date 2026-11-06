@@ -14,7 +14,7 @@ from tianxia.models import Condition
 from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).resolve().parents[4] / "content"
-EXPLORE_FILES = sorted((CONTENT_DIR / "events").glob("explore_*.json"))
+EXPLORE_FILES = sorted((Path(__file__).parents[1] / "content" / "events").glob("explore_*.json"))  # 這一包的內容檔（全部拆包第 63 批搬進包）
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +64,7 @@ def _shown_to(cond: dict, faction: str | None) -> bool:
 
 @pytest.mark.parametrize("path", EXPLORE_FILES, ids=[p.stem for p in EXPLORE_FILES])
 def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
-    """每個選項結果的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（explore-<檔名>）。"""
+    """每個選項結果的獎勵上限跟另外兩份補寫事件共用一個檢查：tests/core/test_event_reward_caps.py（explore-<檔名>）。"""
     events = json.loads(path.read_text(encoding="utf-8"))
     assert events
     rumors = 0
@@ -90,7 +90,7 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
 
 def test_every_location_has_one_free_text_explore_event(content):
     """隨口應對每個地點先開 1 則（探索的多人與 LLM 玩法設計第五節）。只在分岔開著的季才有的那一顆（outcomes_only：人拉犁，
-    減法季批 4 接線、PM 2026-10-25 第 7 件）不算：關著的季沒有它，開著的季潁川郊野多這一則（tests/test_outcomes_answer.py 測選單）。
+    減法季批 4 接線、PM 2026-10-25 第 7 件）不算：關著的季沒有它，開著的季潁川郊野多這一則（tests/core/test_outcomes_answer.py 測選單）。
     第二、三階的事件（事件分級）也不算：門開了才抽得到，是另外多的。"""
     counts = {
         loc_id: sum(1 for e in _always_available(content, loc_id)

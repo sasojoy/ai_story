@@ -42,7 +42,7 @@ SCRIPT = """
 """
 
 def seal(name: str) -> str:
-    """名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。web/app.js 的 zhuanSeal 同一條算法。"""
+    """名號的方印（陰刻）：四字兩行兩列、其餘一直行，右行先讀。web/zhuan.js 的 zhuanSeal 同一條算法。"""
     chars = list(name)[:6]
     n = len(chars)
     cols = 2 if n >= 4 else 1
@@ -57,7 +57,7 @@ def seal(name: str) -> str:
 
 
 def text(paras: list[str]) -> tuple[str, str]:
-    """正文與評（web/app.js 的 zhuanText 同一份標記）：第一段放大第一個字；「評曰」那一段拆出正文、另起一塊蓋「評」字印。"""
+    """正文與評（web/zhuan.js 的 zhuanText 同一份標記）：第一段放大第一個字；「評曰」那一段拆出正文、另起一塊蓋「評」字印。"""
     plain = [p for p in paras if not p.startswith("評曰")]
     ping = next((p for p in paras if p.startswith("評曰")), None)
     body = "".join(f'<p{" class=\"first\"" if i == 0 else ""}>{escape(p)}</p>' for i, p in enumerate(plain))
@@ -67,14 +67,14 @@ def text(paras: list[str]) -> tuple[str, str]:
 
 
 def head(title: str, sub: str) -> str:
-    """篇名那一塊（web/app.js 的 zhuanHead 同一份標記）。"""
+    """篇名那一塊（web/zhuan.js 的 zhuanHead 同一份標記）。"""
     return (f'<header class="zh-head"><div class="zh-orn" aria-hidden="true">{"<i></i>" * 6}</div>'
             f'<div class="zh-label" style="--slip-size:{slip_size(title)}px"><h1 class="zh-title">{escape(title)}</h1></div>'
             f'<p class="zh-sub">{escape(sub)}</p></header>')
 
 
 def slip_size(title: str) -> int:
-    """題簽的字級：篇名的字數越多字越小，一律排進一條直書的題簽（四字以內 30px）。web/app.js 的 slipSize 同一條算法。"""
+    """題簽的字級：篇名的字數越多字越小，一律排進一條直書的題簽（四字以內 30px）。web/zhuan.js 的 slipSize 同一條算法。"""
     return min(30, int(176 / len(title) / 1.3))
 
 

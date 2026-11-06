@@ -6,7 +6,7 @@ ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
 不佔你的持有）；持有上限、「已經有了」照舊各自擋。武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
 開爐的是答應的那一方：request 是 A 段（鎖內、只讀）、discuss 是 C 段，B 段（鎖外取名）的殼接線 server.prepare_peer、screen_peer 留在 server.py（手冊 G10）；
 發邀請的那一方接著照配方合出同一門（forge 的 ctx 是開爐的那一份 Game：對方那一份是 other）。
-naming.generate 一律用模組屬性叫（tests/arts/test_discuss.py 換掉它）。"""
+naming.generate 一律用模組屬性叫（tianxia/features/peers/tests/test_discuss.py 換掉它）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

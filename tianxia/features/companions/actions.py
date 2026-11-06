@@ -404,3 +404,18 @@ def letter_request(ctx) -> letters.LetterNote | None:
 def apply_letter(ctx, note: letters.LetterNote, text: str) -> bool:
     """C 段：還是同一封才換；寫不出來照固定句。"""
     return letters.apply(ctx.state, note, text)
+
+
+def drop_stale(ctx) -> None:
+    """stale.early 的 companions 那一格（core_seams，全部拆包第 55 批；照原位搬）：招募確認畫面上的人被內容拿掉了。"""
+    p = ctx.state.player
+    if p.pending_companion and p.pending_companion not in ctx.content.characters:
+        p.pending_companion = None
+
+
+def carry_season(ctx, old, fresh) -> None:
+    """season.carry 的 companions 那一格（core_seams，全部拆包第 55 批；照原位搬，不看開關）：跟同伴的對話歷史整份保留，記下這一季從第幾則開始（模型只看這一季的）。"""
+    fresh.player.dialogue_history = old.player.dialogue_history
+    fresh.player.history_start = {cid: len(h) for cid, h in old.player.dialogue_history.items()}
+    fresh.player.used_dialogue_options = old.player.used_dialogue_options
+    fresh.player.turns_since_consolidation = old.player.turns_since_consolidation

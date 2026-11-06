@@ -126,9 +126,11 @@ def test_the_chaos_and_stance_rule_is_written_once(on):
 
 
 def test_howto_reads_only_public_names_from_rules():
-    """審查 Minor 7：howto 不拿 rules 的私有名字（_STANCE_NAMES、_COUNT_WORDS）。"""
-    source = (ROOT / "tianxia" / "howto.py").read_text(encoding="utf-8")
-    assert not re.search(r"rules\._[A-Za-z]|from \.rules import _", source)
+    """審查 Minor 7：howto 不拿 rules 的私有名字（_STANCE_NAMES、_COUNT_WORDS）。第 59 批：句子拆進各包的 howto.py 與核心的 howto_base。"""
+    files = [ROOT / "tianxia" / "core" / "howto_base.py", *sorted((ROOT / "tianxia" / "features").glob("*/howto.py"))]
+    assert len(files) == 18  # 17 包加核心
+    source = "\n".join(path.read_text(encoding="utf-8") for path in files)
+    assert not re.search(r"rules\._[A-Za-z]|from (?:\.|tianxia\.)rules import _", source)
 
 
 def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules(on):
@@ -304,8 +306,10 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             for value in node:
                 scan(value, where)
 
-    for path in sorted((ROOT / "content").rglob("*.json")):
-        scan(json.loads(path.read_text(encoding="utf-8")), path.relative_to(ROOT / "content").as_posix())
+    from tianxia.content import real_files
+
+    for rel, path in real_files().items():
+        scan(json.loads(path.read_text(encoding="utf-8")), rel)
     # 頭目的名望寫在 fame 欄位，不是 stats；奇事（一條線）結局的效果跟事件同一套，寫在 storylines.json
     assert givers and all(where.startswith("events/") or where == "storylines.json" for where in givers), sorted(set(givers))
 

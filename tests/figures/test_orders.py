@@ -833,7 +833,7 @@ def test_a_cart_whose_order_is_gone_is_still_shown_and_delivered(on):
 @pytest.mark.parametrize("season_one", [False, True])
 def test_joining_does_not_move_the_tutorial_in_either_season(real, season_one):
     """T6 審查 M4 的後續：以前投靠那一刻推引導是第一季才有的（t7_orders 只看陣營）。現在沒有任何引導步驟看陣營了（第一季的軍令兩步由
-    入伍段取代，新手引導計畫二），不管開關開著或關著，投靠都不動引導的步數（第一季另外開始入伍段，tests/test_enlist.py）。"""
+    入伍段取代，新手引導計畫二），不管開關開著或關著，投靠都不動引導的步數（第一季另外開始入伍段，tianxia/features/guide/tests/test_enlist.py）。"""
     real.config.season_one = season_one
     game = _game(real, at="changshe")
     steps = [s.id for s in real.tutorial.steps]
@@ -1263,7 +1263,7 @@ def test_fb221_the_yellow_turbans_siege_names_the_government_camp(on):
     from conftest import classic_rules
     from tianxia import atlas, orders
 
-    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
+    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/acts/test_territory.py
     assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
     known = _siege_card(on, "huang", "yingru", at="guangzong", visited=["guan_camp"])
     assert known == "到官軍大營遊歷，打贏一場官軍記一次。" == atlas.SIEGE_AT.format(where="官軍大營", enemy="官軍", note="")
@@ -1273,7 +1273,7 @@ def test_fb221_two_places_are_both_named(on):
     from conftest import classic_rules
     from tianxia import atlas, orders
 
-    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
+    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/acts/test_territory.py
     assert orders.siege_places(on, "huang", "jizhou") == ["luzhi_camp", "baima_ford"]
     both = _siege_card(on, "huang", "jizhou", at="nanyang_wilds", visited=["luzhi_camp", "baima_ford"])
     assert both == "到盧植營或白馬津遊歷，打贏一場官軍記一次。"
@@ -1283,7 +1283,7 @@ def test_fb221_three_or_more_places_still_say_the_whole_front(on):
     from conftest import classic_rules
     from tianxia import atlas, orders
 
-    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
+    classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/acts/test_territory.py
     places = orders.siege_places(on, "guan", "yingru")
     assert len(places) > atlas.SIEGE_NAMED_MAX
     assert _siege_card(on, "guan", "yingru", at="changshe", visited=places) == "到潁川汝南一帶遊歷，打贏一場對面的兵記一次。"

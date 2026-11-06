@@ -14,7 +14,7 @@
 共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
 設宴是世界層 life 那一格（core/features.py 的 WORLD_ORDER；宴客包登記，tick 每一輪每一位對話人物叫一次、在求援之前）。讀璽效 seal_acts、
 輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；求援與人物懸賞（post_rally、post_figure、RALLY_POSTED、how、enemy_name）讀核心 core/bounty_base（第 45 批）。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
-test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tests/seal/test_seal_acts.py、
+test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tianxia/features/seal/tests/test_seal_acts.py、
 tianxia/features/companions/tests/ 的 test_companions、test_parley_schema、test_parley_two、test_relations_letters、tianxia/features/feast/tests/test_feast.py；
 世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations

@@ -52,7 +52,7 @@ HINT_NONE = "未入階・還差 {gap}"  # main.sides.tier_hint：此刻就收季
 HINT_GAP = "{tier}・還差 {gap}"  # 離上一階還差多少
 # 季末論功的江湖史（一、二階，設計 3.3「江湖史留名」；待 joy 潤）
 CHRONICLE_TIER = "季末論功，{faction}{tier}「{title}」：{names}。"
-# 新的一季開局照上一季的階發起手資源（Game._season_grant；待 joy 潤）
+# 新的一季開局照上一季的階發起手資源（陣營包 ending_actions.season_grant；待 joy 潤）
 GRANT_TITLE = "上一季論功"
 GRANT_LINE = "上一季論功，你得了{tier}「{title}」：新的一季開局多帶一份盤纏。"
 

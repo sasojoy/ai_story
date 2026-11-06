@@ -1,12 +1,12 @@
 """關鍵伏筆的真實內容（計畫 T7b；濃縮版內容表第四節）：8 條鏈、9 樣物品、11 則事件（豪強第三方的 3 條鏈與 2 則事件 2026-10-31 拿掉），以及一條從頭到尾的實測。
 
-引擎本身（片段、最後一步、鎖定、天機、官銀、開關）是 T7a 用 fixture 驗的（tests/test_foreshadow.py）；這裡驗的是
+引擎本身（片段、最後一步、鎖定、天機、官銀、開關）是 T7a 用 fixture 驗的（tianxia/features/military/tests/test_foreshadow.py）；這裡驗的是
 content/foreshadows.json 與 content/events/foreshadow_*.json 照內容表轉對了、每一條都做得完。
 
 下面的表是照內容表 4.1～4.5 逐項抄的（不是從 content 反推）。數字都是 1000 人以上那一檔的基準量；
 用週末設定跑、人數上限在每個 fixture 裡釘成 2（係數 0.2），所以物品、情誼、糧草的量要過 foreshadow.need 換算。
 **釘住是刻意的**：2026-10-14 線上的人數上限改成 20（係數 0.3，需求量 ×1.5、片段機率剩 0.67 倍），而這個檔驗的是
-「內容表轉對了、每一條做得完」，不是驗部署用幾人；部署的那個值由 tests/test_content.py 驗。
+「內容表轉對了、每一條做得完」，不是驗部署用幾人；部署的那個值由 tests/core/test_content.py 驗。
 """
 from __future__ import annotations
 

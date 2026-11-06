@@ -74,5 +74,10 @@ class FeastFeature(Feature):
             )
         return self._world
 
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
 
 FEATURE = FeastFeature()

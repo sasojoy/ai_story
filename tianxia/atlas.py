@@ -27,9 +27,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from . import allied, conquest, figures, mounts, orders, prologue, territory
+from . import conquest, figures, mounts, orders, prologue, territory
 from .calendar import point
+from .core import features as features_core  # 動身被擋的順序表 MENU_ORDER["block"]（core_seams，全部拆包第 56 批；同 world.py，registry 第一次叫才 import，這裡頂端不能叫）
 from .core import omen_base, travel_base  # 核心的查詢：正在答題（軍情包的 fs_asking）、跟著誰同行（移動包的 tagalong）；第 50 批
+from .core.travel_base import TravelBlock  # 分到各包的格都回它，搬進核心；這裡 re-export 同一個類別（tests/map/test_atlas.py 從這裡拿）
 from .models import Content, Location, MapRegion, TravelMode
 from .rules import pending_event_title, season_one_off, trend_name
 from .state import GameState, Order
@@ -492,66 +494,48 @@ class TravelOption:
     to_jianghu: bool = False  # 按不下去是因為江湖頁上有事沒了結（事件、交談、求見、投靠、叛投、答話）：頁面多給一顆「回江湖」（FB-063）
 
 
-@dataclass(frozen=True)
-class TravelBlock:
-    """現在不能安排前往的原因（話只在 travel_block 寫一次）。to_jianghu：要回江湖頁了結才解得開（待處理的事件、交談中、
-    求見中、投靠或叛投待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、賽季結束不是。"""
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 一、二）：動身被擋由核心代叫的格（賽季、序章、待處理的事件、答話、結伴、閉關），
+# 其餘（頭目戰與擂台、談著、求見、懸賞榜、鐵匠鋪、馬市、打點與軍需官、酒肆、投靠與叛投、守著埋伏）各包登記 block 那一格。先後是 MENU_ORDER["block"]，字一字不動。
 
-    reason: str
-    to_jianghu: bool = False
+
+def _block_ended(state: GameState, content: Content) -> TravelBlock | None:
+    return TravelBlock("賽季已結束，不能安排前往") if state.world.ended else None
+
+
+def _block_prologue(state: GameState, content: Content) -> TravelBlock | None:
+    return None if prologue.can_travel(state, content) else TravelBlock("師父的話還沒說完，先別急著走")
+
+
+def _block_event(state: GameState, content: Content) -> TravelBlock | None:
+    if not state.pending_event:
+        return None
+    title = pending_event_title(state, content)  # 找不到事件（存檔指著拿掉的事件）時退回「眼前的事」
+    what = f"「{title}」" if title is not None else "眼前的事"
+    return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
+
+
+def _block_omen(state: GameState, content: Content) -> TravelBlock | None:
+    # 正在答題（軍情包認領的 fs_asking；第 50 批改問核心的 omen_base）
+    return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True) if omen_base.fs_answering(state) else None
+
+
+def _block_follow(state: GameState, content: Content) -> TravelBlock | None:
+    leader = travel_base.following(state)  # 結伴同行：路線由帶頭的人定（玩家互動第二層；移動包認領的 tagalong，第 50 批改問核心的 travel_base）
+    return None if leader is None else TravelBlock(f"跟著{leader}同行，要改道先分道揚鑣", to_jianghu=True)
+
+
+def _block_busy(state: GameState, content: Content) -> TravelBlock | None:
+    return TravelBlock("閉關中，不能安排前往") if state.player.busy_until is not None else None
+
+
+_BLOCK_CORE = {"ended": _block_ended, "prologue": _block_prologue, "event": _block_event, "omen": _block_omen, "follow": _block_follow, "busy": _block_busy}
 
 
 def travel_block(state: GameState, content: Content) -> TravelBlock | None:
     """現在不能安排前往的原因（賽季已結束、有事件待處理、交談中、求見中、投靠或叛投待確認、閉關中）；可以時為 None。
     有事件待處理時寫出是哪一則、去哪裡了結（FB-063）：多段的事件（next_event）是現在待處理的那一段。
-    在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。"""
-    if state.world.ended:
-        return TravelBlock("賽季已結束，不能安排前往")
-    if not prologue.can_travel(state, content):
-        return TravelBlock("師父的話還沒說完，先別急著走")
-    if state.pending_event:
-        title = pending_event_title(state, content)  # 找不到事件（存檔指著拿掉的事件）時退回「眼前的事」
-        what = f"「{title}」" if title is not None else "眼前的事"
-        return TravelBlock(f"先回江湖頁處理{what}", to_jianghu=True)
-    p = state.player
-    if p.duel is not None:  # 單人頭目戰打到一半（tianxia/duel.py）
-        return TravelBlock("正跟人交手，先分出勝負或抽身退走", to_jianghu=True)
-    if p.arena is not None:  # 擂台打到一半（tianxia/arena.py）
-        return TravelBlock("正在擂台上，先分出勝負或認輸下台", to_jianghu=True)
-    if p.picking_arena:
-        return TravelBlock("還在擂台邊，先返回才能安排前往", to_jianghu=True)
-    if p.pending_companion:
-        return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True)
-    if p.picking_audience:
-        return TravelBlock("求見中，先返回才能安排前往", to_jianghu=True)
-    if p.picking_bounty:
-        return TravelBlock("懸賞榜還開著，先離開才能安排前往", to_jianghu=True)
-    if p.picking_smith:
-        return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
-    if p.picking_market:
-        return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 為了騎馬的步調與省體力 import mounts，這句就近讀它）
-    if p.picking_dadian:  # 打點（21 天季的銀兩出口）；待 joy 潤
-        return TravelBlock("還在茶樓雅間裡，先離開才能安排前往", to_jianghu=True)
-    if p.picking_donate:  # 大本營的捐軍備（素材與經濟設計第六節）；待 joy 潤
-        return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
-    if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）；同 tavern.TRAVEL_BLOCKED（atlas 不 import tavern：tavern → atlas），待 joy 潤
-        return TravelBlock("還坐在酒肆裡，先出門才能安排前往", to_jianghu=True)
-    if p.pending_faction:
-        return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
-    if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
-        return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
-    if p.pending_defect:
-        return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
-    if omen_base.fs_answering(state):  # 正在答題（軍情包認領的 fs_asking；第 50 批改問核心的 omen_base）
-        return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True)
-    leader = travel_base.following(state)  # 結伴同行：路線由帶頭的人定（玩家互動第二層；移動包認領的 tagalong，第 50 批改問核心的 travel_base）
-    if leader is not None:
-        return TravelBlock(f"跟著{leader}同行，要改道先分道揚鑣", to_jianghu=True)
-    if p.busy_until is not None:
-        return TravelBlock("閉關中，不能安排前往")
-    if p.ambush is not None:  # 設伏劫道：守著埋伏不能移動（沒有分身）；待 joy 潤
-        return TravelBlock("正守著埋伏，先收伏才能動身", to_jianghu=True)
-    return None
+    在路上不擋：從路上改去別處（路上設計 3.1，見 way_to）。先後寫死在 MENU_ORDER["block"]；這裡沒有 ctx（結伴 party 拿別人的 state 問），格裡一律讀傳進來的 state。"""
+    return features_core.menu_first("block", _BLOCK_CORE, state, content)
 
 
 def travel_refusal(state: GameState, content: Content, loc_id: str, mode: TravelMode) -> str | None:

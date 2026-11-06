@@ -15,7 +15,7 @@ from tianxia.models import Content
 from tianxia.state import FrontChip, FrontReport, FrontRow, PlayerState, WorldState
 
 Mode = Literal["attack", "hold"]
-NAME = "出陣"  # 待 joy 潤
+NAME = territory.SORTIE_NAME  # 待 joy 潤（第 59 批：字搬到共用層，玩法說明的兩包不准 import 出陣包）
 MODE_NAMES: dict[str, str] = {"attack": "攻", "hold": "守"}  # 待 joy 潤
 LEFT_NOTE = "今日還能 {n} 次"  # 待 joy 潤：鈕上體力後面那一段
 USED_UP = "今日已出陣 {n} 次，明日 00:00 後再出陣"  # 待 joy 潤（設計 2.3；鈕上不帶句號，行動列底下那一行補句號）

@@ -14,6 +14,7 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia import figures, precise, roster
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text
 
 from . import actions, companion_agent, parley, parley_actions
@@ -226,7 +227,7 @@ def road_say(ctx, prepared: companion_agent.PreparedTurn | None, said: str | Non
 
 
 def talk_options(ctx) -> list[Option]:
-    """跟人物談著的時候的整個選單（Game._everyday_options 裡 pending_companion 那一段，位置算行為，原位叫委派 Game._talk_options）：
+    """跟人物談著的時候的整個選單（Game._everyday_options 裡 pending_companion 那一段，位置算行為，第 56 批起是 take/talk 那一格）：
     上一輪給的選項（花體力）、自己說、伏筆的片段與機緣的話題（固定文字、不花體力）、NPC 智能 2.0 的條件與欠的事，最後一定有「告辭」。"""
     s, c = ctx.state, ctx.content
     dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
@@ -267,3 +268,24 @@ def road_title(ctx) -> str:
     """帶路的路上跟他說一句的標題：「同行・盧植」（原本 Game._action_title 的 parley 那一支；帶路的人不在人物表時選單上不會有這一顆，寫「同行」）。"""
     escort = ctx.state.player.parley_escort
     return f"同行・{ctx.content.characters[escort].name}" if escort in ctx.content.characters else "同行"
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/talk 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字一字不動）：跟人物談著。"""
+    return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True) if state.player.pending_companion else None
+
+
+def main_slot(ctx, frame) -> dict:
+    """main 表的 companions 那一格（全部拆包第 66 批）：鍵照 talk、figure、errands 的先後，沒有就沒有那個鍵。像在 web/img/figures/full/<id>.webp 才給 face（server.figure_face）。"""
+    out: dict = {}
+    talk_now = talk_view(ctx)  # 正在說話的那一位（浮在最上層的對話框）
+    if talk_now is not None:
+        out["talk"] = {**talk_now, "face": frame.shell.figure_face(talk_now["id"])}
+    talking = ctx.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
+    figure = actions.figure_view(ctx, talking) if talking else None
+    if figure is not None:
+        out["figure"] = figure
+    errands_now = actions.errands_view(ctx)  # 託付清單（減法季批 6，主機側計畫 1.3 的 main.errands）；託付關著沒有這個鍵
+    if errands_now is not None:
+        out["errands"] = errands_now
+    return out

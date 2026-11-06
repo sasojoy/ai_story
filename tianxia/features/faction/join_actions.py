@@ -2,19 +2,20 @@
 本體一字沒改，self 換成 ctx）。
 
 投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面，「確定」才真的投靠，「再想想」就作罷；豪強分屬兩軍的季
-投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_sect_options、_join_lean、_faction_prompt（選單與場景原位在叫）；_ally_options 只有包裡的
+投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_join_lean、_faction_prompt（場景原位在叫；sect_options 第 56 批起是 here/sect 那一格，委派拿掉）；_ally_options 只有包裡的
 pending_options 叫（沒有委派）；_faction_step 只有包的 choose 掛鉤叫（沒有委派）。選單「接管整個選單」的待確認那三段搬成 pending_options
-（Game 留 _faction_pending_options）。
+（第 56 批起是 take/faction 那一格，委派拿掉）。
 
 「你這一步」的 join 那一格（全部拆包第 36 批；原本 weekcard._steps 最後那一段與 step._target 的去投靠那一支）：join_step_items、
 join_step_place，只讀；JOIN_STEP 從 weekcard 搬來，字一個不改。
 """
 from __future__ import annotations
 
-from tianxia import allied, wins
+from tianxia import allied, precise, wins
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core import bounty_base
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡抽得到的拜門派事件）
 from tianxia.rules import STANCE_NAMES, season_one
 
@@ -156,7 +157,7 @@ JOIN_STEP = "先投一方：{places}。"  # 待 joy 潤：散人「眼下要事�
 
 
 def _join_place_names(ctx, faction) -> list[str]:
-    """這一方的投靠點的地名（同 weekcard._places：三方卡照用那一份，這裡抄一份，包不 import weekcard）。"""
+    """這一方的投靠點的地名（同 sides._places：三方卡照用那一份，這裡抄一份）。"""
     locs = ctx.content.locations
     return [locs[x].name for x in faction.join_at if x in locs]
 
@@ -176,3 +177,33 @@ def join_step_place(ctx, ref: tuple) -> tuple:
     joins = {loc: f for f in reversed(c.scenario.factions) for loc in f.join_at if loc in c.locations}  # 一樣近照劇本陣營的順序
     where = ctx._nearest_to(set(joins)) if joins else None  # noqa: SLF001
     return (joins[where].id, step_rules.place(ctx, where), None) if where is not None else (None, None, None)
+
+
+def sect_cell(ctx) -> list[Option]:
+    """here/sect 那一格（core_seams，全部拆包第 56 批）：一類一顆開著時拜入門派另成一顆（正式季整合 2.7），排在交友前面；關著沒有（舊的走投靠那一顆）。"""
+    return sect_options(ctx) if precise.on(ctx.content, ctx.state.world) else []
+
+
+def join_options(ctx) -> list[Option]:
+    """here/join 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：散人站在陣營的投靠點，一個陣營一顆。"""
+    s, c = ctx.state, ctx.content
+    if s.player.faction is not None:
+        return []
+    return [Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}") for faction in c.scenario.factions if s.player.location in faction.join_at]
+
+
+def picking_ally(ctx) -> bool:
+    """idle/faction 那一格（core_seams，全部拆包第 56 批）：拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑，不算閒著。"""
+    return allied.needs_ally(ctx.state, ctx.content)
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/faction 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字與先後一字不動）：投靠的確認畫面、拜入之後還沒挑依附哪一邊、叛投的確認畫面。"""
+    p = state.player
+    if p.pending_faction:
+        return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
+    if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
+        return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
+    if p.pending_defect:
+        return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
+    return None

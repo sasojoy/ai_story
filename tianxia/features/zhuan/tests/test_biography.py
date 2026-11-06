@@ -1,5 +1,6 @@
 """玩家傳第二批：季末把行狀寫成《某某傳》（tianxia/biography.py、Game.biography_*）、背景寫傳與公開分享（server.py、zhuan_html.py）、
 網頁的傳（web/app.js 的 zhuanHtml）。"""
+# 畫法在 web/zhuan.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

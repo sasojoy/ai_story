@@ -8,6 +8,7 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import mall
 from tianxia.characters import name_key
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.models import MallItem
 from tianxia.wallet import Wallet
 
@@ -64,17 +65,17 @@ def test_the_fourth_figure_sends_the_signature_arm():
 def test_the_slot_is_off_the_shelf_and_an_old_purchase_still_reads():
     game = _game()
     assert "deep_slot" not in game.content.mall
-    assert "deep_slot" not in {item["id"] for item in game.mall_view()["items"]}
-    assert game.mall_buy("deep_slot", "d1") == [mall.NO_ITEM]
+    assert "deep_slot" not in {item["id"] for item in mall_actions.view(game)["items"]}
+    assert mall_actions.buy(game, "deep_slot", "d1") == [mall.NO_ITEM]
     wallet = Wallet(game.world.db)
     owner = name_key(game.state.player.name)
     wallet.post(owner, 1000, "grant", "test:deep", time=game.now)
     # 下架之前買的那一列：暫時放回架上買一張，再拿掉，帳與退款照樣認得
     game.content.mall["deep_slot"] = MallItem.model_validate({
         "id": "deep_slot", "name": "深交名額", "note": "舊的", "price": 250, "kind": "consumable", "effects": {"deep_slot": 1}})
-    assert game.mall_buy("deep_slot", "old-1")[0].startswith("買下")
+    assert mall_actions.buy(game, "deep_slot", "old-1")[0].startswith("買下")
     del game.content.mall["deep_slot"]
-    assert game.mall_view()["items"] and mall.tokens(wallet, owner, "deep_slot", season=1)
+    assert mall_actions.view(game)["items"] and mall.tokens(wallet, owner, "deep_slot", season=1)
     p = game.state.player
     p.affinities.update(FOUR)
     game.sync(game.now)

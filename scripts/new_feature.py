@@ -7,6 +7,12 @@
 - tianxia/features/<包名>/tests/<包名>_stage.py：契約測試擺局面用的（tests/core/test_contract_features.py；先什麼都不擺）
 - docs/guide/<導覽區塊>.md 最後加一節的標題
 - tianxia/core/registry.py 的 FEATURES 登記（照標記加 import 與清單各一行，排在最後）
+- tests/core/test_test_for.py 的 STAGE_PACKAGES 接一行（有 <包名>_stage.py 的包都要登記；--root 的資料夾沒有這個檔就不做）
+
+內容檔與畫面檔不生，用到才加（開發規範手冊第十五節 G8、G9）：
+- 內容檔放 tianxia/features/<包名>/content/、寫進 Feature.content；測試內容放同一包的 tests/content/（同一個相對路徑）。不放 repo 的 content/。
+- 畫面寫 web/<包名>.js、web/<包名>.css、寫進 Feature.web。js 的 script 標籤由伺服器照它生成，不要手改 index.html 的 script；
+  css 的 link 手寫在 index.html（style.css 後面），js 手加進 tests/kit/webharness.APP_FILES（跟頁面同一個先後）；tests/core/test_contract_features.py 守。
 
 包名：小寫英文字母開頭、只有小寫英數與底線；不能跟已經有的包、tianxia/ 底下的模組、任何測試檔撞名。
 --root 給別的資料夾就在那裡生（測試用）。
@@ -43,6 +49,24 @@ def _edit(path: Path, mark: str, line: str) -> None:
     path.write_bytes((text.replace("\n", "\r\n") if crlf else text).encode("utf-8"))
 
 
+def _add_stage(root: Path, name: str, title: str) -> Path | None:
+    """生出來的 <包>_stage.py 要登記，不然 test_the_stage_packages_are_every_package_with_a_stage_file 紅。
+    接在最後一行 STAGE_PACKAGES 後面、不改前面的行（並行的線各寫各的一行）。"""
+    path = root / "tests" / "core" / "test_test_for.py"
+    if not path.exists():
+        return None
+    raw = path.read_bytes().decode("utf-8")
+    crlf = "\r\n" in raw
+    lines = raw.replace("\r\n", "\n").split("\n")
+    spots = [i for i, line in enumerate(lines) if line.startswith("STAGE_PACKAGES")]
+    if not spots:
+        raise SystemExit(f"{path} 裡找不到 STAGE_PACKAGES")
+    lines.insert(spots[-1] + 1, f'STAGE_PACKAGES += ["{name}"]  # {title}（scripts/new_feature.py 生的 {name}_stage.py）')
+    text = "\n".join(lines)
+    path.write_bytes((text.replace("\n", "\r\n") if crlf else text).encode("utf-8"))
+    return path
+
+
 def problem(root: Path, name: str, guide: str) -> str | None:
     if not NAME.fullmatch(name):
         return f"包名「{name}」要是小寫英文字母開頭、只有小寫英數與底線"
@@ -68,7 +92,8 @@ def make(root: Path, name: str, title: str, guide: str) -> list[Path]:
     made = {
         pkg / "__init__.py": f'''"""{title}（功能包；開發規範手冊 3.2）。這一包做什麼、導覽在哪一節、設計稿是哪一份：README.md。
 
-掛鉤照 tianxia/core/features.py 的表；用得到哪一個才寫哪一個。功能包只 import 核心（tianxia/core/ 與手冊 3.1 的核心模組）。
+掛鉤照 tianxia/core/features.py 的表；用得到哪一個才寫哪一個。功能包只 import 核心（tianxia/core/ 與手冊 3.1 的核心模組）、共用規則層（registry.SHARED）與自己這一包。
+玩家動作（main_actions、menxia_actions）、管理者工具（admin_tools）、API（routes）、鎖外三段式（outlock）寫在包的 routes.py，掛鉤裡才 from . import routes（手冊第十五節 G10）。
 新寫給玩家看的字標「待 joy 潤」。
 """
 from __future__ import annotations
@@ -79,7 +104,9 @@ from tianxia.core.features import Feature
 class {cls}(Feature):
     name = "{name}"
     prefix = "{name}"  # 選項 id 的前綴：{name}:…（核心只把這個前綴的 id 交給這一包）
-    player_fields: tuple[str, ...] = ()  # 認領的 PlayerState 欄位（新欄位放自己的子模型，手冊 3.5）
+    web: tuple[str, ...] = ()  # 畫面（手冊 G9）：web/ 底下的檔名，例 ("{name}.js", "{name}.css")。js 的 script 由伺服器照這裡生成，不要手改 index.html 的 script；css 的 link 與 tests/kit/webharness.APP_FILES 手寫
+    content: tuple[str, ...] = ()  # 內容檔（手冊 G8）：相對於 tianxia/features/{name}/content/，例 ("{name}.json",)、("events/{name}.json",)；宣告了就要有那個檔，不放 repo 的 content/
+    player_fields: tuple[str, ...] = ()  # 認領的 PlayerState 欄位（新欄位加在核心 state.py、名字帶包名前綴，先過 PM：手冊第十五節 G7）
     carried: tuple[str, ...] = ()  # 上面那些裡換季照帶走的
 
     def enabled(self, ctx) -> bool:
@@ -125,7 +152,8 @@ def stages(game):
     registry = root / "tianxia" / "core" / "registry.py"
     _edit(registry, IMPORT_MARK, f"from ..features import {name}  # {title}")
     _edit(registry, LIST_MARK, f"    {name}.FEATURE,")
-    return [*made, guide_path, registry]
+    stage = _add_stage(root, name, title)
+    return [*made, guide_path, registry, *([stage] if stage else [])]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root)
     for path in make(root, args.name, args.title, args.guide):
         print(path.relative_to(root).as_posix())
+    print("生完要接的：開發規範手冊第十五節「new_feature.py 生什麼、生完做什麼」；內容檔、畫面、玩家動作放哪：同一節 G8、G9、G10。")
     return 0
 
 

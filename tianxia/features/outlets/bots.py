@@ -2,7 +2,8 @@
 全部拆包第 43 批拿了 donate:、dadian: 前綴之後搬來）。
 
 萬一停在打點那一間店裡只會離開（每一顆都 0.0）；萬一停在軍需官那一串裡只會離開（捐由 look_after 的 bot.donate_spare 直接捐，不按這一串的鈕）。
-`act:donate`、`act:dadian` 是 act 子動詞，分數（None：假人不進）還在 bot_policy 的 act: 那一段（前綴 act 是核心的，掛鉤問不到）。
+`act:donate`、`act:dadian` 是 act 子動詞，第 60 批接進 Verb（bot 回 None：假人不進，只是打開一間店；以前落到 ACT_SCORES 的 0.0，隨手挑的那一半會按開、
+那一串的鈕又都不打分，假人就停在大本營的軍需官前面一整季，2026-10-22 量 7 天季時看到：季末十三個假人有七到十個卡在這裡）。
 """
 from __future__ import annotations
 

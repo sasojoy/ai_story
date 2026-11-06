@@ -1,5 +1,5 @@
 """假人收到打招呼、結伴邀請與名帖的回法，與做名帖、遞名帖（開發規範手冊 3.8；原本寫在 bot_policy.py：answer_call、_roll、_make_card、_hand_card
-與那幾個比例常數，全部拆包第 37 批搬來）。bot_policy 照舊 import 這幾個名字（tests/core/test_social.py 用 bot_policy.answer_call 與 REPLY_MIN_SECONDS）；
+與那幾個比例常數，全部拆包第 37 批搬來）。bot_policy 照舊 import 這幾個名字（tianxia/features/peers/tests/test_social.py 用 bot_policy.answer_call 與 REPLY_MIN_SECONDS）；
 呼叫的順序（_answer_discuss → _answer_invite → answer_call → 結伴等著 → 集結 → _raid → _hand_card）一個字不動，留在 bot_policy.take_turn。
 
 邀請框的 invite: 前綴這一包拿了：假人看到 invite: 的選項分數是 None（不按；上面三個函式直接回應，不交給打分數亂按），跟搬包之前 score 走到最後 return None 一樣。

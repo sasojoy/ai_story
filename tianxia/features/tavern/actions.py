@@ -29,6 +29,7 @@ from tianxia.core import presence  # 此地還有誰、站哪一邊（核心的�
 from tianxia.calendar import DAY, HOUR
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import Squad
 from tianxia.rules import add_rumor, display_name
 from tianxia.state import PLAYER, GameState, TavernHit, TavernWatch, Whisper
@@ -93,7 +94,7 @@ def tavern_choice(ctx: Game, arg: str) -> list[str]:
         return [tavern_rules.LEFT]
     if arg == "board":  # 牆上的懸賞榜：收起酒肆、打開懸賞榜（同城裡的 act:bounties）
         tavern_rules.close(ctx.state)
-        ctx.state.player.picking_bounty = True
+        bounty_base.sit_at_board(ctx.state.player)
         ctx._shop_say("enter")
         return [f"你走到牆邊，看起{bounty_base.BOARD}。"]
     return tavern_run(ctx, arg)
@@ -709,7 +710,7 @@ def tavern_ask_facts(ctx: Game, question: str = "") -> tuple[tuple[str, ...], tu
 
 
 def tavern_chatter_request(ctx: Game) -> tavern_rules.ChatterRequest | None:
-    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
+    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（routes.write_chatter 在背景請模型寫）。"""
     s, c = ctx.state, ctx.content
     loc = s.player.location
     if not tavern_open(ctx) or not tavern_rules.chatter_due(s.world, c, loc):
@@ -858,3 +859,8 @@ def tavern_view(ctx: Game) -> dict:
         "hidden": tavern_rules.HIDE_ALREADY.format(when=ctx.stamp(p.hidden_until)) if p.hidden_until > s.world.time else "",
         "board": tavern_rules.BOARD_ID if bounty_base.board_here(s, c) and bounty_base.visible(s, c) else "",
     }
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/tavern 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，同一句：tavern_rules.TRAVEL_BLOCKED）。"""
+    return TravelBlock(tavern_rules.TRAVEL_BLOCKED, to_jianghu=True) if state.player.picking_tavern else None

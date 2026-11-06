@@ -12,6 +12,7 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import calendar, database, mall, zhuan_end
 from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.models import MallItem, MallWindow
 from tianxia.wallet import Wallet
 from conftest import next_season
@@ -42,7 +43,7 @@ def _game(**flags) -> Game:
 
 
 def _shelf(game: Game) -> set[str]:
-    return {item["id"] for item in game.mall_view()["items"]}
+    return {item["id"] for item in mall_actions.view(game)["items"]}
 
 
 def _to_week(game: Game, week: int) -> None:
@@ -69,7 +70,7 @@ def test_the_items_follow_their_windows():
     _close(game)
     rest = _shelf(game)
     assert {"zhuan_art", "zhuan_seal", "zhuan_quote"} <= rest and "deep_slot" not in rest  # 休季：插畫、紀念印、親筆評曰
-    prices = {item["id"]: item["price"] for item in game.mall_view()["items"]}
+    prices = {item["id"]: item["price"] for item in mall_actions.view(game)["items"]}
     assert (prices["zhuan_art"], prices["zhuan_seal"], prices["zhuan_quote"]) == (300, 150, 200)
     assert "deep_slot" not in game.content.mall
 
@@ -82,32 +83,32 @@ def test_off_the_shelf_has_none_of_them_and_the_rest_menu_is_one_grey_button():
     _close(game)
     assert not _shelf(game) & FOUR
     assert [(o.id, o.enabled) for o in game.options()] == [("season:resting", False)]
-    assert game.mall_buy("zhuan_seal", "off-1") == [mall.NO_ITEM]
+    assert mall_actions.buy(game, "zhuan_seal", "off-1") == [mall.NO_ITEM]
 
 
 def test_limits_per_season():
     game = _game()
     _to_week(game, 3)
-    assert game.mall_buy("zhuan_art", "a1")[0].startswith("買下")
-    assert "這一季" in game.mall_buy("zhuan_art", "a2")[0]
+    assert mall_actions.buy(game, "zhuan_art", "a1")[0].startswith("買下")
+    assert "這一季" in mall_actions.buy(game, "zhuan_art", "a2")[0]
     _close(game)
-    assert game.mall_buy("zhuan_quote", "q1")[0].startswith("買下") and game.mall_buy("zhuan_quote", "q2")[0].startswith("買下")
-    assert "這一季" in game.mall_buy("zhuan_quote", "q3")[0]
-    assert game.mall_buy("zhuan_seal", "s1")[0].startswith("買下")
-    assert "這一季" in game.mall_buy("zhuan_seal", "s2")[0]
-    assert game.mall_buy("deep_slot", "d1") == [mall.NO_ITEM]  # 深交名額下架了（企劃者 2026-10-28）
+    assert mall_actions.buy(game, "zhuan_quote", "q1")[0].startswith("買下") and mall_actions.buy(game, "zhuan_quote", "q2")[0].startswith("買下")
+    assert "這一季" in mall_actions.buy(game, "zhuan_quote", "q3")[0]
+    assert mall_actions.buy(game, "zhuan_seal", "s1")[0].startswith("買下")
+    assert "這一季" in mall_actions.buy(game, "zhuan_seal", "s2")[0]
+    assert mall_actions.buy(game, "deep_slot", "d1") == [mall.NO_ITEM]  # 深交名額下架了（企劃者 2026-10-28）
 
 
 def test_rest_buttons_use_the_tickets_and_the_biography_shows_them():
     game = _game()
     _to_week(game, 3)
-    game.mall_buy("zhuan_art", "art")
+    mall_actions.buy(game, "zhuan_art", "art")
     p = game.state.player
     p.affinities.update({"luzhi": 55, "zhujun": 75, "caocao": 30})
     CharacterStore(game.world.db).save(game.state)
     _close(game)
-    game.mall_buy("zhuan_seal", "seal")
-    game.mall_buy("zhuan_quote", "quote")
+    mall_actions.buy(game, "zhuan_seal", "seal")
+    mall_actions.buy(game, "zhuan_quote", "quote")
     ids = {o.id: o for o in game.options()}
     assert ids["season:resting"].enabled is False
     assert {zhuan_end.PICK_ART, zhuan_end.SEAL, "zhuan:quote:luzhi"} <= set(ids)
@@ -135,9 +136,9 @@ def test_one_use_per_season_even_with_a_spare_ticket():
     """手上還有上一季沒用的票（這裡直接塞一列購買）：這一季用過一張插畫、一方紀念印，就不再出那兩顆鈕（票留到下一季）。"""
     game = _game()
     _to_week(game, 3)
-    game.mall_buy("zhuan_art", "art")
+    mall_actions.buy(game, "zhuan_art", "art")
     _close(game)
-    game.mall_buy("zhuan_seal", "seal")
+    mall_actions.buy(game, "zhuan_seal", "seal")
     game.choose(zhuan_end.PICK_ART)
     game.choose(zhuan_end.SEAL)
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
@@ -153,7 +154,7 @@ def test_the_first_tier_gets_the_art_free_and_no_button():
     game.state.player.contrib = 120  # 這一局官軍只有他：過了門檻就是第一階
     CharacterStore(game.world.db).save(game.state)
     _to_week(game, 3)
-    game.mall_buy("zhuan_art", "art")
+    mall_actions.buy(game, "zhuan_art", "art")
     _close(game)
     entry = game.biography_entry()
     assert entry["tier"]["tier"] == 1 and entry["illustration"] and entry["illustration"].startswith("guan_")
@@ -163,7 +164,7 @@ def test_the_first_tier_gets_the_art_free_and_no_button():
 def test_refund_voids_the_ticket_and_takes_the_art_off():
     game = _game()
     _to_week(game, 3)
-    game.mall_buy("zhuan_art", "art")
+    mall_actions.buy(game, "zhuan_art", "art")
     _close(game)
     game.choose(zhuan_end.PICK_ART)
     assert game.biography_entry()["illustration"]
@@ -171,7 +172,7 @@ def test_refund_voids_the_ticket_and_takes_the_art_off():
     pid = next(b.id for b in wallet.purchases(owner) if b.item == "zhuan_art")
     admin = Game.new(game.content, ADMIN, rng=random.Random(2), world=game.world)
     admin.client = None
-    msg = admin.admin_mall_refund(game.state.player.name, pid, "測試退款")[0]
+    msg = mall_actions.admin_refund(admin, game.state.player.name, pid, "測試退款")[0]
     assert "列傳插畫作廢" in msg
     game.sync(game.now + 30)
     assert game.biography_entry()["illustration"] is None
@@ -195,9 +196,9 @@ def test_the_server_gives_the_art_url_only_when_the_file_is_there(monkeypatch, t
 
     game = _game()
     _to_week(game, 3)
-    game.mall_buy("zhuan_art", "art")
+    mall_actions.buy(game, "zhuan_art", "art")
     _close(game)
-    game.mall_buy("zhuan_seal", "seal")
+    mall_actions.buy(game, "zhuan_seal", "seal")
     game.choose(zhuan_end.PICK_ART)
     game.choose(zhuan_end.SEAL)
     key = game.biography_entry()["illustration"]
@@ -262,11 +263,11 @@ def test_a_wanderer_cannot_buy_the_art_ticket_in_season_or_in_the_rest():
     assert art is not None and art["can"] is False and art["why"] == zhuan_end.ART_NO_SIDE and art["max"] == 0
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
     before = wallet.balance(owner)
-    assert game.mall_buy("zhuan_art", "w1") == [zhuan_end.ART_NO_SIDE]
+    assert mall_actions.buy(game, "zhuan_art", "w1") == [zhuan_end.ART_NO_SIDE]
     assert wallet.balance(owner) == before and not [b for b in wallet.purchases(owner) if b.item == "zhuan_art"]
     close_season(game)
     assert row(game, "zhuan_art")["why"] == zhuan_end.ART_NO_SIDE
-    assert game.mall_buy("zhuan_art", "w2") == [zhuan_end.ART_NO_SIDE]
+    assert mall_actions.buy(game, "zhuan_art", "w2") == [zhuan_end.ART_NO_SIDE]
     assert row(game, "zhuan_seal")["can"] is True  # 紀念印、親筆評曰散人也用得上，照舊賣
 
 
@@ -276,7 +277,7 @@ def test_a_wanderer_who_joins_a_side_can_buy_it():
     assert row(game, "zhuan_art")["can"] is False
     game.state.player.faction = "guan"
     assert row(game, "zhuan_art")["can"] is True and row(game, "zhuan_art")["why"] is None
-    assert game.mall_buy("zhuan_art", "j1")[0].startswith("買下")
+    assert mall_actions.buy(game, "zhuan_art", "j1")[0].startswith("買下")
 
 
 def test_the_first_tier_cannot_buy_the_art_ticket_once_the_season_is_over():
@@ -290,7 +291,7 @@ def test_the_first_tier_cannot_buy_the_art_ticket_once_the_season_is_over():
     art = row(game, "zhuan_art")
     assert art["can"] is False and art["why"] == zhuan_end.ART_FREE and art["max"] == 0
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
-    assert game.mall_buy("zhuan_art", "t1") == [zhuan_end.ART_FREE]
+    assert mall_actions.buy(game, "zhuan_art", "t1") == [zhuan_end.ART_FREE]
     assert not [b for b in wallet.purchases(owner) if b.item == "zhuan_art"]
 
 
@@ -300,7 +301,7 @@ def test_a_lower_tier_keeps_buying_the_art_ticket_in_the_rest():
     close_season(game)
     assert game.biography_entry()["tier"] is None
     assert row(game, "zhuan_art")["can"] is True
-    assert game.mall_buy("zhuan_art", "l1")[0].startswith("買下")
+    assert mall_actions.buy(game, "zhuan_art", "l1")[0].startswith("買下")
     assert zhuan_end.PICK_ART in option_ids(game)
 
 
@@ -310,7 +311,7 @@ def test_the_limit_is_told_before_the_unfit_reason():
     game.state.player.contrib = 120
     CharacterStore(game.world.db).save(game.state)
     to_week(game, 3)
-    assert game.mall_buy("zhuan_art", "b1")[0].startswith("買下")
+    assert mall_actions.buy(game, "zhuan_art", "b1")[0].startswith("買下")
     close_season(game)
     assert "這一季已經買了" in row(game, "zhuan_art")["why"]
 
@@ -318,7 +319,7 @@ def test_the_limit_is_told_before_the_unfit_reason():
 def test_the_other_shelf_rows_are_not_blocked():
     game = make_game(side=None)
     to_week(game, 3)
-    others = [r for r in game.mall_view()["items"] if r["id"] != "zhuan_art"]
+    others = [r for r in mall_actions.view(game)["items"] if r["id"] != "zhuan_art"]
     assert others and all(r["can"] and r["why"] is None for r in others)
 
 
@@ -327,10 +328,10 @@ def test_a_ticket_belongs_to_the_season_it_was_bought_in():
     game.state.player.affinities.update({"luzhi": 55})
     CharacterStore(game.world.db).save(game.state)
     to_week(game, 3)
-    assert game.mall_buy("zhuan_art", "a1")[0].startswith("買下")
+    assert mall_actions.buy(game, "zhuan_art", "a1")[0].startswith("買下")
     close_season(game)
     for item, ref in (("zhuan_seal", "s1"), ("zhuan_quote", "q1")):
-        assert game.mall_buy(item, ref)[0].startswith("買下")
+        assert mall_actions.buy(game, item, ref)[0].startswith("買下")
     assert {zhuan_end.PICK_ART, zhuan_end.SEAL, "zhuan:quote:luzhi"} <= option_ids(game)  # 這一季的票這一季用得上
     next_season(game.content, game.world, game)  # 第 2 季開了：第 1 季沒用掉的三張不再算
     game.state.player.affinities.update({"luzhi": 55})
@@ -339,7 +340,7 @@ def test_a_ticket_belongs_to_the_season_it_was_bought_in():
     assert game.state.player.season_number == 2 and game.state.world.ended
     assert not {zhuan_end.PICK_ART, zhuan_end.SEAL, "zhuan:quote:luzhi"} & option_ids(game)
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
-    assert game.mall_buy("zhuan_seal", "s2")[0].startswith("買下")  # 第 2 季的限購另算
+    assert mall_actions.buy(game, "zhuan_seal", "s2")[0].startswith("買下")  # 第 2 季的限購另算
     assert zhuan_end.SEAL in option_ids(game)
     game.choose(zhuan_end.SEAL)
     used = [(b.item, b.season, b.data.get("season")) for b in wallet.purchases(owner) if b.data.get("used")]
@@ -355,7 +356,7 @@ def test_the_button_spends_the_ticket_of_this_season_not_an_older_one():
     close_season(game)
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
     wallet.add_purchase(owner, "old-art", "zhuan_art", 300, time=game.now, day=0, season=0, data={"zhuan_art": 1})
-    game.mall_buy("zhuan_art", "new-art")
+    mall_actions.buy(game, "zhuan_art", "new-art")
     assert zhuan_end.PICK_ART in option_ids(game)
     game.choose(zhuan_end.PICK_ART)
     used = {b.ref.split(":")[-1]: b.data.get("used") is not None for b in wallet.purchases(owner) if b.item == "zhuan_art"}
@@ -390,7 +391,7 @@ def test_quotes_follow_the_order_they_were_asked():
     add_story(game)
     close_season(game)
     for ref in ("q1", "q2"):
-        assert game.mall_buy("zhuan_quote", ref)[0].startswith("買下")
+        assert mall_actions.buy(game, "zhuan_quote", ref)[0].startswith("買下")
     game.choose("zhuan:quote:caocao")
     game.choose("zhuan:quote:luzhi")
     assert figures(game.biography_entry()) == ["caocao", "luzhi"]
@@ -405,9 +406,9 @@ def test_the_order_does_not_depend_on_when_the_tickets_were_bought():
     game = make_game()
     game.state.player.affinities.update({"luzhi": 55, "caocao": 50})
     close_season(game)
-    game.mall_buy("zhuan_quote", "q1")
+    mall_actions.buy(game, "zhuan_quote", "q1")
     game.choose("zhuan:quote:luzhi")
-    game.mall_buy("zhuan_quote", "q2")
+    mall_actions.buy(game, "zhuan_quote", "q2")
     game.choose("zhuan:quote:caocao")
     assert figures(game.biography_entry()) == ["luzhi", "caocao"]
 
@@ -438,7 +439,7 @@ def _written():
 def test_a_quote_asked_after_the_biography_is_written_is_listed_only_after_the_rewrite():
     game = _written()
     assert game.biography_entry()["verdicts"] == []
-    game.mall_buy("zhuan_quote", "q1")
+    mall_actions.buy(game, "zhuan_quote", "q1")
     out = game.choose("zhuan:quote:luzhi")
     assert zhuan_end.QUOTE_LATER in out
     assert game.biography_entry()["verdicts"] == [] and game.biography_view(1)["verdicts"] == []
@@ -457,7 +458,7 @@ def test_before_the_biography_is_written_the_list_says_who_will_write():
     game.state.player.affinities.update({"luzhi": 55})
     add_story(game)
     close_season(game)
-    game.mall_buy("zhuan_quote", "q1")
+    mall_actions.buy(game, "zhuan_quote", "q1")
     game.choose("zhuan:quote:luzhi")
     assert figures(game.biography_entry()) == ["luzhi"]  # 還沒寫：預告要寫的人
     assert figures(game.biography_view(1)) == ["luzhi"]
@@ -469,13 +470,13 @@ def test_a_refunded_used_quote_stays_listed_because_the_text_still_has_it():
     game.state.player.affinities.update({"luzhi": 55})
     add_story(game)
     close_season(game)
-    game.mall_buy("zhuan_quote", "q1")
+    mall_actions.buy(game, "zhuan_quote", "q1")
     game.choose("zhuan:quote:luzhi")
     assert game.write_biography(game.biography_request(1), None, game.now + 30)
     assert figures(game.biography_entry()) == ["luzhi"]
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
     pid = next(b.id for b in wallet.purchases(owner) if b.item == "zhuan_quote")
-    msg = admin_of(game).admin_mall_refund(game.state.player.name, pid, "測試退款")[0]
+    msg = mall_actions.admin_refund(admin_of(game), game.state.player.name, pid, "測試退款")[0]
     assert "人物親筆評曰作廢" in msg
     game.sync(game.now + 40)
     assert figures(game.biography_entry()) == ["luzhi"]  # 正文還有他，名單就還有他
@@ -488,11 +489,11 @@ def test_a_refund_before_the_biography_is_written_takes_him_off_the_list_and_the
     game.state.player.affinities.update({"luzhi": 55})
     add_story(game)
     close_season(game)
-    game.mall_buy("zhuan_quote", "q1")
+    mall_actions.buy(game, "zhuan_quote", "q1")
     game.choose("zhuan:quote:luzhi")
     wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
     pid = next(b.id for b in wallet.purchases(owner) if b.item == "zhuan_quote")
-    admin_of(game).admin_mall_refund(game.state.player.name, pid, "測試退款")
+    mall_actions.admin_refund(admin_of(game), game.state.player.name, pid, "測試退款")
     game.sync(game.now + 40)
     assert game.biography_entry()["verdicts"] == []
     assert game.write_biography(game.biography_request(1), None, game.now + 50)
@@ -505,7 +506,7 @@ def test_the_list_is_what_the_text_has_free_writers_first_then_the_asked_ones():
     add_story(game)
     close_season(game)
     for ref in ("q1", "q2"):
-        game.mall_buy("zhuan_quote", ref)
+        mall_actions.buy(game, "zhuan_quote", ref)
     game.choose("zhuan:quote:luzhi")
     game.choose("zhuan:quote:caocao")
     assert game.write_biography(game.biography_request(1), None, game.now + 30)
@@ -539,7 +540,7 @@ def test_the_public_page_extras_do_not_move(monkeypatch):
     game = make_game()
     add_story(game)
     close_season(game)
-    game.mall_buy("zhuan_seal", "s1")
+    mall_actions.buy(game, "zhuan_seal", "s1")
     game.choose(zhuan_end.SEAL)
     assert game.write_biography(game.biography_request(1), None, game.now + 30)
     code = game.share_biography(1, True, "fb847")
@@ -670,7 +671,7 @@ def test_the_week7_note_names_the_day_the_item_really_goes_on_sale():
 def test_the_rest_keeps_the_same_words_and_the_other_items_are_untouched():
     game = make_game("week7")
     to_week(game, 3)
-    shelf = {r["id"]: r["note"] for r in game.mall_view()["items"]}
+    shelf = {r["id"]: r["note"] for r in mall_actions.view(game)["items"]}
     for item_id, note in shelf.items():
         if item_id != "zhuan_art":
             assert note == game.content.mall[item_id].note  # 沒有插槽的說明一個字不變

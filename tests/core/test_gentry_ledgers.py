@@ -2,7 +2,7 @@
 
 「此刻幫誰」就是 PlayerState.ally（豪強分屬兩軍的季投靠時挑的那一軍）：wins.lean_of 讀它、wins.set_lean 寫它；
 換邊不算叛投、帳不清。這裡只測 wins 的函式與存檔的鍵；兩本帳要四勝利開著（減法季 Config.jianfa＋開季的章，ON），
-引擎的接線另見 tests/test_four_wins_wiring.py。
+引擎的接線另見 tianxia/features/faction/tests/test_four_wins_wiring.py。
 用正式內容（season21：豪強分屬兩軍、劇本有三個陣營），載入超過一秒，整個檔標 slow。"""
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ def test_new_fields_add_no_keys_until_used(content):
     state = new_game_state(content, "甲客")
     keys = _keys(state)
     assert "ledgers" not in keys and "lean_changed" not in keys
-    # 別的批也往 QUIET_DEFAULTS 加欄位（批 4 的 deed_day、deed_today；批 2 的 fights_today 這些，tests/test_jianfa_switch.py 測）：
+    # 別的批也往 QUIET_DEFAULTS 加欄位（批 4 的 deed_day、deed_today；批 2 的 fights_today 這些，tests/core/test_jianfa_switch.py 測）：
     # 照整份清單扣，不寫死這兩個
     assert keys == set(type(state.player).model_fields) - set(QUIET_DEFAULTS) - _excluded(state)
     p = state.player

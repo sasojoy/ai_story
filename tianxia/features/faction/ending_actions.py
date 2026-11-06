@@ -1,5 +1,5 @@
 """季末與三方卡（三陣營四勝利，減法季整合設計第三章；全部拆包第 35 批；原本是 Game 上的 _season_grant、_four_wins、ending_card、_tier_outlook、
-tier_hint、_gentry_now、sides_card，本體一字沒改，self 換成 ctx）。Game 留一行委派的：_season_grant（換季開場）、_four_wins（核心與決戰包都在問）、
+tier_hint、_gentry_now、sides_card，本體一字沒改，self 換成 ctx）。Game 留一行委派的（_season_grant 第 55 批換成 season.grant 那一格）：_four_wins（核心與決戰包都在問）、
 ending_card（season_result、server）、tier_hint、sides_card（weekcard、server）；_tier_outlook、_gentry_now 只有包裡叫（沒有委派）。
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ def tier_outlook(ctx) -> tuple[TierResult, int | None]:
 
 
 def tier_hint(ctx) -> str | None:
-    """三方卡的 tier_hint（weekcard.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
+    """三方卡的 tier_hint（sides.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
     「未入階・還差 20」，wins.tier_hint）。四勝利開著、季還沒收、投靠了劇本裡的陣營才有；其餘是 None。"""
     s, c = ctx.state, ctx.content
     if not four_wins(ctx) or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
@@ -85,7 +85,7 @@ def gentry_now(ctx, faction) -> str:
 
 def sides_card(ctx) -> dict | None:
     """三方卡的批 3c 資料（設計 3.4）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
-    [{location, name, minutes}], now 現在}，稱號與比例照 Config.jianfa.tiers。畫面的三方卡是批 1 的 weekcard.sides_card
+    [{location, name, minutes}], now 現在}，稱號與比例照 Config.jianfa.tiers。畫面的三方卡是同包的 sides.sides_card
     （欄位表 main.sides_card），它拿這一份補豪強那一格的「現在」、每一方的「贏了給」與投靠點的分鐘；最後一週「離贏還差多少」
     在 week_unlock.win_gap（wins.gap_line）。四勝利關著、休季沒有。"""
     s, c = ctx.state, ctx.content

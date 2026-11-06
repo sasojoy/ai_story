@@ -1,4 +1,4 @@
-"""tests/webharness.py 自己的檢查（第 5 區評審之後補強的幾件）：常駐的 node 與各開一個 node（TIANXIA_WEB_HARNESS=process）
+"""tests/kit/webharness.py 自己的檢查（第 5 區評審之後補強的幾件）：常駐的 node 與各開一個 node（TIANXIA_WEB_HARNESS=process）
 對這些情況的結果要一樣。沒有 node 就略過。"""
 from __future__ import annotations
 

@@ -115,7 +115,7 @@ def line_for(state: GameState, content: Content, name: str) -> str:
     return CARD_LINE.format(line=found[-1].line) if found else ""
 
 
-# ── 模型寫評語（鎖外；server.write_yuedan）──────────────
+# ── 模型寫評語（鎖外；包的 routes.write_yuedan）──────────────
 
 
 class YuedanNote(BaseModel):

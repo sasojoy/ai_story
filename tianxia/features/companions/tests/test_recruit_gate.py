@@ -44,7 +44,7 @@ def test_the_old_recruit_at_path_has_the_same_gate(content):
     content.config.recruit_min_affinity = 40
     game = Game.new(content, "沈浪", rng=random.Random(0))
     assert "act:recruit" not in [o.id for o in game.options()]
-    assert game._recruit_target() is None and game._recruit() == ["（此地此刻沒有能招募的人。）"]
+    assert game._recruit_target() is None and game._act("recruit") == ["（此地此刻沒有能招募的人。）"]
     game.state.player.affinities["scholar"] = 40
     assert game._recruit_target() == "scholar"
     assert "act:recruit" in [o.id for o in game.options()]

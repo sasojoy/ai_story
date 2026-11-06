@@ -185,7 +185,7 @@ def test_later_siege_fights_the_new_holder():
 
 def test_merged_siege_keeps_the_guard():
     # 裁決 22（企劃者 2026-10-21）翻過來：以前兩軍同時搶同一塊中立地拿掉守將、兩軍正面打；現在是三方混戰，守將留著站第三格
-    # （新規則的測試在 tests/test_conquest_siege.py）
+    # （新規則的測試在 tests/acts/test_conquest_siege.py）
     game = _game()
     _open(game, announce(game, "nanyang_road", "huang", merged=("guan", "huang")))
     battle = game.world.get_sieges()[0]
