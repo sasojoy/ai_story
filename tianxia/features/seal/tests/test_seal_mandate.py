@@ -189,12 +189,15 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
     其他地方要看得到天命之爭一律走 timetable.events（照這一季的章）或 timetable.find。"""
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[4]  # 全部拆包第 27 批從 tests/seal/ 搬進玉璽包的 tests/（只改層數）
+    # 全部拆包第 27 批：seal.py 整份搬進玉璽包（tianxia/features/seal/seal.py）、它的 mandate_event 搬進核心本體 seal_base——白名單加這兩個檔、
+    # 掃的範圍加玉璽包的資料夾（跟搬之前掃的是同一批程式），判斷不動
     allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py",
-               "tianxia/core/seal_base.py"}  # 全部拆包第 27 批：seal.py 的 mandate_event 搬進核心本體 seal_base（只改白名單，判斷不動）
+               "tianxia/core/seal_base.py", "tianxia/features/seal/seal.py"}
     hits = [
         f"{p.relative_to(root).as_posix()}:{n}"
-        for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), root / "server.py"]  # 核心本體也掃（dev/core-events-1 審查）
+        for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), *root.glob("tianxia/features/seal/*.py"),
+                  root / "server.py"]  # 核心本體也掃（dev/core-events-1 審查）
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
         if "mandate_timetable" in line and p.relative_to(root).as_posix() not in allowed
     ]

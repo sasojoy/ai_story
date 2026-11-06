@@ -468,7 +468,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   呼叫端改完就拿掉）
 
 # bout（全部拆包第 12 批：單挑包自己的委派，被測試或腳本換掉的，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
-- `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tests/seal/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
+- `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tianxia/features/seal/tests/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
   `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
 # figure_acts（全部拆包第 31 批：大勢人物的行動包叫的、主人還沒搬的；原本這裡還有 socialize 那一段的 `ctx._snubbed_character`，第 31 批大勢人物成包，改列二、查詢服務 `# figure_acts`）

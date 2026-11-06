@@ -12,7 +12,7 @@ import pytest
 
 from conftest import real_content
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[4]  # 全部拆包第 27 批從 tests/season/ 搬進玉璽包的 tests/（只改層數）
 
 
 @pytest.fixture(scope="module")
