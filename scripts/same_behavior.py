@@ -17790,7 +17790,9 @@ class MapScenario(Scenario):
     - orders_how：/api/main 的本週軍令卡（atlas.order_how）。管理者重發之外，照內容每一種模板官軍、黃巾各擺一道（orders._build），所以
       攻城（出陣與遊歷兩種寫法、約戰開著與關著）、守城（領地爭奪的記不到與照守勢行動）、截糧（出陣與遊歷）、護糧、打擊（他現在在哪）都走到；
       局面三種：照原樣、約戰關著（sortie_duel.on 那兩支，season21、week7）、劇本的地盤拿掉（territory.on＝出陣關著，領地爭奪跟著關）。
-      局勢圖層那一張帶打擊目標的 ◎（strike_marks 摸清的那一支）。
+      局勢圖層那一張帶打擊目標的 ◎（strike_marks 摸清的那一支）。上面三種局面守城都是記不到或照守勢行動，守城「有地點」那一支
+      （order_how 的 conquest.duel_on、territory.on 那兩行）由 defended 補（第 50 批審查）：每一方的守城軍令在自家一塊擺上對面的進度，
+      約戰照原樣與關著各看一遍（season21 實跑：「對面在那裡約戰時去應戰、守住」與「出陣守一回，或按」各 3 處，之前都是 0），看完放回去。
     - details、details_again：舊的整張圖一處一處點（每一處的詳情欄、標頭、前往鈕；SVG 照雜湊，圖層照順序輪）：開季與過了四天，官軍、黃巾每一處，
       散人與序章新人頭尾兩處——大區的大勢、此刻由誰控制與中立地、常出沒的龍頭人物與聲威會回、敵情與自己陣營的「操練」、意境、地利、
       最近的傳聞、「這一帶離得遠」（season21、week7）、主線目標（只有測試內容：另兩種是第一季，不觸發 beta 主線）、路線（就在這裡、
@@ -17806,7 +17808,9 @@ class MapScenario(Scenario):
     **這一軌走不到的**（實跑數過，三種設定都是 0 次；搬的時候 ast 逐條比）：「此地的大勢人物」那一段（_here_text、HERE_TITLE、IDLE_NOTE 按兵不動：
     只在沒有時刻表的季，三種設定都不是）；龍頭人物「出兵之前」的「（…起）」（_figure_activity 的 started 那一支：顯示到的人物都已出兵或沒有戰線）；
     road_hops（全圖開放關著才用）；打擊目標沒摸清只標大區那一支（全圖開放，都摸清了）；mapdata.mostly_here 照表的那一支（services.hint_in：
-    探索一顆開著時 /api/main 的 mostly 由探索包的出門一趟回答，沒走到輿圖這一支）；sim_shown 只有測試內容走到（另兩種是第一季的規則）。"""
+    探索一顆開著時 /api/main 的 mostly 由探索包的出門一趟回答，沒走到輿圖這一支）；sim_shown 只有測試內容走到（另兩種是第一季的規則）；
+    守城卡並列最高的多過 SIEGE_NAMED_MAX（DEFEND_AREA_CONQUEST）與被戰書凍結的（DEFEND_SIEGE_CONQUEST）兩句（這一批沒改那兩行）；
+    守城那一行 territory.on 是假的那一支（DEFEND_ACT_PLAIN 在領地爭奪裡）靜態走不到：conquest.on 就是 territory.on。"""
 
     PLAYERS = {"韓望舒": "guan", "賀凌川": "huang", "祝聽雨": None, "岑九皋": "guan"}
     GUAN, HUANG, LONE, WALKER = tuple(PLAYERS)
@@ -18045,6 +18049,51 @@ class MapScenario(Scenario):
                 scenario.territory = old_land
                 self.set_duel(True)
                 self.server.MAP_BASE.clear()
+        self.defended()
+
+    def defended(self) -> None:
+        """map2（第 50 批審查補的）：守城卡「有地點」那一支（atlas.order_how 守城那兩行 conquest.duel_on、territory.on）。上面三種局面
+        守城都是「沒有對面在推」或照守勢行動，走不到那兩行：每一方的守城軍令（m2: 那一批），在它那條戰線上挑第一塊自家佔著、只差沒人在推的
+        區塊（conquest.push_problem 守那一邊只回 WHY_IDLE），把對面那一條擺到 40（不到警報線 alarm_at），照原樣（約戰開著）與約戰關著
+        官軍、黃巾各看一遍軍令卡、局勢圖層打一張；看完把領地爭奪那一份整個放回去，後面的段落照舊。測試內容沒有軍令，不擺。"""
+        from tianxia import conquest
+
+        world = self.world.get_season()
+        spots: list[tuple[str, str]] = []
+        for o in world.orders:
+            if not o.id.startswith("m2:") or o.template != "defend" or o.front is None:
+                continue
+            loc = next((b for b in conquest.blocks(self.c) if conquest.line_of(world, self.c, b) == o.front
+                        and conquest.holder(world, self.c, b) == o.faction
+                        and conquest.push_problem(world, self.c, o.faction, b, "hold") == conquest.WHY_IDLE), None)
+            if loc is not None:
+                spots.append((loc, "huang" if o.faction == "guan" else "guan"))
+        emit("map2 守城擺的地方", spots)
+        if not spots:
+            return
+        saved = None if world.conquest is None else world.conquest.model_copy(deep=True)
+        try:
+            for loc, foe in spots:
+                self.preset_bar(loc, foe, 40.0, self.GUAN if foe == "guan" else self.HUANG)
+            cases = [("對面推到自家一塊", None)] + ([("對面推到自家一塊、約戰關著", False)] if self.profile in DUEL_PROFILES else [])
+            for label, duel in cases:
+                if duel is not None:
+                    self.set_duel(duel)
+                self.server.MAP_BASE.clear()
+                try:
+                    emit(f"軍令卡 {label}", None)
+                    for who in (self.GUAN, self.HUANG):
+                        self.peek(who, "/api/main", ("orders",))
+                    self.peek(self.GUAN, self.q("situation"), ("detail", "legend"))
+                finally:
+                    self.set_duel(True)
+                    self.server.MAP_BASE.clear()
+        finally:
+            def back(w) -> None:
+                w.conquest = saved
+
+            self.world.mutate_season(back)
+            self.server.MAP_BASE.clear()
 
     def details(self) -> None:
         """map2：詳情欄（atlas.detail_text 與它叫的圖層那一半：大區的大勢、地盤、龍頭人物〔常出沒、此地的大勢人物、出兵之前的「第 N 週起」、
