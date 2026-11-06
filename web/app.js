@@ -5656,7 +5656,9 @@
         const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         // 這一送剛好結算了回合時，回話是整段回合敘事（場景裡的戰況就是同一段）：提示只放得下幾秒，截短、指去場景。
         // 只有決戰選項這樣（FB-162：懸賞選項的拒絕句是一句話，場景裡沒有它，不截、不指去場景）
-        if (text) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+        // 戰場面板開著時出招不跳提示：面板上已經寫「你這一回合：…」，結算了的那一回合在面板的戰報裡（PM 2026-11-06 看截圖）
+        const panelSays = id.startsWith("battle:act:") && typeof bpOn === "function" && bpOn(S.main);
+        if (text && !panelSays) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
     }, waitLineFor(id));
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、

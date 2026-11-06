@@ -65,8 +65,8 @@
         + `<b>${esc(parts[0] || say)}</b><small>${esc(say)}</small><small>${esc(parts.filter((x, i) => i > 0 && x !== "主將令").join("・"))}${order ? ' <em>主將令</em>' : ""}</small></button>`;
     }).join("")}</div>`;
   }
-  // 選單上那幾顆出招鈕面板已經畫了：選單裡的拿掉（同一顆不畫兩次）
-  const bpDropMoves = (menu) => menu.replace(/\s*<button class="btn[^"]*" data-act="(?:choose|opt-why)" data-id="battle:act:[^"]*"[\s\S]*?<\/button>/g, "");
+  // 選單上那幾顆出招鈕面板已經畫了：選單裡的拿掉（同一顆不畫兩次）；出完招那一顆灰的「（已選擇，等其他人…）」也拿掉——面板寫了「你這一回合」
+  const bpDropMoves = (menu) => menu.replace(/\s*<button class="btn[^"]*" data-act="(?:choose|opt-why)" data-id="battle:(?:act:[^"]*|waiting)"[\s\S]*?<\/button>/g, "");
 
   function bpFeedHtml(p, g) {
     if (!p.feed.length) return "";

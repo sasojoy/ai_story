@@ -154,3 +154,35 @@ def test_no_panel_bits_without_a_battle(on):
 def test_chiefs_have_a_face(fid):
     """面板與覆蓋用的立繪（web/img/figures/full/<人物>.webp）；沒有圖的人物網頁照第一個字畫（bpFace 的 em）。"""
     assert (server.WEB / "img" / "figures" / "full" / f"{fid}.webp").exists()
+
+
+@node
+def test_the_week_strip_drops_its_two_army_numbers_during_a_battle(showdown):
+    """PM 2026-11-06 看截圖：戰局條「官軍 50／50 黃巾軍」跟本週條「官 53・黃 47」玩家分不清——決戰期間本週條不寫那兩個數字。"""
+    _, a, _ = showdown
+    m = server.main_view(a)
+    week = {"key": "w1", "label": "本週", "when": "第 1 週", "theme": "黃巾起事", "sides": {"guan": 53, "huang": 47}, "steps": [], "notes": []}
+    on = run({**m, "week_card": week}, 'return H.weekCardHtml(m, "strip");')
+    off = run({**m, "week_card": week, "battle_panel": None}, 'return H.weekCardHtml(m, "strip");')
+    assert 'class="wk-sides"' in off and 'class="wk-sides"' not in on and 'class="wk-strip' in on
+
+
+def test_every_free_text_move_is_called_the_same(on):
+    """同一個輸入框只用一個名字（PM 2026-11-06：「開打」那張寫放手一搏、「回合中」那張寫孤注一擲）。"""
+    from tianxia.content import load_content
+
+    for content in (on, load_content(server.ROOT / "content")):
+        texts = {o.text for b in content.battles.values() for act in b.acts for o in act.options if o.free_text}
+        assert texts and all(t.startswith("放手一搏") for t in texts), texts
+
+
+@node
+def test_after_sending_the_panel_says_it_once(showdown):
+    """PM 2026-11-06 看截圖：出完招面板寫「你這一回合：奇襲」，選單上那顆灰的「（已選擇，等其他人…）」不再畫第二次。"""
+    _, a, _ = showdown
+    _open(a)
+    a.choose("battle:act:guan_raid")
+    m = server.main_view(a)
+    assert any(o["id"] == "battle:waiting" for o in m["options"])
+    page = run(m, "return H.pageJianghu();")
+    assert "你這一回合：奇襲" in page and "battle:waiting" not in page and "已選擇，等其他人" not in page

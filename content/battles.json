@@ -52,11 +52,11 @@
           {"text": "全線壓上，猛攻不歇", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "穩紮穩打，徐圖進取", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "輕騎迂迴，直插敵後", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "拼死反撲，誓死不退", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "且戰且退，保存實力", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "埋伏林中，截殺追兵", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -69,11 +69,11 @@
           {"text": "全軍壓上，畢其功於一役", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "穩住陣腳，等待戰機", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "趁亂直取敵軍大旗", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "絕地反擊，背水一戰", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "死守最後防線", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "放火燒營，亂中奪路", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
@@ -159,11 +159,11 @@
           {"text": "點齊兵馬，出城衝營", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "按兵不動，靜待時機", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "縋城而下，襲擾敵營", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "趁夜猛攻城門", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "收攏營寨，嚴加戒備", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "趁夜摸上城頭", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -176,11 +176,11 @@
           {"text": "全軍出城，衝擊敵陣", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "守住城門，穩住陣腳", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "分兵出側門，抄敵後路", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "全軍壓上，奪下城門", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "穩住營盤，步步進逼", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "繞到城北，偷開小門", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
@@ -245,11 +245,11 @@
           {"text": "集中一面，蟻附登城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "輪番佯攻，耗盡守軍", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "聲東擊西，暗襲另一面城牆", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "開城反衝，殺退攻城兵", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "添兵守垛，滾木擂石", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "夜縋出城，焚燒雲梯", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -262,11 +262,11 @@
           {"text": "全軍登城，畢其功於一役", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "圍死四門，不放一人", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "挑選精兵，夜攀城角", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "傾城而出，殺散圍軍", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "死守最後一道城門", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "分兵出城，偷襲官軍後營", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
@@ -331,11 +331,11 @@
           {"text": "整頓兵馬，出城衝營", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "節省糧草，輪番守城", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "派死士夜出，燒敵糧車", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "四面同時攻城", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "加固連營，圍而不攻", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "夜派輕兵，繞到城後放火", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -348,11 +348,11 @@
           {"text": "傾城出戰，解圍在此一舉", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "死守城門，寸步不讓", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "分兵出側門，抄敵後營", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "全軍蟻附，奪下城頭", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "穩住連營，步步進逼", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "趁夜攀城，打開城門", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
@@ -416,11 +416,11 @@
           {"text": "晝夜不停，輪番攻城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "閉營休兵，佯示退意", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "佯退設伏，誘敵出城", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "開門追擊，掩殺官軍", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "輪班上城，保存氣力", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "趁官軍疲憊，夜襲大營", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -433,11 +433,11 @@
           {"text": "雞鳴而發，全軍撲城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "穩住陣線，堵死各門", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "挑選死士，夜攀城角", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "傾城而出，決一死戰", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "死守內城，寸土不讓", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "死士出城，直撲中軍", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
@@ -501,11 +501,11 @@
           {"text": "晝夜不停，輪番攻城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "閉營休兵，佯示退意", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "佯退設伏，誘敵出城", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "開門追擊，掩殺官軍", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "輪班上城，保存氣力", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "趁官軍疲憊，夜襲大營", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "孤注一擲（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       },
       {
@@ -518,11 +518,11 @@
           {"text": "雞鳴而發，全軍撲城", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
           {"text": "穩住陣線，堵死各門", "tag": "guan_hold", "faction": "guan", "move": "固守"},
           {"text": "挑選死士，夜攀城角", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
           {"text": "傾城而出，決一死戰", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
           {"text": "死守內城，寸土不讓", "tag": "huang_hold", "faction": "huang", "move": "固守"},
           {"text": "死士出城，直撲中軍", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
-          {"text": "背水一戰（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
         ]
       }
     ],
