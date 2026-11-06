@@ -266,7 +266,7 @@ for _name, _old in (("conquest", "（讀璽效 seal_acts 記在邊界測試的 S
                     ("plans", "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）")):
     assert _old in SHARED[_name], _name
     SHARED[_name] = SHARED[_name].replace(_old, "（讀璽效 seal_acts：第 51 批進了這一層）")
-_old = "讀璽效 seal_acts、懸賞 bounties 記在 SHARED_PENDING；"
+_old = "讀璽效 seal_acts 記在 SHARED_PENDING；"  # 懸賞第 45 批成包，同一格的懸賞那一句是它自己改的
 assert _old in SHARED["figure_life"]
-SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層、懸賞 bounties 記在 SHARED_PENDING；")
+SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層；")
 
