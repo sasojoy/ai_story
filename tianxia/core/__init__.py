@@ -39,6 +39,7 @@
   atlas.travel_block 經它問，只讀移動包認領的 PlayerState.tagalong，不寫（寫與清照舊是移動包的 party）。移動包的 party re-export 同一個。
   同 event_check 不進 MODULES。
 - omen_base.py 再收 fs_answering（正在答最後一步的題：PlayerState.fs_asking 有值）：atlas.travel_block 經它問，軍情包的 fs_rules re-export 同一個。
+- omen_base.py 再收 heard_any（聽過伏筆片段了嗎：PlayerState.fragments 有值）：引導包碰到才說的提示 h_foreshadow 經它問（第 34 批認定第 9 條）。
 - seal_base.py（seal：全部拆包第 27 批，PM 認定甲案）：玉璽碎片「讀」的那一小半——on、revamp_on、filled、key、holders、天命之爭（mandate_event、
   mandate_battle、is_mandate_battle、mandate_now）、保底收場 deserted、天命未定的兩句、挑戰者門檻與「戰功居前」（threshold、challenger_ok、
   hint_names、merit_hint）、璽動那一句 stir_text、起點偏移與那一句（lean_shift、lean_text、shift_text、MANDATE_SCENE、MANDATE_WEIGHT）、江湖史七格

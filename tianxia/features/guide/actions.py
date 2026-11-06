@@ -10,7 +10,7 @@ from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批�
 from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
 from tianxia.characters import name_key
 from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
-from tianxia.core import seal_base, services  # 核心：碰到才說的玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
+from tianxia.core import omen_base, seal_base, services  # 核心：碰到才說的伏筆、玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
@@ -323,7 +323,7 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     if want("h_spectator") and status is not None and p.faction is None and p.name not in status[0].participants \
             and ctx._at_battle(status[1]):
         on.append("h_spectator")
-    if want("h_foreshadow") and any(p.fragments.values()):
+    if want("h_foreshadow") and omen_base.heard_any(s):
         on.append("h_foreshadow")
     if want("h_event_reveal") and p.events_seen:
         on.append("h_event_reveal")
