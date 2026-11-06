@@ -199,7 +199,7 @@ GAME_IMPORTS = {
     "tianxia.features.explore.explore_base",  # explore（全部拆包第 18 批）：舊探索的底 6 個一行委派
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
-    # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
+    # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tianxia/features/peers/tests/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
     # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel`（別名，choose 讀 PREFIX、PICK）第 11 批
     # 換成 choose_unlisted 與 Verb.picks 之後沒人用，拿掉
@@ -1045,6 +1045,26 @@ GAME_DIRECT.update({
     "discuss_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
 })
 
+# peers2（全部拆包第 38 批「玩家互動二」：切磋、論武、截殺搬進同一個包；計畫 docs/superpowers/plans/2026-11-07-玩家互動包-第2批.md 1.4）：
+# 28 個方法搬進 spar_actions、discuss_actions、raid_actions，Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）。第 37 批那一段的格一個字不改，
+# 這一批的增減集中在這一段（並行的拆包線不跟別人的行穿插）：_PEERS_PENDING 的 7 筆（GAME_DIRECT）與 _PEERS_38 的 6 筆（GAME_DELEGATE_CALLERS）隨方法搬走拿掉；
+# engine 對 invites、social 的過渡 import 沒人用了；_pair_left 沒人叫了（切磋、論武包內直接叫 pair_actions），委派拿掉。engine 多 import 論武、截殺兩個動作檔
+# （13 個委派用；DISCUSS_SAME、_refusal 那一行是 tests/arts/test_discuss.py 從 engine 拿的過渡）。結伴同行（_join、join_refusal）是第 48 批的，不動。
+GAME_IMPORTS -= {"tianxia.features.peers.invites", "tianxia.features.peers.social"}
+GAME_IMPORTS |= {"tianxia.features.peers.discuss_actions", "tianxia.features.peers.raid_actions"}
+GAME_DELEGATES -= {"_pair_left"}
+GAME_DELEGATES |= {
+    # 論武：測試叫（discuss_items、_discuss_cost、discuss_item_problem）、包裡經 other 叫（discuss_problem：測試換掉對方那一份）；
+    # 截殺：測試叫（raid_shown、raid_refusal、raid_odds、raid_targets、raid）、包裡經 ctx 叫而 sim 腳本與測試換掉的四個（raid_flee_odds、_raid_fled、_raid_spoils、_raid_record）
+    "discuss_items", "_discuss_cost", "discuss_problem", "discuss_item_problem",
+    "raid_shown", "raid_refusal", "raid_odds", "raid_targets", "raid", "raid_flee_odds", "_raid_fled", "_raid_spoils", "_raid_record",
+}
+for _key in (("_spar", "_tell_sender"), ("_discuss", "_tell_sender"), ("_spar", "_pair_tick"), ("_discuss", "_pair_tick"),
+             ("_spars_left", "_pair_left"), ("discusses_left", "_pair_left")):
+    del GAME_DELEGATE_CALLERS[_key]
+for _name in ("_spar_answer_problem", "spar_invite", "spar_refusal", "_discuss", "discuss_invite", "discuss_invite_problem", "discuss_refusal"):
+    del GAME_DIRECT[_name]
+
 
 # travel（全部拆包第 47 批「移動一」；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.4）：選單的順序算行為
 # （/api/main 的選項一顆一顆逐位元組：站著的時候「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
@@ -1818,6 +1838,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "conquest_day": "territory_acts", "xingshi": "territory_acts",
                          # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
                          "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
+                         # peers2（全部拆包第 38 批：tianxia/spar.py、discuss.py、raid.py）
+                         "spar": "peers", "discuss": "peers", "raid": "peers",
                          # map（全部拆包第 49 批：tianxia/mapview.py、mapart.py、mapdata.py、worldgeo.py）
                          "mapview": "map", "mapart": "map", "mapdata": "map", "worldgeo": "map",
                          # smithy（全部拆包第 41 批：tianxia/smithing.py）

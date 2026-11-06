@@ -345,9 +345,10 @@ def test_the_menu_does_not_list_raid_and_social_lists_the_card_action():
 
 def test_a_bot_raids_only_targets_it_can_beat(pair, monkeypatch):
     from tianxia import bot_policy
+    from tianxia.features.peers import bots
 
     content, world = pair
-    monkeypatch.setattr(bot_policy, "RAID_CHANCE", 1.0)
+    monkeypatch.setattr(bots, "RAID_CHANCE", 1.0)  # 包的 _raid 讀包自己的常數（全部拆包第 38 批）
     assert _do(content, world, "甲", lambda g: g.raid_targets())[0] == [("乙", "難分勝負")]
     assert _do(content, world, "甲", lambda g: bot_policy._raid(g, random.Random(0)))[0] is None  # 難分勝負不打
     them = _load(world, "乙")

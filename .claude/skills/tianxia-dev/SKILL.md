@@ -130,7 +130,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 批量把 `weekend` 換成 `week7` 的 commit 容易漏掉只有斷言字串、沒有 `renown_unscaled` 的檔；整批合進來之後有紅，先 `git log --oneline -- <那個測試檔>` 看最後一個改它的是不是這種整理批，再用 `git worktree add --detach <scratchpad>/bis <commit>^` 與 `<commit>` 各跑一次釘死是哪一筆（用完 `git worktree remove --force`）。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。`_write` 寫的那一則，「銀兩 +N」這種數值變化在 `entry.changes`、不在 `entry.lines`。
 - **兩個人的測試**（截殺、領地爭奪的混戰，2026-10-20 翻地與爭搶）：`Game.new` 不存角色，另一個人要被 `_load_kin` 讀到就先 `CharacterStore(world.db).save(game.state)`；
-  照伺服器的做法每一個動作從資料庫重讀自己（`tests/ranger/test_raid.py::_do`、`tests/acts/test_conquest_flip.py::_do`）。season21 的新手期看 `newbie_real_hours`（現實 48 小時），
+  照伺服器的做法每一個動作從資料庫重讀自己（`tianxia/features/peers/tests/test_raid.py::_do`、`tests/acts/test_conquest_flip.py::_do`）。season21 的新手期看 `newbie_real_hours`（現實 48 小時），
   只設 `newbie_days = -1` 擋不掉，要一起設 `newbie_real_hours = 0`。
 - **證明開關關著一個字都不變**：一條條「關著不變」的測試之外，最省事的是拿 QA 的整份畫面對照（`tianxia-qa/引擎驗收.md` 第 7 節；scratchpad 裡 QA 留過 `conqqa/cmp_off.py`）：開這一批之前那一版與 HEAD 各 `git archive` 一份跑，比雜湊。腳本 `import server`，所以要連頂層的 `server.py server_push.py zhuan_html.py llm_queue.py console.py` 一起 archive（只 archive `tianxia content` 會 `No module named 'server_push'`），**`web` 也要**（`server` 載入時讀 `web/index.html`，沒有就 `FileNotFoundError`）。領地爭奪第一批修正：season21／week7／weekend 三種季 573／569／567 行一個位元組都一樣。
   **base 選對**：派工寫的對照版（例 `98c1c0f5`）之後，功能分支又合進了別的批（輿圖 v3 第 2 批 `b9ee3c9c`）時，你合進來之後拿舊版比，畫面會差在那一批動的東西（小地圖多一條路，不是你的改動）。先拿合進來的功能分支 tip 當 base 比到一個位元組不差，再另外拿派工寫的版本比一次、把差異歸給那一批（`diff` 看出差的位置）。玉璽碎片改版第 1 批修正：側門整條（卡、勝算、擂台選單與頁面、切磋、截殺、擂台各打一輪的整份戰報與回合演出）45 行、三種季，`98c1c0f5`／`b9ee3c9c`／HEAD 三版雜湊一樣；碎片全套 204 行，`b9ee3c9c` 對 HEAD 一樣，`98c1c0f5` 對 HEAD 只差輿圖 v3 那條路。

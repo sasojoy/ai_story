@@ -2988,7 +2988,7 @@ MENXIA_ACTIONS = {
 }
 
 
-# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 留在殼，第 38 批）
+# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）
 
 
 # POST /api/party/leave 搬進 tianxia/features/travel/routes.py（api_party_leave；全部拆包第 48 批）

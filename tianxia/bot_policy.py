@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, invites, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
@@ -23,6 +23,7 @@ from .features.travel import bots as travel_bots  # 舊模組 → 包：move: �
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
     GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
     TRAVEL_ACCEPT_SHARE, TRAVEL_REJECT_SHARE, _hand_card, _make_card, _roll, answer_call,
+    INVITE_YES, RAID_CHANCE, RAID_ODDS, _answer_invite, _raid, answer_discuss,  # 切磋、論武、截殺：全部拆包第 38 批搬進玩家互動包（測試讀 bot_policy._answer_invite、_raid；_answer_discuss 的薄層叫 answer_discuss）
 )
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile
@@ -56,14 +57,11 @@ STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人�
 PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
-# 截殺（Config.raid）：此地有截殺得了、而且勝算夠的敵對陣營的人時，每一輪有 RAID_CHANCE 的機會動手；只挑 RAID_ODDS 的對象
-# （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
-RAID_CHANCE = 0.1
+# （截殺的 RAID_CHANCE、RAID_ODDS 與切磋、論武的 INVITE_YES 搬進玩家互動包 features/peers/bots.py，全部拆包第 38 批；上面 import 回來）
 # 後期體力玩法（設伏劫道、修築工事、屯糧練兵）：體力在上限的 PLAY_STAMINA 以上時，每一輪 PLAY_CHANCE 的機會挑一樣做（選單上按得下去的，
 # 照名號＋這一輪的雜湊挑，不動 rng 的序列以外的東西）。內傷重的不設伏（伏兵也要打）。
 PLAY_CHANCE = 0.05
 PLAY_STAMINA = 0.8
-RAID_ODDS = CHALLENGE_ODDS
 # 懸賞榜（bounties.py）：城裡看得到還接得了的懸賞就去揭（不花體力），手上有就往要去的地方走、到了照做；
 # 比推大勢的遊歷值得，比軍令低（陣營的事先做）【預設】
 BOUNTY_SCORE = 8.0
@@ -88,7 +86,6 @@ def _crippled(game: Game) -> bool:
 def _clinic_score(game: Game) -> float:
     return CLINIC_URGENT_SCORE if bot.injury_share(game) >= bot.CLINIC_URGENT else CLINIC_MOVE_SCORE
 MARKET_SCORE = SMITH_SCORE  # （同 features/gear/bots.py 的 MARKET_SCORE，8.0）馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
-INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 DIVINE_NAME_CHANCE = 0.3  # 打出神器原品之後，每一輪按「沿用譜名」的機會（不在打出來那一下就定，照人的步調，同 answer_call）【預設】
@@ -307,22 +304,6 @@ def battle_move(game: Game, profile: BotProfile, rng: random.Random) -> list[str
     return game.choose(choice) if choice else []
 
 
-def _answer_invite(game: Game, rng: random.Random) -> str | None:
-    """有人在這裡邀假人切磋（玩家互動第二層）：跟真人一樣在自己這一輪看到才答——付得起體力時 INVITE_YES 的機會答應，
-    其餘婉拒（真人也會婉拒，假人不能每一張都答應，不然看得出來）。一次只答一張，最早的那張。沒有邀請是 None。"""
-    world = game.state.world
-    incoming = [  # 論武的邀請由 _answer_discuss 答（選單上那一顆是灰的，要在玩家卡上挑出哪一樣）
-        o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:yes:")
-        and getattr(invites.find(world, o.id.removeprefix("invite:yes:")), "kind", "") == "spar"
-    ]
-    if not incoming:
-        return None
-    first = incoming[0]
-    if first.enabled and rng.random() < INVITE_YES:
-        return first.id
-    return "invite:no:" + first.id.removeprefix("invite:yes:")
-
-
 def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
     """體力花不完時（PLAY_STAMINA 以上）PLAY_CHANCE 的機會設伏、修工事、屯糧、護衛、犒軍或探望（選單上按得下去的那幾顆挑一顆）；這一輪不做是 None。
     體力不夠、選單上沒有這幾顆時不擲骰。"""
@@ -335,15 +316,6 @@ def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
     if not plays or rng.random() >= PLAY_CHANCE:
         return None
     return game.choose(rng.choice(plays))
-
-
-def _raid(game: Game, rng: random.Random) -> list[str] | None:
-    """此地有截殺得了、勝算在 RAID_ODDS 的人時，RAID_CHANCE 的機會截殺第一個（走玩家卡同一條路，Game.peer_act）。
-    沒有對象時不擲骰（不改到其他行為的亂數）；這一輪不動手是 None。"""
-    targets = [name for name, odds in game.raid_targets() if odds in RAID_ODDS]
-    if not targets or rng.random() >= RAID_CHANCE:
-        return None
-    return game.peer_act(targets[0], "raid")
 
 
 # 擂台（tianxia/arena.py）：還沒報名、有武學就報名；分身比此刻弱了 ARENA_REFRESH 以上就更新；今天還有次數時每一輪 ARENA_CHANCE 的機會
@@ -436,31 +408,13 @@ def _tavern(game: Game, rng: random.Random) -> list[str] | None:
 
 
 def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str] | None:
-    """有人在這裡邀假人論武：跟切磋一樣 INVITE_YES 的機會答應，挑第一樣自己這邊合得成的（身上的在前）出；挑不到就婉拒。
-    走玩家卡同一條路（Game.peer_request、peer_act）。首創要取名時開單放進 slot（這一輪到此為止，B、C 段在 bot_runner）；
-    這一輪沒有取名的名額就先放著（邀請還在，下一輪再答）、照常做別的事（回 None）。沒有論武邀請也是 None。"""
-    p = game.state.player
-    pending = [i for i in invites.incoming(game.state.world, p.name) if i.kind == "discuss" and i.location == p.location]
-    if not pending or not game.is_idle():
-        return None
-    inv = pending[0]
-    # 照玩家卡上答應的那幾顆挑（跟真人看到的同一張卡）：按得下去的就是兩邊都合得成的（discuss._answer_buttons，FB-117）
-    card = game.peer_card(inv.sender)
-    ready = [
-        b["arg"].removeprefix("yes:") for b in (card or {}).get("actions", [])
-        if b["action"] == "discuss" and b["enabled"] and b["arg"].startswith("yes:")
-    ]
-    item = ready[0] if ready else None
-    if item is None or rng.random() >= INVITE_YES:  # 他走了（卡打不開）、一樣都合不成：收掉這張
-        return game.choose(f"invite:no:{inv.id}")
-    params = {"arg": f"yes:{item}"}
-    request = game.peer_request(inv.sender, "discuss", params)
-    if request is None:
-        return game.peer_act(inv.sender, "discuss", {**params, "proposed": NO_NAME})
-    if slot is None or not slot.open:
-        return None
-    slot.job = DiscussJob(inv.sender, item, request)
-    return []
+    """有人在這裡邀假人論武（本體在玩家互動包 peers/bots.answer_discuss，全部拆包第 38 批）。首創要取名時包回來一份資料，
+    這裡包成 DiscussJob 放進 slot（這一輪到此為止，B、C 段在 bot_runner）；其餘（婉拒、直接答、沒名額先放著、沒有邀請）原樣回。"""
+    got = answer_discuss(game, rng, slot is not None and slot.open)
+    if isinstance(got, tuple):
+        slot.job = DiscussJob(*got)
+        return []
+    return got
 
 
 TEACH_PER_TICK = 3  # 假人一輪最多傳幾下功（真人也是一下一下按的）
