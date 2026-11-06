@@ -1,4 +1,5 @@
 """行動列：出陣那一格寫今日剩幾次（出陣探索與地盤設計第七節）。沒有 node 就略過。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

@@ -2,6 +2,7 @@
 （遠看大區與各方幾處、中間小圖與名字、近看能悟與勝算），上面浮著搜尋列與篩選，底下一張抽屜（附近能去一排卡片、一處的卡、版圖變化）。
 以前的天下圖、區圖、第一層三張固定取景的圖與它們的測試檔一起拿掉了。在 node 裡跑整支網頁（tests/kit/webharness.py），餵伺服器真的會給的
 底圖與疊層；沒有 node 就略過。"""
+# 畫法在 web/travel.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

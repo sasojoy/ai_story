@@ -5,6 +5,7 @@
   見聞的籤加了「形勢」是九顆，375 寬一排放不下：只在〈天下形勢〉開著的季（main.xingshi）畫第九顆、排成兩排（上五下四）。
 
 把 app.js 的函式切出來交給 node 跑；沒有 node 就略過。"""
+# 畫法在 web/seal.js、web/territory_acts.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import re
