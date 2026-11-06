@@ -2047,16 +2047,18 @@
     return `<div class="vn-layer pick" role="dialog" aria-label="${esc(f.name)}">${vnBack(m)}${f.face ? `<img class="vn-fig" src="${esc(f.face)}" alt="">` : ""}
       <button class="vn-x" data-act="fig-close" aria-label="關閉">×</button>
       <div class="vn-acts">${talk}${acts}<button class="vn-act paper" data-act="fig-log" data-id="${esc(f.id)}"><b>${FIG_LOG}</b></button></div>
-      ${vnBox(f.name, f.side, `${figIntroHtml(f.intro)}<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`, `情誼 ${f.affinity}${f.side ? `・${esc(f.side)}` : ""}`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
+      ${vnBox(f.name, f.side, `${figIntroHtml(f.intro, f.side)}<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
   }
   // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；server.figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
   // 另一串做）時多「如今」一格與變化紀錄，沒變之前不畫這兩格
   const INTRO_NATURE = "本性", INTRO_NOW = "如今"; // 待 joy 潤
-  function figIntroHtml(i) {
+  // 每樣只寫一次（PM 11/6）：陣營看名牌旁的籤，身分那一行去掉開頭同一個陣營；情誼在「交談」鈕底下，框底不再寫
+  function figIntroHtml(i, side = "") {
     if (!i) return "";
+    const role = side && i.role ? i.role.replace(new RegExp(`^${side}・`), "") : i.role;
     const row = (cls, k, v) => `<p class="${cls}"><b>${k}</b><span>${esc(v)}</span></p>`;
     const hist = (i.history || []).length ? `<ul class="vi-hist">${i.history.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : "";
-    return `<div class="vn-intro">${i.role ? `<p class="vi-role">${esc(i.role)}</p>` : ""}${i.who ? `<p class="vi-who">${esc(i.who)}</p>` : ""}${i.nature
+    return `<div class="vn-intro">${role ? `<p class="vi-role">${esc(role)}</p>` : ""}${i.who ? `<p class="vi-who">${esc(i.who)}</p>` : ""}${i.nature
       ? row("vi-nature", INTRO_NATURE, i.nature) : ""}${i.now ? row("vi-now", INTRO_NOW, i.now) : ""}${hist}</div>`;
   }
   // 對話底下那一塊：場景照片暗下來（最後一次站在地點時的那張圖，S.lastPlaceArt），沒有就是墨色

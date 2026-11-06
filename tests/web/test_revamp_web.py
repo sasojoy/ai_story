@@ -160,6 +160,8 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []
     pick = run(m, 'H.S.fig = "hejin"; return H.pageJianghu();').split('class="vn-layer pick"')[1]
     assert 'class="vn-intro"' in pick and hejin["intro"]["who"] in pick and "<b>本性</b>" in pick and "vi-now" not in pick and "vi-hist" not in pick
+    # 每樣只寫一次（PM 11/6）：陣營只在名牌旁的籤（身分行是「大將軍」不是「官軍・大將軍」），情誼只在「交談」鈕底下
+    assert pick.count("官軍") == 1 and '<p class="vi-role">大將軍</p>' in pick and pick.count(f"情誼 {hejin['affinity']}") == 1 and "vn-foot" not in pick
     hejin["intro"].update(now="如今的樣子", history=["第 1 週・週五 起，沒那麼優柔了"])
     pick = run(m, 'H.S.fig = "hejin"; return H.pageJianghu();').split('class="vn-layer pick"')[1]
     assert '<p class="vi-now"><b>如今</b><span>如今的樣子</span></p>' in pick and "<li>第 1 週・週五 起，沒那麼優柔了</li>" in pick
