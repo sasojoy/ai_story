@@ -29,7 +29,7 @@ class SenseFeature(Feature):
         return True
 
     def choose(self, ctx, kind, arg):
-        """sense:<做法>、sense:let（原本 Game.choose 的 sense 那一支叫 Game._sense；「畫下來」sense:draw 在建紀錄之前就回了）：標題照
+        """sense:<做法>、sense:let（原本 Game.choose 的 sense 那一支叫 Game._sense；「畫下來」sense:draw 在建紀錄之前就回了，MENU_ORDER["quick"] 那一格）：標題照
         原本 Game._action_title 的 sense 那一支（「有所感・場景」，動作之前先拿）。dunwu: 不接（自己寫的名字在 Game.choose 的 text，
         掛鉤不帶），留在原位叫 Game._epiphany_name。"""
         if kind != "sense":
@@ -65,13 +65,15 @@ class SenseFeature(Feature):
     _menus: tuple[MenuHook, ...] | None = None
 
     def menus(self) -> tuple[MenuHook, ...]:
-        """選單的兩格（順序在 MENU_ORDER；不問 enabled）：有所感接管整個選單（擂台之後、一條線的答題之前；menu 掛鉤在擂台前面，接不了）；還沒了結不算閒著。"""
+        """選單的三格（順序在 MENU_ORDER；不問 enabled）：有所感接管整個選單（擂台之後、一條線的答題之前；menu 掛鉤在擂台前面，接不了）；還沒了結不算閒著；
+        「畫下來」只叫出畫布、不建紀錄（quick，第 57 批；畫完送出走 sense_request／sense_draw）。"""
         if self._menus is None:
             from . import actions  # noqa: PLC0415
 
             self._menus = (
                 MenuHook("take", "sense", lambda ctx: actions.sense_menu(ctx)),
                 MenuHook("idle", "sense", lambda ctx: ctx.state.player.sensing is not None),
+                MenuHook("quick", "canvas", lambda ctx, kind, arg, option_id: actions.sense_canvas(ctx, option_id)),
             )
         return self._menus
 

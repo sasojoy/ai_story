@@ -8,7 +8,7 @@
 
 兩間店（軍需官那一串、「打點」那一間）接第 11 批的店面登記（shops）：坐在店裡的選單、哪一間開著、動身與此地不開了收店；進店那兩顆
 （「此地還能做」裡的捐軍備、打點）留在 Game 原位，因為它們排在療傷之後（順序算行為），Shop.entry 回 None。act:donate、act:dadian 與銀兩出口
-四樣（silver_donate、mentor、furnace、buy_legend）接 act 子動詞（verbs）；bribe:<人物> 帶後綴接不了 Verb，留在核心 _act 叫委派。
+四樣（silver_donate、mentor、furnace、buy_legend）與打點門路 bribe:<人物>（帶後綴，第 57 批）接 act 子動詞（verbs）。
 """
 from __future__ import annotations
 
@@ -85,10 +85,10 @@ class OutletsFeature(Feature):
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:
-        """act 子動詞：donate（打開軍需官那一串，不花體力）、dadian（打開打點那一間店，不花體力）與銀兩出口四樣（silver_donate、mentor、furnace、
-        buy_legend；打點那一間店開著時掮客換一句）。標題只接兩間店的招牌；四樣的標題與 bribe:<人物> 的標題留在核心 _action_title 原位。"""
+        """act 子動詞：donate（打開軍需官那一串，不花體力）、dadian（打開打點那一間店，不花體力）與銀兩出口五樣（silver_donate、mentor、furnace、
+        buy_legend，與帶後綴的打點門路 bribe:<人物>，第 57 批；都不花體力，打點那一間店開著時掮客換一句）。標題：兩間店的招牌、四樣的「招牌・此地」、打點門路的「打點・那個人」（第 57 批）。"""
         if self._verbs is None:
-            from tianxia import economy, silver  # noqa: PLC0415
+            from tianxia import economy, figures, silver  # noqa: PLC0415
 
             from . import silver_actions  # noqa: PLC0415
 
@@ -106,19 +106,24 @@ class OutletsFeature(Feature):
                 ctx._shop_say("enter")
                 return [silver.SHOP_ENTERED]
 
-            def silver_verb(what: str) -> Verb:
-                def run(ctx, prepared):
-                    msgs = silver_actions.silver_act(ctx, what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
-                    if ctx.state.player.picking_dadian:
-                        ctx._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
-                    return msgs
+            def press(ctx, what: str) -> list[str]:
+                msgs = silver_actions.silver_act(ctx, what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
+                if ctx.state.player.picking_dadian:
+                    ctx._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
+                return msgs
 
-                return Verb(what, run=run)
+            def silver_verb(what: str, sign: str) -> Verb:
+                return Verb(what, run=lambda ctx, prepared: press(ctx, what), title=lambda ctx: f"{sign}・{here(ctx)}")
 
             self._verbs = (
                 Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}"),
                 Verb("dadian", run=open_dadian, title=lambda ctx: f"{silver.SHOP}・{here(ctx)}"),
-                *(silver_verb(what) for what in ("silver_donate", "mentor", "furnace", "buy_legend")),
+                silver_verb("silver_donate", silver.DONATE_TITLE),
+                silver_verb("mentor", silver.MENTOR_TITLE),
+                silver_verb("furnace", silver.FURNACE_TITLE),
+                silver_verb("buy_legend", silver.LEGEND_TITLE),
+                Verb("bribe", tail_run=lambda ctx, prepared, tail: press(ctx, f"bribe:{tail}"),
+                     tail_title=lambda ctx, tail: f"{silver.BRIBE_TITLE}・{figures.name_of(ctx.content, tail)}"),
             )
         return self._verbs
 

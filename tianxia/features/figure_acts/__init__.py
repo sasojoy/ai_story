@@ -3,13 +3,13 @@
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 選項前綴 `aid:`（`aid:guard:<人物>`、`aid:rally:<人物>`、`aid:visit:<人物>`）與 `plan:`（`plan:help:<站>`、`plan:block:<站>`）：choose 接掛鉤（標題一起給）。
-挑戰本人（`act:challenge:<人物>`）是核心 act 子動詞，帶後綴接不了 Verb（總表第 57 批），選單、按下去、標題留在核心原位叫 Game 的委派；選單末段
+挑戰本人（`act:challenge:<人物>`）接 act 子動詞（verbs，帶後綴走 tail_*，第 57 批：按下去、標題、這一下打哪一路）；選單是 `MENU_ORDER["here"]` 的 challenge 那一格，選單末段
 `MENU_ORDER["plays"]` 護衛在包選項之前、盤算在之後，夾著 `options` 掛鉤：這一包登記 `plays/aid`、`plays/plan` 那兩格（第 56 批）。
 enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid、盤算看 Config.plans、挑戰本人看 figures.challenge_on，各在動作裡驗）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb, WorldHook
 
 
 class FigureActsFeature(Feature):
@@ -78,6 +78,23 @@ class FigureActsFeature(Feature):
                 MenuHook("plays", "plan", lambda ctx: plan_actions.options(ctx)),
             )
         return self._menus
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """挑戰本人 act:challenge:<人物>（原本 Game._act、_action_title、_fight_squad 原位；不問 enabled）：按下去、紀錄標題、這一下打哪一路（難度照他此刻的聲威與江湖水漲；人物表上沒有他不打）。
+        按下去與打哪一路經 ctx 叫（scripts/measure_challenge.py 換掉 Game._challenge；服務清單 # core_seams）。"""
+        if self._verbs is None:
+            from tianxia import figures  # noqa: PLC0415  共用規則層（人物表 figures，第 40 批收進）
+
+            self._verbs = (Verb(
+                "challenge",
+                tail_run=lambda ctx, prepared, tail: ctx._challenge(tail),
+                tail_title=lambda ctx, tail: f"挑戰・{figures.name_of(ctx.content, tail)}",
+                tail_squad=lambda ctx, tail: ctx._figure_squad(tail) if tail in ctx.content.figures else None,
+            ),)
+        return self._verbs
 
 
 FEATURE = FigureActsFeature()

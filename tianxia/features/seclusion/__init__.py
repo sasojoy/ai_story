@@ -2,7 +2,7 @@
 
 - actions.py：原本 Game 上的 seclusion_refusal、seclude、_finish_seclusion（Game 留一行委派給 server 的修練頁、_advance_player_local 與測試）
 
-閉關鈕在修練頁（server 的 /api/do/seclude → Game.seclude）；閉關中選單只剩 act:break 與擂台入口（核心 _everyday_options 原位，總表第 57 批才碰）。
+閉關鈕在修練頁（server 的 /api/do/seclude → Game.seclude）；閉關中選單只剩 act:break 與擂台入口（MENU_ORDER["busy"] 的 seclusion、arena 兩格，第 56 批）。
 按 act:break 提早出關由這一包的 Verb("break") 接走。沒有選項前綴、沒有選單、沒有 bots.py（假人不閉關）。
 """
 from __future__ import annotations

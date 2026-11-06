@@ -1,7 +1,6 @@
 """交友求見的選單與求見畫面（功能包 socialize；全部拆包第 21 批）：交友那一顆、一類一顆的交友那一顆、求見的第二層選單（名單）、求見畫面的說明，
 還有江湖頁「此地人物」那一排（figures_here_view；主幹合回第 2 段 D，它要問求見名單，所以放這裡不放 view.py：view 不 import menus）。
-原本 Game 上的 4 個方法，名字去掉前導底線、第一個參數是 ctx。選單上「單人求見」那一顆（call:<人物>，行動列放在交友後面）與 act:call 那一格是 act 子動詞
-（總表第 57 批），留在核心原位叫這裡的服務。
+原本 Game 上的 4 個方法，名字去掉前導底線、第一個參數是 ctx。選單上「單人求見」那一顆（call:<人物>，行動列放在交友後面）與 act:call 那一格是 here_cell（MENU_ORDER["here"] 的 social 那一格，第 56 批）；按下去與標題接 Verb（第 57 批）。
 """
 from __future__ import annotations
 

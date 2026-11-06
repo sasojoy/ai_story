@@ -21,7 +21,7 @@ from . import (
     allied, armor, atlas, battlelog, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
-    shopview, signature, silver, skillview,
+    shopview, signature, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
 from . import flavor
@@ -58,7 +58,7 @@ from .features.bounties import actions as bounties_actions  # 過渡：Game 上�
 from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（13 個一行委派：搬的 11 個方法＋探索包問的 _map_open_places、_map_mostly_here）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
     DuelBoss, PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
@@ -177,14 +177,12 @@ from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡�
 from .features.figure_acts import yuedan_actions as figure_yuedan_actions  # 過渡：Game 上月旦評的 2 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
 from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
-# military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它；`_rank_action_id` 與 `_act` 在核心原位認它）
+# military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
 # 軍令卡、押糧、第 2 階與第 3／4 階行動、席次抄帳、管理者的軍令與召見的 15 個一行委派
 from .features.military import admin_actions as military_admin_actions  # 過渡：Game 上管理者重發軍令、輪替席次、發召見的 4 個一行委派
-from .features.military import convoy_actions as military_convoy_actions  # 過渡：Game 上押糧的 2 個一行委派
 from .features.military import order_actions as military_order_actions  # 過渡：Game 上軍令卡與記功的 4 個一行委派
 from .features.military import seat_actions as military_seat_actions  # 過渡：Game 上席次抄帳的一行委派
-from .features.military import step_actions as military_step_actions  # 過渡：Game 上第 2 階與第 3、4 階行動的 4 個一行委派
 from .features.military import fs_actions as military_fs_actions  # 過渡：Game 上伏筆的一行委派（第 34 批）
 from .features.military import opp_actions as military_opp_actions  # 過渡：Game 上機緣的一行委派（第 34 批）
 # territory_acts（全部拆包第 46 批）：戰書與攻城時段、22:00 換天與分紅補送、〈天下形勢〉、地盤畫面、管理者救場的 20 個一行委派
@@ -247,13 +245,6 @@ class TollFacts:
     saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
     spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
     gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
-
-
-def _rank_action_id(arg: str) -> str | None:
-    """選項 act:rank:<id> 去掉 act: 之後的那一段（_act、_action_title 收到的 arg）：是第 3、4 階的行動就回行動 id，不是回 None。
-    前綴只在 RANK_ACTION_PREFIX 寫一次。"""
-    head = RANK_ACTION_PREFIX.partition(":")[2]
-    return arg.removeprefix(head) if arg.startswith(head) else None
 
 
 def _points(lines: list[str]) -> int:
@@ -1175,9 +1166,6 @@ class Game:
     def _bribe_targets(self) -> list[str]:
         return outlets_silver.bribe_targets(self)
 
-    def _silver_act(self, what: str) -> list[str]:
-        return outlets_silver.silver_act(self, what)
-
     def _at_clinic_town(self) -> bool:
         """名師指點、買破境丹的地方（6.5）：帶醫館標籤的地點、不在路上（看標籤，不看 Config.heal_at_clinic：那個開關關著時哪裡都能療傷）。"""
         p = self.state.player
@@ -1401,13 +1389,10 @@ class Game:
         s, c = self.state, self.content
         kind, _, arg = option_id.partition(":")
         # act 子動詞的主人說這一下打哪一路（Verb.squad，全部拆包第 17 批多開的一格）：出陣包——遊歷、出陣那一格（約戰開著不打仗、遇上自己人
-        # 是操練，不打架）；不打仗、沒有主人照舊往下
+        # 是操練，不打架）；大勢人物包——挑戰本人（Verb.tail_squad，第 57 批：難度照他此刻的聲威與江湖水漲）；不打仗、沒有主人照舊往下
         owned = features_core.act_squad(self, arg) if kind == "act" else None
         if owned is not None:
             return owned
-        if option_id.startswith("act:challenge:"):
-            fid = option_id.removeprefix("act:challenge:")
-            return self._figure_squad(fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）與江湖水漲
         if kind == "choice" and arg.isdecimal() and s.pending_event:
             choices = c.events[s.pending_event].choices
             combat = choices[int(arg)].combat if int(arg) < len(choices) else None
@@ -1556,22 +1541,13 @@ class Game:
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
         kind, _, arg = option_id.partition(":")
-        if kind == "battle":  # 決戰選項不走 Draft：加入與趕到由 _battle_choose 自己寫一則紀錄，每回合的出招不寫（FB-030）
-            return self._log(self._battle_choose(arg))
-        if kind == "seal":  # 奪璽單挑：每回合的出招不寫紀錄，收場由 _deliver_seal_results 補一份戰報與一則紀錄（5.9）
-            return self._log(self._seal_act(arg))
-        if kind == "duel":  # 頭目戰同決戰：每回合的出招不寫紀錄，分出勝負那一下由 _duel_finish 寫一則、一份戰報
-            return self._log(self._duel_act(arg))
-        if kind == "arena" and (arg in MOVES or option_id == ARENA_YIELD):  # 擂台同頭目戰：收場那一下由 _arena_finish 寫一則、一份戰報
-            return self._log(self._arena_act(arg))
+        # 選單上、不建紀錄的那幾顆（MENU_ORDER["quick"]，全部拆包第 57 批；格裡不寫紀錄，這裡 _log 一次）：決戰不走 Draft（加入與趕到自己寫一則，每回合的出招不寫，FB-030）；
+        # 奪璽單挑、頭目戰、擂台每回合的出招不寫（收場那一下各自寫一則、一份戰報）；勸降與有所感的「畫下來」只叫出輸入框與畫布（送出走各自的三段式）
+        quick = features_core.menu_first("quick", {}, self, kind, arg, option_id)
+        if quick is not None:
+            return self._log(quick)
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
-        asked = self._errand_ask(arg) if kind == "errand" else None  # 勸降（減法季批 6；人物情誼包）：選項本身只叫出輸入框，送出走 persuade_request／persuade
-        if asked is not None:
-            return self._log(asked)
-        canvas = self._sense_canvas(option_id)  # 有所感的「畫下來」只叫出畫布（有所感包，第 24 批）；畫完送出走 sense_request／sense_draw
-        if canvas is not None:
-            return self._log(canvas)
         said = say_text(text, self.say_max()) if option_id in TEXT_TALKS else None
         if option_id in TEXT_TALKS and said is None:
             return self._log([f"（寫下你想說的話，{self.say_max()} 字以內。）"])  # 選項本身只叫出輸入框
@@ -1732,9 +1708,6 @@ class Game:
     def errands_view(self) -> list[dict] | None:
         return companions_actions.errands_view(self)
 
-    def _errand_ask(self, arg: str) -> list[str] | None:
-        return companions_actions.errand_ask(self, arg)
-
     def persuade_request(self, errand_id: str, text: str) -> companions_actions.errand_rules.PersuadeRequest | list[str]:
         return companions_actions.persuade_request(self, errand_id, text)
 
@@ -1777,9 +1750,6 @@ class Game:
     def _sense_start(self, scene_id: str, rng: random.Random) -> list[str]:
         return sense_actions.sense_start(self, scene_id, rng)
 
-    def _sense_canvas(self, option_id: str) -> list[str] | None:
-        return sense_actions.sense_canvas(self, option_id)
-
     def _epiphany_title(self) -> str:
         return sense_actions.epiphany_title(self)
 
@@ -1810,39 +1780,13 @@ class Game:
         # （story：寫線的名字，全部拆包第 30 批換成一條線包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批）
             return self._epiphany_title()
-        if kind == "act" and arg.startswith("challenge:"):
-            return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
-        if kind == "act" and arg.startswith("bribe:"):  # 銀兩出口的打點門路（21 天季）
-            return f"{silver.BRIBE_TITLE}・{figures.name_of(c, arg.partition(':')[2])}"
-        silver_title = {"silver_donate": silver.DONATE_TITLE, "mentor": silver.MENTOR_TITLE, "furnace": silver.FURNACE_TITLE,
-                        "buy_legend": silver.LEGEND_TITLE}.get(arg) if kind == "act" else None
-        if silver_title is not None:
-            return f"{silver_title}・{c.locations[s.player.location].name}"
-        if kind == "act" and arg.startswith("recruit:") and arg.partition(":")[2] in c.characters:
-            return f"招募・{c.characters[arg.partition(':')[2]].name}"
-        rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
-        if rank_action is not None:
-            name = next(a.name for a in c.orders.rank_actions if a.id == rank_action)  # choose 已經驗過選項在選單上，一定找得到
-            return f"{name}・{c.locations[s.player.location].name}"
-        here = c.locations[s.player.location].name
-        duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
-        action2 = self._rank2_action()  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
-        # act 子動詞的主人是功能包的那幾格（接縫掛鉤，第 11 批）：探索包「出門一趟・某地」（探索一顆開著）、出陣包「出陣／雪恥／遊歷・某地」、
-        # 酒肆包的招牌、單挑包的「擂台・某地」（全部拆包第 12 批）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；主人不接照舊查表
+        # act 子動詞的標題都由主人給（接縫掛鉤，第 11 批；其餘的全部拆包第 57 批接上，帶後綴的走 Verb.tail_title）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；
+        # 主人不接照舊查表：舊探索、沒有主人時的遊歷、療傷（留核心，計畫第四節）；其餘（act:break、sect:）是「提前出關」
         owned = features_core.act_title(self, arg)
         if owned is not None:
             return owned
-        titles = {
-            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}",
-            "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
-            "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
-            # （bounties：「懸賞榜・此地」由懸賞榜包的 act 子動詞給，上面 owned 那一行；全部拆包第 45 批）
-            # （smith：「鐵匠鋪・此地」由鐵匠鋪包的 act 子動詞給，上面 owned 那一行；全部拆包第 41 批）
-            # （market：「馬市・此地」由裝備包的 act 子動詞給，上面 owned 那一行；全部拆包第 42 批）
-            # （arena：「擂台・此地」由單挑包的 act 子動詞給，上面 owned 那一行；全部拆包第 12 批）
-            "heal": f"療傷・{here}",
-        }
+        here = c.locations[s.player.location].name
+        titles = {"explore": f"探索{here}", "train": f"遊歷・{here}", "heal": f"療傷・{here}"}
         return titles.get(arg, "提前出關")
 
     # core_eventbus（全部拆包第 26 批）
@@ -2051,53 +1995,19 @@ class Game:
         # 運糧隊經過時照舊攻打，體力在裡面扣），其餘打那一場（第 17 批：扣體力、並肩出陣的加成、出陣或遊歷，體力在裡面扣），與守勢（act:duty，
         # 第 17 批，體力在裡面扣）；單挑包——打開擂台（不花體力，頭一句是名次；全部拆包第 12 批）。後幾支原本在中段：前面那幾支只比 what、
         # 只讀（ranks.summons_event 只讀），子動詞互斥，挪到最前面結果一樣
+        # 全部拆包第 57 批：其餘的子動詞也接走了（招募、調息、第 2 階、第 3／4 階、糧車、應召、打點門路、求見、交友、挑戰本人，帶後綴的走 Verb.tail_run；計畫第二節）；
+        # 這裡只剩療傷與舊探索（計畫第四節）
         got = features_core.act(self, what, prepared)
         if got is not None:
             return got
-        # （halt：喊停，全部拆包第 47 批換成移動包 Verb 的 run 與 title〔上面 features_core.act 接走〕，拿掉；part：分道揚鑣，第 48 批同上）
-        if what == "recruit":
-            return self._recruit()
-        if what.startswith("recruit:"):
-            return self._recruit_one(what.partition(":")[2])
-        if what == "rest":
-            return self._rest()
-        if what == "rank2":
-            return self._rank2()
-        action_id = _rank_action_id(what)  # 第 3、4 階的行動（正式版戊一）
-        if action_id is not None:
-            return self._rank_action(action_id)
-        if what == "convoy":
-            return self._take_convoy()
-        # （bounties：打開懸賞榜，全部拆包第 45 批換成懸賞榜包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
-        # （smith：打開鐵匠鋪，全部拆包第 41 批換成鐵匠鋪包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
-        # （market：打開馬市，全部拆包第 42 批換成裝備包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
-        # （act:arena：打開擂台由單挑包的 act 子動詞接走，最上面 features_core.act 那一行；全部拆包第 12 批）
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
-        # （act:dadian、silver_donate、mentor、furnace、buy_legend、donate：全部拆包第 43 批換成銀兩出口包的 act 子動詞〔最上面 features_core.act 那一行〕，拿掉）
-        if what.startswith("bribe:"):  # 打點門路（銀兩出口，21 天季）：人物 id 帶在後面，接不了 Verb（總表第 57 批才擴），留在原位叫委派；不花體力
-            msgs = self._silver_act(what)
-            if self.state.player.picking_dadian:
-                self._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
-            return msgs
-        if what == "call":
-            self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
-            return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
-        if what.startswith("challenge:"):
-            return self._challenge(what.partition(":")[2])
         promotion = ranks.summons_event(self.state, self.content)
-        if what == "summons":
+        self.state.player.stamina -= self._action_costs()[what]  # 不認得的 what 在這裡 KeyError，照舊
+        if promotion is not None and not precise.on(self.content, self.state.world):
+            # 在召見的地點探索：端出晉升奇遇（計畫 T5）；一類一顆開著時不再換掉（正式季整合 2.10），應召照舊在「此地還能做」。交友那一支同一段在交友求見包 actions.press
             return self._present(self.content.events[promotion])
-        self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
-        if promotion is not None and what in ("explore", "socialize") and not precise.on(self.content, self.state.world):
-            # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）；一類一顆開著時不再換掉（正式季整合 2.10），應召照舊在「此地還能做」
-            return self._present(self.content.events[promotion])
-        if what == "explore":
-            return self._explore()
-        # （act:train 打的那一場：出陣、序章的雪恥與舊遊歷，第 17 批收進出陣包的 Verb.run，在最前面接走）
-        msgs = self._socialize(prepared)
-        self._hint("h_bond")  # 第一次交友：情誼有什麼用（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）
-        return msgs
+        return self._explore()
 
     def _socialize(self, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         return socialize_actions.socialize(self, prepared)
@@ -2107,9 +2017,6 @@ class Game:
 
     def _fs_asking_text(self) -> str | None:
         return military_fs_actions.asking_text(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
-
-    def _rank2_action(self):
-        return military_opp_actions.rank2_action(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
 
     def _fs_after_win(self, squad, region_id: str | None) -> list[str]:
         return military_fs_actions.after_win(self, squad, region_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
@@ -2240,9 +2147,6 @@ class Game:
     def _duty_option(self, name: str) -> Option:
         return sortie_train_actions.duty_option(self, name)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
-    def _rank2(self) -> list[str]:
-        return military_step_actions.rank2(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
-
     def _push_room(self, trend_id: str) -> float:
         """自己今天在這條線上還推得動多少（每人每曆日上限，緩衝後的量）：跟 push_trend 走 push.py 的同一個算法（push.room）。
         第一季的規則沒開時 push_trend 不設上限，這裡也是無限。"""
@@ -2252,14 +2156,8 @@ class Game:
         day = calendar.point(s.world.time, c, s.world).cal_day
         return push.room(s.player.pushed, day, trend_id, self.daily_push_cap())
 
-    def _rank_action(self, action_id: str) -> list[str]:
-        return military_step_actions.rank_action(self, action_id)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
-
     def _order_credit(self, *, side: str | None = None, **kw) -> list[str]:
         return military_order_actions.order_credit(self, side=side, **kw)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/order_actions.py
-
-    def _take_convoy(self) -> list[str]:
-        return military_convoy_actions.take_convoy(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/convoy_actions.py
 
     # 本體在 tianxia/features/guide/actions.py（全部拆包第 22 批：新手引導），這裡留一行委派
     def _rest(self) -> list[str]:
@@ -2725,10 +2623,6 @@ class Game:
         """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
         return seal_duel_actions.my_duel(self)
 
-    def _seal_act(self, move: str) -> list[str]:
-        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
-        return seal_duel_actions.act(self, move)
-
     # 本體在 tianxia/features/battle/progress.py（全部拆包第 8 批：推進與結算），這裡留一行委派
     def _apply_outcome_trends_and_flags(self, season: WorldState, battle: battle_instance.BattleInstance) -> None:
         battle_progress.apply_outcome_trends_and_flags(self, season, battle)
@@ -2924,12 +2818,6 @@ class Game:
 
     def _battle_choose_in(self, arg: str) -> list[str]:
         return battle_muster.battle_choose_in(self, arg)
-
-    def _recruit(self) -> list[str]:
-        return companions_actions.recruit(self)
-
-    def _recruit_one(self, cid: str) -> list[str]:
-        return companions_actions.recruit_one(self, cid)
 
     def _deliver_fortune(self) -> list[str]:
         return socialize_actions.deliver_fortune(self)
@@ -4438,9 +4326,6 @@ class Game:
     ) -> list[str]:
         return bout_duel.duel_gamble(self, text, llm_rate, stories, request, crowd)
 
-    def _duel_act(self, arg: str) -> list[str]:
-        return bout_duel.duel_act(self, arg)
-
     def _duel_finish(self, tier: str | None, line: str) -> list[str]:
         return bout_duel.duel_finish(self, tier, line)
 
@@ -4491,9 +4376,6 @@ class Game:
 
     def apply_arena_crowd(self, note: CrowdNote, text: str) -> bool:
         return bout_arena.apply_arena_crowd(self, note, text)
-
-    def _arena_act(self, arg: str) -> list[str]:
-        return bout_arena.arena_act(self, arg)
 
     def _deliver_arena(self) -> None:
         return bout_arena.deliver_arena(self)

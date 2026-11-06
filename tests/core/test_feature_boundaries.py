@@ -484,7 +484,7 @@ GAME_DELEGATE_CALLERS.update({
     # Game.new（classmethod，`game.` 叫）的 _opening_on、_opening_begin、_tutorial_intro、_graduate、_note_gift：掃描只認 self.，記在這裡備查
 })
 CORE_DELEGATE_CALLERS_GUIDE = {  # 事件檢定（核心本體）經 ctx 叫的新手引導委派：隨口應對的結果也可能拜入門派、碰到新玩法（answer_event、answer_branch
-    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批、「做完一件事」第 57 批再看〔第 26 批 PM 認定第 6 條〕）
+    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批；「做完一件事」第 57 批量過不開事件，計畫第四節）
     ("event_check.answer_event", "_begin_enlistment"): "隨口應對的結果拜入陣營名下的門派：開始入伍段",
     ("event_check.answer_event", "_greet_rejoin"): "同上：入伍段早就走完的人，引薦人打個招呼",
     ("event_check.answer_event", "_check_hints"): "隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框",
@@ -2446,6 +2446,37 @@ GAME_DELEGATE_CALLERS.update({(_caller, _name): _battle_why for _caller, _name i
 # atlas.travel_block 換之前直接讀的另外 14 格：改問 MENU_ORDER["block"]，各包登記自己那一格
 ATLAS_PACKAGE_FIELDS |= {"duel", "arena", "picking_arena", "pending_companion", "picking_audience", "picking_bounty", "picking_smith", "picking_market", "picking_dadian", "picking_donate",
                          "picking_tavern", "pending_faction", "pending_defect", "ambush"}
+
+# core_seams（全部拆包第 57 批「分派與標題收接縫」；計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 四、五）：這一批的增減集中在這一段（核心批，沒有新包）。
+# _act 其餘的子動詞、_action_title 那幾支、_fight_squad 的挑戰本人接進 Verb（帶後綴的走 tail_*）；choose「選單上、不建紀錄」那幾支換成 MENU_ORDER["quick"]。GAME_DIRECT 維持 1。
+# 只剩這幾處呼叫的委派拿掉（tests、scripts、server、bot 三支、包都查過）；留著的：_socialize（tests/core/test_explain.py 換）、_challenge（scripts/measure_challenge.py 換）、
+# _figure_squad（test_rise 等直接叫）、_battle_choose（test_engine 等直接叫）、_rest（scripts/same_behavior.py 直接叫）
+GAME_DELEGATES -= {
+    "_recruit", "_recruit_one", "_rank2", "_rank_action", "_take_convoy", "_silver_act", "_rank2_action", "_seal_act", "_duel_act", "_arena_act", "_errand_ask", "_sense_canvas",
+}
+GAME_IMPORTS -= {"tianxia.features.military.step_actions", "tianxia.features.military.convoy_actions"}
+for _pair in (
+    ("_act", "_challenge"), ("_act", "_hint"), ("_act", "_rank2"), ("_act", "_rank_action"), ("_act", "_recruit"), ("_act", "_recruit_one"), ("_act", "_rest"), ("_act", "_silver_act"),
+    ("_act", "_socialize"), ("_act", "_take_convoy"),
+    ("_action_title", "_rank2_action"),
+    ("_fight_squad", "_figure_squad"),
+    ("choose", "_arena_act"), ("choose", "_battle_choose"), ("choose", "_duel_act"), ("choose", "_errand_ask"), ("choose", "_seal_act"), ("choose", "_sense_canvas"),
+):
+    del GAME_DELEGATE_CALLERS[_pair]
+# 「做完一件事、引導跟著走」量過，不開事件，全部留著（第 26 批認定第 6 條交這一批量；計畫第四節）。查過 core/features.py：BUS_ORDER 沒有「做完一個動作」這種事件，接這幾處都要開新事件（要過 PM，波次模式選保守的）；
+# 最接近的 arrive 也接不了：departure.arrive 的 left 要在 note_action 之後算，訂閱者的回話會排到它前面
+_NOTE_STAYS = "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）："
+GAME_DELEGATE_CALLERS.update({
+    ("choose", "_note_action"): _NOTE_STAYS + "choose 那 5 行（選了事件的選項、act 做完、進店、出店、指名求見）之間夾著 _opening_deliver，回話照位置接",
+    ("take_stamina_pill", "_note_action"): _NOTE_STAYS + "服回體丹（序章那一步）：回體丹是核心，在動作中間、回話照位置接",
+    ("_menxia_entry", "_note_action"): _NOTE_STAYS + "修練頁、煉製頁的動作（序章的練功、熔煉）：核心的修練頁紀錄服務，還把 HutReward 拆進 changes，位置就是行為",
+    # 查過 core/features.py：MENU_ORDER 的 quick 格只接動作，這裡是重驗、回傳值要傳給後面的 taken 與 _act，接不了
+    ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：不是動作，是重驗、驗過的那一輪要傳給後面的格；MENU_ORDER 的 quick 接不了（第 57 批）",
+})
+CORE_DELEGATE_CALLERS.update({
+    ("services.outing_watch", "_outing_watched"): "走一趟停在要選的事上時這一下選完的得失（探索包的委派）：裝飾器原本是 engine.py 模組層的 _outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、"
+                                                  "epiphany_names 上；包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」第 57 批量過不開事件（計畫第四節）",
+})
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

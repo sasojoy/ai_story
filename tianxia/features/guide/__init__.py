@@ -8,12 +8,12 @@
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
 
 這一包沒有選項前綴：它的動作走 server 的 MAIN_ACTIONS（hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
-newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:rest 是核心 act: 的子動詞、開局三選一是事件的 choice:、投靠是 faction:）。
+newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（開局三選一是事件的 choice:、投靠是 faction:）；序章教體力那一步的 act:rest 接 act 子動詞（verbs，第 57 批）。
 所以 options、menu、choose、bot_pick 都是預設的；enabled 一直是 True（引導、提示、新手目標、開局各有自己的開關，包本身沒有總開關）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, SeamHook, StepHook
+from tianxia.core.features import DefectHook, Feature, SeamHook, StepHook, Verb
 
 
 class GuideFeature(Feature):
@@ -78,6 +78,18 @@ class GuideFeature(Feature):
                 SeamHook("season.carry", "guide", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """act:rest（序章教體力那一步的調息）：按下去與紀錄標題（原本 Game._act、_action_title 原位）；不問 enabled。那一顆是核心 MENU_ORDER["here"] 的 rest 那一格。"""
+        if self._verbs is None:
+            from . import actions  # noqa: PLC0415
+
+            self._verbs = (Verb("rest", run=lambda ctx, prepared: actions.rest(ctx),
+                                title=lambda ctx: f"調息・{ctx.content.locations[ctx.state.player.location].name}"),)
+        return self._verbs
 
 
 FEATURE = GuideFeature()

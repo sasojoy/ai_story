@@ -14,7 +14,7 @@
 - card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
 - bots.py：假人看到 seal: 一律不按
 
-選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
+選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
@@ -25,7 +25,7 @@ from tianxia.core.features import BusHook, EffectHook, Feature, MenuHook, SeamHo
 
 class SealFeature(Feature):
     name = "seal"
-    prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（engine 的 options／choose 原位叫委派）
+    prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（MENU_ORDER 的 front、quick 那兩格）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
     # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
@@ -126,13 +126,15 @@ class SealFeature(Feature):
     _menus: tuple[MenuHook, ...] | None = None
 
     def menus(self) -> tuple[MenuHook, ...]:
-        """選單的兩格（順序在 MENU_ORDER；不問 enabled）：誰輪詢誰推奪璽單挑（tick，同決戰，5.4）；單挑的那幾顆排在決戰的鈕與平常的選單最前面（front）。"""
+        """選單的三格（順序在 MENU_ORDER；不問 enabled）：誰輪詢誰推奪璽單挑（tick，同決戰，5.4）；單挑的那幾顆排在決戰的鈕與平常的選單最前面（front）；
+        按下去的那一招不建紀錄（quick，第 57 批；收場由 _deliver_seal_results 補一份戰報與一則紀錄，5.9）。"""
         if self._menus is None:
             from . import duel_actions  # noqa: PLC0415
 
             self._menus = (
                 MenuHook("tick", "seal", lambda ctx: duel_actions.tick(ctx)),
                 MenuHook("front", "seal", lambda ctx: duel_actions.options(ctx)),
+                MenuHook("quick", "seal", lambda ctx, kind, arg, option_id: duel_actions.act(ctx, arg) if kind == "seal" else None),
             )
         return self._menus
 

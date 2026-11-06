@@ -11,8 +11,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
-場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（choose 不建紀錄的出招、灰掉的挑擂鈕、頭目戰打到一半的
-選單、場景卡、
+場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、
 sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
 """
 from __future__ import annotations
@@ -51,8 +50,8 @@ class BoutFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """arena:join／fight:<名號鍵>／back（坐在擂台邊那一串給的）：標題照原 Game._action_title 的 arena 那一支（挑人寫「擂台・他」），
-        動作照原 Game._arena（報名或更新分身、開打、返回）。三招與認輸在 Game.choose 原位（查完選單、建紀錄之前，出招不寫紀錄）已經接走；
-        duel: 也是（同決戰的 battle:，總表第 57 批「選單上、不建紀錄」那一格四包一起接）。"""
+        動作照原 Game._arena（報名或更新分身、開打、返回）。三招與認輸是 MENU_ORDER["quick"] 那一格（查完選單、建紀錄之前，出招不寫紀錄），已經接走；
+        duel: 也是（同決戰的 battle:，全部拆包第 57 批「選單上、不建紀錄」那一格）。"""
         if kind != "arena":
             return None
         from . import arena_actions  # noqa: PLC0415
@@ -133,9 +132,12 @@ class BoutFeature(Feature):
     _menus: tuple[MenuHook, ...] | None = None
 
     def menus(self) -> tuple[MenuHook, ...]:
-        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：頭目戰接管整個選單（排在 menu 掛鉤前面）；閉關中、路上也能上擂台（此地的入口是店面登記）；打到一半不算閒著；店面那一頁就是這一場；動身被擋。"""
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：頭目戰接管整個選單（排在 menu 掛鉤前面）；閉關中、路上也能上擂台（此地的入口是店面登記）；打到一半不算閒著；店面那一頁就是這一場；動身被擋；
+        每回合的出招不建紀錄（quick，第 57 批；分出勝負那一下由 duel_finish、arena_finish 寫一則、一份戰報；arena:join、fight、back 回 None 照舊走 choose 掛鉤）。"""
         if self._menus is None:
-            from . import arena_actions, duel_actions  # noqa: PLC0415
+            from tianxia.models import MOVES  # noqa: PLC0415
+
+            from . import arena_actions, arena_rules, duel_actions  # noqa: PLC0415
 
             self._menus = (
                 MenuHook("take", "duel", lambda ctx: duel_actions.duel_menu(ctx) if ctx.state.player.duel is not None else None),
@@ -145,6 +147,9 @@ class BoutFeature(Feature):
                 MenuHook("idle", "arena", lambda ctx: ctx.state.player.picking_arena or ctx.state.player.arena is not None),
                 MenuHook("open", "arena", lambda ctx: "arena" if ctx.state.player.arena is not None else None),
                 MenuHook("block", "bout", lambda state, content: arena_actions.travel_block(state, content)),
+                MenuHook("quick", "duel", lambda ctx, kind, arg, option_id: duel_actions.duel_act(ctx, arg) if kind == "duel" else None),
+                MenuHook("quick", "arena", lambda ctx, kind, arg, option_id: (
+                    arena_actions.arena_act(ctx, arg) if kind == "arena" and (arg in MOVES or option_id == arena_rules.YIELD_ID) else None)),
             )
         return self._menus
 

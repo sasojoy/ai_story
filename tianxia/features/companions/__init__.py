@@ -2,13 +2,13 @@
 人物對話與 NPC 智能（companion_agent、parley，`talk:`、`parley:`）是第 20 批搬進來的（talk_actions、parley_actions、bots.py）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 選項前綴 `errand:`（託付：交信、探營、勸降）、`talk:`（跟人物談著的選項：上一輪給的、自己說、商量打法、條件的接與不接、還債、請他兌現、伏筆與機緣的話題、告辭）、
-`parley:`（帶路的路上跟他說一句）；招募是核心 `act:` 的子動詞（`act:recruit`、`act:recruit:<id>`，總表第 57 批）。`talk:`、`parley:road` 的 choose 第 20 批審查接上掛鉤
+`parley:`（帶路的路上跟他說一句）；招募接 act 子動詞（`act:recruit`、`act:recruit:<id>` 同一個 Verb，第 57 批）。`talk:`、`parley:road` 的 choose 第 20 批審查接上掛鉤
 （鎖外生成好的一輪 prepared 與驗過的那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放，同勸降的 `_persuade_said`）；進鎖後的重驗 `_checked_prepared` 與字數 `say_max` 仍在 choose 前段。enabled 一直是 True
 （招募 Config.companions、書信 Config.figure_life.letters、心意與託付 Config.jianfa 各有自己的開關，包本身沒有總開關）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook
+from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook, Verb
 
 
 class CompanionsFeature(Feature):
@@ -32,7 +32,7 @@ class CompanionsFeature(Feature):
         return True
 
     def choose(self, ctx, kind, arg):
-        """託付（交信、探營、勸降的 C 段）；勸降按下去只叫出輸入框那一下在建紀錄之前，核心原位問 Game._errand_ask（計畫 1.5）。"""
+        """託付（交信、探營、勸降的 C 段）；勸降按下去只叫出輸入框那一下在建紀錄之前，是 MENU_ORDER["quick"] 的 errand 那一格（第 57 批）。"""
         if kind == "talk" or (kind == "parley" and arg == "road"):
             # 談話（talk:<N>、say、leave、clue、opp、terms……）與帶路的路上說一句（parley:road；第 20 批審查接上掛鉤）：鎖外生成好的一輪與驗過的
             # 那句話經 ctx._talk_turn、ctx._talk_said 寄放（Game.choose 前段驗完擺好，同勸降的 _persuade_said）；標題在動作之前拿
@@ -104,7 +104,8 @@ class CompanionsFeature(Feature):
     _menus: tuple[MenuHook, ...] | None = None
 
     def menus(self) -> tuple[MenuHook, ...]:
-        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：談著接管整個選單、動身被擋；他帶你走的路上每到一站說一句；此地的招募、託付。"""
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：談著接管整個選單、動身被擋；他帶你走的路上每到一站說一句；此地的招募、託付；勸降只叫出輸入框（quick，第 57 批：
+        回 None 照舊往下走 choose 掛鉤，送信、探營是 errand: 的正常路）。"""
         if self._menus is None:
             from . import actions, parley_actions, talk_actions  # noqa: PLC0415
 
@@ -114,8 +115,28 @@ class CompanionsFeature(Feature):
                 MenuHook("here", "recruit", lambda ctx, loc, cost, odds: actions.recruit_options(ctx)),
                 MenuHook("here", "errand", lambda ctx, loc, cost, odds: actions.errand_options(ctx)),
                 MenuHook("block", "talk", lambda state, content: talk_actions.travel_block(state, content)),
+                MenuHook("quick", "errand", lambda ctx, kind, arg, option_id: actions.errand_ask(ctx, arg) if kind == "errand" else None),
             )
         return self._menus
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """招募：act:recruit（舊招募：這裡那一位）與 act:recruit:<人物>（招這一位），按下去與紀錄標題（原本 Game._act、_action_title 原位）；不問 enabled（原位不看開關）。
+        不認得的人物標題回 None，照舊掉到核心的「提前出關」。兩個分頁搶人的 FB-363 那一句回 Refused（只在 engine），留在 Game.choose 前段。"""
+        if self._verbs is None:
+            from . import actions  # noqa: PLC0415
+
+            def here(ctx) -> str:
+                return ctx.content.locations[ctx.state.player.location].name
+
+            self._verbs = (Verb(
+                "recruit", run=lambda ctx, prepared: actions.recruit(ctx), title=lambda ctx: f"招募・{here(ctx)}",
+                tail_run=lambda ctx, prepared, tail: actions.recruit_one(ctx, tail),
+                tail_title=lambda ctx, tail: f"招募・{ctx.content.characters[tail].name}" if tail in ctx.content.characters else None,
+            ),)
+        return self._verbs
 
 
 FEATURE = CompanionsFeature()
