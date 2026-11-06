@@ -235,6 +235,15 @@ def test_a_pack_test_content_file_takes_the_fixture_route_and_the_pack_route():
     assert "test_real_content.py" not in names  # 測試內容不走真實內容那一條
 
 
+def test_a_new_undeclared_pack_file_picks_the_test_that_catches_it():
+    """包裡新檔忘了寫進 Feature.content 時載入不報錯（_locate 只查宣告了的），事件靜靜少掉；
+    新檔名不會寫在 test_content_packs.py 裡，所以內容改了要固定挑到它（第 B 波審查）。"""
+    for path in ("tianxia/features/socialize/content/events/social_wan.json",  # 還沒有這個檔：情境就是剛新增
+                 "tianxia/features/socialize/tests/content/social_wan.json",
+                 "content/events/jizhou.json"):
+        assert "test_content_packs.py" in _names([path]), path
+
+
 def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
     """第一季正式版丙一、丙二、戊一的測試檔用真實內容釘住晉升奇遇與第 3、4 階行動：改那幾個內容檔時要挑到它們（整合審查 M2）。"""
     promotions = {"test_promotions_high.py", "test_promotions_huang.py"}
