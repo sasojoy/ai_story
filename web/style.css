@@ -1625,7 +1625,6 @@ a.btn.ad-entry, .ad-head a.btn { text-decoration: none; }
   .lib button.libr.glow { animation: none; } /* 上面那條的 animation-name 比 .glow 的選擇器重，要自己關；金邊還在，只是不呼吸 */
 }
 
-/* 留在 style.css，別搬進 craft.css：揣摩預覽卡的重數格同時中這條與 cultivation.css 的 .lv i，權重一樣，要 .lv i 排在後面（第 B 波審查） */
 .mc-tags i { font-style: normal; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); }
 
 /* 武學譜（manualEntry 是煉製頁上的入口，bookHtml 是點開的一本書）：線裝古書的版面——泛黃的紙、雙線版框、界欄，

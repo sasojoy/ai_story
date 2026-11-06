@@ -87,7 +87,8 @@ def test_direct_children_of_different_parents_cannot_clash(tool):
 
 
 def test_real_sheets_keep_the_level_cells_over_the_tag_pill():
-    """揣摩預覽卡的重數格同時中 .mc-tags i 與 .lv i（權重一樣），要 .lv i 排後面，不然沒亮的那格變成籤的底色與圓角。"""
+    """揣摩預覽卡的重數格同時中 .mc-tags i 與 .lv i（權重一樣），要 .lv i 排後面，不然沒亮的那格變成籤的底色與圓角。
+    所以 .mc-tags i 留在 web/style.css，.lv i 在 web/cultivation.css，別把前者搬進 web/craft.css（那支載入得比較晚）。"""
     order = re.findall(r'href="/static/([^"]+\.css)"', (ROOT / "web" / "index.html").read_text(encoding="utf-8"))
     text = "\n".join((ROOT / "web" / name).read_text(encoding="utf-8") for name in order)
     assert text.index("\n.mc-tags i {") < text.index("\n.lv i {")
