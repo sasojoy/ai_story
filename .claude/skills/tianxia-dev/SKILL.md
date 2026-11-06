@@ -96,7 +96,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 你自己合了別的分支進來時，base 用合完那一個 commit，只量你這一輪的改動，不然會把別人的東西全挑進來。
   - `--list` 先看挑到哪些檔、每一段為什麼挑；`--count` 數條數。量「改這一行會挑到幾條」時把檔名明確傳給它（`test_for.py tianxia/engine.py --base HEAD --count`），不然工作樹裡別的還沒提交的改動也算進來；臨時改檔量完用位元組比對確認還原（2026-10-31 第 0 階）。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
-- 改 `tianxia/engine.py` 照改到的 Game 方法挑那一群（方法名第一個認得的字；檔名沒有那個字的群改看內文叫最多的是哪一群）；落在共用方法（choose、_everyday_options、sync、status_data……）或核心服務（_log、_side、_pill_day……）就跑核心測試＋煙霧，約 1,500 條、`-n 4` 約一分鐘。改 `models.py`、`state.py` 也是核心測試＋煙霧，欄位名帶功能前綴的再加那一群。（第 0 階之前改 `engine.py` 會挑到八千多條。）
+- 改 `tianxia/engine.py`：一行委派照那一包挑（那一包的 `tests/`＋核心契約＋內文寫到那個方法名的檔）；其餘方法跑核心測試＋煙霧＋內文寫到那個方法名的檔（寫到的超過 `IMPORT_CAP` 個檔不併，`choose`、`sync` 這種；第 61 批拿掉了照方法名分功能群，挑不到的靠每日整套與合併閘門）；方法以外跑核心測試＋煙霧，約 1,650 條（11/07 量）。改 `models.py`、`state.py` 也是核心測試＋煙霧，再加 `test_models.py`／`test_state…`。（第 0 階之前改 `engine.py` 會挑到八千多條。）
 - **整個檔標 slow 的一般功能測試有 77 個檔**（`explore_one*`、`sortie_duel*`、`epiphany`、`errands`、`stances*`、`story_*`、`test_mall_web`……）：`test_for` 預設不跑，開跑前列出來、全被濾光時提示加 `--slow`。改的正是那一塊就加 `--slow`。
 - **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
 - `test_for` 預設 `-n 4`；`--` 之後給 `-n X` 就照給的（第 0 階之前它自己補 `-n auto`、擋不住，2026-10-31 改了）。

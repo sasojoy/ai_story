@@ -268,6 +268,110 @@ WAVES["C"] = dict(
 )
 
 
+R2 = "docs/superpowers/plans/2026-11-07-第二輪拆分-總表.md"
+R2_NOTE = [
+    "- **第二輪的批**：範圍照第二輪總表 `" + R2 + "` 這一批那一節整節（grep 標題找到，只讀那一節、第二節的「裁決」與第十節；第一輪總表的列與附錄甲不適用）。數字量在舊的一筆，**開工照現行程式重量，對不上以程式為準**，寫進 decided。",
+    "- **各包 README、`docs/guide` 線上不動（PM 11/07 定）**：要寫的句子放回報的 `docs`（一條一句，寫明哪個檔、改哪裡），波末一位文件代理統一寫。",
+]
+R2_NO_TRACK = "- **D 波不加軌、不碰 `scripts/same_behavior.py`**（第 70 批在搬它，PM 定）：要新情境、要改 selftest 目標句的，寫進 leftovers，波末合併時接。"
+
+
+def r2(n, title, pkg, dev, ports, body, model=None, no_track=True):
+    plan = f"docs/superpowers/plans/2026-11-07-第二輪-第{n}批.md"
+    return batch(n, f"第二輪第 {n} 批：{title}", pkg, dev, plan, ports, body + R2_NOTE + ([R2_NO_TRACK] if no_track else []), model=model, custom=True)
+
+
+QA_TOOLS = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad"
+
+
+def b70():
+    return r2(70, "same_behavior 一軌一檔（`scripts/sb/`）", "tools", "dev/sb-1", "8285", [
+        "- 範圍照那一節：調度與固定層進 `scripts/sb/harness.py`，Scenario、DuelScenario、假人進 `scripts/sb/base.py`，每段軌一檔 `scripts/sb/tracks/<軌>.py`。`scripts/same_behavior.py` 留 CLI 入口、路徑與指令不變：`wave_gate.py`、`trunk_daily.py`、`nightly`、`split-wave.js` 都照這個路徑叫，這幾支這一批不動，要改的句子放回報。用語法樹腳本機械搬；搬檔工具放暫存，不進 repo。",
+        "- **這一批的驗證閘門做不到，你自己跑（這一條優先於波次模式的「你不跑 compare」與下面「波次模式蓋掉」那一條）**：閘門是拿 head 的腳本比兩邊，新腳本掉了一段情境，兩邊一起掉，照樣綠。所以用舊腳本（開工那一筆的 `scripts/same_behavior.py`）與新腳本，對同一對 base、head 各跑一次 `compare` 與 `explore-compare`（186 格加假人 5 組），**每一格的雜湊逐筆相同**，不是只看「兩邊一樣」。約 50 分、不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <完成標記> 570` 等，不要前景跑。另外每條繼承鏈挑一軌 selftest（改一字抓得到），軌數還是 62。",
+        "- 坑照那一節（`_setup_child` 拿掉 scripts/ 的路徑，軌要先載入；BUF、STEP、CLOCK、MODEL 要同一物件）。另外要留意：`compare` 用 head 的腳本跑 base 的根，`scripts/sb/` 一定要從腳本自己的位置載入，不能從被比的那棵樹載入，否則 base 上沒有這個資料夾。子行程也一樣。",
+        "- `_*_register_track` 收成一個、`TRACK_NAMES` 照檔名排、軌名重複載入時就擋。",
+    ], no_track=False)
+
+
+def b71():
+    return r2(71, "閘門快取與每軌秒數", "tools", "dev/sb-2", "8286", [
+        "- 範圍照那一節，從第 70 批的結果開。`wave_gate.py` 只有這條線動。",
+        "- **PM 定，跟那一節寫的相反：快取預設關，`--cache` 才開**（那一節寫「加 `--no-cache`」）。鍵漏掉相依會假綠，預設關才不會忘；只有同一波修正後重跑閘門時 PM 才加。進 develop、上 main 的那一次不開。",
+        "- **閘門 `--web` 的介面（PM 定，第 77 批在另一條線做另一半）**：`wave_gate.py --web` 叫 `scripts/webqa/gate.py --base <sha> --head <sha> --out <資料夾>`，結束碼 0 才綠、其他算紅，結果接進 `result.json` 的 `web`。那個檔不存在（第 77 批順延）時印一行、`web` 寫沒跑，不擋。",
+        "- 這一批不碰 `tianxia/`、`server.py`、`web/`。比對的驗證你自己跑（這一條優先於波次模式的「你不跑 compare」與下面「波次模式蓋掉」那一條），但只跑幾軌：開快取與不開結果一致、selftest 突變全部抓到（開快取時改一個字照樣抓得到）、前半快照接 head2 的雜湊等於整段。",
+    ], no_track=False)
+
+
+def b72():
+    return r2(72, "一行委派進各包的表（`features/<包>/game_api.py`）", "core_api", "dev/game-api-1", "8287", [
+        "- 範圍照那一節。**Q1 企劃者還沒答（PM 建議改）**：這條線先做，答否 PM 整條不合，你照「改」做，不用為了否做任何事。",
+        "- **PM 定的寫法**：直接掛函式本身，不包 `*args, **kwargs`。委派與本體參數名不同的（例 `write_biography(request,…)` 對 `write(ctx, req,…)`、`_ambush_record(…spoils…)` 對 `record(…got…)`）今天沒有關鍵字呼叫，attach 時用語法樹比一次、不同的列成名單，寫一條測試守。attach 遇同名丟例外。",
+        "- 全腳本生成，手寫只有 attach 與兩支工具（工具放暫存）。只有委派在用的 `from .features` 與別名 import 分第二個 commit 拿掉，好退。比 `sys.modules` 順序：只拿委派要完全一樣；連 import 拿時逐一看 peers、bounties、renown、looks 的登記順序（玩家卡按鈕靠 `order=`，手冊第十五節「波次 B、C」第 8 條）。",
+        "- 語法樹確認每個名字都在 `Game` 上、參數一致。一般測試一行都不改；守門的 `test_feature_boundaries`、`test_test_for`、`test_for.engine_delegates` 照那一節改。",
+    ])
+
+
+def b73():
+    return r2(73, "邊界測試的名單正規化", "core_api", "dev/game-api-2", "8288", [
+        "- 範圍照那一節，從第 72 批的結果開。第 72 批之後剩多少名單先重量，剩得少就併成一檔，不要真開 30 個檔。新舊所有大寫名單逐張相等（dict 的理由字也一樣），寫一支暫存腳本比；52 條本體不動。",
+    ])
+
+
+def b74():
+    return r2(74, "核心表放鬆與服務清單", "core_api", "dev/game-api-3", "8289", [
+        "- 範圍照那一節，從第 73 批的結果開。`merge=union` 先在本地驗過再用；GitHub 網頁驗不了，寫進回報。`tuning/<包>.py` 與 `new_feature.py` 照手冊第十五節「波次 B、C」第 15 條。",
+    ])
+
+
+def b75():
+    return r2(75, "契約變快與 test_for 規則", "core_api", "dev/game-api-4", "8290", [
+        "- 範圍照那一節，從第 74 批的結果開。第十節的 `test_for` 看穿 kit、`test_explain*` 搬進 guide 都在這一批。**核心服務檔（combat、pushing、pills、status_view、page_view、scene_view）這時還不存在**（E 波才開），規則先寫好、測試用假檔名驗。`IMPORT_CAP` 照舊不准動。量牆鐘寫進回報。",
+    ])
+
+
+def b76():
+    return r2(76, "資料清單改一行", "core_data", "dev/data-lists", "8291", [
+        "- 範圍照那一節。**一定用 `Field(..., json_schema_extra=QUIET)`，不能用 `Annotated`**（原型踩過：有 6 個欄位型別在後面，會多寫 6 個鍵）。**存檔位元組不變**：新算的 QUIET 集合等於舊清單，抽樣狀態 `model_dump_json` 比對，寫一支暫存腳本。資料庫結構不改。",
+        "- 屬性等級武學那條線也在動 `models.py`、`state.py`，只動那一節寫的清單，不順手整理別的。",
+    ])
+
+
+def b77():
+    return r2(77, "網頁比對工具正式化（`scripts/webqa/`）", "tools", "dev/webqa", "8292、8293", [
+        "- 範圍照那一節。**工具的來源**：`" + QA_TOOLS + "\\waveB\\qaBui\\tools`（六輪 1,482 鏡）與 `" + QA_TOOLS + "\\waveC\\qaCui\\tools`（後來改過的版本，兩份都看，以 C 波的為新）；B 波的並排圖在 `waveB\\qaBui\\sheets`，比對紀錄在 `waveC\\qaCui\\log\\detail_f3.txt`。收進 repo 的路徑、埠、Chromium 都改參數，不寫死這份暫存。**不下載、不安裝任何東西**，用這台現有的。",
+        "- **第 71 批在別條線接閘門，介面 PM 定了**：`scripts/webqa/gate.py --base <sha> --head <sha> --out <資料夾>`，結束碼 0 才綠。",
+        "- **雜訊是這批成敗的關鍵**（那一節的坑：雜訊沒壓下來會成每次要人判的紅燈）。B、C 波判過的雜訊都要自動分類：圓角抗鋸齒差 1 色階、1280 捲軸 15px、canvas 影格、分享碼、臨時密碼、戰記寫作時機。算好的樣式是捲回頂端、換寬度後馬上取的，C 波跨輪出現方向對調的假差異（`.kiln compact`、`.shell` 高度與 margin）：**等版面穩定才取**。B 波的 `newbie_c05`、`pe_c07` 是判成雜訊但沒嚴格證明的，順手重現一次。",
+        "- C 波學到的流程坑寫進工具：舊頁面還開著會輪詢、把覆蓋演掉，**改狀態前先離開頁面**；來信小卡會蓋掉本週條，要驗本週條得先婉拒託付信；換視窗大小會重畫，輸入框的字要送出前才填；開打前世界時間還是 0 時下戰書那場攻城會作罷，先快轉再下。拍覆蓋時要關自動關，另外實測一次自動關。",
+        "- 語料除了那一節的序章、輿圖，**B 波沒走到的能走就補**：神器打造表單、看火候熬料確認送出、人物對話模型回話與勸降表單（模型指 `127.0.0.1:9`，走保底）、決戰 MVP 動畫與擂台特效、商城與形象買賣上架、管理頁 6 顆（`pause_clock`、`fire`、`summon` 等）、本週卡下一步與單項收起；C 波沒走到的：戰場摺疊、再看一次、官軍主將重創。走不到的寫清楚。",
+        "- 工具自測：base 對 base 要 0、故意改一條要紅（正控制沿用 `.card` padding 與 style.css 排最後）；同一份跑兩次全同。**這條線不碰 `tianxia/`、`server.py`、`web/`**。跑完伺服器 `taskkill /T`、大檔刪掉。不超過 2 小時，到了就交，沒做完的放 leftovers。",
+    ])
+
+
+def b78():
+    return r2(78, "版本網址長快取", "shell", "dev/long-cache", "8294", [
+        "- 範圍照那一節，只改 `WebFiles.get_response` 與新增 2 條測試。**條件全部成立才回 `max-age=31536000, immutable`**：設了 `TIANXIA_PUBLIC_URL`，而且 `?v=` 等於那個檔現在的內容雜湊；其餘（沒帶 `?v=`、`?v=` 對不上、`/`、`/admin`、`/sw.js`、`index.html`）照舊 `no-cache`，測試各打一條。部署的人不用多做事。不碰 `web/`。",
+    ])
+
+
+EXTRA_LENSES_D = [
+    dict(key="tools", text="**驗證工具不能變鈍**。第 70、71 批把 same_behavior 搬成一軌一檔、加快取。逐軌比開工那一筆與 head：每一段情境的步驟、每一條 `MUTATIONS`、`EXPLORE_MUTATIONS` 的目標句（搬了檔之後 `_mutant` 還找得到嗎）、`_bot_runs`、半舊半新的切點；`compare` 用 head 的腳本跑 base 的根時 `scripts/sb/` 從哪裡載入；子行程的 `sys.path`；有沒有一軌因為載入順序、同名覆蓋而靜靜少跑（印軌數不夠，要逐軌確認跑到了）。快取預設真的關著嗎；開快取時鍵有沒有漏相依（繼承鏈的檔、Python 與依賴版本、內容檔）。`undef_scan` 擴到 `scripts/`、`tests/` 之後有沒有把真問題當白名單。"),
+    dict(key="delegates", text="**掛上去的函式跟委派要等價**（看 Q1，這條線可能不合，但要先驗）。第 72 批把一行委派換成表。逐個比開工那一筆的委派與 head 掛上去的函式：參數名與預設值（有沒有測試或包用關鍵字叫；`inspect.signature` 比一遍）；`self` 傳到哪；bound method 與 `Game.x` 當類別屬性讀（`patch.object(Game, 'x')`、`monkeypatch.setattr`、`getattr(Game, name)`、`hasattr`、`dir(Game)`、`callable` 的判斷有沒有因此變）；`@_not_while_preparing` 那 6 個有沒有保住；`staticmethod`、`classmethod` 與不傳 self 的 9 個；`same_behavior`、`bot_policy`、`server.py` 用字串叫的（`getattr(game, name)`、選項表）；pydantic、pickle、deepcopy 有沒有碰到 Game 上的屬性；import 先後（`sys.modules` 順序、`core.cards.ACTIONS` 登記順序）在 `server.py`、`run_bots.py`、單獨 `import tianxia.engine` 三種入口各印一次比。第 73 批的名單新舊逐張相等；第 74 批拿掉的服務名字真的沒人用（字串拼的 `ctx.<名字>` 也算）。"),
+    dict(key="save", text="**存檔一個位元組都不能變**。第 76 批把 QUIET 清單改標到 `Field`。用真的 `PlayerState`、`WorldState`、`SharedWorldState`：開工那一筆與 head 各建預設物件、各載幾份舊存檔的 JSON（`tests/fixtures` 或自己造，含缺欄位的舊存檔），`model_dump_json`、`QUIET_DEFAULTS` 算出來的集合、鍵順序、`_drop_new_defaults` 的結果逐一比；有沒有哪個欄位因為多了 `json_schema_extra` 改變序列化或 schema。`ALLOW_FIXED`、`ALLOW_FAMILIES`、`REVEAL_KEYS` 集合相等。第 78 批：沒設 `TIANXIA_PUBLIC_URL`（這台開發、測試）行為一個位元組都不變；`/`、`/sw.js`、`index.html` 絕不長快取；雜湊怎麼算的，跟 `?v=` 產生的地方是同一支函式嗎。"),
+]
+WAVES["D"] = dict(
+    round2=True,
+    extra_lenses=EXTRA_LENSES_D,
+    lines=[
+        dict(name="驗證工具", batches=[b70, b71]),
+        dict(name="委派與守門", batches=[b72, b73, b74, b75]),
+        dict(name="資料清單", batches=[b76]),
+        dict(name="網頁工具", batches=[b77]),
+        dict(name="版本快取", batches=[b78]),
+    ],
+    merge_port=8295, fix_port=8296,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
@@ -300,6 +404,9 @@ def main():
     a = ap.parse_args()
     w = WAVES[a.wave]
     args = {"wave": a.wave, "scratch": a.scratch, "branch": f"wave/{a.wave}", "merge_port": w["merge_port"], "fix_port": w["fix_port"]}
+    if w.get("round2"):
+        args["round2"] = True
+        args["master"] = R2
     if a.finish:
         args["built"] = json.loads(Path(a.finish).read_text(encoding="utf-8"))
         args["merge_base"] = a.merge_base
