@@ -76,6 +76,7 @@
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
 | status_slots()（StatusHook） | 狀態列（Game.status_data）、江湖畫面（server._main_view_body）與管理頁（features/admin/routes.py 的 admin_choices，第二輪第 90 批）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
   一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled；表外的格接在表尾（第二輪第 74 批） |
+| scratch() | 包寄放在 Game 上的旗標 {名字: 預設值}（core_choose：第二輪第 92 批）：Game 建好時 scratch_init 照 registry.DECLARED 一包一包擺上去，不問 enabled；每次回新的 dict。不進存檔 |
 
 ctx 第一階就是 Game；功能包只准叫 services_list.md 那張清單上的方法，和自己這一包的委派。
 """
@@ -226,6 +227,8 @@ class FeatureHooks(Protocol):
     def threads(self, shell: Any) -> None: ...
     # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled）
     def status_slots(self) -> tuple[StatusHook, ...]: ...
+    # core_choose（第二輪第 92 批：包寄放在 Game 上的旗標；不問 enabled，走 registry.DECLARED，見 scratch_init）
+    def scratch(self) -> dict[str, Any]: ...
 
 
 class Feature:
@@ -367,6 +370,9 @@ class Feature:
 
     def status_slots(self) -> tuple[StatusHook, ...]:
         return ()
+
+    def scratch(self) -> dict[str, Any]:
+        return {}
 
     def __repr__(self) -> str:
         return f"<功能包 {self.name}>"
@@ -1804,3 +1810,17 @@ def attach_game_api(cls: type, tables: dict[str, dict[str, Callable]] | None = N
     for table in tables.values():
         for name, func in table.items():
             setattr(cls, name, func)
+
+
+# core_choose（第二輪第 92 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第92批.md 第二節）
+
+
+def scratch_init(ctx: Game) -> None:
+    """每一包宣告的旗標（Feature.scratch）擺上這一份 Game。Game.__init__ 在 _drop_stale_references 正上方叫：那一支會換季、跑掛鉤，會讀旗標；
+    _kin、_load_kin、_admin_target 開的 Game 都走 __init__，一樣有。走 registry.DECLARED、不走 registered()、不看 enabled（理由同 pack_content）：
+    測試常把 FEATURES 換掉再建 Game，核心的 combat、pushing、choose 照樣讀這些旗標，少了就 AttributeError。"""
+    from .registry import DECLARED  # noqa: PLC0415  同 pack_content
+
+    for f in DECLARED:
+        for name, value in f.scratch().items():
+            setattr(ctx, name, value)

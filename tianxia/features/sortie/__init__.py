@@ -34,6 +34,16 @@ class SortieFeature(Feature):
                      "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today")
     carried = ("sortie_day", "sorties_today")  # 換季不能多出一輪陣（season.carry 那一格照帶）；掉寶的上限跟著新的一季重來
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
+            "_clash_won": False,
+            "_sortie_marked": False,
+            "_sortie_moved": 0.0,  # 這一下出陣自己推（拉）動了多少（_push_progress 加；出陣回報讀）
+            "_sortie_flipped": False,  # 這一下出陣推滿、當場易手
+        }
+
     def enabled(self, ctx) -> bool:
         """一直開著（全部拆包第 17 批）：act:train 那一格每一季都是這一包的——地盤（＝領地爭奪，`rules.on`＝`territory.on`）開著是出陣
         （序章是雪恥），關著是舊遊歷。行動列那一格（Verb.cell）是給選項的、照問 enabled（第 11 批 PM 認定第 2 條），原本地盤關著時這一包

@@ -31,6 +31,12 @@ class SmithyFeature(Feature):
     player_fields = ("picking_smith", "smith_page", "smith_draft", "smith_rule", "smith_rules_told")
     carried: tuple[str, ...] = ()
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            "smith_result": None,  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        }
+
     def enabled(self, ctx) -> bool:
         """武器或防具開著（跟 equipment.smith_open 同一個條件，不看第一季開關），或此刻還坐在鐵匠鋪裡：開關在坐著的時候被關掉（沒經過 sync 收店）
         照樣按得到離開、假人照樣只按它——搬包之前 choose 的 smith 那一支、bot_policy.score 的那一段都不看開關。"""

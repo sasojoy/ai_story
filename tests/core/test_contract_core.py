@@ -2046,6 +2046,61 @@ def test_the_outcome_says_how_the_journal_entry_lands(game, monkeypatch):
     assert g.state.journal[0].lines[:2] == ["結果。", "第三句。"]  # 收掉 fold 說是的那一行、其餘接在結果句後面（add_entry）
 
 
+SCRATCH_FLAGS = {
+    "explore": {"_outing_busy": False, "_loot_scale": 1.0, "_drop_scale": 1.0, "_gate_scale": 1.0, "_outing_close": set(), "_beat": None, "_outing_upset": False},
+    "gear": {"_affinity_before": None},
+    "battle": {"_escort_picked": False, "_escort_now": None, "_battle_ref": None},
+    "sortie": {"_clash_won": False, "_sortie_marked": False, "_sortie_moved": 0.0, "_sortie_flipped": False},
+    "smithy": {"smith_result": None},
+    "peers": {"peer_brief": None},
+    "cultivation": {"forged": False, "forged_thing": None, "secret_solved": None},
+    "companions": {"_persuade_said": None, "_talk_turn": None, "_talk_said": None, "_parley_decision": None},
+}
+
+
+def test_the_scratch_flags_are_declared_by_their_packages_and_do_not_clash():
+    """Feature.scratch()（第二輪第 92 批）：24 個旗標照包宣告、預設值照原本的 Game.__init__；名字不重複、不撞 Game 類別上的東西（不然 setattr 會蓋掉方法）；
+    每次回新的 dict，_outing_close 兩份 Game 不能共用。"""
+    got = {f.name: f.scratch() for f in registry.DECLARED if f.scratch()}
+    assert got == SCRATCH_FLAGS
+    names = [name for flags in got.values() for name in flags]
+    assert len(names) == len(set(names)) == 24
+    assert not [name for name in names if hasattr(Game, name)]
+    for f in registry.DECLARED:
+        assert f.scratch() is not f.scratch()
+    assert Feature().scratch() == {}
+
+
+def _has_every_scratch_flag(g: Game) -> bool:
+    return all(hasattr(g, name) for flags in SCRATCH_FLAGS.values() for name in flags)
+
+
+def test_every_game_has_the_scratch_flags_before_it_drops_stale_references(game, monkeypatch):
+    """scratch_init 在 _drop_stale_references 之前跑完（那一支會換季、跑掛鉤，會讀旗標）；_kin、_admin_target、_load_kin 開的也有；FEATURES 換掉（假的或空的）建的也有
+    （核心的 combat、pushing、choose 照樣讀，所以走 DECLARED 不走 registered）；兩份 Game 的 _outing_close 不是同一個。"""
+    from tianxia.characters import CharacterStore
+
+    assert _has_every_scratch_flag(game)
+
+    other = game._kin(game.state.model_copy(deep=True))
+    assert _has_every_scratch_flag(other) and other._outing_close is not game._outing_close
+
+    other.state.player.name = "別人"
+    CharacterStore(game.world.db).save(other.state)
+    assert game._load_kin("別人") is not None and _has_every_scratch_flag(game._load_kin("別人"))
+    target = game._admin_target("別人")
+    assert target is not game and _has_every_scratch_flag(target)
+
+    seen = []
+    real = Game._drop_stale_references
+    monkeypatch.setattr(Game, "_drop_stale_references", lambda self: seen.append(_has_every_scratch_flag(self)) or real(self))
+    for features in ([], [Menuy([])]):
+        monkeypatch.setattr(registry, "FEATURES", features)
+        built = Game(game.content, game.state, game.rng, game.world)
+        assert _has_every_scratch_flag(built)
+    assert seen == [True, True]
+
+
 class Tailed(Feature):
     """帶後綴的 act 子動詞的假包（關著：這幾格不問 enabled）。plainverb 只有沒後綴的那幾格。"""
 

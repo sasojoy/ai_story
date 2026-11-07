@@ -36,6 +36,12 @@ class GearFeature(Feature):
             ContentSlot("signature_arms", lambda *a: checks.check_signature_arms(*a)),
         )
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            "_affinity_before": None,  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        }
+
     def enabled(self, ctx) -> bool:
         """兵器、防具、坐騎、寶物四欄各看自己的 enabled（不看第一季開關；裝備四欄設計 2.6），或此刻還坐在馬市裡：開關在坐著的時候被關掉（沒經過 sync 收店）
         照樣按得到離開、假人照樣只按它——搬包之前 choose 的 market 那一支、bot_policy.score 的那一段都不看開關。"""

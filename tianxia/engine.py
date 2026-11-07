@@ -378,38 +378,14 @@ class Game:
         self._flavor_jobs: list[FlavorJob] = []  # 這一份 Game 觸發、還沒潤色的江湖大事（S-09，見 _flavor_sink、take_flavor_jobs）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
-        self._outing_busy = False  # 走一趟正在走（outing_actions.outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
-        self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：探索包遭遇那一場（城裡的地痞 town_loot_scale）才不是 1
-        # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
-        self._drop_scale = 1.0
-        self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（explore_actions.fight_gate）；其餘是 1
-        self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（explore_actions.fight_gate 記、explore_one 寫段落結尾那一句）
-        self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（explore_actions.explore_one 寫、outing_actions.outing_walk 讀）
-        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、探索包的 explore_one 讀）
-        self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
-        # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
-        self._escort_picked = False
-        self._escort_now: battle_instance.Escort | None = None
-        self._battle_ref: int | None = None  # 領地爭奪第二批：這一下按的鈕指定的那一場（加入鈕帶 @流水號，_battle_choose 設、_battle_now 讀）
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
         # 事件旁白每週改寫（減法季批 10，tianxia/narration.py）：伺服器塞進來的查詢函式；沒有（假人程式、測試）一律照內容原文
         self.narration: narration.Lookup | None = None
-        # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
-        self._clash_won = False
-        self._sortie_marked = False
-        self._sortie_moved = 0.0  # 這一下出陣自己推（拉）動了多少（_push_progress 加；出陣回報讀）
-        self._sortie_flipped = False  # 這一下出陣推滿、當場易手
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
-        self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
-        # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
-        self.peer_brief: str | None = None
-        self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
-        self.forged_thing: tuple[str, str] | None = None  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
-        self.secret_solved: dict | None = None  # 上一次開爐或裝意境這一季第一次參透一條秘方：跳的那個視窗（secret_recipes.solved_card）
         # 勝算的記憶（team.OddsMemo，FB-321）：伺服器上的 Game 共用一份（server.game_for 掛上），輿圖疊層與按鈕上的勝算輸入一樣就不再模擬；
         # 直接建的 Game（測試、腳本、假人程式）是 None，照舊每次算
         self.odds_memo: team.OddsMemo | None = None
@@ -427,6 +403,7 @@ class Game:
         # 本人這一輪（名聲 4.6、5.4）：伺服器的 act／act_look（mark_seen）與假人程式自己那一輪（bot_runner）設。系統通緝只在這一輪掛。
         # 不借 own_request：假人刻意不設它（奪璽單挑裡永遠不在場），借了的話假人永遠不被掛單、一看就知道是假人
         self.own_turn = False
+        features_core.scratch_init(self)  # 包寄放在 Game 上的旗標（Feature.scratch，第二輪第 92 批）：排在清失效參照之前，那一支會換季、跑掛鉤，會讀旗標
         self._drop_stale_references()
 
     def _quick_client(self) -> OllamaClient | None:
@@ -1271,11 +1248,6 @@ class Game:
 
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
-    _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
-    _talk_turn: companion_agent.PreparedTurn | None = None  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給人物情誼包的 choose 掛鉤（服務清單四、寄放）
-    _talk_said: str | None = None
-
-
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         return event_check.add_gamble_narration(self, outcome, narration)
 
@@ -1482,12 +1454,6 @@ class Game:
 
     def shop_view(self, option_ids=None) -> dict | None:
         return page_view.shop_view(self, option_ids)
-
-
-
-    # ── NPC 智能 2.0（parley.py；Joy 2026-10-23「先做看看」）────────────
-
-    _parley_decision: parley.Decision | None = None  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
 
 
 

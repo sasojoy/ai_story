@@ -461,18 +461,18 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   奪璽單挑雙方的快照用；也叫別人的 Game，`kin._duel_cut()`）
 - `ctx.own_request`（Game 上的旗標：這一下是不是玩家自己的請求；奪璽單挑推進時只有自己的請求才記 last_seen）
 
-## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
+## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫。第二輪第 92 批起由那一包的 `Feature.scratch()` 宣告，Game 建好時 `core/features.py` 的 `scratch_init` 擺上去，不進存檔；酒肆那兩個例外，用的時候才設）
 
-explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
+explore（主動搬六包第 3＋4 批加的這一段；都是探索包 scratch 宣告的）
 - `ctx._beat`（走一趟：剛剛那一次探索抽到什麼——探索一顆寫、走一趟讀）、`ctx._outing_close`、`ctx._outing_upset`（探索一顆：這一趟打了折的閘、
   這一場開打前勝算凶險以下）、`ctx._outing_busy`（走一趟正在走、正在記一件事選完的得失：核心的 `outing_watch`〔第 24 批從 engine 模組層的
   `_outing_watch` 搬來〕套在 choose、answer_event 與有所感包的 epiphany_names、sense_draw 上，看它不再套一層）
 - `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀）
 
-- `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
+- `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：出陣包 scratch 宣告、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
 
-# battle（全部拆包第 7 批：Game.__init__ 起的，核心的 _battle_now〔第 8 批〕也讀 _battle_ref）
+# battle（全部拆包第 7 批：決戰包 scratch 宣告，核心的 _battle_now〔第 8 批〕也讀 _battle_ref）
 - `ctx._battle_ref`（這一下按的鈕指定的那一場：加入鈕帶 @流水號）、`ctx._escort_picked`、`ctx._escort_now`（挑好了同伴、正要加入的那一下：
   戰力快照照它帶那一位）
 
@@ -480,23 +480,23 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
   問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 
-# companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
+# companions（全部拆包第 19 批：人物情誼包 scratch 宣告，choose 前段〔按勸降只叫出輸入框〕與包都讀）
 - `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
-# companions（全部拆包第 20 批：Game 的類別屬性，人物對話的 _talk、_road_say 與 _parley_decide 之間傳的）
+# companions（全部拆包第 20 批：人物情誼包 scratch 宣告，人物對話的 _talk、_road_say 與 _parley_decide 之間傳的）
 - `ctx._parley_decision`（這一輪「自己說」擲出來的結果：_parley_decide 記、talk 與 road_say 收尾時拿去做事）
 - `ctx._talk_turn`、`ctx._talk_said`（Game.choose 前段驗過的那一輪對話與那句話，交給 choose 掛鉤的 talk、road_say；第 20 批審查接上掛鉤時開的）
-# cultivation（全部拆包第 23 批；Game.__init__ 起的）
+# cultivation（全部拆包第 23 批；修練包 scratch 宣告）
 - `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
   api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
 # peers（全部拆包第 37 批；第 38 批論武進包）
 - `ctx.peer_brief`（論武合成了才填、`peer_act` 每次開頭清掉；提示泡泡那一句：寫它的是包的 discuss_actions.discuss、清它的是 actions.peer_act、讀它的是包的 routes.py；
-  屬性留在 Game）
+  玩家互動包 scratch 宣告）
 
 # smithy（全部拆包第 41 批）
-- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。鐵匠鋪包 scratch 宣告）
 
 # gear（全部拆包第 42 批）
-- `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
+- `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；裝備包 scratch 宣告）
 
 # tale（全部拆包第 52 批；查詢服務，主人決戰包：戰記包 routes.py 的補劇情 narrate_* 經 game 叫的三個委派）
 - `ctx.battle_tale_request()`（A 段開單）、`ctx.apply_battle_tales(request, stories)`（C 段重驗才補）、`ctx._tale_battles()`（有沒有等著補的）

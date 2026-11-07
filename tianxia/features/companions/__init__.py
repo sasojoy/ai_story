@@ -42,6 +42,15 @@ class CompanionsFeature(Feature):
             ContentSlot("companions", lambda *a: checks.check_companions(*a)),
         )
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。這四個原本是 Game 的類別屬性。"""
+        return {
+            "_persuade_said": None,  # 勸降的 C 段（actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
+            "_talk_turn": None,  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給這一包的 choose 掛鉤（服務清單四、寄放）
+            "_talk_said": None,
+            "_parley_decision": None,  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
+        }
+
     def enabled(self, ctx) -> bool:
         return True
 

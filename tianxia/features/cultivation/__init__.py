@@ -23,6 +23,14 @@ class CultivationFeature(Feature):
     player_fields = ("naming", "renames_told", "ascension", "legend_fails", "milestone_due")
     carried: tuple[str, ...] = ()
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            "forged": False,  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
+            "forged_thing": None,  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
+            "secret_solved": None,  # 上一次開爐或裝意境這一季第一次參透一條秘方：跳的那個視窗（secret_recipes.solved_card）
+        }
+
     def enabled(self, ctx) -> bool:
         """一直開著：修練頁與拜師學藝每一季都有（沒有自己的開關；傳功、破境丹、境界卡各自先問自己的設定）。"""
         return True
