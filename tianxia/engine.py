@@ -63,9 +63,7 @@ from .core.services import HutReward  # guide（全部拆包第 22 批）：序�
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
 
-if TYPE_CHECKING:  # 型別註記用（companion_agent 搬進人物情誼包之後 engine 不再 import 它；Game 上的委派只轉手）
-    from .features.companions import companion_agent
-    from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
+if TYPE_CHECKING:  # 型別註記用，只放核心與共用層；包的型別寫字串（核心不 import 包，連這裡也不准，第二輪第 102 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 from .core.services import not_while_preparing as _not_while_preparing
 from . import story_base  # noqa: F401  第二輪第 91 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.story_base 晚 3 個模組才載入，波 F 合完量過）
@@ -926,7 +924,7 @@ class Game:
 
     @_outing_watch
     def choose(
-        self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
+        self, option_id: str, prepared: "companion_agent.PreparedTurn | None" = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
     ) -> list[str]:
         """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
@@ -1161,7 +1159,7 @@ class Game:
         改成回合裡的化影，tactics.py）"""
         return dict(self.content.config.action_cost)
 
-    def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+    def _act(self, what: str, prepared: "companion_agent.PreparedTurn | None" = None) -> list[str]:
         # act 子動詞的主人是功能包的（接縫掛鉤，第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：探索包——減法季探索一顆的
         # 出門一趟（體力在裡面扣）；酒肆包——進店（不花體力）；出陣包——約戰開著、不在序章時出陣那一格打開出陣前那張卡（不花體力；截糧的
         # 運糧隊經過時照舊攻打，體力在裡面扣），其餘打那一場（第 17 批：扣體力、並肩出陣的加成、出陣或遊歷，體力在裡面扣），與守勢（act:duty，

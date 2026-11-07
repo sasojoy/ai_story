@@ -200,15 +200,8 @@ PUSHING_CALLED_THROUGH_CTX = {"daily_push_cap"}  # push_trend、push_room → ct
 
 # ── 共用規則層 ──
 
-# 共用規則層的模組碰到別的舊模組的（總表第六節第 5 條：只准 import 核心本體與同一層）：(模組, 舊模組) → 寫在理由開頭：「排定：」收進核心本體或共用規則層的（那一批
-# 收完拿掉這一行）；「之後成包：」主人成包之前要先改成查詢服務、或把用到的那一段留在共用規則層。多一條、少一條都紅。現在沒有。
-SHARED_PENDING: dict[tuple[str, str], str] = {}
-
-# 還不收進共用規則層的舊模組：讀的都是還沒成包的舊模組，還沒有包可以回答查詢。模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
-SHARED_LATER: dict[str, str] = {}
-
 # core_shared（第二輪第 88 批）：只留給測試的殼。產品程式一律讀真正的位置，最外層與函式裡都不准 import（test_product_code_does_not_import_a_test_only_shell）。
-TEST_ONLY_SHELLS = ("skillview", "shopview")
+TEST_ONLY_SHELLS = ("howto", "skillview", "shopview")  # howto：第二輪第 102 批，產品 0 處、只有測試讀；第 103 批連殼收掉
 
 # 收進共用規則層之後函式裡也不准 import 包的那七個（test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function）。
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
@@ -361,5 +354,16 @@ CROSS_PACKAGE_CALLS = {
 # core_bots（第二輪第 89 批）
 # 假人殼：接在包上面的四支，包不准 import（反過來的 re-export 不算）。bot_base 是共用層，不在這裡
 BOT_SHELL = ("bot", "bot_policy", "bot_runner", "server_bots")
-# 還沒清掉的：(包.檔, 殼)。只准少、不准多；第 87 批收了 sortie.duel_actions 那一處之後就空了（第 E 波合完）
-BOT_SHELL_PENDING: set[tuple[str, str]] = set()
+# 第二輪第 102 批：共用層裡只有 bot_base 准拿 Game（手冊第十五節第 102 批落地認定），碰得到的 game.xxx 只有這幾個，多了少了都紅
+# （test_the_bot_base_touches_only_the_listed_names_on_the_game）。其他共用層不准拿 Game（test_only_the_bot_base_in_the_shared_layer_takes_the_game）。
+BOT_BASE_GAME = {
+    "_sortie_foes",  # 第 89 批開的路：_sortie_win 問出陣包打這一格的對手（服務清單上有，不是把 Game 的私有開給共用層）
+    "content",
+    "duel_on",
+    "odds",
+    "sortie_progress",
+    "sorties_left",
+    "state",
+    "train_trend_push",
+    "world",
+}
