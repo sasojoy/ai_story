@@ -1018,7 +1018,7 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
     js = webharness.app_source()
     submit = js[js.index('form.id === "name-art"'):]
-    submit = submit[:submit.index('} // cultivationForm')]  # 名字表單那一段到那個框的結尾（第 85 批：下一個表單 ad-mall-form 搬進 mall.js，排在前面了）
+    submit = submit[:submit.index('} // cultivationForm')]  # 名字表單那一段到那個框的結尾（第 85 批：下一個表單 ad-mall-form 搬進商城那一包的畫面檔，排在前面了）
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
     assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
