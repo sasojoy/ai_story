@@ -38,7 +38,7 @@ def _contest(**kw) -> PlanContest:
 
 
 def test_the_real_itineraries_load_and_validate(c):
-    assert c.config.plans.enabled and len(c.itineraries) >= 20  # 載入時 content.check_itineraries 驗過了
+    assert c.config.plans.enabled and len(c.itineraries) >= 20  # 載入時 plans.check_itineraries 驗過了
     assert all(it.who in c.characters for it in c.itineraries)
 
 

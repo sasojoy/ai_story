@@ -158,7 +158,7 @@ FEATURES: list[Feature] = [
 # 共用規則層（全部拆包總表第六節第 5 條；第 11 批 PM 定的格式）：還沒、也不會搬進任何一包的規則模組（tianxia/<名字>.py），好幾包都讀。
 # 模組名 → 一句誰在用、為什麼在共用層。包 import 這裡的模組不必註「過渡：待搬」；這幾個模組跟核心一樣不准 import 包
 # （tests/core/test_feature_boundaries.py 守）。核心本體（tianxia/core/__init__.py 的 MODULES）可以 import 這一層、這一層可以 import 核心
-# 本體與同一層。第 11 批放了主人已經寫成「共用規則層」的 siege；第 15 批（# shared 那一段）登記其餘 59 個。總表第 15 列寫了、這一批先不收的 8 個
+# 本體與同一層。第 11 批放了主人已經寫成「共用規則層」的 siege；第 15 批（# shared 那一段）登記其餘 59 個。總表第 15 列寫了、這一批先不收的 8 個（第 87、88 批已收到只剩 shopview）
 # （讀了之後成包的擂台、伏筆、有所感……）與這一層還碰到別的舊模組的 11 條（排定收進來的、之後成包的），在邊界測試的 SHARED_LATER、SHARED_PENDING。
 # scripts/test_for.py 照語法樹讀這一份（改這一層的模組只挑自己檔名的測試＋煙霧＋邊界測試）：值只寫字面的字串（相鄰的字串可以接）。
 SHARED: dict[str, str] = {
@@ -174,7 +174,7 @@ SHARED: dict[str, str] = {
     "rise": "江湖水漲（大場面、頭目跟得上變強的人）：核心的 rules 讀；單打服務的劇情戰與勝算都經它",
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
-    # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
+    # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收〔fusion 第 87 批已收，skillview 第 88 批切開，shopview 接第 93 批〕：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
     # 理由在 tests/core/boundary_tables.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
     "arts": "武學的評分、裝卸、意境格（arts.score）：核心的 team 讀；修練、煉製、榜單、序章都叫",
@@ -225,7 +225,7 @@ SHARED: dict[str, str] = {
     "precise": "一類一顆（每一顆行動鈕只給一類東西）與算不算城鎮（is_town）：出陣、探索、引導三包的獎勵與懸賞、有所感、玩法說明讀",
     # explore（全部拆包第 18 批）
     "training": "城外分級（最弱的對手分一二三級、江湖話、輿圖地點詳情那一句）：探索包的 _practice_tier、輿圖的地點卡與詳情、引導包的提示與新手目標都讀",
-    # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
+    # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收〔都已收：events、tiers、narration 第 87 批已收，leaderboard 第 88 批〕：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
     "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
     "speech": "玩家寫給別人看的一句話（擋髒話）：探索包的題壁、形象包的招式名與名帖、挑釁共用（總表附錄甲裁定）",
     "jianfa_numbers": "減法季的數字（自己的 pydantic 模型、不 import models）：核心的 models 掛它（總表附錄甲裁定）",
@@ -277,7 +277,7 @@ SHARED: dict[str, str] = {
     "events": "事件抽選：核心的事件檢定 core/event_check、engine 讀；探索、交友、陣營、軍情、出陣、引導六包都叫；同一層的 narration 讀。只 import 核心與同一層",
     "tiers": "事件分級（五道門、照階抽）：核心的事件檢定 core/event_check、engine、同一層的 events 讀；擂主那道門的名次第 87 批改讀核心的 arena_ranks，不再經舊名 arena",
     "narration": "事件旁白每週改寫：核心的事件檢定 core/event_check、engine 讀；只 import 核心與同一層的 events",
-    "fusion": "合成與揣摩：煉製、鐵匠鋪、玩家互動（論武）三包叫，假人 bot、門下頁 skillview 讀；私有意境的取名與收進存檔第 87 批搬進共用層 insights，不再 import 有所感包。"
+    "fusion": "合成與揣摩：煉製、鐵匠鋪、玩家互動（論武）三包叫，假人 bot、門下頁 art_cards、煉製頁 forge_view 讀；私有意境的取名與收進存檔第 87 批搬進共用層 insights，不再 import 有所感包。"
               "不進任何一包（第二輪總表不做的清單）",
     # core_shared（第二輪第 88 批：art_cards 從 skillview 切出來；leaderboard 從邊界測試的 SHARED_LATER 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第88批.md）
     "art_cards": "武學與裝備的唯讀卡片（狀態列的用途與提示、療傷鈕、榜單的功法卡與裝備卡、修練頁裝備那一塊）：engine、同一層的 leaderboard、舊模組 shopview、修練、煉製、"

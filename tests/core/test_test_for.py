@@ -179,7 +179,7 @@ def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
 
 
 def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
-    """彙整的模組（import 很多模組的 skillview 這種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
+    """彙整的模組（import 很多模組的 shopview 這種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
     many = frozenset(f"m{i}" for i in range(test_for.AGGREGATOR_FANOUT))
     graph = {"low": frozenset(), "mid": frozenset({"low"}), "agg": frozenset({"mid"}) | many,
              "top": frozenset({"agg"}), "bot": frozenset({"mid"}), "rules": frozenset({"low"})}
@@ -1317,7 +1317,7 @@ def test_a_core_service_pick_with_too_many_files_falls_back_to_core_and_smoke(mo
 
 
 def test_the_combat_service_file_picks_its_base_not_core_and_smoke():
-    """第 79 批開的真檔（FAKE_PUSHING 那幾條留給第 80 批）：take_toll 的名字認不出功能（take 在 SERVICE_STOP、沒有測試檔叫 toll），靠這個檔的底，
+    """第 79 批開的真檔（FAKE_PUSHING 那幾條照留、驗規則本身，第 80 批另補用真檔的）：take_toll 的名字認不出功能（take 在 SERVICE_STOP、沒有測試檔叫 toll），靠這個檔的底，
     不跑核心測試與煙霧。battle_scores 經 ctx._battle_power 叫它（test_rise 換掉 Game._battle_power，要打得到）：_core_refs 只看 ast.Name，不往上算；
     battle_scores 也在 battle 那一群，而 battle 就在底裡，所以沒漏。"""
     assert test_for.service_word("take_toll") == ""

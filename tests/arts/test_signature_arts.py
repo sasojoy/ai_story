@@ -124,7 +124,7 @@ def test_a_signature_art_cannot_be_melted():
 
 # ── 原 test_fb640_figure_arts.py（整檔搬進來） ──
 # FB-640（release/1021：develop 的 FB-364 給九位歷史武將同行補了起始武學，main 的 d0ca2c25 給學來的 23 門下品武學各帶一個小戰法；
-# 兩邊各自都過，合起來正式內容載不起來，content.check_signature_arts 把人物的 starting_* 一律當本命）。PM 裁決：兩邊都留，
+# 兩邊各自都過，合起來正式內容載不起來，signature.check_signature_arts 把人物的 starting_* 一律當本命）。PM 裁決：兩邊都留，
 # 本命＝人物起始武學裡的絕學（寫本命戰法的那一門，tactics.figure_arts）；同伴起始帶的學來的下品武學照樣帶小戰法、不是本命：
 # 誰的都不算（tactics.figure_of）、情誼到了不教、名帖不寫親傳、玩家照樣在各地學得到也熔得掉；十八位大勢人物的本命一個字不變。
 

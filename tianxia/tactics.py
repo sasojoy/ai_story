@@ -1613,7 +1613,7 @@ def of(content: Content, skill_id: str | None) -> TacticDef | None:
 
 def figure_arts(content: Content, character: CharacterDef) -> list[str]:
     """這位人物的本命武學與本命內功（FB-640）：人物表 starting_wugong／starting_neigong 裡品質是絕學的那幾門（十八位大勢人物的
-    都是，各寫一個本命戰法；寫本命戰法的一定是絕學，content.check_signature_arts 擋）。歷史武將同行補的起始武學（FB-364：
+    都是，各寫一個本命戰法；寫本命戰法的一定是絕學，signature.check_signature_arts 擋）。歷史武將同行補的起始武學（FB-364：
     王允、華佗……）是各地教的內容武學（下品的帶小戰法、上品的什麼都不帶），不是本命：誰的都不算（figure_of）、情誼到了不教
     （companion_agent）、名帖不寫「親傳」（mingtie）；玩家照樣在各地學得到。"""
     out = []

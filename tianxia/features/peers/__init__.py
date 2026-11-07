@@ -30,7 +30,7 @@ from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動�
 class PeersFeature(Feature):
     name = "peers"
     prefix = "invite"  # invite:yes|no|cancel:<編號>：打招呼的回禮（invite:cold|retort|…）也是同一個前綴
-    web = ("peers.js", "peers.css")  # 名帖的畫法與畫布（全部拆包第 66 批從 app.js 切出來）；此地還有誰、邀請、玩家卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；點擊分派的 case 照舊在 app.js（殼）
+    web = ("peers.js", "peers.css")  # 名帖的畫法與畫布（全部拆包第 66 批從 app.js 切出來）；此地還有誰、邀請、玩家卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
     content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照它到這一包的 content/ 載（MingtieContent）
     bot_always = ("invite:",)  # 邀請的選項一直按得下去（收回、回禮）：整季機器人不按（bot.py 的排除清單原本也寫了一個，拿掉那一個，只剩這裡）
     # 名帖與贈物一天的次數：自己那一張、收到的、檢舉過的、不接誰的挑釁話、定稿與遞帖的次數記在哪一天、贈物的次數——全部跨季帶走

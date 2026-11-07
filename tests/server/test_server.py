@@ -1322,7 +1322,7 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
 def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
     """收著的第一行是功效的句子時，fitFirstRound 量到太高也不會把它縮成數字行：compactRound 只認「第N回合」開頭的句子，
     〔功效名〕開頭的一律回 null、整句照常顯示（寧可多佔一行也不藏字）。S1 的 45 句，每一句配上一個人名與一群人都試過；
-    S1 的句子本來就不寫數字（content.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
+    S1 的句子本來就不寫數字（traits.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
     import json
 
     js = webharness.app_source()

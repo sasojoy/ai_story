@@ -2003,7 +2003,7 @@ def test_a_prologue_scene_whose_method_the_hut_cannot_give_is_refused(prologue_r
 
 @pytest.mark.parametrize("field, label", [("title", "標題"), ("text", "場景"), ("method", "做法")])
 def test_a_blank_line_in_an_insight_scene_is_refused(prologue_root, field, label):
-    """有所感的場景：標題、場景、每個做法都不能是空白的句子（content._check_line 的第一條；整併最終審查 area 8 M5 要釘住，
+    """有所感的場景：標題、場景、每個做法都不能是空白的句子（core/content_base.py 的 check_line 第一條；整併最終審查 area 8 M5 要釘住，
     以前只有心裡話與戰況變化的空白有測試）。"""
     def blank(scenes):
         if field == "method":
