@@ -39,7 +39,7 @@ def conquest_view(ctx) -> dict | None:
         "attackers": [names.get(a, a) for a in slot.attackers], "time": ctx.stamp(slot.at), "minute": slot.minute,
         "status": slot.status, "status_text": siege_status_text(c, slot),
         "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
-        # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（siege.slots 同一套：
+        # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（決戰包 siege_rules.slots 同一套：
         # 攻方 attack、被打的那一方 defend、散人與不是兩軍的人 help〔臨時投效或助守〕、另一軍站不進去是空的）；margin 是打完那一場的大勝／險勝
         "sides": list(slot.attackers), "you": siege_you(ctx, slot, side), "margin": siege_margin(ctx, slot),
         # FB-690：region 是那一塊的大區名（加入要人在那一區）；join 是集結・交戰中那一場看的人此刻加不加得進去（_siege_join）
@@ -64,7 +64,7 @@ def conquest_view(ctx) -> dict | None:
     return {"today": today, "blocks": blocks, "here": here, "letter": letter, "muster": c.config.conquest.muster_minutes}
 
 def siege_you(ctx, slot, side: str | None) -> str:
-    """看的人站得進這一場攻城的哪一格（卡上那顆鈕寫什麼；siege.slots 同一套）：攻方 attack、此刻佔著那一塊的那一軍 defend、
+    """看的人站得進這一場攻城的哪一格（卡上那顆鈕寫什麼；決戰包 siege_rules.slots 同一套）：攻方 attack、此刻佔著那一塊的那一軍 defend、
     散人與不是兩軍的人 help（臨時投效攻方或助守）、另一軍站不進去是空字串。打完、作罷的也照算（卡上那時不畫鈕）。"""
     if side is None:
         return "help"
@@ -100,7 +100,7 @@ def siege_join(ctx, slot, side: str | None, live) -> str:
     return "go" if battle.record_id in joinable else "far"
 
 def siege_margin(ctx, slot) -> str:
-    """打完那一場的大勝／險勝（收場那一下 siege._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""
+    """打完那一場的大勝／險勝（收場那一下決戰包 siege_rules._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""
     if slot.status != "done" or ctx.state.world.conquest is None:
         return ""
     return next((n.margin for n in reversed(ctx.state.world.conquest.day_log)

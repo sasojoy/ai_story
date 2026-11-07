@@ -3,7 +3,7 @@
  * 煉製頁（pageCraft）：太極火爐與開爐、挑東西的抽屜、自創五步與擺式（火柴人 figBody）、秘方與口訣書（bookHtml、secretPop）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；/ 的 script 標籤由伺服器照 FEATURES 生成，這支排在 admin.js 之後、app.js 前面
  * （段裡有兩個頂層監聽跟著走：window 的 scroll、document 的 pointer；排 admin.js 之後，監聽的先後照舊）。
- * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、change 分派的 case、renderPage 的 fixedKiln 照舊在 app.js（殼）。
+ * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、change 用 registerClicks、registerChanges 登記在這支檔；renderPage 的 fixedKiln 照舊在 app.js（殼）。
  */
 "use strict";
 

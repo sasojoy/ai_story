@@ -30,7 +30,7 @@ class MapScenario(Scenario):
     season21、week7 各走到 8 次。假人跑完照舊比存檔與世界雜湊，`travel_options` 另由 /api/map 的地點詳情與 /api/travel 走到。
     **map2（全部拆包第 50 批：atlas 拆兩半，圖層那一半進輿圖包 layers.py）補的**，切點與段落見 PHASES（下面「走到」的都在 dev/map-2 Task 1
     那一筆實跑、逐函式數過呼叫次數）：
-    - orders_how：/api/main 的本週軍令卡（atlas.order_how）。管理者重發之外，照內容每一種模板官軍、黃巾各擺一道（orders._build），所以
+    - orders_how：/api/main 的本週軍令卡（order_cards.order_how）。管理者重發之外，照內容每一種模板官軍、黃巾各擺一道（orders._build），所以
       攻城（出陣與遊歷兩種寫法、約戰開著與關著）、守城（領地爭奪的記不到與照守勢行動）、截糧（出陣與遊歷）、護糧、打擊（他現在在哪）都走到；
       局面三種：照原樣、約戰關著（sortie_duel.on 那兩支，season21、week7）、劇本的地盤拿掉（territory.on＝出陣關著，領地爭奪跟著關）。
       局勢圖層那一張帶打擊目標的 ◎（strike_marks 摸清的那一支）。上面三種局面守城都是記不到或照守勢行動，守城「有地點」那一支
@@ -241,7 +241,7 @@ class MapScenario(Scenario):
             self.get(self.GUAN, "/api/map/state")
 
     def orders_how(self) -> None:
-        """map2：軍令卡的 how（/api/main 的 orders：atlas.order_how——打擊 strike_how 他在哪、攻城 siege_how、守城、截糧、護糧各一句）。
+        """map2：軍令卡的 how（/api/main 的 orders：order_cards.order_how——打擊 strike_how 他在哪、攻城 siege_how、守城、截糧、護糧各一句）。
         管理者重發本週軍令，官軍、黃巾各看一遍，局勢圖層（打擊目標的 ◎）也打一張；再換三種局面各看一遍：約戰關著（sortie_duel.on 那兩支）、
         劇本的地盤拿掉（territory.on 也就是出陣關著：攻城、守城、截糧寫遊歷那一種，領地爭奪跟著關），翻前翻後清底圖快取、翻完還原。
         重發的那一批每一方每天只有一兩道：另外照內容的每一種模板（官軍、黃巾各自的攻城、守城、截糧、護糧、打擊）各擺一道
@@ -295,7 +295,7 @@ class MapScenario(Scenario):
         self.defended()
 
     def defended(self) -> None:
-        """map2（第 50 批審查補的）：守城卡「有地點」那一支（atlas.order_how 守城那兩行 conquest.duel_on、territory.on）。上面三種局面
+        """map2（第 50 批審查補的）：守城卡「有地點」那一支（order_cards.order_how 守城那兩行 conquest.duel_on、territory.on）。上面三種局面
         守城都是「沒有對面在推」或照守勢行動，走不到那兩行：每一方的守城軍令（m2: 那一批），在它那條戰線上挑第一塊自家佔著、只差沒人在推的
         區塊（conquest.push_problem 守那一邊只回 WHY_IDLE），把對面那一條擺到 40（不到警報線 alarm_at），照原樣（約戰開著）與約戰關著
         官軍、黃巾各看一遍軍令卡、局勢圖層打一張；看完把領地爭奪那一份整個放回去，後面的段落照舊。測試內容沒有軍令，不擺。"""

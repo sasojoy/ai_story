@@ -906,7 +906,7 @@ def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):
 # 新寫的句子都在待 joy 潤的清單上（見 fb-report.md）：這裡的測試只認事實（講了什麼、對不對得上規則），不鎖死字句。
 
 # ── FB-093：入伍第 2 步沒說軍令怎麼出力 ─────────────────────────────────
-# joy 的版本（2026-10-07 併進 main，PM 裁示 joy 的為準）：每一道沒達成的軍令卡寫怎麼做（atlas.order_how）；第 2 步的 order_hint 點名
+# joy 的版本（2026-10-07 併進 main，PM 裁示 joy 的為準）：每一道沒達成的軍令卡寫怎麼做（order_cards.order_how）；第 2 步的 order_hint 點名
 # 守勢行動；伺服器在框上帶能完成這一步的選項 id（guide.glow，enlist.glow），網頁讓它們發光、「此地還能做」打開。
 # 這裡留下的是 joy 的測試沒蓋到的：每一種軍令卡、黃巾的守勢行動名字；我們的結語（不再整段背五種軍令）；網頁上我們加在 joy 的發光上的
 # 三樣——收著的摺疊改由標題列發光、「在下面 ↓」、摺疊在那一步開頭只自動打開一次（tests/web/test_jianghu_page_web.py）。

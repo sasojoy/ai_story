@@ -2,7 +2,7 @@
  *
  * 展開屬性裡的入口一行、傳承頁（legacyPageHtml）、識海頁、開季準備卡上的傳承入口（legacyOfferOpen）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 mall.js 之後、app.js 之前。
- * 呼叫處、四個點擊 case（legacy-open／close／view／slip）與 prepShihaiHtml 照舊在 app.js（殼）。
+ * 呼叫處與 prepShihaiHtml 照舊在 app.js（殼）；四個點擊（legacy-open／close／view／slip）用 registerClicks 登記在這支檔。
  */
 "use strict";
 

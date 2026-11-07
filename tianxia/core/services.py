@@ -223,7 +223,7 @@ SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆�
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 
 
-# checkin（全部拆包第 30 批「簽到」）：原本寫在 tianxia/checkin.py；回體丹那一套（Game._pill_find 掉回體丹）歸核心，要問簽到開著沒、說那一句，
+# checkin（全部拆包第 30 批「簽到」）：原本寫在 tianxia/checkin.py；回體丹那一套歸核心（探索包的 explore_actions.pill_find 掉回體丹也問），要問簽到開著沒、說那一句，
 # 簽到包（tianxia/features/checkin/checkin.py）又不能被核心 import，搬到這裡，簽到包 re-export（`checkin.on is services.checkin_on`）
 PILL_FOUND = "獲得 【{name}】一顆——不知誰落下的，正好收著。"
 

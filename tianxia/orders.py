@@ -423,7 +423,7 @@ def defend_places(content: Content, world: WorldState | None, o: Order) -> list[
     """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家佔著、被推得最高、守得動的區塊
     （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有），加上自家被戰書凍結的那幾塊（FB-605：那裡記的是攻城戰守住，
     _counts 的 SIEGE_GUARD）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
-    （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
+    （軍情包 order_cards.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
     關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 

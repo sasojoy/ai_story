@@ -2,7 +2,7 @@
  *
  * 那一層（貨架、紀錄、購買確認）、入口（齒輪旁的錠子鈕、底部第六格）、江湖頁的「月卡・今日份」、設定頁的易名帖、管理者區的查帳與補發扣回退款。
  * 跟 main.js、map.js、outing.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 app.js 前面；
- * 開合、輪詢、點擊的分派與店面的框（shopHtml）照舊在 app.js（殼），這裡只有商城自己的畫面與動作。
+ * 輪詢、商城關掉時收起那一層與店面的框（shopHtml）照舊在 app.js（殼）；點擊、表單用 registerClicks、registerForms 登記在這支檔，這裡只有商城自己的畫面與動作。
  */
 "use strict";
 

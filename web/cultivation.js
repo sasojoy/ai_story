@@ -2,7 +2,7 @@
  *
  * 俠客頁（pagePractice）：武學、裝備、門下、屬性四個分頁、功法庫與篩選、批量熔煉、意境槽、武學卡上的絕招、破境動畫與破境卡（ascendCard）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；/ 的 script 標籤由伺服器照 FEATURES 生成，這支排在 app.js 前面。
- * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、change 分派的 case 與 renderPage 照舊在 app.js（殼）。
+ * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、表單、change 用 registerClicks、registerForms、registerChanges 登記在這支檔；renderPage 照舊在 app.js（殼）。
  */
 "use strict";
 

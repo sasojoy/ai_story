@@ -69,7 +69,7 @@
 # docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.5）。主人都是核心：本體留在 Game 上（第一階 ctx 就是 Game），之後的包直接叫，
 # 不必再一個一個加。上面已經列了的照列一次名字（同上）；三、過渡裡寫成別的主人的 12 個（`odds`、`_squad_encounter`、`_pill_find`、
 # `_scrap_find`、`_push_progress`、`_conquest_side`、`_spar_power`、`_spar_mirror`、`_raid_key`、`_drill_gains`、`_drills_with`、
-# `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準；那幾行第 16 批合進 develop 時去重了（三、過渡留一句記它們原本寫的用法）。
+# `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準（`_pill_find`、`_scrap_find` 第二輪第 99 批進了探索包）；那幾行第 16 批合進 develop 時去重了（三、過渡留一句記它們原本寫的用法）。
 共用規則層的函式怎麼寫（第 6 批的 `siege.title`、`siege.settle`、`siege.verdict` 那一條一起定；後兩個第二輪第 97 批進了決戰包 `siege_rules.py`）：**不列在這張清單**。這張清單只管 Game 上的
 `ctx.<名字>`（邊界測試只認這個寫法）；共用規則層有哪些模組看 `tianxia/core/registry.SHARED`，包直接 import 那個模組、不註過渡。
 單打服務（戰鬥區；打一場的每一包都用；本體在 `tianxia/core/combat.py`，第二輪第 79 批，名字不變，`_squad_encounter`、`odds` 還在 `Game`；推大勢在 `core/pushing.py`、回體丹在 `core/pills.py`，第 80 批）
@@ -263,7 +263,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._opening_pending()`、`ctx._opening_gate()`（主人新手引導：開局第一分鐘〔城門口三選一還沒選〕不能簽到，回那一句；簽到的 `check_in`、
   `auto_checkin`、`checkin_view` 問）
 - 共用的字與小函式（從這個模組 import，簽到包 re-export）：`PILL_FOUND`（找素材、練功掉回體丹那一句）、`checkin_on(content, world)`（簽到開著沒；
-  核心的 `Game._pill_find` 掉回體丹也問，回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
+  探索包的 `explore_actions.pill_find` 掉回體丹也問（第二輪第 99 批搬的），回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
 # figure_acts（全部拆包第 31 批「大勢人物」；主人：大勢人物的行動包。計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.3）
 - `ctx._snubbed_character(companion_id)`（這位對話人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。總表附錄甲把挑戰本人 13 個
   〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物；本體在 `features/figure_acts/challenge.py`，Game 留一行委派回答別的包。原本列在三、過渡 socialize 那一段）
@@ -392,7 +392,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
 （第 16 批合進 develop 時去重：這一段原本還列了 `_present`（主人是核心本體，見一、共用服務 `# core-events`）與 `odds`（勝算：鈕上寫的
 同一個；測試換掉 game.odds）、`_drills_with`（那一路是不是自己這一邊）、`_pill_find`、`_scrap_find`、`_squad_encounter`（wild=True：探索一顆的
-遭遇那一場，扣氣血減半、不問模型、不推大勢）——以一、共用服務 `# shared` 那一段為準。）
+遭遇那一場，扣氣血減半、不問模型、不推大勢）——以一、共用服務 `# shared` 那一段為準；`_pill_find`、`_scrap_find` 第二輪第 99 批進了探索包。）
 
 （原本這裡還有 `_train_option`、`_train_pick`、`_big_trip`：舊遊歷的鈕與大場面挑哪一路，第 17 批搬進同一包，包裡直接叫 train_actions，拿掉了。）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）

@@ -1098,7 +1098,7 @@ class BusHook:
 # 「集結開始」是世界層 WORLD_ORDER["muster"] 的 seal 那一格（第 25 批），不在這裡。
 #
 # 事件        發布點（位置不動）                                                                 run 的簽名                         回傳
-# win         Game._squad_encounter 打贏（不是野怪、不在序章）；探索包 outing_fight 遭遇打贏（不是城裡）   (ctx, loc_id, squad_id)            接 list[str]
+# win         core/combat.py 的 squad_encounter 打贏（Game._squad_encounter 一行委派；不是野怪、不在序章）；探索包 outing_fight 遭遇打贏（不是城裡）   (ctx, loc_id, squad_id)            接 list[str]
 # outing      探索包 explore_one 收尾                                                             (ctx, loc_id)                      接
 # explore     探索包 explore_base.explore（舊探索，序章外）                                        (ctx, loc_id)                      接
 # arrive      移動包 departure.arrive 抵達一站（Game._arrive 留一行委派）                           (ctx, loc_id)                      接

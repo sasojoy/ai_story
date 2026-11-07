@@ -260,7 +260,7 @@ def echo(
     state: GameState, content: Content, thing: MartialArt | Insight | WeaponRecipe | GearFind, first: bool, made: str = "練",
 ) -> None:
     """首創名望回饋（Config.first_echo）：你合出（或打出，made="打"）別人首創的那一門，在這一季的 WorldState.echoes 記你一筆；
-    首創者自己的 Game 同步時補名望（Game._deliver_echoes）。一個人一門只算一次、最多算 cap 個人，湊滿那一下江湖上傳一句。
+    首創者自己的 Game 同步時補名望（煉製包 actions.deliver_echoes）。一個人一門只算一次、最多算 cap 個人，湊滿那一下江湖上傳一句。
     自己首創的、師門配方、內容寫好的不記；第一季沒開著時什麼都不做。"""
     me = state.player.name
     if first or not thing.creator or me in (thing.creator, thing.co_creator) or getattr(thing, "preset", False):

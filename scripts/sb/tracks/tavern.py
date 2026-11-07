@@ -400,7 +400,7 @@ class TavernScenario(Scenario):
         酒肆查藏了行跡的葉開（風聲記在季上）；葉開那一筆託付擺成到期、身上擺一封委託過期的信（letters.deliver 排在三個 deliver 後面，
         寫「書信」那一則）。然後葉開同步一次：風聲、殺手單的結果、託付到期、書信四則在同一下，江湖紀錄的先後照 sync 的順序。
         三個 deliver 的前後再各夾一格會寫紀錄的：前一格護衛補帳（_deliver_guard_credits）、後面翻地的守城分紅（_deliver_conquest，有領地
-        爭奪的季）——三行整段挪過它們（例：挪到 _deliver_big_events 前面、挪到 _marks_tick 之後）也看得出來。_marks_tick、
+        爭奪的季）——三行整段挪過它們（例：挪到 _deliver_big_events 前面、挪到 marks.tick 之後）也看得出來。marks.tick、
         _stance_annals、_zhuan_tick 只寫行狀、不讀惡名，跟三個 deliver 的先後只能靠這兩格看。"""
         from tianxia import figure_aid
         from tianxia.state import Bounty, ConquestPayout, Letter

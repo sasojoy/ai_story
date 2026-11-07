@@ -186,7 +186,7 @@ def insight_blocked(ctx, loc: Location) -> bool:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 ctx._insight_blocked）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 insight_blocked）。"""
     if not outing_on(ctx):
         c = ctx.content
         legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None

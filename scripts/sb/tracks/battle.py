@@ -102,7 +102,7 @@ class BattleScenario(Scenario):
     BOT_SEATS = [("假戊", "guan"), ("假己", "guan"), ("假庚", "huang"), ("假辛", "huang")]
     # 第 6 批：六場攻城（名字：(攻方, 地點)）。A 官軍攻中立的南陽官道：守將（那裡最強的一路隊伍）守住；B 黃巾攻官軍的涿郡：攻下、易手；
     # C 集結中管理者取消（_cancel_siege）；D 集結中收季（_shelve_siege）；E 伺服器假人那一場：黃巾守住自己的新野（守城軍令記一次，_siege_guards）；
-    # F 黃巾攻官軍的洛陽官道、那一區沒有人、一個人都沒到：作罷（siege.void_absent 之後照樣經 _settle_siege）。結果是跑出來的（照兩份程式同一套
+    # F 黃巾攻官軍的洛陽官道、那一區沒有人、一個人都沒到：作罷（siege_rules.void_absent 之後照樣經 _settle_siege）。結果是跑出來的（照兩份程式同一套
     # 亂數），寫在這裡是情境走到哪幾支：守將守住、攻下易手、陣營守住、作罷、取消、季終收兵。每一場自己一個大區（D 在決戰收場之後才開）：同一個
     # 大區兩場以上一起集結的話加入鈕帶 @流水號，第 5 批那幾位的加入會被改掉
     SIEGES = {"A": ("guan", "nanyang_road"), "B": ("huang", "zhuo_county"), "C": ("huang", "xiaquyang"), "D": ("guan", "runan_wilds"),

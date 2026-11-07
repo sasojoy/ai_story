@@ -605,7 +605,7 @@ def holds(state: GameState, content: Content, change: FigureChange) -> bool:
 def can_challenge(state: GameState, content: Content, fid: str) -> bool:
     """這位人物此刻挑戰得了嗎：在場（active）、有所在，而且在戰線上領兵——戰線空著的人（董卓、趙弘、重挫退下的人）
     不受挑戰（PM 2026-10-05 定），人物表標了 challenge_off_front 的何進例外。挑戰按鈕（Game._challenge_options）與
-    軍令卡、輿圖上的打擊軍令（atlas.strike_how、strike_marks）都問這一份規則；閉門不見（snub）是另一回事，看個人。"""
+    軍令卡、輿圖上的打擊軍令（軍情包 order_cards.strike_how、輿圖包 layers.strike_marks）都問這一份規則；閉門不見（snub）是另一回事，看個人。"""
     now, fig = state_of(state, content, fid), content.figures.get(fid)
     return now.status == "active" and bool(now.location) and (now.front is not None or (fig is not None and fig.challenge_off_front))
 

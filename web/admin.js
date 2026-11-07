@@ -4,7 +4,7 @@
  * 每一塊可以摺起來（手機上一次只攤開要用的那一塊）；頂上一張「現在」卡寫此刻的季、時鐘、決戰、模型佇列，做完一件事留在這一頁、
  * 結果寫在畫面底下那一條（以前是關掉抽屜、回江湖頁看一個三秒就消失的泡泡）。設定抽屜只留一顆「管理者工具 ›」連過來。
  * 網址是 /admin 才畫這一頁（S.adminPage）；不是管理者的人打開，照常回到江湖、網址換回 /（資料在 /api/admin* 那幾條，那邊才擋人）。
- * 跟 main.js、mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 app.js 前面；點擊、送出表單的分派照舊在 app.js。
+ * 跟 main.js、mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 app.js 前面；點擊、表單、change 用 registerClicks、registerForms、registerChanges 登記在這支檔。
  */
 "use strict";
 

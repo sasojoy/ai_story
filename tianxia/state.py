@@ -815,8 +815,8 @@ class PlayerState(BaseModel):
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
-    shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
-    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；shopview.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
+    shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，core/shop_base.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
+    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；鐵匠鋪包 shop_view.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
     # 的位置，講完一輪從頭）。換季時新角色本來就是空的
     smith_rule: str = ""
     smith_rules_told: list[int] = Field(default_factory=list)
@@ -1002,7 +1002,7 @@ class PlayerState(BaseModel):
     # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
     showdowns: int = 0
     top_merits: int = 0
-    # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
+    # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 timetable.deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
     # 已經通知過（或不必通知）的絕學定名（FB-083，修練包 actions.deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
@@ -1671,7 +1671,7 @@ class DayNote(BaseModel):
     reason: str = ""
     # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是下戰書那一筆
     void: str = ""
-    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。下戰書的那一筆與作罷的那一筆這幾欄是空的 ──
+    # ── 第三批 A：收場那一下另記一筆（決戰包 siege_rules.settle；〈天下形勢〉讀）。下戰書的那一筆與作罷的那一筆這幾欄是空的 ──
     result: str = ""  # taken 攻方拿下、held 守住、stalemate 兩軍相持（沒有守將的中立地停在中線）
     taken: str = ""  # 拿下的那一方（陣營 id）；沒易手是空的
     margin: str = ""  # 大勝／險勝（戰場上贏的那一方）
@@ -1873,7 +1873,7 @@ class WorldState(BaseModel):
     # 空的時候不寫進 JSON（_drop_empty_marks_fired）：沒有痕跡過門檻的季存檔一個鍵都不多
     marks_fired: dict[str, float] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 替有痕跡規則的痕跡出過力的人（減法季批 4，rules.add_marks 在痕跡看得見開著時記；過了門檻就不再記）：「地點 id:痕跡名」→ 名號。
-    # 過了門檻之後每個人下一次同步記一則行狀（Game._mark_credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
+    # 過了門檻之後每個人下一次同步記一則行狀（marks.credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
     mark_helpers: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 人物心意（減法季批 6，tianxia/stances.py；整合設計 5.4）：這一週全服記了幾筆（人物表 id → 心意 id → 筆數）、記的是哪一週（季曆週，
     # 7 天的季是段；週初掛鉤歸零）、此刻照哪一個心意做事（人物表 id → StanceOn，到門檻那一刻起到週初）。空的、0 的時候不寫進 JSON
@@ -2172,7 +2172,7 @@ class GameState(BaseModel):
     log: list[str] = Field(default_factory=list)  # 原始訊息，每次行動之間夾一個 journal.LOG_BREAK
     journal: list[JournalEntry] = Field(default_factory=list)  # 江湖紀錄，最新的在前，最多 journal.MAX_ENTRIES 則
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
-    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（Game._deliver_away）。None＝還沒記過（舊存檔、
+    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（rumor_view.deliver_away）。None＝還沒記過（舊存檔、
     # 換季重來的角色），那一次從這一季開頭算
     last_world: float | None = None
 

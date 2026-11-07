@@ -17,7 +17,7 @@ from tianxia.core.features import Feature, SeamHook, StatusHook
 class CraftFeature(Feature):
     name = "craft"
     prefix = None  # 沒有選項前綴：煉製頁全是網頁按鈕打 /api/menxia/<op>、/api/do/<op>
-    web = ("craft.js", "craft.css")  # 煉製頁的畫法（全部拆包第 64 批從 app.js 切出來）；renderPage 的 fixedKiln 照舊在 app.js（殼）。功法清單的篩選與樣子第 67 批從 main.js、style.css 切出來（爐那幾段跟引導的 .onb-dim 同權重，留 style.css）
+    web = ("craft.js", "craft.css")  # 煉製頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊、change 用 registerClicks、registerChanges 登記在 craft.js，renderPage 的 fixedKiln 照舊在 app.js（殼）。功法清單的篩選與樣子第 67 批從 main.js、style.css 切出來（爐那幾段跟引導的 .onb-dim 同權重，留 style.css）
     content = ("create_forms.json",)  # content.py 照它到這一包的 content/ 載（自創的偏向表、擺式預設、招式表）；preset_recipes.json 是序章、命名、引導共用的，不歸這一包
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：自創走到一半的單子、這一季自創付了幾次心得。換季跟著新角色重來。
     # 重悟帖張數 create_rerolls 歸商城（player_fields／carried）；意境 insights、own_insights 是共用規則層的

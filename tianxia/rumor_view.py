@@ -108,7 +108,7 @@ def away_lines(
     state: GameState, content: Content, since: float | None, when: Callable[[float], str],
 ) -> tuple[list[str], int]:
     """「你不在的時候」那一份（傳聞分層設計第八節）：since（世界秒；None＝這一季從頭）之後、現在聽得到的
-    1. 天下大事，全部——時刻表的大事除外（Game._deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
+    1. 天下大事，全部——時刻表的大事除外（timetable.deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
     2. 陣營軍情的要點（FACTION_KEYS 開頭的）；
     3. 你所在大區的地方傳聞（傳聞板上的；地方摘要是傳聞分層第二份計畫的事，有了之後放摘要）。
     每一段照時間先後，三段照這個順序接起來。先去掉不用再看的（最終審查 I1：週末一週是現實 5 小時，離開一晚就是好幾週的軍令）：
