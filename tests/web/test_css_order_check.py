@@ -118,7 +118,11 @@ def test_real_sheets_keep_the_level_cells_over_the_tag_pill():
 
 
 # 第 86 批切走的前綴：這些規則現在在 map.css、shop.css，排在 style.css 後面。.m-gap 不在那一批的範圍，照位置留在 style.css。
-CUT_PREFIXES = re.compile(r"\.mv-|\.m-(?!gap(?![\w-]))|\.mapx|\.map-|#map-|\.mdrawer|\.mgrab|\.mbody|\.shop-|\.ring-|\.forge-|\.ledger-")
+# 後面括號那一串沒有前綴、是整個 class 搬走的名字（整個名字比對）；.book-layer、.book-bar、.book-cover 在 style.css 還有本體，不列。
+CUT_PREFIXES = re.compile(
+    r"\.mv-|\.m-(?!gap(?![\w-]))|\.mapx|\.map-|#map-|\.mdrawer|\.mgrab|\.mbody|\.shop-|\.ring-|\.forge-|\.ledger-"
+    r"|\.(?:w-melee|wear-bar|tempers|form-why|pot-slot|flame|pot-out|pot-head|pot-why|cell|reveal-layer|bundle|tapme|first-seal)(?![\w-])"
+)
 
 
 def _selectors(css: str) -> list[str]:
@@ -141,6 +145,10 @@ def test_style_css_stays_free_of_the_cut_prefixes():
     pytest.param(".m-gap2 { color: red; }", [".m-gap2"], id="m-gap-longer"),
     pytest.param(".m-gap { color: red; }", [], id="m-gap-stays"),
     pytest.param(".xshop-a, .mapping { color: red; }", [], id="other-names"),
+    pytest.param(".pot-slot { color: red; }", [".pot-slot"], id="moved-whole"),
+    pytest.param(".bundle.g-red { color: red; }", [".bundle.g-red"], id="moved-whole-compound"),
+    pytest.param(".cells, .bundle-x, .xflame { color: red; }", [], id="moved-whole-longer-names"),
+    pytest.param(".book-layer { color: red; }", [], id="book-stays"),
     pytest.param("/* .shop-layer { } */ .x { background: url(a.shop-b.png); }", [], id="comment-and-value"),
 ])
 def test_the_cut_prefix_check_bites(css, hits):
