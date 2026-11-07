@@ -1,6 +1,6 @@
 """打造單子「讀」的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：鐵匠鋪包 features/smithy/smithing.py 的 GO_VERB、
-is_forge_step、is_step_line、draft_here、draft_stale 與它們讀的常數、here 原樣搬來，包 re-export 同一批）：核心的 choose（打造那幾步
-併成一則）、_drop_stale_references 與 sync（單子那一欄關了、失效了就清）讀它，不經舊名 smithing。只讀，不寫。核心本體
+is_forge_step、is_step_line、draft_here、draft_stale 與它們讀的常數、here 原樣搬來，包 re-export 同一批）：鐵匠鋪包的 Outcome（打造那幾步
+併成一則，第二輪第 92 批從核心的 choose 搬過去）、_drop_stale_references 與 sync（單子那一欄關了、失效了就清）讀它，不經舊名 smithing。只讀，不寫。核心本體
 （tianxia/core/ 底下的檔），不進 MODULES。單子一步一步回的那幾句（問下一步、挑了什麼、退回、不打了）是原句搬家。
 以器配招「讀」的那一半（BIND_LINE、NAMED_LINE、bind_options、bound_alive、bond_lines，第二輪第 88 批）也在這裡：共用層 art_cards.gear_rows 畫修練頁那一列要讀，包不能給共用層 import；
 寫的 bind_problem、bind_art 留在包裡，包 re-export 同一批。
@@ -34,12 +34,12 @@ def here(state: GameState, content: Content, kind: str | None) -> bool:
 
 def is_forge_step(arg: str) -> bool:
     """smith: 後面這一段是打造的一步（含打開與開爐）：江湖紀錄的標題是「打造」；打開以外的每一步併進同一則
-    （Game.choose 照它 merge，打開那一步 "forge" 另起一則）。"""
+    （包的 Outcome.merge 照它，打開那一步 "forge" 另起一則）。"""
     return arg.partition(":")[0].startswith("forge")
 
 
 # 打造單子自己的回話（step 回的那幾句）：問下一步的、退回去的、不打了的整句照常數認；挑了什麼（PICKED_*）的中間是素材或種類的名字，
-# 拆成前後兩段認。Game.choose 開爐成了併進「打造」那一則時用 is_step_line 收掉這些（FB-141），別的話（大勢門檻的消息之類）留著
+# 拆成前後兩段認。開爐成了併進「打造」那一則時（包的 Outcome.fold）用 is_step_line 收掉這些（FB-141），別的話（大勢門檻的消息之類）留著
 _STEP_LINES = frozenset({ASK_KIND, ASK_MAIN, ASK_AUX, ARMOR_ASK_MAIN, ARMOR_ASK_AUX, READY, CANCELLED, UNDONE})
 _PICKED_FRAMES = tuple(tuple(template.split("{what}")) for template in (PICKED_KIND, PICKED_MAIN, PICKED_AUX))
 

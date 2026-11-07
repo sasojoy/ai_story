@@ -45,14 +45,14 @@ class BountiesFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """bounty:*（懸賞榜第二、三層選單上的每一顆）：標題「懸賞榜」（原 Game._action_title 的 bounty 那一支），動作照原 Game._bounty。
-        FB-162 被搶的那一句（選單上沒有的 bounty: 回為什麼不成）是 stale/bounties 那一格（actions.stale_cell，第二輪第 92 批），在這個掛鉤之前；翻頁不寫紀錄仍在 Game.choose 原位，在這個掛鉤之後。"""
+        FB-162 被搶的那一句（選單上沒有的 bounty: 回為什麼不成）是 stale/bounties 那一格（actions.stale_cell，第二輪第 92 批），在這個掛鉤之前；翻頁不寫紀錄是 Outcome.quiet（actions.browse_quiet，同一批）。"""
         if kind != self.prefix:
             return None
         from tianxia.core import bounty_base  # noqa: PLC0415
 
         from . import actions  # noqa: PLC0415
 
-        return Outcome(title=bounty_base.BOARD, run=lambda: actions.bounty(ctx, arg))
+        return Outcome(title=bounty_base.BOARD, run=lambda: actions.bounty(ctx, arg), quiet=lambda entry: actions.browse_quiet(arg, entry))
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415

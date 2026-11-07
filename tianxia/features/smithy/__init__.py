@@ -39,12 +39,15 @@ class SmithyFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """smith:*（鐵匠鋪第二層選單上的每一顆）：標題照 smithing.title（打造的每一步「打造」、淬煉「淬煉」，其餘「鐵匠鋪」；原 Game._action_title 的 smith 那一支），
-        動作照原 Game._smith（做完擲一次鐵匠順口）。choose 後半「打造那幾步併成一則」、切頁不寫紀錄仍在核心原位讀 smithing 的三個名字。"""
+        動作照原 Game._smith（做完擲一次鐵匠順口）。這一則紀錄怎麼落（切頁不寫、打造那幾步併成一則、開爐成了只留結果）由 Outcome 的三格給（原本在 Game.choose 後半，第二輪第 92 批）。"""
         if kind != self.prefix:
             return None
         from . import shelf_actions, smithing  # noqa: PLC0415
 
-        return Outcome(title=smithing.title(arg), run=lambda: shelf_actions.smith(ctx, arg))
+        return Outcome(
+            title=smithing.title(arg), run=lambda: shelf_actions.smith(ctx, arg), quiet=lambda entry: shelf_actions.page_quiet(arg, entry),
+            merge=shelf_actions.forge_merges(arg), fold=lambda: shelf_actions.forged_fold(ctx, arg),
+        )
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415

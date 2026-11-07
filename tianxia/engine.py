@@ -47,7 +47,7 @@ from . import training
 # tests/core/test_engine.py 換的是 tianxia.engine.note_action），其餘的委派叫包的 actions
 from .guide import note_action
 from .journal import LOG_BREAK, Draft
-from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）
+from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、第 2 週才開）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, Check, Choice, Content, Effect, Event, FactionDef, Location,
@@ -1250,26 +1250,14 @@ class Game:
             msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
             if not picked_only:  # 只打開一張卡（什麼都沒做）：排著的提示留到下一個真的動作再上框，這一下才不必寫紀錄
                 self._check_hints()  # 這一下碰到的新玩法排一條提示；事件了結、引導或入伍段走完的這一下，排著的上框。記在這一則的 guide（新手引導計畫三）
-            # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
-            # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
-            # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
-            # 只有那一句回話時不寫紀錄（bounty_base.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
-            # 連交幾張時各寫各的得失）
+            # 這一則紀錄怎麼落由接走這一下的那一包給（Outcome 的 quiet、merge、fold，第二輪第 92 批：鐵匠鋪切頁、懸賞榜翻頁不寫，打造的每一步併成一則）
             entry = self._draft.entry(self.state.world.time, msgs)
-            # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
-            quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
-            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounty_base.BROWSE_VERBS and not (entry.changes or entry.guide)
-                              and all(bounty_base.is_browse_line(line) for line in entry.lines))
+            quiet = taken is not None and taken.quiet is not None and taken.quiet(entry)
             quiet = quiet or (picked_only and entry.lines in [[reply] for reply in features_core.pick_replies()]
                               and not (entry.changes or entry.guide))
             if not quiet:
-                # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
-                # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
-                # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smith_base.is_step_line）：
-                # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
-                forged = kind == "smith" and arg.partition(":")[0] == smith_base.GO_VERB and self.state.player.smith_draft is None
-                journal.add_entry(self.state, entry, merge=kind == "smith" and smith_base.is_forge_step(arg) and arg != "forge",
-                                  fold=smith_base.is_step_line if forged else False)
+                journal.add_entry(self.state, entry, merge=taken is not None and taken.merge,
+                                  fold=taken.fold() if taken is not None and taken.fold is not None else False)
             self._gift_entry(gifts)
             msgs += gifts
         finally:

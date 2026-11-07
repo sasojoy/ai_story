@@ -138,6 +138,13 @@ def post_auto(ctx: Game) -> None:
         ctx._save_season()
 
 
+def browse_quiet(arg: str, entry) -> bool:
+    """Outcome.quiet（第二輪第 92 批；原本在 Game.choose 後半）：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
+    只有那一句回話時不寫紀錄（bounty_base.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，連交幾張時各寫各的得失）。"""
+    return (arg.partition(":")[0] in bounty_base.BROWSE_VERBS and not (entry.changes or entry.guide)
+            and all(bounty_base.is_browse_line(line) for line in entry.lines))
+
+
 def stale(ctx: Game, arg: str) -> list[str]:
     """FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）時回的那一句；stale_cell 包成 Refused（只讀，不改狀態、不寫紀錄）。"""
     return [rules.stale_line(ctx.state, ctx.content, ctx.world, arg)]

@@ -137,10 +137,15 @@ class Verb:
 
 @dataclass(frozen=True)
 class Outcome:
-    """choose 接走一顆選項：title 是這一下江湖紀錄的標題（核心在動作之前先拿，同 Game._action_title），run 做那個動作、回那幾句話。"""
+    """choose 接走一顆選項：title 是這一下江湖紀錄的標題（核心在動作之前先拿，同 Game._action_title），run 做那個動作、回那幾句話。
+    後面三格（core_choose，第二輪第 92 批）管這一則紀錄怎麼落，沒給就是一下一則：quiet(entry) 建好這一則之後問，真的就不寫（只是翻頁）；merge 併進上一則同標題的（journal.add_entry）；
+    fold() 動作之後要寫那一則時才叫，回 add_entry 的 fold（是函式因為 Outcome 在動作之前建，判斷可能要讀動作之後的狀態）。"""
 
     title: str
     run: Callable[[], list[str]]
+    quiet: Callable[[Any], bool] | None = None
+    merge: bool = False
+    fold: Callable[[], Any] | None = None
 
 
 @dataclass(frozen=True)

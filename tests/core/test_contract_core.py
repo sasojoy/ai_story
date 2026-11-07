@@ -2001,6 +2001,51 @@ def test_the_stale_row_answers_after_the_menu_lookup_and_before_the_cannot_line(
     assert calls == [(name, "fake:go", "fake:go") for name in features_core.MENU_ORDER["stale"]]
 
 
+def test_the_outcome_says_how_the_journal_entry_lands(game, monkeypatch):
+    """Outcome 接在 run 後面的三格（第二輪第 92 批）：沒給就是一下一則；quiet 拿建好的這一則、真的就不寫；merge 併進同標題那一則；fold 在動作之後才叫、回的東西交給 add_entry。
+    現有兩格的先後與預設不准動（各包都用位置或名字建）。"""
+    order, made = [], {}
+
+    class Landy(Quicky):
+        def choose(self, ctx, kind, arg):
+            return made[arg] if kind == "fake" else None
+
+    def said(line):
+        return lambda: order.append("run") or [line]
+
+    monkeypatch.setattr(registry, "FEATURES", [Landy([
+        MenuHook("take", "gear", lambda ctx: [Option(id=f"fake:{name}", label=name) for name in ("plain", "quiet", "loud", "merge", "fold")]),
+    ])])
+    g = _made(game)
+    bare = Outcome("標題", said("x"))
+    assert (bare.quiet, bare.merge, bare.fold) == (None, False, None)
+
+    made["plain"] = Outcome("一樣的標題", said("第一句。"))
+    start = len(g.state.journal)
+    g.choose("fake:plain")
+    assert len(g.state.journal) == start + 1 and g.state.journal[0].lines[:1] == ["第一句。"]
+
+    seen = []
+    made["quiet"] = Outcome("一樣的標題", said("翻頁。"), quiet=lambda entry: seen.append(entry.lines) or True)
+    g.choose("fake:quiet")
+    assert len(g.state.journal) == start + 1 and seen and seen[0][:1] == ["翻頁。"]
+
+    made["loud"] = Outcome("一樣的標題", said("第二句。"), quiet=lambda entry: False)
+    g.choose("fake:loud")
+    assert len(g.state.journal) == start + 2  # quiet 是假的、沒給 merge：照舊另起一則
+
+    made["merge"] = Outcome("一樣的標題", said("第三句。"), merge=True)
+    g.choose("fake:merge")
+    assert len(g.state.journal) == start + 2 and g.state.journal[0].lines[:2] == ["第二句。", "第三句。"]
+
+    order.clear()
+    made["fold"] = Outcome("一樣的標題", said("結果。"), merge=True, fold=lambda: order.append("fold") or (lambda line: line == "第二句。"))
+    g.choose("fake:fold")
+    assert order == ["run", "fold"]  # fold 在動作之後才叫（判斷要讀動作之後的狀態）
+    assert len(g.state.journal) == start + 2
+    assert g.state.journal[0].lines[:2] == ["結果。", "第三句。"]  # 收掉 fold 說是的那一行、其餘接在結果句後面（add_entry）
+
+
 class Tailed(Feature):
     """帶後綴的 act 子動詞的假包（關著：這幾格不問 enabled）。plainverb 只有沒後綴的那幾格。"""
 
