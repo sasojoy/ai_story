@@ -24,6 +24,7 @@ from . import (
 from . import flavor
 from .flavor import FlavorJob
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
+from . import timetable  # 共用規則層（時刻表大事補進江湖紀錄；第二輪第 99 批）
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
@@ -1382,37 +1383,10 @@ class Game:
         return combat.battle_neili_cap(self)
 
     def _without_timetable(self, msgs: list[str]) -> list[str]:
-        """推進的訊息拿掉時刻表大事的公告（world.timetable.resolve 回的「【江湖大事】＋公告全文」）：那些由
-        _deliver_big_events 補進每個人的江湖紀錄，不再只進剛好推進到那一刻的人的那一則。
-        大勢門檻與世界事件也是「【江湖大事】」開頭，但文字不在時間軸上，照舊留著。"""
-        announced = {f"【江湖大事】{r.text}" for r in self.state.world.timeline.values() if r.text}
-        return [m for m in msgs if m not in announced]
+        return timetable.without_announced(self.state.world, msgs)
 
     def _deliver_big_events(self) -> None:
-        """這一季時刻表上已經發生、自己還沒看過的大事補進江湖紀錄（FB-038）：每個人各一次，不管有沒有剛好在線、
-        是不是推進時間的那個人，離線的回來第一次同步補到，這一季中途才建立的角色也補到這一季已經發生的。
-        一次補到好幾件就合成一則「江湖大事」，每件一行、照時間先後、前面標季曆時間；只補到一件時標籤就是公告全文。
-        跳過的大事（沒有公告文字）不補。看過的記在 PlayerState.events_seen，換季時新角色自然是空的。
-        做法比照 _deliver_battle_results：資料庫（時間軸）才是真實來源，每個人自己的 Game 同步時在鎖裡自己補，
-        不去改別人的角色。開關關著（或這一季開季時沒開）時時間軸本來就是空的，什麼都不補。"""
-        w, c, p = self.state.world, self.content, self.state.player
-        if not calendar.season_one_on(w, c):
-            return
-        fresh = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and eid not in p.events_seen]
-        if not fresh:
-            return
-        fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
-        p.events_seen += [eid for _, eid, _ in fresh]
-        for _, _, r in fresh:
-            if r.locked_by == p.name:  # 行狀：你暗中鎖定的伏筆左右了這件大事（揭曉這一刻才記，鎖定的當下不能露出來）
-                annals.note(self.state, c, annals.DEED, f"你暗中布下的伏筆左右了這件大事：{r.text}", 5, place="", time=r.time)
-        last = fresh[-1][2]
-        if len(fresh) == 1:
-            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
-        else:
-            lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
-            entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
-        journal.add_entry(self.state, entry)
+        timetable.deliver_big_events(self.state, self.content, self.stamp)
 
     def event_free_text_prompt(self) -> str | None:
         return event_check.event_free_text_prompt(self)

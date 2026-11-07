@@ -4,7 +4,7 @@
 - 怎麼結算：給了結果鍵照它（決戰由 T8 給、管理者也用）→ 有人鎖定關鍵伏筆照 lock_result → 固定的照 "fixed"
   → 其餘照戰況擲骰（roll_chance）。
 - 公告：「【江湖大事】」開頭，同時記在時間軸（TimelineResult.text）、寫一則天下大事傳聞與一行江湖史。進每個人的江湖紀錄是
-  Game._deliver_big_events 的事（每個角色同步時補自己還沒看過的），不是只進推進到那一刻的人（FB-038）。
+  deliver_big_events 的事（每個角色同步時補自己還沒看過的），不是只進推進到那一刻的人（FB-038）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。
 
@@ -15,14 +15,14 @@ import functools
 import math
 import random
 import re
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from typing import Literal
 
 from . import calendar, figures, territory
 from .core.content_base import TIMETABLE_SIDES, check_traditional as _check_traditional, week7 as _week7
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
-from .state import GameState, Lock, TimelineResult, WorldState
+from .state import GameState, JournalEntry, Lock, TimelineResult, WorldState
 
 HOUR = 3600
 DAY = 86400
@@ -726,6 +726,44 @@ TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本�
     "roll": ["成", "不成"],
     "showdown": [f"{side}:{tier}" for side in TIMETABLE_SIDES for tier in ("大勝", "險勝")],
 }
+
+
+def without_announced(world: WorldState, msgs: list[str]) -> list[str]:
+    """推進的訊息拿掉時刻表大事的公告（world.timetable.resolve 回的「【江湖大事】＋公告全文」）：那些由
+    _deliver_big_events 補進每個人的江湖紀錄，不再只進剛好推進到那一刻的人的那一則。
+    大勢門檻與世界事件也是「【江湖大事】」開頭，但文字不在時間軸上，照舊留著。"""
+    announced = {f"【江湖大事】{r.text}" for r in world.timeline.values() if r.text}
+    return [m for m in msgs if m not in announced]
+
+
+def deliver_big_events(state: GameState, content: Content, stamp: Callable[[float], str]) -> None:
+    """這一季時刻表上已經發生、自己還沒看過的大事補進江湖紀錄（FB-038）：每個人各一次，不管有沒有剛好在線、
+    是不是推進時間的那個人，離線的回來第一次同步補到，這一季中途才建立的角色也補到這一季已經發生的。
+    一次補到好幾件就合成一則「江湖大事」，每件一行、照時間先後、前面標季曆時間；只補到一件時標籤就是公告全文。
+    跳過的大事（沒有公告文字）不補。看過的記在 PlayerState.events_seen，換季時新角色自然是空的。
+    做法比照 _deliver_battle_results：資料庫（時間軸）才是真實來源，每個人自己的 Game 同步時在鎖裡自己補，
+    不去改別人的角色。開關關著（或這一季開季時沒開）時時間軸本來就是空的，什麼都不補。"""
+    from . import journal  # noqa: PLC0415  journal、annal_base 比這裡晚載入，頂端 import 會改載入先後
+    from .core import annal_base as annals  # noqa: PLC0415  同上
+
+    w, c, p = state.world, content, state.player
+    if not calendar.season_one_on(w, c):
+        return
+    fresh = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and eid not in p.events_seen]
+    if not fresh:
+        return
+    fresh.sort(key=lambda item: (item[2].time, item[0]))  # 先看時間，同一刻照時間軸記下的順序
+    p.events_seen += [eid for _, eid, _ in fresh]
+    for _, _, r in fresh:
+        if r.locked_by == p.name:  # 行狀：你暗中鎖定的伏筆左右了這件大事（揭曉這一刻才記，鎖定的當下不能露出來）
+            annals.note(state, c, annals.DEED, f"你暗中布下的伏筆左右了這件大事：{r.text}", 5, place="", time=r.time)
+    last = fresh[-1][2]
+    if len(fresh) == 1:
+        entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=last.text)
+    else:
+        lines = [f"{stamp(r.time)}　{r.text}" for _, _, r in fresh]
+        entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
+    journal.add_entry(state, entry)
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
