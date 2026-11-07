@@ -136,6 +136,7 @@ class CompanionsFeature(Feature):
                 MenuHook("here", "errand", lambda ctx, loc, cost, odds: actions.errand_options(ctx)),
                 MenuHook("block", "talk", lambda state, content: talk_actions.travel_block(state, content)),
                 MenuHook("quick", "errand", lambda ctx, kind, arg, option_id: actions.errand_ask(ctx, arg) if kind == "errand" else None),
+                MenuHook("stale", "recruit", lambda ctx, option, option_id: actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 
@@ -144,7 +145,7 @@ class CompanionsFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """招募：act:recruit（舊招募：這裡那一位）與 act:recruit:<人物>（招這一位），按下去與紀錄標題（原本 Game._act、_action_title 原位）；不問 enabled（原位不看開關）。
-        不認得的人物標題回 None，照舊掉到核心的「提前出關」。兩個分頁搶人的 FB-363 那一句回 Refused（只在 engine），留在 Game.choose 前段。"""
+        不認得的人物標題回 None，照舊掉到核心的「提前出關」。兩個分頁搶人的 FB-363 那一句是 stale/recruit 那一格（actions.stale_cell，第二輪第 92 批）。"""
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 

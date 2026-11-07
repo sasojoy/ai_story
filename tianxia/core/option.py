@@ -28,3 +28,10 @@ class Option(BaseModel):
         if isinstance(data, dict) and data.get("outcomes") is None:
             data.pop("outcomes", None)
         return data
+
+
+class Refused(list):
+    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）、馬市的鈕已經灰掉（FB-195）。沒做事、沒寫江湖紀錄，
+    所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
+    不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。
+    原本寫在 engine.py；被拒的那幾格（MENU_ORDER["stale"]）搬進包之後包要回它，搬進核心（第二輪第 92 批；`from tianxia.engine import Refused` 照舊拿得到）。"""

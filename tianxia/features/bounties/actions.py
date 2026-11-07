@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import bounty_base  # 核心（榜的入口與收店：清失效參照那一格讀，core_seams）
 
@@ -139,8 +139,16 @@ def post_auto(ctx: Game) -> None:
 
 
 def stale(ctx: Game, arg: str) -> list[str]:
-    """FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）時回的那一句；Game.choose 原位包成 Refused（只讀，不改狀態、不寫紀錄）。"""
+    """FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）時回的那一句；stale_cell 包成 Refused（只讀，不改狀態、不寫紀錄）。"""
     return [rules.stale_line(ctx.state, ctx.content, ctx.world, arg)]
+
+
+def stale_cell(ctx: Game, option: Option | None, option_id: str) -> Refused | None:
+    """stale/bounties 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：
+    回這一步為什麼不成的那一句，不寫江湖紀錄；回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）。"""
+    if option is None and option_id.startswith("bounty:"):
+        return Refused(ctx._log(stale(ctx, option_id.partition(":")[2])))
+    return None
 
 
 def status(ctx: Game) -> list[dict]:

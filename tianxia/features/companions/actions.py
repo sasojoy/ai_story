@@ -9,7 +9,7 @@ from __future__ import annotations
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import figures  # 共用規則層（人物表 figures，第 40 批收進）
 from tianxia import roster, team, zh
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import Effect
 from tianxia.rules import rate_words
@@ -58,6 +58,17 @@ def recruitable_here(ctx) -> bool:
     """此地有人招得了你（recruit_targets 裡陣營對、名下沒滿的）：h_recruit 照它說，灰掉的鈕不算（黃巾的人在涿郡不說）。"""
     s, c = ctx.state, ctx.content
     return any(roster.recruit_problem(s, c, ctx.world, cid) is None for cid in recruit_targets(ctx))
+
+
+def stale_cell(ctx, option: Option | None, option_id: str) -> Refused | None:
+    """stale/recruit 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。FB-363：兩個分頁搶，慢的那一頁的招募鈕還在、他已經被別人招走了：
+    同懸賞榜 FB-162 回那一句（Refused，網頁跳提示），不扣體力、不寫江湖紀錄。不在這裡、陣營不合這類原因照舊「此刻無法這麼做」（回 None）。"""
+    if option is None and option_id.startswith("act:recruit:"):
+        cid = option_id.removeprefix("act:recruit:")
+        owner = roster.owned_by(ctx.world, cid) if cid in ctx.content.characters else None
+        if owner is not None and not roster.owns(owner, ctx.state.player.name):
+            return Refused(ctx._log([roster.TAKEN.format(name=ctx.content.characters[cid].name, owner=owner)]))
+    return None
 
 
 def recruit_options(ctx) -> list[Option]:

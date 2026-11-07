@@ -108,6 +108,7 @@ class GearFeature(Feature):
                 MenuHook("open", "gear", lambda ctx: market_actions.open_cell(ctx)),
                 MenuHook("depart", "gear", lambda ctx: mounts.close_market(ctx.state.player)),
                 MenuHook("block", "gear", lambda state, content: market_actions.travel_block(state, content)),
+                MenuHook("stale", "market", lambda ctx, option, option_id: market_actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 

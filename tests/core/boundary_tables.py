@@ -38,9 +38,7 @@ GAME_DELEGATE_CALLERS = {
     ("options", "_fighting"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("scene_art", "_battle_for_me"): "場景卡的圖：全服戰鬥蓋著場景時沒有圖（序章裡不算）：殼的場景卡（總表第 64～67 批）；位置固定、沒有對應的掛鉤（全部拆包第 8 批計畫 1.4）",
     # bounties
-    ("choose", "_bounty_stale"): "FB-162 被搶的那一句回 Refused（伺服器照它跳提示）；choose_unlisted 回 list、而且在查選單之前，位置與回傳都不同，照 FB-195 馬市那一支留原位",
     # bout
-    ("choose", "_arena_fight_problem"): "按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久：在查完選單之後、「此刻無法」之前，choose_unlisted 在查選單之前，不是這個位置",
     ("_own_scene_text", "_duel_scene"): "自己眼前的場景卡（頭目戰、擂台排在宴客的席位之前）：scene 掛鉤在擂台之後，接上去會排到宴客後面",
     ("_own_scene_text", "_arena_scene"): "同上",
     # companions
@@ -50,11 +48,10 @@ GAME_DELEGATE_CALLERS = {
     ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
     ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
     # cultivation
-    ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
+    ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game（第二輪第 92 批 Refused 進了核心，這三步搬得動了，這批不搬）；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
     # explore
     ("_act", "_explore"): "關著探索一顆時的舊探索（扣體力、晉升奇遇、序章的舊探索都在它前面；第 11 批 README 認定留原位，不改成 Verb）",
     # faction
-    ("choose", "_lean_anytime"): "「改幫…」不在選單上時照樣收（在路上、決戰的大區，設計 3.2）：要先查選單、查不到才問它，choose 掛鉤在查選單之後，位置不對",
     ("choose", "_join_lean"): "投靠或拜入陣營名下的門派那一下，動作之後、入伍段之前給傾向：位置固定、動作之後的收尾沒有對應的掛鉤",
     ("_own_scene_text", "_faction_prompt"): "場景那一段的順序算行為（談著、選邊、投靠、叛投確認、求見…）：位置固定，場景的掛鉤是第 55～57 批",
     ("_own_scene_text", "_defect_scene"): "同上（叛投確認畫面的場景）",

@@ -10,7 +10,7 @@ from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
 from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.engine import Game
 
 DAY = 24 * 3600.0
@@ -1686,6 +1686,7 @@ def test_the_menu_order_is_the_table_in_the_plan():
         "depart": ("bounties", "escort", "smithy", "gear", "shops"),
         "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
         "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # 第 57 批
+        "stale": ("lean", "bounties", "market", "recruit", "arena"),  # 第二輪第 92 批
     }
     assert Feature().menus() == ()
 
@@ -1799,15 +1800,15 @@ def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
         "seal": sorted([("tick", "seal"), ("front", "seal"), ("quick", "seal")]),
         "battle": [("quick", "battle")],
         "zhuan": [("rest", "zhuan")],
-        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena")]),
+        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena"), ("stale", "arena")]),
         "sense": sorted([("take", "sense"), ("idle", "sense"), ("quick", "canvas")]),
         "story": sorted([("take", "story"), ("here", "story")]),
-        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand")]),
-        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction")]),
+        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand"), ("stale", "recruit")]),
+        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction"), ("stale", "lean")]),
         "socialize": sorted([("take", "audience"), ("here", "social"), ("notes", "socialize"), ("idle", "audience"), ("block", "audience")]),
-        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties")]),
+        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties"), ("stale", "bounties")]),
         "smithy": sorted([("take", "smithy"), ("here", "smithy"), ("idle", "smithy"), ("open", "smithy"), ("depart", "smithy"), ("block", "smithy")]),
-        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear")]),
+        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear"), ("stale", "market")]),
         "outlets": sorted([("here", "donate"), ("here", "dadian"), ("idle", "outlets"), ("block", "outlets")]),
         "tavern": sorted([("idle", "tavern"), ("block", "tavern")]),
         "military": sorted([("take", "omen"), ("here", "order"), ("here", "rank2"), ("here", "rank"), ("here", "omen"), ("idle", "omen")]),
@@ -1957,6 +1958,47 @@ def test_the_quick_row_answers_after_the_menu_check_and_before_the_journal(game,
     assert "走到 choose 掛鉤。" in g.choose("fake:go")
     assert [c[0] for c in calls] == list(features_core.MENU_ORDER["quick"])
     assert len(g.state.journal) == journal + 1
+
+
+def test_the_stale_row_answers_after_the_menu_lookup_and_before_the_cannot_line(game, monkeypatch):
+    """Game.choose 的 stale（第二輪第 92 批）：查完選單之後、「此刻無法」之前照表的先後問，每一格拿到查到的那一顆與 id；
+    回 Refused 就直接回它、後面的不問、不再 _log（寫不寫江湖紀錄是格自己的事）；回 Option 換掉查到的那一顆、照它往下走；都回 None 照舊往下。"""
+    calls, answers = [], {}
+
+    def slot(name):
+        return lambda ctx, option, option_id: calls.append((name, option.id if option else None, option_id)) or answers.get(name)
+
+    monkeypatch.setattr(registry, "FEATURES", [Quicky([
+        MenuHook("take", "gear", lambda ctx: [Option(id="fake:go", label="假的那一顆")]),
+        *(MenuHook("stale", name, slot(name)) for name in features_core.MENU_ORDER["stale"]),
+    ])])
+    g = _made(game)
+
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]
+    assert calls == [(name, None, "fake:gone") for name in features_core.MENU_ORDER["stale"]]
+
+    calls.clear()
+    log = len(g.state.log)
+    answers["market"] = Refused(["不成。"])
+    got = g.choose("fake:gone")
+    assert isinstance(got, Refused) and got == ["不成。"] and len(g.state.log) == log
+    assert [c[0] for c in calls] == ["lean", "bounties", "market"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="假的那一顆")
+    assert "走到 choose 掛鉤。" in g.choose("fake:gone")
+    assert [c[0] for c in calls] == ["lean"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="灰的", enabled=False)
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]  # 換上來的灰的照舊擋
+
+    calls.clear()
+    answers.clear()
+    assert "走到 choose 掛鉤。" in g.choose("fake:go")
+    assert calls == [(name, "fake:go", "fake:go") for name in features_core.MENU_ORDER["stale"]]
 
 
 class Tailed(Feature):

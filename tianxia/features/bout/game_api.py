@@ -23,7 +23,6 @@ TABLE = {
     "_arena_bare": arena_actions.arena_bare,
     "arena_power": arena_actions.arena_power,
     "arena_left": arena_actions.arena_left,
-    "_arena_fight_problem": arena_actions.arena_fight_problem,
     "_arena_options": arena_actions.arena_options,
     "_arena_join": arena_actions.arena_join,
     "_arena_scene": arena_actions.arena_scene,

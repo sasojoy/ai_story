@@ -8,6 +8,5 @@ from . import actions
 TABLE = {
     # ── 懸賞榜：本體在 tianxia/features/bounties/（全部拆包第 45 批），這裡留一行委派 ─────
     "_bounty": actions.bounty,
-    "_bounty_stale": actions.stale,
     "_raid_bounty": actions.raid_bounty,
 }

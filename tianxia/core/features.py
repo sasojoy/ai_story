@@ -1335,6 +1335,8 @@ class MenuHook:
 # depart  移動包 departure.depart 最前面：動身了，店收起來          (ctx)                      menu_run，回傳不接
 # block   atlas.travel_block：現在不能安排前往的原因               (state, content)           menu_first（沒有 ctx：party 拿別人的 state 問，格裡一律讀傳進來的）
 # quick   Game.choose 查完選單、清掉「剛剛」與引導之後、建紀錄之前  (ctx, kind, arg, option_id)  menu_first（第 57 批：選單上、不建紀錄的那幾顆；回的話由核心 _log 一次，格裡不寫紀錄。回 None 照舊往下）
+# stale   Game.choose 查完選單、「此刻無法」之前：鈕過時了（兩個分頁搶）  (ctx, option, option_id)  menu_first（第二輪第 92 批；option 是選單上查到的那一顆或 None。回 Refused 就直接回給玩家，寫不寫江湖紀錄〔_log〕由格自己定；
+#         回 Option 換掉查到的那一顆〔「改幫…」不在選單上照樣收〕；回 None 照舊往下。跟 SEAM_ORDER 的 stale.*〔清失效參照，讀檔那一下〕是兩件事）
 MENU_ORDER: dict[str, tuple[str, ...]] = {
     "tick": ("seal",),
     "front": ("seal",),
@@ -1351,6 +1353,7 @@ MENU_ORDER: dict[str, tuple[str, ...]] = {
     "depart": ("bounties", "escort", "smithy", "gear", "shops"),
     "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
     "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # core_seams（全部拆包第 57 批）
+    "stale": ("lean", "bounties", "market", "recruit", "arena"),  # core_choose（第二輪第 92 批）
 }
 
 

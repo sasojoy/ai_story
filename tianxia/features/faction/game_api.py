@@ -7,7 +7,6 @@ from . import defect_actions, ending_actions, join_actions, lean_actions
 
 TABLE = {
     # 本體在 tianxia/features/faction/lean_actions.py（全部拆包第 35 批：豪強改幫），這裡留一行委派
-    "_lean_anytime": lean_actions.lean_anytime,
     "_join_lean": join_actions.join_lean,
     # 本體在 tianxia/features/faction/join_actions.py（全部拆包第 35 批：投靠的確認話），這裡留一行委派
     "_faction_prompt": join_actions.faction_prompt,

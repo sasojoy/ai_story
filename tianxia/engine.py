@@ -71,7 +71,7 @@ from .core import battle_base as battle_instance  # battle（全部拆包第 54 
 from .core import xinshen  # 心神：跟人物交談扣的點數（核心的資源，同體力；Config.xinshen）
 from .core import omen_base  # 正在答題（軍情包認領的 fs_asking；core_seams，全部拆包第 56 批：_own_scene_text 改問它）
 from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
-from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
+from .core.option import IDLE_MARK, Option, Refused  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）；被擋下來的回話（第二輪第 92 批，server 與測試從 engine 拿）
 from .core.services import PAUSED_REFUSAL, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
@@ -177,12 +177,6 @@ ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它�
 # （RaidSpoils 全部拆包第 39 批搬進 tianxia/core/services.py；上面 import 回來，`from tianxia.engine import RaidSpoils` 照舊是同一個類別）
 # （管理者給的伏筆片段、機緣線索在玩家江湖紀錄裡的標題 HEARD_TITLE，全部拆包第 34 批搬進 tianxia/features/military/opp_actions.py）
 # （FIGHT_LEFT、FIGHT_CHANGED、FIGHT_GONE_LINES 搬進 tianxia/core/combat.py，第二輪第 79 批；上面 import 回 FIGHT_GONE_LINES，server 照舊從 engine 拿）
-
-
-class Refused(list):
-    """choose() 回的話，而且這一下是被擋下來的：懸賞選項已經不在選單上（兩個分頁搶同一張，FB-162）、馬市的鈕已經灰掉（FB-195）。沒做事、沒寫江湖紀錄，
-    所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
-    不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
 
 
 # 賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL（全部拆包第 24 批）與裝飾器 _not_while_preparing（第 23 批）搬進核心的共用的字與小函式
@@ -1164,36 +1158,12 @@ class Game:
         if unlisted is not None:
             return unlisted
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
-        if option is None and option_id.startswith(wins.LEAN_PREFIX):
-            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
-            if option is not None and self.state.pending_event is not None:
-                # 唯一的例外：有事件待選時不收（FB-820，PM 2026-10-26）——不然同一則事件裡依陣營出現的選項兩邊都挑得到。
-                # 回一句（Refused：伺服器傳去網頁跳提示），什麼都不動、不寫江湖紀錄
-                return Refused(self._log([wins.LEAN_EVENT_PENDING]))
-        if option is None and option_id.startswith("bounty:"):
-            # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
-            # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
-            return Refused(self._log(self._bounty_stale(option_id.partition(":")[2])))
-        if (option is None or not option.enabled) and option_id.startswith("market:"):
-            # FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：同懸賞榜 FB-162，回為什麼不成的那一句
-            # （Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄
-            problem = mounts.stale_problem(self.state, self.content, option_id.partition(":")[2])
-            if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
-                self._shop_after(problem, "refused")
-            return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
-        if option is None and option_id.startswith("act:recruit:"):
-            # FB-363：兩個分頁搶，慢的那一頁的招募鈕還在、他已經被別人招走了：同懸賞榜 FB-162 回那一句（Refused，網頁跳提示），
-            # 不扣體力、不寫江湖紀錄。不在這裡、陣營不合這類原因照舊「此刻無法這麼做」
-            cid = option_id.removeprefix("act:recruit:")
-            owner = roster.owned_by(self.world, cid) if cid in self.content.characters else None
-            if owner is not None and not roster.owns(owner, self.state.player.name):
-                return Refused(self._log([roster.TAKEN.format(name=self.content.characters[cid].name, owner=owner)]))
-        if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
-            # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
-            # （為什麼不成問單挑包：全部拆包第 12 批）
-            problem = self._arena_fight_problem(option_id)
-            if problem:
-                return Refused([f"（{problem}。）"])
+        # 鈕過時了（兩個分頁搶；MENU_ORDER["stale"]，第二輪第 92 批）：回 Refused 就是這一下被擋了；回 Option 換掉查到的那一顆（「改幫…」不在選單上照樣收）；None 照舊往下
+        stale = features_core.menu_first("stale", {}, self, option, option_id)
+        if isinstance(stale, Refused):
+            return stale
+        if stale is not None:
+            option = stale
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
         if option_id.startswith(GROWTH_PREFIX):  # 開季準備卡挑配比：pick_growth 自己寫紀錄（自己配要五項的數字，走 /api/growth）

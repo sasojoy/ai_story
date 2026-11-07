@@ -515,4 +515,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - 鐵匠鋪與捐軍備的 `bots.py`（`trade_want`、`donate_want`，從 `bot` 搬來）叫 `ctx.econ_day()`（Game 本體：今天是這一季第幾天，素材買賣的每日額度算這個）
 - 決戰包的 `bots.py`（`_toward_battle`，從 `bot_policy` 搬來）叫 `ctx.travel(dest, mode)`（主人 travel）、`ctx.travel_options(dest)`（主人 map）
 
+# core_choose（第二輪第 92 批：choose 前段那五支被拒搬成 MENU_ORDER["stale"] 的格，一個新名字）
+- 裝備包的 `market_actions.stale_cell`（馬市的鈕過時了，FB-195）叫 `ctx._shop_open()`（Game 本體：此刻坐在哪一間店；已經出了馬市就不改掌櫃的話）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

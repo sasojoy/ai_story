@@ -333,7 +333,7 @@ def allocate_v2(ctx, stat: str) -> list[str]:
 
 
 def pick_growth(ctx, preset: str, custom: dict | None) -> list[str]:
-    """挑成長配比的本體（籌備中、這一季沒有配比、已定這三步留在 Game.pick_growth，Refused 只在 engine）：
+    """挑成長配比的本體（籌備中、這一季沒有配比、已定這三步留在 Game.pick_growth）：
     自己配的整理、查問題、定下、寫紀錄。（原本 Game.pick_growth 的後半）"""
     s, c = ctx.state, ctx.content
     custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
