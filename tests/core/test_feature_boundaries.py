@@ -32,6 +32,7 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     BUS_SUBSCRIBERS, CORE_DELEGATE_CALLERS, CORE_EVENT_DELEGATES,
     COMBAT_CALLED_THROUGH_CTX, COMBAT_VIA_CTX, CORE_COMBAT_DELEGATES, CORE_COMBAT_STATIC_DELEGATES,
     CORE_PILLS_DELEGATES, CORE_PUSHING_DELEGATES, PILLS_VIA_CTX, PUSHING_CALLED_THROUGH_CTX, PUSHING_VIA_CTX,  # core_pushing（第二輪第 80 批）
+    CORE_XINSHEN_DELEGATES,  # core_xinshen（架構收尾第 105 批）
     CORE_VIEW_DELEGATES,  # core_views
     CORE_TOP_DELEGATE_CALLERS, EFFECT_DEFECT_SCAN, EVENT_CHECK_VIA_CTX,
     GAME_DELEGATE_CALLERS, GAME_DIRECT, GAME_IMPORTS,
@@ -545,6 +546,17 @@ def test_the_push_and_pill_services_call_the_patched_game_methods_through_ctx(mo
     via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
     assert via & {name for name, _ in via_ctx.values()} == (PUSHING_CALLED_THROUGH_CTX if module == "pushing" else set())
     assert {name for name, _ in via_ctx.values()} <= delegates
+
+
+# core_xinshen（架構收尾第 105 批）
+def test_the_game_reaches_xinshen_only_through_its_one_line_delegates():
+    """Game 上碰 xinshen 這個名字的只有 CORE_XINSHEN_DELEGATES 那幾個一行的委派（回傳型別註解也算碰；多一處就是把心神的邏輯寫回 Game、或委派加了邏輯）。
+    engine 模組層那一行 import 不算碰。xinshen_asks_left、xinshen_note_ask 下一項搬回酒肆包。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    users = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and any(isinstance(n, ast.Name) and n.id == "xinshen" for n in ast.walk(f))}
+    assert _service_delegates("xinshen") == CORE_XINSHEN_DELEGATES
+    assert users == CORE_XINSHEN_DELEGATES | {"xinshen_asks_left", "xinshen_note_ask"}
 
 
 # core_views（第二輪第 81 批）
