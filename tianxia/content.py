@@ -791,25 +791,6 @@ def check_insight_strong(c: Content, need) -> None:
              f"{where}：有所感的場景沒有一段線索指得到最濃的「{d.name}」（{d.attribute}）")
 
 
-def check_faction_choices(c: Content, need) -> None:
-    """選項照陣營分邊（Condition.factions／factions_none，企劃者 2026-10-08「加入黃巾軍了，探索還一堆打黃巾的任務」）之後，
-    每一種身分（散人與每個陣營）碰得到的事件，至少要剩一個選項看得見——不然那個人會卡在一則沒有選項的事件上。
-    只看陣營這一項：其他條件（銀兩、旗標）本來就由寫事件的人負責留一條退路。"""
-    def allows(cond: Condition, faction: str | None) -> bool:
-        if cond.factions and faction not in cond.factions:
-            return False
-        return faction is None or faction not in cond.factions_none
-
-    for event in c.events.values():
-        for faction in [None, *(f.id for f in c.scenario.factions)]:
-            if not allows(event.condition, faction):
-                continue
-            need(
-                any(allows(choice.condition, faction) for choice in event.choices),
-                f"事件 {event.id}：{faction or '散人'}碰得到這則事件，選項卻全被陣營條件擋掉了",
-            )
-
-
 def check_check_voice(c: Content, need) -> None:
     """檢定選項括號裡的那一句（content/check_voice.json，joy 寫的；取代 S1 的 check_lines.json，驗證照它的標準）：
     至少一檔、照 min_gap 由高到低排而且不重複；每一檔都要說得出每一種有人檢定的屬性（沒寫的屬性用 "default"）；
@@ -1616,58 +1597,6 @@ def check_foreshadows(
         need(False, f"伏筆計數 {key}：有鏈讀它，卻沒有任何效果（或官銀的規則）寫它")
 
 
-def check_bounties(c: Content, need) -> None:
-    """懸賞榜的設定（Config.bounties，懸賞榜設計 4.1 末段）：種類只能是認得的（不認得的 bounties.issue 會默默跳過）；求兵挑屬性的
-    範圍至少一個、而且是認得的屬性；求兵的價錢剛好寫三個品質與四個階（1～4 階，四階 ×6；少一個，交那種兵器時會 KeyError）。
-    give_kinds 只能是 arms（求藝企劃者 2026-10-21 拿掉，寫 art 直接報錯，不默默跳過）。
-    give_kinds、give_attributes 不能重複：kinds 寫兩次 strike 是「掛兩張」，give_kinds 寫兩次 arms 卻只會掛一張（issue 照種類各掛一張），
-    照 kinds 的習慣寫會被默默吃掉；give_attributes 重複會讓三方抽到同一個屬性。
-    賞的字典（silver、exp、deeds、xinde）：設定覆寫檔寫了就是整張換掉，少寫 give_kinds 裡某一種的那一項，掛得出來、交得了，領到的卻默默是 0
-    （bounties.py 都是 .get(種類, 0)）。所以預設有寫的項目，掛出去的每一種都要留著（預設 silver 沒有 arms：求兵的銀兩走 arms_silver × arms_tier）。"""
-    cfg = c.config.bounties
-    need(set(cfg.kinds) <= {"strike", "scout", "escort"}, f"Config.bounties.kinds 只能有 strike、scout、escort：{cfg.kinds}")
-    need(
-        set(cfg.give_kinds) <= {"arms"} and len(set(cfg.give_kinds)) == len(cfg.give_kinds),
-        f"Config.bounties.give_kinds 只能有 arms（求藝 2026-10-21 拿掉），最多寫一次：{cfg.give_kinds}",
-    )
-    need(
-        bool(cfg.give_attributes) and set(cfg.give_attributes) <= set(ATTRIBUTES)
-        and len(set(cfg.give_attributes)) == len(cfg.give_attributes),
-        f"Config.bounties.give_attributes 至少一個、不重複，而且只能是 {'、'.join(ATTRIBUTES)}：{cfg.give_attributes}",
-    )
-    need(set(cfg.arms_silver) == {"下品", "中品", "上品"}, f"Config.bounties.arms_silver 要剛好寫下品、中品、上品：{sorted(cfg.arms_silver)}")
-    need(set(cfg.arms_tier) == {"1", "2", "3", "4"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3、4：{sorted(cfg.arms_tier)}")
-    defaults = type(cfg)()  # 預設長什麼樣，就是「該寫哪幾項」的依據
-    for field in ("silver", "exp", "deeds", "xinde"):
-        given = getattr(cfg, field)
-        missing = [kind for kind in cfg.give_kinds if kind in getattr(defaults, field) and kind not in given]
-        need(
-            not missing,
-            f"Config.bounties.{field} 少了 {'、'.join(missing)} 的賞（整張字典換掉時，give_kinds 裡每一種都要寫，少了會默默給 0）：{sorted(given)}",
-        )
-
-
-def check_duels(c: Content, need, known) -> None:
-    """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
-    面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
-    from .models import MOVES  # noqa: PLC0415
-
-    factions = {f.id for f in c.scenario.factions}
-    for boss in c.duels.values():
-        where = f"頭目 {boss.id}"
-        need(bool(boss.locations), f"{where}：至少要有一個地點")
-        known(where, boss.locations, c.locations, "地點")
-        known(where, boss.drops, c.materials, "素材")
-        for i, foe in enumerate(boss.foes):
-            if foe.side is not None:
-                need(foe.side in factions, f"{where} 的第 {i + 1} 個面貌：未知的陣營 {foe.side}")
-            need(set(foe.moves) <= set(MOVES), f"{where} 的第 {i + 1} 個面貌：moves 只能寫{'、'.join(MOVES)}")
-            need(all(w >= 0 for w in foe.moves.values()) and (not foe.moves or sum(foe.moves.values()) > 0),
-                 f"{where} 的第 {i + 1} 個面貌：moves 的權重不能是負的、也不能全是 0")
-        for faction in sorted(factions):
-            need(any(foe.side != faction for foe in boss.foes), f"{where}：{faction} 的人挑不到一個不是自己人的面貌")
-
-
 def check_gear(c: Content, need, known) -> None:
     """寶物表、名駒、名將贈禮（content/gear.json，裝備四欄 6.3、5.7）與 Config.treasures：效果的數字剛好八種；良駒的品質權重只寫
     三個品質、不是負的、加起來大於 0。有表時：掉落池至少一件；名字不重複、過得了命名過濾、id 不叫 good_horse、寶物與名駒的 id 不重複；
@@ -2198,7 +2127,7 @@ def validate(c: Content) -> None:
     check_insight_scenes(c, need)
     check_insight_strong(c, need)
     check_terrain_arts(c, need)
-    check_faction_choices(c, need)
+    check_at("faction_choices", c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
@@ -2818,10 +2747,10 @@ def validate(c: Content) -> None:
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
     check_opportunities(c, need, known, front_ids)
-    check_duels(c, need, known)
+    check_at("duels", c, need, known)
     check_gear(c, need, known)
     check_signature_arms(c, need, known)
-    check_bounties(c, need)
+    check_at("bounties", c, need)
     check_core_loop(c, need)
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)

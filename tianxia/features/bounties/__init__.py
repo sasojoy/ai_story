@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, DefectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, WorldHook
+from tianxia.core.features import ContentSlot
 
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（core/cards.py 的 ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 
@@ -25,6 +26,14 @@ class BountiesFeature(Feature):
     # 店面共用的 shop_line／shop_clue／shop_hold（七間店共用，核心）不在這裡；Bounty 類別與 WorldState.bounties、rallies、bounty_seq、bounty_week、bounty_day 的定義在核心 state.py
     player_fields = ("picking_bounty", "bounty_pick", "bounties_done")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("bounties", lambda *a: checks.check_bounties(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """懸賞榜開著（bounty_base.active：設定開著、劇本有陣營、這一季還沒收），或此刻還坐在榜前：季收了、開關被關掉（還沒經過 sync 收店）照樣按得到「返回」、

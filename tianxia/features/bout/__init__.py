@@ -18,6 +18,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 from __future__ import annotations
 
 from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import ContentSlot
 
 
 class BoutFeature(Feature):
@@ -30,6 +31,14 @@ class BoutFeature(Feature):
     player_fields = ("duel", "duel_tally", "duel_last", "arena", "arena_last", "picking_arena", "arena_day", "arena_today",
                      "arena_crowd_seen", "arena_crowd_note")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("duels", lambda *a: checks.check_duels(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """內容裡有頭目（duels.json）、或擂台開著（Config.arena.enabled），或此刻還在頭目戰、擂台上、坐在擂台邊：開關在坐著、打著的時候
