@@ -13,7 +13,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 
 # ═══════════════════════════ figact：大勢人物的行動（全部拆包第 31 批，dev/figure-acts-1） ═══════════════════════════
 # 挑戰大勢人物本人（Game 上 _challenge 等 13 個）、護衛犒軍探望（aid:，figure_aid）、助他一臂或壞他的事（plan:）、月旦評（yuedan）、管理者救回人物
-# 搬進新包 tianxia/features/figure_acts/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
+# 搬進新包 tianxia/features/figure_acts/（計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
 
 FIGACT_YUE = "少年英發，前程無量"  # 假模型寫的月旦評（八到十六字，不含名號）
 _FIGACT_CLIENTS: dict[type, type] = {}
@@ -441,7 +441,7 @@ class FigActScenario(Scenario):
 
     def seed_batch(self, names: list[str]) -> None:
         """擺一批還沒寫的月旦評（跟 tick 自己評的一樣：固定句、還沒寫、還沒發）。"""
-        from tianxia import yuedan
+        from tianxia.features.figure_acts import yuedan
         from tianxia.state import YuedanEntry
 
         def seed(s) -> None:
@@ -593,5 +593,5 @@ class FigActScenario(Scenario):
 
 
 # 改一個字（selftest）：月旦評發出去那一則的開頭（搬之前在 tianxia/yuedan.py、之後在 tianxia/features/figure_acts/yuedan.py）
-register_track("figact", FigActScenario, (("tianxia/features/figure_acts/yuedan.py", "tianxia/yuedan.py"),
+register_track("figact", FigActScenario, (("tianxia/features/figure_acts/yuedan.py",),
                                           ('HEAD = "{critic}月旦評（{week}）："', 'HEAD = "{critic}月旦評！（{week}）："')), "week7")

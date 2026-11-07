@@ -25,9 +25,9 @@ def test_material_cells_go_by_attribute_then_tier(content, world):
 
 def test_an_attribute_outside_the_four_goes_after_them(content, world):
     """陰陽虛實的素材（正式內容現在沒有）排在剛柔快慢後面。"""
-    from tianxia import shopview
+    from tianxia.core import shop_base
 
-    rank = shopview.attribute_rank
+    rank = shop_base.attribute_rank
     assert rank("剛") < rank("柔") < rank("快") < rank("慢") < rank("陰") and rank("慢") < rank("實")
 
 
@@ -96,7 +96,7 @@ def test_board_notes_are_compact_with_a_colored_tag_and_the_rest_on_the_paper(co
     from test_shop2 import SCOUT, STRIKE
     from test_shop2_web import run
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]
@@ -114,7 +114,7 @@ def test_the_notice_shows_the_short_due_and_the_paper_the_full_one_fb196(content
     from test_shop2 import SCOUT, STRIKE
     from test_shop2_web import _css, _rule, run
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]
@@ -186,7 +186,7 @@ def test_faster_or_slower_follows_the_speed_bar_on_the_card(content, world):
     （以前照吃飽的腳力比：騎著餓了的駑馬上品，卡上數字比較大的兩匹反而寫「比你騎的慢」。）"""
     from test_shop2 import _horse, _market
 
-    from tianxia import shopview
+    from tianxia.features.gear import shop_view as gear_shop
 
     ride = _horse(name="黑鬃馬", tier=1, quality="上品", edge=35)
     game = _market(content, world, horse=ride, name="比馬")
@@ -195,9 +195,9 @@ def test_faster_or_slower_follows_the_speed_bar_on_the_card(content, world):
     speed = {s["id"]: next(b["value"] for b in s["bars"] if b["key"] == "speed") for s in stalls if not s.get("empty")}
     worn = speed["騎:1"]
     for stall in stalls[2:]:
-        want = shopview.FASTER if speed[stall["id"]] > worn else shopview.SLOWER if speed[stall["id"]] < worn else shopview.SAME
+        want = gear_shop.FASTER if speed[stall["id"]] > worn else gear_shop.SLOWER if speed[stall["id"]] < worn else gear_shop.SAME
         assert stall["compare"] == want, (stall["id"], speed[stall["id"]], worn)
-    assert [s["compare"] for s in stalls[2:]] == [shopview.FASTER, shopview.FASTER, shopview.SAME]
+    assert [s["compare"] for s in stalls[2:]] == [gear_shop.FASTER, gear_shop.FASTER, gear_shop.SAME]
 
 
 # ── FB-195：馬市兩頁搶，按下去被擋時說為什麼 ──
@@ -208,7 +208,8 @@ def test_a_market_buy_lost_to_another_tab_says_why(content, world):
     馬販那一句換成錢不夠那一組；什麼都沒買、錢不動。"""
     from test_shop2 import _market
 
-    from tianxia import mounts, shopview
+    from tianxia import mounts
+    from tianxia.core import shop_base
     from tianxia.engine import Refused
 
     game = _market(content, world, silver=300, name="搶馬")
@@ -219,7 +220,7 @@ def test_a_market_buy_lost_to_another_tab_says_why(content, world):
     price = content.config.mounts.shop_price
     assert isinstance(msgs, Refused) and list(msgs) == [f"（還差 {price - 40} 兩。）"]
     assert p.mount is None and p.stats["silver"] == 40
-    assert p.shop_line == "short_silver" and shopview.line_text(game.state, content, "market") in content.shop_lines["market"]["short_silver"]
+    assert p.shop_line == "short_silver" and shop_base.line_text(game.state, content, "market") in content.shop_lines["market"]["short_silver"]
 
 
 def test_a_market_feed_or_swap_lost_to_another_tab_says_why(content, world):

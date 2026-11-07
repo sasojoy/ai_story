@@ -9,7 +9,9 @@ import random
 import pytest
 
 from conftest import no_plans, real_content
-from tianxia import calendar, guide, rules
+from tianxia import calendar
+from tianxia.features.guide import rules as guide
+from tianxia import rules
 from tianxia import world as world_mod
 from tianxia.engine import Game
 

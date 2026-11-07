@@ -3,7 +3,7 @@ import random
 
 from conftest import no_week_unlock, real_content, renown_unscaled
 
-from tianxia import arena
+from tianxia.features.bout import arena_rules as arena
 from tianxia.engine import Game
 from tianxia.state import ArenaEntry, WorldState
 

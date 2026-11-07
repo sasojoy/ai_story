@@ -1,5 +1,5 @@
 """歷史武將同行第六節：大決戰打完，隨主人上陣的同伴回江湖（docs/superpowers/specs/2026-10-18-歷史武將同行-design.md）。
-全部拆包第 7 批從 tianxia/escorts.py 整個搬進決戰包（舊名留成指到這一份的別名）。
+全部拆包第 7 批從 tianxia/escorts.py 整個搬進決戰包。
 
 收場那一刻（engine._apply_battle_outcome，龍頭上陣的 generals.after_battle 之後）全服放掉 owner、在 CompanionProgress.parted_from
 記下原主人（9.6）；原主人自己的 Game 補這一場的戰報時（view.file_showdown → muster.escort_home）把他拿出隊伍、寫一句，同步或按招募之前

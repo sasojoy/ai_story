@@ -293,7 +293,8 @@ class PlacesScenario(SocializeScenario):
 
     def plan_war(self) -> None:
         """盤算到點：照 PlanContest.place_win／place_lose 改地點（預設打過一仗）。"""
-        from tianxia import hints, place_state
+        from tianxia.features.guide import hints
+        from tianxia import place_state
         from tianxia.state import Plan
 
         pair = next(((it, st) for it in self.c.itineraries for st in it.stops if st.contest and st.place in self.c.locations), None) if place_state.on(self.c) else None

@@ -36,7 +36,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_mounts_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import atlas, bot, bot_policy, bounties, database, mounts, naming, orders  # noqa: E402
+from tianxia import atlas, bot, bot_policy  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database, mounts, naming, orders  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402

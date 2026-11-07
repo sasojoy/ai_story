@@ -10,7 +10,8 @@ from typing import Literal, get_args
 import pytest
 
 from conftest import install_season_one, install_showdowns, real_content
-from tianxia import naming, seal
+from tianxia import naming
+from tianxia.features.seal import seal
 from tianxia.features.seal.checks import validate_seal
 from tianxia.models import ShardDef
 from pydantic import BaseModel, Field, ValidationError
@@ -70,7 +71,7 @@ def test_the_real_content_has_seven_shards_and_marks_three_showdowns():
 
 
 def test_the_test_content_has_no_shards_so_the_seal_stays_off(content):
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     assert content.seal == {} and not seal.on(content)
     put_shards(content)
@@ -129,7 +130,7 @@ def test_no_shards_means_the_marks_and_the_emerge_skill_are_not_checked(content)
 def test_the_registry_lives_on_the_shared_world_and_survives_a_new_season(sealed, world):
     """登記在 world 那一列（不分季）：換季不清；開季、換季寫 opened_real（「這一季上線過」與隱沒都看它，5.3）。"""
     from conftest import next_season
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.engine import Game
 
     world.mutate(lambda st: seal.log(seal.filled(st.seal, sealed), st.season_number, "emerge", shard="chishou", holder="甲"))
@@ -142,7 +143,7 @@ def test_the_registry_lives_on_the_shared_world_and_survives_a_new_season(sealed
 
 
 def test_the_salt_is_made_once_and_never_shown(sealed, world):
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     reg = world.seal_state().registry
     assert reg.salt == ""
@@ -152,7 +153,7 @@ def test_the_salt_is_made_once_and_never_shown(sealed, world):
 
 
 def test_the_dice_are_seeded_by_salt_tianji_and_purpose():
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     a = seal.dice(SALT, 3, "seal-stir", "changshe_fire", "chishou").random()
     assert a == seal.dice(SALT, 3, "seal-stir", "changshe_fire", "chishou").random()
@@ -161,7 +162,7 @@ def test_the_dice_are_seeded_by_salt_tianji_and_purpose():
 
 
 def test_shard_of_matches_names_without_case(sealed, world):
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.world_state import SealRegistry
 
     reg = seal.filled(SealRegistry(), sealed)
@@ -174,7 +175,7 @@ def test_shard_of_matches_names_without_case(sealed, world):
 
 def _holding(content, world, shard="chishou", name="懷璽"):
     """把 shard 記在 name 名下（since_season 0：不是這一季到手的），回傳那個人的 Game（同步過，抄本已經照登記抄好）。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.engine import Game
 
     def _give(st):
@@ -189,7 +190,7 @@ def _holding(content, world, shard="chishou", name="懷璽"):
 
 def test_the_registry_copies_the_heirloom_onto_its_holder_and_off_everyone_else(content, world):
     """抄本照登記重抄（7.4）：是你的就寫上（id 固定「璽:片」、不吃流水號），不是就清掉；碎片關著也清掉。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     put_shards(content)
     game = _holding(content, world, "yunzhuan")
@@ -267,7 +268,7 @@ def test_chizhang_is_read_and_guixin_grows_companions(content, world):
     put_shards(content)
     game = _holding(content, world, "chizhang")
     assert treasures.amount(game.state, content, "fuse_points") == 5
-    from tianxia import create
+    from tianxia.features.craft import create
     assert create.seal_points(game.state, content) == 5
     guixin = _holding(content, world, "guixin", name="歸心客")
     guixin.state.player.team = ["mate"]  # 測試內容的人物 mate 帶在身邊（grant_team_exp 只讀 team 與 content.characters）
@@ -381,7 +382,7 @@ def test_with_the_shards_on_the_old_chain_no_longer_records_a_fragment(real, wor
 
 def _registry(content, **held):
     """一份補齊七片、有密鹽的登記；held 是 片 id → 持有者（since_season 0）。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.world_state import SealRegistry
 
     reg = seal.filled(SealRegistry(salt=SALT), content)
@@ -392,7 +393,7 @@ def _registry(content, **held):
 
 def _ended(battle_id, rows, rounds=9, record=7, **seal_fields):
     """收場的決戰：rows 是（名號, 陣營, 自己出手幾回合, 帶頭佔上風幾回合）；戰功照 Joy 的 merit_points（出手 2、帶頭 3）。"""
-    from tianxia.battle_instance import BattleInstance, BattleParticipant
+    from tianxia.features.battle.instance import BattleInstance, BattleParticipant
 
     parts = {
         name: BattleParticipant(name=name, faction=side, neili=300.0, neili_cap=300.0, power=60.0, acted_rounds=acted,
@@ -404,8 +405,8 @@ def _ended(battle_id, rows, rounds=9, record=7, **seal_fields):
 
 def test_joining_snapshots_turncoat_and_newbie(sealed, world):
     """參戰者加入時快照「這一季叛投過」與「新手期」（4.6），挑挑戰者只讀快照。"""
-    from tianxia import battle_instance
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.features.battle import instance as battle_instance
+    from tianxia.features.battle.instance import BattleInstance
     from tianxia.engine import Game
 
     game = Game.new(sealed, "甲", rng=random.Random(0), world=world)
@@ -422,7 +423,7 @@ def test_joining_snapshots_turncoat_and_newbie(sealed, world):
 
 def test_emergence_rolls_its_own_dice_once_a_season(sealed):
     """3.2：一季最多一片；照密鹽＋天機＋季別擲 35%，挑還沒現世過的；管理者強制現世略過機率。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     reg = _registry(sealed)
     hits = [s for s in range(1, 200) if seal.roll_emerge(reg, sealed, s, 0) is not None]
@@ -438,7 +439,7 @@ def test_emergence_rolls_its_own_dice_once_a_season(sealed):
 
 def test_the_round_threshold_relaxes_on_a_small_battle(sealed):
     """min(3, 實打回合)；參戰名單不到 10 人時放寬到 1 回合（PM 癸）。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     cfg = sealed.config.seal
     twelve = [(f"人{i}", "guan", 1, 0) for i in range(12)]
@@ -448,7 +449,7 @@ def test_the_round_threshold_relaxes_on_a_small_battle(sealed):
 
 
 def test_the_pick_takes_the_top_three_by_merit_and_prefers_the_former_holder_only_inside():
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     rows = [("甲", 30), ("乙", 20), ("丙", 10), ("丁", 5)]
     assert {seal.weighted_pick(rows, random.Random(i), 3) for i in range(200)} == {"甲", "乙", "丙"}
@@ -460,7 +461,7 @@ def test_the_pick_takes_the_top_three_by_merit_and_prefers_the_former_holder_onl
 
 def test_wancheng_raises_a_shard_at_muster_when_the_dice_say_so(sealed, world):
     """宛城（標 emerge）開集結：擲中就記在這一場（seal_emerge），天下大事多一句異光。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia import world as world_rules
 
     world.seed_first_season(sealed)
@@ -523,7 +524,7 @@ def test_a_battle_nobody_could_fight_to_the_end_raises_nothing(sealed, world):
 
 def test_stirring_skips_protected_shards_and_stops_at_the_season_cap(sealed):
     """4.1、4.2：每片各擲 7%（照密鹽＋天機＋event_id＋片），一場最多一片；新主保護、每片每季一次、全服一季兩次；管理者強制璽動略過。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     reg = _registry(sealed, chishou="甲", xuanniu="乙")
     rolls = [seal.roll_stir(reg, sealed, 5, t, "changshe_fire") for t in range(400)]
@@ -541,7 +542,7 @@ def test_stirring_skips_protected_shards_and_stops_at_the_season_cap(sealed):
 
 
 def test_the_four_tiers_from_the_holder_side():
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     assert seal.tier_for("guan", "guan", "大勝") == "大勝" and seal.tier_for("guan", "guan", "險勝") == "險勝"
     assert seal.tier_for("guan", "huang", "險勝") == "險敗" and seal.tier_for("guan", "huang", "大勝") == "大敗"
@@ -581,7 +582,7 @@ def test_a_free_or_absent_holder_is_snapshotted_as_a_bystander(sealed, world):
 
 def test_the_top_merit_on_both_sides_hear_they_may_be_pushed_forward(sealed):
     """4.3 最後一條：被璽動的那一場，兩邊合格的前三名各收到一句（持有者本人與快照陣營相同的人不收）。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     battle = _ended("changshe_fire", [("甲", "guan", 3, 2), ("乙", "guan", 3, 0), ("懷璽", "guan", 3, 3), ("丙", "huang", 3, 0)],
                     rounds=3, seal_shard="chishou", seal_holder="懷璽", seal_holder_faction="guan", seal_holder_side="guan")
@@ -595,7 +596,7 @@ def test_the_top_merit_on_both_sides_hear_they_may_be_pushed_forward(sealed):
 def test_the_hint_and_the_pick_use_one_rule_fb177(sealed):
     """FB-177：畫面那一句（hint_names）與挑挑戰者（Game._seal_challengers）照同一個條件 seal.challenger_ok：倒下的照樣在內
     （挑人本來就不看倒下）；叛投過、新手期、補位的機器人兩邊都不算（以前畫面那一句沒擋叛投與新手，會跟挑人對不上）。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     battle = _ended("changshe_fire", [("甲", "huang", 3, 2), ("乙", "huang", 3, 1), ("丙", "huang", 3, 0), ("懷璽", "guan", 3, 3)],
                     rounds=3, seal_shard="chishou", seal_holder="懷璽", seal_holder_faction="guan", seal_holder_side="guan")
@@ -609,7 +610,7 @@ def test_the_hint_and_the_pick_use_one_rule_fb177(sealed):
 
 def test_a_fallen_fighter_still_hears_the_merit_hint_fb177(sealed, world):
     """FB-177：倒下的人照樣可能被挑上陣前，畫面也寫「你此役戰功居前…」；跟倒下無關的那幾句（盯上你、牽制、放手一搏、顯眼）倒下了不寫。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.engine import Game
 
     game = Game.new(sealed, "甲", rng=random.Random(0), world=world)
@@ -625,7 +626,7 @@ def test_a_fallen_fighter_still_hears_the_merit_hint_fb177(sealed, world):
 
 
 def test_the_battle_scene_and_report_mention_the_stir(sealed, world):
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.engine import Game
 
     game = Game.new(sealed, "旁觀者", rng=random.Random(0), world=world)
@@ -642,7 +643,7 @@ def test_the_battle_scene_and_report_mention_the_stir(sealed, world):
 
 def test_a_shard_sinks_only_after_three_absent_seasons_and_twenty_eight_days(sealed):
     """PM 庚：連續三季沒上線、而且距上次上線滿 28 天才隱沒；上線了就歸零；opened_real 是 None 不動；查不到那一列（None）照沉。"""
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     cfg = sealed.config.seal
     day = 86400.0
@@ -665,7 +666,7 @@ def test_a_shard_sinks_only_after_three_absent_seasons_and_twenty_eight_days(sea
 def test_next_season_sinks_absent_holders_and_clears_the_duels(sealed, world):
     """7.6、5.11：換季那一筆交易裡判隱沒（江湖史只寫「不知所蹤」）、清空 seal_duels（還沒收場的記成未分勝負）、寫新的 opened_real。"""
     from conftest import next_season
-    from tianxia import seal
+    from tianxia.features.seal import seal
     from tianxia.engine import Game
     from test_seal_duel import _duel
 

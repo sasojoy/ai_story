@@ -140,7 +140,7 @@ def test_weapon_recipes_are_per_season(store, content):
 
 # ── Task 3：打造的規則 ──
 
-from tianxia import smithing  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
 
 
 def _forger(content, world, silver=200, name="試劍"):
@@ -1095,7 +1095,7 @@ def test_a_rack_weapon_tempers_up_to_its_own_cap_too(content, world):
 
 
 def test_originals_copies_and_signature_arms_count_as_top_quality(content, world):
-    from tianxia import signature_arms
+    from tianxia.features.gear import signature_arms
     from tianxia.models import SignatureArmDef
     _graded(content)
     game = _forger(content, world)
@@ -1121,14 +1121,14 @@ def test_rows_and_cards_write_the_cap_of_that_very_item(content, world):
     data = weapons.rows(s, content, world, art)
     assert data["worn"]["temper_max"] == 7 and [r["temper_max"] for r in data["rack"]] == [6, 5]
     assert data["worn"]["wear_note"] == "磨得慢" and [r["wear_note"] for r in data["rack"]] == ["", ""]  # 只有上品卡多一句
-    from tianxia import shopview
-    view = shopview.smith_view(s, content, world)
+    from tianxia.features.smithy import shop_view as smithy_shop
+    view = smithy_shop.smith_view(s, content, world)
     assert view["worn"]["item"]["temper_max"] == 7 and view["worn"]["item"]["wear_note"] == "磨得慢"
     assert {row["id"]: row["temper_max"] for row in view["rack"]["rows"]} == {"兵:2": 6, "兵:3": 5}
     assert {row["id"]: row["wear_note"] for row in view["rack"]["rows"]} == {"兵:2": "", "兵:3": ""}
-    from tianxia import skillview
-    assert skillview.shown_gear(content, p.weapon)["temper_max"] == 7 and skillview.shown_gear(content, p.weapon)["wear_note"] == "磨得慢"
-    assert skillview.shown_gear(content, p.rack[1], live=False)["temper_max"] == 5
+    from tianxia import art_cards
+    assert art_cards.shown_gear(content, p.weapon)["temper_max"] == 7 and art_cards.shown_gear(content, p.weapon)["wear_note"] == "磨得慢"
+    assert art_cards.shown_gear(content, p.rack[1], live=False)["temper_max"] == 5
 
 
 def test_the_whole_season_bot_tempers_a_top_quality_blade_seven_times(content, world, monkeypatch):

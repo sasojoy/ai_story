@@ -12,7 +12,10 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import annals, battle_instance, calendar, cultivation
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.battle import instance as battle_instance
+from tianxia import calendar
+from tianxia.features.cultivation import cultivation
 from tianxia.engine import Game
 from tianxia.rules import season_one
 from tianxia.sqlite_world import open_world

@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 
 import console
-from tianxia import calendar, database, seal
+from tianxia import calendar, database
+from tianxia.features.seal import seal
 from tianxia.bot_runner import BATTLE_TICK_SECONDS, BotRunner, TickReport, log_failure
 from tianxia.content import load_content, profile_line, serving_profile
 from tianxia.ollama_client import OllamaClient

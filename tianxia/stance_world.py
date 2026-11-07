@@ -3,11 +3,11 @@
 這一半讀寫的是季上的欄位（WorldState.stance_counts、stance_active、stance_week）與它們對世界的影響，核心與還沒搬的舊模組都讀：
 核心 rules（痕跡一筆算幾筆 mark_scale）、核心 event_check（人物開的事件端到眼前 met）、events（抽不到的事件 closed_events）、figures（推線的倍數 push_scale）、
 world（每天 00:00、每週一的掛鉤 daily、weekly_reset）。放進哪一包都會變成核心 import 包，所以是共用規則層（registry.SHARED）。
-行動那一半（玩家跟人物說話記一筆、人物頁、假人挑心意）在功能包 tianxia/features/companions/stances.py，舊名 tianxia.stances 是它的別名、也 re-export 這裡的名字。
+行動那一半（玩家跟人物說話記一筆、人物頁、假人挑心意）在功能包 tianxia/features/companions/stances.py，它也 re-export 這裡的名字。
 規則的說明在包裡那一份的開頭與導覽〈大勢人物與賽季〉「人物心意與託付」。
 
 開關是 rules.jianfa(content, world, "stances")；關著每個函式都當沒有這回事（季上的欄位不讀不寫）。
-只 import models、state、rules、calendar、conquest 與 figures（延後；figures 第 40 批收進共用規則層，邊界測試 SHARED_PENDING）。"""
+只 import models、state、rules、calendar、conquest 與 figures（延後；figures 第 40 批收進共用規則層）。"""
 from __future__ import annotations
 
 from . import calendar, rules

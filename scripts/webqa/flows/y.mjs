@@ -9,7 +9,7 @@ export const flows = [
   x_week2,
   ["y_duel", async (c) => {
     await c.py(`
-from tianxia import seal
+from tianxia.features.seal import seal
 from tianxia.world_state import SealDuel, SealSide
 name = '沈浪'
 def side(n):

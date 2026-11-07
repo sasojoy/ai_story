@@ -12,7 +12,9 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import bot, bot_policy, calendar, events, figures, opportunities, push, rules, timetable
+from tianxia import bot, bot_policy, calendar, events, figures
+from tianxia.features.military import opp_rules as opportunities
+from tianxia import push, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, OppDef
@@ -204,7 +206,7 @@ def test_switch_off_dialogue_menu_unchanged(real):
 
 
 def test_defection_clears_opportunities(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     game = _game(on, faction="guan", at="huangjin_camp")
     game.state.player.opp_done = ["guan_zhujun"]

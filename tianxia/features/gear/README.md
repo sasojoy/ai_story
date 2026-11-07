@@ -10,7 +10,7 @@
 
 ## 裡面有什麼
 
-- `signature_arms.py`（原 `tianxia/signature_arms.py`，舊名留成指到這裡的 `sys.modules` 別名）：名將本命兵器的規則（情誼到門檻他送你、打贏本人 `signature_wins` 次他讓你奪走、神器譜的行、名字照內容讀 `refresh_names`）。
+- `signature_arms.py`（原 `tianxia/signature_arms.py`）：名將本命兵器的規則（情誼到門檻他送你、打贏本人 `signature_wins` 次他讓你奪走、神器譜的行、名字照內容讀 `refresh_names`）。
 - `market_actions.py`：`market_options`（馬市第二層選單：買、餵、換上、離開）、`market`（選單上的選擇）、`enter`（`act:market` 進門）。
 - `bench_actions.py`：`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（修練頁；`dismantle_many` 的 `@not_while_preparing` 在包的函式上）。
 - `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
@@ -38,11 +38,11 @@
 核心原位碰這一包的，邊界名單（`tests/core/boundary_tables.py` 的 `# gear` 那一組）逐條記理由：
 - `GAME_DELEGATE_CALLERS`：`choose → _general_gifts`、`_signature_arms`、`_gift_entry`（位置固定）。
 - `CORE_DELEGATE_CALLERS`：`event_check.answer_event`、`answer_branch` 各叫 `_general_gifts`、`_signature_arms`、`_gift_entry`（事件檢定是核心本體，贈禮在效果套完之後）。
-- `GAME_DIRECT`：`_drop_stale_references` 讀 `signature_arms.refresh_names`（經舊名別名；會改 `item.name`、要讀 `owned`）。接不了 `on_drop_stale` 的原因是開關、不是位置：`core/features.py` 的 `on_drop_stale` 只問開著的包，原位的 `refresh_names` 不看開關，四欄都關著時 `GearFeature.enabled` 是 False，接進掛鉤就不跑了（第 42 批 PM 認定第 1 條）；歸第 55 批（補算與換季收接縫），照第 40 批 `smith_base` 的前例把 `refresh_names` 放進共用層或核心的 `*_base` 再收。
+- `GAME_DIRECT`：`_drop_stale_references` 讀 `signature_arms.refresh_names`（會改 `item.name`、要讀 `owned`）。接不了 `on_drop_stale` 的原因是開關、不是位置：`core/features.py` 的 `on_drop_stale` 只問開著的包，原位的 `refresh_names` 不看開關，四欄都關著時 `GearFeature.enabled` 是 False，接進掛鉤就不跑了（第 42 批 PM 認定第 1 條）；歸第 55 批（補算與換季收接縫），照第 40 批 `smith_base` 的前例把 `refresh_names` 放進共用層或核心的 `*_base` 再收。
 
 ## 讀 這一包的 `content/gear.json` 的人
 
-`check_gear`、`check_signature_arms` 在這一包的 `checks.py`，`content.validate` 原位經 `check_at` 叫，不接 `check_content`（第二輪第 100 批；第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；`SHARED_LATER` 的 `leaderboard`（`gear_card` 讀 `signature_arms`，函式裡經舊名別名）；`mounts` 不讀。
+`check_gear`、`check_signature_arms` 在這一包的 `checks.py`，`content.validate` 原位經 `check_at` 叫，不接 `check_content`（第二輪第 100 批；第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；共用層 `leaderboard`（`gear_card` 讀核心 `core/signature_base`）；`mounts` 不讀。
 
 ## 測試
 
@@ -57,7 +57,7 @@
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `menxia_actions`：`wield`、`dismantle`、`feed`、`dismantle_many`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
-- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。
+- 改 `shop_view.py` 另外跑 `git grep -l gear_shop -- tests tianxia/features` 列的那幾個（`test_for` 挑不到）。
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 
@@ -67,5 +67,5 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py`：`market_want`、`MOUNT_SILVER_RESERVE`（第 89 批）、`visit_market`、`feed_mount`、`wear_better`（第 101 批）從 `bot` 搬來，舊名 re-export，換的要換 `gear.bots` 那一份。
-- 過渡：`views.py` 第 88 批改讀共用層 `art_cards.gear_rows`，少 `skillview` 這 1 處。`REF` 搬進 `core/signature_base`，`signature_arms` re-export，`leaderboard.gear_card` 讀核心那一份。
+- `views.py` 第 88 批改讀共用層 `art_cards.gear_rows`。`REF` 搬進 `core/signature_base`，`signature_arms` re-export，`leaderboard.gear_card` 讀核心那一份。
 - 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

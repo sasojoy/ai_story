@@ -11,7 +11,8 @@ import re
 from unittest import mock
 
 from conftest import FixedRandom, no_plans, no_territory, real_content
-from tianxia import battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.features.map import layers
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
@@ -894,7 +895,7 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
     fig = on.figures["bocai"]
     squad = on.squads[fig.squad]
     won = _player(on, world, "官甲", "guan", "huangjin_camp")
-    with _fight("險勝"), mock.patch("tianxia.cultivation.seize", return_value=[]):
+    with _fight("險勝"), mock.patch("tianxia.features.cultivation.cultivation.seize", return_value=[]):
         won.choose("act:challenge:bocai")
     win = won.state.battles[0]
     game = _player(on, world, "官乙", "guan", "huangjin_camp")
@@ -903,7 +904,7 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
     if fig.character:
         p.affinities[fig.character] = 30
     xinde, mats = p.stats.get("xinde", 0), dict(p.materials)
-    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]):
+    with _fight("僵持"), mock.patch("tianxia.features.cultivation.cultivation.seize", return_value=[]):
         msgs = game.choose("act:challenge:bocai")
     record = game.state.battles[0]
     assert record.tier == "僵持" and figures.DRAW_LINE.format(name=fig.name) in msgs
@@ -921,12 +922,12 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
 def test_a_drawn_challenge_is_a_chance_to_break_through_like_a_win(on, world):
     """僵持也擲一次頓悟，難度比照打贏的算法（對手難度 ÷ 我方威力）；figure_draw_share 0 是舊規則：什麼都不給、不擲。"""
     game = _player(on, world, "官甲", "guan", "huangjin_camp")
-    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
+    with _fight("僵持"), mock.patch("tianxia.features.cultivation.cultivation.seize", return_value=[]) as seize:
         game.choose("act:challenge:bocai")
     assert seize.call_count == 1 and seize.call_args.args[3] == pytest.approx(120 / 200)
     on.config.figure_draw_share = 0.0
     other = _player(on, world, "官乙", "guan", "huangjin_camp")
-    with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
+    with _fight("僵持"), mock.patch("tianxia.features.cultivation.cultivation.seize", return_value=[]) as seize:
         other.choose("act:challenge:bocai")
     assert seize.call_count == 0 and (other.state.battles[0].xinde, other.state.battles[0].exp) == (0, 0)
 
@@ -936,7 +937,7 @@ def test_a_story_draw_still_is_no_chance_to_break_through(on, world):
     game = _player(on, world, "官甲", "guan", "huangjin_camp")
     record = battlelog.new_record(game.state, on, world, on.squads[on.figures["bocai"].squad],
                                   EncounterResult(tier="僵持", margin=0, our_power=200, difficulty=120), "train")
-    with mock.patch("tianxia.cultivation.seize", return_value=["x"]) as seize:
+    with mock.patch("tianxia.features.cultivation.cultivation.seize", return_value=["x"]) as seize:
         assert game._seize(record) == [] and seize.call_count == 0
 
 

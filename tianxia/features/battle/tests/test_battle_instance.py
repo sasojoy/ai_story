@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.content import load_content
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,

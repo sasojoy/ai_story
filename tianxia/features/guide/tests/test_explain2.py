@@ -1,6 +1,6 @@
 """玩法說明二（explain-2，FB-100：QA 用完全不懂的新玩家角度玩 20 分鐘，說明告訴了「這一下會怎樣」，還沒告訴「為什麼要這樣做、目標是什麼」）。
 
-一、點戰況圖卡、態勢、大事、主線看的說明（status.war_help，句子在 tianxia/howto.py）：這一季在打什麼、亂局與割據、大事怎麼定、
+一、點戰況圖卡、態勢、大事、主線看的說明（status.war_help，句子在各包的 howto.py）：這一季在打什麼、亂局與割據、大事怎麼定、
     你能怎麼出力。門檻讀設定、此刻在亂局的讀 rules.chaos_fronts、大事的件數讀時刻表、擲骰的上下限讀 timetable 的常數。
 二、設定抽屜的玩法說明多五節（這一季在打什麼、名望、投靠與軍令、三方有什麼不同、修練與煉製）；新手期江湖頁有入口；
     狀態列的心得提示改成「付得起、做得了」就提示。
@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 from conftest import classic_rules, real_content
 
-from tianxia import howto, renown, rules, timetable
+from tianxia.features.guide import howto as guide_howto
+from tianxia import renown, rules, timetable
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parents[4]
@@ -79,51 +80,51 @@ def _rolls(content):
 def test_the_big_event_counts_follow_the_timetable(on):
     kinds = [e.kind for e in on.timetable]
     roll, fronted = _rolls(on)
-    line = howto.board_help(on)[0]
+    line = guide_howto.board_help(on)[0]
     assert f"這一季有 {len(kinds)} 件大事" in line
     assert f"{kinds.count('fixed')} 件史書寫定" in line
     assert f"{roll} 件擲骰（{fronted} 件看戰況" in line and f"{roll - fronted} 件不在戰線上" in line  # 審查 Minor 5：盧植下獄沒有戰線
     assert f"{kinds.count('showdown')} 場決戰" in line and "季末收場" in line
     first_roll = next(e for e in on.timetable if e.kind == "roll" and e.front is not None)
     first_roll.kind = "fixed"  # 時刻表改了：件數跟著變
-    line = howto.board_help(on)[0]
+    line = guide_howto.board_help(on)[0]
     assert f"{kinds.count('fixed') + 1} 件史書寫定" in line and f"{roll - 1} 件擲骰（{fronted - 1} 件看戰況" in line
     for e in on.timetable:
         e.front = e.front or "yingru"  # 每一件都在戰線上：不寫「不在戰線上」那一段
-    assert "不在戰線上" not in howto.board_help(on)[0]
+    assert "不在戰線上" not in guide_howto.board_help(on)[0]
 
 
 def test_the_events_that_can_be_skipped_are_named_as_such(on):
     """審查 Minor 5：寫好的大事不一定發生——skip_if_out 的人物先退場了就跳過（timetable.resolve）。件數照時刻表。"""
     skips = sum(e.skip_if_out is not None for e in on.timetable)
-    assert skips and f"有 {skips} 件要看那位人物還在不在：他先退場了，那件就不發生。" in howto.board_help(on)
+    assert skips and f"有 {skips} 件要看那位人物還在不在：他先退場了，那件就不發生。" in guide_howto.board_help(on)
     for e in on.timetable:
         e.skip_if_out = None
-    assert not any("退場" in line for line in howto.board_help(on))
+    assert not any("退場" in line for line in guide_howto.board_help(on))
 
 
 def test_orders_push_only_when_the_quota_is_met(on):
     """審查 Minor 5：一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推一把（orders.credit）。"""
-    line = howto.fronts_help(_war(on).state, on)[1]
+    line = guide_howto.fronts_help(_war(on).state, on)[1]
     assert "做軍令，會" not in line and "軍令湊滿額度" in line
 
 
 def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
-    assert "最多給到九成、最少也有一成" in howto.board_help(on)[0]  # timetable.CHANCE_CEIL／CHANCE_FLOOR
+    assert "最多給到九成、最少也有一成" in guide_howto.board_help(on)[0]  # timetable.CHANCE_CEIL／CHANCE_FLOOR
     monkeypatch.setattr(timetable, "CHANCE_CEIL", 0.8)
     monkeypatch.setattr(timetable, "CHANCE_FLOOR", 0.2)
-    assert "最多給到八成、最少也有二成" in howto.board_help(on)[0]
+    assert "最多給到八成、最少也有二成" in guide_howto.board_help(on)[0]
 
 
 def test_the_chaos_and_stance_rule_is_written_once(on):
-    """審查 Minor 7：亂局帶與態勢的規則只寫一次（howto.front_rule、howto.allied_rule），態勢、戰況圖卡、玩法說明都拿它
+    """審查 Minor 7：亂局帶與態勢的規則只寫一次（guide_howto.front_rule、guide_howto.allied_rule），態勢、戰況圖卡、玩法說明都拿它
     （割據那一句 geju_rule 2026-10-31 跟豪強第三方一起拿掉）。"""
     game = _war(on)
-    stance, front = howto.allied_rule(on), howto.front_rule(on, card=False)
+    stance, front = guide_howto.allied_rule(on), guide_howto.front_rule(on, card=False)
     help_ = game.status_data()["war_help"]
     section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
     assert stance in help_["stance"] and f"- {stance}" in section and f"- {front}" in section
-    assert help_["fronts"][0].startswith(howto.front_rule(on, card=True))
+    assert help_["fronts"][0].startswith(guide_howto.front_rule(on, card=True))
 
 
 def test_howto_reads_only_public_names_from_rules():
@@ -156,10 +157,10 @@ def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules
 def test_the_rewritable_events_are_the_ones_guan_and_huang_chains_point_at(on):
     """關鍵伏筆改寫得了的大事：官軍、黃巾的鏈指著的那幾件（豪強的鏈是第三方，不改寫結果）；伏筆拿掉就不提。"""
     events = {c.event for c in on.foreshadows.chains if c.side in ("guan", "huang")}
-    assert f"其中 {len(events)} 件可以被關鍵伏筆改寫" in howto.board_help(on)[-1]
-    lines = len(howto.board_help(on))
+    assert f"其中 {len(events)} 件可以被關鍵伏筆改寫" in guide_howto.board_help(on)[-1]
+    lines = len(guide_howto.board_help(on))
     on.foreshadows.chains = [c for c in on.foreshadows.chains if c.side == "haoqiang"]
-    assert len(howto.board_help(on)) == lines - 1 and "伏筆改寫" not in "".join(howto.board_help(on))
+    assert len(guide_howto.board_help(on)) == lines - 1 and "伏筆改寫" not in "".join(guide_howto.board_help(on))
 
 
 # ── 二、玩法說明多五節、新手期的入口、心得提示 ─────────────────────────────
@@ -195,8 +196,8 @@ def test_the_beta_page_leaves_out_what_only_season_one_has(real):
 def test_the_season_section_is_the_war_explanations_and_the_closing_rule(on):
     game = _war(on)
     section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
-    assert howto.season_line(on) in section and "35～65 是亂局" in section
-    for line in howto.board_help(on) + howto.quest_help(on):
+    assert guide_howto.season_line(on) in section and "35～65 是亂局" in section
+    for line in guide_howto.board_help(on) + guide_howto.quest_help(on):
         assert line in section
     assert f"收季：{rules.stance_rule_note(game.state, on)}" in section  # 收季規則讀 stance_rule_note（第 N 週起、幾分）
     on.config.chaos_low, on.config.chaos_high = 30, 70
@@ -255,7 +256,7 @@ def test_the_fame_amounts_follow_the_content_when_it_changes(on):
 
 def test_only_events_and_the_first_echo_give_fame_in_the_code():
     """名望的來源只有六條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
-    決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）、決戰陣前擊退龍頭（Game._showdown_pay）、護衛擋下挑戰（Game._deliver_guard_credits）、領地爭奪的分紅與守城功（Game._deliver_conquest，玩法說明 howto._fame_sources 那一句）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
+    決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）、決戰陣前擊退龍頭（Game._showdown_pay）、護衛擋下挑戰（Game._deliver_guard_credits）、領地爭奪的分紅與守城功（Game._deliver_conquest，玩法說明 guide_howto._fame_sources 那一句）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
     # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也是程式：一起掃，包裡的檔照相對 tianxia/ 的路徑記；核心本體 tianxia/core/
     # 也是（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
@@ -467,7 +468,7 @@ METHODS = (("柔", "看水"), ("剛", "打水"), ("快", "追風"), ("慢", "靜
 
 
 def _feeling(game, methods=METHODS, prologue=False, seed=0):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     from tianxia.models import InsightScene, SenseMethod
 
     scene = InsightScene(
@@ -494,7 +495,7 @@ def _card(game):
 
 
 def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     scene = _feeling(game)
     text, help_, _ = _card(game)
@@ -511,7 +512,7 @@ def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
 
 def test_the_kind_labels_come_back_with_one_switch(game, monkeypatch):
     """企劃者要恢復鈕上的心意：sensing.SHOW_KINDS 改 True（一行），伺服器就照做法給 tags，網頁照它畫。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     monkeypatch.setattr(sensing, "SHOW_KINDS", True)
     scene = _feeling(game)
@@ -539,7 +540,7 @@ def test_the_feeling_hint_is_the_same_whichever_method_is_right(game):
 
 
 def test_no_method_help_in_the_hut_or_while_drawing(game):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     _feeling(game)
     game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"

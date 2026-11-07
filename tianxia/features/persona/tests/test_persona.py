@@ -6,7 +6,8 @@ from __future__ import annotations
 import pytest
 from stances_kit import DAY, LUZHI, at, real_game, talking
 
-from tianxia import annals, companion_agent
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.companions import companion_agent
 from tianxia.features.persona import rules as persona
 from tianxia.state import PersonaNote
 

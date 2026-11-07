@@ -9,7 +9,7 @@
 每季照天機從池子裡照「欄位:組」挑 Config.forge_secrets.per_season 條（全服同一批，換季換一批；這一欄的裝備關著就不挑）。認形狀不認素材 id；
 主輔不交換；比對不擲骰。打中了的全服登記在 gear_recipes（鍵「鑄|配方 id」，名字欄寫鍵本身、不佔名字空間）。口訣三句：0 說書、1 鐵匠、2 殘譜；
 玩家聽過的、打中過的記在鑄譜（PlayerState.forge_manual），只記這一季的。擲骰一律用自己的亂數（secret_recipes.roll），不動 Game.rng。
-只 import models、state、calendar、equipment、weapons、armor、secret_recipes、world_state（型別）；smithing、engine、content 反過來用它。
+只 import models、state、calendar、equipment、weapons、armor、martial_arts、naming、secret_recipes、world_state（型別）；smithing、engine、content 反過來用它。
 
 內容驗證 validate_forge_secrets、validate_tier4_named、validate_named_clash 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
@@ -565,7 +565,7 @@ def validate_tier4_named(c: Content, need) -> None:
 
 
 def named_stem(name: str, slot: str, kind: str | None) -> str:
-    """名器名字拿掉最後的兵器字（劍、拳套）或防具字（甲鎧袍衫），剩下的是取名的那幾個字（_validate_named_clash 比這一段）。"""
+    """名器名字拿掉最後的兵器字（劍、拳套）或防具字（甲鎧袍衫），剩下的是取名的那幾個字（validate_named_clash 比這一段）。"""
     tail = WEAPON_NOUNS.get(kind or "", kind or "") if slot == "weapon" else next((w for w in ARMOR_FORGE_WORDS if name.endswith(w)), "")
     return name[: -len(tail)] if tail and name.endswith(tail) else name
 

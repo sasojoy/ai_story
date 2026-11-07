@@ -1,8 +1,9 @@
 """見面情誼起步與冷淡、對話提示帶稱號（名聲設計 4.3、5.2）。"""
 from conftest import real_content, renown_unscaled
 
-from tianxia import companion_agent, renown
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.companions import companion_agent
+from tianxia import renown
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.sqlite_world import open_world
 from tianxia.state import new_game_state
 

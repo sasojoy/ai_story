@@ -15,7 +15,9 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, plain_game, ready
 
-from tianxia import explore_one, hints, journal, team
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.guide import hints
+from tianxia import journal, team
 from tianxia.encounter import EncounterResult
 
 NUMERIC = re.compile(r"^\S+ [+-]\d+(\.\d+)?")  # 例如「銀兩 +5」「經驗 +10（每人）」

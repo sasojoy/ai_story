@@ -4,7 +4,9 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import atlas, library, renown, skillview, team
+from tianxia import atlas, library, renown
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import new_game_state
@@ -101,9 +103,9 @@ def test_the_boost_line_names_the_title_when_the_path_matches():
     s = new_game_state(c, "甲")
     s.player.member.wugong_id = "shouyi_jian"
     s.player.stats.update({"good": 22, "evil": 4})
-    assert "你是一方豪俠：【守義劍】正派，吃善名 22，+11%" in skillview.boost_line(s, c, w)
+    assert "你是一方豪俠：【守義劍】正派，吃善名 22，+11%" in art_view.boost_line(s, c, w)
     s.player.stats.update({"good": 2, "evil": 9})  # 走寇：正派的共鳴照算，不寫稱號
-    assert "【守義劍】正派，吃善名 2，+1%" in skillview.boost_line(s, c, w)
-    assert "你是" not in skillview.boost_line(s, c, w)
+    assert "【守義劍】正派，吃善名 2，+1%" in art_view.boost_line(s, c, w)
+    assert "你是" not in art_view.boost_line(s, c, w)
     c.config.renown.explain = False
-    assert "【守義劍】共鳴 +1%" in skillview.boost_line(s, c, w)
+    assert "【守義劍】共鳴 +1%" in art_view.boost_line(s, c, w)

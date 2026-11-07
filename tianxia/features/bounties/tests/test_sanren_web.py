@@ -9,7 +9,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import bounties
+from tianxia.features.bounties import rules as bounties
 from tianxia.characters import CharacterStore
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]

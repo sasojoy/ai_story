@@ -1,7 +1,7 @@
 """簽到（功能包；開發規範手冊 3.2）：21 天季每天簽一次（丹的日子給回體丹、第 6、13、20 天自己挑一個四階，其餘輪流銀兩與一階素材）。
 全部拆包第 30 批搬進來。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- checkin.py：簽到的規則（原 tianxia/checkin.py，舊名留成別名；`on`、`PILL_FOUND` 是核心 core/services.py 的 checkin_on、PILL_FOUND，這裡 re-export）
+- checkin.py：簽到的規則（原 tianxia/checkin.py；`on`、`PILL_FOUND` 是核心 core/services.py 的 checkin_on、PILL_FOUND，這裡 re-export）
 - actions.py：原本 Game 上的 3 個方法（check_in、_auto_checkin、checkin_view；Game 留 3 個一行委派）的本體
 
 沒有選項前綴（簽到不放鈕：江湖頁的小標，/api/do/checkin 在 routes.py 的 main_actions，全部拆包第 68 批）、沒有 APIRouter、沒有假人分數（假人叫的是 Game.checkin_view、check_in）。

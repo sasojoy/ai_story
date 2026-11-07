@@ -13,7 +13,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, db_text, emit, register_track
 # ═══════════════════════════ craft：煉製與自創一軌（全部拆包第 44 批，dev/craft-1） ═══════════════════════════
 # 意境合成與揣摩（取名三段式 A、B、C：Game.forge_request／server.prepare_forge／Game.forge 的重驗；預覽 /api/forge_line）、自創五步
 # （執器、擺式、立意〔三段式〕、成形、立名）、重悟帖（重骰形、重讀這句意〔三段式〕）、作罷的本體從 engine.py 與 tianxia/create.py 搬進
-# tianxia/features/craft/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。角色與意境、武學、招式的名字都是原創的（第 22 批 PM 認定第 3 條）。
+# tianxia/features/craft/（計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。角色與意境、武學、招式的名字都是原創的（第 22 批 PM 認定第 3 條）。
 
 CRAFT_READ = {"score": 82, "attributes": ["柔", "虛"], "lean": "正", "move": "拂雲式", "say": "身子一擰便繞了過去"}
 CRAFT_REREAD = {"score": 71, "attributes": ["剛"], "lean": "邪", "move": "裂冰式", "say": "掌勢一沉便壓了下去"}
@@ -238,7 +238,7 @@ class CraftScenario(Scenario):
 
     def create_steps(self) -> None:
         """自創的前三步：種類不對、形不對、沒執器就擺式、立意（太短、太長、模型回了）、回頭。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.MAKER
         self.mx(who, "create_pose", {"pose": create.preset(self.c, "進擊")})  # 沒執器
@@ -266,7 +266,7 @@ class CraftScenario(Scenario):
 
     def create_name(self) -> None:
         """立名：太短、撞名（先有人用了）、招名不合、成功；另一個人模型擋著走完、作罷（付過了）。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.MAKER
         self.mx(who, "create_name", {"name": "拳", "move": ""})
@@ -286,14 +286,14 @@ class CraftScenario(Scenario):
 
     def inner_form(self) -> str:
         """內功的行功之法（表上第一個；沒有就空著，讓引擎回那一句）。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         forms = create.forms_of(self.c, "內功")
         return forms[0].key if forms else ""
 
     def reroll(self) -> None:
         """重悟帖：沒有帖、重骰形（模型不用）、重讀這句意（模型回了、模型擋著不扣帖、改寫太短）、骰滿了。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.REROLLER
         self.mx(who, "create_reroll")  # 沒有單子
@@ -319,7 +319,7 @@ class CraftScenario(Scenario):
 
     def half(self) -> None:
         """前半停在這裡：擺式那一步、立意那一步、成形還沒立名（兩張帖，重骰過一次）、舊存檔的三步單子、煉製頁那一爐合好一個。"""
-        from tianxia import create
+        from tianxia.features.craft import create
         from tianxia.state import CreateDraft
 
         self.mx(self.H_POSE, "create_begin", {"kind": "武學", "form": "拳腳"})
@@ -342,7 +342,7 @@ class CraftScenario(Scenario):
 
     def resume(self) -> None:
         """新程式接著走：擺式的接著擺、立意的接著三段式、成形的重讀與重骰再立名、舊單子收掉重開、煉製頁接著合。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         self.login_all()
         for who in (self.H_POSE, self.H_INTENT, self.H_NAME, self.H_OLD, self.H_FURNACE):
@@ -460,5 +460,5 @@ class CraftScenario(Scenario):
 
 # 改一個字（selftest）：重悟帖沒有帖那一句（搬之前在 tianxia/create.py、之後在 tianxia/features/craft/ 的規則模組；第 2 項是之後的檔名，
 # 搬的人照實際的檔名改這一個字串）。抓到的地方：松檐重骰形的第一下
-register_track("craft", CraftScenario, (("tianxia/features/craft/create.py", "tianxia/create.py"),
+register_track("craft", CraftScenario, (("tianxia/features/craft/create.py",),
                                         ('NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"', 'NO_REROLL = "手上沒有重悟帖：萬寶閣買得到！"')), "week7")

@@ -3,13 +3,14 @@ import pytest
 import requests
 from pydantic import BaseModel
 
-from tianxia.battle_instance import SuccessRateJudgment
+from tianxia.features.battle.instance import SuccessRateJudgment
 from tianxia.engine import Game
 from tianxia.ollama_client import OllamaClient, _ensure_required_present
 import json
 import random
-from tianxia import companion_agent, event_llm, fight_llm, flavor, naming
-from tianxia.battle_instance import GambleVerdict, SuccessRateJudgment, assess_gamble
+from tianxia.features.companions import companion_agent
+from tianxia import event_llm, fight_llm, flavor, naming
+from tianxia.features.battle.instance import GambleVerdict, SuccessRateJudgment, assess_gamble
 from tianxia.fight_llm import FightRequest
 from tianxia.models import BattleAct, BattleOption
 from tianxia.ollama_client import InLockClient, ModelBudget, ModelSpokeKana, OllamaClient, has_kana

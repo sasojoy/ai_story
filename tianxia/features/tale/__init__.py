@@ -1,7 +1,7 @@
 """戰記（功能包；開發規範手冊 3.2）：決戰收場之後，說書人把那一場寫成一篇話本，全服一份（Joy 2026-10-29）；戰報頁的「戰記 ›」、江湖史的目錄、公開的分享頁都讀它。
 全部拆包第 52 批搬進來（計畫 docs/superpowers/plans/2026-11-06-戰記包-第1批.md）。README.md 寫這一包做什麼、導覽與設計稿、還留在原位的接縫。
 
-- tale.py：備料、寫字、組篇、存放（原 tianxia/tale.py）；tale_html.py：戰記頁的標記（原根目錄 tale_html.py）。舊名都留成別名
+- tale.py：備料、寫字、組篇、存放（原 tianxia/tale.py）；tale_html.py：戰記頁的標記（原根目錄 tale_html.py）。
 - routes.py：/api/tale/{battle_id}、/zhanji/{code} 與 server.py 原本的戰記那一段（寫戰記的背景執行緒、封面、畫面）、決戰放手一搏補劇情的 narrate_*；殼照 FEATURES 掛
 
 沒有選項前綴、沒有狀態鍵、沒有 PlayerState 欄位、沒有內容檔（戰記存在資料庫旁邊的小檔 <db>-tale.sqlite）；假人只會進名錄。接的掛鉤只有 routes、threads。

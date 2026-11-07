@@ -58,9 +58,9 @@
 - 網頁：`test_econ_web.py`（捐軍備與軍備存量）第 61 批搬進這一包的 `tests/`。改 `web/outlets.js` 時 `test_for` 照檔名挑得到它、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去；第 61 批搬走的 18 條只是名字帶 page，測的是各包自己的資料，不用跟）、`tests/bots/test_server_bots.py`（掃字）。
 - `tests/figures/test_gentry_allied.py`：一條（`test_donate_goes_to_the_side_stock`，豪強捐軍備進依附那一軍的存量）。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-過渡 import 0 處：`donate_actions` 第二輪第 93 批改讀 `core/shop_base.attribute_rank`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`donate_actions` 讀 `core/shop_base.attribute_rank`。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `outlets`（今天捐過的照帶，不看開關）。
 
@@ -85,4 +85,4 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py` 多 `donate_want`、`donate_spare`（第 101 批）；`econ_day` 走服務清單。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
 
-- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。
+- 改 `shop_view.py` 另外跑 `git grep -l outlets_shop -- tests tianxia/features` 列的那幾個（`test_for` 挑不到）。

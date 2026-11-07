@@ -1,5 +1,5 @@
 """商城（docs/superpowers/specs/2026-10-20-商城架構-design.md）：元寶、商品、購買與發貨、月卡、封測發放、管理者工具的規則。
-功能包 tianxia/features/mall/ 的純規則（開發規範手冊 3.2；原本是 tianxia/mall.py，那一個名字留成指到這裡的別名）。
+功能包 tianxia/features/mall/ 的純規則（開發規範手冊 3.2；原本是 tianxia/mall.py）。
 
 - 開關 Config.mall.enabled（on）：關著時什麼都不做、不讀不寫資料庫（月卡不加上限），呼叫端照舊。
 - 商品寫在 content/mall.json（joy 寫），效果只能從允許的效果表 EFFECTS 挑（4.3：用允許表不用禁止表）；載入時 content.check_mall

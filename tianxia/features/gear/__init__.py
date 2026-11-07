@@ -2,7 +2,7 @@
 全部拆包第 42 批搬進來（引擎那一半）；網頁的畫法在 web/gear.js（第 65 批）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
 GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py；那個名字留成指到這裡的別名）
+- signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py）
 - market_actions.py：馬市的第二層選單、選單上的選擇、進門（原本 Game 上的 2 個方法與 _act 的 act:market 三行）
 - bench_actions.py：修練頁的換上、餵馬、拆解、批量拆解（4 個）
 - gift_actions.py：寄放補送、名將贈禮、此刻在身邊的人物、贈禮另起的紀錄、本命兵器（5 個）
@@ -11,7 +11,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 
 接縫掛鉤：choose（market:*）、verbs（act:market 進門與紀錄標題）、content、bot_pick。沒有 APIRouter（/api/menxia 的四個動作在 routes.py 的 menxia_actions，全部拆包第 68 批；/api/boards、/api/board_card 留在殼，叫 Game 的委派）。
 店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節；同鐵匠鋪：入口順序 懸賞榜 → 鐵匠鋪 → 馬市是行為）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class GearFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """market:*（馬市第二層選單上的每一顆）：標題「馬市」（原 Game._action_title 的 market 那一支），動作照原 Game._market。
-        FB-195（選單上沒有或灰掉的 market: 回為什麼不成）仍在 Game.choose 原位，在這個掛鉤之前。"""
+        FB-195（選單上沒有或灰掉的 market: 回為什麼不成）在 market_actions.stale_cell（MENU_ORDER 的 stale/market），在這個掛鉤之前。"""
         if kind != self.prefix:
             return None
         from tianxia import mounts  # noqa: PLC0415

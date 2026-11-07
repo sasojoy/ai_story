@@ -1,7 +1,7 @@
 """宴客（大勢人物擴充第三批：人物設宴、玩家入席敬酒、席間最佳上天下大事；功能包，開發規範手冊 3.2、3.10 第 1 階的「有按鈕的小包」）。
 README.md 寫這一包做什麼、導覽與設計稿。
 
-- rules.py：純規則（原 tianxia/feasts.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/feasts.py）
 - actions.py：原本 Game 上的 _feast_*、feast_*（Game 留一行委派給 server 的三段式與場景卡）
 - bots.py：假人的分數（原本 bot_policy.score 的那一段）
 """

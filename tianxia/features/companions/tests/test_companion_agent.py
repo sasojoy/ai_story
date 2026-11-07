@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
-from tianxia.companion_agent import DriftSynthesis, resolve_tag_delta
+from tianxia.features.companions import companion_agent
+from tianxia.features.companions.companion_agent import DriftSynthesis, resolve_tag_delta
 from tianxia.world_state import WorldStateStore
 
 
@@ -271,7 +271,7 @@ def test_prepare_turn_wraps_the_outcome_and_marks_failure_with_no_turn(content, 
 def test_prepare_turn_logs_which_companion_failed(content, state, world, caplog):
     request = companion_agent.build_request(state, content, world, "mate", "talk:0", "閒聊幾句")
     with mock.patch.object(companion_agent, "generate_turn", side_effect=companion_agent.DialogueUnavailable("連不上")), \
-            caplog.at_level("WARNING", logger="tianxia.companion_agent"):
+            caplog.at_level("WARNING", logger="tianxia.features.companions.companion_agent"):
         companion_agent.prepare_turn(mock.Mock(), request)
     assert any("mate" in r.getMessage() and "連不上" in r.getMessage() for r in caplog.records)
 

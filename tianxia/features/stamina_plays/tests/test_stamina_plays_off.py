@@ -5,7 +5,7 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import ambush
+from tianxia.features.stamina_plays import ambush_rules as ambush
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

@@ -11,7 +11,7 @@ from test_battle_instance import _gamblers
 from test_engine import _install_battle_def_with_free_text, _join_and_open
 
 import server
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.models import FreeTextGamble
 
 ACT = SimpleNamespace(title="對陣", text="兩軍對陣。")  # 評分與寫劇情只讀 title、text

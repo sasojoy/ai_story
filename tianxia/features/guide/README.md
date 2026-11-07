@@ -7,7 +7,7 @@
 
 ## 裡面有什麼
 
-- `rules.py`（原 `tianxia/guide.py`：說書人的步驟、任務卡、下一步）、`hints.py`、`newbie.py`、`opening.py`、`enlist.py`（原名）：五個舊名都留成 `sys.modules` 別名（同一個模組物件），`from tianxia import guide`、`from tianxia.guide import note_action`（第二輪第 98 批起 engine 不 import 了）與測試照舊拿得到（本週卡 `weekcard` 第 36 批起收進核心，三選一還沒選改問 `Game._opening_pending` 委派，不再 import `opening`）。
+- `rules.py`（原 `tianxia/guide.py`：說書人的步驟、任務卡、下一步）、`hints.py`、`newbie.py`、`opening.py`、`enlist.py`（原名）。本週卡 `weekcard` 第 36 批起收進核心，三選一還沒選改問 `Game._opening_pending` 委派，不再 import `opening`。
 - `actions.py`：原本 `Game` 上的 31 個方法（名字去掉前導底線），加上核心原位叫的 11 個服務的本體（`opening_on`……`enlist_expire`；`Game._note_action` 第二輪第 98 批起掛在 `game_api.py` 的表，本體 `actions.note_action`，見下）。
 - `checks.py`：內容檢查（`check_content`）——碰到才說（`hints.json`）那一塊原本在 `content.validate`，核心不准 import 包，搬進這裡、句子照抄。
 - `HutReward`（序章步驟的獎勵那一行的記號）搬進核心 `tianxia/core/services.py`：核心的 `Game._guide`、`_menxia_entry` 認它；`rules.HutReward` 是同一個類別。
@@ -40,12 +40,11 @@
 **玩法說明的掛鉤**（第 59 批；計畫 `docs/superpowers/plans/2026-11-06-玩法說明-第59批.md`）：`Feature.howto()`（`HowtoHook`、`HowtoPage`，`core/features.py` 檔尾）。那一頁的 22 格照核心寫死的 `HOWTO_ORDER` 接（順序就是行為，`test_contract_core` 逐字鎖；改表先過 PM），這一包交 `season`、`act_head`、`growth`、`stamina`、`fame`、`bag` 六格，其餘 16 包各交自己那一節；別節中間判斷在別包的句子走 `HOWTO_INSERTS`（`fame_seal`、`fame_tavern`、`land_seal`，主人玉璽、酒肆）。整包不看 `enabled`（判斷都在各節自己裡面，跟搬之前一樣）。兩包以上要用的 `section`、`tenth`、`order_pushers`、`SOME_PLACES` 在核心 `core/howto_base.py`。
 **`Game` 上這一批留的名字（掛在 `game_api.py` 的表）**：`howto_text`（路由與二十幾個測試）、`_top_up_line`（`_top_up_pills`：讀檔那一刻寫一行）、`_stamina_help`、`_war_help`（`status_data`：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-- 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 3 處，原本 6 處）：`opening.py` 1（`bounties`）、`actions.py` 1（`atlas`、`howto`；同一行的 `figures` 第 40 批收進共用規則層，不算過渡，註照留「過渡：待搬」；`rules.py` 的 `ranks`、`enlist.py` 的 `orders` 第 40 批收進共用規則層，註改寫成「共用規則層」；`world` 那一行全部拆包第 25 批收進核心本體，註拿掉；`create` 第 44 批煉製自創成包時拿掉：`h_create` 改問包的三個查詢服務 `ctx._create_on()`、`_create_allowed()`、`_create_price()`；`training` 第 18 批登記進共用規則層，不算過渡；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
-- 第 45 批合完重印 **1 處**：`actions.py` → `howto`；`opening.py` 的 `issuer` 改讀核心 `core/bounty_base`。
-- 第 50 批合完重印 **2 處**：`opening.py` → `bounties`、`actions.py` → `howto`（原本 `atlas`、`figures`、`howto` 同一行，拆成兩行，`atlas`、`figures` 那一行註「共用規則層」）。`actions.py` 讀軍情包認領的 `fragments` 那一處當時不收（第 34 批認定第 9 條），第 59 批合起來之後改問查詢服務 `core/omen_base.heard_any`。
-- 第 59 批合完重印 **1 處**：`howto.py` 函式裡 → `events`（`fame_ranges` 的 `is_rare`）；`actions.py` 的 `howto` 改讀包裡那一份。舊名 `tianxia/howto.py` 留成重新匯出的殼（內容在 17 包，`sys.modules` 別名只能指一包），舊的頂層名字 110 個一個不少；沒有產品程式 import 它，二十幾個測試檔改完就拿掉（第 61 批之後）。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。假人走序章那一下問有所感包的查詢服務 `ctx._sense_prologue_choice()`，`h_create` 問煉製自創包的 `ctx._create_on()`、`_create_allowed()`、`_create_price()`。
+- `opening.py` 的 `issuer` 讀核心 `core/bounty_base`。
+- `actions.py` 的 `howto` 讀包裡那一份。`tianxia/howto.py` 那個重新匯出的殼第 103 批收了（內容在 17 包各自的 `howto.py`），測試寫 `from tianxia.features.<包> import howto as <包>_howto`。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）、`_create_on`、`_create_allowed`、`_create_price`、`forge`（煉製自創，第 44 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`_hint_triggers`（自己的委派）。
 
 ## 測試
@@ -82,4 +81,4 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `take_stamina_pill`、`_top_up_pills` 的本體在 `tianxia/core/pills.py`（第 80 批）。
-- `howto.py` 函式裡的 `events` 第 87 批起是共用規則層，不算過渡；import 仍留在函式裡。
+- `howto.py` 函式裡的 `events` 第 87 批起是共用規則層；import 仍留在函式裡。

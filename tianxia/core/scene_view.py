@@ -1,7 +1,7 @@
 """場景卡（核心本體；第二輪第 91 批，計畫 docs/superpowers/plans/2026-11-07-第二輪-第91批.md，導覽 docs/guide/核心與存檔.md）。
 
 江湖頁場景卡的文字與上面那張圖。原本是 Game 上的 5 個方法（第一階 ctx 就是 Game，開發規範手冊 3.3）；Game 留 5 個一行委派（名字照舊，server 與測試都讀）。
-「眼前是哪一張」原本是一條寫死哪一包排第幾的 if 鏈，現在照 core/features.py 的 SCENE_ORDER 一格一格問：核心留收季、事件、地點三格（OWN_CORE、ART_CORE），其餘九包登記 Feature.scenes()。
+「眼前是哪一張」原本是一條寫死哪一包排第幾的 if 鏈，現在照 core/features.py 的 SCENE_ORDER 一格一格問：核心留收季、事件、地點三格（OWN_CORE、ART_CORE），其餘十包（bout、battle、feast、sense、story、companions、faction、socialize、military、travel）登記 Feature.scenes()。
 
 - 模組裡互相叫直接叫函式（沒有一個被測試換掉，量過；_core_refs 只看 ast.Name，這樣 test_for 才算得到呼叫端）。留在 Game 上的（_event_text）與 features_core.scene_over 經 ctx、經模組。
 - 被測試換掉的模組屬性（place_state.on、place_state.kind_at、precise.on）：place_state.view、marks_rules.describe、atlas.region_of、story_base.stage_art 一律寫「模組.函式」，不 from … import 函式。

@@ -9,11 +9,18 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import calendar, checkin, figures, orders, ranks, rules, silver, timetable, treasures, world
+from tianxia import calendar
+from tianxia.features.checkin import checkin
+from tianxia import figures, orders, ranks, rules, silver, timetable, treasures, world
 from tianxia.state import new_game_state
 from tianxia.world_state import fresh_season, stamp_season
 from tianxia.features.admin import routes as admin_routes
-from tianxia import calendar, duel, howto, orders, renown, rules, seats, timetable, world, yuedan
+from tianxia import calendar
+from tianxia.features.bout import duel_rules as duel
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia import orders, renown, rules, seats, timetable, world
+from tianxia.features.figure_acts import yuedan
 from tianxia.state import Order, YuedanEntry, new_game_state
 import re
 import test_prologue_web
@@ -21,7 +28,9 @@ import server
 import webharness
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
-from tianxia import calendar, seal, seats, timetable
+from tianxia import calendar
+from tianxia.features.seal import seal
+from tianxia import seats, timetable
 from tianxia import calendar, rules
 from tianxia.world_state import fresh_season, season_length_days, stamp_season
 
@@ -188,7 +197,7 @@ def test_orders_and_bounties_come_every_day():
 
 
 def test_the_bounty_notice_counts_days():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c7 = real_content("week7")
     v = _vehicle(c7)
@@ -200,7 +209,7 @@ def test_the_bounty_notice_counts_days():
 def _hang_day_less(content, now, day=2):
     """沒有「第幾天」（b.day 是 0）的那幾種懸賞，各走真正掛單的函式掛一張，掛在季曆第 day 天 12:00（週末、14 天的季是第 day 天 12:00）：
     系統掛的陣營通緝與官府通緝（post_auto）、玩家押錢掛的通緝（post）、大勢人物的追剿與復仇（post_figure）。回 (季, {名字: 那一張})。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     season = _season(content, now)
     state = new_game_state(content, "甲")
@@ -230,7 +239,7 @@ def test_day_less_bounty_notices_count_days_on_week7_fb506():
     """FB-506（7 天季複驗）：追剿、復仇、系統掛的通緝、玩家押錢掛的通緝沒有 b.day，告示掉到第一季那一支照週次寫「期限 第 2 週・剩 1」
     （7 天季的週是段，對不上任何東西），點開的紙上卻寫「第 4 天 12:00」。修後告示照到期那一刻寫第幾天，跟每天掛的那一批一個寫法：
     00:00 到期寫最後還有效的那一天（「到第 2 天」）、其他時刻寫「期限 第 4 天」。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c7 = real_content("week7")
     season, hung = _hang_day_less(c7, WED14)  # 第 2 天 12:00 掛
@@ -247,7 +256,7 @@ def test_day_less_bounty_notices_count_days_on_week7_fb506():
 
 def test_day_less_bounties_hung_in_the_last_segment_say_season_end_on_week7():
     """最後一段（第 5～7 天）掛的系統通緝撐到季末（到期在季曆終點）：告示與紙上都寫「到季末」，不寫成「第 8 天」或週次。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c7 = real_content("week7")
     season, hung = _hang_day_less(c7, WED14, day=6)
@@ -263,7 +272,7 @@ def test_day_less_bounties_hung_in_the_last_segment_say_season_end_on_week7():
 ])
 def test_day_less_bounty_notices_are_unchanged_outside_week7_fb506(profile, want):
     """21 天季、週末、14 天的季：沒有第幾天的懸賞告示一個字不變（拿掉 b.day 的條件只動 7 天季那一支）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     content = real_content(profile) if profile else real_content()
     season, hung = _hang_day_less(content, WED14)
@@ -331,7 +340,7 @@ def test_the_weekly_treasure_cap_resets_each_segment():
 
 
 def test_the_boss_tally_resets_each_segment():
-    from tianxia import duel
+    from tianxia.features.bout import duel_rules as duel
 
     c7 = real_content("week7")
     state = _player(c7)
@@ -343,7 +352,7 @@ def test_the_boss_tally_resets_each_segment():
 
 
 def test_a_week_is_a_segment_for_week_long_spans():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c7 = real_content("week7")
     v = _vehicle(c7)
@@ -413,7 +422,7 @@ def test_renown_perks_say_each_segment_on_week7():
     kou = [p for t in range(1, 5) for p in renown.virtue_perks(c7, "寇", t, s7)]
     assert "敵方陣營每段通緝你" in fame and not any("每週" in p for p in fame)
     assert any(p.startswith("官府每段貼你的海捕文書") for p in kou) and not any("每週" in p for p in kou)
-    howto_text = "".join(howto.renown_lines(c7, s7))
+    howto_text = "".join(guide_howto.renown_lines(c7, s7))
     assert "每段通緝你" in howto_text and "官府每段貼你" in howto_text
 
 
@@ -433,9 +442,9 @@ def test_renown_perks_keep_each_week_elsewhere(profile):
 def test_howto_says_orders_come_every_day_on_week7():
     c7 = real_content("week7")
     state = _state(c7)
-    quest = "".join(howto.war_help(state, c7)["quest"])
+    quest = "".join(guide_howto.war_help(state, c7)["quest"])
     assert "投靠陣營之後每天有軍令" in quest and "每週一" not in quest
-    join = "".join(howto.join_lines(c7, state.world))
+    join = "".join(faction_howto.join_lines(c7, state.world))
     assert "**軍令**：每天發令" in join and "今日的軍令卡在江湖頁行動列底下" in join
     assert "每週一" not in join and "本週" not in join
 

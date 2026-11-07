@@ -1,15 +1,15 @@
 """懸賞榜（討伐、打探、護送、求兵、通緝、人物託付與求援）。功能包，開發規範手冊 3.2；全部拆包第 45 批搬進來（引擎那一半）；懸賞榜的畫法在 web/bounties.js（第 65 批）。
 包名 bounties 跟設定 Config.bounties、季上的 WorldState.bounties 同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- rules.py：懸賞榜的規則（原 tianxia/bounties.py；那個名字留成指到這裡的別名）。別人讀的那一半在核心 core/bounty_base.py，rules re-export 同一批
-- wanted.py：通緝掛上玩家卡（原 tianxia/wanted.py，別名；載入這一包時登記進核心的 cards.ACTIONS）
+- rules.py：懸賞榜的規則（原 tianxia/bounties.py）。別人讀的那一半在核心 core/bounty_base.py，rules re-export 同一批
+- wanted.py：通緝掛上玩家卡（原 tianxia/wanted.py；載入這一包時登記進核心的 cards.ACTIONS）
 - actions.py：懸賞榜第二、三層的選單與選單上按下去的一下、打開榜、掛通緝、截殺打贏的發布點、退押金與作廢、系統通緝（原本 Game 上的 4 個方法與 _act、sync、own_turn_checks 裡那幾行）
 - step_actions.py：「你這一步」的委託與懸賞兩格（原本 step._STEP_CORE）
 - bots.py：假人的分數（原本 bot_policy.score 的 bounty 那一段）
 
 接縫掛鉤：choose（bounty:*）、verbs（act:bounties 打開榜與紀錄標題）、bot_pick、bus（六種事件交差）、world（step、week、day、start 掛單）、steps（commission、bounty）、defection（stranded）。
 店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：入口排在鐵匠鋪、馬市前面；drop_shops 會在 sync.close 多收一次）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

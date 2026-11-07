@@ -6,7 +6,8 @@ import random
 
 from conftest import real_content
 
-from tianxia import mapart, mapdata, orders
+from tianxia.features.map import mapart, mapdata
+from tianxia import orders
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

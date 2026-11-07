@@ -24,8 +24,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - **改哪裡**（手冊第十五節，PM 2026-10-31）：還在 `engine.py`／舊模組的功能，修 bug 與小延伸照舊改在原位、可以在那一群加方法，**不順手搬**；已經搬進 `tianxia/features/<包>/` 的改包裡的檔，`game_api.py` 的表不加邏輯；雲端與 Joy 的 Claude 不用避開正在搬的包（企劃者 2026-11-05「照現在這樣，不管」；合回之後 PM 11/06 定照舊），照常改，PM 合的時候照新位置搬；還沒搬的批看交接〔`docs/superpowers/handoff/2026-10-30-主機側交接.md`〕第三節，正在搬的看第一節「現在在跑」；全新的玩法一律生一包。
   - **舊功能搬進包**：企劃者 2026-10-31 定 PM 主動照〈全部拆包總表〉（`docs/superpowers/plans/2026-10-31-全部拆包-總表.md`，32 包、68 批；「趕快拆」）一批搬一包，**只由總表的批搬**，派工上別的批不順手搬。搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠，前後對照＋實機（純搬、`web/` 沒動的批是兩台真伺服器逐位元組比，總表 5.0）。
   - **前後對照用 `scripts/same_behavior.py`**（主動搬六包第 1 批收進來；用法在腳本開頭的 docstring）：`selftest --base <根> --tmp <暫存>` 先證明同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到；`compare --base <根> --head <根> --tmp <暫存> [--profiles …] [--jobs 4]` 比設定（`season21`、`week7`、`test`；`none`、`weekend` 第 14 批關門了）。情境在 `scripts/sb/tracks/`，新軌只加檔、檔尾 `register_track`，有假人再 `register_bots`；`same_behavior.py` 只是入口，指令不變。每一批在 `PHASES` 後面加自己的情境（總表第六節第 10 條：那一區調查的 `risks`／`same_behavior`），半舊半新（`--part first`／`second`）也要切在這一包還開著的局面上。不加 `-I`（會連 `PYTHONHASHSEED` 一起忽略）。
-  - **搬包常踩的**（第 1 階 2026-10-31）：掃原始碼的測試多半寫 `glob("tianxia/*.py")`，搬了之後看不到包裡的程式，期待清單寫了檔名的會紅（`test_explain2`、`test_schema_required`、`test_prologue`），改成也掃 `tianxia/features/*/*.py`；測試檔搬進 `tianxia/features/<包>/tests/` 之後 `Path(__file__).parents[2]` 要改 `parents[4]`；舊的 import 路徑留成別名（`sys.modules[__name__] = rules`），`monkeypatch.setattr(舊模組, …)` 照樣有效；把規則從 `style.css` 搬到後載的檔會改串接順序，375 與 1280 都要拍（商城那一層的背景簡寫蓋掉了電腦寬的欄寬底色）；搬之前先查原本那幾段在開關關著時還做不做事（宴客的 `enabled` 是「開著，或這一季還有擺過的宴」）。
-  - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。過渡期可以 import 還沒搬的舊模組，行尾註 `# 過渡：待搬`。`tests/core/test_feature_boundaries.py` 會掃。
+  - **搬包常踩的**（第 1 階 2026-10-31）：掃原始碼的測試多半寫 `glob("tianxia/*.py")`，搬了之後看不到包裡的程式，期待清單寫了檔名的會紅（`test_explain2`、`test_schema_required`、`test_prologue`），改成也掃 `tianxia/features/*/*.py`；測試檔搬進 `tianxia/features/<包>/tests/` 之後 `Path(__file__).parents[2]` 要改 `parents[4]`；舊的 import 路徑當時留成別名（第 103 批全收了，現在搬檔要連呼叫端一起改）；把規則從 `style.css` 搬到後載的檔會改串接順序，375 與 1280 都要拍（商城那一層的背景簡寫蓋掉了電腦寬的欄寬底色）；搬之前先查原本那幾段在開關關著時還做不做事（宴客的 `enabled` 是「開著，或這一季還有擺過的宴」）。
+  - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。包只准 import 核心、共用層、自己這一包，寫註也放行不了。`tests/core/test_feature_boundaries.py` 會掃。
   - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`。
   - **不改技能檔**：學到的寫在回報的「學到的」一節，PM 收進技能（手冊第十節）。
   - **每做完一個 Task 就推一次**自己的分支（手冊第八節）：換帳號最多丟一個 Task。
@@ -141,7 +141,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 輿圖 QA 的 `cmp_off.py`（第 4 批複驗那一份，`main_view`、`map_state`、`map_base`、存檔，三種季各約 50 萬位元組、一支一分鐘內）**不含玩法說明**：動到 `howto` 的批另跑一支只印 `Game.howto_text()`（散人、官軍、黃巾各一份）的對照（輿圖第三版第 5 批，`95096217` 對 HEAD 三種季都一樣）。
 - **一個測試只開一季**：conftest 每個測試給一個 `TIANXIA_DB`，同一個測試裡 `open_world()` 兩次開的是同一份資料庫，第二個 `Game` 讀到第一季的章（7 天季的測試裡 21 天季的 `season_length_days` 變成 7）。要比幾種季就 `parametrize`，一種季一個測試。
 - **「舊季一字不變」用對照證明**（2026-10-20，7 天季 FB-500／501）：
-  - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`server.admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
+  - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`features/admin/routes.py` 的 `admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
   - 網頁：`webharness.run(DRIVER, {..., "app": <舊 app.js 的路徑>})` 用同一份伺服器資料、舊新兩份 app.js 各畫一次比字串；`wholeApp` 的名單只放兩版都有的函式。
     **伺服器送的資料形狀也改了時這樣比會比出假差異**（2026-10-20 FB-502：21 天季多送 `words`，舊 app.js 拿到新資料就把 21 天季當 7 天季）：改成兩邊各用自己的伺服器＋app.js——在舊程式的根目錄用它自己 `tests/` 的 `_render` 跑一次、寫成 JSON，再比。
   - 兩份輸出行數一樣時照行號比：`difflib` 遇到一大段相似的行會錯配，報出其實沒變的行。

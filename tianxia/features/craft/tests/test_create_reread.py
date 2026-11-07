@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import create
+from tianxia.features.craft import create
 from tianxia.content import load_content
 from tianxia.engine import Game
 

@@ -7,7 +7,9 @@ from pathlib import Path
 from unittest import mock
 
 from conftest import real_content
-from tianxia import conquest, conquest_day, team, territory
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content

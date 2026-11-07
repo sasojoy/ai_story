@@ -1,7 +1,9 @@
 """店家折扣（名聲設計 4.1）：名望那一半跟地盤福利疊乘，套療傷、打造工錢、升階工錢、買馬；價錢後面寫原因。"""
 from conftest import real_content
 
-from tianxia import economy, mounts, skillview, smithing, team, territory
+from tianxia import economy, mounts, art_cards
+from tianxia.features.smithy import smithing
+from tianxia import team, territory
 from tianxia.state import new_game_state
 
 
@@ -30,7 +32,7 @@ def test_the_heal_button_names_the_discount():
     s = _s(c, 25)
     s.player.member.injury = 40
     s.player.stats["silver"] = 100
-    assert skillview.heal_note(s, c).endswith("（名動一方・九四折）")
+    assert art_cards.heal_note(s, c).endswith("（名動一方・九四折）")
 
 
 def test_no_discount_no_note():

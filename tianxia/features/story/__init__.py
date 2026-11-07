@@ -2,13 +2,13 @@
 一條線是一串段（事件、答題、打一場、等一件事做成），每一段走完照這條線自己記下的記號往下，結局一定寫進傳。全部拆包第 30 批搬進來。
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- storyline.py：一條線自己的走法（選單、答題、打一場、結算、收尾、餘波；原 tianxia/storyline.py 的後半，舊名留成別名）。
+- storyline.py：一條線自己的走法（選單、答題、打一場、結算、收尾、餘波；原 tianxia/storyline.py 的後半）。
   底座〔登記鉤子的字典、開線、換字、題目文字〕在共用規則層 tianxia/story_base.py（核心的 rules、事件檢定與探索包、有所感包也讀），storyline.py re-export 它的每個名字
 - actions.py：原本 Game 上的 10 個方法（Game 留 10 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
 
 掛鉤：choose（只吃 story:）、scenes（SCENE_ORDER 的 own/story 格：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由；/api/do/story_seen 在 routes.py 的 main_actions（全部拆包第 68 批）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

@@ -6,7 +6,9 @@ from __future__ import annotations
 import pytest
 
 from conftest import real_content
-from tianxia import feasts, figure_life, letters
+from tianxia.features.feast import rules as feasts
+from tianxia import figure_life
+from tianxia.features.companions import letters
 from tianxia.state import Feast, GameState, PlayerState, Toast
 from tianxia.world_state import fresh_season
 

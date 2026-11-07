@@ -7,7 +7,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia import tactics
 
 pytestmark = pytest.mark.whole_content
@@ -272,7 +272,7 @@ def _ride_in(content, game, affinity=80):
 
 def test_the_escort_returns_to_the_world_when_the_battle_ends(content, game):
     from test_engine import _fight_to_the_end
-    from tianxia import escorts
+    from tianxia.features.battle import escorts
 
     definition = _ride_in(content, game)
     _fight_to_the_end(game, definition, definition.muster_seconds + 1)
@@ -292,7 +292,7 @@ def test_a_battle_ended_by_the_owners_own_poll_still_halves(content, game):
     """FB-361：收場那一下是主人自己的輪詢（server.act_look：先同步、存檔，再組畫面；options() 在畫面那一段把決戰追到收場）。
     畫面那一段對角色的改動不存（下一次同步再補戰報），可是全服的記號照樣提交：記號要留到存了減半的那一份角色才清，不然永遠不減半。"""
     from conftest import at
-    from tianxia import escorts
+    from tianxia.features.battle import escorts
 
     definition = _ride_in(content, game)
     p_name = game.state.player.name

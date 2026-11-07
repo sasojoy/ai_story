@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from tianxia import event_llm, outcomes
-from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
+from tianxia.features.battle.instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
 from tianxia.models import Choice, Effect, Event, JianfaRules, Outcome
 from tianxia.ollama_client import OllamaClient
 from tianxia.rules import FREE_TEXT_MAX_RATE, FREE_TEXT_MIN_RATE, FREE_TEXT_PER_POINT

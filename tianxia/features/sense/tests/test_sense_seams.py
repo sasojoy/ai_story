@@ -9,7 +9,11 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import epiphany, explore_one, glyph, insights, journal, materials, sensing
+from tianxia.features.sense import epiphany
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.sense import glyph
+from tianxia import insights, journal, materials
+from tianxia.features.sense import sensing
 from tianxia.core.services import PREPARING_REFUSAL
 from tianxia.engine import Game
 from tianxia.state import BattleRecord, GodNaming

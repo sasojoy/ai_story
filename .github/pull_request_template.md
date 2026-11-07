@@ -11,7 +11,7 @@ PR 說明的填法（企劃者 2026-11-05「可以，連 PR 範本一起」）�
 
 ## 改了哪一包
 
-<!-- 已經搬成包的寫 `tianxia/features/<包>/`；舊名 `tianxia/<模組>.py` 是別名的（檔裡只有 `sys.modules[__name__] = …`）寫它指到的包名；還在 engine.py 的寫 `Game` 哪一群方法（方法前綴）；全新的玩法用 `scripts/new_feature.py` 生一包。動到的核心檔也列出來，連同共用層的 `SHARED`（`tianxia/core/registry.py`）、核心的 `MODULES`（`tianxia/core/__init__.py`）、`tianxia/core/*_base.py`（下面「誰點頭」那一格要填）。 -->
+<!-- 已經搬成包的寫 `tianxia/features/<包>/`；還在 engine.py 的寫 `Game` 哪一群方法（方法前綴）；全新的玩法用 `scripts/new_feature.py` 生一包。動到的核心檔也列出來，連同共用層的 `SHARED`（`tianxia/core/registry.py`）、核心的 `MODULES`（`tianxia/core/__init__.py`）、`tianxia/core/*_base.py`（下面「誰點頭」那一格要填）。 -->
 
 ## 跑了哪些測試、幾條過
 

@@ -10,7 +10,9 @@ from unittest import mock
 import pytest
 
 from wins_kit import ids, wins_content, wins_game
-from tianxia import bounties, defection, team, wins
+from tianxia.features.bounties import rules as bounties
+from tianxia.features.faction import defection
+from tianxia import team, wins
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.state import Bounty
@@ -84,7 +86,7 @@ def test_army_credit_keeps_no_books():
 
 def test_showdown_credits_the_side_it_joined():
     """決戰的戰功記參戰那一刻那一邊那一本（計畫 5.0 第 12 條）：中途改幫另一軍，這一場照舊記原來那一軍。"""
-    from tianxia.battle_instance import BattleParticipant
+    from tianxia.features.battle.instance import BattleParticipant
 
     game = wins_game(faction="haoqiang", ally="huang", at="zhuo_militia_hall")
     me = BattleParticipant(name=game.state.player.name, faction="guan", neili=100, neili_cap=100)

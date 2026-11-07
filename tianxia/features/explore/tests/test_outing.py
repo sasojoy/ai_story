@@ -11,7 +11,8 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_one, outing, precise, speech, team
+from tianxia.features.explore import explore_rules as explore_one, outing_rules as outing
+from tianxia import precise, speech, team
 from tianxia.core import presence
 from tianxia.encounter import EncounterResult
 from tianxia.features.mall import actions as mall_actions
@@ -380,7 +381,7 @@ def test_the_model_tale_is_checked_and_kept_for_the_same_trip():
 
 
 def _outing_annals(game):
-    from tianxia import annals
+    from tianxia.features.zhuan import standing as annals
     return [a for a in game.state.player.annals if a.kind == annals.DEED and ("走了一趟" in a.text or "必輸的一仗" in a.text)]
 
 

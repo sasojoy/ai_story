@@ -7,10 +7,11 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, classic_rules, install_season_one, walk_to
-from tianxia import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, library, rules, skillview, team,
-    traits,
-)
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, calendar
+from tianxia.features.companions import companion_agent
+from tianxia import encounter, fight_llm, library, rules, team, traits
 from tianxia.features.map import layers
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -2913,14 +2914,14 @@ def test_the_status_says_what_each_stat_does(game):
 
 def test_the_stat_note_says_four_until_an_event_checks_lore():
     """「事件的檢定看前四項」是因為正式內容還沒有任何事件檢定（或隨口應對看）博聞。joy 加了第一個之後這條會失敗：
-    把 skillview.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
-    from tianxia import skillview
+    把 art_cards.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
+    from tianxia import art_cards
 
     real = load_content(ROOT / "content")
     stats = {ch.check.stat for e in real.events.values() for ch in e.choices if ch.check is not None}
     stats |= {e.free_text.stat for e in real.events.values() if e.free_text is not None}
     assert stats and "lore" not in stats
-    assert skillview.STAT_CHECK_NOTE == "事件的檢定看前四項。"
+    assert art_cards.STAT_CHECK_NOTE == "事件的檢定看前四項。"
 
 
 def test_lore_is_the_fifth_stat_and_is_named_in_one_place(game):

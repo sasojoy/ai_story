@@ -9,7 +9,9 @@ import random
 
 import pytest
 
-from tianxia import arena, atlas, bot, bot_policy, rules, shopview, social
+from tianxia.features.bout import arena_rules as arena
+from tianxia import atlas, bot, bot_policy, rules
+from tianxia.features.peers import social
 from tianxia.characters import CharacterStore
 from tianxia.engine import ARENA_YIELD, Game
 from tianxia.models import MOVES
@@ -241,10 +243,10 @@ def test_the_cooldown_says_how_long_to_wait(ring):
     assert game.choose("arena:fight:乙") == ["（剛挑過，約 2 小時 15 分後可再挑。）"]
     assert arena.wait_text(10) == "約 1 分鐘" and arena.wait_text(3600) == "約 1 小時"
     assert "明日 00:00" in arena.challenge_problem(w, "甲", foe, cfg, 0)
-    from tianxia import shopview
-    view = shopview.arena_view(game.state, content, world, 100.0, 5)
+    from tianxia.features.bout import shop_view as bout_shop
+    view = bout_shop.arena_view(game.state, content, world, 100.0, 5)
     assert view["foes"][0]["short"] == ["約 2 小時 15 分後", "可再挑"]
-    spent = shopview.arena_view(game.state, content, world, 100.0, 0)
+    spent = bout_shop.arena_view(game.state, content, world, 100.0, 0)
     assert spent["foes"][0]["short"][0] == "明日 00:00" and spent["purse"] == arena.SPENT_PURSE
 
 
@@ -305,7 +307,7 @@ def test_a_gamble_rides_the_boss_duel_box_and_tells_the_model_who_it_faces(ring)
 
 def test_a_stale_arena_rating_says_the_round_is_over(ring, monkeypatch):
     """M-05：擂台的單子是上一回合開的就回「這一回合已經結算」，不在鎖內重評、不套用。"""
-    from tianxia import duel
+    from tianxia.features.bout import duel_rules as duel
     from tianxia.core import battle_base as battle_instance  # 全部拆包第 54 批：arena_actions 沒給分數時讀核心的 assess_gamble，換這一格才打得到
 
     content, world = ring
@@ -551,7 +553,7 @@ def test_each_side_of_a_fight_is_snapshotted_with_its_own_cut(ring):
 
 
 def _sides(me_cut=0.0, foe_cut=0.0):
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import duel_rules
     from tianxia.state import ArenaFight, ArenaSide
 
     scores = {"強攻": 60.0, "固守": 60.0, "奇襲": 60.0}
@@ -570,7 +572,7 @@ def test_the_blow_each_side_lands_is_cut_by_the_other_sides_own_armor(content):
 
 
 def test_arena_blows_take_armor_and_tactic_toll_cut_together_clamped_at_the_cap(content, monkeypatch):
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import duel_rules
     from tianxia import tactics
     from tianxia.state import PLAYER
 

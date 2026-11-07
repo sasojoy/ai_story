@@ -1,11 +1,11 @@
 """功能包的邊界（開發規範手冊 3.4 第 1 條、3.11）：用 ast 掃 import，幾毫秒。
 
 - 功能包（tianxia/features/<包>/，tests/ 不算）只能 import 核心（tianxia/core/ 與 CORE 那幾個模組）、共用規則層（registry.SHARED，第 11 批）、
-  自己這一包、標準庫與第三方；不能 import 別的包。還沒搬的舊模組過渡期可以 import，那一行要註「# 過渡：待搬」（第一版只禁「包 import 包」
-  與沒註的舊模組）；註了的那一行要真的有一個還沒搬的舊模組（全是核心、共用規則層的就把註拿掉）。
-- 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行；共用規則層的模組也不行，
-  而且只 import 核心本體與同一層（總表第 15 批：還碰到別的舊模組的那幾條逐條記在 SHARED_PENDING，總表寫了、先不收的在 SHARED_LATER）。
-- if TYPE_CHECKING: 底下的 import 只給型別看，不算。
+  自己這一包、標準庫與第三方。別的包、假人殼、engine 一律不准；寫註解也放行不了（第二輪第 102 批收掉過渡註）。
+- 核心（tianxia/core/、CORE 那幾個模組、engine.py）與共用規則層只 import 核心與共用規則層，最外層與函式裡都算，一處例外都不留；
+  包只有 tianxia/core/registry.py（FEATURES 登記）import。
+- if TYPE_CHECKING: 底下的 import 只給型別看，上面兩條不算；可是核心與共用規則層連那裡都不准寫包名（test_the_core_names_no_package_even_for_type_checking）。
+- tianxia/ 最外層每個檔都要歸位：核心、共用規則層、假人殼或 engine（test_every_top_level_module_has_a_place）。
 - 網頁框架（fastapi）只有功能包的 routes.py 可以 import，而且只在殼掛路由時延後 import；引擎、run_bots、假人不碰（PM 10/31）。
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:  # 直接當腳本跑（PM 記過渡處數，見檔尾）時 repo 不在路徑上
+if str(ROOT) not in sys.path:  # 直接當腳本跑（PM 記處數，見檔尾）時 repo 不在路徑上
     sys.path.insert(0, str(ROOT))
 from tianxia.core import MODULES as CORE_MODULES  # noqa: E402
 from tianxia.core.registry import SHARED  # noqa: E402  共用規則層（第 11 批）：模組名 → 為什麼在共用層
@@ -36,20 +36,19 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     CORE_TOP_DELEGATE_CALLERS, EFFECT_DEFECT_SCAN, EVENT_CHECK_VIA_CTX,
     GAME_DELEGATE_CALLERS, GAME_DIRECT, GAME_IMPORTS,
     PREPARING_GUARDED, RELAY_OWNERS, RENAMED_PARAMS,
-    SHARED_CORE_WORLD2, SHARED_LATER, SHARED_PENDING,
+    SHARED_CORE_WORLD2,
     STEP_PACKAGE_READS,
     # core_api（第二輪第 74 批）
-    CROSS_PACKAGE_CALLS, SHELL_FOREIGN,
+    CROSS_PACKAGE_CALLS,
     # core_bots（第二輪第 89 批）
-    BOT_SHELL, BOT_SHELL_PENDING,
+    BOT_BASE_GAME, BOT_SHELL,
 )
 TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
-MARK = "過渡：待搬"
 
 # 核心的模組：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄），
 # 只有那一份——scripts/test_for.py 也照它挑（10/31 審查：以前這裡跟 test_for 各寫一份，對不上）。
-# journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃）
+# journal 自己 import front_lines、battlelog（都在共用規則層；核心 → 舊模組由 test_the_core_only_imports_the_core_and_the_shared_layer 掃）
 CORE = set(CORE_MODULES)
 
 
@@ -71,19 +70,16 @@ def _type_checking_lines(tree: ast.AST) -> set[int]:
     return lines
 
 
-def imports_of(source: str, module: str) -> list[tuple[int, str, bool]]:
-    """source（模組 module 的原文）import 了哪些 tianxia 的模組：[(行, 絕對模組名, 那一行有沒有「過渡：待搬」)]。
-    from tianxia import a 記成 tianxia.a；相對 import 照 module 算成絕對的。"""
+def imports_of(source: str, module: str, *, type_checking: bool = False) -> list[tuple[int, str]]:
+    """source（模組 module 的原文）import 了哪些 tianxia 的模組：[(行, 絕對模組名)]。
+    from tianxia import a 記成 tianxia.a；相對 import 照 module 算成絕對的。if TYPE_CHECKING: 底下的只有 type_checking=True 才算。"""
     tree = ast.parse(source)
-    lines = source.splitlines()
-    skip = _type_checking_lines(tree)
+    skip = set() if type_checking else _type_checking_lines(tree)
     package = module.rsplit(".", 1)[0]
-    out: list[tuple[int, str, bool]] = []
+    out: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno in skip:
             continue
-        text = "\n".join(lines[node.lineno - 1:(node.end_lineno or node.lineno)])
-        marked = MARK in text
         if isinstance(node, ast.Import):
             names = [a.name for a in node.names]
         else:
@@ -95,7 +91,7 @@ def imports_of(source: str, module: str) -> list[tuple[int, str, bool]]:
                 head = node.module or ""
             # from x import y：y 可能是模組（from tianxia import mall）也可能是名字；x 本身與 x.y 都記
             names = [head] + [f"{head}.{a.name}" for a in node.names if a.name != "*"]
-        out += [(node.lineno, n, marked) for n in names if n == "tianxia" or n.startswith("tianxia.")]
+        out += [(node.lineno, n) for n in names if n == "tianxia" or n.startswith("tianxia.")]
     return out
 
 
@@ -105,63 +101,21 @@ def _module_exists(name: str) -> bool:
     return path.with_suffix(".py").exists() or (path / "__init__.py").exists()
 
 
-def _is_alias(tree: ast.AST) -> bool:
-    """這個模組把自己換成別的模組（sys.modules[__name__] = …）。"""
-    return any(isinstance(node, ast.Assign) and any(
-        isinstance(t, ast.Subscript) and ast.unparse(t.value) == "sys.modules" and ast.unparse(t.slice) == "__name__"
-        for t in node.targets) for node in ast.walk(tree))
-
-
-def _find_aliases() -> dict[str, str]:
-    out: dict[str, str] = {}
-    for path in sorted(TIANXIA.glob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        if "sys.modules" not in source or not _is_alias(ast.parse(source)):
-            continue
-        packages = {mod.split(".")[2] for _, mod, _ in imports_of(source, _modname(path))
-                    if mod.startswith("tianxia.features.") and len(mod.split(".")) > 2}
-        if len(packages) == 1:
-            out[path.stem] = packages.pop()
-    return out
-
-
-def aliases() -> dict[str, str]:
-    """舊名留成的別名（3.11 過渡：tianxia/mall.py、tianxia/feasts.py 把 sys.modules 換成包裡的 rules，給還沒改的測試）：舊名 → 包名。
-    import 它就是 import 那一包，掃描照那一包算（不然「包 import 包」換個名字就溜過去、還被算成一處過渡）。"""
-    global _ALIASES
-    if _ALIASES is None:
-        _ALIASES = _find_aliases()
-    return _ALIASES
-
-
-_ALIASES: dict[str, str] | None = None
-
-
 def problems_of(source: str, module: str) -> list[str]:
-    """一個功能包的模組違反的地方（空的是乾淨）。"""
+    """一個功能包的模組違反的地方（空的是乾淨）：包只准 import 核心、共用層、自己這一包；註解放行不了（第二輪第 102 批）。"""
     own = module.split(".")[2]
     out: dict[tuple[int, str], str] = {}
-    for line, name, marked in imports_of(source, module):
+    for line, name in imports_of(source, module):
         parts = name.split(".")
         if name == "tianxia" or parts[1] == "core" or parts[1] in CORE or parts[1] in SHARED:
-            continue
-        if parts[1] in aliases():  # 舊名的別名就是那一包
-            target = aliases()[parts[1]]
-            if target != own:
-                out.setdefault((line, target), f"{module}:{line} 經過別名 tianxia.{parts[1]} import 了別的包 {target}"
-                                               f"（要用別包的東西走核心的服務，手冊 3.4）")
-            else:
-                out.setdefault((line, target), f"{module}:{line} import 了自己這一包的別名 tianxia.{parts[1]}（別名只給還沒改的測試；"
-                                               f"包裡用相對 import）")
             continue
         if parts[1] == "features":
             if len(parts) > 2 and parts[2] != own:  # 別的包（還沒建的也算）
                 out.setdefault((line, parts[2]), f"{module}:{line} import 了別的包 {parts[2]}（要用別包的東西走核心的服務，手冊 3.4）")
             continue
         if not _module_exists(".".join(parts[:2])):
-            continue  # from tianxia import 名字（不是模組）
-        if not marked:
-            out.setdefault((line, parts[1]), f"{module}:{line} import 了還沒搬的舊模組 {parts[1]}，行尾要註「# {MARK}」（手冊 3.11）")
+            continue  # 解不到的舊名歸 test_every_tianxia_import_resolves 擋
+        out.setdefault((line, parts[1]), f"{module}:{line} import 了 {parts[1]}：包只准 import 核心、共用層、自己這一包（手冊 3.4）")
     return list(out.values())
 
 
@@ -170,20 +124,18 @@ def _modname(path: Path) -> str:
     return ".".join(path.relative_to(ROOT).with_suffix("").parts)
 
 
-def test_feature_packages_only_import_the_core_their_own_package_or_marked_old_modules():
+def test_feature_packages_only_import_the_core_the_shared_layer_or_their_own_package():
     found = []
     for name in _packages():
         for path in _package_files(name):
             found += problems_of(path.read_text(encoding="utf-8"), _modname(path))
-    assert found == []
+    assert not found, "\n".join(found)
 
 
 def feature_target(mod: str) -> str | None:
-    """import 的這個模組是哪一包（tianxia.features.<包>…，或舊名的別名）；不是包是 None。"""
+    """import 的這個模組是哪一包（tianxia.features.<包>…）；不是包是 None。"""
     parts = mod.split(".")
-    if len(parts) > 2 and parts[:2] == ["tianxia", "features"]:
-        return parts[2]
-    return aliases().get(parts[1]) if len(parts) > 1 and parts[0] == "tianxia" else None
+    return parts[2] if len(parts) > 2 and parts[:2] == ["tianxia", "features"] else None
 
 
 def _feature_imports(path: Path) -> list[tuple[int, str]]:
@@ -195,10 +147,10 @@ def _feature_imports(path: Path) -> list[tuple[int, str]]:
 @functools.lru_cache(maxsize=None)
 def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
     text = path.read_text(encoding="utf-8")
-    if "features" not in text and not any(re.search(rf"\b{re.escape(a)}\b", text) for a in aliases()):
-        return ()  # 寫不到 features 也寫不到別名的檔不可能 import 包：不必 parse（engine.py 一萬七千行，parse 一次一秒多）
+    if "features" not in text:
+        return ()  # 寫不到 features 的檔不可能 import 包：不必 parse（engine.py 一萬七千行，parse 一次一秒多）
     seen: dict[tuple[int, str], str] = {}
-    for line, mod, _ in imports_of(text, _modname(path)):
+    for line, mod in imports_of(text, _modname(path)):
         target = feature_target(mod)
         if target is not None:
             best = seen.get((line, target))
@@ -268,32 +220,31 @@ def test_the_core_never_imports_a_feature_package_except_the_registry():
     for name in sorted(CORE):
         found += [f"{name}.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / f"{name}.py")]
     found += [f"engine.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / "engine.py") if mod not in GAME_IMPORTS]
-    assert found == []
+    assert not found, f"核心不准 import 包（要接一包先想掛鉤）：{found}"
 
 
 def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_imports_a_package():
-    """共用規則層（registry.SHARED，第 11 批 PM 定的格式）：每一個是 tianxia/ 底下真的有的模組、不是核心本體、不是包、不是舊名的別名，
+    """共用規則層（registry.SHARED，第 11 批 PM 定的格式）：每一個是 tianxia/ 底下真的有的模組、不是核心本體、不是包，
     寫了為什麼在共用層；跟核心一樣不 import 包（總表第六節第 5 條「兩層都不准 import 包」）。"""
     assert SHARED and all(isinstance(why, str) and why.strip() for why in SHARED.values())
     for name in SHARED:
         assert (TIANXIA / f"{name}.py").exists(), name
-        assert name not in CORE and name not in aliases() and name not in _packages(), name
-    assert [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")] == []
+        assert name not in CORE and name not in _packages(), name
+    found = [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")]
+    assert not found, f"共用層不准 import 包：{found}"
 
 
 # 總表第六節第 5 條「共用規則層可以 import 核心本體與同層」：共用規則層的模組 import 的別的 tianxia 模組只能是核心本體（MODULES、tianxia/core/）
-# 與同一層；包與舊名的別名是上面那一條，一律不准。現行程式裡碰到別的舊模組的逐條記在 SHARED_PENDING，兩種寫在理由開頭：
-# 「排定：」收進核心本體或共用規則層的（那一批收完拿掉這一行）；「之後成包：」主人成包之前要先改成查詢服務、或把用到的那一段留在共用規則層
-# （不然那一下就是「共用規則層 import 包」，上面那一條紅）。多一條、少一條都紅。
+# 與同一層；包是上面那一條，一律不准。一處例外都不留（第二輪第 102 批）。
 
 
 def outside_imports(source: str, module: str) -> set[str]:
     """共用規則層的模組（module 的原文 source）import 了哪些不是核心本體、不是同一層的 tianxia 舊模組：最外層與函式裡都算，
-    TYPE_CHECKING 底下不算；包、舊名的別名、from tianxia import 名字（不是模組）不在這裡（包與別名是另一條，一律不准）。"""
+    TYPE_CHECKING 底下不算；包、from tianxia import 名字（不是模組）不在這裡（包是另一條，一律不准）。"""
     out: set[str] = set()
-    for _, name, _ in imports_of(source, module):
+    for _, name in imports_of(source, module):
         parts = name.split(".")
-        if name == "tianxia" or parts[1] in ("core", "features") or parts[1] in CORE or parts[1] in SHARED or parts[1] in aliases():
+        if name == "tianxia" or parts[1] in ("core", "features") or parts[1] in CORE or parts[1] in SHARED:
             continue
         if _module_exists(".".join(parts[:2])):
             out.add(parts[1])
@@ -307,43 +258,16 @@ def shared_reach() -> set[tuple[str, str]]:
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
-    """共用規則層只 import 核心本體與同一層（總表第六節第 5 條）：碰到別的舊模組的就是 SHARED_PENDING 那幾條，多一條、少一條都紅
-    （新碰到的要寫理由、收掉的要拿掉）；對象沒有一個是核心本體、同一層或別名，理由開頭寫是哪一種。"""
-    assert shared_reach() == set(SHARED_PENDING)
-    for (name, old), why in SHARED_PENDING.items():
-        assert name in SHARED and old not in SHARED and old not in CORE and old not in aliases(), (name, old)
-        assert why.startswith(("排定：", "之後成包：")), (name, old)
-
-
-def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（以前有 bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包，第 45 批成包、figure_life 改讀核心 bounty_base，那一條收掉；
-    atlas 經舊名 sortie import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
-    （seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
-    看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
-    只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
-    for (name, old), why in SHARED_PENDING.items():
-        packages = sorted({feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{old}.py")})
-        if packages:
-            assert "連帶載入" in why and all(p in why for p in packages), (name, old, packages)
-        else:
-            assert "連帶載入" not in why, (name, old)
-
-
-def test_the_modules_left_out_of_the_shared_layer_still_reach_past_it():
-    """總表寫了、先不收的（SHARED_LATER）：不在 SHARED，而且真的還 import 了核心本體與共用規則層以外的模組（或包）——卡住的那一條不見了，
-    這裡紅，登記進 registry.SHARED。"""
-    for name, why in SHARED_LATER.items():
-        path = TIANXIA / f"{name}.py"
-        assert path.exists() and name not in SHARED and why.strip(), name
-        assert outside_imports(path.read_text(encoding="utf-8"), _modname(path)) or _feature_imports(path), \
-            f"{name} 只 import 核心本體與共用規則層了：登記進 registry.SHARED"
+    """共用規則層只 import 核心本體與同一層（總表第六節第 5 條）：最外層與函式裡都算，一處都不准。"""
+    found = shared_reach()
+    assert not found, f"共用層只准 import 核心與共用層：{sorted(found)}"
 
 
 def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
-    同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
+    同一層、from tianxia import 名字、標準庫不算；包不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import server_bots, territory\n", m) == {"server_bots"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion；第二輪第 87 批 fusion 也收進了共用規則層，換成 shopview（SHARED_LATER，還是舊模組，第 93 批才動它）；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
+    assert outside_imports("from . import server_bots, territory\n", m) == {"server_bots"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion；第二輪第 87 批 fusion 也收進了共用規則層，換成 shopview（當時不在共用層，第 93 批才動它）；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
     # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算）；第 52 批：tale 也成了戰記包的別名，換 bot（舊模組、之後不成包、這一波不動）
     assert outside_imports("def f():\n    from .bot import pick\n", m) == {"bot"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
@@ -351,7 +275,40 @@ def test_the_shared_scanner_catches_an_old_module():
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
     assert outside_imports("from .core import features\nfrom .models import Content\nfrom tianxia import calendar, siege\n", m) == set()
     assert outside_imports("from tianxia import TYPE_NAME_NOT_A_MODULE\nimport json\nfrom pydantic import BaseModel\n", m) == set()
-    assert outside_imports("from .features.battle import rules\nfrom . import feasts\n", m) == set()
+    assert outside_imports("from .features.battle import rules\n", m) == set()
+
+
+# 第 103 批收掉別名之後，舊名對應的檔不在了，上面幾條掃描會把它當「from tianxia import 名字」放行；寫在函式裡的 import 要跑到那一行才炸。
+UNRESOLVED_OK = {("scripts/sb/tracks/explore.py", "tianxia.explore_modes")}  # 包在 try/except ImportError 裡，認舊程式用的
+
+
+def unresolved_imports(source: str, module: str) -> set[str]:
+    """source 裡解不到模組的 tianxia 名字。tianxia/__init__.py 沒有名字，tianxia.<x> 一定要是檔；更深的 a.b.c 是 a.b 裡的名字也算解得到。"""
+    out = set()
+    for _, name in imports_of(source, module, type_checking=True):
+        parent = name.rsplit(".", 1)[0]
+        if name != "tianxia" and not _module_exists(name) and (parent == "tianxia" or not _module_exists(parent)):
+            out.add(name)
+    return out
+
+
+def test_the_unresolved_scanner_catches_an_old_name():
+    """unresolved_imports 本身抓得到（不然下面那一條永遠綠）：寫在函式裡、三種寫法都算；真的模組、模組裡的名字、標準庫不算。"""
+    assert unresolved_imports("def f():\n    from tianxia import letters\n", "tianxia.features.tavern.rules") == {"tianxia.letters"}
+    assert unresolved_imports("def f():\n    from . import letters\n", "tianxia.engine") == {"tianxia.letters"}
+    assert "tianxia.letters" in unresolved_imports("def f():\n    from tianxia.letters import mail_day\n", "tianxia.fusion")
+    assert "tianxia.features.tavern.letters.x" in unresolved_imports("from .letters import x\n", "tianxia.features.tavern.rules")
+    assert unresolved_imports("from . import calendar\nfrom .core import features\nfrom tianxia.models import Config\nimport json\n", "tianxia.engine") == set()
+
+
+@pytest.mark.slow  # 六百多個檔都要 parse，約 6 秒
+def test_every_tianxia_import_resolves():
+    """tianxia、腳本、server.py、run_bots.py 裡每一個 tianxia 的 import 都解得到，最外層與函式裡都算（測試自己跑得到，不掃）。"""
+    files = [p for p in sorted(TIANXIA.rglob("*.py")) if "tests" not in p.relative_to(ROOT).parts]
+    files += [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
+    found = {(p.relative_to(ROOT).as_posix(), name) for p in files
+             for name in unresolved_imports(p.read_text(encoding="utf-8"), _modname(p))}
+    assert not found - UNRESOLVED_OK, f"解不到的舊名（舊名對照看 docs/guide/核心與存檔.md）：{sorted(found - UNRESOLVED_OK)}"
 
 
 def test_the_game_reaches_the_packages_only_through_the_listed_methods():
@@ -364,8 +321,7 @@ def test_the_game_reaches_the_packages_only_through_the_listed_methods():
 
 
 def reverse_imports() -> list[str]:
-    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名）。
-    PM 每搬一包在交接記還剩幾處，跟 transitional_imports()（包 import 舊模組）兩個方向都記；核心的 registry.py 不算。"""
+    """反方向（3.11）：tianxia/ 最外層的檔、伺服器、腳本 import 功能包；核心的 registry.py 不算。"""
     files = [p for p in sorted(TIANXIA.glob("*.py"))] + [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
     out = []
     for path in files:
@@ -374,48 +330,17 @@ def reverse_imports() -> list[str]:
     return out
 
 
-def test_the_reverse_transitional_imports_come_from_old_modules():
-    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的一筆都不准：第 98 批起 GAME_IMPORTS 是空的），而且數得到（不然交接記的數是空的）。"""
+def test_only_the_shells_the_scripts_and_the_aliases_import_a_package():
+    """反方向只准這幾種：server.py、run_bots.py、scripts/，或假人殼（第二輪第 102 批；第 103 批別名與只給測試的殼收掉）。核心與共用層一筆都不准；而且數得到（不然這條永遠綠）。"""
     found = reverse_imports()
     assert any(e.startswith("server.py:") for e in found)
+    allowed = set(BOT_SHELL)
+    wrong = []
     for entry in found:
-        stem = entry.split(":", 1)[0].removeprefix("tianxia/").removesuffix(".py")
-        assert stem not in CORE or entry.rsplit(" ", 1)[1] in GAME_IMPORTS, entry
-
-
-def transitional_imports() -> list[str]:
-    """過渡期的 import（包 import 還沒搬的舊模組）：PM 每搬一包在交接記還剩幾處（手冊 3.11）。共用規則層（SHARED）的不算：它們不搬。"""
-    out = []
-    for name in _packages():
-        for path in _package_files(name):
-            seen = {(line, ".".join(mod.split(".")[:2])) for line, mod, marked in imports_of(path.read_text(encoding="utf-8"), _modname(path))
-                    if marked and mod != "tianxia" and _module_exists(".".join(mod.split(".")[:2])) and mod.split(".")[1] not in aliases()
-                    and mod.split(".")[1] not in SHARED}
-            out += [f"{_modname(path)}:{line} {mod}" for line, mod in sorted(seen)]
-    return out
-
-
-def stale_marks(source: str, module: str) -> list[int]:
-    """註了「過渡：待搬」、可是 import 的 tianxia 模組裡沒有一個是還沒搬的舊模組（全是核心本體、共用規則層、包或 from tianxia import 名字）的那幾行。"""
-    lines: dict[int, bool] = {}
-    for line, name, marked in imports_of(source, module):
-        if not marked:
-            continue
-        parts = name.split(".")
-        old = (len(parts) > 1 and parts[1] not in CORE and parts[1] not in SHARED and parts[1] not in ("core", "features")
-               and parts[1] not in aliases() and _module_exists(".".join(parts[:2])))
-        lines[line] = lines.get(line, False) or old
-    return sorted(line for line, has_old in lines.items() if not has_old)
-
-
-def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_package():
-    """註了「過渡：待搬」的那一行真的是舊模組：搬完了（變成核心或包）、登記進共用規則層，就把註拿掉。"""
-    for entry in transitional_imports():
-        mod = entry.rsplit(" ", 1)[1].split(".")
-        assert mod[1] not in CORE and mod[1] not in ("core", "features") and mod[1] not in aliases() and mod[1] not in SHARED, entry
-    stale = [f"{_modname(path)}:{line}" for name in _packages() for path in _package_files(name)
-             for line in stale_marks(path.read_text(encoding="utf-8"), _modname(path))]
-    assert stale == []
+        path = entry.split(":", 1)[0]
+        if path not in ("server.py", "run_bots.py") and not path.startswith("scripts/") and path.removeprefix("tianxia/").removesuffix(".py") not in allowed:
+            wrong.append(entry)
+    assert not wrong, f"這幾處不該 import 包：{wrong}"
 
 
 SERVICES = TIANXIA / "core" / "services_list.md"
@@ -690,7 +615,7 @@ def web_framework_problems() -> list[str]:
             for node in _load_time_nodes(tree):
                 if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno in skip:
                     continue
-                for _, mod, _ in imports_of(ast.unparse(node) + "\n", module):
+                for _, mod in imports_of(ast.unparse(node) + "\n", module):
                     parts = mod.split(".")
                     if len(parts) == 4 and parts[:2] == ["tianxia", "features"] and parts[3] == "routes":
                         found.append(f"{rel}:{node.lineno} 載入時就 import {mod}（要延後到殼掛路由的那一刻）")
@@ -756,102 +681,19 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia.features import feast\n", "別的包"),
     ("from tianxia.features.feast import rules\n", "別的包"),
     ("from ..feast import rules\n", "別的包"),
-    ("from tianxia import server_bots\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
-    ("from tianxia import engine\n", "舊模組"),
-    ("import tianxia.server_bots\n", "舊模組"),
-    # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
-    ("from tianxia import feasts  # 過渡：待搬\n", "別的包 feast"),
-    ("from tianxia.feasts import ToastRequest\n", "別的包 feast"),
-    ("import tianxia.feasts\n", "別的包 feast"),
-    ("from tianxia import mall  # 過渡：待搬\n", "自己這一包的別名"),
+    ("from tianxia import server_bots\n", "只准 import 核心、共用層、自己這一包"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
+    ("from tianxia import engine\n", "只准 import 核心、共用層、自己這一包"),
+    ("import tianxia.server_bots\n", "只准 import 核心、共用層、自己這一包"),
+    ("from tianxia import server_bots  # 過渡：待搬\n", "只准 import 核心、共用層、自己這一包"),  # 第二輪第 102 批：以前註了就准，現在放行不了
 ])
 def test_the_scanner_catches_a_crossing(source, expected):
     found = problems_of(source, "tianxia.features.mall.actions")
     assert len(found) == 1 and expected in found[0]
 
 
-def test_the_old_names_left_as_aliases_are_known():
-    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py、
-    tianxia/tavern.py、tianxia/tavern_ask.py、tianxia/escorts.py、tianxia/generals.py、tianxia/duel.py、tianxia/arena.py、tianxia/arena_crowd.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
-    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie",
-                         # explore
-                         "outing": "explore", "explore_one": "explore",
-                         # tavern
-                         "tavern": "tavern", "tavern_ask": "tavern",
-                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py；第 54 批：tianxia/battle_instance.py）
-                         "escorts": "battle", "generals": "battle", "battle_instance": "battle",
-                         # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
-                         "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
-                         # stamina_plays（全部拆包第 39 批：tianxia/ambush.py、works.py）
-                         "ambush": "stamina_plays", "works": "stamina_plays",
-                         # bout（全部拆包第 12 批：tianxia/duel.py、arena.py、arena_crowd.py）
-                         "duel": "bout", "arena": "bout", "arena_crowd": "bout",
-                         # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
-                         "stances": "companions", "errands": "companions", "letters": "companions",
-                         # companions（全部拆包第 20 批：tianxia/companion_agent.py、parley.py）
-                         "companion_agent": "companions", "parley": "companions",
-                         # companions（主幹合回 D 段：tianxia/talk_log.py）
-                         "talk_log": "companions",
-                         # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
-                         "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
-                         # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
-                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation",
-                         # story（全部拆包第 30 批：tianxia/storyline.py）
-                         "storyline": "story",
-                         # checkin（全部拆包第 30 批：tianxia/checkin.py）
-                         "checkin": "checkin",
-                         # figure_acts（全部拆包第 31 批：tianxia/figure_aid.py、yuedan.py）
-                         "figure_aid": "figure_acts", "yuedan": "figure_acts",
-                         # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
-                         "biography": "zhuan", "zhuan_end": "zhuan",
-                         # zhuan（第 29 批之二：tianxia/annals.py 指到 zhuan/standing.py，那一份 re-export 核心 annal_base）
-                         "annals": "zhuan",
-                         # military（全部拆包第 33 批：tianxia/rank_actions.py）
-                         "rank_actions": "military",
-                         # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）
-                         "foreshadow": "military", "opportunities": "military",
-                         # craft（全部拆包第 44 批：tianxia/create.py）
-                         "create": "craft",
-                         # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
-                         "conquest_day": "territory_acts", "xingshi": "territory_acts",
-                         # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
-                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
-                         # peers2（全部拆包第 38 批：tianxia/spar.py、discuss.py、raid.py）
-                         "spar": "peers", "discuss": "peers", "raid": "peers",
-                         # map（全部拆包第 49 批：tianxia/mapview.py、mapart.py、mapdata.py、worldgeo.py）
-                         "mapview": "map", "mapart": "map", "mapdata": "map", "worldgeo": "map",
-                         # smithy（全部拆包第 41 批：tianxia/smithing.py）
-                         "smithing": "smithy",
-                         # faction（全部拆包第 35 批：tianxia/defection.py）
-                         "defection": "faction",
-                         # gear（全部拆包第 42 批：tianxia/signature_arms.py）
-                         "signature_arms": "gear",
-                         # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
-                         "seal": "seal",
-                         # bounties（全部拆包第 45 批：tianxia/bounties.py、wanted.py；包名跟別名同字，同 cultivation、guide、seal）
-                         "bounties": "bounties", "wanted": "bounties",
-                         # seal（全部拆包第 28 批：tianxia/seal_duel.py 指到 seal/duel_rules.py）
-                         "seal_duel": "seal",
-                         # tale（全部拆包第 52 批：tianxia/tale.py；包名跟別名同字，同 cultivation、guide）
-                         "tale": "tale",
-                         # notify（全部拆包第 53 批：tianxia/notices.py；包名不叫 push，tianxia/push.py 是推力規則）
-                         "notices": "notify"}
-    assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
-
-
-def test_a_mark_with_no_old_module_left_is_caught():
-    """註了過渡、import 的卻都是核心本體或共用規則層（搬完了、登記了）：那一行的註要拿掉；同一行還有一個舊模組的照註（第 11 批）。"""
-    assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
-    assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
-    # shared：原本的例子 conquest 第 15 批登記進共用規則層，換一個還是舊模組的
-    assert stale_marks("from tianxia import server_bots, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []  # 第 45 批：原本的例子 bounties 成包，換還是舊模組的 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
-    assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
-
-
 @pytest.mark.parametrize("source", [
-    "from tianxia import server_bots  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層；bounties 第 45 批成包，再換 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
-    "from tianxia import library\n",  # shared：共用規則層（第 15 批）不必註
-    "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
+    "from tianxia import library\n",  # shared：共用規則層（第 15 批）
+    "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）
     "from tianxia.siege import title\n",
     "from tianxia.core.services import WalletService\n",
     "from tianxia import calendar, naming\n",
@@ -867,14 +709,14 @@ def test_the_scanner_lets_the_allowed_ones_through(source):
 
 
 def test_the_world_layer_core_files_import_no_package_not_even_inside_a_function():
-    """world.py 收進核心本體（MODULES）之後跟 sqlite_world.py 一樣：最外層與函式裡都不 import 包與舊名的別名（宴客 feasts、單挑 arena、
+    """world.py 收進核心本體（MODULES）之後跟 sqlite_world.py 一樣：最外層與函式裡都不 import 包（宴客 feasts、單挑 arena、
     大勢人物 yuedan、決戰 generals 換成了世界層的格）。掃描照 ast.walk 看得到函式裡的 import（下面那一段證明），所以核心那一條
     （test_the_core_never_imports_a_feature_package_except_the_registry）照 CORE 掃到它們；這裡寫明兩個檔，免得 MODULES 改了沒人發現。"""
     assert {"world", "sqlite_world"} <= CORE
     for name in ("world", "sqlite_world"):
         assert _feature_imports(TIANXIA / f"{name}.py") == [], name
-    source = "def f():\n    from . import generals\n    from .features.feast import rules as feasts\n    from . import arena, yuedan\n"
-    assert {feature_target(mod) for _, mod, _ in imports_of(source, "tianxia.world")} - {None} == {"battle", "feast", "bout", "figure_acts"}
+    source = "def f():\n    from .features.battle import generals\n    from .features.feast import rules as feasts\n    from .features.bout import arena_rules as arena\n    from .features.figure_acts import yuedan\n"
+    assert {feature_target(mod) for _, mod in imports_of(source, "tianxia.world")} - {None} == {"battle", "feast", "bout", "figure_acts"}
 
 
 def claimed_fields() -> dict[str, str]:
@@ -911,7 +753,7 @@ def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
     """核心本體 rules 的效果格與舊模組 defection 的清進度都不寫包認領的欄位（換成核心的掛鉤之後是空的）。先證明掃描看得到：
     原本寫在 apply_effect 最後一段的一條線那一步、clear_progress 裡的押糧與提示，照這一條都抓得到。"""
     for module, names in EFFECT_DEFECT_SCAN.items():
-        where = FEATURES / "faction" / f"{module}.py" if module == "defection" else TIANXIA / f"{module}.py"  # defection 第 35 批搬進陣營包（舊名是別名）
+        where = FEATURES / "faction" / f"{module}.py" if module == "defection" else TIANXIA / f"{module}.py"  # defection 第 35 批搬進陣營包
         assert package_fields_touched(where.read_text(encoding="utf-8"), names) == [], module
     old = ("def apply_effect(effect, state):\n    p = state.player\n    progress = p.storylines.get(effect.story.line)\n"
            "    p.keepsakes.append(effect.story.keepsake)\n"
@@ -941,11 +783,12 @@ def bus_bypasses(source: str) -> list[int]:
 
 
 def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
-    """engine.py 與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
+    """engine.py、核心（core/ 與 MODULES，搬進核心的函式也要守，第二輪第 102 批）與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
     原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
-    files = [TIANXIA / "engine.py", TIANXIA / "core" / "combat.py"] + [path for name in _packages() for path in _package_files(name)]  # combat：win 的發布點第 98 批搬過去
+    files = _core_files() + [path for name in _packages() for path in _package_files(name)]
     found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
-    assert {path: lines for path, lines in found.items() if lines} == {}
+    hits = {path: lines for path, lines in found.items() if lines}
+    assert not hits, f"不准直接叫事件的訂閱者，走 ctx.publish：{hits}"
     old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
            "def _arrive(self, s, c, loc_id):\n    convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)\n"
            "def _raid_bounty(self, target):\n    msgs = bounties.on_raid_win(self.state, self.content, self.world, target)\n"
@@ -958,43 +801,47 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
 
 
 def _package_imports_of(source: str, module: str) -> list[tuple[int, str]]:
-    """source（模組 module 的原文）裡 import 包（含舊名的別名）的 (行, 那一包)：同 _feature_imports，不讀檔（拿換之前的原文證明掃得到）。"""
-    return sorted({(line, feature_target(mod)) for line, mod, _ in imports_of(source, module) if feature_target(mod) is not None})
+    """source（模組 module 的原文）裡 import 包的 (行, 那一包)：同 _feature_imports，不讀檔（拿換之前的原文證明掃得到）。"""
+    return sorted({(line, feature_target(mod)) for line, mod in imports_of(source, module) if feature_target(mod) is not None})
 
 
 def test_step_and_weekcard_joined_the_core_and_reach_no_package():
     """step、weekcard 在核心本體裡、一處都不 import 包、不讀換之前直接讀的那幾樣（糧車、最近的地點、伏筆的下一步）。先證明掃描看得到：
-    換之前那幾行 import（split/trunk 8f86777e 的原文：weekcard 第 18、20 行、step 第 15 行）照這一條抓得到 5 處。"""
+    換之前那幾行 import（split/trunk 8f86777e 的原文：weekcard 第 18、20 行、step 第 15 行；第二輪第 103 批舊名換成真位置）照這一條抓得到 5 處。"""
     assert {"step", "weekcard"} <= CORE
     for name in ("step", "weekcard"):
         assert _feature_imports(TIANXIA / f"{name}.py") == [], name
         tree = ast.parse((TIANXIA / f"{name}.py").read_text(encoding="utf-8"))
         assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & STEP_PACKAGE_READS, name
-    old_weekcard = ("from . import calendar, chapters, errands, foreshadow, rules, storyline, week_unlock, wins\n"
+    old_weekcard = ("from . import calendar, chapters, rules, week_unlock, wins\n"
+                    "from .features.companions import errands\n"
+                    "from .features.military import fs_rules as foreshadow\n"
+                    "from .features.story import storyline\n"
                     "from . import step as step_rules\n"
-                    "from . import opening as opening_rules\n"
+                    "from .features.guide import opening as opening_rules\n"
                     "from . import prologue as prologue_rules\n")
-    old_step = "from . import atlas, foreshadow, orders\nfrom .rules import jianfa\n"  # 第 45 批：bounties 成包之後多回一筆，拿掉（照第 40 批認定第 15 條），這個例子只驗 foreshadow 那一包
-    assert _package_imports_of(old_weekcard, "tianxia.weekcard") == [(1, "companions"), (1, "military"), (1, "story"), (3, "guide")]
-    assert _package_imports_of(old_step, "tianxia.step") == [(1, "military")]
-    assert not [e for e in transitional_imports() if e.endswith(" tianxia.step") or e.endswith(" tianxia.weekcard")]
+    old_step = "from . import atlas, orders\nfrom .features.military import fs_rules as foreshadow\nfrom .rules import jianfa\n"  # 第 45 批：bounties 成包之後多回一筆，拿掉（照第 40 批認定第 15 條），這個例子只驗 foreshadow 那一包
+    assert _package_imports_of(old_weekcard, "tianxia.weekcard") == [(2, "companions"), (3, "military"), (4, "story"), (6, "guide")]
+    assert _package_imports_of(old_step, "tianxia.step") == [(2, "military")]
     assert not [e for e in reverse_imports() if e.startswith(("tianxia/step.py:", "tianxia/weekcard.py:"))]
 
 
 def test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function():
-    """這一批收進共用規則層的七個：最外層與函式裡都不 import 包與舊名的別名（大勢人物的 figure_aid、宴客 feasts、出陣 sortie、一條線 storyline、
+    """這一批收進共用規則層的七個：最外層與函式裡都不 import 包（大勢人物的 figure_aid、宴客 feasts、出陣 sortie、一條線 storyline、
     軍情 foreshadow、opportunities 換成了核心的查詢服務 omen_base、feast_base、底座 story_base 與世界層的 life 那一格）。上面
     test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_imports_a_package 照 SHARED 掃到它們；這裡寫明七個，免得名單改了沒人發現。
     先證明掃描看得到函式裡的：換之前那幾行（figures.recover、figure_life.tick、orders.intercept_spots 的延後 import，chapters、rumor_view 的最外層）。"""
     assert set(SHARED_CORE_WORLD2) <= set(SHARED)
     for name in SHARED_CORE_WORLD2:
         assert _feature_imports(TIANXIA / f"{name}.py") == [], name
-    old = ("from . import calendar, foreshadow, opportunities, orders\n"
-           "from . import calendar, deeds, storyline, wins\n"
-           "def recover():\n    from . import figure_aid\n"
+    old = ("from . import calendar, orders\n"
+           "from .features.military import fs_rules as foreshadow, opp_rules as opportunities\n"
+           "from . import calendar, deeds, wins\n"
+           "from .features.story import storyline\n"
+           "def recover():\n    from .features.figure_acts import figure_aid\n"
            "def tick():\n    from .features.feast import rules as feasts\n"
-           "def intercept_spots():\n    from . import sortie\n")
-    assert _package_imports_of(old, "tianxia.figures") == [(1, "military"), (2, "story"), (4, "figure_acts"), (6, "feast"), (8, "sortie")]
+           "def intercept_spots():\n    from .features.sortie import rules as sortie\n")
+    assert _package_imports_of(old, "tianxia.figures") == [(2, "military"), (4, "story"), (6, "figure_acts"), (8, "feast"), (10, "sortie")]
 
 
 def test_the_top_level_core_modules_reach_no_package_delegate_through_the_game():
@@ -1035,7 +882,8 @@ def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_
     """atlas 在共用規則層裡、最外層與函式裡都不 import 包（出陣包 sortie、sortie_duel 換成共用層的 territory.on、conquest.duel_on），
     不直接讀換之前讀的 fs_asking、tagalong（改問核心的 omen_base.fs_answering、travel_base.following）；兩邊留的是同一個函式物件。
     先證明掃描看得到：換之前那三行（split/trunk febd38d8 的原文：atlas 第 17 行、siege_how 與 order_how 裡的延後 import）抓得到 3 處。"""
-    from tianxia import conquest, sortie_duel
+    from tianxia import conquest
+    from tianxia.features.sortie import duel_rules as sortie_duel
     from tianxia.core import omen_base, travel_base
     from tianxia.features.military import fs_rules
     from tianxia.features.sortie import duel_rules
@@ -1047,10 +895,11 @@ def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_
     assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & ATLAS_PACKAGE_FIELDS
     assert duel_rules.on is conquest.duel_on and sortie_duel.on is conquest.duel_on
     assert fs_rules.fs_answering is omen_base.fs_answering and party.following is travel_base.following
-    old = ("from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory\n"
-           "def siege_how():\n    from . import sortie_duel\n"
-           "def order_how():\n    from . import sortie_duel\n")
-    assert _package_imports_of(old, "tianxia.atlas") == [(1, "sortie"), (3, "sortie"), (5, "sortie")]
+    old = ("from . import allied, conquest, figures, insights, mounts, orders, prologue, terrain, territory\n"
+           "from .features.sortie import rules as sortie\n"
+           "def siege_how():\n    from .features.sortie import duel_rules as sortie_duel\n"
+           "def order_how():\n    from .features.sortie import duel_rules as sortie_duel\n")
+    assert _package_imports_of(old, "tianxia.atlas") == [(2, "sortie"), (4, "sortie"), (6, "sortie")]
     assert not [e for e in reverse_imports() if e.startswith("tianxia/atlas.py:")]
 
 
@@ -1070,23 +919,23 @@ def test_the_bot_shell_touches_nothing_private_on_the_game():
 
 # core_bots（第二輪第 89 批）
 def shell_imports(source: str, module: str) -> set[str]:
-    """這個檔 import 了哪幾支假人殼：函式裡也算、標了「過渡：待搬」也算，if TYPE_CHECKING: 底下的不算（imports_of 已經略過）。"""
-    return {name.split(".")[1] for _, name, _ in imports_of(source, module) if name.count(".") >= 1 and name.split(".")[1] in BOT_SHELL}
+    """這個檔 import 了哪幾支假人殼：函式裡也算、寫了註也算，if TYPE_CHECKING: 底下的不算（imports_of 已經略過）。"""
+    return {name.split(".")[1] for _, name in imports_of(source, module) if name.count(".") >= 1 and name.split(".")[1] in BOT_SHELL}
 
 
 def test_no_package_imports_the_bot_shell():
-    """假人殼（bot、bot_policy、bot_runner、server_bots）接在包的上面（第二輪第 89 批把包要讀的搬走了）：包再 import 就是跳回舊模組，延後 import 或標過渡都不放行。
-    兩包以上讀的進共用層 bot_base，一包讀的進那一包的 bots.py。只准比 BOT_SHELL_PENDING 少，不准多。"""
+    """假人殼（bot、bot_policy、bot_runner、server_bots）接在包的上面（第二輪第 89 批把包要讀的搬走了）：包再 import 就是跳回舊模組，延後 import 或寫註都不放行。
+    兩包以上讀的進共用層 bot_base，一包讀的進那一包的 bots.py。一處都不准。"""
     module = "tianxia.features.x.bots"
     assert shell_imports("def f():\n    from tianxia import bot_policy as bp\n", module) == {"bot_policy"}  # 掃描本身抓得到：函式裡的
-    assert shell_imports("from tianxia import bot  # 過渡：待搬\n", module) == {"bot"}  # 標了過渡的
+    assert shell_imports("from tianxia import bot  # 過渡：待搬\n", module) == {"bot"}  # 註解放行不了
     assert shell_imports("def f():\n    from ...bot_runner import BotRunner\n", module) == {"bot_runner"}  # 相對的
     assert shell_imports("from tianxia.server_bots import active\n", module) == {"server_bots"}
     assert shell_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tianxia import bot\n", module) == set()  # 只給型別看的
     assert shell_imports("from tianxia import bot_base, botany\n", module) == set()  # 共用層 bot_base 不算
     found = {(_modname(path).removeprefix("tianxia.features."), shell) for name in _packages() for path in _package_files(name)
              for shell in shell_imports(path.read_text(encoding="utf-8"), _modname(path))}
-    assert found <= BOT_SHELL_PENDING, f"包不准 import 假人殼：{sorted(found - BOT_SHELL_PENDING)}"
+    assert found == set(), f"包不准 import 假人殼：{sorted(found)}"
 
 
 def test_bot_pick_asks_the_packages_for_what_it_skips():
@@ -1231,7 +1080,7 @@ def test_the_calls_between_packages_are_exactly_the_written_list():
 
 @functools.lru_cache(maxsize=None)
 def server_package_modules() -> tuple[tuple[str, str], ...]:
-    """server.py 最外層 import 進來、指到功能包的名字：((名字, 包), ...)（feature_target 認別名）。"""
+    """server.py 最外層 import 進來、指到功能包的名字：((名字, 包), ...)。"""
     out: dict[str, str] = {}
     for node in ast.parse((ROOT / "server.py").read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Import):
@@ -1252,8 +1101,8 @@ def foreign_shell_refs(source: str, package: str) -> set[tuple[str, str]]:
             and points.get(node.attr, package) != package}
 
 
-def test_a_package_reaches_another_package_through_the_shell_only_on_the_written_list():
-    """shell.<名字> 指到別包是繞過 ctx 的跨包：只有 SHELL_FOREIGN 那幾列（過渡，不准加，第 102 批收），多了少了都紅。"""
+def test_no_package_reaches_another_package_through_the_shell():
+    """shell.<名字> 指到別包是繞過 ctx 的跨包，一處都不准（第二輪第 102 批收掉最後 4 列）。"""
     source = "def f(shell):\n    return shell.battle_instance.x\n"
     assert foreign_shell_refs(source, "tale") == {("tale", "battle_instance")}
     assert foreign_shell_refs(source, "battle") == set()
@@ -1262,7 +1111,7 @@ def test_a_package_reaches_another_package_through_the_shell_only_on_the_written
     for name in _packages():
         for path in _package_files(name):
             found |= foreign_shell_refs(path.read_text(encoding="utf-8"), name)
-    assert found == SHELL_FOREIGN
+    assert found == set(), f"經殼碰別包的模組，改走核心或 ctx 服務：{sorted(found)}"
 
 
 def service_list_leftovers() -> list[str]:
@@ -1276,51 +1125,103 @@ def service_list_leftovers() -> list[str]:
     return sorted(name for name in service_list() if not callers.get(name, set()) - {owner.get(name)})
 
 
-# core_shared（第二輪第 88 批：skillview 切成三處，留下來的殼只給測試；殼不能藏跨包）
-from boundary_tables import TEST_ONLY_SHELLS  # noqa: E402  自己這一段另 import：上面那一串別條線也在加
+# core_shared（第二輪第 102 批：過渡收口。規矩從「註了就准」變成不准，防止第二輪做完又長回來）
+def _core_files() -> list[Path]:
+    """核心：tianxia/core/ 底下（含 tuning/）、MODULES、engine.py。"""
+    return sorted((TIANXIA / "core").rglob("*.py")) + [TIANXIA / f"{name}.py" for name in sorted(CORE)] + [TIANXIA / "engine.py"]
 
 
-def _shell_imports(source: str, module: str) -> set[str]:
-    """source（模組 module 的原文）import 了哪幾個只留給測試的殼；最外層與函式裡都算，TYPE_CHECKING 底下不算（imports_of）。"""
-    shells = {f"tianxia.{name}" for name in TEST_ONLY_SHELLS}
-    return {name for _, name, _ in imports_of(source, module)} & shells
+def test_the_core_only_imports_the_core_and_the_shared_layer():
+    """核心只 import 核心與共用層，函式裡也算；包是 test_the_core_never_imports_a_feature_package_except_the_registry 那一條。"""
+    assert outside_imports("def f():\n    from tianxia import server_bots\n", "tianxia.core.pills") == {"server_bots"}  # 掃描本身抓得到
+    found = {_modname(path): sorted(hit) for path in _core_files() if (hit := outside_imports(path.read_text(encoding="utf-8"), _modname(path)))}
+    assert not found, f"核心只准 import 核心與共用層：{found}"
 
 
-def test_product_code_does_not_import_a_test_only_shell():
-    """產品程式（tianxia/ 底下除了測試，加 server.py、run_bots.py）一律讀真正的位置：共用層 art_cards、修練包 art_view、煉製包 forge_view。"""
-    paths = [p for p in TIANXIA.rglob("*.py") if "tests" not in p.relative_to(TIANXIA).parts] + [ROOT / "server.py", ROOT / "run_bots.py"]
-    found = {path.relative_to(ROOT).as_posix(): sorted(hit) for path in paths if (hit := _shell_imports(path.read_text(encoding="utf-8"), _modname(path)))}
-    assert not found, f"這幾個檔 import 了只留給測試的殼，改讀真正的位置：{found}"
+def type_checking_packages(source: str, module: str) -> list[str]:
+    """source（模組 module 的原文）連 if TYPE_CHECKING: 底下也算，寫到哪幾包。"""
+    return sorted({target for _, mod in imports_of(source, module, type_checking=True) if (target := feature_target(mod)) is not None})
 
 
-def test_the_shell_scanner_catches_a_fake_import():
-    """上面那一條的掃描抓得到（不然永遠綠）：相對、絕對、函式裡都算；別的模組與 TYPE_CHECKING 底下不算。"""
-    module = "tianxia.features.craft.actions"
-    assert _shell_imports("from tianxia import skillview\n", module) == {"tianxia.skillview"}
-    assert _shell_imports("def f():\n    from tianxia.skillview import art_card\n", module) == {"tianxia.skillview"}
-    assert _shell_imports("def f():\n    from ... import skillview\n", module) == {"tianxia.skillview"}
-    assert not _shell_imports("from tianxia import art_cards\n", module)
-    assert not _shell_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tianxia import skillview\n", module)
+def test_the_core_names_no_package_even_for_type_checking():
+    """核心與共用層連型別註記也不寫包名（要註記寫字串或寬一點的型別）；只有 registry.py 登記 FEATURES 可以 import 包。"""
+    source = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .features.territory_acts import xingshi\n    from .features.companions import parley\n"
+    assert type_checking_packages(source, "tianxia.engine") == ["companions", "territory_acts"]  # 掃描本身抓得到
+    assert imports_of(source, "tianxia.engine") == []  # 不帶 type_checking 照舊不算
+    assert type_checking_packages("if TYPE_CHECKING:\n    from .engine import Game\n    from . import tactics\n", "tianxia.bot_base") == []
+    paths = [p for p in _core_files() if p.name != "registry.py"] + [TIANXIA / f"{name}.py" for name in sorted(SHARED)]
+    found = {_modname(path): hit for path in paths if (hit := type_checking_packages(path.read_text(encoding="utf-8"), _modname(path)))}
+    assert not found, f"核心與共用層連 TYPE_CHECKING 也不准寫包名：{found}"
 
 
-if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
+def test_every_top_level_module_has_a_place():
+    """tianxia/ 最外層每個檔都歸位：核心、共用層、假人殼或 engine。新的舊模組長不回來；要加登記進 MODULES 或 registry.SHARED，或開一包。"""
+    files = {path.stem for path in TIANXIA.glob("*.py")} - {"__init__"}
+    places = CORE | set(SHARED) | set(BOT_SHELL) | {"engine"}
+    assert files - places == set(), f"這幾個檔沒有歸位：{sorted(files - places)}"
+    assert places - files == set(), f"名單上的檔不在 tianxia/ 最外層：{sorted(places - files)}"
+
+
+def game_names_touched(source: str) -> set[str]:
+    """source 裡 game.<名字> 碰到的名字。"""
+    return {node.attr for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "game"}
+
+
+def test_the_bot_base_touches_only_the_listed_names_on_the_game():
+    """共用層 bot_base 准拿 Game（第二輪第 102 批落地認定），碰的 game.xxx 只有 BOT_BASE_GAME，多了少了都紅；拿 Game 的參數一律叫 game，別名才掃得到。"""
+    assert game_names_touched("def f(game):\n    return game._side() + game.state.world\n") == {"_side", "state"}  # 掃描本身抓得到
+    source = (TIANXIA / "bot_base.py").read_text(encoding="utf-8")
+    touched = game_names_touched(source)
+    assert touched == BOT_BASE_GAME, f"bot_base 碰了名單外的 {sorted(touched - BOT_BASE_GAME)}；名單上沒人碰的 {sorted(BOT_BASE_GAME - touched)}（boundary_tables.BOT_BASE_GAME）"
+    other = [arg.arg for node in ast.walk(ast.parse(source)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+             for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+             if arg.annotation is not None and re.search(r"\bGame\b", ast.unparse(arg.annotation)) and arg.arg != "game"]
+    assert other == []
+
+
+def takes_the_game(source: str) -> list[str]:
+    """source 拿 Game 的地方：import Game（TYPE_CHECKING 底下也算）、註記寫 Game、參數叫 game、沒註記成 Ctx 的 ctx（tactics 的 ctx 是它自己的 Ctx）。"""
+    out: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and any(a.name == "Game" for a in node.names):
+            out.append(f"{node.lineno} import Game")
+        elif isinstance(node, ast.AnnAssign) and re.search(r"\bGame\b", ast.unparse(node.annotation)):
+            out.append(f"{node.lineno} 註記 {ast.unparse(node.annotation)}")
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.returns is not None and re.search(r"\bGame\b", ast.unparse(node.returns)):
+                out.append(f"{node.lineno} {node.name} 回傳 {ast.unparse(node.returns)}")
+            args = node.args
+            for arg in args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a is not None]:
+                note = ast.unparse(arg.annotation) if arg.annotation is not None else ""
+                if re.search(r"\bGame\b", note) or arg.arg == "game" or (arg.arg == "ctx" and not re.search(r"\bCtx\b", note)):
+                    out.append(f"{arg.lineno} {node.name} 的參數 {arg.arg}")
+    return out
+
+
+def test_only_the_bot_base_in_the_shared_layer_takes_the_game():
+    """共用層是規則，不拿 Game（資料由呼叫端傳）；只有 bot_base 例外（第 89 批，手冊第十五節第 102 批落地認定）。"""
+    assert takes_the_game("if TYPE_CHECKING:\n    from .engine import Game\n") == ["2 import Game"]  # 掃描本身抓得到
+    assert takes_the_game("def f(g: 'Game'): pass\n") == ["1 f 的參數 g"]
+    assert takes_the_game("def f(game): pass\n") == ["1 f 的參數 game"]
+    assert takes_the_game("def f(ctx): pass\n") == ["1 f 的參數 ctx"]
+    assert takes_the_game("def f(ctx: Ctx, holder: Holder): pass\nif TYPE_CHECKING:\n    from .engine import Option\n") == []
+    found = {name: hit for name in sorted(SHARED) if name != "bot_base"
+             if (hit := takes_the_game((TIANXIA / f"{name}.py").read_text(encoding="utf-8")))}
+    assert not found, f"共用層只有 bot_base 准拿 Game：{found}"
+
+
+if __name__ == "__main__":  # PM 記處數：python tests/core/test_feature_boundaries.py
     import io
     import sys
 
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    for title, rows in (("包 → 舊模組（transitional_imports）", transitional_imports()), ("舊模組 → 包（reverse_imports）", reverse_imports())):
-        print(f"{title}：{len(rows)} 處")
-        print("\n".join(f"  {r}" for r in rows))
+    rows = reverse_imports()
+    print(f"假人殼、伺服器、腳本 → 包（reverse_imports）：{len(rows)} 處")
+    print("\n".join(f"  {r}" for r in rows))
     print(f"Game 碰包：委派 {len(GAME_DELEGATES)} 個、直連 {len(GAME_DIRECT) + len(GAME_DELEGATE_CALLERS)} 處"
           f"（GAME_DIRECT {len(GAME_DIRECT)}、GAME_DELEGATE_CALLERS {len(GAME_DELEGATE_CALLERS)}）；GAME_IMPORTS {len(GAME_IMPORTS)}")
     print(f"共用規則層（registry.SHARED）：{len(SHARED)} 個模組（{'、'.join(sorted(SHARED))}）")
-    # shared（第 15 批）
-    print(f"共用規則層碰到的別的舊模組（SHARED_PENDING）：{len(SHARED_PENDING)} 條"
-          f"（排定 {sum(w.startswith('排定：') for w in SHARED_PENDING.values())}、"
-          f"之後成包 {sum(w.startswith('之後成包：') for w in SHARED_PENDING.values())}）")
-    print("\n".join(f"  {a} → {b}" for a, b in sorted(SHARED_PENDING)))
-    print(f"總表寫了、先不收的（SHARED_LATER）：{len(SHARED_LATER)} 個（{'、'.join(sorted(SHARED_LATER))}）")
     # core_api（第二輪第 74 批）
     print(f"跨包經 Game（CROSS_PACKAGE_CALLS）：{len(CROSS_PACKAGE_CALLS)} 對、{len(set().union(*CROSS_PACKAGE_CALLS.values()))} 個名字")
-    print(f"shell 指到別包（SHELL_FOREIGN，第 102 批收）：{len(SHELL_FOREIGN)} 列")
     print(f"服務清單上沒有包叫或只有主人叫（PM 每波清一次）：{len(service_list_leftovers())} 個（{'、'.join(service_list_leftovers())}）")

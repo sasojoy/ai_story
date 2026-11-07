@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from tianxia import log_archive, sqlite_world
-from tianxia.battle_instance import BattleInstance, BattleRoundRecord
+from tianxia.features.battle.instance import BattleInstance, BattleRoundRecord
 from tianxia.sqlite_world import open_world
 from tianxia.state import Rumor
 

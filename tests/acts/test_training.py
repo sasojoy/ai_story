@@ -7,7 +7,7 @@ import random
 from conftest import real_content
 from jianfa_kit import classic_explore
 
-from tianxia import newbie
+from tianxia.features.guide import newbie
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

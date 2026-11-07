@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import atlas, bot, clinic, skillview, team
+from tianxia import atlas, bot, clinic, art_cards, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.engine import Game
 
@@ -40,7 +40,7 @@ def test_away_from_a_clinic_healing_is_refused_and_names_the_nearest(real):
     p = game.state.player
     assert game.heal() == ["這裡沒有醫館，最近的在潁川郡（陽翟）。"]
     assert (p.member.injury, p.stats["silver"]) == (40.0, 100)
-    assert skillview.heal_button(game.state, real) == {
+    assert art_cards.heal_button(game.state, real) == {
         "ok": False, "why": "這裡沒有醫館，最近的在潁川郡（陽翟）。", "clinic": "這裡沒有醫館，最近的在潁川郡（陽翟）。", "note": None,
     }
     assert "act:heal" not in [o.id for o in game.options(odds=False)]
@@ -64,7 +64,7 @@ def test_at_a_clinic_the_place_offers_healing_at_the_same_price(real):
     p = game.state.player
     (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
     assert option.enabled and option.label == f"{clinic.HEAL}（內傷 40・{team.heal_cost(real, p.member)} 兩）"
-    assert skillview.heal_button(game.state, real) == {"ok": True, "why": None, "clinic": None, "note": "內傷 40・20 兩"}
+    assert art_cards.heal_button(game.state, real) == {"ok": True, "why": None, "clinic": None, "note": "內傷 40・20 兩"}
     stamina = p.stamina
     msgs = game.choose("act:heal")
     assert "療傷完畢，內傷 -40、氣血回滿（銀兩 -20）。" in msgs
@@ -85,7 +85,7 @@ def test_short_of_silver_heals_what_it_can(real):
     p = game.state.player
     (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]
     assert option.enabled and option.label == f"{clinic.HEAL}（治 24 點・12 兩（還剩 16 點））"
-    assert skillview.heal_button(game.state, real)["note"] == "治 24 點・12 兩（還剩 16 點）"
+    assert art_cards.heal_button(game.state, real)["note"] == "治 24 點・12 兩（還剩 16 點）"
     assert game.choose("act:heal")[0] == "銀兩只夠治一部分：內傷 -24，還剩 16 點（銀兩 -12）。"
     assert (p.member.injury, p.stats["silver"]) == (16.0, 0)
     (option,) = [o for o in game.options(odds=False) if o.id == "act:heal"]

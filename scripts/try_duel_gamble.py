@@ -22,7 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import battle_instance, duel  # noqa: E402
+from tianxia.features.battle import instance as battle_instance  # noqa: E402
+from tianxia.features.bout import duel_rules as duel  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.state import DuelState  # noqa: E402

@@ -10,7 +10,8 @@ import pytest
 from test_sortie import _fight, _game
 
 from conftest import real_content
-from tianxia import explore_one, precise
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import precise
 
 pytestmark = pytest.mark.whole_content
 

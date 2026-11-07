@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from conftest import real_content
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia import figures
 from tianxia.features.battle import generals
 from tianxia.state import GameState, PlayerState

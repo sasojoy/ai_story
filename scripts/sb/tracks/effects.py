@@ -481,4 +481,4 @@ class EffectsScenario(Scenario):
 
 
 # 改一個字（selftest）：叛投之後新陣營那一則陣營軍情（defection.defect；第 35 批陣營成包時那一行搬進包，這裡要多寫包裡的檔）
-register_track("effects", EffectsScenario, (("tianxia/defection.py", "tianxia/features/faction/defection.py"), ("投奔過來了。", "投奔過來了！")), "week7")
+register_track("effects", EffectsScenario, (("tianxia/features/faction/defection.py",), ("投奔過來了。", "投奔過來了！")), "week7")

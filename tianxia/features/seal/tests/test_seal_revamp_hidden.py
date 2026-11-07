@@ -18,7 +18,11 @@ import server
 from conftest import no_week_unlock, real_content
 from test_seal import _ended, _registry, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import battle_instance, battlelog, leaderboard, seal, seal_duel, social, tavern
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, leaderboard
+from tianxia.features.seal import seal, duel_rules as seal_duel
+from tianxia.features.peers import social
+from tianxia.features.tavern import rules as tavern
 from tianxia import world as world_rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game

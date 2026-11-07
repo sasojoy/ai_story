@@ -8,7 +8,8 @@ import pytest
 from conftest import next_season
 from test_mall import DAY, DAY0, T0, _admin, _game, _ready, _rows, _wallet
 
-from tianxia import annals, biography, mall
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia.features.mall import rules as mall
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions
 from tianxia.models import MallItem

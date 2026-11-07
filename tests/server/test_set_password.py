@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import set_password  # noqa: E402
 from conftest import real_content  # noqa: E402
 
-from tianxia import howto  # noqa: E402
+from tianxia.features.guide import howto as guide_howto  # noqa: E402
 from tianxia.accounts import AccountStore  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import profile_line  # noqa: E402
@@ -64,11 +64,11 @@ def test_a_character_it_creates_gets_the_same_profile_as_the_server(tmp_path, ca
     monkeypatch.setenv("TIANXIA_PROFILE", "week7")
     assert _run(tmp_path, "Rayal", "--character", "Rayal") == 0
     assert profile_line(weekend, "week7") in capsys.readouterr().out  # 跟伺服器啟動時印的同一行
-    assert howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
+    assert guide_howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
     monkeypatch.delenv("TIANXIA_PROFILE")  # 沒帶就是 season21（週末設定關門）
     assert _run(tmp_path, "other", "--character", "沈青衫") == 0
     assert profile_line(plain, "season21") in capsys.readouterr().out
-    assert howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines
+    assert guide_howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines
 
 
 def test_running_again_replaces_the_password(tmp_path):

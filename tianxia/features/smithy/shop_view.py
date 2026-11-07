@@ -3,7 +3,7 @@
 只讀：不改數值、不碰亂數、不 import engine（next_rule 只記這一季講過哪幾句）。每一個「做不了」的原因都從現在的規則函式拿（smithing.forge_problem、temper_problem、
 weapons.buy_problem、repair_problem……），網頁不自己判斷規則。店共用的（掌櫃那一句、素材格的排序、階名）在 core/shop_base。
 page 是店面那一頁的組法（Feature.shop_view 轉交；core/features.shop_page 問）。
-靠 tianxia/shopview.py 那個殼的測試（tests/gear/test_four_tiers.py、test_weapons.py、tests/arts/test_renown_trade.py、tests/battle/test_tactics_bouts.py……）改這一檔時 test_for 挑不到：另外跑 scripts/test_for.py tianxia/shopview.py。
+包外讀這一檔的測試改這一檔時 test_for 挑不到：另外跑 `git grep -l smithy_shop -- tests tianxia/features` 列的那幾個。
 """
 from __future__ import annotations
 

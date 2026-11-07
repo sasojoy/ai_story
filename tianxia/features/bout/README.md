@@ -10,9 +10,9 @@
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`BoutFeature`）：`prefix = ("duel", "arena")`；`enabled`＝內容有頭目、或擂台開著、或此刻還在頭目戰／擂台上／坐在擂台邊（開關在坐著、打著的時候被關掉照樣出得去，同酒肆）；`content` 宣告 `duels.json`、`arena_crowd.json`（`content.py` 照它到這一包的 `content/` 載）；掛鉤 `menu`、`choose`、`bot_pick`、`check_content`、`shops`、`verbs`（下面） |
-| `duel_rules.py` | 頭目戰的純規則（原 `tianxia/duel.py`；舊名留成 `sys.modules` 別名）：次數與冷卻的帳、遇得上哪一隻、面貌、他的招與架勢、出一招、放手一搏、勝負、`SETTING`／`PLACE`／`STALE`／`RESEND`、`COUNTER_WORDS`；鎖外三段式的單子 `DuelTextRequest` 與輸入框底下那一句 `DUEL_GAMBLE_NOTE`（原本寫在 `engine.py`） |
-| `arena_rules.py` | 擂台的純規則（原 `tianxia/arena.py`；別名）：守擂的分身、挑得到誰、冷卻與次數、一場的推進、俸、收季排名、擂台那一頁的字 |
-| `arena_crowd.py` | 場邊事件（原 `tianxia/arena_crowd.py`；別名）：底細、候選、擲、套用、模型判觀眾反應與重寫那一句；`check_content`（原 `content.check_arena_crowd`） |
+| `duel_rules.py` | 頭目戰的純規則（原 `tianxia/duel.py`）：次數與冷卻的帳、遇得上哪一隻、面貌、他的招與架勢、出一招、放手一搏、勝負、`SETTING`／`PLACE`／`STALE`／`RESEND`、`COUNTER_WORDS`；鎖外三段式的單子 `DuelTextRequest` 與輸入框底下那一句 `DUEL_GAMBLE_NOTE`（原本寫在 `engine.py`） |
+| `arena_rules.py` | 擂台的純規則（原 `tianxia/arena.py`）：守擂的分身、挑得到誰、冷卻與次數、一場的推進、俸、收季排名、擂台那一頁的字 |
+| `arena_crowd.py` | 場邊事件（原 `tianxia/arena_crowd.py`）：底細、候選、擲、套用、模型判觀眾反應與重寫那一句；`check_content`（原 `content.check_arena_crowd`） |
 | `duel_actions.py` | 原本 `Game` 上頭目戰的 16 個方法（名字去掉前導底線）＋頭目的查詢 `boss_ready`（只有三選一的練功問的三個第 13 批一起拿掉）＋打到一半的選單 `duel_menu`（三招與抽身；審查修正從 `_everyday_options` 搬來）；頭目戰、擂台共用的放手一搏輸入框與重驗、本命戰法的亂數、陣營名也在這裡 |
 | `arena_actions.py` | 原本 `Game` 上擂台的 22 個方法（`_arena` → `arena_choice`、`_arena_crowd` → `roll_crowd`）＋原位接上掛鉤的那幾段（`fight_menu`、`entry_option`、`close`、`arena_open`、`arena_sign`、`arena_title`、`arena_fight_problem`） |
 | `shop_view.py` | 擂台那一頁（第二輪第 93 批從 `shopview` 切來）：`arena_view`、`_fight_view`、`_ring_short`；`page` 是組法，`Feature.shop_view` 認 `arena` |
@@ -35,11 +35,11 @@
 - 第二輪拿掉的委派與新格：`_duel_scene`、`_arena_scene`（第 91 批，改登記 `SCENE_ORDER` 的 `own/duel`、`own/arena`、`art/bout`）；`_arena_fight_problem`（第 92 批，灰掉的挑擂鈕改登記 `MENU_ORDER["stale"]` 的 `arena` 格，`arena_actions.stale_cell`，照舊不寫 `_log`）。`game_api.py` 表上 `DUEL_GAMBLE_NOTE` 這一格是字（第 98 批，邊界名單 `GAME_TABLE_TEXTS`）。
 - **還在原位叫委派的**（沒有對應的掛鉤，邊界測試 `GAME_DELEGATE_CALLERS` 寫了理由）：`_everyday_options` 閉關中、在路上的入口（`_arena_entry`）；頭目戰打到一半的三招與抽身（`_everyday_options` → `_duel_menu`：排在 `menu` 掛鉤前面一行，接上掛鉤會排到宴客的席位後面）；`sync` 的擂台補送（`_deliver_arena`）；戰力快照抄防具（`_battle_gear` → `_duel_cut`；奪璽單挑的 `_seal_spectators`、`_seal_side_of` 也在**別人的** `Game` 上叫 `kin._duel_cut()`、`game._duel_cut()`——邊界測試只掃 `self.<名>`，名單記不到這兩處。**第 28 批**把那兩個方法搬進玉璽包時，要先把 `_duel_cut` 登記成服務清單二、查詢服務〔主人：單挑包〕）；奪璽單挑的陣營名（`seal_text_request` → `_duel_side`，第 28 批）；舊探索撞上頭目（`_boss_ready`、`_boss_face`、`_duel_start`；舊探索留著，不再有下一批收）。只讀存檔的照舊在原位：`_idle`、`_shop_open` 的「擂台打到一半」、`LEAVE_SHOP_IDS`／`ARENA_YIELD`（寫字面）。
 - **別包怎麼問**：探索包的出門一趟撞上頭目經 `ctx._boss_ready()`、`ctx._boss_face(boss)`、`ctx._duel_start(boss)`（服務清單二、查詢服務）；酒肆包的名氣讀核心 `arena_ranks`。這一包經 `ctx` 叫形象包的 `arena_look`、`arena_move`（查詢服務）。
-- **舊模組 → 包**（過渡，3.11）：`bot_policy`（`arena`、`duel`）、`tiers`（`tests/core/test_event_tiers.py` 換掉 `tianxia.arena.entry_of`，所以照舊經別名）照舊 import 別名（`world` 收季的 `close_season` 全部拆包第 25 批換成世界層 `close` 的 `arena` 那一格：`__init__.py` 的 `world()` → `arena_rules.world_close`，判斷照原位只看擂台開著沒，不問 `enabled`；第 12 批 PM 認定第 2 條）；只讀名次與稱號的 `mingtie`（名帖）、`social`（玩家卡）、`leaderboard`（榜單）改讀核心的 `arena_ranks`（審查修正，邊界測試 `ARENA_RANK_READERS` 守）；`server.py`（`duel.Scene`、`SETTING`、`PLACE`，`arena_crowd` 的鎖外重寫與看台）、`scripts/` 也是。
+- **假人殼與殼讀這一包**：`bot_policy`（`arena_rules`、`duel_rules`）；`server.py`（`duel.Scene`、`SETTING`、`PLACE`，`arena_crowd` 的鎖外重寫與看台）、`scripts/` 也是。世界層 `close` 的 `arena` 那一格（`__init__.py` 的 `world()` → `arena_rules.world_close`，判斷照原位只看擂台開著沒，不問 `enabled`；第 12 批 PM 認定第 2 條）。只讀名次與稱號的 `mingtie`（名帖）、`social`（玩家卡）、`leaderboard`（榜單）、`tiers` 讀核心的 `arena_ranks`（邊界測試 `ARENA_RANK_READERS` 守）。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-- 包 → 還沒搬的舊模組 2 處：`duel_actions.py`、`arena_actions.py` 各一行 `annals`（行狀）。其餘 import 的都是核心本體與共用規則層（`battle_instance`、`battlelog`、`encounter`、`materials`、`renown`、`rise`、`rounds`、`tactics`、`treasures`、`prologue`、`week_unlock`、`zh`……）。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的（`# bout`）：二、查詢服務 `ctx._boss_ready()`、`ctx._boss_face(boss)`、`ctx._duel_start(boss)`（探索包問；原本在三、過渡 explore 那一段）、`ctx.arena_look()`、`ctx.arena_move()`（主人：形象包）；三、過渡 `ctx._arena_bare()`（`tianxia/features/seal/tests/test_seal_revamp_hidden.py` 換掉）、`ctx._duel_finish(tier, line)`（`scripts/sim_season_one.py` 換掉）——這兩個是這一包自己的委派，包裡經 `ctx` 叫才打得到。
 
 ## 測試
@@ -54,7 +54,7 @@
 - 網頁：改 `web/bout.js` 時 `test_for` 照檔名挑得到 `test_shop_width`（只讀原始碼與樣式）、`test_shell_web`（載入順序）；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去；第 61 批搬走的 18 條只是名字帶 page，測的是各包自己的資料，不用跟）、`tests/bots/test_server_bots.py`（掃字）。**沒有測試執行 `arenaHtml` 那幾個畫法**（`test_arena_anim_web` 測的是 `arena_anim.js`），靠 `same_behavior` 的 `facade` 軌比字與實機看。
 - 前後一字不變：`scripts/same_behavior.py` 的 `bout`（切在擂台報名之後、被挑之前；同一刻頭目戰打到一半）、`ring`（切在擂台寫到一半：擂台打到一半、場邊那一句等著重寫、守擂的那一筆沒補、坐在擂台邊、記下的俸沒領；審查修正取代原本的 `boss`）兩軌（`--tracks bout,ring`）。
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+**行狀記一筆讀核心**（全部拆包第 29 批之二）：`from tianxia.core import annal_base as annals`（核心本體）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `arena`（`arena_actions.deliver_arena`；`Game._deliver_arena` 留給測試）。
 
@@ -62,9 +62,9 @@
 
 **第 57 批（分派與標題收接縫，核心批）**：`choose` 不建紀錄的 `duel:`、`arena:<招>`／認輸是 `MENU_ORDER["quick"]` 的 `duel`、`arena` 兩格（`arena` 那一格只接招式與認輸，`arena:join`、`fight`、`back` 回 None 照舊走 `choose` 掛鉤）。委派 `_duel_act`、`_arena_act` 拿掉；engine 不再 import `MOVES`，`ARENA_YIELD` 留（`bot.py` 從 engine 拿）。
 
-**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：新開的 `routes.py`（沒有路由，`routes` 掛鉤照舊回 None）：`duel_text`（放手一搏，`/api/do/duel_text`；`GambleVerdict`、`assess_gamble`、保底值照舊經 `shell.battle_instance`）、擂台場邊那一句 `_crowd_waiting`、`write_crowd`、`crowd_once`、`CROWD_RUNNING`（`outlock` 掛鉤那一格 `crowd`）。殼留一行包裝：`duel_text`、`crowd_once`。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_server.py`、`tests/arts/test_in_lock_model_timeout.py`、`tests/server/test_outlock.py`。
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：新開的 `routes.py`（沒有路由，`routes` 掛鉤照舊回 None）：`duel_text`（放手一搏，`/api/do/duel_text`；`GambleVerdict`、`assess_gamble`、保底值讀核心 `core/battle_base`，不經殼，第二輪第 102 批）、擂台場邊那一句 `_crowd_waiting`、`write_crowd`、`crowd_once`、`CROWD_RUNNING`（`outlock` 掛鉤那一格 `crowd`）。殼留一行包裝：`duel_text`、`crowd_once`。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_server.py`、`tests/arts/test_in_lock_model_timeout.py`、`tests/server/test_outlock.py`。
 
-- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。
+- 改 `shop_view.py` 另外跑 `git grep -l bout_shop -- tests tianxia/features` 列的那幾個（`test_for` 挑不到）。
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 

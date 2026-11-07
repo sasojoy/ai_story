@@ -5,7 +5,8 @@ import random
 import pytest
 from conftest import FixedRandom
 
-from tianxia import insights, sensing
+from tianxia import insights
+from tianxia.features.sense import sensing
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight
 from tianxia.models import InsightScene, SenseMethod
@@ -197,20 +198,21 @@ def test_a_clue_pointing_at_the_strongest_passes(content):
 # ── 玩法說明（意境提示設計第二節）──
 from conftest import real_content  # noqa: E402
 
-from tianxia import howto  # noqa: E402
+from tianxia.features.guide import howto as guide_howto  # noqa: E402
+from tianxia.features.sense import howto as sense_howto  # noqa: E402
 
 
 def _howto(c):
     from tianxia.world_state import fresh_season
 
-    return howto.page(c, fresh_season(c), recruitable=False)
+    return guide_howto.page(c, fresh_season(c), recruitable=False)
 
 
 def test_the_howto_says_each_place_has_a_strongest_insight():
-    assert howto.STRONG_HOWTO in _howto(real_content("week7"))
+    assert sense_howto.STRONG_HOWTO in _howto(real_content("week7"))
 
 
 def test_the_howto_is_unchanged_with_the_switch_off():
     c = real_content("week7")
     c.config.insight_strong.enabled = False
-    assert howto.STRONG_HOWTO not in _howto(c) and "哪裡悟得到什麼看地形。" in _howto(c)
+    assert sense_howto.STRONG_HOWTO not in _howto(c) and "哪裡悟得到什麼看地形。" in _howto(c)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from tianxia import letters, parley
+from tianxia.features.companions import letters, parley
 
 
 def bounty_ctx(state, content, world=None) -> SimpleNamespace:

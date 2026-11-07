@@ -521,7 +521,7 @@ def test_the_stored_rank_stays_three_for_a_seated_member(on):
 
 
 def test_the_defection_prompt_names_the_seat_title(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     game = _qualified(on, "甲")
     seats.report(game.state, on)
@@ -530,7 +530,7 @@ def test_the_defection_prompt_names_the_seat_title(on):
 
 
 def test_the_defection_prompt_for_a_waiting_candidate_names_the_candidacy(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     game = _qualified(on, "甲")
     text = defection.prompt(game.state, on, on.scenario.faction("huang"), "")
@@ -705,7 +705,7 @@ def _defect_through_the_menu(game, now):
 
 
 def test_defection_frees_the_seat(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     w = WorldState(season_one=True)
     holder = _qualified(on, "甲", world=w)
@@ -752,7 +752,7 @@ def test_leave_with_nothing_on_the_books_is_harmless(on):
 
 def test_a_waiting_candidate_who_defects_leaves_the_ledger_too(on):
     """還沒補上缺、在帳上候缺的人叛投：帳上也拿掉，不然週一的排名會把一個已經不在這個陣營的人排進去。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     w = WorldState(season_one=True)
     for name in ("甲", "乙"):
@@ -766,7 +766,7 @@ def test_a_waiting_candidate_who_defects_leaves_the_ledger_too(on):
 
 def test_a_defector_does_not_come_back_on_monday(on):
     """沒有幽靈席次：上一週貢獻最多的人叛投走了，週一的排名讀不到他，名單與軍情裡都沒有他。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     w = _season({"甲": 90, "乙": 40, "丙": 30})
     holder = _qualified(on, "甲", weeks={1: 90}, world=w)
@@ -779,7 +779,7 @@ def test_a_defector_does_not_come_back_on_monday(on):
 
 
 def test_the_defector_holds_no_seat_in_the_new_faction(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     w = WorldState(season_one=True)
     holder = _qualified(on, "甲", world=w)
@@ -795,7 +795,7 @@ def test_the_defector_holds_no_seat_in_the_new_faction(on):
 
 def test_seated_reads_the_current_faction_only(on):
     """名單照陣營分開：在任看的是自己現在的陣營的名單。叛投走 defect（它呼叫 leave）之後，舊陣營的名單上沒有他，新陣營也沒有。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     w = WorldState(season_one=True)
     holder = _qualified(on, "甲", world=w)

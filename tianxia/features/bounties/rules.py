@@ -16,7 +16,7 @@
 過了期限只有一個問法（past_due，FB-152、FB-153）：這一季收了，榜上的一律算過了；寫「到季末」的單撐到季真的收了；其他的照自己的期限。
 只改 GameState（玩家與共用的季）；不 import engine、world。
 
-原 tianxia/bounties.py（全部拆包第 45 批搬進懸賞榜包，舊名是指到這裡的別名）。別人讀的那一半（active、mine、title、how、issuer、open_bounties、stranded、post_rally、post_figure……）
+原 tianxia/bounties.py（全部拆包第 45 批搬進懸賞榜包）。別人讀的那一半（active、mine、title、how、issuer、open_bounties、stranded、post_rally、post_figure……）
 在核心 core/bounty_base.py，這裡 re-export 同一批物件；留在這裡的都是自己這一包在用的（交差、揭下、求兵、通緝、掛單、狀態）。交差那幾個函式要叫人物情誼包的委派
 （道謝信、守約、兌現），所以第一個參數是 ctx（_done、on_*、_complete_rally、_complete_commission、commission_reward、status）；_complete、take、give 照舊拿 state、content、world
 （scripts/measure_sanren.py、sim_server_bots.py 換它們的替身照這個簽名）。"""

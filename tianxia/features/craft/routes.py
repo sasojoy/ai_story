@@ -31,7 +31,7 @@ def router(shell) -> APIRouter:
     @r.post("/api/forge_line")
     def api_forge_line(request: Request, body: dict = Body(default={})):
         """煉製頁選了東西就更新說明（不算行動、不存檔）。爐裡只放了一樣時多給 picks：另一格放得進來的每一樣合不合得了，
-        判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
+        判斷是開爐時那一套（forge_view.forge_picks）；其他時候是 None。"""
         game = shell._game(request)
         _art, picked = shell.forge_args(body)
         return shell.look(game, lambda g: {

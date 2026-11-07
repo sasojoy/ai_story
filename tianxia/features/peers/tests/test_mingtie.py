@@ -5,7 +5,8 @@ import random
 
 from test_social import NOW, _as, _done, _player
 
-from tianxia import mingtie, speech
+from tianxia.features.peers import mingtie
+from tianxia import speech
 from tianxia.engine import Game
 
 DOT = [[0, 0, 10, 10, 60, 60]]

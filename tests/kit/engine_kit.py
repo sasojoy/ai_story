@@ -2,7 +2,10 @@
 import random
 from unittest import mock
 from conftest import at, install_season_one, walk_to
-from tianxia import atlas, battle_instance, companion_agent, fight_llm
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.companions import companion_agent
+from tianxia import fight_llm
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 from tianxia.models import Effect, Location

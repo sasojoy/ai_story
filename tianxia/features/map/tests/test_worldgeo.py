@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from tianxia import worldgeo
+from tianxia.features.map import worldgeo
 
 BOX = (0.0, 0.0, 100.0, 100.0)
 

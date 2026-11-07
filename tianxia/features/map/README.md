@@ -14,11 +14,11 @@
 | `actions.py` | 原本 `Game` 上輿圖的 11 個方法（`self`→`ctx`）：`map_base`、`map_state`、`map_foes`（`_map_foes`）、`fierce_line`（`_fierce_line`）、`world_map_svg`、`minimap_svg`、`map_legend`、`map_header`、`map_places`、`place_detail`、`travel_options`；另有探索包問的兩個查詢 `open_places`、`mostly_here`（Game 上的 `_map_open_places`、`_map_mostly_here`） |
 | `views.py` | `/api/map` 的資料：`map_base_view`（底圖，照 `mapdata.base_key` 快取）、`map_view`（舊輿圖；殼的 `md` 當參數傳進來）、`MAP_BASE`／`MAP_BASE_KEEP`（快取字典，`server.MAP_BASE` 是同一個物件）、`DEFAULT_LAYER`；不碰 fastapi |
 | `routes.py` | `GET /api/map`、`GET /api/map/base`、`GET /api/map/state`（殼照 `FEATURES` 掛；一律照 `shell.<名字>` 當下讀，測試換掉 `server.map_view` 也看得到） |
-| `mapview.py` | 畫法：四層 SVG、小地圖、圖例（`legend_data`）、`open_places`、`render_base`（原 `tianxia/mapview.py`，舊名留成別名） |
-| `mapart.py` | 設色山水：地形、河、區塊的畫法（原 `tianxia/mapart.py`，舊名別名） |
-| `mapdata.py` | 底圖資料與疊層：`base`、`state`、`base_key`、`with_mostly`、`mostly_here`、`place_mostly`（原 `tianxia/mapdata.py`，舊名別名） |
+| `mapview.py` | 畫法：四層 SVG、小地圖、圖例（`legend_data`）、`open_places`、`render_base`（原 `tianxia/mapview.py`） |
+| `mapart.py` | 設色山水：地形、河、區塊的畫法（原 `tianxia/mapart.py`） |
+| `mapdata.py` | 底圖資料與疊層：`base`、`state`、`base_key`、`with_mostly`、`mostly_here`、`place_mostly`（原 `tianxia/mapdata.py`） |
 | `layers.py` | 圖層、詳情與勝算（全部拆包第 50 批從 `tianxia/atlas.py` 拆出來，41 個名字一個字沒改）：地點詳情 `detail_text`、標題 `header_text`、大地圖選得到的地點 `place_choices`；局勢層（`region_trends`、`direction`、`haunters`、`leader_activity`、`leader_text`、`leader_news`）、本週打擊的標記（`strike_marks`、`STRIKE_MARK`）、劇情層（`goal_places`、`news_places`、`recent_news`、`news_days`）、敵情（`foes`、`worst_foe`、`ODDS_ORDER`、`DRILL`、`Odds`）。從共用規則層的 `atlas` 拿十個名字（`KNOWN`、`views`、`is_known`、`region_of`、`_strike_place`、`MODES`、`mode_text`、`returns_at_once`、`way_to`、`_names`）；舊名 `atlas.<圖層>` 不留別名（共用層不准 import 包） |
-| `worldgeo.py` | 天下圖的純幾何（原 `tianxia/worldgeo.py`，舊名別名） |
+| `worldgeo.py` | 天下圖的純幾何（原 `tianxia/worldgeo.py`） |
 
 ## 認領的欄位
 
@@ -42,15 +42,15 @@
 - **`app.js` 的 `loadMap`**：殼呼叫的入口，留在 `app.js`。
 - **`Game.MAP_LAYERS`**（`atlas.LAYERS`）：類別屬性，`views.map_view` 與 `test_atlas` 讀它。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-過渡 import 共 4 行（包到舊模組，都標了「# 過渡：待搬」；全部拆包第 40 批合完重印 5 處，原本 9 處）：`actions`→`atlas`；`mapdata`→`atlas`、`bounties`；`mapview`→`atlas`（兩行，一行是 `atlas.KNOWN`、`atlas.Odds`）。同幾行的 `orders`、`figures` 第 40 批收進共用規則層，不算過渡（行尾註照留：同一行還有 `atlas`）。`atlas` 拆兩半（圖層那一半進包）留給總表第 50 批（計畫 Task 6，第 49 批 PM 認定第 2 條；這幾行的註寫「atlas 第 50 批拆兩半」），做完 `actions`、`mapview`、`mapdata` 對 `atlas` 的過渡會少一部分（留在 `atlas` 的是地點與路的資料，移動、地盤、設伏都在讀，不進包）。舊模組到包有 `engine.py` 的 `GAME_IMPORTS` 一行（`tianxia.features.map.actions`）與四個別名（`mapview`、`mapart`、`mapdata`、`worldgeo`）。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`atlas` 留在共用層的是地點與路的資料，移動、地盤、設伏都在讀；圖層那一半第 50 批進了包（`layers.py`）。
 **第 45 批合完重印 0 處**：`mapdata` 的 `mine` 改讀核心 `core/bounty_base`。
 **第 50 批合完重印 1 處**：`mapdata`→`bounties`（第 45 批懸賞榜；原本 `atlas`、`bounties`、`figures`、`orders` 同一行，拆成兩行，`atlas`、`figures`、`orders` 那一行註「共用規則層」）。`actions`、`mapview` 讀 `atlas` 的那幾行改註「共用規則層」（`atlas` 第 50 批收進 `registry.SHARED`）；`mapview` 的 `from tianxia.atlas import KNOWN, Odds` 拆成 `KNOWN`（共用規則層）與 `from .layers import Odds`。
 
 ## 測試
 
-- 這一包的 `tests/`（全部拆包第 49 批從 `tests/` 整檔搬來，含 slow）：`test_mapview.py`（畫法）、`test_mapart.py`、`test_mapdata.py`（底圖、疊層、推薦）、`test_mapdata_layers.py`、`test_mapdata_suggest_cooling.py`、`test_map_base.py`、`test_open_map.py`、`test_worldgeo.py`、`test_world_map.py`、`test_real_map.py`（正式內容的地圖）、`test_map_perf.py`、`test_map_history.py`、`test_jianfa_3d_map_foes.py`（地點卡的對手與勝算）；另加 `test_map_package.py`（接縫：舊名別名、殼留的是同一個物件、三條路由、搬到核心服務檔的函式是同一個物件）。搬的時候改的只有 `test_mapview.py`、`test_real_map.py` 讀 `content/` 的路徑（`parents[2]` 換成 `parents[4]`）。
+- 這一包的 `tests/`（全部拆包第 49 批從 `tests/` 整檔搬來，含 slow）：`test_mapview.py`（畫法）、`test_mapart.py`、`test_mapdata.py`（底圖、疊層、推薦）、`test_mapdata_layers.py`、`test_mapdata_suggest_cooling.py`、`test_map_base.py`、`test_open_map.py`、`test_worldgeo.py`、`test_world_map.py`、`test_real_map.py`（正式內容的地圖）、`test_map_perf.py`、`test_map_history.py`、`test_jianfa_3d_map_foes.py`（地點卡的對手與勝算）；另加 `test_map_package.py`（接縫：殼留的是同一個物件、三條路由、搬到核心服務檔的函式是同一個物件）。搬的時候改的只有 `test_mapview.py`、`test_real_map.py` 讀 `content/` 的路徑（`parents[2]` 換成 `parents[4]`）。
 - 混合檔的一處改動：`tests/core/test_test_for.py` 的 `test_a_module_also_picks_the_tests_of_the_modules_that_import_it` 原本拿 `mapview` 當「還是舊模組」的例子，`mapview` 成了包的模組，換成本週卡 `step`（經 `weekcard` 挑到 `test_weekcard`）；第 36 批 `step`、`weekcard` 收進核心本體，又換成 `events` ← `narration`（`test_narration`）。
 - 跑：`pytest tianxia/features/map/tests -m "slow or not slow" -n 4`。
 

@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from conftest import at
-from tianxia import battle_instance, battlelog, encounter, skillview, team
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, encounter
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.features.battle.rules import TROOPS_LINE, TROOPS_REPORT
@@ -49,7 +52,7 @@ def test_a_grown_follower_hits_harder():
 def test_the_follower_card_shows_his_power_and_grown_art():
     real, game = _real_game(level=15)
     spear = real.followers["follower_guan_spear"]
-    card = skillview.member_card(game.state, real, game.world, team.FOLLOWER_KEY + "0")
+    card = art_view.member_card(game.state, real, game.world, team.FOLLOWER_KEY + "0")
     assert f"威力　{round(team.follower_power(game.state, real, game.world, spear))}" in card.splitlines()
     assert "5成" in card or "五成" in card
 

@@ -11,7 +11,7 @@ _bulletin_events、_news_on_cards、_chip、_now_entry、_now_start 外面沒人
 - 見聞與江湖史：trends_text、rumors_text、rumor_layers、chronicle_text、_timeline
 - 江湖紀錄與「剛剛」：_day_stamp、_chip、latest_entry_html、journal_top_html、now_entry_html、_now_entry、now_front、journal_html、_now_start、shows_battle_card、battle_extra_html
 
-名字的綁法照 engine：engine 拿名字的（rules 的 season_one、audible……）這裡也拿名字，engine 叫模組屬性的（journal.、shop_base.、timetable.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
+名字的綁法照 engine：engine 拿名字的（rules 的 season_one、audible……）這裡也拿名字，engine 叫模組屬性的（journal.、timetable.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
 engine 在 `from .core.event_check import …` 之後才 import 這一份（這裡 import 的模組那時都已經載入，載入順序不變）。
 
 改這一份要跑的測試：scripts/test_for.py（CORE_SERVICES：這個檔的底 jianghu、shop、shop2、journal、rumor、front，加改到的函式那一群）；

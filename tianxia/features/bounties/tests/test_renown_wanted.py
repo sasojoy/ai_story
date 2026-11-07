@@ -5,7 +5,8 @@ import pytest
 
 from conftest import real_content, renown_unscaled
 
-from tianxia import bounties, calendar, renown
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar, renown
 from tianxia.engine import Game
 
 

@@ -12,7 +12,7 @@
 這個模組 import team 與 fusion（品質的推法、悟性、天時地利）；team 會 import weapons，所以 weapons 不能 import 這裡。
 鐵匠鋪的選單項（Option）在核心 tianxia/core/option.py，回選單的函式延後 import（同 foreshadow.talk_options）。
 
-全部拆包第 41 批搬進鐵匠鋪包（tianxia/features/smithy/）；tianxia/smithing.py 留成指到這裡的別名（開發規範手冊 3.11）。"""
+全部拆包第 41 批搬進鐵匠鋪包（tianxia/features/smithy/）。"""
 from __future__ import annotations
 
 import random

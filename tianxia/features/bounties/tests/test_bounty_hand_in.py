@@ -9,7 +9,9 @@ import pytest
 
 from conftest import real_content
 from test_bounties import _direct, _do, _ids, _load, _post, beta_setup  # noqa: F401  （beta_setup 是 fixture）
-from tianxia import bot, bot_policy, bounties, calendar
+from tianxia import bot, bot_policy
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, validate
 from tianxia.engine import Refused

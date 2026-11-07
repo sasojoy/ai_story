@@ -17,7 +17,12 @@ import pytest
 
 import server
 from conquest_kit import announce, conquest_game, conquest_rules, go, join
-from tianxia import conquest, conquest_day, rules, seal, siege, territory, xingshi
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import rules
+from tianxia.features.seal import seal
+from tianxia import siege, territory
+from tianxia.features.territory_acts import xingshi
 from tianxia.engine import Game
 from tianxia.state import DayNote
 from conftest import real_content

@@ -6,15 +6,18 @@ import random
 
 import pytest
 
-from tianxia import social
+from tianxia.features.peers import social
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.state import BotProfile
 import re
-from tianxia import howto, rules
+from tianxia.features.socialize import howto as socialize_howto
+from tianxia import rules
 from tianxia.engine import SNUB_NOTE, Game
 from test_discuss import pair  # noqa: F401（fixture）
-from tianxia import atlas, fusion, seal, social
+from tianxia import atlas, fusion
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
 from tianxia.rules import game_day
 import server
 import webharness
@@ -388,7 +391,7 @@ def test_a_fame_short_audience_names_the_gap_like_the_menu(guan):
 def test_the_talked_out_and_the_open_audience_keep_their_lines(guan, on):
     guan.state.player.stats["fame"] = 100
     option, note = _cell_and_note(guan)
-    assert option.enabled and note == howto.call_line("波才", True)
+    assert option.enabled and note == socialize_howto.call_line("波才", True)
     guan.state.player.talks_today["bocai"] = [rules.game_day(on, guan.state.world), on.config.talk_turns_per_day]
     option, note = _cell_and_note(guan)
     assert not option.enabled and note == _detail(option.label) == guan._talked_out_note()  # noqa: SLF001
@@ -503,7 +506,7 @@ def test_fb220_a_full_gift_button_keeps_its_name_on_one_line(content):
     from test_shop2_web import _css, _rule
     from test_social import _player
 
-    from tianxia import social
+    from tianxia.features.peers import social
 
     cap = content.config.gift_per_pair_day
     a = _player(content, "甲")
@@ -546,7 +549,7 @@ def test_fb220_every_card_button_wraps_its_name(content):
 
 def test_the_card_registry_is_one_table_in_the_core():
     """玩家卡的登記表搬進核心 core/cards.py（全部拆包第 45 批）：social re-export 同一批物件，玩家互動包、懸賞榜包的通緝都登記進同一張；卡上照 (order, id) 排，通緝 65 的位置不變。"""
-    from tianxia import social
+    from tianxia.features.peers import social
     from tianxia.core import cards
 
     assert social.ACTIONS is cards.ACTIONS and social.register is cards.register

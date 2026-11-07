@@ -180,7 +180,7 @@ class RoamScenario(StripScenario):
 
     def answer(self) -> None:
         """草廬那張卡：四景四選一挑最後一個（前半挑第一個的話這裡才有不一樣的路），或有所感版選第一個做法、順其自然。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.NEWBIE
         opts = self.options(who)

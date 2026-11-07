@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, text_of, tick
-from tianxia import conquest, sortie_duel
+from tianxia import conquest
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.characters import CharacterStore
 
 

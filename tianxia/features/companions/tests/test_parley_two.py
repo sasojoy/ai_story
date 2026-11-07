@@ -7,8 +7,12 @@ from unittest import mock
 import pytest
 
 from bounty_ctx import bounty_ctx
-from tianxia import bounties, companion_agent, figure_life, parley, relations, team
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.bounties import rules as bounties
+from tianxia.features.companions import companion_agent
+from tianxia import figure_life
+from tianxia.features.companions import parley
+from tianxia import relations, team
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.engine import PLAN_OPTION, ROAD_SAY
 from tianxia.state import ParleyBacking, ParleyDebt, ParleyRecord
 

@@ -8,7 +8,9 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import LOC, duel_content, duel_world, game_of, seat
-from tianxia import conquest, mapdata, orders
+from tianxia import conquest
+from tianxia.features.map import mapdata
+from tianxia import orders
 from tianxia.state import Order
 
 

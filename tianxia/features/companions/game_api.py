@@ -25,6 +25,7 @@ TABLE = {
     "read_letter": actions.read_letter,
     "decline_letter": actions.decline_letter,
     "morning_mail": actions.morning_mail,
+    "mail_day_at": actions.mail_day_at,
     "letter_request": actions.letter_request,
     "apply_letter": actions.apply_letter,
     "_open_dialogue": talk_actions.open_dialogue,

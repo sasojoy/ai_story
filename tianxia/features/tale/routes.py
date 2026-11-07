@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
+from tianxia.core import battle_base
 from tianxia.core.features import Outlock, OutlockJob
 
 from . import tale, tale_html
@@ -37,7 +38,7 @@ def _tales_waiting(shell, game) -> bool:
 # 全服同時只有一條在寫（TALE_RUNNING）；佇列開著時排在真人的評分後面（當成假人排，名號是 TALE_OWNER，不是任何一個角色）。
 def narrate_battle(shell, game) -> bool:
     """這一場有等著補劇情的放手一搏、而且還沒有一條在寫：開一個背景執行緒寫最早那一回合的一批。開了回 True。
-    A 鎖內開單（Game.battle_tale_request）→ B 鎖外一整批請模型寫（battle_instance.write_tales，預算 battle_tale_budget_seconds）
+    A 鎖內開單（Game.battle_tale_request）→ B 鎖外一整批請模型寫（Game.write_battle_tales，本體在決戰包的 instance.write_tales，預算 battle_tale_budget_seconds）
     → C 鎖內重驗同一場才補（Game.apply_battle_tales；寫不出來的照固定句、不重寫）。呼叫端不能握著行動鎖。"""
     with shell.TALE_LOCK:
         if shell.TALE_RUNNING:
@@ -73,7 +74,7 @@ def narrate_once(shell, game) -> int | None:
         client = shell.within_budget(game.client, budget - (shell._monotonic() - started))
         sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
         # fallen 是引擎這一回合真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（守門用）
-        return shell.battle_instance.write_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
+        return game.write_battle_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
 
     if shell.QUEUE is None:
         stories = ask()
@@ -136,7 +137,7 @@ def tale_page_view(shell, record_id: int, written: tale.Tale) -> dict:
     battle = shell.open_world().ended_battle(record_id)
     definition = shell.CONTENT.battles.get(battle.battle_id) if battle is not None else None
     view = written.model_dump()
-    names = shell.battle_instance.side_names(battle, definition) if battle is not None and definition is not None else {}
+    names = battle_base.side_names(battle, definition) if battle is not None and definition is not None else {}
     view["sides"] = [{"name": name, "cls": tale_html.SIDE_CLASS.get(side, "")} for side, name in names.items()]
     view["present"] = len(battle.participants) if battle is not None else 0
     view["title"] = written.title or f"{written.battle_name}{tale.TITLE_SUFFIX}"
@@ -211,7 +212,7 @@ def tale_material(shell, world, battle) -> tale.Material | None:
         return None
     return tale.gather(
         definition, battle, world.battle_rounds(battle.record_id),
-        season=world.get_season_number(), side_names=shell.battle_instance.side_names(battle, definition),
+        season=world.get_season_number(), side_names=battle_base.side_names(battle, definition),
     )
 
 

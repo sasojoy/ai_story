@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 
 from conftest import FixedRandom, no_territory, old_explore, renown_unscaled
-from tianxia import calendar, foreshadow, rules, team, timetable
+from tianxia import calendar
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game

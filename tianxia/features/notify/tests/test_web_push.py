@@ -17,8 +17,9 @@ from fastapi.testclient import TestClient
 import server
 import server_push
 from conftest import real_content
-from tianxia import letters, notices
-from tianxia.battle_instance import BattleInstance
+from tianxia.features.companions import letters
+from tianxia.features.notify import notices
+from tianxia.features.battle.instance import BattleInstance
 from tianxia.characters import open_characters
 from tianxia.state import GameState, JournalEntry, Letter, PlayerState, XingshiEssay
 from tianxia.world_state import fresh_season

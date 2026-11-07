@@ -28,11 +28,11 @@ from . import timetable  # 共用規則層（時刻表大事補進江湖紀錄�
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
-from . import outcomes as outcome_rules  # noqa: F401  第二輪第 92 批之後 engine 沒人用了，只留著載入先後（拿掉的話 event_llm、outcomes 晚約 30 個模組才載入，量過；第 98 批清這一區時一起看）
+from . import outcomes as outcome_rules  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 outcomes、event_llm 各晚 10 個模組才載入（第二輪第 102 批量）
 from .models import FreeTextChoice, Outcome
-from .rules import jianfa
+from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
-from . import wins  # noqa: F401  第二輪第 92 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.wins 晚 5 個模組才載入，波 F 合完量過）
+from . import wins  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 tianxia.wins 晚 6 個模組才載入（第二輪第 102 批量）
 from .characters import CharacterStore, name_key
 from .journal import LOG_BREAK, Draft
 from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、第 2 週才開）
@@ -46,7 +46,6 @@ from .rules import (
     add_season_rumor,
     humanize,
 )
-from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
@@ -63,12 +62,10 @@ from .core.services import HutReward  # guide（全部拆包第 22 批）：序�
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
 
-if TYPE_CHECKING:  # 型別註記用（companion_agent 搬進人物情誼包之後 engine 不再 import 它；Game 上的委派只轉手）
-    from .features.companions import companion_agent
-    from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
+if TYPE_CHECKING:  # 型別註記用，只放核心與共用層；包的型別寫字串（核心不 import 包，連這裡也不准，第二輪第 102 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 from .core.services import not_while_preparing as _not_while_preparing
-from . import story_base  # noqa: F401  第二輪第 91 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.story_base 晚 3 個模組才載入，波 F 合完量過）
+from . import story_base  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 tianxia.story_base 晚 2 個模組才載入（第二輪第 102 批量）
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
 from .state import (
@@ -926,7 +923,7 @@ class Game:
 
     @_outing_watch
     def choose(
-        self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
+        self, option_id: str, prepared: "companion_agent.PreparedTurn | None" = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
     ) -> list[str]:
         """text 只有「自己說」（SAY_OPTION）用：玩家打的那一句；沒給（或過不了 say_text）就只回一句叫他寫，不花體力、不算輪數。
@@ -1161,7 +1158,7 @@ class Game:
         改成回合裡的化影，tactics.py）"""
         return dict(self.content.config.action_cost)
 
-    def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+    def _act(self, what: str, prepared: "companion_agent.PreparedTurn | None" = None) -> list[str]:
         # act 子動詞的主人是功能包的（接縫掛鉤，第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：探索包——減法季探索一顆的
         # 出門一趟（體力在裡面扣）；酒肆包——進店（不花體力）；出陣包——約戰開著、不在序章時出陣那一格打開出陣前那張卡（不花體力；截糧的
         # 運糧隊經過時照舊攻打，體力在裡面扣），其餘打那一場（第 17 批：扣體力、並肩出陣的加成、出陣或遊歷，體力在裡面扣），與守勢（act:duty，
@@ -1804,5 +1801,5 @@ class Game:
         return msgs
 
 
-# core_api（第二輪第 72 批）：包的一行委派搬進各包的 game_api.py，這裡掛一次（`g.xxx` 照舊）。放檔尾：Game 要先定義好，各包的模組此刻都已載入，sys.modules 的先後不變。
+# core_api（第二輪第 72 批）：包的一行委派搬進各包的 game_api.py，這裡掛一次（`g.xxx` 照舊）。放檔尾：Game 要先定義好；engine 不 import 包，各包的模組此刻才由下面這一行載入。
 features_core.attach_game_api(Game)

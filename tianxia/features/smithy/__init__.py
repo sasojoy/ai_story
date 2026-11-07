@@ -2,7 +2,7 @@
 素材頁的收購與升階，爐火的看火候）。功能包，開發規範手冊 3.2；全部拆包第 41 批搬進來（引擎那一半）；網頁的畫法在 web/smithy.js（第 65 批）。
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- smithing.py：打造與淬煉的規則（原 tianxia/smithing.py；那個名字留成指到這裡的別名）
+- smithing.py：打造與淬煉的規則（原 tianxia/smithing.py）
 - shelf_actions.py：架上的選單與選單上按下去的一下（原本 Game 上的 8 個方法）
 - forge_actions.py：開爐一次、店面打造頁的預覽、直接開爐、看火候（4 個）
 - trade_actions.py：素材頁的收購與升階（5 個）

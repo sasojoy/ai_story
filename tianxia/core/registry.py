@@ -22,7 +22,7 @@ from ..features import guide  # 新手引導：全部拆包第 22 批（沒有�
 # companions
 from ..features import companions  # 人物情誼：全部拆包第 19 批（只接 errand:* 的 choose 與 /api/figure；都照前綴、路徑認，排在哪裡結果都一樣）
 # sense
-from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:、scene 接在宴客之後——原本那一行就在宴客那一行後面）
+from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:；場景卡的先後由 core/features.py 的 SCENE_ORDER 決定）
 # cultivation
 from ..features import cultivation  # 修練：全部拆包第 23 批（只接 learn:* 的 choose，照前綴認，排在哪裡結果都一樣）
 # story
@@ -158,17 +158,16 @@ FEATURES: list[Feature] = [
 ]
 
 # 共用規則層（全部拆包總表第六節第 5 條；第 11 批 PM 定的格式）：還沒、也不會搬進任何一包的規則模組（tianxia/<名字>.py），好幾包都讀。
-# 模組名 → 一句誰在用、為什麼在共用層。包 import 這裡的模組不必註「過渡：待搬」；這幾個模組跟核心一樣不准 import 包
+# 模組名 → 一句誰在用、為什麼在共用層。包可以直接 import 這裡的模組；這幾個模組跟核心一樣不准 import 包
 # （tests/core/test_feature_boundaries.py 守）。核心本體（tianxia/core/__init__.py 的 MODULES）可以 import 這一層、這一層可以 import 核心
-# 本體與同一層。第 11 批放了主人已經寫成「共用規則層」的 siege；第 15 批（# shared 那一段）登記其餘 59 個。總表第 15 列寫了、這一批先不收的 8 個（第 87、88 批收了，shopview 第 93 批切開，`SHARED_LATER` 現在是空表）
-# （讀了之後成包的擂台、伏筆、有所感……）與這一層還碰到別的舊模組的 11 條（排定收進來的、之後成包的），在邊界測試的 SHARED_LATER、SHARED_PENDING。
+# 本體與同一層，其他一律不准（第二輪第 102 批）。第 11 批放了主人已經寫成「共用規則層」的 siege；第 15 批（# shared 那一段）登記其餘 59 個。
 # scripts/test_for.py 照語法樹讀這一份（改這一層的模組只挑自己檔名的測試＋煙霧＋邊界測試）：值只寫字面的字串（相鄰的字串可以接）。
 SHARED: dict[str, str] = {
     "siege": "攻城的開集結與留守（攻城戰的名字、誰佔著、開集結、留守、範本驗證）：世界層、內容檢查、決戰包的攻城、地盤都讀；誰站哪一格、收場那一半第二輪第 97 批進了決戰包 siege_rules.py",
     # shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.2）：只登記、不搬程式。
     # 戰鬥引擎（9 個）：核心的 team 打每一場都讀，每一種打一場的包都用，放進哪一包都會變成包 import 包
     "encounter": "單次判定（威力差、勝算、四種結果）：核心的 team、content 讀，Game 的單打服務（大場面判讀、切磋、截殺、設伏、頭目戰與擂台的"
-                 "收場、戰力快照）也叫；出陣、酒肆的殺手那一場與大勢人物的護衛（figure_aid）都叫，門下頁的說明（skillview）也讀",
+                 "收場、戰力快照）也叫；出陣、酒肆的殺手那一場與大勢人物的護衛（figure_aid）都叫，門下頁的說明（art_view）也讀",
     "rounds": "一般的仗一回合一回合的演出（from_clash）：核心的 team 照它寫戰報的回合；戰報 battlelog 也讀",
     "tactics": "回合與本命戰法、相剋：核心的 team、state、world_state、content 都讀；決戰包的戰況、出陣約戰的三招、擂台、單挑都叫",
     "styles": "大場面對手的路數（一門打不遍）：核心的 team 算威力時讀；單打服務的戰報那一句、人物對話也用",
@@ -176,8 +175,7 @@ SHARED: dict[str, str] = {
     "rise": "江湖水漲（大場面、頭目跟得上變強的人）：核心的 rules 讀；單打服務的劇情戰與勝算都經它",
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
-    # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收〔fusion 第 87 批已收，skillview 第 88 批切開，shopview 第 93 批切開、只剩給測試的殼〕：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
-    # 理由在 tests/core/boundary_tables.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
+    # 武學與裝備的規則（22 個；總表寫 25 個，fusion 第 87 批才收，skillview、shopview 第 88、93 批切開，殼第 103 批收掉）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
     "arts": "武學的評分、裝卸、意境格（arts.score）：核心的 team 讀；修練、煉製、榜單、序章都叫",
     "insight_fx": "意境效果池與層數：武學 arts、意境 insights、功法庫、序章讀；修練、有所感成包之後也要",
@@ -219,7 +217,7 @@ SHARED: dict[str, str] = {
     # 地盤與攻城（siege 第 11 批已登記，在最上面）、醫館、散人、一類一顆（行動與地盤＋散人區）
     "territory": "地盤易手（誰控制、駐軍、大本營）：核心的 content、rules、team 讀；探索、出陣、酒肆三包與輿圖、懸賞、經濟都叫",
     "conquest": "領地爭奪的規則（區塊、進度、推、拉、易手）：核心的 content、rules 讀；決戰、出陣兩包與輿圖、軍令、之後的地盤包都叫"
-                "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）",
+                "（讀璽效 seal_acts：第 51 批進了這一層）",
     "clinic": "醫館（只在城鎮療傷、最近的醫館在哪）：核心的 team 讀；修練頁的療傷、名師指點、買破境丹都問（總表附錄甲：醫館是核心的服務）"
               "（讀輿圖的路線 atlas：第 50 批收進這一層）",
     "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀，Game 的戰後獎勵與狀態列也叫；出陣包與懸賞（bounties）、同伴招募（roster）、"
@@ -227,7 +225,7 @@ SHARED: dict[str, str] = {
     "precise": "一類一顆（每一顆行動鈕只給一類東西）與算不算城鎮（is_town）：出陣、探索、引導三包的獎勵與懸賞、有所感、玩法說明讀",
     # explore（全部拆包第 18 批）
     "training": "城外分級（最弱的對手分一二三級、江湖話、輿圖地點詳情那一句）：探索包的 _practice_tier、輿圖的地點卡與詳情、引導包的提示與新手目標都讀",
-    # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收〔都已收：events、tiers、narration 第 87 批已收，leaderboard 第 88 批〕：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
+    # 其餘（12 個；總表寫 20 個，rumor_view 第 40 批才收，events、tiers、narration 第 87 批，leaderboard 第 88 批）
     "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
     "speech": "玩家寫給別人看的一句話（擋髒話）：探索包的題壁、形象包的招式名與名帖、挑釁共用（總表附錄甲裁定）",
     "jianfa_numbers": "減法季的數字（自己的 pydantic 模型、不 import models）：核心的 models 掛它（總表附錄甲裁定）",
@@ -252,11 +250,11 @@ SHARED: dict[str, str] = {
     # core_world2（全部拆包第 40 批「世界模型二」：季的世界模型第一批之後收的六個，與量出來的 rumor_view；這幾個不 import 包，
     # 讀包認領的欄位改問核心的查詢服務 omen_base、feast_base 與底座 story_base，設宴是世界層 life 那一格）
     "figures": "大勢人物（聲威、在場、退場與回來、自然回復與犒軍共用一天的上限 aid_*）：核心的 world〔世界一步〕、rules、timetable 讀；"
-               "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）",
+               "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts：第 51 批進了這一層）",
     "figure_life": "人物活起來（人物此刻在哪、心事、募兵、走動、求援；每一位對話人物設宴是世界層 life 那一格）：核心的 world 每一步叫；"
-                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts 記在 SHARED_PENDING；懸賞第 45 批成包，求援與人物懸賞改讀核心 core/bounty_base；輿圖的大區 atlas 第 50 批收進這一層）",
+                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts 第 51 批進了這一層；懸賞第 45 批成包，求援與人物懸賞改讀核心 core/bounty_base；輿圖的大區 atlas 第 50 批收進這一層）",
     "plans": "人物的盤算（每一步推、送到的那一下）：核心的 world 每一步叫、engine.sync 送；人物活起來、大勢人物包的盤算行動讀"
-             "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）",
+             "（讀璽效 seal_acts：第 51 批進了這一層）",
     "orders": "軍令（每週與每天發令、截糧的站、目標）：核心的 world 週初與每天叫；決戰、軍情、出陣、引導、輿圖五包與假人、見聞的分層讀",
     "ranks": "階級與晉升（稱號、召見、提拔）：核心的 world、rules〔效果 patron、summons_next、promote〕與共用層的 seats 讀；"
              "人物情誼、陣營、引導、軍情、玩家互動、交友、出陣、地盤行動、行路九包都讀（讀輿圖的大區 atlas：第 50 批收進這一層）",
@@ -275,33 +273,21 @@ SHARED: dict[str, str] = {
     # heroines（女子與隱線，Joy 2026-11-06「開工」：照 persona_rules 的做法，純規則在這一層）
     "heroine_rules": "女子與隱線的純規則（出不出現、隱線端得出哪一段、給模型的角色與分寸、寫回來的過濾）：人物情誼包的 companion_agent 每一輪對話都叫 role、"
                      "prompt_lines、clean，手上沒有 ctx；女子與隱線包的 rules re-export 同一批物件。只 import 核心的 rules、models、state 與同一層的 figures",
-    # core_shared（第二輪第 87 批「收口一」：這四格從邊界測試的 SHARED_LATER 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第87批.md）
+    # core_shared（第二輪第 87 批「收口一」：這四格收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第87批.md）
     "events": "事件抽選：核心的事件檢定 core/event_check、engine 讀；探索、交友、陣營、軍情、出陣、引導六包都叫；同一層的 narration 讀。只 import 核心與同一層",
     "tiers": "事件分級（五道門、照階抽）：核心的事件檢定 core/event_check、engine、同一層的 events 讀；擂主那道門的名次第 87 批改讀核心的 arena_ranks，不再經舊名 arena",
     "narration": "事件旁白每週改寫：核心的事件檢定 core/event_check、engine 讀；只 import 核心與同一層的 events",
     "fusion": "合成與揣摩：煉製、鐵匠鋪、玩家互動（論武）三包叫，假人 bot、門下頁 art_cards、煉製頁 forge_view 讀；私有意境的取名與收進存檔第 87 批搬進共用層 insights，不再 import 有所感包。"
               "不進任何一包（第二輪總表不做的清單）",
-    # core_shared（第二輪第 88 批：art_cards 從 skillview 切出來；leaderboard 從邊界測試的 SHARED_LATER 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第88批.md）
+    # core_shared（第二輪第 88 批：art_cards 從 skillview 切出來；leaderboard 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第88批.md）
     "art_cards": "武學與裝備的唯讀卡片（狀態列的用途與提示、療傷鈕、榜單的功法卡與裝備卡、修練頁裝備那一塊）：engine、同一層的 leaderboard、鐵匠鋪、修練、煉製、"
-                 "裝備三包讀；只 import 核心與同一層，函式裡也不 import 包",
+                 "裝備四包讀；只 import 核心與同一層，函式裡也不 import 包",
     "leaderboard": "賽季榜單：核心的 world（收季、江湖史）與 server 讀，人物舉措（月旦評）、玩家互動（名帖）兩包讀；只 import 核心與同一層，功法卡、裝備卡讀 art_cards "
                    "在函式裡（world import 這裡，art_cards 牽動多）",
     # core_bots（第二輪第 89 批「假人一」）
     "bot_base": "假人好幾包都讀的那一半（分數常數、內傷、出陣的值、一次 pick 的快取，第二輪第 101 批再加素材留多少、取名的單子、下一站）：出陣、探索、挑戰本人、移動、決戰、陣營、鐵匠鋪、捐軍備、煉製、修練、有所感、玩家互動這幾包的 bots.py 都叫，放進哪一包都會變成包 import 包，"
-                "留在假人殼又得在函式裡跳回去；只 import 核心的 rules、team、state、naming、core.bounty_base 與同一層的 allied、atlas、conquest、four_tiers",
+                "留在假人殼又得在函式裡跳回去；共用層只有它准拿 Game，碰的名字列在邊界測試的 BOT_BASE_GAME（第二輪第 102 批）；只 import 核心的 rules、team、state、naming、core.bounty_base 與同一層的 allied、atlas、conquest、four_tiers",
 }
-
-# seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；
-# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第3批.md）：集中在這一段，上面別人的行不動，conquest、figures、figure_life、plans 四格的說明在這裡改寫。
-for _name, _old in (("conquest", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）"),
-                    ("figures", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）"),
-                    ("plans", "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）")):
-    assert _old in SHARED[_name], _name
-    SHARED[_name] = SHARED[_name].replace(_old, "（讀璽效 seal_acts：第 51 批進了這一層）")
-_old = "讀璽效 seal_acts 記在 SHARED_PENDING；"  # 懸賞第 45 批成包，同一格的懸賞那一句是它自己改的
-assert _old in SHARED["figure_life"]
-SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層；")
-
 
 # core_content（全部拆包第 62 批：內容照包分）：內容檔在誰的資料夾由這一份定，core.features.pack_content 讀它、不讀 FEATURES。契約測試把 FEATURES
 # 換成假的包時（monkeypatch），內容的位置不跟著換：內容母本是第一個要它的測試當下建的（conftest.cached_content），碰上被換成 [] 就找不到檔。

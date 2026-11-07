@@ -227,7 +227,7 @@ def test_the_melt_confirm_and_note_are_honest_about_a_zero_refund(content):
     """W9：確認框、卡片上那一行，退 0 心得時都直說「沒有心得，只空出一格」；開局送的基礎武學再補一句城鎮免費重學
     （只有開局送的才真的免費重學，見 library._taught_here，所以別的武學不寫這句）。"""
     assert library.melt_note(0) == "沒有心得，只空出一格" and library.melt_note(8) == "退回心得 8"
-    # arts-polish-2：確認框只有這一份（伺服器寫好）；去哪裡重學由 skillview.relearn_note 給、接在後面，「免費重學」只說一次
+    # arts-polish-2：確認框只有這一份（伺服器寫好）；去哪裡重學由 art_view.relearn_note 給、接在後面，「免費重學」只說一次
     assert library.melt_confirm("基礎拳腳", 0, "熔了還能免費重學：到任何城鎮。") == (
         "把【基礎拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：到任何城鎮。"
     )

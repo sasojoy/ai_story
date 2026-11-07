@@ -56,7 +56,7 @@ def _notice_keys(shell, game, account_key: str, now: float) -> tuple[list, bool]
     """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色；開著的分頁照常輪詢就看得到，不叫 HUB：只有動作的端點叫，
     見 _tell_tabs），回傳（五種事, 正在玩）。
     正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
-    day = shell.letters.mail_day(game.content, game.state.world, now)
+    day = game.mail_day_at(now)
     if day is not None and shell.MAIL_DONE.get(account_key) != day:
         if game.morning_mail(now):
             shell.open_characters().save(game.state)

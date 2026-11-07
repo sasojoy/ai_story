@@ -826,7 +826,7 @@ def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatc
     """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（progress：_clear_own）→ 押糧、提示 → 機緣；
     每一格拿到同一個 PlayerState。四格都是包登記的（機緣第 34 批起、progress 第 35 批起由陣營包登記），核心代叫的一格都不剩：
     假包自己登記這四格（登記的先後跟表相反），驗的是照表的先後。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     calls = []
 
@@ -848,7 +848,7 @@ def test_defecting_asks_the_leave_stranded_and_after_slots_where_the_old_lines_w
     """defection.defect：清完、改投之前問 leave（密謀），「你叛出…」那一句之後問 stranded（懸賞，回話接在最後）；陣營包 defect_actions.defect_step
     確定那一支（第 35 批前是 Game._defect_step）：defection.defect 之後問 after——同伴回江湖（leave_behind，第 35 批起陣營包登記；原本核心代叫
     Game._leave_behind）、再食言（parley，人物情誼包登記），回話照這個先後接。關著的假包照樣被問。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
     from tianxia.features.faction import defect_actions
 
     g = _sided_game()
@@ -881,7 +881,8 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
     """核心代叫的格（rules._EFFECT_CORE；叛投那邊只剩 defection._STRANDED_CORE——_CLEAR_CORE、_LEAVE_CORE 與 engine._DEFECT_AFTER_CORE
     第 35 批拿掉，那幾格改由包登記）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。
     誰登記哪一格照計畫 1.4。"""
-    from tianxia import defection, rules
+    from tianxia.features.faction import defection
+    from tianxia import rules
 
     own = features_core.effect_hooks()
     assert not own.keys() & rules._EFFECT_CORE.keys()
@@ -1064,7 +1065,7 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
 
     from jianfa_kit import jianfa_game, ready
 
-    from tianxia import explore_one
+    from tianxia.features.explore import explore_rules as explore_one
     from tianxia.features.explore import explore_actions
 
     game = ready(jianfa_game(), side="guan", loc="yingchuan_wilds", level=20)
@@ -1098,9 +1099,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
-    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，舊名是包 rules 的別名，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
+    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
     （全部拆包第 27 批：玉璽包那兩格照包的模組屬性找 actions.seal_find、actions.settle，原本是 Game 上的 _seal_find、_seal_settle）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.features.military import convoy_actions
     from tianxia.features.seal import actions as seal_actions
 
@@ -1322,11 +1323,11 @@ def test_the_core_and_the_packages_take_every_step_slot_exactly_once():
 
 
 def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
-    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找舊名 tianxia.bounties，第 45 批成了包 rules 的別名；包的格找自己的模組）：換掉的照樣打得到，參數照傳
+    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找包的 rules；包的格找自己的模組）：換掉的照樣打得到，參數照傳
     （軍令那一格拿殼傳進來的 orders、新手目標那一格拿 status；託付、伏筆、去投靠讀 ctx 上的 state 與 content）。"""
     from wins_kit import wins_game
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia import step as step_rules
     from tianxia.features.companions import errands
     from tianxia.features.faction import join_actions
@@ -1365,7 +1366,7 @@ def test_the_life_slot_runs_only_when_a_package_takes_it_and_asks_a_closed_one_t
     """life 那一格核心不代叫（core 傳 {}）：包沒登記（契約測試換掉 FEATURES）時不跑、回空串；登記了照 registered() 問、不看 enabled
     （原位本來就不看宴客包的開關：maybe_open 自己判 on），收到 (state, content, cid, turn)。真的宴客包登記的那一格就是 rules.maybe_open
     （叫的那一下才照模組屬性找：換掉 feasts.maybe_open 照樣打得到）。"""
-    from tianxia import feasts
+    from tianxia.features.feast import rules as feasts
 
     real = registry.FEATURES
     monkeypatch.setattr(registry, "FEATURES", [])

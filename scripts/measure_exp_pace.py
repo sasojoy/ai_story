@@ -34,7 +34,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, bot_policy, clinic, database, encounter, growth, sensing, team  # noqa: E402
+from tianxia import bot, bot_policy, clinic, database, encounter, growth  # noqa: E402
+from tianxia.features.sense import sensing  # noqa: E402
+from tianxia import team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

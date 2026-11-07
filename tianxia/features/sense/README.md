@@ -2,12 +2,12 @@
 
 探索撞上有所感（卡上三四個做法、選對擲中進感悟狀態、一筆畫下心中的形或順其自然）、自己畫字悟出的私有意境（看圖取名的三段式、首悟紀錄）、特殊頓悟（擲中感悟時再擲：心靈拷問 → 心境小試 → 心魔 → 取名，收進一份神品意境）。全部拆包第 24 批搬進來（計畫 `docs/superpowers/plans/2026-11-01-有所感包-第1批.md`）。網頁那一半（`SENSE_DRAW`、`SENSE_SIZE`、畫布、`godName`……）第 66 批切進 `web/sense.js`。
 
-- 導覽：`docs/guide/武學與成長.md` 的「有所感與頓悟（功能包 `tianxia/features/sense/`）」那一節；規則細節照舊在那一份的 `tianxia/epiphany.py` 那一條與〈行動與地盤〉的靜心感悟。
+- 導覽：`docs/guide/武學與成長.md` 的「有所感與頓悟（功能包 `tianxia/features/sense/`）」那一節；規則細節照舊在那一份的 `tianxia/features/sense/epiphany.py` 那一條與〈行動與地盤〉的靜心感悟。
 - 設計稿：沒有版本號——悟意境設計（企劃者 2026-10-06「甲案加乙案」：第零節有所感、0.2 看圖取名、0.2a 退路與暖機、0.2b 私有意境與首悟）；意境提示設計（第一、二節：每個地點最濃的意境）；特殊頓悟設計稿（企劃者 2026-10-26，https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）。
 
 ## 裡面有什麼
 
-- `sensing.py`（原 `tianxia/sensing.py`：有所感的規則）、`epiphany.py`（原 `tianxia/epiphany.py`：特殊頓悟；import 的時候登記一條線的鉤子 `storyline.TASKS`／`TASK_LEFT`／`REFRESH_HOOKS`／`FIGHT_HOOKS`／`END_HOOKS`）、`glyph.py`（原 `tianxia/glyph.py`：讀筆畫）、`insight_llm.py`（原 `tianxia/insight_llm.py`：看圖取名的 B 段）——四個舊名都留成 `sys.modules` 別名（同一個模組物件，`mock.patch.object(epiphany, "_trial")`、`server.insight_llm.warm` 這一類照樣換得到）。
+- `sensing.py`（原 `tianxia/sensing.py`：有所感的規則）、`epiphany.py`（原 `tianxia/epiphany.py`：特殊頓悟；import 的時候登記一條線的鉤子 `storyline.TASKS`／`TASK_LEFT`／`REFRESH_HOOKS`／`FIGHT_HOOKS`／`END_HOOKS`）、`glyph.py`（原 `tianxia/glyph.py`：讀筆畫）、`insight_llm.py`（原 `tianxia/insight_llm.py`：看圖取名的 B 段）（`mock.patch.object(epiphany, "_trial")`、`server.insight_llm.warm` 這一類換的就是這一份）。
 - `actions.py`：原本 `Game` 上的 10 個方法（名字去掉前導底線、第一個參數 `ctx`；`sense_draw`、`epiphany_names` 掛核心的 `outing_watch`），`SCENE_ORDER` 那幾格（`own/sense`、`art/sense`）的本體，核心原位、探索包、引導包叫的 7 個服務的本體（`sense_missed`、`sense_drop_stale`、`sense_menu`、`sense_start`、`sense_canvas`、`epiphany_title`、`prologue_choice`）。
 - `routes.py`：`/api/sense`、`/api/sense_read`、`/api/sense_warm`（原本寫在 `server.py`；殼照 `FEATURES` 掛，函式名照舊）。畫完那一筆的鎖外三段式 `sense_draw`、靜心思名 `epiphany_think` 第 69 批也搬進來（見最後一段）。
 - 掛鉤：`enabled` 一直是 True（有沒有場景看內容、特殊頓悟看 `Config.epiphany`）；`prefix = ("sense", "dunwu")`；`choose` 只吃 `sense:`（標題「有所感・場景」）；`scenes()`（`SCENE_ORDER` 的 `own/sense`：有所感的卡、取名那一張，排在宴客之後；`art/sense`：圖只看 `sensing`、不看 `god_naming`）；`routes`；`content`（`insight_scenes.json`）；`player_fields`。**沒有 `bots.py`**：`bot_policy.score` 本來就沒有 `sense:`、`dunwu:` 那一段（落到最後的 None），拿了前綴之後 `bot_pick` 預設回 None，一樣不按（手冊第十五節第 2 批）；假人的有所感、取名照舊在 `bot_policy.take_turn` 的 `_sense`、`_god_name` 與 `bot.py` 的 `sense_pick`／`sense_stroke`，叫 Game 的委派。整季機器人不按 `dunwu:own` 第 60 批搬成這一包的 `Feature.bot_idle`（要比相等）。
@@ -29,12 +29,12 @@
 - 舊探索（留給序章與測試內容；本體在探索包 `explore_base.py`，經 `ctx` 叫）：探索包 `explore_actions.insight_blocked` 的 `_sense_missed`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
 - 包 import 包的地雷先拆：探索包 `explore_actions.outing_weights` 改問 `ctx._sense_missed(loc)`、引導包 `actions.graduate_pass` 改問 `ctx._sense_prologue_choice()`。
-- 一行沒動的：`server.py` 的 `api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
+- 一行沒動的：`server.py` 的 `api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own` 第 87 批搬進共用層 `insights`）、`mapdata`（`terrain_tags`）；網頁。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：第 51 批合完重印 **0 處**。`epiphany.py` 讀的 `annals` 第 29 批之二改 import 核心（`story_base` 是共用規則層）；`sensing.py` 讀的 `seal_acts`（頒詔）留原名收進共用規則層（第 51 批），改註。
-- 舊模組 → 包：四個別名檔（engine 第二輪第 98 批起不 import 這一包，探索包的測試改換 `tianxia.features.sense.sensing.missed_today`）；還沒搬的 `fusion`、`mapdata`、`bot`、`bot_policy`、`bot_runner`、server（`insight_llm`、`epiphany`）、腳本。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`epiphany.py` 讀的 `annals` 是核心 `annal_base`（`story_base` 是共用層），`sensing.py` 讀的 `seal_acts`（頒詔）是共用層。
+- 假人殼、殼與腳本讀這一包：`bot`、`bot_policy`、`bot_runner`、server（`insight_llm`、`epiphany`）、腳本；engine 第二輪第 98 批起不 import 這一包，探索包的測試換 `tianxia.features.sense.sensing.missed_today`。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `outing_watch`、`PREPARING_TEXT`、`PREPARING_REFUSAL`；二、查詢 `_sense_here`（從三、過渡 explore 那一行搬來）、`_sense_missed`、`_sense_prologue_choice`（這一包回答別的包），`_rare_boost`（主人 explore）。包裡叫回 Game 的另有 `_outcome`、`_preparing`、`_log`、`_draft`、`_check_hints`、`_save_season`、`_quick_client`、`_guide`、`_note_action`（都已在清單）。
 
 ## 測試
@@ -47,7 +47,7 @@
   - 改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/sense/actions.py tianxia/features/sense/tests/test_epiphany_name_web.py tianxia/features/guide/tests/test_explain2_web.py tests/web/test_prologue_web.py tests/web/test_jianghu_page_web.py tests/server/test_server.py tianxia/features/guide/tests/test_explain2.py tianxia/features/guide/tests/test_hints.py tests/arts/test_pr21_merge.py tests/arts/test_secret_recipes.py tianxia/features/guide/tests/test_prologue.py tianxia/features/story/tests/test_storyline.py tests/core/test_engine.py tianxia/features/guide/tests/test_explain.py tianxia/features/zhuan/tests/test_biography.py tests/core/test_choose_refusal.py tests/core/test_old_saves.py tests/core/test_precise_actions.py tests/acts/test_conquest_rules.py tianxia/features/cultivation/tests/test_stat_milestones_engine.py tests/figures/test_day_scale.py tianxia/features/admin/tests/test_admin_timetable.py tests/gear/test_mounts.py tianxia/features/map/tests/test_mapdata.py tianxia/features/map/tests/test_mapdata_layers.py tianxia/features/seal/tests/test_seal_acts.py tests/season/test_real_content.py tests/season/test_measure_tactics_gear.py tianxia/features/explore/tests`（寫在指令裡的測試檔 `test_for` 連 slow 一起跑）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `sense` 一軌（`--tracks sense`）。
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+**行狀記一筆讀核心**（全部拆包第 29 批之二）：`from tianxia.core import annal_base as annals`（核心本體）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`stale.early` 的 `sense`（`actions.sense_drop_stale`）。
 
@@ -69,6 +69,6 @@
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
-- `own_name`、`add_own` 第 87 批搬進共用層 `insights`，`sensing` re-export 同一批物件；`fusion` 直接叫 `insights`，不再是舊模組 → 包。
+- `own_name`、`add_own` 第 87 批搬進共用層 `insights`，`sensing` re-export 同一批物件；`fusion` 直接叫 `insights`。
 - `bots.py`（第 101 批）：`sense_pick`、`sense_stroke`、`sense_draw`、`_sense`、`_god_name`、`SENSE_RIGHT`、`SENSE_DRAW`；要換 `SENSE_DRAW`、`sense_stroke` 換這裡。
 - 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

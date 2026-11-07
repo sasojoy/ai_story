@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import bot, chuangong, encounter, skillview, team
+from tianxia import bot
+from tianxia.features.cultivation import chuangong
+from tianxia import encounter
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
@@ -121,7 +125,7 @@ def test_what_was_taught_stays_with_the_companion_when_he_changes_hands(game):
 def test_the_companion_card_lists_what_was_taught(game):
     _with_mate(game)
     game.chuangong("mate", "str")
-    card = skillview.member_card(game.state, game.content, game.world, "mate")
+    card = art_view.member_card(game.state, game.content, game.world, "mate")
     assert "傳功　臂力 +1" in card.splitlines()
 
 
@@ -158,7 +162,7 @@ def test_a_follower_gets_stronger_arms_until_the_cap():
     assert team.follower_power(game.state, real, game.world, spear, key) > early
     other = team.follower_power(game.state, real, game.world, real.followers["follower_guan_crossbow"], team.FOLLOWER_KEY + "1")
     assert other == team.follower_power(game.state, real, game.world, real.followers["follower_guan_crossbow"])  # 另一名沒傳
-    assert "傳功　" in skillview.member_card(game.state, real, game.world, key)
+    assert "傳功　" in art_view.member_card(game.state, real, game.world, key)
 
 
 def test_the_battle_weight_counts_followers_not_their_power():
@@ -170,7 +174,7 @@ def test_the_battle_weight_counts_followers_not_their_power():
 
 
 def test_defecting_drops_the_drill_with_the_followers():
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     real, game = _real_game()
     game.chuangong(team.FOLLOWER_KEY + "0", "str")

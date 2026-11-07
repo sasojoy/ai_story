@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 import server
 import webharness
-from tianxia import tale
+from tianxia.features.tale import tale
 from tianxia.sqlite_world import open_world
 # autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
 from server_kit import (  # noqa: F401

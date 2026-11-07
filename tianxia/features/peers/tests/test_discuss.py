@@ -11,7 +11,10 @@ import random
 import pytest
 
 from conftest import FixedRandom, install_season_one
-from tianxia import bot_policy, engine, fusion, invites, library, naming, social
+from tianxia import bot_policy, engine, fusion
+from tianxia.features.peers import invites
+from tianxia import library, naming
+from tianxia.features.peers import social
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY
@@ -20,7 +23,9 @@ import json
 from test_prologue_web import DRIVER as BASE_DRIVER
 import server
 import webharness
-from tianxia import discuss, engine, social
+from tianxia.features.peers import discuss
+from tianxia import engine
+from tianxia.features.peers import social
 from tianxia.features.peers import discuss_actions
 
 pytestmark = pytest.mark.whole_content
@@ -640,7 +645,7 @@ def test_his_mingtie_shows_answer_and_decline_on_his_card(pair):
     content, world = pair
     _card_for(content, world, "甲")
     _do(content, world, "甲", lambda g: g.peer_act("乙", "mingtie", {"arg": "send"}))
-    from tianxia import mingtie
+    from tianxia.features.peers import mingtie
     assert _row(_card(content, world, "乙", "甲"), "mingtie") == [("回帖", "yes", mingtie.NO_CARD, False), ("婉拒", "no", "", True)]
     assert _row(_card(content, world, "甲", "乙"), "mingtie")[0][2] == "等他回帖"  # 發的那一方
     _card_for(content, world, "乙")

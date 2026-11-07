@@ -10,7 +10,9 @@ from __future__ import annotations
 import pytest
 
 from stances_kit import BOCAI, LUZHI, at, real_game
-from tianxia import calendar, errands, letters, renown, rules
+from tianxia import calendar
+from tianxia.features.companions import errands, letters
+from tianxia import renown, rules
 
 
 def _friend(g, cid=LUZHI, affinity=50):

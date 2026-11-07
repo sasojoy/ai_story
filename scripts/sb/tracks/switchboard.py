@@ -308,7 +308,7 @@ class SwitchboardScenario(Scenario):
 
     def unpaused(self) -> None:
         """繼續，接著把舊程式寫到一半的做完：應戰（約戰關著的 test 回一句）、擺式、立名（回「先立意」）、擱下。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         self.do(ADMIN, "resume_clock")
         duels = sorted(self.world.sortie_duels().values(), key=lambda d: (d.opened_at, d.id))

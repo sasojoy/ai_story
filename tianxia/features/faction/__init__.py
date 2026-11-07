@@ -3,10 +3,10 @@
 - join_actions.py：投靠與拜入門派（投靠兩步確認、選邊、拜入要依附的門派之後的傾向、待確認的選單、sect: 那一顆）；「你這一步」的去投靠那一格（第 36 批）
 - lean_actions.py：豪強改幫（三陣營四勝利）
 - defect_actions.py：叛投的行動（確認、驗證、同伴回江湖、選單能叛投去的、確認畫面的場景）
-- defection.py：叛投的規則（原 tianxia/defection.py；那個名字留成指到這裡的別名）
+- defection.py：叛投的規則（原 tianxia/defection.py）
 - ending_actions.py：季末與三方卡（起手資源與稱號、結局卡、三方卡、此刻拿第幾階、四勝利開著沒）
 - bots.py：假人的分數（原本 bot_policy.score 的 defect／sect 那兩段；faction: 原本落到最後的 None）
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

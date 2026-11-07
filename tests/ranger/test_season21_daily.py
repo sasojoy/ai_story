@@ -11,7 +11,11 @@ from tianxia.world_state import fresh_season, stamp_season
 import pytest
 import test_week7_season as fb501web
 from conftest import real_content
-from tianxia import calendar, enlist, guide, howto, orders, world
+from tianxia import calendar
+from tianxia.features.guide import enlist, rules as guide
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia import orders, world
 from tianxia.state import Order, new_game_state
 
 HOUR, DAY = 3600, 86400
@@ -151,7 +155,7 @@ def test_each_day_hangs_a_batch():
 
 def test_a_wednesday_opening_and_a_long_catch_up_hang_only_today():
     """Review Focus 1、2：週三開季只掛第 3 天的；一次補算跨過好幾天只掛今天的。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c = real_content("season21")
     v = _vehicle(c, now=WED)
@@ -167,7 +171,7 @@ def test_a_wednesday_opening_and_a_long_catch_up_hang_only_today():
 
 def test_the_notice_names_the_last_day():
     """店面告示上短的那一行：每天一批的單在某天 00:00 到期，寫最後還有效的那一天（同週次寫最後還有效的那一週，FB-196）。待 joy 潤。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c = real_content("season21")
     v = _vehicle(c)
@@ -176,7 +180,7 @@ def test_the_notice_names_the_last_day():
 
 
 def test_daily_prizes_hang_on_strike_and_on_the_second_bill():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c = real_content("season21")
     c.config.season21_daily.prize_treasure_chance = 1.0
@@ -203,7 +207,8 @@ def _gained(before, after):
 
 
 def test_rewards_grow_with_the_level():
-    from tianxia import bounties, team
+    from tianxia.features.bounties import rules as bounties
+    from tianxia import team
 
     game = _game()
     s, c = game.state, game.content
@@ -225,7 +230,8 @@ def test_rewards_grow_with_the_level():
 
 def test_each_bill_brings_one_thing():
     """討伐給對手屬性的二階（另擲三階）、打探給一顆回體丹、護送給終點屬性的二階；對手或終點沒屬性也給（Review Focus 4）。"""
-    from tianxia import bounties, materials
+    from tianxia.features.bounties import rules as bounties
+    from tianxia import materials
 
     game = _game()
     s, c = game.state, game.content
@@ -269,7 +275,8 @@ def test_each_bill_brings_one_thing():
 
 def test_maxed_players_get_xinde():
     """Review Focus 3：滿級的人交懸賞，經驗照 5 換 1 換成心得，不寫「經驗 +N」。"""
-    from tianxia import bounties, team
+    from tianxia.features.bounties import rules as bounties
+    from tianxia import team
 
     game = _game()
     s, c = game.state, game.content
@@ -287,7 +294,7 @@ def test_maxed_players_get_xinde():
 
 
 def test_arms_add_the_level_silver():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _game()
     game.sync(MON + DAY + 60)
@@ -435,9 +442,9 @@ def test_weekend_and_fourteen_day_keep_every_week_word(profile):
 def test_season21_howto_says_orders_come_every_day():
     c21 = real_content("season21")
     state = _state(c21)
-    quest = "".join(howto.war_help(state, c21)["quest"])
+    quest = "".join(guide_howto.war_help(state, c21)["quest"])
     assert "投靠陣營之後每天有軍令" in quest and "每週一" not in quest
-    join = "".join(howto.join_lines(c21, state.world))
+    join = "".join(faction_howto.join_lines(c21, state.world))
     assert "**軍令**：每天發令" in join and "今日的軍令卡在江湖頁行動列底下" in join and "每週一" not in join
 
 

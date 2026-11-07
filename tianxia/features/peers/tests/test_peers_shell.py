@@ -3,7 +3,7 @@ import random
 import pytest
 from fastapi.testclient import TestClient
 import server
-from tianxia import social
+from tianxia.features.peers import social
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.ollama_client import OllamaClient

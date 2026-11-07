@@ -5,7 +5,7 @@
 
 - letter_actions.py：下戰書；day_actions.py：22:00 換天的掛鉤、分紅與守城功送到；xingshi_actions.py：〈天下形勢〉開單到收下；
   view.py：地盤畫面的資料與管理者頁的下拉選單；admin_actions.py：四個救場工具
-- conquest_day.py、xingshi.py：原本的 tianxia/conquest_day.py、tianxia/xingshi.py（舊名留成別名）；void、note_void、today 先搬進共用規則層 conquest
+- conquest_day.py、xingshi.py：原本的 tianxia/conquest_day.py、tianxia/xingshi.py；void、note_void、today 先搬進共用規則層 conquest
 - routes.py：/api/xingshi 與管理者五個工具（conquest_set、conquest_progress、admin_conquest_letter、conquest_cancel、xingshi_now）
 
 沒有選項前綴（戰書走 /api/do/conquest_letter，不在選單上；假人不下戰書）。enabled 一直是 True（戰書看 conquest.on、〈天下形勢〉看 xingshi.on，各在動作裡驗）。

@@ -192,5 +192,5 @@ class ShutScenario(StripScenario):
             emit(f"{who} 換季之後的目標", self.game(who).newbie_view())
 
 
-register_track("shut", ShutScenario, (("tianxia/features/guide/newbie.py", "tianxia/newbie.py"),
+register_track("shut", ShutScenario, (("tianxia/features/guide/newbie.py",),
                                       ("到匪寇橫行的地方出門探索，打贏一場", "到匪寇橫行的地方出門探索，打贏兩場")), "week7")

@@ -622,13 +622,55 @@ def b103():
     ])
 
 
+WEB_G = "**這一波沒動 `web/`，但收了 70 個舊模組、路由與 `server.py` 的 import 都動了；函式裡才 import 的舊名要走到才會炸，這也是第二輪最後一次走全程。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」不用做。** 都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。量分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0：same=true。結束碼 1：逐列分成①工具誤報（寫進 report，不算 diffs）②這一波真的改了（寫進 diffs，same=false）。結束碼 2：工具壞了，same=true、report 開頭寫「比對沒跑完」與原因。\n3. 工具走不到的實機各走一次，主控台 0 錯誤、網路沒有 4xx／5xx、伺服器的 log 沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`：第 102 批改過的路由（單挑的文字、擂台開賽與圍觀、奪璽單挑、戰記）、手機通知的登記頁；管理頁各分頁。\n4. F 波沒走到的兩樣各試一次，叫不出來不要硬試，寫清楚：跟人物對話送出一句（`sayLine`）、採集喊話（`gatherSay`）。\n5. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`，有就是 blocker。\n**不修工具、不修程式、不跑 selftest，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+
+
 WAVES["G"] = dict(
     round2=True,
     extra_lenses=[
-        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次（`features/looks/cutting` 要 scipy，這台 venv 沒裝，除外）；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）照舊跑得動。"),
+        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次（`features/looks/cutting` 要 scipy，這台 venv 沒裝，除外）；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）與根目錄的 `server_push.py`、`console.py`、`llm_queue.py`、`run_studio.py`、`run_bots.py` 照舊跑得動；**函式裡才 import 的**舊名用語法樹掃，不靠 grep 的字串樣子。`scripts/new_feature.py` 生一包出來，邊界與契約照舊綠（生在暫存複本，不留）。"),
     ],
     lines=[dict(name="收口", batches=[b102, b103])],
     merge_port=8332, fix_port=8333,
+    web_check=dict(ports="8334、8335", steps=WEB_G),
+)
+
+
+H_PLAN = "docs/superpowers/plans/2026-11-08-架構收尾.md"
+H_NOTE = [
+    "- **架構收尾這一波**：範圍照 `" + H_PLAN + "` 這一批那一節整節（只讀第一段與那一節；第二輪總表不適用，第二節的裁決也不適用）。行號量在 `3e5f69b22`，**開工照現行程式重量，對不上以程式為準**，寫進 decided。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。",
+    "- **各包 README、`docs/guide`、手冊、`CLAUDE.md` 線上不動**：要寫的句子放回報的 `docs`（一條一句，寫明哪個檔、改哪裡），波末一位文件代理統一寫。**這一波不改行為、不改存檔、不動資料庫版本。**",
+]
+
+
+def hb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-08-架構收尾-第{n}批.md"
+    return batch(n, f"架構收尾第 {n} 批：{title}", "core_shared", dev, plan, ports, body + H_NOTE, custom=True)
+
+
+def b105():
+    return hb(105, "沒照架構的搬回去", "dev/fold-back", "8336", [
+        "- 範圍照那一節的 1～6，不多做。心神認定是核心資源是 PM 定的，不開包。每一項一個 commit。搬完語法樹比：搬的函式本體除了 `self` 換 `ctx` 之外一樣。",
+    ])
+
+
+def b106():
+    return hb(106, "殼不再長", "dev/shell-lock", "8337", [
+        "- 範圍照那一節的 1～15，**產品程式 0 行**。每一條守門都先注入違規證明會紅，把注入與紅的訊息寫進回報；哪一條注入了還是綠就是沒做好。名單的數字開工重量。第 15 條的工具做好，規矩的句子放 docs，等企劃者。",
+    ])
+
+
+WEB_H = "**這一波搬了 `web/` 幾段（`.ck-pop`、`heroines`、`faction`、`heroStay`），用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」不用做。** 都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。量分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0：same=true。結束碼 1：逐列分成①工具誤報（寫進 report，不算 diffs）②這一波真的改了（寫進 diffs，same=false）。結束碼 2：工具壞了，same=true、report 開頭寫「比對沒跑完」與原因。\n3. 工具走不到的實機各走一次，主控台 0 錯誤、網路沒有 4xx／5xx：每天第一次進來的簽到小窗（`.ck-pop`）、設定抽屜的成人內容那一列（`adult-yes`、`adult-no`）、本週卡的「先投一方」與三方表、修練頁的 `heroStay`、狀態列的心神那一格、跟人物說一句扣心神、問酒家的次數到頂。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式、不跑 selftest，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["H"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="guards", text="**守門真的會紅，搬的東西沒變**。第 105、106 批。第 106 批每一條守門親自注入一處違規，跑那個測試，要紅、訊息要說得清楚該放哪；現況要綠。挑最可能的漏網寫法試（不同的引號、多行、別名、`getattr`）。第 105 批：心神、問酒家的次數、`heroines`、`faction` 搬的函式跟原本語法樹比；`Game` 上被叫的名字都還在或呼叫端改了；舊存檔（`tavern_asks` 有值、`xinshen_*` 有值）照讀；新包照 `scripts/new_feature.py` 生出來，守門不會誤紅（生在暫存複本）。`compare --new` 帶參數一樣、不帶紅。"),
+    ],
+    lines=[dict(name="收尾", batches=[b105, b106])],
+    merge_port=8338, fix_port=8339,
+    web_check=dict(ports="8340、8341", steps=WEB_H),
 )
 
 

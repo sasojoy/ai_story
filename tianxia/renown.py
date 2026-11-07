@@ -387,7 +387,7 @@ def clinic_factor(state: GameState, content: Content) -> float:
 
 
 def clinic_part(state: GameState, content: Content) -> str:
-    """療傷打折的俠那一半：「一方豪俠・八五折」；沒打折是空字串。skillview.heal_note 跟地盤、名望那幾段寫在同一個括號（FB-294）。"""
+    """療傷打折的俠那一半：「一方豪俠・八五折」；沒打折是空字串。art_cards.heal_note 跟地盤、名望那幾段寫在同一個括號（FB-294）。"""
     factor = clinic_factor(state, content)
     if factor >= 1.0 or not on(content, "explain"):
         return ""

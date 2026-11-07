@@ -148,7 +148,7 @@ class TrainScenario(Scenario):
 
     def walk_hut(self, who: str) -> bool:
         """序章走到雪恥那一步（同 Scenario.prologue，全走 API）；沒有序章的季回 False。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         view = self.main(who)
         if not view.get("prologue"):

@@ -10,7 +10,7 @@ from sb.tracks.companions import CompanionsScenario, GameStateHolder
 # ═══════════════════════════ talk：人物對話二軌（全部拆包第 20 批，dev/companions-2） ═══════════════════════════
 # 人物對話（鎖外三段式 A、B、C：dialogue_request／prepare_dialogue／choose 的重驗）、NPC 智能 2.0（開口求人、開條件、先做後付與食言、
 # 他主動開口求你、帶路、陪你出陣與商量打法）的本體從 engine.py 與 tianxia/companion_agent.py、parley.py 搬進 tianxia/features/companions/
-# （舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
+# （計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
 
 TALK_REPLY = "他沉吟了一會，緩緩開口。"
 TALK_TERMS = "他想了想：「這事不難，只是你得先拿出一點誠意。」"
@@ -513,5 +513,5 @@ class TalkScenario(CompanionsScenario):
 
 
 # 改一個字（selftest）：指點一招那一句（parley.SPAR_LINE；搬之前在 tianxia/parley.py、之後在包裡），week7 紀行雲求指點、當場做那一下抓到
-register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py", "tianxia/parley.py"),
+register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py",),
                                       ('SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻。"', 'SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻！"')), "week7")

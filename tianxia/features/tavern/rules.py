@@ -11,7 +11,7 @@
 打聽的人自己在自家陣營控制的地盤上 +1（地頭熟）；名望不加（有名的人去問，反而容易被對方知道是誰在問）。
 
 只讀寫傳進來的狀態、回字。亂數一律自己一份（rng_for：「酒肆｜種子」），不碰 Game.rng。真人假人照同一條公式，任何回話、風聲都不看
-PlayerState.bot（伺服器假人設計第五節）。接到 Game 的在這一包的 actions.py（原本 engine 的「酒肆」那一段 _tavern_*；主動搬六包第 10 批搬進功能包，舊名 tianxia.tavern 留成指到這裡的別名）。"""
+PlayerState.bot（伺服器假人設計第五節）。接到 Game 的在這一包的 actions.py（原本 engine 的「酒肆」那一段 _tavern_*；主動搬六包第 10 批搬進功能包）。"""
 from __future__ import annotations
 
 import hashlib

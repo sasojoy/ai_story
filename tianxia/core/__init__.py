@@ -18,8 +18,7 @@
   ——查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史讀它；單挑包的 arena_rules re-export 同一批。同 event_check 不進 MODULES。
 - annal_base.py（zhuan：全部拆包第 29 批之二）：行狀「記一筆」的那一半——note、entry、trim、kept_names、clip、first_sentence、figure_name、on、heard、
   盯狀態變化的 mark、watch，與種類常數（SHOWDOWN…STORY、KINDS、GROUPS、UNHEARD）；engine、event_check、fusion 與各包記行狀都經它。
-  查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）在列傳包 features/zhuan/standing.py；舊名 tianxia/annals.py 是指到
-  standing 的 sys.modules 別名（standing re-export 這裡的名字，兩半都拿得到）。同 event_check 不進 MODULES。
+  查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）在列傳包 features/zhuan/standing.py（standing re-export 這裡的名字，兩半都拿得到）。同 event_check 不進 MODULES。
 - omen_base.py（military：全部拆包第 34 批）：機緣與伏筆「只讀」的那一小半——伏筆需求量的換算（scale、need）、天機表與題目（GUANYIN、
   TIANJI、FIGURE_SLOT、TIANJI_ANSWER、trips、asks_of）、召見與叛投確認畫面讀的機緣（done_for_rank、in_plot）；rules、content、ranks、
   defection 讀它，軍情包的 fs_rules、opp_rules re-export 同一批。同 event_check 不進 MODULES。
@@ -50,10 +49,9 @@
   （chronicle_block、sink_text 與 BOOK_*）；核心的 world、engine 的管理者「定結果」與江湖史、決戰包的 view、progress 讀它，玉璽包的 seal.py
   re-export 同一批。同 event_check 不進 MODULES。
 - battle_base.py（battle：全部拆包第 54 批）：全服決戰的資料型別與「讀」的那一半——全服狀態存的 BattleInstance、BattleRoundRecord、SiegeInfo 這些型別，加上核心、
-  共用規則層、舊模組、別的包非讀不可的判定（move_scores、idle、merit、call_orders、outcome_reason、result_at、start_muster、shift_deadlines、assess_gamble、clean_story……，
+  共用規則層、假人殼、別的包非讀不可的判定（move_scores、idle、merit、call_orders、outcome_reason、result_at、start_muster、shift_deadlines、assess_gamble、clean_story……，
   共 63 個名字）；world_state、sqlite_world、world、team、duel_base、seal_base、chiefs、conquest、event_llm、siege、tale、seal_duel、bot_policy、bot_runner、engine 與
-  bout、seal、territory_acts、looks、faction 幾包讀它。規則那一半在決戰包 features/battle/instance.py，它 re-export 這裡的名字；舊名 tianxia/battle_instance.py 是指到
-  instance 的 sys.modules 別名。同 event_check 不進 MODULES。
+  bout、seal、territory_acts、looks、faction 幾包讀它。規則那一半在決戰包 features/battle/instance.py，它 re-export 這裡的名字。同 event_check 不進 MODULES。
 
 # bounties（全部拆包第 45 批：懸賞榜成包；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）
 - cards.py：玩家卡的動作登記表——CardButton、CardAction、ACTIONS、register（原本在玩家互動包的 social.py，第 37 批 PM 認定第 3 條）；玩家互動包的卡模組與懸賞榜包的通緝都登記進這一張，
@@ -88,7 +86,7 @@
 # - scripts/test_for.py：改了這幾個跑核心測試＋煙霧＋自己檔名的測試（照語法樹讀這一行、不 import；test_test_for 守兩邊一樣）。
 # 只寫字面的名字（test_for 用 ast.literal_eval 讀）。attrset（五項屬性，屬性與跨季架構 v2 第三節）跟 team 一起算核心：team、rules 讀它（合回 develop 2026-11-06，PM 認定第 1 條：tests/core/test_attrset.py 放進 test_for 的 NOT_CORE_TESTS，同 world、step）。
 # core_world（全部拆包第 25 批）：world（世界一步、週初與每天、開季結算、收季、開集結）改成世界層掛鉤（core/features.py 的 WORLD_ORDER）、
-# 不再 import 功能包之後收進來（總表第 15 列）。它還代叫幾個沒成包的舊模組（行尾標批號），核心 → 舊模組這一版照舊不掃（同 journal）。
+# 不再 import 功能包之後收進來（總表第 15 列）。它代叫的都在共用規則層（行尾標批號）；核心只 import 核心與共用層，邊界測試連函式裡也掃（第二輪第 102 批）。
 # core_effects（全部拆包第 32 批，第 25 批 PM 認定第 2 條）：log_archive（換季時封存舊季的傳聞與回合紀錄；只 import 標準函式庫，
 # 只有 sqlite_world 用）兩份名單都沒有，順手收進核心本體。它的 tests/core/test_log_archive.py（8 條）跟著進核心測試，不放進 NOT_CORE_TESTS。
 MODULES = frozenset({
@@ -97,6 +95,6 @@ MODULES = frozenset({
     "world",
     "log_archive",
     # core_step（全部拆包第 36 批）：step、weekcard 不再 import 包之後收進來（計畫 1.5 甲案）。懸賞榜兩格第 45 批由包登記（step._STEP_CORE 空了）；它們還
-    # 讀章回（chapters），核心 → 舊模組這一版照舊不掃（同 world）
+    # 讀章回（chapters，共用規則層）
     "step", "weekcard",
 })

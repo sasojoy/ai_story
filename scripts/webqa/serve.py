@@ -39,7 +39,7 @@ import server  # noqa: E402
 # every name of server.py this file reaches for
 PATCH_NAMES = ("CONTENT", "app", "main", "narration_round", "BOARDS_CACHE", "GAMES", "world_step", "WORLD_GAME", "_monotonic", "open_characters", "start_scheduler", "make_queue")
 # the seal module draws its shard secrets from here; it has lived in two places
-SEAL_MODULES = ("tianxia.features.seal.seal", "tianxia.seal")
+SEAL_MODULES = ("tianxia.features.seal.seal",)
 
 
 def _seal_module():

@@ -66,13 +66,20 @@ from starlette.concurrency import run_in_threadpool
 import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
-from tianxia import (
-    battle_instance, flavor, battlelog, calendar, companion_agent, create, divine, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
-    naming, narration,
-    ollama_client, power_save,
-    precise, seal, server_bots, speech, team, training, treasures, weekcard,
-    talk_log,
-)
+from tianxia.features.battle import instance as battle_instance
+from tianxia import flavor, battlelog, calendar
+from tianxia.features.companions import companion_agent
+from tianxia.features.craft import create
+from tianxia import divine
+from tianxia.features.sense import epiphany
+from tianxia import event_llm, fight_llm, gender
+from tianxia.features.sense import insight_llm
+from tianxia import leaderboard
+from tianxia.features.companions import letters  # noqa: F401  server 本身不讀，留著是載入先後
+from tianxia import might, naming, narration, ollama_client, power_save, precise
+from tianxia.features.seal import seal
+from tianxia import server_bots, speech, team, training, treasures, weekcard
+from tianxia.features.companions import talk_log
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line, serving_profile
 from tianxia.characters import name_key, open_characters

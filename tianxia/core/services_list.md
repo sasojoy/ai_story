@@ -59,7 +59,7 @@
 - 共用規則層的名字（不是 Game 上的、也不在這個模組；包直接 import 那個模組）：`siege.title`（攻城戰的名字「攻城・地點」）、
   ——主人：共用規則層；`siege_rules.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、`siege_rules.verdict`（誰贏、大勝或險勝）第二輪第 97 批進了決戰包 `features/battle/siege_rules.py`，不是共用規則層了
   （`tianxia/siege.py` 留開集結、留守、名字、內容驗證）。第 11 批開了共用規則層的名單（`tianxia/core/registry.SHARED`），`siege` 登記在上面：
-  包 import 它不必註「過渡：待搬」（同一行還有別的舊模組的照註）；其餘的共用規則層模組總表第 15 批登記
+  包直接 import；其餘的共用規則層模組總表第 15 批登記
 
 選單與分派（explore：主動搬六包第 3＋4 批加的這一段）
 - `ctx.options(odds=False, tick=False)`：此刻的選單（走一趟問「探索按不按得下去、這一段端出要選的事沒」）；`ctx.choose(id)`：按一顆
@@ -163,7 +163,7 @@
 # 計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.3）。包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：
 - `ctx._pill_day()`（「一天」）、`ctx._idle()`、
   `ctx._side()`、`ctx._log(msgs)`、`ctx._save_season()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx.push_trend(...)`（捐軍備推大本營那一條線）
-- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`、`figures`（第 40 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）。
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`、`figures`（第 40 批收進）。
 
 # peers（全部拆包第 37 批「玩家互動一」：此地還有、玩家卡、邀請框、打招呼、贈物、名帖搬進玩家互動包；計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md 1.3）。
 # 包要叫的核心服務，上面大多已經列了，這一段記「誰在用」，新增的只有 `ctx._kin`：
@@ -325,7 +325,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
   `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
-  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`、`fusion`（第二輪第 87 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`annals`（行狀）
+  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`、`fusion`（第二輪第 87 批收進）；行狀讀核心 `core/annal_base`
 
 # faction（全部拆包第 35 批「陣營」；主人：陣營包，本體在 tianxia/features/faction/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻。原本記在三、過渡 `# battle`，主人成包了，改列這裡；包裡自己叫的直接叫，不經它）
@@ -490,7 +490,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
   玩家互動包 scratch 宣告）
 
 # smithy（全部拆包第 41 批）
-- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。鐵匠鋪包 scratch 宣告）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，`features/smithy/shop_view.py` 的 `forged_card`；被拒絕是 None。鐵匠鋪包 scratch 宣告）
 - `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，features/smithy/shop_view.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
 
 # gear（全部拆包第 42 批）
@@ -520,5 +520,8 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - 裝備包的 `market_actions.stale_cell`（馬市的鈕過時了，FB-195）叫 `ctx._shop_open()`（Game 本體：此刻坐在哪一間店；已經出了馬市就不改掌櫃的話）
 # shop（第二輪第 93 批：shopview 切五家，沒有新名字）
 - 店共用在 `core/shop_base.py`（包直接 import）；各包 `shop_view.py` 的 `page(ctx)` 叫 `ctx._pill_day()`、`ctx._battle_power()`，都是上面列著的；銀兩出口包另外問自己的 `_at_own_base`、`_at_clinic_town`（第 99 批搬進同一包）。
+# core_shared（第二輪第 102 批：`SHELL_FOREIGN` 收掉，包不再經殼碰別包的模組）
+- `ctx.mail_day_at(now)`（主人人物與同伴包 `companions`；這個現實時刻算哪一個送信日，只讀）：手機通知包的 `notify.routes._notice_keys` 在鎖內叫
+- `ctx.write_battle_tales(client, act, items, sides=, fallen=)`（主人決戰包 `battle`；決戰放手一搏一整回合的劇情，B 段，不讀狀態）：戰記包的 `tale.routes.narrate_once` 在鎖外叫
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

@@ -355,15 +355,16 @@ def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
 
 
 def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
+    from tianxia.features.figure_acts import howto as figure_acts_howto
     cfg = real.config
-    page = howto.page(real, world.get_season(), recruitable=True)
+    page = guide_howto.page(real, world.get_season(), recruitable=True)
     assert f"打贏大勢人物本人，他對你的情誼會掉 {cfg.figure_defeat_affinity}" in page
-    assert howto.CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige) in page
-    assert howto.CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap) in page
+    assert figure_acts_howto.CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige) in page
+    assert figure_acts_howto.CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap) in page
     assert "波才、皇甫嵩、董卓" in page
     cfg.figure_challenge_every_season = False
-    assert "打贏大勢人物本人" not in howto.page(real, world.get_season(), recruitable=True)
+    assert "打贏大勢人物本人" not in guide_howto.page(real, world.get_season(), recruitable=True)
 
 
 def test_season_bots_pick_a_challenge_by_its_odds(real, world):

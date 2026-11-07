@@ -7,7 +7,7 @@
 
 ## 裡面有什麼
 
-- `checkin.py`（原 `tianxia/checkin.py`，舊名留成 `sys.modules` 別名，同一個模組物件）：第幾天、給什麼、能不能領、領了改背包與銀兩、畫面要的資料、假人挑哪一種（`bot_attribute`）。`on`、`PILL_FOUND` 是**核心** `tianxia/core/services.py` 的 `checkin_on`、`PILL_FOUND`（回體丹那一套歸核心，總表附錄甲：探索包的 `explore_actions.pill_find` 掉回體丹也問「簽到開著沒」），這裡 re-export（`checkin.on is services.checkin_on`）。
+- `checkin.py`（原 `tianxia/checkin.py`）：第幾天、給什麼、能不能領、領了改背包與銀兩、畫面要的資料、假人挑哪一種（`bot_attribute`）。`on`、`PILL_FOUND` 是**核心** `tianxia/core/services.py` 的 `checkin_on`、`PILL_FOUND`（回體丹那一套歸核心，總表附錄甲：探索包的 `explore_actions.pill_find` 掉回體丹也問「簽到開著沒」），這裡 re-export（`checkin.on is services.checkin_on`）。
 - `actions.py`：原本 `Game` 上的 3 個方法（`check_in`、`auto_checkin`、`checkin_view`；`Game` 上的名字掛在 `game_api.py` 的表，`check_in` 的裝飾器 `@_not_while_preparing` 留在委派上）。序章（草廬）裡不簽，開局第一分鐘〔城門口三選一還沒選〕回引導包那一句（經 `ctx._opening_pending()`、`ctx._opening_gate()`，服務清單二、查詢服務 `# checkin`）。
 - 掛鉤：`enabled` 回 `checkin_on`（沒有任何掛鉤吃這個開關，委派自己各問 `checkin.on`）；`prefix = None`（沒有選項 id）。**沒有 `APIRouter`、沒有 `bots.py`**：`/api/do/checkin` 在 `routes.py` 的 `main_actions`（第 68 批）；假人叫的是 `Game.checkin_view`／`check_in`（`bot.check_in`、`bot_policy.take_turn`），不是選項。
 
@@ -24,10 +24,9 @@
 - 狀態列的 `checkin` 那一格（`status_slots`，第 66 批；位置在 `STATUS_ORDER`：`howto_entry` 之後、`fronts` 之前）；`feature_status` 是 `main` 的頂層。
 - 探索包的 `explore_actions.pill_find`：直接讀 `core.services` 的 `checkin_on`、`PILL_FOUND`（第二輪第 99 批）。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：**沒有**（`checkin.py` 只 import 核心與共用規則層 `four_tiers`、`materials`、`prologue`）。
-- 舊模組 → 包：`engine` 1 行（`checkin_actions`）、別名檔 `tianxia/checkin.py`；還沒搬的 `bot`（`bot_attribute`）與測試、腳本。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`checkin.py` 讀共用層 `four_tiers`、`materials`、`prologue`。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `PILL_FOUND`、`checkin_on`；二、查詢 `# checkin` 一段（`_opening_pending`、`_opening_gate`：這一包問引導包）。
 
 ## 測試
@@ -58,4 +57,4 @@ python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
-- `bots.py`：`check_in`（第 101 批從 `bot.py` 搬來；沒有掛鉤，殼經舊名叫）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+- `bots.py`：`check_in`（第 101 批從 `bot.py` 搬來；沒有掛鉤，假人殼 import 這一份叫）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
