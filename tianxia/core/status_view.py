@@ -5,9 +5,9 @@ status_data 是狀態列的資料（數字與短字串，/api/main 的 status，
 模組裡互相叫直接叫函式（沒有一個被測試換掉，量過）；留在 Game 上的（stamp、_preparing、pills_left_today、xinshen_view……）一律經 ctx，測試換 Game 上的照樣打得到。
 
 - status_data 的閉包整段不拆：鍵的先後算行為，一格一格的先後在 core/features.py 的 STATUS_ORDER["status"]。閉包的參數也叫 ctx，跟外面是同一個物件（status_run 傳的就是進來的那一個）。
-- 名字的綁法照 engine：engine 拿名字的（rules 的 season_one、stances……）這裡也拿名字，engine 叫模組屬性的（team.、calendar.、skillview.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
+- 名字的綁法照 engine：engine 拿名字的（rules 的 season_one、stances……）這裡也拿名字，engine 叫模組屬性的（team.、calendar.、art_cards.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
 - DAY、HOUR 拿 calendar 的（同值）；engine 留自己的（別的方法與測試在用）。
-- skillview.stat_uses、STAT_CHECK_NOTE、practice_hint 照舊叫舊模組（第 88 批切 skillview 時接）。
+- stat_uses、STAT_CHECK_NOTE、practice_hint 讀共用層 art_cards（第 88 批從 skillview 切出來，同一批物件）。
 
 engine 在 `from .core.event_check import …` 之後才 import 這一份（這裡 import 的模組那時都已經載入，載入順序不變）。
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .. import attrset, calendar, forge_secrets, gender, orders, ranger, renown, roster, secret_recipes, skillview, team, timetable
+from .. import attrset, calendar, forge_secrets, gender, orders, ranger, renown, roster, secret_recipes, art_cards, team, timetable
 from .. import prologue as prologue_rules
 from ..calendar import DAY, HOUR
 from ..rules import chaos_fronts, front_ids, season_one, stance_rule_note, stance_sum_note, stances, trend_name, trend_value
@@ -104,7 +104,7 @@ def status_data(ctx: Game) -> dict:
 
     def vitals(ctx, data) -> dict:
         return {
-            "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
+            "hp": round(now),  # 跟角色卡（修練包 art_view.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
             "hp_max": round(cap),
             "injury": int(p.member.injury),
             "silver": p.stats.get("silver", 0),
@@ -117,10 +117,10 @@ def status_data(ctx: Game) -> dict:
             # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
             **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
-            "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
-            "stat_uses_note": skillview.STAT_CHECK_NOTE,
+            "stat_uses": art_cards.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
+            "stat_uses_note": art_cards.STAT_CHECK_NOTE,
             # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
-            "hint": None if ctx._preparing() else skillview.practice_hint(s, c),
+            "hint": None if ctx._preparing() else art_cards.practice_hint(s, c),
             "team": mates,
             "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
         }
