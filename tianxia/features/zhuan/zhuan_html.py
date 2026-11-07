@@ -89,7 +89,7 @@ font:700 15px/1.5 var(--zh-font);text-align:center;letter-spacing:.08em}
 
 def page(row: dict, scenario: str, url: str, image: str, extras: dict | None = None) -> str:
     """一篇公開的傳。row 是 biographies 的一列（WorldStateStore.biography_by_code）；url 是這一頁的網址，image 是題簽圖的網址。
-    extras（減法季批 7b，server.zhuan_extras）：art 是列傳插畫的網址（有圖檔才給）、seal 是紀念印上的字；沒給或空的跟以前一模一樣。"""
+    extras（減法季批 7b，routes.zhuan_extras）：art 是列傳插畫的網址（有圖檔才給）、seal 是紀念印上的字；沒給或空的跟以前一模一樣。"""
     extras = extras or {}
     art = (f'<figure class="zh-art"><img src="{escape(extras["art"])}" alt="{escape(biography.title(row["name"]))}的插畫"></figure>'
            if extras.get("art") else "")

@@ -140,14 +140,6 @@ def story_cards(game: Game) -> list[dict]:
     return out
 
 
-def zhuan_art_src(key: str | None) -> str | None:
-    """列傳插畫（減法季批 7b，zhuan_end.illustration_for 的圖庫鍵）的網址：web/img/zhuan/<鍵>.webp 真的在才給（雲端批 8 放圖；同 scene_art）。"""
-    if not key:
-        return None
-    path = zhuan_end.art_path(key)
-    return f"/static/img/{path}.webp" if (WEB / "img" / f"{path}.webp").is_file() else None
-
-
 def figure_face(cid: str) -> str | None:
     """大勢人物的半身像（介面重整第一批圖，web/img/figures/full/<人物 id>.webp，去背）：檔案在才給網址，沒有是 None（網頁畫名字的第一個字）。"""
     return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
@@ -2357,17 +2349,10 @@ def api_board_card(request: Request, board: str, name: str = "", season: int = 0
 # （/api/xingshi：全部拆包第 46 批搬進地盤包 tianxia/features/territory_acts/routes.py，殼照 FEATURES 掛）
 
 
-# ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──
-# 寫一篇要一兩分鐘，一個請求在 trycloudflare 約 100 秒就被切斷：按「寫」只開一個背景執行緒做三段式，網頁每幾秒問一次寫好了沒。
-# 伺服器重開時寫到一半的那一篇就沒了（沒存進去），網頁問的時候照「還沒寫」再按一次。
-
-ZHUAN_JOBS: dict[tuple[str, int], float] = {}  # （名號 casefold, 季）→ 開始寫的時間
-ZHUAN_LOCK = threading.Lock()
+# 列傳的畫面與 ZHUAN_LOCK 搬進列傳包 tianxia/features/zhuan/routes.py（第二輪第 83 批）；殼留兩個別名與 write_zhuan 一行包裝（測試與 same_behavior 讀 server.<名字>，同一個物件）
+ZHUAN_JOBS = zhuan_routes.ZHUAN_JOBS
+_zhuan_key = zhuan_routes._zhuan_key
 PUBLIC_URL_ENV = "TIANXIA_PUBLIC_URL"  # 分享網址的開頭；沒設就照設定的 Config.biography.public_url，再沒有就照這次請求的網址
-
-
-def _zhuan_key(game: Game, season: int) -> tuple[str, int]:
-    return game.state.player.name.casefold(), season
 
 
 def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
@@ -2381,50 +2366,6 @@ def public_base(request: Request) -> str:
         return fixed.rstrip("/")
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
     return f"{proto}://{request.headers.get('host') or request.url.netloc}"
-
-
-def zhuan_view(game: Game, season: int, request: Request) -> dict:
-    view = game.biography_view(season)
-    if view is None:
-        raise GameError("這一季沒有你的傳。")
-    view["writing"] = _zhuan_key(game, season) in ZHUAN_JOBS
-    if view.get("illustration"):  # 列傳插畫（減法季批 7b）：讀傳那一層開頭那一幅，同江湖頁的 main.zhuan；圖檔在才給網址，沒有是 None
-        view["illustration_src"] = zhuan_art_src(view["illustration"])
-    if view.get("code"):
-        view["url"] = f"{public_base(request)}/zhuan/{view['code']}"
-    return view
-
-
-def _season_arg(value) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        raise GameError("哪一季？") from None
-
-
-# （/api/zhuan、/api/zhuan/write、/api/zhuan/share、/zhuan/{code}：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛；
-# 寫傳的鎖外三段式 write_zhuan、verdict_text 第 69 批也進了那個檔，ZHUAN_JOBS、ZHUAN_LOCK、_zhuan_key 留這裡（zhuan_view、測試、same_behavior 在讀）；傳的畫面 zhuan_view、公開頁的 zhuan_extras 留在殼）
-
-
-def zhuan_extras(store, row: dict) -> dict:
-    """公開頁多畫的（減法季批 7b）：那一季開著列傳為終點時，紀念印上的字（蓋了才有）與插畫的網址（第一階或用了插畫票、圖檔在才有）；
-    其餘是空的（頁面一個位元組都不變）。票照那一位的錢包讀（商城關著當沒有）。"""
-    number = row["season"]
-    season = store.get_season() if number == store.get_season_number() else store.past_season(number)
-    if season is None or not zhuan_end.on(CONTENT, season):
-        return {}
-    from tianxia.core.services import wallet_on  # noqa: PLC0415  錢包開著沒（核心；開發規範手冊 3.10）
-    from tianxia.wallet import Wallet  # noqa: PLC0415
-
-    purchases = Wallet(store.db).purchases(name_key(row["name"])) if wallet_on(CONTENT) else []
-    got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number), row["text"])
-    out = {}
-    art = zhuan_art_src(got["illustration"])
-    if art:
-        out["art"] = art
-    if got["seal"]:
-        out["seal"] = got["seal"]
-    return out
 
 
 # （/api/map、/api/map/base、/api/map/state：全部拆包第 49 批搬進輿圖包 tianxia/features/map/routes.py，殼照 FEATURES 掛）
