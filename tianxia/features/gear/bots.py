@@ -7,8 +7,13 @@ bot_policy 照舊留著 MARKET_SCORE 這個名字（tests/bots/test_bot_policy.p
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from tianxia import mounts
 from tianxia.core.option import Option
+
+if TYPE_CHECKING:
+    from tianxia.engine import Game
 
 MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 MARKET_SCORE = 8.0  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要（bot_policy.MARKET_SCORE = SMITH_SCORE 同一個數）

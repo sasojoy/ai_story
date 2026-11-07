@@ -7,10 +7,15 @@ bot.trade_at_smith、bot.keep_book_names 不搬，留在假人殼。**模組層�
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from tianxia import armor, equipment, team, weapons
 from tianxia.core.option import Option
 
 from . import smithing
+
+if TYPE_CHECKING:
+    from tianxia.engine import Game
 
 SMITH_SCORE = 8.0  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力（bot_policy.SMITH_SCORE = BOUNTY_SCORE 同一個數）
 FORGE_SCORE = SMITH_SCORE  # 人在城鎮、身上湊得出一爐又付得起（forge_ready）時進鐵匠鋪再多這麼多（FB-144；說明在 bot_policy.FORGE_SCORE，同一個數）
