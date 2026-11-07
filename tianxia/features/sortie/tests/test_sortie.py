@@ -14,7 +14,8 @@ from test_real_content import _walk_the_hut
 import server
 from tianxia import sortie, team
 from tianxia.encounter import EncounterResult
-from tianxia.engine import Game, drill_share
+from tianxia.core.services import drill_share
+from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import Order
 

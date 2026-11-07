@@ -9,7 +9,8 @@ import pytest
 from conftest import at
 from tianxia import battle_instance, battlelog, encounter, skillview, team
 from tianxia.content import load_content
-from tianxia.engine import TROOPS_LINE, TROOPS_REPORT, Game
+from tianxia.engine import Game
+from tianxia.features.battle.rules import TROOPS_LINE, TROOPS_REPORT
 from tianxia.models import BattleTuning, FollowerDef
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"

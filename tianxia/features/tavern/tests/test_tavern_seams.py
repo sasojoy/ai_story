@@ -51,7 +51,7 @@ def _rig(monkeypatch):
     def fake(mine, killer, rng, *a, **k):
         return encounter.EncounterResult(tier="落敗", margin=0.0, our_power=mine, difficulty=killer)
 
-    monkeypatch.setattr("tianxia.engine.encounter.resolve_encounter", fake)
+    monkeypatch.setattr("tianxia.encounter.resolve_encounter", fake)
     monkeypatch.setattr(tavern, "find_chance", lambda c, reach: 1.0)
 
 

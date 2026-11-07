@@ -933,7 +933,7 @@ def test_riding_away_from_a_loss_takes_nothing_from_the_games_dice(game):
 
 def test_the_hopeless_fight_warning_says_the_horse_may_save_the_silver(game, monkeypatch):
     """必敗的遊歷先問的那一句（FB-095）：騎著馬多寫能保住幾成，跟 _lose_silver 擲的是同一個數（mounts.escape）。"""
-    from tianxia.engine import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING
+    from tianxia.features.sortie.rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING
     _hopeless(game, None)
     monkeypatch.setattr(Game, "odds", lambda self, squad_id: "必敗")
 

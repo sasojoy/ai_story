@@ -68,7 +68,7 @@ def main() -> None:
                 sources[season["n"]][(kind, faction)] += after - before
         return out
 
-    rules.change_trend = engine.change_trend = pushing.change_trend = worldmod.change_trend = change_trend
+    rules.change_trend = pushing.change_trend = worldmod.change_trend = change_trend
 
     original_push = engine.Game._train_push
     pushes_today: Counter = Counter()

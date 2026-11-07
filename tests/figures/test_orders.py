@@ -1225,7 +1225,7 @@ def test_a_siege_front_makes_training_glow(on):
 
 def test_hopeless_training_asks_first_and_fair_training_does_not(on):
     """FB-095：遊歷標「必敗」時按鈕帶一句確認（輸了掉氣血、內傷、一成銀兩）；勝算過得去、或只是操練時不問。"""
-    from tianxia.engine import TRAIN_CONFIRM
+    from tianxia.features.sortie.rules import TRAIN_CONFIRM
 
     game = _game(on, at="huangjin_camp")
     game.state.player.tutorial_step = BASE

@@ -1076,7 +1076,7 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
 
 
 # ── FB-095：剛出師的新角色去黃巾別部營寨遊歷，挨了三場打 ───────────────────────────
-# joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（engine.TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
+# joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（features/sortie/rules.py 的 TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
 # 多一句別去營寨惹事（joy 的測試：tests/figures/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下 joy 的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
 # 選單（機器人）不問也不擲骰、伺服器照常打、網頁上問與取消（同一個 Option.confirm、同一個 ask()，PM 裁示用到同一件東西的測試留著）。
 # 出陣探索與地盤（2026-10-14）：散人沒有出陣鈕，打仗的鈕是投靠了陣營的人在別人地盤上的「出陣・攻」（同一個 act:train、同一套勝算與問句），
@@ -1094,7 +1094,8 @@ def _camp(on):
 @pytest.mark.parametrize("word, asks", [("必敗", True), ("凶險", False), ("難分勝負", False), ("五五波", False), ("有把握", False), ("穩勝", False)])
 def test_fb095_only_a_losing_fight_asks_first(on, monkeypatch, word, asks):
     """問不問看遊歷按鈕上的勝算那一個字（Game.odds，標籤用的就是它）：只有「必敗」問；勝算表上其他每一個字都不問。"""
-    from tianxia.engine import TRAIN_CONFIRM, Game
+    from tianxia.engine import Game
+    from tianxia.features.sortie.rules import TRAIN_CONFIRM
 
     game = _camp(on)  # 官軍的人在黃巾的營寨：對手是黃巾的人
     monkeypatch.setattr(Game, "odds", lambda self, squad_id: word)
@@ -1147,7 +1148,7 @@ _ASK_SCRIPT = """return (async () => {
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_fb095_the_page_asks_with_its_own_dialog_then_fights_only_on_yes(on):
-    from tianxia.engine import TRAIN_CONFIRM
+    from tianxia.features.sortie.rules import TRAIN_CONFIRM
 
     game = _camp(on)
     game.state.player.member.wugong_id = None
