@@ -33,7 +33,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_weapons_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, naming, rules, smithing, weapons  # noqa: E402
+from tianxia import bot, database, naming, rules  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
+from tianxia import weapons  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

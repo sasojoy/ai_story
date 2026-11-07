@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import arena_crowd
+from tianxia.features.bout import arena_crowd
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game

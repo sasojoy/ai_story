@@ -190,7 +190,7 @@ class BattleScenario(Scenario):
     def hold(self) -> None:
         """還沒收場的決戰與攻城：期限往後挪一步（battle_instance.shift_deadlines，管理者暫停再繼續的同一個做法：集結中挪集結截止、開打了挪這一回合
         開放的時間）。賽季的時鐘照走。都收場了（或還沒開）什麼都不寫。"""
-        from tianxia import battle_instance
+        from tianxia.features.battle import instance as battle_instance
 
         b = self.world.get_battle()
         if (b is None or b.phase == "ended") and all(s.phase == "ended" for s in self.world.get_sieges()):
@@ -237,7 +237,7 @@ class BattleScenario(Scenario):
 
     def battle_row(self, tag: str) -> None:
         """共用狀態裡那一場決戰此刻的樣子（整份的雜湊與看得懂的那幾格；整份資料庫每一段另有雜湊）。"""
-        from tianxia import battle_instance
+        from tianxia.features.battle import instance as battle_instance
 
         b = self.world.get_battle()
         if b is None:
@@ -410,7 +410,7 @@ class BattleScenario(Scenario):
         me 的江湖紀錄標題看得出三格的先後：決戰的補送挪過護衛、挪到酒肆後面，酒肆那三個挪過護衛、挪到決戰前面，都抓得到；沒越過護衛的
         看不出來（決戰的補送只在補份量快照與護衛之間挪、越過玉璽碎片與改名那幾格，它們這一下什麼都不寫）。三個 deliver 不看酒肆開關，
         測試內容沒有酒肆也照擺照送；測試內容沒有決戰，只看得出護衛與酒肆兩格。"""
-        from tianxia import figure_aid
+        from tianxia.features.figure_acts import figure_aid
         from tianxia.characters import name_key
         from tianxia.state import TavernHit, Whisper
 

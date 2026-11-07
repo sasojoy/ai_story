@@ -331,7 +331,7 @@ class BoutScenario(ExploreScenario):
     def boss_gate(self) -> None:
         """遇不上頭目的兩種（三選一的練功鈕與行動列那一行寫原因；長社對官軍的人只有頭目、沒有尋常對手，練功那一格才寫頭目）：花無缺剛打完
         山匪頭子（冷卻中）、冷卻擺過去之後長社這一隻次數用完（季的帳與週的帳都擺滿）；再探索一次也不撞上。江小魚剛打完、在長社再看一次。"""
-        from tianxia import duel
+        from tianxia.features.bout import duel_rules as duel
 
         self.place("江小魚", "changshe")
         self.boss_note("江小魚", "冷卻中的練功")
@@ -508,7 +508,9 @@ class BoutScenario(ExploreScenario):
         測試內容沒有頭目、擂台關著：只擺人、照跑。"""
         from collections import Counter
 
-        from tianxia import bot, bot_policy, duel, server_bots
+        from tianxia import bot, bot_policy
+        from tianxia.features.bout import duel_rules as duel
+        from tianxia import server_bots
         from tianxia.bot_runner import BotRunner
         from tianxia.engine import Game
         from tianxia.state import BotProfile
@@ -569,7 +571,8 @@ class BoutScenario(ExploreScenario):
     def season_bot_duel(self, name: str, loc: str) -> None:
         """整季機器人把一場頭目戰從頭打到尾（審查修正：以前只挑一顆、沒按下去）：name（剛補的、閒著的假人）走到 loc 撞上頭目，每一招照
         bot.pick 挑、照 Game.choose 按（同 bot.play_season），打到收場。在行動鎖裡、固定種子；測試內容沒有這個地點、沒有頭目：只寫一行。"""
-        from tianxia import bot, duel
+        from tianxia import bot
+        from tianxia.features.bout import duel_rules as duel
         from tianxia.engine import Game
 
         if loc not in self.c.locations:

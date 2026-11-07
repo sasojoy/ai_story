@@ -167,7 +167,8 @@ def test_the_newbie_entry_opens_the_drawer_on_the_howto_page():
 
 def _feeling_view():
     """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。"""
-    from tianxia import insights, sensing
+    from tianxia import insights
+    from tianxia.features.sense import sensing
 
     content = real_content("week7")
     content.config.auto_open_first_season = True

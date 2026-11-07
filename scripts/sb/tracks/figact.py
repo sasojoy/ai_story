@@ -441,7 +441,7 @@ class FigActScenario(Scenario):
 
     def seed_batch(self, names: list[str]) -> None:
         """擺一批還沒寫的月旦評（跟 tick 自己評的一樣：固定句、還沒寫、還沒發）。"""
-        from tianxia import yuedan
+        from tianxia.features.figure_acts import yuedan
         from tianxia.state import YuedanEntry
 
         def seed(s) -> None:

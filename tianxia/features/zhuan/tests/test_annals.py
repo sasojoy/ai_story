@@ -10,7 +10,9 @@ import pytest
 
 import webharness
 from conftest import next_season
-from tianxia import annals, battle_instance, biography
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.zhuan import biography
 from tianxia.database import SCHEMA, SCHEMA_V5_TABLES, SCHEMA_V6_TABLES, SCHEMA_V7_TABLES, SCHEMA_V8_CHANGES, SCHEMA_V9_TABLES, SCHEMA_VERSION, open_database
 from tianxia.engine import Game
 from tianxia.state import AnnalEntry, PlayerState

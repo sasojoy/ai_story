@@ -54,7 +54,7 @@ def _gather_finds_hosts() -> list:
 
 def _explore_rules():
     """探索一顆的純規則模組：base 是 tianxia/explore_one.py，head 是指到探索包 explore_rules 的別名（同一個模組物件；換掉它的屬性兩邊都打得到）。"""
-    from tianxia import explore_one
+    from tianxia.features.explore import explore_rules as explore_one
 
     return explore_one
 
@@ -192,7 +192,7 @@ class ExploreScenario(Scenario):
 
     def settle(self, who: str, rounds: int = 10) -> None:
         """這一下端出來要選的（事件、有所感、頭目戰的招）：照第一顆按得下去的選掉，直到探索回到選單上（或選不動）。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         for _ in range(rounds):
             opts = self.options(who)
@@ -436,7 +436,7 @@ class ExploreScenario(Scenario):
           收的時候記一則行狀與世界記事。
         - 五段的一趟照固定的亂數自己抽（段數越多稀有的越容易來）。"""
         explore_one = _explore_rules()
-        from tianxia import outing
+        from tianxia.features.explore import outing_rules as outing
 
         if self.place("路小佳", "baima_temple"):
             with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=1.0):

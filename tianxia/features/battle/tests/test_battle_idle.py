@@ -7,7 +7,7 @@ from test_battle_gauge import showdown  # noqa: F401（fixture）
 from test_battle_instance import three  # noqa: F401（fixture）
 from test_battle_targeting import CODES, _battle, gamble  # noqa: F401（fixture）
 
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.models import BattleTuning
 import pytest
 

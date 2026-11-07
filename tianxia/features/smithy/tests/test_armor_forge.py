@@ -7,7 +7,9 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import armor, equipment, naming, rules, smithing, team, weapons
+from tianxia import armor, equipment, naming, rules
+from tianxia.features.smithy import smithing
+from tianxia import team, weapons
 from tianxia.state import Equipment, SmithDraft, Weapon
 
 KEY_YANG = "鎧|gang_1+kuai_1"  # 精鐵砂（剛）＋驚羽（快）＝陽 → 接「鎧」

@@ -1,7 +1,9 @@
 """店家折扣（名聲設計 4.1）：名望那一半跟地盤福利疊乘，套療傷、打造工錢、升階工錢、買馬；價錢後面寫原因。"""
 from conftest import real_content
 
-from tianxia import economy, mounts, skillview, smithing, team, territory
+from tianxia import economy, mounts, skillview
+from tianxia.features.smithy import smithing
+from tianxia import team, territory
 from tianxia.state import new_game_state
 
 

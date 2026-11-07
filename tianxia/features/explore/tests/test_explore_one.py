@@ -13,7 +13,8 @@ import pytest
 from conftest import real_content
 from jianfa_kit import _new, jianfa_game, jianfa_rules, plain_game, ready
 
-from tianxia import explore_one, journal, team
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import journal, team
 from tianxia.battlelog import OUTING_LABEL
 from tianxia.encounter import EncounterResult
 from tianxia.engine import FREE_TEXT_OPTION
@@ -250,7 +251,7 @@ def test_the_explore_cell_reads_the_same_hint_as_the_button():
     自家營寨寫「同袍比劃」。輿圖第一層名字旁的兩個字也照表（樓桑里照小圖是野、照表是城）；關著照小圖（雲端原本的）。"""
     import server
 
-    from tianxia import mapdata
+    from tianxia.features.map import mapdata
 
     game = ready(jianfa_game(), side="guan", loc="yingchuan")
     view = server.main_view(game)

@@ -7,7 +7,8 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import mall, roster, skillview
+from tianxia.features.mall import rules as mall
+from tianxia import roster, skillview
 from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions

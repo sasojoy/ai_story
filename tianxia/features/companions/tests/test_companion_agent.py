@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
-from tianxia.companion_agent import DriftSynthesis, resolve_tag_delta
+from tianxia.features.companions import companion_agent
+from tianxia.features.companions.companion_agent import DriftSynthesis, resolve_tag_delta
 from tianxia.world_state import WorldStateStore
 
 

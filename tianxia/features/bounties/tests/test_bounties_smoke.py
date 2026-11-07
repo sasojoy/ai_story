@@ -55,7 +55,7 @@ def test_the_package_takes_its_slots_and_the_base_is_the_same_object(content, wo
     assert [(h.slot, h.ref) for h in feature.steps()] == [("commission", "errand"), ("bounty", "bounty")]
     assert [(h.at, h.slot) for h in feature.defection()] == [("stranded", "bounties")]
     # 別人讀的那一半在核心：包 re-export 同一個物件；舊名是包 rules 的別名
-    import tianxia.bounties as old
+    from tianxia.features.bounties import rules as old
     assert old is rules
     for name in ("title", "how", "issuer", "mine", "hunting", "post_rally", "post_figure", "drop_stranded", "BOARD", "ENEMY"):
         assert getattr(rules, name) is getattr(bounty_base, name), name

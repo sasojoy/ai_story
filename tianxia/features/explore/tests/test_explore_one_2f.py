@@ -15,7 +15,8 @@ from jianfa_kit import jianfa_game, plain_game, ready
 
 import server
 from tianxia import events as event_rules
-from tianxia import explore_one, mapdata
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.map import mapdata
 from tianxia.state import Bounty
 
 SIDES = ["guan", "huang", "haoqiang", None]

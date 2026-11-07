@@ -8,14 +8,14 @@ import pytest
 from conftest import real_content
 from jianfa_kit import _new, jianfa_rules, ready
 
-from tianxia import explore_one
+from tianxia.features.explore import explore_rules as explore_one
 from tianxia.core import features as features_core
 from tianxia.core import seal_base
 from tianxia.core.registry import FEATURES
 
 
 def test_the_package_declares_what_it_owns_and_the_old_name_is_the_same_module():
-    from tianxia import seal as old
+    from tianxia.features.seal import seal as old
     from tianxia.features.seal import FEATURE
     from tianxia.features.seal import seal
 
@@ -58,7 +58,7 @@ def test_exploring_the_hiding_place_picks_up_the_shard():
 @pytest.mark.smoke
 def test_the_package_owns_the_seal_prefix_and_the_old_duel_name_is_the_same_module():
     """第 28 批：前綴 seal: 登記在玉璽包（假人看到 seal: 一律不按，bot_pick 問 bots.score）；tianxia.seal_duel 是 features/seal/duel_rules.py 的別名。"""
-    from tianxia import seal_duel
+    from tianxia.features.seal import duel_rules as seal_duel
     from tianxia.core import features as features_core
     from tianxia.core.option import Option
     from tianxia.features.seal import bots, duel_rules

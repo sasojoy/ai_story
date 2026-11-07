@@ -9,7 +9,8 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import atlas, figures, howto, mapview
+from tianxia import atlas, figures, howto
+from tianxia.features.map import mapview
 from tianxia.features.military import order_cards
 from tianxia.features.map import layers
 from tianxia.engine import Game

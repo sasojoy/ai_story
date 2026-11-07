@@ -205,7 +205,7 @@ class HeraldScenario(ExploreScenario):
                 self.choose(who, "battle:escort:none")
 
     def seal_live(self) -> bool:
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         return seal.on(self.c) and self.factions_on()
 
@@ -243,7 +243,7 @@ class HeraldScenario(ExploreScenario):
     def outing(self) -> None:
         """探索一趟：手上揭著那裡的打探；領地爭奪的季管理者先藏一片碎片、站到藏處（撿到的機會這一下定成必中）——同一下兩個訂閱者。
         測試內容（沒有探索一顆）走舊探索。"""
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         hidden = None
         if seal.on(self.c) and seal.conquest_season(self.c, self.world.get_season()):

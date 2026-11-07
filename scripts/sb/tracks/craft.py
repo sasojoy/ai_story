@@ -238,7 +238,7 @@ class CraftScenario(Scenario):
 
     def create_steps(self) -> None:
         """自創的前三步：種類不對、形不對、沒執器就擺式、立意（太短、太長、模型回了）、回頭。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.MAKER
         self.mx(who, "create_pose", {"pose": create.preset(self.c, "進擊")})  # 沒執器
@@ -266,7 +266,7 @@ class CraftScenario(Scenario):
 
     def create_name(self) -> None:
         """立名：太短、撞名（先有人用了）、招名不合、成功；另一個人模型擋著走完、作罷（付過了）。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.MAKER
         self.mx(who, "create_name", {"name": "拳", "move": ""})
@@ -286,14 +286,14 @@ class CraftScenario(Scenario):
 
     def inner_form(self) -> str:
         """內功的行功之法（表上第一個；沒有就空著，讓引擎回那一句）。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         forms = create.forms_of(self.c, "內功")
         return forms[0].key if forms else ""
 
     def reroll(self) -> None:
         """重悟帖：沒有帖、重骰形（模型不用）、重讀這句意（模型回了、模型擋著不扣帖、改寫太短）、骰滿了。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         who = self.REROLLER
         self.mx(who, "create_reroll")  # 沒有單子
@@ -319,7 +319,7 @@ class CraftScenario(Scenario):
 
     def half(self) -> None:
         """前半停在這裡：擺式那一步、立意那一步、成形還沒立名（兩張帖，重骰過一次）、舊存檔的三步單子、煉製頁那一爐合好一個。"""
-        from tianxia import create
+        from tianxia.features.craft import create
         from tianxia.state import CreateDraft
 
         self.mx(self.H_POSE, "create_begin", {"kind": "武學", "form": "拳腳"})
@@ -342,7 +342,7 @@ class CraftScenario(Scenario):
 
     def resume(self) -> None:
         """新程式接著走：擺式的接著擺、立意的接著三段式、成形的重讀與重骰再立名、舊單子收掉重開、煉製頁接著合。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         self.login_all()
         for who in (self.H_POSE, self.H_INTENT, self.H_NAME, self.H_OLD, self.H_FURNACE):

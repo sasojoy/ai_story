@@ -6,7 +6,9 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import battle_instance, duel, rules, tactics
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.bout import duel_rules as duel
+from tianxia import rules, tactics
 from tianxia.engine import Game
 from tianxia.models import BEATS, MOVES, DuelBoss, DuelFoe, FactionDef
 from tianxia.state import PLAYER

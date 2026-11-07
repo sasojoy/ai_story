@@ -13,7 +13,9 @@ from unittest import mock
 
 import server
 from wins_kit import wins_content, wins_game
-from tianxia import bot, newbie, orders, step, weekcard
+from tianxia import bot
+from tianxia.features.guide import newbie
+from tianxia import orders, step, weekcard
 from tianxia.state import Bounty, Order
 
 DAY = 86400

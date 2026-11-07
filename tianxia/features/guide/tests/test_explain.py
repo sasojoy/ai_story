@@ -15,7 +15,10 @@ import pytest
 from conftest import classic_rules, real_content
 from test_explore import _lake
 
-from tianxia import companion_agent, hints, howto, rules, sensing
+from tianxia.features.companions import companion_agent
+from tianxia.features.guide import hints
+from tianxia import howto, rules
+from tianxia.features.sense import sensing
 from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.models import ExploreMix, HintDef, InsightScene, SenseMethod
@@ -568,13 +571,13 @@ def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_con
 
 
 def test_the_full_stamina_note_says_why():
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     assert guide.FULL_STAMINA_NOTE == "體力將滿：滿了就不再回，別讓它浪費。"
 
 
 def test_the_full_stamina_note_shows_when_nearly_full_and_not_below(game):
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.5
@@ -667,7 +670,7 @@ def test_the_howto_drill_sentence_follows_the_squad_not_the_place(game):
 
 
 def test_the_full_stamina_note_shows_when_nearly_full(game):
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.95

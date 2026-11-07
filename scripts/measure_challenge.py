@@ -28,7 +28,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from tianxia import cultivation, database, figures, insight_llm, treasures  # noqa: E402
+from tianxia.features.cultivation import cultivation  # noqa: E402
+from tianxia import database, figures  # noqa: E402
+from tianxia.features.sense import insight_llm  # noqa: E402
+from tianxia import treasures  # noqa: E402
 from tianxia import world as world_mod  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.content import load_content  # noqa: E402

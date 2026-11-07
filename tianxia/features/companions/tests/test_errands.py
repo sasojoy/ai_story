@@ -9,7 +9,11 @@ import random
 import pytest
 
 from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
-from tianxia import annals, bot, errands, letters, rules, stances
+from tianxia.features.zhuan import standing as annals
+from tianxia import bot
+from tianxia.features.companions import errands, letters
+from tianxia import rules
+from tianxia.features.companions import stances
 from tianxia.state import BotProfile
 
 

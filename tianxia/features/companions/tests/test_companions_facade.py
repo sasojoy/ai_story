@@ -2,7 +2,8 @@
 from unittest import mock
 import pytest
 from conftest import FixedRandom, walk_to
-from tianxia import companion_agent, rules, team
+from tianxia.features.companions import companion_agent
+from tianxia import rules, team
 from engine_kit import FAKE_TURN, NEXT_TURN, _figure, _hall, _no_model, _prepared, _spy_battle_status, ids  # noqa: F401
 
 pytestmark = pytest.mark.whole_content

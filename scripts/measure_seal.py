@@ -40,7 +40,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from tianxia import battle_instance, database, seal, seal_duel, timetable  # noqa: E402
+from tianxia.features.battle import instance as battle_instance  # noqa: E402
+from tianxia import database  # noqa: E402
+from tianxia.features.seal import seal, duel_rules as seal_duel  # noqa: E402
+from tianxia import timetable  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content as _load_content  # noqa: E402

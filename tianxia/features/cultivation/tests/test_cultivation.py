@@ -7,7 +7,9 @@ import re
 
 import pytest
 
-from tianxia import arts as arts_mod, cultivation, fusion, library, skillview, team
+from tianxia import arts as arts_mod
+from tianxia.features.cultivation import cultivation
+from tianxia import fusion, library, skillview, team
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.state import InsightFx, new_game_state
 

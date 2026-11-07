@@ -7,7 +7,9 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import armor, equipment, shopview, smithing, weapons
+from tianxia import armor, equipment, shopview
+from tianxia.features.smithy import smithing
+from tianxia import weapons
 from tianxia.content import validate
 
 pytestmark = pytest.mark.whole_content
@@ -94,7 +96,9 @@ def test_the_keeper_line_stays_put_across_polls(content, world):
 
 def test_backs_written_out_match_the_constants_in_the_packages():
     """第二輪第 93 批：core/shop_base.BACKS 寫字面（讓包 import shop_base 會多一條載入得早的路），這裡鎖住跟包裡的常數一樣（同 RACK_FULL）。"""
-    from tianxia import arena, bounties, mounts  # noqa: PLC0415
+    from tianxia.features.bout import arena_rules as arena  # noqa: PLC0415
+    from tianxia.features.bounties import rules as bounties  # noqa: PLC0415
+    from tianxia import mounts  # noqa: PLC0415
     from tianxia.core import shop_base  # noqa: PLC0415
 
     assert shop_base.BACKS["market"] == (mounts.BACK,)

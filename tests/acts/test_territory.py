@@ -7,7 +7,8 @@ import random
 import pytest
 
 from conftest import classic_rules, real_content
-from tianxia import bounties, orders, rules, territory, timetable
+from tianxia.features.bounties import rules as bounties
+from tianxia import orders, rules, territory, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

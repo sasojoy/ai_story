@@ -10,7 +10,10 @@ import pytest
 
 import server
 from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, FixedRandom, idle_step, install_foreshadows
-from tianxia import bot, bot_policy, calendar, companion_agent, foreshadow, rules, skillview, team, timetable
+from tianxia import bot, bot_policy, calendar
+from tianxia.features.companions import companion_agent
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import rules, skillview, team, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option

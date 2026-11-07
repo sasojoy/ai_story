@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import ascend, create, cultivation, moves, skillview, tactics, team, traits
+from tianxia.features.cultivation import ascend
+from tianxia.features.craft import create
+from tianxia.features.cultivation import cultivation
+from tianxia import moves, skillview, tactics, team, traits
 from tianxia.content import load_content
 from tianxia.engine import Game
 

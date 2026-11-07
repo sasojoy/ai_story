@@ -9,9 +9,11 @@ import pytest
 from conftest import real_content
 from test_seal import SALT, _ended, _registry, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_engine import _admin, _player
-from tianxia import seal
+from tianxia.features.seal import seal
 from tianxia.engine import Game
-from tianxia import atlas, fusion, seal, social
+from tianxia import atlas, fusion
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
 
 
 def install_mandate(content):
@@ -108,7 +110,7 @@ def test_a_bad_mandate_setup_is_refused_at_load(mandated, change, message):
 
 def test_old_saves_read_without_the_new_fields():
     """舊存檔：新欄位都有預設值（不升版）；登記記一筆時寫上這一輪。"""
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.features.battle.instance import BattleInstance
     from tianxia.state import WorldState
     from tianxia.world_state import SealEvent, SealRegistry
 

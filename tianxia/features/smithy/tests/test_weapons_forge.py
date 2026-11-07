@@ -140,7 +140,7 @@ def test_weapon_recipes_are_per_season(store, content):
 
 # ── Task 3：打造的規則 ──
 
-from tianxia import smithing  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
 
 
 def _forger(content, world, silver=200, name="試劍"):
@@ -1095,7 +1095,7 @@ def test_a_rack_weapon_tempers_up_to_its_own_cap_too(content, world):
 
 
 def test_originals_copies_and_signature_arms_count_as_top_quality(content, world):
-    from tianxia import signature_arms
+    from tianxia.features.gear import signature_arms
     from tianxia.models import SignatureArmDef
     _graded(content)
     game = _forger(content, world)

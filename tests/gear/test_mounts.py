@@ -264,7 +264,7 @@ def test_the_spot_on_the_road_keeps_the_pace_the_trip_was_planned_with(content, 
 
 def test_the_map_routes_layer_counts_walking_minutes_on_horseback(content, world):
     """設計 5.3 的表漏列的：輿圖路線層的「N 分鐘」也乘步調，跟詳情欄、「前往」寫的步行時間一樣。"""
-    from tianxia.mapview import render_map
+    from tianxia.features.map.mapview import render_map
     game = _game(content, world, horse=_horse())  # 吃飽的駑馬：步行快三成
     game.state.world.flags.add("cave_open")
     svg = render_map(game.state, content, "routes", selected="cave")
@@ -472,7 +472,7 @@ def test_the_market_tag_is_not_written_as_terrain(content):
     """有所感的標題括號寫的是地形（河畔、城鎮……）；「馬市」是設施，不寫。"""
     from types import SimpleNamespace
 
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     loc = content.locations["town"]
     loc.tags.append(mounts.MARKET_TAG)
     assert sensing.place_tags(SimpleNamespace(prologue=False), loc) == "（城鎮）"
@@ -598,7 +598,7 @@ def test_the_practice_page_feed_action_feeds_the_horse(content, world):
 
 def test_cavalry_multiplies_charge_and_raid_but_not_hold_and_stacks_with_the_role():
     """設計 5.9：強攻、奇襲 ×（1＋騎兵），固守不加；跟職位疊乘。沒騎馬（預設 0）數字一個都不變。"""
-    from tianxia import battle_instance
+    from tianxia.features.battle import instance as battle_instance
     from tianxia.models import BattleTuning
     t = BattleTuning()
     plain = battle_instance.move_scores(t, 100.0, None, None)

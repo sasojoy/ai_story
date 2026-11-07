@@ -77,7 +77,9 @@ class TallyScenario(CompanionsScenario):
         from types import SimpleNamespace as NS
         from unittest import mock
 
-        from tianxia import bot, bot_policy as bp, bounties, orders, precise
+        from tianxia import bot, bot_policy as bp
+        from tianxia.features.bounties import rules as bounties
+        from tianxia import orders, precise
         from tianxia.engine import Game
         from tianxia.features.gear import bots as gear_bots
         from tianxia.features.smithy import bots as smithy_bots

@@ -1,7 +1,7 @@
 """輿圖包的接縫（全部拆包第 49 批）：舊名是指到同一個模組的別名、殼留的是同一個物件、三條路由掛上了、
 搬到核心服務檔的小函式兩邊是同一個物件。行為本身（畫法、資料、疊層）由同一個資料夾裡搬進來的整檔測試守。"""
 import server
-from tianxia import mapart, mapdata, mapview, worldgeo
+from tianxia.features.map import mapart, mapdata, mapview, worldgeo
 from tianxia.core import explore_base
 from tianxia.features.explore import explore_rules
 from tianxia.features.map import mapart as pkg_mapart

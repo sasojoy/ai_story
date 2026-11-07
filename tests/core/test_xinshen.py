@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
+from tianxia.features.companions import companion_agent
 from tianxia.characters import name_key
 from tianxia.core import xinshen
 from tianxia.engine import Game

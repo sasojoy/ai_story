@@ -77,7 +77,7 @@ class RoadmateScenario(TravelScenario):
         try:
             from tianxia.features.peers import invites
         except ImportError:  # develop：還沒搬進包
-            from tianxia import invites
+            from tianxia.features.peers import invites
 
         with self.world.action_lock():
             loc = self.chars.load(sender).player.location

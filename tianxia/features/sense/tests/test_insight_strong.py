@@ -5,7 +5,8 @@ import random
 import pytest
 from conftest import FixedRandom
 
-from tianxia import insights, sensing
+from tianxia import insights
+from tianxia.features.sense import sensing
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight
 from tianxia.models import InsightScene, SenseMethod

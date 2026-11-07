@@ -6,7 +6,8 @@ import random
 from conftest import real_content
 from test_gentry_allied import _game, _showdown
 
-from tianxia import allied, battle_instance
+from tianxia import allied
+from tianxia.features.battle import instance as battle_instance
 
 
 def _wk():
@@ -145,7 +146,7 @@ def test_stale_season_control_reads_no_gentry_base():
 
 
 def test_presence_names_the_side_of_an_allied_gentry():
-    from tianxia import social
+    from tianxia.features.peers import social
 
     wk = _wk()
     game = _game(wk, faction="haoqiang", ally="huang")
@@ -157,7 +158,7 @@ def test_presence_names_the_side_of_an_allied_gentry():
 
 
 def test_presence_old_rules_say_the_faction_only():
-    from tianxia import social
+    from tianxia.features.peers import social
 
     off = _fourteen_day()
     game = _game(off, name="乙", faction="haoqiang")

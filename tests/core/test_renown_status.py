@@ -3,7 +3,8 @@ import random
 
 from conftest import real_content, renown_unscaled
 
-from tianxia import howto, renown, rules, social
+from tianxia import howto, renown, rules
+from tianxia.features.peers import social
 from tianxia.engine import Game
 from tianxia.models import Condition
 from tianxia.state import new_game_state

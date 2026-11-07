@@ -13,12 +13,16 @@ import webharness
 from conftest import FixedRandom, real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
-from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
+from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview
+from tianxia.features.smithy import smithing
+from tianxia import team, weapons
 from tianxia.content import validate
 from tianxia.models import Drop, ForgeSecret, ForgeSide
 from tianxia.sqlite_world import open_world
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
-from tianxia import equipment, forge_secrets, shopview, skillview, smithing, weapons
+from tianxia import equipment, forge_secrets, shopview, skillview
+from tianxia.features.smithy import smithing
+from tianxia import weapons
 from tianxia.state import Weapon
 
 pytestmark = pytest.mark.whole_content

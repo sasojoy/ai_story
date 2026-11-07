@@ -163,7 +163,7 @@ def test_skipping_stays_skipped_into_the_next_season():
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
-    from tianxia.guide import base_step_count
+    from tianxia.features.guide.rules import base_step_count
     from tianxia.sqlite_world import open_world
 
     root = Path(__file__).parents[4] / "content"  # 測試檔搬進 tianxia/features/guide/tests/（全部拆包第 22 批）：repo 根往上四層

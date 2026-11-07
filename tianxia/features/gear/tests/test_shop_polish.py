@@ -96,7 +96,7 @@ def test_board_notes_are_compact_with_a_colored_tag_and_the_rest_on_the_paper(co
     from test_shop2 import SCOUT, STRIKE
     from test_shop2_web import run
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]
@@ -114,7 +114,7 @@ def test_the_notice_shows_the_short_due_and_the_paper_the_full_one_fb196(content
     from test_shop2 import SCOUT, STRIKE
     from test_shop2_web import _css, _rule, run
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game, m = _board_view(content, world, [SCOUT, STRIKE])
     scout = game.state.world.bounties[0]

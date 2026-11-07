@@ -873,7 +873,8 @@ def test_wanted_repairs_only_a_blade_that_fits(content, world):
 
 def test_a_rack_with_all_four_slots_only_shows_each_slot_its_own(content, world):
     """裝備四欄 3.3：裝備庫裡混了四欄，武器那幾個函式只看到武器；坐騎、寶物（之後的批次）不列、不能換、不能拆，格數照算。"""
-    from tianxia import equipment, smithing
+    from tianxia import equipment
+    from tianxia.features.smithy import smithing
     from tianxia.state import Equipment
     content.config.armor.enabled = True
     game = _sworder(content, world)
@@ -1172,7 +1173,7 @@ def _piece(kind="拳腳", **over):
 
 def test_fb133_the_forge_result_writes_the_noun_and_its_measure_word():
     """打出來的結果句寫「拳腳」「弓弩」，挑種類與開爐鈕寫「拳套」「弩」：結果句也寫拳套、弩；拳套論副。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     fist = smithing.forged_head(_piece("拳腳"), "兩份精鐵砂")
     assert "一副" in fist and "拳套" in fist and "拳腳" not in fist and "一把" not in fist
@@ -1208,7 +1209,7 @@ def test_fb133_the_dismantle_question_says_the_tempering_goes_too(content):
 
 def test_fb133_stepping_back_says_so_before_asking_again(content, world):
     """「上一步」只回下一步的問句，讀起來像同一個問題問了兩次：先回一句退回了。這一句也算單子自己的回話（開爐成了收掉）。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     from tianxia.state import SmithDraft
 
     _on(content)
@@ -1219,7 +1220,7 @@ def test_fb133_stepping_back_says_so_before_asking_again(content, world):
 
 
 def test_fb160_a_fist_bounty_asks_for_a_pair():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import Bounty
 
     fist = Bounty(id="b1", kind="arms", faction="guan", week=1, silver=0, deeds=2, attribute="剛", weapon_kind="拳腳", expires=0.0)
@@ -1233,7 +1234,8 @@ def test_fb160_a_fist_bounty_asks_for_a_pair():
 def test_fb146_an_armor_divine_piece_is_one_jian_everywhere(divine_content, world):
     """打出凝波甲：結果句寫「一件」，後面的「這是一把神器」、傳聞「打出了一把神器」、江湖史「打出一把神器（防具）」都是「把」。
     照欄位換：防具一件，兵器照種類（劍一把）。"""
-    from tianxia import armor, equipment, smithing
+    from tianxia import armor, equipment
+    from tianxia.features.smithy import smithing
 
     game = _forger(divine_content, world, name="甲")
     key = "鎧|gang_3+gang_3"
@@ -1261,7 +1263,7 @@ def test_fb146_an_armor_divine_piece_is_one_jian_everywhere(divine_content, worl
 def test_fb148_the_first_words_of_the_forge_result_say_what_kind_of_piece_it_is():
     """375 寬收成一行只露開頭十五、六個字：名器「打出一把【柳影劍】（劍・屬虛・」跟一般組合長得一樣，品質也切掉了。
     名器寫在名字前面，括號先寫階品再寫種類屬性；神器原品與仿品的名字（無名神器、仿・…）已經看得出來，標記照舊接在階品後面。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     from tianxia.state import Equipment
 
     cases = [
@@ -1345,7 +1347,7 @@ def test_fb149_a_signature_arm_from_afar_joins_the_gift_entry(content, world):
     from conftest import idle_step
     from test_signature_arms import _arms, _game as _arm_game
 
-    from tianxia import signature_arms
+    from tianxia.features.gear import signature_arms
 
     _arms(content)
     game = _arm_game(content, world)
@@ -1539,7 +1541,7 @@ def test_fb128_an_unfit_pickup_still_goes_into_an_empty_hand(content, world):
 
 def test_f4_the_held_and_unfit_notes_count_a_fist_as_a_pair(content, world):
     """終審 F4：求兵交出手上那把的確認句、修與淬煉鈕上的「這把配不上你的武學」：拳套論副（量詞走 equipment.unit_for）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import Bounty
 
     assert "這副配不上" in weapons.unfit_note(_blade(kind="拳腳")) and "這把配不上" in weapons.unfit_note(_blade())

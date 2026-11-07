@@ -3,7 +3,13 @@ from unittest import mock
 
 import pytest
 
-from tianxia import arena_crowd, battle_instance, letters, tavern, yuedan, zh, zhuan_end
+from tianxia.features.bout import arena_crowd
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.companions import letters
+from tianxia.features.tavern import rules as tavern
+from tianxia.features.figure_acts import yuedan
+from tianxia import zh
+from tianxia.features.zhuan import zhuan_end
 
 
 @pytest.mark.smoke

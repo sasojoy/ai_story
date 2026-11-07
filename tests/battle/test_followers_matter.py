@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from conftest import at
-from tianxia import battle_instance, battlelog, encounter, skillview, team
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, encounter, skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.features.battle.rules import TROOPS_LINE, TROOPS_REPORT

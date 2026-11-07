@@ -24,7 +24,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import battle_instance as bi  # noqa: E402
+from tianxia.features.battle import instance as bi  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.models import BEATS, MOVES  # noqa: E402
 
@@ -194,7 +194,8 @@ def _generals_run(definition, tuning, chiefs, per_side, power, seed, follow, nam
 
 
 def measure_generals(content, per_side: int, power: tuple[float, float], seeds: int, name_rate: float = 0.0) -> None:
-    from tianxia import bot_policy, generals
+    from tianxia import bot_policy
+    from tianxia.features.battle import generals
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 

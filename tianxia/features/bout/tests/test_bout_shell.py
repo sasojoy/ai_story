@@ -16,7 +16,7 @@ pytestmark = pytest.mark.whole_content
 
 def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
     """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
-    from tianxia import duel
+    from tianxia.features.bout import duel_rules as duel
 
     game.client = None
     game.state.player.location = "changshe"

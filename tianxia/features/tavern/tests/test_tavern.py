@@ -7,7 +7,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import tavern, tavern_ask
+from tianxia.features.tavern import rules as tavern, ask as tavern_ask
 from tianxia.characters import CharacterStore
 from tianxia.core import xinshen
 from tianxia.engine import Game

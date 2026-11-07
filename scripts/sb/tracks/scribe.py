@@ -316,7 +316,7 @@ class ScribeScenario(BattleScenario):
 
     def siege_due(self) -> None:
         """一場收掉的攻城（C：單方攻中立地，守將那一格）與一場季終收兵的決戰（D）；都不寫，tale_round 留到後半。"""
-        from tianxia.battle_instance import SiegeInfo
+        from tianxia.features.battle.instance import SiegeInfo
 
         ids = sorted(i for i in self.c.battles if i.startswith("siege_"))
         if ids:
@@ -408,7 +408,7 @@ class ScribeScenario(BattleScenario):
 
     def scribe_store(self, tag: str):
         """換一個全新的小檔（同一批收場的決戰可以再寫一次）。回原本那一個。"""
-        from tianxia.tale import TaleStore
+        from tianxia.features.tale.tale import TaleStore
 
         side = self.db.with_name(f"{self.db.stem}-{tag}.sqlite")
         if side.exists():

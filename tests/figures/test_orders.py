@@ -12,7 +12,11 @@ from unittest import mock
 import pytest
 
 from conftest import classic_rules
-from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
+from tianxia import atlas, calendar
+from tianxia.features.guide import enlist
+from tianxia import figures, front_lines
+from tianxia.features.map import mapview
+from tianxia import orders, rules, team, timetable
 from tianxia.features.military import order_cards
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層那一半（strike_marks、STRIKE_MARK）；同檔有區域變數叫 layers
 from tianxia.content import load_content
@@ -580,7 +584,7 @@ def test_orders_view_shows_own_side_with_deadline(on):
 def test_enlistment_after_joining_only_in_season_one(on):
     """用真實內容走一遍入伍段：投靠 → 框是老石、第一段是入營＋看戰局 → 軍令卡出現（view_orders）→ 框換成「挑一道軍令」→
     攻城軍令打贏一場 → 框是老石的結尾 → 「知道了」收起。開關關著（beta 季）投靠不開始。"""
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     game = _game(on, at="changshe")
     game.set_hints_off(True)  # 這個測試看入伍段的框：長社站著大勢人物，真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）

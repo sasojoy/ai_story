@@ -134,7 +134,8 @@ class LoomScenario(WorldScenario):
     def half(self) -> None:
         """**前半停在世界一步推到一半**：週初與每天的掛鉤跑到第 2 週的中間；兩個人還擺著那一則事件；一位人物聲威低、一位退場等著回來、一位
         對話人物擺著宴；兩張鐵匠鋪的單子（一張失效、一張防具）。擺完不再打這幾個人的 API（讀檔清單子要留給後半接手的那一份）。"""
-        from tianxia import equipment, smithing
+        from tianxia import equipment
+        from tianxia.features.smithy import smithing
         from tianxia.models import WEAPON_KINDS
         from tianxia.state import Feast, SmithDraft
 

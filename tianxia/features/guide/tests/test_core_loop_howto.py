@@ -8,7 +8,8 @@ from tianxia import howto
 import random
 import re
 from conftest import classic_rules
-from tianxia import foreshadow, howto, timetable
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import howto, timetable
 from tianxia.engine import Game
 from tianxia.rules import STANCE_NAMES
 

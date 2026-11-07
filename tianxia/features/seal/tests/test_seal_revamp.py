@@ -9,7 +9,8 @@ import pytest
 
 from conftest import real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
-from tianxia import seal, treasures
+from tianxia.features.seal import seal
+from tianxia import treasures
 
 pytestmark = pytest.mark.whole_content
 
@@ -179,7 +180,7 @@ def test_got_and_assigned_lines_name_the_revamp_effects(content, world):
 def test_chizhang_adds_ten_to_the_self_made_intent(content, world):
     """合 develop（武學重構）時 PM 2026-10-21 定：合成不再擲品質，赤璋改版開著時改成「自創的意分 +10」（create.seal_points，
     底子威力的倍數照它推）；子開關關著照 main 的 +5（test_seal.py）。說明句跟著寫自創的意分。"""
-    from tianxia import create
+    from tianxia.features.craft import create
 
     revamp(content)
     game = holding(content, world, "chizhang")
@@ -293,7 +294,7 @@ def test_guixin_discounts_every_chuangong_lesson(content, world):
     """歸心：傳功的心得 ×0.9（照 round、最少 1，同雲篆的練成）；鈕上寫的跟扣的是同一個數。"""
     from test_chuangong import _with_mate
 
-    from tianxia import chuangong
+    from tianxia.features.cultivation import chuangong
 
     revamp(content)
     game, plain = _two(content, world, "guixin")
@@ -365,8 +366,9 @@ def test_companions_do_not_take_the_power(content, world):
 def test_joining_a_battle_snapshots_a_bare_copy_for_the_duel(content, world):
     """決戰加入時的份量快照照吃戰力；另外快照一份不含碎片的（seal_bare，只在有碎片時記），奪璽單挑的快照用它，跟沒碎片時一樣。
     沒碎片的人那一包標記一個字不變（沒有 seal_bare 這個鍵）。"""
-    from tianxia import battle_instance, seal_duel
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.features.battle import instance as battle_instance
+    from tianxia.features.seal import duel_rules as seal_duel
+    from tianxia.features.battle.instance import BattleInstance
 
     revamp(content)
     game, plain = _two(content, world, "yunzhuan")

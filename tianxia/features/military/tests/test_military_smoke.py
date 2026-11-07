@@ -29,7 +29,7 @@ def test_a_yellow_turban_incites_a_town_and_the_front_moves(on):
 def test_the_opportunity_and_foreshadow_options_belong_to_the_package(on):
     """機緣 opp:、伏筆 fs:（全部拆包第 34 批）：兩個前綴都是軍情包的，按下去走 choose 掛鉤（標題先拿、動作後做）；舊名 tianxia.opportunities、
     tianxia.foreshadow 是同一個模組物件。"""
-    from tianxia import foreshadow, opportunities
+    from tianxia.features.military import fs_rules as foreshadow, opp_rules as opportunities
     from tianxia.core import features as features_core
     from tianxia.features.military import fs_rules, opp_rules
 

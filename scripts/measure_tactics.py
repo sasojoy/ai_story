@@ -189,8 +189,9 @@ def figures_with(content):
 
 
 def bouts(content, runs):
-    from tianxia import arena, battle_instance
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import arena_rules as arena
+    from tianxia.features.battle import instance as battle_instance
+    from tianxia.features.bout import duel_rules
     from tianxia.models import MOVES
     from tianxia.state import ArenaFight, ArenaSide, DuelState
 
@@ -542,8 +543,9 @@ def gear_holder(tactic):
 def ring_share(content, runs, hp_a=1000, hp_b=1000):
     """擂台的贏面：share(甲的戰法, 乙的戰法)，兩邊威力 150（kits 與 catch_up 共用）。
     hp_a、hp_b 是甲、乙的池子（滿的開始，hp＝hp_cap；--gear 量螭首用），預設兩邊 1000、跟加這兩個參數之前一模一樣。"""
-    from tianxia import arena, battle_instance
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import arena_rules as arena
+    from tianxia.features.battle import instance as battle_instance
+    from tianxia.features.bout import duel_rules
     from tianxia.models import MOVES
     from tianxia.state import ArenaFight, ArenaSide
 
@@ -732,7 +734,8 @@ def _source(content, key, field, value):
 def wearing(content, key=None, agi=team.BASE_STAT, wis=team.BASE_STAT):
     """一個只帶著 key 那一樣的角色（寶物放寶物欄；玉璽碎片放傳承那一格、上限倍數照 seal.copy_heirloom 設），給遊戲裡真的掛點讀
     （treasures.amount、team.dodge_chance、sensing.rate）；key 是 None 就是什麼都沒帶。"""
-    from tianxia import seal, treasures
+    from tianxia.features.seal import seal
+    from tianxia import treasures
     from tianxia.state import Equipment, GameState, PlayerState
     p = PlayerState(name="量表", location=next(iter(content.locations)), stats={"agi": agi, "wis": wis}, stamina=0)
     if key in content.config.treasures.effects:
@@ -806,7 +809,8 @@ def _tiers(odds):
 def gear(content, runs, chain):
     """第 35 項：寶物八種與玉璽七片哪些進打仗（直接：量勝負變幾個百分點）、哪些只改成長（間接：改哪一條、改多少）、哪些不碰。
     寶物或玉璽的開關關著也照樣量（量的是開了會怎樣）：只在這一份記憶體裡的內容把兩個開關打開，量完放回去。"""
-    from tianxia import seal, treasures
+    from tianxia.features.seal import seal
+    from tianxia import treasures
     cfg = content.config
     print("寶物與玉璽：哪一樣進打仗（第 35 項；只量不改，數字照 Config 讀）")
     print(f"  寶物（Config.treasures.enabled）{'開著' if treasures.on(content) else '關著'}；"
@@ -912,7 +916,8 @@ def _gear_hp(content, runs, chain, rows):
 
 def _indirect(content, r):
     """間接那一列：改哪一條成長、改多少（照遊戲裡真的掛點算，不換算成威力）。"""
-    from tianxia import sensing, treasures
+    from tianxia.features.sense import sensing
+    from tianxia import treasures
     cfg = content.config
     amt = treasures.amount(wearing(content, r.key), content, r.key)
     if r.key == "cultivate":
@@ -947,7 +952,7 @@ def _indirect(content, r):
         cut = sum(team.practice_price(content, n, amt) for n in range(1, team.MAX_LEVEL))
         return f"練成 ×{amt:g}：練滿十成的心得 {full} → {cut}（每一成 round(原價×{amt:g})、最少 1；熔煉照原價退）"
     if r.key == "fuse_points":
-        from tianxia import create
+        from tianxia.features.craft import create
         mid = 50  # 自創的品級一律 Config.arts.create_grade（main d0ca2c25，Joy 2026-10-21「保底上品」），意分只推底子
         lo, hi = create.power_scale_of(content, mid), create.power_scale_of(content, mid + int(amt))
         return (f"自創的意分 +{amt:g}：品級一律{content.config.arts.create_grade}，意分 {mid} 的那一門"

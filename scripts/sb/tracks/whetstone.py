@@ -91,7 +91,8 @@ class WhetstoneScenario(TallyScenario):
 
     def half(self) -> None:
         """前半切在這裡（舊程式寫進存檔）：磨甲的自創單子付過心得、停在取名；磨乙的絕學等定名；磨丙的有所感等著畫那一筆；磨丁的頓悟等著取名。測試內容沒有的（形、場景、神品）照實寫 null。"""
-        from tianxia import create, sensing
+        from tianxia.features.craft import create
+        from tianxia.features.sense import sensing
         from tianxia.state import GodNaming
 
         self.begin()
@@ -171,7 +172,8 @@ class WhetstoneScenario(TallyScenario):
 
     def draft_ways(self) -> None:
         """自創的退路：照常、沒有形、開不了單、立意不成、名字都撞、前一張單子沒付心得；換到最後每一張都看單子還在不在。測試內容沒有形：照實寫。"""
-        from tianxia import bot, create
+        from tianxia import bot
+        from tianxia.features.craft import create
         from tianxia.engine import Game
 
         self.begin()
@@ -208,7 +210,8 @@ class WhetstoneScenario(TallyScenario):
 
     def sense_ways(self) -> None:
         """有所感：不在感悟裡；要畫的時候那一筆讀不出來、要取名（名額開著、關著、沒有 slot）、不必取名。整季機器人那一支（bot.sense_draw）讀不出來時順其自然。"""
-        from tianxia import bot, bot_policy as bp, sensing
+        from tianxia import bot, bot_policy as bp
+        from tianxia.features.sense import sensing
         from tianxia.engine import Game
 
         self.begin()
@@ -333,7 +336,9 @@ class WhetstoneScenario(TallyScenario):
 
     def shop_ways(self) -> None:
         """店面與雜項各缺一兩行的：換馬、升階、賣不掉、捐不掉、內傷不設伏、庫快滿不學藝、走一趟沒體力、榜上交不出手、功效表是空的、等定名時不等契機、庫裡有認不得的武學。"""
-        from tianxia import bot, bot_policy as bp, bounties, economy, library, mounts, treasures
+        from tianxia import bot, bot_policy as bp
+        from tianxia.features.bounties import rules as bounties
+        from tianxia import economy, library, mounts, treasures
         from tianxia.engine import Game
 
         self.begin()

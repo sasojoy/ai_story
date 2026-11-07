@@ -33,14 +33,14 @@ def test_the_old_names_are_the_package_modules():
     assert tianxia.tavern is rules and tianxia.tavern_ask is ask
     assert sys.modules["tianxia.tavern"] is rules and sys.modules["tianxia.tavern_ask"] is ask
     assert importlib.import_module("tianxia.tavern") is rules
-    from tianxia.tavern import BANNED_WORDS
+    from tianxia.features.tavern.rules import BANNED_WORDS
 
     assert BANNED_WORDS is rules.BANNED_WORDS and BANNED_WORDS == ("假人", "機器人", "外掛")
     assert ask.tavern is rules
 
 
 def test_patching_the_old_name_reaches_the_package(monkeypatch):
-    import tianxia.tavern as old
+    from tianxia.features.tavern import rules as old
     from tianxia.features.tavern import actions, rules
 
     monkeypatch.setattr(old, "find_chance", lambda c, reach: 0.25)

@@ -10,7 +10,7 @@ from test_prologue_web import DRIVER as BASE_DRIVER
 
 import server
 import webharness
-from tianxia import errands, letters
+from tianxia.features.companions import errands, letters
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow, pytest.mark.whole_content]
 

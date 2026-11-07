@@ -960,7 +960,8 @@ def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_
     """atlas 在共用規則層裡、最外層與函式裡都不 import 包（出陣包 sortie、sortie_duel 換成共用層的 territory.on、conquest.duel_on），
     不直接讀換之前讀的 fs_asking、tagalong（改問核心的 omen_base.fs_answering、travel_base.following）；兩邊留的是同一個函式物件。
     先證明掃描看得到：換之前那三行（split/trunk febd38d8 的原文：atlas 第 17 行、siege_how 與 order_how 裡的延後 import）抓得到 3 處。"""
-    from tianxia import conquest, sortie_duel
+    from tianxia import conquest
+    from tianxia.features.sortie import duel_rules as sortie_duel
     from tianxia.core import omen_base, travel_base
     from tianxia.features.military import fs_rules
     from tianxia.features.sortie import duel_rules

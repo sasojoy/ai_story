@@ -6,7 +6,9 @@ import random
 
 import pytest
 
-from tianxia import bot, cultivation, howto, skillview
+from tianxia import bot
+from tianxia.features.cultivation import cultivation
+from tianxia import howto, skillview
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

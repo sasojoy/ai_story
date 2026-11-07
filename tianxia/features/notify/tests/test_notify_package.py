@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import server
 import server_push
-from tianxia import notices as old_name
+from tianxia.features.notify import notices as old_name
 from tianxia.core import features as features_core
 from tianxia.features import notify as package
 from tianxia.features.notify import notices, webpush

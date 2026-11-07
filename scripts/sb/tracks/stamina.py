@@ -36,7 +36,7 @@ class StaminaScenario(WorldScenario):
 
     def pair(self) -> tuple[str, str]:
         """（埋伏的人站的地方, 路的另一頭）：第一對兩頭都不是城鎮的路（照地點 id 排序，connections 的順序）。"""
-        from tianxia import ambush
+        from tianxia.features.stamina_plays import ambush_rules as ambush
 
         for a in sorted(self.c.locations):
             for to in self.c.locations[a].connections:

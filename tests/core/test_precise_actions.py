@@ -62,7 +62,7 @@ def test_unstamped_season_keeps_the_old_rules():
 
 def test_season21_boss_is_twice_a_week():
     from tianxia import calendar
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import duel_rules
 
     game = _game("season21", at="julu_altar", faction="huang")
     s, c = game.state, game.content
@@ -187,7 +187,8 @@ def test_no_after_fight_event_needs_a_fight_any_more():
 
 
 def test_a_wrong_way_of_sensing_gives_xinde_and_does_not_lock():
-    from tianxia import insights, sensing
+    from tianxia import insights
+    from tianxia.features.sense import sensing
 
     game = _game(at="yingshui")
     s, c = game.state, game.content
@@ -278,7 +279,7 @@ def _strike(game, at="changshe"):
 
 def test_a_strike_bounty_says_practice_where_precise_is_on():
     """FB-420：找素材不打仗了，討伐的說明寫練功（懸賞卡、告示、紙上都是這一句）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _game()
     b = _strike(game)
@@ -326,7 +327,7 @@ def test_a_pool_of_only_the_borrowed_ones_is_not_capped():
 
 def test_a_ranger_reads_only_practice_on_a_strike_bounty():
     """散人不出陣：討伐只寫練功（STRIKE_PRACTICE）；投靠了陣營的人寫練功或出陣（FB-420 之後 QA）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _game()
     b = _strike(game)

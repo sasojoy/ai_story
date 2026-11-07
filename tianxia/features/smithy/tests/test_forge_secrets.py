@@ -8,7 +8,9 @@ from collections import Counter
 import pytest
 
 from conftest import real_content
-from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, secret_recipes, smithing, team, weapons
+from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, secret_recipes
+from tianxia.features.smithy import smithing
+from tianxia import team, weapons
 from tianxia.content import ContentError, validate
 from tianxia.models import ForgeSecret, ForgeSide
 from tianxia.state import Equipment, GearFind, Manual, Weapon, WeaponRecipe, new_game_state

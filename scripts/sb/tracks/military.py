@@ -154,7 +154,7 @@ class MilitaryScenario(Scenario):
 
     def seat(self) -> None:
         """挑地點：每個陣營押糧的起點與終點（內容的插槽表第一條有這個陣營的戰線）、有戰線的地方（hub）、第 3 4 階行動做得了的地方。"""
-        from tianxia import rank_actions
+        from tianxia.features.military import rank_rules as rank_actions
         from tianxia.rules import front_of
 
         c = self.c

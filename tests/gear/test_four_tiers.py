@@ -221,7 +221,7 @@ def test_tier4_is_not_grain():
 
 
 def test_gift_refuses_tier4():
-    from tianxia import social
+    from tianxia.features.peers import social
 
     a, b = _pair()
     a.state.player.materials = {"gang_4": 2, "gang_1": 3}
@@ -280,7 +280,7 @@ def test_tier4_armor_cut_is_20():
 
 
 def test_tier4_forge_costs_300():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     c = real_content()
     assert smithing.price(c, 4) == 300 and smithing.price(c, 4, "armor") == 300
@@ -288,7 +288,7 @@ def test_tier4_forge_costs_300():
 
 def test_tier4_temper_takes_one_tier_one_material_and_pays_150():
     """鐵匠鋪與合成流程 3.7：淬煉的料固定一階，工錢照裝備的階（四階 150）；以前四階裝備收三階以上的料（temper_floor）已拿掉。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _econ_game(bag={"gang_1": 1, "gang_3": 1, "gang_4": 1})
     s, c = game.state, game.content
@@ -311,7 +311,7 @@ def test_aux_three_tiers_apart():
 
 
 def test_arms_bounty_tier4_is_x6():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     c = real_content()
     w = _gear(tier=4)
@@ -337,7 +337,7 @@ def _forge_game(bag):
 
 
 def test_named_tier4_gets_a_table_name_and_bonus():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _forge_game({"gang_4": 2})
     s, c, w = game.state, game.content, game.world
@@ -352,7 +352,7 @@ def test_named_tier4_gets_a_table_name_and_bonus():
 
 
 def test_named_roll_does_not_shift_game_rng():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     draws = []
     for chance in (0.0, 1.0):
@@ -366,7 +366,7 @@ def test_named_roll_does_not_shift_game_rng():
 
 def test_divine_recipe_still_beats_named():
     from tianxia import forge_secrets as fs
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _forge_game({"kuai_4": 1, "rou_4": 1})
     s, c, w = game.state, game.content, game.world
@@ -379,7 +379,7 @@ def test_divine_recipe_still_beats_named():
 
 
 def test_go_option_hints_named_for_tier4_main():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _forge_game({"gang_4": 1, "gang_3": 1})
     s, c, w = game.state, game.content, game.world
@@ -391,7 +391,7 @@ def test_go_option_hints_named_for_tier4_main():
 
 def test_the_shop_forge_line_hints_named_for_tier4_main():
     """FB-341：店面的開爐說明（/api/smith_line）跟一步一步選單的開爐鈕一樣，主料是四階時多那一句。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _forge_game({"gang_4": 1, "gang_3": 1})
     s, c, w = game.state, game.content, game.world
@@ -458,7 +458,7 @@ def test_divine_piece_says_tier4():
 
 
 def test_forging_a_divine_now_costs_300():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     c = real_content()
     assert smithing.price(c, smithing.tier_of(c, "kuai_4")) == 300
@@ -531,14 +531,14 @@ def test_rules_never_name_a_recipe():
 
 
 def test_pick_pair_keeps_a_lone_tier4():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _econ_game(bag={"gang_4": 1, "gang_3": 3})
     assert smithing._pick_pair(game.state, game.content, "剛", []) == ("gang_3", "gang_3")
 
 
 def test_pick_pair_opens_tier4_with_two():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _econ_game(bag={"gang_4": 1, "rou_4": 1, "gang_3": 3})
     main, aux = smithing._pick_pair(game.state, game.content, "剛", [])

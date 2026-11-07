@@ -120,7 +120,8 @@ class TavernScenario(Scenario):
         """殺手那一場定死：tier 給了，tavern.find_chance 換成 1、單次判定照 tier（本人這一邊的結果，照樣用掉那一場的一個亂數），
         記下殺手威力 ÷ 本人威力；tier 是 None，find_chance 換成 0（擲了、找不到）。換的都是模組屬性（tianxia.tavern 是包裡 rules 的別名）。
         也記下殺手擲的那一下的打聽度（find_chance 拿到的 reach：藏行跡扣 hide_reach；一個都沒有＝殺手沒擲）。"""
-        from tianxia import encounter, tavern
+        from tianxia import encounter
+        from tianxia.features.tavern import rules as tavern
 
         real_find, real_resolve = tavern.find_chance, encounter.resolve_encounter
         seen: list[float] = []
@@ -175,7 +176,7 @@ class TavernScenario(Scenario):
 
     def seat(self) -> None:
         """站好位置、給銀兩與名望（直接改資料庫）；季上擺兩張通緝（孟星魂、郭大路：揭了的通緝不必先查也雇得了殺手、名氣 +1）。"""
-        from tianxia import tavern
+        from tianxia.features.tavern import rules as tavern
         from tianxia.state import Bounty
 
         for who, loc in self.SEATS.items():
@@ -402,7 +403,7 @@ class TavernScenario(Scenario):
         三個 deliver 的前後再各夾一格會寫紀錄的：前一格護衛補帳（_deliver_guard_credits）、後面翻地的守城分紅（_deliver_conquest，有領地
         爭奪的季）——三行整段挪過它們（例：挪到 _deliver_big_events 前面、挪到 _marks_tick 之後）也看得出來。_marks_tick、
         _stance_annals、_zhuan_tick 只寫行狀、不讀惡名，跟三個 deliver 的先後只能靠這兩格看。"""
-        from tianxia import figure_aid
+        from tianxia.features.figure_acts import figure_aid
         from tianxia.state import Bounty, ConquestPayout, Letter
 
         c = self.c
@@ -528,7 +529,8 @@ class TavernScenario(Scenario):
         測試內容沒有酒肆、沒有陣營：略過。"""
         from collections import Counter
 
-        from tianxia import bot, bot_policy, server_bots, tavern
+        from tianxia import bot, bot_policy, server_bots
+        from tianxia.features.tavern import rules as tavern
         from tianxia.bot_runner import BotRunner
         from tianxia.engine import Game
         from tianxia.state import BotProfile

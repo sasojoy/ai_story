@@ -121,7 +121,11 @@ class RelayScenario(Scenario):
 
     def seed(self, who: str) -> None:
         """擺好六格裡五格等著鎖外工作的東西（決戰那一格在 scribe 一軌）：一封還沒重寫的信、一句場邊那一句、該換閒談的酒肆、一批月旦評、一張〈天下形勢〉的單。這份內容沒有的那一格略過（寫出來）。"""
-        from tianxia import arena_crowd, letters, tavern, xingshi, yuedan
+        from tianxia.features.bout import arena_crowd
+        from tianxia.features.companions import letters
+        from tianxia.features.tavern import rules as tavern
+        from tianxia.features.territory_acts import xingshi
+        from tianxia.features.figure_acts import yuedan
         from tianxia.state import CrowdNote, Letter, XingshiTicket, YuedanEntry
 
         place = next((i for i in sorted(self.c.locations) if tavern.tavern_at(self.c, i)), None) if tavern.on(self.c) else None

@@ -6,7 +6,8 @@
 
 import pytest
 
-from tianxia import cultivation, skillview, team
+from tianxia.features.cultivation import cultivation
+from tianxia import skillview, team
 from tianxia.battlelog import new_record
 from tianxia.models import Breakthrough, Config
 

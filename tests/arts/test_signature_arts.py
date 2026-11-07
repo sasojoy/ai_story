@@ -9,11 +9,14 @@ import pytest
 from conftest import real_content
 from test_content import copy_fixture, edit_json
 
-from tianxia import companion_agent, library, skillview, team, traits
+from tianxia.features.companions import companion_agent
+from tianxia import library, skillview, team, traits
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
-from tianxia import arts, library, mingtie, roster, signature, skillview, tactics, team
+from tianxia import arts, library
+from tianxia.features.peers import mingtie
+from tianxia import roster, signature, skillview, tactics, team
 
 
 def _game(content=None):

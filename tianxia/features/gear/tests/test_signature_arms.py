@@ -9,7 +9,10 @@ import pytest
 
 from conftest import idle_step, next_season, real_content
 from test_treasures import _game, _gear_root, _won
-from tianxia import equipment, figures, forge_secrets, naming, rules, signature_arms, smithing, team, treasures, weapons
+from tianxia import equipment, figures, forge_secrets, naming, rules
+from tianxia.features.gear import signature_arms
+from tianxia.features.smithy import smithing
+from tianxia import team, treasures, weapons
 from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, load_content
 from tianxia.encounter import EncounterResult

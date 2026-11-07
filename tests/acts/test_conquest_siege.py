@@ -4,33 +4,43 @@ from __future__ import annotations
 import pytest
 
 from conquest_kit import announce, conquest_game, go, join, plain_game
-from tianxia import battle_instance, battlelog, conquest, conquest_day, rules, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import rules, siege
 from tianxia.features.battle import siege_rules
 from tianxia.state import BattleRecord
 import random
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import battle_instance, conquest
-from tianxia.battle_instance import SiegeInfo
+from tianxia.features.battle import instance as battle_instance
+from tianxia import conquest
+from tianxia.features.battle.instance import SiegeInfo
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.database import SCHEMA_VERSION
 from tianxia.sqlite_world import open_world
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import battle_instance, conquest, siege
-from tianxia.battle_instance import GUARD
+from tianxia.features.battle import instance as battle_instance
+from tianxia import conquest, siege
+from tianxia.features.battle.instance import GUARD
 import inspect
 import server
 from conquest_kit import announce, conquest_game, go, join, win_sortie
-from tianxia import bot_policy, conquest, conquest_day, orders, ranks, siege
+from tianxia import bot_policy, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import orders, ranks, siege
 from tianxia.features.military import order_cards
 from tianxia.engine import Game
 from tianxia.state import Order
-from tianxia import battle_instance, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, plain_game, press
 from tianxia import conquest, howto
 from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, press
-from tianxia import conquest, mapdata, orders, siege
+from tianxia import conquest
+from tianxia.features.map import mapdata
+from tianxia import orders, siege
 from fastapi.testclient import TestClient
 from conftest import real_content
 from conquest_kit import conquest_rules

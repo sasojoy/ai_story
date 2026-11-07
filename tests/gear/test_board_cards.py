@@ -13,7 +13,8 @@ from test_prologue_web import DRIVER as PROLOGUE_DRIVER
 
 import server
 import webharness
-from tianxia import forge_secrets, leaderboard, smithing
+from tianxia import forge_secrets, leaderboard
+from tianxia.features.smithy import smithing
 from tianxia.characters import open_characters
 from tianxia.state import GearFind, new_game_state
 

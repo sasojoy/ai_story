@@ -7,7 +7,7 @@ import pytest
 from conftest import FixedRandom
 from test_content import copy_fixture, edit_json
 from tianxia import bot, event_llm, team
-from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
+from tianxia.features.battle.instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
 from tianxia.content import ContentError, load_content
 from tianxia.engine import FREE_TEXT_OPTION, FreeTextRequest, Game
 from tianxia.models import Condition, Effect, FreeTextChoice
@@ -22,7 +22,7 @@ from tianxia import event_llm
 from tianxia.models import Effect, FreeTextChoice
 import json
 from tianxia import event_llm, rules
-from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
+from tianxia.features.battle.instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
 from tianxia.engine import EVIL_ANNAL, Game
 from tianxia.models import Effect, FactionDef, FreeTextChoice
 

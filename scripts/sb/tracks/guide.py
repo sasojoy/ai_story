@@ -149,7 +149,7 @@ class GuideScenario(Scenario):
 
     def hut(self) -> None:
         """草廬前七步（照 Scenario.prologue，全走 API；每一下回的 /api/main 帶著框）；測試內容是說書人第一步（探索）。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.WALKER
         if not self.in_hut(who):

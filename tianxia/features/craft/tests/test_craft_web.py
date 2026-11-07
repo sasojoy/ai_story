@@ -289,7 +289,7 @@ _CANCEL = """return (async () => {
 
 def _drafted(game, intent=True):
     """自創走到擺式（還沒付心得）或立意之後（付了，draft.paid 是實際收的那一筆）。"""
-    from tianxia import create
+    from tianxia.features.craft import create
 
     game.state.player.stats["xinde"] = 5000
     assert game.create_begin("武學", "拳腳")

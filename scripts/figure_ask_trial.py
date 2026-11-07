@@ -37,7 +37,9 @@ os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp()) / "figure_ask_t
 
 from unittest import mock  # noqa: E402
 
-from tianxia import companion_agent, figure_life, parley  # noqa: E402
+from tianxia.features.companions import companion_agent  # noqa: E402
+from tianxia import figure_life  # noqa: E402
+from tianxia.features.companions import parley  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import PLAN_OPTION, Game, say_text  # noqa: E402
 from tianxia.features.companions import parley_actions  # noqa: E402  （全部拆包第 20 批：這幾個清單與提示搬進人物情誼包，Game 沒有留委派）

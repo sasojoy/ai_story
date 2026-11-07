@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import insight_fx, library, prologue, sensing, skillview, team
+from tianxia import insight_fx, library, prologue
+from tianxia.features.sense import sensing
+from tianxia import skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 

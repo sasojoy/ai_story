@@ -8,7 +8,8 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import bounties, equipment, mounts, shopview
+from tianxia.features.bounties import rules as bounties
+from tianxia import equipment, mounts, shopview
 from tianxia.content import validate
 from tianxia.models import FactionDef
 from tianxia.state import Bounty, Equipment

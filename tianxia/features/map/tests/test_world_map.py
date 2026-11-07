@@ -9,7 +9,8 @@ from conftest import classic_rules, real_content
 from conquest_kit import conquest_game
 from pydantic import ValidationError
 
-from tianxia import atlas, content as content_mod, conquest, mapdata, worldgeo
+from tianxia import atlas, content as content_mod, conquest
+from tianxia.features.map import mapdata, worldgeo
 from tianxia.engine import Game
 from tianxia.models import FactionInk
 from tianxia.sqlite_world import open_world

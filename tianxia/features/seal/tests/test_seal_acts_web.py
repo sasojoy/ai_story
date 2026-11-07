@@ -18,7 +18,8 @@ from test_seal_acts import _do, _holder, _person, _use
 import server
 import webharness
 from conftest import real_content
-from tianxia import seal, seal_acts
+from tianxia.features.seal import seal
+from tianxia import seal_acts
 from tianxia.features.seal import acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game

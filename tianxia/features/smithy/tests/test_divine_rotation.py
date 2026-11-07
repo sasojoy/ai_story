@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from conftest import real_content
 
-from tianxia import divine, equipment, forge_secrets, smithing
+from tianxia import divine, equipment, forge_secrets
+from tianxia.features.smithy import smithing
 from tianxia.sqlite_world import open_world
 from tianxia.features.admin import routes as admin_routes
 
@@ -175,7 +176,7 @@ def _smith(c, w, name, level=20):
 
 
 def _forge_sword(c, w, game, rid=SWORD):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     recipe = c.forge_secrets[rid]
     main = next(m.id for m in c.materials.values() if m.tier == 4 and m.attribute == recipe.main.attribute)

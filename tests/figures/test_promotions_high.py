@@ -10,7 +10,10 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import FixedRandom, classic_rules, real_content
-from tianxia import bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
+from tianxia import bot_policy, calendar
+from tianxia.features.faction import defection
+from tianxia.features.guide import enlist
+from tianxia import figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg

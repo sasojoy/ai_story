@@ -8,7 +8,8 @@ from test_season21_daily import _first, _game
 
 import server
 import webharness
-from tianxia import bounties, shopview
+from tianxia.features.bounties import rules as bounties
+from tianxia import shopview
 
 pytestmark = pytest.mark.whole_content
 

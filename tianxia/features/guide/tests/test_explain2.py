@@ -467,7 +467,7 @@ METHODS = (("柔", "看水"), ("剛", "打水"), ("快", "追風"), ("慢", "靜
 
 
 def _feeling(game, methods=METHODS, prologue=False, seed=0):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     from tianxia.models import InsightScene, SenseMethod
 
     scene = InsightScene(
@@ -494,7 +494,7 @@ def _card(game):
 
 
 def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     scene = _feeling(game)
     text, help_, _ = _card(game)
@@ -511,7 +511,7 @@ def test_the_feeling_card_says_what_an_insight_is_and_frames_the_methods(game):
 
 def test_the_kind_labels_come_back_with_one_switch(game, monkeypatch):
     """企劃者要恢復鈕上的心意：sensing.SHOW_KINDS 改 True（一行），伺服器就照做法給 tags，網頁照它畫。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     monkeypatch.setattr(sensing, "SHOW_KINDS", True)
     scene = _feeling(game)
@@ -539,7 +539,7 @@ def test_the_feeling_hint_is_the_same_whichever_method_is_right(game):
 
 
 def test_no_method_help_in_the_hut_or_while_drawing(game):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     _feeling(game)
     game.state.player.sensing.stage, game.state.player.sensing.method = "draw", "柔"

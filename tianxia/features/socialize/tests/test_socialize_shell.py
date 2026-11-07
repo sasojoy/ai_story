@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 import llm_queue
 import server
-from tianxia import companion_agent
+from tianxia.features.companions import companion_agent
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 # autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）

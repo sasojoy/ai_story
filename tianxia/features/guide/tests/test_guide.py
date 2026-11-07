@@ -1,5 +1,5 @@
-from tianxia import guide
-from tianxia.guide import next_hint, note_action, quest_text, tutorial_active, tutorial_intro
+from tianxia.features.guide import rules as guide
+from tianxia.features.guide.rules import next_hint, note_action, quest_text, tutorial_active, tutorial_intro
 from tianxia.state import Journey
 import pytest
 

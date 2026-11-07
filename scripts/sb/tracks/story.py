@@ -125,7 +125,7 @@ class StoryScenario(Scenario):
         return bool(jianfa(self.c, self.world.get_season(), "storylines"))
 
     def signing_on(self) -> bool:
-        from tianxia import checkin
+        from tianxia.features.checkin import checkin
 
         return bool(checkin.on(self.c, self.world.get_season()))
 
@@ -185,7 +185,7 @@ class StoryScenario(Scenario):
 
     def mirror_power(self, who: str) -> None:
         """影子此刻的難度（Game._mirror_squad，輸過幾次削幾次）。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
         from tianxia.engine import Game
 
         self.begin()
@@ -200,7 +200,7 @@ class StoryScenario(Scenario):
 
     def walk(self, who: str, rounds: int) -> None:
         """長篇奇事往下走：多日段等完（entered 往前挪）、站到這一段做得了的地方、眼前有事件就選第一個亮的、沒有就按「未了之事」那一顆。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         for _ in range(rounds):
             state = self.chars.load(who)
@@ -229,7 +229,7 @@ class StoryScenario(Scenario):
 
     def forward_to(self, day: int) -> None:
         """管理者快轉（一天一天），快轉到簽到的第 day 天（沒有簽到的設定快轉同樣的天數）。"""
-        from tianxia import checkin
+        from tianxia.features.checkin import checkin
 
         for _ in range(day):
             s = self.world.get_season()
@@ -287,7 +287,7 @@ class StoryScenario(Scenario):
 
     def walk_first(self) -> None:
         """周問舟在潁川荒野遇上賣兒契（內容寫的線）：走幾步停在半路。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         who = self.WALKER
         line = self.c.storylines.get(self.REAL)
@@ -366,7 +366,7 @@ class StoryScenario(Scenario):
     def walk_on(self) -> None:
         """前半停在半路的周問舟過了期限（快轉了五天，賣兒契的期限早過了：往 late 走、收卡）；杜歸舟後半才在潁川書院遇上臥龍岡的地（內容寫的線），
         一路走完。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         who, line = self.WALKER2, self.c.storylines.get("wolong")
         if line is None or not self.lines_on():

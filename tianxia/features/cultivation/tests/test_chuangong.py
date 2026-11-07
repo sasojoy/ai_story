@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import bot, chuangong, encounter, skillview, team
+from tianxia import bot
+from tianxia.features.cultivation import chuangong
+from tianxia import encounter, skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
@@ -170,7 +172,7 @@ def test_the_battle_weight_counts_followers_not_their_power():
 
 
 def test_defecting_drops_the_drill_with_the_followers():
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     real, game = _real_game()
     game.chuangong(team.FOLLOWER_KEY + "0", "str")

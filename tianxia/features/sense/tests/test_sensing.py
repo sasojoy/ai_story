@@ -5,7 +5,11 @@ from unittest import mock
 import pytest
 from conftest import FixedRandom, next_season, real_content
 
-from tianxia import bot, fusion, glyph, insight_llm, insights, journal, naming, sensing, treasures
+from tianxia import bot, fusion
+from tianxia.features.sense import glyph, insight_llm
+from tianxia import insights, journal, naming
+from tianxia.features.sense import sensing
+from tianxia import treasures
 from tianxia.engine import Game
 from tianxia.features.sense import bots as sense_bots
 from tianxia.models import InsightScene, SenseMethod

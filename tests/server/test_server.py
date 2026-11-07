@@ -18,10 +18,13 @@ import server
 import server_push
 import webharness
 from conftest import at, old_explore, season_one_events
-from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, journal, naming, skillview, sqlite_world,
-    tale, team,
-)
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import calendar
+from tianxia.features.companions import companion_agent
+from tianxia import database, fight_llm, journal, naming, skillview, sqlite_world
+from tianxia.features.tale import tale
+from tianxia import team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game

@@ -6,7 +6,9 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import library, skillview, smithing, tactics, team, traits
+from tianxia import library, skillview
+from tianxia.features.smithy import smithing
+from tianxia import tactics, team, traits
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 from tianxia.state import PLAYER, Equipment

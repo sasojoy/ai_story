@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 import webharness
-from tianxia import create, moves
+from tianxia.features.craft import create
+from tianxia import moves
 from tianxia.content import load_content
 from tianxia.engine import Game
 

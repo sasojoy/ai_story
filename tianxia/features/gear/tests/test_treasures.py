@@ -216,7 +216,7 @@ def test_amount_is_neutral_unless_worn_and_switched_on(content, state):
 
 def test_cultivate_treasure_now_multiplies_the_last_step(content, state, world):
     """武學重構：衝品拿掉了，寶物「cultivate」改乘絕學這一步——服丹衝關（force_odds）照 ×1.2（夾 max_chance 之前）。"""
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
     _book(content)
     content.config.legend_item_bonus = 20  # 照悟性 5 是 20%，乘 1.2 是 24%，不碰 max_chance
     forcing = cultivation.force_odds(state, content, world, "nope")
@@ -597,7 +597,7 @@ def test_each_season_carries_its_tianji_for_the_weekly_dice(content, world):
 
 
 def test_issue_hangs_prizes_on_the_first_two_strikes_of_each_side_without_moving_the_board():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import WorldState
     content = real_content("week7")
 
@@ -620,7 +620,7 @@ def test_issue_hangs_prizes_on_the_first_two_strikes_of_each_side_without_moving
 
 
 def test_prize_rolls_hang_on_tianji_week_and_side():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     content = real_content()
     cfg = content.config.treasures
     rng = random.Random("bounty-prize|4|1|guan")
@@ -629,7 +629,7 @@ def test_prize_rolls_hang_on_tianji_week_and_side():
 
 
 def test_only_the_first_to_finish_a_prize_strike_gets_the_treasure(board):
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     content, world = board
     b = _strike(world, "treasure")
     note = treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS["treasure"])
@@ -647,7 +647,7 @@ def test_only_the_first_to_finish_a_prize_strike_gets_the_treasure(board):
 
 
 def test_a_prize_with_no_room_waits_in_held_gear_and_arrives_later(board):
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     content, world = board
     content.config.weapons.rack_cap = 1
     b = _strike(world, "treasure")
@@ -668,7 +668,8 @@ def test_a_prize_with_no_room_waits_in_held_gear_and_arrives_later(board):
 
 
 def test_a_horse_prize_is_a_good_horse_rolled_on_season_name_and_bounty(board):
-    from tianxia import bounties, mounts
+    from tianxia.features.bounties import rules as bounties
+    from tianxia import mounts
     content, world = board
     b = _strike(world, "horse")
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
@@ -684,7 +685,7 @@ def test_a_horse_prize_is_a_good_horse_rolled_on_season_name_and_bounty(board):
 
 def test_the_weekly_board_changes_with_tianji_but_not_at_zero():
     """週初掛單原本的兩份亂數（懸賞榜第一批 bounty|…、第二批 bounty-give|…）天機不是 0 時才帶天機：測試與量表（天機 0）的基準不位移。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import WorldState
     content = real_content("week7")
 
@@ -699,7 +700,7 @@ def test_the_weekly_board_changes_with_tianji_but_not_at_zero():
 
 def test_the_weekly_seeds_are_byte_identical_at_tianji_zero_and_carry_it_after():
     """天機是 0 時兩份週初亂數的種子一字不差（基準不位移）；不是 0 時兩份都在最後接「|天機」。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import WorldState
     content = real_content("week7")
 

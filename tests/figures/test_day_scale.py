@@ -10,7 +10,10 @@ from unittest import mock
 import pytest
 from conftest import FixedRandom, install_season_one, walk_to
 
-from tianxia import calendar, companion_agent, howto, rules, sensing
+from tianxia import calendar
+from tianxia.features.companions import companion_agent
+from tianxia import howto, rules
+from tianxia.features.sense import sensing
 from tianxia.engine import Game
 from tianxia.features.travel import road_actions
 from tianxia.models import InsightScene, SenseMethod, TimetableEvent

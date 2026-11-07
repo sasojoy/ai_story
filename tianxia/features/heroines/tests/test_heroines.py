@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_one
+from tianxia.features.explore import explore_rules as explore_one
 from tianxia.features.heroines import actions, rules
 from tianxia.models import Condition
 from tianxia.rules import day_seconds

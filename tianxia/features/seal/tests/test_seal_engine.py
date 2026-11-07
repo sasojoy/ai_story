@@ -7,7 +7,7 @@ import pytest
 
 from conftest import at
 from test_seal import SALT, _ended, _registry, sealed  # noqa: F401  sealed 是夾具
-from tianxia import seal, seal_duel
+from tianxia.features.seal import seal, duel_rules as seal_duel
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 

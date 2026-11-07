@@ -7,7 +7,10 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import allied, ambush, encounter, territory, works
+from tianxia import allied
+from tianxia.features.stamina_plays import ambush_rules as ambush
+from tianxia import encounter, territory
+from tianxia.features.stamina_plays import works_rules as works
 from tianxia.characters import CharacterStore
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -271,7 +274,7 @@ def test_the_newbie_window_is_48_real_hours(real, world):
 
 def test_both_sides_get_a_report_and_an_annals_line(real, world):
     """戰報（kind ambush）與行狀（交手那一類，留對手的名號）兩邊都記。"""
-    from tianxia import annals
+    from tianxia.features.zhuan import standing as annals
 
     owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
     _player(real, world, "官乙", "guan", "changshe")

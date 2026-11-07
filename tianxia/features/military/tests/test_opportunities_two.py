@@ -15,7 +15,11 @@ import pytest
 
 from conftest import idle_step, real_content
 from tianxia.models import OppDef
-from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules, team
+from tianxia import bot, bot_policy, calendar
+from tianxia.features.faction import defection
+from tianxia import figures
+from tianxia.features.military import fs_rules as foreshadow, opp_rules as opportunities
+from tianxia import rules, team
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game

@@ -14,7 +14,9 @@ import server
 import webharness
 import zhuan_html
 from conftest import next_season
-from tianxia import annals, biography, epiphany, gender
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia.features.sense import epiphany
+from tianxia import gender
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parents[4]

@@ -269,7 +269,7 @@ class Scenario:
 
     def prologue(self) -> None:
         """序章走到雪恥（出陣開著時 act:train 叫雪恥、不算出陣次數；關著叫遊歷）：照 tests/season/test_real_content._walk_the_hut 的步驟，全走 API。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.NEWBIE
         view = self.main(who)
@@ -669,7 +669,7 @@ class DuelScenario(Scenario):
 
     def notices(self, who: str) -> None:
         """手機通知那一串（notices.current：server 的通知看守讀同一份；duel:open、duel:answered）。"""
-        from tianxia import notices
+        from tianxia.features.notify import notices
 
         state = self.chars.load(who)
         state.world = self.world.get_season()

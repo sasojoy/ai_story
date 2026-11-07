@@ -7,10 +7,11 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, classic_rules, install_season_one, walk_to
-from tianxia import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, library, rules, skillview, team,
-    traits,
-)
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, calendar
+from tianxia.features.companions import companion_agent
+from tianxia import encounter, fight_llm, library, rules, skillview, team, traits
 from tianxia.features.map import layers
 from tianxia.characters import open_characters
 from tianxia.content import load_content

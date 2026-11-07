@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
-from tianxia import tavern
+from tianxia.features.tavern import rules as tavern
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

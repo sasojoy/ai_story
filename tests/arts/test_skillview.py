@@ -1,6 +1,8 @@
 import pytest
 
-from tianxia import arts as arts_mod, cultivation, library, rules, skillview, team, traits
+from tianxia import arts as arts_mod
+from tianxia.features.cultivation import cultivation
+from tianxia import library, rules, skillview, team, traits
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import InsightFx
 from test_cultivation import STRONG

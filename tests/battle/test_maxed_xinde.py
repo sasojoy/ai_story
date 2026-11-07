@@ -7,7 +7,8 @@ from unittest import mock
 from conftest import real_content
 from conquest_kit import conquest_rules
 
-from tianxia import battle_instance, team
+from tianxia.features.battle import instance as battle_instance
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -85,7 +86,7 @@ def test_maxed_showdown_pay_writes_xinde():
 
 def test_maxed_bounty_reward_converts_in_every_season():
     """第 5 批只在 21 天季的懸賞換；第 8 批起每一種季都換（週末這裡）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import Bounty
 
     game = _game(faction=None)
@@ -128,7 +129,7 @@ def test_the_now_card_has_no_red_xinde_after_a_maxed_win():
 
 def test_maxed_showdown_pay_and_bounty_say_the_conversion_line():
     """FB-452：決戰軍餉與懸賞交差在滿級時也寫「已達頂級，經驗化作心得 +N。」。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import Bounty
 
     game = _game()

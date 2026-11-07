@@ -10,10 +10,13 @@ import pytest
 from conquest_kit import announce, conquest_game
 from tianxia import calendar, conquest, territory
 from conquest_kit import announce, conquest_game, go, join, plain_game, win_sortie
-from tianxia import annals, calendar, conquest, materials
+from tianxia.features.zhuan import standing as annals
+from tianxia import calendar, conquest, materials
 import re
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import bot_base, bot_policy, conquest, conquest_day, orders
+from tianxia import bot_base, bot_policy, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import orders
 from tianxia.engine import Option
 from tianxia.state import BotProfile, Order
 import random
@@ -23,10 +26,14 @@ from tianxia import conquest, encounter, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from conquest_kit import announce, contribution, conquest_game, go, join, plain_game, win_sortie
-from tianxia import bot_policy, conquest, howto, orders, rules, sortie, territory, works
+from tianxia import bot_policy, conquest, howto, orders, rules
+from tianxia.features.sortie import rules as sortie
+from tianxia import territory
+from tianxia.features.stamina_plays import works_rules as works
 from tianxia.state import BotProfile
 from conquest_kit import conquest_game, go, join, plain_game, press
-from tianxia import bot_policy, conquest, howto, orders, sortie
+from tianxia import bot_policy, conquest, howto, orders
+from tianxia.features.sortie import rules as sortie
 from conquest_kit import conquest_game, go, join, plain_game
 from tianxia import conquest, howto
 from conquest_kit import conquest_game, go, join, win_sortie
@@ -36,7 +43,9 @@ from tianxia import conquest, orders
 from tianxia.features.military import order_cards
 from conquest_kit import conquest_game, go, join, plain_game, win_sortie
 from conquest_kit import conquest_game, join, plain_game, press
-from tianxia import conquest, mapdata, orders
+from tianxia import conquest
+from tianxia.features.map import mapdata
+from tianxia import orders
 
 
 def _game():

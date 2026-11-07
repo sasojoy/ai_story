@@ -113,7 +113,8 @@ class RampartScenario(Scenario):
     def post(self, key: str, sync: str) -> None:
         """時程表上排一場（同 tests/kit/conquest_kit.announce：不看階與門檻），此刻就等著開集結；下一個同步的人開成集結（world.start_pending_battle）。
         開打在季時間半小時之後。不走管理者工具：它併不成兩軍（下第二張之前第一張就開了），這一軌最要的就是兩軍併成一場。"""
-        from tianxia import conquest, conquest_day
+        from tianxia import conquest
+        from tianxia.features.territory_acts import conquest_day
         from tianxia.state import SiegeSlot
 
         attackers, loc = self.SIEGES[key]
@@ -161,7 +162,7 @@ class RampartScenario(Scenario):
 
     def finish(self, key: str, plan: dict[str, str], before_last=None) -> None:
         """照回合出招打到收場；回合沒結就把時鐘推過期限。before_last：最後一回合之前改一下那一場（只叫一次）。收場之後每一位收補送。"""
-        from tianxia import battle_instance
+        from tianxia.features.battle import instance as battle_instance
 
         first = next(iter(plan))
         for _ in range(14):
@@ -287,7 +288,7 @@ class RampartScenario(Scenario):
     @staticmethod
     def frozen_slot(w, loc: str):
         """官軍下了戰書、還沒開集結的一場（只為了凍結那一塊，放回去時整份蓋掉）。"""
-        from tianxia import conquest_day
+        from tianxia.features.territory_acts import conquest_day
         from tianxia.state import SiegeSlot
 
         return SiegeSlot(id=f"rampart-z-{loc}", key=w.conquest.settled_key, loc=loc, minute=21 * 60, at=w.time + 86400, muster_at=w.time + 80000,
@@ -379,7 +380,7 @@ class RampartScenario(Scenario):
         """兩軍相爭：那一塊的隊伍暫時拿掉（開集結那一下才讀），沒有守將、兩軍正面打；最後一回合之前戰局擺回中線，出同一招，相持。"""
         if not self.on():
             return
-        from tianxia import battle_instance
+        from tianxia.features.battle import instance as battle_instance
 
         _, loc = self.SIEGES["D"]
         place, land = self.c.locations[loc], self.c.scenario.territory

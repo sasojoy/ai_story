@@ -131,7 +131,9 @@ def test_a_new_insight_or_art_line_gets_the_shine():
 
 def test_the_rework_lines_shine_only_when_something_new_arrives():
     """武學重構的新句子：自創成了（create.CREATED_LINE）拿到一門新武學，亮；把意境裝進槽、拆下來、揣摩加深強度都沒拿到新東西，不亮。"""
-    from tianxia import arts, create, fusion
+    from tianxia import arts
+    from tianxia.features.craft import create
+    from tianxia import fusion
 
     assert journal._line_class(create.CREATED_LINE.format(kind="武學", name="斷水刀", grade="中品")) == "tx-line tx-new"
     for line in (
@@ -149,7 +151,7 @@ def test_reaching_the_peerless_rank_shines():
 
 
 def test_the_create_cap_refusal_does_not_shine():
-    from tianxia import create
+    from tianxia.features.craft import create
 
     assert journal._line_class(create.CAP_LINE.format(n=3)) == "tx-line"
 

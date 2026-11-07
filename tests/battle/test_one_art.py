@@ -4,8 +4,10 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import battle_instance, companion_agent, encounter, fusion, journal, styles, team
-from tianxia.battle_instance import BattleInstance, BattleParticipant
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.companions import companion_agent
+from tianxia import encounter, fusion, journal, styles, team
+from tianxia.features.battle.instance import BattleInstance, BattleParticipant
 from tianxia.encounter import Boost, EncounterResult
 from tianxia.martial_arts import Insight, MartialArt
 from tianxia.models import BattleTuning
@@ -144,7 +146,7 @@ def test_the_join_snapshot_carries_the_road_only_with_season_one_on(game):
 
 def test_a_mixed_side_beats_a_same_road_side_of_equal_strength(definition_for_round):
     """兩邊各四個人、份量一樣、出同一招：路數雜的那一邊把戰局推過去。"""
-    from tianxia.battle_instance import MOVES  # noqa: PLC0415
+    from tianxia.features.battle.instance import MOVES  # noqa: PLC0415
 
     definition = definition_for_round
     battle = battle_instance.start_muster(definition, now=0)

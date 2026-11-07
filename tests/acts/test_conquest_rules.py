@@ -2,7 +2,8 @@
 from __future__ import annotations
 from conftest import real_content
 from conquest_kit import conquest_rules, plain_game
-from tianxia import conquest, sortie
+from tianxia import conquest
+from tianxia.features.sortie import rules as sortie
 from tianxia.models import BlockDef, ConquestRules
 from tianxia.features.admin import routes as admin_routes
 from tianxia.state import WorldState
@@ -14,16 +15,23 @@ from tianxia.models import BlockDef
 from conquest_kit import conquest_game, plain_game
 from tianxia import conquest, rules, territory
 from tianxia import conquest, territory
-from tianxia import conquest, sensing, territory
+from tianxia import conquest
+from tianxia.features.sense import sensing
+from tianxia import territory
 from tianxia.features.explore import explore_rules
 import calendar as pycal
 from datetime import datetime
-from tianxia import conquest, conquest_day
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
 from conquest_kit import announce, conquest_game, join, plain_game
-from tianxia import conquest, conquest_day, howto, orders
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import howto, orders
 from tianxia.state import Order
 from tianxia.world import keep_showdowns_on_time
-from tianxia import conquest_day, howto, xingshi
+from tianxia.features.territory_acts import conquest_day
+from tianxia import howto
+from tianxia.features.territory_acts import xingshi
 from tianxia.state import DayNote
 from tianxia import conquest, rules
 import json
@@ -37,17 +45,23 @@ from conftest import real_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import bot_policy, mapview, orders, sortie
+from tianxia import bot_policy
+from tianxia.features.map import mapview
+from tianxia import orders
+from tianxia.features.sortie import rules as sortie
 from tianxia.state import BotProfile, Order
 import re
 import unicodedata
-from tianxia import battle_instance as bi
-from tianxia import conquest, seal, territory
+from tianxia.features.battle import instance as bi
+from tianxia import conquest
+from tianxia.features.seal import seal
+from tianxia import territory
 from tianxia import world as world_mod
 from conquest_kit import _new, conquest_rules, go, join
 from conftest import next_season, real_content
 from jianfa_kit import no_jianfa
-from tianxia import atlas, conquest, library, seal
+from tianxia import atlas, conquest, library
+from tianxia.features.seal import seal
 from tianxia import world as world_rules
 from tianxia.world_state import SealCache, SealRegistry
 

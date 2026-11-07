@@ -48,7 +48,7 @@ def test_every_strategy_picks_a_real_move():
     m = _load()
     content = load_content(ROOT / "content")
     definition = content.battles["changshe_fire"]
-    from tianxia import battle_instance as bi
+    from tianxia.features.battle import instance as bi
     from tianxia.models import MOVES
 
     battle = bi.start_muster(definition, now=0)
@@ -80,7 +80,7 @@ def test_the_generals_mode_runs_and_commanders_carry_weight():
     m = _load()
     content = load_content(ROOT / "content", profile="week7")
     definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
-    from tianxia import generals
+    from tianxia.features.battle import generals
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 

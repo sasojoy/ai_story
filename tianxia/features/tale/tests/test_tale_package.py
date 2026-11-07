@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 import server
-from tianxia import tale as old_name
+from tianxia.features.tale import tale as old_name
 from tianxia.core import features as features_core
 from tianxia.features import tale as package
 from tianxia.features.tale import tale

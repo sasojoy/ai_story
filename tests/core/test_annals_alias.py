@@ -2,7 +2,7 @@
 舊名上每個公開名字都拿得到同一個物件。"""
 from __future__ import annotations
 
-from tianxia import annals
+from tianxia.features.zhuan import standing as annals
 from tianxia.core import annal_base
 from tianxia.features.zhuan import standing
 

@@ -27,7 +27,11 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_chuangong_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import atlas, battle_instance, bot, encounter, sensing, team  # noqa: E402
+from tianxia import atlas  # noqa: E402
+from tianxia.features.battle import instance as battle_instance  # noqa: E402
+from tianxia import bot, encounter  # noqa: E402
+from tianxia.features.sense import sensing  # noqa: E402
+from tianxia import team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

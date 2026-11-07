@@ -14,7 +14,8 @@ import pytest
 
 import server
 from conftest import FixedRandom, copy_test_content, real_content
-from tianxia import battle_instance, battlelog, figures, front_lines, journal, rules, team, world
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, figures, front_lines, journal, rules, team, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game

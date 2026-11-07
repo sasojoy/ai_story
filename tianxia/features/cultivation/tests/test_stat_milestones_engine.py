@@ -10,7 +10,11 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, plain_game, ready
 
-from tianxia import bot, explore_one, growth, library, rise, sensing, team
+from tianxia import bot
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import growth, library, rise
+from tianxia.features.sense import sensing
+from tianxia import team
 from tianxia.battlelog import stat_notes
 from tianxia.encounter import EncounterResult
 
