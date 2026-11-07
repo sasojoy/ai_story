@@ -155,6 +155,17 @@ CORE_EVENT_DELEGATES = {  # 只有 event_check 自己叫的 _answer_branch、_de
     "_free_text_of", "_branches", "event_free_text_prompt", "free_text_request", "answer_event", "add_gamble_narration",  # 隨口應對
 }
 
+# core_views（第二輪第 81 批）：畫面的本體在 tianxia/core/status_view.py、page_view.py，Game 上本體只有一行 `return status_view.<名>(self, …)` 或 `return page_view.<名>(self, …)` 的方法。
+# 外面沒人叫的 _attr_rows、_calendar_status、_when_text、_bulletin_events、_news_on_cards、_chip、_now_entry、_now_start 不留委派
+CORE_VIEW_DELEGATES = {
+    "status_data", "status_text",  # 狀態列
+    "action_notes",  # 行動列底下那幾行
+    "_shop_say", "_shop_after", "_shop_open", "_shop_live", "shop_view",  # 店面
+    "bulletin", "season_result", "place_minutes",  # 公告、結算卡、分鐘
+    "trends_text", "rumors_text", "rumor_layers", "chronicle_text",  # 見聞與江湖史
+    "_day_stamp", "latest_entry_html", "journal_top_html", "now_entry_html", "now_front", "journal_html", "shows_battle_card", "battle_extra_html",  # 江湖紀錄與「剛剛」
+}
+
 # 被測試換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：event_check 裡叫它們一律經 ctx，不直接叫模組裡的本體。
 # 模組裡的函式 → Game 上的委派、誰換掉它
 EVENT_CHECK_VIA_CTX = {

@@ -1296,6 +1296,46 @@ def test_a_core_service_pick_with_too_many_files_falls_back_to_core_and_smoke(mo
     assert picked.core and picked.smoke and any("太多" in w for w in picked.why)
 
 
+def _real_service(module: str, function: str):
+    """第 81 批開的真檔：改 module 這個函式（真檔的原文、hunk 落在那個 def 那一行）挑到什麼。"""
+    rel = f"tianxia/core/{module}.py"
+    src = (ROOT / rel).read_bytes().decode("utf-8").replace("\r\n", "\n")
+    line = next(i for i, text in enumerate(src.splitlines(), 1) if text.startswith(f"def {function}("))
+    return test_for.pick([rel], hunks_of=_added(rel, src, line))
+
+
+@pytest.mark.parametrize("module, function, wants", [
+    ("status_view", "status_data", {"test_renown_status.py", "test_jianghu_page_web.py", "test_explain2.py", "test_fronts.py"}),
+    ("page_view", "shop_view", {"test_jianghu_page_web.py", "test_shop.py", "test_shop2.py", "test_journal.py", "test_rumor_layers.py", "test_front_lines.py"}),
+])
+def test_the_real_view_files_pick_their_ground_not_core_and_smoke(module, function, wants):
+    """真的 core/status_view.py、core/page_view.py 照 CORE_SERVICES 的底挑（第 81 批量的：status、jianghu 各只有 1 個檔，真的在測 status_data 的 test_explain2 24 處、
+    test_fronts 10 處要另外寫進底；page_view 的 test_shop2 24 處、test_journal 45 處也是）。"""
+    picked = _real_service(module, function)
+    names = {p.name for p in picked.files}
+    assert wants | {"test_feature_boundaries.py"} <= names
+    assert not picked.core and not picked.smoke
+    assert len(names) <= test_for.IMPORT_CAP
+
+
+def test_a_real_view_helper_without_a_word_goes_with_the_functions_that_call_it():
+    """_core_refs 只看 ast.Name：模組裡直接叫才算得到呼叫端（服務檔經 ctx._x 互叫的不往上算，所以這兩份模組裡互叫都直接叫）。
+    _chip 自己的名字認不出功能（沒有測試檔叫 chip），連用到它的 battle_extra_html，比它自己的底多挑到 battle 那一群。"""
+    assert test_for.service_word("_chip") == ""
+    chip = _real_service("page_view", "_chip").files
+    assert _real_service("page_view", "battle_extra_html").files == chip
+    assert len(chip) > len(_real_service("page_view", "_timeline").files)
+
+
+def test_the_view_delegates_are_read_from_the_engine():
+    """Game 上委派給 status_view、page_view 的（test_for.core_delegates 照語法樹認）跟邊界測試的 CORE_VIEW_DELEGATES 是同一批；模組裡的函式名與方法名相同。"""
+    import test_feature_boundaries
+    found = test_for.core_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8"))
+    views = {m: f for m, (mod, f) in found.items() if mod in ("status_view", "page_view")}
+    assert set(views) == set(test_feature_boundaries.CORE_VIEW_DELEGATES)
+    assert all(m == f for m, f in views.items())
+
+
 def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
     """第 72 批留的：pick 裡 named（檔名 → 路徑）被 game_api 那一條蓋掉，game_api.py 排在內容檔、web/ 前面時 test_content、test_real_content、
     test_content_packs、test_server 都掉（排後面才挑得到）。"""

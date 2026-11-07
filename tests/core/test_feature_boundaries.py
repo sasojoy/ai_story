@@ -30,6 +30,7 @@ from tianxia.core.registry import SHARED  # noqa: E402  共用規則層（第 11
 from boundary_tables import (  # noqa: E402  名單（最後的值）在同一個資料夾的 boundary_tables.py，這個檔只有規則
     ARENA_RANK_READERS, ATLAS_PACKAGE_FIELDS, BUS_METHODS,
     BUS_SUBSCRIBERS, CORE_DELEGATE_CALLERS, CORE_EVENT_DELEGATES,
+    CORE_VIEW_DELEGATES,  # core_views
     CORE_TOP_DELEGATE_CALLERS, EFFECT_DEFECT_SCAN, EVENT_CHECK_VIA_CTX,
     GAME_DELEGATE_CALLERS, GAME_DIRECT, GAME_IMPORTS,
     PREPARING_GUARDED, RELAY_OWNERS, RENAMED_PARAMS,
@@ -533,6 +534,31 @@ def test_the_event_check_calls_the_patched_game_methods_through_ctx():
     via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
     assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= via
     assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= CORE_EVENT_DELEGATES
+
+
+# core_views（第二輪第 81 批）
+VIEW_MODULES = {"status_view", "page_view"}
+
+
+def test_the_game_reaches_the_views_only_through_its_one_line_delegates():
+    """Game 上叫 status_view、page_view 的只有 CORE_VIEW_DELEGATES 那幾個一行的委派（多一處就是把畫面的邏輯寫回 Game、或委派加了邏輯）；
+    engine._MENU_CORE 的 "open" 那一格指到 page_view.OPEN_CORE（_shop_open 讀的是同一份，核心不 import engine）。"""
+    from tianxia import engine
+    from tianxia.core import page_view
+
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    methods = [f for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    users = {f.name for f in methods if any(isinstance(n, ast.Name) and n.id in VIEW_MODULES for n in ast.walk(f))}
+    one_liners = set()
+    for f in methods:
+        body = [n for n in f.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+        call = body[0].value if len(body) == 1 and isinstance(body[0], ast.Return) else None
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                and call.func.value.id in VIEW_MODULES and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+            one_liners.add(f.name)
+    assert one_liners == CORE_VIEW_DELEGATES
+    assert users == CORE_VIEW_DELEGATES
+    assert engine._MENU_CORE["open"] is page_view.OPEN_CORE
 
 
 # ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──
