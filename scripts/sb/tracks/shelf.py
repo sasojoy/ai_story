@@ -18,7 +18,7 @@ class ShelfScenario(Scenario):
 
     前半（照段落順序）：setup、seat 開季、兩個人就位；ledger_front 重新載入一份內容（season21、week7 讀 content/，test 讀測試內容），
     Content 前一半的欄位一格一行（筆數、整格的雜湊、第一個與最後一個鍵：dict 的先後算行為，同名蓋掉的先後也在裡面），再加人物簡介
-    （FIGURE_INTROS：殼在 import 時自己讀，不經過 Content）；walk 兩個人看畫面；half 停在寫到一半：翻書人身上掛著 events/sects.json 的
+    （FIGURE_INTROS：socialize/intro.py 在 import 時自己讀、不經過 Content；殼留別名）；walk 兩個人看畫面；half 停在寫到一半：翻書人身上掛著 events/sects.json 的
     yingchuan_join、抄經客掛著 events/social_runan.json 的 sc_rn_feast，都還沒選（測試內容沒有這兩則，都掛測試內容的第一則）。
     後半是重開的行程：resume 重新登入、看畫面；ledger_back 重新載入一份內容，後一半的欄位一格一行；settle 接手的程式照事件 id 找到內容、
     選掉第一個選項；bots 兩個假人（一軍一個）擺好之後 BotRunner 跑 4 輪；season 收季、開下一季。

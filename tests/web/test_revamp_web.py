@@ -172,8 +172,10 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     性子隨互動變了（另一串做）時多「如今」與變化紀錄。每一位大勢人物都有一份。"""
     import json
 
+    from tianxia.features.socialize import intro as socialize_intro
+
     figures = json.loads((server.ROOT / "content" / "figures.json").read_text(encoding="utf-8"))
-    assert all(server.figure_intro(f["id"]) and server.figure_intro(f["id"])["nature"] for f in figures)
+    assert all(socialize_intro.figure_intro(f["id"]) and socialize_intro.figure_intro(f["id"])["nature"] for f in figures)
     m = server.main_view(wan)
     hejin = next(f for f in m["figures_here"] if f["id"] == "hejin")
     assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []

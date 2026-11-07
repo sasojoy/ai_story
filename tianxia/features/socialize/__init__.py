@@ -110,12 +110,12 @@ class SocializeFeature(Feature):
     def status_slots(self) -> tuple[StatusHook, ...]:
         """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
         if self._status_slots is None:
-            from . import menus  # noqa: PLC0415
+            from . import intro, menus  # noqa: PLC0415
 
             self._status_slots = (
-                # 介面重整（2026-11-05）：此地人物那一排；像在 web/img/figures/full/<id>.webp 才給 face（殼的 figure_face）
+                # 介面重整（2026-11-05）：此地人物那一排；像在 web/img/figures/full/<id>.webp 才給 face（殼的 figure_face）；簡介在這一包的 intro.py（第二輪第 83 批）
                 StatusHook("main", "figures_here", lambda ctx, frame: {"figures_here": [
-                    {**f, "face": frame.shell.figure_face(f["id"]), "intro": frame.shell.figure_intro(f["id"], ctx)} for f in menus.figures_here_view(ctx)]}),
+                    {**f, "face": frame.shell.figure_face(f["id"]), "intro": intro.figure_intro(f["id"], ctx)} for f in menus.figures_here_view(ctx)]}),
             )
         return self._status_slots
 

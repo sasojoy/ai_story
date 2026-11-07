@@ -98,6 +98,7 @@ from tianxia.features.figure_acts import routes as figure_acts_routes
 from tianxia.features.tavern import routes as tavern_routes
 from tianxia.features.territory_acts import routes as territory_acts_routes
 from tianxia.features.zhuan import routes as zhuan_routes
+from tianxia.features.socialize import intro as socialize_intro  # 人物簡介：第二輪第 83 批搬進交友包
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
@@ -152,29 +153,8 @@ def figure_face(cid: str) -> str | None:
     return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
 
 
-def _figure_intros() -> dict:
-    """點大勢人物那一層的人物簡介（content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
-    try:
-        data = json.loads((ROOT / "content" / "figure_intros.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
-
-
-FIGURE_INTROS = _figure_intros()
-
-
-def figure_intro(cid: str, game: Game | None = None) -> dict | None:
-    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。人物性子（功能包 persona；共用規則層 persona_rules.view）開著、他換過段時
-    now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」），拉鋸與「你勸過他 N 次」接在最後；
-    關著、沒換過段 now 是 None、history 是空的，畫面不畫這兩格。簡介檔沒寫他、他卻有性子的，只畫如今與紀錄。"""
-    row = FIGURE_INTROS.get(cid) or {}
-    shift = persona_rules.view(game.state, game.content, cid) if game is not None else None
-    if not row and not (shift and (shift["now"] or shift["history"])):
-        return None
-    extra = [x for x in ((shift or {}).get("torn"), (shift or {}).get("mine")) if x]
-    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""),
-            "now": (shift or {}).get("now"), "history": [*(shift or {}).get("history", []), *extra] if shift else []}
+# 人物簡介搬進交友包 tianxia/features/socialize/intro.py（第二輪第 83 批）；殼留一行別名（測試與 same_behavior 讀 server.FIGURE_INTROS，同一個物件）
+FIGURE_INTROS = socialize_intro.FIGURE_INTROS
 
 
 def horse_art() -> list[str]:
