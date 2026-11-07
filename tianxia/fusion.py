@@ -16,6 +16,15 @@
 整個重驗再登記、收費）。沒給 proposed 才在這裡叫模型（整季機器人、腳本、測試）。
 「已經有了」一律照功法的 id 認（改名之後顯示的名字跟 id 不一樣）。
 打造（smithing）借用這裡的品質機率零件：QualityOdds、odds_from_points、roll_quality、quality_odds_text、天時地利三個判斷。
+
+共用規則層（第二輪第 87 批收進 registry.SHARED）：不 import 功能包與舊名的別名；私有意境的取名與收進存檔走同一層的 insights。
+改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界（收進來之前挑 76 個檔）。另外跑（-n 4）直接讀到它的：
+tests/arts/ 的 test_in_lock_model_timeout、test_library、test_secret_recipes；tests/battle/test_one_art；tests/bots/ 的 test_bot、test_bot_policy、test_bot_runner；
+tests/core/test_journal；tests/server/test_server；tianxia/features/ 的 craft/tests/test_forge_picks、cultivation/tests/test_arts_pages_two、test_cultivation、
+guide/tests/test_prologue、map/tests/test_real_map、peers/tests/test_discuss、test_social、seal/tests/test_seal_duel、test_seal_mandate、
+sense/tests/test_epiphany、test_sensing、smithy/tests/test_armor_forge、test_forge_divine、test_forge_secrets、test_shop、test_weapons_forge；
+這幾包的 tianxia/features/<包>/tests/test_<包>_shell：battle、bounties、bout、companions、craft、cultivation、guide、map、military、peers、seclusion、sense、socialize、tale、travel。
+經門下頁 skillview 讀到它的另外 35 個檔，看 scripts/test_for.py tianxia/skillview.py 挑的那一份。
 """
 from __future__ import annotations
 

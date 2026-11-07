@@ -1,4 +1,12 @@
-"""事件抽選與選項顯示。選項的效果處理在 engine.py（因為可能牽涉戰鬥與事件串接）。"""
+"""事件抽選與選項顯示。選項的效果處理在 engine.py（因為可能牽涉戰鬥與事件串接）。
+
+共用規則層（第二輪第 87 批收進 registry.SHARED）：不 import 功能包與舊名的別名。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界（收進來之前挑 23 個檔）。
+另外跑（-n 4）直接讀到它的：tests/bots/test_event_rotation；tests/core/ 的 test_event_tiers、test_events、test_jianfa_switch、test_outcomes_answer、test_precise_actions；
+tests/figures/ 的 test_figures、test_narration、test_promotions_huang、test_stamina_balance；tests/web/test_week_card_web；
+tianxia/features/ 的 companions/tests/test_stances_fix6、explore/tests/test_explore_one_2f、test_explore_variety、legacy/tests/test_legacy、map/tests/test_real_map、
+military/tests/test_foreshadow、test_opportunities、test_rank_actions、test_real_foreshadows、socialize/tests/test_socialize_variety；slow 的 tests/season/test_real_content
+（tests/core/test_event_tiers 整檔也是 slow）。
+"""
 from __future__ import annotations
 
 import random

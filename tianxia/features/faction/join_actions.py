@@ -16,7 +16,7 @@ from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULE
 from tianxia.core import bounty_base
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
-from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡抽得到的拜門派事件）
+from tianxia.events import event_candidates  # 共用規則層（事件：這裡抽得到的拜門派事件）
 from tianxia.rules import STANCE_NAMES, season_one
 
 from . import defection, lean_actions

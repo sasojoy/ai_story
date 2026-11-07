@@ -20,9 +20,9 @@ from collections import Counter
 from collections.abc import Callable
 
 from tianxia import armor, equipment, forge_secrets, four_tiers, library, naming, silver, team, traits, weapons
-from tianxia import fusion  # 過渡：待搬（合成與揣摩 fusion，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二；第 41 批 PM 認定第 10 條）
-from tianxia.fusion import QualityOdds  # 過渡：待搬（fusion，SHARED_LATER）
+from tianxia.fusion import QualityOdds  # 共用規則層（合成與揣摩）
 from tianxia.insights import merged_attribute
 from tianxia.core.smith_base import (  # noqa: F401  打造單子「讀」的那一小半在核心（全部拆包第 40 批），re-export 同一批
     _PICKED_FRAMES, _STEP_LINES, ARMOR_ASK_AUX, ARMOR_ASK_MAIN, ARMOR_KIND, ASK_AUX, ASK_KIND, ASK_MAIN, CANCELLED, GO_VERB, PICKED_AUX,

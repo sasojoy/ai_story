@@ -77,13 +77,15 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。mapview：mapview、mapdata 第 49 批搬進輿圖包、舊名成了別名，
     換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。core_step：step、weekcard 第 36 批收進核心本體（MODULES），
     改 step 跑核心測試、不往上找，換成還是舊模組的事件抽選 events——經 narration 挑到只 import narration 的 test_narration
-    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。）"""
-    picked = test_for.pick(["tianxia/events.py"])
-    assert "test_narration.py" in {p.name for p in picked.files}
-    assert "events" not in test_for.imported(next(p for p in picked.files if p.name == "test_narration.py"))
+    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
+    第二輪第 87 批 events、narration 收進共用規則層（共用層只挑自己檔名＋煙霧），換成還是舊模組的門下頁 skillview——經 shopview 挑到只 import shopview 的 test_bounty_tags
+    〔量的：改 skillview 挑 54 個檔、core 與 smoke 都假、dependents("skillview") 只有 shopview；第 88 批切 skillview 時再換〕。）"""
+    picked = test_for.pick(["tianxia/skillview.py"])
+    assert "test_bounty_tags.py" in {p.name for p in picked.files}
+    assert "skillview" not in test_for.imported(next(p for p in picked.files if p.name == "test_bounty_tags.py"))
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("events")
-    assert {"narration"} <= ups
+    ups = test_for.dependents("skillview")
+    assert {"shopview"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
 
 
@@ -184,11 +186,13 @@ def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monke
     # 其餘沒搬的檔 sensing、seal、smithing 是只有幾行的別名，不算）：沒有一個舊模組超過 100，所以上限壓到 30（直接 import 它的測試檔 27 個，在上限之內）；scripts/test_for.py 的 IMPORT_CAP 不動
     # 第二輪第 75 批：test_for 看穿 tests/kit 之後，fusion 直接的 42 個檔（server_kit 帶進來 15 個）、往上找到的 34 個：上限 30 仍是「太多」（core、smoke 照舊真），
     # 「直接的比上限少」不成立了。這一條守的是「太多就不併往上找到的」，所以換成那一群一個都沒併；scripts/test_for.py 的 IMPORT_CAP 不動
-    monkeypatch.setattr(test_for, "IMPORT_CAP", 30)
-    picked = test_for.pick(["tianxia/fusion.py"])
+    # 第二輪第 87 批：fusion 收進共用規則層（照上面那一條挑），例子換成還是舊模組的 skillview；它往上找到的只有 11 個檔，30 不算太多，上限壓到 5
+    # （量的：挑 43 個檔、core 與 smoke 都真、往上找到的 11 個一個都沒併、why 寫「太多」）；scripts/test_for.py 的 IMPORT_CAP 不動
+    monkeypatch.setattr(test_for, "IMPORT_CAP", 5)
+    picked = test_for.pick(["tianxia/skillview.py"])
     assert picked.core and picked.smoke
-    direct = {t for t in test_for.all_tests() if "fusion" in test_for.reached(t) or t.stem == "test_fusion" or t.stem.startswith("test_fusion_")}
-    via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("fusion")} - direct
+    direct = {t for t in test_for.all_tests() if "skillview" in test_for.reached(t) or t.stem == "test_skillview" or t.stem.startswith("test_skillview_")}
+    via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("skillview")} - direct
     assert via and not picked.files & via
     assert any("太多" in w for w in picked.why)
 

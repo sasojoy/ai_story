@@ -310,7 +310,7 @@ def fame_ranges(content: Content, season: WorldState) -> dict[str, FameRange]:
     - "big"：動手打贏的（劇情戰）、一次性與奇遇（events.is_rare）、新立門戶福緣；
     - "loss"：任何一個效果扣的（檢定失手、做了丟臉的事；寫成負數，(最多扣, 最少扣)）。
     每堆（最小, 最大）；這一堆沒有就不在回傳裡。"""
-    from tianxia.events import is_rare  # noqa: PLC0415  過渡：待搬（events → rules → …：只有這裡用到）
+    from tianxia.events import is_rare  # noqa: PLC0415  共用規則層（events → rules → …：只有這裡用到）
 
     off = rules.season_one_off(content, season, "events")
     piles: dict[str, list[int]] = {"common": [], "big": [], "loss": []}

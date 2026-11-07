@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
 from tianxia.core import bounty_base
 from tianxia import conquest  # 共用規則層（站在自家領地多給的那一個）
-from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
+from tianxia import events as event_rules  # 共用規則層（事件：抽不抽得到、藏起來的、照輪替抽）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
 from tianxia import insights  # 共用規則層（悟不悟得出）
 from tianxia import journal, team
@@ -33,7 +33,7 @@ from tianxia import story_base  # 共用規則層（一條線的底座：開頭�
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
 from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
-from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
+from tianxia.events import event_candidates, pick_event  # 共用規則層（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
 from tianxia.rules import day_turn, jianfa
 

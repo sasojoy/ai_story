@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import gender, insights, naming
-from tianxia import fusion  # 過渡：待搬（合成與揣摩 fusion，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia.core import presence
 from tianxia.rules import season_one
 

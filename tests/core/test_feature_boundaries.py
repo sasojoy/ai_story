@@ -338,7 +338,7 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import fusion, territory\n", m) == {"fusion"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion（總表寫了、先不收的 SHARED_LATER，還是舊模組）
+    assert outside_imports("from . import shopview, territory\n", m) == {"shopview"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion；第二輪第 87 批 fusion 也收進了共用規則層，換成 shopview（SHARED_LATER，還是舊模組，第 93 批才動它）
     # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算）；第 52 批：tale 也成了戰記包的別名，換 bot（舊模組、之後不成包、這一波不動）
     assert outside_imports("def f():\n    from .bot import pick\n", m) == {"bot"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()

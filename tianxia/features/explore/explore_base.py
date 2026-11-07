@@ -18,7 +18,7 @@ import random
 from tianxia import insights  # 共用規則層（這裡悟不悟得出）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬四景）
 from tianxia import renown, team, territory, training, treasures  # 核心、共用規則層
-from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
+from tianxia.events import event_candidates, pick_event  # 共用規則層（事件：候選、抽一則）
 from tianxia.models import EXPLORE_BRANCHES, ExploreBranch, Location, Squad
 
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import fusion  # 過渡：待搬（合成與揣摩：fusion 留共用層，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia import insight_fx, journal  # 共用規則層、核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章只准照劇本合成）
 from tianxia import skillview  # 過渡：待搬（煉製頁的預覽與提示；共用規則層 SHARED_LATER）
