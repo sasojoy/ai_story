@@ -30,7 +30,8 @@
   名字的功能群（檔名有名字第一個認得的字的測試檔，連模組裡用到它的；service_groups）＋這個檔的底＋自己檔名的＋邊界測試；函式以外或指名了卻沒有差 → 核心測試＋煙霧。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
-  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
+  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。改到內容驗證（最外層、名字 check_*、validate_*、參數有 need 的 def，
+  或它用到的小函式與常數；沒有差就照整個檔）再加 test_content.py（shared_content_checks，第二輪第 95 批：content.validate 在函式內叫，import 圖看不到）。
 - tianxia/engine.py：hunk 落在一行委派 → 那一包的 tests/＋核心契約＋內文寫到那個方法名的測試檔（engine_delegates，舊檔裡是胖方法、
   這一次才換成委派的不算委派）。落在其餘的方法（Game 的門面與核心）→ 核心測試＋煙霧＋內文寫到那個方法名的測試檔，同 core_module_callers：
   寫到它的超過 IMPORT_CAP 個檔不併（choose、sync 這種）；方法以外 → 核心測試＋煙霧。核心測試本來就含核心契約，只改到委派的另外帶核心契約。
@@ -50,7 +51,10 @@
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
   包裡的內容檔（tianxia/features/<包>/content/，全部拆包第 62 批）兩條都走：內容這一條＋那一包的 tests/＋核心契約。
   內容這一條再加 test_content_packs.py（新檔忘了寫進 Feature.content 時載入不報錯，只有它抓得到）。
-- web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+- web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。web/app.js、web/main.js 另外照 hunk 挑（shell_js_writers，第二輪第 95 批）：
+  落在頂層的 function、const、let 或事件處理的 case（shell_spans）→ 寫到那個名字或 case 標籤的測試檔（整檔 slow 的網頁測試連 slow 一起跑）
+  ＋test_shell_web.py、test_server_bots.py＋煙霧；只改名字以外的註解或空行只有固定那幾個；沒有測試寫到的名字也只有固定那幾個（執行期才炸的靠每日整套）。
+  沒有差、落在名字以外的程式行、任一個名字超過 SHELL_NAME_CAP 個檔寫到（choose、pageJianghu 這種）→ 上面的原挑法。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
