@@ -2,7 +2,7 @@
 
 探索撞上有所感（卡上三四個做法、選對擲中進感悟狀態、一筆畫下心中的形或順其自然）、自己畫字悟出的私有意境（看圖取名的三段式、首悟紀錄）、特殊頓悟（擲中感悟時再擲：心靈拷問 → 心境小試 → 心魔 → 取名，收進一份神品意境）。全部拆包第 24 批搬進來（計畫 `docs/superpowers/plans/2026-11-01-有所感包-第1批.md`）。網頁那一半（`SENSE_DRAW`、`SENSE_SIZE`、畫布、`godName`……）第 66 批切進 `web/sense.js`。
 
-- 導覽：`docs/guide/武學與成長.md` 的「有所感與頓悟（功能包 `tianxia/features/sense/`）」那一節；規則細節照舊在那一份的 `tianxia/epiphany.py` 那一條與〈行動與地盤〉的靜心感悟。
+- 導覽：`docs/guide/武學與成長.md` 的「有所感與頓悟（功能包 `tianxia/features/sense/`）」那一節；規則細節照舊在那一份的 `tianxia/features/sense/epiphany.py` 那一條與〈行動與地盤〉的靜心感悟。
 - 設計稿：沒有版本號——悟意境設計（企劃者 2026-10-06「甲案加乙案」：第零節有所感、0.2 看圖取名、0.2a 退路與暖機、0.2b 私有意境與首悟）；意境提示設計（第一、二節：每個地點最濃的意境）；特殊頓悟設計稿（企劃者 2026-10-26，https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）。
 
 ## 裡面有什麼

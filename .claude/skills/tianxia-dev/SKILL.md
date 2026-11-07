@@ -141,7 +141,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 輿圖 QA 的 `cmp_off.py`（第 4 批複驗那一份，`main_view`、`map_state`、`map_base`、存檔，三種季各約 50 萬位元組、一支一分鐘內）**不含玩法說明**：動到 `howto` 的批另跑一支只印 `Game.howto_text()`（散人、官軍、黃巾各一份）的對照（輿圖第三版第 5 批，`95096217` 對 HEAD 三種季都一樣）。
 - **一個測試只開一季**：conftest 每個測試給一個 `TIANXIA_DB`，同一個測試裡 `open_world()` 兩次開的是同一份資料庫，第二個 `Game` 讀到第一季的章（7 天季的測試裡 21 天季的 `season_length_days` 變成 7）。要比幾種季就 `parametrize`，一種季一個測試。
 - **「舊季一字不變」用對照證明**（2026-10-20，7 天季 FB-500／501）：
-  - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`server.admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
+  - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`features/admin/routes.py` 的 `admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
   - 網頁：`webharness.run(DRIVER, {..., "app": <舊 app.js 的路徑>})` 用同一份伺服器資料、舊新兩份 app.js 各畫一次比字串；`wholeApp` 的名單只放兩版都有的函式。
     **伺服器送的資料形狀也改了時這樣比會比出假差異**（2026-10-20 FB-502：21 天季多送 `words`，舊 app.js 拿到新資料就把 21 天季當 7 天季）：改成兩邊各用自己的伺服器＋app.js——在舊程式的根目錄用它自己 `tests/` 的 `_render` 跑一次、寫成 JSON，再比。
   - 兩份輸出行數一樣時照行號比：`difflib` 遇到一大段相似的行會錯配，報出其實沒變的行。
