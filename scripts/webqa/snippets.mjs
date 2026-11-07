@@ -25,11 +25,15 @@ export const freeze = ({ mask = true, still = true } = {}) => `(() => { const SE
 export const STABLE_SIG = `(() => { const d = document.documentElement; const s = document.querySelector(".shell"); const r = s ? s.getBoundingClientRect() : null; let x = 2166136261; for (const e of document.querySelectorAll("*")) { const c = e.getAttribute("class") || ""; for (let i = 0; i < c.length; i++) { x ^= c.charCodeAt(i); x = Math.imul(x, 16777619); } x ^= 124; x = Math.imul(x, 16777619); } return innerWidth + "|" + d.scrollHeight + "|" + d.scrollWidth + "|" + (r ? [r.left, r.top, r.width, r.height].join() : "") + "|" + (x >>> 0); })()`;
 
 // every element under body plus ::before and ::after that exist: property text deduplicated by hash inside one scene.
-export const STYLE_DUMP = `(() => { const props = [...getComputedStyle(document.body)].filter((p) => !p.startsWith("--")); const host = location.host; const dict = {}; const els = [];
+// The walk leaves #toast out: it drops its class 3.2 s after showing, on the wall clock, so it flips from side to side (wave D, 002_opening_event and 170_cr_pick2 at 640).
+// The replay keeps it: there both sides get the same snapshot, and that is where a change to the toast's own styles shows.
+const styleDump = (skipToast) => `(() => { const props = [...getComputedStyle(document.body)].filter((p) => !p.startsWith("--")); const host = location.host; const dict = {}; const els = [];
   const fnv = (s, x) => { for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return (x >>> 0).toString(36); };
   const put = (cs) => { const vals = []; for (const p of props) vals.push(cs.getPropertyValue(p)); const t = vals.join("\\u0001").split(host).join("HOST").replace(/\\?v=[0-9a-zA-Z_-]+/g, "?v=X"); const k = fnv(t, 2166136261) + fnv(t, 33554467); dict[k] = t; return k; };
-  for (const el of document.querySelectorAll("body, body *")) { if (/^(SCRIPT|STYLE|LINK)$/.test(el.tagName)) continue; const cls = el.getAttribute("class") || ""; const row = [el.tagName + "." + cls.slice(0, 40), put(getComputedStyle(el))]; for (const ps of ["::before", "::after"]) { const c = getComputedStyle(el, ps); if (c.content !== "none" && c.content !== "normal") row.push(ps, put(c)); } els.push(row); }
+  for (const el of document.querySelectorAll("body, body *")) { if (/^(SCRIPT|STYLE|LINK)$/.test(el.tagName)${skipToast ? ` || el.id === "toast"` : ""}) continue; const cls = el.getAttribute("class") || ""; const row = [el.tagName + "." + cls.slice(0, 40), put(getComputedStyle(el))]; for (const ps of ["::before", "::after"]) { const c = getComputedStyle(el, ps); if (c.content !== "none" && c.content !== "normal") row.push(ps, put(c)); } els.push(row); }
   return { props, els, dict }; })()`;
+export const STYLE_DUMP = styleDump(false);
+export const WALK_STYLE_DUMP = styleDump(true);
 
 export const LAYOUT = `(() => { const d = document.documentElement; const over = [...document.querySelectorAll("#app *")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > innerWidth + 1 && getComputedStyle(e).position !== "fixed"; }).length; return { sw: d.scrollWidth, cw: d.clientWidth, sh: d.scrollHeight, past: over }; })()`;
 

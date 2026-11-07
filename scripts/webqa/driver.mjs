@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
+import { freeze, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
 
 const [label, PAGE, API, OUT, CHROME_PORT] = process.argv.slice(2);
 const ROUND = process.env.QA_ROUND || "c";
@@ -130,7 +130,7 @@ async function grab(file) {
   writeFileSync(join(SHOTS, file), buf);
 }
 async function dumpStyles(id, view, facts) {
-  const d = await ev(STYLE_DUMP);
+  const d = await ev(WALK_STYLE_DUMP);
   facts.sty[view] = sha(d.els.map((r) => r.join(" ")).join("\n"));
   writeFileSync(join(STY, `${id}__${view}.json.gz`), gzipSync(JSON.stringify(d)));
 }
