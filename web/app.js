@@ -1195,6 +1195,28 @@
   }
 
 
+  // 成人內容（features/heroines；設計稿「三位女子出場」第三節，Joy 2026-11-06）：預設關；打開之前先跳確認卡，按了確認才送出。
+  // 這一季的內容沒有女子時伺服器不給 main.heroines，這一格不出現。字句待 joy 潤
+  function adultRow() {
+    const h = S.main && S.main.heroines;
+    if (!h) return "";
+    if (S.adultAsk) {
+      return `<div class="card adult-ask"><p>成人內容是成年角色之間、彼此情願的親密情節，只有你自己看得到，不會寫進傳聞、江湖史或列傳。</p>
+        <p><b>我已年滿十八歲，願意看到成人內容。</b></p>
+        <div class="row"><button class="btn small primary" data-act="adult-yes">確認</button><button class="btn small ghost" data-act="adult-no">取消</button></div></div>`;
+    }
+    return `<label class="toggle"><input type="checkbox" id="adult" ${h.adult ? "checked" : ""}> 成人內容（預設關；打開要確認年滿十八歲）</label>`;
+  }
+
+  async function adultSet(value) {
+    await busy(async () => {
+      const r = await api("/api/heroines/adult", { value });
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+    }, SENT_WAITING);
+  }
+
   function sheetHtml() {
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     const s = S.main.status;
@@ -1206,6 +1228,7 @@
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
         ${renameRow()}
+        ${adultRow()}
         ${pushRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
@@ -2024,6 +2047,8 @@
         case "rename-ask": { const v = (document.getElementById("rename-name") || {}).value || ""; if (v.trim()) { S.renameAsk = v.trim(); render(); } break; }
         case "rename-back": S.renameAsk = null; render(); break;
         case "rename-go": await renameGo(); break;
+        case "adult-yes": S.adultAsk = null; await adultSet(true); break;
+        case "adult-no": S.adultAsk = null; render(); break;
         case "gender-go": S.genderPick = null; await doMain("gender", { value: el.dataset.value }); break;
         case "ad-tab": adTabPick(el.dataset.tab); break; // 管理頁的分頁籤（介面重整）
         case "ad-hold": adHoldClick(el); break; // 危險區：短按只提示要長按（長按在 admin.js 的 pointerdown）
@@ -2423,6 +2448,9 @@
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
+    if (ev.target.id === "adult") { // 成人內容：打開先跳確認卡（勾先放回去，確認了才算），關掉直接送
+      if (ev.target.checked) { ev.target.checked = false; S.adultAsk = true; render(); } else await adultSet(false);
+    }
     if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
       const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
       if (box && v != null) box.value = v;

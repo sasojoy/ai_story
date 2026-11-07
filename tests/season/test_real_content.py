@@ -520,7 +520,7 @@ FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuan
 def test_all_eighteen_historical_figures_are_locked(content):
     """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位；大勢人物擴充〔Joy 2026-10-17〕
     再加 13 位，共 31 位）。"""
-    people = _figures_only(content)  # 一般 NPC 同伴（content/hire.json，features/hire）另外算
+    people = [ch for ch in _figures_only(content) if ch.id not in content.heroines]  # 一般 NPC 同伴（features/hire）、女子（features/heroines）另外算
     assert len(people) == 31
     assert all(ch.kind == "locked" for ch in people)
 
@@ -1357,7 +1357,7 @@ def test_season_one_tells_the_dialogue_model_when_it_is(content):
 
 
 def test_every_figure_has_an_audience_threshold(content):
-    figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction}
+    figures = {cid: ch.audience_fame for cid, ch in content.characters.items() if ch.deep_interaction and cid not in content.heroines}
     newcomers = {"fuxie", "qinjie", "buji", "liupi", "wangyun", "gongsunzan", "tangzhou", "xuchu", "zhangyan", "xushao", "xunyu",
                  "huatuo", "zhangrang"}  # 大勢人物擴充：門檻低（華佗、唐周誰都見），不排進下面那條
     assert len(figures) == 31 and all(fame > 0 for cid, fame in figures.items() if cid not in newcomers)

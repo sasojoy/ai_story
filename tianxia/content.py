@@ -28,7 +28,7 @@ from .models import (
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, PLACE_KINDS, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
-    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, PersonaAxis, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, PersonaAxis, HeroineDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, StoryDef, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -297,6 +297,8 @@ def load_content(root: Path, profile: str | None = None, *, only: str | None = N
         mall=_index(MallItem, _read(at("mall.json"))) if at("mall.json").exists() else {},  # 商城的商品（joy 寫）
         looks=_index(Look, _read(at("looks.json"))) if at("looks.json").exists() else {},  # 擂台形象（功能包 looks）
         relations=[_build(RelationDef, raw) for raw in _read(at("relations.json"))] if at("relations.json").exists() else [],
+        heroines={cid: _build(HeroineDef, raw) for cid, raw in _read(at("heroines.json")).items() if not cid.startswith("_")}
+        if at("heroines.json").exists() else {},  # 女子與隱線（features/heroines）
         personas={cid: [_build(PersonaAxis, raw) for raw in rows] for cid, rows in _read(at("personas.json")).items() if not cid.startswith("_")}
         if at("personas.json").exists() else {},  # 人物性子（features/persona）
         itineraries=[_build(Itinerary, raw) for raw in _read(at("itineraries.json"))] if at("itineraries.json").exists() else [],

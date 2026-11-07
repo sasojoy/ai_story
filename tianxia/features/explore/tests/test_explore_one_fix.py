@@ -241,6 +241,7 @@ def test_the_capped_close_for_a_real_scout_bounty():
 
 def test_a_town_brawl_ending_in_a_draw_reads_as_a_draw_not_a_loss():
     game = ready(jianfa_game(), side="guan", loc="yingchuan")
+    game.content.storylines["duruo"].start.chance = 0  # 陽翟書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是出門打地痞
     assert "town_draw" in explore_one.LINE_KEYS["encounter"] and game.content.outing_lines["encounter"]["town_draw"]
     foe = game.content.squads["dipi"].name
     draws = {line.format(foe=foe, place="", item="") for line in game.content.outing_lines["encounter"]["town_draw"]}

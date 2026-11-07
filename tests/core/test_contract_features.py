@@ -288,6 +288,9 @@ def _dirty(annotation, default):
         return (default or "") + "契約"
     if optional and len(args) == 1 and isinstance(args[0], type) and issubclass(args[0], BaseModel):
         return args[0].model_construct()  # 一份全是預設值的（不驗必填）：跟預設的 None 不一樣就夠
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):  # 一定有的子模型（女子與隱線的 heroines）：頭一格擺髒
+        name, field = next(iter(annotation.model_fields.items()))
+        return default.model_copy(update={name: _dirty(field.annotation, field.get_default(call_default_factory=True))})
     if origin is list:
         # story（全部拆包第 30 批）：lasting 是字串的清單，換季時併進旗標集合（annals 讀旗標的字串開頭），擺 7 會壞；字串的清單擺字串
         return ["x"] if typing.get_args(annotation) == (str,) else [7]

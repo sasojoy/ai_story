@@ -147,6 +147,15 @@ def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
     ]
 
 
+def heroine_ending(state: GameState, content: Content, cid: str) -> str | None:
+    """女子（content/heroines.json，女子與隱線包 features/heroines 讀它；Joy 2026-11-06「開工」）那一條奇事收在哪一個留得下她的
+    結局；不是女子、沒走、還在走、收在別的結局（失敗、季末沒收）是 None。放在共用規則層：placed_characters 要問，共用規則層不 import 包。"""
+    hd = content.heroines.get(cid)
+    progress = None if hd is None else state.player.storylines.get(hd.line)
+    ending = None if progress is None else progress.ending
+    return ending if hd is not None and ending in hd.endings else None
+
+
 def placed_characters(state: GameState, content: Content) -> dict[str, str | None]:
     """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
     None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
@@ -154,6 +163,10 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     out: dict[str, str | None] = {}
     if life_on(content):  # 人物活起來：不是大勢人物的人物照每日行事走到的地方（沒走過的照 talk_at，不寫）
         out.update(state.world.whereabouts)
+    for cid, hd in content.heroines.items():  # 女子：還沒走完她那一條奇事的不在任何地方；結局換了地方的（stay）在那裡
+        ending = heroine_ending(state, content, cid)
+        if ending is None or ending in hd.stay:
+            out[cid] = None if ending is None else hd.stay[ending]
     if not challenge_on(content, state.world):
         return out
     for fid, fig in content.figures.items():

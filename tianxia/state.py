@@ -1037,6 +1037,8 @@ class PlayerState(BaseModel):
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
     persona_notes: dict[str, PersonaNote] = Field(default_factory=dict)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
+    heroines: HeroineNotes = Field(default_factory=lambda: HeroineNotes())  # 女子與隱線（features/heroines）：隱線走到哪，換季重來
+    heroines_adult: bool = False  # 女子與隱線：設定頁的「成人內容」（預設關，打開前確認年滿十八歲；換季照帶）
     errands: list[ErrandState] = Field(default_factory=list)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
@@ -1155,6 +1157,7 @@ QUIET_DEFAULTS = (
     "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
     "legacy",  # 傳承（features/legacy）
     "persona_notes",  # 人物性子（features/persona）
+    "heroines", "heroines_adult",  # 女子與隱線（features/heroines）
 )
 
 
@@ -1413,6 +1416,15 @@ class StoryCard(BaseModel):
     image: str | None = None
     ending: str = ""  # 結局的名字（end 才有）
     failed: bool = False
+
+
+class HeroineNotes(BaseModel):
+    """女子與隱線（功能包 features/heroines；PlayerState.heroines，換季重來；成人內容的開關另外一格 PlayerState.heroines_adult）。steps 是每位女子的隱線應下到第幾段（人物 id → 3 或 4；換季重來）；scene 是此刻端在眼前、還沒選的那一段
+    （「人物 id:段」；None 是沒有）；declined 是婉拒的那一天（人物 id → 遊戲日），同一天不再問。"""
+
+    steps: dict[str, int] = Field(default_factory=dict)
+    scene: str | None = None
+    declined: dict[str, int] = Field(default_factory=dict)
 
 
 class PersonaNote(BaseModel):
