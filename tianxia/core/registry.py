@@ -275,6 +275,11 @@ SHARED: dict[str, str] = {
     "narration": "事件旁白每週改寫：核心的事件檢定 core/event_check、engine 讀；只 import 核心與同一層的 events",
     "fusion": "合成與揣摩：煉製、鐵匠鋪、玩家互動（論武）三包叫，假人 bot、門下頁 skillview 讀；私有意境的取名與收進存檔第 87 批搬進共用層 insights，不再 import 有所感包。"
               "不進任何一包（第二輪總表不做的清單）",
+    # core_shared（第二輪第 88 批：art_cards 從 skillview 切出來；leaderboard 從邊界測試的 SHARED_LATER 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第88批.md）
+    "art_cards": "武學與裝備的唯讀卡片（狀態列的用途與提示、療傷鈕、榜單的功法卡與裝備卡、修練頁裝備那一塊）：engine、同一層的 leaderboard、舊模組 shopview、修練、煉製、"
+                 "裝備三包讀；只 import 核心與同一層，函式裡也不 import 包",
+    "leaderboard": "賽季榜單：核心的 world（收季、江湖史）與 server 讀，人物舉措（月旦評）、玩家互動（名帖）兩包讀；只 import 核心與同一層，功法卡、裝備卡讀 art_cards "
+                   "在函式裡（world import 這裡，art_cards 牽動多）",
 }
 
 # seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；

@@ -8,6 +8,11 @@
 不是歷史人物本來就有的固定威力，呼應設計文件原文「你（或你創的武學）在天下武學排名上
 留下什麼紀錄」），依威力排名取前 TOP_N 名。小規模工作室試玩（十幾人以內，見設計文件
 8.1），同步掃描所有存檔的成本可以忽略，不需要另外維護一份即時更新的排行榜快取。
+
+共用規則層（第二輪第 88 批收進 registry.SHARED）：不 import 功能包，連函式裡都不行（本命兵器那一筆的鍵讀 core/signature_base，卡片讀同一層的 art_cards：牽動的模組多、
+world 又 import 這裡，所以照舊延後）。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界（收進來之前挑 9 個檔）。另外跑（-n 4）直接讀到它的：
+tests/figures/ 的 test_figure_life_batch3、test_finale；tests/gear/test_board_cards；tests/server/test_server；tianxia/features/ 的 bout/tests/test_arena、mall/tests/test_mall_bots、
+seal/tests/test_seal_acts_hidden、test_seal_revamp_hidden。
 """
 from __future__ import annotations
 

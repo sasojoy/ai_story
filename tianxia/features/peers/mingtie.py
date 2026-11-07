@@ -98,7 +98,7 @@ def _board_titles(state: GameState, board: dict | None) -> list[str]:
     """榜單：這一季前十名寫「某某榜第N」（榜單由呼叫端給：伺服器的快取 boards_now、假人自己掃一次；沒給就沒有這幾個）。"""
     if not board:
         return []
-    from tianxia.leaderboard import BOARDS  # noqa: PLC0415  過渡：待搬（賽季榜單；leaderboard → team → …，延後 import）
+    from tianxia.leaderboard import BOARDS  # noqa: PLC0415  共用規則層（賽季榜單；leaderboard → team → …，延後 import）
 
     me, out = name_key(state.player.name), []
     for kind, label, _ in BOARDS:

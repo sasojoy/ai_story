@@ -24,7 +24,7 @@ tests/core/test_journal；tests/server/test_server；tianxia/features/ 的 craft
 guide/tests/test_prologue、map/tests/test_real_map、peers/tests/test_discuss、test_social、seal/tests/test_seal_duel、test_seal_mandate、
 sense/tests/test_epiphany、test_sensing、smithy/tests/test_armor_forge、test_forge_divine、test_forge_secrets、test_shop、test_weapons_forge；
 這幾包的 tianxia/features/<包>/tests/test_<包>_shell：battle、bounties、bout、companions、craft、cultivation、guide、map、military、peers、seclusion、sense、socialize、tale、travel。
-經門下頁 skillview 讀到它的另外 35 個檔，看 scripts/test_for.py tianxia/skillview.py 挑的那一份。
+經武學卡片 art_cards、煉製頁 forge_view 讀到它的，看 scripts/test_for.py tianxia/skillview.py 挑的那一份（靠舊名殼的測試都在那裡）。
 """
 from __future__ import annotations
 

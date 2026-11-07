@@ -54,7 +54,21 @@ def _added(path, src, *lines):
     return {path: ([([], [(n, text[n - 1]) for n in lines])], src, src)}
 
 
-def test_a_module_picks_the_tests_that_import_it():
+@pytest.fixture
+def shopview_reads_server_bots(monkeypatch):
+    """第二輪第 88 批：skillview 切開、shopview 改讀共用層的 art_cards 之後量過，舊模組（bot、bot_policy、bot_runner、howto、server_bots、shopview、skillview）的
+    dependents 全是空的，「經 import 它的模組再挑」與「太多就不併」都沒有真例子了。這幾條守的是 pick 的做法、不是哪個模組，所以用真圖加一條假的邊 shopview → server_bots。
+    量到的：pick(["tianxia/server_bots.py"]) 24 個檔、why「經 shopview（依賴它的 1 個模組）再挑到 16 個檔」、含只 import shopview 的 test_bounty_tags、core 與 smoke 都假；
+    IMPORT_CAP 壓到 5：8 個檔、core 與 smoke 都真、往上找到的 16 個一個都沒併、why 寫「太多」。scripts/test_for.py 的 IMPORT_CAP 不動。"""
+    real = test_for.module_graph()
+    graph = {**real, "shopview": real["shopview"] | {"server_bots"}}
+    monkeypatch.setattr(test_for, "module_graph", lambda: graph)
+    test_for.dependents.cache_clear()
+    yield
+    test_for.dependents.cache_clear()
+
+
+def test_a_module_picks_the_tests_that_import_it(shopview_reads_server_bots):
     # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
     # core_step（全部拆包第 36 批）：weekcard 收進核心本體（MODULES），核心不往上走——chapters 往上找的舊模組變成 0 個（量的：dependents("chapters")
     # 是空的、改 chapters 挑 1 個檔 test_chapters）。直接 import 的那一半照舊用 chapters；「經 import 它的模組再挑」那一行換成還是舊模組的
@@ -65,11 +79,11 @@ def test_a_module_picks_the_tests_that_import_it():
     picked = test_for.pick(["tianxia/server_bots.py"])
     assert "test_bot_runner.py" in {p.name for p in picked.files} and not picked.core
     assert "server_bots" in test_for.imported(next(p for p in picked.files if p.name == "test_bot_runner.py"))
-    picked = test_for.pick(["tianxia/skillview.py"])
+    # 第二輪第 88 批：切開 skillview 之後沒有真例子了，「經 import 它的模組再挑」那一行用假的邊（shopview_reads_server_bots 的說明）
     assert any("shopview" in w for w in picked.why)  # 經 import 它的 shopview 再挑（T-02）
 
 
-def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
+def test_a_module_also_picks_the_tests_of_the_modules_that_import_it(shopview_reads_server_bots):
     """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
     test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
     （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
@@ -79,12 +93,13 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     改 step 跑核心測試、不往上找，換成還是舊模組的事件抽選 events——經 narration 挑到只 import narration 的 test_narration
     〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
     第二輪第 87 批 events、narration 收進共用規則層（共用層只挑自己檔名＋煙霧），換成還是舊模組的門下頁 skillview——經 shopview 挑到只 import shopview 的 test_bounty_tags
-    〔量的：改 skillview 挑 54 個檔、core 與 smoke 都假、dependents("skillview") 只有 shopview；第 88 批切 skillview 時再換〕。）"""
-    picked = test_for.pick(["tianxia/skillview.py"])
+    〔量的：改 skillview 挑 54 個檔、core 與 smoke 都假、dependents("skillview") 只有 shopview；第 88 批切 skillview 時再換〕。
+    第二輪第 88 批：舊模組沒有真例子了，換假的邊 shopview → server_bots（fixture 的說明）。）"""
+    picked = test_for.pick(["tianxia/server_bots.py"])
     assert "test_bounty_tags.py" in {p.name for p in picked.files}
-    assert "skillview" not in test_for.imported(next(p for p in picked.files if p.name == "test_bounty_tags.py"))
+    assert "server_bots" not in test_for.imported(next(p for p in picked.files if p.name == "test_bounty_tags.py"))
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("skillview")
+    ups = test_for.dependents("server_bots")
     assert {"shopview"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
 
@@ -176,7 +191,7 @@ def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
         test_for.dependents.cache_clear()
 
 
-def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monkeypatch):
+def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monkeypatch, shopview_reads_server_bots):
     """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。
     （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、figures 往上一百多個檔。
     map2：第 50 批 atlas 收進共用規則層之後量的，依賴它的模組 17 個、import 它們的測試檔 141 個，還是超過壓低的上限 100，例子不用換。）"""
@@ -188,11 +203,12 @@ def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monke
     # 「直接的比上限少」不成立了。這一條守的是「太多就不併往上找到的」，所以換成那一群一個都沒併；scripts/test_for.py 的 IMPORT_CAP 不動
     # 第二輪第 87 批：fusion 收進共用規則層（照上面那一條挑），例子換成還是舊模組的 skillview；它往上找到的只有 11 個檔，30 不算太多，上限壓到 5
     # （量的：挑 43 個檔、core 與 smoke 都真、往上找到的 11 個一個都沒併、why 寫「太多」）；scripts/test_for.py 的 IMPORT_CAP 不動
+    # 第二輪第 88 批：切開 skillview 之後舊模組沒有真例子了，換假的邊 shopview → server_bots（fixture 的說明），上限照舊壓到 5
     monkeypatch.setattr(test_for, "IMPORT_CAP", 5)
-    picked = test_for.pick(["tianxia/skillview.py"])
+    picked = test_for.pick(["tianxia/server_bots.py"])
     assert picked.core and picked.smoke
-    direct = {t for t in test_for.all_tests() if "skillview" in test_for.reached(t) or t.stem == "test_skillview" or t.stem.startswith("test_skillview_")}
-    via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("skillview")} - direct
+    direct = {t for t in test_for.all_tests() if "server_bots" in test_for.reached(t) or t.stem == "test_server_bots" or t.stem.startswith("test_server_bots_")}
+    via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("server_bots")} - direct
     assert via and not picked.files & via
     assert any("太多" in w for w in picked.why)
 

@@ -1127,6 +1127,33 @@ def service_list_leftovers() -> list[str]:
     return sorted(name for name in service_list() if not callers.get(name, set()) - {owner.get(name)})
 
 
+# core_shared（第二輪第 88 批：skillview 切成三處，留下來的殼只給測試；殼不能藏跨包）
+from boundary_tables import TEST_ONLY_SHELLS  # noqa: E402  自己這一段另 import：上面那一串別條線也在加
+
+
+def _shell_imports(source: str, module: str) -> set[str]:
+    """source（模組 module 的原文）import 了哪幾個只留給測試的殼；最外層與函式裡都算，TYPE_CHECKING 底下不算（imports_of）。"""
+    shells = {f"tianxia.{name}" for name in TEST_ONLY_SHELLS}
+    return {name for _, name, _ in imports_of(source, module)} & shells
+
+
+def test_product_code_does_not_import_a_test_only_shell():
+    """產品程式（tianxia/ 底下除了測試，加 server.py、run_bots.py）一律讀真正的位置：共用層 art_cards、修練包 art_view、煉製包 forge_view。"""
+    paths = [p for p in TIANXIA.rglob("*.py") if "tests" not in p.relative_to(TIANXIA).parts] + [ROOT / "server.py", ROOT / "run_bots.py"]
+    found = {path.relative_to(ROOT).as_posix(): sorted(hit) for path in paths if (hit := _shell_imports(path.read_text(encoding="utf-8"), _modname(path)))}
+    assert not found, f"這幾個檔 import 了只留給測試的殼，改讀真正的位置：{found}"
+
+
+def test_the_shell_scanner_catches_a_fake_import():
+    """上面那一條的掃描抓得到（不然永遠綠）：相對、絕對、函式裡都算；別的模組與 TYPE_CHECKING 底下不算。"""
+    module = "tianxia.features.craft.actions"
+    assert _shell_imports("from tianxia import skillview\n", module) == {"tianxia.skillview"}
+    assert _shell_imports("def f():\n    from tianxia.skillview import art_card\n", module) == {"tianxia.skillview"}
+    assert _shell_imports("def f():\n    from ... import skillview\n", module) == {"tianxia.skillview"}
+    assert not _shell_imports("from tianxia import art_cards\n", module)
+    assert not _shell_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tianxia import skillview\n", module)
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys
