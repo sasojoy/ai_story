@@ -7,7 +7,7 @@ ctx.free_text_request（tests/server/test_server 換掉 Game.free_text_request�
 戰鬥的單打服務、地盤的進度……）一律經 ctx。
 
 - 事件卡：present（把事件端到眼前）、event_text（旁白）、event_tier（州郡大事、天下大事那一行）、event_option_view（江湖頁的鈕）、
-  choice_label_of（選單上那一顆的字）、pending_options（有事件待選時那一份選單，第二輪第 92 批從 Game._everyday_options 搬來；沒有委派：只有那一處叫）
+  choice_label_of（選單上那一顆的字）、pending_options（有事件待選時那一份選單，第二輪第 92 批從 Game._everyday_options 搬來；Game 留一行委派 _pending_options：Game 碰事件檢定只經一行委派，邊界測試守）
 - 固定選項：resolve_choice（按下去：檢定、打一場、套效果、行狀）、event_battle（劇情戰）、apply（效果；串下一則）、tale_clue（說書的口訣）
 - 隨口應對：free_text_of、branches_of、event_free_text_prompt（那一顆與輸入框）、free_text_request（A 段，鎖內只讀）、
   answer_event（C 段）、answer_branch（分岔的 C 段）、deed_credit（分岔的後果記貢獻）、add_gamble_narration（E 段，潤色插回紀錄）；

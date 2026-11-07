@@ -930,7 +930,7 @@ class Game:
         if prep is not None:
             return prep
         if s.pending_event:
-            return event_check.pending_options(self, odds)
+            return self._pending_options(odds)
         taken = features_core.menu_first("take", _MENU_CORE["take"], self)  # 此刻接管整個選單的（空的也算：髒存檔的待確認畫面真的是空選單）
         if taken is not None:
             return taken
@@ -1212,6 +1212,9 @@ class Game:
 
     def _branches(self, event: Event) -> list[Outcome]:
         return event_check.branches_of(self, event)
+
+    def _pending_options(self, odds: bool) -> list[Option]:
+        return event_check.pending_options(self, odds)
 
     @_outing_watch
     def answer_event(

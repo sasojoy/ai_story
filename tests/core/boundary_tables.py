@@ -146,7 +146,7 @@ CORE_TOP_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 
 # 事件檢定（核心本體 tianxia/core/event_check.py）：Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法：server、假人、測試、探索包與 Game 原位在叫的。
 CORE_EVENT_DELEGATES = {  # 只有 event_check 自己叫的 _answer_branch、_deed_credit 不留委派
-    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label",  # 事件卡
+    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label", "_pending_options",  # 事件卡
     "_choose", "_tale_clue", "_event_battle", "_apply",  # 固定選項
     "_free_text_of", "_branches", "event_free_text_prompt", "free_text_request", "answer_event", "add_gamble_narration",  # 隨口應對
 }
