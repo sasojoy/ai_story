@@ -67,6 +67,29 @@ def test_unrelated_elements_stay_quiet(tmp_path):
     assert got.returncode == 0, got.stdout
 
 
+def test_a_swap_across_sheets_is_reported_as_a_swap(tmp_path):
+    """第 86 批起比所有樣式：base 的 .outer i 在 style.css、.inner i 在 moved.css，head 兩支對調。報的是「先後反了」，不是「多出來」。"""
+    js = INNER + '  function card(v) {\n    return `<div class="outer">${innerHtml()}</div>`;\n  }\n'
+    outer, inner = ".outer i { color: red; }\n", ".inner i { color: blue; }\n"
+    _tree(tmp_path / "base", outer, inner, js)
+    _tree(tmp_path / "head", inner, outer, js)
+    got = subprocess.run([sys.executable, str(TOOL), str(tmp_path / "base"), str(tmp_path / "head")],
+                         capture_output=True, text=True, encoding="utf-8")
+    assert got.returncode == 1, got.stdout
+    assert "head 多出來的規則： 0" in got.stdout and "base 有、head 不見的規則： 0" in got.stdout
+    assert "先後反了又可能打架的規則對： 1" in got.stdout
+    assert "base style.css:1、moved.css:1" in got.stdout
+
+
+def test_not_same_el_only_clears_that_pair(tool):
+    """逐對的認定只擋那一對：.glow 是 classList 加的（wild），對別的 class 照舊算可能，工具不會因為這張表變鬆。"""
+    assert frozenset(("glow", "mv-fight")) in tool.NOT_SAME_EL
+    co = tool.Co({}, set(), {"glow"}, set())
+    assert not co.can("glow", "mv-fight") and not co.can("mv-fight", "glow")
+    assert co.can("glow", "btn")
+    assert co.can("mv-fight", "mv-fight")
+
+
 def test_short_prefix_with_a_hyphen_takes_any_data_value(tool):
     assert tool.prefix_hit("k-*", "k-material")
     assert tool.prefix_hit("g-*", "g-redgold")
