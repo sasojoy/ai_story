@@ -388,7 +388,7 @@
     // 名號底下所在那一行（📍 地名　季曆時刻，FB-493）：字尾超過那一欄（瀏覽器會收成「…」）就加 .split，地名一行、時刻一行（企劃者
     // 2026-10-20 挑乙）。同條上那兩個字：topHtml 不帶，每次從一行量起；量 Range 不量 scrollWidth（多出不到半 px 時兩個都是整數、一樣大，
     // 瀏覽器卻照樣收「…」）。序章只寫地名（沒有 .where-at）不折；還沒排版（寬 0）不動。要排在 --top-h 前面：折了狀態列高一截
-    const where = typeof document.createRange === "function" && head && typeof head.querySelector === "function" ? head.querySelector(".who > .where") : null;
+    const where = typeof document.createRange === "function" && head && typeof head.querySelector === "function" ? head.querySelector(".who .where:not(.sub)") : null; // 介面重整把它包進 .who-col，舊的 .who > .where 量不到（Joy 11/7 截圖時刻被截成「09:…」）
     if (where && where.querySelector(".where-at")) {
       where.classList.remove("split");
       const range = document.createRange();
@@ -1292,7 +1292,23 @@
     if (S.reportOpen && S.reports.tale_id != null) await loadTale(S.reports.tale_id);
   }
 
+  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
+  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
+  function heroStay(draw) {
+    const page = document.getElementById("page");
+    const y = window.scrollY || 0;
+    draw();
+    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
+    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
+    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
+    const target = Math.min(y, Math.max(0, tabsTop - 8));
+    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
+    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
+    window.scrollTo(0, target);
+  }
   async function goTab(tab) {
+    const pg = document.getElementById("page");
+    if (pg && pg.style) pg.style.minHeight = ""; // 俠客頁撐高的那一截（heroStay）換頁就放掉
     S.tab = tab;
     S.message = "";
     S.artOpen = null;
@@ -1674,7 +1690,10 @@
       renderPage();
       if (batch || (stay && note === "lib")) { document.querySelector(".melt-result")?.scrollIntoView({ block: batch ? "center" : "nearest", behavior: "smooth" }); return; }
       const now = stay ? placeTop(place.to) : null;
-      if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
+      // 介面重整的俠客頁：結果那一行（#mx-msg）在分頁鈕底下，不是頁首，回頂上反而看不到；留在原地，結果那一行不在畫面裡才捲到它（Joy 11/7 不要跳頂）
+      if (now === null && S.tab === "practice" && (typeof uiV2 === "function" && uiV2()) && !pro() && !guideMoved && !needsName) {
+        if (S.message) document.getElementById("mx-msg")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
   }
@@ -1837,7 +1856,7 @@
         case "fig-log-more": await moreFigLog(); break;
         case "rv-scene": S.sceneRvOpen = !S.sceneRvOpen; renderPage(); break;
         case "hero-attrs": S.heroTab = "attrs"; await goTab("practice"); break; // 狀態列的名號：去俠客頁的屬性
-        case "hero-tab": S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); window.scrollTo({ top: 0 }); break;
+        case "hero-tab": heroStay(() => { S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); }); break; // Joy 11/7「按完不要都給我跳置頂」
         case "now-more": nowToggle(el); break; // 原地展開／收起，不重畫整頁（重畫會讓「剛剛」再播一次浮現動畫）
         case "rounds-more": {
           // 同上，原地展開／收起；展開時其餘回合照 style.css 的延遲一回合一回合浮現
@@ -1938,8 +1957,8 @@
         case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renownDraw(); break; // 2C：展開時「名聲」那一行；介面重整在屬性頁「怎麼來」
         case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renownDraw(); break; // 點圓點看那一段
         case "renown-sanren": S.renownSanren = !S.renownSanren; renownDraw(); break; // 散人另有的好處
-        case "attr-help": S.attrHelp = !S.attrHelp; renderPage(); break; // 屬性頁的「？」：五項各管什麼
-        case "xinde-more": S.xindeOpen = !S.xindeOpen; renderPage(); break; // 屬性頁心得那一行：點開看整句提示
+        case "attr-help": heroStay(() => { S.attrHelp = !S.attrHelp; renderPage(); }); break; // 屬性頁的「？」：五項各管什麼
+        case "xinde-more": heroStay(() => { S.xindeOpen = !S.xindeOpen; renderPage(); }); break; // 屬性頁心得那一行：點開看整句提示
         case "renown-open": // 6B：金色的「名號傳開」；介面重整之後名聲那一條在俠客頁的「屬性」（狀態列不再攤開）
           S.renownOpen = true; S.renownDot = null;
           if ((typeof uiV2 === "function" && uiV2()) && !pro() && !onb()) { S.heroTab = "attrs"; await goTab("practice"); window.scrollTo(0, 0); break; }
