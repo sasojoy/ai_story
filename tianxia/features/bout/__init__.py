@@ -14,10 +14,12 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
 場邊事件的內容檢查（check_content）、sync 的補送（seams）、閉關中與路上的入口與店面那一頁打到一半那一行（menus）。
 沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
 from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import ContentSlot
 
 
 class BoutFeature(Feature):
@@ -30,6 +32,14 @@ class BoutFeature(Feature):
     player_fields = ("duel", "duel_tally", "duel_last", "arena", "arena_last", "picking_arena", "arena_day", "arena_today",
                      "arena_crowd_seen", "arena_crowd_note")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("duels", lambda *a: checks.check_duels(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """內容裡有頭目（duels.json）、或擂台開著（Config.arena.enabled），或此刻還在頭目戰、擂台上、坐在擂台邊：開關在坐著、打著的時候

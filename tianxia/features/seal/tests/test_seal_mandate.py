@@ -191,9 +191,11 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
 
     root = Path(__file__).resolve().parents[4]  # 全部拆包第 27 批從 tests/seal/ 搬進玉璽包的 tests/（只改層數）
     # 全部拆包第 27 批：seal.py 整份搬進玉璽包（tianxia/features/seal/seal.py）、它的 mandate_event 搬進核心本體 seal_base——白名單加這兩個檔、
-    # 掃的範圍加玉璽包的資料夾（跟搬之前掃的是同一批程式），判斷不動
+    # 掃的範圍加玉璽包的資料夾（跟搬之前掃的是同一批程式），判斷不動。第二輪第 96 批：check_territory 從 content.py 搬進 territory.py，白名單跟著加
+    # 第二輪第 100 批：validate_seal 從 content.py 搬進玉璽包的 checks.py（content.py 別處還在讀，留著）——白名單加這個檔，判斷不動。
     allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py",
-               "tianxia/core/seal_base.py", "tianxia/features/seal/seal.py"}
+               "tianxia/core/seal_base.py", "tianxia/features/seal/seal.py", "tianxia/territory.py",
+               "tianxia/features/seal/checks.py"}
     hits = [
         f"{p.relative_to(root).as_posix()}:{n}"
         for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), *root.glob("tianxia/features/seal/*.py"),

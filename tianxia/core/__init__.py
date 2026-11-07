@@ -71,6 +71,8 @@
 # core_views（第二輪第 81 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第81批.md）
 - status_view.py：狀態列的資料與文字版（status_data、status_text）；Game 留 2 個一行委派。同 event_check 不進 MODULES。
 - page_view.py：江湖頁、公告、見聞、江湖紀錄的查詢、店面的分派、行動列底下那幾行；Game 留 21 個一行委派，engine._MENU_CORE["open"] 指到這裡的 OPEN_CORE。同 event_check 不進 MODULES。
+- content_base.py（core_content：第二輪第 96、100 批）：內容驗證共用的小工具——NUMBER_IN_TEXT、TIMETABLE_SIDES、check_traditional、week7、check_line、event_effects、stage_events；content.validate 與共用層
+  各模組的 check_* 讀它（驗證本體回各自模組，validate 函式內 import、原位呼叫）。同 event_check 不進 MODULES，也不進 test_for.CORE_SERVICES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

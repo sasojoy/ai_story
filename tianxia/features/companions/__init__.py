@@ -5,10 +5,12 @@
 `parley:`（帶路的路上跟他說一句）；招募接 act 子動詞（`act:recruit`、`act:recruit:<id>` 同一個 Verb，第 57 批）。`talk:`、`parley:road` 的 choose 第 20 批審查接上掛鉤
 （鎖外生成好的一輪 prepared 與驗過的那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放，同勸降的 `_persuade_said`）；進鎖後的重驗 `_checked_prepared` 與字數 `say_max` 仍在 choose 前段。enabled 一直是 True
 （招募 Config.companions、書信 Config.figure_life.letters、心意與託付 Config.jianfa 各有自己的開關，包本身沒有總開關）。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
 from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import ContentSlot
 
 
 class CompanionsFeature(Feature):
@@ -29,6 +31,16 @@ class CompanionsFeature(Feature):
     )
     # 對話紀錄、說過的話、梳理的輪數換季照帶（Game._reset_player_for_new_season；history_start 是它從 dialogue_history 的長度算的，不另認領）
     carried: tuple[str, ...] = ("dialogue_history", "used_dialogue_options", "turns_since_consolidation")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("stances", lambda *a: checks.check_stances(*a)),
+            ContentSlot("errands", lambda *a: checks.check_errands(*a)),
+            ContentSlot("companions", lambda *a: checks.check_companions(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         return True

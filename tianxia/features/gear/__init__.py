@@ -11,19 +11,30 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 
 接縫掛鉤：choose（market:*）、verbs（act:market 進門與紀錄標題）、content、bot_pick。沒有 APIRouter（/api/menxia 的四個動作在 routes.py 的 menxia_actions，全部拆包第 68 批；/api/boards、/api/board_card 留在殼，叫 Game 的委派）。
 店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節；同鐵匠鋪：入口順序 懸賞榜 → 鐵匠鋪 → 馬市是行為）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
 from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
+from tianxia.core.features import ContentSlot
 
 
 class GearFeature(Feature):
     name = "gear"
     web = ("gear.js",)  # 裝備格與馬市的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = "market"  # market:buy、market:feed、market:wield:<id>、market:back；入口 act:market 是核心的前綴
-    content = ("gear.json",)  # content.py 照它到這一包的 content/ 載（check_gear、check_signature_arms 留在 content.py，不接 check_content）
+    content = ("gear.json",)  # content.py 照它到這一包的 content/ 載（check_gear、check_signature_arms 在 checks.py，content.validate 原位經 check_at 叫，不接 check_content）
     player_fields = ("picking_market",)  # 馬市第二層選單開著沒：換季跟著新角色重來。held_gear 核心與共用層也讀、figure_wins 是大勢人物包的，不認領
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("gear", lambda *a: checks.check_gear(*a)),
+            ContentSlot("signature_arms", lambda *a: checks.check_signature_arms(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """兵器、防具、坐騎、寶物四欄各看自己的 enabled（不看第一季開關；裝備四欄設計 2.6），或此刻還坐在馬市裡：開關在坐著的時候被關掉（沒經過 sync 收店）

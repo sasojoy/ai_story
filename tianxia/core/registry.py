@@ -304,3 +304,9 @@ SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts
 # core_content（全部拆包第 62 批：內容照包分）：內容檔在誰的資料夾由這一份定，core.features.pack_content 讀它、不讀 FEATURES。契約測試把 FEATURES
 # 換成假的包時（monkeypatch），內容的位置不跟著換：內容母本是第一個要它的測試當下建的（conftest.cached_content），碰上被換成 [] 就找不到檔。
 DECLARED = tuple(FEATURES)
+# core_content（第二輪第 96 批）：共用層那一類的內容驗證回各自模組，14 格的說明在這裡接一句，上面別人的行不動。
+for _name in ("timetable", "relations", "plans", "territory", "conquest", "siege", "push", "traits", "signature", "terrain", "battlelog",
+              "forge_secrets", "secret_recipes", "orders"):
+    SHARED[_name] += "載入時的內容驗證也在這裡：核心的 content 在 validate 裡函式內叫（第二輪第 96 批）。"
+# core_content（第二輪第 100 批）：check_figures 從 content.py 搬來，stances、errands 兩格經 features.check_at 問人物情誼包。
+SHARED["figures"] += "載入時的內容驗證也在這裡：check_figures，核心的 content 在 validate 裡函式內叫（第二輪第 100 批）。"

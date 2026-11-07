@@ -6,7 +6,9 @@
 存在 WorldState.territory（整份 JSON，資料庫結構不動）；None＝這一季還沒算過：第一次算不發天下大事（設計第六節）。
 只讀寫 WorldState；天下大事與江湖史直接記進 world.rumors／world.chronicle（rules.add_rumor 要 GameState）。
 沒有地盤的季（on 是假：沒有第一季規則、劇本沒寫區塊）：controller 回 None，squads_at 照 Location.enemies。
-rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
+rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。
+
+內容驗證 check_territory 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 from . import calendar, place_state, renown, rules
@@ -216,3 +218,72 @@ def price_note(state: GameState, content: Content) -> str:
     """價錢後面的原因（名聲 4.1「寫原因」）：「（自家地盤・九折，名動一方・九四折）」；名聲關著、兩樣都沒有是空字串
     （關著時一個字都不變：地盤福利以前也不寫原因）。"""
     return renown.reasons_text(price_parts(state, content))
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
+    """地盤（Scenario.territory，出陣探索與地盤設計第四節）：戰線認得、兩頭有陣營；可易手的地點真的在那條戰線上、不是大本營、
+    不重複；每一處戰線地點都有歸屬（大本營、fixed 或 lines）；站的隊伍是那一方的、每個可能的控制方都有；時刻表的 control
+    只能寫可易手或 fixed 的地點、那一方要有站的隊伍。沒寫 territory 的劇本只查時刻表沒寫 control。"""
+
+    table = [*c.timetable, *c.mandate_timetable]
+    factions_all = {f.id for f in c.scenario.factions}
+    for event in table:  # 地點會變樣（place_state.py）：TimetableOutcome.places 的地點認得、值是 war、famine、retake 或 fallen:<陣營>
+        for key, outcome in event.outcomes.items():
+            for loc_id, how in outcome.places.items():
+                where = f"時刻表 {event.id} 結果 {key} 的 places"
+                known(where, [loc_id], c.locations, "地點")
+                kind, _, side = how.partition(":")
+                need(how in ("war", "famine", "retake") or (kind == "fallen" and side in factions_all),
+                     f"{where}：{loc_id} 寫成 {how}（要是 war、famine、retake 或 fallen:<陣營>）")
+    t = c.scenario.territory
+    if t is None:
+        need(not any(o.control for e in table for o in e.outcomes.values()), "時刻表寫了 control，劇本卻沒有 territory")
+        return
+    factions = {f.id for f in c.scenario.factions}
+    base_ids = bases(c)
+    need(len(base_ids) == sum(len(f.join_at) for f in c.scenario.factions), "地盤：一個地點只能是一個陣營的投靠點（大本營）")
+    lined = [loc_id for spots in t.lines.values() for loc_id in spots]
+    need(len(lined) == len(set(lined)), "地盤：同一個地點列在兩條戰線上")
+
+    def stands(where: str, loc_id: str, side: str | None) -> None:
+        if side is not None:
+            need(bool(t.garrison.get(loc_id, {}).get(side)), f"{where}：{loc_id} 沒寫 {side} 控制時站的隊伍（territory.garrison）")
+
+    for line, spots in t.lines.items():
+        where = f"地盤的戰線 {line}"
+        need(line in front_ids, f"{where}：不是戰線")
+        low, high = sides(c, line)
+        need(low is not None and high is not None, f"{where}：劇本陣營的 goals 要有一方往 0、一方往 100")
+        known(where, spots, c.locations, "地點")
+        for loc_id in (x for x in spots if x in c.locations):
+            need(line_of(c, loc_id) == line, f"{where}：{loc_id} 的 train_trend 不在這條戰線上")
+            need(loc_id not in base_ids, f"{where}：{loc_id} 是投靠點（大本營不易手）")
+            need(loc_id not in t.fixed, f"{where}：{loc_id} 同時寫在 fixed")
+            for side in (low, high):
+                stands(where, loc_id, side)
+    for loc_id, side in t.fixed.items():
+        where = "地盤的 fixed"
+        known(where, [loc_id], c.locations, "地點")
+        need(side in factions, f"{where}：{loc_id} 的 {side} 不是陣營")
+        need(loc_id not in base_ids, f"{where}：{loc_id} 是投靠點（大本營不易手）")
+        need(loc_id not in c.locations or line_of(c, loc_id) is not None, f"{where}：{loc_id} 不是戰線地點")
+        stands(where, loc_id, side)
+    for loc_id in c.locations:
+        if line_of(c, loc_id) is not None:
+            need(loc_id in base_ids or loc_id in t.fixed or loc_id in lined,
+                 f"地盤：戰線地點 {loc_id} 沒有歸屬（不是大本營、不在 fixed、也不在 lines）")
+    for loc_id, by_side in t.garrison.items():
+        where = f"地盤的 garrison {loc_id}"
+        known(where, [loc_id], c.locations, "地點")
+        for side, squads in by_side.items():
+            need(side in factions, f"{where}：{side} 不是陣營")
+            known(where, squads, c.squads, "隊伍")
+            need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{where}：{side} 那一組要是 {side} 的隊伍")
+    for event in table:
+        for key, outcome in event.outcomes.items():
+            where = f"時刻表 {event.id} 結果 {key}"
+            for loc_id, side in outcome.control.items():
+                need(loc_id in t.fixed or loc_id in lined, f"{where}：control 的 {loc_id} 不是可易手或 fixed 的地點（大本營不易手）")
+                need(side in factions, f"{where}：control 的 {side} 不是陣營")
+                stands(where, loc_id, side)

@@ -19,7 +19,9 @@
 - 收場（verdict）：攻方贏（大勝或險勝）就易手（conquest.flip：照推滿那樣分紅、冷卻）；否則原主人留著（中立還是中立）、攻方的條砍半。
   三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷、進度照留。
 只 import models、state、battle_instance、chiefs（龍頭上陣的挑法：全部拆包第 8 批 generals 進決戰包時留在共用規則層的那一塊）、territory、
-conquest（作罷）、world_state 型別。"""
+conquest（作罷）、world_state 型別。
+
+內容驗證 check_siege_templates 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -63,7 +65,7 @@ def title(content: Content, info: SiegeInfo) -> str:
 
 
 def template(content: Content, loc_id: str) -> BattleDef | None:
-    """這一塊所在的大區的攻城範本（siege_<大區>）；沒有是 None（content.check_conquest_blocks 擋了搶得下來的每一塊都要有）。"""
+    """這一塊所在的大區的攻城範本（siege_<大區>）；沒有是 None（conquest.check_conquest_blocks 擋了搶得下來的每一塊都要有）。"""
     region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
     definition = content.battles.get(f"siege_{region.id}") if region is not None else None
     return definition if definition is not None and definition.siege else None
@@ -438,3 +440,15 @@ def _note_result(world: WorldState, slot: SiegeSlot, info_: SiegeInfo, battle: b
         taken=taken or "", margin=margin, keeper=keeper, attackers=list(info_.attackers),
         blow=guard.felled_by if guard is not None and taken is not None else "",
     ))
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_siege_templates(c: Content, need) -> None:
+    """攻城範本（BattleDef.siege，領地爭奪第二批）：id 是 siege_<大區>、寫了大區、兩軍依序是官軍與黃巾（戰局以官軍為正向）、不是時刻表決戰。"""
+    for battle in c.battles.values():
+        if not battle.siege:
+            continue
+        where = f"攻城範本 {battle.id}"
+        need(battle.region is not None and battle.id == f"siege_{battle.region}", f"{where}：id 要是 siege_<大區>、要寫 region")
+        need([f.id for f in battle.factions] == ["guan", "huang"], f"{where}：陣營要依序是 guan、huang")
+        need(battle.timetable_event is None and battle.version is None, f"{where}：攻城範本不是時刻表決戰")

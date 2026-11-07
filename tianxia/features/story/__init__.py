@@ -8,10 +8,12 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 
 掛鉤：choose（只吃 story:）、scene（接縫掛鉤：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由；/api/do/story_seen 在 routes.py 的 main_actions（全部拆包第 68 批）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
 from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SeamHook
+from tianxia.core.features import ContentSlot
 
 
 class StoryFeature(Feature):
@@ -24,6 +26,14 @@ class StoryFeature(Feature):
     # 紀念物與跨季旗標換季跟著角色（Game._reset_player_for_new_season），其餘換季重來
     player_fields = ("storylines", "story_open", "story_cards", "keepsakes", "lasting")
     carried = ("keepsakes", "lasting")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("storylines", lambda *a: checks.check_storylines(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """一直開著：原本 choose 的 story: 那一支與標題、選單都不看任何開關（線自己看 Config.jianfa.storylines〔storyline.on〕；關著時選單上沒有 story: 的選項，

@@ -11,10 +11,12 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 沒有選項前綴：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 都是 act 子動詞，第 57 批接進 verbs（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 tail_*）；抄帳、管理者的鈕在核心原位叫
 Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；沒有 APIRouter（server.py 的 `orders`、`convoy` 兩個鍵照舊叫 Game；管理者工具在 routes.py 的 admin_tools，全部拆包第 68 批）。
 假人分數（`act:rank2`、`act:convoy`、`act:summons`）由 verbs() 那幾格的 bot 接走（全部拆包第 60 批）。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import ContentSlot
 
 
 class MilitaryFeature(Feature):
@@ -34,6 +36,16 @@ class MilitaryFeature(Feature):
     carried: tuple[str, ...] = ()
     # 第 2 階晉升奇遇與晉升表（第 33 批）、機緣、伏筆與準備事件（第 34 批；總表附錄甲）；content.py 照它到這一包的 content/ 載；檔名照舊
     content = ("promotions.json", "events/promotion.json", "opportunities.json", "foreshadows.json", "events/foreshadow_fragments.json", "events/foreshadow_prep.json")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("foreshadows", lambda *a: checks.check_foreshadows(*a)),
+            ContentSlot("promotions", lambda *a: checks.check_promotions(*a)),
+            ContentSlot("opportunities", lambda *a: checks.check_opportunities(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         return True
