@@ -957,28 +957,7 @@ class Game:
         if prep is not None:
             return prep
         if s.pending_event:
-            event = c.events[s.pending_event]
-            opts = []
-            for i, ch in visible_choices(event, s, c):
-                opt = Option(
-                    id=f"choice:{i}", label=self._choice_label(ch, odds),
-                    wait=BIG_FIGHT_WAIT if ch.combat and self.is_big(c.squads[ch.combat]) else "",
-                )
-                if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
-                    if not renown.on(c, "virtue_choices"):
-                        continue
-                    ok = renown.open_to(s, c, "choices", ch.needs.path, ch.needs.tier)  # 傳承的門路也開得了第一段
-                    opt.enabled, opt.tag = ok, ch.needs.path
-                    opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
-                opts.append(opt)
-            free = self._free_text_of(event)
-            if free is not None:
-                branches = self._branches(event)
-                opts.append(Option(
-                    id=FREE_TEXT_OPTION, label=free.prompt + free_text_note(free, c, branching=bool(branches)),
-                    outcomes=outcome_rules.tags(branches) if branches else None,
-                ))
-            return opts
+            return event_check.pending_options(self, odds)
         taken = features_core.menu_first("take", _MENU_CORE["take"], self)  # 此刻接管整個選單的（空的也算：髒存檔的待確認畫面真的是空選單）
         if taken is not None:
             return taken
