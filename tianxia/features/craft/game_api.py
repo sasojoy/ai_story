@@ -56,4 +56,6 @@ TABLE = {
     "_create_allowed": _create_allowed,
     # 這一門自創要付多少心得（create.price）。
     "_create_price": _create_price,
+    # core_rest
+    "_deliver_echoes": actions.deliver_echoes,
 }

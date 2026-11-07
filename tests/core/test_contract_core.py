@@ -1553,6 +1553,7 @@ def test_the_core_and_the_packages_take_every_seam_slot_exactly_once():
         "outlets": [("season.carry", "outlets")],
         "peers": [("season.carry", "peers")],
         "legacy": [("season.carry", "legacy")],
+        "craft": [("sync.deliver", "echoes")],  # core_rest
     }
 
 

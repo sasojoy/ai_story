@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia import insight_fx, journal  # 共用規則層、核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章只准照劇本合成）
+from tianxia import renown  # 共用規則層（首創回饋補名望）
 from tianxia.core.services import PREPARING_REFUSAL, not_while_preparing
 
 from . import create, forge_view
@@ -187,3 +188,27 @@ def cancel(ctx: Game) -> list[str]:
 def view(ctx: Game) -> dict:
     """煉製頁「自創」那一塊（create.view）。只讀。"""
     return create.view(ctx.state, ctx.content, ctx.world)
+
+
+def deliver_echoes(ctx) -> None:
+    """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（兵器配方打了出來）（fusion.echo 記在 WorldState.echoes），
+    你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
+    做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
+    p = ctx.state.player
+    rule = ctx.content.config.first_echo
+    lines, gained = [], 0
+    for entry in ctx.state.world.echoes.values():
+        co = entry.co_creator == p.name  # 論武合出來的：另一個首創者照自己的帳補（co_paid）
+        due = len(entry.followers) - (entry.co_paid if co else entry.paid)
+        if p.name not in (entry.creator, entry.co_creator) or due <= 0:
+            continue
+        if co:
+            entry.co_paid = len(entry.followers)
+        else:
+            entry.paid = len(entry.followers)
+        gained += due * rule.fame_per
+        lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
+    if not lines:
+        return
+    ctx._write(journal.ECHO, lines + renown.gain(ctx.state, ctx.content, "fame", gained))  # 名聲設計 3.2
+    ctx._save_season()  # 補到第幾個人記在共用賽季裡

@@ -209,7 +209,6 @@ _SEAM_CORE: dict[str, dict[str, Callable[..., Any]]] = {
         # 前一行，全部拆包第 8 批併進這一格），再補下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）；玉璽包接著補
         # 碎片的事：現世、單挑收場、隱沒（5.9），下線時發生的回來補（原本緊接著的下一行 _deliver_seal_results，全部拆包第 27 批併進這一格）
         "results": lambda ctx: features_core.deliver_results(ctx),
-        "echoes": lambda ctx: ctx._deliver_echoes(),  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         # 別人捎來的（接縫掛鉤，第 11 批）：酒肆包——風聲（有人在酒肆打聽你）、自己雇的殺手得手失手或到期退錢、託酒家留意的人有了準信或到期
         "notices": lambda ctx: features_core.deliver_notices(ctx),
         "marks": lambda ctx: ctx._marks_tick(),  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
@@ -1473,29 +1472,6 @@ class Game:
             lines = [f"{self.stamp(r.time)}　{r.text}" for _, _, r in fresh]
             entry = JournalEntry(time=last.time, title=journal.WORLD_NEWS, tag=f"共 {len(fresh)} 件", lines=lines)
         journal.add_entry(self.state, entry)
-
-    def _deliver_echoes(self) -> None:
-        """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（兵器配方打了出來）（fusion.echo 記在 WorldState.echoes），
-        你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
-        做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
-        p = self.state.player
-        rule = self.content.config.first_echo
-        lines, gained = [], 0
-        for entry in self.state.world.echoes.values():
-            co = entry.co_creator == p.name  # 論武合出來的：另一個首創者照自己的帳補（co_paid）
-            due = len(entry.followers) - (entry.co_paid if co else entry.paid)
-            if p.name not in (entry.creator, entry.co_creator) or due <= 0:
-                continue
-            if co:
-                entry.co_paid = len(entry.followers)
-            else:
-                entry.paid = len(entry.followers)
-            gained += due * rule.fame_per
-            lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
-        if not lines:
-            return
-        self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))  # 名聲設計 3.2
-        self._save_season()  # 補到第幾個人記在共用賽季裡
 
     def event_free_text_prompt(self) -> str | None:
         return event_check.event_free_text_prompt(self)
