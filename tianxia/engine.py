@@ -146,11 +146,10 @@ from .core import smith_base  # 打造單子讀的那一小半（全部拆包第
 from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tianxia/features/peers/tests/test_discuss.py 從 engine 拿
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
-from .core import status_view  # core_views（第二輪第 81 批）：狀態列的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
+from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
 
 HOUR = 3600
 DAY = 86400
-BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
 # （SECT_LABEL：拜入門派那一顆的字，全部拆包第 35 批搬進陣營包 features/faction/join_actions.py）
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
@@ -402,7 +401,7 @@ _MENU_CORE: dict[str, dict[str, Callable[..., Any]]] = {
         "rest": _here_rest,
     },
     "plays": {"options": lambda ctx: features_core.options(ctx)},
-    "open": {"shops": lambda ctx: features_core.shop_open(ctx)},  # 店面登記的店（坐在店裡、這裡也還開著）
+    "open": page_view.OPEN_CORE,  # 店面登記的店（第 81 批：格搬進 core/page_view.py，_shop_open 也讀它）
 }
 
 # （走一趟的裝飾器 _outing_watch 搬進核心〔tianxia/core/services.py 的 outing_watch，全部拆包第 24 批〕：上面 import 回來，同一個名字）
@@ -1093,28 +1092,7 @@ class Game:
         )
 
     def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
-        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
-        探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（出陣包 train_actions.train_line，經 act 子動詞的 Verb.note），交友照會不會直接開口談話
-        （_socialize_figure）與這裡有沒有交友事件。只給 option_ids 裡有的。序章裡是空的：探索、遊歷照那一步寫好的走（草廬四景、
-        斷眉），師父自己會說。只讀，不擲骰。"""
-        s, c = self.state, self.content
-        if prologue_rules.active(s, c):
-            return {}
-        ids = set(option_ids)
-        loc = c.locations[s.player.location]
-        notes: dict[str, str] = {}
-        # 探索那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：探索包——減法季探索一顆開著時寫這一處多半給什麼（比重照擲骰用的那一份）
-        if "act:explore" in ids:
-            explore_note = features_core.act_note(self, "explore", loc)
-            if explore_note is not None:
-                notes["act:explore"] = explore_note
-        if "act:train" in ids:  # 出陣那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——約戰開著寫約戰那一句、出陣開著寫出陣那一行；都不是寫舊遊歷那一行（第 17 批收進包）
-            train_note = features_core.act_note(self, "train", loc)
-            if train_note is not None:
-                notes["act:train"] = train_note
-        for got in features_core.menu_run("notes", {}, self, ids, loc):  # 交友、求見那幾行（交友求見包，core_seams）；鍵的順序算行為
-            notes.update(got)
-        return notes
+        return page_view.action_notes(self, option_ids)
 
     def _insight_blocked(self, loc: Location) -> bool:
         """探索那一行的悟意境那一支，是不是只因為這個遊戲日在這裡選錯過做法才拿掉（這裡本來悟得到、比重不是 0）：是的話那一行
@@ -1699,58 +1677,19 @@ class Game:
         ]
 
     def _shop_say(self, key: str, problem: str | None = None) -> None:
-        """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
-        撐到什麼時候（shopview.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
-        p = self.state.player
-        p.shop_line, p.shop_line_seed = key, int(self.state.world.time)
-        p.shop_hold = shopview.hold_for(self.state, self.content, key, problem)
+        return page_view._shop_say(self, key, problem)
 
     def _shop_after(self, problem: str | None, done: str, keyer=None) -> None:
-        """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shopview.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
-        self._shop_say((keyer or shopview.problem_key)(problem, done), problem)
+        return page_view._shop_after(self, problem, done, keyer)
 
     def _shop_open(self) -> str | None:
-        """哪一間店開著（店面獨立介面設計 1.1；同 options() 的先後：懸賞榜、鐵匠鋪、馬市）。那個地方已經不開門了（同步之前）是 None；
-        鐵匠鋪的一步一步單子還開著（開關關著時開的、舊存檔）也是 None，照舊畫那一串按鈕（店面上的鈕在單子那一步不在選單上）。"""
-        # 先後在 MENU_ORDER["open"]（core_seams，全部拆包第 56 批）：擂台打到一半（Joy 2026-10-14「擂台應該要是獨立的一頁」）、懸賞榜、鐵匠鋪、馬市，最後是店面登記的店（坐在店裡、這裡也還開著）；
-        # 格回 "" 是坐著、這裡不開門了
-        return features_core.menu_first("open", _MENU_CORE["open"], self) or None
+        return page_view._shop_open(self)
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
-        """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
-        馬市 market:back、懸賞榜 bounty:back 或第三層的 bounty:unpick），而且前面沒有決戰、奪璽單挑的鈕。決戰開打、休季時選單換成三招
-        或「休季中」，店裡那一串根本不在上面（picking_* 卻還是真的）：這時給店面，出店會被拒絕、人就困在店裡，休季還開得了爐
-        （第一批終審 Critical 1）。集結時決戰的鈕排在店裡那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
-        option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
-        ids = [o.id for o in self.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
-        return any(back in ids for back in shopview.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
+        return page_view._shop_live(self, option_ids, shop)
 
     def shop_view(self, option_ids=None) -> dict | None:
-        """店面（店面獨立介面設計 6.1）：開關開著、有一間店開著（_shop_open）、那間店那一串是眼前的選單（_shop_live）才有；
-        照哪一間店給 shopview 的 smith_view、market_view 或 board_view。"""
-        s, c = self.state, self.content
-        if not c.config.shop_screens:
-            return None
-        shop = self._shop_open()
-        if shop is None or not self._shop_live(option_ids, shop):
-            return None
-        if shop == "arena":
-            return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left(), bare=self._battle_power(seal=False))
-        if shop == "donate":
-            return shopview.donate_view(s, c, self._pill_day())
-        if shop == "dadian":
-            day = self._pill_day()
-            base = self._at_own_base()
-            return shopview.dadian_view(s, c, day=day, room=economy.donate_room(s, c, day) if base else 0, base=base,
-                                        clinic=self._at_clinic_town(), smith=equipment.smith_open(s, c), bribe=self._bribe_targets(),
-                                        prologue=prologue_rules.active(s, c))
-        if shop == "tavern":
-            return self.tavern_view()
-        if shop == "smith":  # 打造頁的爐火（鐵匠鋪與合成流程 3.2，forge.furnace）要回體丹的換日與序章：Game 才知道
-            view = shopview.smith_view(s, c, self.world, day=self._pill_day(), prologue=prologue_rules.active(s, c))
-            view["trade"] = shopview.trade_view(s, c, self._pill_day())  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
-            return view
-        return {"market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
+        return page_view.shop_view(self, option_ids)
 
 
 
@@ -3492,88 +3431,15 @@ class Game:
         return status_view.status_data(self)
 
     def bulletin(self) -> list[str]:
-        """江湖頁那排小標「大事」點開的本週大事（Markdown）：這一週已經發生的大事，新的在前、最多 BULLETIN_MAX 則。
-        江湖紀錄裡的「江湖大事」只寫進剛好在場同步到的那個人，這張卡讓每個人都看得到。開關關著時是空的；
-        休季時也是空的：結算卡已經列著這一季的每一件大事與結局（FB-046）。"""
-        return [f"**{title}**\n\n{text}" for title, text in self._bulletin_events()]
-
-    def _bulletin_events(self) -> list[tuple[str, str]]:
-        """本週大事面板上的（標題, 公告全文），新的在前、最多 BULLETIN_MAX 則。"""
-        w, c = self.state.world, self.content
-        if not calendar.season_one_on(w, c) or w.ended:
-            return []
-        start = calendar.week_start(calendar.point(w.time, c, w).week, c, w) - calendar.EPS_SECONDS
-        titles = {e.id: e.title for e in timetable.events(w, c)}
-        done = [(i, eid, r) for i, (eid, r) in enumerate(w.timeline.items()) if r.text and r.time >= start]
-        done.sort(key=lambda item: (item[2].time, item[0]), reverse=True)
-        return [(titles.get(eid, eid), r.text) for _, eid, r in done[:BULLETIN_MAX]]
-
-    def _news_on_cards(self) -> set[str]:
-        """江湖頁的卡片上已經寫著全文的時刻表公告：平常是本週大事（那排小標「大事」點開的面板），休季時是結算卡（結局與這一季的每一件大事）。"""
-        w = self.state.world
-        if w.ended and season_one(self.content, w):
-            shown = {r.text for r in w.timeline.values()} | {w.ending_text}
-        else:
-            shown = {text for _, text in self._bulletin_events()}
-        shown.discard("")
-        return shown
+        return page_view.bulletin(self)
 
     def season_result(self) -> dict | None:
-        """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
-        各陣營出力前五。只有第一季（開關開著＋這一季的章）收季之後才有；資料在收季那一刻存好（world.end_season），這裡只讀。
-        時刻表那一列：結算過的是公告全文；跳過的寫「這一季沒有發生」；季提前收束、還沒輪到的寫「季已落幕，沒有發生」。
-        改寫的人寫公告上的名字（timetable.shown：一律名號；只有這一版之前匿名鎖定的，照記下的「某位少俠」寫）。"""
-        s, c = self.state, self.content
-        w = s.world
-        if not w.ended or not season_one(c, w):
-            return None
-        values = dict(w.final_trends)
-        huangjin = values.get(HUANGJIN, 0)
-        standing = {"guan": 100 - huangjin, "huang": huangjin}
-        names = {f.id: f.name for f in c.scenario.factions}
-        timeline = []
-        for event in timetable.events(w, c):  # 天命之季含天命之爭（玉璽二）
-            result = w.timeline.get(event.id)
-            if result is None:
-                text = "（季已落幕，沒有發生。）"
-            elif not result.text:
-                text = "（這一季沒有發生。）"
-            else:
-                text = result.text
-            lock = w.locks.get(event.id) if result is not None and result.locked_by else None
-            timeline.append({
-                "week": event.week, "title": event.title, "text": text,
-                "locked_by": timetable.shown(lock) if lock is not None else None,
-            })
-        out = {
-            "title": w.ending_title, "text": w.ending_text,
-            "stances": [{"side": side, "name": names.get(side, side), "value": value} for side, value in standing.items()],
-            "fronts": [{"id": f, "name": trend_name(c, f), "value": values.get(f, 0)} for f in front_ids(c)],
-            "timeline": timeline,
-            "rankings": [
-                {"faction": f.id, "name": f.name, "rows": [list(row) for row in w.final_rankings.get(f.id, [])]}
-                for f in c.scenario.factions
-            ],
-        }
-        ending = self.ending_card()  # 三陣營四勝利（減法季批 3c，欄位表 main.ending）：關著的季沒有這個鍵
-        if ending is not None:
-            out["ending"] = ending
-        return out
+        return page_view.season_result(self)
 
     # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending；三方卡與「你這一步」補在批 1 的 weekcard 裡）──
 
     def place_minutes(self, loc_id: str) -> int | None:
-        """從此刻的位置走到 loc_id（步行；騎著馬照馬的步調）要現實幾分鐘（同狀態列的「現實約 N 分鐘後抵達」）；就在這裡是 0、走不到是 None。
-        先照摸清的路（atlas.way_to），走不到再照所有開放的地點（投靠點是公開的，三方卡照樣寫得出分鐘）。三方卡、本週卡的目標用。"""
-        s, c = self.state, self.content
-        if s.player.journey is None and s.player.location == loc_id:
-            return 0
-        route = atlas.way_to(s, c, loc_id)
-        if route is None and s.player.journey is None:
-            route = atlas.shortest_routes(s, c).get(loc_id)
-        if route is None or not route.path:
-            return None
-        return self._real_minutes(atlas.travel_seconds(route.minutes, "walk", pace=mounts.pace(s, c)))
+        return page_view.place_minutes(self, loc_id)
 
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""
@@ -3583,143 +3449,42 @@ class Game:
         return status_view.status_text(self)
 
     def trends_text(self) -> str:
-        w = self.state.world
-        parts = []
-        for trend in self.content.scenario.trends:
-            if not trend_shown(self.content, w, trend.id) or not is_revealed(w, self.content, trend.id):
-                continue
-            value = trend_value(self.state, self.content, trend.id)
-            bar = "█" * (value // 5) + "░" * (20 - value // 5)
-            parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}")
-        if w.ended:
-            parts.append(f"## 結局：{w.ending_title}\n\n{w.ending_text}")
-        return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"
+        return page_view.trends_text(self)
 
     def rumors_text(self, limit: int = 30) -> str:
-        """見聞頁的傳聞（一條清單，main_view 的 rumors）：只列聽得到的（rules.audible——陣營軍情只給那個陣營、個人線索只給
-        那個人；第一季的地方傳聞只給此刻人在那個大區的人、只留傳聞板上最近幾天的）。開關關著時跟以前一樣。"""
-        ears = ears_of(self.state, self.content)
-        heard = [r for r in self.state.world.rumors if audible(r, ears)]
-        return _timeline(heard[-limit:][::-1], self._day_stamp) or "（尚無傳聞。）"
+        return page_view.rumors_text(self, limit)
 
     def rumor_layers(self) -> list[dict[str, str]] | None:
-        """見聞頁的傳聞分四層（天下大事、陣營軍情、所在大區、個人線索；rumor_view.layers），每層 {id, title, body}，body 是
-        Markdown。只在第一季的規則開著時分：開關關著（或這一季開季時沒開）是 None，頁面照舊畫 rumors_text 那一條清單。"""
-        if not season_one(self.content, self.state.world):
-            return None
-        return rumor_view.layers(self.state, self.content, self.world, self._day_stamp)
+        return page_view.rumor_layers(self)
 
     def chronicle_text(self) -> str:
-        """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是歷屆擂主，最後是玉璽碎片。
-        神器譜搬到見聞的「榜單」（divine_book_view，Joy 2026-10-17）。"""
-        number = self.world.get_season_number()
-        current = _timeline(self.state.world.chronicle, self._day_stamp) or "（江湖史尚無記載。）"
-        past = self.world.chronicle_before(number)
-        parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
-        parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
-        champs = arena_ranks.champions([(number, [e.text for e in self.state.world.chronicle])]
-                                 + [(n, [e.text for e in entries]) for n, entries in past])  # 歷屆擂主（跨季）
-        if champs:
-            parts.append(champs)
-        if seal_base.on(self.content):  # 七格玉璽排在江湖史最上面（第十節）；舊的碎片紀錄只當前史一行（11.5）
-            old, view = self.world.get_jade_seal_fragments(), self.world.seal_state()
-            parts.insert(0, seal_base.chronicle_block(self.content, view.registry, self.world.jade_seal_summary() if old else "",
-                                                      mandate=seal_base.mandate_now(view.registry, view.season)))  # 天命之季多一句（玉璽二）
-        else:
-            parts.append(self.world.jade_seal_summary())
-        return "\n\n---\n\n".join(parts)
+        return page_view.chronicle_text(self)
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 
     def _day_stamp(self, time: float) -> str:
-        """江湖史與傳聞的時間：沒有季曆時只寫天數（「第2天」），第一季寫季曆。"""
-        return self.stamp(time, clock=False)
-
-    def _chip(self, change: str, seed: str) -> tuple[str, int] | None:
-        """江湖紀錄畫數值標籤時，戰況變化的換法（FB-064，journal.ChipFn）：紀錄裡存的是機器可讀的寫法，這裡照內容換成一句話、
-        照「現在看的人」的陣營算對他是好事還是壞事（顏色在畫的那一刻才定，換了陣營再畫就跟著變）。"""
-        return front_chip(self.content, self._side(), change, seed)
+        return page_view._day_stamp(self, time)
 
     def latest_entry_html(self) -> str:
-        entries = self.state.journal
-        return journal.card_html(entries[0], self.stamp, self._chip) if entries else ""
+        return page_view.latest_entry_html(self)
 
     def journal_top_html(self) -> str:
-        """江湖紀錄頁的第一則（伺服器的 latest，底下接 journal_html(1, …)）：最新一則就是「剛剛」那張戰鬥卡片那一場時，
-        放卡片沒寫到的補充（照舊）；其他時候畫最新一則——包括「剛剛」越過的那則配點（_now_start），它在江湖紀錄裡照樣列在最前面。"""
-        if self.shows_battle_card() and self._now_start() == 0:
-            return self.battle_extra_html()
-        return self.latest_entry_html()
+        return page_view.journal_top_html(self)
 
     def now_entry_html(self) -> str:
-        """江湖頁「剛剛」那一則（FB-046）：最新一則；最新的幾則若只是時刻表大事的公告（_deliver_big_events 補的），
-        而且每一件的全文江湖頁的卡片上已經有了（_news_on_cards），就往前找第一則不是的——同一段公告不在「剛剛」
-        再寫一次，剛做完的事也不會因為一件大事發生就被擠掉。江湖紀錄頁照舊從最新一則列起（latest_entry_html）。
-        一次補好幾件時每一行是「季曆時間　公告全文」。
-        配點那一則也越過（計畫二最終審查 M1，見 _now_start）；越過之後什麼都不剩（只有配點）時才放它，不讓「剛剛」空著。
-        籌備中不放（FB-049）：那時最新一則是開場那一則，寫著「賽季開始」、叫人先去探索，選單卻只有「等待管理者開季」。
-        草廬裡（序章，T7 審查 I2、I3）只放自己做的事的結果：江湖大事、你不在的時候、賽季開場（journal.is_world_entry）都不放，
-        草廬的事件在眼前時整張卡不放（它只是重複事件的標題，還把選項擠到分頁列底下）。紀錄裡照舊都有。"""
-        if self._preparing():
-            return ""
-        hut = prologue_rules.active(self.state, self.content)
-        if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
-            return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
-        if self._opening_pending():
-            return ""  # 開局第一分鐘（減法季批 7）：旁白與三選一就是第一張卡，開場那一則（含丹的福利）留在紀錄裡（整合設計 6.7）
-        entry = self._now_entry()
-        return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
-
-    def _now_entry(self) -> JournalEntry | None:
-        """「剛剛」那一則（now_entry_html 的挑法，不看籌備中與草廬的事件）。"""
-        hut = prologue_rules.active(self.state, self.content)
-        shown = self._news_on_cards()
-
-        def repeated(entry: JournalEntry) -> bool:
-            story = entry.lines or [entry.tag]
-            return entry.title == journal.WORLD_NEWS and all(
-                line in shown or line.partition("　")[2] in shown for line in story
-            )
-
-        fresh = [e for e in self.state.journal if not repeated(e) and not (hut and journal.is_world_entry(e))]
-        return next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
+        return page_view.now_entry_html(self)
 
     def now_front(self) -> dict | None:
-        """「剛剛」那一則是出陣、有出陣回報（JournalEntry.front，sortie.report）時給畫面的資料；不是 None。戰鬥卡片照 shows_battle_card 看
-        同一則，不是戰鬥卡片照 now_entry_html 的挑法（那裡不放卡時這裡也不給）。"""
-        if self.shows_battle_card():
-            entry = self.state.journal[self._now_start()]
-        elif self.now_entry_html():
-            entry = self._now_entry()
-        else:
-            return None
-        return entry.front.model_dump() if entry is not None and entry.front is not None else None
+        return page_view.now_front(self)
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-        return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp, self._chip)
-
-    def _now_start(self) -> int:
-        """「剛剛」從江湖紀錄的第幾則看起：最新的幾則若是配點就越過（計畫二最終審查 M1）。配點是點名號展開、在狀態列上按的，
-        跟 journal.add_guide 一樣不換「剛剛」——升級那一仗打完照著「你有 N 點屬性可以分配」去配點，那一場的戰鬥卡片
-        不會因此不見。全都是配點時從最新一則看起。江湖紀錄頁照舊從最新一則列起（journal_top_html／journal_html）。"""
-        return next((i for i, e in enumerate(self.state.journal) if e.title != journal.ALLOCATE), 0)
+        return page_view.journal_html(self, start, limit, heading, empty)
 
     def shows_battle_card(self) -> bool:
-        s, i = self.state, self._now_start()
-        return self.battle_card_id() is not None and len(s.journal) > i and s.journal[i].battle_id == s.battle_card
+        return page_view.shows_battle_card(self)
 
     def battle_extra_html(self, for_card: bool = False) -> str:
-        """「剛剛」那張戰鬥卡片底下的補充：那一場那一則裡卡片沒寫到的（越過最新的配點，跟 shows_battle_card 看同一則）。
-        for_card（江湖頁的「剛剛」用）：打完接著有事件待處理時，「你聽到一件事」那一行讓出來——事件的最後一個選項要留在第一屏
-        （FB-076）；江湖紀錄頁最上面（journal_top_html）不給，照舊列出，那一行也還在紀錄那一則裡。"""
-        if not self.shows_battle_card():
-            return ""
-        record = battlelog.find(self.state, self.state.battle_card)
-        entry = self.state.journal[self._now_start()]
-        lines, changes = journal.card_leftovers(entry, battlelog.told_lines(record), battlelog.gains_list(record))
-        if for_card and self.state.pending_event is not None:
-            lines = journal.without_fragments(lines)
-        return journal.extra_html(lines, changes, self._chip, str(entry.time))
+        return page_view.battle_extra_html(self, for_card)
 
     def _art_name(self, art_id: str) -> str:
         art = team.resolve_art(art_id, self.content, self.world)
@@ -3783,10 +3548,6 @@ class Game:
         if overflow > 0:
             del log[:overflow]
         return msgs
-
-
-def _timeline(entries: list[Rumor], when: Callable[[float], str]) -> str:
-    return "\n\n".join(f"{when(e.time)}　{e.text}" for e in entries)
 
 
 # core_api（第二輪第 72 批）：包的一行委派搬進各包的 game_api.py，這裡掛一次（`g.xxx` 照舊）。放檔尾：Game 要先定義好，各包的模組此刻都已載入，sys.modules 的先後不變。

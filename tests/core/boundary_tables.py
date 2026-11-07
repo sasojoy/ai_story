@@ -44,7 +44,6 @@ GAME_DELEGATE_CALLERS = {
     ("choose", "_arena_fight_problem"): "按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久：在查完選單之後、「此刻無法」之前，choose_unlisted 在查選單之前，不是這個位置",
     ("_own_scene_text", "_duel_scene"): "自己眼前的場景卡（頭目戰、擂台排在宴客的席位之前）：scene 掛鉤在擂台之後，接上去會排到宴客後面",
     ("_own_scene_text", "_arena_scene"): "同上",
-    ("shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
     ("_battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，_battle_gear 在核心",
     # companions
     ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：不是動作，是重驗、驗過的那一輪要傳給後面的格；MENU_ORDER 的 quick 接不了（第 57 批）",
@@ -62,7 +61,6 @@ GAME_DELEGATE_CALLERS = {
     ("choose", "_join_lean"): "投靠或拜入陣營名下的門派那一下，動作之後、入伍段之前給傾向：位置固定、動作之後的收尾沒有對應的掛鉤",
     ("_own_scene_text", "_faction_prompt"): "場景那一段的順序算行為（談著、選邊、投靠、叛投確認、求見…）：位置固定，場景的掛鉤是第 55～57 批",
     ("_own_scene_text", "_defect_scene"): "同上（叛投確認畫面的場景）",
-    ("season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
     # gear
     ("choose", "_general_gifts"): "位置固定、沒有對應的掛鉤（名將贈禮夾在「引導」與 check_thresholds 之間，choose 後半的先後算行為）",
     ("choose", "_signature_arms"): "位置固定、沒有對應的掛鉤（同上：本命兵器與名將贈禮同一處）",
@@ -77,7 +75,6 @@ GAME_DELEGATE_CALLERS = {
     ("_menxia_entry", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：修練頁、煉製頁的動作（序章的練功、熔煉）：核心的修練頁紀錄服務，還把 HutReward 拆進 changes，位置就是行為",
     ("choose", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）：選完那一下人物的信接在這一下的回話裡（位置算行為）",
     ("choose", "_opening_deliver"): "同上：那位人物的信與護送委託",
-    ("now_entry_html", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）不放「剛剛」那張卡：江湖頁的「剛剛」是核心",
     ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
     ("_note_guide", "_guide_speakers"): "核心的引導框服務照說話的人分開「下一步的話」與「✔ 與獎勵」",
     ("_top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
@@ -92,7 +89,6 @@ GAME_DELEGATE_CALLERS = {
     ("_own_scene_text", "_fs_asking_text"): "答題中的場景文字排在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前，scene 掛鉤在更前面（有所感、宴席之後、談話之前），位置不同不能接",
     ("admin_player_choices", "_admin_omen_choices"): "管理者的玩家選單（/api/admin/player）最後兩鍵：可以給的機緣與伏筆片段，鍵的順序算行為，沒有對應的掛鉤",
     # outlets
-    ("shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
     # seal
     ("_battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
     ("admin_resolve_event", "_mandate_settle"): "管理者「定結果」替天命之爭定天命：時刻表的救場工具是核心，接在 timetable.resolve 與存季之後、讀回季之前，沒有對應的掛鉤",
@@ -112,7 +108,6 @@ GAME_DELEGATE_CALLERS = {
     ("choose", "_story_tick"): "每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
     ("_event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；同上",
     # tavern
-    ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）店面那一頁接上店面登記（Shop）",
     # zhuan
     ("_reset_player_for_new_season", "_zhuan_past"): "換季最前面補季末論功與〈天下形勢〉，回的 past 要傳給第三行的 _zhuan_profile、中間夾一條線收尾：掛鉤沒有傳值的位置，硬開一格要多一份暫存；不接",
     ("_reset_player_for_new_season", "_zhuan_profile"): "換季存行狀（save_annals 的第四個引數）時的身家，讀第一行的 past（同上）",
@@ -143,6 +138,11 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     # core_views（第二輪第 81 批）：畫面搬進核心，原本 Game 原位的這幾對照搬
     ("status_view.status_data", "_stamina_help"): "點體力條看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     ("status_view.status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
+    ("page_view.shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
+    ("page_view.shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
+    ("page_view.shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）店面那一頁接上店面登記（Shop）",
+    ("page_view.season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
+    ("page_view.now_entry_html", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）不放「剛剛」那張卡：江湖頁的「剛剛」是核心",
 }
 
 # 頂層的核心模組（MODULES 裡放在 tianxia/ 底下的）經 game 叫包的委派。現在沒有。
