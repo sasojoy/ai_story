@@ -24,9 +24,7 @@ GAME_IMPORTS = {
 
 # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）。核心的接縫（選單、補算時間、行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、
 # 戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心自己的接縫：還沒搬的別的功能（或同一包還沒搬的那一半）叫包。
-GAME_DIRECT = {
-    "_squad_encounter": "戰鬥（as_sortie 那一支）打贏之後出陣包給獎勵、約戰開著的季不推進度（那兩對記在 GAME_DELEGATE_CALLERS）：留原位（第 26 批量過：獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra；約戰開著與否是查詢；都不在懸賞那一個發布點上，原位行尾標「# 留原位：第 26 批」）。序章那一場的戰報標題寫雪恥（sortie.on、PROLOGUE_FIGHT）留在這裡（第 17 批）：戰報在這個單打服務裡建、裡面就存檔，序章裡誰打都照寫（不只 act:train），出陣包從外面改不到；要拿掉得在單打服務開一個「這一場戰報叫什麼」的位置，交 PM 定",
-}
+GAME_DIRECT: dict[str, str] = {}
 
 # core_imports（第二輪第 98 批）：各包的表上不是函式的格（字 → 包）。原本是 Game 的類別屬性，只有測試從 Game 讀。
 GAME_TABLE_TEXTS = {
@@ -82,12 +80,9 @@ GAME_DELEGATE_CALLERS = {
     ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
     ("_note_guide", "_guide_speakers"): "核心的引導框服務照說話的人分開「下一步的話」與「✔ 與獎勵」",
     # military
-    ("_squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
     ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
     ("choose", "_settle_plots"): "做完一個動作之後的集體密謀結算：位置在回話的最後一段，沒有對應的掛鉤",
     ("choose", "_hear_after_stamina"): "花體力的動作之後抽伏筆片段與機緣線索：位置在 choose 結尾、after_action 之前，伏筆先機緣後、共用 self.rng，擲骰順序算行為，沒有對應的掛鉤",
-    ("_squad_encounter", "_fs_after_win"): "遊歷打贏之後擲官銀：留原位（第 26 批量過：夾在軍令記功前後、懸賞那一個發布點之前，只在單打服務這一處有，收進事件 win 兩個發布點的訂閱者就不一樣）",
-    ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
     ("_own_scene_text", "_fs_asking_text"): "答題中的場景文字排在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前，scene 掛鉤在更前面（有所感、宴席之後、談話之前），位置不同不能接",
     # outlets
     # seal
@@ -98,10 +93,6 @@ GAME_DELEGATE_CALLERS = {
     # socialize
     ("_own_scene_text", "_audience_intro"): "求見畫面的說明（picking_audience）：場景文字夾在叛投確認與伏筆答題之間，`scene` 掛鉤坐在更前面，位置算行為",
     # sortie
-    ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏之後給出陣的獎勵：留原位（第 26 批量過：出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上；原位行尾標「# 留原位：第 26 批」）",
-    ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）打贏之後：約戰開著時只剩截糧、不推進度（進度只在約戰結算動）：留原位（第 26 批量過：約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件；原位行尾標「# 留原位：第 26 批」）",
-    ("_squad_encounter", "_drill"): "戰鬥（核心的單打服務，遊歷、探索的野怪、劇情以外的仗都經它）遇上自家陣營的隊伍改成操練：操練是出陣包的（第 17 批）、打不打在單打服務裡定；單打服務的「遇上自己人」沒有對應的掛鉤。68 批裡沒有排：總表 3.4 可選的「戰鬥單打服務收進核心」（戰鬥調查 C1）那一次在 core/combat.py 開這一格、改叫掛鉤；不做 C1 就一直留著",
-    ("_squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，結果交給 push_trend，不在發布點上；原位行尾標「# 留原位：第 26 批」）",
     # story
     ("_reset_player_for_new_season", "_story_close_season"): "還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳，夾在 _zhuan_past 與 _zhuan_profile 中間（同上）；on_season_end 在 save_annals 之後、又只問開著的包",
     ("choose", "_story_tick"): "每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
@@ -138,6 +129,14 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     ("combat.battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
     ("combat.battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，_battle_gear 在核心",
     ("combat.seize", "_seize_chance"): "核心的單打服務收尾擲絕學的契機：留原位（第 26 批量過：在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報；原位行尾標「# 留原位：第 26 批」）",
+    # core_imports（第二輪第 98 批：_squad_encounter 收進單打服務，這七對從 GAME_DELEGATE_CALLERS 搬過來，理由字照搬）
+    ("combat.squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
+    ("combat.squad_encounter", "_fs_after_win"): "遊歷打贏之後擲官銀：留原位（第 26 批量過：夾在軍令記功前後、懸賞那一個發布點之前，只在單打服務這一處有，收進事件 win 兩個發布點的訂閱者就不一樣）",
+    ("combat.squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
+    ("combat.squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏之後給出陣的獎勵：留原位（第 26 批量過：出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上；原位行尾標「# 留原位：第 26 批」）",
+    ("combat.squad_encounter", "duel_on"): "戰鬥（as_sortie）打贏之後：約戰開著時只剩截糧、不推進度（進度只在約戰結算動）：留原位（第 26 批量過：約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件；原位行尾標「# 留原位：第 26 批」）",
+    ("combat.squad_encounter", "_drill"): "戰鬥（核心的單打服務，遊歷、探索的野怪、劇情以外的仗都經它）遇上自家陣營的隊伍改成操練：操練是出陣包的（第 17 批）、打不打在單打服務裡定；單打服務的「遇上自己人」沒有對應的掛鉤。68 批裡沒有排：總表 3.4 可選的「戰鬥單打服務收進核心」（戰鬥調查 C1）那一次在 core/combat.py 開這一格、改叫掛鉤；不做 C1 就一直留著",
+    ("combat.squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，結果交給 push_trend，不在發布點上；原位行尾標「# 留原位：第 26 批」）",
     # core_pushing（第二輪第 80 批：推大勢、回體丹搬進 core/pushing.py、core/pills.py，這三對從 GAME_DELEGATE_CALLERS 搬過來，理由字照搬）
     ("pills.take_stamina_pill", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：服回體丹（序章那一步）：回體丹是核心，在動作中間、回話照位置接",
     ("pills.top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
@@ -189,12 +188,13 @@ CORE_COMBAT_DELEGATES = {
     "_drill_gains", "_famed_news", "_deed_fame", "_record_exp",  # 操練的帳與立功
     "_lose_silver", "_player_hp_and_cap", "_player_hp", "_hp_facts", "_take_toll", "_play_rounds", "_story_squad", "_tier3", "_battle_rewards", "_seize", "_file_battle",  # 收場
     "_spar_power", "_spar_mirror",  # 本人對本人
+    "_squad_encounter",  # 打一場的主流程（第二輪第 98 批）
 }
 # 照舊是 staticmethod（懸賞、玉璽的測試用 staticmethod 換 _spar_power）：委派的第一個參數不是 self
 CORE_COMBAT_STATIC_DELEGATES = {"_narrate", "_spar_power", "_spar_mirror"}
 
 # 被測試、腳本換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：combat 裡一律不直接叫模組裡的本體。模組裡的函式 → Game 上的委派、誰換掉它。
-# 模組裡真的有人互叫的只有 COMBAT_CALLED_THROUGH_CTX 那兩個（寫成 ctx.<委派>）；其餘 6 個模組裡沒有人互叫，都經 _squad_encounter 的 self._x 或包的 ctx._x，打得到
+# 模組裡真的有人互叫的是 COMBAT_CALLED_THROUGH_CTX 那 6 個（寫成 ctx.<委派>；第 98 批 _squad_encounter 收進來，多了它叫的 4 個）；其餘 2 個模組裡沒有人互叫，都經包的 ctx._x，打得到
 COMBAT_VIA_CTX = {
     "judged": ("_judged", "tianxia/features/guide/tests/test_prologue.py 換掉 Game._judged：序章寫好的那一場不看判讀"),
     "lose_silver": ("_lose_silver", "scripts/measure_mounts.py 換掉 Game._lose_silver：量策馬脫身"),
@@ -205,7 +205,7 @@ COMBAT_VIA_CTX = {
     "spar_power": ("_spar_power", "tianxia/features/bounties/tests/test_bounties.py、tianxia/features/seal/tests/test_seal_revamp_hidden.py 用 staticmethod 換掉 Game._spar_power"),
     "fight_request": ("fight_request", "tianxia/features/craft/tests/test_craft_shell.py 換掉 Game.fight_request：暫停中不問引擎"),
 }
-COMBAT_CALLED_THROUGH_CTX = {"_battle_power", "fight_request"}  # battle_scores → ctx._battle_power、checked_fight → ctx.fight_request
+COMBAT_CALLED_THROUGH_CTX = {"_battle_power", "fight_request", "_judged", "_lose_silver", "_battle_rewards", "_seize"}  # battle_scores → ctx._battle_power、checked_fight → ctx.fight_request、squad_encounter → 後面 4 個
 
 # core_pushing：推大勢、回體丹（核心本體 tianxia/core/pushing.py、pills.py，第二輪第 80 批）：Game 上本體只有一行 `return pushing.<名>(self, …)`、`return pills.<名>(self, …)` 的方法。
 # 只有模組自己叫的 _resisted_line、_refill_stamina 不留委派；take_stamina_pill 的 @_not_while_preparing 留在委派上

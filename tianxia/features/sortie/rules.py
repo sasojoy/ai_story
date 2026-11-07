@@ -20,7 +20,7 @@ MODE_NAMES: dict[str, str] = {"attack": "攻", "hold": "守"}  # 待 joy 潤
 LEFT_NOTE = "今日還能 {n} 次"  # 待 joy 潤：鈕上體力後面那一段
 USED_UP = "今日已出陣 {n} 次，明日 00:00 後再出陣"  # 待 joy 潤（設計 2.3；鈕上不帶句號，行動列底下那一行補句號）
 HOLD_LINE = "你在{place}整頓營伍、巡守要道，替自家守住這一處。"  # 待 joy 潤
-PROLOGUE_FIGHT = "雪恥"  # 待 joy 潤：序章那一場寫好的仗（不算出陣次數，鈕上與紀錄標題寫它）
+from tianxia.core.services import PROLOGUE_FIGHT  # noqa: F401  序章那一場的字搬進核心（第二輪第 98 批：單打服務也讀）；actions.py 照舊讀 rules.PROLOGUE_FIGHT
 # 散人站在戰線地點（FB-250）：出陣那一顆灰著寫這個原因（不寫「不在戰線」）；行動列底下那一行寫 RANGER_LINE。待 joy 潤
 RANGER_NOTE = "散人不能出陣"
 RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與找素材撞上的仗出力。"

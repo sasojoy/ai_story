@@ -50,6 +50,7 @@ ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管�
 
 # sortie（全部拆包第 17 批：原本寫在 engine.py；出陣包的遊歷鈕要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+PROLOGUE_FIGHT = "雪恥"  # 待 joy 潤：序章那一場寫好的仗（不算出陣次數，鈕上與紀錄標題寫它；單打服務 core/combat.py、出陣包都讀，第二輪第 98 批搬進來）
 
 
 # guide（全部拆包第 22 批）：原本寫在 tianxia/guide.py；核心的 Game._guide、_menxia_entry 照它把序章步驟的獎勵（這一下的結果）跟對話框

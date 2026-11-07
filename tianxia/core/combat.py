@@ -43,14 +43,14 @@ from typing import TYPE_CHECKING
 
 from . import battle_base as battle_instance
 from . import features as features_core
-from .services import drill_share
+from .services import PROLOGUE_FIGHT, drill_share
 from .. import (
-    armor, attrset, battlelog, conquest, encounter, fight_llm, gender, materials, mounts, ranger, renown, rise, roster, rounds, styles, tactics,
-    team, terrain, traits, treasures, weapons,
+    armor, atlas, attrset, battlelog, conquest, encounter, fight_llm, gender, materials, mounts, ranger, renown, rise, roster, rounds, styles, tactics,
+    team, terrain, territory, traits, treasures, weapons,
 )
 from .. import prologue as prologue_rules
 from ..models import Squad
-from ..rules import add_rumor, game_day, season_one
+from ..rules import add_rumor, front_of, game_day, season_one
 from ..state import PLAYER
 
 if TYPE_CHECKING:
@@ -632,6 +632,76 @@ def file_battle(ctx, record, wear: bool | None = None, armor_wear: bool | None =
             ctx._draft.changes.append(f"經驗 +{record.exp}（每人）")
     return line
 
+
+# ── 打一場的主流程（第二輪第 98 批從 Game 收進來：逐行照抄，擲骰與呼叫的先後一行都沒動） ──
+
+def squad_encounter(ctx, squad_id: str, wild: bool = False, as_sortie: bool = False) -> list[str]:
+    """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+
+    wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
+    打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
+    一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。
+    野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。
+    as_sortie：出陣的攻（出陣探索與地盤設計 2.2、2.4）——戰報類型 sortie、給自己的照 _sortie_rewards（三成、不給銀兩掉落）、
+    不推線，推那一塊的進度（_push_progress）。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    loc = c.locations[p.location]
+    squad = c.squads[squad_id]
+    if ctx._drills_with(squad):
+        return ctx._drill(squad)  # 遇上自家隊伍改操練：操練是出陣包的（第 17 批），打不打在這個單打服務裡定
+    scripted = prologue_rules.fight_tier(s, c)  # 序章雪恥那一場：結果照寫好的，不吃模型的判讀
+    judged = None if wild or scripted is not None else ctx._judged(squad)
+    result = fight_with(ctx, squad, judged, tier=scripted)
+    record = battlelog.new_record(s, c, ctx.world, squad, result, "wild" if wild else "sortie" if as_sortie else "train")
+    if prologue_rules.active(s, c) and territory.on(c):  # 戰報不寫舊名「遊歷」（新手引導重做）
+        record.label = PROLOGUE_FIGHT
+    if scripted is None:
+        record.notes += style_note(ctx, squad, result) + terrain_note(ctx)
+    narrate(record, result, judged)
+    msgs: list[str] = []
+    if result.tier in team.WIN_TIERS:
+        rewards = ctx._sortie_rewards(squad, record) if as_sortie else ctx._battle_rewards(squad, record)  # 留原位：第 26 批（打贏的獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）
+        msgs += rewards
+        extra: list[str] = []
+        if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
+            if not as_sortie:  # 出陣不推線（領地爭奪：推那一塊的進度，下面 _push_progress）
+                for trend_id, delta in ctx.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend  # 留原位：第 26 批（推大勢夾在記功、地盤進度之前，結果交給 push_trend，不在發布點上）
+                    extra += ctx.push_trend(trend_id, delta, source="train")
+            credit: list[str] | None = None
+            # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
+            if as_sortie and not ctx.duel_on():  # 留原位：第 26 批（約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件）
+                # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
+                credit = ctx._order_credit(
+                    kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+                )
+                extra += ctx._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie", "attack")
+            region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
+            extra += ctx._fs_after_win(squad, region.id if region is not None else None)
+            extra += credit if credit is not None else ctx._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
+                kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+            )
+            extra += ctx._opp_on_win(front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
+            extra += ctx.publish("win", loc.id, squad.id)  # 懸賞榜的討伐（事件 win，第 26 批）
+            if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
+                extra += deed_fame(ctx, "sortie")
+        changes, notes = battlelog.split_changes(extra, for_record=True)
+        record.changes += changes
+        record.notes += notes
+        msgs += extra
+    elif result.tier == "落敗":
+        msgs += ctx._lose_silver(record)
+    toll, hp_lost, facts = take_toll(ctx, result.tier, wild=wild, clash=result.clash, squad=squad)
+    record.changes += toll
+    msgs += toll
+    play_rounds(ctx, record, squad, result.tier, hp_lost, facts, clash=result.clash)
+    msgs += ctx._seize(record)
+    msgs.insert(0, file_battle(ctx, record))
+    if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
+        msgs.insert(1, f"（{squad.name}：{squad.desc}）")
+    if not wild and is_big(ctx, squad):  # 名聲 4.5：天下聞名打大場面點名
+        famed_news(ctx, loc.name, squad.name, result.tier)
+    return msgs
 
 # ── 本人對本人（切磋、截殺、買兇的殺手） ──
 

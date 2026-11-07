@@ -570,8 +570,8 @@ def test_the_game_reaches_the_combat_service_only_through_its_one_line_delegates
 
 
 def test_the_combat_service_calls_the_patched_game_methods_through_ctx():
-    """被換掉的 8 個，combat 裡一處都不直接叫本體；真的有人互叫的兩個（COMBAT_CALLED_THROUGH_CTX）寫成 ctx.<委派>。
-    另外 6 個模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
+    """被換掉的 8 個，combat 裡一處都不直接叫本體；真的有人互叫的 6 個（COMBAT_CALLED_THROUGH_CTX）寫成 ctx.<委派>。
+    另外 2 個模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
     tree = ast.parse((TIANXIA / "core" / "combat.py").read_text(encoding="utf-8"))
     direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in COMBAT_VIA_CTX)
@@ -942,7 +942,7 @@ def bus_bypasses(source: str) -> list[int]:
 def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     """engine.py 與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
     原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
-    files = [TIANXIA / "engine.py"] + [path for name in _packages() for path in _package_files(name)]
+    files = [TIANXIA / "engine.py", TIANXIA / "core" / "combat.py"] + [path for name in _packages() for path in _package_files(name)]  # combat：win 的發布點第 98 批搬過去
     found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
     assert {path: lines for path, lines in found.items() if lines} == {}
     old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
@@ -1113,6 +1113,16 @@ GAME_DELEGATES = set(game_api_names())
 
 # core_imports（第二輪第 98 批）：表上不是函式的那幾格
 from boundary_tables import GAME_TABLE_TEXTS  # noqa: E402  自己這一段另 import：上面那一串別條線也在加
+
+
+def test_the_prologue_fight_label_is_one_object_in_the_core():
+    """序章那一場的字搬進核心（第 98 批）：單打服務、出陣包、engine 留的名字是同一個物件。"""
+    from tianxia import engine
+    from tianxia.core import combat, services
+    from tianxia.features.sortie import rules
+
+    assert engine.PROLOGUE_FIGHT is services.PROLOGUE_FIGHT is rules.PROLOGUE_FIGHT is combat.PROLOGUE_FIGHT
+
 
 
 def test_every_name_on_the_game_api_tables_hangs_a_function_of_that_package():
