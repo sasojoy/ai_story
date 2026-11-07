@@ -186,12 +186,13 @@ def gear_card(
 ) -> dict | None:
     """神器譜那一筆的唯讀裝備卡（skillview.shown_gear）：ref 是 Game.divine_book_view 那一筆的 ref。原品還在主人身上、裝備庫或寄放處
     就照那一件畫（淬煉、磨損照實）；不在了（換季、內容拿掉）照譜上記的種類、屬性、階畫。找不到那一筆回 None。"""
-    from . import forge_secrets, signature_arms, skillview
+    from . import forge_secrets, skillview
+    from .core.signature_base import REF
     from .state import Equipment
 
     owner, item, name, live = None, None, "", True
-    if ref.startswith(signature_arms.REF):
-        cid = ref[len(signature_arms.REF):]
+    if ref.startswith(REF):
+        cid = ref[len(REF):]
         claim = next((claims[cid] for s, claims in world.signature_records() if s == season and cid in claims), None)
         arm = next((a for a in content.gear.signature_arms if a.character == cid), None)
         if claim is None or arm is None:

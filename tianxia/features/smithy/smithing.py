@@ -28,6 +28,7 @@ from tianxia.core.smith_base import (  # noqa: F401  打造單子「讀」的那
     _PICKED_FRAMES, _STEP_LINES, ARMOR_ASK_AUX, ARMOR_ASK_MAIN, ARMOR_KIND, ASK_AUX, ASK_KIND, ASK_MAIN, CANCELLED, GO_VERB, PICKED_AUX,
     PICKED_KIND, PICKED_MAIN, READY, UNDONE, draft_here, draft_stale, here, is_forge_step, is_step_line,
 )
+from tianxia.core.smith_base import BIND_LINE, NAMED_LINE, bind_options, bond_lines, bound_alive  # noqa: F401  修練頁也讀的以器配招（第二輪第 88 批搬進核心），包 re-export 同一批
 from tianxia.models import WEAPON_KINDS, Content
 from tianxia.rules import add_chronicle, add_rumor
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GameState, SmithDraft, Weapon
@@ -332,25 +333,6 @@ BIND_NOT_ORIGINAL = "（只有你打出的神器原品能以器配招。）"
 BIND_BAD_ART = "（這一門配不上：要是你自己合成、練成絕學、有絕招的那一門。）"
 BIND_ALREADY = "（【{item}】已經配了【{art}】，不能改配。）"
 BIND_DONE = "【{item}】與【{art}】人器合一：{bond}。"
-BIND_LINE = "以器配招〔{art}〕：{bond}"
-NAMED_LINE = "名器同氣〔{art}〕：{bond}"
-
-
-def bind_options(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str, str]]:
-    """配得上的絕學：自己手上（身上與功法庫）自己合成、練成絕學、功效寫了以器配招的那幾門：（武學 id, 名字, 加強的那一句）。"""
-    out = []
-    for art_id in library.owned_arts(state):
-        art = team.player_art(state, content, world, art_id)
-        trait = traits.ultimate_trait(content, art)
-        if trait is not None and trait.ultimate_bond is not None:
-            out.append((art_id, art.name, trait.ultimate_bond.desc))
-    return out
-
-
-def bound_alive(state: GameState, item: Equipment) -> bool:
-    return item.bound_art is not None and item.bound_art in library.owned_arts(state)
-
-
 def bind_problem(state: GameState, content: Content, world: WorldStateStore, item_id: str, art_id: str) -> str | None:
     """以器配招做不了的原因：不是自己手上的神器原品（名將本命兵器不算）、已經配了一門還在手上的、那一門配不上。"""
     item = next((i for i in forge_secrets.owned_gear(state.player) if i.id == item_id), None)
@@ -374,22 +356,6 @@ def bind_art(state: GameState, content: Content, world: WorldStateStore, item_id
     item.bound_art = art_id
     bond = traits.ultimate_trait(content, art).ultimate_bond
     return True, [BIND_DONE.format(item=item.name, art=art.name, bond=bond.desc.split("：", 1)[-1])]
-
-
-def bond_lines(state: GameState, content: Content, world: WorldStateStore, item: Equipment) -> list[str]:
-    """修練頁那一列寫的：這件綁了哪一門（以器配招），或身上哪一門絕學跟這件名器同氣。沒有是空的。"""
-    if bound_alive(state, item):
-        art = team.player_art(state, content, world, item.bound_art)
-        trait = traits.ultimate_trait(content, art)
-        if trait is not None and trait.ultimate_bond is not None:
-            return [BIND_LINE.format(art=art.name, bond=trait.ultimate_bond.desc.split("：", 1)[-1])]
-    out = []
-    for art_id in (state.player.member.wugong_id, state.player.member.neigong_id):
-        art = team.player_art(state, content, world, art_id)
-        found = team.gear_bond(content, art, item) if art is not None else None
-        if found is not None and found[1] == team.NAMED_SOURCE:
-            out.append(NAMED_LINE.format(art=art.name, bond=found[0].desc))
-    return out
 
 
 # ---- 鐵匠鋪的一步一步選單（375×812：每一步只有一排按鈕，最多十二種素材＋兩顆）----

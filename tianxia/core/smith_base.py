@@ -2,12 +2,15 @@
 is_forge_step、is_step_line、draft_here、draft_stale 與它們讀的常數、here 原樣搬來，包 re-export 同一批）：核心的 choose（打造那幾步
 併成一則）、_drop_stale_references 與 sync（單子那一欄關了、失效了就清）讀它，不經舊名 smithing。只讀，不寫。核心本體
 （tianxia/core/ 底下的檔），不進 MODULES。單子一步一步回的那幾句（問下一步、挑了什麼、退回、不打了）是原句搬家。
+以器配招「讀」的那一半（BIND_LINE、NAMED_LINE、bind_options、bound_alive、bond_lines，第二輪第 88 批）也在這裡：共用層 art_cards.gear_rows 畫修練頁那一列要讀，包不能給共用層 import；
+寫的 bind_problem、bind_art 留在包裡，包 re-export 同一批。
 """
 from __future__ import annotations
 
-from .. import armor, weapons
+from .. import armor, library, team, traits, weapons
 from ..models import WEAPON_KINDS, Content
-from ..state import GameState, SmithDraft
+from ..state import Equipment, GameState, SmithDraft
+from ..world_state import WorldStateStore
 
 ARMOR_KIND = "防具"  # 單子（SmithDraft.kind）與開爐鈕 id 上代表防具的那一格（防具沒有種類，四欄設計 4.7）
 GO_VERB = "forge-go"
@@ -59,3 +62,38 @@ def draft_stale(content: Content, draft: SmithDraft) -> bool:
 def draft_here(state: GameState, content: Content, draft: SmithDraft) -> bool:
     """這張單子在這裡還打得了（存檔修補、同步時看）：防具的單子看防具的開關、兵器的看武器的開關（人都要在城鎮）。"""
     return here(state, content, draft.kind)
+
+
+BIND_LINE = "以器配招〔{art}〕：{bond}"
+NAMED_LINE = "名器同氣〔{art}〕：{bond}"
+
+
+def bind_options(state: GameState, content: Content, world: WorldStateStore) -> list[tuple[str, str, str]]:
+    """配得上的絕學：自己手上（身上與功法庫）自己合成、練成絕學、功效寫了以器配招的那幾門：（武學 id, 名字, 加強的那一句）。"""
+    out = []
+    for art_id in library.owned_arts(state):
+        art = team.player_art(state, content, world, art_id)
+        trait = traits.ultimate_trait(content, art)
+        if trait is not None and trait.ultimate_bond is not None:
+            out.append((art_id, art.name, trait.ultimate_bond.desc))
+    return out
+
+
+def bound_alive(state: GameState, item: Equipment) -> bool:
+    return item.bound_art is not None and item.bound_art in library.owned_arts(state)
+
+
+def bond_lines(state: GameState, content: Content, world: WorldStateStore, item: Equipment) -> list[str]:
+    """修練頁那一列寫的：這件綁了哪一門（以器配招），或身上哪一門絕學跟這件名器同氣。沒有是空的。"""
+    if bound_alive(state, item):
+        art = team.player_art(state, content, world, item.bound_art)
+        trait = traits.ultimate_trait(content, art)
+        if trait is not None and trait.ultimate_bond is not None:
+            return [BIND_LINE.format(art=art.name, bond=trait.ultimate_bond.desc.split("：", 1)[-1])]
+    out = []
+    for art_id in (state.player.member.wugong_id, state.player.member.neigong_id):
+        art = team.player_art(state, content, world, art_id)
+        found = team.gear_bond(content, art, item) if art is not None else None
+        if found is not None and found[1] == team.NAMED_SOURCE:
+            out.append(NAMED_LINE.format(art=art.name, bond=found[0].desc))
+    return out

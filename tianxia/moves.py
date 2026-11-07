@@ -145,6 +145,31 @@ def purity(colors: list[list[str]]) -> str | None:
     return None
 
 
+CLEAR, RARE = "透", "奇"  # 待 joy 潤
+MARK_TEXT = {PURE: "三格全單色", WHOLE: "三格全任色", CLEAR: "招已透", RARE: RARE_WORD}  # 待 joy 潤
+TIER_TEXT = {0: "凡", 1: "佳", 2: "珍", 3: "神"}  # 跟意境的品相同一條梯子（Joy 2026-10-21「那武學呢 有分？」）
+
+
+def marks_of(colors: list[list[str]], fire: str | None, rare: bool) -> list[str]:
+    """撞到的稀有：純或渾、招透、稀有路數。"""
+    out = [m for m in (purity(colors),) if m]
+    if fire == "透":
+        out.append(CLEAR)
+    if rare:
+        out.append(RARE)
+    return out
+
+
+def tier_of(marks: list[str]) -> str | None:
+    """品相：一樣都沒撞到「凡」、一樣「佳」、兩樣「珍」、三樣「神」。"""
+    return TIER_TEXT[min(len(marks), 3)]
+
+
+def look_text(marks: list[str]) -> str:
+    """卡上那一行品相：「珍・三格全單色、招已透」；什麼都沒撞到是「凡」。"""
+    return "・".join([tier_of(marks)] + (["、".join(MARK_TEXT[m] for m in marks)] if marks else []))
+
+
 def look_bonus(content: Content, art) -> float:
     """純、渾在打的時候真的有用（稿案「強不強」）：自創的這一門功效層數多乘 1＋這麼多（Config.arts.pure_bonus／whole_bonus）。
     art 是玩家那一份（品級已照自己的）；不是自創的是 0。"""

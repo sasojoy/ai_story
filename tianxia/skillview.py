@@ -4,7 +4,8 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, roster, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, roster, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, might, mounts, moves, pose, prologue, renown, tactics as tactics_mod, team, traits, treasures, weapons
+from .core import seal_base, smith_base
 from .core.services import item_for  # 「去萬寶閣」停在哪一件（核心的錢包服務，3.10）
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import (
@@ -465,7 +466,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "stack": (stack := {} if arts_mod.fixed(content, art_id) else {
                 i: "；".join(p) for i in state.player.insights if not arts_mod.where_slotted(state, i) and (p := stack_parts(state, content, world, art, i))}),
             "stack_rule": STACK_RULE if stack else "",
-            "pose": create_mod.icon_pose(content, art, weapon),  # 功法卡上的小火柴人：自創的照自己擺的式，其餘照兵器挑預設架式
+            "pose": pose.icon_pose(content, art, weapon),  # 功法卡上的小火柴人：自創的照自己擺的式，其餘照兵器挑預設架式
             "weapon": weapon,  # 小圖上手裡拿什麼（內功、推不出來的是 None）
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
             # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
@@ -520,7 +521,7 @@ def shown_art(state: GameState, content: Content, world: WorldStateStore, kind: 
         "card": art_card(art, level, None, parent_names(art, content, world), traits.card_line(content, art), gen_word=gen_word(art, content, world)),
         "affinity": arts_mod.affinity_text(art),
         "slots": slot_rows(state, content, world, art), "colors": arts_mod.slot_colors(state, content, art),
-        "pose": create_mod.icon_pose(content, art, weapon), "weapon": weapon,
+        "pose": pose.icon_pose(content, art, weapon), "weapon": weapon,
         "score": arts_mod.score(state, content, world, art), "score_note": score_note(state, content, world, art),
         "tactic": tactic_line(content, art, level), "fifth": fifth_ring(content, art, level),
         **_look(content, art),
@@ -731,8 +732,8 @@ def _look(content: Content, art: MartialArt) -> dict:
     """自創那一門撞到了什麼（create.marks_of）：look 是卡上那一行，tier 是品相凡佳珍神（撞到幾樣）；不是自創的都是空的。"""
     if not moves.is_own(content, art):
         return {"look": "", "tier": None}
-    marks = create_mod.marks_of(art.slot_colors, art.move_fire, art.move_rare)
-    return {"look": create_mod.look_text(marks), "tier": create_mod.tier_of(marks)}
+    marks = moves.marks_of(art.slot_colors, art.move_fire, art.move_rare)
+    return {"look": moves.look_text(marks), "tier": moves.tier_of(marks)}
 
 
 def _fits(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[dict]:
@@ -984,7 +985,7 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     武器、防具兩段每一列多 divine：還等著你定名的神器原品是 {"pattern": 譜名, "unit": 量詞}（修練頁那一列底下畫定名表單；量詞照
     equipment.unit_for：防具一件、拳套一副、其他兵器一把，FB-197），其餘 None；裝備庫裡等著定名的原品排最前面（網頁預設只列前 8 件，不排前面表單會被藏起來）。
     bind：自己手上還沒以器配招的神器原品是 {"options": [{id, name, bond}…]}（配得上的絕學，可以是空的），其餘 None；
-    綁了的、名器同氣的那一句接在 tactic 後面（smithing.bond_lines）。
+    綁了的、名器同氣的那一句接在 tactic 後面（smith_base.bond_lines）。
     held_note：寄放著哪幾件（6.5），沒有是空字串。
     where（FB-138）：每一段「哪裡買得到、哪裡得來」那一句（equipment.smith_where、mounts.where、treasures.WHERE），讀內容的地點標籤；
     網頁在每一段身上與裝備庫都空著、也沒有寄放時畫精簡的一塊，每段一行寫 empty 加 where。內容裡沒有那種地點時是空字串。"""
@@ -1001,20 +1002,20 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
     if equipment.on(content, "mount"):
         slots.append({"slot": "mount", "label": equipment.SLOTS["mount"].label, "empty": mounts.EMPTY, "note": mounts.RACK_NOTE,
                       "where": mounts.where(state, content), **mounts.rows(state, content)})
-    if equipment.on(content, "treasure") or (seal.on(content) and state.player.heirloom is not None):
+    if equipment.on(content, "treasure") or (seal_base.on(content) and state.player.heirloom is not None):
         slots.append({"slot": "treasure", "label": equipment.SLOTS["treasure"].label, "empty": treasures.EMPTY,
                       "note": treasures.rack_note(state, content), "where": treasures.WHERE, **treasures.rows(state, content)})
     pending = forge_secrets.unnamed_originals(state, world)  # 還等著定名的神器原品（打造隱藏配方設計 5.2）：那一列底下畫定名表單
     owned = {item.id: item for item in forge_secrets.owned_gear(state.player)}
-    options = smithing.bind_options(state, content, world)
+    options = smith_base.bind_options(state, content, world)
     for block in slots:
         if block["slot"] in ("weapon", "armor"):
             for row in [block["worn"], *block["rack"]]:
                 if row is not None and (item := owned.get(row["id"])) is not None:
                     # 鑄器配招（玩家武學追上本命定案 四）：綁了哪一門、名器同氣接在特技那幾行後面；還沒綁的神器原品多一組 bind
-                    row["tactic"] = [*row.get("tactic", []), *smithing.bond_lines(state, content, world, item)]
+                    row["tactic"] = [*row.get("tactic", []), *smith_base.bond_lines(state, content, world, item)]
                     row["bind"] = ({"options": [{"id": a, "name": n, "bond": d.split("：", 1)[-1]} for a, n, d in options]}
-                                   if item.original and item.secret and not item.signature and not smithing.bound_alive(state, item) else None)
+                                   if item.original and item.secret and not item.signature and not smith_base.bound_alive(state, item) else None)
                 if row is not None:
                     row.setdefault("bind", None)
                     # unit：表單那一句「打出這把／件／副神器」的量詞（FB-197），照 equipment.unit_for，網頁不另寫一份
