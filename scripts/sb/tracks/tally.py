@@ -16,7 +16,8 @@ class TallyScenario(CompanionsScenario):
     bot.pick 的排除清單裡 act:rest、act:halt、arena:yield、talk:*、parley:* 這幾種沒有一軌遞進去過；_tavern 打手得手那一支沒有一軌走到。
 
     這一軌不靠運氣走到：照舊叫公開的 bot_policy.score、bot_policy.pick、bot.pick，每一格直接問；條件用 mock 換掉（dials 那張表）。換的名字兩份程式都叫得到：
-    Game 的公開方法、orders、precise、bot、bounties 的模組屬性、bot_policy 留著的小函式（_crippled、_cannot_push、_outmatched、_train_value、_bounty_here、wants_heal）、鐵匠鋪包的 bots.want。
+    Game 的公開方法、orders、precise、bounties 的模組屬性、bot_policy.wants_heal、鐵匠鋪包的 bots.want；第二輪第 89 批搬走的（_crippled、_cannot_push、_outmatched、_train_value、_bounty_here、injury_share、forge_ready、market_want）
+    compare 是拿 head 的腳本跑 base 與 head，舊位置在 head 上打不到讀者：dials 的 moved 把 bot、bot_policy、bot_base、鐵匠鋪與馬市的 bots 裡有這個名字的全部換掉。
     前半切在 half：假人坐在店裡（鐵匠鋪、馬市、酒肆，week7 還有懸賞榜；season21 那一位的選單上沒有亮的 act:bounties），那幾格是舊程式按開、寫進存檔的。後半新程式接手（實跑讀過輸出）：
     - sitting：坐在店裡的選單每一顆的分數、兩種 pick 各挑四次；BotRunner 兩輪之後再看一次（鐵匠鋪、馬市坐著的走出來了，籌丁走進別間；week7 懸賞榜那一位還在揭）。
     - scores：三個位子（官軍在大本營、黃巾在中立地、散人在路上）× 每一格條件 × 全部 act:<子動詞>（含沒有主人的 act:heal、act:on_road、不認得的、帶後綴的）；別人的名牌（profile 不是存檔那一份）；
@@ -78,15 +79,34 @@ class TallyScenario(CompanionsScenario):
 
         from tianxia import bot, bot_policy as bp, bounties, orders, precise
         from tianxia.engine import Game
+        from tianxia.features.gear import bots as gear_bots
         from tianxia.features.smithy import bots as smithy_bots
 
+        try:
+            from tianxia import bot_base
+        except ImportError:  # 第 89 批之前的程式
+            bot_base = None
+
         patch = mock.patch.object
+        homes = [m for m in (bot, bp, bot_base, smithy_bots, gear_bots) if m is not None]
+
+        class moved:  # noqa: N801  第 89 批搬走的名字：有這個名字的模組全部換（用法同 mock.patch.object 回的物件）
+            def __init__(self, name, **how):
+                self.patches = [patch(m, name, **how) for m in homes if hasattr(m, name)]
+
+            def start(self):
+                for p in self.patches:
+                    p.start()
+
+            def stop(self):
+                for p in reversed(self.patches):
+                    p.stop()
 
         def odds(word):
             return patch(Game, "challenge_odds", return_value=word)
 
         def here(kind):
-            return patch(bp, "_bounty_here", side_effect=lambda game, k: k == kind)
+            return moved("_bounty_here", side_effect=lambda game, k: k == kind)
 
         def trip(how, **weights):
             return patch(Game, "outing_plan", return_value=NS(weights=weights, how=how))
@@ -94,7 +114,7 @@ class TallyScenario(CompanionsScenario):
         def plenty(g):
             g.state.player.materials = {m: 99 for m, x in self.c.materials.items() if x.tier == 1}
 
-        crippled = lambda: patch(bp, "_crippled", return_value=True)  # noqa: E731
+        crippled = lambda: moved("_crippled", return_value=True)  # noqa: E731
         return [
             ("照實", [], None),
             ("內傷走不動", [crippled()], None),
@@ -110,31 +130,31 @@ class TallyScenario(CompanionsScenario):
             ("走一趟素材多", [trip("plain", encounter=1, material=2)], None),
             ("走一趟素材多＋背包滿", [trip("plain", encounter=1, material=2)], plenty),
             ("走一趟空的", [trip("plain")], None),
-            ("醫館輕傷", [patch(bp, "wants_heal", return_value=True), patch(bot, "injury_share", return_value=0.1)], None),
-            ("醫館重傷", [patch(bp, "wants_heal", return_value=True), patch(bot, "injury_share", return_value=0.9)], None),
+            ("醫館輕傷", [patch(bp, "wants_heal", return_value=True), moved("injury_share", return_value=0.1)], None),
+            ("醫館重傷", [patch(bp, "wants_heal", return_value=True), moved("injury_share", return_value=0.9)], None),
             ("交友開口是對話", [patch(Game, "socialize_starts_dialogue", return_value=True)], None),
             ("交友白跑", [patch(Game, "socialize_is_futile", return_value=True)], None),
             ("交友照常", [patch(Game, "socialize_starts_dialogue", return_value=False), patch(Game, "socialize_is_futile", return_value=False)], None),
-            ("推不動", [patch(bp, "_cannot_push", return_value=True)], None),
-            ("推不動＋截糧", [patch(bp, "_cannot_push", return_value=True), patch(Game, "duel_on", return_value=True), patch(Game, "duel_convoy_here", return_value=True)], None),
-            ("贏面太低", [patch(bp, "_outmatched", return_value=True)], None),
-            ("出陣能打", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False)], None),
-            ("軍令記功", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(orders, "win_counts", return_value=True)], None),
-            ("守城記功", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="hold"),
+            ("推不動", [moved("_cannot_push", return_value=True)], None),
+            ("推不動＋截糧", [moved("_cannot_push", return_value=True), patch(Game, "duel_on", return_value=True), patch(Game, "duel_convoy_here", return_value=True)], None),
+            ("贏面太低", [moved("_outmatched", return_value=True)], None),
+            ("出陣能打", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False)], None),
+            ("軍令記功", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), patch(orders, "win_counts", return_value=True)], None),
+            ("守城記功", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="hold"),
                        patch(orders, "duty_counts", return_value=True)], None),
-            ("不是守城", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="attack"),
+            ("不是守城", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), patch(Game, "sortie_mode", return_value="attack"),
                        patch(orders, "duty_counts", return_value=True)], None),
-            ("討伐懸賞", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), here("strike")], None),
-            ("一類一顆開", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(precise, "on", return_value=True)], None),
-            ("一類一顆關", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(precise, "on", return_value=False)], None),
-            ("大勢分", [patch(bp, "_cannot_push", return_value=False), patch(bp, "_outmatched", return_value=False), patch(bp, "_train_value", return_value=2.5)], None),
+            ("討伐懸賞", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), here("strike")], None),
+            ("一類一顆開", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), patch(precise, "on", return_value=True)], None),
+            ("一類一顆關", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), patch(precise, "on", return_value=False)], None),
+            ("大勢分", [moved("_cannot_push", return_value=False), moved("_outmatched", return_value=False), moved("_train_value", return_value=2.5)], None),
             ("守勢記功", [patch(orders, "duty_counts", return_value=True), patch(Game, "duel_on", return_value=False)], None),
             ("守勢記功＋約戰開著", [patch(orders, "duty_counts", return_value=True), patch(Game, "duel_on", return_value=True)], None),
             ("鐵匠有事", [patch(smithy_bots, "want", return_value="smith:repair")], None),
-            ("鐵匠有事＋爐開得成", [patch(smithy_bots, "want", return_value="smith:repair"), patch(bot, "forge_ready", return_value=True)], None),
-            ("鐵匠沒事＋爐開得成", [patch(smithy_bots, "want", return_value=None), patch(bot, "forge_ready", return_value=True)], None),
-            ("馬市有事", [patch(bot, "market_want", return_value="market:buy")], None),
-            ("馬市沒事", [patch(bot, "market_want", return_value=None)], None),
+            ("鐵匠有事＋爐開得成", [patch(smithy_bots, "want", return_value="smith:repair"), moved("forge_ready", return_value=True)], None),
+            ("鐵匠沒事＋爐開得成", [patch(smithy_bots, "want", return_value=None), moved("forge_ready", return_value=True)], None),
+            ("馬市有事", [moved("market_want", return_value="market:buy")], None),
+            ("馬市沒事", [moved("market_want", return_value=None)], None),
             ("榜上交得出", [patch(bounties, "give_choice", return_value=("a", "b"))], None),
             ("榜上沒事", [patch(bounties, "give_choice", return_value=None), patch(bounties, "open_bounties", return_value=[])], None),
         ]
