@@ -81,8 +81,6 @@ GAME_DELEGATE_CALLERS = {
     ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
     ("_note_guide", "_guide_speakers"): "核心的引導框服務照說話的人分開「下一步的話」與「✔ 與獎勵」",
     ("_top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
-    ("status_data", "_stamina_help"): "點體力條看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
-    ("status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     # military
     ("_squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
     ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
@@ -142,6 +140,9 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     ("event_check.answer_branch", "_general_gifts"): "同上（隨口應對的分岔那一支）",
     ("event_check.answer_branch", "_signature_arms"): "同上",
     ("event_check.answer_branch", "_gift_entry"): "同上",
+    # core_views（第二輪第 81 批）：畫面搬進核心，原本 Game 原位的這幾對照搬
+    ("status_view.status_data", "_stamina_help"): "點體力條看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
+    ("status_view.status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
 }
 
 # 頂層的核心模組（MODULES 裡放在 tianxia/ 底下的）經 game 叫包的委派。現在沒有。
