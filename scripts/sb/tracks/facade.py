@@ -5,7 +5,7 @@ import hashlib
 import re
 
 from sb.base import Scenario
-from sb.harness import ADMIN, emit, register_track
+from sb.harness import ADMIN, emit, new_web, note_new, register_track
 from sb.tracks.map import MapScenario
 
 # ── shell_web（全部拆包第 64 批：網頁殼化）────────────────────────────────────────
@@ -119,7 +119,9 @@ class FacadeScenario(Scenario):
             versions_ok &= hashlib.sha256(r.content).hexdigest()[:10] == version
             if name in FACADE_SCRIPTS:
                 emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
-            if name not in FACADE_SHELL_FILES:
+            if name in new_web():  # compare --new（第 106 批）：新包的 js 不算進 lines，版本號照驗
+                note_new("js", name)
+            elif name not in FACADE_SHELL_FILES:
                 body = r.text.replace("\r\n", "\n").split('"use strict";', 1)[1]
                 lines += [ln for ln in body.split("\n") if ln.strip() and not FACADE_SHELL_LINES.search(ln)]
         emit("每一支的版本號都是內容的前十碼", versions_ok)

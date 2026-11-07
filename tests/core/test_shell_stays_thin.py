@@ -10,6 +10,7 @@ import ast
 import fnmatch
 import importlib.util
 import re
+import sqlite3
 import sys
 from collections import Counter
 from pathlib import Path
@@ -484,3 +485,36 @@ def test_no_login_replies_do_not_say_who_is_a_bot():
     assert replies, "一條回應都沒打到：掃法壞了"
     found = {key: hits[:3] for key, reply in replies.items() if (hits := leaks(reply.text.replace('name="robots"', "") + "\n" + str(reply.headers)))}
     assert not found, f"不用登入就看得到假人字樣 {found}。該放哪：任何畫面、回應都不能透露誰是假人（FB-673；CLAUDE.md 原則「伺服器假人跟真人完全一樣」），這條沒有名單、不開例外。"
+
+
+# ── 15. same_behavior compare --new（整條比對在波末閘門，這裡只驗兩個不開伺服器就看得到的）──
+
+
+@pytest.fixture
+def harness(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    from sb import harness as module  # 只走 sb.harness 這條路徑，不要 scripts.sb（同 same_behavior.py 開頭）
+
+    yield module
+    module.set_new(())
+
+
+def test_compare_new_only_hides_the_tables_with_the_package_prefix(harness, tmp_path):
+    db = tmp_path / "x.db"
+    con = sqlite3.connect(db)
+    con.executescript("CREATE TABLE players (id INTEGER); CREATE TABLE zzdemo (id INTEGER); CREATE TABLE zzdemo_notes (id INTEGER); CREATE TABLE zz_notes (id INTEGER); CREATE TABLE zzdemos (id INTEGER);")
+    con.close()
+    harness.set_new(())
+    assert "### zzdemo_notes" in harness.db_text(db) and "### zzdemo " in harness.db_text(db)
+    harness.set_new(("zzdemo",))
+    text = harness.db_text(db)
+    assert "### zzdemo_notes" not in text and "### zzdemo " not in text
+    assert {"### players", "### zz_notes", "### zzdemos"} <= {line.rsplit(" [", 1)[0] for line in text.split("\n")}  # 沒帶前綴的照紅，免得順手藏掉別的表
+    assert harness.NEW["seen"]["表"] == {"zzdemo", "zzdemo_notes"}
+
+
+def test_compare_new_refuses_a_package_that_is_not_new(harness, tmp_path):
+    with pytest.raises(SystemExit, match="不是新包"):
+        harness.compare(ROOT, ROOT, tmp_path, ["week7"], 1, False, tracks=["facade"], new=("mall",))
+    with pytest.raises(SystemExit, match="head 沒有這一包"):
+        harness.compare(ROOT, ROOT, tmp_path, ["week7"], 1, False, tracks=["facade"], new=("zz_no_such_pack",))

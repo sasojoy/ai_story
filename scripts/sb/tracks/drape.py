@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-from sb.harness import emit, register_track
+from sb.harness import emit, new_web, note_new, register_track
 from sb.tracks.facade import FacadeScenario, LOOM_OLD_SHEETS
 
 # ── shell_web（全部拆包第 67 批：style.css 照包分）─────────────────────────────────────
@@ -76,8 +76,17 @@ class DrapeScenario(FacadeScenario):
             if name in LOOM_OLD_SHEETS:
                 emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
             body = r.text.replace("\r\n", "\n")
+            sheet = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+            if name in new_web():  # compare --new（第 106 批）：新包的 css 不進 lines、rules，版本號照驗；蓋到舊選擇器的同一個屬性是行為，照紅
+                note_new("css", name)
+                mine: dict = {}
+                _drape_rules(sheet, "", mine)
+                for key, values in mine.items():
+                    if key in rules:
+                        rules[key] = rules[key] + values
+                continue
             lines += [ln for ln in body.split("\n") if ln.strip() and not LOOM_HEAD.match(ln)]
-            _drape_rules(re.sub(r"/\*.*?\*/", "", body, flags=re.S), "", rules)
+            _drape_rules(sheet, "", rules)
         emit("每一支的版本號都是內容的前十碼", versions_ok)
         emit("所有 css 的行（排序）", [len(lines), hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()])
         flat = json.dumps(sorted((list(k), v) for k, v in rules.items()), ensure_ascii=False)
