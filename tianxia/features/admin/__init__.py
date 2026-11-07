@@ -24,5 +24,15 @@ class AdminFeature(Feature):
     def enabled(self, ctx) -> bool:
         return True  # 沒有開關；管理者認的是 Game.is_admin
 
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只有殼掛路由時才 import（routes 要 fastapi）
+
+        return routes.router(shell)
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
 
 FEATURE = AdminFeature()

@@ -257,6 +257,8 @@ RENAMED_PARAMS = {"write_biography": ("request", "req"), "_ambush_record": ("spo
 # 包經 Game 叫別包的委派（主人是各包 game_api.py 的 TABLE）：(誰叫, 主人) → 名字。跟全包掃到的逐對比，多了少了都紅。
 # 新的跨包呼叫：這裡加一列（或加進那一列的名字），名字也要同時列在 tianxia/core/services_list.md。一對一行、名字排序。
 CROSS_PACKAGE_CALLS = {
+    ("admin", "battle"): {"cancelled_showdowns"},
+    ("admin", "military"): {"admin_player_choices"},
     ("admin", "seal"): {"_mandate_settle"},
     ("battle", "admin"): {"_timetable_event", "_timetable_refusal"},
     ("battle", "cultivation"): {"_seize_chance"},
