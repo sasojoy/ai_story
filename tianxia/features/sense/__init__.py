@@ -7,7 +7,7 @@
 - routes.py：/api/sense、/api/sense_read、/api/sense_warm（原本寫在 server.py；殼照 FEATURES 掛）
 
 掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scenes（SCENE_ORDER 的 sense 格：有所感的卡、取名那一張）、routes。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

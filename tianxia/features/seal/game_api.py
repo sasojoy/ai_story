@@ -40,7 +40,7 @@ TABLE = {
     "seal_use": card.use,
     # 本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。
     "seal_duel_card": duel_actions.duel_card,
-    # 管理者「強制現世」（領地爭奪的季改成現在藏一片；玉璽包 admin，殼的 ADMIN_ACTIONS 與測試叫）。
+    # 管理者「強制現世」（領地爭奪的季改成現在藏一片；本體在玉璽包 admin.py，管理者工具走 routes.py 的 admin_tools，這個名字測試叫）。
     "admin_seal_emerge": admin.emerge,
     # 本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。
     "admin_seal_assign": admin.assign,
@@ -50,9 +50,9 @@ TABLE = {
     "admin_seal_fix": admin.fix,
     # 本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。
     "admin_seal_cancel": admin.cancel,
-    # 管理者「隱沒判斷」（玉璽包 admin，殼的 ADMIN_ACTIONS 與測試叫）。
+    # 管理者「隱沒判斷」（本體在玉璽包 admin.py，管理者工具走 routes.py 的 admin_tools，這個名字測試叫）。
     "admin_seal_sink_check": admin.sink_check,
-    # 管理者「蓋天命之季」（玉璽包 admin，殼的 ADMIN_ACTIONS、測試與輿圖包的測試叫）。
+    # 管理者「蓋天命之季」（本體在玉璽包 admin.py，管理者工具走 routes.py 的 admin_tools，這個名字測試與輿圖包的測試叫）。
     "admin_seal_mandate": admin.mandate,
     # 本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。
     "admin_seal_choices": admin.choices,

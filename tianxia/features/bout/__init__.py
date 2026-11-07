@@ -13,8 +13,8 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
 場邊事件的內容檢查（check_content）、sync 的補送（seams）、閉關中與路上的入口與店面那一頁打到一半那一行（menus）。
-沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+灰掉的挑擂鈕走 MENU_ORDER 的 stale/arena，場景卡走 SCENE_ORDER；其餘沒有對應掛鉤、留在 Game 原位叫一行委派的寫在 README。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

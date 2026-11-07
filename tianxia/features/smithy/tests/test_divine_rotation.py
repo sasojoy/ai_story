@@ -113,7 +113,7 @@ def test_the_admin_hears_which_divines_appear():
 
 
 def test_the_settings_page_warns_when_new_divines_run_out():
-    """FB-400：「新神器用完了」除了主控台與換季那一句回話，設定頁管理者那一塊也寫一行（server.admin_choices 的 divine_out）。"""
+    """FB-400：「新神器用完了」除了主控台與換季那一句回話，設定頁管理者那一塊也寫一行（features/admin/routes.py 的 admin_choices 的 divine_out）。"""
     import webharness
 
     if webharness.NODE is None:

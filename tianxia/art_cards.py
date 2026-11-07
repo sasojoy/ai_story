@@ -321,7 +321,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
 
 
 def _look(content: Content, art: MartialArt) -> dict:
-    """自創那一門撞到了什麼（create.marks_of）：look 是卡上那一行，tier 是品相凡佳珍神（撞到幾樣）；不是自創的都是空的。"""
+    """自創那一門撞到了什麼（moves.marks_of）：look 是卡上那一行，tier 是品相凡佳珍神（撞到幾樣）；不是自創的都是空的。"""
     if not moves.is_own(content, art):
         return {"look": "", "tier": None}
     marks = moves.marks_of(art.slot_colors, art.move_fire, art.move_rare)

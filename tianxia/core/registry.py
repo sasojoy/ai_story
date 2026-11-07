@@ -22,7 +22,7 @@ from ..features import guide  # 新手引導：全部拆包第 22 批（沒有�
 # companions
 from ..features import companions  # 人物情誼：全部拆包第 19 批（只接 errand:* 的 choose 與 /api/figure；都照前綴、路徑認，排在哪裡結果都一樣）
 # sense
-from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:、scene 接在宴客之後——原本那一行就在宴客那一行後面）
+from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:；場景卡的先後由 core/features.py 的 SCENE_ORDER 決定）
 # cultivation
 from ..features import cultivation  # 修練：全部拆包第 23 批（只接 learn:* 的 choose，照前綴認，排在哪裡結果都一樣）
 # story

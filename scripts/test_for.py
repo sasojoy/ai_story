@@ -39,13 +39,12 @@
   內文是假原始碼、或名單寫滿委派名的（test_test_for、核心契約，TEXT_BLIND）不算寫到。全部拆包第 61 批拿掉了照方法名、hunk 裡的字分功能群的過渡挑法。
 - server.py：核心測試＋煙霧＋tests/server/test_server.py＋全部 test_*_shell.py（第 61 批從 test_server 拆進各包的）。路由都在包裡，改路由是改包。
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的、檔名是模組名
-  第一個字的（mingtie_card → test_mingtie.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
+  第一個字的（server_bots → test_server.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
   tianxia/<模組>.py 另外照模組之間最外層的 import 往上找（dependents；10/31 測試自檢 T-02：改 might.py 以前挑 0 個檔）：
   import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
   AGGREGATOR_FANOUT 個的）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
-  核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
-  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔（registered_actions；
-  搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
+  核心測試＋煙霧。engine 不 import 包（第二輪第 98 批），玩家卡動作的登記只在包的 __init__.py（features/bounties：from . import wanted as _wanted_card  # noqa: F401）：
+  只為了登記才 import 的照它登記的動作名（cards.register(cards.CardAction(id=KIND))：wanted、mingtie）挑寫到那個名字的測試檔（registered_actions）。
 - scripts/sb/**（情境，第二輪第 70 批）：不照檔名字根挑（量到 198 個檔，軌名撞 world、map 這種模組名，它們都不讀這些檔），只跑邊界測試；
   情境改了跑那一軌的 same_behavior selftest。scripts/webqa/**（網頁比對工具，第二輪第 77 批，有 .mjs、.txt）：tests/web/test_webqa.py。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
@@ -461,9 +460,10 @@ _ENGINE_SIDE_IMPORT = re.compile(r"^from[ \t]+\.[ \t]+import[ \t]+(\w+)[ \t]+as[
 
 @functools.lru_cache(maxsize=None)
 def registered_actions(mod: str) -> tuple[str, ...]:
-    """engine.py 只為了登記才 import 的模組（`from . import wanted as _wanted_card  # noqa: F401`）登記的動作名：
+    """包的 __init__.py 只為了登記才 import 的模組（features/bounties：`from . import wanted as _wanted_card  # noqa: F401`）登記的動作名：
     模組裡 xxx.register(CardAction(id=…)) 的 id（字面字串，或最外層的常數 KIND = "wanted"）。其他模組回空的。
-    這種模組沒有測試檔 import 它（測試是經 Game.peer_card／peer_act 用到），只能照動作名挑。"""
+    這種模組沒有測試檔 import 它（測試是經 Game.peer_card／peer_act 用到），只能照動作名挑。
+    engine 第二輪第 98 批起不 import 包，下面先看 engine.py 的那條分支沒有真檔了（沒排批）。"""
     engine = TIANXIA / "engine.py"
     try:
         path = TIANXIA / f"{mod}.py"
@@ -1382,7 +1382,7 @@ def pick(files: list[str], base: str | None = None,
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
-            first = _first_word(mod)  # mingtie_card 也挑 test_mingtie.py（檔名是模組名的第一個字）
+            first = _first_word(mod)  # server_bots 也挑 test_server.py（檔名是模組名的第一個字）
             result.files |= {t for t in tests if mod in reached(t) or t.stem == f"test_{mod}"
                              or t.stem.startswith(f"test_{mod}_") or (first != mod and t.stem == f"test_{first}")
                              or (f.startswith("scripts/") and f"{mod}.py" in _text(t))}

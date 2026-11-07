@@ -23,7 +23,7 @@ trait_lines、thin_drops、battle_mount 不留）。_narrate、_spar_power、_sp
 
 squad_encounter（打一場的主流程，第二輪第 98 批從 Game 收進來，Game 留 _squad_encounter 一行委派）逐行照抄，擲骰與呼叫的先後一行都沒動，只換兩個名字：
 sortie.on → territory.on（features/sortie/rules.py 的 on 整個函式就是 return territory.on(content)，tests、tianxia、scripts 沒有人換掉這兩個，是同一件事）；
-sortie.PROLOGUE_FIGHT → PROLOGUE_FIGHT（字搬進 core/services.py，出陣包與 engine 留的名字是同一個物件）。事件 win 的發布點跟著搬，位置不動。
+sortie.PROLOGUE_FIGHT → PROLOGUE_FIGHT（字搬進 core/services.py，出陣包留的名字是同一個物件；engine 留的那個第 99 批拿掉）。事件 win 的發布點跟著搬，位置不動。
 
 名字的綁法照搬之前的 engine：engine 拿名字的（add_rumor、front_of、game_day、season_one、PLAYER、drill_share）這裡也拿名字，engine 叫模組屬性的（team、encounter、materials、
 treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。各有自己一份亂數的（lose_silver、tier3、thin_drops、play_rounds）種子字串一個字不動，
@@ -447,7 +447,7 @@ def play_rounds(
     同一筆戰報每次演出來都一樣。
     輸了（含僵持）卻一滴氣血都沒掉（本來就見底，內傷照樣累積）時，跟劇情戰一樣不寫打中沒有：每一下都寫「被你閃開了」，
     讀起來是對方沒碰到你、你卻輸了、損失裡還有內傷（最後審查 Minor 2）；贏了沒掉血（打得漂亮）寫閃開是通的，不動。
-    帶【先手】的人回合裡一定先出手、不看身法（13.2）；功效的演出句寫進 trait_before／trait_after（13.6，_trait_lines），
+    帶【先手】的人回合裡一定先出手、不看身法（13.2）；功效的演出句寫進 trait_before／trait_after（13.6，trait_lines），
     護命的那一句寫進 notes 最前面（跟閃避的那一句同一個位置）。facts 是 _take_toll 量好的（劇情戰不給，氣血的功效就不演）。
     clash 是 team.fight 一回合一回合打的那一場（tactics.Clash，Joy 2026-10-15「全部改回合制」）：回合數、兩邊出的招、氣勢、
     對手打沒打到你都照它，本命戰法的句子排在它發動的那一回合前面；大場面有模型寫的那一段話時，戰法的句子接在 trait_after。

@@ -8,7 +8,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 
 掛鉤：choose（只吃 story:）、scenes（SCENE_ORDER 的 own/story 格：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由；/api/do/story_seen 在 routes.py 的 main_actions（全部拆包第 68 批）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

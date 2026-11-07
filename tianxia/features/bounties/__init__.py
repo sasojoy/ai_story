@@ -9,7 +9,7 @@
 
 接縫掛鉤：choose（bounty:*）、verbs（act:bounties 打開榜與紀錄標題）、bot_pick、bus（六種事件交差）、world（step、week、day、start 掛單）、steps（commission、bounty）、defection（stranded）。
 店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：入口排在鐵匠鋪、馬市前面；drop_shops 會在 sync.close 多收一次）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

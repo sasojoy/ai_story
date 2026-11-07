@@ -17,7 +17,7 @@
 選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有 APIRouter（管理者的 seal_*、seal_use 在 routes.py 的 admin_tools、main_actions，全部拆包第 68 批；seal_text 是鎖外三段式，第 69 批進 routes.py 的 outlock）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
-checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 

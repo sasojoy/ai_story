@@ -3,7 +3,7 @@ self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3）；名字
 包裡有模組也叫 arena_crowd）。加上原位接上第 11 批掛鉤的那幾段（1.4）：坐在擂台邊的選單（店面登記 Shop.menu → arena_options）、
 「此地還能做」裡那一顆（Shop.entry → entry_option）、收起來（Shop.close → close）、打開擂台與那一下的標題（act 子動詞 Verb → arena_open、
 arena_sign）、報名與挑擂的標題（choose 掛鉤 → arena_title）、打到一半的三招與認輸（menu 掛鉤 → fight_menu）；choose 那一下灰掉的挑擂鈕
-回原因（arena_fight_problem：Game 原位叫一行委派）。
+回原因（arena_fight_problem，stale_cell 叫：MENU_ORDER 的 stale/arena，第二輪第 92 批）。
 
 - 快照：arena_side、arena_bare、arena_arts、arena_power、arena_left；入口與選單：arena_entry、arena_options；分派：arena_choice、
   arena_join、arena_start；動畫：arena_move_art、arena_burst；場景：arena_scene、arena_last_round；場邊事件：roll_crowd、

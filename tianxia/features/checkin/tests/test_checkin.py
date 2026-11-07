@@ -269,7 +269,7 @@ def test_no_pill_drop_with_checkin_off():
         _sure_drop(c)
         c.config.checkin.enabled = False
 
-    # week7 的簽到開著（season21 也是）：這裡關掉，走探索一顆的素材拍才問得到 _pill_find 那道閘；舊探索本來就不擲丹，問不到
+    # week7 的簽到開著（season21 也是）：這裡關掉，走探索一顆的素材拍才問得到 explore_actions.pill_find 那道閘；舊探索本來就不擲丹，問不到
     game = _game("week7", setup=setup)
     p = game.state.player
     pills, seq = p.stamina_pills, p.explore_seq

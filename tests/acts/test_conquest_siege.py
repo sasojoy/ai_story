@@ -1644,8 +1644,8 @@ def test_a_ranger_helping_the_defence_is_not_credited():
 # ── 原 test_conquest_fb609_letter_route.py（整檔搬進來） ──
 # FB-609（QA 驗輿圖第三版第 1 批）：玩家下戰書的 API 被管理者的同名動作蓋掉，沒有一個玩家下得了戰書。
 #
-# server.MAIN_ACTIONS 與 ADMIN_ACTIONS 都有 conquest_letter（玩家的 Game.conquest_letter、管理者的「立刻下戰書」），/api/do/{op} 先查
-# ADMIN_ACTIONS：在任第 4 階的玩家打 POST /api/do/conquest_letter 回 400「只有管理者能這麼做。」。修法（PM 2026-10-21）：管理者那一個改名
+# 當時 server.MAIN_ACTIONS 與 ADMIN_ACTIONS（第二輪第 90 批拿掉，現在是各包 admin_tools 合成的 FEATURE_ADMIN_ACTIONS）都有 conquest_letter（玩家的 Game.conquest_letter、管理者的「立刻下戰書」），/api/do/{op} 先查
+# 管理者那一張：在任第 4 階的玩家打 POST /api/do/conquest_letter 回 400「只有管理者能這麼做。」。修法（PM 2026-10-21）：管理者那一個改名
 # admin_conquest_letter（同 Game.admin_conquest_letter），兩張表不准重名。
 #
 # 伺服器用正式內容的 21 天季、打開領地爭奪，自己的一份（不碰別的測試的 server.CONTENT）。

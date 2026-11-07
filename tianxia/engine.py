@@ -1801,5 +1801,5 @@ class Game:
         return msgs
 
 
-# core_api（第二輪第 72 批）：包的一行委派搬進各包的 game_api.py，這裡掛一次（`g.xxx` 照舊）。放檔尾：Game 要先定義好，各包的模組此刻都已載入，sys.modules 的先後不變。
+# core_api（第二輪第 72 批）：包的一行委派搬進各包的 game_api.py，這裡掛一次（`g.xxx` 照舊）。放檔尾：Game 要先定義好；engine 不 import 包，各包的模組此刻才由下面這一行載入。
 features_core.attach_game_api(Game)
