@@ -137,9 +137,6 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     # core_views（第二輪第 81 批）：畫面搬進核心，原本 Game 原位的這幾對照搬
     ("status_view.status_data", "_stamina_help"): "點體力條看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     ("status_view.status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
-    ("page_view.shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
-    ("page_view.shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
-    ("page_view.shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）店面那一頁接上店面登記（Shop）",
     ("page_view.season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
     ("page_view.now_entry_html", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）不放「剛剛」那張卡：江湖頁的「剛剛」是核心",
 }
@@ -227,12 +224,10 @@ PUSHING_CALLED_THROUGH_CTX = {"daily_push_cap"}  # push_trend、push_room → ct
 SHARED_PENDING: dict[tuple[str, str], str] = {}
 
 # 還不收進共用規則層的舊模組：讀的都是還沒成包的舊模組，還沒有包可以回答查詢。模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
-SHARED_LATER = {
-    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批已成包，經舊名別名）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、單挑 duel 的底層；那幾包成包之後再收",
-}
+SHARED_LATER: dict[str, str] = {}
 
 # core_shared（第二輪第 88 批）：只留給測試的殼。產品程式一律讀真正的位置，最外層與函式裡都不准 import（test_product_code_does_not_import_a_test_only_shell）。
-TEST_ONLY_SHELLS = ("skillview",)
+TEST_ONLY_SHELLS = ("skillview", "shopview")
 
 # 收進共用規則層之後函式裡也不准 import 包的那七個（test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function）。
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")

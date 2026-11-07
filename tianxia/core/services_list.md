@@ -328,7 +328,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
   `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
-  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`、`fusion`（第二輪第 87 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）、`annals`（行狀）
+  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`、`fusion`（第二輪第 87 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`annals`（行狀）
 
 # faction（全部拆包第 35 批「陣營」；主人：陣營包，本體在 tianxia/features/faction/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻。原本記在三、過渡 `# battle`，主人成包了，改列這裡；包裡自己叫的直接叫，不經它）
@@ -493,7 +493,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
   屬性留在 Game）
 
 # smithy（全部拆包第 41 批）
-- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，features/smithy/shop_view.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
 
 # gear（全部拆包第 42 批）
 - `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
@@ -514,5 +514,8 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # core_bots（第二輪第 101 批：每包的按法搬進 `bots.py`，三個新名字）
 - 鐵匠鋪與捐軍備的 `bots.py`（`trade_want`、`donate_want`，從 `bot` 搬來）叫 `ctx.econ_day()`（Game 本體：今天是這一季第幾天，素材買賣的每日額度算這個）
 - 決戰包的 `bots.py`（`_toward_battle`，從 `bot_policy` 搬來）叫 `ctx.travel(dest, mode)`（主人 travel）、`ctx.travel_options(dest)`（主人 map）
+
+# shop（第二輪第 93 批：shopview 切五家，沒有新名字）
+- 店共用在 `core/shop_base.py`（包直接 import）；各包 `shop_view.py` 的 `page(ctx)` 叫 `ctx._pill_day()`、`ctx._at_own_base()`、`ctx._at_clinic_town()`、`ctx._battle_power()`，都是上面列著的。
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

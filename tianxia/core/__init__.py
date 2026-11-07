@@ -70,9 +70,12 @@
   順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。
 # core_views（第二輪第 81 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第81批.md）
 - status_view.py：狀態列的資料與文字版（status_data、status_text）；Game 留 2 個一行委派。同 event_check 不進 MODULES。
-- page_view.py：江湖頁、公告、見聞、江湖紀錄的查詢、店面的分派、行動列底下那幾行；Game 留 21 個一行委派，engine._MENU_CORE["open"] 指到這裡的 OPEN_CORE。同 event_check 不進 MODULES。
+- page_view.py：江湖頁、公告、見聞、江湖紀錄的查詢、店面（第二輪第 93 批起分派問包：features.shop_page）、行動列底下那幾行；Game 留 21 個一行委派，engine._MENU_CORE["open"] 指到這裡的 OPEN_CORE。同 event_check 不進 MODULES。
 - content_base.py（core_content：第二輪第 96、100 批）：內容驗證共用的小工具——NUMBER_IN_TEXT、TIMETABLE_SIDES、check_traditional、week7、check_line、event_effects、stage_events；content.validate 與共用層
   各模組的 check_* 讀它（驗證本體回各自模組，validate 函式內 import、原位呼叫）。同 event_check 不進 MODULES，也不進 test_for.CORE_SERVICES。
+# shop（第二輪第 93 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第93批.md）
+- shop_base.py：店裡共用的（原本在 shopview）——掌櫃的話的情況表 SITUATIONS、離開鈕 BACKS、情況鍵 problem_key、被拒那一句撐到什麼時候 hold_for、still_holds、招牌底下那一句 line_text、素材格的排序 attribute_rank、階名 TIER_NAMES，
+  加跨店的內容檢查 check_shop_lines（content.validate 原位函式內 import，不開 CONTENT_SLOTS 新格）；page_view、酒肆、軍需帳與四間店的 shop_view.py 讀它。各間店本體在包裡（Feature.shop_view）。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

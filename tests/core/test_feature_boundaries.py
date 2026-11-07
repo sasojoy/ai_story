@@ -343,7 +343,7 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import shopview, territory\n", m) == {"shopview"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion；第二輪第 87 批 fusion 也收進了共用規則層，換成 shopview（SHARED_LATER，還是舊模組，第 93 批才動它）
+    assert outside_imports("from . import server_bots, territory\n", m) == {"server_bots"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion；第二輪第 87 批 fusion 也收進了共用規則層，換成 shopview（SHARED_LATER，還是舊模組，第 93 批才動它）；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
     # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算）；第 52 批：tale 也成了戰記包的別名，換 bot（舊模組、之後不成包、這一波不動）
     assert outside_imports("def f():\n    from .bot import pick\n", m) == {"bot"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
@@ -755,7 +755,7 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia.features import feast\n", "別的包"),
     ("from tianxia.features.feast import rules\n", "別的包"),
     ("from ..feast import rules\n", "別的包"),
-    ("from tianxia import shopview\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview（SHARED_LATER，還是舊模組）
+    ("from tianxia import server_bots\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
     ("from tianxia import engine\n", "舊模組"),
     ("import tianxia.server_bots\n", "舊模組"),
     # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
@@ -843,12 +843,12 @@ def test_a_mark_with_no_old_module_left_is_caught():
     assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     # shared：原本的例子 conquest 第 15 批登記進共用規則層，換一個還是舊模組的
-    assert stale_marks("from tianxia import shopview, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []  # 第 45 批：原本的例子 bounties 成包，換還是舊模組的 shopview
+    assert stale_marks("from tianxia import server_bots, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []  # 第 45 批：原本的例子 bounties 成包，換還是舊模組的 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
     assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
 
 
 @pytest.mark.parametrize("source", [
-    "from tianxia import shopview  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層；bounties 第 45 批成包，再換 shopview（還是舊模組）
+    "from tianxia import server_bots  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層；bounties 第 45 批成包，再換 shopview；第二輪第 93 批 shopview 切成測試用的殼（TEST_ONLY_SHELLS），換 server_bots（還是舊模組）
     "from tianxia import library\n",  # shared：共用規則層（第 15 批）不必註
     "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
     "from tianxia.siege import title\n",

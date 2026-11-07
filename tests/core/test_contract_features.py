@@ -105,6 +105,36 @@ def test_no_two_packages_claim_the_same_prefix_verb_or_shop():
     assert len(keys) == len(set(keys)), keys
 
 
+SHOP_OWNERS = {"smith": "smithy", "arena": "bout", "donate": "outlets", "dadian": "outlets", "board": "bounties", "market": "gear", "tavern": "tavern"}
+
+
+class _Untouched:
+    """碰任何屬性就丟：Feature.shop_view 開頭先認店，不是自己的店不看 ctx（靠這個問得出誰認，不用真的開一間店）。"""
+
+    class Touched(Exception):
+        pass
+
+    def __getattr__(self, name):
+        raise self.Touched(name)
+
+
+def _claims(feature, shop: str) -> bool:
+    try:
+        return feature.shop_view(_Untouched(), shop) is not None
+    except _Untouched.Touched:
+        return True
+
+
+def test_one_shop_has_exactly_one_package_answering_its_page():
+    """第二輪第 93 批：一間店只有一包認（Feature.shop_view；features.shop_page 照 FEATURES 問、第一個不是 None 的回去，兩包都認就分不清了）。
+    店的清單是 shop_base.BACKS（page_view._shop_live 認的那一份）；不認得的店沒有人認。"""
+    from tianxia.core import shop_base
+
+    claims = {shop: [f.name for f in FEATURES if _claims(f, shop)] for shop in shop_base.BACKS}
+    assert claims == {shop: [owner] for shop, owner in SHOP_OWNERS.items()}
+    assert [f.name for f in FEATURES if _claims(f, "沒有這間店")] == []
+
+
 def test_a_tuple_prefix_is_spread_and_dispatched_by_the_first_match(monkeypatch):
     """一包兩三個前綴寫 tuple：prefixes 攤開，owner_of 照清單、照前綴找第一個對上的；字串照收、None 是沒有前綴。"""
     from tianxia.core import registry
