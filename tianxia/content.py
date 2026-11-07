@@ -1683,132 +1683,6 @@ def check_bounties(c: Content, need) -> None:
         )
 
 
-def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
-    """地盤（Scenario.territory，出陣探索與地盤設計第四節）：戰線認得、兩頭有陣營；可易手的地點真的在那條戰線上、不是大本營、
-    不重複；每一處戰線地點都有歸屬（大本營、fixed 或 lines）；站的隊伍是那一方的、每個可能的控制方都有；時刻表的 control
-    只能寫可易手或 fixed 的地點、那一方要有站的隊伍。沒寫 territory 的劇本只查時刻表沒寫 control。"""
-    from . import territory  # noqa: PLC0415  延後 import（同 validate 的 atlas）
-
-    table = [*c.timetable, *c.mandate_timetable]
-    factions_all = {f.id for f in c.scenario.factions}
-    for event in table:  # 地點會變樣（place_state.py）：TimetableOutcome.places 的地點認得、值是 war、famine、retake 或 fallen:<陣營>
-        for key, outcome in event.outcomes.items():
-            for loc_id, how in outcome.places.items():
-                where = f"時刻表 {event.id} 結果 {key} 的 places"
-                known(where, [loc_id], c.locations, "地點")
-                kind, _, side = how.partition(":")
-                need(how in ("war", "famine", "retake") or (kind == "fallen" and side in factions_all),
-                     f"{where}：{loc_id} 寫成 {how}（要是 war、famine、retake 或 fallen:<陣營>）")
-    t = c.scenario.territory
-    if t is None:
-        need(not any(o.control for e in table for o in e.outcomes.values()), "時刻表寫了 control，劇本卻沒有 territory")
-        return
-    factions = {f.id for f in c.scenario.factions}
-    bases = territory.bases(c)
-    need(len(bases) == sum(len(f.join_at) for f in c.scenario.factions), "地盤：一個地點只能是一個陣營的投靠點（大本營）")
-    lined = [loc_id for spots in t.lines.values() for loc_id in spots]
-    need(len(lined) == len(set(lined)), "地盤：同一個地點列在兩條戰線上")
-
-    def stands(where: str, loc_id: str, side: str | None) -> None:
-        if side is not None:
-            need(bool(t.garrison.get(loc_id, {}).get(side)), f"{where}：{loc_id} 沒寫 {side} 控制時站的隊伍（territory.garrison）")
-
-    for line, spots in t.lines.items():
-        where = f"地盤的戰線 {line}"
-        need(line in front_ids, f"{where}：不是戰線")
-        low, high = territory.sides(c, line)
-        need(low is not None and high is not None, f"{where}：劇本陣營的 goals 要有一方往 0、一方往 100")
-        known(where, spots, c.locations, "地點")
-        for loc_id in (x for x in spots if x in c.locations):
-            need(territory.line_of(c, loc_id) == line, f"{where}：{loc_id} 的 train_trend 不在這條戰線上")
-            need(loc_id not in bases, f"{where}：{loc_id} 是投靠點（大本營不易手）")
-            need(loc_id not in t.fixed, f"{where}：{loc_id} 同時寫在 fixed")
-            for side in (low, high):
-                stands(where, loc_id, side)
-    for loc_id, side in t.fixed.items():
-        where = "地盤的 fixed"
-        known(where, [loc_id], c.locations, "地點")
-        need(side in factions, f"{where}：{loc_id} 的 {side} 不是陣營")
-        need(loc_id not in bases, f"{where}：{loc_id} 是投靠點（大本營不易手）")
-        need(loc_id not in c.locations or territory.line_of(c, loc_id) is not None, f"{where}：{loc_id} 不是戰線地點")
-        stands(where, loc_id, side)
-    for loc_id in c.locations:
-        if territory.line_of(c, loc_id) is not None:
-            need(loc_id in bases or loc_id in t.fixed or loc_id in lined,
-                 f"地盤：戰線地點 {loc_id} 沒有歸屬（不是大本營、不在 fixed、也不在 lines）")
-    for loc_id, by_side in t.garrison.items():
-        where = f"地盤的 garrison {loc_id}"
-        known(where, [loc_id], c.locations, "地點")
-        for side, squads in by_side.items():
-            need(side in factions, f"{where}：{side} 不是陣營")
-            known(where, squads, c.squads, "隊伍")
-            need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{where}：{side} 那一組要是 {side} 的隊伍")
-    for event in table:
-        for key, outcome in event.outcomes.items():
-            where = f"時刻表 {event.id} 結果 {key}"
-            for loc_id, side in outcome.control.items():
-                need(loc_id in t.fixed or loc_id in lined, f"{where}：control 的 {loc_id} 不是可易手或 fixed 的地點（大本營不易手）")
-                need(side in factions, f"{where}：control 的 {side} 不是陣營")
-                stands(where, loc_id, side)
-
-
-def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None:
-    """領地爭奪的區塊（Scenario.territory.blocks，第 38 項改版計畫 Task 2）：只在寫了區塊時查。地點認得；大本營是自己陣營的種類；
-    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通，
-    而且每一方都走得到（conquest.reach：從自家開季的區塊出發、只走自家與中立的區塊；輿圖簡化設計 3.2）。
-    中立駐軍（neutral_garrison）只寫在開季中立的區塊、隊伍認得、沒有陣營。"""
-    from . import conquest, territory  # noqa: PLC0415  延後 import（同 check_territory）
-
-    t = c.scenario.territory
-    if t is None or not t.blocks:
-        need(t is None or not t.neutral_garrison, "領地爭奪：寫了 neutral_garrison 卻沒有 blocks")
-        return
-    where = "領地爭奪的區塊"
-    known(where, list(t.blocks), c.locations, "地點")
-    bases = territory.bases(c)
-    allies = {f.id for f in c.scenario.factions if f.allies}
-    for loc_id, block in t.blocks.items():
-        if loc_id not in c.locations:
-            continue
-        here = f"{where} {loc_id}"
-        if loc_id in bases:
-            side = bases[loc_id]
-            need(side not in allies, f"{here}：{side} 要依附別的陣營，它的投靠點不是區塊（設計 4.1）")
-            need(side in allies or block.kind == side, f"{here}：大本營要是自己陣營（{side}）的種類")
-        need(not c.locations[loc_id].prologue_only, f"{here}：序章專屬的地點不是區塊")
-        if loc_id in t.fixed:
-            need(block.kind == t.fixed[loc_id], f"{here}：fixed 的地點種類要是開季的控制方（{t.fixed[loc_id]}）")
-        need(block.line is None or block.line in front_ids, f"{here}：line「{block.line}」不是戰線")
-        if block.kind == conquest.NEUTRAL:
-            need(bool(conquest.adjacent(c, loc_id)), f"{here}：中立區塊至少要跟一塊區塊直通（不然誰都打不到）")
-    # 每一塊中立地，每一方都要有一條路從自家開季持有的區塊走得到、只走自家與中立的區塊（輿圖簡化設計 3.2，PM 2026-10-21）
-    neutral = [loc_id for loc_id, block in t.blocks.items() if block.kind == conquest.NEUTRAL and loc_id in c.locations]
-    for side in sorted({block.kind for block in t.blocks.values()} - {conquest.NEUTRAL}):
-        reached = conquest.reach(c, side)
-        name = c.scenario.faction_name(side, side)
-        for loc_id in neutral:
-            need(loc_id in reached, f"{where} {loc_id}（{c.locations[loc_id].name}）：{name}走不到這塊中立地"
-                                    f"（從{name}開季的區塊出發、只走{name}與中立的區塊；輿圖簡化設計 3.2）")
-    for loc_id, squads in t.neutral_garrison.items():
-        here = f"領地爭奪的中立駐軍 {loc_id}"
-        need(loc_id in t.blocks and t.blocks[loc_id].kind == conquest.NEUTRAL, f"{here}：只能寫在開季中立的區塊")
-        known(here, squads, c.squads, "隊伍")
-        need(all(c.squads[s].faction is None for s in squads if s in c.squads), f"{here}：中立駐軍要是沒有陣營的隊伍")
-    for side, squads in t.side_garrison.items():
-        here = f"領地爭奪的控制方巡邏 {side}"
-        need(side in conquest.SIDES, f"{here}：只能是交戰兩軍")
-        known(here, squads, c.squads, "隊伍")
-        need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{here}：要是 {side} 的隊伍")
-    # 第二批：每一塊搶得下來的區塊所在的大區都要有攻城範本（content/battles.json 的 siege_<大區>，tianxia/siege.py）
-    from . import atlas  # noqa: PLC0415
-
-    for loc_id in t.blocks:
-        if loc_id in c.locations and conquest.capturable(c, loc_id):
-            region = atlas.region_of(c, loc_id)
-            tid = f"siege_{region.id}" if region is not None else None
-            need(tid in c.battles and c.battles[tid].siege, f"{where} {loc_id}：所在的大區要有攻城範本（battles.json 的 {tid}）")
-
-
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -1957,6 +1831,8 @@ def validate(c: Content) -> None:
     from .orders import check_orders  # noqa: PLC0415
     from .traits import check_traits  # noqa: PLC0415
     from .timetable import check_timetable  # noqa: PLC0415
+    from .territory import check_territory  # noqa: PLC0415
+    from .conquest import check_conquest_blocks  # noqa: PLC0415
 
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}

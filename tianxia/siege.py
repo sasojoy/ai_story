@@ -63,7 +63,7 @@ def title(content: Content, info: SiegeInfo) -> str:
 
 
 def template(content: Content, loc_id: str) -> BattleDef | None:
-    """這一塊所在的大區的攻城範本（siege_<大區>）；沒有是 None（content.check_conquest_blocks 擋了搶得下來的每一塊都要有）。"""
+    """這一塊所在的大區的攻城範本（siege_<大區>）；沒有是 None（conquest.check_conquest_blocks 擋了搶得下來的每一塊都要有）。"""
     region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
     definition = content.battles.get(f"siege_{region.id}") if region is not None else None
     return definition if definition is not None and definition.siege else None

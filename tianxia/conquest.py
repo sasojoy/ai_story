@@ -84,7 +84,7 @@ def adjacent(content: Content, loc_id: str) -> list[str]:
 
 def reach(content: Content, side: str) -> set[str]:
     """side 開季持有的區塊（大本營、fixed 也算）出發、只走 side 自己與中立的區塊（adjacent：有路直通、不穿過不是區塊的地點）走得到的
-    區塊，照內容的開季種類、不看劇情開放了沒。content.check_conquest_blocks 拿它驗「每一塊中立地每一方都走得到」（輿圖簡化設計 3.2，
+    區塊，照內容的開季種類、不看劇情開放了沒。check_conquest_blocks 拿它驗「每一塊中立地每一方都走得到」（輿圖簡化設計 3.2，
     PM 2026-10-21）；side 是劇本裡任何一方都行，不只兩軍。"""
     table = blocks(content)
     seen = {loc for loc, block in table.items() if block.kind == side}
@@ -1062,3 +1062,60 @@ def today(world: WorldState, content: Content, side: str | None, how: str) -> li
     if side is None or not on(content, world):
         return []
     return focus_blocks(world, content, side, "attack" if how == "attack" else "defend")
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None:
+    """領地爭奪的區塊（Scenario.territory.blocks，第 38 項改版計畫 Task 2）：只在寫了區塊時查。地點認得；大本營是自己陣營的種類；
+    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通，
+    而且每一方都走得到（conquest.reach：從自家開季的區塊出發、只走自家與中立的區塊；輿圖簡化設計 3.2）。
+    中立駐軍（neutral_garrison）只寫在開季中立的區塊、隊伍認得、沒有陣營。"""
+
+    t = c.scenario.territory
+    if t is None or not t.blocks:
+        need(t is None or not t.neutral_garrison, "領地爭奪：寫了 neutral_garrison 卻沒有 blocks")
+        return
+    where = "領地爭奪的區塊"
+    known(where, list(t.blocks), c.locations, "地點")
+    bases = territory.bases(c)
+    allies = {f.id for f in c.scenario.factions if f.allies}
+    for loc_id, block in t.blocks.items():
+        if loc_id not in c.locations:
+            continue
+        here = f"{where} {loc_id}"
+        if loc_id in bases:
+            side = bases[loc_id]
+            need(side not in allies, f"{here}：{side} 要依附別的陣營，它的投靠點不是區塊（設計 4.1）")
+            need(side in allies or block.kind == side, f"{here}：大本營要是自己陣營（{side}）的種類")
+        need(not c.locations[loc_id].prologue_only, f"{here}：序章專屬的地點不是區塊")
+        if loc_id in t.fixed:
+            need(block.kind == t.fixed[loc_id], f"{here}：fixed 的地點種類要是開季的控制方（{t.fixed[loc_id]}）")
+        need(block.line is None or block.line in front_ids, f"{here}：line「{block.line}」不是戰線")
+        if block.kind == NEUTRAL:
+            need(bool(adjacent(c, loc_id)), f"{here}：中立區塊至少要跟一塊區塊直通（不然誰都打不到）")
+    # 每一塊中立地，每一方都要有一條路從自家開季持有的區塊走得到、只走自家與中立的區塊（輿圖簡化設計 3.2，PM 2026-10-21）
+    neutral = [loc_id for loc_id, block in t.blocks.items() if block.kind == NEUTRAL and loc_id in c.locations]
+    for side in sorted({block.kind for block in t.blocks.values()} - {NEUTRAL}):
+        reached = reach(c, side)
+        name = c.scenario.faction_name(side, side)
+        for loc_id in neutral:
+            need(loc_id in reached, f"{where} {loc_id}（{c.locations[loc_id].name}）：{name}走不到這塊中立地"
+                                    f"（從{name}開季的區塊出發、只走{name}與中立的區塊；輿圖簡化設計 3.2）")
+    for loc_id, squads in t.neutral_garrison.items():
+        here = f"領地爭奪的中立駐軍 {loc_id}"
+        need(loc_id in t.blocks and t.blocks[loc_id].kind == NEUTRAL, f"{here}：只能寫在開季中立的區塊")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction is None for s in squads if s in c.squads), f"{here}：中立駐軍要是沒有陣營的隊伍")
+    for side, squads in t.side_garrison.items():
+        here = f"領地爭奪的控制方巡邏 {side}"
+        need(side in SIDES, f"{here}：只能是交戰兩軍")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{here}：要是 {side} 的隊伍")
+    # 第二批：每一塊搶得下來的區塊所在的大區都要有攻城範本（content/battles.json 的 siege_<大區>，tianxia/siege.py）
+    from . import atlas  # noqa: PLC0415
+
+    for loc_id in t.blocks:
+        if loc_id in c.locations and capturable(c, loc_id):
+            region = atlas.region_of(c, loc_id)
+            tid = f"siege_{region.id}" if region is not None else None
+            need(tid in c.battles and c.battles[tid].siege, f"{where} {loc_id}：所在的大區要有攻城範本（battles.json 的 {tid}）")
