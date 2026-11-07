@@ -392,5 +392,5 @@ SHELL_FOREIGN = {
 # core_bots（第二輪第 89 批）
 # 假人殼：接在包上面的四支，包不准 import（反過來的 re-export 不算）。bot_base 是共用層，不在這裡
 BOT_SHELL = ("bot", "bot_policy", "bot_runner", "server_bots")
-# 還沒清掉的：(包.檔, 殼)。只准少、不准多；第 87 批收了 sortie.duel_actions 那一處之後，PM 合完刪這一列
-BOT_SHELL_PENDING = {("sortie.duel_actions", "server_bots")}
+# 還沒清掉的：(包.檔, 殼)。只准少、不准多；第 87 批收了 sortie.duel_actions 那一處之後就空了（第 E 波合完）
+BOT_SHELL_PENDING: set[tuple[str, str]] = set()
