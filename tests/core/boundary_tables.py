@@ -70,14 +70,12 @@ GAME_DELEGATE_CALLERS = {
     ("choose", "_begin_enlistment"): "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營成包（第 35 批）之後，投靠那一步在包裡，入伍段屬引導包；要知道動作之前的陣營，位置固定在 choose 掛鉤之後",
     ("choose", "_greet_rejoin"): "第二季起再投靠：引薦人打個招呼（同上）",
     ("choose", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：choose 那 5 行（選了事件的選項、act 做完、進店、出店、指名求見）之間夾著 _opening_deliver，回話照位置接",
-    ("take_stamina_pill", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：服回體丹（序章那一步）：回體丹是核心，在動作中間、回話照位置接",
     ("_menxia_entry", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：修練頁、煉製頁的動作（序章的練功、熔煉）：核心的修練頁紀錄服務，還把 HutReward 拆進 changes，位置就是行為",
     ("choose", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）：選完那一下人物的信接在這一下的回話裡（位置算行為）",
     ("choose", "_opening_deliver"): "同上：那位人物的信與護送委託",
     ("now_entry_html", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）不放「剛剛」那張卡：江湖頁的「剛剛」是核心",
     ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
     ("_note_guide", "_guide_speakers"): "核心的引導框服務照說話的人分開「下一步的話」與「✔ 與獎勵」",
-    ("_top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
     ("status_data", "_stamina_help"): "點體力條看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     ("status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     # military
@@ -108,7 +106,6 @@ GAME_DELEGATE_CALLERS = {
     # story
     ("_reset_player_for_new_season", "_story_close_season"): "還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳，夾在 _zhuan_past 與 _zhuan_profile 中間（同上）；on_season_end 在 save_annals 之後、又只問開著的包",
     ("choose", "_story_tick"): "每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
-    ("_event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；同上",
     # tavern
     ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）店面那一頁接上店面登記（Shop）",
     # zhuan
@@ -143,6 +140,10 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     ("combat.battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
     ("combat.battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，_battle_gear 在核心",
     ("combat.seize", "_seize_chance"): "核心的單打服務收尾擲絕學的契機：留原位（第 26 批量過：在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報；原位行尾標「# 留原位：第 26 批」）",
+    # core_pushing（第二輪第 80 批：推大勢、回體丹搬進 core/pushing.py、core/pills.py，這三對從 GAME_DELEGATE_CALLERS 搬過來，理由字照搬）
+    ("pills.take_stamina_pill", "_note_action"): "「做完一件事」第 57 批量過不開事件（BUS_ORDER 沒有這種事件；計畫第四節）：服回體丹（序章那一步）：回體丹是核心，在動作中間、回話照位置接",
+    ("pills.top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
+    ("pushing.event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
 }
 
 # 頂層的核心模組（MODULES 裡放在 tianxia/ 底下的）經 game 叫包的委派。現在沒有。
@@ -188,6 +189,27 @@ COMBAT_VIA_CTX = {
     "fight_request": ("fight_request", "tianxia/features/craft/tests/test_craft_shell.py 換掉 Game.fight_request：暫停中不問引擎"),
 }
 COMBAT_CALLED_THROUGH_CTX = {"_battle_power", "fight_request"}  # battle_scores → ctx._battle_power、checked_fight → ctx.fight_request
+
+# core_pushing：推大勢、回體丹（核心本體 tianxia/core/pushing.py、pills.py，第二輪第 80 批）：Game 上本體只有一行 `return pushing.<名>(self, …)`、`return pills.<名>(self, …)` 的方法。
+# 只有模組自己叫的 _resisted_line、_refill_stamina 不留委派；take_stamina_pill 的 @_not_while_preparing 留在委派上
+CORE_PUSHING_DELEGATES = {
+    "season_scale", "daily_push_cap", "_resisted_lines", "_shaped", "_carry", "_goals", "_push_room", "push_trend",  # 推力
+    "_push_progress", "_event_progress",  # 進度
+    "_deed_points",  # 文字的事的貢獻
+}
+CORE_PILLS_DELEGATES = {"_top_up_pills", "take_stamina_pill", "pill_now", "pill_cap", "pills_left_today"}
+
+# 被測試、腳本換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：模組裡一律不直接叫本體。模組裡的函式 → Game 上的委派、誰換掉它。
+# 模組裡真的有人互叫的只有 PUSHING_CALLED_THROUGH_CTX 那一個（寫成 ctx.<委派>）；其餘模組裡沒有人互叫，都經委派，打得到
+PUSHING_VIA_CTX = {
+    "daily_push_cap": ("daily_push_cap", "tianxia/features/seal/tests/test_seal_acts.py 換掉 Game.daily_push_cap：傳檄不抬每日上限"),
+    "push_room": ("_push_room", "tianxia/features/guide/tests/test_explain.py 換掉 Game._push_room：今天推滿了，遊歷那一行不再說推得動"),
+    "push_trend": ("push_trend", "tianxia/features/guide/tests/test_prologue.py 在物件上換掉 push_trend：序章雪恥那一場不推大勢"),
+}
+PILLS_VIA_CTX = {
+    "take_stamina_pill": ("take_stamina_pill", "scripts/measure_sanren.py、scripts/sim_season_one.py 換掉 Game.take_stamina_pill：數服了幾顆"),
+}
+PUSHING_CALLED_THROUGH_CTX = {"daily_push_cap"}  # push_trend、push_room → ctx.daily_push_cap
 
 # ── 共用規則層 ──
 

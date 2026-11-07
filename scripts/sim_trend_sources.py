@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import sim_server_bots as sim  # noqa: E402
 from tianxia import engine, rules  # noqa: E402
+from tianxia.core import pushing  # noqa: E402  push_trend 第 80 批搬進去了，它叫的 change_trend 在那裡換
 from tianxia import world as worldmod  # noqa: E402
 from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 
@@ -60,14 +61,14 @@ def main() -> None:
             trajectory[season["n"]].append((state.world.time / 86400, after))
             if after != before:
                 kind = {"drill": "操練", "_squad_encounter": "真打贏", "sortie_hold": "出陣守／攪局", "sim_tick": "虛擬玩家",
-                        "apply_effect": "事件"}.get(_caller(("drill", "_squad_encounter", "sortie_hold", "sim_tick", "apply_effect"), 9), "其他")
+                        "apply_effect": "事件"}.get(_caller(("drill", "_squad_encounter", "sortie_hold", "sim_tick", "apply_effect"), 10), "其他")  # 10：第 80 批 push_trend 搬進 core/pushing.py，堆疊多一層委派
                 game = next((who for fr in inspect.stack()[1:10]
                              for who in (fr.frame.f_locals.get("self"), fr.frame.f_locals.get("ctx")) if isinstance(who, engine.Game)), None)
                 faction = (game.state.player.faction or "散人") if game is not None else "—"
                 sources[season["n"]][(kind, faction)] += after - before
         return out
 
-    rules.change_trend = engine.change_trend = worldmod.change_trend = change_trend
+    rules.change_trend = engine.change_trend = pushing.change_trend = worldmod.change_trend = change_trend
 
     original_push = engine.Game._train_push
     pushes_today: Counter = Counter()

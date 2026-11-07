@@ -10,6 +10,8 @@
   三段式；本體從 Game 搬來，Game 留一行委派。核心本體的一部分（tianxia/core/ 底下的檔本來就算核心：功能包可以 import、它不 import 包），
   不進 MODULES（那一份是 tianxia/<名字>.py 頂層的核心模組）、不進 FEATURES（它不是包、沒有掛鉤與前綴）。
 - combat.py（core_combat：第二輪第 79 批）：單打服務——大場面判讀、戰力快照、操練的帳與立功、打完的收場、本人對本人；本體從 Game 搬來，Game 留一行委派（_squad_encounter 的本體還在 Game）。同 event_check 不進 MODULES、不進 FEATURES。
+- pushing.py（core_pushing：第二輪第 80 批）：推大勢——push_trend、季長倍數、每人每日上限、事件五折與盡頭阻力、零頭、領地爭奪的進度、文字的事的貢獻；本體從 Game 搬來，Game 留一行委派。同 event_check 不進 MODULES、不進 FEATURES。
+- pills.py（core_pushing：第二輪第 80 批）：回體丹——服一顆、一天的上限、測試期間的一鍵補滿、讀檔補丹與那幾句字；本體從 Game 搬來，Game 留一行委派（engine 照名字 import 回那幾句字）。同 event_check 不進 MODULES、不進 FEATURES。
 - duel_base.py（bout：全部拆包第 12 批）：單挑底層——剋、推力、挨打、防具、放手一搏擲一次、勝負、架勢、氣勢的字、選單上的一招、Scene；
   頭目戰、擂台（單挑包）與奪璽單挑（已進玉璽包 features/seal/duel_rules.py）共用，單挑包的 duel_rules re-export 同一批函式物件。同 event_check 不進 MODULES。
 - arena_ranks.py（bout：全部拆包第 12 批）：擂台的名次與稱號（on、entry_of、ladder、title_of、title_for、record_text、board、歷屆擂主）

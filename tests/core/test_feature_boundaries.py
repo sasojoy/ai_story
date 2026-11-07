@@ -31,6 +31,7 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     ARENA_RANK_READERS, ATLAS_PACKAGE_FIELDS, BUS_METHODS,
     BUS_SUBSCRIBERS, CORE_DELEGATE_CALLERS, CORE_EVENT_DELEGATES,
     COMBAT_CALLED_THROUGH_CTX, COMBAT_VIA_CTX, CORE_COMBAT_DELEGATES, CORE_COMBAT_STATIC_DELEGATES,
+    CORE_PILLS_DELEGATES, CORE_PUSHING_DELEGATES, PILLS_VIA_CTX, PUSHING_CALLED_THROUGH_CTX, PUSHING_VIA_CTX,  # core_pushing（第二輪第 80 批）
     CORE_TOP_DELEGATE_CALLERS, EFFECT_DEFECT_SCAN, EVENT_CHECK_VIA_CTX,
     GAME_DELEGATE_CALLERS, GAME_DIRECT, GAME_IMPORTS,
     PREPARING_GUARDED, RELAY_OWNERS, RENAMED_PARAMS,
@@ -575,6 +576,46 @@ def test_the_combat_service_calls_the_patched_game_methods_through_ctx():
     via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
     assert via & {name for name, _ in COMBAT_VIA_CTX.values()} == COMBAT_CALLED_THROUGH_CTX
     assert {name for name, _ in COMBAT_VIA_CTX.values()} <= CORE_COMBAT_DELEGATES
+
+
+# core_pushing（第二輪第 80 批）
+def _service_delegates(module: str) -> set[str]:
+    """engine.Game 上本體（說明字以外）只有一行 `return <module>.<名>(self, …)` 的方法（take_stamina_pill 帶裝飾器，語法樹一樣認得）。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    out = set()
+    for f in game.body:
+        if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = [n for n in f.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+        call = body[0].value if len(body) == 1 and isinstance(body[0], ast.Return) else None
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == module and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+            out.add(f.name)
+    return out
+
+
+@pytest.mark.parametrize("module, delegates", [("pushing", CORE_PUSHING_DELEGATES), ("pills", CORE_PILLS_DELEGATES)], ids=["pushing", "pills"])
+def test_the_game_reaches_the_push_and_pill_services_only_through_their_one_line_delegates(module, delegates):
+    """Game 上碰 pushing、pills 的只有 CORE_PUSHING_DELEGATES、CORE_PILLS_DELEGATES 那幾個一行的委派（多一處就是把邏輯寫回 Game、或委派加了邏輯）。
+    engine 模組層那幾行 import 不算碰。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    users = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and any(isinstance(n, ast.Name) and n.id == module for n in ast.walk(f))}
+    assert _service_delegates(module) == delegates
+    assert users == delegates
+
+
+@pytest.mark.parametrize("module, via_ctx, delegates", [("pushing", PUSHING_VIA_CTX, CORE_PUSHING_DELEGATES), ("pills", PILLS_VIA_CTX, CORE_PILLS_DELEGATES)], ids=["pushing", "pills"])
+def test_the_push_and_pill_services_call_the_patched_game_methods_through_ctx(module, via_ctx, delegates):
+    """被換掉的那幾個，模組裡一處都不直接叫本體。pushing 真的有人互叫的只有 daily_push_cap（PUSHING_CALLED_THROUGH_CTX，寫成 ctx.daily_push_cap）；
+    其餘的模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
+    tree = ast.parse((TIANXIA / "core" / f"{module}.py").read_text(encoding="utf-8"))
+    direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in via_ctx)
+    assert direct == []
+    via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
+    assert via & {name for name, _ in via_ctx.values()} == (PUSHING_CALLED_THROUGH_CTX if module == "pushing" else set())
+    assert {name for name, _ in via_ctx.values()} <= delegates
 
 
 # ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──

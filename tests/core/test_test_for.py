@@ -1239,7 +1239,7 @@ def test_seeing_through_a_kit_goes_down_one_layer_only():
     assert "conquest_day" not in test_for.reached(test)
 
 
-# 假的核心服務檔（第 79～81、91 批才開真檔，開檔的那一批再補一條用真檔的）：行號 _shaped 1～2、push_trend 5～6、LIMIT 9
+# 假的核心服務檔（hunks_of 給假原文、不讀真檔，驗規則本身；pushing 的真檔第 80 批開了，用真檔的那一條在 test_the_push_and_pill_service_files_pick_their_base_not_core_and_smoke）：行號 _shaped 1～2、push_trend 5～6、LIMIT 9
 FAKE_PUSHING = "def _shaped(a):\n    return a\n\n\ndef push_trend(self, x):\n    return _shaped(x)\n\n\nLIMIT = 3\n"
 PUSHING = "tianxia/core/pushing.py"
 
@@ -1309,6 +1309,29 @@ def test_the_combat_service_file_picks_its_base_not_core_and_smoke():
     src = (ROOT / "tianxia" / "core" / "combat.py").read_text(encoding="utf-8")
     assert "battle_scores" not in test_for._callers_up("battle_power", test_for._core_refs(src, src)[2])
     assert test_for.service_word("battle_scores") == "battle" and test_for.word_tests("battle") <= picked.files
+
+
+def test_the_push_and_pill_service_files_pick_their_base_not_core_and_smoke():
+    """第 80 批開的真檔：goals、deed_points 的名字認不出功能（service_word 空字串），靠這個檔的底，不跑核心測試與煙霧；refill_stamina 的底是 pill、stamina。
+    push_trend、push_room 經 ctx.daily_push_cap 叫它（test_seal_acts 換掉 Game.daily_push_cap，要打得到）：_core_refs 只看 ast.Name，不往上算；
+    daily_push_cap 自己認得 push，而 push 就在底裡，所以沒漏。"""
+    assert test_for.service_word("goals") == "" and test_for.service_word("deed_points") == ""
+    cases = [
+        ("pushing", "goals", {"test_fronts.py", "test_gentry_allied.py", "test_push.py"}),
+        ("pushing", "deed_points", {"test_gentry_ledgers.py", "test_outcomes_answer.py", "test_outcomes_classify.py", "test_push.py"}),
+        ("pills", "refill_stamina", {"test_stamina_refill.py", "test_stamina_pill.py", "test_pill_per_day.py"}),
+    ]
+    for module, name, want in cases:
+        picked = test_for.pick([f"tianxia/core/{module}.py"], hunks_of=_core_hunk(module, name))
+        names = {p.name for p in picked.files}
+        assert want | {"test_feature_boundaries.py"} <= names, name
+        assert not picked.core and not picked.smoke, name
+        assert len(names) <= test_for.IMPORT_CAP, name
+    src = (ROOT / "tianxia" / "core" / "pushing.py").read_text(encoding="utf-8")
+    callers = test_for._callers_up("daily_push_cap", test_for._core_refs(src, src)[2])
+    assert not callers & {"push_trend", "push_room"}
+    goals = test_for.pick(["tianxia/core/pushing.py"], hunks_of=_core_hunk("pushing", "goals"))
+    assert test_for.service_word("daily_push_cap") == "push" and test_for.word_tests("push") <= goals.files
 
 
 def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
