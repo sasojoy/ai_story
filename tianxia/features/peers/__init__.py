@@ -102,6 +102,8 @@ class PeersFeature(Feature):
                 StatusHook("status", "invites", lambda ctx, frame: {"invites": invite_actions.status(ctx)} if rules.season_one(ctx.content, ctx.state.world) else {}),
                 # 此地還有誰（玩家之間的互動第一層）：[{name, side}]，路上、序章裡是空的；別人遞給你、還沒回的邀請（第二層），回應鈕是選單上的 invite: 選項
                 StatusHook("main", "peers", lambda ctx, frame: {"here": actions.peers_here(ctx), "calls": actions.calls_here(ctx)}),
+                # 管理頁：被檢舉的名帖（撤下、放回）；沒有是空的（第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "mingtie", lambda ctx, frame: {"mingtie": ctx.admin_mingtie_reports()}),
             )
         return self._status_slots
 

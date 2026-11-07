@@ -1438,8 +1438,8 @@ def howto_insert(slot: str, content: Content, season: WorldState) -> list[str]:
 
 @dataclass(frozen=True)
 class StatusHook:
-    """狀態列（table "status"，Game.status_data）或江湖畫面（table "main"，server._main_view_body）的一格（Feature.status_slots() 回一串）：
-    status_run 照 STATUS_ORDER[table] 一格一格叫 run(ctx, frame)，回的鍵照順序合進去（這一下沒有鍵回 {}，回別的丟 TypeError）。frame：status 表是
+    """狀態列（table "status"，Game.status_data）、江湖畫面（table "main"，server._main_view_body）或管理頁（table "admin"，features/admin/routes.py 的 admin_choices）的一格（Feature.status_slots() 回一串）：
+    status_run 照 STATUS_ORDER[table] 一格一格叫 run(ctx, frame)，回的鍵照順序合進去（這一下沒有鍵回 {}，回別的丟 TypeError）。frame：status、admin 表是
     目前合到一半的那一份 dict，main 表是 MainFrame。照 registered() 問、不看 enabled（原位那幾行本來就不看包的開關，關著的也要有 null）。
     包的函式在叫的那一下才照模組屬性找（monkeypatch 照樣有效）。"""
 
@@ -1536,6 +1536,29 @@ class MainFrame:
 # zhuan         列傳 zhuan               zhuan
 # season_result 殼                       season_result
 # ending        陣營 faction             ending
+#
+# admin 表（features/admin/routes.py 的 admin_choices，第二輪第 90 批；frame 是合到一半的 dict）
+# 格                 主人                     鍵
+# phase              管理者 admin             phase
+# battles            決戰 battle              battles
+# events             管理者 admin             events
+# trends             管理者 admin             trends
+# timetable          管理者 admin             timetable, results, locks
+# season_one         管理者 admin             season_one
+# season21           管理者 admin             season21
+# realign            管理者 admin             realign
+# default_dates      管理者 admin             default_dates
+# mandate_at         管理者 admin             mandate_at
+# showdowns          決戰 battle              showdowns
+# next_has_timetable 管理者 admin             next_has_timetable
+# fallen             大勢人物的行動 figure_acts  fallen
+# seal               玉璽 seal                seal
+# xingshi            地盤 territory_acts      xingshi
+# conquest           地盤 territory_acts      conquest
+# mingtie            玩家互動 peers           mingtie
+# divine_out         管理者 admin             divine_out
+# llm_queue          管理者 admin             llm_queue
+# now                管理者 admin             now
 STATUS_ORDER: dict[str, tuple[str, ...]] = {
     "status": ("head", "bounties", "manual", "seal", "armament", "forge_manual", "create", "ascension", "self", "newbie", "vitals", "journey",
                "calendar", "help", "checkin", "war", "invites"),
@@ -1543,6 +1566,8 @@ STATUS_ORDER: dict[str, tuple[str, ...]] = {
              "party", "news", "tales", "admin", "guide", "horse_art", "push", "web_push", "shop", "prep", "milestone", "features", "glow", "fronts",
              "orders", "week_card", "mostly", "sides_card", "figures_here", "companions", "event_opts", "rumor_layers", "convoy", "conquest",
              "sortie_cards", "siege", "xingshi", "plan", "place_state", "place_deeds", "letter", "zhuan", "season_result", "ending"),
+    "admin": ("phase", "battles", "events", "trends", "timetable", "season_one", "season21", "realign", "default_dates", "mandate_at", "showdowns",
+              "next_has_timetable", "fallen", "seal", "xingshi", "conquest", "mingtie", "divine_out", "llm_queue", "now"),
 }
 
 

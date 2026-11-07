@@ -6,56 +6,45 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from tianxia import calendar, divine, rules, timetable
+from tianxia.core import features as features_core
 from tianxia.core.features import AdminTool, no_gate
 from tianxia.world_state import season_length_days
-from tianxia.features.territory_acts import xingshi  # 下一步改走 STATUS_ORDER["admin"] 就拿掉
 
 
 def admin_choices(shell, game) -> dict:
     """管理者觸發區的三個下拉選單（戰鬥、大事、大勢線）與模型佇列的總數。戰鬥與大事照引擎給的（Game.admin_battles／admin_fires：
     內容的順序，第一季不觸發的 beta 決戰與門檻不列；已經發生過的大事按下去會被引擎拒絕）；
-    大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
+    大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。
+    鍵的先後與叫的先後都算行為，照 core/features.py 的 STATUS_ORDER["admin"]；battles、showdowns、fallen、seal、xingshi、conquest、mingtie 是各包登記的格（status_slots），這裡是其餘的格。"""
     world = game.state.world
-    return {
+    core = {
         # 賽季在哪個階段（籌備中 preparing／進行中 running／休季 resting）：開季、立刻收季、開啟下一季只在對的階段按得下去（U-19）
-        "phase": game.world.season_phase(),
-        "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
-        "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
+        "phase": lambda ctx, frame: {"phase": ctx.world.season_phase()},
+        "events": lambda ctx, frame: {"events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in ctx.admin_fires()]},
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
-        "trends": [{"label": t.name, "id": t.id} for t in shell.CONTENT.scenario.trends if rules.pushable(shell.CONTENT, world, t.id)],
-        **timetable_choices(shell, game),
+        "trends": lambda ctx, frame: {"trends": [{"label": t.name, "id": t.id} for t in shell.CONTENT.scenario.trends if rules.pushable(shell.CONTENT, world, t.id)]},
+        "timetable": lambda ctx, frame: timetable_choices(shell, ctx),
         # 這一季照第一季的規則（開關開著、開季時蓋了章）：管理者區多「每週的事」（立刻發本週軍令、立刻輪替第 4 階席次）
-        "season_one": rules.season_one(shell.CONTENT, world),
+        "season_one": lambda ctx, frame: {"season_one": rules.season_one(shell.CONTENT, world)},
         # 21 天季（季曆就是現實的週）：暫停、繼續的問句多說一句季曆會對回現實的星期（PM 2026-10-19）
-        "season21": calendar.season21_on(world, shell.CONTENT),
+        "season21": lambda ctx, frame: {"season21": calendar.season21_on(world, shell.CONTENT)},
         # 那一句照季寫（FB-501）：「21 天的季…對回現實的星期」「7 天的季…對回現實的日子」（同 world.realign_line）
-        "realign": {"days": f"{season_length_days(world, shell.CONTENT):g}", "unit": calendar.week_word("realign", shell.CONTENT, world)}
-        if calendar.season21_on(world, shell.CONTENT) else None,
+        "realign": lambda ctx, frame: {"realign": {"days": f"{season_length_days(world, shell.CONTENT):g}", "unit": calendar.week_word("realign", shell.CONTENT, world)}
+                                       if calendar.season21_on(world, shell.CONTENT) else None},
         # 開季、開下一季的問句括號裡那一句：7 天濃縮季照時刻表寫（timetable.default_dates_note）；其他季 None，網頁照原本的字
-        "default_dates": timetable.default_dates_note(shell.CONTENT),
+        "default_dates": lambda ctx, frame: {"default_dates": timetable.default_dates_note(shell.CONTENT)},
         # 「這一季立刻蓋天命之季的章」問句裡天命之爭的時刻：7 天濃縮季照時刻表寫（timetable.mandate_note，FB-503）；其他季 None，網頁照原本的字
-        "mandate_at": timetable.mandate_note(shell.CONTENT, world),
-        # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
-        "showdowns": [
-            {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
-            for event, why in game.admin_showdowns()
-        ],
+        "mandate_at": lambda ctx, frame: {"mandate_at": timetable.mandate_note(shell.CONTENT, world)},
         # 下一季會照第一季的規則開（開關開著）：「開啟下一季」的問句也提醒排三場大戲與季末的時間（FB-050）
-        "next_has_timetable": bool(shell.CONTENT.config.season_one),
-        # 救場「叫回人物」：這一季退場、重創的大勢人物（沒有就不畫那一列）
-        "fallen": [{"label": shell.CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
-        "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
-        "xingshi": xingshi.on(shell.CONTENT, world),  # 〈天下形勢〉開著的季：管理者區多一顆「現在就開一篇天下形勢」（領地爭奪第三批 A）
-        # 領地爭奪開著的季：救場一組（定一塊歸誰、定進度、立刻下戰書、取消一場攻城）的下拉選單；關著、季收了是 None（不畫）
-        "conquest": game.admin_conquest_choices(),
-        "mingtie": game.admin_mingtie_reports(),  # 被檢舉的名帖（撤下、放回）；沒有是空的
+        "next_has_timetable": lambda ctx, frame: {"next_has_timetable": bool(shell.CONTENT.config.season_one)},
         # 新神器用完了（正式季整合 5.6，FB-400）：主控台啟動時印、換季的回話寫，管理者那一塊也寫一行；沒用完是空字串
-        "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",
+        "divine_out": lambda ctx, frame: {"divine_out": divine.EXHAUSTED if divine.exhausted_now(ctx.world.divine_state(), ctx.world.get_season_number()) else ""},
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
-        "llm_queue": None if shell.QUEUE is None else shell.QUEUE.snapshot(),
+        "llm_queue": lambda ctx, frame: {"llm_queue": None if shell.QUEUE is None else shell.QUEUE.snapshot()},
         # 管理頁頂上「現在」那一塊（管理頁獨立，Joy 2026-11-01）：第幾季、季曆此刻、在打的決戰、各條大勢線此刻的值
-        "now": admin_now(shell, game),
+        "now": lambda ctx, frame: {"now": admin_now(shell, ctx)},
     }
+    return features_core.status_run("admin", core, {}, game)  # 經模組屬性叫（契約測試換掉它來收核心的格）
 
 
 PHASE_WORDS = {"preparing": "籌備中", "running": "進行中", "resting": "休季"}

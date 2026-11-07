@@ -82,6 +82,10 @@ class TerritoryActsFeature(Feature):
                 StatusHook("main", "conquest", lambda ctx, frame: slot_some("conquest", view.conquest_view(ctx))),
                 # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi）；FB-578 xingshi_mark：最新一篇的篇次＋有沒有一張還在寫，變了停在「形勢」頁的網頁就重抓
                 StatusHook("main", "xingshi", lambda ctx, frame: {"xingshi": True, "xingshi_mark": xingshi_actions.mark(ctx)} if xingshi.on(ctx.content, ctx.state.world) else {}),
+                # 管理頁（第二輪第 90 批從殼的 admin_choices 搬來）：〈天下形勢〉開著的季多一顆「現在就開一篇天下形勢」（領地爭奪第三批 A）
+                StatusHook("admin", "xingshi", lambda ctx, frame: {"xingshi": xingshi.on(ctx.content, ctx.state.world)}),
+                # 領地爭奪開著的季：救場一組（定一塊歸誰、定進度、立刻下戰書、取消一場攻城）的下拉選單；關著、季收了是 None（不畫）
+                StatusHook("admin", "conquest", lambda ctx, frame: {"conquest": ctx.admin_conquest_choices()}),
             )
         return self._status_slots
 

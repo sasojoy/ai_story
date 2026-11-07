@@ -161,6 +161,13 @@ class BattleFeature(Feature):
                                                                  "card_gauge": view.card_gauge(ctx) if frame.card is not None else None}),
                 # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
                 StatusHook("main", "siege", lambda ctx, frame: slot_some("siege", view.siege_banner(ctx))),
+                # 管理頁「立刻開戰」的下拉選單（Game.admin_battles：內容的順序，第一季不觸發的 beta 決戰不列；第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "battles", lambda ctx, frame: {"battles": [{"label": b.name, "id": b.id} for b in ctx.admin_battles()]}),
+                # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
+                StatusHook("admin", "showdowns", lambda ctx, frame: {"showdowns": [
+                    {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
+                    for event, why in ctx.admin_showdowns()
+                ]}),
             )
         return self._status_slots
 
