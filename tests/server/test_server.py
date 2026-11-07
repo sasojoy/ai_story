@@ -1004,7 +1004,7 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
     也拿掉了（輿圖簡化設計 5.4）；一張到底（2026-10-30）篩選改成浮在搜尋列底下的一排。網頁的版面與樣式對得上，就靠這一條。"""
     js = webharness.app_source()
-    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "map.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
     # 一張到底（企劃者 2026-10-30）：右上角那一欄（我在哪、放大、縮小）沒有了，改成右下兩顆圓鈕（回到我、看整張）；篩選回來了，浮在搜尋列底下
     assert "map-ctl" not in js and ".map-ctl" not in css and 'data-act="map-home"' in js and 'data-act="map-fit"' in js

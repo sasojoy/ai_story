@@ -280,7 +280,7 @@ def test_the_craft_page_odds_rules_do_not_bleed_into_the_shop():
     店面上的「沿用譜名」在紙底的定名表單裡，不能用暗底那一套淡色字。"""
     import re
 
-    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    css = (server.WEB / "shop.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.odds span \{[^}]*color: inherit[^}]*margin: 0", css)
     assert re.search(r"\.shop-layer \.odds \{[^}]*gap: 0[^}]*margin-top: 0", css)
     assert re.search(r"\.shop-layer \.naming \.btn\.ghost \{[^}]*color: var\(--ink\)", css)
@@ -595,7 +595,7 @@ def test_the_tag_hangs_on_the_fire():
     有小籤時中間那一欄也寫 em：照舊 72px 的話電腦寬（字級 ×1.3）小籤壓到兩邊料格的下角 11px（實機量的）；沒有小籤（銀兩出口關著）照舊。"""
     import re
 
-    css = (server.WEB / "style.css").read_text(encoding="utf-8") + (server.WEB / "smithy.css").read_text(encoding="utf-8")
+    css = (server.WEB / "shop.css").read_text(encoding="utf-8") + (server.WEB / "smithy.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.furnace:has\(> \.fu-fire\) \{ grid-template-columns: 1fr [0-9.]+em 1fr; \}", css)
     assert "grid-template-columns: 1fr 72px 1fr;" in css  # 沒有小籤的爐子照舊
     assert re.search(r"\.shop-layer \.furnace \.fu-fire \{[^}]*position: relative", css)

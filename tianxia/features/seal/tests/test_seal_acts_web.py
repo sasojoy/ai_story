@@ -31,7 +31,7 @@ NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
 DRIVER = PROLOGUE_DRIVER.replace(
     NAMES_START, 'wholeApp(["S", "heirloomRow", "sealActHtml", "sealActLine", "sealActNow", "sealHtml", "sealActPolled", ')
-CSS = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8") + (Path(__file__).resolve().parents[4] / "web" / "seal.css").read_text(encoding="utf-8")
+CSS = "".join((Path(__file__).resolve().parents[4] / "web" / name).read_text(encoding="utf-8") for name in ("style.css", "shop.css", "seal.css"))
 
 # 一顆一顆點（同 test_admin_triggers_web.CLICK）：點完記下 #app 畫了什麼與跳出來的問句；ask-yes 只在 input.yes 為真時按
 CLICK = """return (async () => {

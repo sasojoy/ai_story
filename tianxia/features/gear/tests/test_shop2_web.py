@@ -204,7 +204,7 @@ def test_a_refused_hand_in_does_not_stamp(board):
 def test_the_stamp_and_notes_respect_reduced_motion():
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css  # 2026-10-14 微調
 
 
@@ -256,7 +256,7 @@ def test_the_held_row_and_a_held_note_do_not_share_a_class(board):
     board.choose(f"bounty:take:{scout}")
     html = run(server.main_view(board), "H.render(); return T.els.app.innerHTML;")
     assert 'class="held-row"' in html and 'class="note k-scout held"' in html
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert ".shop-board .held {" not in css and ".shop-board .held-row {" in css
 
 
@@ -273,7 +273,7 @@ def test_the_horse_card_rows_do_not_reuse_the_status_bar_class(market):
 def _css():
     from pathlib import Path
 
-    return (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    return "".join((Path(__file__).resolve().parents[4] / "web" / name).read_text(encoding="utf-8") for name in ("style.css", "shop.css"))
 
 
 def _rule(css: str, selector: str) -> str:

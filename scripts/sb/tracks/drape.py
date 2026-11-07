@@ -9,7 +9,7 @@ from sb.harness import emit, register_track
 from sb.tracks.facade import FacadeScenario, LOOM_OLD_SHEETS
 
 # ── shell_web（全部拆包第 67 批：style.css 照包分）─────────────────────────────────────
-LOOM_HEAD = re.compile(r"^/\* 天下大勢：.*全部拆包第 67 批從 style\.css 切出來.*\*/$")  # 新檔第一行的說明（base 沒有）
+LOOM_HEAD = re.compile(r"^/\* 天下大勢：.*全部拆包第 \d+ 批從 style\.css 切出來.*\*/$")  # 新檔第一行的說明（base 沒有）
 
 
 def _drape_rules(css: str, media: str, sink: dict) -> None:
