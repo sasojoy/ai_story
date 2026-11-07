@@ -770,6 +770,7 @@ NARRATION_KEY = "旁白改寫"  # 佇列裡的名號（不是任何角色：一�
 TALK_LOG: talk_log.TalkLogStore | None = None  # 往來紀錄的小檔（<db>-talk.sqlite）；第一次用到才開（talk_store）
 
 
+# 小檔的鎖外包裝與 act 前後那兩行留在殼：after_action 拿不到動作前的那一份
 def talk_store() -> talk_log.TalkLogStore:
     """往來紀錄的小檔：跟著現在的資料庫（TIANXIA_DB）走；換了資料庫（測試）就重開一份。"""
     global TALK_LOG
@@ -1078,6 +1079,7 @@ def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str 
 SCREEN_BUDGET_SECONDS = 12.0  # 審一句話（挑釁、名帖自題）最多等模型幾秒：叫不動就只看字表照送
 
 
+# 玩家互動、探索兩包都用，留在殼
 def screen_text(game: Game, text: str, kind: str) -> str:
     """玩家寫給別人看的一句話在行動鎖外請模型審（speech.judge，三段式的 B 段）："ok"、"bad"，叫不動、沒輪到是空字串
     （C 段只看字表）。空的、字表就擋得下的不叫模型。"""
@@ -2179,15 +2181,6 @@ MENXIA_ACTIONS = features_core.action_table(MENXIA_ACTION_ORDER, {
 }, features_core.menxia_actions(sys.modules[__name__]))
 
 
-# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 第 69 批也進了那個檔，這裡留一行包裝給測試換；screen_text 兩包都用，留在殼）
-
-
-# （/api/talk_log：主幹合回 D 段搬進人物情誼包 tianxia/features/companions/routes.py，殼照 FEATURES 掛；小檔的鎖外包裝 talk_store、_log_talk 與 act 前後那兩行留在殼：after_action 拿不到動作前的那一份）
-
-
-# POST /api/party/leave 搬進 tianxia/features/travel/routes.py（api_party_leave；全部拆包第 48 批）
-
-
 @app.get("/api/menxia")
 def api_menxia(request: Request, person: str | None = None):
     game = _game(request)
@@ -2233,20 +2226,6 @@ def api_prologue(request: Request):
     """設定頁的「重看序章」：序章的事件與師父的話排成一頁（Markdown 轉成 HTML）；沒有序章的內容是空字串，網頁就不畫那顆鈕。"""
     game = _game(request)
     return look(game, lambda g: {"text": md(g.prologue_recap())})
-
-
-# （/api/howto：全部拆包第 59 批搬進新手引導包 tianxia/features/guide/routes.py，殼照 FEATURES 掛）
-
-
-# （/api/sense、/api/sense_read、/api/sense_warm：全部拆包第 24 批搬進有所感包 tianxia/features/sense/routes.py，殼照 FEATURES 掛；
-# 畫完那一筆的鎖外三段式 sense_draw 第 69 批也進了那個檔）
-
-
-# （/api/forge_line：全部拆包第 44 批搬進煉製與自創包 tianxia/features/craft/routes.py，殼照 FEATURES 掛；forge_args 與開爐、立意的
-# 鎖外三段式〔prepare_forge、create_intent、create_reread〕第 69 批也進了那個檔，這裡留一行包裝）
-
-
-# （/api/smith_line：全部拆包第 41 批搬進鐵匠鋪包 tianxia/features/smithy/routes.py，殼照 FEATURES 掛）
 
 
 @app.get("/api/reports")
@@ -2336,15 +2315,6 @@ def api_board_card(request: Request, board: str, name: str = "", season: int = 0
 
 
 
-# （/api/mingtie、/api/mingtie/{op}：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛）
-
-
-# （/api/annals：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛）
-
-
-# （/api/xingshi：全部拆包第 46 批搬進地盤包 tianxia/features/territory_acts/routes.py，殼照 FEATURES 掛）
-
-
 # 列傳的畫面與 ZHUAN_LOCK 搬進列傳包 tianxia/features/zhuan/routes.py（第二輪第 83 批）；殼留兩個別名與 write_zhuan 一行包裝（測試與 same_behavior 讀 server.<名字>，同一個物件）
 ZHUAN_JOBS = zhuan_routes.ZHUAN_JOBS
 _zhuan_key = zhuan_routes._zhuan_key
@@ -2362,12 +2332,6 @@ def public_base(request: Request) -> str:
         return fixed.rstrip("/")
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
     return f"{proto}://{request.headers.get('host') or request.url.netloc}"
-
-
-# （/api/map、/api/map/base、/api/map/state：全部拆包第 49 批搬進輿圖包 tianxia/features/map/routes.py，殼照 FEATURES 掛）
-
-
-# POST /api/travel（安排前往）：全部拆包第 47 批搬進移動包 tianxia/features/travel/routes.py，殼照 FEATURES 掛（features_core.routers）。
 
 
 @app.post("/api/password")
@@ -2400,9 +2364,6 @@ async def api_events(request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # 代理不能把串流攢著不送
     )
-
-
-# 手機通知的五條 /api/push 與 /sw.js：本體在 tianxia/features/notify/routes.py（全部拆包第 53 批），殼照 FEATURES 掛（features_core.routers）。
 
 
 @app.get("/manifest.webmanifest")
