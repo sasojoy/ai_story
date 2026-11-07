@@ -150,7 +150,7 @@ if (!built) {
 const lineList = built.map(l => `- 線 ${l.line}：\`${l.branch}\` ${l.head}（從 ${l.base} 開；批：${l.done.map(d => d.n).join('、')}）`).join('\n')
 
 phase('Merge')
-const merged = await agent(`你是《天下大勢》PM 派的合併助手：把**第 ${WAVE} 波**每條線合起來。
+const merged = A.merged_head ? { head: A.merged_head, conflicts: '', checks: '', stopped: '', report: 'PM：合併在上一段做完，下一波已從這一筆開工' } : await agent(`你是《天下大勢》PM 派的合併助手：把**第 ${WAVE} 波**每條線合起來。
 ${COMMON}
 **要合的**：
 ${lineList}
@@ -160,14 +160,17 @@ ${MERGE_INTO ? '**另外要合的（PM 寫）**：\n' + MERGE_INTO + '\n' : ''}
 合完**只跑**：\`python ${TOOLS}/undef_scan.py tianxia server.py\` 0 個；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\` 過。紅了修（合起來才壞的一個 commit）。**整套、比對不跑**：下一關一次跑。
 推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree' })
 if (!merged || halted_word(merged.stopped)) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }
+if (A.stop_after_merge) return { wave: WAVE, built, merged, head: sha_of(merged.head), stopped: '' }  // 企劃者 11/07「不要卡著」：合好就開下一波，閘門疊著跑
 
 let gateHead = sha_of(merged.head), docsPass = null
-if (A.after_merge) {  // 合完、閘門之前的文件輪（PM 寫；閘門要驗到它）
-  docsPass = await agent(`你是《天下大勢》PM 派的文件子代理，第 ${WAVE} 波合好之後、閘門之前做一輪文件。
+const docsRun = () => agent(`你是《天下大勢》PM 派的文件子代理，第 ${WAVE} 波合好之後、閘門之前做一輪文件。
 ${COMMON}
 分支：明確 fetch ${WAVE_BRANCH}；\`git switch -c ${WAVE_BRANCH}-docs origin/${WAVE_BRANCH}\`（同名已存在就加 -work），做完快轉推回 \`${WAVE_BRANCH}\`。暫存 ${SP}\\wave${WAVE}\\docs\\。
 ${A.after_merge}
 回報 head、做了哪些（fixed）、發現不該做或對不上的（rejected）、跑的結果（tests）。只有企劃者能定的才寫 stopped。`, { label: `docs:wave${WAVE}`, phase: 'Merge', schema: FIX_SCHEMA, isolation: 'worktree' })
+const docsPromise = (A.after_merge && A.docs_alongside) ? docsRun() : null  // 只動文件，跟閘門同時跑，閘門不驗它（企劃者 11/07）
+if (A.after_merge && !A.docs_alongside) {  // 合完、閘門之前的文件輪（PM 寫；閘門要驗到它）
+  docsPass = await docsRun()
   if (!docsPass || halted_word(docsPass.stopped)) return { wave: WAVE, built, merged, docsPass, stopped: docsPass ? docsPass.stopped : '文件輪沒有結果' }
   if (docsPass.head) gateHead = sha_of(docsPass.head)
 }
@@ -196,20 +199,18 @@ ${COMMON}
 **這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完刪。
 **你的鏡頭**：${x.text}
 每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA })
-const reviewsRaw = await parallel([...built.map(l => () => reviewOf(l)), ...(A.extra_lenses || []).map(x => () => lensOf(x))])
-const reviews = reviewsRaw.filter(Boolean)
-const gate = await gatePromise
-let check = null
-if (A.web_check) {
-  phase('Check')
-  check = await agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${gateHead} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**
+const checkPromise = !A.web_check ? null : agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${gateHead} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**
 ${COMMON}
 埠 ${A.web_check.ports}，分主機名（127.0.0.1 對 localhost）。要看的：${A.web_check.steps}
 回報 same、走了哪些步驟、差異、截圖路徑。收的時候伺服器 taskkill /T、刪暫存大檔。`, { label: `check:wave${WAVE}`, phase: 'Check', schema: { type: 'object', properties: { same: { type: 'boolean' }, steps: { type: 'string' }, diffs: { type: 'array', items: { type: 'string' } }, report: { type: 'string' } }, required: ['same', 'steps', 'diffs', 'report'] } })
-}
+const reviewsRaw = await parallel([...built.map(l => () => reviewOf(l)), ...(A.extra_lenses || []).map(x => () => lensOf(x))])
+const reviews = reviewsRaw.filter(Boolean)
+const gate = await gatePromise
+const check = checkPromise ? await checkPromise : null
+if (docsPromise) docsPass = await docsPromise
 const findings = [...reviews.flatMap(r => r.findings || []).filter(f => f.severity !== 'nit'), ...(check && !check.same ? (check.diffs || []).map(d => ({ title: '實機畫面有差', severity: 'blocker', where: '', evidence: d })) : [])]
 
-let head = gateHead, fix = null
+let head = (docsPass && docsPass.head) ? sha_of(docsPass.head) : gateHead, fix = null
 if (!gate || !gate.green || findings.length) {
   phase('Fix')
   fix = await agent(`你是《天下大勢》的開發子代理，修第 ${WAVE} 波合起來之後的問題。
@@ -222,6 +223,7 @@ ${lineList}
 ${gate ? gate.result : '閘門沒有結果：先用同樣的參數跑一次 wave_gate.py'}
 **審查的發現**：
 ${JSON.stringify(findings, null, 1)}
+**企劃者 11/07「加快分拆，不要卡著」：這一關不超過 60 分鐘，到了就把修好的推上去、交。** 順序：閘門紅的 → blocker → 一兩行能修好的 should；其餘 should 不修，寫進 rejected，開頭寫「留給下一波：」。**工具（scripts/webqa、scripts/sb、wave_gate）的誤報不修工具**，寫進 rejected；工具整個跑不起來（結束碼 2）才修。不重跑全量網頁比對、不跑 selftest。
 做法：一條一個 commit、修一條推一次。比對紅了先用那一軌（\`same_behavior compare --tracks <軌>\`）對每條線的 head 比，找到是哪一條線、哪一批；是腳本的問題（情境走的路兩邊不同）就修腳本、兩邊重比。測試紅了照「合併丟東西」「只是路徑」「真的行為變了」分類：**不要為了綠改行為，也不要改斷言的意思**。修完**只重跑修到的**：那幾條測試、那幾軌，改了 \`tianxia/\` 再跑 \`python ${TOOLS}/undef_scan.py tianxia server.py\` 與邊界、契約。不跑整套（PM 最後再跑一次）。屬實的才修，不屬實的寫進 rejected 附證據。nit 不修。只有企劃者能定的才寫 stopped。
 回報 head、修了哪些、駁回哪些、重跑的結果。`, { label: `fix:wave${WAVE}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree' })
   if (fix && fix.head) head = sha_of(fix.head)

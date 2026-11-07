@@ -373,6 +373,147 @@ WAVES["D"] = dict(
 )
 
 
+R2E_NOTE = [
+    "- **D 波之後的新位置（以現行程式為準）**：一行委派進 `tianxia/features/<包>/game_api.py` 的 `TABLE`；搬進 `tianxia/core/` 的服務照 event_check 前例在 `Game` 留一行委派，表只管包。邊界名單在 `tests/core/boundary_tables.py`；服務清單在 `tianxia/core/services_list.md`，`CROSS_PACKAGE_CALLS`、`SHELL_FOREIGN` 紅了照訊息補列或拿掉。調校數字 `tianxia/core/tuning/<包>.py`。新存檔欄位要空的不寫鍵用 `Field(<預設>, json_schema_extra=QUIET)`。情境在 `scripts/sb/tracks/<軌>.py`，檔尾 `register_track`；`scripts/same_behavior.py` 只是入口。",
+    "- **這一波 8 條線同時開工（企劃者 11/07「加快分拆，不要卡著」，PM 重排）**：好幾條線都動 `tianxia/engine.py`（各搬各的段）、`tests/core/boundary_tables.py`、`tianxia/core/features.py`、`tianxia/core/registry.py`。**只動你要搬的那幾段**，不順手整理、不重排、不改別人的 import 行；拿掉的 import 只拿你造成沒人用的。總表那一節寫的「依賴」「同線」跟這張派工單不一樣時，照這張派工單。",
+    "- 看到別批的問題、工具的誤報，寫進 leftovers，不修。",
+]
+CORE_FILE = "- **開核心服務檔（第 79、80、81 批共通）**：照實調 `scripts/test_for.py` 的 `CORE_SERVICES` 的底，補一條用真檔的測試；服務檔經 `ctx._x` 互叫的不會往上算（`_core_refs` 只看 `ast.Name`）。被 patch 的方法互叫走 `ctx._x`，其餘直接叫（那一節的坑）。"
+WEBQA_NAMES = "- `scripts/webqa/serve.py` 的 `PATCH_NAMES` 讀 `server` 模組的名字：你搬走的名字 `server` 模組要還認得，`tests/web/test_webqa.py` 要綠。"
+
+
+def r2e(n, title, pkg, dev, ports, body, model=None):
+    return r2(n, title, pkg, dev, ports, body + R2E_NOTE, model=model)
+
+
+def b79():
+    return r2e(79, "單打服務收進 `core/combat.py`", "core_combat", "dev/combat", "8299", [
+        "- 範圍照那一節。`test_explain2.py` 現在在 `tianxia/features/guide/tests/`。`_squad_encounter`：那一節要收、第 72 批留的話說照舊留 `GAME_DIRECT`，以現行程式為準選保守的，擲骰順序不動，寫進 decided。",
+        CORE_FILE,
+    ])
+
+
+def b80():
+    return r2e(80, "推大勢與回體丹（`core/pushing.py`、`core/pills.py`）", "core_pushing", "dev/pushing", "8300", [
+        "- 範圍照那一節，從第 79 批的結果開。`push_trend` 的 int 與 float 細節不動。",
+        CORE_FILE,
+    ])
+
+
+def b81():
+    return r2e(81, "畫面搬出 engine（`core/status_view.py`、`core/page_view.py`）", "core_views", "dev/views", "8301", [
+        "- 範圍照那一節。**自己一條線，不接第 79、80 批（PM 定）**：它們搬的方法在 `Game` 上名字還在，你照舊 `self.x` 叫。`status_data` 的閉包整段不拆。",
+        "- `skillview.stat_uses`、`STAT_CHECK_NOTE`、`practice_hint` 照搬進 `core/status_view.py`。第 88 批在別條線切 skillview，合併時接，你不動。`shop_view` 的分派這批照搬，第 93 批下一波才改。",
+        CORE_FILE,
+    ])
+
+
+def b83():
+    return r2e(83, "殼的殘留與 import", "shell", "dev/shell-rest", "8302", [
+        "- 範圍照那一節。第 82 批砍了（PM 判斷：付 14 格表換 5 筆，不划算），不用對它。`cards.ACTIONS` 的 sorted 跟 `test_social.py:552` 同一串要印出來對。第 69 批那條補註要收回：句子放 docs。",
+        WEBQA_NAMES,
+    ])
+
+
+def b90():
+    return r2e(90, "管理者開包 `features/admin`", "admin", "dev/admin", "8303", [
+        "- 範圍照那一節，從第 83 批的結果開。`/` 回的 HTML 與 script 順序不變：`web/admin.js` 只改由這包宣告，內容不動（第 85 批在別條線把 admin 的 submit 分支搬進它，合併時接）。**`/api/admin*` 與 `/admin` 每一條的權限檢查一個字都不動**，測試各打一條「不是管理者」要被擋。",
+        "- `switchboard` 軌補 `/api/admin/accounts`、`reset_password`（那一節寫現在 0 處打到）；`schedule`、`jump_next`、`clear_lock`、`set_trend` 開工先查有沒有打到，沒打到補情境。手冊 3.1 要補的認定句子放 docs。",
+        WEBQA_NAMES,
+    ])
+
+
+def b84():
+    return r2e(84, "點擊分派接手（`registerClicks`）", "shell_web", "dev/clicks", "8304", [
+        WEB_RULE,
+        "- 範圍照那一節。case 行逐字不動（縮排 8 格），查表一律 `return await`。`web/` 的檔連註解都不准寫假人那幾個字。facade、map 軌的 `FACADE_SHELL_LINES` 照那一節放行。第 86 批在別條線切 style.css，實切的 `test_shell_web` 那 1 條是這批解的。looks 的 24 個 case 先進 `mall.js`，第 94 批同線接著搬。",
+    ])
+
+
+def b85():
+    return r2e(85, "表單與 change 分派（`registerForms`）", "shell_web", "dev/forms", "8305", [
+        WEB_RULE,
+        "- 範圍照那一節，從第 84 批的結果開。殼留登入、建角、改密碼、隨口應對，keydown 留殼。`web/battle.js` 的 `battleInner` 舊註解與恆真的 `typeof bpOn` 守衛這批清（第十節）。admin 的 41 行進 `web/admin.js`；第 90 批在別條線只改這個檔由誰宣告，不動內容。",
+    ])
+
+
+def b94():
+    return r2e(94, "`mall.js` 切出 `looks.js`", "looks", "dev/looks-js", "8306", [
+        WEB_RULE,
+        "- 範圍照那一節，從第 85 批的結果開，第 84 批進 `mall.js` 的 24 個 case 跟著走。頂層 const 載入時有沒有互讀先量。**`mall.css` 的 look 段這批不切（PM 定：第 86 批同波在動 CSS 先後）**，放 leftovers。",
+    ])
+
+
+def b86():
+    return r2e(86, "`style.css` 切 `map.css`、`shop.css`", "map", "dev/css-cut", "8307", [
+        WEB_RULE,
+        "- 範圍照那一節。link **放 `style.css` 正後面**；多的 `}`（FB-9441）與作廢那條一起走、不修。先修 `scripts/css_order_check.py`（所有樣式照載入順序接成合成 base 再比）。加一條測試：`style.css` 不准再出現切走的那幾個前綴。",
+        "- `test_shell_web` 那 1 條紅是第 84 批解的，別條線在做，你不修，在 base 上確認、寫進 decided。語料重播（`scripts/webqa`）波末比對一次跑，你只跑 `css_order_check.py` 與讀這些 css 的測試。",
+    ])
+
+
+def b87():
+    return r2e(87, "收口一：事件三支、合成、`server_bots`", "core_shared", "dev/old-shared", "8308", [
+        "- 範圍照那一節。邊界名單開工逐行分。動到共用層登記寫明理由。",
+    ])
+
+
+def b88():
+    return r2e(88, "skillview 切開", "core_shared", "dev/skillview", "8309", [
+        "- 範圍照那一節，從第 87 批的結果開。第 81 批在別條線把 `skillview.*` 搬進 `core/status_view.py`：你改 engine 上還看得到的；`core/status_view.py` 那幾個合併時照新位置接，寫進 leftovers。第 82 批砍了，`features/*/__init__.py` 不用對它。",
+    ])
+
+
+def b89():
+    return r2e(89, "假人一：包讀的搬進包", "core_bots", "dev/bots-1", "8310", [
+        "- 範圍照那一節。**自己一條線，不接第 88 批（PM 定）**：開工先確認搬的東西沒有用到第 88 批新開的位置，用到的照舊讀 `skillview`、寫進 leftovers。`_TURN`、`_turn_cached` 不能變兩份狀態。假人的選擇逐位元組不變，任何畫面、輸出不能透露誰是假人。",
+    ])
+
+
+def b101():
+    return r2e(101, "假人二：每包的按法搬進 `bots.py`", "core_bots", "dev/bots-2", "8311", [
+        "- 範圍照那一節，從第 89 批的結果開。分數相同時的先後、亂數抽幾次都算行為。",
+    ])
+
+
+def b96():
+    return r2e(96, "內容驗證：共用層那一類回各自模組", "core_content", "dev/content-check-1", "8312", [
+        "- 範圍照那一節。一律函式內 import，validate 原位呼叫。一次性比對各類內容改壞時 `ContentError` 全文（含先後）一樣，寫一支暫存腳本。",
+    ])
+
+
+def b100():
+    return r2e(100, "內容驗證：單包的進包", "core_content", "dev/content-check-2", "8313", [
+        "- 範圍照那一節，從第 96 批的結果開。**`check_shop_lines` 這批不搬（PM 定）**：它讀 `shopview.SITUATIONS`，第 93 批下一波才切，放 leftovers 給第 93 批。`ContentError` 全文比對照第 96 批那支。另跑 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。",
+    ])
+
+
+EXTRA_LENSES_E = [
+    dict(key="clicks", text="**按鈕一顆都不能掉，也不能兩包都認**。第 84、85、94 批把 `app.js` 的 switch、submit、change 分進包的 js。把 base 的每個 case、每條 else-if 與 head 各包的 `<包>Click`、`registerClicks`、`registerForms` 逐一對，寫腳本不要用看的：case 行逐字、有沒有漏、同一 act 兩包認；查表一律 `return await`（`app.js` 靠 try/catch 吞 `api()` 的 throw）；fallthrough 的 case 有沒有被拆開；else-if 鏈改寫後條件的先後。頂層 TDZ：每支檔頂層讀的識別字對到定義的檔與載入順序，`WEB_ORDER`、`APP_FILES`、`web_scripts()` 一致；`looks.js` 載入當下的頂層 const。`web/` 的檔連註解都不准寫假人那幾個字。"),
+    dict(key="css", text="**CSS 先後就是行為**。第 86 批把 `style.css` 兩大段切進 `map.css`、`shop.css`，link 放 `style.css` 正後面。用 `scripts/css_order_check.py` 對 base 跑；`NOT_EVERYWHERE` 每一組的理由逐條讀，讀程式確認真的打不到；js 組字串產生的 class（資料表組出來的）它抓不到，你另外列，對照搬去哪、先後有沒有反轉；多的 `}`（FB-9441，吃掉 `.shop-layer.shop-tavern`）切出去之後效果跟 base 一樣嗎；`mall.css` 排在哪；`style.css` 不准再出現切走前綴的那條測試真的會紅嗎（改一行試）；`sw.js` 快取清單與 `?v=`、長快取的雜湊有沒有涵蓋新檔。"),
+    dict(key="core", text="**搬進核心的行為不能變，測試換的東西還換得到**。第 79、80、81 批把單打、推大勢、回體丹、狀態列與頁面搬進 `core/`。逐個比 base 與 head：被 patch 的方法（`git grep` 測試與 `scripts/sb`）互叫時真的走 `ctx._x` 嗎，經直接呼叫的是不是測試沒 patch；`sortie.on` 換 `territory.on` 的等價證明；`PROLOGUE_FIGHT` 的 re-export 是同一物件；`_battle_rewards`、`_squad_encounter` 擲骰次數與順序；`push_trend` 的 int 與 float；`status_data` 的閉包有沒有抓到舊值、鍵的先後（`/api/main` 逐位元組）；engine re-export 的 `FIGHT_GONE_LINES`、`LOW_HP_RATIO`、`REFILL_*`、`PILL_DAY_FULL`、`_cn_count` 都在；核心有沒有 import 包；兩條線都動 engine.py 合起來有沒有掉方法或重複（`Game` 的名字集合 base 對 head 比一次）。"),
+    dict(key="admin", text="**管理者的門不能少一道**。第 90 批把管理者工具與 `/api/admin*`、`/admin`、`reset_password` 搬進新包 `features/admin`。列出 base 與 head 每一條路由，逐條對權限檢查（沒登入、登入了不是管理者、休季時 `paused_ok`）的語句與先後，用 TestClient 實打「不是管理者」每一條都要被擋（行程內，不開埠）；`FEATURE_ADMIN_ACTIONS` 與 `ADMIN_OWNERS` 每一格；`admin_choices` 的鍵順序（`STATUS_ORDER[\"admin\"]`）；`is_admin` 的來源沒變；第 83 批 `cards.ACTIONS` 字典順序變了之後，真的只有 sorted 與 `.get` 在讀嗎。"),
+    dict(key="models", text="**假人與內容不能變**。第 89、101 批：`_TURN`、`_turn_cached` 只有一份狀態（`id()` 比一次）；同一個局面的 `score`、`pick`、同分先後、亂數抽幾次在 base 與 head 一樣；假人四支定成殼之後包有沒有 import。第 96、100 批：造幾種壞內容，`ContentError` 全文與先後在 base 與 head 一樣，`load_content` 在 season21、week7、不帶設定各載一次 `model_dump_json` 比雜湊；函式內 import 有沒有環。第 87、88 批：re-export 是同一物件（`is` 比），`patch.object(create, …)`、`patch.object(skillview, …)` 打得到；`seal.on` 改讀 `seal_base` 等價；共用層登記 `SHARED` 有沒有多放行包。"),
+]
+WEB_E = "**這一波切了 `app.js` 的分派、`style.css`、`mall.js`，用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」不用做。** 都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4 --keep-corpus`（fast；改到 css 會自動跑重播）。量分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0：same=true。結束碼 1：逐列分成①工具誤報（寫進 report，不算 diffs）②這一波真的改了（寫進 diffs，same=false）。結束碼 2：工具壞了，same=true、report 開頭寫「比對沒跑完」與原因。\n3. 印 main 語料含 `#map-host` 的快照數（第 86 批要這個數；0 就寫明輿圖那一半沒有語料證據）。\n4. 工具走不到的實機各走一次，主控台 0 錯誤、網路沒有 4xx／5xx：管理頁重設密碼、酒肆四張表單、形象與絕招頁（第 85、94 批）。\n**不修工具、不修程式、不跑 selftest，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+WAVES["E"] = dict(
+    round2=True,
+    extra_lenses=EXTRA_LENSES_E,
+    lines=[
+        dict(name="戰鬥與推大勢", batches=[b79, b80]),
+        dict(name="畫面搬出", batches=[b81]),
+        dict(name="殼與管理者", batches=[b83, b90]),
+        dict(name="點擊分派", batches=[b84, b85, b94]),
+        dict(name="樣式", batches=[b86]),
+        dict(name="舊模組", batches=[b87, b88]),
+        dict(name="假人", batches=[b89, b101]),
+        dict(name="內容驗證", batches=[b96, b100]),
+    ],
+    merge_port=8314, fix_port=8315,
+    web_check=dict(ports="8316、8317", steps=WEB_E),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
@@ -400,6 +541,9 @@ def main():
     ap.add_argument("--merge-extra", default="", help="合併時要多合的東西（文字檔）")
     ap.add_argument("--gate-base", default="", help="閘門比對的基準；合併時又合了 develop、main 就給它們合起來那一筆")
     ap.add_argument("--after-merge", default="", help="合完、閘門之前的文件輪（文字檔）")
+    ap.add_argument("--merged-head", default="", help="合併已經做完（下一波已從這一筆開工）：收尾不再合")
+    ap.add_argument("--stop-after-merge", action="store_true", help="只合併就回來，閘門之後另外叫（企劃者 11/07：波與波疊著跑）")
+    ap.add_argument("--docs-alongside", action="store_true", help="文件輪只動文件，跟閘門同時跑")
     ap.add_argument("--opus", action="store_true", help="每一批都用 Opus（沒有逐批審查時比較保險）")
     ap.add_argument("--leftovers", default="", help="上一波開發回來的 built（JSON 檔）：寫到某一批的 leftovers 接進那一批的派工")
     a = ap.parse_args()
@@ -421,7 +565,13 @@ def main():
             args["gate_base"] = a.gate_base
         if a.after_merge:
             args["after_merge"] = Path(a.after_merge).read_text(encoding="utf-8")
-        name = f"wave-{a.wave}-finish.js"
+        if a.merged_head:
+            args["merged_head"] = a.merged_head
+        if a.stop_after_merge:
+            args["stop_after_merge"] = True
+        if a.docs_alongside:
+            args["docs_alongside"] = True
+        name = f"wave-{a.wave}-merge.js" if a.stop_after_merge else f"wave-{a.wave}-finish.js"
     else:
         args["stop_after_build"] = True
         args["lines"] = [dict(name=l["name"], base=a.base, batches=[f() for f in l["batches"]]) for l in w["lines"]]
