@@ -523,5 +523,5 @@ class StoryScenario(Scenario):
 
 
 # 改一個字（selftest）：選單上「未了之事」那一行的開頭（搬之前在 tianxia/storyline.py、之後在 tianxia/features/story/storyline.py）
-register_track("story", StoryScenario, (("tianxia/features/story/storyline.py", "tianxia/storyline.py"),
+register_track("story", StoryScenario, (("tianxia/features/story/storyline.py",),
                                         ('PENDING_HEAD = "未了之事"', 'PENDING_HEAD = "未了之事！"')), "week7")

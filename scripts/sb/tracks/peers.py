@@ -452,4 +452,4 @@ class PeersScenario(Scenario):
 
 
 # 改一個字（selftest）：不接他的挑釁話那一句（social.MUTED；搬之前在 tianxia/social.py，搬進包之後 Task 3 把包裡的檔補進這張清單），week7 greet 那一段抓到
-register_track("peers", PeersScenario, (("tianxia/social.py", "tianxia/features/peers/social.py"), ("那一句你不會看到。", "那一句你不會看到！")), "week7")
+register_track("peers", PeersScenario, (("tianxia/features/peers/social.py",), ("那一句你不會看到。", "那一句你不會看到！")), "week7")

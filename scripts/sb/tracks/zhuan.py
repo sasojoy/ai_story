@@ -431,5 +431,5 @@ class ZhuanScenario(Scenario):
 
 
 # 改一個字（selftest）：蓋紀念印那一句（搬之前在 tianxia/zhuan_end.py、之後在 tianxia/features/zhuan/zhuan_end.py）
-register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py", "tianxia/zhuan_end.py"),
+register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py",),
                                         ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21")

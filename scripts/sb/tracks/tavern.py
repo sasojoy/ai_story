@@ -600,4 +600,4 @@ class TavernScenario(Scenario):
                                    "seq": s.tavern_hit_seq, "chatter": dict(sorted(s.tavern_chatter.items()))})
 
 
-register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py", "tianxia/tavern.py"), ("滿堂叫好。", "滿堂叫好！")), "week7")
+register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py",), ("滿堂叫好。", "滿堂叫好！")), "week7")

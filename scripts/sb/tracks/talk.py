@@ -513,5 +513,5 @@ class TalkScenario(CompanionsScenario):
 
 
 # 改一個字（selftest）：指點一招那一句（parley.SPAR_LINE；搬之前在 tianxia/parley.py、之後在包裡），week7 紀行雲求指點、當場做那一下抓到
-register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py", "tianxia/parley.py"),
+register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py",),
                                       ('SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻。"', 'SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻！"')), "week7")

@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 
 import server
-from tianxia.features.tale import tale as old_name
 from tianxia.core import features as features_core
 from tianxia.features import tale as package
 from tianxia.features.tale import tale
@@ -14,7 +13,6 @@ from tianxia.features.tale import tale
 def test_the_package_is_registered_and_the_old_names_are_the_same_module():
     assert package.FEATURE in features_core.registered()
     assert package.FEATURE.name == "tale" and package.FEATURE.prefix is None
-    assert old_name is tale
     import tale_html as old_html  # noqa: PLC0415  根目錄的舊名
 
     assert old_html is sys.modules["tianxia.features.tale.tale_html"]

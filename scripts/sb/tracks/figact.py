@@ -593,5 +593,5 @@ class FigActScenario(Scenario):
 
 
 # 改一個字（selftest）：月旦評發出去那一則的開頭（搬之前在 tianxia/yuedan.py、之後在 tianxia/features/figure_acts/yuedan.py）
-register_track("figact", FigActScenario, (("tianxia/features/figure_acts/yuedan.py", "tianxia/yuedan.py"),
+register_track("figact", FigActScenario, (("tianxia/features/figure_acts/yuedan.py",),
                                           ('HEAD = "{critic}月旦評（{week}）："', 'HEAD = "{critic}月旦評！（{week}）："')), "week7")

@@ -753,5 +753,5 @@ class GameStateFor:
 
 
 # 改一個字（selftest）：託付辦成了那一句（errands.DONE；搬之前在 tianxia/errands.py、之後在包裡）
-register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py", "tianxia/errands.py"),
+register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py",),
                                                   ('DONE = "{who}託你的事辦成了。"', 'DONE = "{who}託你的事辦成了！"')), "week7")

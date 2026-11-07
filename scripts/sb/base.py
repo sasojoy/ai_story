@@ -1193,9 +1193,9 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # ═══════════════════════════ 登記：第 1 批的一軌（出陣）、第 2 批的一軌（約戰），各自一個資料庫、各自切一半 ═══════════════════════════
 
 # 改一個字（selftest）：出陣回報打輸那一句
-register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py", "tianxia/sortie.py"), ("這一下沒推動。", "這一下沒推動！")), "week7")
+register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7")
 # 改一個字（selftest）：同去按第二次那一句
-register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py", "tianxia/sortie_duel.py"),
+register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
                                       ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7")
 register_bots("sortie", BOT_PROFILES, bots_run)  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run)  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

@@ -74,10 +74,7 @@ class RoadmateScenario(TravelScenario):
 
     def invite(self, sender: str, target: str) -> None:
         """記一張結伴同行的邀請（kind 是 travel；玩家卡上沒有入口了，只剩舊的邀請照舊走完）。"""
-        try:
-            from tianxia.features.peers import invites
-        except ImportError:  # develop：還沒搬進包
-            from tianxia.features.peers import invites
+        from tianxia.features.peers import invites
 
         with self.world.action_lock():
             loc = self.chars.load(sender).player.location

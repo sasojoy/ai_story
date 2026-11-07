@@ -481,5 +481,5 @@ class GuideScenario(Scenario):
 
 
 # 改一個字（selftest）：任務卡「就當散人」那一句（newbie.DRIFTER_LINE；搬之前在 tianxia/newbie.py、之後在包裡）
-register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py", "tianxia/newbie.py"),
+register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py",),
                                          ("就當個散人，天下照樣走得。", "就當個散人，天下照樣走得！")), "week7")

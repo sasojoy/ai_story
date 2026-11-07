@@ -97,7 +97,7 @@ def test_errand_and_foreshadow_get_their_places():
     status = game.status_data()
     status["bounties"] = [{"title": "託付", "how": "送信", "commission": True, "issuer": "某人", "id": b.id}]
     trip = SimpleNamespace(label="束苣乘城", location="changshe")
-    with mock.patch("tianxia.foreshadow.next_trip", return_value=(SimpleNamespace(id="fs1"), trip)):
+    with mock.patch("tianxia.features.military.fs_rules.next_trip", return_value=(SimpleNamespace(id="fs1"), trip)):
         rows = weekcard.week_card(game, status, [])["steps"]
     assert rows[0]["kind"] == "errand" and rows[0]["id"] == b.id and rows[0]["target"]["location"] == "wan_city"
     fs = next(r for r in rows if r["kind"] == "foreshadow")

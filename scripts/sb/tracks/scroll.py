@@ -319,4 +319,4 @@ class ScrollScenario(Scenario):
 
 
 # 改一個字（selftest）：同一個真意第二份那一句（搬之前在 tianxia/skillview.py、搬之後在共用層 tianxia/art_cards.py）。抓到的地方：素帛身上的第二份
-register_track("scroll", ScrollScenario, (("tianxia/art_cards.py", "tianxia/skillview.py"), ('HIGH_MORE = "多一半"', 'HIGH_MORE = "多一半！"')), "week7")
+register_track("scroll", ScrollScenario, (("tianxia/art_cards.py",), ('HIGH_MORE = "多一半"', 'HIGH_MORE = "多一半！"')), "week7")

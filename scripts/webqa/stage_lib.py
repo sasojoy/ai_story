@@ -112,7 +112,7 @@ def divine_recipe(chars, content, world, name):
 
 def persuade_errand(chars, content, name, figure, errand):
     """A persuade errand on the character, who then stands at its target (the way the errand tests give one). None if the errand is not in this content."""
-    errands = importlib.import_module("tianxia.errands")
+    errands = importlib.import_module("tianxia.features.companions.errands")
     st = chars.load(name)
     st.player.affinities[figure] = 50
     errands.give(st, content, figure, errand)

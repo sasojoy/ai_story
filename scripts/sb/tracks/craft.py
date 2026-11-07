@@ -460,5 +460,5 @@ class CraftScenario(Scenario):
 
 # 改一個字（selftest）：重悟帖沒有帖那一句（搬之前在 tianxia/create.py、之後在 tianxia/features/craft/ 的規則模組；第 2 項是之後的檔名，
 # 搬的人照實際的檔名改這一個字串）。抓到的地方：松檐重骰形的第一下
-register_track("craft", CraftScenario, (("tianxia/features/craft/create.py", "tianxia/create.py"),
+register_track("craft", CraftScenario, (("tianxia/features/craft/create.py",),
                                         ('NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"', 'NO_REROLL = "手上沒有重悟帖：萬寶閣買得到！"')), "week7")

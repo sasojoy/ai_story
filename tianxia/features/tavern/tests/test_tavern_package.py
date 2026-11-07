@@ -1,11 +1,8 @@
-"""酒肆搬進功能包（主動搬六包第 10 批）守的幾件事：舊名是包裡同一個模組物件（tianxia.tavern、tianxia.tavern_ask；BANNED_WORDS 照舊
-拿得到——合 develop 時搬進核心 naming.py，這裡 re-export、走一趟的留言從 naming 拿）、換掉舊名的屬性包裡看得到（test_tavern 換 tavern.find_chance）、
+"""酒肆搬進功能包（主動搬六包第 10 批）守的幾件事（BANNED_WORDS 合 develop 時搬進核心 naming.py，包的 rules re-export、走一趟的留言從 naming 拿）：
 開關在坐著的時候被關掉照樣出得去、假人的分數照舊、tavern:* 由包接走時標題跟搬之前一樣；審查補的：同一對人 hit_pair_hours 內只雇得了一次；合 develop 時補的：題壁擋禁字。"""
 from __future__ import annotations
 
-import importlib
 import random
-import sys
 
 from conftest import real_content
 from tianxia.engine import Game
@@ -23,28 +20,6 @@ def _seated() -> Game:
     game.now = 3600.0
     game.choose("act:tavern")
     return game
-
-
-def test_the_old_names_are_the_package_modules():
-    import tianxia.tavern
-    import tianxia.tavern_ask
-    from tianxia.features.tavern import ask, rules
-
-    assert tianxia.tavern is rules and tianxia.tavern_ask is ask
-    assert sys.modules["tianxia.tavern"] is rules and sys.modules["tianxia.tavern_ask"] is ask
-    assert importlib.import_module("tianxia.tavern") is rules
-    from tianxia.features.tavern.rules import BANNED_WORDS
-
-    assert BANNED_WORDS is rules.BANNED_WORDS and BANNED_WORDS == ("假人", "機器人", "外掛")
-    assert ask.tavern is rules
-
-
-def test_patching_the_old_name_reaches_the_package(monkeypatch):
-    from tianxia.features.tavern import rules as old
-    from tianxia.features.tavern import actions, rules
-
-    monkeypatch.setattr(old, "find_chance", lambda c, reach: 0.25)
-    assert rules.find_chance(None, 0) == 0.25 and actions.tavern_rules.find_chance(None, 0) == 0.25
 
 
 def test_turning_the_tavern_off_while_seated_still_lets_you_leave(monkeypatch):
@@ -98,9 +73,10 @@ def test_the_tavern_wall_refuses_the_banned_words_from_the_core():
     """合 develop 時禁字搬進核心 naming.BANNED_WORDS（酒肆包的 rules re-export 同一份，探索包的走一趟留言也讀它）：題壁照樣擋這三個字
     （把專有名詞的名單清空，擋下的只可能是這一道）；擋下的不收錢、牆上不多一句，沒犯忌的照常題上去。"""
     from tianxia import naming
-    from tianxia.features.tavern import rules
+    from tianxia.features.tavern import ask, rules
 
-    assert rules.BANNED_WORDS is naming.BANNED_WORDS
+    assert rules.BANNED_WORDS is naming.BANNED_WORDS and rules.BANNED_WORDS == ("假人", "機器人", "外掛")
+    assert ask.tavern is rules
     game = _seated()
     game.content.banned_names = []
     p = game.state.player

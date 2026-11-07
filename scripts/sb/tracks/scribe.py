@@ -519,5 +519,5 @@ class ScribeScenario(BattleScenario):
 
 
 # 改一個字（selftest）：開篇那一拍（戰記本體，第 52 批搬進包；舊名的檔、搬進包的檔兩處找）
-register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py", "tianxia/tale.py"),
+register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py",),
                                           ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7")

@@ -439,4 +439,4 @@ class HeraldScenario(ExploreScenario):
 
 
 # 改一個字（selftest）：懸賞交差那一句（bounties._complete；第 45 批懸賞榜成包時那一行搬進包，這裡要多寫包裡的檔）
-register_track("herald", HeraldScenario, (("tianxia/features/bounties/rules.py", "tianxia/bounties.py"), ("」交差了，", "」交差了！")), "week7")
+register_track("herald", HeraldScenario, (("tianxia/features/bounties/rules.py",), ("」交差了，", "」交差了！")), "week7")
