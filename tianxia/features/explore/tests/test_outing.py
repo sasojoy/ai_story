@@ -11,8 +11,10 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_modes, explore_one, outing, social, speech, team
+from tianxia import explore_one, outing, precise, speech, team
+from tianxia.core import presence
 from tianxia.encounter import EncounterResult
+from tianxia.features.mall import actions as mall_actions
 from tianxia.state import Inscription
 
 MAT, EVT, ENC = explore_one.MATERIAL, explore_one.EVENT, explore_one.ENCOUNTER
@@ -161,7 +163,7 @@ def test_rare_boost_follows_the_trip_length():
     assert outing.rare_boost(s, c) == 1.0
     seen = []
     with _draws(MAT, MAT, MAT, MAT, MAT), mock.patch.object(
-            explore_modes, "gather_finds", side_effect=lambda *a, boost=1.0, **k: seen.append(boost) or []):
+            explore_one, "gather_finds", side_effect=lambda *a, boost=1.0, **k: seen.append(boost) or []):
         game.outing_go(5)
     assert seen == [1.5] * 5
     assert outing.rare_boost(s, c) == 1.0  # 走完了，不在路上
@@ -172,15 +174,15 @@ def test_gather_boost_raises_only_the_second_tier():
     game = _game()
     c = game.content
     loc = next(l for l in c.locations.values()
-               if l.danger >= 2 and l.materials and not explore_modes.is_town(c, l))  # 城外、危險度二以上才擲二階
-    chance = c.config.explore_modes.second_tier[loc.danger]
+               if l.danger >= 2 and l.materials and not precise.is_town(c, l))  # 城外、危險度二以上才擲二階
+    chance = c.config.jianfa.second_tier[loc.danger]
 
     class Fixed(random.Random):
         def random(self):
             return chance * 1.2  # 不加成擲不中，乘 1.5 擲得中
 
-    plain = explore_modes.gather_finds(c, loc, Fixed(), sure=True)
-    boosted = explore_modes.gather_finds(c, loc, Fixed(), sure=True, boost=1.5)
+    plain = explore_one.gather_finds(c, loc, Fixed())
+    boosted = explore_one.gather_finds(c, loc, Fixed(), boost=1.5)
     assert len(boosted) == len(plain) + 1
 
 
@@ -219,7 +221,8 @@ def _with_ink(game, n: int = 1) -> None:
     game.now = game.now or 1_800_000_000.0  # 用掉的那一張記用掉的時刻（0 會被當成沒用）
     Wallet(game.world.db).post(name_key(game.state.player.name), 1000, "grant", "test:ink", time=game.now)
     for i in range(n):
-        assert game.mall_buy("inscribe_ink", f"ink-{i}") and game.mall_bought == "inscribe_ink"
+        got = mall_actions.purchase(game, "inscribe_ink", f"ink-{i}")
+        assert got.lines and got.bought == "inscribe_ink"
 
 
 def test_a_preset_line_is_free_and_one_per_trip():
@@ -318,7 +321,7 @@ def test_someone_here_waves_once():
     game = _game()
     game.content.config.jianfa.outing_trace_chance = 1.0
     other = SimpleNamespace(player=SimpleNamespace(name="遠方客"))
-    with mock.patch.object(social, "here", return_value=[other]):
+    with mock.patch.object(presence, "here", return_value=[other]):
         trip = _walked(game, 5)
         assert game.outing_view()["trip"]["people"] == ["遠方客"]
     waves = [b for b in trip.beats if b.kind == outing.TRACE]
@@ -389,12 +392,12 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
     c = game.content
     low = next(m.id for m in c.materials.values() if m.tier == 1)
     top = next(m for m in c.materials.values() if m.tier >= outing.FEAT_TIER)
-    with _draws(MAT, ENC, MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[low]), \
+    with _draws(MAT, ENC, MAT), mock.patch.object(explore_one, "gather_finds", return_value=[low]), \
          mock.patch.object(team, "odds_word", return_value="有把握"):
         game.outing_go(3)
     assert _outing_annals(game) == [] and game.outing_view()["trip"]["feat_note"] == ""
     assert "outing_keep" not in dir(game)
-    with _draws(MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[top.id]):
+    with _draws(MAT), mock.patch.object(explore_one, "gather_finds", return_value=[top.id]):
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 1 and top.name in got[0].text and game.outing_view()["trip"]["feat_note"] == outing.FEAT_NOTE

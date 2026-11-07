@@ -2,18 +2,18 @@
 
 減法季的新角色不進草廬：站在起點（潁川）看一段旁白、三選一定起手的屬性（事件 Opening.event 的三顆選項，各加兩點、各帶一個旗標），
 選了之後照旗標由一位人物開口——做成他派人送來的一封信（Letter，kind「託付」）附一件護送委託（把信送到 Opening.end，到了就算；
-bounties.on_arrive → _complete_commission：銀兩與他的情誼照 Config.figure_life 的委託數字），信先寫固定句、伺服器鎖外請模型照他的口氣
+懸賞榜包 rules.on_arrive → _complete_commission：銀兩與他的情誼照 Config.figure_life 的委託數字），信先寫固定句、伺服器鎖外請模型照他的口氣
 重寫（letters.write，寫不出來照固定句）。三方卡本來就在江湖頁最上面；信收起來本週卡才出現，「你這一步」第一件就是這一封信
-（weekcard._steps 的 errand）。新手八步（newbie.GOALS）照舊只在本週卡與「為什麼」裡。草廬序章（prologue.py）與老周的初入江湖
+（core/features.py 的 STEP_ORDER 的 commission 那一格：懸賞榜的委託，核心 step._STEP_CORE 代叫，_ref 是 errand）。新手八步（newbie.GOALS）照舊只在本週卡與「為什麼」裡。草廬序章（prologue.py）與老周的初入江湖
 （tutorial.json 的 e 步）一律略過。丹的福利照舊寫在江湖紀錄開場那一則（Game._note_gift），不另起一張卡。
 
 開關：Config.jianfa.opening 加上這一季開季時蓋的章（rules.jianfa(content, world, "opening")）；關著、或內容沒有 opening.json，
 新角色照舊走草廬。假人（Game.new(graduated=True)）走同一條：一樣站在城門口挑一顆、收到信（看不出誰是假人）；腳本與測試不帶任何
-旗標建的角色照舊直接站在起點、什麼都不端出。只有 engine、weekcard、content 與測試 import 它。"""
+旗標建的角色照舊直接站在起點、什麼都不端出。只有這一包的 actions（engine 的委派）、content 與測試 import 它。"""
 from __future__ import annotations
 
 from tianxia import calendar, gender, prologue, rules  # 核心、共用規則層
-from tianxia import bounties  # 過渡：待搬
+from tianxia.core import bounty_base
 from tianxia.calendar import DAY
 from tianxia.models import Content, OpeningSender
 from tianxia.state import Bounty, GameState, Letter
@@ -75,7 +75,7 @@ def deliver(state: GameState, content: Content) -> list[str]:
     end = content.locations[o.end].name
     text = who.text.format(hero=gender.hero(p), end=end)
     p.letters.append(Letter(id=p.letter_seq, kind=KIND, sender=who.figure, at=w.time, text=text, task=task))
-    return [o.arrived.format(who=bounties.issuer(content, task), end=end)]
+    return [o.arrived.format(who=bounty_base.issuer(content, task), end=end)]
 
 
 def errand_live(state: GameState, content: Content) -> bool:

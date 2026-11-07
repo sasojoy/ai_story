@@ -1,0 +1,136 @@
+"""移動（一）：移動選單（步行、疾行）、路上三樣小事、路上見聞、喊停、折返、安排前往（功能包，開發規範手冊 3.2；全部拆包第 47 批）。
+README.md 寫這一包做什麼、導覽與設計稿。
+
+- menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（只有 set_move_mode 留一行委派給 server、測試；選單那幾個第 56 批換成 road、here 的格）
+- road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（第 48 批 _arrivals 搬進 departure.py，直接叫 sight；委派拿掉）
+- go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
+- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）
+- party.py：原本 Game 上結伴同行的 _join、join_refusal、_party_expires、_party、party_view、leave_party、_part_ways、_lead、_partners、_share_road
+  （_join、join_refusal、party_view 留委派；_party_expires 第 55 批換成 sync.deliver 的 party 那一格）
+- bots.py：假人的分數（原本 bot_policy.score 的 move: 那一段）
+- routes.py：POST /api/travel、POST /api/party/leave（原本 server.py 的 api_travel、api_party_leave）
+
+`_arrivals` 每次 sync、advance 都叫，迴圈中途的 _ambush_check → arrive → 騎乘飽足 → 路上見聞先後算行為；`arrive` 是事件 arrive 的發布點。
+"""
+from __future__ import annotations
+
+from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
+from tianxia.core.services import ROAD_TASKS
+
+
+class TravelFeature(Feature):
+    name = "travel"
+    web = ("travel.js",)  # 走法、路上的捷徑與往輿圖那一處（全部拆包第 66 批從 app.js 切出來）
+    prefix = ("move", "road")  # move:<地點>[:<走法>]；road:back[:<走法>]、road:think／ask／gather
+    bot_always = ("road:",)  # 路上小事按完還有、折返隨時能按：整季機器人不按（原本 bot.pick 的排除；move: 不在這裡，站著的時候它是正常的選項）
+    player_fields = ("leg_actions", "recent_sights", "road_rewards_today", "tagalong")  # 這一段做過的路上小事、最近看過的見聞、今天拿過幾次路上收穫、跟著誰結伴同行；換季照 _reset_player_for_new_season 重來
+    content = ("road_sights.json",)  # 路上見聞（road_actions.sight 讀 content.road_sights）
+    carried: tuple[str, ...] = ()
+
+    def enabled(self, ctx) -> bool:
+        """一律開著：choose 與 bot_pick 原位本來就不看開關；選單不走 Feature.options（見 menu.py）。搬包之前就是這樣，行為一個字不變。"""
+        return True
+
+    def choose(self, ctx, kind, arg):
+        if kind == "move":
+            from . import road_actions  # noqa: PLC0415
+
+            return Outcome(title=f"前往 {ctx.content.locations[arg.partition(':')[0]].name}", run=lambda: road_actions.move(ctx, arg))
+        if kind == "road":
+            from . import menu, road_actions  # noqa: PLC0415
+
+            what = arg.partition(":")[0]
+            if what == "back":
+                title = atlas.journey_title(ctx.content, menu.back_way(ctx).path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
+            else:
+                title = ROAD_TASKS[what][0]
+            return Outcome(title=title, run=lambda: road_actions.road(ctx, arg))
+        return None
+
+    def bot_pick(self, ctx, option):
+        from . import bots  # noqa: PLC0415
+
+        # 正式路徑上 `move:` 由 `bot_policy.score` 先問（第 47 批 PM 認定第 2 條），這裡留給直接叫掛鉤的測試
+        return bots.score(ctx, option, ctx.state.player.bot)
+
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
+
+        return routes.router(shell)
+
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """act:halt、act:part 兩格（act 子動詞，第 11 批、第 48 批）：按下去（go_actions.halt、party.part_ways）與紀錄標題「喊停」「分道揚鑣」
+        （原本 Game._action_title 那張表的兩格）。選單上的 act:halt、act:part 那兩顆在路上那串裡（Game._options，順序算行為），不在這裡。
+        建一次就留著，在叫的那一下才照模組屬性找函式。"""
+        if self._verbs is None:
+            from . import go_actions, party  # noqa: PLC0415
+
+            self._verbs = (
+                Verb("halt", run=lambda ctx, prepared: go_actions.halt(ctx), title=lambda ctx: "喊停", bot_skip=True),
+                Verb("part", run=lambda ctx, prepared: party.part_ways(ctx), title=lambda ctx: "分道揚鑣"),
+            )
+        return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync、advance 補算抵達（經 ctx._arrivals：test_seats 換掉 Game 上的名字才打得到）、
+        sync 最後散掉沒動身的結伴（party.party_expires）、清失效參照的路（road_actions.drop_stale）。"""
+        if self._seams is None:
+            from . import party, road_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.close", "arrive", lambda ctx: ctx._arrivals()),
+                SeamHook("advance.arrive", "arrive", lambda ctx: ctx._arrivals()),
+                SeamHook("sync.deliver", "party", lambda ctx: party.party_expires(ctx)),
+                SeamHook("stale.road", "travel", lambda ctx, lost_place: road_actions.drop_stale(ctx, lost_place)),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的格（順序在 MENU_ORDER；不問 enabled）：路上那一行與折返或分道揚鑣、喊停、路上的小事；此地的前往。"""
+        if self._menus is None:
+            from . import menu  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("road", "head", lambda ctx, j: menu.road_head(ctx, j)),
+                MenuHook("road", "halt", lambda ctx, j: menu.road_halt(ctx, j)),
+                MenuHook("road", "tasks", lambda ctx, j: menu.road_task_options(ctx, j)),
+                MenuHook("here", "move", lambda ctx, loc, cost, odds: menu.move_options(ctx, loc)),
+            )
+        return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的travel 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("travel", lambda content, season, page: words.travel_section()),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import departure, party  # noqa: PLC0415
+
+            self._status_slots = (
+                # 在路上的那一句；不在路上是 None
+                StatusHook("status", "journey", lambda ctx, frame: {"journey": None if ctx.state.player.journey is None else departure.journey_line(ctx)}),
+                # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製）。看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
+                StatusHook("main", "on_road", lambda ctx, frame: {"on_road": any(o.id == "act:on_road" for o in frame.options)}),
+                # 結伴同行的那一行；沒有是 None
+                StatusHook("main", "party", lambda ctx, frame: {"party": party.party_view(ctx)}),
+            )
+        return self._status_slots
+
+
+FEATURE = TravelFeature()

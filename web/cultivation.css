@@ -1,0 +1,495 @@
+/* 天下大勢：俠客頁的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* ── 修練頁最上面的人物面板（企劃者 2026-10-12 給的版面）：一幅掛在紙上的水墨人物，身上的光點對上屬性、身上的兩門與裝備。
+   舞台不論深淺色都是紙（剪影是墨，畫在紙上才看得見），深色時紙調暗一點 ── */
+:root {
+  --hero-paper: #f4eee2;
+  --hero-paper-2: #ebdfcb;
+  --hero-edge: rgba(200, 155, 60, 0.28);
+  --hero-gold: #c89b3c;
+  --hero-gold-light: #fbe69b;
+  --hero-cinnabar: #b22d15;
+  --hero-label-bg: rgba(255, 255, 255, 0.86);
+  --hero-label-ink: #3b2b1b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hero-paper: #d9cfbc;
+    --hero-paper-2: #c4b79f;
+    --hero-edge: rgba(214, 165, 72, 0.35);
+    --hero-label-bg: rgba(244, 238, 226, 0.9);
+  }
+}
+.hero { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 12px 10px; margin: 4px 0 12px; box-shadow: var(--shadow); }
+.hero-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+.hero-name { font: 900 18px/1.3 var(--serif); letter-spacing: 1px; }
+.hero-tag { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--hero-gold-light); background: var(--disk); padding: 2px 8px; border-radius: 4px; }
+.hero-sub { text-align: right; font-size: 11px; line-height: 1.6; color: var(--ink-2); white-space: nowrap; }
+.hero-stage { position: relative; height: 380px; border-radius: 12px; overflow: hidden; border: 1px solid var(--hero-edge);
+  background: radial-gradient(circle at 45% 38%, var(--hero-paper) 0%, var(--hero-paper) 35%, var(--hero-paper-2) 100%); }
+.hero-halo { position: absolute; width: 300px; height: 300px; top: 30px; left: calc(50% - 150px); border-radius: 50%;
+  border: 1.5px dashed var(--hero-edge); animation: hero-spin 45s linear infinite; pointer-events: none; }
+@keyframes hero-spin { to { transform: rotate(360deg); } }
+/* 「自己」頁（減法季批 1，圖解版第 33、34 頁）：人像四角的四欄裝備（左上武器、右上坐騎、左下防具、右下寶物），空著的虛線框 */
+.self-gears { position: absolute; inset: 0; pointer-events: none; }
+.self-gear { position: absolute; pointer-events: auto; width: 64px; min-height: 58px; display: grid; justify-items: center; align-content: center; gap: 4px;
+  padding: 6px 4px; border: 1px solid var(--hero-edge); border-radius: 12px; background: color-mix(in srgb, var(--card) 88%, transparent);
+  color: var(--ink); font: 12px/1.3 var(--serif); cursor: pointer; box-shadow: var(--shadow); }
+.self-gear svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.self-gear span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.self-gear.empty { border-style: dashed; color: var(--ink-2); box-shadow: none; }
+.self-gear.tl { left: 8px; top: 12px; } .self-gear.tr { right: 8px; top: 12px; }
+.self-gear.bl { left: 8px; bottom: 12px; } .self-gear.br { right: 8px; bottom: 12px; }
+/* 身上兩門的成數條：一門一張，名字左、「內功・第三成」右，底下一條金色的進度；絕學金框、左邊朱印「絕」 */
+.self-arts { display: grid; gap: 8px; margin: 0 0 12px; }
+.self-art { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius);
+  background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.self-art.q4 { border: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
+/* 武學卡底下掛絕招（Joy 2026-11-03，示意稿 CZbfm371…）：卡與絕招那一條包成一張（.self-art-wrap），卡本身的框拿掉 */
+.self-art-wrap { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius); background: var(--card); overflow: hidden; }
+.self-art-wrap.q4 { border: 2px solid var(--gold); }
+.self-art-wrap > .self-art { border: 0; border-radius: 0; background: transparent; }
+.hm-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px dashed var(--line); background: var(--card-2); }
+.hm-seal { flex: none; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font: 700 18px var(--serif); color: var(--gold); border: 1.5px dashed var(--gold); }
+.hm-seal.on { background: var(--accent); color: var(--accent-ink); border: 0; }
+.hm-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hm-main b { font: 600 15px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-main small { color: var(--ink-2); font-size: 12px; }
+.hm-play { flex: none; min-height: 40px; }
+.hm-stage { margin: 0 12px; padding-top: 10px; }
+.hm-stage canvas { display: block; width: 100%; height: auto; border-radius: 10px; background: #1e1a15; }
+.hm-warn { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--ink); background: color-mix(in srgb, var(--stam) 14%, var(--card)); border-top: 1px solid var(--line); }
+.hm-foot { display: flex; justify-content: flex-end; padding: 2px 12px 4px; }
+.hm-go { min-height: 40px; font-size: 13px; }
+.sa-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.sa-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sa-hd b { font: 600 16px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-hd small { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.sa-note { color: var(--ink-2); font-size: 12px; }
+/* 十成畫成十點墨（同抽屜裡的 .ten）：練到第幾成亮到第幾點，絕學的點是朱色 */
+.sa-ten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.sa-ten > i { display: block; height: 7px; border-radius: 2px; background: var(--card-2); }
+.sa-ten > i.on { background: var(--gold); }
+.self-art.q4 .sa-ten > i.on { background: var(--accent); }
+/* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
+   段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */
+.self-sec { margin: 0 0 14px; }
+/* 段名：宋體、前面一道朱色短槓（Joy 2026-10-24：不要像設定頁的清單，要有水墨名帖的味道） */
+.self-hd { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 8px; }
+.self-hd h3 { margin: 0; font: 700 16px var(--serif); letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+.self-hd h3::before { content: ""; width: 4px; height: 16px; background: var(--accent); border-radius: 1px; }
+.self-hd .linkish { margin: 0 0 0 auto; font-size: 13px; min-height: 32px; }
+.self-hd .pts { margin-left: auto; font: 600 13px var(--sans); color: var(--accent); }
+/* 去做兩格（煉製、自創武學）兩欄，跟江湖頁的行動列同一種墨底的格子（療傷、閉關 Joy 2026-10-25 拿掉） */
+.self-goes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.self-go, .self-go.btn { min-height: 64px; display: grid; justify-items: center; align-content: center; gap: 2px; background: var(--disk); color: #ede2d3;
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; font: 700 16px var(--serif); letter-spacing: 0.08em; box-shadow: none; }
+.self-go small { font: 11px var(--sans); color: #b9ab98; font-weight: 400; letter-spacing: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.self-go:disabled, .self-go.btn:disabled { opacity: 0.5; }
+/* 行狀：人像那張卡右上角一顆小字（Joy 2026-10-24：榜單、名帖匣回見聞，行狀留在俠客頁） */
+.hero-sub .hero-annals { display: inline-flex; min-height: 28px; margin: 2px 0 0; padding: 0; font-size: 12px; }
+/* 四個摺疊（功法庫、裝備、門下、規矩）：標題一行宋體、底下一道細線，不圍框 */
+details.self-fold { margin-bottom: 4px; }
+details.self-fold > summary { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 10px 2px; font: 700 16px var(--serif); letter-spacing: 0.1em; }
+details.self-fold[open] > summary { border-radius: 0; }
+details.self-fold > summary small { font: 400 12px var(--sans); color: var(--ink-2); letter-spacing: 0; }
+details.self-fold > .fold-body { border: 0; border-radius: 0; background: none; padding: 6px 0 10px; }
+details.self-fold > .fold-body.gear { padding-top: 0; }
+/* 屬性五塊木牌（頂上金邊，名字、數字，有點可配時底下一枚朱色的「＋」）；名望、善名、惡名一行小字；心得一行（以前在狀態列，整合設計 6.2） */
+.self-stats { padding: 0; border: 0; background: none; }
+.self-attrs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.self-attrs .attr { display: grid; justify-items: center; gap: 2px; padding: 8px 0 6px; border-radius: 4px 4px 10px 10px; border: 1px solid var(--line); border-top: 3px solid var(--gold);
+  background: linear-gradient(var(--card), var(--card-2)); box-shadow: var(--shadow); font-variant-numeric: tabular-nums; }
+.self-attrs .attr em { font-style: normal; font: 600 13px var(--serif); color: var(--ink-2); letter-spacing: 0.1em; }
+.self-attrs .attr b { font: 700 22px/1.1 var(--serif); }
+.self-attrs .attr .alloc { min-width: 0; width: 30px; min-height: 30px; padding: 0; border-radius: 50%; margin-top: 4px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.self-attrs .attr .alloc:disabled { background: none; color: var(--ink-2); border-color: var(--line); }
+.self-stats .stat-uses { margin-top: 8px; }
+.self-xinde { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.self-xinde b { font: 600 18px var(--serif); }
+.self-xinde small { flex-basis: 100%; color: var(--ink-2); font-size: 12px; }
+.self-nums { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 14px; }
+.self-nums em, .self-xinde em { font-style: normal; color: var(--ink-2); margin-right: 4px; font-size: 13px; }
+.self-nums.attrs { font-variant-numeric: tabular-nums; }
+.hero-fig { position: absolute; top: 6px; bottom: 6px; left: 50%; transform: translateX(-50%); aspect-ratio: 674 / 900; } /* 照哪一張剪影，app.js 用 style 蓋掉 */
+.hero-fig img { display: block; width: 100%; height: 100%; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.22)); pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.hero-node { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; padding: 0; border: 0; background: none;
+  display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 2; -webkit-tap-highlight-color: transparent; }
+.hero-node .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.95); border: 1.5px solid var(--hero-gold);
+  box-shadow: 0 0 8px rgba(200, 155, 60, 0.8), 0 0 16px rgba(251, 230, 155, 0.6); transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s; }
+.hero-node .pulse { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--hero-gold-light); animation: hero-pulse 2.2s ease-in-out infinite; pointer-events: none; }
+@keyframes hero-pulse { 0%, 100% { transform: scale(0.6); opacity: 0.2; } 50% { transform: scale(1.4); opacity: 0.8; } }
+.hero-node.on .dot { transform: scale(1.5); background: var(--hero-cinnabar); border-color: #fff; box-shadow: 0 0 12px rgba(178, 45, 21, 1), 0 0 20px rgba(255, 120, 100, 0.8); }
+.hero-node.dim .dot { background: rgba(255, 255, 255, 0.5); box-shadow: none; border-color: rgba(200, 155, 60, 0.6); }
+.hero-node.dim .pulse { display: none; }
+.hero-node span { position: absolute; font-size: 10px; font-weight: 800; line-height: 1.4; white-space: nowrap; color: var(--hero-label-ink);
+  background: var(--hero-label-bg); border: 1px solid #dcd1be; padding: 0 5px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); pointer-events: none; }
+.hero-node.r span { left: 24px; }
+.hero-node.l span { right: 24px; }
+.hero-node.on span { color: var(--hero-cinnabar); border-color: var(--hero-cinnabar); }
+.hero-node.dim span { opacity: 0.7; }
+.hero-ripple { position: absolute; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--hero-cinnabar); pointer-events: none; z-index: 3;
+  transform: translate(-50%, -50%) scale(0); animation: hero-ripple 0.5s cubic-bezier(0.1, 0.8, 0.2, 1) forwards; }
+@keyframes hero-ripple { to { transform: translate(-50%, -50%) scale(3); opacity: 0; } }
+.hero-ft { margin-top: 8px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.hero-ft-title { font: 800 14px/1.4 var(--serif); color: var(--accent); }
+.hero-ft-title small { margin-left: 6px; font: 600 11px var(--sans); color: var(--gold); }
+.hero-ft-row { display: flex; align-items: center; gap: 8px; }
+.hero-ft-row p { flex: 1; min-width: 0; margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.hero-ft-row .btn { flex: none; min-height: 34px; padding: 4px 10px; font-size: 13px; }
+.hero-ft-row .btn small { margin-left: 4px; font-size: 11px; font-weight: 400; opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .hero-halo, .hero-node .pulse { animation: none; } }
+.acard[data-worn], .gear-slot { scroll-margin-top: 130px; } /* 人物面板的「看這一門／看這件」捲過去時不被頂上的狀態列蓋住 */
+
+/* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
+.lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
+.lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
+.lessons .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
+
+/* 武學重構：意境槽（Joy 2026-10-20「●好醜…槽位，包含整張卡都很醜」）。一門武學一排玉環：環的顏色就是這一格收哪一路的意境
+   （單色一路、雙色兩路各半、八色一圈什麼都收），環心是裝著的意境名字的頭兩個字，底下〔技能〕與三節玉（一重～三重）。
+   空的環淡一點、環心一個＋；點了在底下攤開手上空著的意境（.slot-pick），顏色不合的灰掉。顏色是礦物顏料，深色另一組 */
+:root {
+  --at-gang: #a8322a; --at-kuai: #2f5d8a; --at-rou: #3f7d5c; --at-man: #9a6a2a;
+  --at-yang: #c58a1c; --at-yin: #5a4b8a; --at-xu: #7a7a86; --at-shi: #55702e;
+  --jade-lv: #c9a24a; --jade-lv-off: #e3d8c3;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --at-gang: #c2473c; --at-kuai: #4a7cae; --at-rou: #55a079; --at-man: #b98634;
+    --at-yang: #e0b04a; --at-yin: #8f80c8; --at-xu: #a3a3ad; --at-shi: #8db35a;
+    --jade-lv: #e0b85c; --jade-lv-off: #3d352b;
+  }
+}
+.jring { position: relative; flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), inset 0 -2px 3px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(60, 40, 20, 0.15); }
+.jring.one { background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--a) 55%, #fff) 0, var(--a) 46%, color-mix(in srgb, var(--a) 78%, #000) 100%); }
+.jring.two { background: linear-gradient(135deg, var(--a) 0 50%, var(--b) 50% 100%); }
+.jring.two::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35), transparent 55%); }
+.jring.any { background: conic-gradient(from -22.5deg, var(--at-gang) 0 12.5%, var(--at-yang) 0 25%, var(--at-kuai) 0 37.5%, var(--at-xu) 0 50%,
+  var(--at-rou) 0 62.5%, var(--at-yin) 0 75%, var(--at-man) 0 87.5%, var(--at-shi) 0 100%); }
+.jring::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22); }
+.jring .jin { position: relative; z-index: 1; font: 700 12px/1.1 var(--serif); color: var(--ink); text-align: center; letter-spacing: 0; }
+.jring .jin i { font-style: normal; font-size: 16px; font-weight: 400; color: var(--ink-2); }
+.jring.vacant { opacity: 0.55; }
+.jring.jchip { width: 22px; height: 22px; }
+.jring.jchip::after { inset: 4px; }
+.jring.jchip .jin { font-size: 10px; }
+.jring.jmini { width: 18px; height: 18px; }
+.jring.jmini::after { inset: 4px; }
+.jade { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; margin: 10px 0 2px; }
+.jd { display: grid; justify-items: center; align-content: start; gap: 2px; min-width: 0; padding: 6px 4px 5px; border: 1px solid transparent; border-radius: 12px;
+  background: transparent; color: var(--ink); cursor: pointer; line-height: 1.25; }
+.jd.full { background: color-mix(in srgb, var(--gold) 7%, var(--card)); border-color: color-mix(in srgb, var(--gold) 30%, var(--line)); }
+.jd.empty { border-style: dashed; border-color: var(--line); }
+.jd.empty.on { border-color: var(--accent); background: var(--accent-soft); }
+.jd.empty.on .jring.vacant { opacity: 1; }
+.jd small { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.jd small.dim { color: var(--ink-2); opacity: 0.8; }
+.lv { display: inline-flex; gap: 2px; vertical-align: middle; }
+.lv i { width: 9px; height: 4px; border-radius: 2px; background: var(--jade-lv-off); }
+.lv i.on { background: var(--jade-lv); box-shadow: 0 0 3px color-mix(in srgb, var(--jade-lv) 60%, transparent); }
+/* 意境效果池（第二批）：品質是玉環右上角一枚小印（下灰、中青、上金）；效果一顆一顆的小籤——一般功效名字加三節玉，大獎金底，秘方的特別功效朱底；
+   合併預覽裡「可能擲到的」虛線 */
+.jd { position: relative; }
+.iq { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; font: 700 10px/1 var(--serif); font-style: normal;
+  color: #fff; background: #8a8478; vertical-align: middle; flex: none; }
+.iq.q-2 { background: #3f7d74; }
+.iq.q-3 { background: linear-gradient(135deg, #d9a93a, #a87818); box-shadow: 0 0 4px color-mix(in srgb, var(--gold) 60%, transparent); }
+.jd .iq { position: absolute; top: 3px; right: 6px; }
+.fxs { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.fxs.col { flex-direction: column; gap: 2px; }
+.fxs.col .fx { font-size: 10px; padding: 1px 3px; gap: 2px; }
+.fxs.col .lv { gap: 1px; }
+.fxs.col .lv i { width: 5px; height: 3px; }
+.fx { display: inline-flex; align-items: center; gap: 3px; font: 500 11px/1.2 var(--serif); font-style: normal; color: var(--ink);
+  white-space: nowrap; padding: 1px 5px; border-radius: 6px; background: color-mix(in srgb, var(--gold) 8%, var(--card)); border: 1px solid var(--line); }
+.fx.grand, .tr.grand { color: #5a3a00; border-color: #c9a24a; background: linear-gradient(135deg, #f5dc8e, #e2b54e);
+  box-shadow: 0 0 5px color-mix(in srgb, #e2b54e 55%, transparent); font-weight: 700; }
+.fx.sp, .tr.sp { color: #fff; border-color: #8f2d24; background: #a8322a; }
+/* 不發動的秘方特效（同一門只發動一條；Joy 2026-10-28）：灰掉、劃一道，籤上寫「不發動」 */
+.fx.sp.idle { color: var(--ink-2); border-color: currentColor; background: transparent; }
+.fx.sp.idle small { margin-left: 3px; font-size: 9.5px; }
+.ic-fx li.sp.idle { background: transparent; opacity: .75; }
+.ic-fx li.sp.idle b { text-decoration: line-through; }
+.idle-why { display: block; font-style: normal; font-size: 11.5px; line-height: 1.4; color: var(--accent); }
+.score small { display: block; font-size: 10.5px; font-weight: 400; color: var(--ink-2); white-space: normal; }
+.fx.maybe, .tr.maybe { border-style: dashed; background: transparent; box-shadow: none; opacity: 0.85; }
+.tr.grand small { margin-left: 4px; font-size: 10px; color: #7a5200; }
+.tr .lv { margin-left: 4px; }
+.ins-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; color: var(--ink-2); }
+@media (prefers-color-scheme: dark) {
+  .fx.grand, .tr.grand { color: #2a1a00; }
+  /* 還沒擲出來的真意（maybe）背景被改成透明：深色底上不能再用這個近黑的字色，
+     不然名字整個看不見、只剩小字「真意」（Joy 2026-10-22 開爐畫面實拍）。 */
+  .fx.grand.maybe, .tr.grand.maybe { color: #f2d489; }
+  .tr.grand.maybe small { color: #d8b460; }
+}
+.slot-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 8px; border-radius: 12px; background: var(--card-2); }
+.slot-pick button { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px;
+  padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
+.slot-pick button small { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
+.slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+/* 同效果第二份起算一半（Joy 2026-10-22）：格子底下、挑意境時、裝進鈕旁邊那一句 */
+.jd small.stk, .stk { font-size: 10.5px; color: var(--accent); white-space: normal; text-align: center; line-height: 1.35; }
+.slot-pick em.stk { display: block; font-style: normal; text-align: left; }
+.ic-fits small.stk { flex-basis: 100%; text-align: left; }
+.stk-rule { flex-basis: 100%; margin: 0 0 2px; font-size: 12px; color: var(--accent); }
+
+/* 破境卡（tianxia/ascend.py）：蓋在畫面上，收下才收掉 */
+.asc-wrap { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(20, 16, 12, .55); }
+.asc-card { background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 12px; max-width: 30rem; width: 100%;
+  padding: 1.1rem 1.1rem 1rem; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); animation: asc-in .6s ease-out; }
+.asc-head { font-size: 1.15em; margin: 0 0 .6em; display: flex; gap: .4em; align-items: center; }
+.asc-moves { display: grid; grid-template-columns: 1fr auto 1fr; gap: .5em; align-items: center; }
+.asc-moves > div { min-width: 0; }
+.asc-moves small { color: var(--ink-2); }
+.asc-was p { color: var(--ink-2); font-size: .92em; }
+.asc-now p { font-size: .95em; }
+.asc-arrow { color: var(--gold); font-size: 1.6em; }
+.asc-line { margin: .8em 0 .3em; font-size: 1.05em; text-align: center; color: var(--ink); }
+.asc-power { text-align: center; margin: .2em 0; }
+.asc-power b { color: var(--gold); }
+.asc-chron { margin: .4em 0 .8em; }
+.asc-card .btn { width: 100%; }
+@media (max-width: 480px) { .asc-moves { grid-template-columns: 1fr; } .asc-arrow { transform: rotate(90deg); justify-self: center; } }
+@keyframes asc-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+/* 第五個玉環：破境的絕招 */
+.jd.fifth { cursor: default; }
+.jd.fifth .jring.gold { background: conic-gradient(var(--gold), #e8c66a, var(--gold)); }
+.jd.fifth.on b { color: var(--gold); }
+.jd.fifth.on small { color: var(--gold); }
+
+/* ── 招式與絕學稿案第四、五輪：戰力、抽屜、意境卡、品相、爐火 ── */
+.hero-might { color: var(--accent); font-weight: 700; }
+.hero-might b { font: 800 14px var(--serif); }
+.hero-node span { max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+.hero-node span small { display: block; font-size: 9.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; } /* 招另起一行：左邊那幾個點離圖邊近，一行寫不下 */
+.hero-node.l span { text-align: right; }
+.pr-sheet { max-height: 82vh; }
+.pr-sheet .acard { margin: 0; box-shadow: none; }
+.lib-kind { margin: 8px 0 4px; font-size: 12px; color: var(--ink-2); letter-spacing: 0.1em; }
+.libr .tseal { flex: none; }
+.lib-might { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.lib-might.up { color: #2f7d4f; }
+.lib-might.down { color: var(--accent); }
+.winfo .lib-might { display: block; margin: 2px 0 0; }
+.insl .insr { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }
+.insl .insr.on { border-color: var(--accent); }
+.insr .txt { display: flex; flex-direction: column; min-width: 0; }
+.insr .txt small { color: var(--ink-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insl { display: grid; gap: 6px; }
+.look { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; margin-left: 4px; border: 1.5px solid currentColor; border-radius: 4px; font: 700 11px/1 var(--serif); font-style: normal; vertical-align: 1px; }
+.look.big { width: 1.9em; height: 1.9em; font-size: 15px; margin-left: auto; }
+.look.l1 { color: var(--ink-2); }
+.look.l2 { color: #3b6fa8; }
+.look.l3 { color: #7b4bb0; }
+.look.l4 { color: var(--gold); background: rgba(200, 155, 60, 0.12); }
+.ins-card { display: grid; gap: 8px; }
+.ic-head { display: flex; align-items: center; gap: 10px; }
+.ic-head > div { display: flex; flex-direction: column; min-width: 0; }
+.ic-head small { color: var(--ink-2); font-size: 12px; }
+.ic-fx { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ic-fx li { padding: 6px 8px; border-radius: 8px; background: var(--card-2); font-size: 13px; line-height: 1.55; }
+.ic-fx li b { margin-right: 6px; font-family: var(--serif); }
+.ic-fx li.grand { background: rgba(200, 155, 60, 0.16); border: 1px solid rgba(200, 155, 60, 0.45); }
+.ic-fx li.sp { background: rgba(178, 45, 21, 0.08); }
+.ic-fits, .ic-melt { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ic-note, .ic-cmp { margin: 0; font-size: 13px; color: var(--ink-2); }
+
+/* 品相四級的梯子與「裝在哪一格最強」（Joy 2026-10-21「合出來我根本看不懂這是不是好的」） */
+.look-ladder { margin: 6px 0 8px; display: grid; gap: 6px; }
+.ll-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ll-steps i { font: 700 13px/1 var(--serif); font-style: normal; text-align: center; padding: 7px 0; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); opacity: 0.45; }
+.ll-steps i.past { opacity: 0.7; }
+.ll-steps i.on { opacity: 1; font-size: 16px; border-width: 2px; border-color: currentColor; background: var(--card); }
+.ll-steps i.on.l1 { color: var(--ink); }
+.ll-steps i.on.l2 { color: #3b6fa8; background: rgba(59, 111, 168, 0.08); }
+.ll-steps i.on.l3 { color: #7b4bb0; background: rgba(123, 75, 176, 0.09); }
+.ll-steps i.on.l4 { color: var(--gold); background: rgba(200, 155, 60, 0.14); }
+.look-ladder p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.look-ladder p b.l2 { color: #3b6fa8; } .look-ladder p b.l3 { color: #7b4bb0; } .look-ladder p b.l4 { color: var(--gold); }
+.ic-best { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.ic-best.up { color: #2f7d4a; }
+.ic-best.up b { font: 800 15px var(--serif); }
+
+/* 衝關的小動畫（Joy 2026-10-21；app.js breakAnim）：三秒一齣。0～30% 運氣（兩圈氣一圈圈散開）、30～43% 衝出去、
+   43% 撞上那道關。衝開（.won）：金光炸開、關碎成五塊飛走、人穿過去、蓋「破境」；沒衝開（.lost）：關一震、裂一道縫、
+   人被彈回來、蓋灰色的「彈回」。顏色都走 token，深色也看得清 */
+.cg-wrap { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(20, 16, 12, .6); animation: cg-fade .25s ease-out; }
+.cg-stage { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 12px;
+  width: 100%; max-width: 26rem; padding: .8rem .8rem 1rem; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); overflow: hidden; }
+.cg-scene { display: block; width: 100%; height: auto; overflow: visible; }
+.cg-ground { stroke: var(--line); stroke-width: 2; }
+.cg-man { transform-box: fill-box; transform-origin: 50% 100%; animation: 3s ease-in-out forwards; }
+.won .cg-man { animation-name: cg-man-won; }
+.lost .cg-man { animation-name: cg-man-lost; }
+.cg-fig { color: var(--ink); }
+.cg-aura { fill: none; stroke: var(--gold); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; animation: cg-aura 1s ease-out 2 forwards; }
+.cg-aura.a2 { animation-delay: .45s; animation-iteration-count: 1; }
+.cg-brick rect { fill: var(--card-2); stroke: var(--ink-2); stroke-width: 2; }
+.cg-brick line { stroke: var(--line); stroke-width: 2; }
+.cg-brick { transform-box: fill-box; transform-origin: center; }
+.won .cg-brick { animation: cg-brick 3s ease-out forwards; }
+.won .b0 { --dx: 60px; --dy: -70px; --r: 40deg; }
+.won .b1 { --dx: 90px; --dy: -25px; --r: -30deg; }
+.won .b2 { --dx: 110px; --dy: 10px; --r: 70deg; }
+.won .b3 { --dx: 85px; --dy: 45px; --r: -55deg; }
+.won .b4 { --dx: 50px; --dy: 30px; --r: 25deg; }
+.cg-guan { font-family: var(--serif); font-size: 30px; font-weight: 700; text-anchor: middle; fill: var(--accent); }
+.won .cg-guan { animation: cg-gone 3s ease-out forwards; }
+.lost .cg-gate { animation: cg-shake 3s ease-out forwards; }
+.cg-burst { fill: var(--gold); opacity: 0; transform-box: fill-box; transform-origin: center; }
+.won .cg-burst { animation: cg-burst 3s ease-out forwards; }
+.cg-crack { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; stroke-dasharray: 200; stroke-dashoffset: 200; opacity: 0; }
+.lost .cg-crack { animation: cg-crack 3s ease-out forwards; }
+.cg-stamp { position: absolute; left: 50%; top: .6rem; margin: 0; padding: .1em .35em; font-family: var(--serif); font-size: 1.9rem; font-weight: 700;
+  letter-spacing: .1em; border: 3px solid currentColor; border-radius: 6px; opacity: 0; transform: translateX(-50%) rotate(-8deg); animation: cg-stamp 3s ease-out forwards; }
+.won .cg-stamp { color: var(--accent); }
+.lost .cg-stamp { color: var(--ink-2); }
+.cg-line { margin: .4em 0 0; text-align: center; font-size: 1.02em; opacity: 0; animation: cg-line 3s ease-out forwards; }
+.won .cg-line { color: var(--gold); font-weight: 600; }
+@keyframes cg-fade { from { opacity: 0; } }
+@keyframes cg-aura { 0% { opacity: .7; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes cg-man-won {
+  0% { transform: none; } 25% { transform: translateY(4px) scaleY(.96); } 30% { transform: translateX(-10px); }
+  43% { transform: translateX(118px); } 60% { transform: translateX(205px); } 100% { transform: translateX(205px); } }
+@keyframes cg-man-lost {
+  0% { transform: none; } 25% { transform: translateY(4px) scaleY(.96); } 30% { transform: translateX(-10px); }
+  43% { transform: translateX(118px); } 47% { transform: translateX(110px) rotate(-4deg); }
+  62% { transform: translateX(-8px) rotate(-14deg); } 76% { transform: translateX(0) rotate(0); } 100% { transform: none; } }
+@keyframes cg-brick { 0%, 43% { transform: none; opacity: 1; } 72% { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--r)); } }
+@keyframes cg-gone { 0%, 43% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes cg-burst { 0%, 42% { opacity: 0; transform: scale(.2); } 46% { opacity: .9; } 75% { opacity: 0; transform: scale(9); } 100% { opacity: 0; transform: scale(9); } }
+@keyframes cg-shake { 0%, 43% { transform: none; } 46% { transform: translateX(7px); } 49% { transform: translateX(-5px); } 52% { transform: translateX(3px); } 56%, 100% { transform: none; } }
+@keyframes cg-crack { 0%, 44% { opacity: 0; stroke-dashoffset: 200; } 46% { opacity: 1; } 58%, 100% { opacity: 1; stroke-dashoffset: 0; } }
+@keyframes cg-stamp { 0%, 56% { opacity: 0; transform: translateX(-50%) rotate(-8deg) scale(2.2); } 64%, 100% { opacity: 1; transform: translateX(-50%) rotate(-8deg) scale(1); } }
+@keyframes cg-line { 0%, 58% { opacity: 0; } 70%, 100% { opacity: 1; } }
+.pk-btns { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .4em; }
+.pk-btns .btn small { display: block; font-size: .78em; opacity: .85; }
+.cr-reroll { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: .4em 0; }
+.cr-reroll .btn small { display: block; font-size: .78em; opacity: .85; }
+.cr-reread { display: grid; gap: 4px; margin: .2em 0 .6em; padding-top: .5em; border-top: 1px dashed var(--line); }
+
+/* 參透秘方的視窗（app.js secretPop；企劃者 2026-10-25）：遮罩同衝關（.cg-wrap），卡片是武學譜的舊紙，朱印從大縮小蓋下來（同 cg-stamp） */
+.sp-wrap { position: fixed; inset: 0; z-index: 72; display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 16, 12, .6); animation: cg-fade .25s ease-out; }
+.sp-card { width: 100%; max-width: 22rem; padding: 1.4rem 1.2rem 1.1rem; text-align: center; border-radius: 12px;
+  background: var(--bk-paper); color: var(--bk-ink); border: 2px solid var(--bk-rule); box-shadow: 0 10px 40px rgba(0, 0, 0, .35); }
+.sp-seal { display: flex; justify-content: center; margin-bottom: .4rem; }
+.sp-seal .seal { width: 84px; height: 84px; animation: sp-stamp .7s cubic-bezier(.2, .9, .3, 1.2) both; }
+.sp-title { margin: .2rem 0 0; font: 700 1.05rem var(--bk-serif); color: var(--bk-seal); letter-spacing: .12em; }
+.sp-name { margin: .2rem 0 .5rem; font: 700 1.4rem var(--bk-serif); }
+.sp-clue { margin: .1rem 0; font-family: var(--bk-serif); color: var(--bk-ink-2); font-size: .95rem; }
+.sp-bar { height: 6px; margin: .9rem .4rem .4rem; border-radius: 3px; background: var(--bk-paper-2); overflow: hidden; }
+.sp-bar i { display: block; height: 100%; background: var(--bk-seal); border-radius: 3px; transition: width .6s ease-out; }
+.sp-note { margin: .2rem 0 .9rem; font-size: .92rem; color: var(--bk-ink-2); }
+.sp-btns { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
+@keyframes sp-stamp { 0% { opacity: 0; transform: rotate(-5deg) scale(2.4); } 70% { opacity: 1; transform: rotate(-5deg) scale(.92); } 100% { opacity: 1; transform: rotate(-5deg) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .sp-seal .seal { animation: none; } }
+
+/* 意境槽底下每一格那一招寫出來（app.js slotsHtml 的 jd-notes；Joy 2026-10-25「槽裡面擺的，他效果好像不會顯示」） */
+.jd-notes { list-style: none; margin: .3rem 0 .5rem; padding: 0; display: grid; gap: .3rem; font-size: .88rem; }
+.jd-notes li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .4rem; padding: .3rem .5rem; border-radius: 6px; background: var(--card-2); }
+.jd-notes b { font-weight: 600; }
+.jd-notes .jdn-fx { color: var(--accent); font-weight: 600; }
+.jd-notes .jdn-desc { flex-basis: 100%; color: var(--ink-2); line-height: 1.5; }
+.jd-notes .look { position: static; }
+
+/* 俠客頁「裝備」一欄一格（Joy 2026-10-26「裝備可以類似意境那樣，要直覺好看懂」；app.js 的 gearCell）：2×2 的名帖小牌，
+   左上圖示與欄名、右上階品；中間裝了什麼（宋體）、一句效果；底下一條還剩幾成（鋒利、耐久、飽足），空的那一格虛線框 */
+.gear-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gear-cell { display: grid; align-content: start; gap: 4px; min-height: 112px; padding: 10px 12px; text-align: left; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--gold); border-radius: 6px 6px 12px 12px; font: inherit; cursor: pointer; }
+.gear-cell.empty { border: 1px dashed var(--line); border-top: 1px dashed var(--line); background: none; color: var(--ink-2); }
+.gear-cell.off { border-top-color: var(--line); }
+.gc-hd { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gc-hd svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.gear-cell.empty .gc-hd svg { stroke: var(--ink-2); }
+.gc-hd em { font: 600 12px var(--sans); font-style: normal; color: var(--ink-2); letter-spacing: 0.08em; }
+.gc-hd small { margin-left: auto; font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.gc-name { font: 700 15px var(--serif); line-height: 1.3; overflow-wrap: anywhere; }
+.gear-cell.empty .gc-name { font-weight: 400; color: var(--ink-2); }
+.gc-fx { font-size: 12px; line-height: 1.4; color: var(--accent); }
+.gear-cell.empty .gc-fx, .gear-cell.off .gc-fx { color: var(--ink-2); }
+.gc-edge { display: block; height: 5px; margin-top: 2px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
+.gc-edge > i { display: block; height: 100%; background: var(--gold); }
+.gc-edgen, .gc-more { font-size: 11px; color: var(--ink-2); }
+
+/* 俠客頁「門下」一人一張卡（app.js 的 mateCard）：左邊一枚印（本、出、在、部），名字與等級、氣血一條、身上兩門各一行（十格成數）；
+   點了在卡底下攤開角色卡與加入、移出、傳功 */
+.mates { display: grid; gap: 8px; }
+.mate { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; }
+.mate.on { border-color: var(--gold); }
+.mate-hd { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; cursor: pointer; }
+.mate-seal { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; font: 700 15px var(--serif); color: #fff; background: var(--ink-2); }
+.mate.role-self .mate-seal { background: var(--gold); }
+.mate.role-fight .mate-seal { background: var(--accent); }
+.mate.role-follow .mate-seal { background: #4f6b5a; }
+.mate-body { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.mate-name { display: flex; align-items: baseline; gap: 8px; }
+.mate-name b { font: 700 16px var(--serif); }
+.mate-name small { font-size: 12px; color: var(--ink-2); }
+.mate-name em { margin-left: auto; font: 600 12px var(--sans); font-style: normal; color: var(--ink-2); }
+.mate.role-fight .mate-name em { color: var(--accent); }
+.mate-hp { display: block; height: 5px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
+.mate-hp > i { display: block; height: 100%; background: var(--accent); }
+.mate-hpn { font-size: 11px; color: var(--ink-2); margin-top: -3px; }
+.mate-art { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; font-size: 13px; }
+.mate-art em { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.mate-art b { font: 600 14px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mate-art small { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.mate-art .sa-ten { grid-column: 2 / -1; }
+.mate-arrow { flex: none; color: var(--ink-2); font-size: 16px; line-height: 30px; }
+.mate-detail { padding: 4px 12px 12px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.mates-none { margin: 6px 2px 0; font-size: 13px; }
+.mate-lines { margin: 0; font-size: 13px; line-height: 1.6; }
+
+/* 紀念物（長篇奇事）：俠客頁一小段，一件一個淡框 */
+.keepsakes .keep-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
+.keepsakes .keep { padding: 2px 10px; border: 1px solid var(--line, #c9b98f); border-radius: 999px; font: 14px var(--serif); color: var(--ink-2); background: var(--card-2); }
+
+/* 俠客頁四分頁（介面重整） */
+.hero-tabs { position: sticky; top: var(--top-h, 0px); z-index: 5; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0 0 12px; padding: 4px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.hero-tabs button { height: 38px; border: 0; border-radius: 9px; background: transparent; font: 700 15px var(--kai); color: var(--ink-2); letter-spacing: 2px; }
+.hero-tabs button.on { background: var(--disk); color: #f4ede0; }
+.swap-list { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.swap-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.swap-row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.swap-row .txt b { font: 700 15px var(--kai); }
+.swap-row .txt small { font-size: 12px; color: var(--ink-2); }
+.swap-row .lib-might { font-size: 12px; white-space: nowrap; }
+.swap-none { margin-top: 10px; }
+.hero-more .more-stats { margin-top: 8px; }
+.hero:has(+ .hero-tabs) .hero-stage { height: 290px; }
+
+/* 屬性頁（Joy 2026-11-06）：說明一律收起來；經驗、歷練兩條細條並排；名聲一行 */
+.self-hd .attr-q { margin-left: auto; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font: 600 12px/20px var(--sans); color: var(--ink-2); text-align: center; padding: 0; }
+.self-hd .pts + .attr-q { margin-left: 8px; }
+.self-xinde.one { flex-wrap: nowrap; align-items: center; min-width: 0; }
+.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.self-xinde .xinde-tip.open { white-space: normal; }
+.hm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hm-meters > :only-child { grid-column: 1 / -1; }
+.hm-meter, .hm-meters .lilian { margin: 0; font: 500 12px/1.5 var(--sans); color: var(--ink-2); min-width: 0; }
+.hm-meter span, .hm-meters .lilian span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-meter small { margin-left: 6px; opacity: .8; font-size: 11px; }
+.hm-meter i { display: block; position: relative; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
+.hm-meter i::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--gold); border-radius: 2px; }
+.hero-more .more-stats:empty { display: none; }
+.hm-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 14px; }
+.hm-line em { font-style: normal; color: var(--ink-2); margin-right: 4px; font-size: 13px; }
+.hm-line .rn-titles { font: 600 13px var(--serif); }
+.hm-line .rn-how { margin-left: auto; font-size: 12px; }
+.hm-fame .hm-renown { margin-top: 8px; }
+.hm-tail .lg-entry { margin: 0; }
+.hm-tail .stances-line { margin: 8px 0 0; }
+.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到一行，點進抽屜看全文 */

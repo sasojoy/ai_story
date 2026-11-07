@@ -30,8 +30,12 @@ from tianxia.state import PlayerState
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURE_DIR = ROOT / "tianxia" / "features"
+# companions（第 20 批審查）：原本的 "talk:leave" 這一批拿了前綴之後是人物情誼包的 id，換成核心的 "road:back"。
 # battle（全部拆包第 8 批）：原本的 "battle:join:guan" 第 7 批拿了前綴之後其實是決戰包的 id（第 7 批 PM 認定第 6 條），換成核心的 "season:paused"
-CORE_IDS = ["act:explore", "act:train", "move:yingshui", "choice:0", "talk:leave", "season:paused", "season:resting", "x"]
+# travel（全部拆包第 47 批）：原本的 "move:yingshui"、"road:back" 這一批拿了前綴之後是移動包的 id，換成核心的 "act:rest"、"choice:1"（faction: 歸第 35 批、bounty: 歸第 45 批，同一波合進來不能拿它們當核心 id）。
+CORE_IDS = ["act:explore", "act:train", "act:rest", "choice:0", "choice:1", "season:paused", "season:resting", "x"]
+# 選單由核心原位排、包一律開著（enabled 一律 True）的包：關掉它也不會讓選單少掉那幾顆（test_a_closed_package_gives_nothing 不查選單那兩行）
+MENU_BY_CORE = {"travel": "移動的選單（前往、折返、路上小事）順序算行為，Game 原位叫包的函式排（不走 Feature.options）；包一律開著，選單本來就不看開關（全部拆包第 47 批）"}
 
 
 def _game() -> Game:
@@ -65,6 +69,7 @@ def _own_ids(feature, game) -> list[str]:
     ids = []
     for _ in _stages(feature, game):
         ids += [o.id for o in feature.options(game)] + [o.id for o in (feature.menu(game) or [])]
+        ids += [o.id for o in (feature.prep(game) or [])]  # 開季準備卡那一步（prep；None 是這一包沒有要在卡上給的）
         ids += [o.id for shop in feature.shops() if shop.inside(game) for o in shop.menu(game)]
     return ids
 
@@ -137,7 +142,11 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
     import dataclasses
 
     home = type(feature).__module__
-    for decl in [*feature.shops(), *feature.verbs()]:
+    # core_world（第 25 批）：世界層的格（WorldHook）也一樣；core_effects（第 32 批）：效果的格（EffectHook）、叛投的格（DefectHook）也一樣；
+    # core_eventbus（第 26 批）：事件的格（BusHook）也一樣；core_step（第 36 批）：「你這一步」的格（StepHook）也一樣
+    # 玩法說明的格（HowtoHook，第 59 批）也一樣
+    for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection(), *feature.bus(),
+                 *feature.steps(), *feature.howto()]:
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):
@@ -173,13 +182,13 @@ def test_a_patched_package_function_reaches_the_seam_before_and_after_the_first_
 
 
 def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
-    """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）現在還記在三個地方：登記、index.html、tests/kit/webharness.APP_FILES（第 3 階才由伺服器
-    照 FEATURES 生成）。三份要對得上：漏寫進 index.html 頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。
+    """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）：js 的 script 標籤第 64 批起由伺服器照 FEATURES 生成（features_core.with_scripts），
+    css 的 link 與 tests/kit/webharness.APP_FILES 還是手寫的。要對得上：漏寫進去頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。
     js 排在殼的 app.js 前面（頂層的名字同在一個全域裡，app.js 一載入就用得到），css 排在 style.css 後面（同權重的它說了算）。"""
     import webharness
 
     web = ROOT / "web"
-    page = (web / "index.html").read_text(encoding="utf-8")
+    page = features_core.with_scripts((web / "index.html").read_text(encoding="utf-8"))
     files = features_core.web_files()
     assert files == [name for f in FEATURES for name in f.web] and len(files) == len(set(files))
     for name in files:
@@ -237,11 +246,29 @@ def test_a_closed_package_gives_nothing(feature, monkeypatch):
     assert all(features_core.act_cell(game, v.verb, loc, 0, False) is None for v in feature.verbs() if v.cell is not None)
     if feature.prefix is not None:
         assert not any(_starts(o.id, feature) for o in features_core.options(game))
+    if feature.prefix is not None and feature.name not in MENU_BY_CORE:
         assert not any(_starts(o.id, feature) for o in game.options())
     for option_id in own:
         kind, _, arg = option_id.partition(":")
         assert features_core.choose(game, kind, arg) is None
         assert game.choose(option_id) == ["（此刻無法這麼做。）"]
+
+
+@pytest.mark.parametrize("feature", [f for f in FEATURES if type(f).prep is not features_core.Feature.prep], ids=lambda f: f.name)
+def test_a_closed_package_gives_nothing_on_the_prep_card(feature, monkeypatch):
+    """開季準備卡那一步（prep）：要在「它給得出東西」的那一種局面當場關才驗得到。上一條擺到最後一種局面才關，傳承的候選
+    那時已經封掉，開著也是 None。沒有一種局面給得出東西，就是局面檔沒擺到，一樣算紅。"""
+    game = _game()
+    reached = 0
+    for _ in _stages(feature, game):
+        if not feature.prep(game):
+            continue
+        reached += 1
+        assert any(_starts(o.id, feature) for o in features_core.prep(game) or [])
+        with monkeypatch.context() as closed:
+            closed.setattr(type(feature), "enabled", lambda self, ctx: False)
+            assert features_core.prep(game) is None
+    assert reached
 
 
 def _dirty(annotation, default):
@@ -265,16 +292,22 @@ def _dirty(annotation, default):
         name, field = next(iter(annotation.model_fields.items()))
         return default.model_copy(update={name: _dirty(field.annotation, field.get_default(call_default_factory=True))})
     if origin is list:
-        return [7]
+        # story（全部拆包第 30 批）：lasting 是字串的清單，換季時併進旗標集合（annals 讀旗標的字串開頭），擺 7 會壞；字串的清單擺字串
+        return ["x"] if typing.get_args(annotation) == (str,) else [7]
     if origin is set:
         return {"x"}
     if origin is dict:
+        value = typing.get_args(annotation)[-1]
+        if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id；不驗（人物情誼包的 TalkMemo 必填的 at 是小數，第 30 批合併時改）
+            return {"x": value.model_construct(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
+        if len(args) == 2 and typing.get_origin(args[1]) is list:  # 值是清單的（人物情誼包的 dialogue_history）：換季會對值取長度，擺 7 會壞
+            return {"x": []}
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
 
 
 @pytest.mark.parametrize("field", ["sortie_cooldown_until", "hidden_until", "escort_pick", "outing_last", "outing", "sorties_today",
-                                   "picking_audience", "visited", "team", "affinities", "sect"])  # sect 是 str | None（dev/sortie-2 審查補）
+                                   "picking_audience", "visited", "team", "affinities", "sect", "dialogue_history"])  # dialogue_history 值是清單（第 20 批審查補）；sect 是 str | None（dev/sortie-2 審查補）
 def test_dirty_moves_every_kind_of_field_off_its_default(field):
     """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。只挑型別定義在 PlayerState 前面的欄位：
     寫在後面的（letters 的 Letter）在 PlayerState 第一次建出來之前，model_fields 裡還是 ForwardRef（xdist 分到這一條先跑的那個 worker 就紅過）；
@@ -301,6 +334,8 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
         value = _dirty(fields[name].annotation, fields[name].get_default(call_default_factory=True))
         setattr(game.state.player, name, value)
         before[name] = value
+    # checkin（全部拆包第 30 批）：新季第一次同步會自動簽第 1 天（簽到開著），checkin_days 就不是預設的空值；擺局面時關掉，斷言不動
+    c.config.checkin.enabled = False
     next_season(c, world, game)
     for name in feature.player_fields:
         now = getattr(game.state.player, name)
@@ -308,3 +343,57 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
             assert now == before[name], name
         else:
             assert now == fields[name].get_default(call_default_factory=True), name
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、2.4、Task 4）
+def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
+    """世界層的每一個位置：核心代叫的格（world.py、sqlite_world.py 裡那幾張 {格: 函式}；收季那一格核心沒有，寫 {}）與包登記的格
+    （Feature.world()）合起來剛好是 WORLD_ORDER 上的格、沒有重疊——不然 world_run 會叫包的那一份、核心那一份默默不跑，或那一格誰都不跑。
+    包登記的就是計畫 2.4 那五格；每一個位置照 FEATURES 問都問得出來（world_hooks 不丟 ValueError）。"""
+    from tianxia import sqlite_world, world
+
+    core = {
+        "step": world._STEP_CORE, "week": world._WEEK_CORE, "day": world._DAY_CORE, "start": world._START_CORE, "close": {},
+        "muster": world._MUSTER_CORE, "open": sqlite_world.SqliteWorldStore._open_core(), "retire": sqlite_world._RETIRE_CORE,
+        "next": sqlite_world.SqliteWorldStore._next_core(),
+        "life": {},  # core_world2（全部拆包第 40 批）：figure_life.tick 設宴那一格核心不代叫
+    }
+    owners = {(hook.at, hook.slot): f.name for f in FEATURES for hook in f.world()}
+    assert len(owners) == sum(len(f.world()) for f in FEATURES)  # 同一格不會有兩包
+    assert owners == {("step", "feast"): "feast", ("step", "yuedan"): "figure_acts", ("close", "arena"): "bout",
+                      ("muster", "generals"): "battle", ("next", "inscriptions"): "explore",
+                      ("muster", "works"): "stamina_plays",  # 全部拆包第 39 批
+                      ("life", "feast"): "feast",  # core_world2（全部拆包第 40 批）
+                      # 全部拆包第 27 批：玉璽包登記五格（原本核心代叫 world._MUSTER_CORE、sqlite_world 的 _open_core、_next_core、_RETIRE_CORE 那幾格）
+                      ("muster", "seal"): "seal", ("open", "seal.cache"): "seal", ("next", "seal.mandate"): "seal",
+                      ("next", "seal.cache"): "seal", ("retire", "seal"): "seal",
+                      # 全部拆包第 45 批：懸賞榜包登記四格（原本核心代叫 world._STEP_CORE、_WEEK_CORE、_DAY_CORE、_START_CORE 那幾格）
+                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties"}
+    assert set(core) == set(features_core.WORLD_ORDER)
+    for at, order in features_core.WORLD_ORDER.items():
+        own = set(features_core.world_hooks(at))
+        assert own == {slot for (where, slot) in owners if where == at}, at
+        assert not own & set(core[at]) and own | set(core[at]) == set(order), at
+    # 週初、每天那兩串照表建、一格一個函式（season_events 照串列的順序叫）
+    assert len(world.WEEK_HOOKS) == len(features_core.WORLD_ORDER["week"]) and len(world.DAY_HOOKS) == len(features_core.WORLD_ORDER["day"])
+
+
+# shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）
+def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypatch):
+    """真的 FEATURES 登記的格＋核心、殼傳進 status_run 的格＝STATUS_ORDER，沒有重疊——不然 status_run 會叫包的那一份、核心那一份變死碼；少一格畫面就少鍵。"""
+    import server
+
+    real = features_core.status_run
+    core: dict[str, set[str]] = {}
+
+    def spy(table, slots, frame, ctx):
+        core[table] = set(slots)
+        return real(table, slots, frame, ctx)
+
+    monkeypatch.setattr(features_core, "status_run", spy)
+    view = server.main_view(_game())
+    assert list(view)[:5] == ["status", "quest", "scene", "art", "options"]
+    assert core.keys() == features_core.STATUS_ORDER.keys()
+    for table, order in features_core.STATUS_ORDER.items():
+        own = set(features_core.status_hooks(table))
+        assert not own & core[table] and own | core[table] == set(order), table

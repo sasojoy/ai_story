@@ -2,14 +2,14 @@
 
 | 哪一步 | 定什麼 |
 |---|---|
-| 擺式 | 勢（create.stance_of 照關節讀）：攻勢＝出招、守勢＝應招、變勢＝乘勢、起勢＝起手；內功除了起勢都是心法 |
+| 擺式 | 勢（pose.stance_of 照關節讀）：攻勢＝出招、守勢＝應招、變勢＝乘勢、起勢＝起手；內功除了起勢都是心法 |
 | 立意 | 主屬性（第一格的顏色、MartialArt.attribute）配上勢，就是這一招做什麼（content/create_forms.json 的 moves，八路×四勢＋八種心法） |
 | 意分 | 火候：生、熟、透（MartialArt.move_fire；Config.arts.move_fire_cuts 分段、move_fire 打折）。表上寫的是透＝約人物本命的八成 |
 | 成形 | 稀有路數：那一格有稀有的版本時照 Config.arts.move_rare_odds 擲（MartialArt.move_rare） |
 | 立名 | 招名（MartialArt.move_name；模型先填一個、玩家可改）；那一句話（move_say；模型寫，叫不動照表的套句） |
 | 成數 | 一到 move_raw_levels 成招還「生」：表上會長的數再乘 move_raw_scale（team.tactic_holders 照自己練到的成數算） |
 
-只 import models；認勢要姿勢的幾何（create.py），用到才 import。
+只 import models；認勢要姿勢的幾何（pose.py，共用規則層），用到才 import。
 """
 from __future__ import annotations
 
@@ -38,9 +38,9 @@ def fire_of(content: Content, score: int) -> str:
 def stance_of_art(content: Content, art) -> str:
     if getattr(art, "move_stance", "") in STANCE_TIMING:
         return art.move_stance
-    from . import create  # create 會 import tactics，tactics 會 import 這裡
+    from . import pose  # 擺式的幾何（共用規則層，第 44 批從 create 抽出來）；pose 會 import martial_arts，用到才 import
 
-    return create.stance_of(create.icon_pose(content, art, art.weapon))
+    return pose.stance_of(pose.icon_pose(content, art, art.weapon))
 
 
 def timing_of(kind: str, stance: str) -> str:

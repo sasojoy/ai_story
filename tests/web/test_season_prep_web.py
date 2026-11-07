@@ -1,4 +1,4 @@
-"""開季準備卡（web/app.js 的 prepHtml）與江湖頁頂上的提示條（web/main.js 的 jhHintsHtml）：企劃者 2026-11-05
+"""開季準備卡（web/app.js 的 prepHtml；傳承入口 legacyOfferOpen 在 web/legacy.js）與江湖頁頂上的提示條（web/main.js 的 jhHintsHtml）：企劃者 2026-11-05
 「識海入口藏在現在那個位子 一般玩家怎麼可能知道 至少需要導引」「加點是隨時都可以調整？」「舊玩家根本不會知道要去哪邊點點數」。
 
 - 準備卡：main.prep 的 step 是 growth（五套預設＋自己配，先點一張再按「定下來」）或 feature（識海的候選：封進識海、這一季不帶）；

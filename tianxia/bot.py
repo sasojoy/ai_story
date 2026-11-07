@@ -12,12 +12,12 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import arts as arts_mod, allied, attrset, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import arts as arts_mod, allied, attrset, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from . import outing  # 走一趟：假人挑段數（outing_segments）
-from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, GROWTH_PREFIX, TEXT_TALKS, Game, Option
+from .engine import FREE_TEXT_OPTION, GROWTH_PREFIX, Game, Option
 from .rules import jianfa
 from .core import features as features_core
 from .martial_arts import MartialArt, next_quality
@@ -30,7 +30,6 @@ from .world_state import WorldStateStore
 HALF_HOUR = 1800
 CHALLENGE_ODDS = ("穩勝", "有把握")  # 挑戰本人只挑這兩種勝算（整季機器人與伺服器假人共用；bot_policy 從這裡拿，挑戰每季都有設計第九節）
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
-FORESHADOW_OPTIONS = ("fs:", "talk:clue:", "opp:", "talk:opp:")  # 伏筆的最後一步、對話的片段與機緣（正式版乙一）：機器人不做
 
 FORGE_TRIES = 4  # 意境＋意境試幾組（被擋下就換一組）
 SENSE_RIGHT = 0.6  # 有所感時挑到選得對的做法的機會（其餘從全部做法裡隨便挑，可能也挑對）：看得懂場景的玩家大多挑得對
@@ -414,20 +413,8 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
 
 
 def explore_choice(ids, want: str = "material") -> str | None:
-    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。
-    want="exp"（要經驗）：一類一顆開著、選單上有練功（explore:practice）就按它，沒有退回上面那樣（正式季整合 9.2）。
-    打探懸賞照預設（練功不算打探）。
-    找素材分支（第 32 項）：選單上有分支（explore:gather:<id>）時「找素材」只是入口，回第一條分支（不回「自己說」）；
-    ids 是有順序的（list、tuple）照選單的順序，set 照字排，結果才固定。"""
-    practice = explore_modes.option_id(explore_modes.PRACTICE)
-    if want == "exp" and practice in ids:
-        return practice
-    gather = explore_modes.option_id(explore_modes.GATHER)
-    order = list(ids) if isinstance(ids, (list, tuple)) else sorted(ids)
-    branch = next((i for i in order if i.startswith(f"{gather}:") and i != explore_modes.SAY_ID), None)
-    if branch is not None:
-        return branch
-    return gather if gather in ids else "act:explore" if "act:explore" in ids else None
+    """要探索時按哪一顆：act:explore，不在選單上是 None。量表與腳本共用；want 留著（量表與 same_behavior 帶它）。"""
+    return "act:explore" if "act:explore" in ids else None
 
 
 def duel_moves(rng: random.Random) -> list[str]:
@@ -506,55 +493,15 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         enlist = enlist_pick(game, [o.id for o in options])
         if enlist is not None:
             return enlist
-    options = [o for o in options if o.id != FREE_TEXT_OPTION and o.id not in TEXT_TALKS]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
-    # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
-    options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
-    if any(o.id.startswith(explore_modes.PREFIX) for o in options):
-        # 探索三選一開著：「探索」只是展開三顆的入口，按了什麼都不做、不花體力（同 act:rest 的道理：永遠按得下去的空按會讓
-        # 「沒得按就推進時間」的訊號失效）
-        options = [o for o in options if o.id != "act:explore"]
-    gather = explore_modes.option_id(explore_modes.GATHER)
-    if any(o.id.startswith(f"{gather}:") for o in options):
-        # 找素材分支（第 32 項）：「找素材」那時只是展開分支的入口（同 act:explore，按了不做事）；「自己說」要寫一句話（同隨口應對）。
-        # 分支只留一條（照 explore_seq 輪，不擲骰）：隨機挑時找素材的份量跟沒有分支層時一樣是一顆，不因為多了幾條路多去找素材
-        branches = [o.id for o in options if o.id.startswith(f"{gather}:") and o.id != explore_modes.SAY_ID]
-        keep = branches[s.player.explore_seq % len(branches)] if branches else None
-        options = [o for o in options if o.id not in (gather, explore_modes.SAY_ID) and (not o.id.startswith(f"{gather}:") or o.id == keep)]
+    options = [o for o in options if o.id != FREE_TEXT_OPTION]  # 隨口應對要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）；這一行要在下面的 int() 之前（choice:free 不是數字）
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
-    # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
-    # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
-    # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
-    # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith。鐵匠鋪的切頁（smith:page:）也只是換一頁（裝備四欄設計第九節）
-    # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
-    # 捐軍備（act:donate，素材與經濟設計第六節）同鐵匠鋪：在大本營一直按得下去；捐走 donate_spare，軍需官那一串（donate:）不隨機按
-    # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
-    # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
-# （宴客搬進功能包：排除的前綴改由那一包宣告，features_core.bot_always）
-    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進（tavern: 由酒肆包的 bot_always
-    # 宣告，第 11 批拿掉這裡重複的那一個；act:tavern 是核心 act 前綴的一顆，照留在下面那張清單）
-    # 拜入門派（sect:，一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（還是隨機挑，婉拒的就不再按）
-    options = [o for o in options if not o.id.startswith("sect:") or o.id.partition(":")[2] not in s.player.seen_events]
-    options = [
-        o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
-                        "act:tavern", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:",
-                                 "act:recruit:", "errand:", "faction:lean:") + features_core.bot_always())  # 功能包宣告的永遠按得下去
-    ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。託付（errand:，減法季批 6）：機器人不收託付，萬一有也不按（勸降要寫字）。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
-    # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）
-    # 一條線答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，同 act:rest 排除（答題照隨機答完）
-    options = [o for o in options if not (o.id.startswith("story:") and o.id.endswith(":later"))]
-    # 特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；機器人先按靜心思名、再從三個候選裡挑
-    options = [o for o in options if o.id != "dunwu:own"]
-    # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
-    options = [
-        o for o in options
-        if not (o.id.startswith("call:") and o.id != "call:back" and not game.can_meet_figure(o.id.partition(":")[2]))
-    ]
+    # 永遠按得下去的（沒有別的事可做時按了也白按，不排除的話「沒事可做就推進時間」的訊號會失效）：各包宣告（Feature.bot_always、Feature.bot_idle、Verb.bot_skip、Verb.tail_bot_skip；全部拆包第 60 批）。
+    # act:heal 沒有主人（第 57 批第四節）：療傷走 spend_xinde，這一個字面留在這裡
+    options = [o for o in options if o.id != "act:heal" and not features_core.bot_idle(game, o)]
     # 挑戰本人照勝算挑（挑戰每季都有設計第九節）：隨機挑選時只留「穩勝」「有把握」的（同假人）；火候滿了等契機時五五波以上都打。
     # 勝算只對此地按得下去的挑戰鈕算（一個地點最多兩位，一次 40 場模擬），其他步驟不多算
     chance = awaits_chance(game)

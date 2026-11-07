@@ -126,9 +126,11 @@ def test_the_chaos_and_stance_rule_is_written_once(on):
 
 
 def test_howto_reads_only_public_names_from_rules():
-    """審查 Minor 7：howto 不拿 rules 的私有名字（_STANCE_NAMES、_COUNT_WORDS）。"""
-    source = (ROOT / "tianxia" / "howto.py").read_text(encoding="utf-8")
-    assert not re.search(r"rules\._[A-Za-z]|from \.rules import _", source)
+    """審查 Minor 7：howto 不拿 rules 的私有名字（_STANCE_NAMES、_COUNT_WORDS）。第 59 批：句子拆進各包的 howto.py 與核心的 howto_base。"""
+    files = [ROOT / "tianxia" / "core" / "howto_base.py", *sorted((ROOT / "tianxia" / "features").glob("*/howto.py"))]
+    assert len(files) == 18  # 17 包加核心
+    source = "\n".join(path.read_text(encoding="utf-8") for path in files)
+    assert not re.search(r"rules\._[A-Za-z]|from (?:\.|tianxia\.)rules import _", source)
 
 
 def test_every_number_in_the_war_explanations_comes_from_the_config_or_the_rules(on):
@@ -270,11 +272,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
                 gains.append((label(path), line.strip().split("#")[0].strip()))
     assert gains == [
-        ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
-        ("engine.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，Game._deliver_conquest）
-        ("engine.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，Game._deliver_guard_credits）
         # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
         ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
         ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
@@ -285,9 +284,15 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("features/bout/arena_actions.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（deliver_arena）
         ("features/bout/duel_actions.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json；duel_finish）
         ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
+        # figure_acts：同步補護衛名望搬進大勢人物包（全部拆包第 31 批）：路徑從 engine.py 換成 features/figure_acts/aid_actions.py（照路徑排在宴客後面、酒肆前面）
+        ("features/figure_acts/aid_actions.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，aid_actions.deliver_guard_credits）
+        # seal：奪璽單挑的名望搬進玉璽包（全部拆包第 27 批；這一行原本在 engine.py 的 Game._file_seal，字一個沒變，路徑換成玉璽包、照路徑排在大勢人物包後面、酒肆前面）
+        ("features/seal/actions.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給；actions.file_seal）
         # 酒肆搬進功能包（主動搬六包第 10 批）：同兩行，路徑從 engine.py 換成 features/tavern/actions.py（照路徑排在宴客後面）
         ("features/tavern/actions.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（tavern_treat）
         ("features/tavern/actions.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（tavern_hit_fight）
+        # territory_acts：領地爭奪的分紅與守城功搬進地盤包（全部拆包第 46 批；這一行原本在 engine.py 的 Game._deliver_conquest，字一個沒變，路徑換成地盤包、照路徑排在酒肆後面；FB-9431）
+        ("features/territory_acts/day_actions.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，day_actions.deliver_conquest）
     ]
     givers = []
 
@@ -301,8 +306,10 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             for value in node:
                 scan(value, where)
 
-    for path in sorted((ROOT / "content").rglob("*.json")):
-        scan(json.loads(path.read_text(encoding="utf-8")), path.relative_to(ROOT / "content").as_posix())
+    from tianxia.content import real_files
+
+    for rel, path in real_files().items():
+        scan(json.loads(path.read_text(encoding="utf-8")), rel)
     # 頭目的名望寫在 fame 欄位，不是 stats；奇事（一條線）結局的效果跟事件同一套，寫在 storylines.json
     assert givers and all(where.startswith("events/") or where == "storylines.json" for where in givers), sorted(set(givers))
 
@@ -646,7 +653,7 @@ def test_one_branch_left_is_not_mostly(on):
     """只剩一支走得了（例：潁川選錯了做法，悟意境那一支到換日都沒了）：不寫「多半」，寫「會」。正式內容每一處都照這條。"""
     from tianxia.rules import game_day
 
-    classic_rules(on)  # 測的是照比例自動抽的舊探索那一行（出陣探索與地盤之前）；三選一開著的那一行見 tests/test_explore_modes.py
+    classic_rules(on)  # 測的是照比例自動抽的舊探索那一行（出陣探索與地盤之前）
     game = _war(on)
     s = game.state
     s.player.sense_misses[s.player.location] = game_day(on, s.world)

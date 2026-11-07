@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PrivateAttr, field_validator, model_serializer, model_validator
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
@@ -1078,6 +1078,23 @@ class Sect(_Strict):
     desc: str = ""
 
 
+# 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，不信任 LLM 自報數字）。目前是全部人物共用同一張表，
+# 之後如果要每位歷史人物有不同的個性化反應強度，可以在 CharacterDef 加一個對應欄位覆寫，這裡先給一個通用版本。
+# （全部拆包第 20 批「先做」：原本寫在 companion_agent.py；核心的 content.py 驗內容要讀 DIALOGUE_TAGS、不能 import 包，搬到這裡，
+# 人物情誼包的 companion_agent 從這裡拿）
+AFFINITY_TAG_DELTAS: dict[str, int] = {
+    "雪中送炭": 8,
+    "坦誠相待": 7,
+    "真誠請教": 6,
+    "由衷讚賞": 5,
+    "尋常寒暄": 1,
+    "冷漠敷衍": -2,
+    "言語冒犯": -6,
+    "強人所難": -5,
+}
+DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
+
+
 class CharacterDef(_Strict):
     """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量，仍給 Check
     系統（辦事/修行類事件選項的屬性判定）使用，跟遭遇/劇情戰的判定（encounter.py）無關。"""
@@ -1112,7 +1129,7 @@ class CharacterDef(_Strict):
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
-    # 一般 NPC 同伴（features/hire，屬性與跨季架構 v2 第九節；企劃者 2026-11-04 照建議）：content/hirelings.json 生的，
+    # 一般 NPC 同伴（features/hire，屬性與跨季架構 v2 第九節；企劃者 2026-11-04 照建議）：content/hire.json 生的，
     # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
     hire_type: str | None = None
     hire_at: str | None = None
@@ -1393,7 +1410,7 @@ REVEAL_KEYS = frozenset({
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
 })
-# 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
+# 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/guide.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
 GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
@@ -1405,7 +1422,7 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
 # 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
 # allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。兩道檢查，都不是萬全的：
-#   tests/core/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
+#   tianxia/features/guide/tests/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
 #   tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
 #   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
 ALLOW_FIXED = frozenset({
@@ -1426,7 +1443,7 @@ ALLOW_FIXED = frozenset({
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
-    "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "explore:",  # 探索三選一的三顆（第 13 批拿掉；初入江湖的 glow、allow 還寫到，第 14 批連這幾步一起清）
     "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
@@ -3247,32 +3264,12 @@ class SortieRules(_Strict):
         return self
 
 
-class ExploreModes(_Strict):
-    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix），
-    事件推戰線也不再打折。"""
-
-    enabled: bool = True
-    encounter_chance: float = Field(default=0.35, ge=0, le=1)  # 找素材撞上怪（城鎮不撞）
-    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})  # 照危險度：再一個二階的機會
-    town_chance: float = Field(default=0.5, ge=0, le=1)  # 城鎮找素材撿到一個一階的機會
-    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額）
-    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
-
-
 class Training(_Strict):
-    """城裡操練與城外練功分級（新手引導重做，Joy 2026-10-22 同意設計稿 https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx）。
-    一類一顆（precise.on）開著才有：城鎮裡行動列那一格是「操練」（act:drill），零風險、一天 drill_per_day 次（同回體丹的現實
-    00:00 換日）、主要給心得；城外那一格是「練功」（explore:practice），照這裡最弱的對手分一、二、三級（tier_bounds），心得與銀兩
-    乘 tier_loot（經驗不加成：50 級的升級速度是量好的）。enabled 關掉回到練功收在探索裡、沒有操練。"""
+    """城外分級（新手引導重做，Joy 2026-10-22 同意設計稿 https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx；城裡操練與尋敵鈕全部拆包第 13 批拿掉）。
+    一類一顆（precise.on）開著才有：照這裡最弱的對手分一、二、三級（tier_bounds），寫在輿圖的地點詳情。"""
 
     enabled: bool = True
-    drill_per_day: int = Field(default=5, ge=1)
-    drill_xinde_base: int = Field(default=4, ge=0)  # 操練一次的心得：drill_xinde_base ＋ 等級 × drill_xinde_per_level
-    drill_xinde_per_level: float = Field(default=1.0, ge=0)
-    drill_exp_base: int = Field(default=1, ge=0)  # 操練一次的經驗：drill_exp_base ＋ 等級 // drill_exp_level_div
-    drill_exp_level_div: int = Field(default=5, ge=1)
     tier_bounds: list[int] = Field(default_factory=lambda: [10, 30])  # 最弱的對手難度 ≤ 第一個是一級、≤ 第二個是二級，再上去三級
-    tier_loot: list[float] = Field(default_factory=lambda: [1.0, 1.25, 1.5])  # 一、二、三級練功打贏的心得與銀兩倍數
     # 新手目標（tianxia/newbie.py）：引導走完、新手期裡任務卡上的那一塊；做到一條給 goal_pill 顆回體丹或 goal_silver 兩
     goals: bool = True
     goal_pill: int = Field(default=1, ge=0)
@@ -3282,35 +3279,7 @@ class Training(_Strict):
     def _shape(self) -> Training:
         if len(self.tier_bounds) != 2 or self.tier_bounds[0] >= self.tier_bounds[1]:
             raise ValueError("training.tier_bounds 要寫兩個由小到大的難度")
-        if len(self.tier_loot) != 3:
-            raise ValueError("training.tier_loot 要寫一、二、三級三個倍數")
         return self
-
-
-class GatherBranch(_Strict):
-    """找素材的一條分支（第 32 項，企劃者 10/18「往深山可能探索到的就是山或者風之類的意境」「素材可能就能分狩獵、挖礦」；
-    content/gather_branches.json）：地點帶 tags 其中一個、危險度到 min_danger 就有這條。給 attributes 這幾種屬性的素材
-    （數量照找素材一定給的那一套，explore_modes.gather_finds），deep（深入）照地點的 Location.materials、另外擲一次悟意境。
-    line 是紀錄的第一句（{place} 換地點名）；名字與句子待 joy 潤。"""
-
-    id: str
-    name: str
-    tags: list[str]
-    attributes: list[str] = Field(default_factory=list)
-    line: str
-    min_danger: int = Field(default=1, ge=1, le=3)
-    deep: bool = False
-
-
-class GatherBranches(_Strict):
-    """找素材分支（第 32 項；tianxia/explore_modes.py 的 branches_*）：按「找素材」先展開這裡的幾條路，每條一定給素材、差在屬性；
-    最後一顆「自己說…」寫 20 字的找法，模型評成算、引擎擲骰。另要探索三選一與一類一顆（precise.on）都開著、內容有
-    content/gather_branches.json 才生效；不蓋章（只影響給哪種屬性，正在跑的季中途打開沒有壞處，PM）。測試內容關著。"""
-
-    enabled: bool = True
-    deep_insight_chance: float = Field(default=0.10, ge=0, le=1)  # 【預設】「深入」另擲一次悟意境：附帶的小驚喜（同殘譜、破境丹），不取代素材
-    say_enabled: bool = True  # 「自己說」單獨的緊急開關（模型壞了只關它）
-    say_bonus_second: bool = True  # 【預設】「自己說」寫得好：多一個同屬性一階之外，再照危險度擲一次二階（企劃者 2026-10-19 照 PM 先定的做）
 
 
 class InsightStrong(_Strict):
@@ -3493,7 +3462,7 @@ class HeroineDef(_Strict):
 
 
 class PersonaStage(_Strict):
-    """人物性子的一段（content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
+    """人物性子的一段（features/persona/content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
     short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
 
     text: str
@@ -3577,6 +3546,11 @@ class EpiphanyRules(_Strict):
     wis_step: float = Field(default=0.05, ge=0)
     wis_cap: float = Field(default=1.5, ge=1)
     pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
+    # 神品意境一個人同時能有幾份（企劃者 2026-11-06「可以有兩份神品意境」；本來寫死一份）。
+    # 兩處都讀它：arts.slot_problem（同時裝幾份）與 features/legacy 的識海解封（身上有幾份就不給解）。
+    # 本來的一份會卡死識海：這一季自己先悟到一份，上一季封進識海的那一份就永遠解不開——而神品熔不得、
+    # 也不能合成（library.melt_insight_problem、fusion.merge_problem），玩家沒有任何辦法放掉它（正式站第 9 季踩到）。
+    god_cap: int = Field(default=2, ge=1)
     demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
     retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
     # 心境小試抽到「靜候」那一種時要等幾個遊戲日（FB-902）：預設 1.0 是設計稿的「靜候一日」，
@@ -3735,7 +3709,7 @@ class ConquestRules(_Strict):
 
 class XingshiTuning(_Strict):
     """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，伺服器鎖外
-    請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
+    請模型照那一天的事實寫一篇旁白（三段式，地盤行動包 routes.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
     模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
 
     enabled: bool = True  # 【預設】正式開；領地爭奪本身還關著（ConquestRules.enabled），開了領地爭奪就有
@@ -3878,9 +3852,10 @@ class EconomyRules(_Strict):
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
-    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打事件五折（Config.explore_modes.event_trend_share）、
+    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打五折（donate_trend_share）、
     # 季長倍數、盡頭阻力，跟出陣共用每人每日推力上限，不另記推力的貢獻（貢獻照捐的份量記）
     donate_push_per_point: float = Field(default=0.05, ge=0)
+    donate_trend_share: float = Field(default=0.5, ge=0, le=1)  # 捐軍備推大勢的折數（跟 Config.event_trend_share 同值、不同欄：測試內容事件不打折、捐軍備照打）
     armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
         default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
     )
@@ -4216,7 +4191,7 @@ class Config(_Strict):
     road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
     # 傳聞分層（傳聞分層設計第三、八節；第一季的規則開著時才用，計畫 2026-10-06 傳聞分層一）
-    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（atlas.news_days）
+    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（layers.news_days）
     rumor_board_days: float = Field(default=3, gt=0)
     away_hours: float = Field(default=1, gt=0)  # 「你不在的時候」：離線超過幾個「現實」小時，再上線先看一份摘要（PM 2026-10-06）
     # 那一份摘要最多幾行（含放不下時最後那一行「另有 N 則」；天下大事、陣營軍情的要點、所在大區，照這個順序）。
@@ -4259,12 +4234,11 @@ class Config(_Strict):
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
-    explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
-    gather_branches: GatherBranches = Field(default_factory=GatherBranches)  # 找素材分支（見 GatherBranches；內容在 content/gather_branches.json）
-    training: Training = Field(default_factory=Training)  # 城裡操練、城外練功分級（見 Training）
+    training: Training = Field(default_factory=Training)  # 城外分級（見 Training）
     # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
-    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
+    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）
     precise_actions: bool = True
+    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額；Game._shaped 讀）
     # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
     # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
     precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
@@ -4607,7 +4581,7 @@ class Config(_Strict):
     # 測試期間一鍵補滿體力（企劃者 2026-10-07，緊急）：「體力在這個遊戲是很重要的資源，現在的回復以及消耗完全不成正比，探索偶爾
     # 還順便扣一堆體力，新人玩家體驗不到樂趣。另外現在還在測試版，請直接讓玩家能直接補滿體力。」打開時，狀態列體力條上 joy 的
     # 「丹」鈕（同一個入口 Game.take_stamina_pill、同一條路由 pill）變成「補滿」：按一下直接補到 stamina_max，不花丹、不花銀兩、
-    # 不限次數；關著時回體丹一個字不變。只在測試期間開（content/profiles/weekend.json），content/config.json 不寫；測試期過了就關掉。
+    # 不限次數；關著時回體丹一個字不變。只在測試期間開（週末設定 content/profiles/weekend.json，第 14 批拿掉；測試內容與覆寫檔可以再開），content/config.json 不寫；測試期過了就關掉。
     # 伺服器假人與整季機器人不吃這個，照舊吃丹（bot.take_pill 傳 pill_only=True），平衡量表不受影響
     beta_free_refill: bool = False
     # 開關打開時狀態列那顆鈕上的字（取代「丹 N」）；新寫，待 joy 潤。不能是空字串：網頁見空字串會退回畫「丹 N」，引擎卻照樣補滿
@@ -4629,6 +4603,7 @@ class Config(_Strict):
     sense_rate: int = 70  # 有所感選對做法之後，進入感悟狀態的成功率（%）
     sense_rate_per_wis: int = 3  # 悟性比基準 5 每多一點 +3%（少一點 −3%）
     sense_rate_range: tuple[int, int] = (40, 95)  # 夾在這之間（痕跡的加成另外加在上面，見 sense_marks_bonus）
+    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限；0 是沒有這一支，寶物字走舊的那一句）
     sense_miss_xinde: int = 3  # 選對了但沒擲中：「差一點就抓到了」給的心得
     sense_marks_bonus: int = 3  # 這一處悟成過的人每多一檔模糊人數（一兩個人、幾個人、十來個人），成功率 +3%……
     sense_marks_cap: int = 9  # ……最多 +9%
@@ -5642,7 +5617,7 @@ class Content(_Strict):
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
-    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/xingshi.py 讀、content.check_xingshi_lines 驗）；沒有這個檔就沒有〈天下形勢〉
+    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/features/territory_acts/xingshi.py 讀、地盤包的 check_content〔xingshi.check_lines〕驗）；沒有這個檔就沒有〈天下形勢〉
     xingshi_lines: dict = Field(default_factory=dict)
     banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
@@ -5653,8 +5628,7 @@ class Content(_Strict):
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     heroines: dict[str, HeroineDef] = Field(default_factory=dict)  # 女子與隱線（content/heroines.json，features/heroines）：人物 id → 她的設定；沒有這個檔就是空的
-    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
-    gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
+    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（features/persona/content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
@@ -5671,6 +5645,10 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    # core_content（全部拆包第 63 批）：這一份只載了哪一包（load_content(only=)，只有測試內容、只有測試用；validate 看它）。不是欄位：不進 model_fields、
+    # 不進序列化；pickle、deepcopy、model_copy 都帶著（測試的複本也擋得住）
+    _only_pack: str | None = PrivateAttr(default=None)
 
     def banned_name_list(self) -> list[str]:
         """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""

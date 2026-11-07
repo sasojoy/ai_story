@@ -20,19 +20,19 @@ event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西
 
 改這一份要跑的測試（dev/core-events-1 審查修正，PM 2026-11-03；導覽〈核心與存檔〉「事件檢定」）：
 - scripts/test_for.py：核心測試＋煙霧，再並上寫到改到的函式（連模組裡直接叫它、用到它的，一路往上）的 Game 委派名、模組名＋函式名、
-  類別與常數的測試檔（test_for.core_module_callers）。tale_clue 挑到 tests/arts/test_secret_recipes.py、tests/gear/test_forge_secrets.py；
-  present 挑到寫 _present 的 tests/ranger/test_stances_fix6.py（人物心意那一則）、tests/figures/test_seats.py、tests/core/test_events.py……；
+  類別與常數的測試檔（test_for.core_module_callers）。tale_clue 挑到 tests/arts/test_secret_recipes.py、tianxia/features/smithy/tests/test_forge_secrets.py；
+  present 挑到寫 _present 的 tianxia/features/companions/tests/test_stances_fix6.py（人物心意那一則）、tests/figures/test_seats.py、tests/core/test_events.py……；
   沒留委派的 answer_branch、deed_credit 照叫它的 answer_event 挑到隨口應對那幾個（test_free_text_and_marks、test_outcomes_answer……）。
 - present、event_text、choice_label_of、resolve_choice、apply 是每一則事件都走的（端出卡、選單上的字、按下固定選項、套效果），只挑那一個
   函式的不夠：改了，提交之後照整個檔挑一次 `scripts/test_for.py tianxia/core/event_check.py --base HEAD --slow`（工作樹跟 HEAD 沒有差
   時照整個檔算；還沒提交就只挑改到的那幾個函式的）。
 - 一個名字都沒寫、經 choose、探索、整季走的，改了 present 等等 test_for 也挑不到，另外跑（-m "slow or not slow" -n 4）：
-  - present 記看過的事件：tests/battle/test_explore.py（test_a_seen_once_event_never_comes_back）、tests/season/test_real_content.py
+  - present 記看過的事件：tianxia/features/explore/tests/test_explore.py（test_a_seen_once_event_never_comes_back）、tests/season/test_real_content.py
     （slow：test_bot_plays_a_full_season）——審查把 seen_events.add 拿掉，test_for 挑的與原本列的 18 個檔都沒紅，只有這兩個紅
   - 端出事件與固定選項：tests/bots/test_event_llm.py、tests/core/test_event_ease.py、tests/core/test_event_reward_caps.py、
     tests/core/test_event_tiers.py（整檔 slow；event_tier 沒有測試寫到它的名字）、tests/core/test_events_new_regions.py、
-    tests/core/test_faction_events.py、tests/figures/test_foreshadow.py、tests/figures/test_item7_foreshadow_cooldown.py、
-    tests/season/test_real_foreshadows.py
+    tests/core/test_faction_events.py、tianxia/features/military/tests/test_foreshadow.py、tianxia/features/military/tests/test_item7_foreshadow_cooldown.py、
+    tianxia/features/military/tests/test_real_foreshadows.py
 - 與 scripts/same_behavior.py 的 events 一軌（compare --tracks events；見計畫第五、六節）
 """
 from __future__ import annotations
@@ -41,11 +41,13 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, storyline, team, tiers
+from . import annal_base as annals
+from . import bounty_base
+from .. import battlelog, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
-from .. import stances as stance_rules
+from .. import stance_world as stance_rules  # 人物心意的世界那一半（共用規則層，全部拆包第 19 批）
 from ..events import choice_label, stamina_note, visible_choices
 from ..journal import Draft
 from ..models import FREE_TEXT_MAX, Choice, Effect, Event, FreeTextChoice, Outcome
@@ -98,7 +100,7 @@ def present(ctx, event: Event, action: str | None = None) -> list[str]:
     text = fill_marks(event_text(ctx, event), ctx.state)
     ctx._outcome(journal.event_marker(event.title, event.qiyu), head)
     ctx._hide(text)
-    return [head, text] + foreshadow.hear_from_event(ctx.state, ctx.content, event.id, ctx.world)  # 片段事件（計畫 T7）
+    return [head, text] + ctx._hear_from_event(event.id)  # 片段事件（計畫 T7；本體在軍情包，全部拆包第 34 批）
 
 
 def event_text(ctx, event: Event) -> str:
@@ -131,7 +133,7 @@ def event_option_view(ctx) -> dict[str, dict] | None:
         return None
     out: dict[str, dict] = {}
     for i, ch in visible_choices(c.events[s.pending_event], s, c):
-        act = ch.text + bounties.join_note(s, c, ch)
+        act = ch.text + bounty_base.join_note(s, c, ch)
         if ch.combat:
             squad = ctx._story_squad(c.squads[ch.combat])
             odds = team.estimate(s, c, ctx.world, squad.id, difficulty=squad.difficulty, memo=ctx.odds_memo)
@@ -147,14 +149,14 @@ def event_option_view(ctx) -> dict[str, dict] | None:
 def choice_label_of(ctx, choice: Choice, odds: bool) -> str:
     """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
     有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。拜入陣營名下的門派、而且手上有新陣營接不了的懸賞時，
-    最後多一個括號講會作廢幾張（bounties.join_note，FB-159）。"""
+    最後多一個括號講會作廢幾張（bounty_base.join_note，FB-159）。"""
     if choice.combat and odds:
         squad = ctx._story_squad(ctx.content.squads[choice.combat])
         odds_text = team.estimate(ctx.state, ctx.content, ctx.world, squad.id, difficulty=squad.difficulty)
         label = f"{choice.text}（對手：{squad.name}・{odds_text}）{stamina_note(choice, ctx.content)}"
     else:
         label = choice_label(choice, ctx.state, ctx.content, ctx.world)
-    return label + bounties.join_note(ctx.state, ctx.content, choice)
+    return label + bounty_base.join_note(ctx.state, ctx.content, choice)
 
 
 # ── 固定選項：檢定、打一場、效果 ──
@@ -302,7 +304,7 @@ def answer_event(
     if current is None or current.event_id != request.event_id:
         return ctx._log(["（事情已經過去了，這句話沒派上用場。）"])
     event = c.events[request.event_id]
-    storyline.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
+    story_base.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
     branches = branches_of(ctx, event)
     if branches:
         return answer_branch(ctx, event, request, branches, llm_rate, moral, outcome)

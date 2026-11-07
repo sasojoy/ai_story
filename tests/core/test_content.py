@@ -1,11 +1,10 @@
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from conftest import FIXTURE
+from conftest import FIXTURE, copy_real_content, copy_test_content
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
@@ -19,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def copy_fixture(tmp_path):
     dest = tmp_path / "content"
-    shutil.copytree(FIXTURE, dest)
+    copy_test_content(dest)
     return dest
 
 
@@ -1503,10 +1502,8 @@ def test_location_desc_when_is_checked(tmp_path):
 
 def _real_copy(tmp_path):
     """真實內容的一份副本（fixture 內容沒有第一季的結局與季末大事）。"""
-    from pathlib import Path
-
     root = tmp_path / "content"
-    shutil.copytree(Path(__file__).parents[2] / "content", root)
+    copy_real_content(root)
     return root
 
 
@@ -2355,7 +2352,7 @@ def test_the_real_traits_are_the_designed_table():
 
 def test_the_fixture_traits_are_the_real_ones():
     """測試夾具的功效與演出句跟正式內容一樣（直接複製），數字跟著正式內容走。只差在夾具的功效沒有回合裡的戰法（tactic，本命戰法第三批）與絕招（ultimate、ultimate_bond）：
-    舊測試的仗照舊不開回合（頭目戰、擂台開不開 bout 跟著身上有沒有戰法走），戰法本身用正式內容測（tests/test_tactics.py）。"""
+    舊測試的仗照舊不開回合（頭目戰、擂台開不開 bout 跟著身上有沒有戰法走），戰法本身用正式內容測（tests/battle/test_tactics.py）。"""
     for name in ("traits.json", "trait_lines.json"):
         real = json.loads((ROOT / "content" / name).read_text(encoding="utf-8"))
         if name == "traits.json":

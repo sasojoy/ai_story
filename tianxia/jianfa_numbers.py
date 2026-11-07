@@ -117,6 +117,8 @@ class JianfaNumbers(_Strict):
     danger_shift: int = Field(default=10, ge=0)  # 危險度每多一星（一星是表上的數字）：遭遇 +N、事件 −N【預設】
     beat_floor: int = Field(default=5, ge=0)  # 危險度移過的那兩欄夾在 beat_floor～beat_cap【預設】
     beat_cap: int = Field(default=80, ge=1)
+    # 素材那一拍（explore_rules.gather_finds；全部拆包第 13 批從三選一的設定搬來）：照危險度，城外再一個二階的機會
+    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})
     explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 十八張表（每張掛在六種地點之一），照順序比對
     # 城類地點自己沒有對手（此刻站的、不是自家的隊伍）時，遭遇那一拍換成這幾路（第一路；PM 2026-10-25 第 3 件：自己有隊伍的城照原本的隊伍）：
     # 不推線、不算討伐、戰利（銀兩、心得、掉的素材）乘 town_loot_scale【PM】

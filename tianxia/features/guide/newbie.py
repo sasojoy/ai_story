@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from tianxia import prologue, roster
+from tianxia.core import bounty_base  # 核心（這一季完成了幾張懸賞，core_seams）
 from tianxia.models import Content
 from tianxia.state import GameState
 
@@ -59,7 +60,7 @@ def met(state: GameState, goal: Goal) -> bool:
     if goal.key == "create":
         return p.created_count >= 1
     if goal.key == "bounty":
-        return p.bounties_done >= 1
+        return bounty_base.done_count(p) >= 1
     if goal.key == "side":
         return p.faction is not None or DRIFTER in p.newbie_marks
     return goal.key in p.newbie_marks

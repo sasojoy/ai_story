@@ -4,7 +4,7 @@
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，一個例外：`_train_note` 是 `foes_note`（跟 actions.train_note〔行動列底下那一行〕分開）。另外兩個是從
 Game 原位收來的：`train_fight`（`Game._act` 的 train 那一支：扣體力、並肩出陣、出陣或遊歷）、`train_squad`（`Game._fight_squad` 的
-act:train 那一支）。Game 留 8 個一行委派（核心的單打服務 `_squad_encounter`、軍情的 `_order_options`、假人、測試、腳本還在叫）。
+act:train 那一支）。Game 留 8 個一行委派（核心的單打服務 `_squad_encounter`、軍情的 `order_options`、假人、測試、腳本還在叫）。
 包裡互相叫直接叫這裡與 actions、duel_actions 的函式；測試、腳本換掉的經 ctx 叫，換掉的才打得到：`ctx._train()`、`ctx._sortie()`、
 `ctx.train_trend_push(...)`、`ctx._train_push(...)`、`ctx._parley_backing_here()`、`ctx.sorties_left()`，與本來就在 Game 上的服務
 （`ctx.odds`、`ctx._push_room`、`ctx.push_trend`、`ctx._present`、`ctx._order_credit`……）。
@@ -15,23 +15,21 @@ import hashlib
 from typing import TYPE_CHECKING
 
 from tianxia import calendar, team
-from tianxia import howto  # 過渡：待搬（遊歷那一行的句子）
 from tianxia import materials  # 共用規則層（素材：打贏會不會掉）
 from tianxia import mounts  # 共用規則層（坐騎：必敗先問的那一句寫策馬脫身的機會）
-from tianxia import opportunities  # 過渡：待搬（守勢之後的收容流民，正式版乙一）
-from tianxia import orders  # 過渡：待搬（軍令：截糧時那一帶的敵方運糧隊）
-from tianxia import parley  # 過渡：待搬（並肩出陣：那一仗前面那一句）
+from tianxia import orders  # 共用規則層（軍令：截糧時那一帶的敵方運糧隊；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：守勢再加跟守一樣的經驗心得）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥那一步的對手與寫好的結果）
 from tianxia import territory  # 共用規則層（地盤：站的照控制方）
 from tianxia.core.option import Option
-from tianxia.core.services import BIG_FIGHT_WAIT, drill_share
+from tianxia.core.services import BACKED_LINE, BIG_FIGHT_WAIT, PLAN_MISS, drill_share  # 並肩出陣的兩句（第 20 批：原本 import parley）
 from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
 
 from . import actions  # 出陣本體（第 1 批）：出陣開著時遊歷的對手池、守勢拿這一處自家那一路的數字
 from . import duel_actions  # 出陣約戰（第 2 批）：約戰開著時守勢收進此地、一天記一點貢獻，出陣那一格不打仗
+from . import howto  # 遊歷那一行的句子（第 59 批搬進包）
 from . import rules
 from .rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING
 
@@ -56,7 +54,7 @@ def train_fight(ctx: Game, prepared) -> list[str]:
     if backing:
         ctx.state.player.parley_backing = None
         name = ctx.content.characters[backing].name
-        msgs.insert(0, parley.BACKED_LINE.format(name=name, pct=round(share * 100)) if share else parley.PLAN_MISS.format(name=name))
+        msgs.insert(0, BACKED_LINE.format(name=name, pct=round(share * 100)) if share else PLAN_MISS.format(name=name))
     return msgs
 
 
@@ -290,7 +288,7 @@ def duty(ctx: Game) -> list[str]:
     goals = {} if duel else ctx._goals()  # 約戰開著：線只在約戰結算、軍令、大勢人物、事件的痕跡這幾處動（設計 4.3）
     if goals.get(front):
         msgs += ctx.push_trend(front, goals[front], source="duty")
-    msgs += opportunities.after_success(s, c, "duty", loc.id, ctx.rng)  # 收容流民（正式版乙一）
+    msgs += ctx._opp_after_success("duty", loc.id)  # 收容流民（正式版乙一）
     if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
         host = actions.sortie_host(ctx, loc)
         if host is not None:

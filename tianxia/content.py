@@ -1,4 +1,4 @@
-"""載入 content/ 底下的 JSON，並檢查所有交叉引用。內容寫錯時在載入當下就報錯。
+"""載入 content/ 底下與各包 content/ 底下（Feature.content 宣告的，全部拆包第 62 批）的 JSON，並檢查所有交叉引用。內容寫錯時在載入當下就報錯。
 
 sanguo-companions 合併大幅簡化了這裡的驗證規則（見設計文件開放決策記錄）：舊制度圍繞
 天地玄黃品階/統御區間/流派資質 S 級數量/招賢卡池/收徒地點的一大批交叉檢查全部拿掉，
@@ -20,14 +20,13 @@ from pydantic import BaseModel, ValidationError
 
 from . import encounter
 from . import forge_secrets as forge_rules
-from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
-    ArtBook, Itinerary, Check, StatDef,
+    DIALOGUE_TAGS, ArtBook, Itinerary, Check, StatDef,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, PLACE_KINDS, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
+    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, PersonaAxis, HeroineDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
@@ -67,6 +66,15 @@ def env_profile() -> str | None:
     import os  # noqa: PLC0415  只有這裡與 _with_local_admins 用得到
 
     return os.environ.get(PROFILE_ENV) or None
+
+
+DEFAULT_SERVING_PROFILE = "season21"  # 拿掉二（甲）：週末設定關門，主機端沒帶 TIANXIA_PROFILE 就套 21 天季
+
+
+def serving_profile() -> str:
+    """伺服器、假人與主機端工具「當主程式跑」時用的設定：環境變數有帶照它，沒帶套 season21。
+    env_profile() 不改（import server 的測試與 same_behavior 的子行程靠它沒帶＝預設內容）。"""
+    return env_profile() or DEFAULT_SERVING_PROFILE
 
 
 TIER_BANDS = {2: (9, 12), 3: (12, 15)}  # 第二、三階事件的難度帶（事件分級設計稿：照剛開門的人定）；第一階照地點的危險度（tests/season/test_real_content.py）
@@ -156,97 +164,170 @@ def resolve_grades(content: Content) -> None:
         raise ContentError("\n".join(errors[:20]))
 
 
-def load_content(root: Path, profile: str | None = None) -> Content:
-    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
-    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
+# core_content（全部拆包第 62 批：內容照包分；計畫 docs/superpowers/plans/2026-11-06-內容照包分-第62批.md）：各包宣告的內容檔
+# （Feature.content）住在 tianxia/features/<包>/content/<rel>，其餘的（config.json、profiles/、核心的事件池）住在 content/<rel>。
+# 第 63 批（計畫 docs/superpowers/plans/2026-11-06-內容照包分-第63批.md）：測試內容同一個判準，包宣告了這個 rel 而且有檔的住在 tianxia/features/<包>/tests/content/<rel>，
+# 其餘的住在 tests/fixtures/content/<rel>。
+REAL_ROOT = Path(__file__).resolve().parent.parent / "content"  # 真實內容（同 LOCAL_DIR 的寫法）
+TEST_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "content"  # 測試內容（第 63 批；同 REAL_ROOT，正式機沒有 tests/ 也不礙事：只比路徑）
+
+
+def _locate(root: Path, only: str | None = None) -> dict[str, Path]:
+    """這個根上哪些檔要去包裡找（rel → 真的在哪）。只有真實的 content/ 與測試內容（tests/fixtures/content，第 63 批）才去：其他的根（測試的 tmp 副本、
+    序章母本）照舊攤平讀 root/<rel>。不能「根上找不到就去包裡找」：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），所以測試內容只收包裡真的有的（pack_test_content）。
+    宣告了卻沒有檔、content/ 底下還留著同一份都當場報錯：load_content 裡一堆 .exists() 判斷式，不報的話檔案搬丟了會靜靜變成空的。
+    only（只載核心加一包，第二級測試用）只有測試內容可以；兩處都有的先照整份查，再濾。"""
+    resolved = root.resolve()
+    if only is not None and resolved != TEST_ROOT:
+        raise ContentError(f"只有測試內容可以只載一包（{only}）：{root} 不是 {TEST_ROOT}")
+    if resolved == TEST_ROOT:
+        from .core.features import pack_test_content  # noqa: PLC0415  同下面的 pack_content
+
+        tests = pack_test_content()
+        for rel, path in tests.items():
+            if (root / rel).exists():
+                raise ContentError(f"內容檔 {rel} 兩處都有：{path} 與 {root / rel}")
+        return tests if only is None else pack_test_content(only)
+    if resolved != REAL_ROOT:
+        return {}
+    from .core.features import pack_content  # noqa: PLC0415  同 check_features：登記的包延後載入（包會 import 核心）
+
+    packs = pack_content()
+    for rel, path in packs.items():
+        if not path.exists():
+            raise ContentError(f"內容檔 {rel} 有包宣告了，但 {path} 沒有這個檔")
+        if (root / rel).exists():
+            raise ContentError(f"內容檔 {rel} 兩處都有：{path} 與 {root / rel}")
+    return packs
+
+
+def _event_files(root: Path, packs: dict[str, Path]) -> list[Path]:
+    """事件檔：root/events/*.json 加上包宣告的 events/*.json，全部照檔名排。content.events 的先後就是事件池抽籤的先後，所以要跨包穿插、
+    排起來跟全放在一個資料夾時一樣（比 Path，同以前的 sorted(Path)）。同名不會走到這裡：rel 相同在 _locate、pack_content 就擋了。"""
+    files = list((root / "events").glob("*.json")) + [path for rel, path in packs.items() if rel.startswith("events/")]
+    return sorted(files, key=lambda path: Path(path.name))
+
+
+def content_path(rel: str) -> Path:
+    """真實內容的這個檔現在在哪（腳本與測試用；rel 是它在 content/ 底下的相對路徑，例 events/sects.json）。"""
+    return _locate(REAL_ROOT).get(rel, REAL_ROOT / rel)
+
+
+def real_files() -> dict[str, Path]:
+    """真實內容的每一個 json：rel → 在哪，照 rel 排。掃整份內容的腳本與測試走這裡，不要自己 rglob content/：各包的檔不在那裡，改漏了不會紅、只會少掃。"""
+    files = {path.relative_to(REAL_ROOT).as_posix(): path for path in REAL_ROOT.rglob("*.json")}
+    files.update(_locate(REAL_ROOT))
+    return dict(sorted(files.items()))
+
+
+def real_event_files() -> list[Path]:
+    """真實內容的事件檔，照載入的先後。"""
+    return _event_files(REAL_ROOT, _locate(REAL_ROOT))
+
+
+def load_content(root: Path, profile: str | None = None, *, only: str | None = None) -> Content:
+    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如 week7 一次打開季曆與 7 天的季），
+    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。
+    only 是測試用（全部拆包第 63 批，只有測試內容可以）：只載核心加這一包，別包的測試內容當空的；這樣的內容不驗（別包的內容不在，一定報錯），validate 碰到它報 RuntimeError。"""
     root = Path(root)
+    packs = _locate(root, only)
+
+    def at(rel: str) -> Path:
+        return packs.get(rel, root / rel)
+
+    def required(rel: str, empty):
+        """這幾格沒有 .exists()：攤平的根少了照舊當場炸；只載一包時別包的檔本來就不在，才當空的。"""
+        return empty if only is not None and not at(rel).exists() else _read(at(rel))
+
     events: dict[str, Event] = {}
-    for path in sorted((root / "events").glob("*.json")):
+    for path in _event_files(root, packs):
         for raw in _read(path):
             event = _build(Event, raw)
             if event.id in events:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             stamp_tier(event)
             events[event.id] = event
-    timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
+    timetable_events = [_build(TimetableEvent, raw) for raw in _read(at("timetable.json"))] if at("timetable.json").exists() else []
     config = _config(root, profile)
     if config.season21:  # 21 天季自己一份時刻表（正式季整合設計 1.2 給開發 1）：驗證之前套上，週末與 14 天不經過這裡
         timetable_events = season21_timetable(timetable_events, config.season_segments)
     content = Content(
         config=config,
-        scenario=Scenario(**_read(root / "scenario.json")),
-        locations=_index(Location, _read(root / "locations.json")),
-        skills=_index(SkillDef, _read(root / "skills.json")),
-        insights=_index(InsightDef, _read(root / "insights.json")),
-        traits=_traits(root / "traits.json"),
-        trait_lines=_trait_lines(root / "trait_lines.json"),
-        materials=_index(Material, _read(root / "materials.json")),
-        craft_names=CraftNames(**_read(root / "craft_names.json")),
-        combat_lines=_combat_lines(root / "combat_lines.json"),
-        check_voice=_check_voice(root / "check_voice.json"),
-        front_lines=_front_lines(root / "front_lines.json"),
-        banned_names=_read(root / "banned_names.json"),
-        sects=_index(Sect, _read(root / "sects.json")),
-        characters=_index(CharacterDef, _read(root / "characters.json")
-                          + (_read(root / "hirelings.json") if (root / "hirelings.json").exists() else [])),  # 一般 NPC 同伴（features/hire）
-        squads=_index(Squad, _read(root / "squads.json")),
-        battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
-        road_sights=_index(RoadSight, _read(root / "road_sights.json")),
+        scenario=Scenario(**_read(at("scenario.json"))),
+        locations=_index(Location, _read(at("locations.json"))),
+        skills=_index(SkillDef, _read(at("skills.json"))),
+        insights=_index(InsightDef, _read(at("insights.json"))),
+        traits=_traits(at("traits.json")),
+        trait_lines=_trait_lines(at("trait_lines.json")),
+        materials=_index(Material, _read(at("materials.json"))),
+        craft_names=CraftNames(**_read(at("craft_names.json"))),
+        combat_lines=_combat_lines(at("combat_lines.json")),
+        check_voice=_check_voice(at("check_voice.json")),
+        front_lines=_front_lines(at("front_lines.json")),
+        banned_names=_read(at("banned_names.json")),
+        sects=_index(Sect, required("sects.json", [])),
+        characters=_index(CharacterDef, _read(at("characters.json"))
+                          + (_read(at("hire.json")) if at("hire.json").exists() else [])),  # 一般 NPC 同伴（features/hire）
+        squads=_index(Squad, _read(at("squads.json"))),
+        battles=_index(BattleDef, _read(at("battles.json"))) if at("battles.json").exists() else {},
+        road_sights=_index(RoadSight, required("road_sights.json", [])),
         timetable=[e for e in timetable_events if not e.mandate_only],
         mandate_timetable=[e for e in timetable_events if e.mandate_only],  # 天命之爭（玉璽二）：只有蓋了章的季看得到（timetable.events）
-        foreshadows=_foreshadows(root / "foreshadows.json"),
-        orders=_orders(root / "orders.json"),
-        promotions=[_build(PromotionDef, raw) for raw in _read(root / "promotions.json")]
-        if (root / "promotions.json").exists() else [],
-        opportunities=[_build(OppDef, raw) for raw in _read(root / "opportunities.json")]
-        if (root / "opportunities.json").exists() else [],
-        followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(root / "followers.json")}
-        if (root / "followers.json").exists() else {},
-        preset_recipes=[_build(PresetRecipe, raw) for raw in _read(root / "preset_recipes.json")]
-        if (root / "preset_recipes.json").exists() else [],
-        secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
-        if (root / "secret_recipes.json").exists() else [],
-        forge_secrets=_forge_secrets(root / "forge_secrets.json"),
-        tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
-        shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
-        create_forms=CreateForms(**_read(root / "create_forms.json")) if (root / "create_forms.json").exists() else CreateForms(),
-        banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
-        mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
-        arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
-        xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
-        seal=_shards(root / "seal.json"),
-        mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
-        looks=_index(Look, _read(root / "looks.json")) if (root / "looks.json").exists() else {},  # 擂台形象（功能包 looks）
-        relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
-        heroines={cid: _build(HeroineDef, raw) for cid, raw in _read(root / "heroines.json").items() if not cid.startswith("_")}
-        if (root / "heroines.json").exists() else {},  # 女子與隱線（features/heroines）
-        personas={cid: [_build(PersonaAxis, raw) for raw in rows] for cid, rows in _read(root / "personas.json").items() if not cid.startswith("_")}
-        if (root / "personas.json").exists() else {},  # 人物性子（features/persona）
-        itineraries=[_build(Itinerary, raw) for raw in _read(root / "itineraries.json")] if (root / "itineraries.json").exists() else [],
-        gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
-        mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
-        outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
-        verdicts=_read(root / "verdicts.json") if (root / "verdicts.json").exists() else {},  # 人物評曰的固定句（減法季批 7b-2）
-        storylines=_index(StoryDef, _read(root / "storylines.json")) if (root / "storylines.json").exists() else {},  # 一條線（特殊事件）
-        figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
-        duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
-        gear=_gear(root / "gear.json"),
-        insight_scenes=_index(InsightScene, _read(root / "insight_scenes.json"))
-        if (root / "insight_scenes.json").exists() else {},
+        foreshadows=_foreshadows(at("foreshadows.json")),
+        orders=_orders(at("orders.json")),
+        promotions=[_build(PromotionDef, raw) for raw in _read(at("promotions.json"))]
+        if at("promotions.json").exists() else [],
+        opportunities=[_build(OppDef, raw) for raw in _read(at("opportunities.json"))]
+        if at("opportunities.json").exists() else [],
+        followers={raw["id"]: _build(FollowerDef, raw) for raw in _read(at("followers.json"))}
+        if at("followers.json").exists() else {},
+        preset_recipes=[_build(PresetRecipe, raw) for raw in _read(at("preset_recipes.json"))]
+        if at("preset_recipes.json").exists() else [],
+        secret_recipes=[_build(SecretRecipe, raw) for raw in _read(at("secret_recipes.json"))]
+        if at("secret_recipes.json").exists() else [],
+        forge_secrets=_forge_secrets(at("forge_secrets.json")),
+        tier4_named=_index(Tier4Named, _read(at("tier4_named.json"))) if at("tier4_named.json").exists() else {},
+        shop_lines=_read(at("shop_lines.json")) if at("shop_lines.json").exists() else {},
+        create_forms=CreateForms(**_read(at("create_forms.json"))) if at("create_forms.json").exists() else CreateForms(),
+        banned_words=_read(at("banned_words.json")) if at("banned_words.json").exists() else [],
+        mingtie=MingtieContent(**_read(at("mingtie.json"))) if at("mingtie.json").exists() else MingtieContent(),
+        arena_crowd=_read(at("arena_crowd.json")) if at("arena_crowd.json").exists() else {},
+        xingshi_lines=_read(at("xingshi_lines.json")) if at("xingshi_lines.json").exists() else {},
+        seal=_shards(at("seal.json")),
+        mall=_index(MallItem, _read(at("mall.json"))) if at("mall.json").exists() else {},  # 商城的商品（joy 寫）
+        looks=_index(Look, _read(at("looks.json"))) if at("looks.json").exists() else {},  # 擂台形象（功能包 looks）
+        relations=[_build(RelationDef, raw) for raw in _read(at("relations.json"))] if at("relations.json").exists() else [],
+        heroines={cid: _build(HeroineDef, raw) for cid, raw in _read(at("heroines.json")).items() if not cid.startswith("_")}
+        if at("heroines.json").exists() else {},  # 女子與隱線（features/heroines）
+        personas={cid: [_build(PersonaAxis, raw) for raw in rows] for cid, rows in _read(at("personas.json")).items() if not cid.startswith("_")}
+        if at("personas.json").exists() else {},  # 人物性子（features/persona）
+        itineraries=[_build(Itinerary, raw) for raw in _read(at("itineraries.json"))] if at("itineraries.json").exists() else [],
+        mark_rules=[_build(MarkRule, raw) for raw in _read(at("mark_rules.json"))] if at("mark_rules.json").exists() else [],
+        outing_lines=_read(at("outing_lines.json")) if at("outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
+        verdicts=_read(at("verdicts.json")) if at("verdicts.json").exists() else {},  # 人物評曰的固定句（減法季批 7b-2）
+        storylines=_index(StoryDef, _read(at("storylines.json"))) if at("storylines.json").exists() else {},  # 一條線（特殊事件）
+        figures=_index(FigureDef, _read(at("figures.json"))) if at("figures.json").exists() else {},
+        duels=_index(DuelBoss, _read(at("duels.json"))) if at("duels.json").exists() else {},
+        gear=_gear(at("gear.json")),
+        insight_scenes=_index(InsightScene, _read(at("insight_scenes.json")))
+        if at("insight_scenes.json").exists() else {},
         events=events,
-        map=MapLayout(**_read(root / "map.json")),
-        tutorial=Tutorial(**_read(root / "tutorial.json")),
-        opening=Opening(**_read(root / "opening.json")) if (root / "opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
-        hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
-        art=ArtBook(**_read(root / "art.json")) if (root / "art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
+        map=MapLayout(**_read(at("map.json"))),
+        tutorial=Tutorial(**required("tutorial.json", {})),
+        opening=Opening(**_read(at("opening.json"))) if at("opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
+        hints=Hints(**_read(at("hints.json"))) if at("hints.json").exists() else Hints(),
+        art=ArtBook(**_read(at("art.json"))) if at("art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
     )
     content.config.admins = _with_local_admins(content.config.admins)
     _fill_story_lines(content)
-    _load_attributes(content, root / "attributes.json")
-    if (root / "attributes_v2.json").exists():  # 五項屬性（屬性與跨季架構 v2 第三節）：顯示名照季讀（attrset.names），不蓋 stat_names
-        content.attributes_v2 = [_build(StatDef, raw) for raw in _read(root / "attributes_v2.json")]
+    _load_attributes(content, at("attributes.json"))
+    if at("attributes_v2.json").exists():  # 五項屬性（屬性與跨季架構 v2 第三節）：顯示名照季讀（attrset.names），不蓋 stat_names
+        content.attributes_v2 = [_build(StatDef, raw) for raw in _read(at("attributes_v2.json"))]
     resolve_grades(content)
-    validate(content)
+    if only is None:
+        validate(content)
+    else:
+        content._only_pack = only
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
 
@@ -539,7 +620,7 @@ def _index(model, items: list[dict]) -> dict:
 def _material_sources(c: Content) -> set[str]:
     """所有拿得到的素材 id：路邊採集、對手掉（含依難度的預設表）、事件與路上見聞給。
 
-    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（Game._road_gather）：
+    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（移動包 features/travel/road_actions.py 的 gather）：
     採到的永遠是一階，屬性看這段路兩頭的地點寫了哪些素材（只看屬性，不看寫的是幾階），兩頭都沒寫就隨機一階。
     所以地點寫了二、三階素材，那一階並不會因此拿得到。"""
     from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
@@ -553,7 +634,7 @@ def _material_sources(c: Content) -> set[str]:
                 for end in (loc, c.locations.get(str(conn)))
                 if end is not None for mid in end.materials if mid in c.materials
             }
-            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟 Game._road_gather 一樣：挑不到就退回全部一階
+            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟移動包 features/travel/road_actions.py 的 gather 一樣：挑不到就退回全部一階
             reachable |= set(picked or [m.id for m in first_tier])
     for squad in c.squads.values():
         if squad.drops:
@@ -764,42 +845,7 @@ def check_front_lines(c: Content, need) -> None:
 # 擂台場邊事件的固定句（原本的 check_arena_crowd）搬進單挑包：tianxia/features/bout/arena_crowd.py 的 check_content（全部拆包第 12 批）
 
 
-def check_xingshi_lines(c: Content, need) -> None:
-    """〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；Joy 直接改字）：寫了這個檔就每一組都要齊——open、close 是一串句子，
-    fact、summary、lean、move 每一個鍵（xingshi.FACT_KEYS 這幾組）都要有一句、不能多寫認不得的鍵；每一句照 xingshi.SAMPLE 填得進去、
-    填完不能空、不能有阿拉伯數字（文章不准有數字，固定段就是拿這些句子拼的）。沒有這個檔就沒有〈天下形勢〉（xingshi.on）。"""
-    from . import xingshi  # noqa: PLC0415
-
-    lines = c.xingshi_lines
-    if not lines:
-        return
-
-    def check(where: str, text) -> None:
-        try:
-            filled = str(text).format(**xingshi.SAMPLE)
-        except (KeyError, IndexError, ValueError) as e:
-            need(False, f"xingshi_lines.{where}：「{text}」填不進去（{e}）")
-            return
-        need(isinstance(text, str) and bool(filled.strip()) and not any(ch.isdigit() for ch in filled),
-             f"xingshi_lines.{where}：「{text}」不能空、不能有數字")
-
-    groups = {"fact": xingshi.FACT_KEYS, "summary": xingshi.SUMMARY_KEYS, "lean": xingshi.LEAN_KEYS, "move": xingshi.MOVE_KEYS}
-    for key in lines:
-        need(key in groups or key in ("open", "close"), f"xingshi_lines：不認得的鍵 {key}")
-    for key in ("open", "close"):
-        pool = lines.get(key)
-        need(isinstance(pool, list) and bool(pool), f"xingshi_lines.{key}：要寫成一串句子")
-        for text in pool if isinstance(pool, list) else []:
-            check(key, text)
-    for group, keys in groups.items():
-        table = lines.get(group)
-        need(isinstance(table, dict), f"xingshi_lines.{group}：要寫成「鍵：句子」")
-        table = table if isinstance(table, dict) else {}
-        for key in keys:
-            need(key in table, f"xingshi_lines.{group} 缺少 {key}")
-        for key, text in table.items():
-            need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
-            check(f"{group}.{key}", text)
+# 〈天下形勢〉句型（content/xingshi_lines.json）的驗證（原本的 check_xingshi_lines）搬進地盤包的 check_content：tianxia/features/territory_acts/xingshi.py 的 check_lines（全部拆包第 46 批）
 
 
 # 減法季探索一顆的「旅人」（整合設計 4.1）：野外的事件拍偏向救助旅人那一類（從現有的野外事件挑合適的標上，PM 2026-10-25 第 7 件）。
@@ -1705,7 +1751,7 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。
     乙二：拼圖型（拿法寫全、東西與處的 key 不重複、官軍交給誰與豪強的靠山）、推理型（天機存在、嫌疑人剛好是那個天機的候選、
     每個嫌疑人的特徵都有片段）、集體密謀型（每一處寫 front 或 at、跟 how 一致、need_parts 不超過處數）；請命的陣營與人物存在。"""
-    from . import foreshadow  # noqa: PLC0415  延後 import：foreshadow 讀 content 的模型，不能在載入時就互相 import
+    from .core import omen_base  # noqa: PLC0415  軍情第 34 批：天機表在核心的 omen_base（原本延後 import foreshadow）
 
     ids = [o.id for o in c.opportunities]
     need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
@@ -1765,8 +1811,8 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             texts += [pr.stand_in, pr.label, pr.done] + [x.done for x in pr.patrons.values()]
         if o.deduce is not None:
             d = o.deduce
-            need(d.tianji in foreshadow.TIANJI, f"{where}：天機 {d.tianji} 不存在")
-            need({s.id for s in d.suspects} == set(foreshadow.TIANJI.get(d.tianji, ())),
+            need(d.tianji in omen_base.TIANJI, f"{where}：天機 {d.tianji} 不存在")
+            need({s.id for s in d.suspects} == set(omen_base.TIANJI.get(d.tianji, ())),
                  f"{where}：嫌疑人要跟天機 {d.tianji} 的候選一樣")
             keys = {t.key for t in d.traits}
             need(all(set(s.traits) <= keys for s in d.suspects), f"{where}：嫌疑人有沒寫片段的特徵")
@@ -1825,7 +1871,7 @@ def check_foreshadows(
     """伏筆（content/foreshadows.json，計畫 T7）：鏈的大事在時刻表上、陣營在劇本裡；片段的大區是大區、事件與人物存在；
     最後一步的地點、物品、人物存在，答案是選項之一或 tianji:<天機>（天機的選項要剛好是候選）；文字只用繁體中文。
     伏筆計數：效果寫的要有鏈讀，鏈讀的要有效果寫（官銀由 guanyin 的規則寫）。"""
-    from .foreshadow import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, asks_of, trips  # noqa: PLC0415  延後 import
+    from .core.omen_base import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, asks_of, trips  # noqa: PLC0415  軍情第 34 批：核心的 omen_base
 
     fs = c.foreshadows
     faction_ids = [f.id for f in c.scenario.factions]
@@ -2023,37 +2069,12 @@ def check_bounties(c: Content, need) -> None:
 
 
 def check_core_loop(c: Content, need) -> None:
-    """出陣探索與地盤的設定（Config.push_resistance、explore_modes）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
+    """出陣探索與地盤的設定（Config.push_resistance、jianfa.second_tier）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
     r = c.config.push_resistance
     need(r.full_within <= r.half_within,
          f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
-    need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
-         f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
-
-
-GATHER_BRANCH_FIELDS = {"place"}  # 分支第一句能用的佔位（GatherBranch.line）
-
-
-def check_gather_branches(c: Content, need) -> None:
-    """找素材分支（content/gather_branches.json，第 32 項）：id 不能是「自己說」那一顆的 say；屬性只能是素材表裡有的；
-    不是深入的要寫 attributes；標籤要有地點用；深入最多一條；第一句只能用 {place}。開關開著卻有城外地點一條都沒有不擋
-    （那裡照舊直接找素材，PM）。id 重複在載入時（_index）就擋。"""
-    from .explore_modes import SAY  # noqa: PLC0415  延後 import（同 validate 的 atlas）
-
-    attributes = {m.attribute for m in c.materials.values()}
-    tags = {tag for loc in c.locations.values() for tag in loc.tags}
-    where = "content/gather_branches.json"
-    need(sum(b.deep for b in c.gather_branches.values()) <= 1, f"{where}：深入（deep）最多一條")
-    for b in c.gather_branches.values():
-        need(b.id != SAY, f"{where}：id 不能是 {SAY}（「自己說」那一顆用掉了）")
-        need(b.deep or bool(b.attributes), f"{where}：{b.id} 不是深入，要寫 attributes")
-        known_attrs = [a for a in b.attributes if a not in attributes]
-        need(not known_attrs, f"{where}：{b.id} 的屬性 {known_attrs} 不在素材表裡")
-        need(len(set(b.attributes)) == len(b.attributes), f"{where}：{b.id} 的屬性重複")
-        unused = [t for t in b.tags if t not in tags]
-        need(bool(b.tags) and not unused, f"{where}：{b.id} 的標籤 {unused or '（空的）'} 沒有地點用")
-        fields = set(STEP_PLACEHOLDER.findall(b.line))
-        need(fields <= GATHER_BRANCH_FIELDS, f"{where}：{b.id} 的第一句只能用 {{place}}：{sorted(fields)}")
+    need(set(c.config.jianfa.second_tier) <= {1, 2, 3},
+         f"Config.jianfa.second_tier 的鍵是危險度 1～3：{sorted(c.config.jianfa.second_tier)}")
 
 
 def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
@@ -2325,6 +2346,8 @@ def check_attributes(c: Content, need) -> None:
 
 
 def validate(c: Content) -> None:
+    if c._only_pack is not None:  # core_content（第 63 批）。不能用 ContentError：只載一包一定驗不過，沒寫 match 的 pytest.raises(ContentError) 會假綠
+        raise RuntimeError(f"這份內容只載了 {c._only_pack} 這一包，不能拿來驗內容：測試標 @pytest.mark.whole_content 拿整份")
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
 
@@ -2734,7 +2757,6 @@ def validate(c: Content) -> None:
     check_features(c, need)
     check_art(c, need)
     check_attributes(c, need)
-    check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
@@ -2987,12 +3009,9 @@ def validate(c: Content) -> None:
             from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
 
             errors.extend(f"config.jianfa.{line}" for line in wins_check(c, jf))
-    # 列傳為終點（減法季批 7b-2）：寫評曰的人物要在 characters 裡；評曰的固定句照 zhuan_end.check_verdicts（理由、長度、沒有數字）
+    # 列傳為終點（減法季批 7b-2）：寫評曰的人物要在 characters 裡；評曰的固定句在列傳包的 check_content 驗（理由、長度、沒有數字）
     for faction in c.scenario.factions:
         need(all(cid in c.characters for cid in faction.verdict_by), f"陣營 {faction.id}：verdict_by 寫的人物不在 characters 裡（{faction.verdict_by}）")
-    from .zhuan_end import check_verdicts  # noqa: PLC0415
-
-    errors.extend(f"verdicts.json：{line}" for line in check_verdicts(c))
     # 輿圖上的一個字（輿圖第三版第 3 批，FactionInk.short）：天下圖大區名底下「官 N・巾 N」照它認是哪一方，兩方同一個字就分不出來
     shorts = [f.ink.short for f in c.scenario.factions if f.ink is not None and f.ink.short]
     need(len(shorts) == len(set(shorts)), f"劇本：陣營在輿圖上的一個字（ink.short）重複了：{'、'.join(shorts)}")
@@ -3302,7 +3321,7 @@ def validate(c: Content) -> None:
             ch.kind is not None or ch.hire_type is not None or ch.starting_wugong is None,
             f"{where}：敵人（kind 沒填）不需要 starting_wugong，那是同伴才有的欄位",
         )
-        if ch.hire_type is not None or ch.hire_at is not None:  # 一般 NPC 同伴（features/hire；content/hirelings.json）
+        if ch.hire_type is not None or ch.hire_at is not None:  # 一般 NPC 同伴（features/hire；content/hire.json）
             need(ch.kind is None and not ch.recruitable, f"{where}：一般 NPC 同伴不寫 kind、recruitable（只在酒肆花銀兩招）")
             need(ch.hire_type in {t.key for t in c.config.hire.types}, f"{where}：hire_type {ch.hire_type} 不是 Config.hire.types 的任何一型")
             need(ch.hire_at is not None, f"{where}：一般 NPC 同伴要寫 hire_at（在哪間酒肆招）")
@@ -3355,7 +3374,6 @@ def validate(c: Content) -> None:
     check_signature_arms(c, need, known)
     check_bounties(c, need)
     check_core_loop(c, need)
-    check_gather_branches(c, need)
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)

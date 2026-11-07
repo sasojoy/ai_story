@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import battle_instance, roster  # 共用規則層（戰鬥規則核心、同伴）
+from tianxia import roster  # 共用規則層（同伴）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia.models import Content
 
 if TYPE_CHECKING:

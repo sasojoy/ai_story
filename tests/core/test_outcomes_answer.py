@@ -333,7 +333,7 @@ def test_answering_is_unchanged_when_off(content, world, roll, parts):
 
 
 def test_new_player_fields_add_no_keys_until_used(state):
-    """存檔一個鍵都不多（tests/test_gentry_ledgers.py 的做法）：deed_day、deed_today 是預設值時不寫鍵，有值寫得出來、讀得回去。"""
+    """存檔一個鍵都不多（tests/core/test_gentry_ledgers.py 的做法）：deed_day、deed_today 是預設值時不寫鍵，有值寫得出來、讀得回去。"""
     dumped = state.player.model_dump()
     assert "deed_day" not in dumped and "deed_today" not in dumped
     state.player.deed_day, state.player.deed_today = 3, 7

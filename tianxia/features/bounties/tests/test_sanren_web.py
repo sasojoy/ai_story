@@ -1,0 +1,111 @@
+"""散人玩法的網頁那一半：狀態列展開時的遊俠名號（俠名、下一階、這一階的好處）與江湖頁的懸賞卡（手上揭了的、看懸賞榜）。
+餵真的引擎給的 /api/main 給 app.js（tests/web/test_prologue_web.py 的假瀏覽器）。沒有node 就略過。"""
+from __future__ import annotations
+
+import pytest
+from test_bounties import _do, _post, setup  # noqa: F401  （setup 是 fixture）
+from test_bounty_hand_in import _armed, _arms, _blade, _edit
+from test_prologue_web import run
+
+import server
+import webharness
+from tianxia import bounties
+from tianxia.characters import CharacterStore
+
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
+
+
+
+DUTY = {"dutyOpen": True}  # 介面重整：懸賞、軍令那幾張卡收在要事清單裡（點了要事那張卡才拉上來）
+
+def _view(content, world, name):
+    return _do(content, world, name, server.main_view)[0]
+
+
+def test_the_expanded_name_shows_the_ranger_ladder(setup):  # noqa: F811
+    content, world = setup
+    state = CharacterStore(world.db).load("丙")
+    state.player.ranger_good = 7  # 第 1 階（5），再 8 點到第 2 階（15）
+    CharacterStore(world.db).save(state)
+    m = _view(content, world, "丙")
+    top = run(m, "return H.heroMoreHtml(H.S.main.status);")  # 介面重整：以前點名號攤開的那一串在俠客頁的「屬性」
+    assert "江湖遊俠" in run(m, "return H.topHtml();")  # 名號底下那一行
+    assert "俠名 7，再攢 8 點可稱「一方豪俠」" in top and "求見門檻 -3" in top
+    assert "who-ranger" not in run(m, "return H.topHtml();")  # 收起來只有頭銜那一行
+    assert "who-ranger" not in run(_view(content, world, "甲"), "return H.heroMoreHtml(H.S.main.status);")  # 陣營的人凍結：不畫
+
+
+def test_the_bounty_card_lists_what_you_hold_and_opens_the_board(setup):  # noqa: F811
+    content, world = setup
+    assert "🪧 懸賞" not in run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY)  # 沒揭就不畫
+    b = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
+    _do(content, world, "丙", lambda g: g.choose("bounty:back"))
+    page = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY)
+    assert "🪧 懸賞（1）" in page and "打探・湖邊" in page and "到湖邊探索一次" in page and "俠名 +2" in page
+    assert "期限 到季末・名額還剩 1" in page  # 每一列寫期限與名額（FB-121 第 5 件；測試的單掛到季末之後）
+    assert 'data-act="choose" data-id="act:bounties"' in page.split("🪧")[1]  # 在城鎮：卡底下開得了懸賞榜
+    assert page.index("🪧") > page.index('data-id="act:explore"')  # 排在行動列下面，不擠第一屏
+    shut = run(_view(content, world, "丙"), "return H.pageJianghu();", S={**DUTY, "bountyShut": b.id})
+    assert '<details class="fold bounties" data-key="' + b.id + '" >' in shut  # 收起來照手上那幾張記住
+
+    state = CharacterStore(world.db).load("丙")
+    state.player.location = "lake"
+    CharacterStore(world.db).save(state)
+    away = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY)
+    assert "到城鎮的懸賞榜前" in away and 'data-id="act:bounties"' not in away
+
+
+def test_the_wanted_amount_box_starts_at_the_lowest_bounty(setup):  # noqa: F811
+    """FB-121 第 6 件：通緝的金額輸入框下限照規則（post_min，20 兩），不是 1。"""
+    content, world = setup
+    card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
+    i = next(k for k, b in enumerate(card["actions"]) if b["action"] == "wanted")
+    assert card["actions"][i]["amount_min"] == content.config.bounties.post_min == 20  # 贈銀兩拿掉了（名帖改版），只剩通緝這一格寫金額
+    html = run(_view(content, world, "甲"), "H.render(); return T.els.app.innerHTML;",
+               S={"peer": {"name": "乙", "card": card, "amountFor": i}})
+    box = html.split('id="peer-amount"')[1].split("</form>")[0]
+    assert 'min="20"' in box and "：20～200" in box
+
+
+def test_the_bounty_card_lists_a_hand_in_you_can_make(setup):  # noqa: F811
+    """懸賞榜設計 4.9：身上有合用的求兵，卡上就列那一張，多一行身上合用的是哪幾件；人在城外時卡底那句寫得出可以交；
+    第三層（替那一張挑一件）開著時，選單就是懸賞榜，卡底不再叫人去看榜。"""
+    content, world = setup
+    content.config.weapons.enabled = True
+    _armed(world, "丙", _blade("兵:2"))
+    b = _arms(world)
+    card = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY).split("🪧")[1].split("</details>")[0]
+    have = bounties.HAVE + "【柔劍2】（一階下品）"
+    assert "懸賞（1）" in card and "求兵・屬柔的劍" in card and have in card and "期限 到季末・名額還剩 3" in card
+    assert 'data-id="act:bounties"' in card  # 在城鎮：卡底開得了懸賞榜
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:pick:{b.id}"))
+    card = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY).split("🪧")[1]
+    assert "bounty-foot" not in card.split("</details>")[0]
+    _do(content, world, "丙", lambda g: g.choose("bounty:back"))
+    _edit(world, "丙", lambda p: setattr(p, "location", "lake"))
+    away = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY)
+    assert have in away and "到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的兵器。" in away
+
+
+def test_with_the_board_open_the_card_points_nowhere(setup):  # noqa: F811
+    content, world = setup
+    b = _post(world, kind="scout", faction="guan", silver=10, deeds=2, location="lake")
+    _do(content, world, "丙", lambda g: g.choose("act:bounties"))
+    _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
+    card = run(_view(content, world, "丙"), "return H.pageJianghu();", S=DUTY).split("🪧")[1]
+    assert "bounty-foot" not in card.split("</details>")[0]  # 選單就是懸賞榜：不再叫人去看榜
+
+
+def test_the_expanded_name_shows_how_far_the_next_level_is(setup):  # noqa: F811
+    """50 級加陡（企劃者 2026-10-14）：俠客頁「屬性」寫這一級的經驗（以前展開名號時頭銜底下一行）；滿級寫「已到頂」；收起來不寫。"""
+    content, world = setup
+    m = _view(content, world, "丙")
+    m["status"]["level"], m["status"]["exp"] = 31, {"have": 120, "need": 372}
+    top = run(m, "return H.heroMoreHtml(H.S.main.status);")  # 介面重整：在俠客頁的「屬性」
+    assert "經驗 120／372<small>升第 32 級</small>" in top and "--w:32%" in top  # 屬性頁重整（Joy 11/6）：一條細條
+    assert "who-exp" not in run(m, "return H.topHtml();")
+    m["status"]["exp"] = None
+    assert "經驗已到頂" in run(m, "return H.heroMoreHtml(H.S.main.status);")

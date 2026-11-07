@@ -159,12 +159,19 @@ NONE = "無"  # 表格裡「沒有這一樣」的寫法（模型挑的列舉值�
 SCENE_PREDICT = 200  # 一張十三欄的小表格
 
 
+# 模型那張表的兩組欄位。FREE_FIELDS 是自由文字、**空字串是合法的答案**（玩家那一句沒寫法相就該留空，見 SYSTEM）：
+# 它們只進 schema 的 required（鍵一定要寫，空字串算答了），不進「沒有就是被截斷」那一份。
+# TABLE_FIELDS 只能挑表上的值（預設是「無」或第一個，bool 是 False），空不了，照舊當必填。
+FREE_FIELDS = ("figure", "thrown")
+TABLE_FIELDS = ("swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path", "glow", "tone")
+
+
 def _draft_model():
     """模型要填的那一張表：要畫的兩樣是自由文字（想像力在這裡），其餘每一欄都只能挑表上的值。"""
     from pydantic import Field, create_model  # noqa: PLC0415  只有要叫模型時才需要
 
     pick = lambda *vals: (str, Field(default=vals[0], json_schema_extra={"enum": list(vals)}))  # noqa: E731
-    return create_model(
+    model = create_model(
         "SceneDraft",
         figure=(str, Field(default="")),  # 背後升起的法相（自由文字，最多 LABEL_MAX 個中文字）
         thrown=(str, Field(default="")),  # 砸出去、打出去的那一件大東西（自由文字）
@@ -179,6 +186,11 @@ def _draft_model():
         glow=pick(*GLOWS),
         tone=pick(*TONES),
     )
+    # 假名檢查的主體欄位（ollama_client.chat_structured 的 essential）：這兩樣會原樣變成畫師的提示詞，
+    # 夾了日文假名就整趟重問。預設是 required_fields，但那一份底下刻意不含這兩欄（見 model_draft），
+    # 所以這裡自己寫明，不要跟著縮小。
+    model.KANA_ESSENTIAL = (*FREE_FIELDS, *TABLE_FIELDS)
+    return model
 
 
 SYSTEM = "\n".join((
@@ -205,9 +217,14 @@ def model_draft(client, text: str) -> dict | None:
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": f"玩家寫的：「{text}」"}]
     try:
         got = client.chat_structured(messages, _draft_model(), temperature=0.3, num_predict=SCENE_PREDICT,
-                                     required_fields=["figure", "thrown", "swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path",
-                                                      "glow", "tone"],
-                                     require_in_schema=True)  # 有預設值的欄位不寫進 required，模型會整欄略過（FB-904）
+                                     # 有預設值的欄位不寫進 required，模型會整欄略過（FB-904）；
+                                     # 但法相與巨物的空字串是合法答案（玩家沒寫就該留空），放在 required_fields 會被
+                                     # _ensure_required_present 判成「疑似被截斷」，白重問一趟再落回關鍵字導演（FB-9440）。
+                                     # 這兩串照 TABLE_FIELDS／FREE_FIELDS 寫成字面值：守門測試
+                                     # （tests/bots/test_schema_required.py）用 ast.literal_eval 讀呼叫點，讀不了變數。
+                                     # 對不對得上由 test_looks_scenes.py 在執行期守著。
+                                     required_fields=["swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path", "glow", "tone"],
+                                     require_in_schema=True, schema_required=["figure", "thrown"])
     except Exception:  # noqa: BLE001  叫不動就是落回關鍵字，不要讓它擋住下單
         return None
     if not isinstance(got, dict):

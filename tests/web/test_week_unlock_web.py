@@ -1,5 +1,5 @@
 """功能照週解鎖與三週主題的網頁部分（減法季批 5，整合設計 6.3、6.6、6.8）：本週卡灰線底下那一行（第 3 週離贏還差多少、功能開了、45 級）、
-「為什麼」裡哪幾樣第 2 週開、四格探索那一格的小字「城裡多事」、輿圖抽屜的同一句。照 tests/test_week_card_web.py 的做法把整支網頁放進
+「為什麼」裡哪幾樣第 2 週開、四格探索那一格的小字「城裡多事」、輿圖抽屜的同一句。照 tests/web/test_week_card_web.py 的做法把整支網頁放進
 node 的假瀏覽器；沒有 node 就略過。"""
 from __future__ import annotations
 
@@ -44,10 +44,10 @@ def test_the_strip_gets_a_note_line_only_when_there_is_something_to_say():
     plain = run(_main(gap=None, unlock=None, cap=None), "return H.weekCardHtml(H.S.main);")
     assert "wk-note" not in plain
     html = run(_main(gap=GAP, unlock=UNLOCK, cap=week_unlock.CAP_NOTE), "return H.weekCardHtml(H.S.main);")
-    note = html[html.index('<p data-wk="top" class="wk-note">'):]
+    note = html[html.index('<p class="wk-note">'):]
     note = note[: note.index("</p>")]
-    assert GAP in note and UNLOCK in note and week_unlock.CAP_NOTE in note
-    assert html.index("wk-strip") < html.index("wk-note") < html.index("wk-card")  # 灰線底下、眼下要事上面
+    assert GAP in note and UNLOCK in note and week_unlock.CAP_NOTE in note  # 測試的 main 沒投靠：離贏還差多少照寫
+    assert html.index("wk-head") < html.index("wk-note") < html.index("wk-card")  # 合併卡上一格（主題底下）、眼下要事上面
 
 
 def test_why_lists_what_opens_in_week_two():

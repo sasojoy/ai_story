@@ -269,7 +269,7 @@ def test_the_real_prologue_and_bots_get_through_in_five_attribute_seasons(conten
 def test_old_saves_count_as_past_the_real_prologue(content, world, old_step, new_step):
     """舊存檔（舊引導八步：t1～t6、第一季的 t7、t8；onboarding 比序章那一版小）一律當作走過序章、不會被拉回草廬，步數換算成新的
     （不分季的舊六步當作走過序章）。舊的 t7、t8 已經由入伍段取代（新手引導計畫二），指到它們的步數夾在最後一步；初入江湖上線之前的存檔也一起略過（共十五步）：
-    換版當下已經投靠的不走入伍段，還沒投靠的投靠時才開始（tests/test_enlist.py）。"""
+    換版當下已經投靠的不走入伍段，還沒投靠的投靠時才開始（tianxia/features/guide/tests/test_enlist.py）。"""
     from tianxia.state import ONBOARDING_VERSION
 
     game = Game.new(content, "老手", rng=random.Random(0), world=world)
@@ -530,7 +530,7 @@ def _figures_only(content):
 
 
 def test_hirelings_file_matches_the_generator():
-    """content/hirelings.json 是 scripts/make_hirelings.py 照 Config.hire 生的：改了型或酒肆要重跑（--check 比對）。"""
+    """content/hire.json 是 scripts/make_hirelings.py 照 Config.hire 生的：改了型或酒肆要重跑（--check 比對）。"""
     import subprocess
     import sys
     from pathlib import Path
@@ -568,8 +568,9 @@ def test_every_figure_has_three_brush_off_lines(content):
             assert line.strip() and len(line) <= 40 and not re.search(r"\d", line), (cid, line)
 
 
-def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content):
-    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content, monkeypatch):
+    # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）；共用的內容，測完還原（以前留著，season_of 那幾季會跟著先後變）
+    monkeypatch.setattr(content.config, "precise_actions", False)
     game = Game.new(content, "試玩者", rng=random.Random(1))
     game.world.open_season(game.content, now=0.0)
     game.state.player.location = content.characters["luzhi"].talk_at
@@ -628,14 +629,14 @@ def test_the_recruit_hint_speaks_where_someone_will_follow_you(content):
 #   h_showdown（三個陣營）：FB-105 多一句「先按戰場名字旁的『加入』報名」（以前沒說按哪裡，加入收在摺疊裡）
 # 其餘（包括 h_merge 的「到『煉製』…」、h_mandate、開季那一句 season_return）都是設計文件現在的原文。
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
-# explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tests/test_explain.py 管（數字照設定、風聲只在第一季說）
+# explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tianxia/features/guide/tests/test_explain.py 管（數字照設定、風聲只在第一季說）
 PLACEHOLDER_LINES |= {("h_bond", "text"), ("h_bond", "season_one")}
 # 新手引導重做（2026-10-22）新寫、改寫的六句，待 joy 潤：h_basic_art 改寫（拿掉「融進不同的底」的舊規則）、操練練完、練功連輸、夠自創、酒肆、點數沒配
 PLACEHOLDER_LINES |= {("h_basic_art", "text"), ("h_drill_done", "text"), ("h_field_lose", "text"), ("h_create", "text"),
                       ("h_tavern", "text"), ("h_points", "text")}
-# 減法季探索一顆開著時操練練完那一句換成出門探索的說法（HintDef.explore_one，2026-10-26 批 2 小修），待 joy 潤；事實由 tests/test_explore_one_polish.py 管
+# 減法季探索一顆開著時操練練完那一句換成出門探索的說法（HintDef.explore_one，2026-10-26 批 2 小修），待 joy 潤；事實由 tianxia/features/explore/tests/test_explore_one_polish.py 管
 PLACEHOLDER_LINES |= {("h_drill_done", "explore_one")}
-# 補新手教學（2026-11-05，PM 盤點）新寫的十一句，待 joy 潤；事實由 tests/arts/test_hints.py 的 test_the_real_new_hints_name_the_right_places 管
+# 補新手教學（2026-11-05，PM 盤點）新寫的十一句，待 joy 潤；事實由 tianxia/features/guide/tests/test_hints.py 的 test_the_real_new_hints_name_the_right_places 管
 PLACEHOLDER_LINES |= {(hint_id, "text") for hint_id in ("h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast",
                                                        "h_chuangong", "h_mount", "h_treasure", "h_place", "h_tale")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
@@ -809,10 +810,11 @@ def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(
     assert "結識:caocao" in meet.condition.flags_none
 
 
-def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
+def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path, monkeypatch):
     from tianxia.sqlite_world import open_world
 
-    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+    # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）；共用的內容，測完還原
+    monkeypatch.setattr(content.config, "precise_actions", False)
     game = Game.new(content, "測試俠客", rng=random.Random(0), world=open_world(tmp_path / "world.db"))
     msgs = game._deliver_fortune()
     assert any("賀禮" in m for m in msgs)
@@ -1065,7 +1067,7 @@ def test_most_checks_in_the_starting_region_give_a_new_character_five_to_seven_i
 
 
 def test_bocai_is_the_hardest_squad_by_difficulty(content):
-    """代表大勢人物本人的隊伍（figure_<id>，T4）不算：難度跟著聲威走，見 tests/test_figures.py。"""
+    """代表大勢人物本人的隊伍（figure_<id>，T4）不算：難度跟著聲威走，見 tests/figures/test_figures.py。"""
     squads = [s for s in content.squads.values() if not s.id.startswith("figure_")]
     assert max(squads, key=lambda s: s.difficulty).id == "fanjianglong"
 
@@ -1381,7 +1383,7 @@ def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties
 
 def test_real_timetable_matches_settlement_doc():
     """12 件大事照結算文件第五節的週次；固定 3 件、決戰 3 件、最後是季末。照原本的 12 週週次載入（預設設定；7 天、21 天季
-    另外照 real7／real 欄換算到季曆的天，見 tests/test_week7_season.py、test_season21_frame.py）。"""
+    另外照 real7／real 欄換算到季曆的天，見 tests/figures/test_week7_season.py、test_season21_frame.py）。"""
     c = load_content(CONTENT_DIR)
     events = {e.id: e for e in c.timetable}
     assert len(c.timetable) == 12

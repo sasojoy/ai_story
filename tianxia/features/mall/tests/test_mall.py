@@ -10,6 +10,7 @@ from conftest import next_season
 from tianxia import mall, roster, skillview
 from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.models import MallItem
 from tianxia.state import BotProfile
 from tianxia.wallet import Wallet
@@ -180,7 +181,7 @@ def _ready(on, name="沈浪", now=T0) -> Game:
 def test_buying_pills_moves_yuanbao_and_pills(on):
     game = _ready(on)
     pills = game.state.player.stamina_pills
-    msgs = game.mall_buy("pills_5", "ref-0001")
+    msgs = mall_actions.buy(game, "pills_5", "ref-0001")
     assert game.state.player.stamina_pills == pills + 5
     wallet = _wallet(game)
     assert wallet.balance("沈浪") == 4900
@@ -198,7 +199,7 @@ def test_not_enough_yuanbao_writes_nothing(on):
     on.config.mall.beta_grant = 50
     game = _ready(on)
     pills, entries = game.state.player.stamina_pills, len(game.state.journal)
-    msgs = game.mall_buy("pills_5", "ref-0002")
+    msgs = mall_actions.buy(game, "pills_5", "ref-0002")
     assert "元寶不夠" in msgs[0]
     assert _wallet(game).balance("沈浪") == 50 and len(_rows(game)) == 1
     assert _wallet(game).purchases("沈浪") == []
@@ -207,15 +208,15 @@ def test_not_enough_yuanbao_writes_nothing(on):
 
 def test_unknown_item_is_refused(on):
     game = _ready(on)
-    assert game.mall_buy("nope", "ref-0003") == [mall.NO_ITEM]
+    assert mall_actions.buy(game, "nope", "ref-0003") == [mall.NO_ITEM]
     assert len(_rows(game)) == 1
 
 
 def test_same_ref_twice_charges_once(on):
     game = _ready(on)
     pills = game.state.player.stamina_pills
-    game.mall_buy("pills_5", "same-ref-1")
-    again = game.mall_buy("pills_5", "same-ref-1")
+    mall_actions.buy(game, "pills_5", "same-ref-1")
+    again = mall_actions.buy(game, "pills_5", "same-ref-1")
     assert "已經買好" in again[0]
     assert _wallet(game).balance("沈浪") == 4900 and len(_wallet(game).purchases("沈浪")) == 1
     assert game.state.player.stamina_pills == pills + 5
@@ -223,45 +224,45 @@ def test_same_ref_twice_charges_once(on):
 
 def test_limits_per_day(on):
     game = _ready(on)
-    assert game.mall_buy("pills_5", "d1")[0].startswith("買下")
-    assert game.mall_buy("pills_5", "d2")[0].startswith("買下")
-    refused = game.mall_buy("pills_5", "d3")
+    assert mall_actions.buy(game, "pills_5", "d1")[0].startswith("買下")
+    assert mall_actions.buy(game, "pills_5", "d2")[0].startswith("買下")
+    refused = mall_actions.buy(game, "pills_5", "d3")
     assert "今天" in refused[0] and _wallet(game).balance("沈浪") == 4800
     game.now = T0 + 15 * HOUR  # 台灣隔天 00:00
-    assert game.mall_buy("pills_5", "d4")[0].startswith("買下")
+    assert mall_actions.buy(game, "pills_5", "d4")[0].startswith("買下")
 
 
 def test_limits_per_season(on):
     game = _ready(on)
-    assert game.mall_buy("pills_30", "s1")[0].startswith("買下")
-    assert "這一季" in game.mall_buy("pills_30", "s2")[0]
+    assert mall_actions.buy(game, "pills_30", "s1")[0].startswith("買下")
+    assert "這一季" in mall_actions.buy(game, "pills_30", "s2")[0]
     next_season(on, game.world, game)
     game.now = T0 + DAY
-    assert game.mall_buy("pills_30", "s3")[0].startswith("買下")
+    assert mall_actions.buy(game, "pills_30", "s3")[0].startswith("買下")
 
 
 def test_limits_per_account(on):
     game = _ready(on)
-    assert game.mall_buy("card_30", "a1")[0].startswith("買下")
-    assert game.mall_buy("card_30", "a2")[0].startswith("買下")
-    assert "每個帳號" in game.mall_buy("card_30", "a3")[0]
+    assert mall_actions.buy(game, "card_30", "a1")[0].startswith("買下")
+    assert mall_actions.buy(game, "card_30", "a2")[0].startswith("買下")
+    assert "每個帳號" in mall_actions.buy(game, "card_30", "a3")[0]
     next_season(on, game.world, game)
     game.now = T0 + DAY
-    assert "每個帳號" in game.mall_buy("card_30", "a4")[0]
+    assert "每個帳號" in mall_actions.buy(game, "card_30", "a4")[0]
 
 
 def test_items_out_of_window_are_not_for_sale(on):
     game = _ready(on)
     window = on.mall["pills_5"].on_sale
     window.seasons = [9]
-    assert game.mall_buy("pills_5", "w1") == [mall.NO_ITEM]
+    assert mall_actions.buy(game, "pills_5", "w1") == [mall.NO_ITEM]
     window.seasons = []
     window.start = _date(DAY0 + 1)
-    assert game.mall_buy("pills_5", "w2") == [mall.NO_ITEM]
+    assert mall_actions.buy(game, "pills_5", "w2") == [mall.NO_ITEM]
     window.start, window.end = None, _date(DAY0 - 1)
-    assert game.mall_buy("pills_5", "w3") == [mall.NO_ITEM]
+    assert mall_actions.buy(game, "pills_5", "w3") == [mall.NO_ITEM]
     window.start = window.end = _date(DAY0)  # 頭尾都含
-    assert game.mall_buy("pills_5", "w4")[0].startswith("買下")
+    assert mall_actions.buy(game, "pills_5", "w4")[0].startswith("買下")
 
 
 def test_a_failed_delivery_rolls_everything_back(on, monkeypatch):
@@ -274,7 +275,7 @@ def test_a_failed_delivery_rolls_everything_back(on, monkeypatch):
 
     monkeypatch.setattr(Wallet, "set_card", boom)
     with pytest.raises(RuntimeError), game.world.db.transaction():
-        game.mall_buy("card_30", "ref-boom")
+        mall_actions.buy(game, "card_30", "ref-boom")
     wallet = _wallet(game)
     assert wallet.balance("沈浪") == 5000 and len(_rows(game)) == 1
     assert wallet.purchases("沈浪") == [] and wallet.card("沈浪", mall.CARD_KEY) is None
@@ -284,7 +285,7 @@ def test_a_failed_delivery_rolls_everything_back(on, monkeypatch):
 def test_balance_always_equals_the_ledger(on):
     game = _ready(on)
     for i, item in enumerate(("pills_5", "pills_30", "card_30", "card_1", "pills_5")):
-        game.mall_buy(item, f"sum-{i}")
+        mall_actions.buy(game, item, f"sum-{i}")
     rows = _rows(game)
     assert _wallet(game).balance("沈浪") == sum(r.delta for r in rows) == 5000 - 100 - 500 - 600 - 10 - 100
 
@@ -296,7 +297,7 @@ def test_card_bought_at_2359_counts_that_day(on, monkeypatch):
     monkeypatch.setattr(roster, "newbie", lambda state, content, days=None: False)
     late = MIDNIGHT_TW + 20000 * DAY + DAY - 60  # DAY0 的台灣 23:59
     game = _ready(on, now=late)
-    game.mall_buy("card_1", "c1")
+    mall_actions.buy(game, "card_1", "c1")
     assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 1)
     assert game.pill_cap() == 3
     game.now = late + 60  # 00:00 一到就失效
@@ -305,17 +306,17 @@ def test_card_bought_at_2359_counts_that_day(on, monkeypatch):
 
 def test_card_rebuy_extends_from_the_end(on):
     game = _ready(on)
-    game.mall_buy("card_30", "e1")
+    mall_actions.buy(game, "card_30", "e1")
     game.now = T0 + 20 * DAY  # 還剩 10 天
-    game.mall_buy("card_30", "e2")
+    mall_actions.buy(game, "card_30", "e2")
     assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 60)
 
 
 def test_card_rebuy_after_expiry_starts_today(on):
     game = _ready(on)
-    game.mall_buy("card_1", "x1")
+    mall_actions.buy(game, "card_1", "x1")
     game.now = T0 + 5 * DAY
-    game.mall_buy("card_1", "x2")
+    mall_actions.buy(game, "card_1", "x2")
     assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0 + 5, DAY0 + 6)
 
 
@@ -324,15 +325,15 @@ def test_card_rebuy_after_expiry_starts_today(on):
 
 def test_view_is_none_when_off(content):
     game = _game(content)
-    assert game.mall_view() is None and game.mall_records() is None
+    assert mall_actions.view(game) is None and mall_actions.records(game) is None
 
 
 def test_view_lists_items_with_why(on):
     game = _ready(on)
     on.mall["pills_30"].on_sale.seasons = [9]  # 沒上架的不列
-    game.mall_buy("pills_5", "v1")
-    game.mall_buy("pills_5", "v2")
-    view = game.mall_view()
+    mall_actions.buy(game, "pills_5", "v1")
+    mall_actions.buy(game, "pills_5", "v2")
+    view = mall_actions.view(game)
     assert view["balance"] == 4800 and view["card"] is None
     rows = {row["id"]: row for row in view["items"]}
     assert set(rows) == {"pills_5", "card_30", "card_1"}
@@ -341,14 +342,14 @@ def test_view_lists_items_with_why(on):
     assert pills["effects"] == "回體丹 5 顆" and pills["kind_name"] == "消耗品" and "每天限 2 次" in pills["limit"]
     card = rows["card_30"]
     assert card["can"] is True and card["why"] is None and card["after"] == 4200
-    game.mall_buy("card_30", "v3")
-    assert game.mall_view()["card"] == {"until": mall.day_text(DAY0 + 29), "bonus": 1, "left": 30, "daily": None}
+    mall_actions.buy(game, "card_30", "v3")
+    assert mall_actions.view(game)["card"] == {"until": mall.day_text(DAY0 + 29), "bonus": 1, "left": 30, "daily": None}
 
 
 def test_records_show_the_ledger_with_running_balance(on):
     game = _ready(on)
-    game.mall_buy("pills_5", "r1")
-    records = game.mall_records()
+    mall_actions.buy(game, "pills_5", "r1")
+    records = mall_actions.records(game)
     assert records["balance"] == 4900
     assert [(row["reason"], row["delta"], row["balance"]) for row in records["ledger"]] == [("購買", -100, 4900), ("封測發放", 5000, 5000)]
     assert [(p["item"], p["price"], p["refunded"]) for p in records["purchases"]] == [("回體丹五顆", 100, False)]
@@ -358,11 +359,11 @@ def test_records_show_the_ledger_with_running_balance(on):
 def test_records_also_say_the_season_time(on):
     """全面自檢 U-12（Joy 2026-10-31 照建議）：元寶是真錢，帳照舊寫現實時間，旁邊多寫季曆（跟江湖紀錄同一個寫法）。"""
     game = _ready(on)
-    game.mall_buy("pills_5", "r1")
-    row = game.mall_records()["ledger"][0]
+    mall_actions.buy(game, "pills_5", "r1")
+    row = mall_actions.records(game)["ledger"][0]
     assert row["season_time"] == game.stamp(game.state.world.time)
     game.state.world.ended = True
-    assert game.mall_records()["ledger"][0]["season_time"] is None  # 休季不寫
+    assert mall_actions.records(game)["ledger"][0]["season_time"] is None  # 休季不寫
 
 
 # ── 管理者工具 ───────────────────────────────────
@@ -377,17 +378,17 @@ def _admin(on, now=T0) -> Game:
 def test_reissue_and_revoke_are_logged_with_admin_and_note(on):
     player = _ready(on)
     admin = _admin(on)
-    assert "只有管理者" in player.admin_mall_reissue("管理者", 100, "自己加", "ref-x")[0]
-    assert "原因" in admin.admin_mall_reissue("沈浪", 100, "  ", "ref-a")[0]
-    assert "江湖上沒有" in admin.admin_mall_reissue("查無此人", 100, "補償", "ref-b")[0]
-    msgs = admin.admin_mall_reissue("沈浪", 300, "伺服器維修補償", "ref-c")
+    assert "只有管理者" in mall_actions.admin_reissue(player, "管理者", 100, "自己加", "ref-x")[0]
+    assert "原因" in mall_actions.admin_reissue(admin, "沈浪", 100, "  ", "ref-a")[0]
+    assert "江湖上沒有" in mall_actions.admin_reissue(admin, "查無此人", 100, "補償", "ref-b")[0]
+    msgs = mall_actions.admin_reissue(admin, "沈浪", 300, "伺服器維修補償", "ref-c")
     assert "沈浪" in msgs[0] and _wallet(player).balance("沈浪") == 5300
     row = _rows(player)[0]
     assert (row.reason, row.delta, row.admin, row.note) == ("reissue", 300, "管理者", "伺服器維修補償")
-    assert admin.admin_mall_reissue("沈浪", 300, "伺服器維修補償", "ref-c")  # 同一個編號重送不算兩次
+    assert mall_actions.admin_reissue(admin, "沈浪", 300, "伺服器維修補償", "ref-c")  # 同一個編號重送不算兩次
     assert _wallet(player).balance("沈浪") == 5300
-    assert "不能是負的" in admin.admin_mall_revoke("沈浪", 9999, "扣錯了", "ref-d")[0]
-    admin.admin_mall_revoke("沈浪", 300, "發錯了", "ref-e")
+    assert "不能是負的" in mall_actions.admin_revoke(admin, "沈浪", 9999, "扣錯了", "ref-d")[0]
+    mall_actions.admin_revoke(admin, "沈浪", 300, "發錯了", "ref-e")
     assert _wallet(player).balance("沈浪") == 5000 and _rows(player)[0].reason == "revoke"
 
 
@@ -399,43 +400,43 @@ def test_admin_finds_the_wallet_by_login_too(on):
     store.register("shen_01", "secret-pw")
     store.bind_character("shen_01", "沈浪")
     admin = _admin(on)
-    admin.admin_mall_reissue("shen_01", 10, "測試", "ref-login")
+    mall_actions.admin_reissue(admin, "shen_01", 10, "測試", "ref-login")
     assert _wallet(player).balance("沈浪") == 5010
 
 
 def test_refund_returns_yuanbao_and_takes_back_pills_in_hand(on):
     player = _ready(on)
-    player.mall_buy("pills_30", "f1")
+    mall_actions.buy(player, "pills_30", "f1")
     player.state.player.stamina_pills = 12  # 用掉了一大半
     open_characters().save(player.state)
     pid = _wallet(player).purchases("沈浪")[0].id
     admin = _admin(on)
-    msgs = admin.admin_mall_refund("沈浪", pid, "買錯了")
+    msgs = mall_actions.admin_refund(admin, "沈浪", pid, "買錯了")
     assert "500" in msgs[0]
     assert _wallet(player).balance("沈浪") == 5000
     assert open_characters().load("沈浪").player.stamina_pills == 0  # 手上的 12 顆收回，用掉的不追
     row = _rows(player)[0]
     assert (row.reason, row.delta, row.purchase_id, row.admin) == ("refund", 500, pid, "管理者")
-    assert "退過" in admin.admin_mall_refund("沈浪", pid, "再退一次")[0]
+    assert "退過" in mall_actions.admin_refund(admin, "沈浪", pid, "再退一次")[0]
     assert _wallet(player).balance("沈浪") == 5000
 
 
 def test_refunded_purchase_frees_the_limit(on):
     player = _ready(on)
-    player.mall_buy("pills_30", "l1")
+    mall_actions.buy(player, "pills_30", "l1")
     pid = _wallet(player).purchases("沈浪")[0].id
-    _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    mall_actions.admin_refund(_admin(on), "沈浪", pid, "買錯了")
     player.state = open_characters().load("沈浪")
     player.sync(T0)
-    assert player.mall_buy("pills_30", "l2")[0].startswith("買下")
+    assert mall_actions.buy(player, "pills_30", "l2")[0].startswith("買下")
 
 
 def test_refunding_a_card_takes_its_days_back(on):
     player = _ready(on)
-    player.mall_buy("card_30", "k1")
-    player.mall_buy("card_30", "k2")
+    mall_actions.buy(player, "card_30", "k1")
+    mall_actions.buy(player, "card_30", "k2")
     first = _wallet(player).purchases("沈浪")[-1].id
-    _admin(on).admin_mall_refund("沈浪", first, "測試退卡")
+    mall_actions.admin_refund(_admin(on), "沈浪", first, "測試退卡")
     assert _wallet(player).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 30)
 
 
@@ -448,26 +449,26 @@ def test_admin_ledger_looks_the_same_for_bots(on):
     open_characters().save(real.state)
     open_characters().save(bot.state)
     admin = _admin(on)
-    a, b = admin.admin_mall_ledger("沈浪"), admin.admin_mall_ledger("某假人")
+    a, b = mall_actions.admin_ledger(admin, "沈浪"), mall_actions.admin_ledger(admin, "某假人")
     assert set(a) == set(b) == {"name", "balance", "card", "ledger", "purchases"}
     assert a["balance"] == b["balance"] == 5000
     assert a["ledger"][0]["reason"] == b["ledger"][0]["reason"] == "封測發放"
-    assert "refusal" in real.admin_mall_ledger("某假人")
-    assert "refusal" in admin.admin_mall_ledger("查無此人")
+    assert "refusal" in mall_actions.admin_ledger(real, "某假人")
+    assert "refusal" in mall_actions.admin_ledger(admin, "查無此人")
 
 
 def test_buying_a_breakthrough_pill_puts_it_in_the_bag_and_a_refund_takes_back_the_unused(on):
     """萬寶閣的破境丹（Joy 2026-10-21「把破境丹也加入商城」）：legend_items 加上去；退款收回還在行囊裡的，服掉的不追。"""
     on.mall["legend_1"] = MallItem(id="legend_1", name="破境丹", price=150, kind="consumable", effects={"legend": 2})
     player = _ready(on)
-    msgs = player.mall_buy("legend_1", "pj1")
+    msgs = mall_actions.buy(player, "legend_1", "pj1")
     assert player.state.player.legend_items == 2 and _wallet(player).balance("沈浪") == 4850
     assert "破境丹 +2" in player.state.journal[0].changes and any("破境丹" in m for m in msgs)
     assert mall.effects_text(on.mall["legend_1"], on) == "破境丹 2 顆"
     player.state.player.legend_items = 1  # 服掉一顆
     open_characters().save(player.state)
     pid = _wallet(player).purchases("沈浪")[0].id
-    _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    mall_actions.admin_refund(_admin(on), "沈浪", pid, "買錯了")
     assert open_characters().load("沈浪").player.legend_items == 0 and _wallet(player).balance("沈浪") == 5000
 
 
@@ -476,13 +477,13 @@ def test_buying_reroll_slips_and_refunding_the_unused(on):
     """重悟帖（Joy 2026-10-21）：PlayerState.create_rerolls 加上去；退款收回還沒用的。"""
     on.mall["reroll_1"] = MallItem(id="reroll_1", name="重悟帖", price=50, kind="consumable", effects={"create_reroll": 2})
     player = _ready(on)
-    player.mall_buy("reroll_1", "rr1")
+    mall_actions.buy(player, "reroll_1", "rr1")
     assert player.state.player.create_rerolls == 2 and "重悟帖 +2" in player.state.journal[0].changes
     assert mall.effects_text(on.mall["reroll_1"], on) == "自創重骰 2 次"
     player.state.player.create_rerolls = 1  # 用掉一張
     open_characters().save(player.state)
     pid = _wallet(player).purchases("沈浪")[0].id
-    msgs = _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    msgs = mall_actions.admin_refund(_admin(on), "沈浪", pid, "買錯了")
     assert "重悟帖收回 1 張" in msgs[0]
     assert open_characters().load("沈浪").player.create_rerolls == 0
 
@@ -525,21 +526,21 @@ def test_buying_several_at_once_writes_one_purchase_each(on):
     on.mall["pills_9"] = MallItem(id="pills_9", name="回體丹一顆", price=10, kind="consumable", effects={"pills": 1})
     game = _ready(on)
     pills = game.state.player.stamina_pills
-    msgs = game.mall_buy("pills_9", "many-0001", qty=4)
+    msgs = mall_actions.buy(game, "pills_9", "many-0001", qty=4)
     assert game.state.player.stamina_pills == pills + 4 and _wallet(game).balance("沈浪") == 4960
     refs = sorted(p.ref for p in _wallet(game).purchases("沈浪"))
     assert refs == ["buy:沈浪:many-0001", "buy:沈浪:many-0001#2", "buy:沈浪:many-0001#3", "buy:沈浪:many-0001#4"]
     assert "×4" in msgs[0] and "元寶 -40" in msgs[0]
     entry = game.state.journal[0]
     assert entry.changes == ["元寶 -40", "回體丹 +4"]
-    assert "已經買好" in game.mall_buy("pills_9", "many-0001", qty=4)[0]  # 重送同一個編號不再買
+    assert "已經買好" in mall_actions.buy(game, "pills_9", "many-0001", qty=4)[0]  # 重送同一個編號不再買
     assert game.state.player.stamina_pills == pills + 4
 
 
 def test_quantity_is_clamped_to_what_the_limit_leaves(on):
     game = _ready(on)
-    game.mall_buy("pills_5", "c1")
-    msgs = game.mall_buy("pills_5", "c2", qty=5)  # 一天限 2 次，已經買了 1 次
+    mall_actions.buy(game, "pills_5", "c1")
+    msgs = mall_actions.buy(game, "pills_5", "c2", qty=5)  # 一天限 2 次，已經買了 1 次
     assert "限購只剩 1 件" in msgs[0] and _wallet(game).balance("沈浪") == 4800
     assert _wallet(game).count("沈浪", "pills_5", day=DAY0) == 2
 
@@ -547,7 +548,7 @@ def test_quantity_is_clamped_to_what_the_limit_leaves(on):
 def test_not_enough_for_all_buys_none(on):
     on.config.mall.beta_grant = 150
     game = _ready(on)
-    msgs = game.mall_buy("pills_5", "short-1", qty=2)
+    msgs = mall_actions.buy(game, "pills_5", "short-1", qty=2)
     assert "元寶不夠" in msgs[0] and "×2 要 200" in msgs[0]
     assert _wallet(game).purchases("沈浪") == [] and _wallet(game).balance("沈浪") == 150
 
@@ -555,9 +556,9 @@ def test_not_enough_for_all_buys_none(on):
 def test_view_says_how_many_can_be_bought(on):
     on.config.mall.beta_grant = 1000
     game = _ready(on)
-    rows = {row["id"]: row for row in game.mall_view()["items"]}
+    rows = {row["id"]: row for row in mall_actions.view(game)["items"]}
     assert rows["pills_5"]["max"] == 2  # 限購一天 2 次
     assert rows["pills_30"]["max"] == 1  # 限購一季 1 次
     assert rows["card_1"]["max"] == 1  # 月卡一次一張
     on.mall["pills_9"] = MallItem(id="pills_9", name="回體丹一顆", price=300, kind="consumable", effects={"pills": 1})
-    assert {row["id"]: row for row in game.mall_view()["items"]}["pills_9"]["max"] == 3  # 元寶只夠三件
+    assert {row["id"]: row for row in mall_actions.view(game)["items"]}["pills_9"]["max"] == 3  # 元寶只夠三件

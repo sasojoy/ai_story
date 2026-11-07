@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import random
 
-import pytest
-
 from conftest import real_content, renown_unscaled
 from jianfa_kit import classic_explore
 
@@ -39,6 +37,11 @@ def _ids(game):
     return {o.id: o for o in game.options()}
 
 
+def _press(game, oid):
+    game.state.player.stamina = 250.0
+    return game.choose(oid)
+
+
 # ── Task 1：開關與蓋章 ──
 
 
@@ -55,134 +58,6 @@ def test_unstamped_season_keeps_the_old_rules():
     stamp_season(season, c)
     season.precise_actions = False  # 設定打開之前就開的季
     assert not precise.on(c, season)
-
-
-# ── Task 2：找素材一定給、不打仗（2.4）；應召不再換掉（2.10）──
-
-
-def _press(game, oid):
-    game.state.player.stamina = 250.0
-    return game.choose(oid)
-
-
-def test_gathering_always_gives_materials_and_never_fights():
-    for at in ("yingchuan", "changshe"):  # 城鎮、城外
-        game = _game(at=at)
-        for _ in range(40):
-            before = sum(game.state.player.materials.values())
-            battles = len(game.state.battles)
-            _press(game, "explore:gather")
-            assert sum(game.state.player.materials.values()) > before, at
-            assert len(game.state.battles) == battles and game.state.pending_event is None, at
-
-
-def test_gathering_at_a_summons_place_still_gathers(monkeypatch):
-    from tianxia import ranks
-
-    game = _game(at="changshe")
-    monkeypatch.setattr(ranks, "summons_event", lambda *a, **k: next(iter(game.content.events)))
-    before = sum(game.state.player.materials.values())
-    _press(game, "explore:gather")
-    assert sum(game.state.player.materials.values()) > before and game.state.pending_event is None
-
-
-def test_unstamped_season_still_fights_while_gathering():
-    from tianxia import explore_modes
-
-    game = _game(at="changshe")
-    game.state.world.precise_actions = False
-    game.content.config.explore_modes.encounter_chance = 1.0
-    _press(game, "explore:gather")
-    assert game.state.battles  # 舊規則：城外撞上一場
-    assert explore_modes.on(game.content)
-
-
-# ── Task 3：練功（2.5）──
-
-
-@pytest.mark.smoke
-def test_practice_always_fights_one_and_is_unlimited():
-    game = _game(at="changshe")
-    p = game.state.player
-    option = _ids(game)["explore:practice"]
-    assert option.enabled and option.label.startswith("尋敵（體力 6") and "經驗" not in option.label  # 鈕上不寫給多少（設計 9.1）
-    for n in range(1, 6):
-        p.stamina = 250.0
-        game.choose("explore:practice")
-        assert len(game.state.battles) == n and p.stamina <= 244 + 0.01 and p.duel is None
-        assert game.state.pending_event is None  # 練功之後不接戰後事件
-
-
-def test_practice_greys_out_where_there_is_no_one_to_fight():
-    game = _game(at="yingchuan")
-    game.content.config.training.enabled = False  # 城裡操練開著時那一格是操練（tests/test_training.py），這裡測練功收在探索裡的舊樣子
-    option = _ids(game)["explore:practice"]
-    assert not option.enabled and "這裡沒有可以練手的對手" in option.label and "最近的在" in option.label
-    stamina = game.state.player.stamina
-    game.choose("explore:practice")
-    assert game.state.player.stamina == stamina and not game.state.battles
-
-
-def test_practice_is_not_a_scouting_but_gathering_is(monkeypatch):
-    from tianxia import bounties
-
-    calls = []
-    monkeypatch.setattr(bounties, "on_explore", lambda *a, **k: calls.append(a) or [])
-    game = _game(at="changshe")
-    _press(game, "explore:practice")
-    assert calls == []
-    _press(game, "explore:gather")
-    assert len(calls) == 1
-
-
-def test_practice_rolls_the_boss_instead_of_gathering():
-    game = _game(at="changshe")
-    game.content.config.duel.explore_chance = 1.0
-    _press(game, "explore:gather")
-    assert game.state.player.duel is None  # 找素材不再擲頭目
-    _press(game, "explore:practice")
-    assert game.state.player.duel is not None
-
-
-def test_a_boss_only_place_practices_straight_against_the_boss():
-    game = _game(at="julu_altar", faction="huang")
-    assert game._gather_foe(game.content.locations["julu_altar"]) is None
-    option = _ids(game)["explore:practice"]
-    assert option.enabled
-    _press(game, "explore:practice")
-    assert game.state.player.duel is not None
-
-
-def test_practice_finishes_a_strike_bounty():
-    from unittest import mock
-
-    from tianxia import team
-    from tianxia.encounter import EncounterResult
-    from tianxia.state import Bounty
-
-    game = _game(at="changshe")
-    w = game.state.world
-    w.bounties.append(Bounty(id="b1", kind="strike", faction="huang", week=1, expires=1e12, silver=20, deeds=1,
-                             location="changshe", squad="jun_bing", takers=["沈浪"]))
-    with mock.patch.object(team, "fight", return_value=EncounterResult(tier="大勝", margin=50, our_power=200, difficulty=10)):
-        _press(game, "explore:practice")
-    assert game.state.battles[-1].opponent == game.content.squads["jun_bing"].name and w.bounties[-1].done_by == ["沈浪"]
-
-
-def test_boss_cooldown_and_used_up_grey_the_boss_only_place():
-    from tianxia import duel as duel_rules
-
-    game = _game(at="julu_altar", faction="huang")
-    s, c = game.state, game.content
-    s.player.duel_last = [float(s.player.season_number), s.world.time]
-    option = _ids(game)["explore:practice"]
-    assert not option.enabled and "後才會再現身" in option.label
-    s.player.duel_last = []
-    boss = duel_rules.here(s, c)[0]
-    s.player.duel_tally[duel_rules.week_key(s, c, boss.id)] = c.config.duel.per_boss_week  # 7 天季：每段 per_boss_week 次
-    option = _ids(game)["explore:practice"]
-    # FB-672：次數用完那一句帶頭目的名字（「他」→「頭目某某」，名字是黃巾看到的那一面；tests/test_practice_spots.py）
-    assert not option.enabled and "這一段頭目衛重不再現身" in option.label
 
 
 def test_season21_boss_is_twice_a_week():
@@ -285,27 +160,7 @@ def test_a_summons_place_still_talks(monkeypatch):
     assert "act:summons" in _ids(game) and game.dialogue_request("act:socialize") is not None
 
 
-# ── Task 5：找事件的併池、空池（2.7；鈕上的偏向企劃者 2026-10-19 拿掉了，設計 9.1）──
-
-
-def test_seek_does_not_say_what_it_gives():
-    option = _ids(_game(at="yingchuan"))["explore:seek"]
-    assert option.enabled and option.label == "找事件（體力 6）"
-
-
-
-
-def test_an_empty_seek_pool_greys_out_for_free(monkeypatch):
-    from tianxia import engine as engine_mod
-
-    game = _game(at="yingchuan")
-    monkeypatch.setattr(engine_mod, "event_candidates", lambda *a, **k: [])
-    option = _ids(game)["explore:seek"]
-    assert not option.enabled and option.label == "找事件（這一帶眼下沒什麼事）"
-
-
-
-
+# ── Task 5：找事件的併池（2.7）──
 
 
 def test_after_fight_events_join_seeking_only_in_the_field_with_foes():
@@ -336,38 +191,17 @@ def test_a_wrong_way_of_sensing_gives_xinde_and_does_not_lock():
 
     game = _game(at="yingshui")
     s, c = game.state, game.content
-    _press(game, "explore:sense")
+    game._sense_here(c.locations["yingshui"], random.Random(0))
     got, scene, loc = sensing.current(s, c)
     assert "下回可以換個做法再試" in sensing.miss_warning(s, c)
     wrong = next(i for i, m in enumerate(got.order) if scene.methods[m].attribute not in insights.pool_attributes(loc, c))
     xinde = s.player.stats.get("xinde", 0)
     game.choose(f"{sensing.PREFIX}{wrong}")
     assert s.player.stats.get("xinde", 0) == xinde + c.config.sense_miss_xinde
-    assert s.player.sensing is None and _ids(game)["explore:sense"].enabled
+    assert s.player.sensing is None
 
 
 # ── Task 8：假人與整季機器人（9.2）──
-
-
-def test_the_season_bot_practices_when_it_wants_exp():
-    from tianxia import bot
-
-    ids = {"explore:gather", "explore:seek", "explore:practice"}
-    assert bot.explore_choice(ids, want="exp") == "explore:practice"
-    assert bot.explore_choice(ids) == "explore:gather"  # 打探照舊找素材（練功不算打探）
-    assert bot.explore_choice({"explore:gather"}, want="exp") == "explore:gather"
-
-
-def test_server_bots_practice_for_exp_and_gather_only_when_short():
-    from tianxia import bot_policy
-    from tianxia.state import BotProfile
-
-    game = _game(at="changshe")
-    profile = BotProfile(personality="普通", seed=1, faction=None, season_number=1)
-    opts = _ids(game)
-    practice = bot_policy.score(game, opts["explore:practice"], profile)
-    gather = bot_policy.score(game, opts["explore:gather"], profile)
-    assert practice == bot_policy.PRACTICE_SCORE and gather < practice
 
 
 def test_the_season_bot_does_not_loop_on_a_refused_sect():
@@ -450,7 +284,7 @@ def test_a_strike_bounty_says_practice_where_precise_is_on():
     b = _strike(game)
     line = bounties.how(game.content, b, game.state)
     assert "尋敵" in line and "找素材" not in line
-    rows = bounties.status(game.state, game.content, game.world)
+    rows = bounties.status(game)
     assert any(r["id"] == "b1" and r["how"] == line for r in rows)
     game.state.world.precise_actions = False  # 沒蓋章的季照舊
     assert "找素材撞上" in bounties.how(game.content, b, game.state)
@@ -503,18 +337,16 @@ def test_a_ranger_reads_only_practice_on_a_strike_bounty():
 
 
 def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
-    """FB-422：一類一顆生效的季，玩法說明的探索、練功、交友、意境、名望、情誼照新規則寫；沒蓋章的季跟以前一字不差。"""
-    from tianxia import explore_modes, howto
+    """FB-422：一類一顆生效的季，玩法說明的交友、意境、名望、情誼照新規則寫；沒蓋章的季跟以前一字不差。"""
+    from tianxia import howto
     from tianxia.world_state import fresh_season
 
     c = classic_explore(renown_unscaled(real_content("week7")))
     season = fresh_season(c)
     stamp_season(season, c)
     text = howto.page(c, season, recruitable=False)
-    assert "一定撿得到素材，不打仗" in text and f"**{explore_modes.NAMES['practice']}**" in text and "不限次數" in text
-    assert "撞上怪" not in text and "會打發你" not in text and "過一陣子才悟得出" not in text and "求見名單" not in text
+    assert "會打發你" not in text and "過一陣子才悟得出" not in text and "求見名單" not in text
     assert f"選錯了得 {c.config.sense_miss_xinde} 心得" in text and "交友名單上也有" in text and "不夠的見不到" in text
     season.precise_actions = False
     old = howto.page(c, season, recruitable=False)
-    assert "撞上怪" in old and "會打發你" in old and "過一陣子才悟得出" in old and "求見名單上也有" in old
-    assert f"**{explore_modes.NAMES['practice']}**" not in old
+    assert "會打發你" in old and "過一陣子才悟得出" in old and "求見名單上也有" in old

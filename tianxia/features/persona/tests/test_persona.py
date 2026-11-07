@@ -40,6 +40,17 @@ def next_day(g):
     at(g, g.now + DAY)
 
 
+def test_the_package_rules_are_the_shared_layer_objects():
+    """合回第 4 段：純規則的本體在共用層（人物情誼包的 companion_agent 要叫，包不准 import 包）；包的 rules 是同一批物件，沒有第二份。"""
+    from tianxia import persona_rules
+
+    names = [n for n, v in vars(persona_rules).items()
+             if getattr(v, "__module__", None) == persona_rules.__name__ or (n.isupper() and isinstance(v, (str, int)))]
+    assert {"NONE", "ends_for", "prompt_lines", "hear", "covers", "settle", "view", "_one_day", "_shift"} <= set(names)
+    assert [n for n in names if getattr(persona, n, None) is not getattr(persona_rules, n)] == []
+    assert companion_agent.persona is persona_rules
+
+
 def test_real_content_has_twelve_people_with_two_axes_each():
     c = real_game().content
     assert real_game(profile="week7").content.config.persona_shift.enabled and c.config.persona_shift.enabled  # Joy 11/6「打開」

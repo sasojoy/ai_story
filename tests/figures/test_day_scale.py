@@ -12,6 +12,7 @@ from conftest import FixedRandom, install_season_one, walk_to
 
 from tianxia import calendar, companion_agent, howto, rules, sensing
 from tianxia.engine import Game
+from tianxia.features.travel import road_actions
 from tianxia.models import InsightScene, SenseMethod, TimetableEvent
 from tianxia.state import WorldState
 
@@ -128,7 +129,7 @@ def test_with_the_switch_off_the_moment_rounds_up_to_the_minute(content):
 def test_no_moment_is_named_once_the_next_day_would_start_at_or_after_the_season_end(content):
     """審查 M2：最後一個遊戲日的換日剛好是收季那一刻（季曆會把它寫成「第 12 週・週日 23:59」，那一分鐘什麼都不會重算）；
     季末延後時，季曆寫不出名義季長之後的時刻（一樣卡在 23:59）；季末提前時，換日在收季之後。這三種都不寫時刻（None）。
-    呼叫端照 rules.day_turn 分：收季前不會再換日寫「這一季之內不會再…」，季末延後還會換日寫「過一陣子」（FB-102，tests/test_admin_timetable.py）。"""
+    呼叫端照 rules.day_turn 分：收季前不會再換日寫「這一季之內不會再…」，季末延後還會換日寫「過一陣子」（FB-102，tests/figures/test_admin_timetable.py）。"""
     content.config.season_one = True
     season = _season(content, WEEKEND, one=True)
     season.time = 12.5 * SHORT  # 第 13 個遊戲日：第 12 週・週二 00:00 換日，還寫得出來
@@ -166,7 +167,7 @@ def test_on_the_last_game_day_the_texts_say_not_this_season(content):
     msgs = _talk_out(game)
     assert msgs[-1] == "韓鐵起身送客：這一季之內不能再來拜會了。"
     assert game._talked_out_note() == "已經談滿 3 輪，這一季之內不能再來"
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         assert game.choose("act:socialize") == ["韓鐵事忙，這一季之內都不得空。"]
     content.characters["scholar"].deep_interaction = True
     content.characters["scholar"].audience_fame = 0
@@ -235,7 +236,7 @@ def test_the_talk_texts_name_the_moment_the_figure_opens_again(content):
     moment = rules.day_ends_text(content, game.state.world)
     assert moment.startswith("第 1 週・週")
     assert msgs[-1] == f"韓鐵起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         assert game.choose("act:socialize") == [f"韓鐵事忙，要到 {moment} 之後才得空。"]
     assert all("今天" not in m and "明天" not in m and "今日" not in m for m in msgs)
 
@@ -297,25 +298,25 @@ def test_old_talk_records_keyed_by_the_old_day_number_read_as_an_earlier_day(con
 def test_road_gains_come_back_after_one_scaled_day(content):
     game = _game(content, WEEKEND)
     content.config.road_reward_daily_cap = 1
-    game._count_road_reward("task")
+    road_actions.count_reward(game, "task")
     w = game.state.world
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     end = rules.day_ends(content, w)
     w.time = math.nextafter(end, -math.inf)
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     w.time = end
-    assert game._road_reward_due("task")
+    assert road_actions.reward_due(game, "task")
 
 
 def test_road_gains_in_a_fourteen_day_season_still_wait_a_whole_day(content):
     game = _game(content, 14)
     content.config.road_reward_daily_cap = 1
-    game._count_road_reward("task")
+    road_actions.count_reward(game, "task")
     w = game.state.world
     w.time += SHORT
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     w.time = DAY
-    assert game._road_reward_due("task")
+    assert road_actions.reward_due(game, "task")
 
 
 def test_the_capped_road_texts_name_the_moment(content):

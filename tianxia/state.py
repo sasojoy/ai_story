@@ -794,7 +794,7 @@ class PlayerState(BaseModel):
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
     figure_dented: dict[str, int] = Field(default_factory=dict)  # 人物 id → 上一次打贏他而扣到聲威是第幾個遊戲日（figure_dent_once_per_day；叛投不清）
     figure_rare_drops: int = 0  # 這一季挑戰本人掉了幾個三階（兩條來源合算：預設表、保證的那一個；丁 (c) 的一人一季上限 figure_rare_cap；換季跟著新角色歸零）
-    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
+    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：裝備包 gift_actions.deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
@@ -916,7 +916,7 @@ class PlayerState(BaseModel):
     # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
-    explore_seq: int = 0  # 這一季第幾次探索三選一（explore_modes.rng_for 的種子；角色每季重來）
+    explore_seq: int = 0  # 這一季第幾次探索（探索包 rng_for、find_rng 的種子；角色每季重來）
     # 減法季批 2（Config.jianfa；整合設計 4.1、4.2、4.5）。四個都是 0／空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
     fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
@@ -989,7 +989,7 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
-    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 已經通知過（或不必通知）的絕學定名（FB-083，修練包 actions.deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
     # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
     renames_told: list[str] = Field(default_factory=list)
     # 行狀（玩家傳，tianxia/annals.py）：這一季值得寫進傳裡的事，照份量留最多 Config.biography.cap 則。角色每季重來，換季前存進
@@ -1013,7 +1013,7 @@ class PlayerState(BaseModel):
     bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
     picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
     # 懸賞榜第三層：正在替哪一張求兵挑東西（懸賞 id，懸賞榜設計 4.4）。按「交出…」記下；回到懸賞榜、返回、交完、打開懸賞榜時清掉。
-    # 那一張下榜了、交不出了，選單當它不存在（Game._bounty_options），所以存檔修補、出發都不必另外收
+    # 那一張下榜了、交不出了，選單當它不存在（懸賞榜包 actions.options），所以存檔修補、出發都不必另外收
     bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
@@ -1945,7 +1945,7 @@ class WorldState(BaseModel):
     @classmethod
     def _drop_retired_bounties(cls, value: list[Bounty]) -> list[Bounty]:
         """求藝（kind "art"）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」）：那之前開的季，榜上可能還掛著求藝，讀進來就丟掉，
-        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（Game._bounty_options）。"""
+        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（懸賞榜包 actions.options）。"""
         return [b for b in value if b.kind not in RETIRED_BOUNTY_KINDS]
 
     @model_serializer(mode="wrap")

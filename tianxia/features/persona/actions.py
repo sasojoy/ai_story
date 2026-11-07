@@ -1,7 +1,7 @@
 """人物性子跟 Game 打交道的那一半：同步時替全服結算到今天、寫勸過的人的行狀。"""
 from __future__ import annotations
 
-from tianxia import annals  # 過渡：待搬（行狀還是舊模組）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 
 from . import rules
 

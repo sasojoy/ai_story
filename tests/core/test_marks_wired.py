@@ -1,7 +1,7 @@
 """減法季批 4 接線（主機側計畫 Task 4-3、6.5 的勾選清單；整合設計 5.2；PM 2026-10-25 交接第四節之四第 4 件）：痕跡看得見——
 動作存季之前、同步、排程的一下都看有沒有痕跡過門檻（marks.fire_due，只發一次）：那一刻發地方傳聞（世界層那一句 PM 2026-10-25 修正輪拿掉；〈天下形勢〉照過門檻的先後多一句）、
 地點描寫換段；**江湖史在季末**（每個地點挑最高的那一條寫一句）；跨過門檻那一刻出過力的人（WorldState.mark_helpers）各記一則行狀。
-用 tests/outcomes_kit.py 的「醉漢」（town）與它的四條痕跡規則；關著（總開關或子開關 marks_visible）一個字都不變。"""
+用 tests/kit/outcomes_kit.py 的「醉漢」（town）與它的四條痕跡規則；關著（總開關或子開關 marks_visible）一個字都不變。"""
 from __future__ import annotations
 
 import pytest

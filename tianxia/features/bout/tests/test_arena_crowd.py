@@ -17,8 +17,8 @@ from tianxia.state import CrowdNote
 
 from test_arena import NOW, _do, _join, ring  # noqa: F401 — ring 是 fixture
 
-# repo 的根：tianxia/features/bout/tests/ 往上四層（全部拆包第 12 批從 tests/battle/ 搬進包，以前是 parents[2]）
-LINES = json.loads((Path(__file__).resolve().parents[4] / "content" / "arena_crowd.json").read_text(encoding="utf-8"))
+# 這一包的內容檔（全部拆包第 62 批搬進包）
+LINES = json.loads((Path(__file__).resolve().parents[1] / "content" / "arena_crowd.json").read_text(encoding="utf-8"))
 
 
 class _Fake:
@@ -187,6 +187,7 @@ def test_write_line_rejects_numbers_and_missing_names():
     assert arena_crowd.write_line(_Fake(error=RuntimeError()), note) == ""
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_content_lines_are_checked(content):
     content.arena_crowd = {"patron": ["{helper}丟了 3 顆花生"]}
     with pytest.raises(ContentError):

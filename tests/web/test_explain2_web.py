@@ -1,6 +1,6 @@
 """玩法說明二（explain-2）的網頁部分：點戰況圖卡、態勢、大事、主線看的說明。
 減法季批 1 起戰況圖卡在見聞・大事・大勢的最上面（trendsTopHtml）、態勢與主線的說明在本週卡「為什麼」裡、大事的說明接在本週江湖大事後面。
-照 tests/test_explain_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
+照 tianxia/features/guide/tests/test_explain_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
 from __future__ import annotations
 
 import random

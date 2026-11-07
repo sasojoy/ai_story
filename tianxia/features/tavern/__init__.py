@@ -1,5 +1,5 @@
 """酒肆（帶「酒肆」標籤的城鎮裡的一間：打聽、題壁、請酒、藏行跡、反查、買殺手、問酒家、鄰桌閒談）。功能包，開發規範手冊 3.2；
-主動搬六包第 10 批搬進來（引擎那一半；網頁那一半 app.js、style.css 第 3 階才切）。README.md 寫這一包做什麼、導覽與設計稿、
+主動搬六包第 10 批搬進來（引擎那一半）；網頁的畫法在 web/tavern.js（全部拆包第 65 批），樣子在 web/tavern.css（第 67 批）。README.md 寫這一包做什麼、導覽與設計稿、
 認領的欄位、還留在原位的接縫。
 
 - rules.py：純規則（原 tianxia/tavern.py；那個名字留成指到這裡的別名）
@@ -13,11 +13,12 @@ on_away、deliver_notices、after_action，下面）。這一包另接 tavern:* 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, Shop, Verb
 
 
 class TavernFeature(Feature):
     name = "tavern"
+    web = ("tavern.js", "tavern.css")  # 酒肆的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子第 67 批從 style.css 切出來（店面那一層的底留 style.css）
     prefix = "tavern"  # tavern:news、tavern:treat、tavern:hide、tavern:trace、tavern:board、tavern:back；入口 act:tavern 是核心的前綴
     bot_always = ("tavern:",)  # 坐在酒肆裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）
     # 酒肆開著沒、酒家最近幾則回話、聽過的傳聞、查到過的名號、哪一天請過酒、收到的風聲、藏行跡到幾時、託酒家留意的人、
@@ -75,11 +76,12 @@ class TavernFeature(Feature):
     def verbs(self) -> tuple[Verb, ...]:
         """act:tavern 的主人（act 子動詞，第 11 批）：按下去打開酒肆（actions.tavern_enter：開著、人在酒肆、閒著才進得去，不花體力；
         原本 Game._act 中段那一行）、紀錄標題是招牌（actions.tavern_sign；原本 Game._action_title 那張表的 tavern）。兩樣都不問 enabled
-        （原位不看開關；這一包的 tests/test_tavern_package.py 直接叫 _action_title("act", "tavern")）。進店那一顆在店面登記（Shop.entry）。"""
+        （原位不看開關；這一包的 tianxia/features/tavern/tests/test_tavern_package.py 直接叫 _action_title("act", "tavern")）。進店那一顆在店面登記（Shop.entry）。"""
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 
-            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx)),)
+            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx),
+                                bot=lambda ctx, profile: None, bot_skip=True),)  # 假人：不交給打分數（只是打開酒肆），打聽由 take_turn 的 _tavern 另外做（bots.visit）
         return self._verbs
 
     def on_away(self, ctx, away_from) -> None:
@@ -105,6 +107,37 @@ class TavernFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.tavern_hit_check(ctx)
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：坐在酒肆裡不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("idle", "tavern", lambda ctx: ctx.state.player.picking_tavern),
+                MenuHook("block", "tavern", lambda state, content: actions.travel_block(state, content)),
+            )
+        return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的插句 fame_tavern（核心 HOWTO_INSERTS）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("fame_tavern", lambda content, season, page: words.fame_tavern(content)),)
+
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
 
 
 FEATURE = TavernFeature()

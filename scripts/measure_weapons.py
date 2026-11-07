@@ -12,7 +12,7 @@
 會先抵掉收入，所以收入略少算、比例略高估。週末設定一季只走約 350 步（FB-129），量打造與淬煉要用預設的 14 天（不給 `--profile`）。
 兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）；坐騎也固定關著（坐騎開著的整季看 measure_mounts）；寶物也固定關著（寶物開著的整季看 measure_treasures）。
 
-用法：.venv/Scripts/python.exe scripts/measure_weapons.py --seeds 1 2 3 [--profile weekend]
+用法：.venv/Scripts/python.exe scripts/measure_weapons.py --seeds 1 2 3 [--profile week7]
 """
 from __future__ import annotations
 

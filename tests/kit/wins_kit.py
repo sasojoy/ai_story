@@ -1,4 +1,4 @@
-"""三陣營四勝利（減法季批 3c）測試共用的建法（不改 tests/conftest.py；批 2 的 tests/jianfa_kit.py 是另一份，這裡不建同名檔）。
+"""三陣營四勝利（減法季批 3c）測試共用的建法（不改 tests/conftest.py；批 2 的 tests/kit/jianfa_kit.py 是另一份，這裡不建同名檔）。
 
 正式內容的 season21（豪強分屬兩軍、減法季開著、領地爭奪開著）開季就蓋章（子開關 four_wins 2026-10-31 拿掉：四勝利跟著減法季的
 總開關）。每一局各載一份內容的複本，世界照 conftest 給這一個測試的 TIANXIA_DB（open_world 預設），

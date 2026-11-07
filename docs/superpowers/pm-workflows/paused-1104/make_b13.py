@@ -21,6 +21,7 @@ a = {
     "prev_plan": "docs/superpowers/plans/2026-11-01-出陣包-第3批.md",
     "host": "strip1",
     "reviewers": 3,
+    "all_tracks": True,
     "body": "\n".join([
         "- **這一批是拿掉，不是純搬**（企劃者 10/31「整套拿掉，排在搬完六包之後」、11/01「決戰合完就做」；手冊第十五節 11/01 第 4 條「只剩 7 天與 21 天兩種季」）。範圍照總表 3.3 第 13 列整格（18 個方法、337 行）。承諾改成：",
         "  - **week7、season21、test 三種設定**：same_behavior 所有軌、explore-compare、假人，整段與半舊半新**逐位元組一樣**。",
@@ -39,8 +40,8 @@ a = {
     "base": BASE,
     "ports": {"dev": 8163, "rev": 8164, "fix": 8164, "head": 8165, "base": 8166},
     "fb": "FB-9290～FB-9299",
-    "parallel": ("同時在跑的：第 23 批（新包 `arts`，`dev/arts-1`：修練）、第 24 批（新包 `sense`，`dev/sense-1`：有所感與頓悟）。"
-                 f"這一批從 develop `{BASE}` 開（第 8、12、17、22 批都已合；PM 開 feature/strip 在這一筆）。第 24 批的有所感（`sensing`）讀觀山石加成，你把 `sense_treasure_points` 搬到讀它的那一包的設定時，**它現在還是舊模組 `sensing.py`**（第 24 批正在搬成 `features/sense/`）：照現行程式搬到它旁邊，合併時 PM 照順序接。"),
+    "parallel": ("正在合進主幹的：第 19 批（新包 `companions`）、第 23 批（修練，新包 `cultivation`）、第 24 批（新包 `sense`）。"
+                 f"這一批從 split/trunk `{BASE}` 開（第 8、12、17、22 批都已合；PM 開 feature/strip 在這一筆；不用等那三批）。第 24 批的有所感（`sensing`）讀觀山石加成，你把 `sense_treasure_points` 搬到讀它的那一包的設定時，第 24 批合了沒要照當時的 split/trunk 看：還沒合就搬到舊模組 `sensing.py` 旁邊，合併時 PM 照順序接。"),
     "after15": True,
 }
 

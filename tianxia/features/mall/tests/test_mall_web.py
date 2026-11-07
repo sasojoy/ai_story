@@ -7,6 +7,7 @@
 - 設定頁的管理者區多一組商城：查帳、補發、扣回、退一筆。
 假瀏覽器照 test_prologue_web 那一套跑整支 app.js（同 test_shop2_web）；商城的畫面在 web/mall.js、樣式在 web/mall.css（開發規範手冊 3.7
 第 1 階從 app.js、style.css 切出來；webharness 照 index.html 的順序把 mall.js 接在 app.js 前面）。"""
+# 畫法在 web/zhuan.js、web/peers.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import copy
@@ -21,6 +22,7 @@ from test_mall import _items
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES_START = 'wholeApp(["S", '
@@ -30,7 +32,7 @@ DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "shopHtml", "openM
 HOUR = 3600
 DAY = 24 * HOUR
 T0 = DAY - 8 * HOUR + 20000 * DAY + 9 * HOUR  # 某一天台灣早上九點（同 test_mall）
-REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")  # 伺服器照用的編號（server.MALL_REF）
+REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")  # 伺服器照用的編號（包的 routes.MALL_REF）
 
 
 def run(m, script, S=None, responses=None):
@@ -38,7 +40,7 @@ def run(m, script, S=None, responses=None):
 
 
 def _click(dataset: str) -> str:
-    """送一次點擊給 app.js 的 click 處理器（同 tests/test_shop2_web.py::_click）。"""
+    """送一次點擊給 app.js 的 click 處理器（同 tianxia/features/gear/tests/test_shop2_web.py::_click）。"""
     return ("await T.docListeners.click[0]({ target: { closest: () => ({ dataset: " + dataset
             + ", classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });")
 
@@ -53,7 +55,7 @@ def _async(body: str) -> str:
 
 
 def _view(balance=5000, count=28, card=None):
-    """/api/mall 的形狀（Game.mall_view）：兩件丹、一張月卡；三十顆那一包元寶不夠。"""
+    """/api/mall 的形狀（actions.view）：兩件丹、一張月卡；三十顆那一包元寶不夠。"""
     return {
         "balance": balance, "card": card, "grant": 5000,
         "pills": {"name": "回體丹", "count": count, "today": 2, "cap": 3 if card else 2, "restore": 150, "bonus": 1},
@@ -122,7 +124,7 @@ def test_main_view_has_the_mall_entry_only_when_the_mall_is_on(m_on, m_off):
 
 def test_the_mall_view_tells_pills_what_each_item_gives_and_where_the_card_would_run_to(content):
     game = _game(content)
-    view = game.mall_view()
+    view = mall_actions.view(game)
     assert view["pills"] == {"name": content.config.stamina_pill_name, "count": 28, "today": 2, "cap": 2,
                              "restore": content.config.stamina_pill_restore, "bonus": 1}
     assert view["grant"] == 5000
@@ -137,8 +139,8 @@ def test_the_mall_view_tells_pills_what_each_item_gives_and_where_the_card_would
 def test_records_name_the_item_on_each_purchase_row(content):
     game = _game(content)
     item = next(iter(content.mall.values()))
-    game.mall_buy(item.id, "web-0001")
-    ledger = game.mall_records()["ledger"]
+    mall_actions.buy(game, item.id, "web-0001")
+    ledger = mall_actions.records(game)["ledger"]
     assert (ledger[0]["reason"], ledger[0]["item"], ledger[0]["refunded"]) == ("購買", item.name, False)
     assert ledger[1]["item"] is None  # 封測發放沒有商品
 
@@ -146,10 +148,10 @@ def test_records_name_the_item_on_each_purchase_row(content):
 def test_buying_tells_whether_it_went_through(content):
     game = _game(content)
     item = next(iter(content.mall.values()))
-    game.mall_buy(item.id, "web-0002")
-    assert game.mall_bought == item.id
-    game.mall_buy("沒有這件", "web-0003")
-    assert game.mall_bought is None
+    got = mall_actions.purchase(game, item.id, "web-0002")
+    assert got.bought == item.id
+    got = mall_actions.purchase(game, "沒有這件", "web-0003")
+    assert got.bought is None
 
 
 # ── 入口：乙（齒輪旁的錠子鈕）、丙（底部第六格）──
@@ -559,7 +561,7 @@ const mk = (c) => {
 };
 globalThis.document = {
   documentElement: { style: { getPropertyValue: (n) => vars[n] || "", setProperty: (n, v) => { vars[n] = v; } } },
-  getElementById: (id) => (id === "top" ? Object.assign(el.head, { querySelector: (sel) => (sel === ".who > .where" ? el.where : null), querySelectorAll: () => [] }) : null),
+  getElementById: (id) => (id === "top" ? Object.assign(el.head, { querySelector: (sel) => (sel === ".who .where:not(.sub)" ? el.where : null), querySelectorAll: () => [] }) : null),
   createRange: () => ({ selectNodeContents(n) { current = n; }, getBoundingClientRect: () => ({ right: current.end() }) }),
 };
 finish(input.cases.map((c) => {

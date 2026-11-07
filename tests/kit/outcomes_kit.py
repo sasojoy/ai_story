@@ -1,4 +1,4 @@
-"""減法季批 4 接線（隨口應對分岔、痕跡看得見）的測試建法。批 2 的 tests/jianfa_kit.py 同時在建（同名的檔不要在這一批建），
+"""減法季批 4 接線（隨口應對分岔、痕跡看得見）的測試建法。批 2 的 tests/kit/jianfa_kit.py 同時在建（同名的檔不要在這一批建），
 這一份只給批 4 的測試用：測試內容的「醉漢」（town）掛上五種後果（勸說 check、扭送 combat、周濟 cost、搜身是作惡、走開是 fallback）
 與它們的痕跡規則，打開減法季（總開關＋這一季的章）。模型一律是假的：測試直接把歸類好的 outcome 交給 C 段，或 mock 掉 event_llm。"""
 from __future__ import annotations
@@ -46,7 +46,7 @@ PROMPT = "另想法子打發醉漢"
 
 def branch_game(content, world, *, name="甲", on=True, parts=None, faction="guan", rng=None, silver=50) -> Game:
     """開一個停在「醉漢」上的角色：on 是減法季的總開關與這一季的章（一起開關）；parts 再改子開關（例 {"free_text_outcomes": False}）。
-    劇本補兩個陣營（tests/test_free_text_and_marks.py 的做法），faction 是這個人的陣營（None＝散人：照推、不記貢獻）；打開行狀。
+    劇本補兩個陣營（tests/bots/test_free_text_and_marks.py 的做法），faction 是這個人的陣營（None＝散人：照推、不記貢獻）；打開行狀。
     rng 在開好之後才換上（擲骰從同一個地方開始）。同一個測試開第二個角色時換 name，內容已經改過一次也照樣改（冪等）。"""
     content.scenario.factions = [
         FactionDef(id="guan", name="官軍", join_at=["town"]),
@@ -71,7 +71,7 @@ def branch_game(content, world, *, name="甲", on=True, parts=None, faction="gua
 
 
 def fight(tier: str):
-    """事件裡打的那一場照 tier 收（tests/test_engine.py::_forced 的做法）。"""
+    """事件裡打的那一場照 tier 收（tests/core/test_engine.py::_forced 的做法）。"""
     return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=0, our_power=10, difficulty=5))
 
 

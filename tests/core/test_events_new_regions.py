@@ -53,7 +53,7 @@ def _shown_to(cond: dict, faction: str | None) -> bool:
 @pytest.mark.parametrize("region", REGION_IDS)
 def test_events_stay_within_the_reward_limits(content, region):
     """同一則事件的選項互斥；一半以上的事件要冒險（檢定或動手），傳聞最多兩則。每個選項結果的獎勵上限
-    （effect、fail_effect 各自）跟另外兩份補寫事件共用一個檢查：tests/test_event_reward_caps.py（region-<大區>）。"""
+    （effect、fail_effect 各自）跟另外兩份補寫事件共用一個檢查：tests/core/test_event_reward_caps.py（region-<大區>）。"""
     events = _events(region)
     risky = 0
     rumors = 0

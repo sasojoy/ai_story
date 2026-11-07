@@ -1,4 +1,4 @@
-"""生 content/hirelings.json（一般 NPC 同伴，features/hire；企劃者 2026-11-04「NPC 五型在酒肆花銀兩招、名字隨機」）。
+"""生 hire 包的 content/hire.json（一般 NPC 同伴，features/hire；企劃者 2026-11-04「NPC 五型在酒肆花銀兩招、名字隨機」）。
 
 每一間帶「酒肆」標籤的地點、每一型（Config.hire.types）生 Config.hire.per_tavern 位：名字是姓加兩個字隨機取（種子固定，
 重跑同一份），不跟人物表、大勢人物、禁用名單撞名；屬性照型的資質換成舊的四項（武力→臂力、身法→身法、統御→根骨、悟性→悟性，
@@ -21,7 +21,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 from tianxia.content import load_content  # noqa: E402
 
-OUT = ROOT / "content" / "hirelings.json"
+OUT = ROOT / "tianxia" / "features" / "hire" / "content" / "hire.json"
 SURNAMES = "王李張劉陳楊黃周吳徐朱胡郭何高林羅鄭梁謝宋唐韓馮于蕭程曹鄧彭蘇盧蔣蔡丁魏薛葉閻潘杜戴夏鍾汪田任姜范方石姚譚廖鄒熊金陸郝孔崔邱秦江史顧侯邵孟萬段雷錢湯尹黎常喬賀賴龔"
 FIRST = "德子仲伯叔季文元公彥士景孝承休長宣世義茂"
 SECOND = "平安遠明達和成興昌通方正忠信誠良恭敬勇山"

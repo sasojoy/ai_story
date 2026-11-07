@@ -16,7 +16,8 @@ PREFIX = "heroines"
 class HeroinesFeature(Feature):
     name = "heroines"
     prefix = PREFIX  # heroines:open:<人物>、heroines:yes、heroines:no
-    content = ("heroines.json",)  # content.py 照舊讀進 Content.heroines
+    # 這一包 content/ 底下：三位女子的設定與她們三條奇事的段落事件檔（content.py 照它到這一包的 content/ 載；線本身在根上的 content/storylines.json）
+    content = ("heroines.json", "events/story_yesanniang.json", "events/story_sugu.json", "events/story_duruo.json")
     player_fields: tuple[str, ...] = ("heroines", "heroines_adult")
     carried: tuple[str, ...] = ("heroines_adult",)  # 成人內容的開關換季照帶（on_season_start 抄過去）；隱線換季重來
 

@@ -1,6 +1,6 @@
 """這台機器自己的管理者名單（`.local/admins.txt` 與 `TIANXIA_ADMINS`）。
 
-單獨一個檔是刻意的：這組測試原本接在 `tests/test_content.py` 的檔尾，而上游每次新增內容測試
+單獨一個檔是刻意的：這組測試原本接在 `tests/core/test_content.py` 的檔尾，而上游每次新增內容測試
 也都加在那個位置，於是每次 pull 都在同一行衝突（連續三次）。搬出來之後兩邊再也碰不到。
 """
 

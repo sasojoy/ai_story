@@ -1,0 +1,10 @@
+/* 天下大勢：手機通知的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 怎麼收到手機通知（設定抽屜整頁換成它）：頂上一句此刻的狀況、偵測到的裝置攤開、其他兩種收在摺疊裡 */
+.push-how .push-status { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--card); border-radius: var(--radius); font-size: 15px; line-height: 1.6; }
+.push-how-sec { margin-top: 12px; }
+.push-how-sec h4 { margin: 0 0 6px; font-size: 16px; }
+.push-how-sec h5 { margin: 12px 0 4px; font-size: 14px; color: var(--ink-2); }
+.push-how-sec p { margin: 0; font-size: 14px; line-height: 1.65; }
+.push-steps { margin: 0; padding-left: 1.4em; font-size: 15px; line-height: 1.7; }
+.push-steps li + li { margin-top: 6px; }

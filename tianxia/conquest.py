@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 
 from . import calendar, place_state, rules, seal_acts, territory
-from .battle_instance import CENTER, FrontNote
+from .core.battle_base import CENTER, FrontNote
 from .characters import name_key
 from .models import BattleDef, BlockDef, Content
 from .state import (
@@ -35,6 +35,14 @@ NEUTRAL_HELD = "（開季是中立地）"  # 待 joy 潤：被佔下的中立地
 def on(content: Content, world: WorldState | None = None) -> bool:
     """這一季照領地爭奪的規則：地盤開著（territory.on）就是，不看季（world 只是舊的呼叫寫法，留著不用）。"""
     return territory.on(content)
+
+
+def duel_on(content: Content, world: WorldState | None) -> bool:
+    """約戰在這一季開著：減法季的 sortie_duel 子開關（rules.jianfa：設定＋開季的章）、出陣開著、領地爭奪在這一季生效（約戰貼在區塊上）。
+    全部拆包第 50 批從出陣包 duel_rules.on 搬來：atlas 要問、又不能 import 出陣包；出陣包 re-export 同一個函式物件。
+    另外跑：改這一個 scripts/test_for.py 照共用規則層挑（自己檔名的 test_conquest*＋煙霧＋邊界），挑不到本體還在 duel_rules 時挑的出陣包
+    tianxia/features/sortie/tests（15 個檔，test_sortie_duel_road_duty、test_sortie_report 兩個整檔 slow），另外跑那一包的 tests（第 50 批審查）。"""
+    return rules.jianfa(content, world, "sortie_duel") and territory.on(content) and on(content, world)
 
 
 def blocks(content: Content) -> dict[str, BlockDef]:
@@ -1023,3 +1031,34 @@ def front_scene(content: Content, definition: BattleDef, note: FrontNote | None)
     if note is None:
         return ""
     return FRONT_SCENE.format(lean=_front_lean(definition, note, FRONT_SCENE_LEAN, FRONT_SCENE_EVEN), line=_line_name(content, note))
+
+
+# 作罷與今天的進度最高那幾塊（原本在 conquest_day.py；全部拆包第 46 批搬進共用規則層，siege、orders 就不必 import 地盤包；conquest_day 留名字）
+def _rumor(world: WorldState, text: str, loc: str | None = None) -> None:
+    world.rumors.append(Rumor(time=world.time, text=text, location=loc, layer="world"))
+
+
+def void(world: WorldState, content: Content, slot: SiegeSlot, text: str = "") -> None:
+    """這一場作罷：那一塊解凍（進度照留）；text 給了寫一句天下大事。"""
+    slot.status = "void"
+    if text:
+        _rumor(world, text, slot.loc)
+
+
+def note_void(world: WorldState, slot: SiegeSlot, why: str) -> None:
+    """作罷了不發天下大事的那幾種（攻方沒人到，裁決 19）在 day_log 記一筆：那一場的每一個攻方各一筆（void 寫原因）。"""
+    if world.conquest is None:
+        return
+    for side in slot.attackers:
+        world.conquest.day_log.append(DayNote(
+            key=slot.key, side=side, loc=slot.loc, minute=slot.minute, by=slot.by.get(side, ""),
+            reason=slot.reasons.get(side, ""), void=why,
+        ))
+
+
+def today(world: WorldState, content: Content, side: str | None, how: str) -> list[str]:
+    """軍令的攻城、守城認的地點（PM 2026-10-20 第 1 條，設計 4.5）：how 是 attack（這一邊此刻進度最高、推得動的那幾塊）或 defend（自家被推得
+    最高、守得動的那幾塊）；每一條戰線各挑，照內容順序（conquest.focus_blocks）。開關關著是空的。名字照第二批留著（orders._today 讀它）。"""
+    if side is None or not on(content, world):
+        return []
+    return focus_blocks(world, content, side, "attack" if how == "attack" else "defend")

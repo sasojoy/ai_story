@@ -1,5 +1,6 @@
 """修練頁最上面的人物面板（企劃者 2026-10-12 給的版面）：剪影身上的光點對上身上的兩門與開著的裝備欄，
 底下那一格寫點著的那一個；屬性不放上去（企劃者 2026-10-12）。餵真的引擎資料給 app.js；沒有 node 就略過。"""
+# 畫法在 web/cultivation.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

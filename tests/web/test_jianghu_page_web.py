@@ -1,4 +1,6 @@
 """江湖頁的畫面：第一屏與行動列、此地還能做的摺疊、狀態列、剛剛的卡片。原本一張回饋單一個檔（FB-087、105、107、120、123、135、136、198、360、663、664、670、671），2026-10-27 測試整理 1b 併成這一檔；各段開頭照抄原本那一檔的說明。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/battle.js、web/peers.js、web/sortie.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 import re
 from pathlib import Path
@@ -8,37 +10,18 @@ import webharness
 import random
 from tianxia.engine import Game
 import json
-from test_prologue_web import _enlist_main
-import html as htmllib
-from test_prologue import _to_step
-from conftest import real_content, renown_unscaled
+from conftest import real_content
 from tianxia import rules
-from tianxia.engine import SOCIAL_NO_ONE, Game
+from tianxia.engine import Game
 from conftest import classic_rules, real_content
 from jianfa_kit import no_jianfa
-from test_prologue_web import run as run_prologue_web, with_reveal
-from tianxia import explore_modes, sortie
-from tianxia.models import REVEAL_KEYS
+from test_prologue_web import run as run_prologue_web
+from tianxia import sortie
 from tianxia.sqlite_world import open_world
-
-
-# ── 原 test_fb107_first_screen.py（整檔搬進來） ──
-# FB-107（QA 93e7037，2026-10-08，375×812）：師父「碰到才說」的框、兩行的 💡、決戰集結（戰場、「此地還有」、結伴）在畫面上時，
-# 行動列掉到分頁列底下。企劃者 10/5：框留在行動列上面、話不切。
-#
-# 網頁現在畫好之後量一次（web/app.js 的 fitFirstScreen）：行動列（一組選項時是最後一顆）的下緣離分頁列不到 FIT_MARGIN，就照
-# FIT_STEPS 的順序一步一步收，放得下就停——放得下的畫面一點都不動。順序：間距 → 框收緊（話不切）→ 💡 收成一行 → 戰鬥卡片底下的補充
-# 收成一行 → 第一回合收進「展開過程」→「剛剛」只露三行 → 決戰時所在地的描述收成一行 → 集結那一句收成一行 → 一組選項的鈕縫與鈕高。
-# 每一樣點得開；「得失」與結果那幾行、框裡的話不收。
-#
-# 這裡把那幾個函式從 app.js 切出來，在 node 裡接一個假的頁面跑：假頁面的行動列下緣照「哪幾個元素身上掛了哪個 class」算（每一樣省多少 px
-# 寫在 SAVE），量的是收的順序、停在哪、點開過的不收、重量之前先還原、在路上與序章不收。真的 px 是 375×812 估出來的（fix-1008 的交接報告）。
-# 樣式另外釘住：每一步只動它該動的東西。
-
-ROOT = Path(__file__).parents[2]
-
-
-node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+from jianghu_kit import (  # noqa: F401
+    BATTLE, CLICK, MUSTER_SCENE, ROOT, ROW_ATTRS, SHOWDOWN_BOX, _bar, _cell, _consts, _face, _fight_round, _folded, _game,
+    _guide, _muster, _note_html, _page, _player, _scene, _script, _sided, _text, battle, glowing, node,
+)
 
 
 DRIVER = r"""
@@ -593,30 +576,6 @@ def test_only_a_width_change_refits_on_resize():
     assert out["turned"]["fitted"] == [] and out["turned"]["rounds"] == ["rounds"] and out["width"] == 812
 
 
-GUIDE_DRIVER = r"""
-// 說書人那一段（GUIDE_KEY 到 guideHtml）切出來：決戰集結時入伍、步驟的框預設收成一行（企劃者 2026-10-08，FB-107 修正輪）
-const a = src.indexOf("\n  const GUIDE_KEY");
-const b = src.indexOf("\n  }\n", src.indexOf("\n  function guideHtml(")) + 4;
-const store = {};
-globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
-const S = { guideRoad: null, guideFull: null, guidePage: null, main: { scene: input.scene || "" } };
-const esc = (s) => String(s);
-const pro = () => input.pro || null;
-const H = new Function("S", "esc", "pro", src.slice(a, b) + "\nreturn { guideHtml, openGuide, shutGuide };")(S, esc, pro);
-const kind = (g, onRoad = false) => { const html = H.guideHtml(g, onRoad); return html.includes('class="guide-line"') ? "line" : html.includes("card guide") ? "card" : ""; };
-const step = { speaker: "老石", key: "r3_battle", text: "要打大仗了。\n\n先按戰場名字旁的『加入』報名。", line: "去報名", done: [], end: false, paged: true, full: true };
-const ack = { speaker: "師父", key: "h_injury", text: "打一場掉的氣血，大半會自己回來。", done: [], end: true };
-finish(new Function("H", "S", "kind", "step", "ack", input.script)(H, S, kind, step, ack));
-"""
-
-
-MUSTER_SCENE = "<p><strong>長社火攻</strong></p>\n<p>集結中，還剩現實 {} 秒。選擇陣營加入；集結期間照常行動。</p>\n<hr />\n<p>【長社】危險 ★★</p>"
-
-
-def _guide(script, scene="", **extra):
-    return webharness.run(GUIDE_DRIVER, {"script": script, "scene": scene, **extra})
-
-
 @node
 def test_a_step_box_starts_folded_during_a_muster_and_full_otherwise():
     """企劃者 2026-10-08：決戰集結時，入伍、步驟的框（今天整段或分頁攤開的）預設收成一行，點了攤開——同在路上（FB-055）。
@@ -631,21 +590,6 @@ def test_a_step_box_starts_folded_during_a_muster_and_full_otherwise():
     assert _guide(opened, MUSTER_SCENE.format("12 分 5")) == ["card", "card"]  # 點開了：倒數變了也不收
     joined = MUSTER_SCENE.format("1 分 5").replace("集結中，還剩現實 1 分 5 秒。選擇陣營加入；集結期間照常行動。", "你已加入【官軍】，集結還剩現實 1 分 5 秒。集結結束就開打，在那之前照常行動。")
     assert _guide("return kind(step);", joined) == "line"  # 加入了、還在集結：照樣收著
-
-
-@node
-def test_an_opened_step_box_stays_open_while_the_countdown_ticks_and_folds_when_told():
-    """點開了：輪詢倒數變了（場景的字跟著變）也不收回去；自己按「收起」才收；集結結束（開打了）就回到平常的樣子（攤開），
-    下一場集結又從收著開始。"""
-    script = """
-      const out = [kind(step)];
-      H.openGuide(step); out.push(kind(step));
-      S.main = { scene: S.main.scene.replace("12 分 5", "11 分 55") }; out.push(kind(step));
-      S.main = { scene: "<p><strong>長社火攻</strong></p>\\n<p>【第一幕】（第 1／9 回合）火起</p>\\n<hr />\\n<p>【長社】</p>" }; out.push(kind(step));
-      S.main = { scene: S.main.scene.replace("【第一幕】（第 1／9 回合）火起", "集結中，還剩現實 9 分 0 秒。") }; out.push(kind(step));
-      H.openGuide(step); H.shutGuide(step); out.push(kind(step));
-      return out;"""
-    assert _guide(script, MUSTER_SCENE.format("12 分 5")) == ["line", "card", "card", "card", "line", "line"]
 
 
 # ── 真的卡片：收起來的那幾樣不含得失與結果 ─────────────────────────
@@ -681,7 +625,7 @@ def test_the_folded_parts_never_hold_the_gains_or_the_result(on):
 
 
 def _css() -> str:
-    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8") + (ROOT / "web" / "battle.css").read_text(encoding="utf-8") + (ROOT / "web" / "companions.css").read_text(encoding="utf-8") + (ROOT / "web" / "peers.css").read_text(encoding="utf-8"), flags=re.S)
 
 
 def _rules(css, needle):
@@ -864,7 +808,7 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
     first = bar[bar.index('<div class="sx-drow'):]
     first = first[:first.index("</div>")]  # 第一張那一行（裡面只有 span 與一顆鈕，沒有再巢一層 div）
     assert '<button class="btn small primary" data-act="sortie-answer" data-id="d1">應戰</button>' in first and "<div" not in first[4:]
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = (ROOT / "web" / "fit.js").read_text(encoding="utf-8")
     sel = re.search(r"const FIT_DUEL_BTN = ('[^']*'\s*\+\s*'[^']*');", src).group(1)
     assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
     grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
@@ -903,7 +847,7 @@ def test_refitting_opens_the_letter_again_once_the_duel_is_gone():
 
 @node
 def test_the_folded_letter_hides_its_body_and_the_push_question_in_css():
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "companions.css").read_text(encoding="utf-8")
     assert ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }" in css
 
 
@@ -1043,81 +987,6 @@ def test_unfolding_a_description_leaves_no_empty_class_attribute_behind():
     assert edge["desc"] == [[], ["fit-clip"]] and edge["descClassAttr"] == [None, "fit-clip"]
 
 
-def _html_tree(html: str) -> dict:
-    from html.parser import HTMLParser
-
-    void = {"img", "hr", "br", "input", "meta", "link", "source"}
-    root = {"tag": "#", "attrs": {}, "kids": [], "text": ""}
-    stack = [root]
-
-    class Reader(HTMLParser):
-        def handle_starttag(self, tag, attrs):
-            node = {"tag": tag, "attrs": dict(attrs), "kids": [], "text": ""}
-            stack[-1]["kids"].append(node)
-            if tag not in void:
-                stack.append(node)
-
-        def handle_startendtag(self, tag, attrs):
-            stack[-1]["kids"].append({"tag": tag, "attrs": dict(attrs), "kids": [], "text": ""})
-
-        def handle_endtag(self, tag):
-            while len(stack) > 1 and stack[-1]["tag"] != tag:
-                stack.pop()
-            if len(stack) > 1:
-                stack.pop()
-
-        def handle_data(self, data):
-            for node in stack[1:]:
-                node["text"] += data
-
-    Reader().feed(html)
-    return root
-
-
-def _scene_card(node: dict) -> dict | None:
-    classes = node["attrs"].get("class", "").split()
-    if node["tag"] == "section" and "card" in classes and "scene" in classes:
-        return node
-    for kid in node["kids"]:
-        found = _scene_card(kid)
-        if found:
-            return found
-    return None
-
-
-@node
-@pytest.mark.parametrize("with_art", [True, False])
-def test_the_description_selector_follows_the_real_scene_markup(on, with_art):
-    """第 6c 步的選擇器（app.js：場景卡直接孩子裡沒有 class 的 <p>，沒有畫時去掉第一段）照真的場景卡寫：有畫時地名那一條疊在畫上、
-    場景文字裡拿掉；沒有畫時它是第一段；「此地還有」、邀請、結伴是 <div>，選不到。"""
-    game = Game.new(on, "甲", rng=random.Random(0))
-    game.client = None
-    m = server.main_view(game)
-    paras = re.findall(r"<p>(.*?)</p>", m["scene"], re.S)
-    head, desc = paras[0], paras[1:]
-    assert head.startswith("【") and desc
-    m["art"] = ({"kind": "place", "src": "/static/img/places/world.webp", "title": "某地", "sub": "危險 ★", "time": "第 1 天 08:00", "head": f"<p>{head}</p>"}
-                if with_art else None)
-    m["here"] = [{"name": "沈伯安", "side": "黃巾軍"}]
-    m["calls"] = [{"text": "有人跟你打招呼", "options": [{"id": "invite:accept:1", "label": "回禮", "enabled": True}]}]
-    m["party"] = {"text": "你與某人結伴同行", "lead": False}
-    card = _scene_card(_html_tree(run_prologue_web(m, "return H.pageJianghu();")))["kids"]
-    drawn_art = any("scene-art" in k["attrs"].get("class", "") for k in card)
-    assert drawn_art is with_art
-    # 介面重整：場景文字包在 .rv-scene 裡（app.js 的 sceneBody），畫還是場景卡的直接孩子；結伴、邀請在卡底下，「此地還有」搬到此地人物那一排
-    kids = next(k for k in card if "rv-scene" in k["attrs"].get("class", "").split())["kids"]
-    picked = [k for k in kids if k["tag"] == "p" and "class" not in k["attrs"]]
-    if not drawn_art:
-        assert picked[0]["text"].startswith("【")  # 第一段是地名那一條
-        picked = picked[1:]
-    norm = lambda text: " ".join(re.sub(r"<[^>]*>", "", text).split())  # noqa: E731
-    assert [norm(k["text"]) for k in picked] == [norm(d) for d in desc]
-    assert "calls" in {k["attrs"].get("class") for k in card if k["tag"] == "div"} and not any("calls" in k["attrs"].get("class", "") for k in kids)
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert 'scene.querySelectorAll(":scope > p:not([class])")' in src and 'document.querySelector("#page > .card.scene:not(.road)").querySelector(":scope > .scene-art")' in src
-    assert 'card.querySelector(":scope > .rv-scene") || card' in src
-
-
 def test_the_art_and_extra_folds_are_styled():
     css = _css()
     assert re.search(r"(?m)^\.card\.scene > \.scene-art\.fit-art \{[^}]*height: 84px", css)
@@ -1135,7 +1004,7 @@ def test_the_art_and_extra_folds_are_styled():
 #    行動列被推下去也不重收。現在 renderTop 重畫狀態列前後量一次 #top 的高度，變了就重量（fitTopMoved）；fitFirstScreen 自己收 💡、
 #    還原 💡 時也會重畫狀態列，那時不算（S.fitting），不會一直重量。
 #
-# 假頁面照 tests/test_jianghu_page_web.py 的驅動程式（從 app.js 切出 FB-107 那一段；scripts/test_for.py 靠 import 與 app.js 這個名字挑到這裡）。
+# 假頁面照 tests/web/test_jianghu_page_web.py 的驅動程式（從 app.js 切出 FB-107 那一段；scripts/test_for.py 靠 import 與 app.js 這個名字挑到這裡）。
 
 # ── 1. 網址列收起、跑出來：基準不跟著跑 ─────────────────────────────
 
@@ -1260,117 +1129,6 @@ def test_render_top_hands_the_height_before_the_redraw_to_fit_top_moved():
     assert webharness.run(RENDER_TOP, {"html": "<div>展開的名號</div>"}) == [["fitBars", 300], [120, 300]]
 
 
-# ── 原 test_fb120_battle_fold.py（整檔搬進來） ──
-# FB-120（QA 32efa2c6，2026-10-09，375×812）：全服決戰開打的那段時間，戰場那一塊把每個人的第一屏都佔掉。
-#
-# Game.scene_text 有全服決戰時大家都看得到戰場：只能觀戰的人是戰場＋分隔線＋自己眼前的事。開打後每回合多一句開頭、放手一搏的原文與
-# 模型的故事，最近 5 段都在；QA 量到宛城開打、官軍站在潁川時師父的框在 1130、行動列 1226～1324（分頁列頂 756）。
-#
-# 現在（只改網頁，web/app.js 的 battleScene）：沒在打這一場的人（人不在決戰的大區、沒加入、沒臨時投效），場景裡開打中的戰場收成一行
-# 「宛城之戰　第 N 回合・點開看」（待 joy 潤，字在 app.js 的 BATTLE_PEEK），點了攤開、底下多一顆「收起戰場」（BATTLE_SHUT）；
-# 攤開記的是戰場的名字（S.battleOpen），回合往下走、輪詢重畫都不收回去，自己按收起或這一場打完才算。參戰的人照舊。
-#
-# 認的是伺服器給的場景（Markdown 轉好的 HTML）：分隔線（<hr />）之前那一段有開打後的回合數（「（第 N／M 回合」）、而且不是參戰者的那一句
-# （離開大區的「這回合不出手」、倒下的「你已經倒下」）。兩個正規式（BATTLE_ROUND、BATTLE_MINE）寫在 app.js、這裡用真的戰場驗：
-# 戰鬥那條線（FB-109、FB-113）改了 _battle_scene_text 的寫法，這裡就紅。
-#
-# 網頁用真實內容（週末設定）的宛城之戰、真的 /api/main，照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node
-# （scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
-
-BATTLE = "wancheng_jia"  # 宛城之戰（南陽）
-
-
-def _player(on, name, faction, place):
-    game = Game.new(on, name, rng=random.Random(0))
-    game.client = None
-    game.set_hints_off(True)
-    game.state.player.faction, game.state.player.location = faction, place
-    return game
-
-
-def _fight_round(fighter):
-    """參戰的那一個送出這一回合（場上只有他，送出就結算）。對面沒人、一回合推滿 push_max（正式 20），戰局先拉回中線，免得兩回合就收場。"""
-    fighter.world.mutate_battle(lambda b: setattr(b, "trend", 50))
-    move = next(o.id for o in fighter.options(odds=False) if o.enabled and o.id.startswith("battle:act:"))
-    fighter.choose(move)
-
-
-def _text(html):
-    """拿掉標籤與空白只比字：戰況一回合一段（app.js 的 roundBlocks）會把伺服器的回合標題與清單換成自己的標記，字一個不少（收成一行的舊回合多寫一次摘要，不算）。"""
-    html = re.sub(r"<summary><b>(.*?)</b><span>.*?</span></summary>", r"\1", html)  # 收成一行的舊回合：那一句摘要底下清單裡還有
-    return re.sub(r"\s+", "", re.sub(r"<[^>]*>", "", html))
-
-
-@pytest.fixture
-def battle(on):
-    """宛城之戰開打、打過一回合：一個臨時投效官軍的散人在宛城打，一個官軍的人站在潁川（QA 那一場）。"""
-    watcher = _player(on, "觀戰甲", "guan", "yingchuan")
-    fighter = _player(on, "參戰乙", None, "wan_city")
-    watcher.world.start_battle(on.battles[BATTLE], now=watcher.now)
-    fighter.choose("battle:enlist:guan")
-    fighter.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
-    fighter.options()
-    assert fighter.world.get_battle().phase == "active"
-    _fight_round(fighter)
-    return watcher, fighter
-
-
-def _consts():
-    driver = ('finish(new Function(konst("BATTLE_PEEK") + "\\n" + konst("BATTLE_SHUT") + '
-              '"\\nreturn { peek: BATTLE_PEEK, shut: BATTLE_SHUT };")());')
-    return webharness.run(driver, {})
-
-
-def _div_inner(html, head):
-    """html 裡開頭是 head 的那一個 <div …> 的內容（數 div 的層數找對應的收尾）；沒有這個 div 就原樣回傳。"""
-    start = html.find(head)
-    if start < 0:
-        return html
-    open_end = html.index(">", start) + 1
-    depth = 0
-    for tag in re.finditer(r"<(/?)div\b", html[start:]):
-        depth += -1 if tag.group(1) else 1
-        if depth == 0:
-            return html[open_end:start + tag.start()]
-    return html[open_end:]
-
-
-def _scene(page):
-    """場景卡的內容，拿掉戰局條（它自己的測試在 test_battle_gauge.py）：這裡比的是伺服器給的那一段文字。"""
-    scene = re.search(r'<section class="card scene(?: rv)?">(.*?)</section>', page, re.S).group(1)
-    scene = _div_inner(scene, '<div class="rv-scene')  # 介面重整：場景文字包在 rv-scene 裡（上面是「剛剛」那一條，下面是結伴與邀請）
-    start = scene.find('<div class="gauge"')
-    if start < 0:
-        return scene
-    depth = 0
-    for tag in re.finditer(r"<(/?)div\b", scene[start:]):  # 戰局條裡還有好幾層 div：數到對應的那一個收尾
-        depth += -1 if tag.group(1) else 1
-        if depth == 0:
-            end = scene.index(">", start + tag.start()) + 1
-            return scene[:start] + scene[end:]
-    return scene
-
-
-def _round(m):
-    return int(re.search(r"（第 (\d+)／\d+ 回合", m["scene"]).group(1))
-
-
-def _folded(m):
-    return (f'<p class="battle-fold" data-act="battle-open" role="button" tabindex="0" aria-expanded="false">'
-            f'宛城之戰　第 {_round(m)} 回合・{_consts()["peek"]}</p>')
-
-
-CLICK = """const tap = async (act) => { const el = { dataset: { act }, classList: { contains: () => false } };
-  await T.docListeners.click[0]({ target: { closest: () => el } }); return T.els.page.innerHTML; };"""
-
-
-def _sided(html):
-    """戰報裡「〔官軍〕」開頭的那一句（有人發動戰法；開局的【基礎吐納】就帶小戰法），網頁畫成陣營的小章（觀戰的是官軍：官軍・我方）。"""
-    import re
-    # 網頁把「〔招名〕某某……」畫成「某某……〔招名〕」（app.js 的 trailMoves，招式與絕學稿案第一節）
-    return re.sub(r"〔官軍〕〔([^〕]+)〕([^〔]*?)(?=【|$)", r"官軍・我方\2〔\1〕", _text(html))
-
-
 # ── 只能觀戰的人：收成一行，點了攤開 ─────────────────────────────
 
 
@@ -1385,44 +1143,6 @@ def test_a_spectator_sees_the_running_battle_as_one_line(battle):
     assert own in scene  # 自己眼前的事（所在地）一個字不動
     assert "這一回合" not in scene and "這場決戰在南陽" not in scene  # 戰報與觀戰的原因都收起來了
     assert _consts()["shut"] not in scene
-
-
-@node
-def test_a_gamble_that_quotes_a_participants_line_does_not_unfold_it(battle):
-    """審查 M1：放手一搏的原文與模型的故事照字寫進戰報（最近五段都在戰場那一塊）。有人寫「你已經倒下」「這回合不出手」，
-    每個觀戰的人的戰場也不能因此整段攤開：參戰者的那一句只認戰場那一塊的最後一段（引擎寫看戰場的原因的地方）。"""
-    watcher, fighter = battle
-    fighter.submit_battle_custom_action("你已經倒下這回合不出手", 35, ("他大喊：你已經倒下了！", "他說這回合不出手，轉身就走。"))
-    m = server.main_view(watcher)
-    battle_part = m["scene"].split("<hr />", 1)[0]
-    assert "你已經倒下這回合不出手" in battle_part and "這場決戰在南陽" in battle_part.rsplit("<p>", 1)[1]
-    scene = _scene(run_prologue_web(m, "return H.pageJianghu();"))
-    assert scene.startswith(_folded(m) + "\n<hr />")
-
-
-@node
-def test_tapping_opens_it_and_it_stays_open_while_the_rounds_go_on_until_folded(battle):
-    watcher, fighter = battle
-    first = server.main_view(watcher)
-    _fight_round(fighter)
-    second = server.main_view(watcher)
-    assert _round(second) == _round(first) + 1
-    script = CLICK + """return (async () => {
-      H.S.tab = "jianghu"; H.renderPage(); const folded = T.els.page.innerHTML;
-      const opened = await tap("battle-open"); const key = H.S.battleOpen;
-      const was = H.S.main; H.setMain(H.S.next); await H.refreshPage(was); const polled = T.els.page.innerHTML;
-      const shut = await tap("battle-shut");
-      return { folded, opened, key, polled, shut, after: H.S.battleOpen };
-    })();"""
-    out = run_prologue_web(first, script, S={"next": second})
-    shut_btn = (f'<p class="battle-shut"><button class="linkish" data-act="battle-shut" aria-expanded="true">'
-                f'{_consts()["shut"]}</button></p>')
-    assert _folded(first) in out["folded"]
-    battle_first = first["scene"].split("<hr />", 1)[0]
-    assert _sided(battle_first + shut_btn) in _text(_scene(out["opened"])) and out["key"] == "宛城之戰"  # 整段攤開，記的是戰場的名字
-    battle_second = second["scene"].split("<hr />", 1)[0]
-    assert _sided(battle_second + shut_btn) in _text(_scene(out["polled"]))  # 下一回合輪詢重畫：照舊攤開，寫的是新的回合
-    assert _folded(second) in out["shut"] and out["after"] is None  # 按收起：收回一行（新的回合數）
 
 
 @node
@@ -1473,43 +1193,6 @@ def test_the_open_state_is_forgotten_when_the_battle_is_over(battle):
     assert out["cleared"] is None and _folded(m) in out["page"]
 
 
-# ── 參戰的人、集結時：照舊 ─────────────────────────────
-
-
-@node
-def test_a_participant_sees_the_whole_battle(battle):
-    _, fighter = battle
-    m = server.main_view(fighter)
-    assert "<hr />" not in m["scene"] and "battle:act:" in "".join(o["id"] for o in m["options"])
-    scene = _scene(run_prologue_web(m, "return H.pageJianghu();"))
-    assert "battle-fold" not in scene and "這一回合" in scene
-
-
-@node
-def test_a_participant_who_walked_out_of_the_region_is_not_folded(battle):
-    """參戰後離開了南陽（這回合不出手、回去就能再出手）：他是這一場的人，戰場照舊整段。"""
-    _, fighter = battle
-    fighter.state.player.location = "yingchuan"
-    fighter._sync_battle_presence()  # noqa: SLF001  出發、抵達時引擎自己記；這裡直接把人放到潁川
-    m = server.main_view(fighter)
-    assert "<hr />" in m["scene"] and "這回合不出手" in m["scene"]
-    scene = _scene(run_prologue_web(m, "return H.pageJianghu();"))
-    assert "battle-fold" not in scene and "這一回合" in scene
-
-
-@node
-def test_a_scene_with_enlist_buttons_on_the_name_line_is_not_folded(battle, on):
-    """審查 M5：名字那一行有加入或臨時投效的鈕（musterJoins）時不收——收了的話那幾顆鈕就沒地方畫。開打後人在決戰的大區、
-    還沒投效的散人就是這一種：引擎在戰場底下接自己眼前的事（FB-109），網頁照舊整段、鈕排在名字那一行。"""
-    drifter = server.main_view(_player(on, "散人丙", None, "wan_city"))
-    assert [o["id"] for o in drifter["options"] if o["id"].startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
-    assert "<hr />" in drifter["scene"] and "回合" in drifter["scene"].split("<hr />", 1)[0]
-    scene = _scene(run_prologue_web(drifter, "return H.pageJianghu();"))
-    assert "battle-fold" not in scene and "這一回合" in scene
-    assert scene.startswith('<div class="muster-head"><p><strong>宛城之戰</strong></p>')
-    assert re.findall(r'data-id="(battle:enlist:\w+)"', scene) == ["battle:enlist:guan", "battle:enlist:huang"]
-
-
 @node
 def test_a_muster_is_left_to_the_first_screen_fit(on):
     """還在集結（沒有回合數）：不歸這裡收，照舊是 FB-107 收集結那一句。"""
@@ -1533,35 +1216,6 @@ def test_the_fit_does_not_clip_a_battle_the_player_opened():
     assert "muster" not in opened["fitted"] and opened["musterClip"] == [False, False, False]
 
 
-# ── 原 test_fb087_here_fold.py（整檔搬進來） ──
-# FB-087：江湖頁「此地還能做 N 件事」摺疊被重畫收起來（QA 驗 FB-077，2026-10-06，375×812）。
-#
-# 摺疊裡的按鈕（例：求見盧植）被擋下來（「對方還沒答話，稍等。」、排太久）之後，choose() 重畫整頁、摺疊就收起來了；輪詢帶來新畫面時
-# renderPage() 也一樣。現在摺疊的開合記在 S.here（玩家自己開關的、這一處），重畫照它補回。附帶 guide-3b 審查 Minor 11：入伍段第一道軍令
-# 那一步（框上帶 glow act:duty）摺疊本來每次重畫都自動打開、跟收起它的玩家打架——現在每一處只在那一步開頭自動打開一次，之後照玩家的。
-#
-# 網頁沒有建置步驟也沒有瀏覽器：照 tests/test_prologue_web.py 的做法，把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main，
-# 用假的 toggle 事件當玩家點開、收起摺疊，看重畫出來的 HTML。假 DOM 裡 details 的開合就是 HTML 裡有沒有 open：驗的是「重畫畫出什麼」。
-
-# 驅動程式共用的小工具：fold() 讀頁面上那個摺疊現在畫成開著（true）、收著（false）、沒畫（null）；toggle(open) 送一個玩家點開／收起
-# 的 toggle 事件；refuse() 讓下一個 /api/choose 被伺服器擋下來（400）、並讓 choose() 失敗後會重畫（按下去的那顆鈕還標著 busy）
-HELPERS = """
-const fold = () => { const hit = T.els.page.innerHTML.match(/<details class="fold here"( open)?>/); return hit ? !!hit[1] : null; };
-const toggle = (open) => T.docListeners.toggle[0]({ target: Object.assign(Object.create(T.Element.prototype), { matches: (sel) => sel === "details.here", open }) });
-const redraw = () => { T.els.page.innerHTML = ""; H.renderPage(); return fold(); };
-const press = (id) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: "choose", id }, classList: { contains: () => false, add() {}, remove() {} } }) } });
-const refuse = (error) => {
-  T.ctx.setTimeout = () => 0; // toast() 的計時器不要拖住這個請求
-  T.ctx.fetch = (url, opts) => { T.calls.push([url, JSON.parse(opts.body)]); return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error }) }); };
-  T.qs[".options .btn.busy, .act-ink.busy"] = {};
-};
-"""
-
-
-def _script(body: str) -> str:
-    return HELPERS + body
-
-
 def _json(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -1573,14 +1227,6 @@ def _quiet(m):
 
 def _at(m, place):
     return {**m, "status": {**m["status"], "location": place}}
-
-
-@pytest.fixture
-def glowing(on):
-    """入伍段第一道軍令那一步：框上帶 glow（act:duty），「此地還能做」裡有發光的巡哨。"""
-    m = _enlist_main(on)
-    assert m["guide"]["glow"] == ["act:duty"] and any(o["id"] == "act:duty" for o in m["options"])
-    return m
 
 
 @pytest.fixture
@@ -1732,15 +1378,6 @@ def test_the_next_glowing_step_or_place_opens_it_again_once(glowing):
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_the_fold_without_a_glowing_duty_button_is_not_opened_by_the_step(glowing):
-    """框上帶 glow、但這一處沒有發光的那顆鈕（沒有 act:duty）：沒有東西要露出來，摺疊不自動打開，也不記成自動打開過。"""
-    other = {"id": "learn:cuquan", "label": "學粗淺拳腳（學費 0 兩）", "enabled": True, "wait": "", "confirm": ""}  # 摺疊裡留一顆別的鈕，摺疊還畫得出來
-    m = {**glowing, "options": [o for o in glowing["options"] if o["id"] != "act:duty"] + [other]}
-    out = run_prologue_web(m, _script("H.renderPage(); return { open: fold(), auto: Object.keys(H.S.hereAuto) };"))
-    assert out == {"open": None, "auto": []}  # 沒有要露出來的：照平常畫此地可為那一排（介面重整）
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_logging_in_again_starts_the_fold_over(glowing):
     out = run_prologue_web(glowing, _script("""
       H.renderPage(); toggle(true);
@@ -1855,202 +1492,11 @@ def test_a_glow_outside_any_fold_is_unchanged(glowing):
 # 集結那一句（「選擇陣營加入；集結期間照常行動。」）是戰鬥引擎寫的（Game._battle_scene_text），另一條線正在改戰鬥那一段：
 # fix-1008 裁示不動它，「在哪裡加入」寫在網頁上、鈕的旁邊（web/app.js 的 MUSTER_NOTE），集結那一句照伺服器給的原樣畫。
 #
-# 網頁用真實內容（週末設定）的廣宗決戰、真的 /api/main，照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node
+# 網頁用真實內容（週末設定）的廣宗決戰、真的 /api/main，照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node
 # （scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。句子待 joy 潤：那一小句照 app.js 的 MUSTER_NOTE、MUSTER_ARROW 比對，
 # 不在這裡再寫一次字面；這裡只認事實（哪一顆、在哪、指向哪）。
 
 ROOT_fb105 = webharness.ROOT
-
-
-# ── 共用 ─────────────────────────────────────────────
-
-
-def _muster(on, who="guan", place="luzhi_camp", battle="guangzong", name="甲"):
-    """廣宗決戰集結中（真實內容、週末設定）：who 是陣營或 None（散人），人在 place；提示關掉（框不在這個測試裡）。"""
-    game = Game.new(on, name, rng=random.Random(0))
-    game.client = None
-    game.set_hints_off(True)
-    p = game.state.player
-    p.faction, p.location = who, place
-    if battle is not None:  # None：同一個世界裡已經開著的那一場
-        game.world.start_battle(on.battles[battle], now=game.now)
-    return game
-
-
-def _start_fighting(game):
-    """集結時間撥到過去，再讀一次選單：options() 把全服戰鬥追到現在，這一場就開打。main_view 先讀場景（不推進戰鬥）、
-    最後才讀選單，所以要在它之前先推進，不然場景還寫著集結、選單已經是開打的。"""
-    game.world.mutate_battle(lambda b: setattr(b, "muster_deadline_real", -1.0))
-    game.options()
-    assert game.world.get_battle().phase == "active"
-
-
-def _page(m):
-    # 介面重整：「此地還能做」的摺疊換成此地可為那一排圓章與「全部」清單；這裡打開「全部」，每一顆（灰的也是）都畫成一顆有 data-id 的鈕
-    return run_prologue_web(m, "H.S.hereAll = true; return H.pageJianghu();")
-
-
-def _fold(page):
-    """此地可為的「全部」清單（舊的「此地還能做」摺疊；入伍段有發光的鈕時照舊是摺疊）。"""
-    hit = re.search(r'<div class="sheet here-all"[^>]*>(.*?)</div></div>$', page, re.S) or re.search(r'<details class="fold here"[^>]*>(.*?)</details>', page, re.S)
-    return hit.group(1) if hit else ""
-
-
-def _consts_fb105():
-    """app.js 裡那一小句與箭頭（MUSTER_NOTE、MUSTER_ARROW）：joy 潤了字，這裡跟著讀，不必改測試。"""
-    driver = 'finish(new Function(konst("MUSTER_NOTE") + "\\n" + konst("MUSTER_ARROW") + "\\nreturn { note: MUSTER_NOTE, arrow: MUSTER_ARROW };")());'
-    return webharness.run(driver, {})
-
-
-def _note_html(kind):
-    """那一小句畫出來的樣子：字照常唸，箭頭藏起來不唸，id 給那一排鈕的 aria-describedby 用。"""
-    c = _consts_fb105()
-    return (f'<span class="muster-note" id="muster-note">{htmllib.escape(c["note"][kind], quote=False)}'
-            f'<span aria-hidden="true"> {c["arrow"][kind]}</span></span>')
-
-
-ROW_ATTRS = 'role="group" aria-label="參戰" aria-describedby="muster-note"'
-
-
-# ── 加入的鈕在場景卡戰場名字那一行，不在摺疊裡 ───────────────────────
-
-
-@node
-def test_the_join_button_sits_by_the_battles_name_and_leaves_the_fold(on):
-    m = server.main_view(_muster(on, "guan"))
-    assert any(o["id"] == "battle:join:guan" and o["enabled"] for o in m["options"]) and "act:explore" in [o["id"] for o in m["options"]]
-    page = _page(m)
-    scene = _scene(page)
-    head = re.search(r'<div class="muster-head">(.*?</div>)</div>', scene, re.S).group(1)
-    # 同一行：戰場名字、說在這裡報名的那一小句（箭頭指向右邊的鈕）、加入的鈕
-    assert head == ('<p><strong>廣宗決戰</strong></p>' + _note_html("join")
-                    + f'<div class="options muster-join" {ROW_ATTRS}><button class="btn small primary" data-act="choose" '
-                    'data-id="battle:join:guan"><span>加入【官軍】</span></button></div>')
-    assert _consts_fb105()["arrow"]["join"] == "→"  # 鈕在右邊
-    assert "battle:join:guan" not in _fold(page) and page.count('data-id="battle:join:guan"') == 1
-    assert 'class="here-row"' in page  # 此地可為照樣在（求見、拜師、巡哨），只是少了加入那一顆
-    # 集結那一句（戰鬥引擎寫的）照伺服器給的原樣跟在名字那一行後面：網頁只換掉第一段（名字），其餘一個字不動
-    rest = m["scene"].split("</p>\n", 1)[1]
-    assert "集結中，還剩現實" in rest and scene.startswith('<div class="muster-head">') and rest in scene
-
-
-@node
-def test_a_drifters_two_enlist_buttons_get_their_own_row_under_the_name(on):
-    m = server.main_view(_muster(on, None))
-    page = _page(m)
-    scene = _scene(page)
-    title, note, row = re.search(
-        r'<div class="muster-head"><p>(.*?)</p>(<span class="muster-note".*?</span></span>)'
-        rf'<div class="options muster-join wide" {ROW_ATTRS}>(.*?)</div></div>', scene, re.S).groups()
-    assert title == "<strong>廣宗決戰</strong>"
-    assert note == _note_html("enlist") and _consts_fb105()["arrow"]["enlist"] == "↓"  # 在名字右邊、往下指那兩顆
-    assert re.findall(r'data-id="(battle:enlist:\w+)"', row) == ["battle:enlist:guan", "battle:enlist:huang"]
-    # 鈕上只寫括號前那一段（「只算這一場」在那一小句裡）
-    labels = {o["id"]: o["label"] for o in m["options"]}
-    assert re.findall(r"<span>(.*?)</span>", row) == [labels[i].split("（")[0] for i in ("battle:enlist:guan", "battle:enlist:huang")]
-    assert all("（" in labels[i] for i in ("battle:enlist:guan", "battle:enlist:huang"))
-    assert "battle:enlist" not in _fold(page)
-    assert scene.endswith(m["scene"].split("</p>\n", 1)[1])  # 集結那一句照伺服器給的原樣
-
-
-@node
-def test_a_drifter_who_arrives_after_the_fighting_started_still_gets_the_row(on):
-    """開打了還沒投效的散人（臨時投效照樣按得下去，試玩回饋 2026-10-08）：那兩顆一樣畫在名字底下，不收進摺疊。"""
-    game = _muster(on, None)
-    _start_fighting(game)
-    m = server.main_view(game)
-    assert "集結中" not in m["scene"] and "回合" in m["scene"]  # 場景是開打之後的戰場
-    assert [o["id"] for o in m["options"] if o["id"].startswith("battle:")] == ["battle:enlist:guan", "battle:enlist:huang"]
-    page = _page(m)
-    assert re.search(rf'<div class="options muster-join wide" {ROW_ATTRS}>', _scene(page))
-    assert "battle:enlist" not in _fold(page) and page.count('data-id="battle:enlist:guan"') == 1
-
-
-@node
-def test_a_late_comer_on_your_own_side_keeps_the_ordinary_join_late_button(on):
-    """開打了才到的自己人：選單只有一顆「加入戰局」（battle:join_late），本來就看得到，照舊畫成一般的鈕；不搬到名字那一行。"""
-    game = _muster(on, "guan")
-    _start_fighting(game)
-    m = server.main_view(game)
-    assert "集結中" not in m["scene"]
-    assert [o["id"] for o in m["options"]] == ["battle:join_late"]
-    page = _page(m)
-    assert "muster-" not in page and _scene(page) == m["scene"]
-    assert re.search(r'<button class="btn " data-act="choose" data-id="battle:join_late" >', page)
-
-
-@node
-def test_once_you_joined_the_page_is_what_it_was(on):
-    """已經加入（或投效過）：「已加入」是灰的那一顆，照舊收在摺疊裡，場景卡就是伺服器給的那一段，一個字不多。"""
-    for who, first in (("guan", "battle:join:guan"), (None, "battle:enlist:guan")):
-        game = _muster(on, who)
-        game.choose(first)
-        m = server.main_view(game)
-        page = _page(m)
-        assert "muster-" not in page, who
-        assert _scene(page) == m["scene"], who
-        assert first in _fold(page), who  # 灰的「已加入」／「已臨時投效」還在摺疊裡
-
-
-@node
-def test_someone_who_cannot_join_sees_no_change(on):
-    """不在決戰的大區：選單上沒有加入，場景卡照伺服器給的。（豪強以前在這裡一旁觀戰；Joy 2026-10-13 起跟散人一樣臨時投效。）"""
-    elsewhere = _muster(on, "guan", place="luzhi_camp", battle=None, name="乙")  # 黃巾決戰在潁川汝南，人在冀州
-    for game in (elsewhere,):
-        m = server.main_view(game)
-        assert not any(o["id"].startswith("battle:") for o in m["options"])
-        m["art"] = None  # 站在地點時場景卡上面有圖、地名那一段疊到圖上（減法季批 8，test_scene_art.py）：這裡比的是沒圖那一份文字
-        page = _page(m)
-        assert "muster-" not in page and _scene(page) == m["scene"]
-
-
-@node
-def test_with_an_event_open_the_join_button_still_sits_by_the_name_and_only_once(on):
-    """集結時碰上事件（選單是一排選項、不是行動列）：加入照樣在名字那一行，不在選項裡再列一次；事件的選項照舊。"""
-    game = _muster(on, "guan")
-    game.state.pending_event = "jz_gz_forge"
-    m = server.main_view(game)
-    assert [o["id"] for o in m["options"]][0] == "battle:join:guan" and "act:explore" not in [o["id"] for o in m["options"]]
-    page = _page(m)
-    assert page.count('data-id="battle:join:guan"') == 1 and "muster-join" in _scene(page)
-    assert 'data-id="choice:0"' in page
-
-
-# ── 場景卡沒畫的時候，鈕照舊留在選單上 ─────────────────────────────
-
-
-@node
-def test_on_the_road_a_join_option_stays_in_the_menu(on):
-    """在路上加入不了（引擎在路上不給這幾顆）；萬一選單上有，路上的場景卡收成兩行、不畫名字那一行：鈕照舊畫在選項裡，不搬、不見。"""
-    m = server.main_view(_muster(on, "guan"))
-    road = {**m, "on_road": True, "options": [o for o in m["options"] if o["id"] == "battle:join:guan"]}
-    page = _page(road)
-    assert "muster-" not in page
-    assert re.search(r'<div class="options">\s*<button class="btn " data-act="choose" data-id="battle:join:guan" >', page)
-
-
-@node
-def test_while_the_master_talks_in_the_hut_the_enlist_buttons_stay_in_the_menu(on):
-    """序章：草廬在潁川汝南，長社火攻集結時新角色在序章第 2 步以前就有投效兩顆（審查 M2 的情形）；現在序章裡引擎不給投效、
-    場景也不畫戰場（FB-113），頁面上沒有參戰那一列。
-    畫面這一層守的照舊：師父在說話（框在、眼前沒有事件）時草廬那張場景卡不畫（masterTalks），選單上萬一有投效鈕也不搬
-    （搬了就沒地方畫、整個不見），照舊收在「此地還能做」的摺疊裡。"""
-    game = Game.new(on, "沈浪", rng=random.Random(0), prologue=True)
-    game.client = None
-    _to_step(game, 1)
-    game.world.start_battle(on.battles["changshe_fire"], now=game.now)
-    m = server.main_view(game)
-    assert m["prologue"] is not None and m["guide"] is not None
-    assert not any(o["id"].startswith("battle:") for o in m["options"]) and "長社火攻" not in m["scene"]  # FB-113
-    assert "muster-" not in _page(m)
-    enlist = [{"id": f"battle:enlist:{side}", "label": f"臨時投效【{name}】（只算這一場）", "enabled": True, "wait": "", "confirm": ""}
-              for side, name in (("guan", "官軍"), ("huang", "黃巾軍"))]
-    stray = {**m, "options": enlist + m["options"]}
-    assert not any(o["id"].startswith("choice:") for o in stray["options"]) and not stray["on_road"]
-    page = _page(stray)
-    assert '<section class="card scene">' not in page and "muster-" not in page  # 場景卡沒畫
-    for o in enlist:
-        assert page.count(f'data-id="{o["id"]}"') == 1 and o["id"] in _fold(page)
 
 
 @node
@@ -2063,19 +1509,11 @@ def test_a_scene_without_a_first_paragraph_puts_the_row_on_top(on):
     assert scene.endswith("</div></div>\n" + odd["scene"])
 
 
-@node
-def test_the_button_label_is_escaped(on):
-    m = server.main_view(_muster(on, "guan"))
-    odd = {**m, "options": [{**o, "label": "加入【<b>官軍</b>】"} if o["id"] == "battle:join:guan" else o for o in m["options"]]}
-    scene = _scene(_page(odd))
-    assert "<span>加入【&lt;b&gt;官軍&lt;/b&gt;】</span>" in scene and "<b>官軍" not in scene
-
-
 # ── 樣式：名字那一行不因為那顆鈕變高 ─────────────────────────────
 
 
 def _css_rule(selector):
-    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8") + (ROOT_fb105 / "web" / "battle.css").read_text(encoding="utf-8"), flags=re.S)
     found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert found, f"style.css 裡找不到 {selector}"
     return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}
@@ -2099,66 +1537,11 @@ def test_the_join_button_does_not_make_the_name_line_taller():
     assert _css_rule(".scene .muster-join.wide .btn")["margin"] == "0"  # 另起一行時不往上吃，免得蓋到名字
 
 
-# ── 原 test_fb360_escort_pick.py（整檔搬進來） ──
-# FB-360（歷史武將同行 QA，2026-10-19，375×812）：名下有同伴的人按場景卡上的「加入」之後，挑同伴的四顆（battle:escort:*）
-# 收在「此地還能做」的摺疊裡，第一屏看起來什麼都沒變——還沒加入，卻以為報名了（FB-105 那個坑換了一個地方）。
-#
-# 現在 web/app.js 的 musterJoins 也認 battle:escort:，挑同伴那一步畫在場景卡戰場名字那一行底下（跟加入同一個位置），一顆一行
-# （鈕上寫份量與氣血，四顆擠一排放不下），旁邊那一小句說挑了才算加入（MUSTER_NOTE.escort，待 joy 潤）；摺疊裡不再列。
-# 晚到（battle:join_late）挑同伴也一樣。網頁照 tests/test_jianghu_page_web.py 的做法用真實內容、真的 /api/main。
-
-PICK = re.compile(r'data-id="(battle:escort:\w+)"')
-
-
-def _owner(on, game):
-    p = game.state.player
-    for cid in ("liubei", "guanyu"):
-        assert game.world.try_recruit(cid, p.name, cap=3)
-    return p
-
-
-def _row(scene):
-    return re.search(rf'<div class="options muster-join pick" {ROW_ATTRS}>(.*?)</div></div>', scene, re.S)
-
-
-@node
-def test_after_join_the_escort_pick_sits_by_the_battles_name(on):
-    game = _muster(on, "guan")
-    _owner(on, game)
-    game.choose("battle:join:guan")
-    m = server.main_view(game)
-    picks = [o["id"] for o in m["options"] if o["id"].startswith("battle:escort:")]
-    assert set(picks) == {"battle:escort:liubei", "battle:escort:guanyu", "battle:escort:none", "battle:escort:back"}
-    page = _page(m)
-    scene = _scene(page)
-    assert _note_html("escort") in scene  # 那一小句說挑了才算加入
-    row = _row(scene)
-    assert row is not None and PICK.findall(row.group(1)) == picks  # 照選單的順序，一顆都不少
-    labels = {o["id"]: o["label"] for o in m["options"]}
-    assert all(f"<span>{labels[i]}</span>" in row.group(1) for i in picks)  # 份量與氣血照寫（挑誰要看）
-    assert "battle:escort" not in _fold(page) and all(page.count(f'data-id="{i}"') == 1 for i in picks)
-
-
 def test_the_pick_row_stacks_one_button_per_line():
     """鈕上寫「派某某隨你出陣（份量 N・氣血 N）」，375 寬四顆擠一排放不下：另起一行、一顆一行、佔滿寬度。"""
     row = _css_rule(".scene .muster-join.pick")
     assert row["flex-basis"] == "100%" and row["flex-direction"] == "column"
     assert _css_rule(".scene .muster-join.pick .btn")["width"] == "100%"
-
-
-@node
-def test_a_late_comer_picks_by_the_name_too(on):
-    game = _muster(on, "guan")
-    _owner(on, game)
-    _start_fighting(game)
-    game.choose("battle:join_late")
-    m = server.main_view(game)
-    picks = [o["id"] for o in m["options"] if o["id"].startswith("battle:escort:")]
-    assert len(picks) == 4
-    page = _page(m)
-    row = _row(_scene(page))
-    assert row is not None and PICK.findall(row.group(1)) == picks
-    assert all(page.count(f'data-id="{i}"') == 1 for i in picks)
 
 
 # ── 原 test_fb663_reveal_card_web.py（整檔搬進來） ──
@@ -2264,55 +1647,13 @@ def test_the_stylesheet_no_longer_leans_on_scroll_margin_for_the_card():
     assert rule and "scroll-margin" not in rule.group(0)
 
 
-# ── 原 test_fb664_grey_cell_sub_web.py（整檔搬進來） ──
-# FB-664（練功入口對比圖開發回報，PM 2026-10-21 給號）：行動列「交友」灰著時，格子小字是整句「這裡沒有能說上話的人」
-# （10 個字、100 px），四格時兩頭被格子切掉。灰格小字最多六個字（一行約 60 px、10 px 的字）：格子寫短的，整句放行動列底下那一行
-# （actNotesHtml）。談滿了的交友（一類一顆開著時，單人地點的交友是 act:socialize 不是 call:）同一個毛病，一併改。沒有 node 就略過。
-# node 排不了版：這裡看格子裡寫什麼、底下那一行寫什麼；375／320 寬有沒有被切在瀏覽器裡量（Range 對格子的矩形），數字寫在試玩回饋 FB-664 那一列。
-
-def _game(at, faction=None):
-    content = renown_unscaled(real_content("week7"))  # 一類一顆開著（開季蓋章）；求見門檻照原數（名望 15）
-    content.config.auto_open_first_season = True
-    game = Game.new(content, "沈浪", rng=random.Random(0))
-    game.client = None
-    p = game.state.player
-    p.location, p.faction, p.stamina = at, faction, float(content.config.stamina_max)
-    return game
-
-
-def _bar(game):
-    return run_prologue_web(server.main_view(game), "return H.actionBar(H.S.main);")
-
-
-def _cell(bar, key):
-    return re.search(rf'<button class="act-ink[^"]*" data-key="{key}".*?</button>', bar, re.S).group(0)
-
-
 def _sub(cell):
     return re.search(r"</b><small>(.*?)</small>", cell).group(1)
-
-
-def _face(cell):
-    """格子上看得到的那一截（開頭標籤裡 data-why 那一句不算）。"""
-    return cell[cell.index(">") + 1:]
 
 
 def _width(text):
     """格子小字的寬（以一個漢字為 1）：英數與空白算半個。一行約 60 px、10 px 的字，放得下六個漢字（sortie.OUT_NOTE 的註解）。"""
     return sum(1 if ord(ch) > 0x2E80 else 0.5 for ch in text)
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
-def test_the_social_cell_greyed_for_nobody_here_says_it_briefly_and_the_note_row_has_the_sentence():
-    game = _game("yingchuan")
-    social = next(o for o in game.options() if o.id == "act:socialize")
-    assert not social.enabled and social.label == f"交友（{SOCIAL_NO_ONE}）"  # 前提：真的是這一句
-    bar = _bar(game)
-    cell = _cell(bar, "social")
-    assert "<b>交友</b><small>沒有人</small>" in cell and SOCIAL_NO_ONE not in _face(cell)
-    assert f'data-why="{SOCIAL_NO_ONE}。"' in cell  # 整句在點了浮出的那一句（減法季批 1 拿掉了底下那一行），不是伺服器寫的那一句「結識這裡的人」
-    assert "結識這裡的人" not in bar
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -2327,27 +1668,8 @@ def test_every_grey_cell_sub_fits_the_cell():
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 @pytest.mark.slow
-def test_a_talked_out_single_figure_social_cell_says_so_briefly_too():
-    """一類一顆開著時，單人地點談滿了的交友是灰的 act:socialize，括號裡整句帶換日的那一刻（跟 call: 談滿同一句）。孟津渡是真的會這樣的地方。"""
-    game = _game("mengjin_ford")
-    content = game.content
-    p = game.state.player
-    (cid,) = game._figures_here()
-    p.flags.add(f"結識:{cid}")
-    p.fortune = True
-    p.talks_today[cid] = [rules.game_day(content, game.state.world), content.config.talk_turns_per_day]
-    option = next(o for o in game.options() if o.id == "act:socialize")
-    note = game._talked_out_note()
-    assert not option.enabled and option.label == f"交友（{note}）"
-    bar = _bar(game)
-    assert "<b>交友</b><small>已談滿</small>" in _cell(bar, "social") and "00:00" not in _face(_cell(bar, "social"))
-    assert f'data-why="{note}。"' in _cell(bar, "social")
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
-    """伺服器沒給這一格的說明（舊版、序章裡是空的）：底下那一行照舊不畫（tests/test_explain_web.py::test_no_notes_without_server_notes 的約定），
+    """伺服器沒給這一格的說明（舊版、序章裡是空的）：底下那一行照舊不畫（tianxia/features/guide/tests/test_explain_web.py::test_no_notes_without_server_notes 的約定），
     有沒有那一行由伺服器說了算，網頁只換句子；格子照樣寫短的。"""
     m = server.main_view(_game("yingchuan"))
     m["action_notes"] = {}
@@ -2361,7 +1683,7 @@ def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
 def test_the_other_grey_reasons_keep_their_cells_and_notes():
     """名望還差：四格時放得下、格子照寫。FB-670（練功多一格，五格每格約 62 px、320 寬約 51 px，灰格小字最多四個字）起，
     「名望還差 15」在 320 寬會被切，改照這一張的做法：格子寫「名望不夠」，還差多少帶句號寫在底下那一行。
-    新規則的其他灰格在 tests/test_jianghu_page_web.py。"""
+    新規則的其他灰格在 tests/web/test_jianghu_page_web.py。"""
     game = _game("changshe")
     bar = _bar(game)
     assert "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social") and "名望還差 15" not in _face(_cell(bar, "social"))
@@ -2372,7 +1694,7 @@ def test_the_other_grey_reasons_keep_their_cells_and_notes():
 # FB-670（企劃者 2026-10-22 選練功入口「丙」，PM 給號）：練功藏在探索卡最下面、城裡灰著看不到。行動列多一格「練功」，五格：
 # 探索、練功、出陣、交友、移動。野外亮著寫「不限次數」、第二行照勝算上色；城裡灰著寫「城外才有」（城外沒有對手的地方寫「這裡沒有」，
 # PM 2026-10-22；照伺服器給的 note），整句（最近的在哪、
-# 步行多久）在行動列底下那一行，照伺服器的 action_notes（Game._practice_line，見 tests/test_practice_spots.py），網頁不另寫判斷；
+# 步行多久）在行動列底下那一行，照伺服器的 action_notes，網頁不另寫判斷（練功的鈕與那一行第 13 批拿掉）；
 # 不帶路（按不下去）。探索卡回到真的三選一。五格每格約 62 px（320 寬約 51 px）：灰格小字最多四個字，長的原因格子寫短的、整句在底下那一行
 # （同 FB-664）；出陣的名字（「出陣・攪局」）只在「・」後面換行。序章與初入江湖照 reveal 的鍵（act:practice）亮，教學沒寫的步驟不畫。
 # node 排不了版：這裡看畫了什麼；375／320 寬切不切字在瀏覽器裡量，數字寫在試玩回饋 FB-670 那一列。沒有 node 就略過。
@@ -2391,13 +1713,12 @@ NOW = MON + 10 * HOUR
 PRACTICE = "explore:practice"
 
 
-# 城裡操練（新手引導重做，Config.training）開著時城裡那一格是操練、城外練功寫級數（tests/test_training.py）；
-# 這一份測的是練功一格本身（操練關著），內容一律把它關掉
+# 這一份只留行動列四格還成立的幾條，內容照舊把分級與減法季關掉
 
 def _content(profile):
     c = real_content(profile)
     c.config.training.enabled = False
-    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tests/test_explore_one.py）：這一份測的是舊的練功格
+    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tianxia/features/explore/tests/test_explore_one.py）：這一份測的是舊的練功格
     return c
 
 
@@ -2435,15 +1756,6 @@ def _width_fb670(text):
 
 
 # ── 四格（減法季批 1） ─────────────────────────────────
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
-def test_outside_the_guide_practice_waits_in_the_here_fold():
-    bar = _bar_fb670(server.main_view(_game_fb670("yingshui")))
-    assert _keys(bar) == ["explore", "train", "social", "move"] and "--cells:4" in bar
-    fold = bar[bar.index("此地還能做"):]
-    assert f'data-id="{PRACTICE}"' in fold
 
 
 PLACES = [  # (陣營, 地點)：城裡、野外、戰線、自家大營、頭目、名望不夠、散人站在戰線上
@@ -2496,56 +1808,14 @@ def test_an_old_season_without_practice_keeps_four_cells():
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 @pytest.mark.slow
-def test_practice_is_a_reveal_key_of_its_own():
-    assert "act:practice" in REVEAL_KEYS
-    m = server.main_view(_game_fb670("yingshui"))
-    others = ["act:explore", "act:train", "act:social", "act:move"]
-    assert "practice" not in _keys(_bar_fb670(with_reveal(m, others)))
-    assert _keys(_bar_fb670(with_reveal(m, [*others, "act:practice"]))) == ["explore", "practice", "train", "social", "move"]
-    assert "practice" in _keys(_bar_fb670(with_reveal(m, ["all"])))
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
-def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
-    """序章（草廬）與初入江湖（出了草廬那四步）照教學內容的 reveal：寫了 act:practice 的那一步起才畫，沒寫就不畫，
-    也不掉進「此地還能做」。初入江湖走完（onboard 是 None）才全亮。照正式內容的每一步算，教學改了也抓得到。"""
-    c = _content("week7")
-    store = open_world()
-    store.seed_first_season(c)
-    store.open_season(c, NOW)
-    game = Game.new(c, "沈浪", rng=random.Random(0), world=store)
-    game.client = None
-    game.sync(NOW)
-    p = game.state.player
-    p.location, p.stamina = "yingchuan", 250.0
-    t = c.tutorial
-    lit = False
-    for step in range(t.prologue_steps, len(t.steps)):
-        p.tutorial_step = step
-        lit = lit or "act:practice" in t.steps[step].reveal or "all" in t.steps[step].reveal
-        m = server.main_view(game)
-        assert m["onboard"] and any(o["id"] == PRACTICE for o in m["options"]), t.steps[step].id
-        bar = _bar_fb670(m)
-        assert ("practice" in _keys(bar)) is lit, t.steps[step].id
-        assert PRACTICE not in bar.replace(_cell(bar, "practice"), "") if lit else PRACTICE not in bar, t.steps[step].id
-    p.tutorial_step = len(t.steps)
-    m = server.main_view(game)
-    bar = _bar_fb670(m)
-    assert m["onboard"] is None and "practice" not in _keys(bar) and PRACTICE in bar  # 走完：收進「此地還能做」
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_the_hut_never_has_a_practice_option():
-    """草廬裡（序章）探索不展開、也沒有練功（_explore_mode_options 在序章是空的）：格子不會在序章冒出來。"""
+    """草廬裡（序章）沒有練功：格子不會在序章冒出來。"""
     c = _content("week7")
     c.config.jianfa.enabled = False  # 減法季的新角色不進草廬（開局第一分鐘）：這一條測的是草廬本身
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(), prologue=True)
     game.client = None
     m = server.main_view(game)
     assert m["prologue"] is not None and PRACTICE not in [o["id"] for o in m["options"]]
-    assert explore_modes.option_id(explore_modes.PRACTICE) == PRACTICE
 
 
 # ── 原 test_fb671_ink_name_spacing.py（整檔搬進來） ──
@@ -2577,29 +1847,6 @@ def test_the_sums_fit_a_360_wide_cell():
     # 360 寬：格子 58.8 − 內距 4 − 邊框 2 = 52.8；四個字 13 px 一字不加字距 = 52。
     inner = 58.8 - 2 * 2 - 2 * 1
     assert 4 * 13 <= inner < 4 * (13 + 0.5)
-
-
-# ── 原 test_fb_batch_b.py ──
-
-# ── FB-136：決戰開打那一刻看不到三招的鈕 → 輪到出招的回合，三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面 ──
-# 在 d2827139 上重現（14 天、官軍、騎著馬上陣、老石「要打大仗了」的框還在，375×812）：框 608～738、輸入框與底下那句 746～843、
-# 三招 855～999，分頁列頂 756——第一屏一顆都看不到（QA 那時是 733 起）。照在路上的排法（FB-055）：輪到你按的排前面。
-# node 裡沒有版面，這裡只比先後；量到的位置寫在試玩回饋那一列
-
-SHOWDOWN_BOX = {"speaker": "老石", "key": "h_showdown", "scene": "", "text": "「要打大仗了。」", "line": "", "done": [], "end": True,
-                "pending": False, "full": True, "hint": True}
-
-
-@node
-def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(battle):
-    _, fighter = battle
-    m = {**server.main_view(fighter), "guide": SHOWDOWN_BOX}
-    assert m["free_text"] is not None and [o["id"] for o in m["options"] if o["id"].startswith("battle:act:")]
-    page = run_prologue_web(m, "return H.pageJianghu();")
-    scene, moves = page.index('<section class="card scene">'), page.index('<div class="options">')
-    free, box = page.index('<form class="free"'), page.index('<section class="card guide"')
-    assert scene < moves < free < box
-    assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（選單那一塊裡）
 
 
 @node

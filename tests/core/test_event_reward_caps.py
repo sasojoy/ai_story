@@ -1,7 +1,7 @@
 """補寫事件的獎勵上限：三份補寫的事件池共用這一個檢查（以前三個檔各寫一份）。
-- 探索補寫：content/events/explore_<大區>.json（tests/test_explore_variety.py）；
-- 城鎮交友補寫：content/events/social_<大區>.json（tests/test_socialize_variety.py）；
-- 新大區的探索事件：content/events/<大區>.json（tests/test_events_new_regions.py）。大地圖上的大區（content/map.json）有自己
+- 探索補寫：content/events/explore_<大區>.json（tianxia/features/explore/tests/test_explore_variety.py）；
+- 城鎮交友補寫：content/events/social_<大區>.json（tianxia/features/socialize/tests/test_socialize_variety.py）；
+- 新大區的探索事件：content/events/<大區>.json（tests/core/test_events_new_regions.py）。大地圖上的大區（content/map.json）有自己
   事件檔的都算，不寫死是哪幾個：多一個大區的事件檔，它的上限照樣有人查。
 每個選項結果（effect、fail_effect 各自）都要在上限之內；各池子的上限照原本各檔寫的，不全一樣（POOLS）。
 選項幾個、檢定的屬性與難度、要不要 fail_effect、傳聞幾則這些結構上的檢查留在各自的檔案。"""
@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from conftest import real_content
+from tianxia.content import real_event_files
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 EVENTS = CONTENT_DIR / "events"
@@ -25,10 +26,10 @@ ADDED = ("flags_add", "world_flags_add", "next_event", "recruit", "join_sect")  
 # 池子 →（檔案, 檢查哪些上限）。xinde：心得最多給多少（None＝心得不能給）；trend、materials：要不要檢查大勢與素材；
 # banned：不能出現的效果；free_text：隨口應對的結果也算進去
 POOLS = {
-    "explore": ([*sorted(EVENTS.glob("explore_*.json"))], {
+    "explore": ([path for path in real_event_files() if path.name.startswith("explore_")], {  # 探索包的（全部拆包第 63 批）
         "xinde": 15, "trend": True, "materials": True, "banned": (*ADDED, "learn_skills"), "free_text": False,
     }),
-    "social": ([*sorted(EVENTS.glob("social_*.json"))], {
+    "social": ([path for path in real_event_files() if path.name.startswith("social_")], {  # 交友包的（全部拆包第 62 批）
         "xinde": 12, "trend": False, "materials": False, "banned": (*ADDED, "learn_skills", "marks"), "free_text": True,
     }),
     "region": (REGION_FILES, {

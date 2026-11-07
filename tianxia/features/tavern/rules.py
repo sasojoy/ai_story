@@ -20,10 +20,11 @@ import re
 from dataclasses import dataclass
 from collections import deque
 
-from tianxia import annals  # 過渡：待搬（行狀：名氣、近況、近來的事只算酒肆打聽得到的 annals.heard）
-from tianxia import atlas  # 過渡：待搬（大區：遠近）
-from tianxia import figures  # 過渡：待搬（大勢人物：名氣、心事）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import atlas  # 共用規則層（大區：遠近；第 50 批收進）
+from tianxia import figures  # 共用規則層（大勢人物：名氣、心事；第 40 批收進）
 from tianxia import gender
+from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）
 from tianxia import renown  # 共用規則層（名望段、善惡稱號）
 from tianxia import rules
 from tianxia import territory  # 共用規則層（地盤：誰控制、地頭熟、大勢線）
@@ -339,7 +340,7 @@ def seek_lines(state: GameState, content: Content, other: GameState, now_real: f
         if score >= 1:
             return [OFFLINE.format(name=name, him=him)], True
         return [], False
-    present = bool(seen) and now_real - seen <= content.config.presence_seconds  # 跟「此地還有」同一個定義
+    present = bool(seen) and now_real - seen <= presence.window(content)  # 跟「此地還有」同一個定義（core/presence.py）
     if score >= 5 and present:
         if p.journey is not None:
             j = p.journey
@@ -364,7 +365,7 @@ def seek_lines(state: GameState, content: Content, other: GameState, now_real: f
 
 def seek_figure_lines(state: GameState, content: Content, cid: str) -> list[str]:
     """查一位人物在哪：人物都有名（figure_fame 2～4），這一間酒肆問得到；大區以外的只能交友人物說大區。"""
-    from tianxia import figure_life  # noqa: PLC0415  過渡：待搬（人物此刻在哪）
+    from tianxia import figure_life  # noqa: PLC0415  共用規則層（人物此刻在哪；第 40 批收進）
 
     ch = content.characters[cid]
     loc = figure_life.where(state, content, cid)
@@ -446,7 +447,7 @@ def ties_figure_lines(state: GameState, content: Content, cid: str,
                       holders: list[tuple[GameState, int]], wanted: set[str] | None = None) -> list[str]:
     """打聽一位人物的交情：情誼最高的前三個玩家（holders 照情誼排好的（存檔, 情誼），0 的不算），每一個照那個玩家的打聽度決定說不說得出名字
     （2 以上說名號，其餘「一個沒什麼名氣的後生」）；再說他此刻在哪、心事、最近聽到的風聞。"""
-    from tianxia import figure_life  # noqa: PLC0415  過渡：待搬（人物此刻在哪）
+    from tianxia import figure_life  # noqa: PLC0415  共用規則層（人物此刻在哪；第 40 批收進）
 
     ch = content.characters[cid]
     lines: list[str] = []
@@ -567,7 +568,7 @@ def news_pick(state: GameState, content: Content) -> Rumor | None:
 
 def region_lines(state: GameState, content: Content) -> list[str]:
     """聽消息附送的這一區局勢：此刻在這一區的大勢人物與心事（最多兩位），這一區戰線地點眼下歸誰。"""
-    from tianxia import figure_life  # noqa: PLC0415  過渡：待搬（人物此刻在哪）
+    from tianxia import figure_life  # noqa: PLC0415  共用規則層（人物此刻在哪；第 40 批收進）
 
     tavern = state.player.location
     region, _ = _regions(content)
@@ -684,7 +685,7 @@ def _split_line(text: str) -> tuple[str, str]:
     return (who, said) if sep else ("", text)
 
 
-# ── 酒客閒談（模型寫鄰桌那幾句；server.write_chatter 在背景寫，一間酒肆 chatter_hours 換一段）────────────
+# ── 酒客閒談（模型寫鄰桌那幾句；routes.write_chatter 在背景寫，一間酒肆 chatter_hours 換一段）────────────
 CHATTER_KEEP = 4  # 話頭最多幾條
 CHATTER_LINE = 45  # 一句最多幾個字（含「誰：」與引號）
 CHATTER_WHO = 8  # 說話的人最多幾個字

@@ -5,8 +5,9 @@ import random
 from collections.abc import Iterator
 from typing import Literal
 
-from . import foreshadow, precise, tiers
-from . import stances as stance_rules
+from . import precise, tiers
+from .core import omen_base  # 伏筆在不在跑、伏筆的事件：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
+from . import stance_world as stance_rules  # 人物心意的世界那一半（共用規則層，全部拆包第 19 批）
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, check_stat_name, fail_stamina, practice_line, season_one_off
 from .state import GameState
@@ -39,7 +40,7 @@ def is_rare(event: Event) -> bool:
 def hidden_events(state: GameState, content: Content) -> set[str]:
     """此刻抽不到的事件 id（藏起來的）：伏筆的事件（片段事件、準備事件，foreshadow.event_ids）只在伏筆在跑時出現（foreshadow.active：開關、蓋章、有鏈）；
     第一季的規則開著時，劇本 season_one_off.events 裡的 beta 事件不出現（例：kou_boss，由挑戰大勢人物本人取代，T4）；人物心意開的事件。只看內容、世界與這個人的旗標，不看他站在哪裡（所以一次算好可以給好幾處用，event_candidates 的 hidden）。"""
-    hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
+    hidden = set() if omen_base.fs_active(state, content) else omen_base.event_ids(content)
     hidden |= season_one_off(content, state.world, "events")
     hidden |= stance_rules.closed_events(state, content)  # 人物心意開的事件：心意生效時才有、每人每天一則（減法季批 6 修正輪）
     return hidden

@@ -61,7 +61,7 @@ def _us(xs: list[float]) -> str:
 
 
 def run(args) -> None:
-    content = load_content(ROOT / "content", profile="weekend")
+    content = load_content(ROOT / "content", profile="week7")
     cfg = content.config
     cfg.auto_open_first_season = True
     cfg.road_sight_chance = 0.0

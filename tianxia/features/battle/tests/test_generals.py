@@ -1,7 +1,7 @@
 """龍頭上陣（Joy 2026-10-17 第 2 條「大決戰雙方龍頭武將應該要參與且有份量」）的決戰包那一半（generals.py）：開集結派那條戰線上的
 大勢人物上陣、陣前那一行寫兩邊的陣容與主將令、收場扣聲威。
 
-全部拆包第 8 批合進 develop 時從 tests/battle/test_generals.py 拆過來（PM 定，手冊第十五節「第 8 批的 PM 認定」第 1 條）；回合規則與挑法
+全部拆包第 8 批合進 develop 時從 tianxia/features/battle/tests/test_generals.py 拆過來（PM 定，手冊第十五節「第 8 批的 PM 認定」第 1 條）；回合規則與挑法
 （battle_instance、共用規則層 chiefs.pick）那七條在 tests/battle/test_chiefs.py。斷言一個字沒改。"""
 from __future__ import annotations
 

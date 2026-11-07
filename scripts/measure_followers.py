@@ -7,7 +7,7 @@
 「前」是部下武學不長（levels_per_cheng 設成 999，成數停在模板的 3 成），「後」是現在的設定。
 決戰的份量另算：季末帶著幾名部下、強攻與奇襲多幾成（Config.follower.battle_per × 人數）。
 
-用法：.venv/Scripts/python.exe scripts/measure_followers.py --seeds 1 2 3 4 5 [--profile weekend]
+用法：.venv/Scripts/python.exe scripts/measure_followers.py --seeds 1 2 3 4 5 [--profile week7]
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ def _avg(values: list[float]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="week7")
     args = parser.parse_args()
     profile = None if args.profile in ("", "none", "default") else args.profile
     for grow, label in ((False, "前（部下不長）"), (True, "後（現在）")):

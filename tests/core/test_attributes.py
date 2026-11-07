@@ -103,7 +103,7 @@ def test_real_content_writes_grades_and_the_bands_match_the_ruling():
         assert grade == key
         dc = {g.key: g.dc for g in real_content().config.checks.grades}[grade]
         assert dc + shift == d
-    leftover = [p.name for p in (ROOT / "content").rglob("*.json")
+    leftover = [p.name for p in content_mod.real_files().values()
                 if convert_grades.convert_text(p.read_text(encoding="utf-8"))[1]]
     assert leftover == [], f"還有寫舊難度的檢定：跑 python scripts/convert_grades.py checks --apply（{leftover}）"
 
@@ -119,7 +119,7 @@ def test_check_rules_are_todays_odds(content):
 DIRECT = re.compile(r"""(?:get\(|\[)["'](?:str|agi|con|wis|lore)["']""")
 # 第 ① 階段留著的（多半是正在搬包的修練、有所感兩包，或只是拿顯示名）：之後改走 attr_effect，改完把數字調低
 ALLOWED = {  # 第 ② 階段第 1 批把本人的舊讀點都改走 team.v1_stat／attrset.legacy；剩下的是顯示名、部下與同伴的模板、設定表
-    "tianxia/chuangong.py": 3, "tianxia/skillview.py": 1, "tianxia/team.py": 4, "tianxia/models.py": 3,
+    "tianxia/features/cultivation/chuangong.py": 3, "tianxia/skillview.py": 1, "tianxia/team.py": 4, "tianxia/models.py": 3,
 }
 
 

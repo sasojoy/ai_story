@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import battle_instance, figures  # 共用規則層（戰鬥規則核心）；過渡：待搬（大勢人物：敗走扣聲威）
+from tianxia import figures  # 共用規則層（大勢人物：敗走扣聲威，第 40 批收進）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia.chiefs import on, pick  # noqa: F401  共用規則層（龍頭上陣的挑法）：這一包的 on_muster 用、照舊 re-export 給 generals.on、generals.pick
 from tianxia.models import BattleDef, Content
 from tianxia.state import Rumor
@@ -30,7 +31,7 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef) -
     """剛開集結（world._open_claimed，不在任何 mutate 裡）：派人物上陣、天下大事一句。開關關著、沒人上陣什麼都不寫。"""
     if not on(content):
         return []
-    from tianxia.world import _season_vehicle  # noqa: PLC0415  過渡：待搬（季的事用的空殼玩家；world → generals：延後 import）
+    from tianxia.world import _season_vehicle  # noqa: PLC0415  核心本體：季的事用的空殼玩家
 
     season = world.get_season()
     rows = pick(_season_vehicle(content, season), content, definition)
@@ -74,7 +75,7 @@ def after_battle(
     due = [c for c in battle.commanders if c.fallen_round is not None and not c.settled and c.fid in content.figures]
     if battle.unfinished or not due:
         return
-    from tianxia.world import _season_vehicle  # noqa: PLC0415  過渡：待搬（季的事用的空殼玩家）
+    from tianxia.world import _season_vehicle  # noqa: PLC0415  核心本體：季的事用的空殼玩家
 
     if where is None:
         definition = content.battles.get(battle.battle_id)
@@ -102,3 +103,9 @@ def after_battle(
     for c in battle.commanders:
         if c.fid in keys:
             c.settled = True
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 muster 的 generals 那一格（tianxia/core/features.py 的 WORLD_ORDER：排在起點、屯糧、玉璽之後）
+def world_muster(world: WorldStateStore, content: Content, definition: BattleDef, start: int, now: float) -> list[str]:
+    """開集結（原本 world._open_claimed 開成之後最後那一行，經舊名 generals 叫）：龍頭上陣，派那條戰線上的大勢人物上陣。回的話接進訊息。"""
+    return on_muster(world, content, definition)

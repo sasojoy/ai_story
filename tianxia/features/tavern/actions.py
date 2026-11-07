@@ -17,18 +17,19 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia import team
-from tianxia import annals  # 過渡：待搬（行狀：殺手那一場記一筆）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog  # 共用規則層（戰報：殺手那一場）
-from tianxia import bounties  # 過渡：待搬（懸賞榜：通緝名單、牆上的榜）
+from tianxia.core import bounty_base
 from tianxia import encounter  # 共用規則層（單次判定：殺手那一場；測試換掉 encounter.resolve_encounter）
 from tianxia import equipment  # 共用規則層（店沒開時那一句 NOT_NOW）
 from tianxia import renown  # 共用規則層（名望、惡名、名望段）
 from tianxia import roster  # 共用規則層（截殺與通緝的新手期）
 from tianxia import shopview  # 過渡：待搬（店面：掌櫃那一句、素材屬性的排序）
-from tianxia import social  # 過渡：待搬（此地還有誰、站哪一邊）
+from tianxia.core import presence  # 此地還有誰、站哪一邊（核心的查詢服務，第 37 批）
 from tianxia.calendar import DAY, HOUR
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import Squad
 from tianxia.rules import add_rumor, display_name
 from tianxia.state import PLAYER, GameState, TavernHit, TavernWatch, Whisper
@@ -82,7 +83,7 @@ def tavern_options(ctx: Game) -> list[Option]:
         problem = problem or tavern_rules.pay_problem(s, price)
         text = label.format(price=price)
         opts.append(Option(id=oid, label=text if problem is None else f"{text}・{problem}", enabled=problem is None))
-    if bounties.board_here(s, c) and bounties.visible(s, c):
+    if bounty_base.board_here(s, c) and bounty_base.visible(s, c):
         opts.append(Option(id=tavern_rules.BOARD_ID, label=tavern_rules.BOARD_LABEL))
     return opts + [Option(id=tavern_rules.BACK_ID, label=tavern_rules.BACK_LABEL)]
 
@@ -93,9 +94,9 @@ def tavern_choice(ctx: Game, arg: str) -> list[str]:
         return [tavern_rules.LEFT]
     if arg == "board":  # 牆上的懸賞榜：收起酒肆、打開懸賞榜（同城裡的 act:bounties）
         tavern_rules.close(ctx.state)
-        ctx.state.player.picking_bounty = True
+        bounty_base.sit_at_board(ctx.state.player)
         ctx._shop_say("enter")
-        return [f"你走到牆邊，看起{bounties.BOARD}。"]
+        return [f"你走到牆邊，看起{bounty_base.BOARD}。"]
     return tavern_run(ctx, arg)
 
 
@@ -148,7 +149,7 @@ def tavern_short(ctx: Game, base: int) -> list[str]:
 
 def tavern_wanted(ctx: Game) -> set[str]:
     """身上有通緝的名號鍵（名氣 +1）。"""
-    return {name_key(b.target) for b in bounties.open_bounties(ctx.state, ctx.content) if b.kind == "wanted" and b.target}
+    return {name_key(b.target) for b in bounty_base.open_bounties(ctx.state, ctx.content) if b.kind == "wanted" and b.target}
 
 
 def tavern_news(ctx: Game) -> list[str]:
@@ -699,17 +700,17 @@ def tavern_ask_facts(ctx: Game, question: str = "") -> tuple[tuple[str, ...], tu
                 players[other.state.player.name] = other.state
     topic, kinds = tavern_ask.topics(s, c, question, players, tavern_wanted(ctx))
     extra = []
-    guests = [o.player.name for o in social.here(ctx)][:6]
+    guests = [o.player.name for o in presence.here(ctx)][:6]
     if guests:
         extra.append(f"此刻也在{c.locations[p.location].name}的江湖人：{'、'.join(guests)}。")
-    side = social.side(s, c)
+    side = presence.side(s, c)
     extra.append(f"問話的客官是{side}，名號{p.name}，此刻在{c.locations[p.location].name}。")
     base = [f for f in tavern_rules.ask_facts(s, c, extra) if f not in topic]
     return tuple(topic + base), tuple(kinds)
 
 
 def tavern_chatter_request(ctx: Game) -> tavern_rules.ChatterRequest | None:
-    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
+    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（routes.write_chatter 在背景請模型寫）。"""
     s, c = ctx.state, ctx.content
     loc = s.player.location
     if not tavern_open(ctx) or not tavern_rules.chatter_due(s.world, c, loc):
@@ -810,7 +811,7 @@ def tavern_view(ctx: Game) -> dict:
     s, c = ctx.state, ctx.content
     p, cfg = s.player, c.config.tavern
     loc = p.location
-    guests = [o.player.name for o in social.here(ctx)]
+    guests = [o.player.name for o in presence.here(ctx)]
     treat = tavern_rules.treat_shown(s.world, c, loc)
     prices = {k: tavern_price(ctx, getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace", "ask")}
     mats = []
@@ -856,5 +857,10 @@ def tavern_view(ctx: Game) -> dict:
         "materials": mats,
         "whispers": tavern_rules.whisper_view(c, s),
         "hidden": tavern_rules.HIDE_ALREADY.format(when=ctx.stamp(p.hidden_until)) if p.hidden_until > s.world.time else "",
-        "board": tavern_rules.BOARD_ID if bounties.board_here(s, c) and bounties.visible(s, c) else "",
+        "board": tavern_rules.BOARD_ID if bounty_base.board_here(s, c) and bounty_base.visible(s, c) else "",
     }
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/tavern 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，同一句：tavern_rules.TRAVEL_BLOCKED）。"""
+    return TravelBlock(tavern_rules.TRAVEL_BLOCKED, to_jianghu=True) if state.player.picking_tavern else None

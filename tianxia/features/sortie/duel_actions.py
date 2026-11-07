@@ -9,7 +9,7 @@ ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的
 照舊，是包裡的 duel_rules、rules）。函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_duel_tick` 是 `duel_tick`（跟
 `sortie_duel_tick` 分開）、`_duel_power_of` 是 `duel_power_of(state, content, world)`（原本就是 staticmethod）。Game 上留 16 個一行委派
 （server、假人、測試與核心原位還在叫：三處結算、選單那一格、choose 最前面、行動列底下那一行、_act、守勢行動、輿圖）。包裡互相叫直接叫
-這裡與 actions 的函式；只有 `sorties_left` 經 ctx 叫（tests/bots/test_bot_policy_conquest.py 換掉 Game.sorties_left，換掉的才打得到）。
+這裡與 actions 的函式；只有 `sorties_left` 經 ctx 叫（tianxia/features/sortie/tests/test_bot_policy_conquest.py 換掉 Game.sorties_left，換掉的才打得到）。
 一場結算開好幾份 Game（duel_party → ctx._load_kin，存回 ctx._save_kin）：別人那一份上做的直接叫這裡的函式（duel_void(g, …)、
 duel_report(g, …)），軍令記在 attacker、defender 那兩份上（_order_credit，服務清單的過渡）。
 """
@@ -22,19 +22,18 @@ from typing import TYPE_CHECKING
 
 from tianxia import calendar, journal, team
 from tianxia import allied  # 共用規則層（豪強依附的那一軍：補位的人算哪一邊）
-from tianxia import annals  # 過渡：待搬（行狀：約戰那一筆交手）
-from tianxia import atlas  # 過渡：待搬（大區：同一區才應得了戰）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import atlas  # 共用規則層（大區：同一區才應得了戰；第 50 批收進）
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推、拉、集火、易手）
 from tianxia import encounter  # 共用規則層（整隊威力）
-from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
-from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、攻城軍令對不對）
+from tianxia import orders  # 共用規則層（軍令：截糧的運糧隊、攻城軍令對不對；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡沒有約戰）
 from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名單）
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
-from tianxia import ranks  # 過渡：待搬（晉升：離下一階還差多少）
-from tianxia import seal_acts  # 過渡：待搬（玉璽：傳檄的倍數、補位的人在哪一區）
+from tianxia import ranks  # 共用規則層（晉升：離下一階還差多少；第 40 批收進）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
 from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
 from tianxia import wins  # 共用規則層（三陣營四勝利：貢獻記在哪一軍）
@@ -50,6 +49,7 @@ from tianxia.world_state import SortieDuel, SortieSide, WorldStateStore
 
 from . import actions as sortie_actions
 from . import duel_rules as sortie_duel
+from . import howto  # 行動列底下那一行的句子（第 59 批搬進包）
 from . import rules as sortie
 
 if TYPE_CHECKING:

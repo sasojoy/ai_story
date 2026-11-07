@@ -9,7 +9,7 @@
 - 決戰份量：部下讓強攻、奇襲多幾成（Game._battle_troops，照人數算，傳功不動它）、本人的實力（battle_instance.strength）。
 --online 一天在線幾小時（其餘時間只推時間）。
 
-用法：.venv/Scripts/python.exe scripts/measure_chuangong.py --seeds 1 2 [--profile weekend] [--online 24] [--hours 0]
+用法：.venv/Scripts/python.exe scripts/measure_chuangong.py --seeds 1 2 [--profile week7] [--online 24] [--hours 0]
 """
 from __future__ import annotations
 
@@ -181,7 +181,7 @@ def run(seed, args, teach_on):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2])
-    ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--profile", default="week7")
     ap.add_argument("--online", type=float, default=24)
     ap.add_argument("--hours", type=float, default=0)
     ap.add_argument("--mates", nargs="*", default=["guanyu", "zhangfei"])

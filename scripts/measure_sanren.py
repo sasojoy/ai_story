@@ -13,8 +13,8 @@ bounties._complete 數），以及求兵拿到多少（銀兩、經驗、心得�
 求藝企劃者 2026-10-21 拿掉）。最後兩行是兩邊的中位數。
 一個種子一個資料庫、只有一個機器人，碰不到別人，截殺一場都不會有：截殺的量看 scripts/sim_server_bots.py（設計 11.2）。
 
-用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend|none] [--faction guan|huang|haoqiang] [--no-give] [--bare]
-（--profile 預設 weekend：第一季規則開著的週末設定；none 是不套設定覆寫檔，量預設設定〔14 天、第一季規則關著〕的季——
+用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile week7|none] [--faction guan|huang|haoqiang] [--no-give] [--bare]
+（--profile 預設 week7：第一季規則開著的 7 天濃縮季；none 是不套設定覆寫檔，量預設設定〔14 天、第一季規則關著〕的季——
 懸賞榜、名號、截殺每季都有之後，那種季也有懸賞可揭〔懸賞榜設計 11.1〕。不用空字串：PowerShell 5.1 會把它吞掉。
 --faction 指定陣營那一邊投靠誰：還沒投靠時一路往那個陣營的投靠點走、只投它（不給就照舊投選單上第一個出現的，量不到豪強）；
 --no-give 只拿掉求兵（有懸賞榜第一批、沒有第二批：豪強的基準，跟 --faction haoqiang 比）；
@@ -266,7 +266,7 @@ def measure(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--profile", default="weekend",
+    parser.add_argument("--profile", default="week7",
                         help="設定覆寫檔（content/profiles/<名字>.json）；none＝不套，量預設設定（14 天、第一季規則關著）的季")
     parser.add_argument("--faction", default=None, help="陣營那一邊投靠誰（劇本的陣營 id，例如 guan、huang、haoqiang）；不給就投第一個碰到的")
     parser.add_argument("--no-give", action="store_true", help="對照組：只拿掉求兵（豪強的基準）")
