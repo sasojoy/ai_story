@@ -27,7 +27,7 @@ from .. import prologue as prologue_rules
 from ..rules import (
     HUANGJIN, audible, ears_of, front_chip, front_ids, is_revealed, season_one, trend_name, trend_shown, trend_value,
 )
-from . import arena_ranks, seal_base
+from . import arena_ranks, seal_base, shop_base
 from . import features as features_core
 
 if TYPE_CHECKING:
@@ -68,15 +68,15 @@ def action_notes(ctx: Game, option_ids: Iterable[str]) -> dict[str, str]:
 
 def _shop_say(ctx: Game, key: str, problem: str | None = None) -> None:
     """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
-    撐到什麼時候（shopview.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
+    撐到什麼時候（shop_base.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
     p = ctx.state.player
     p.shop_line, p.shop_line_seed = key, int(ctx.state.world.time)
-    p.shop_hold = shopview.hold_for(ctx.state, ctx.content, key, problem)
+    p.shop_hold = shop_base.hold_for(ctx.state, ctx.content, key, problem)
 
 
 def _shop_after(ctx: Game, problem: str | None, done: str, keyer=None) -> None:
-    """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shopview.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
-    _shop_say(ctx, (keyer or shopview.problem_key)(problem, done), problem)
+    """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shop_base.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
+    _shop_say(ctx, (keyer or shop_base.problem_key)(problem, done), problem)
 
 
 def _shop_open(ctx: Game) -> str | None:
@@ -88,13 +88,13 @@ def _shop_open(ctx: Game) -> str | None:
 
 
 def _shop_live(ctx: Game, option_ids=None, shop: str = "smith") -> bool:
-    """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
+    """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shop_base.BACKS：鐵匠鋪 smith:back、
     馬市 market:back、懸賞榜 bounty:back 或第三層的 bounty:unpick），而且前面沒有決戰、奪璽單挑的鈕。決戰開打、休季時選單換成三招
     或「休季中」，店裡那一串根本不在上面（picking_* 卻還是真的）：這時給店面，出店會被拒絕、人就困在店裡，休季還開得了爐
     （第一批終審 Critical 1）。集結時決戰的鈕排在店裡那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
     option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
     ids = [o.id for o in ctx.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
-    return any(back in ids for back in shopview.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
+    return any(back in ids for back in shop_base.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
 
 
 def shop_view(ctx: Game, option_ids=None) -> dict | None:

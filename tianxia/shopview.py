@@ -15,42 +15,14 @@ from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
 from .state import Equipment, GameState, GearFind
 from .world_state import WorldStateStore
-
-# ── 掌櫃的話（1.4）──
-SMITH_SITUATIONS = (
-    "enter", "buy", "repair", "temper", "forge_low", "forge_mid", "forge_high", "forge_named", "forge_divine",
-    "short_silver", "rack_full", "refused",
-    "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
-    "black_market",  # 名聲 5.2：寇照黑市價賣成了
-    "rules",  # 素材四階（正式季整合 5.10）：背包有四階時鐵匠講的神器規矩（next_rule 輪著講；放在畫面哪裡等對比圖）
-    "have_divine",  # 神器輪替（正式季整合 5.8）：已經有那一件神器、再開那一爐被擋下（FB-403：不挑講料的那一句）
+from .core.shop_base import (  # noqa: F401
+    ATTRIBUTE_ROWS, BACKS, BOARD_SITUATIONS, DADIAN_SITUATIONS, DONATE_SITUATIONS, MARKET_SITUATIONS, RACK_FULL, REFUSALS, SITUATIONS, SMITH_SITUATIONS, TAVERN_SITUATIONS, TIER_NAMES, _mark, attribute_rank, hold_for, line_text, problem_key, still_holds,
 )
-# 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
-# 多半只在兩個分頁搶的時候出現
-MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
-BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
-DONATE_SITUATIONS = ("enter", "donate", "refused")  # 軍需帳（素材與經濟 B6）：進門、捐成了、捐不了
-DADIAN_SITUATIONS = ("enter", "done")  # 打點（21 天季的銀兩出口）：進門、記了一筆
-TAVERN_SITUATIONS = ("enter", "chatter", "news", "nothing", "asked", "missed", "wall", "treat", "hide", "trace", "short_silver", "refused")  # 酒肆（企劃者 2026-10-18）
-SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS,
-              "donate": DONATE_SITUATIONS, "dadian": DADIAN_SITUATIONS, "tavern": TAVERN_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
-# 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求兵挑東西）沒有 bounty:back，只有回到懸賞榜
-BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID),
-         "donate": ("donate:back",), "dadian": ("dadian:back",), "tavern": ("tavern:back",)}
+
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
-RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tianxia/features/smithy/tests/test_shop.py 鎖住兩邊一樣）
 
 
-def problem_key(problem: str | None, done: str) -> str:
-    """這一下的情況鍵：做成了是 done；錢不夠（「還差 N 兩」）、裝備庫滿了、已經有那一件神器各一種；其餘的擋法一律 refused。"""
-    if problem is None:
-        return done
-    if problem.startswith("還差"):
-        return "short_silver"
-    if problem == forge_secrets.HAVE_DIVINE:
-        return "have_divine"  # FB-403
-    return "rack_full" if problem == RACK_FULL else "refused"
 
 
 def board_key(problem: str | None, done: str) -> str:
@@ -60,46 +32,8 @@ def board_key(problem: str | None, done: str) -> str:
     return "held_full" if problem.startswith(_HELD_HEAD) else "refused"
 
 
-# 被拒的情況（FB-192）：那一句只撐到被拒的原因還成立的時候，原因不成立了就換回平常那一句（進門那一組）——錢補夠了、裝備庫騰出位子了、
-# 手上那一張作廢了；其餘的擋法（素材不夠、吃飽了、下榜了……）看不出原因，照「錢、素材、身上與裝備庫的東西都沒變」算還成立
-REFUSALS = ("short_silver", "rack_full", "held_full", "refused", "have_divine")
 
 
-def _mark(state: GameState) -> str:
-    """被拒那一下的狀態指紋：銀兩、背包、身上與裝備庫每一件的 id 與磨損、淬煉。"""
-    p = state.player
-    gear = [(e.id, e.edge, e.tempers) for e in (p.weapon, p.armor, p.mount, p.treasure, *p.rack) if e is not None]
-    raw = json.dumps([p.stats.get("silver", 0), sorted(p.materials.items()), gear], ensure_ascii=False)
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def hold_for(state: GameState, content: Content, key: str, problem: str | None) -> str:
-    """這一下的那一句要撐到什麼時候（PlayerState.shop_hold）：錢不夠（「還差 N 兩」）記要的銀兩、裝備庫滿了記 rack、手上揭滿了記 held，
-    其餘被拒的記狀態指紋；做成了的是空字串。"""
-    if key == "short_silver":
-        digits = re.search(r"\d+", problem or "")
-        if digits:
-            return f"silver:{state.player.stats.get('silver', 0) + int(digits.group())}"
-    if key == "rack_full":
-        return "rack"
-    if key == "held_full":
-        return "held"
-    return f"same:{_mark(state)}" if key in REFUSALS else ""
-
-
-def still_holds(state: GameState, content: Content, hold: str) -> bool:
-    """被拒的原因還成立嗎（hold_for 記的）：沒記的（舊存檔、做成了的情況）算成立。"""
-    p = state.player
-    kind, _, arg = hold.partition(":")
-    if kind == "silver":
-        return p.stats.get("silver", 0) < int(arg)
-    if kind == "rack":
-        return len(p.rack) >= content.config.weapons.rack_cap
-    if kind == "held":
-        return len(bounties.mine(state, content)) >= content.config.bounties.max_taken
-    if kind == "same":
-        return _mark(state) == arg
-    return True
 
 
 def forged_key(item: Equipment) -> str:
@@ -111,22 +45,6 @@ def forged_key(item: Equipment) -> str:
     return FORGED_KEYS.get(item.quality, "forge_low")
 
 
-def line_text(state: GameState, content: Content, shop: str) -> str:
-    """招牌底下那一句：鐵匠順口說了口訣就是那一句；不然照情況鍵（沒有、或內容沒寫那一種就用進門那一組）挑一句，
-    照「名號｜情況｜那一下的時間」的雜湊挑（不碰 Game.rng；輪詢時同一句不換）。內容沒寫是空字串。被拒的那一句（REFUSALS）只撐到被拒的原因
-    還成立（still_holds）：錢補夠了……就換回進門那一組，不必等下一個動作（FB-192）。"""
-    p = state.player
-    if p.shop_clue:
-        return p.shop_clue
-    pool = content.shop_lines.get(shop, {})
-    key = p.shop_line if pool.get(p.shop_line) else "enter"
-    if key in REFUSALS and not still_holds(state, content, p.shop_hold):
-        key = "enter"
-    lines = pool.get(key) or []
-    if not lines:
-        return ""
-    digest = hashlib.sha256(f"{p.name}|{key}|{p.shop_line_seed}".encode()).digest()
-    return lines[int.from_bytes(digest[:4], "big") % len(lines)]
 
 
 def next_rule(state: GameState, content: Content) -> str:
@@ -270,12 +188,6 @@ def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str,
     return {"rows": rows, "used": gear["used"], "cap": gear["cap"]}
 
 
-ATTRIBUTE_ROWS = ("剛", "柔", "快", "慢")  # 打造頁素材格一屬性一排的順序（企劃者 2026-10-14 微調）；其餘屬性（陰陽虛實）排在後面
-
-
-def attribute_rank(attribute: str) -> tuple[int, str]:
-    """素材格排第幾排：剛、柔、快、慢，其餘照字排在後面。"""
-    return (ATTRIBUTE_ROWS.index(attribute), "") if attribute in ATTRIBUTE_ROWS else (len(ATTRIBUTE_ROWS), attribute)
 
 
 def _held_rows(state: GameState, content: Content) -> list[tuple[str, int]]:
@@ -571,7 +483,6 @@ DONATE_TIER4_ONLY = "軍需官只收一到三階的料，四階的留著打神�
 # 軍需帳最上面那一格還沒捐時的一句（捐了換成結果；待 joy 潤）：第一季規則開著時記貢獻
 DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強照依附的那一邊推；這裡不寫「戰線」（大本營不一定在戰線上）
 DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
-TIER_NAMES = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
 BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
 BLACK_MARKET_CAP = "照黑市價收"  # 收購那一段的標題
 

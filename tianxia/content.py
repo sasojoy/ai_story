@@ -817,38 +817,6 @@ def check_features(c: Content, need) -> None:
     features.check_content(c, need)
 
 
-def check_shop_lines(c: Content, need) -> None:
-    """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
-    只用繁體中文、不寫數字；店面開關開著時，開門的店那一組每一種情況都要有句子：鐵匠鋪（兵器或防具開著）、馬市（坐騎開著）、
-    懸賞榜（開著而且劇本有陣營）。"""
-    from .shopview import SITUATIONS  # noqa: PLC0415  shopview → smithing → …：在函式裡 import
-
-    for shop, pool in c.shop_lines.items():
-        need(shop in SITUATIONS, f"shop_lines：不認得的店 {shop}")
-        for key, lines in pool.items():
-            need(key in SITUATIONS.get(shop, ()), f"shop_lines.{shop}：不認得的情況 {key}")
-            for text in lines:
-                _check_line(need, f"shop_lines.{shop}.{key}", text)
-    opened = {
-        "smith": c.config.weapons.enabled or c.config.armor.enabled,
-        "market": c.config.mounts.enabled,
-        "board": c.config.bounties.enabled and bool(c.scenario.factions),
-        "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
-        "dadian": c.config.silver_outlets.enabled,  # 打點（21 天季的銀兩出口）
-        "tavern": c.config.tavern.enabled and any("酒肆" in loc.tags for loc in c.locations.values()),  # 酒肆（企劃者 2026-10-18）
-    }
-    switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
-                "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
-                "have_divine": c.config.forge_secrets.rotation,  # 神器輪替關著時不會擋「已經有這一件神器」（FB-403）
-                "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
-    for shop, on in opened.items():
-        if c.config.shop_screens and on:
-            for key in SITUATIONS[shop]:
-                if shop == "smith" and not switched.get(key, True):
-                    continue
-                need(bool(c.shop_lines.get(shop, {}).get(key)), f"shop_lines.{shop} 缺少情況 {key}（這間店開著時每一種情況至少一句）")
-
-
 RECRUITER_SLOTS = ("{本週}", "{每週}")  # 入伍段引薦人的話裡照軍令多久一道換的字（enlist.SLOTS，FB-502）
 
 
@@ -1305,6 +1273,8 @@ def validate(c: Content) -> None:
     check_at("faction_choices", c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
+    from .core.shop_base import check_shop_lines  # noqa: PLC0415  跨店的掌櫃句子：店共用，核心 shop_base（第二輪第 93 批；不開 CONTENT_SLOTS 新格，PM 定）
+
     check_shop_lines(c, need)
     # 功能包自己的內容（商城的商品，原本的 check_mall；擂台的場邊事件，原本在 check_art 下一行的 check_arena_crowd，全部拆包第 12 批）
     check_features(c, need)

@@ -24,7 +24,7 @@ from tianxia import encounter  # 共用規則層（單次判定：殺手那一�
 from tianxia import equipment  # 共用規則層（店沒開時那一句 NOT_NOW）
 from tianxia import renown  # 共用規則層（名望、惡名、名望段）
 from tianxia import roster  # 共用規則層（截殺與通緝的新手期）
-from tianxia import shopview  # 過渡：待搬（店面：掌櫃那一句、素材屬性的排序）
+from tianxia.core import shop_base
 from tianxia.core import presence  # 此地還有誰、站哪一邊（核心的查詢服務，第 37 批）
 from tianxia.calendar import DAY, HOUR
 from tianxia.characters import CharacterStore, name_key
@@ -821,7 +821,7 @@ def tavern_view(ctx: Game) -> dict:
     treat = tavern_rules.treat_shown(s.world, c, loc)
     prices = {k: tavern_price(ctx, getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace", "ask")}
     mats = []
-    for m in sorted(c.materials.values(), key=lambda m: (m.tier, shopview.attribute_rank(m.attribute), m.id)):
+    for m in sorted(c.materials.values(), key=lambda m: (m.tier, shop_base.attribute_rank(m.attribute), m.id)):
         base = cfg.material_prices.get(m.tier, max(cfg.material_prices.values()))
         mats.append({"id": m.id, "name": m.name, "tier": m.tier, "attribute": m.attribute, "price": tavern_price(ctx, base)})
     hour = int(s.world.time // HOUR)
@@ -843,7 +843,7 @@ def tavern_view(ctx: Game) -> dict:
         "hits": hits,
         "sign": tavern_rules.sign(s, c),
         "silver": p.stats.get("silver", 0),
-        "line": shopview.line_text(s, c, "tavern"),
+        "line": shop_base.line_text(s, c, "tavern"),
         "back": tavern_rules.BACK_ID,
         "prices": prices,
         "problems": {"treat": tavern_treat_problem(ctx), "hide": tavern_hide_problem(ctx)},
