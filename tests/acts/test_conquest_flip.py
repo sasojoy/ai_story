@@ -10,10 +10,13 @@ import pytest
 from conquest_kit import announce, conquest_game
 from tianxia import calendar, conquest, territory
 from conquest_kit import announce, conquest_game, go, join, plain_game, win_sortie
-from tianxia import annals, calendar, conquest, materials
+from tianxia.features.zhuan import standing as annals
+from tianxia import calendar, conquest, materials
 import re
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import bot_base, bot_policy, conquest, conquest_day, orders
+from tianxia import bot_base, bot_policy, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import orders
 from tianxia.engine import Option
 from tianxia.state import BotProfile, Order
 import random
@@ -23,12 +26,30 @@ from tianxia import conquest, encounter, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from conquest_kit import announce, contribution, conquest_game, go, join, plain_game, win_sortie
-from tianxia import bot_policy, conquest, howto, orders, rules, sortie, territory, works
+from tianxia import bot_policy, conquest
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.sortie import howto as sortie_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia.features.territory_acts import howto as territory_acts_howto
+from tianxia import orders, rules
+from tianxia.features.sortie import rules as sortie
+from tianxia import territory
+from tianxia.features.stamina_plays import works_rules as works
 from tianxia.state import BotProfile
 from conquest_kit import conquest_game, go, join, plain_game, press
-from tianxia import bot_policy, conquest, howto, orders, sortie
+from tianxia import bot_policy, conquest
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.sortie import howto as sortie_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia.features.territory_acts import howto as territory_acts_howto
+from tianxia import orders
+from tianxia.features.sortie import rules as sortie
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import conquest, howto
+from tianxia import conquest
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.sortie import howto as sortie_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia.features.territory_acts import howto as territory_acts_howto
 from conquest_kit import conquest_game, go, join, win_sortie
 from tianxia import conquest, orders
 from tianxia.state import Order
@@ -36,7 +57,9 @@ from tianxia import conquest, orders
 from tianxia.features.military import order_cards
 from conquest_kit import conquest_game, go, join, plain_game, win_sortie
 from conquest_kit import conquest_game, join, plain_game, press
-from tianxia import conquest, mapdata, orders
+from tianxia import conquest
+from tianxia.features.map import mapdata
+from tianxia import orders
 
 
 def _game():
@@ -782,7 +805,7 @@ def test_siege_places_are_the_highest_block_on_that_line():
 
 def test_howto_has_the_conquest_version():
     game = conquest_game("season21")
-    lines = howto.territory_lines(game.content, True, game.state.world)
+    lines = territory_acts_howto.territory_lines(game.content, True, game.state.world)
     assert any("中立地" in line for line in lines)
 
 
@@ -790,11 +813,11 @@ def test_help_texts_say_progress_and_holdings():
     """戰況圖卡、主線小標、投靠那一段的說明：出陣推進度、戰線照佔領算（不再寫「在戰線上的地點出陣會推動戰況」）。"""
     game = conquest_game("season21")
     s, c = game.state, game.content
-    helps = howto.war_help(s, c)
-    assert howto.CONQUEST_FRONTS in " ".join(helps["fronts"])
-    assert howto.CONQUEST_PLACES in " ".join(helps["quest"])
-    assert howto.CONQUEST_PLACES in " ".join(howto.season_page_lines(c, s.world))
-    assert howto.CONQUEST_JOIN in " ".join(howto.join_lines(c, s.world))
+    helps = guide_howto.war_help(s, c)
+    assert guide_howto.CONQUEST_FRONTS in " ".join(helps["fronts"])
+    assert guide_howto.CONQUEST_PLACES in " ".join(helps["quest"])
+    assert guide_howto.CONQUEST_PLACES in " ".join(guide_howto.season_page_lines(c, s.world))
+    assert faction_howto.CONQUEST_JOIN in " ".join(faction_howto.join_lines(c, s.world))
 
 
 def _note(game, loc_id):
@@ -804,12 +827,12 @@ def _note(game, loc_id):
 def test_action_note_says_progress_not_the_line():
     """行動列底下那一行：出陣推的是這一塊的進度，不寫「這條線推滿了」（sortie_push 開著時是空的，舊寫法會判成推不動）。"""
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
-    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road")
+    assert sortie_howto.SORTIE_PROGRESS in _note(game, "nanyang_road")
     conquest.push(game.state.world, game.content, "yingchuan_wilds", "huang", "某", 10, "attack")
     go(join(game, "guan"), "yingchuan_wilds")  # 守自家的區塊：有人在推，拉得回來
-    assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
+    assert sortie_howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
     go(game, "changshe")  # 大本營搶不下來：沒有進度（FB-532：自家的大本營另一句，見 test_conquest_sortie_notes）
-    assert "沒有進度可推" in _note(game, "changshe") and howto.SORTIE_PROGRESS not in _note(game, "changshe")
+    assert "沒有進度可推" in _note(game, "changshe") and sortie_howto.SORTIE_PROGRESS not in _note(game, "changshe")
 
 
 def test_ranger_sees_why_at_every_block():
@@ -954,10 +977,10 @@ def test_bots_never_press_it_off_own_ground():
 
 def test_howto_says_duty_stays_on_own_ground():
     game = conquest_game("season21")
-    lines = " ".join(howto.territory_lines(game.content, True, game.state.world))
+    lines = " ".join(territory_acts_howto.territory_lines(game.content, True, game.state.world))
     assert "守勢行動也只在自家的領地做" in lines
     off = plain_game("season21")
-    assert "守勢行動" not in " ".join(howto.territory_lines(off.content, True, off.state.world))  # 關著：拔河那一版，一個字不變
+    assert "守勢行動" not in " ".join(territory_acts_howto.territory_lines(off.content, True, off.state.world))  # 關著：拔河那一版，一個字不變
 
 
 # ── 原 test_conquest_sortie_notes.py（整檔搬進來） ──
@@ -1024,7 +1047,7 @@ def test_neutral_block_held_by_the_enemy_still_says_so():
 def test_howto_sortie_line_drops_the_resistance_half_sentence():
     """FB-533（2）：領地爭奪版的出陣說明不寫「越往對方老巢推越難推」（推進度沒有盡頭阻力），還沒人佔的中立地也是打。"""
     game = conquest_game("season21")
-    text = " ".join(howto.sortie_lines(game.content, True, game.state.world))
+    text = " ".join(sortie_howto.sortie_lines(game.content, True, game.state.world))
     assert "越往對方老巢推越難推" not in text and "還沒人佔" in text
 
 

@@ -58,35 +58,35 @@ APP_JS_NO_DIFF = {"web/app.js": ([], "", "")}  # 第二輪第 95 批：釘住 ap
 
 
 @pytest.fixture
-def shopview_reads_server_bots(monkeypatch):
-    """第二輪第 88 批：skillview 切開、shopview 改讀共用層的 art_cards 之後量過，舊模組（bot、bot_policy、bot_runner、howto、server_bots、shopview、skillview）的
-    dependents 全是空的，「經 import 它的模組再挑」與「太多就不併」都沒有真例子了。這幾條守的是 pick 的做法、不是哪個模組，所以用真圖加一條假的邊 shopview → server_bots。
-    量到的：pick(["tianxia/server_bots.py"]) 24 個檔、why「經 shopview（依賴它的 1 個模組）再挑到 16 個檔」、含只 import shopview 的 test_bounty_tags、core 與 smoke 都假；
-    IMPORT_CAP 壓到 5：8 個檔、core 與 smoke 都真、往上找到的 16 個一個都沒併、why 寫「太多」。scripts/test_for.py 的 IMPORT_CAP 不動。"""
+def leaderboard_reads_server_bots(monkeypatch):
+    """第二輪第 88 批量過，舊模組（bot、bot_policy、bot_runner、server_bots）的 dependents 全是空的，「經 import 它的模組再挑」與「太多就不併」都沒有真例子了。
+    這幾條守的是 pick 的做法、不是哪個模組，所以用真圖加一條假的邊。第二輪第 103 批 shopview 那個殼收掉，假的邊從 shopview 換成共用層的 leaderboard（9 個測試檔讀它、dependents 是空的，牽連最少）。
+    量到的：pick(["tianxia/server_bots.py"]) 15 個檔、why「經 leaderboard（依賴它的 1 個模組）再挑到 7 個檔」、含只 import leaderboard 的 test_leaderboard、core 與 smoke 都假；
+    IMPORT_CAP 壓到 5：8 個檔、core 與 smoke 都真、往上找到的 7 個一個都沒併（test_server 也讀 leaderboard，可是它是檔名第一個字挑到的，算直接）、why 寫「太多」。scripts/test_for.py 的 IMPORT_CAP 不動。"""
     real = test_for.module_graph()
-    graph = {**real, "shopview": real["shopview"] | {"server_bots"}}
+    graph = {**real, "leaderboard": real["leaderboard"] | {"server_bots"}}
     monkeypatch.setattr(test_for, "module_graph", lambda: graph)
     test_for.dependents.cache_clear()
     yield
     test_for.dependents.cache_clear()
 
 
-def test_a_module_picks_the_tests_that_import_it(shopview_reads_server_bots):
+def test_a_module_picks_the_tests_that_import_it(leaderboard_reads_server_bots):
     # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
     # core_step（全部拆包第 36 批）：weekcard 收進核心本體（MODULES），核心不往上走——chapters 往上找的舊模組變成 0 個（量的：dependents("chapters")
     # 是空的、改 chapters 挑 1 個檔 test_chapters）。直接 import 的那一半照舊用 chapters；「經 import 它的模組再挑」那一行換成還是舊模組的
-    # skillview ← shopview（改 skillview 挑 52 個檔，why 一行「經 shopview（依賴它的 1 個模組）再挑到 11 個檔」；兩個都是 SHARED_LATER，收的那一批再換）
+    # skillview ← shopview（改 skillview 挑 52 個檔，why 一行「經 shopview（依賴它的 1 個模組）再挑到 11 個檔」；兩個當時都不在共用層，收的那一批再換）
     # core_world2（全部拆包第 40 批）：chapters 收進共用規則層，改它照「自己檔名的＋煙霧＋邊界」挑，test_chapters 靠檔名挑到、不是靠 import。
     # 直接 import 的那一半換成還是舊模組的伺服器假人 server_bots ← test_bot_runner（量的：改 server_bots 挑 8 個檔、dependents 是空的〔import 它的
     # bot_policy、bot_runner 是 DRIVERS〕，test_bot_runner 檔名對不上、只靠直接 import 挑到；server_bots 不在總表任何一批，第 66 批以前不會動）
     picked = test_for.pick(["tianxia/server_bots.py"])
     assert "test_bot_runner.py" in {p.name for p in picked.files} and not picked.core
     assert "server_bots" in test_for.imported(next(p for p in picked.files if p.name == "test_bot_runner.py"))
-    # 第二輪第 88 批：切開 skillview 之後沒有真例子了，「經 import 它的模組再挑」那一行用假的邊（shopview_reads_server_bots 的說明）
-    assert any("shopview" in w for w in picked.why)  # 經 import 它的 shopview 再挑（T-02）
+    # 第二輪第 88 批：切開 skillview 之後沒有真例子了，「經 import 它的模組再挑」那一行用假的邊（leaderboard_reads_server_bots 的說明）
+    assert any("leaderboard" in w for w in picked.why)  # 經 import 它的 leaderboard 再挑（T-02）
 
 
-def test_a_module_also_picks_the_tests_of_the_modules_that_import_it(shopview_reads_server_bots):
+def test_a_module_also_picks_the_tests_of_the_modules_that_import_it(leaderboard_reads_server_bots):
     """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
     test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
     （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
@@ -94,16 +94,16 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it(shopview_re
     mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。mapview：mapview、mapdata 第 49 批搬進輿圖包、舊名成了別名，
     換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。core_step：step、weekcard 第 36 批收進核心本體（MODULES），
     改 step 跑核心測試、不往上找，換成還是舊模組的事件抽選 events——經 narration 挑到只 import narration 的 test_narration
-    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
+    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個當時都不在共用層，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
     第二輪第 87 批 events、narration 收進共用規則層（共用層只挑自己檔名＋煙霧），換成還是舊模組的門下頁 skillview——經 shopview 挑到只 import shopview 的 test_bounty_tags
     〔量的：改 skillview 挑 54 個檔、core 與 smoke 都假、dependents("skillview") 只有 shopview；第 88 批切 skillview 時再換〕。
-    第二輪第 88 批：舊模組沒有真例子了，換假的邊 shopview → server_bots（fixture 的說明）。）"""
+    第二輪第 88 批：舊模組沒有真例子了，換假的邊 shopview → server_bots；第 103 批殼收掉，假的邊換 leaderboard → server_bots、例子換 test_leaderboard（fixture 的說明）。）"""
     picked = test_for.pick(["tianxia/server_bots.py"])
-    assert "test_bounty_tags.py" in {p.name for p in picked.files}
-    assert "server_bots" not in test_for.imported(next(p for p in picked.files if p.name == "test_bounty_tags.py"))
+    assert "test_leaderboard.py" in {p.name for p in picked.files}
+    assert "server_bots" not in test_for.imported(next(p for p in picked.files if p.name == "test_leaderboard.py"))
     assert not picked.core and not picked.smoke
     ups = test_for.dependents("server_bots")
-    assert {"shopview"} <= ups
+    assert {"leaderboard"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
 
 
@@ -242,7 +242,7 @@ def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
 
 
 def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
-    """彙整的模組（import 很多模組的 shopview 這種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
+    """彙整的模組（import 很多模組的那種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
     many = frozenset(f"m{i}" for i in range(test_for.AGGREGATOR_FANOUT))
     graph = {"low": frozenset(), "mid": frozenset({"low"}), "agg": frozenset({"mid"}) | many,
              "top": frozenset({"agg"}), "bot": frozenset({"mid"}), "rules": frozenset({"low"})}
@@ -254,7 +254,7 @@ def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
         test_for.dependents.cache_clear()
 
 
-def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monkeypatch, shopview_reads_server_bots):
+def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monkeypatch, leaderboard_reads_server_bots):
     """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。
     （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、figures 往上一百多個檔。
     map2：第 50 批 atlas 收進共用規則層之後量的，依賴它的模組 17 個、import 它們的測試檔 141 個，還是超過壓低的上限 100，例子不用換。）"""
@@ -266,17 +266,18 @@ def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monke
     # 「直接的比上限少」不成立了。這一條守的是「太多就不併往上找到的」，所以換成那一群一個都沒併；scripts/test_for.py 的 IMPORT_CAP 不動
     # 第二輪第 87 批：fusion 收進共用規則層（照上面那一條挑），例子換成還是舊模組的 skillview；它往上找到的只有 11 個檔，30 不算太多，上限壓到 5
     # （量的：挑 43 個檔、core 與 smoke 都真、往上找到的 11 個一個都沒併、why 寫「太多」）；scripts/test_for.py 的 IMPORT_CAP 不動
-    # 第二輪第 88 批：切開 skillview 之後舊模組沒有真例子了，換假的邊 shopview → server_bots（fixture 的說明），上限照舊壓到 5
+    # 第二輪第 88 批：切開 skillview 之後舊模組沒有真例子了，換假的邊（第 103 批換成 leaderboard → server_bots，fixture 的說明），上限照舊壓到 5
     monkeypatch.setattr(test_for, "IMPORT_CAP", 5)
     picked = test_for.pick(["tianxia/server_bots.py"])
     assert picked.core and picked.smoke
-    direct = {t for t in test_for.all_tests() if "server_bots" in test_for.reached(t) or t.stem == "test_server_bots" or t.stem.startswith("test_server_bots_")}
+    direct = {t for t in test_for.all_tests() if "server_bots" in test_for.reached(t) or t.stem == "test_server" or t.stem.startswith("test_server_")}  # 第一個字 server：test_server 也讀 leaderboard，是檔名挑到的
     via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("server_bots")} - direct
     assert via and not picked.files & via
     assert any("太多" in w for w in picked.why)
 
 
 @pytest.mark.parametrize("module, kind, expected", [
+    # 第二輪第 103 批：這兩個舊名的別名檔收掉了，路徑留假檔名：pick 不看檔在不在，registered_actions 照模組名找到包裡的登記
     ("wanted", "wanted", {"test_bounties.py", "test_sanren_web.py"}),
     ("mingtie_card", "mingtie", {"test_mingtie.py"}),
 ])
@@ -286,14 +287,15 @@ def test_a_module_engine_imports_to_register_picks_the_tests_that_name_its_actio
     assert kind in test_for.registered_actions(module)
     assert expected <= _names([f"tianxia/{module}.py"])
     if module == "wanted":
-        # 第 45 批：wanted 搬進懸賞榜包（舊名是別名，登記改在包的 __init__.py，registered_actions 照樣認）。真正的檔在包裡：改它照包的規矩挑那一包的 tests/＋核心契約，
+        # 第 45 批：wanted 搬進懸賞榜包（登記改在包的 __init__.py，registered_actions 照樣認）。真正的檔在包裡：改它照包的規矩挑那一包的 tests/＋核心契約，
         # 挑得到搬進包的 test_renown_wanted；test_bounties、test_sanren_web 第 61 批也搬進包了
         assert {"test_renown_wanted.py", "test_bounties.py", "test_sanren_web.py"} <= _names(["tianxia/features/bounties/wanted.py"])
     assert test_for.registered_actions("might") == ()
 
 
 def test_a_module_picks_the_tests_named_after_its_first_word():
-    assert "test_mingtie.py" in _names(["tianxia/mingtie_card.py"])
+    # 第二輪第 103 批：原本的例子 mingtie_card 是別名、檔收掉了，換還在的 server_bots（第一個字 server）
+    assert "test_server.py" in _names(["tianxia/server_bots.py"])
 
 
 def test_content_picks_its_tests_and_the_fast_part_of_real_content():
@@ -1096,20 +1098,20 @@ def _core_pick_in(module: str, name: str):
 
 
 def test_the_core_names_a_package_reexports_are_read_with_the_package_module_and_its_old_name():
-    """照語法樹讀出：名字 → 照抄它的模組名（duel_rules、arena_rules）與指到那一份的舊名別名（duel、arena）。只看 from … import 名字
+    """照語法樹讀出：名字 → 照抄它的模組名（duel_rules、arena_rules）與測試給那一份取的本地名（duel、arena；第二輪第 103 批之前是舊名的別名）。只看 from … import 名字
     （整個模組 import 進來的 `from tianxia.core import duel_base as duel_rules` 不算照抄：那一份寫得到 duel_base 這個字）。"""
     duel_words = test_for.core_reexports("duel_base")
     assert {"duel_rules", "duel"} <= duel_words["push_of"] and {"duel_rules", "duel"} <= duel_words["blow_taken"]
     assert {"arena_rules", "arena"} <= test_for.core_reexports("arena_ranks")["title_for"]
-    assert "shopview" not in set().union(*duel_words.values()) and "seal_duel" not in set().union(*duel_words.values())
+    assert "shop_view" not in set().union(*duel_words.values()) and "seal_duel" not in set().union(*duel_words.values())
     assert "present" not in test_for.core_reexports("event_check")  # 沒有人照抄的函式：照舊只認模組名與委派名
-    aliases = test_for.old_aliases()
-    assert aliases["tianxia.features.bout.duel_rules"] == {"duel"} and aliases["tianxia.features.bout.arena_rules"] == {"arena"}
-    assert aliases["tianxia.features.sortie.duel_rules"] == {"sortie_duel"}  # 同名的模組照全名分開
+    local = test_for.local_names_in_tests()
+    assert {"duel"} <= local["tianxia.features.bout.duel_rules"] and {"arena"} <= local["tianxia.features.bout.arena_rules"]
+    assert {"sortie_duel"} <= local["tianxia.features.sortie.duel_rules"]  # 同名的模組照全名分開
 
 
 @pytest.mark.parametrize("module, name, expected", [
-    ("duel_base", "push_of", {"test_seal_duel.py"}),  # 審查 C1（參謀減半拿掉）：寫 duel_rules.push_of（from tianxia import duel as duel_rules）
+    ("duel_base", "push_of", {"test_seal_duel.py"}),  # 審查 C1（參謀減半拿掉）：寫 duel_rules.push_of
     ("duel_base", "blow_taken", {"test_duel.py"}),  # 審查 C2（不算防具）：寫 duel.blow_taken
     ("arena_ranks", "title_for", {"test_arena.py"}),  # 審查 C5（<= 改成 <）：寫 arena.title_for
 ])
@@ -1323,11 +1325,11 @@ def test_a_js_file_reaches_the_tests_through_the_kit_text_but_not_through_the_ki
 
 
 def test_seeing_through_a_kit_goes_down_one_layer_only():
-    """test_sortie_duel → duel_kit → conquest_kit 算得到；conquest_kit 才 import 的 conquest_day 算不到。"""
+    """test_sortie_duel → duel_kit → conquest_kit 算得到；conquest_kit 才 import 的 territory 算不到（第二輪第 103 批：原本的例子 conquest_day 是別名、檔收掉了，kit 改寫包的全名，換 territory）。"""
     test = test_for.FEATURES / "sortie" / "tests" / "test_sortie_duel.py"
     assert "conquest_kit" in test_for.reached(test) and "conquest_kit" not in test_for.imported(test)
-    assert "conquest_day" in test_for.imported(test_for.TESTS / "kit" / "conquest_kit.py")
-    assert "conquest_day" not in test_for.reached(test)
+    assert "territory" in test_for.imported(test_for.TESTS / "kit" / "conquest_kit.py")
+    assert "territory" not in test_for.reached(test)
 
 
 # 假的核心服務檔（hunks_of 給假原文、不讀真檔，驗規則本身；pushing 的真檔第 80 批開了，用真檔的那一條在 test_the_push_and_pill_service_files_pick_their_base_not_core_and_smoke）：行號 _shaped 1～2、push_trend 5～6、LIMIT 9

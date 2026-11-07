@@ -36,7 +36,7 @@ class StaminaScenario(WorldScenario):
 
     def pair(self) -> tuple[str, str]:
         """（埋伏的人站的地方, 路的另一頭）：第一對兩頭都不是城鎮的路（照地點 id 排序，connections 的順序）。"""
-        from tianxia import ambush
+        from tianxia.features.stamina_plays import ambush_rules as ambush
 
         for a in sorted(self.c.locations):
             for to in self.c.locations[a].connections:
@@ -403,5 +403,5 @@ class StaminaScenario(WorldScenario):
 
 
 # 改一個字（selftest）：收伏那一句（ambush.LIFTED；第 39 批設伏搬進包時規則檔換位置，這裡要多寫包裡的檔）
-register_track("stamina", StaminaScenario, (("tianxia/features/stamina_plays/ambush_rules.py", "tianxia/ambush.py"),
+register_track("stamina", StaminaScenario, (("tianxia/features/stamina_plays/ambush_rules.py",),
                                              ("你收起埋伏，從路邊撤了回來。", "你收起埋伏，從路邊撤了回來！")), "week7")

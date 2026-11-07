@@ -5,7 +5,7 @@
 - 犒軍：補人物的聲威（restore，跟每天的自然回復共用 daily_restore_cap）。
 - 探望：人物被挑戰打到退場、還在等回來（FigureState.back_at）時，在自己陣營的大本營讓他早一點回來。
 這裡只改 GameState（季在 state.world 上），扣體力、銀兩、記貢獻、寫紀錄是 engine 的事。只 import models、state、figures、calendar、encounter。
-（全部拆包第 31 批搬進功能包 figure_acts；舊名 tianxia/figure_aid.py 留成別名。）
+（全部拆包第 31 批搬進功能包 figure_acts。）
 """
 from __future__ import annotations
 

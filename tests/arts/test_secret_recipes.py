@@ -186,7 +186,7 @@ def test_a_broken_secret_fails_validation(content):
 
 def test_a_self_found_insight_counts_by_its_attribute(ready, secret_content, world):
     """大多數人手上是自己悟的私有意境：寫了基本意境 id 的格子照那個意境的屬性認（同配方鍵認私有意境的做法）。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     from tianxia.martial_arts import Insight
 
     own = sensing.add_own(ready, Insight(id="", name="峰影", attribute="慢", creator="沈浪", creator_shown="沈浪"))

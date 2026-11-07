@@ -11,8 +11,8 @@ from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import battle_instance as bi
-from tianxia import social
+from tianxia.features.battle import instance as bi
+from tianxia.features.peers import social
 from tianxia.models import BattleTuning, ShowdownPay
 
 pytestmark = pytest.mark.whole_content

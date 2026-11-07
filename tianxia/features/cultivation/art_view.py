@@ -2,7 +2,7 @@
 sanguo-companions 合併大幅簡化，取代舊的武學欄/資質/相剋說明）：只讀狀態與內容、只產生文字，不改任何東西。新制度下每人最多一門內功、一門武學，
 沒有多個自選欄、沒有流派資質相剋，這裡的文字因此比舊版精簡很多。別包也要讀的卡片在共用層 tianxia/art_cards.py。
 
-另外要跑的：靠舊名殼 skillview 的測試都在 `scripts/test_for.py tianxia/skillview.py` 挑的那一份。
+另外要跑的：包外讀這一檔的測試（`git grep -l "import art_view" -- tests tianxia/features` 列的那幾個），test_for 挑不到。
 """
 from __future__ import annotations
 

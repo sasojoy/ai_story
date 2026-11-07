@@ -4563,7 +4563,7 @@ class Config(_Strict):
     # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
     event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
     seclusion_xinde_per_hour: int = 15
-    # 狀態列 💡 心得提示的下限（skillview.practice_hint）：心得至少這麼多、而且真的付得起又做得了一件事（練成下一成、或一次合成）才提示。
+    # 狀態列 💡 心得提示的下限（art_cards.practice_hint）：心得至少這麼多、而且真的付得起又做得了一件事（練成下一成、或一次合成）才提示。
     # explain-2（FB-100「心得到 34 也不知道要拿去哪裡用」）從 50 改成 0：只看「付得起、做得了」——最便宜那一件做得了的事就是門檻
     xinde_hint_threshold: int = Field(default=0, ge=0)
     # ── 探索三選一（探索三選一設計）──

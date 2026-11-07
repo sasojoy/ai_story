@@ -73,7 +73,7 @@ def test_batch2_numbers_ride_on_config_jianfa():
 
 def test_every_real_place_has_an_explore_table_and_travelers_are_wild():
     """正式內容每個地點都靠自己的標籤歸得到一張表；標了「旅人」的事件至少三則、都只在野類的地點（PM 2026-10-25 第 2、7 件）。"""
-    from tianxia import explore_one
+    from tianxia.features.explore import explore_rules as explore_one
     from tianxia.content import TRAVELER_MIN, TRAVELER_TAG
     from tianxia.events import event_matches_location
 
@@ -113,7 +113,7 @@ def test_validate_wants_three_traveler_events(monkeypatch):
 
 def test_a_place_can_override_its_four_columns():
     """locations.json 可以寫 explore_mix 覆寫四欄（設計 4.1）；算哪一種地點照舊看標籤；沒寫的不寫進序列化。"""
-    from tianxia import explore_one
+    from tianxia.features.explore import explore_rules as explore_one
     from tianxia.jianfa_numbers import ExploreMix
 
     c = load_content(CONTENT, profile="season21")

@@ -7,7 +7,7 @@
 等過 yuedan_wait_seconds 還沒寫好（模型叫不動、伺服器沒開背景寫字）照固定句發（tick）。被評的人的玩家卡上掛這一週那一句
 （line_for）。只是名聲，不加數值。
 只 import models、state、rules、calendar、leaderboard、figure_life、zh；world、engine、server、social 呼叫它。
-（全部拆包第 31 批搬進功能包 figure_acts；舊名 tianxia/yuedan.py 留成別名。）"""
+（全部拆包第 31 批搬進功能包 figure_acts。）"""
 from __future__ import annotations
 
 import hashlib

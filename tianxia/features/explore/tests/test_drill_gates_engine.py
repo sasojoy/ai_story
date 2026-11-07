@@ -6,7 +6,8 @@ from unittest import mock
 
 from jianfa_kit import jianfa_game, plain_game, ready
 
-from tianxia import explore_one, team
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import team
 from tianxia.encounter import EncounterResult
 import pytest
 
@@ -119,7 +120,7 @@ def test_camp_sparring_is_a_fight_past_45():
 
 
 def test_a_bounty_past_45_pays_xinde_not_exp():
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _camp()
     p = _to(game, 45, 30)

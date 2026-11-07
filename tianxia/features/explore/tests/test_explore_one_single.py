@@ -16,7 +16,8 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_one, team
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Bounty
 

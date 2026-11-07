@@ -191,7 +191,8 @@ class StripScenario(EventScenario):
 
     def stone(self) -> None:
         """觀山石：卡上那一句、靜心感悟擲中多幾個百分點（寶物表裡沒有它的內容照效果直接換 treasures.amount）、真的戴上看修練頁與探索。"""
-        from tianxia import sensing, treasures
+        from tianxia.features.sense import sensing
+        from tianxia import treasures
         from tianxia.state import Equipment
 
         who = "程聽雪"
@@ -218,7 +219,7 @@ class StripScenario(EventScenario):
 
     def strike(self) -> None:
         """討伐懸賞的說法：有陣營的、散人；一類一顆關著的那一支（沒蓋章的舊季）。"""
-        from tianxia import bounties
+        from tianxia.features.bounties import rules as bounties
         from tianxia.state import Bounty
 
         spot = self.field()

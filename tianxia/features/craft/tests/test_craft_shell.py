@@ -7,7 +7,8 @@ import pytest
 import llm_queue
 import server
 import webharness
-from tianxia import fusion, naming, skillview
+from tianxia import fusion, naming
+from tianxia.features.craft import forge_view
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -22,13 +23,13 @@ pytestmark = pytest.mark.whole_content
 
 
 def test_forge_line_endpoint_says_what_one_lone_item_is_missing(client):
-    """W4：煉製頁放了一樣東西就問一次 /api/forge_line，字的唯一出處是 skillview.forge_line。"""
+    """W4：煉製頁放了一樣東西就問一次 /api/forge_line，字的唯一出處是 forge_view.forge_line。"""
     _player(client)
     game = server.game_for("沈青衫")
     game.state.player.insights = ["feng"]
     open_characters().save(game.state)
     insight = client.post("/api/forge_line", json={"insights": ["feng"]}).json()["line"]
-    assert skillview.FORGE_ONE_INSIGHT in insight
+    assert forge_view.FORGE_ONE_INSIGHT in insight
 
 
 def test_forge_line_previews_without_forging(client):

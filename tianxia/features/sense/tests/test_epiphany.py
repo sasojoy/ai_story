@@ -8,7 +8,11 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import arts, epiphany, fusion, insight_fx, library, storyline, team
+from tianxia import arts
+from tianxia.features.sense import epiphany
+from tianxia import fusion, insight_fx, library
+from tianxia.features.story import storyline
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.rules import day_seconds
 from tianxia.state import InsightFx

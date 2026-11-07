@@ -10,7 +10,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ guide：新手引導一軌（全部拆包第 22 批，dev/guide-1） ═══════════════════════════
 # 引導框、碰到才說、新手目標、開局第一分鐘、入伍段的本體從 engine.py 搬進新包 tianxia/features/guide/（tianxia/guide.py、hints.py、
-# newbie.py、opening.py、enlist.py 留成別名；計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md）。
+# newbie.py、opening.py、enlist.py；計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md）。
 
 
 class GuideScenario(Scenario):
@@ -149,7 +149,7 @@ class GuideScenario(Scenario):
 
     def hut(self) -> None:
         """草廬前七步（照 Scenario.prologue，全走 API；每一下回的 /api/main 帶著框）；測試內容是說書人第一步（探索）。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.WALKER
         if not self.in_hut(who):
@@ -481,5 +481,5 @@ class GuideScenario(Scenario):
 
 
 # 改一個字（selftest）：任務卡「就當散人」那一句（newbie.DRIFTER_LINE；搬之前在 tianxia/newbie.py、之後在包裡）
-register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py", "tianxia/newbie.py"),
+register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py",),
                                          ("就當個散人，天下照樣走得。", "就當個散人，天下照樣走得！")), "week7")

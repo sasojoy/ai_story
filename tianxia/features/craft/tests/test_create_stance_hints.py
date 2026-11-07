@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 import webharness
-from tianxia import create, moves
+from tianxia.features.craft import create
+from tianxia import moves
 from tianxia.content import load_content
 from tianxia.engine import Game
 
@@ -156,14 +157,14 @@ def test_forming_a_rare_move_says_so_and_names_the_common_one(real):
 
 
 def test_the_art_card_marks_a_rare_move(real):
-    from tianxia import skillview
+    from tianxia import art_cards
     game = _formed(real, True)
     game.create_name("震山拳")
     from tianxia import team
     art = team.player_art(game.state, real, game.world, game.forged_thing[1])
     assert art.move_rare
-    assert skillview.tactic_line(real, art, 5).count(f"（{moves.RARE_WORD}）") == 1
-    assert moves.RARE_WORD not in skillview.tactic_line(real, art.model_copy(update={"move_rare": False}), 5)
+    assert art_cards.tactic_line(real, art, 5).count(f"（{moves.RARE_WORD}）") == 1
+    assert moves.RARE_WORD not in art_cards.tactic_line(real, art.model_copy(update={"move_rare": False}), 5)
 
 
 @needs_node

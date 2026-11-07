@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tianxia import database, sqlite_world
-from tianxia.battle_instance import BattleRoundRecord
+from tianxia.features.battle.instance import BattleRoundRecord
 from tianxia.database import Database
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world

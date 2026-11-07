@@ -13,7 +13,9 @@ import random
 import pytest
 
 from conftest import FixedRandom, no_territory, real_content
-from tianxia import calendar, foreshadow, opportunities, orders, ranks, rules, seats
+from tianxia import calendar
+from tianxia.features.military import fs_rules as foreshadow, opp_rules as opportunities
+from tianxia import orders, ranks, rules, seats
 from tianxia.characters import open_characters
 from tianxia.engine import PAUSED_REFUSAL, Game
 from tianxia.sqlite_world import open_world

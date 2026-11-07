@@ -5,7 +5,8 @@ import pytest
 
 import server
 from conftest import real_content
-from tianxia import foreshadow, narration
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import narration
 from tianxia.engine import Game
 from tianxia.world_state import fresh_season
 

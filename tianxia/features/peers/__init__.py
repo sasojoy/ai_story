@@ -1,15 +1,15 @@
 """玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）。功能包，開發規範手冊 3.2；全部拆包第 37 批搬進來
 （計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- social.py：玩家卡、贈物、打招呼（原 tianxia/social.py；那個名字留成指到這裡的別名）。卡上動作的登記表（ACTIONS、CardAction、CardButton、register）在核心 tianxia/core/cards.py（第 45 批），social re-export 同一批物件。
+- social.py：玩家卡、贈物、打招呼（原 tianxia/social.py）。卡上動作的登記表（ACTIONS、CardAction、CardButton、register）在核心 tianxia/core/cards.py（第 45 批），social re-export 同一批物件。
   「此地還有」的判斷與狀態列的身分字不在這裡：核心的查詢服務 tianxia/core/presence.py（social 從那裡 re-export 同一批函式物件）
-- invites.py：邀請的帳（原 tianxia/invites.py，別名）；mingtie.py：名帖的規則（原 tianxia/mingtie.py，別名）；
-  mingtie_card.py：遞名帖掛上玩家卡（原 tianxia/mingtie_card.py，別名；載入這一包時登記進 social.ACTIONS）
+- invites.py：邀請的帳（原 tianxia/invites.py）；mingtie.py：名帖的規則（原 tianxia/mingtie.py）；
+  mingtie_card.py：遞名帖掛上玩家卡（原 tianxia/mingtie_card.py；載入這一包時登記進 social.ACTIONS）
 - actions.py：此地還有、玩家卡、卡上的鈕按下去；invite_actions.py：邀請框（invite: 前綴、choose 掛鉤）；pair_actions.py：同一對人的帳與贈物一天的次數；
   mingtie_actions.py：名帖的動作與管理者看檢舉、撤下、放回——原本是 Game 上的 31 個方法（Game 留一行委派）
 - routes.py：/api/peer、/api/peer/act、/api/mingtie、/api/mingtie/{op}；bots.py：假人收到打招呼、結伴邀請、名帖的回法與做名帖、遞名帖、答切磋、答論武、截殺
 - 玩家互動二（全部拆包第 38 批）：spar.py／spar_actions.py（切磋）、discuss.py／discuss_actions.py（論武，三段式首創取名的 A 段 request、C 段 discuss；B 段殼的接線
-  第 69 批從 server.py 搬進 routes.py 的 prepare_peer、screen_peer，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py（那三個名字留成別名），
+  第 69 批從 server.py 搬進 routes.py 的 prepare_peer、screen_peer，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py，
   動作原本是 Game 上的 28 個方法（Game 留 13 個一行委派）
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，

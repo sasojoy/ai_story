@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
+from tianxia.features.companions import companion_agent
 from tianxia.characters import name_key
 from tianxia.core import xinshen
 from tianxia.engine import Game
@@ -200,9 +200,9 @@ def test_refund_takes_back_only_what_is_still_stored(shop):
 
 
 def test_the_howto_page_says_talk_spends_xinshen(on, game):
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
 
-    text = howto.page(on, game.state.world, recruitable=False)
+    text = guide_howto.page(on, game.state.world, recruitable=False)
     assert "扣心神：按選項 1 點、自己說 2 點" in text and "還能聊到第 8 輪" in text
 
 

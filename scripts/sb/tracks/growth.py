@@ -507,13 +507,14 @@ class LegacyScenario(_PrepTrack):
 
     def doors_of(self, who: str, tag: str) -> None:
         """門路讀到的地方（模組函式直接叫，不存檔）：俠寇選項、正邪武學、奇遇倍率、潁川書院的條件、頓悟再擲、長篇奇事。"""
-        from tianxia import epiphany, events, renown
+        from tianxia.features.sense import epiphany
+        from tianxia import events, renown
         from tianxia.rules import check_condition
 
         try:
             from tianxia.story_base import _luck_again
         except (ImportError, AttributeError):  # develop：還在舊的 storyline
-            from tianxia.storyline import _luck_again
+            from tianxia.features.story.storyline import _luck_again
         s, c = self.chars.load(who), self.c
         out = {"doors": {d: renown.legacy_door(s, c, d) for d in sorted(c.config.legacy.doors)},
                "open": {f"{k}_{w}_{t}": renown.open_to(s, c, k, w, t) for k in ("choices", "lessons") for w in ("俠", "寇") for t in (1, 2)},

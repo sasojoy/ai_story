@@ -659,7 +659,7 @@ def _worn_pairing(state: GameState, content: Content, world: WorldStateStore, sw
 
 
 def _signed_pct(ratio: float) -> str:
-    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 skillview 的 _pct 同一個寫法。"""
+    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 art_view 的 _pct 同一個寫法。"""
     return f"{ratio:+.1%}".replace(".0%", "%").replace("-", "−")
 
 
@@ -742,7 +742,7 @@ def practice_price(content: Content, level: int, scale: float = 1.0) -> int:
 
 def can_practise(state: GameState, content: Content, kind: str) -> bool:
     """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
-    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    機器人要不要練（bot.can_practise）與主畫面的提示（art_cards.practice_hint）共用這一個條件。"""
     member = state.player.member
     slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
     level = getattr(member, level_slot)
@@ -852,7 +852,7 @@ def heal_cost(content: Content, member, state: GameState | None = None) -> int:
 
 
 HEAL_FREE = "這一帶承露，醫館分文不取"  # 待 joy 潤：承露（玉璽碎片改版第 2 批）那一區療傷不收錢，療傷那一句的括號
-HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（skillview.heal_note）
+HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（art_cards.heal_note）
 
 
 def heal_free(state: GameState, content: Content) -> bool:
@@ -878,7 +878,7 @@ def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int
 
 
 def heal_problem(state: GameState, content: Content, member, where: str | None = None) -> str | None:
-    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
+    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（art_cards.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
     where 是呼叫端問過 clinic.problem 的那一句（不在醫館；None＝在醫館或開關關著），排在「氣血無恙」之後、銀兩之前。"""
     cost = heal_cost(content, member, state)
     if cost <= 0:

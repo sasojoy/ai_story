@@ -10,8 +10,7 @@
 4. 不想畫可以「順其自然」：當成畫出來跟做法同一個屬性，落回這一處的基本意境，不叫模型。
 
 序章草廬那一段（InsightScene.prologue）：四個做法都對、必中（擲骰交給呼叫端的 SureRandom），畫什麼都落回做法那個基本意境。
-這個模組只改狀態、回訊息；江湖紀錄、首悟紀錄、引導在這一包的 actions.py（原本在 engine；全部拆包第 24 批搬進有所感包，
-舊名 tianxia/sensing.py 留成別名）。看圖取名走三段式：request（A，鎖內、只讀）→ insight_llm.name（B，鎖外）→ finish（C，鎖內，重驗才套用）。"""
+這個模組只改狀態、回訊息；江湖紀錄、首悟紀錄、引導在這一包的 actions.py（原本在 engine；全部拆包第 24 批搬進有所感包）。看圖取名走三段式：request（A，鎖內、只讀）→ insight_llm.name（B，鎖外）→ finish（C，鎖內，重驗才套用）。"""
 from __future__ import annotations
 
 import random

@@ -62,7 +62,7 @@ def test_the_conversation_view_shows_the_bond(content):
 
     from test_engine import FAKE_TURN
 
-    from tianxia import companion_agent
+    from tianxia.features.companions import companion_agent
 
     content.characters["mate"].deep_interaction = True
     game = Game.new(content, "沈浪", rng=random.Random(0))

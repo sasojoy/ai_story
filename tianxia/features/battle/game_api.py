@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from . import admin, muster, progress, sieges, view
+from . import instance
 from . import rules
+
+
+def _write_battle_tales(ctx, client, act, items, sides=(), fallen=()):
+    """戰記包鎖外補劇情的 B 段（tale.routes.narrate_once）：不讀狀態，鎖外叫沒事。屬性讀 instance.write_tales，測試換得到。"""
+    return instance.write_tales(client, act, items, sides=sides, fallen=fallen)
 
 
 TABLE = {
@@ -61,6 +67,7 @@ TABLE = {
     "submit_battle_custom_action": view.submit_battle_custom_action,
     "battle_tale_request": view.battle_tale_request,
     "apply_battle_tales": view.apply_battle_tales,
+    "write_battle_tales": _write_battle_tales,
     "_tale_battles": view.tale_battles,
     # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     "_battle_choose": muster.battle_choose,

@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp(prefix="try_stances_")) / "try.db"))  # 不開到 saves/tianxia.db
 
-from tianxia import companion_agent, stances  # noqa: E402
+from tianxia.features.companions import companion_agent, stances  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

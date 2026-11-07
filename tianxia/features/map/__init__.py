@@ -2,7 +2,7 @@
 
 全部拆包第 49 批搬進來（計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md）。
 
-- mapview.py、mapart.py、mapdata.py、worldgeo.py：原本的 tianxia/mapview.py 等四個（舊名留成指到同一個模組的別名）：畫法、設色山水、底圖資料與疊層、天下圖的純幾何
+- mapview.py、mapart.py、mapdata.py、worldgeo.py：原本的 tianxia/mapview.py 等四個：畫法、設色山水、底圖資料與疊層、天下圖的純幾何
 - actions.py：原本 Game 上輿圖的 11 個方法（Game 留一行委派）；views.py：/api/map 的資料與底圖快取；routes.py：/api/map 三條路由（殼照 FEATURES 掛）
 
 沒有選項前綴、沒有狀態鍵（輿圖的畫面全從存檔現算，自己沒有寫到一半的東西）；假人不看地圖，只有 bot_policy 叫 Game.travel_options。

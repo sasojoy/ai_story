@@ -7,7 +7,9 @@ import pytest
 
 from conftest import real_content
 from bounty_ctx import bounty_ctx
-from tianxia import bounties, calendar, figure_life, figures, yuedan
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar, figure_life, figures
+from tianxia.features.figure_acts import yuedan
 from tianxia.state import GameState, PlayerState
 from tianxia.world_state import fresh_season
 

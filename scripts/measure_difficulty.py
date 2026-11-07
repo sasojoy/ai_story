@@ -32,7 +32,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 TMP = Path(tempfile.mkdtemp(prefix="measure_difficulty_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")
 
-from tianxia import bot, duel as duel_rules, encounter, rise, rules, sensing, team  # noqa: E402
+from tianxia import bot  # noqa: E402
+from tianxia.features.bout import duel_rules  # noqa: E402
+from tianxia import encounter, rise, rules  # noqa: E402
+from tianxia.features.sense import sensing  # noqa: E402
+from tianxia import team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

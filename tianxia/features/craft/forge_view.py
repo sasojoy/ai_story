@@ -1,6 +1,6 @@
 """煉製頁的預覽與提示（第二輪第 88 批從 tianxia/skillview.py 切出來，煉製包獨用的那一半）：只讀狀態與內容、只產生文字，不改任何東西。
 
-另外要跑的：靠舊名殼 skillview 的測試都在 `scripts/test_for.py tianxia/skillview.py` 挑的那一份。
+另外要跑的：包外讀這一檔的測試（`git grep -l "import forge_view" -- tests tianxia/features` 列的那幾個），test_for 挑不到。
 """
 from __future__ import annotations
 

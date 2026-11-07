@@ -13,7 +13,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import guide
+from tianxia.features.guide import rules as guide
 from tianxia.engine import Game
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]

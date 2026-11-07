@@ -221,5 +221,5 @@ class PrimerScenario(StripScenario):
 
 
 # 改一個字（selftest）：玩法說明體力那一節最後一句（第 59 批搬進包，舊名的檔、搬進包的檔兩處找）
-register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py", "tianxia/howto.py"),
+register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py",),
                                           ("點狀態列的體力條，也看得到這幾句。", "點狀態列的體力條，也看得到這幾句！")), "week7")

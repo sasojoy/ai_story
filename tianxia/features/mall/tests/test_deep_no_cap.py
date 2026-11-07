@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 from jianfa_kit import jianfa_game, ready
-from tianxia import mall
+from tianxia.features.mall import rules as mall
 from tianxia.characters import name_key
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions
@@ -23,7 +23,7 @@ def _game() -> Game:
 
 def _talk(game: Game, cid: str) -> list[str]:
     """跟 cid 談一輪（鎖外先生成好的那一輪，選「雪中送炭」那一類：情誼往上加）。"""
-    from tianxia import companion_agent
+    from tianxia.features.companions import companion_agent
 
     p = game.state.player
     p.pending_companion = cid

@@ -13,9 +13,13 @@ import pytest
 
 import server
 from conftest import no_plans, no_territory, real_content
-from tianxia import (
-    calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
-)
+from tianxia import calendar
+from tianxia.features.faction import defection
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import journal
+from tianxia.features.map import mapview
+from tianxia.features.military import opp_rules as opportunities
+from tianxia import orders, ranks, rules, rumor_view, timetable
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層、詳情那一半；同檔有區域變數叫 layers
 from tianxia.content import load_content
 from tianxia.engine import Game

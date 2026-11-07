@@ -13,7 +13,7 @@ from sb.tracks.explore import ExploreScenario, _explore_rules
 
 # ═══════════════════════════ sense：有所感與頓悟一軌（全部拆包第 24 批，dev/sense-1） ═══════════════════════════
 # 有所感（探索撞上、選做法、擲中、畫一筆或順其自然）、自己畫字的意境（看圖取名的三段式）、特殊頓悟（拷問、小試、心魔、取名）的本體從
-# engine.py 與 tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py 搬進新包 tianxia/features/sense/（舊名留成別名；計畫
+# engine.py 與 tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py 搬進新包 tianxia/features/sense/（計畫
 # docs/superpowers/plans/2026-11-01-有所感包-第1批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
 
 SENSE_NAME = ("寒潭孤月", "像深夜的潭水，冷而圓滿。")  # 假模型替自己悟的意境取的名字與一句說明（insight_llm.name 的 B 段）
@@ -187,7 +187,7 @@ class SenseScenario(ExploreScenario):
     @contextlib.contextmanager
     def roll_boost(self, who: str):
         """擲特殊頓悟乘多少寫進輸出（epiphany.roll 包一層，兩份程式同一步換、同一步換回；骰子照常擲）。"""
-        from tianxia import epiphany
+        from tianxia.features.sense import epiphany
 
         real = epiphany.roll
 
@@ -232,7 +232,7 @@ class SenseScenario(ExploreScenario):
 
     def stroke(self, who: str, name: bool) -> list | None:
         """畫哪一筆（glyph.SAMPLES 照屬性排第一個合的）：name 是要悟一個自己的新意境（要取名），否則落回這一處的基本意境。A 段只讀。"""
-        from tianxia import glyph, sensing
+        from tianxia.features.sense import glyph, sensing
 
         state = self.chars.load(who)
         for attr in sorted(glyph.SAMPLES):
@@ -252,7 +252,7 @@ class SenseScenario(ExploreScenario):
 
     def finish(self, who: str, rounds: int = 6) -> None:
         """眼前端出來的（事件卡、有所感、頭目）照第一顆按得下去的了結；有所感的感悟狀態一律順其自然（不按「畫下來」）。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         for _ in range(rounds):
             opts = self.options(who)
@@ -268,7 +268,7 @@ class SenseScenario(ExploreScenario):
     @contextlib.contextmanager
     def trial(self, name: str):
         """這一次頓悟的小試照寫好的那一種（epiphany._trial 換掉；同 tianxia/features/sense/tests/test_epiphany.py 的 _begin）。"""
-        from tianxia import epiphany
+        from tianxia.features.sense import epiphany
 
         real = epiphany._trial
         epiphany._trial = lambda state, content: (name, epiphany.TRIALS[name][0], -1)
@@ -316,7 +316,7 @@ class SenseScenario(ExploreScenario):
     def prologue(self) -> None:
         """草廬（不帶、weekend）：遇險、拜師、看修練頁，按探索——序章第 3 步的有所感版（舊探索開卡、做法都對、必中）；選第一個做法、
         順其自然。沒有草廬的季寫「沒有」。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.NEWBIE
         view = self.main(who)
@@ -338,7 +338,7 @@ class SenseScenario(ExploreScenario):
 
     def meet(self) -> None:
         """探索撞上有所感：卡上的做法、做法底下的兩行小字（sense_help）、場景；選對、擲中（感悟狀態：畫下來、順其自然）、順其自然。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = "石觀潮"
         self.sensed(who)
@@ -366,7 +366,7 @@ class SenseScenario(ExploreScenario):
     def canvas(self) -> None:
         """自己畫一筆：「畫下來」只叫出畫布、暖機、讀筆畫（讀得出、只點了一下、格式不對）、送一筆讀不出的、畫一筆落回基本意境、畫完再送；
         江照晚畫一筆要取名的（模型擋著：退路字表、不記首悟）。"""
-        from tianxia import glyph, sensing
+        from tianxia.features.sense import glyph, sensing
 
         who = "韋寒汀"
         self.sensed(who)
@@ -397,7 +397,7 @@ class SenseScenario(ExploreScenario):
 
     def epiphany(self) -> None:
         """顧折柳：保底中了特殊頓悟、拷問四題、靜候（trial_wait_days 擺 0）、心魔打贏、靜心思名（模型擋著：字表補三個）、自己寫沒帶字、挑第一個。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = "顧折柳"
         self.begin_line(who, "wait")
@@ -417,7 +417,7 @@ class SenseScenario(ExploreScenario):
     def demon_lost(self) -> None:
         """蘇停雲：拷問、探訪三回、心魔打輸（「心魔未破」的卡掛著——前半停在這裡）；陸聞箏：拷問、打贏一場（探索的遭遇）、心魔打贏，
         停在等著取名（還沒按靜心思名）。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         explore_one = _explore_rules()
         for who, trial in (("蘇停雲", "roam"), ("陸聞箏", "win")):
@@ -471,7 +471,7 @@ class SenseScenario(ExploreScenario):
 
     def trip_on(self) -> None:
         """新程式接手停著的一趟：畫一筆（sense_draw）、畫一筆要取名的（假模型）、順其自然、靜心思名（epiphany_names）；做完接著走。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = "岑望舒"
         if self.main(who).get("outing") is None:
@@ -512,7 +512,9 @@ class SenseScenario(ExploreScenario):
     def trip_gains(self) -> None:
         """走一趟停在卡上，悟的那一下與思名的那一下多帶一行料（sensing.finish、epiphany.fill 包一層，兩份程式同一步換、同一步換回）：
         outing_watch 要把它記在那一段（beat.after）。沒有這一行的話一般的一筆與思名什麼都不記，看不出那一層在不在。"""
-        from tianxia import epiphany, journal, materials, sensing
+        from tianxia.features.sense import epiphany
+        from tianxia import journal, materials
+        from tianxia.features.sense import sensing
 
         who = "計南枝"
         if self.main(who).get("outing") is None:
@@ -582,7 +584,7 @@ class SenseScenario(ExploreScenario):
 
     def preparing(self) -> None:
         """賽季籌備中（Game._preparing 換成真，兩份程式同一步換、同一步換回）：阮晴川畫一筆被擋（sense_request）、涂松聲靜心思名不開單（epiphany_request）。"""
-        from tianxia import glyph
+        from tianxia.features.sense import glyph
         from tianxia.engine import Game
 
         who, namer = "阮晴川", "涂松聲"
@@ -605,7 +607,7 @@ class SenseScenario(ExploreScenario):
 
     def pending_on(self) -> None:
         """新程式接手寫到一半的：紀守拙選對、擲中、順其自然；裴映雪先在鎖裡直接開單、人走開再交回（C 段重驗對不上，不存），再照常畫一筆。"""
-        from tianxia import glyph, sensing
+        from tianxia.features.sense import glyph, sensing
         from tianxia.engine import Game
 
         who = "紀守拙"

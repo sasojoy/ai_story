@@ -9,7 +9,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import companion_agent, parley
+from tianxia.features.companions import companion_agent, parley
 from tianxia.engine import PLAN_OPTION, Game
 from tianxia.state import ParleyBacking
 

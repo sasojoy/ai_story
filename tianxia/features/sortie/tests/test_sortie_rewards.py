@@ -7,7 +7,8 @@ from unittest import mock
 from conftest import real_content
 from conquest_kit import conquest_rules
 
-from tianxia import battle_instance, forge_secrets, four_tiers, team
+from tianxia.features.battle import instance as battle_instance
+from tianxia import forge_secrets, four_tiers, team
 from tianxia.encounter import EncounterResult
 from tianxia.core.services import drill_share
 from tianxia.engine import Game

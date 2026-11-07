@@ -3,7 +3,7 @@
 
 共用規則層（core/registry.py 的 SHARED）：engine、leaderboard 與修練、煉製、裝備、鐵匠鋪四包讀；不 import 任何一包，連函式裡都不行。
 
-另外要跑的：靠舊名殼 skillview 的測試都在 `scripts/test_for.py tianxia/skillview.py` 挑的那一份（test_for 改這一檔照共用層的規矩只挑邊界測試加煙霧）。
+另外要跑的：讀這一檔的測試（`git grep -l "import art_cards" -- tests tianxia/features` 列的那幾個；test_for 改這一檔照共用層的規矩只挑邊界測試加煙霧）。
 """
 from __future__ import annotations
 

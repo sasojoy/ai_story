@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from conftest import real_content
-from tianxia import sortie_duel
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.models import SortieRules
 
 

@@ -7,7 +7,7 @@ import pytest
 import run_bots
 from test_bot import armed
 from tianxia import bot, bot_policy, bot_runner, database, fusion, insight_fx, naming, server_bots
-from tianxia.battle_instance import BattleParticipant, BattleRound
+from tianxia.features.battle.instance import BattleParticipant, BattleRound
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game

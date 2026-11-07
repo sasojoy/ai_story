@@ -1,7 +1,7 @@
 """擂台的店面畫面資料（擂台賽設計；Joy 2026-10-14「擂台應該要是獨立的一頁」；第二輪第 93 批，原本在 tianxia/shopview.py；計畫 docs/superpowers/plans/2026-11-07-第二輪-第93批.md）。
 
 只讀：不改數值、不碰亂數、不 import engine。page 是店面那一頁的組法（Feature.shop_view 轉交；core/features.shop_page 問）。
-靠 tianxia/shopview.py 那個殼的測試（tests/gear/test_four_tiers.py、test_weapons.py、tests/arts/test_renown_trade.py、tests/battle/test_tactics_bouts.py……）改這一檔時 test_for 挑不到：另外跑 scripts/test_for.py tianxia/shopview.py。
+包外讀這一檔的測試改這一檔時 test_for 挑不到：另外跑 `git grep -l bout_shop -- tests tianxia/features` 列的那幾個。
 """
 from __future__ import annotations
 

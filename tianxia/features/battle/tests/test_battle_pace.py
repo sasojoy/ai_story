@@ -9,7 +9,7 @@ from test_bot_runner import _install, _tick_cleanly, clock, runner, world  # noq
 
 import server
 import webharness
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia import bot_policy, server_bots
 from tianxia.characters import open_characters
 from tianxia.models import BattleTuning

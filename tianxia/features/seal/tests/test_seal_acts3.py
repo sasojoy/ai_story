@@ -13,7 +13,9 @@ import server
 from conftest import real_content
 from conquest_kit import conquest_rules
 from test_seal_acts import _do, _give, _person, _uses
-from tianxia import calendar, conquest, seal, seal_acts
+from tianxia import calendar, conquest
+from tianxia.features.seal import seal
+from tianxia import seal_acts
 from tianxia.features.seal import acts
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
@@ -338,7 +340,8 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
     兩人的玩家卡一個字不差。補缺那一場先讓官軍翻走汝南。"""
     import json
 
-    from tianxia import social, tavern
+    from tianxia.features.peers import social
+    from tianxia.features.tavern import rules as tavern
 
     def world(shard: str, user: str) -> dict:
         c, w = _world()

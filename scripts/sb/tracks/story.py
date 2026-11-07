@@ -12,7 +12,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ story：一條線＋簽到一軌（全部拆包第 30 批，dev/story-1） ═══════════════════════════
 # 一條線（tianxia/storyline.py 與 Game 上 story_*、_story_*、_mirror_squad 十個方法、story: 前綴）與每日簽到（tianxia/checkin.py 與
-# Game 上 check_in、_auto_checkin、checkin_view 三個方法）搬進新包 tianxia/features/story/ 與 tianxia/features/checkin/（舊名留成別名；計畫
+# Game 上 check_in、_auto_checkin、checkin_view 三個方法）搬進新包 tianxia/features/story/ 與 tianxia/features/checkin/（計畫
 # docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
 
 _STORY_CHECKIN_DAY = 6  # 簽到要挑四階的第一天（Config.checkin.tier4_days 的第一個）；前半快轉到這一天、人都還沒領
@@ -125,7 +125,7 @@ class StoryScenario(Scenario):
         return bool(jianfa(self.c, self.world.get_season(), "storylines"))
 
     def signing_on(self) -> bool:
-        from tianxia import checkin
+        from tianxia.features.checkin import checkin
 
         return bool(checkin.on(self.c, self.world.get_season()))
 
@@ -185,7 +185,7 @@ class StoryScenario(Scenario):
 
     def mirror_power(self, who: str) -> None:
         """影子此刻的難度（Game._mirror_squad，輸過幾次削幾次）。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
         from tianxia.engine import Game
 
         self.begin()
@@ -200,7 +200,7 @@ class StoryScenario(Scenario):
 
     def walk(self, who: str, rounds: int) -> None:
         """長篇奇事往下走：多日段等完（entered 往前挪）、站到這一段做得了的地方、眼前有事件就選第一個亮的、沒有就按「未了之事」那一顆。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         for _ in range(rounds):
             state = self.chars.load(who)
@@ -229,7 +229,7 @@ class StoryScenario(Scenario):
 
     def forward_to(self, day: int) -> None:
         """管理者快轉（一天一天），快轉到簽到的第 day 天（沒有簽到的設定快轉同樣的天數）。"""
-        from tianxia import checkin
+        from tianxia.features.checkin import checkin
 
         for _ in range(day):
             s = self.world.get_season()
@@ -287,7 +287,7 @@ class StoryScenario(Scenario):
 
     def walk_first(self) -> None:
         """周問舟在潁川荒野遇上賣兒契（內容寫的線）：走幾步停在半路。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         who = self.WALKER
         line = self.c.storylines.get(self.REAL)
@@ -366,7 +366,7 @@ class StoryScenario(Scenario):
     def walk_on(self) -> None:
         """前半停在半路的周問舟過了期限（快轉了五天，賣兒契的期限早過了：往 late 走、收卡）；杜歸舟後半才在潁川書院遇上臥龍岡的地（內容寫的線），
         一路走完。"""
-        from tianxia import storyline
+        from tianxia.features.story import storyline
 
         who, line = self.WALKER2, self.c.storylines.get("wolong")
         if line is None or not self.lines_on():
@@ -523,5 +523,5 @@ class StoryScenario(Scenario):
 
 
 # 改一個字（selftest）：選單上「未了之事」那一行的開頭（搬之前在 tianxia/storyline.py、之後在 tianxia/features/story/storyline.py）
-register_track("story", StoryScenario, (("tianxia/features/story/storyline.py", "tianxia/storyline.py"),
+register_track("story", StoryScenario, (("tianxia/features/story/storyline.py",),
                                         ('PENDING_HEAD = "未了之事"', 'PENDING_HEAD = "未了之事！"')), "week7")

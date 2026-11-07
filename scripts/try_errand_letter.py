@@ -23,7 +23,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp(prefix="try_errand_")) / "try.db"))  # 不開到 saves/tianxia.db
 
-from tianxia import errands, event_llm, letters, zh  # noqa: E402
+from tianxia.features.companions import errands  # noqa: E402
+from tianxia import event_llm  # noqa: E402
+from tianxia.features.companions import letters  # noqa: E402
+from tianxia import zh  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.state import new_game_state  # noqa: E402

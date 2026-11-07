@@ -22,7 +22,7 @@ from tianxia.engine import Game
 from tianxia.models import GiveArt
 from conftest import idle_step
 from test_orders import _game, _order
-from tianxia import guide
+from tianxia.features.guide import rules as guide
 from tianxia.rules import front_of
 
 ROOT = Path(__file__).parents[2]
@@ -986,7 +986,7 @@ def _finished(game, on):
 
 
 def enlist_done(state, content):
-    from tianxia import enlist
+    from tianxia.features.guide import enlist
 
     return enlist.done(state, content)
 
@@ -1059,7 +1059,8 @@ def test_fb094_the_week_counts_from_when_the_step_started_not_from_joining(on):
 
 
 def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_their_week_when_loaded(on):
-    from tianxia import calendar, enlist
+    from tianxia import calendar
+    from tianxia.features.guide import enlist
 
     game = _game(on, at="changshe")
     game.state.player.tutorial_step = len(guide.steps(game.state, on))

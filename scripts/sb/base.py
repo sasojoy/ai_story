@@ -269,7 +269,7 @@ class Scenario:
 
     def prologue(self) -> None:
         """序章走到雪恥（出陣開著時 act:train 叫雪恥、不算出陣次數；關著叫遊歷）：照 tests/season/test_real_content._walk_the_hut 的步驟，全走 API。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.NEWBIE
         view = self.main(who)
@@ -669,7 +669,7 @@ class DuelScenario(Scenario):
 
     def notices(self, who: str) -> None:
         """手機通知那一串（notices.current：server 的通知看守讀同一份；duel:open、duel:answered）。"""
-        from tianxia import notices
+        from tianxia.features.notify import notices
 
         state = self.chars.load(who)
         state.world = self.world.get_season()
@@ -1193,9 +1193,9 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # ═══════════════════════════ 登記：第 1 批的一軌（出陣）、第 2 批的一軌（約戰），各自一個資料庫、各自切一半 ═══════════════════════════
 
 # 改一個字（selftest）：出陣回報打輸那一句
-register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py", "tianxia/sortie.py"), ("這一下沒推動。", "這一下沒推動！")), "week7")
+register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7")
 # 改一個字（selftest）：同去按第二次那一句
-register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py", "tianxia/sortie_duel.py"),
+register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
                                       ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7")
 register_bots("sortie", BOT_PROFILES, bots_run)  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run)  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

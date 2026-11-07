@@ -156,7 +156,7 @@ class ArtsScenario(Scenario):
 
     def create_art(self, who: str, name: str) -> str | None:
         """自創一門武學（執器、擺式、立意〔三段式：模型擋著，照關鍵字表讀〕、立名）：回那一門的 id（不在手上是 None）。"""
-        from tianxia import create
+        from tianxia.features.craft import create
 
         self.xinde(who, 20000)
         self.mx(who, "create_begin", {"kind": "武學", "form": "拳腳"})
@@ -334,7 +334,7 @@ class ArtsScenario(Scenario):
 
     def hut_slot(self) -> None:
         """序章新人走到裝意境那一步（同 Scenario.prologue 的前幾步）；沒有序章的季什麼都不做。"""
-        from tianxia import sensing
+        from tianxia.features.sense import sensing
 
         who = self.PUPIL
         view = self.main(who)
@@ -559,7 +559,8 @@ def arts_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     _setup_child(root, profile, tmp / "unused.db")
     from collections import Counter
 
-    from tianxia import bot, create
+    from tianxia import bot
+    from tianxia.features.craft import create
     from tianxia.bot_runner import BotRunner
     from tianxia.characters import open_characters
     from tianxia.content import load_content

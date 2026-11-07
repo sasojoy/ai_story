@@ -4,14 +4,14 @@
 調度軍令（caller、call_orders）、開集結（start_muster、start_from_front、shift_deadlines）、收場的理由（outcome_reason、result_at、BLOW_REASON…）、
 放手一搏的評分（assess_gamble、SuccessRateJudgment、GambleVerdict、clean_story、claims_a_kill）。
 
-規則那一半（集結、出招、結算回合、畫面的字、鎖外評分與補劇情）在決戰包 tianxia/features/battle/instance.py，它 re-export 這裡全部的名字，舊名 tianxia/battle_instance.py
-是指到它的別名。邊界測試不准核心、共用規則層、舊模組、別的包碰決戰包或它的別名，所以它們讀的都得留在這裡；這裡一個字都不讀決戰包。
+規則那一半（集結、出招、結算回合、畫面的字、鎖外評分與補劇情）在決戰包 tianxia/features/battle/instance.py，它 re-export 這裡全部的名字。
+邊界測試不准核心、共用規則層、舊模組、別的包碰決戰包，所以它們讀的都得留在這裡；這裡一個字都不讀決戰包。
 
 誰讀：核心本體的 world_state、sqlite_world、world、team（函式裡，延後）、core/duel_base、core/seal_base；共用規則層的 chiefs、conquest、event_llm、siege；舊模組 tale、seal_duel、
-bot_policy、bot_runner；engine；bout、seal、territory_acts、looks、faction 幾包。讀的時候區域名照舊叫 battle_instance（from tianxia.core import battle_base as battle_instance）。
+bot_policy、bot_runner；engine；bout、seal、tale、territory_acts、looks、faction 幾包（bout、seal、tale 的鎖外路由也讀這裡，第二輪第 102 批）。讀的時候區域名照舊叫 battle_instance（from tianxia.core import battle_base as battle_instance）。
 
-換掉 assess_gamble 的測試兩種都有：tests/server/test_server.py、單挑包的 test_arena_crowd 經別名換決戰包那一格（server.py 與 view.py 讀那一格）；單挑包的 test_duel、test_arena 測沒給分數時的
-鎖內退路（duel_actions、arena_actions 讀這裡），換這裡那一格。engine 的奪璽那一處也讀這裡，沒有測試換它。
+換掉 assess_gamble 的測試：放手一搏的路由（bout、seal 的 routes，第二輪第 102 批）與鎖內退路（duel_actions、arena_actions）讀這裡，test_server、單挑包的 test_bout_shell、test_arena_crowd、test_duel、test_arena
+換這裡這一格；決戰的 view.py 讀決戰包那一格，換那裡。engine 的奪璽那一處也讀這裡，沒有測試換它。
 
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。
 """

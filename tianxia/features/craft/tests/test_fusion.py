@@ -8,7 +8,9 @@ import pytest
 from tianxia.state import InsightFx
 
 from tianxia import insight_fx, arts as arts_mod
-from tianxia import fusion, insights, library, naming, skillview, team
+from tianxia import fusion, insights, library, naming, art_cards
+from tianxia.features.craft import forge_view
+from tianxia import team
 from tianxia.martial_arts import generate_from_name
 from tianxia.state import new_game_state
 
@@ -74,22 +76,22 @@ def test_the_merge_preview_gives_the_true_meaning_percent_the_fire_was_cut_from(
     from conftest import real_content
 
     content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 測試內容沒有高階技能：借正式內容的陽（風＋火合出來的屬性）
-    card = skillview.forge_preview(ready, content, world, ["feng", "huo"])
+    card = forge_view.forge_preview(ready, content, world, ["feng", "huo"])
     quality = insight_fx.better(insight_fx.quality_of(ready, "feng"), insight_fx.quality_of(ready, "huo"))
     assert card["attribute"] == "陽" and arts_mod.high_of(content, "陽") is not None  # 那一路有真意
-    assert isinstance(card["grand_pct"], int) and card["grand_pct"] == skillview._compound_grand(content, quality)
-    assert card["fire"] == skillview.fire_of(card["grand_pct"])
+    assert isinstance(card["grand_pct"], int) and card["grand_pct"] == forge_view._compound_grand(content, quality)
+    assert card["fire"] == forge_view.fire_of(card["grand_pct"])
     content.config.arts.compound_grand_scale = 0.5  # 數字跟著設定走，不是寫死的
-    again = skillview.forge_preview(ready, content, world, ["feng", "huo"])
-    assert again["grand_pct"] == skillview._compound_grand(content, quality) != card["grand_pct"]
+    again = forge_view.forge_preview(ready, content, world, ["feng", "huo"])
+    assert again["grand_pct"] == forge_view._compound_grand(content, quality) != card["grand_pct"]
 
 
 def test_pondering_and_a_merge_without_a_true_meaning_give_no_percent(ready, content, world, monkeypatch):
     ready.player.insights.append("feng~2")
-    assert skillview.forge_preview(ready, content, world, ["feng", "feng~2"])["grand_pct"] is None  # 揣摩不擲真意
-    assert skillview.forge_preview(ready, content, world, ["feng", "feng"])["grand_pct"] is None
+    assert forge_view.forge_preview(ready, content, world, ["feng", "feng~2"])["grand_pct"] is None  # 揣摩不擲真意
+    assert forge_view.forge_preview(ready, content, world, ["feng", "feng"])["grand_pct"] is None
     monkeypatch.setattr(arts_mod, "high_of", lambda c, attribute: None)  # 那一路沒有真意：不寫「真意 0%」
-    card = skillview.forge_preview(ready, content, world, ["feng", "huo"])
+    card = forge_view.forge_preview(ready, content, world, ["feng", "huo"])
     assert card["kind"] == "合併" and card["grand_pct"] is None and card["fire"]["level"] == 0
 
 
@@ -137,7 +139,7 @@ def test_a_slotted_compound_insight_gives_its_attribute_and_lean_to_the_art(read
     fx = ready.player.insight_fx[good.id]  # 意境效果池：合出來的那一份照較好的品質擲一到兩個效果
     assert mine.traits == [k for k, n in fx.general.items() for _ in range(n)]
     assert mine.lean == "正" and mine.attribute == good.attribute  # 基礎拳腳兼容並蓄：屬性照槽裡強度最高那一格
-    assert "正派" in skillview.art_card(mine, 1)
+    assert "正派" in art_cards.art_card(mine, 1)
 
 
 def test_the_same_piece_twice_is_refused(ready, content, world):
@@ -514,7 +516,7 @@ def test_can_forge_looks_only_at_the_shape_of_what_you_hold(ready, content, worl
 
 
 def test_slot_refusals_carry_a_short_word(ready, content, world):
-    """裝槽的拒絕也帶 short（skillview.forge_picks 照它標，不再一律「合不了」）。"""
+    """裝槽的拒絕也帶 short（forge_view.forge_picks 照它標，不再一律「合不了」）。"""
     from tianxia import arts
     ready.player.art_slots["basic_fist"] = ["feng", None]
     assert arts.slot_problem(ready, content, world, "basic_fist", "feng").short == "已裝上"

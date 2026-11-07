@@ -10,7 +10,10 @@ import pytest
 
 from conftest import real_content
 from stances_kit import BOCAI, DAY, HOUR, HUANGFU, LUZHI, MON, at, real_game, stance_turn, talking, week_start_real
-from tianxia import annals, companion_agent, conquest, figures, rules, stances
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.companions import companion_agent
+from tianxia import conquest, figures, rules
+from tianxia.features.companions import stances
 from tianxia.state import GameState, PlayerState, QUIET_DEFAULTS, StanceNote, StanceOn, WorldState, new_game_state
 
 

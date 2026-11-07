@@ -58,7 +58,7 @@ def test_six_season_one_endings_name_the_winner(content):
 
 def test_mandate_endings_agree_with_their_winner(content):
     """天命之爭得天命的那一軍 → 結局（時刻表的 mandate_endings）跟結局自己寫的 winner 是同一軍。"""
-    from tianxia.seal import mandate_event
+    from tianxia.features.seal.seal import mandate_event
 
     event = mandate_event(content)
     assert event is not None and event.mandate_endings

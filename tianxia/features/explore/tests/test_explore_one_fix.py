@@ -15,7 +15,11 @@ import pytest
 from conftest import real_content
 from jianfa_kit import jianfa_game, jianfa_rules, ready
 
-from tianxia import bounties, explore_one, renown, sortie, team
+from tianxia.features.bounties import rules as bounties
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia import renown
+from tianxia.features.sortie import rules as sortie
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.core.services import drill_share
 from tianxia.state import Bounty

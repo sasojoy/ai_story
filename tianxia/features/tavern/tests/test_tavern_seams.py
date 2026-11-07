@@ -8,7 +8,8 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import figure_aid, tavern
+from tianxia.features.figure_acts import figure_aid
+from tianxia.features.tavern import rules as tavern
 from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

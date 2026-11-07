@@ -10,7 +10,10 @@ import pytest
 import webharness
 from conftest import real_content
 
-from tianxia import battlelog, encounter, howto, team, terrain
+from tianxia import battlelog, encounter
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.sense import howto as sense_howto
+from tianxia import team, terrain
 from tianxia.features.map import layers
 from tianxia.terrain import check_terrain_arts
 from tianxia.engine import Game
@@ -339,9 +342,9 @@ def test_the_map_drawer_shows_the_terrain_section():
 
 def test_the_howto_says_it_only_when_on(content, world):
     g = _lake(content, world)
-    assert howto.TERRAIN_HOWTO in howto.page(content, g.state.world, recruitable=False)
+    assert sense_howto.TERRAIN_HOWTO in guide_howto.page(content, g.state.world, recruitable=False)
     content.config.terrain_arts.enabled = False
-    assert howto.TERRAIN_HOWTO not in howto.page(content, g.state.world, recruitable=False)
+    assert sense_howto.TERRAIN_HOWTO not in guide_howto.page(content, g.state.world, recruitable=False)
 
 
 def test_the_content_check_wants_lines_for_every_strongest_insight():

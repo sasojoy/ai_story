@@ -76,7 +76,7 @@ class LandTurnScenario(Scenario):
         """時鐘撥到第 day 天（CLOCK0 那天是第 0 天，台灣 12:00）當地的 hour:minute（只准往前；下一個請求再 +1 步）。"""
         target = CLOCK0 - 12 * 3600 + day * 86400 + hour * 3600 + minute * 60
         STEP[0] = max(STEP[0], int((target - CLOCK0) // STEP_SECONDS))
-        from tianxia import conquest_day
+        from tianxia.features.territory_acts import conquest_day
 
         emit(f"時鐘撥到 第 {day} 天 {hour:02d}:{minute:02d}",
              {"offset": self.c.config.pill_day_utc_offset_hours, "key": conquest_day.day_key(CLOCK0 + (STEP[0] + 1) * STEP_SECONDS, self.c.config)})
@@ -88,7 +88,7 @@ class LandTurnScenario(Scenario):
         return bool(territory.on(self.c) and conquest.on(self.c, w))
 
     def essay_on(self) -> bool:
-        from tianxia import xingshi
+        from tianxia.features.territory_acts import xingshi
 
         return xingshi.on(self.c, self.world.get_season())
 
@@ -135,7 +135,8 @@ class LandTurnScenario(Scenario):
 
     def land(self) -> None:
         """挑地點：A（開季沒人佔的塊，雙方都推得）、B（推滿易手的）、C（守城功）、D（換天之後再下一張戰書的）；在任的第 4 階；人站到 A 去。"""
-        from tianxia import conquest, xingshi
+        from tianxia import conquest
+        from tianxia.features.territory_acts import xingshi
 
         self.clock_to(1, 9, 0)
         c = self.c
@@ -450,6 +451,6 @@ class LandTurnScenario(Scenario):
 
 # 改一個字（selftest）：前一天沒開成的攻城作罷那一句（搬之前在 tianxia/conquest_day.py、之後在 tianxia/features/territory_acts/conquest_day.py；
 # 第 2 項是之後的檔名，搬的人照實際的檔名改這一個字串）
-register_track("landturn", LandTurnScenario, (("tianxia/features/territory_acts/conquest_day.py", "tianxia/conquest_day.py"),
+register_track("landturn", LandTurnScenario, (("tianxia/features/territory_acts/conquest_day.py",),
                                               ('VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷。"',
                                                'VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷！"')), "week7")

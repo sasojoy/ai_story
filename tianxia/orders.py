@@ -10,7 +10,7 @@
 
 不 import world、atlas、engine（world 會 import 這裡，掛 WEEK_HOOKS）。
 
-共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（截糧的站問 territory.on，原本經出陣包 sortie.on）。
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包（截糧的站問 territory.on，原本經出陣包 sortie.on）。
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_orders.py＋煙霧＋邊界（收進來之前經 atlas、rumor_view 往上找挑到 55 個檔）。
 另外跑（-n 4）直接 import 它的：tests/acts/ 的 test_conquest_flip、test_conquest_rules、test_conquest_siege、test_territory；tests/bots/test_step；
 tests/figures/ 的 test_gentry_allied、test_seats、test_week7_season；tests/ranger/test_season21_daily；tests/server/test_push_resistance；

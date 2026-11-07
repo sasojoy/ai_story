@@ -10,7 +10,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 
 # ═══════════════════════════ zhuan：列傳一軌（全部拆包第 29 批，dev/zhuan-1） ═══════════════════════════
 # 列傳（tianxia/biography.py、zhuan_end.py、zhuan_html.py 與 Game 上寫傳、休季三顆、行狀頁的 20 個方法、server 的列傳那一段與 5 條路由、zhuan: 前綴）
-# 搬進新包 tianxia/features/zhuan/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md）。角色的名字都是原創的（PM 11/04）。
+# 搬進新包 tianxia/features/zhuan/（計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md）。角色的名字都是原創的（PM 11/04）。
 
 ZHUAN_FIGURES = ("luzhi", "zhujun", "caocao")  # 評曰與親筆評曰的人物（正式內容有；測試內容沒有就改拿人物表的前三位）
 
@@ -149,7 +149,7 @@ class ZhuanScenario(Scenario):
 
     def seed(self) -> None:
         """每個人站到陣營的投靠點、記兩三則行狀、擺貢獻（收季時排名次）與跟人物的情誼（評曰的寫手）。桓子衿一則行狀都沒有。"""
-        from tianxia import annals
+        from tianxia.features.zhuan import standing as annals
 
         figs, sides = self.figs(), {f.id: f for f in self.c.scenario.factions}
         affinity = {self.MODEL_W: {figs[0]: 55, figs[1]: 45}, self.FREE: {figs[0]: 75, figs[1]: 72, figs[2]: 80},
@@ -179,7 +179,7 @@ class ZhuanScenario(Scenario):
         """各包記一筆行狀（全部拆包第 29 批之二，annals 拆兩半）：打贏（交手）、差事辦成、人物立場、決戰（大戰）、約戰單挑、攻守、玉璽、痕跡、奇事各記一則
         （種類、份量、人物、保留的名號），〈天下形勢〉與季末論功是 seed／close 的同步記的；再各自先看一次狀態（annals_mark 有了才比得出變化）。
         看 /api/annals 的小標、時刻與排序、酒肆打聽得到的（heard）與文字工具。"""
-        from tianxia import annals
+        from tianxia.features.zhuan import standing as annals
         from tianxia.engine import Game
 
         figs = self.figs()
@@ -346,7 +346,7 @@ class ZhuanScenario(Scenario):
 
     def bot_seats(self) -> None:
         """休季開著時加入的兩個假人（冊甲手上有紀念印的票）。"""
-        from tianxia import annals
+        from tianxia.features.zhuan import standing as annals
         from tianxia.characters import name_key
         from tianxia.engine import Game
         from tianxia.features.mall import actions as mall_actions
@@ -431,5 +431,5 @@ class ZhuanScenario(Scenario):
 
 
 # 改一個字（selftest）：蓋紀念印那一句（搬之前在 tianxia/zhuan_end.py、之後在 tianxia/features/zhuan/zhuan_end.py）
-register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py", "tianxia/zhuan_end.py"),
+register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py",),
                                         ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21")

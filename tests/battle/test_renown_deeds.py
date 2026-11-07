@@ -4,7 +4,7 @@ import random
 
 from conftest import real_content
 
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia import renown
 from tianxia.engine import Game
 from tianxia.state import new_game_state

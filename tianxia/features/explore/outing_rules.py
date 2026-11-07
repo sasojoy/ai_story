@@ -12,7 +12,7 @@
 - 撿到四階素材、勝算凶險以下還打贏（feat）：自動記一則行狀、世界記事一筆；別的不記（Joy 10/30）。
 
 這裡只放純規則（開關、倍數、這一趟還在不在路上、留言、畫面那一份）；走路本身在同一包的 outing_actions（outing_go、outing_walk；
-Game 上留一行委派）。原本是 tianxia/outing.py（主動搬六包第 3＋4 批搬進探索包；那個名字留成指到這裡的別名）。
+Game 上留一行委派）。原本是 tianxia/outing.py（主動搬六包第 3＋4 批搬進探索包）。
 """
 
 from __future__ import annotations

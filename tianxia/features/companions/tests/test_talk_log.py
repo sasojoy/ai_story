@@ -3,8 +3,8 @@
 
 from random import Random
 
-from tianxia import companion_agent, talk_log
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.companions import companion_agent, talk_log
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.core import features as features_core
 
 

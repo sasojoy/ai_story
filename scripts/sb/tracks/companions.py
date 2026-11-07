@@ -12,7 +12,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 
 # ═══════════════════════════ companions：人物情誼一軌（全部拆包第 19 批，dev/companions-1） ═══════════════════════════
 # 同伴招募與名下、心意、託付與勸降、來信與委託、/api/figure 的本體從 engine.py 搬進新包 tianxia/features/companions/（stances、errands、letters
-# 留成別名；心意的世界那一半進共用規則層 tianxia/stance_world.py；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md）。新開的軌用原創名字（第 22 批 PM 認定第 3 條）。
+# 心意的世界那一半進共用規則層 tianxia/stance_world.py；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md）。新開的軌用原創名字（第 22 批 PM 認定第 3 條）。
 
 COMPANIONS_TALK = "他沉吟了一會，點了點頭。"  # 假模型寫的對話那一輪
 COMPANIONS_LETTER = "少俠台鑒：此事有勞，望勿推辭。"  # 假模型照他的口氣重寫的信
@@ -110,7 +110,7 @@ class CompanionsScenario(Scenario):
                 setattr(owner, k, v)
 
     def on_errands(self) -> bool:
-        from tianxia import errands
+        from tianxia.features.companions import errands
 
         return errands.on(self.c, self.world.get_season())
 
@@ -157,7 +157,7 @@ class CompanionsScenario(Scenario):
 
     def give(self, who: str, fid: str, eid: str) -> None:
         """直接開一件（同 errands.offer 挑中之後那一下；Game.persuade 的測試也這樣開）。"""
-        from tianxia import errands
+        from tianxia.features.companions import errands
 
         self.edit_state(who, lambda s: errands.give(s, self.c, fid, eid))
         self.me(who, f"開一件 {eid}")
@@ -323,7 +323,7 @@ class CompanionsScenario(Scenario):
         emit("談話中的人物頁（main.figure）", view.get("figure") if isinstance(view, dict) else None)
 
         def nearly(s) -> None:  # 速戰差一筆到門檻（下面這一下就過門檻：天下大事、江湖史；下一次同步記行狀）
-            from tianxia import stances
+            from tianxia.features.companions import stances
 
             if stances.on(self.c, s):
                 s.stance_week, s.stance_counts = stances.week_of(self.c, s), {self.LUZHI: {"suzhan": 29}}
@@ -364,7 +364,8 @@ class CompanionsScenario(Scenario):
 
     def letters_open(self) -> None:
         """書信：柳聽泉情誼夠的人物焦慮（聲威不到開季的一半），寫求援、附一件委託；信還沒看、委託還沒婉拒（切在這裡）。"""
-        from tianxia import figures, letters
+        from tianxia import figures
+        from tianxia.features.companions import letters
 
         who = self.MAILER
         if not letters.on(self.c) or "qinjie" not in self.c.characters:
@@ -474,7 +475,8 @@ class CompanionsScenario(Scenario):
     def letters_on(self) -> None:
         """柳聽泉：鎖外重寫信（server.letter_once，假模型）、收起、婉拒委託、委託過期；道賀（figure_life.spread 記 cheers）、邀宴；09:00 的看守替他送信；
         敬過酒的宴不邀、宴客關著不邀（審查 M04：之前沒有人敬過酒，這兩個判斷沒有人走到）。"""
-        from tianxia import figure_life, letters
+        from tianxia import figure_life
+        from tianxia.features.companions import letters
         from tianxia.state import Feast, Toast
 
         who = self.MAILER
@@ -583,7 +585,8 @@ class CompanionsScenario(Scenario):
     def clock(self) -> None:
         """時鐘往前推：跨 00:00（daily：換手、持重每天拉下對面的進度）、跨週（週初歸零）。先把心意擺成速戰在做事、持重票數追過，跨 00:00 換手，
         盧植那條線上自家佔著的地方擺一條對面的進度，持重拉得下來；痕跡的倍數、人物開的事件（碰過一次 met 今天不再抽到）、推線的倍數都讀世界那一半。"""
-        from tianxia import conquest, figures, stances
+        from tianxia import conquest, figures
+        from tianxia.features.companions import stances
 
         season = self.world.get_season()
         if not stances.on(self.c, season):
@@ -634,7 +637,9 @@ class CompanionsScenario(Scenario):
         整季機器人（bot.pick）站在託付的地點也不按 errand:（永遠按得下去的前綴），測試內容站 town 照挑舊的招募（act:recruit）。"""
         from collections import Counter
 
-        from tianxia import bot, errands, server_bots
+        from tianxia import bot
+        from tianxia.features.companions import errands
+        from tianxia import server_bots
         from tianxia.bot_runner import BotRunner
         from tianxia.engine import Game
         from tianxia.state import BotProfile
@@ -748,5 +753,5 @@ class GameStateFor:
 
 
 # 改一個字（selftest）：託付辦成了那一句（errands.DONE；搬之前在 tianxia/errands.py、之後在包裡）
-register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py", "tianxia/errands.py"),
+register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py",),
                                                   ('DONE = "{who}託你的事辦成了。"', 'DONE = "{who}託你的事辦成了！"')), "week7")

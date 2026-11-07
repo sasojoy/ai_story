@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import real_content
-from tianxia import battle_instance, biography, gender, mounts, ranger, rules, social
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.zhuan import biography
+from tianxia import gender, mounts, ranger, rules
+from tianxia.features.peers import social
 from tianxia.bot_runner import FEMALE_SAMPLE, BotRunner
 from tianxia.engine import GENDER_LOCKED, Game
 

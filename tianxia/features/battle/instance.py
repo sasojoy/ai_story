@@ -1,4 +1,4 @@
-"""全服決戰的規則那一半（全部拆包第 54 批）：原本在 tianxia/battle_instance.py，逐字搬來，舊名是指到這個模組的別名（程式裡新寫的一律 import 包；別的包、核心、共用規則層讀 tianxia/core/battle_base.py）。
+"""全服決戰的規則那一半（全部拆包第 54 批）：原本在 tianxia/battle_instance.py，逐字搬來（別的包、核心、共用規則層讀 tianxia/core/battle_base.py）。
 資料型別與核心、共用規則層、舊模組、別的包非讀不可的判定（63 個名字）在 tianxia/core/battle_base.py，這裡 re-export 同一批物件：bi.BattleInstance、bi.merit 這些經舊名照舊拿得到。
 
 全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→打完最後一回合、或戰局一面倒時

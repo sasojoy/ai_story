@@ -8,7 +8,14 @@ import random
 import pytest
 
 from conftest import no_week_unlock, real_content
-from tianxia import arena, bounties, calendar, create, equipment, explore_one, mapdata, roster, rules, week_unlock, weekcard
+from tianxia.features.bout import arena_rules as arena
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar
+from tianxia.features.craft import create
+from tianxia import equipment
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.map import mapdata
+from tianxia import roster, rules, week_unlock, weekcard
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

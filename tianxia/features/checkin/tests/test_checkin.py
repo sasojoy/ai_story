@@ -7,7 +7,9 @@ from unittest import mock
 
 from conftest import real_content
 
-from tianxia import checkin, explore_one, opening
+from tianxia.features.checkin import checkin
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.guide import opening
 from tianxia.content import _material_sources
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

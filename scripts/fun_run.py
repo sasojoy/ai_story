@@ -57,7 +57,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")  # 不包的話印 ✔ 會噴 cp950
 
-from tianxia import bot, companion_agent, database, insights, library  # noqa: E402
+from tianxia import bot  # noqa: E402
+from tianxia.features.companions import companion_agent  # noqa: E402
+from tianxia import database, insights, library  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402

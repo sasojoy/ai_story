@@ -6,7 +6,11 @@ import json
 import pytest
 from conftest import real_content
 
-from tianxia import arts as arts_mod, howto, skillview, team, traits
+from tianxia import arts as arts_mod
+from tianxia.features.guide import howto as guide_howto
+from tianxia import art_cards
+from tianxia.features.cultivation import art_view
+from tianxia import team, traits
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.state import InsightFx
 
@@ -179,28 +183,28 @@ def test_the_art_card_marks_the_second_copy(state, content, world):
 def test_the_slot_marks_the_second_copy_and_the_picker_warns(state, content, world):
     art = _wear(state, world, _art("裂石拳", "剛"), "上品", [_ins(state, 1, "剛"), _ins(state, 2, "剛")])
     mine = team.player_art(state, content, world, art.id)
-    assert skillview.slot_stack_marks(state, content, world, mine) == {1: "破甲算五成"}
+    assert art_cards.slot_stack_marks(state, content, world, mine) == {1: "破甲算五成"}
     third = _ins(state, 3, "剛")
-    assert skillview.stack_hint(state, content, world, mine, third) == f"{skillview.STACK_RULE}：破甲已到頂，再裝不加"
+    assert art_view.stack_hint(state, content, world, mine, third) == f"{art_view.STACK_RULE}：破甲已到頂，再裝不加"
     small = _ins(state, 4, "剛", {"剛": 1})
     state.player.art_slots[art.id] = ["悟:1"]
     mine = team.player_art(state, content, world, art.id)
-    assert skillview.stack_hint(state, content, world, mine, small) == f"{skillview.STACK_RULE}：破甲算五成"
+    assert art_view.stack_hint(state, content, world, mine, small) == f"{art_view.STACK_RULE}：破甲算五成"
     other = _ins(state, 5, "柔")
-    assert skillview.stack_hint(state, content, world, mine, other) == ""
+    assert art_view.stack_hint(state, content, world, mine, other) == ""
 
 
 def test_a_worn_art_looks_at_both_worn_arts(state, content, world):
     _wear(state, world, _art("裂石拳", "剛"), "上品", [_ins(state, 1, "剛")])
     inner = _wear(state, world, _art("柔息功", "柔", kind="內功"), "上品", [])
     mine = team.player_art(state, content, world, inner.id)
-    assert skillview.stack_hint(state, content, world, mine, _ins(state, 2, "剛")) == f"{skillview.STACK_RULE}：破甲算五成，裝了就到頂"
+    assert art_view.stack_hint(state, content, world, mine, _ins(state, 2, "剛")) == f"{art_view.STACK_RULE}：破甲算五成，裝了就到頂"
 
 
 def test_the_howto_says_the_rule(real):
     from tianxia.world_state import fresh_season
 
-    text = howto.page(real, fresh_season(real), recruitable=False)
+    text = guide_howto.page(real, fresh_season(real), recruitable=False)
     line = next(l for l in text.splitlines() if "第二份起" in l)
     assert "算一半" in line and "一倍半" in line and "鎮岳、金身" in line and "多撐一回合" in line
 

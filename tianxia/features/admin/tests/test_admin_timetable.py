@@ -27,7 +27,8 @@ from tianxia import timetable
 from unittest import mock
 from conftest import FixedRandom, walk_to
 from test_day_scale import SHORT, WEEKEND, _lake, _miss, _season, _talk_out, SCENE
-from tianxia import rules, sensing
+from tianxia import rules
+from tianxia.features.sense import sensing
 from tianxia.models import TimetableEvent
 
 CONTENT_DIR = Path(__file__).parents[4] / "content"

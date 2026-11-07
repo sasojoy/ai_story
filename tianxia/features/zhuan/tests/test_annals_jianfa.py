@@ -15,7 +15,8 @@ import pytest
 
 from jianfa_kit import jianfa_game
 from wins_kit import save, wins_content, wins_game
-from tianxia import annals, biography, gender
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia import gender
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.state import AnnalEntry, PlayerState, XingshiEssay

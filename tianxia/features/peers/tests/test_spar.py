@@ -9,7 +9,11 @@ import random
 import pytest
 
 from conftest import FixedRandom, install_season_one
-from tianxia import encounter, invites, rules, social, team
+from tianxia import encounter
+from tianxia.features.peers import invites
+from tianxia import rules
+from tianxia.features.peers import social
+from tianxia import team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 

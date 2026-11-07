@@ -109,7 +109,7 @@ def test_every_recruitable_companion_has_arts_and_power(real, world):
 
 def test_the_new_nine_teach_no_signature_art(real, world):
     """情誼到 signature_affinity 時教的是「本命武學」：只有絕學的起始武學才算（十八位大勢人物的都是），新補的九位不教。"""
-    from tianxia import companion_agent
+    from tianxia.features.companions import companion_agent
 
     game = _player(real, world, "官甲", "guan", "zhuo_county")
     p = game.state.player
@@ -172,8 +172,10 @@ def test_affinity_gains_are_scaled_and_rounded():
 
 
 def test_each_gain_source_goes_through_warmed(real, world):
-    from tianxia import atlas, companion_agent, figure_life, renown, rules
-    from tianxia.companion_agent import CompanionTurn
+    from tianxia import atlas
+    from tianxia.features.companions import companion_agent
+    from tianxia import figure_life, renown, rules
+    from tianxia.features.companions.companion_agent import CompanionTurn
     from tianxia.models import Effect
 
     game = _player(real, world, "官甲", "guan", "zhuo_county")

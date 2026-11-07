@@ -9,13 +9,13 @@
   攻城的規則在 siege_rules.py 與共用規則層 tianxia/siege.py）
 - siege_rules.py：第二輪第 97 批從 tianxia/siege.py 切過來，只有決戰讀的那一半（誰站哪一格、開打那一下、收場、場景字）；開集結、留守、名字、內容驗證留在共用規則層
 - muster.py：全部拆包第 7 批，集結、加入、晚到、臨時投效、改投、挑同伴、在不在場、假人趕路、出招的分派 29 個方法（Game 留 13 個一行委派）
-- escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖；舊名是別名）
+- escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖）
 - bots.py：全部拆包第 7 批，假人看到 battle: 的選項怎麼按（原本 bot_policy.score 的 battle 那一段）
 - progress.py：全部拆包第 8 批，推進與結算 20 個方法——我在哪一場、一回合一回合推（回合首功包在外面）、收兵（季終、取消、收季）、收場與論功、
   只能觀戰與整個取代畫面、份量快照補上（Game 留 14 個一行委派）
-- generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威；舊名是別名）——挑法 on、pick
+- generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威）——挑法 on、pick
   留在共用規則層 tianxia/chiefs.py（siege 也讀），這裡 re-export
-- instance.py：全部拆包第 54 批從 tianxia/battle_instance.py 搬來（集結、出招、結算回合、戰局條與論功的字、鎖外評分與補劇情，111 個名字；舊名是別名）——
+- instance.py：全部拆包第 54 批從 tianxia/battle_instance.py 搬來（集結、出招、結算回合、戰局條與論功的字、鎖外評分與補劇情，111 個名字）——
   資料型別與別處要讀的判定（63 個名字）在核心 tianxia/core/battle_base.py，這裡 re-export 同一批物件
 
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。

@@ -165,7 +165,7 @@ def story_title(ctx: Game, arg: str) -> str:
 
 
 def scene(ctx: Game) -> str | None:
-    """自己眼前的場景卡（SCENE_ORDER 的 own/story；原本 Game._own_scene_text 有所感、取名那兩支之後的一支）：一條線的答題，場景寫這一題（選單上是答案）；沒有答題是 None。"""
+    """自己眼前的場景卡（場景掛鉤 Feature.scenes，SCENE_ORDER 的 own/story；原本 Game._own_scene_text 有所感、取名那兩支之後的一支）：一條線的答題，場景寫這一題（選單上是答案）；沒有答題是 None。"""
     s, c = ctx.state, ctx.content
     question = storyline.question_text(s, c) if s.player.story_open is not None else None
     if not question:

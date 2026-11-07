@@ -3,7 +3,7 @@ import random
 
 from conftest import real_content, renown_unscaled
 
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.engine import Game
 from tianxia.models import BattleTuning
 

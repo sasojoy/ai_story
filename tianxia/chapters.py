@@ -15,7 +15,7 @@
 
 規則掛在 Config.jianfa.chapters（rules.jianfa），也要 storylines 開著。只讀時鐘 state.world.time。
 
-共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（一條線的 active、current、here、doable 讀底座 story_base）。
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包（一條線的 active、current、here、doable 讀底座 story_base）。
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/core/test_chapters.py＋煙霧＋邊界（收進來之前也只挑到它）；本週卡讀它（weekcard），weekcard.py
 說明「另外跑」那一串與一條線包的 tianxia/features/story/tests/ 也跑。
 """

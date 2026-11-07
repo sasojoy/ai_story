@@ -8,7 +8,8 @@ from test_season21_daily import _first, _game
 
 import server
 import webharness
-from tianxia import bounties, shopview
+from tianxia.features.bounties import rules as bounties
+from tianxia.features.bounties import shop_view as bounties_shop
 
 pytestmark = pytest.mark.whole_content
 
@@ -48,7 +49,7 @@ def test_a_prize_gets_its_own_red_tag():
 def test_the_board_notes_carry_the_corner_and_tags():
     game = _ranger()
     game.choose("act:bounties")
-    view = shopview.board_view(game.state, game.content, game.world)
+    view = bounties_shop.board_view(game.state, game.content, game.world)
     note = next(n for n in view["notes"] if n["kind"] == "strike")
     assert note["corner"] == "120" and note["tags"][0]["v"] == "120" and note["level"] == "賞照你第 20 級"
 
@@ -98,7 +99,7 @@ def test_the_notice_face_carries_a_short_gift_and_the_prize():
     b = _first(s, "strike")
     b.prize = "treasure"
     game.choose("act:bounties")
-    view = shopview.board_view(s, game.content, game.world)
+    view = bounties_shop.board_view(s, game.content, game.world)
     note = next(n for n in view["notes"] if n["id"] == b.id)
     assert note["gift"] == "＋二階" and note["prize_chip"] == "重賞"
     scout = next(n for n in view["notes"] if n["kind"] == "scout")

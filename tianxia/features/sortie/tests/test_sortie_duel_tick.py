@@ -10,7 +10,7 @@ import random
 
 import server
 from duel_kit import LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, tick
-from tianxia import sortie_duel
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import CharacterStore
 

@@ -195,7 +195,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
 
 
 def _mutant(base: Path, tmp: Path, track: str) -> Path:
-    """base 抄一份、那一軌的一句改一個字（MUTATIONS[track]：舊名的檔與搬進包的檔兩處找，哪一處有就改哪一處）。"""
+    """base 抄一份、那一軌的一句改一個字（MUTATIONS[track]：列的幾個檔裡找，哪一處有就改哪一處）。"""
     files, (old, new) = MUTATIONS[track]
     dest = tmp / f"mutant_{track}"
     if dest.exists():

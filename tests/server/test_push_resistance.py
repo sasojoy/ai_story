@@ -195,6 +195,6 @@ def test_fb248_the_intercept_card_names_only_the_place():
 
 def test_fb256_the_legend_line_is_no_longer_than_the_one_that_fit():
     """375 寬的圖例：「⚔ 可出陣攻打」把「打」擠到第二行；出陣的說法不能比原本放得下的「⚔ 可遊歷」那一句長。"""
-    from tianxia import mapview
+    from tianxia.features.map import mapview
 
     assert len(mapview.LEGEND_RING_SORTIE) <= len(mapview.LEGEND_RING) and "遊歷" not in mapview.LEGEND_RING_SORTIE

@@ -2,7 +2,8 @@
 這個檔只在殼建鎖外工作時才 import（__init__ 的掛鉤裡面才 from . import routes；殼頂上留一行包裝也 import）；不 import 網頁框架。殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 tests/server/test_server.py 的 _users_in_server 掃這個檔看函式名：裡面寫 shell.model_call、shell.QUEUE，不要先存成別的變數。
 - 擂台場邊那一句：_crowd_waiting、write_crowd、crowd_once（背景寫字，放鎖之後才開）
-- 頭目戰與擂台的放手一搏：duel_text（/api/do/duel_text，鎖外三段式）。battle_instance 是決戰包的，照舊經殼（shell.battle_instance）"""
+- 頭目戰與擂台的放手一搏：duel_text（/api/do/duel_text，鎖外三段式）。評分讀核心 core/battle_base，不經殼碰決戰包（第二輪第 102 批）"""
+from tianxia.core import battle_base
 from tianxia.core.features import Outlock, OutlockJob
 
 from . import arena_crowd, duel_rules as duel
@@ -84,14 +85,14 @@ def duel_text(shell, game, text: str) -> list[str]:
     if isinstance(request, list):
         return request
     total = game.content.config.free_text_budget_seconds
-    fallback = shell.battle_instance.GambleVerdict(shell.battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    fallback = battle_base.GambleVerdict(battle_base.DEFAULT_FREE_TEXT_SUCCESS_RATE)
     scene = duel.Scene(request.title, request.scene)
 
     def score():
         client = shell.within_budget(game.client, total - (shell._monotonic() - started))
         if client is None and game.client is not None:
             return fallback, ""
-        verdict = shell.battle_instance.assess_gamble(
+        verdict = battle_base.assess_gamble(
             client, scene, request.faction_name, request.text, request.name, setting=request.setting or duel.SETTING,
             place=request.place or duel.PLACE, target=request.target, sex=request.sex,  # 擂台帶對手那一行與擂台的場合（Game.duel_text_request）
         )

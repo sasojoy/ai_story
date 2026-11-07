@@ -10,7 +10,10 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, plain_game, ready
 
-from tianxia import annals, explore_one, storyline, team
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.story import storyline
+from tianxia import team
 from tianxia.content import ContentError, _fill_story_lines, validate
 from tianxia.encounter import EncounterResult
 from tianxia.models import Event, StoryDef

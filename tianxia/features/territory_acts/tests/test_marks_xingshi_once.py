@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from conquest_kit import conquest_game, join
-from tianxia import xingshi
+from tianxia.features.territory_acts import xingshi
 from tianxia.state import XingshiMark
 
 

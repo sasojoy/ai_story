@@ -8,14 +8,19 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import bounties, equipment, mounts, shopview
+from tianxia.features.bounties import rules as bounties
+from tianxia import equipment, mounts
+from tianxia.core import shop_base
+from tianxia.features.smithy import shop_view as smithy_shop
+from tianxia.features.bounties import shop_view as bounties_shop
+from tianxia.features.gear import shop_view as gear_shop
 from tianxia.content import validate
 from tianxia.models import FactionDef
 from tianxia.state import Bounty, Equipment
 
 pytestmark = pytest.mark.whole_content
 
-LINES = {shop: {key: [f"{shop}說{key}之一。", f"{shop}說{key}之二。"] for key in keys} for shop, keys in shopview.SITUATIONS.items()}
+LINES = {shop: {key: [f"{shop}說{key}之一。", f"{shop}說{key}之二。"] for key in keys} for shop, keys in shop_base.SITUATIONS.items()}
 NOW = 1000.0
 WEEK = 10_000_000.0  # 測試裡的懸賞一律掛到很久以後（同 tianxia/features/bounties/tests/test_bounties.py）
 SWORD = dict(id="兵:1", slot="weapon", name="試劍", kind="劍", attribute="剛", tier=1, quality="下品")
@@ -84,7 +89,7 @@ def _ids(game):
 def test_the_market_and_board_lines_load_and_every_situation_is_required():
     c = real_content()
     for shop in ("market", "board"):
-        for key in shopview.SITUATIONS[shop]:
+        for key in shop_base.SITUATIONS[shop]:
             assert c.shop_lines[shop][key], (shop, key)
     validate(c)
     from tianxia.content import ContentError
@@ -101,15 +106,15 @@ def test_the_market_and_board_lines_load_and_every_situation_is_required():
 
 
 def test_the_board_key_sorts_the_take_refusals():
-    assert shopview.board_key(None, "take") == "take"
-    assert shopview.board_key(bounties.HELD_FULL.format(count=3), "take") == "held_full"
-    assert shopview.board_key(bounties.WANTED_NEWBIE, "take") == "refused"
+    assert bounties_shop.board_key(None, "take") == "take"
+    assert bounties_shop.board_key(bounties.HELD_FULL.format(count=3), "take") == "held_full"
+    assert bounties_shop.board_key(bounties.WANTED_NEWBIE, "take") == "refused"
 
 
 def test_each_market_action_records_a_keeper_situation(content, world):
     game = _market(content, world, silver=300)
     p = game.state.player
-    assert p.shop_line == "enter" and shopview.line_text(game.state, content, "market") in LINES["market"]["enter"]
+    assert p.shop_line == "enter" and shop_base.line_text(game.state, content, "market") in LINES["market"]["enter"]
     game.choose(mounts.BUY)  # 沒有馬：買下來直接騎上
     assert p.shop_line == "buy"
     game.choose(mounts.BUY)  # 第二匹進裝備庫
@@ -133,7 +138,7 @@ def test_each_board_action_records_a_keeper_situation(content, world):
     game = _board(content, world, [SCOUT, dict(SCOUT, location="cave"), ARMS])
     scout, scout2, arms = _ids(game)
     p = game.state.player
-    assert p.shop_line == "enter" and shopview.line_text(game.state, content, "board") in LINES["board"]["enter"]
+    assert p.shop_line == "enter" and shop_base.line_text(game.state, content, "board") in LINES["board"]["enter"]
     game.choose(f"bounty:take:{scout}")
     assert p.shop_line == "take"
     game.choose(f"bounty:drop:{scout}")
@@ -188,9 +193,9 @@ def test_no_horse_has_an_empty_stall_and_focuses_the_sale(content, world):
     price = content.config.mounts.shop_price
     assert (view["shop"], view["back"], view["sign"]) == ("market", mounts.BACK, f"{content.locations['town'].name}{mounts.MARKET}")
     empty, sale = view["stalls"]
-    assert empty["empty"] and empty["name"] == shopview.NO_HORSE and empty["who"] == shopview.STALL_WHO["worn"]
+    assert empty["empty"] and empty["name"] == gear_shop.NO_HORSE and empty["who"] == gear_shop.STALL_WHO["worn"]
     assert sale["role"] == "sale" and sale["id"] == "架:馬" and view["focus"] == "架:馬"
-    assert sale["action"] == {"id": mounts.BUY, "label": shopview.BUY_TEXT.format(price=price), "use": "", "enabled": True, "why": None}
+    assert sale["action"] == {"id": mounts.BUY, "label": gear_shop.BUY_TEXT.format(price=price), "use": "", "enabled": True, "why": None}
     assert [b["label"] for b in sale["bars"]] == ["省體力", "路上快", "決戰騎兵", "落敗脫身"] and sale["fed"] is None
     fresh = mounts.fresh_power(content, mounts.shop_item(game.state, content))
     assert sale["bars"][0]["text"] == mounts.pct(fresh) and sale["bars"][0]["value"] == mounts.half_up(fresh * 100)
@@ -204,10 +209,10 @@ def test_the_ridden_horse_feeds_and_the_rack_compares(content, world):
     view = game.shop_view()
     worn, _sale, slow, fast = view["stalls"]
     assert worn["id"] == "騎:1" and view["focus"] == "騎:1"
-    assert worn["fed"] == {"word": mounts.WEAR_WORD, "value": 40, "note": shopview.HUNGRY_NOTE}
+    assert worn["fed"] == {"word": mounts.WEAR_WORD, "value": 40, "note": gear_shop.HUNGRY_NOTE}
     assert worn["action"]["id"] == mounts.FEED and worn["action"]["enabled"] and "精鐵砂×1" in worn["action"]["use"]
-    assert (slow["compare"], fast["compare"]) == (shopview.SLOWER, shopview.FASTER)
-    assert fast["action"] == {"id": f"{mounts.WIELD}騎:3", "label": shopview.WIELD_TEXT, "use": "", "enabled": True, "why": None}
+    assert (slow["compare"], fast["compare"]) == (gear_shop.SLOWER, gear_shop.FASTER)
+    assert fast["action"] == {"id": f"{mounts.WIELD}騎:3", "label": gear_shop.WIELD_TEXT, "use": "", "enabled": True, "why": None}
     ride.edge = 100
     worn = game.shop_view()["stalls"][0]
     assert not worn["action"]["enabled"] and worn["action"]["why"] == mounts.NOT_HUNGRY and worn["fed"]["note"] == ""
@@ -263,9 +268,9 @@ def test_held_notes_come_first_with_drop_and_fill_the_held_row(content, world):
     assert [n["id"] for n in view["notes"]] == [strike, scout]
     held = view["notes"][0]
     assert held["held"] and held["action"]["verb"] == "drop" and held["action"]["id"] == f"bounty:drop:{strike}"
-    assert held["action"]["confirm"] == shopview.DROP_ASK.format(title=held["title"])
+    assert held["action"]["confirm"] == bounties_shop.DROP_ASK.format(title=held["title"])
     assert [r["id"] for r in view["held"]["rows"]] == [strike]
-    assert view["held"]["head"] == shopview.HELD_HEAD.format(n=1, cap=cap) and view["held"]["left_text"] == shopview.SLOT_LEFT.format(n=cap - 1)
+    assert view["held"]["head"] == bounties_shop.HELD_HEAD.format(n=1, cap=cap) and view["held"]["left_text"] == bounties_shop.SLOT_LEFT.format(n=cap - 1)
     note = view["notes"][1]
     b = game.state.world.bounties[0]
     assert note["head"] == content.locations["lake"].name and note["kind_name"] == "打探" and note["issuer"] == "官軍"
@@ -293,11 +298,11 @@ def test_hand_ins_say_how_many_fit_and_open_the_third_layer(content, world):
     p = game.state.player
     p.rack = [Equipment(**SWORD)]
     note = game.shop_view()["notes"][0]
-    assert note["have"] == shopview.HAVE_NOTE.format(n=1, unit="把")
+    assert note["have"] == bounties_shop.HAVE_NOTE.format(n=1, unit="把")
     assert note["action"] == {"id": f"bounty:pick:{arms}", "verb": "pick", "enabled": True, "why": None}
     p.rack = []
     note = game.shop_view()["notes"][0]
-    assert note["have"] == "" and not note["action"]["enabled"] and note["action"]["why"] == shopview.NO_FIT
+    assert note["have"] == "" and not note["action"]["enabled"] and note["action"]["why"] == bounties_shop.NO_FIT
     p.rack = [Equipment(**SWORD, original=True)]
     assert game.shop_view()["notes"][0]["action"]["why"] == bounties.ONLY_ORIGINAL.strip("（）")
 
@@ -329,7 +334,7 @@ def test_an_emptied_board_says_so(content, world):
 def test_a_prized_note_says_so_until_someone_hands_it_in(content, world):
     content.config.treasures.enabled = True
     game = _board(content, world, [dict(STRIKE, prize="treasure")])
-    assert game.shop_view()["notes"][0]["prize"] == shopview.PRIZE_SHORT
+    assert game.shop_view()["notes"][0]["prize"] == bounties_shop.PRIZE_SHORT
     game.state.world.bounties[0].done_by = ["別人"]
     game.state.world.bounties[0].quota = 2
     assert game.shop_view()["notes"][0]["prize"] == ""
@@ -380,11 +385,11 @@ def test_a_short_of_silver_line_gives_way_once_the_silver_is_there(content, worl
     p.stats["silver"] = 10
     game._smith("buy:劍")  # 灰掉的鈕：直接叫，等於兩個分頁搶
     lines = content.shop_lines["smith"]
-    assert p.shop_line == "short_silver" and shopview.line_text(game.state, content, "smith") in lines["short_silver"]
+    assert p.shop_line == "short_silver" and shop_base.line_text(game.state, content, "smith") in lines["short_silver"]
     p.stats["silver"] = content.config.weapons.shop_price - 1
-    assert shopview.line_text(game.state, content, "smith") in lines["short_silver"]
+    assert shop_base.line_text(game.state, content, "smith") in lines["short_silver"]
     p.stats["silver"] = 300
-    assert shopview.line_text(game.state, content, "smith") in lines["enter"]
+    assert shop_base.line_text(game.state, content, "smith") in lines["enter"]
 
 
 def test_a_full_rack_line_gives_way_once_there_is_room(content, world):
@@ -393,18 +398,18 @@ def test_a_full_rack_line_gives_way_once_there_is_room(content, world):
     p = game.state.player
     p.rack = [_horse("騎:2", "黑鬃馬", 1, "上品")]
     game._market("buy")
-    assert p.shop_line == "rack_full" and shopview.line_text(game.state, content, "market") in LINES["market"]["rack_full"]
+    assert p.shop_line == "rack_full" and shop_base.line_text(game.state, content, "market") in LINES["market"]["rack_full"]
     p.rack = []
-    assert shopview.line_text(game.state, content, "market") in LINES["market"]["enter"]
+    assert shop_base.line_text(game.state, content, "market") in LINES["market"]["enter"]
 
 
 def test_a_plain_refusal_gives_way_once_anything_changes(content, world):
     game = _market(content, world, horse=_horse())  # 吃飽的馬：餵被拒
     p = game.state.player
     game._market("feed")
-    assert shopview.line_text(game.state, content, "market") in LINES["market"]["refused"]
+    assert shop_base.line_text(game.state, content, "market") in LINES["market"]["refused"]
     p.mount.edge = 40  # 走了一段路，餓了：被拒的原因不成立了
-    assert shopview.line_text(game.state, content, "market") in LINES["market"]["enter"]
+    assert shop_base.line_text(game.state, content, "market") in LINES["market"]["enter"]
 
 
 def test_a_held_full_line_gives_way_once_a_slot_frees(content, world):
@@ -413,9 +418,9 @@ def test_a_held_full_line_gives_way_once_a_slot_frees(content, world):
     first, second = _ids(game)
     game.choose(f"bounty:take:{first}")
     game._bounty(f"take:{second}")
-    assert shopview.line_text(game.state, content, "board") in LINES["board"]["held_full"]
+    assert shop_base.line_text(game.state, content, "board") in LINES["board"]["held_full"]
     game.state.world.bounties[0].takers = []  # 手上那一張作廢了（過期、被交滿）
-    assert shopview.line_text(game.state, content, "board") in LINES["board"]["enter"]
+    assert shop_base.line_text(game.state, content, "board") in LINES["board"]["enter"]
 
 
 def test_closing_a_shop_clears_the_hold(content, world):
@@ -438,7 +443,7 @@ def _divine_ctx(rotation=True):
 
 
 def _pack(game, world):
-    return shopview.smith_view(game.state, game.content, world)["divine"]
+    return smithy_shop.smith_view(game.state, game.content, world)["divine"]
 
 
 def _blob(pack) -> str:
@@ -451,8 +456,8 @@ def test_the_divine_pack_is_none_when_the_season_has_no_rotation_stamp():
     c, w = _divine_ctx(rotation=False)
     assert w.get_season().divine_lineup is None
     jia = _smith(c, w, "甲")
-    assert shopview.smith_view(jia.state, c, w)["divine"] is None  # 沒蓋章的季：鐵匠鋪照四頁，整包是 None
-    assert "divine" in shopview.smith_view(jia.state, c, w)
+    assert smithy_shop.smith_view(jia.state, c, w)["divine"] is None  # 沒蓋章的季：鐵匠鋪照四頁，整包是 None
+    assert "divine" in smithy_shop.smith_view(jia.state, c, w)
 
 
 def test_a_fresh_rotation_season_says_nothing_about_the_lineup():
@@ -578,7 +583,7 @@ def test_a_season_without_the_rotation_stamp_never_reads_the_divine_records():
     c, w = _divine_ctx(rotation=False)
     calls = []
     w.divine_records = lambda: calls.append(1) or []
-    shopview.smith_view(_smith(c, w, "丙").state, c, w)
+    smithy_shop.smith_view(_smith(c, w, "丙").state, c, w)
     assert calls == []  # 神器紀錄每次讀資料庫：沒蓋章的季不讀
 
 

@@ -27,7 +27,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import database, encounter, figure_aid, figures, team  # noqa: E402
+from tianxia import database, encounter  # noqa: E402
+from tianxia.features.figure_acts import figure_aid  # noqa: E402
+from tianxia import figures, team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.encounter import EncounterResult  # noqa: E402
 from tianxia.engine import Game  # noqa: E402

@@ -9,7 +9,9 @@ import pytest
 
 import zhuan_html
 from jianfa_kit import jianfa_game, ready
-from tianxia import calendar, database, mall, zhuan_end
+from tianxia import calendar, database
+from tianxia.features.mall import rules as mall
+from tianxia.features.zhuan import zhuan_end
 from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions
@@ -17,7 +19,7 @@ from tianxia.models import MallItem, MallWindow
 from tianxia.wallet import Wallet
 from conftest import next_season
 from zhuan_fix_kit import close_season, make_game, option_ids, row, to_week
-from tianxia import zhuan_end
+from tianxia.features.zhuan import zhuan_end
 from tianxia.wallet import Purchase, Wallet
 from zhuan_fix_kit import add_story, close_season, figures, make_game, verdict_paras
 from tianxia.wallet import Purchase
@@ -26,7 +28,8 @@ from jianfa_kit import jianfa_game
 from tianxia.characters import name_key
 from zhuan_fix_kit import add_story, close_season, make_game, verdict_paras
 from zhuan_fix_kit import close_season, make_game, row, to_week
-from tianxia import calendar, mall
+from tianxia import calendar
+from tianxia.features.mall import rules as mall
 
 ADMIN = "史館管理者"
 FOUR = {"zhuan_art", "zhuan_seal", "zhuan_quote", "deep_slot"}
@@ -223,7 +226,7 @@ def test_the_server_gives_the_art_url_only_when_the_file_is_there(monkeypatch, t
 def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
     """關著的季：main.zhuan 與 zhuan_view 一個鍵都不多（沒有 illustration 就不寫 illustration_src），公開頁的 extras 是空的。"""
     import server
-    from tianxia import annals
+    from tianxia.features.zhuan import standing as annals
     from tianxia.features.zhuan import routes as zhuan_routes
 
     game = _game(zhuan_end=False)

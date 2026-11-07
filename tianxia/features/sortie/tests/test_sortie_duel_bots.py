@@ -10,7 +10,8 @@ import random
 
 import pytest
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, seat
-from tianxia import bot, bot_base, bot_policy, sortie_duel
+from tianxia import bot, bot_base, bot_policy
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.models import MOVES as THREE
 

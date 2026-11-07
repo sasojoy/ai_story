@@ -48,7 +48,7 @@ class RelicScenario(HeraldScenario):
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         seal.secrets.token_hex = lambda nbytes=None: RELIC_TOKEN  # 以防有路徑走到 ensure_salt（server.main、run_bots.main 才叫）
         self.borrowed = False
@@ -446,7 +446,7 @@ class RelicScenario(HeraldScenario):
     def recall_fight(self) -> None:
         """天命之季的璽動那一場（每場必定牽動一片、標了 seal 的前兩場收場時喚回一片隱沒的）：開集結、兩軍各兩個手上沒有碎片的人加入
         （贏的那一軍挑走一個去單挑之後還剩一個能被喚回）、打到收場；挑出了單挑就推到收場。"""
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         which = self.showdown() if self.seal_live() else None
         emit("天命之季的璽動那一場", [which, which in seal.recall_events(self.c) if which else None])
@@ -473,7 +473,7 @@ class RelicScenario(HeraldScenario):
 
     def mandate_fight(self) -> None:
         """天命之爭：開集結（起點照兩軍各握幾片偏）、懷璽的人加入（份量 × holder_weight）、打到收場定天命；懷璽的人補到合璽之人那一句。"""
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         event = seal.mandate_event(self.c)
         emit("天命之爭", None if event is None else event.id)
@@ -525,7 +525,8 @@ class RelicScenario(HeraldScenario):
         if self.profile == "test":
             emit("整季機器人：測試內容沒有領地爭奪、時刻表與天命之爭", None)
             return
-        from tianxia import bot, seal
+        from tianxia import bot
+        from tianxia.features.seal import seal
         from tianxia.content import load_content
         from tianxia.sqlite_world import open_world
 

@@ -16,7 +16,10 @@ import re
 import pytest
 
 from duel_kit import duel_content, duel_world, game_of, MOVES, NOW, seat
-from tianxia import conquest, conquest_day, mapdata, orders
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia.features.map import mapdata
+from tianxia import orders
 from tianxia.features.map import layers
 from tianxia.characters import CharacterStore
 from tianxia.state import Order, SiegeSlot

@@ -2,7 +2,7 @@
 全部拆包第 42 批搬進來（引擎那一半）；網頁的畫法在 web/gear.js（第 65 批）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
 GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py；那個名字留成指到這裡的別名）
+- signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py）
 - market_actions.py：馬市的第二層選單、選單上的選擇、進門（原本 Game 上的 2 個方法與 _act 的 act:market 三行）
 - bench_actions.py：修練頁的換上、餵馬、拆解、批量拆解（4 個）
 - gift_actions.py：寄放補送、名將贈禮、此刻在身邊的人物、贈禮另起的紀錄、本命兵器（5 個）

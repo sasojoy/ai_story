@@ -8,7 +8,8 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import FAR, LOC, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, text_of, tick
-from tianxia import conquest, orders, sortie_duel
+from tianxia import conquest, orders
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.features.military import order_cards
 from tianxia.state import Order
 

@@ -15,8 +15,8 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import real_content
-from tianxia import explore_one
-from tianxia.explore_one import ENCOUNTER, EVENT, INSIGHT, KINDS, MATERIAL
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.explore.explore_rules import ENCOUNTER, EVENT, INSIGHT, KINDS, MATERIAL
 from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
 
 CFG = JianfaNumbers()

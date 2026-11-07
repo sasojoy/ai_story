@@ -17,13 +17,15 @@ import pytest
 import server
 import webharness
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import battle_instance, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import siege
 from tianxia.features.battle import siege_rules
 import json
 from test_seal_web import DRIVER, _seal_admin, _sheet, m  # noqa: F401  m 是夾具
 import test_map_web
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import conquest, mapview
+from tianxia import conquest
+from tianxia.features.map import mapview
 from tianxia.features.map import layers
 from conftest import classic_rules, real_content
 import math
@@ -35,7 +37,9 @@ from tianxia.models import FactionDef, FactionInk
 from tianxia.sqlite_world import open_world
 from tianxia.state import TerritoryState
 from conquest_kit import announce
-from tianxia import conquest, conquest_day, siege
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import siege
 from tianxia.state import DayNote, SiegeSlot
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]

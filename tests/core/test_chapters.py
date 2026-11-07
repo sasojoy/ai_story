@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import chapters, storyline, timetable, weekcard
+from tianxia import chapters
+from tianxia.features.story import storyline
+from tianxia import timetable, weekcard
 from tianxia.content import ContentError, validate
 from tianxia.rules import fill_marks
 from tianxia.state import TimelineResult

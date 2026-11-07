@@ -10,7 +10,9 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from tianxia import calendar, events, models, opportunities, rank_actions, rules, seats
+from tianxia import calendar, events, models
+from tianxia.features.military import opp_rules as opportunities, rank_rules as rank_actions
+from tianxia import rules, seats
 from tianxia.content import ContentError, validate
 from tianxia.engine import RANK_ACTION_PREFIX, Game
 from tianxia.models import Check, OrdersContent, RankAction

@@ -8,7 +8,16 @@ from __future__ import annotations
 
 import random
 
-from . import allied, arena, bot, cultivation, duel, library, naming, outing, rules, server_bots, stances, team
+from . import allied
+from .features.bout import arena_rules as arena
+from . import bot
+from .features.cultivation import cultivation
+from .features.bout import duel_rules as duel
+from . import library, naming
+from .features.explore import outing_rules as outing
+from . import rules, server_bots
+from .features.companions import stances
+from . import team
 from .bot import allocate_points, can_practise, wants_heal
 from .core import battle_base as battle_instance
 from .core import features as features_core

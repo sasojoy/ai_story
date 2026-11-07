@@ -1,7 +1,7 @@
 """煉製頁的網頁那一半（企劃者 2026-10-10「合成流程也很麻煩畫面跳來跳去……武學數量很多的時候，很難選，而且合過的意境不能合，
 常常丟上去按合成才知道」）：爐裡只合意境（Joy 2026-10-21）；合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
 結果寫在開爐底下、爐裡的東西留著。不替玩家列出合得出來的組合（企劃者同日退回：「這樣改不就變成玩家腦都不用動」）。
-資料是真的引擎給的（skillview.forge_picks），畫面在 tests/web/test_prologue_web.py 的假瀏覽器裡跑。"""
+資料是真的引擎給的（forge_view.forge_picks），畫面在 tests/web/test_prologue_web.py 的假瀏覽器裡跑。"""
 # 畫法在 web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
@@ -289,7 +289,7 @@ _CANCEL = """return (async () => {
 
 def _drafted(game, intent=True):
     """自創走到擺式（還沒付心得）或立意之後（付了，draft.paid 是實際收的那一筆）。"""
-    from tianxia import create
+    from tianxia.features.craft import create
 
     game.state.player.stats["xinde"] = 5000
     assert game.create_begin("武學", "拳腳")
@@ -321,7 +321,7 @@ def test_cancelling_before_paying_goes_straight(game):
     assert out["asked"] == "" and out["before"].count("/api/menxia/create_cancel") == 1  # 沒有損失：不問
 
 
-# ── 鐵匠鋪與合成流程 3.5（C 批）：合併的預覽卡在火候字後面寫「真意 N%」（skillview.forge_preview 的 grand_pct）──
+# ── 鐵匠鋪與合成流程 3.5（C 批）：合併的預覽卡在火候字後面寫「真意 N%」（forge_view.forge_preview 的 grand_pct）──
 
 
 def _preview_card(game, v):
@@ -334,11 +334,11 @@ def _preview_card(game, v):
 def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
     from conftest import real_content
 
-    from tianxia import skillview
+    from tianxia.features.craft import forge_view
 
     game = made
     game.content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 同 tianxia/features/craft/tests/test_fusion.py：風＋火合出陽、那一路有真意
-    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    v = forge_view.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
     assert v["kind"] == "合併" and isinstance(v["grand_pct"], int)
     card = _preview_card(game, v)
     verdict = card[card.index('class="mc-verdict"'):]
@@ -348,10 +348,10 @@ def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
 
 
 def test_no_percent_without_a_true_meaning_or_when_pondering(made):
-    from tianxia import skillview
+    from tianxia.features.craft import forge_view
 
     game = made
-    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    v = forge_view.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
     for case in ({**v, "grand_pct": None}, {**v, "kind": "揣摩", "grand_pct": None}):  # 那一路沒有真意、揣摩：不寫「真意 0%」
         assert "mc-grand" not in _preview_card(game, case) and "真意 0%" not in _preview_card(game, case)
     assert '<span class="mc-grand">真意 0%</span>' in _preview_card(game, {**v, "kind": "合併", "grand_pct": 0})  # 判斷是 != null：0 也照寫

@@ -1,4 +1,4 @@
-"""出陣的純規則（功能包 tianxia/features/sortie/；原 tianxia/sortie.py，那個名字留成指到這裡的別名）。
+"""出陣的純規則（功能包 tianxia/features/sortie/；原 tianxia/sortie.py）。
 出陣探索與地盤設計（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md）第二節；遊歷改版。
 
 只有投靠了陣營的人、只在領地爭奪的區塊（conquest.blocks）；照這裡此刻歸誰（conquest.holder）分攻、守。每人每天

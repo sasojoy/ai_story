@@ -14,7 +14,7 @@ import pytest
 
 import server
 from wins_kit import save, wins_content, wins_game
-from tianxia import zhuan_end
+from tianxia.features.zhuan import zhuan_end
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions
@@ -170,7 +170,7 @@ def test_off_has_no_verdicts_and_the_text_is_unchanged():
     req = top.biography_request(1)
     assert req.verdicts == () and "verdicts" not in top.biography_entry()
     top.write_biography(req, None, NOW + 20)
-    from tianxia import biography
+    from tianxia.features.zhuan import biography
 
     assert w.biography(1, "官甲")["text"] == biography.rule_text(req)
 
