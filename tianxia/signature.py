@@ -2,6 +2,8 @@
 玩家自己那一份威力 × power_scale、學到時直接第 start_level 成。每門本命武學帶一個本命戰法（SkillDef.tactic，tianxia/tactics.py：
 在一般的仗的回合裡發動）；以前的本命特效（打贏多拿幾成、少扣幾成氣血這類數字）Joy 2026-10-15 退回（「說是武學卻更像寶物的功能」），拿掉了。
 讀的是內容（content.skills），不碰全服：本命武學一定是內容寫的。只 import models、state、tactics。
+
+內容驗證 check_signature_arts 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。
 """
 from __future__ import annotations
 

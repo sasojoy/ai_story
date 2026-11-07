@@ -65,6 +65,8 @@
 # guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md）
 - howto_base.py：玩法說明兩包以上要用的那幾樣——一節的寫法 section、一成兩成 tenth、會推戰況的陣營 order_pushers、SOME_PLACES；各節在各包的 howto.py，
   順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。
+- content_base.py（core_content：第二輪第 96 批）：內容驗證共用的小工具——NUMBER_IN_TEXT、TIMETABLE_SIDES、check_traditional、week7；content.validate 與共用層
+  各模組的 check_* 讀它（驗證本體回各自模組，validate 函式內 import、原位呼叫）。同 event_check 不進 MODULES，也不進 test_for.CORE_SERVICES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

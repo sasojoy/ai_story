@@ -9,6 +9,8 @@
 一門武學的一般功效記成**屬性的清單**（MartialArt.traits：一個屬性一層；玩家自己的武學照意境槽填，arts.apply）；
 舊資料與內容寫的武學沒有這個欄位，當作只有自己的屬性。功效只算玩家本人身上那兩門（13.1）。
 程式裡叫 trait，不叫 effect：models.Effect 是事件的效果。
+
+內容驗證 check_traits 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。
 """
 from __future__ import annotations
 

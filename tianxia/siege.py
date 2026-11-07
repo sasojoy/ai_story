@@ -19,7 +19,9 @@
 - 收場（verdict）：攻方贏（大勝或險勝）就易手（conquest.flip：照推滿那樣分紅、冷卻）；否則原主人留著（中立還是中立）、攻方的條砍半。
   三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷、進度照留。
 只 import models、state、battle_instance、chiefs（龍頭上陣的挑法：全部拆包第 8 批 generals 進決戰包時留在共用規則層的那一塊）、territory、
-conquest（作罷）、world_state 型別。"""
+conquest（作罷）、world_state 型別。
+
+內容驗證 check_siege_templates 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

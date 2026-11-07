@@ -2,6 +2,8 @@
 encounter.EncounterResult 存成 BattleRecord，並產生場景卡片與戰報列表的文字。全服決戰補送給參戰者的那一筆
 （kind 是 showdown，Game._deliver_battle_results 建的）也在這裡畫，沒有威力與難度、改寫站哪一邊與大勢。
 勝負一次算好之後照結果演出的 3～5 回合（武學與成長設計 8.2）：數字在 rounds.py，句子在這裡（round_lines）。
+
+內容驗證 check_combat_lines 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。
 """
 from __future__ import annotations
 

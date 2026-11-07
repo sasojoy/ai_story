@@ -6,7 +6,9 @@
 - 公告：「【江湖大事】」開頭，同時記在時間軸（TimelineResult.text）、寫一則天下大事傳聞與一行江湖史。進每個人的江湖紀錄是
   Game._deliver_big_events 的事（每個角色同步時補自己還沒看過的），不是只進推進到那一刻的人（FB-038）。
 
-state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。"""
+state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。
+
+內容驗證 check_timetable 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 import functools

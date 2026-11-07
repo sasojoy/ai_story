@@ -6,7 +6,9 @@
 存在 WorldState.territory（整份 JSON，資料庫結構不動）；None＝這一季還沒算過：第一次算不發天下大事（設計第六節）。
 只讀寫 WorldState；天下大事與江湖史直接記進 world.rumors／world.chronicle（rules.add_rumor 要 GameState）。
 沒有地盤的季（on 是假：沒有第一季規則、劇本沒寫區塊）：controller 回 None，squads_at 照 Location.enemies。
-rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
+rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。
+
+內容驗證 check_territory 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 from . import calendar, place_state, renown, rules

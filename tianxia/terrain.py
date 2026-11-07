@@ -6,7 +6,9 @@
 奪璽單挑、護衛、切磋、截殺、設伏都不經 _styled_fighters，不算；江湖水漲浮難度用的 power_vs(terrain=False) 不算。不擲骰。
 
 這裡只有數字與字：哪一處最濃（strong_at、here）、一門的倍數（factor）、戰報那一句（note）、輿圖那一行（place_line）。
-team 反過來呼叫它（把兩門的屬性傳進來），這個模組只 import models、state、insights、martial_arts。"""
+team 反過來呼叫它（把兩門的屬性傳進來），這個模組只 import models、state、insights、martial_arts。
+
+內容驗證 check_terrain_arts 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 from collections.abc import Sequence

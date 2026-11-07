@@ -12,7 +12,9 @@
   分紅、冷卻、加成暫停）；沒人推的每個季曆日往回（decay）；同一邊一起推有集火（focus_bonus）；混戰的判定在出陣包（features/sortie/actions.do_clash），
   這裡只給「誰剛在這裡推過」（clash_names）。翻地對 N 方成立：進度、帳、控制方都照陣營 id 存（設計第九章第 12 條）。
 - 攻城戰（siege.py）改成第 4 階的人下戰書觸發（letter_problem；排時段在 conquest_day.py）；投票與每天 22:00 的公告結算拿掉了。
-只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。"""
+只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。
+
+內容驗證 check_conquest_blocks 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
 from __future__ import annotations
 
 import math
