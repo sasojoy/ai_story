@@ -162,7 +162,8 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 - **伺服器從此不要加 `--share`**。`--share` 是開 trycloudflare 臨時網址用的，每次重開都換一組；兩個一起開只是多一條沒人用的網址。
 - 隧道是**獨立的行程**，跟伺服器各自開關：伺服器重開不必動隧道。
 - 設定在 `C:\Users\User\.cloudflared\config.yml`（隧道 id、憑證檔、兩個 hostname 都指 `http://127.0.0.1:7861`）。`cert.pem` 與 `<UUID>.json` 是密鑰：**不要進 git、不要貼進任何對話或頻道**。
-- **上線那次驗一次長快取**：`curl -I "https://tianxiadashi.com/static/app.js?v=<從首頁抄>"` 要看到 `immutable`（只有設了 `TIANXIA_PUBLIC_URL` 才有，這是唯一驗到 Cloudflare 邊緣的地方）。部署的人不用多做事；退版也安全，網址上的雜湊跟內容綁在一起。
+- **上線那次驗一次長快取**：`curl -I "https://tianxiadashi.com/static/app.js?v=<從首頁抄>"` 要看到 `immutable`（只有設了 `TIANXIA_PUBLIC_URL` 才有，這是唯一驗到 Cloudflare 邊緣的地方）。退版也安全，網址上的雜湊跟內容綁在一起。
+- **設了 `TIANXIA_PUBLIC_URL` 的伺服器（線上、內測），改 `web/` 一定要重開**：首頁的 `?v=` 是開機時算一次的（`server.py` 的 `PAGE`）。手機與 Cloudflare 邊緣已經存了 `immutable` 的舊網址就不會再回來問，沒重開的話檔案改了也拿不到。照這份文件換版本來就是先停伺服器再開，不受影響；不行的是「線上直接改 `web/` 的檔、不重開」這條熱修的路。
 - **分享的「傳」要用這個網址**：啟動伺服器前設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`，不然公開的傳會照「這次請求的網址」組，trycloudflare 時代那些連結過幾天就死了。
 
 怎麼開隧道（Claude session 用 WMI 分離啟動，跟伺服器同一套做法）：

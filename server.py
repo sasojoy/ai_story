@@ -1980,7 +1980,8 @@ NEVER_LONG_CACHED = {"index.html", "sw.js"}  # 這兩支網址不能換：釘住
 
 def cached_for_good(path: str, query: bytes) -> bool:
     """線上（設了 TIANXIA_PUBLIC_URL）而且 ?v= 等於那個檔現在的內容雜湊。雜湊每次當場算：改了檔沒重開，舊網址對不上就照舊 no-cache，
-    蓋上 immutable 的回應內容一定等於網址上的雜湊。"""
+    蓋上 immutable 的回應內容一定等於網址上的雜湊。「對不上就 no-cache」只對真的打到這裡的請求成立：手機與邊緣存了 immutable 的不會再問，
+    所以設了這個環境變數的伺服器，改 web/ 一定要重開，PAGE 才換新網址。"""
     if not os.environ.get(PUBLIC_URL_ENV) or path.lower() in NEVER_LONG_CACHED or not query.startswith(b"v="):
         return False
     return query == b"v=" + content_version((WEB / path).read_bytes()).encode()
