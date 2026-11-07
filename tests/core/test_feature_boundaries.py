@@ -302,13 +302,29 @@ def test_the_unresolved_scanner_catches_an_old_name():
     assert unresolved_imports("from . import calendar\nfrom .core import features\nfrom tianxia.models import Config\nimport json\n", "tianxia.engine") == set()
 
 
+# scripts/webqa/flows/*.mjs 字串裡嵌的 Python（第 106 批）：行首、JS 字串的 \n 之後、引號之後三種寫法；不解 JS，只認這個形狀。
+FLOW_PYTHON_IMPORT = re.compile(r"""(?:^|\\n|["'`])[ \t]*((?:from tianxia[\w.]* import [\w ,]+)|(?:import tianxia[\w.]*))""", re.M)
+
+
+def test_the_flow_scanner_finds_the_three_ways_to_embed_python():
+    """FLOW_PYTHON_IMPORT 本身抓得到（下面那一條是 slow，這條平常就跑）：行首、\\n 之後、引號之後；句中提到的不算。"""
+    text = "from tianxia import aa\n" 'const s = "x = 1\\nfrom tianxia.bb import cc, dd";\n' "const t = `import tianxia.ee`;\n" "// 這裡提到 from tianxia import zz 不算\n"
+    assert FLOW_PYTHON_IMPORT.findall(text) == ["from tianxia import aa", "from tianxia.bb import cc, dd", "import tianxia.ee"]
+    assert unresolved_imports("from tianxia import duel\n", "x") == {"tianxia.duel"}
+
+
 @pytest.mark.slow  # 六百多個檔都要 parse，約 6 秒
 def test_every_tianxia_import_resolves():
-    """tianxia、腳本、server.py、run_bots.py 裡每一個 tianxia 的 import 都解得到，最外層與函式裡都算（測試自己跑得到，不掃）。"""
+    """tianxia、腳本、根目錄每一個 .py 裡每一個 tianxia 的 import 都解得到，最外層與函式裡都算（測試自己跑得到，不掃）；webqa 的情境字串裡嵌的 Python 也算（第 106 批）。
+    tale_html.py、zhuan_html.py 是根目錄還在的別名，裡面寫的是真路徑，不用特別放行。"""
     files = [p for p in sorted(TIANXIA.rglob("*.py")) if "tests" not in p.relative_to(ROOT).parts]
-    files += [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
+    files += sorted(ROOT.glob("*.py")) + sorted((ROOT / "scripts").rglob("*.py"))
     found = {(p.relative_to(ROOT).as_posix(), name) for p in files
              for name in unresolved_imports(p.read_text(encoding="utf-8"), _modname(p))}
+    flows = sorted((ROOT / "scripts" / "webqa" / "flows").glob("*.mjs"))
+    assert flows, "一個情境檔都沒掃到：掃法壞了"
+    found |= {(p.relative_to(ROOT).as_posix(), name) for p in flows
+              for hit in FLOW_PYTHON_IMPORT.findall(p.read_text(encoding="utf-8")) for name in unresolved_imports(hit + "\n", "x")}
     assert not found - UNRESOLVED_OK, f"解不到的舊名（舊名對照看 docs/guide/核心與存檔.md）：{sorted(found - UNRESOLVED_OK)}"
 
 
