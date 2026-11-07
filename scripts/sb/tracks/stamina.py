@@ -294,6 +294,7 @@ class StaminaScenario(WorldScenario):
         from tianxia import bot, bot_policy, server_bots
         from tianxia.bot_runner import BotRunner
         from tianxia.engine import Game
+        from tianxia.features.stamina_plays import bots as stamina_bots  # 第二輪第 101 批：_stamina_play 讀那一份；compare 用這個腳本跑兩棵樹，舊樹也有這一檔，兩邊都換
         from tianxia.state import BotProfile
 
         at, to = self.pair()
@@ -334,14 +335,14 @@ class StaminaScenario(WorldScenario):
         try:
             # 前一段照原樣（體力花不完時才 5% 的機會玩一下）；後一段把機會拉到 1，設伏、屯糧的挑選與守著走不開先收伏才一定走到
             for stage, rounds in (("照原樣", int(os.environ.get("SB_STAMINA_TICKS", "6"))), ("必玩", 8)):
-                bot_policy.PLAY_CHANCE = chance if stage == "照原樣" else 1.0
+                bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = chance if stage == "照原樣" else 1.0
                 for _ in range(rounds):
                     STEP[0] += 4
                     self.begin()
                     report = runner.tick()
                     totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
         finally:
-            bot_policy.PLAY_CHANCE = chance
+            bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = chance
             self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
         emit("假人 一輪一輪", dict(sorted(totals.items())))
         for name in self.BOT_SEATS:
@@ -381,12 +382,12 @@ class StaminaScenario(WorldScenario):
                 def choice(self, seq):
                     return next((x for x in seq if x.startswith("works:")), seq[0])
 
-            bot_policy.PLAY_CHANCE = 1.0  # 機會拉到 1：選單上按得下去的設伏、屯糧一顆顆挑（體力用完就不玩了）
+            bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = 1.0  # 機會拉到 1：選單上按得下去的設伏、屯糧一顆顆挑（體力用完就不玩了）
             try:
                 emit(f"{name} 先挑屯糧", [bot_policy._stamina_play(solo, Prefer(3)) for _ in range(2)])
                 played = [bot_policy._stamina_play(solo, random.Random(k)) for k in range(6)]
             finally:
-                bot_policy.PLAY_CHANCE = chance
+                bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = chance
             emit(f"{name} 必玩", played)
 
     def season(self) -> None:

@@ -508,5 +508,11 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # `ctx._reconcile_season`、`ctx._admin_refusal`、`ctx.is_admin`、`ctx.stamp`、`ctx.world`、`ctx.state`、`ctx.content`、`ctx.rng`、`ctx.now` 上面都列了；這一段只補還沒列的）
 - `ctx.advance(seconds)`（跳到下一件大事照常推進時間，核心）、`ctx._without_timetable(msgs)`（收季、繼續那一則江湖紀錄拿掉時刻表的行，核心）
 - `ctx._mandate_settle(side, by, title)`（定結果替天命之爭定天命，主人玉璽）、`ctx.cancelled_showdowns()`（時刻表那一欄寫開打後取消，主人決戰）、`ctx.admin_player_choices(name)`（玩家個人劇情那張選單，主人軍情）
+# core_bots（第二輪第 89 批：沒有新名字）
+- 移動包的 `bots.py`（`_focus_hop`，從 `bot_policy` 搬來）叫 `ctx.sorties_left()`，那一行上面列了（主人 sortie）；共用層 `bot_base` 叫的 `game._sortie_foes(loc)`、`game.sorties_left()` 也是列著的這兩個。
+
+# core_bots（第二輪第 101 批：每包的按法搬進 `bots.py`，三個新名字）
+- 鐵匠鋪與捐軍備的 `bots.py`（`trade_want`、`donate_want`，從 `bot` 搬來）叫 `ctx.econ_day()`（Game 本體：今天是這一季第幾天，素材買賣的每日額度算這個）
+- 決戰包的 `bots.py`（`_toward_battle`，從 `bot_policy` 搬來）叫 `ctx.travel(dest, mode)`（主人 travel）、`ctx.travel_options(dest)`（主人 map）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

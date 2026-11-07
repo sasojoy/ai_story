@@ -284,6 +284,9 @@ SHARED: dict[str, str] = {
                  "裝備三包讀；只 import 核心與同一層，函式裡也不 import 包",
     "leaderboard": "賽季榜單：核心的 world（收季、江湖史）與 server 讀，人物舉措（月旦評）、玩家互動（名帖）兩包讀；只 import 核心與同一層，功法卡、裝備卡讀 art_cards "
                    "在函式裡（world import 這裡，art_cards 牽動多）",
+    # core_bots（第二輪第 89 批「假人一」）
+    "bot_base": "假人好幾包都讀的那一半（分數常數、內傷、出陣的值、一次 pick 的快取，第二輪第 101 批再加素材留多少、取名的單子、下一站）：出陣、探索、挑戰本人、移動、決戰、陣營、鐵匠鋪、捐軍備、煉製、修練、有所感、玩家互動這幾包的 bots.py 都叫，放進哪一包都會變成包 import 包，"
+                "留在假人殼又得在函式裡跳回去；只 import 核心的 rules、team、state、naming、core.bounty_base 與同一層的 allied、atlas、conquest、four_tiers",
 }
 
 # seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；

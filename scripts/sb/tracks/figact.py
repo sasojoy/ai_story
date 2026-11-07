@@ -500,6 +500,7 @@ class FigActScenario(Scenario):
         from tianxia import bot, bot_policy, server_bots
         from tianxia.bot_runner import BotRunner
         from tianxia.engine import Game
+        from tianxia.features.stamina_plays import bots as stamina_bots  # 第二輪第 101 批：_stamina_play 讀那一份；compare 用這個腳本跑兩棵樹，舊樹也有這一檔，兩邊都換
         from tianxia.state import BotProfile
 
         spot = self.hall if self.hall in self.c.locations else sorted(self.c.locations)[0]
@@ -532,11 +533,11 @@ class FigActScenario(Scenario):
             rows = [[o.id, o.enabled, bot_policy.score(g, o, profile)] for o in g.options(odds=False, tick=False) if o.id.startswith(("aid:", "plan:", "act:challenge:"))]
             emit(f"假人 {name} 問 score", rows)
             before = bot_policy.PLAY_CHANCE
-            bot_policy.PLAY_CHANCE = 2.0
+            bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = 2.0
             try:
                 emit(f"假人 {name} _stamina_play", bot_policy._stamina_play(g, random.Random(5)))
             finally:
-                bot_policy.PLAY_CHANCE = before
+                bot_policy.PLAY_CHANCE = stamina_bots.PLAY_CHANCE = before
             self.chars.save(g.state)
         emit("假人開工時的賽季", self.world.season_phase())
         runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(23), clock=lambda: CLOCK[0])

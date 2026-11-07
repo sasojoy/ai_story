@@ -321,7 +321,9 @@ CROSS_PACKAGE_CALLS = {
     ("battle", "cultivation"): {"_seize_chance"},
     ("battle", "faction"): {"_four_wins"},
     ("battle", "looks"): {"_battle_ult", "_round_mvp"},
+    ("battle", "map"): {"travel_options"},  # core_bots 第二輪第 101 批：_toward_battle
     ("battle", "seal"): {"_deliver_seal_results", "_mandate_weight", "_seal_bare"},
+    ("battle", "travel"): {"travel"},  # core_bots 第二輪第 101 批：_toward_battle
     ("bounties", "companions"): {"_letter_thank", "_parley_ask_label", "_parley_keep", "_parley_owed_line", "_parley_settle_task"},
     ("bout", "looks"): {"arena_look", "arena_move"},
     ("checkin", "guide"): {"_opening_gate", "_opening_pending"},
@@ -375,6 +377,7 @@ CROSS_PACKAGE_CALLS = {
     ("travel", "guide"): {"_check_hints"},
     ("travel", "military"): {"_hear_after_stamina", "_report_seat"},
     ("travel", "peers"): {"_peer", "_tell_sender"},
+    ("travel", "sortie"): {"sorties_left"},
     ("travel", "stamina_plays"): {"_ambush_check"},
 }
 
@@ -385,3 +388,9 @@ SHELL_FOREIGN = {
     ("seal", "battle_instance"),  # 3 處
     ("tale", "battle_instance"),  # 3 處
 }
+
+# core_bots（第二輪第 89 批）
+# 假人殼：接在包上面的四支，包不准 import（反過來的 re-export 不算）。bot_base 是共用層，不在這裡
+BOT_SHELL = ("bot", "bot_policy", "bot_runner", "server_bots")
+# 還沒清掉的：(包.檔, 殼)。只准少、不准多；第 87 批收了 sortie.duel_actions 那一處之後，PM 合完刪這一列
+BOT_SHELL_PENDING = {("sortie.duel_actions", "server_bots")}

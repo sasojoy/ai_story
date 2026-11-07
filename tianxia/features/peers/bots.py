@@ -4,6 +4,8 @@
 
 邀請框的 invite: 前綴這一包拿了：假人看到 invite: 的選項分數是 None（不按；上面三個函式直接回應，不交給打分數亂按），跟搬包之前 score 走到最後 return None 一樣。
 假人之間跟真人完全一樣、看不出來：這裡走玩家卡同一條路，任何畫面都不寫誰是假人。
+
+_answer_discuss（包成取名單）第二輪第 101 批從 bot_policy 搬來，舊名 re-export 同一個函式；NamingSlot、DiscussJob 在共用層 bot_base，一律寫 `bot_base.X`。
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ import hashlib
 import random
 from typing import TYPE_CHECKING
 
+from tianxia import bot_base
 from tianxia import leaderboard  # 共用規則層（賽季榜單：名帖頭銜的榜單名次）
 from tianxia.state import BotProfile, Invite
 
@@ -157,3 +160,13 @@ def _raid(game: Game, rng: random.Random) -> list[str] | None:
     if not targets or rng.random() >= RAID_CHANCE:
         return None
     return actions.peer_act(game, targets[0], "raid")
+
+
+def _answer_discuss(game: Game, rng: random.Random, slot: bot_base.NamingSlot | None) -> list[str] | None:
+    """有人在這裡邀假人論武（本體在玩家互動包 peers/bots.answer_discuss，全部拆包第 38 批）。首創要取名時包回來一份資料，
+    這裡包成 DiscussJob 放進 slot（這一輪到此為止，B、C 段在 bot_runner）；其餘（婉拒、直接答、沒名額先放著、沒有邀請）原樣回。"""
+    got = answer_discuss(game, rng, slot is not None and slot.open)
+    if isinstance(got, tuple):
+        slot.job = bot_base.DiscussJob(*got)
+        return []
+    return got
