@@ -11,7 +11,7 @@
 玩家聽過的、打中過的記在鑄譜（PlayerState.forge_manual），只記這一季的。擲骰一律用自己的亂數（secret_recipes.roll），不動 Game.rng。
 只 import models、state、calendar、equipment、weapons、armor、secret_recipes、world_state（型別）；smithing、engine、content 反過來用它。
 
-內容驗證 validate_forge_secrets、validate_tier4_named、validate_named_clash 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 validate_forge_secrets、validate_tier4_named、validate_named_clash 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import hashlib

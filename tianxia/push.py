@@ -1,7 +1,7 @@
 """推力規則的算式（計畫 T3、第一季設計第七節）：陣營人數緩衝、每人每曆日上限、貢獻、不足一點的推力累積。
 純函式，只看傳進來的數字與狀態，不碰引擎、不改任何東西；怎麼串起來見 engine.Game.push_trend。
 
-內容驗證 check_core_loop 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_core_loop 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import math

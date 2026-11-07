@@ -54,6 +54,9 @@ def _added(path, src, *lines):
     return {path: ([([], [(n, text[n - 1]) for n in lines])], src, src)}
 
 
+APP_JS_NO_DIFF = {"web/app.js": ([], "", "")}  # 第二輪第 95 批：釘住 app.js 的原挑法（分支上 app.js 有改，沒釘就翻成照名字挑）
+
+
 @pytest.fixture
 def shopview_reads_server_bots(monkeypatch):
     """第二輪第 88 批：skillview 切開、shopview 改讀共用層的 art_cards 之後量過，舊模組（bot、bot_policy、bot_runner、howto、server_bots、shopview、skillview）的
@@ -120,10 +123,70 @@ def test_a_shared_rules_module_picks_its_own_tests_smoke_and_the_boundary_test(m
     picked = test_for.pick([f"tianxia/{module}.py"])
     names = {p.name for p in picked.files}
     assert own <= names and "test_feature_boundaries.py" in names
-    assert all(n == "test_feature_boundaries.py" or n.startswith(f"test_{module}") for n in names), names
+    allowed = {"test_feature_boundaries.py"} | ({"test_content.py"} if module == "timetable" else set())  # timetable 有內容驗證 check_timetable（第 95 批）：這條沒給 hunks_of，帶不帶照它跟 base 的差；might、tactics、allied 沒有，不准多
+    assert all(n in allowed or n.startswith(f"test_{module}") for n in names), names
     assert picked.smoke and not picked.core
     assert any("共用規則層" in w for w in picked.why)
     assert "test_ascend.py" not in _names(["tianxia/might.py"])
+
+
+# 第二輪第 95 批：行號 模組說明 1；LIMIT 3；_limit 5～6；check_x 8～9；other 11～12；check_summons 14～15；validate_y 17～18
+FAKE_SHARED_CHECKS = (
+    '"""模組說明。"""\n'
+    "from x import y\n"
+    "LIMIT = 3\n"
+    "\n"
+    "def _limit(v):\n"
+    "    return v < LIMIT\n"
+    "\n"
+    "def check_x(c, need):\n"
+    "    need(_limit(c), 'x')\n"
+    "\n"
+    "def other(c):\n"
+    "    return c\n"
+    "\n"
+    "def check_summons(state, content):\n"
+    "    return []\n"
+    "\n"
+    "def validate_y(c, need, known):\n"
+    "    return known\n"
+)
+
+
+@pytest.mark.parametrize("line, expected", [
+    (9, True),  # 內容驗證本身
+    (18, True),  # validate_*
+    (6, True),  # 它用到的小函式
+    (3, True),  # 小函式用到的常數
+    (12, False),  # 別的函式
+    (15, False),  # 名字像、參數沒有 need：不是內容驗證
+    (1, False),  # 說明（這一批拿掉那一句就是這種）
+    (2, False),  # import
+])
+def test_a_shared_rules_change_brings_test_content_only_when_it_reaches_a_content_check(line, expected):
+    """第 96 批留的：共用層的 check_*、validate_* 由 content.validate 在函式內叫，改了以前挑不到 test_content.py。"""
+    rel = "tianxia/relations.py"
+    picked = test_for.pick([rel], base="HEAD", hunks_of=_added(rel, FAKE_SHARED_CHECKS, line))
+    assert ("test_content.py" in {p.name for p in picked.files}) is expected
+    assert any("test_content.py" in w for w in picked.why) is expected
+    assert picked.smoke and not picked.core
+
+
+def test_a_shared_rules_module_named_without_a_diff_counts_as_the_whole_file():
+    rel = "tianxia/relations.py"
+    plain = "def other(c):\n    return c\n"
+    assert "test_content.py" in _names([rel], base="HEAD", hunks_of={rel: ([], FAKE_SHARED_CHECKS, FAKE_SHARED_CHECKS)})
+    assert "test_content.py" not in _names([rel], base="HEAD", hunks_of={rel: ([], plain, plain)})
+
+
+def test_the_content_checks_are_read_off_the_real_shared_modules():
+    """真實的 15 個模組（第 95 批量的）認得到；舊名字像的不算。失效了是挑少，這條讓人知道。"""
+    def checks(module):
+        return test_for.content_checks((test_for.ROOT / "tianxia" / f"{module}.py").read_text(encoding="utf-8"))
+    assert {"validate_forge_secrets", "validate_tier4_named", "validate_named_clash"} <= checks("forge_secrets")
+    for module, name in (("relations", "check_relations"), ("timetable", "check_timetable"), ("figures", "check_figures")):
+        assert name in checks(module) and module in test_for.SHARED_MODULES
+    assert not checks("might") and not checks("ranks")  # ranks.check_summons 不是內容驗證
 
 
 def test_the_shared_rules_layer_is_one_list_for_the_picker_and_the_boundary_test():
@@ -758,7 +821,7 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     assert {p.name for p in js.files} == mall_tests | contract
     assert not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
-    assert not {p.name for p in js.files} & (_names(["web/app.js"]) - mall_tests - contract)
+    assert not {p.name for p in js.files} & (_names(["web/app.js"], hunks_of=APP_JS_NO_DIFF) - mall_tests - contract)
     css = {p.name for p in test_for.pick(["web/mall.css"]).files}
     assert mall_tests | contract | {"test_desktop_type.py", "test_shop_width.py"} <= css and "test_server.py" not in css
     assert "test_test_for.py" not in css  # 內文是假原始碼的（TEXT_BLIND）不照檔名算
@@ -1245,7 +1308,7 @@ def test_a_change_to_a_kit_or_a_module_reaches_the_tests_that_use_it_through_a_k
 def test_a_js_file_reaches_the_tests_through_the_kit_text_but_not_through_the_kit_that_lists_every_js():
     """web/app.js 掉過 cultivation、guide、socialize 的 *_page_web（jianghu_kit 寫到它的檔名）；webharness 的 APP_FILES 寫滿每一支 js、
     server_kit 只在說明字寫到 app.js：這兩個不算（KIT_TEXT_BLIND），不然改哪一支都多 90 幾個檔、app.js 多 15 個 *_shell。"""
-    app = _names(["web/app.js"])
+    app = _names(["web/app.js"], hunks_of=APP_JS_NO_DIFF)
     assert {"test_cultivation_page_web.py", "test_guide_page_web.py", "test_socialize_page_web.py"} <= app
     assert "test_travel_shell.py" not in app
     assert "test_battle_page_web.py" not in _names(["web/hire.js"], base="HEAD")
@@ -1424,3 +1487,186 @@ def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
     assert {"test_content.py", "test_real_content.py", "test_content_packs.py"} <= names
     # web/icon.svg：test_server.py 沒寫到這個檔名，只有 web/ 那一條的 SERVER_TEST 挑得到（web/app.js 它有寫到，壞了也挑得到，驗不出來）
     assert "test_server.py" in {p.name for p in test_for.pick([rel, "web/icon.svg"], base="HEAD", hunks_of=hunks_of).files}
+
+
+# 第二輪第 95 批：殼的 js 照 hunk 挑。行號在下面每一條測試寫到的地方都是這一份的。
+FAKE_SHELL_JS = (
+    "/* 說明 */\n"  # 1
+    "(function () {\n"
+    '  "use strict";\n'
+    "  const LIMIT = 3; // 行尾有註解\n"  # 4
+    "  const CHOSEN = cond\n"  # 5
+    "    ? 1\n"
+    "    : 2;\n"  # 7
+    "  function topHtml(a) {\n"  # 8
+    "    return a;\n"
+    "  }\n"  # 10
+    "\n"  # 11
+    "  // 落在外面的註解\n"  # 12
+    "  setInterval(tick, 1000);\n"  # 13
+    "\n"
+    '  document.addEventListener("click", async (ev) => {\n'  # 15
+    "    const el = ev.target;\n"  # 16
+    "    try {\n"
+    "      switch (el.act) {\n"
+    '        case "gate": renderGate(); break;\n'  # 19
+    '        case "report-list":\n'  # 20
+    "          closeReport();\n"  # 21
+    "          break;\n"  # 22
+    '        case "one": case "two": both(); break;\n'  # 23
+    "      }\n"
+    "    } catch (e) {}\n"
+    "  });\n"  # 26
+    "\n"
+    "  async function wkTap() {\n"  # 28
+    "    return 1;\n"
+    "  }\n"  # 30
+    "})();\n"
+)
+SHELL_LOAD = {"test_shell_web.py", "test_server_bots.py"}
+
+
+def _shell_pick(monkeypatch, line, writers, js="web/app.js", src=FAKE_SHELL_JS):
+    """假裝改了 src 的第 line 行；writers 是 {名字: [測試檔名…]}，換掉「寫到名字」，不靠真實測試的字。"""
+    by_name = {t.name: t for t in test_for.all_tests()}
+    table = {name: frozenset(by_name[n] for n in files) for name, files in writers.items()}
+    monkeypatch.setattr(test_for, "_name_writers", lambda name: table.get(name, frozenset()))
+    return test_for.pick([js], base="HEAD", hunks_of=_added(js, src, line))
+
+
+@pytest.mark.parametrize("js", ["web/app.js", "web/main.js"])
+def test_a_shell_js_hunk_in_a_function_picks_who_writes_its_name(monkeypatch, js):
+    """寫到它的檔＋載入檢查與 FB-673（固定兩個）＋煙霧，不再帶 test_server.py（它的煙霧那幾條 -m smoke 會跑）。"""
+    picked = _shell_pick(monkeypatch, 9, {"topHtml": ["test_might.py"]}, js=js)
+    assert {p.name for p in picked.files} == {"test_might.py"} | SHELL_LOAD
+    assert picked.smoke and not picked.core and not picked.runs_js
+    assert any("topHtml" in w and js in w for w in picked.why)
+
+
+def test_a_removed_line_is_found_in_the_old_file_so_a_deleted_function_still_picks_its_writers(monkeypatch):
+    monkeypatch.setattr(test_for, "_name_writers", lambda name: frozenset(
+        t for t in test_for.all_tests() if name == "topHtml" and t.name == "test_might.py"))
+    hunks_of = {"web/app.js": ([([(9, "    return a;")], [])], FAKE_SHELL_JS, "(function () {\n})();\n")}
+    assert "test_might.py" in _names(["web/app.js"], base="HEAD", hunks_of=hunks_of)
+
+
+@pytest.mark.parametrize("line, label", [(19, "gate"), (21, "report-list"), (22, "report-list")])
+def test_a_shell_js_hunk_in_a_click_case_goes_by_the_case_label(monkeypatch, line, label):
+    picked = _shell_pick(monkeypatch, line, {label: ["test_might.py"], "report": ["test_tactics.py"]})
+    assert {p.name for p in picked.files} == {"test_might.py"} | SHELL_LOAD
+    assert any(f"case:{label}" in w for w in picked.why)
+
+
+def test_every_label_on_a_case_line_counts(monkeypatch):
+    picked = _shell_pick(monkeypatch, 23, {"one": ["test_might.py"], "two": ["test_tactics.py"]})
+    assert {p.name for p in picked.files} == {"test_might.py", "test_tactics.py"} | SHELL_LOAD
+
+
+def test_a_name_with_a_hyphen_or_a_prefix_is_not_the_shorter_name(monkeypatch):
+    """report-list 不算寫到 report；_name_writers 有 lru_cache，假的測試檔走 __wrapped__ 不留進快取。"""
+    fake = {Path("a.py"): 'click("report-list")', Path("b.py"): 'act: "report"', Path("c.py"): "my_report $report xreport",
+            Path("test_test_for.py"): 'act: "report"'}
+    monkeypatch.setattr(test_for, "all_tests", lambda: list(fake))
+    monkeypatch.setattr(test_for, "web_text", fake.__getitem__)
+    writers = test_for._name_writers.__wrapped__
+    assert writers("report") == {Path("b.py")}  # 假原始碼的 test_test_for 不算（TEXT_BLIND）
+    assert writers("report-list") == {Path("a.py")}
+
+
+def test_a_name_too_many_tests_write_falls_back_to_the_whole_file_picks(monkeypatch):
+    many = [t.name for t in test_for.all_tests()[:test_for.SHELL_NAME_CAP + 1]]
+    whole = test_for.pick(["web/app.js"], base="HEAD", hunks_of=APP_JS_NO_DIFF)
+    picked = _shell_pick(monkeypatch, 9, {"topHtml": many})
+    assert picked.files == whole.files and not picked.smoke and "test_server.py" in {p.name for p in picked.files}
+    assert any("topHtml" in w and f"{len(many)} 個檔" in w for w in picked.why)
+    at_cap = _shell_pick(monkeypatch, 9, {"topHtml": many[:-1]})  # 剛好 20 個不退回
+    assert at_cap.smoke and {p.name for p in at_cap.files} == set(many[:-1]) | SHELL_LOAD
+
+
+def test_a_case_with_a_label_too_many_tests_write_falls_back_too(monkeypatch):
+    many = [t.name for t in test_for.all_tests()[:test_for.SHELL_NAME_CAP + 1]]
+    whole = test_for.pick(["web/app.js"], base="HEAD", hunks_of=APP_JS_NO_DIFF)
+    assert _shell_pick(monkeypatch, 23, {"one": ["test_might.py"], "two": many}).files == whole.files
+
+
+@pytest.mark.parametrize("line", [13, 16, 15, 3])  # 頂層的句子、handler 前段、addEventListener 那一行、"use strict"
+def test_a_hunk_outside_every_name_falls_back_to_the_whole_file_picks(monkeypatch, line):
+    whole = test_for.pick(["web/app.js"], base="HEAD", hunks_of=APP_JS_NO_DIFF)
+    picked = _shell_pick(monkeypatch, line, {"topHtml": ["test_might.py"]})
+    assert picked.files == whole.files and not picked.smoke
+    assert any(f"第 {line} 行" in w and "原挑法" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("line", [11, 12])
+def test_a_comment_or_blank_line_outside_every_name_only_runs_the_fixed_ones(monkeypatch, line):
+    picked = _shell_pick(monkeypatch, line, {})
+    assert {p.name for p in picked.files} == SHELL_LOAD and picked.smoke
+    assert any("註解" in w for w in picked.why)
+
+
+def test_a_name_nobody_writes_only_runs_the_fixed_ones_and_says_the_nightly_covers_it(monkeypatch):
+    """總表認的坑：沒人寫到的函式執行期才炸，這裡全綠，靠 03:30 的整套。"""
+    picked = _shell_pick(monkeypatch, 29, {})
+    assert {p.name for p in picked.files} == SHELL_LOAD and picked.smoke
+    assert any("wkTap" in w and "03:30" in w for w in picked.why)
+
+
+def test_a_shell_js_named_without_a_diff_keeps_the_whole_file_picks():
+    picked = test_for.pick(["web/app.js"], base="HEAD", hunks_of=APP_JS_NO_DIFF)
+    names = {p.name for p in picked.files}
+    assert "test_server.py" in names and len(names) > test_for.SHELL_NAME_CAP and not picked.smoke
+    assert any("原挑法" in w for w in picked.why)
+
+
+def test_the_other_shell_scripts_stay_on_the_whole_file_picks(monkeypatch):
+    """第一條只管 app.js、main.js：shell.js 有 hunk 也照舊，WEB_SCRIPTS 不動。"""
+    assert test_for.SHELL_HUNK_JS == {"web/app.js", "web/main.js"}
+    plain = test_for.pick(["web/shell.js"], base="HEAD", hunks_of={"web/shell.js": ([], "", "")})
+    picked = _shell_pick(monkeypatch, 9, {"topHtml": ["test_might.py"]}, js="web/shell.js")
+    assert picked.files == plain.files and not picked.smoke and "test_server.py" in {p.name for p in picked.files}
+
+
+def test_a_wholly_slow_web_test_that_writes_the_name_runs_with_its_slow_tests(monkeypatch):
+    """test_errands_web 整檔 slow、用假瀏覽器跑頁面：不連 slow 一起跑，挑到了也一條不跑（同包的 js，10/31 審查）。
+    部分 slow 的（test_cultivation_page_web）、整檔 slow 可是不跑 js 的（test_event_tiers）不放。"""
+    files = ["test_errands_web.py", "test_cultivation_page_web.py", "test_event_tiers.py"]
+    picked = _shell_pick(monkeypatch, 9, {"topHtml": files})
+    assert set(files) <= {p.name for p in picked.files}
+    assert {p.name for p in picked.runs_js} == {"test_errands_web.py"}
+    assert {p.name for p in picked.with_slow} == {"test_errands_web.py"}
+
+
+def test_shell_spans_do_not_let_one_name_swallow_the_next():
+    """行尾有註解的 const、沒有收尾行的三元運算：只找收尾那一行的話會一路吞到下一個收尾，歸屬往挑少的方向錯（第 95 批第一版量到吞掉約一百個名字）。"""
+    spans = {name: (start, end) for name, start, end in test_for.shell_spans(FAKE_SHELL_JS)}
+    assert spans == {"LIMIT": (4, 4), "CHOSEN": (5, 7), "topHtml": (8, 10), "case:gate": (19, 19),
+                     "case:report-list": (20, 22), "case:one|two": (23, 23), "wkTap": (28, 30)}
+    assert test_for.shell_spans(FAKE_SHELL_JS.replace("\n", "\r\n")) == test_for.shell_spans(FAKE_SHELL_JS)
+
+
+def test_shell_spans_edges_stay_on_the_side_that_picks_more():
+    src = (
+        '  document.addEventListener("input", onInput);\n'  # 1：一行的 handler，下一行的名字不能漏
+        "  function named() {\n"  # 2
+        "  }\n"  # 3
+        '  document.addEventListener("click", (ev) => {\n'  # 4
+        "      switch (act) {\n"
+        '        case "a":\n'  # 6：連續只有標籤的行併成一個
+        '        case "b":\n'  # 7
+        "          both();\n"  # 8
+        "          break;\n"  # 9
+        '        case SOME: other(); break;\n'  # 10：認不得的標籤
+        "        default: quiet();\n"  # 11
+        "      }\n"
+        "  });\n"
+    )
+    spans = {name: (start, end) for name, start, end in test_for.shell_spans(src)}
+    assert spans == {"named": (2, 3), "case:a|b": (6, 9)}  # 第 10、11 行落在 span 外 → 原挑法
+
+
+@pytest.mark.parametrize("name", ["choose", "render", "pageJianghu", "case:gate"])
+def test_shell_spans_read_the_real_shell_files(name):
+    """真實的兩支認得這幾個。失效了是全部退回原挑法（方向對、只是又變慢），這條是讓人知道。"""
+    found = {span[0] for js in ("app.js", "main.js")
+             for span in test_for.shell_spans((test_for.ROOT / "web" / js).read_text(encoding="utf-8"))}
+    assert name in found

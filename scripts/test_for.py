@@ -30,7 +30,8 @@
   名字的功能群（檔名有名字第一個認得的字的測試檔，連模組裡用到它的；service_groups）＋這個檔的底＋自己檔名的＋邊界測試；函式以外或指名了卻沒有差 → 核心測試＋煙霧。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
-  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
+  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。改到內容驗證（最外層、名字 check_*、validate_*、參數有 need 的 def，
+  或它用到的小函式與常數；沒有差就照整個檔）再加 test_content.py（shared_content_checks，第二輪第 95 批：content.validate 在函式內叫，import 圖看不到）。
 - tianxia/engine.py：hunk 落在一行委派 → 那一包的 tests/＋核心契約＋內文寫到那個方法名的測試檔（engine_delegates，舊檔裡是胖方法、
   這一次才換成委派的不算委派）。落在其餘的方法（Game 的門面與核心）→ 核心測試＋煙霧＋內文寫到那個方法名的測試檔，同 core_module_callers：
   寫到它的超過 IMPORT_CAP 個檔不併（choose、sync 這種）；方法以外 → 核心測試＋煙霧。核心測試本來就含核心契約，只改到委派的另外帶核心契約。
@@ -50,7 +51,10 @@
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
   包裡的內容檔（tianxia/features/<包>/content/，全部拆包第 62 批）兩條都走：內容這一條＋那一包的 tests/＋核心契約。
   內容這一條再加 test_content_packs.py（新檔忘了寫進 Feature.content 時載入不報錯，只有它抓得到）。
-- web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+- web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。web/app.js、web/main.js 另外照 hunk 挑（shell_js_writers，第二輪第 95 批）：
+  落在頂層的 function、const、let 或事件處理的 case（shell_spans）→ 寫到那個名字或 case 標籤的測試檔（整檔 slow 的網頁測試連 slow 一起跑）
+  ＋test_shell_web.py、test_server_bots.py＋煙霧；只改名字以外的註解或空行只有固定那幾個；沒有測試寫到的名字也只有固定那幾個（執行期才炸的靠每日整套）。
+  沒有差、落在名字以外的程式行、任一個名字超過 SHELL_NAME_CAP 個檔寫到（choose、pageJianghu 這種）→ 上面的原挑法。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
@@ -97,6 +101,7 @@ CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在�
 # --base 再蓋過它（功能分支的工作樹照舊給 --base origin/feature/<名字>）。default_base() 每次現讀環境變數。
 DEFAULT_BASE = "origin/develop"
 BASE_ENV = "TIANXIA_TEST_BASE"
+CONTENT_TEST = "test_content.py"  # 內容改了就跟；共用層改到內容驗證也跟（shared_content_checks，第二輪第 95 批）
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 PACK_CONTENT_TEST = "test_content_packs.py"  # 內容改了也跟：包裡新檔忘了宣告（Feature.content）時載入不報錯、事件靜靜少掉，只有這支抓得到，新檔名又不會寫在它裡面
 SERVER_TEST = "test_server.py"
@@ -989,6 +994,145 @@ def service_groups(module: str, hunk_list: list[Hunk], old_src: str, new_src: st
     return files, core, why
 
 
+# 第二輪第 95 批（第 96 批留的）：content.validate 在函式內叫共用層模組的 check_*、validate_*，module_graph 只讀最外層的 import、
+# 共用層又不往上找，改它們挑不到 test_content.py。內容驗證＝模組最外層、名字對、參數有 need 的 def：
+# need 要留著，ranks.check_summons、events.check_note、jianfa_numbers._check_100 不是內容驗證。
+_CONTENT_CHECK = re.compile(r"_?(?:check|validate)_")
+
+
+def content_checks(src: str) -> set[str]:
+    """這份原始碼最外層的內容驗證（函式名）。"""
+    found: set[str] = set()
+    for name, _, _, node in _top_level(src):
+        if isinstance(node, ast.ClassDef) or not _CONTENT_CHECK.match(name):
+            continue
+        params = node.args
+        if any(a.arg == "need" for a in (*params.posonlyargs, *params.args, *params.kwonlyargs)):
+            found.add(name)
+    return found
+
+
+def shared_content_checks(hunk_list: list[Hunk], old_src: str, new_src: str) -> list[str]:
+    """共用層模組的 hunk 碰到內容驗證了嗎：碰到的寫成給 why 的句子，沒碰到是空的。沒有 hunk（指名了、跟 base 沒有差）照整個檔算；
+    有 hunk 照 hunk 落在哪個最外層的名字，連模組裡用到它的一路往上（改驗證用到的小函式、常數也算）；說明、import 這種名字以外的行不算。"""
+    checks = content_checks(old_src) | content_checks(new_src)
+    if not checks:
+        return []
+    if not hunk_list:
+        return [f"跟 base 沒有差異，照整個檔算：內容驗證 {'、'.join(sorted(checks))}"]
+    _, _, users = _core_refs(old_src, new_src)
+    why = []
+    for seed in sorted(n for n in _split(hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)]) if n is not None):
+        hit = _callers_up(seed, users) & checks
+        if hit:
+            why.append(f"改到 {seed}，經內容驗證 {'、'.join(sorted(hit))}")
+    return why
+
+
+# ── 殼的 js 照 hunk 挑（第二輪第 95 批）──────────────────────────────
+# app.js、main.js 每一條網頁測試都載入，照檔名挑一改就是七十幾個檔。hunk 落在哪個頂層名字或 click 的 case 認得出來就只挑寫到它的；
+# 認不出來一律退回原挑法（pick 的 web_route），歸屬只准往挑多的方向錯。寫到名字的測試檔常常不經殼的那個名字走（靠 03:30 的整套兜底），
+# 所以固定帶載入檢查與「每個按鈕一個主人」（test_shell_web）、FB-673 掃 web/ 不准出現的字（test_server_bots）、煙霧。
+SHELL_HUNK_JS = frozenset({"web/app.js", "web/main.js"})
+SHELL_NAME_CAP = 20  # 任一個名字有超過這麼多個測試檔寫到（choose、api、pageJianghu、render……）：不算認得出來，退回原挑法
+SHELL_LOAD_TESTS = ("test_shell_web.py", "test_server_bots.py")
+_JS_TOP = re.compile(r"^  (?:async )?function (\w+)\s*\(|^  (?:const|let) (\w+)\s*=")
+_JS_HANDLER = re.compile(r'^  (?:document|window)\.addEventListener\("')
+_JS_CLOSE = re.compile(r"^  [}\])]")
+_JS_LEFT = re.compile(r"^(?:  )?\S")
+_JS_CASE = re.compile(r'^ {8}case "')
+_JS_CASE_EDGE = re.compile(r"^ {8}(?:case|default)\b")  # 認不得的標籤也斷在這裡：後面那幾行落在 span 外，退回原挑法
+_JS_LABEL = re.compile(r'case "([\w:-]+)":')
+
+
+def _js_block_end(lines: list[str], start: int) -> int:
+    """頂層那一句從 start 開始，結尾在第幾行（都從 0 算）：碰到縮排兩格的收尾符號結束在那一行，碰到別的縮排兩格或頂格的結束在上一行。
+    不能只找收尾那一行：行尾有註解的 `const X = 1; // …`、沒有收尾行的 `const A = cond\\n    ? x\\n    : y;` 都會把後面的名字吞掉，歸屬往挑少的方向錯。"""
+    for j in range(start + 1, len(lines)):
+        if _JS_CLOSE.match(lines[j]):
+            return j
+        if _JS_LEFT.match(lines[j]):
+            return j - 1
+    return len(lines) - 1
+
+
+def _case_spans(lines: list[str], start: int, stop: int) -> list[tuple[str, int, int]]:
+    """事件處理裡縮排八格的 `case "x"`：（case:x, 起, 迄）；連續只有標籤的行、同一行好幾個標籤併成一個（case:a|b）。"""
+    out = []
+    k = start
+    while k < stop:
+        if not _JS_CASE.match(lines[k]):
+            k += 1
+            continue
+        first, labels = k, []
+        while k < stop and _JS_CASE.match(lines[k]):
+            labels += _JS_LABEL.findall(lines[k])
+            rest = _JS_LABEL.sub("", lines[k]).strip()
+            k += 1
+            if rest and not rest.startswith("//"):  # 標籤後面就是程式：這一段從這裡開始
+                break
+        while k < stop and not _JS_CASE_EDGE.match(lines[k]) and not (lines[k].strip() and len(lines[k]) - len(lines[k].lstrip()) < 8):
+            k += 1
+        if labels:
+            out.append(("case:" + "|".join(labels), first + 1, k))
+    return out
+
+
+def shell_spans(src: str) -> list[tuple[str, int, int]]:
+    """殼的 js 裡認得出來的位置：（名字, 起, 迄），行號從 1 算。兩支檔的頂層都縮排兩格（包在一個立即執行的函式裡），照縮排認，不解析 js。
+    頂層的 function、const、let 是它自己；事件處理（addEventListener）那一段本身不算，裡面的 case 才算，名字 case:<標籤>；
+    const 與函式裡的 switch 照函式名、不拆。其他都不算 span（handler 前段、沒有 case 的 handler、頂層的句子）：縮排整個變了就是全部退回，不會挑少。"""
+    lines = src.replace("\r\n", "\n").split("\n")
+    out: list[tuple[str, int, int]] = []
+    i = 0
+    while i < len(lines):
+        top = _JS_TOP.match(lines[i])
+        if top or _JS_HANDLER.match(lines[i]):
+            end = _js_block_end(lines, i)
+            out += [(top.group(1) or top.group(2), i + 1, end + 1)] if top else _case_spans(lines, i + 1, end)
+            i = end + 1
+        else:
+            i += 1
+    return out
+
+
+@functools.lru_cache(maxsize=None)
+def _name_writers(name: str) -> frozenset[Path]:
+    """內文（連 kit，同 web_text）寫到這個 js 名字的測試檔，假原始碼的不算（TEXT_BLIND）。連字號要擋：report-list 不算寫到 report
+    （_index 認不得連字號，不用它）。"""
+    word = re.compile(rf"(?<![\w$-]){re.escape(name)}(?![\w$-])")
+    return frozenset(t for t in all_tests() if t.name not in TEXT_BLIND and word.search(web_text(t)))
+
+
+def _js_code(text: str) -> bool:
+    s = text.strip()
+    return bool(s) and not s.startswith(("//", "/*", "*"))
+
+
+def shell_js_writers(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[frozenset[Path] | None, list[str]]:
+    """殼的 js 的 hunk → （寫到改到的名字的測試檔, 為什麼）；None 是退回原挑法（沒有 hunk、落在 span 外、任一個名字超過 SHELL_NAME_CAP）。
+    只改 span 外的註解或空行落不到任何名字，回空的，只跑固定那幾個。"""
+    if not hunk_list:
+        return None, ["跟 base 沒有差異，照整個檔算 → 原挑法"]
+    groups = _split(hunk_list, old_src, new_src, shell_spans)
+    loose = sorted(no for side in groups.pop(None, ([], [])) for no, text in side if _js_code(text))  # _split 的 _meaningful 只認 # 開頭
+    if loose:
+        return None, [f"第 {loose[0]} 行落在函式與 case 以外 → 原挑法"]
+    writers = {label: _name_writers(label) for span in groups
+               for label in (span.removeprefix("case:").split("|") if span.startswith("case:") else [span])}
+    over = sorted((name, len(hit)) for name, hit in writers.items() if len(hit) > SHELL_NAME_CAP)
+    if over:
+        return None, [f"{'、'.join(f'{name} 有 {n} 個檔寫到' for name, n in over)}（超過 {SHELL_NAME_CAP}）→ 原挑法"]
+    found = frozenset().union(*writers.values())
+    if not groups:
+        return found, ["只改註解或空行，落不到任何名字"]
+    why = [f"改到 {'、'.join(sorted(groups))} → 寫到它們的 {len(found)} 個檔"]
+    silent = sorted(name for name, hit in writers.items() if not hit)
+    if silent:
+        why.append(f"沒有測試寫到 {'、'.join(silent)}，只跑固定那幾個，靠 03:30 的整套")
+    return found, why
+
+
 _CONFTEST_IMPORT = re.compile(r"^[ \t]*from[ \t]+conftest[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
 _PARAMS = re.compile(r"\bdef[ \t]+\w+[ \t]*\(([^)]*)\)", re.S)
 
@@ -1082,7 +1226,7 @@ def pick(files: list[str], base: str | None = None,
     def content_route(path: Path) -> None:
         # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
         # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
-        for name in ("test_content.py", REAL_CONTENT_TEST, PACK_CONTENT_TEST):
+        for name in (CONTENT_TEST, REAL_CONTENT_TEST, PACK_CONTENT_TEST):
             if name in named:
                 result.files.add(named[name])
         result.files |= {t for t in tests if path.name in _text(t)}
@@ -1225,6 +1369,12 @@ def pick(files: list[str], base: str | None = None,
             result.smoke = True
             result.files |= own_named(path.stem) | {t for t in tests if t.name == BOUNDARY_TEST}
             result.why.append(f"{f}：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找；總表第六節第 5 條）")
+            given = (hunks_of or {}).get(f)
+            hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+            touched = shared_content_checks(hunk_list, old_src, new_src)
+            if touched and CONTENT_TEST in named:
+                result.files.add(named[CONTENT_TEST])
+                result.why.extend(f"{f}：{w} → {CONTENT_TEST}" for w in touched)
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
@@ -1276,6 +1426,21 @@ def pick(files: list[str], base: str | None = None,
                                  if runs_js else ""))
             continue
         if f.startswith("web/"):
+            if f in SHELL_HUNK_JS:  # 第二輪第 95 批：殼的 js 認得出 hunk 落在哪個名字就只挑寫到它的，認不出來走下面的原挑法
+                given = (hunks_of or {}).get(f)
+                hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+                writers, why = shell_js_writers(hunk_list, old_src, new_src)
+                result.why.extend(f"{f}：{w}" for w in why)
+                if writers is not None:
+                    load = {named[n] for n in SHELL_LOAD_TESTS if n in named}
+                    result.smoke = True
+                    result.files |= writers | load
+                    # 寫到名字又整檔 slow 的網頁測試：不連 slow 一起跑，挑到了也一條不跑（同包的 js 那一支，10/31 審查）
+                    runs_js = {t for t in writers if whole_slow(t) and "webharness" in reached(t)}
+                    result.runs_js |= runs_js
+                    result.why.append(f"{f}：固定帶 {'、'.join(sorted(t.name for t in load))}＋煙霧"
+                                      + (f"；跑它的網頁測試 {'、'.join(sorted(t.name for t in runs_js))} 連 slow 一起跑" if runs_js else ""))
+                    continue
             if SERVER_TEST in named:
                 result.files.add(named[SERVER_TEST])
             # 江湖頁（main.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們（走一趟的 outing.js 是探索包的、輿圖的 map.js 是輿圖包的〔第 49 批〕，上面那一支）
