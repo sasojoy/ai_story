@@ -14,7 +14,9 @@
 內容檔與畫面檔不生，用到才加（開發規範手冊第十五節 G8、G9）：
 - 內容檔放 tianxia/features/<包名>/content/、寫進 Feature.content；測試內容放同一包的 tests/content/（同一個相對路徑）。不放 repo 的 content/。
 - 畫面寫 web/<包名>.js、web/<包名>.css、寫進 Feature.web。js 的 script 標籤由伺服器照它生成，不要手改 index.html 的 script；
-  css 的 link 手寫在 index.html（style.css 後面），js 手加進 tests/kit/webharness.APP_FILES（跟頁面同一個先後）；tests/core/test_contract_features.py 守。
+  新鈕在 web/<包名>.js 寫 <包名>Click 加 registerClicks(<包名>Click, ["動作", …])（表單、change 走 registerForms、registerChanges），不加進 app.js；
+  css 的 link 手寫在 index.html，接在最後一行 link 之後，不要排到 map.css、shop.css 前面（同權重蓋不過店面與輿圖）；
+  js 手加進 tests/kit/webharness.APP_FILES（跟頁面同一個先後）；tests/core/test_contract_features.py 守。
 
 包名：小寫英文字母開頭、只有小寫英數與底線；不能跟已經有的包、tianxia/ 底下的模組、任何測試檔、tuning 檔、Config 已有的格撞名。
 --root 給別的資料夾就在那裡生（測試用）。
@@ -126,7 +128,7 @@ from tianxia.core.features import Feature
 class {cls}(Feature):
     name = "{name}"
     prefix = "{name}"  # 選項 id 的前綴：{name}:…（核心只把這個前綴的 id 交給這一包）
-    web: tuple[str, ...] = ()  # 畫面（手冊 G9）：web/ 底下的檔名，例 ("{name}.js", "{name}.css")。js 的 script 由伺服器照這裡生成，不要手改 index.html 的 script；css 的 link 與 tests/kit/webharness.APP_FILES 手寫
+    web: tuple[str, ...] = ()  # 畫面（手冊 G9）：web/ 底下的檔名，例 ("{name}.js", "{name}.css")。js 的 script 由伺服器照這裡生成，不要手改 index.html 的 script；新鈕在 web/{name}.js 寫 {name}Click 加 registerClicks，不加進 app.js；css 的 link 接在 index.html 最後一行 link 之後（不要排到 map.css、shop.css 前面），它與 tests/kit/webharness.APP_FILES 手寫
     content: tuple[str, ...] = ()  # 內容檔（手冊 G8）：相對於 tianxia/features/{name}/content/，例 ("{name}.json",)、("events/{name}.json",)；宣告了就要有那個檔，不放 repo 的 content/
     player_fields: tuple[str, ...] = ()  # 認領的 PlayerState 欄位（新欄位加在核心 state.py、名字帶包名前綴，先過 PM：手冊第十五節 G7）
     carried: tuple[str, ...] = ()  # 上面那些裡換季照帶走的
