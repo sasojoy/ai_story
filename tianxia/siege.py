@@ -21,7 +21,7 @@
 只 import models、state、battle_instance、chiefs（龍頭上陣的挑法：全部拆包第 8 批 generals 進決戰包時留在共用規則層的那一塊）、territory、
 conquest（作罷）、world_state 型別。
 
-內容驗證 check_siege_templates 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_siege_templates 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

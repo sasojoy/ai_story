@@ -21,7 +21,7 @@ tests/server/test_push_resistance；tianxia/features/ 的 seal/tests/test_seal_a
 test_stances、figure_acts/tests/test_challenge_season、test_figure_aid、map/tests/test_open_map、military/tests/test_opportunities、test_opportunities_two、
 outlets/tests/test_silver_outlets；slow 的 sortie/tests/test_bot_policy_conquest、tests/season/test_real_content。世界一步代叫它（world._STEP_CORE），
 world.py 說明「另外跑」那一串也跑。
-內容驗證 check_figures 在檔尾（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改這一份帶不到）。"""
+內容驗證 check_figures 在檔尾（第二輪第 100 批從 content.py 搬來）。"""
 from __future__ import annotations
 
 from pydantic import BaseModel

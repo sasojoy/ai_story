@@ -21,7 +21,7 @@
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_plans.py＋煙霧＋邊界；收進來之前挑到的 tianxia/features/seal/tests/test_seal_acts.py 另外跑；
 世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。
 
-內容驗證 check_itineraries 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_itineraries 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import random

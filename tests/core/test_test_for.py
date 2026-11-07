@@ -120,10 +120,70 @@ def test_a_shared_rules_module_picks_its_own_tests_smoke_and_the_boundary_test(m
     picked = test_for.pick([f"tianxia/{module}.py"])
     names = {p.name for p in picked.files}
     assert own <= names and "test_feature_boundaries.py" in names
-    assert all(n == "test_feature_boundaries.py" or n.startswith(f"test_{module}") for n in names), names
+    allowed = {"test_feature_boundaries.py"} | ({"test_content.py"} if module == "timetable" else set())  # timetable 有內容驗證 check_timetable（第 95 批）：這條沒給 hunks_of，帶不帶照它跟 base 的差；might、tactics、allied 沒有，不准多
+    assert all(n in allowed or n.startswith(f"test_{module}") for n in names), names
     assert picked.smoke and not picked.core
     assert any("共用規則層" in w for w in picked.why)
     assert "test_ascend.py" not in _names(["tianxia/might.py"])
+
+
+# 第二輪第 95 批：行號 模組說明 1；LIMIT 3；_limit 5～6；check_x 8～9；other 11～12；check_summons 14～15；validate_y 17～18
+FAKE_SHARED_CHECKS = (
+    '"""模組說明。"""\n'
+    "from x import y\n"
+    "LIMIT = 3\n"
+    "\n"
+    "def _limit(v):\n"
+    "    return v < LIMIT\n"
+    "\n"
+    "def check_x(c, need):\n"
+    "    need(_limit(c), 'x')\n"
+    "\n"
+    "def other(c):\n"
+    "    return c\n"
+    "\n"
+    "def check_summons(state, content):\n"
+    "    return []\n"
+    "\n"
+    "def validate_y(c, need, known):\n"
+    "    return known\n"
+)
+
+
+@pytest.mark.parametrize("line, expected", [
+    (9, True),  # 內容驗證本身
+    (18, True),  # validate_*
+    (6, True),  # 它用到的小函式
+    (3, True),  # 小函式用到的常數
+    (12, False),  # 別的函式
+    (15, False),  # 名字像、參數沒有 need：不是內容驗證
+    (1, False),  # 說明（這一批拿掉那一句就是這種）
+    (2, False),  # import
+])
+def test_a_shared_rules_change_brings_test_content_only_when_it_reaches_a_content_check(line, expected):
+    """第 96 批留的：共用層的 check_*、validate_* 由 content.validate 在函式內叫，改了以前挑不到 test_content.py。"""
+    rel = "tianxia/relations.py"
+    picked = test_for.pick([rel], base="HEAD", hunks_of=_added(rel, FAKE_SHARED_CHECKS, line))
+    assert ("test_content.py" in {p.name for p in picked.files}) is expected
+    assert any("test_content.py" in w for w in picked.why) is expected
+    assert picked.smoke and not picked.core
+
+
+def test_a_shared_rules_module_named_without_a_diff_counts_as_the_whole_file():
+    rel = "tianxia/relations.py"
+    plain = "def other(c):\n    return c\n"
+    assert "test_content.py" in _names([rel], base="HEAD", hunks_of={rel: ([], FAKE_SHARED_CHECKS, FAKE_SHARED_CHECKS)})
+    assert "test_content.py" not in _names([rel], base="HEAD", hunks_of={rel: ([], plain, plain)})
+
+
+def test_the_content_checks_are_read_off_the_real_shared_modules():
+    """真實的 15 個模組（第 95 批量的）認得到；舊名字像的不算。失效了是挑少，這條讓人知道。"""
+    def checks(module):
+        return test_for.content_checks((test_for.ROOT / "tianxia" / f"{module}.py").read_text(encoding="utf-8"))
+    assert {"validate_forge_secrets", "validate_tier4_named", "validate_named_clash"} <= checks("forge_secrets")
+    for module, name in (("relations", "check_relations"), ("timetable", "check_timetable"), ("figures", "check_figures")):
+        assert name in checks(module) and module in test_for.SHARED_MODULES
+    assert not checks("might") and not checks("ranks")  # ranks.check_summons 不是內容驗證
 
 
 def test_the_shared_rules_layer_is_one_list_for_the_picker_and_the_boundary_test():

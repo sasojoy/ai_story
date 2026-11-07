@@ -14,7 +14,7 @@
 - 攻城戰（siege.py）改成第 4 階的人下戰書觸發（letter_problem；排時段在 conquest_day.py）；投票與每天 22:00 的公告結算拿掉了。
 只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。
 
-內容驗證 check_conquest_blocks 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_conquest_blocks 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import math

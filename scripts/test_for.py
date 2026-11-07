@@ -97,6 +97,7 @@ CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在�
 # --base 再蓋過它（功能分支的工作樹照舊給 --base origin/feature/<名字>）。default_base() 每次現讀環境變數。
 DEFAULT_BASE = "origin/develop"
 BASE_ENV = "TIANXIA_TEST_BASE"
+CONTENT_TEST = "test_content.py"  # 內容改了就跟；共用層改到內容驗證也跟（shared_content_checks，第二輪第 95 批）
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 PACK_CONTENT_TEST = "test_content_packs.py"  # 內容改了也跟：包裡新檔忘了宣告（Feature.content）時載入不報錯、事件靜靜少掉，只有這支抓得到，新檔名又不會寫在它裡面
 SERVER_TEST = "test_server.py"
@@ -988,6 +989,41 @@ def service_groups(module: str, hunk_list: list[Hunk], old_src: str, new_src: st
     return files, core, why
 
 
+# 第二輪第 95 批（第 96 批留的）：content.validate 在函式內叫共用層模組的 check_*、validate_*，module_graph 只讀最外層的 import、
+# 共用層又不往上找，改它們挑不到 test_content.py。內容驗證＝模組最外層、名字對、參數有 need 的 def：
+# need 要留著，ranks.check_summons、events.check_note、jianfa_numbers._check_100 不是內容驗證。
+_CONTENT_CHECK = re.compile(r"_?(?:check|validate)_")
+
+
+def content_checks(src: str) -> set[str]:
+    """這份原始碼最外層的內容驗證（函式名）。"""
+    found: set[str] = set()
+    for name, _, _, node in _top_level(src):
+        if isinstance(node, ast.ClassDef) or not _CONTENT_CHECK.match(name):
+            continue
+        params = node.args
+        if any(a.arg == "need" for a in (*params.posonlyargs, *params.args, *params.kwonlyargs)):
+            found.add(name)
+    return found
+
+
+def shared_content_checks(hunk_list: list[Hunk], old_src: str, new_src: str) -> list[str]:
+    """共用層模組的 hunk 碰到內容驗證了嗎：碰到的寫成給 why 的句子，沒碰到是空的。沒有 hunk（指名了、跟 base 沒有差）照整個檔算；
+    有 hunk 照 hunk 落在哪個最外層的名字，連模組裡用到它的一路往上（改驗證用到的小函式、常數也算）；說明、import 這種名字以外的行不算。"""
+    checks = content_checks(old_src) | content_checks(new_src)
+    if not checks:
+        return []
+    if not hunk_list:
+        return [f"跟 base 沒有差異，照整個檔算：內容驗證 {'、'.join(sorted(checks))}"]
+    _, _, users = _core_refs(old_src, new_src)
+    why = []
+    for seed in sorted(n for n in _split(hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)]) if n is not None):
+        hit = _callers_up(seed, users) & checks
+        if hit:
+            why.append(f"改到 {seed}，經內容驗證 {'、'.join(sorted(hit))}")
+    return why
+
+
 _CONFTEST_IMPORT = re.compile(r"^[ \t]*from[ \t]+conftest[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
 _PARAMS = re.compile(r"\bdef[ \t]+\w+[ \t]*\(([^)]*)\)", re.S)
 
@@ -1081,7 +1117,7 @@ def pick(files: list[str], base: str | None = None,
     def content_route(path: Path) -> None:
         # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
         # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
-        for name in ("test_content.py", REAL_CONTENT_TEST, PACK_CONTENT_TEST):
+        for name in (CONTENT_TEST, REAL_CONTENT_TEST, PACK_CONTENT_TEST):
             if name in named:
                 result.files.add(named[name])
         result.files |= {t for t in tests if path.name in _text(t)}
@@ -1224,6 +1260,12 @@ def pick(files: list[str], base: str | None = None,
             result.smoke = True
             result.files |= own_named(path.stem) | {t for t in tests if t.name == BOUNDARY_TEST}
             result.why.append(f"{f}：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找；總表第六節第 5 條）")
+            given = (hunks_of or {}).get(f)
+            hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+            touched = shared_content_checks(hunk_list, old_src, new_src)
+            if touched and CONTENT_TEST in named:
+                result.files.add(named[CONTENT_TEST])
+                result.why.extend(f"{f}：{w} → {CONTENT_TEST}" for w in touched)
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem

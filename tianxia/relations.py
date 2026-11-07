@@ -5,7 +5,7 @@ https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2 第四節�
 唐周與黃巾）。這裡只查表與照事實算心事（倒下的時刻記在 FigureState.fell_at，不另存）；倒下那一刻的反應在 figure_life.on_fall。
 人物都用對話人物的 id（大勢人物的 id 跟對話人物一樣，check_figures 擋）。只 import models、state。
 
-內容驗證 check_relations 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_relations 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 from .models import Content

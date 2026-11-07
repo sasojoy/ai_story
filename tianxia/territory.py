@@ -8,7 +8,7 @@
 沒有地盤的季（on 是假：沒有第一季規則、劇本沒寫區塊）：controller 回 None，squads_at 照 Location.enemies。
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。
 
-內容驗證 check_territory 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_territory 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 from . import calendar, place_state, renown, rules

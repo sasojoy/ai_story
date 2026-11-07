@@ -18,7 +18,7 @@ tianxia/features/ 的 military/tests/test_admin_triggers、map/tests/test_map_we
 test_sortie_duel_map、test_sortie_duel_words；slow 的 sortie/tests/test_bot_policy_conquest、map/tests/test_jianfa_3d_map_foes、sortie/tests/test_sortie_report。
 世界的週初與每天代叫它（world._WEEK_CORE、_DAY_CORE），world.py 說明「另外跑」那一串也跑。
 
-內容驗證 check_orders 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。"""
+內容驗證 check_orders 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import math

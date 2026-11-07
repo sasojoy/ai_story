@@ -15,7 +15,7 @@
 假人與整季機器人照舊隨機合，可能偶然撞到秘方，但不讀口訣。
 擲骰一律用自己的亂數（種子是名號、時間與來源），不動 Game.rng：接上這一套之後，既有的固定種子序列不會位移。
 
-內容驗證 validate_secrets 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）：改它要另外跑 tests/core/test_content.py。
+內容驗證 validate_secrets 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。
 """
 from __future__ import annotations
 
