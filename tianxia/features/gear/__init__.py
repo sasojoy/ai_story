@@ -15,6 +15,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 from __future__ import annotations
 
 from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
+from tianxia.core.features import ContentSlot
 
 
 class GearFeature(Feature):
@@ -24,6 +25,15 @@ class GearFeature(Feature):
     content = ("gear.json",)  # content.py 照它到這一包的 content/ 載（check_gear、check_signature_arms 留在 content.py，不接 check_content）
     player_fields = ("picking_market",)  # 馬市第二層選單開著沒：換季跟著新角色重來。held_gear 核心與共用層也讀、figure_wins 是大勢人物包的，不認領
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("gear", lambda *a: checks.check_gear(*a)),
+            ContentSlot("signature_arms", lambda *a: checks.check_signature_arms(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """兵器、防具、坐騎、寶物四欄各看自己的 enabled（不看第一季開關；裝備四欄設計 2.6），或此刻還坐在馬市裡：開關在坐著的時候被關掉（沒經過 sync 收店）
