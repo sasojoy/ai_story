@@ -1969,8 +1969,27 @@ def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
     return OWN_ASSET.sub(lambda m: f"{m[1]}={m[2]}{m[3]}?v={version_of(m[3])}{m[2]}", html)
 
 
-# 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外
-PAGE = versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes().decode("utf-8")), asset_version)
+def _web_stamp() -> tuple:
+    """web/ 底下每個檔的修改時間：主機只 pull、沒重開伺服器時，頁面上的 ?v= 也要跟著換（2026-11-07 對話告辭急修上線後，
+    頁面還是舊的 ?v=，Joy 的手機一直拿舊檔）。"""
+    return tuple(sorted((e.name, e.stat().st_mtime_ns) for e in os.scandir(WEB) if e.is_file()))
+
+
+def _build_page() -> str:
+    return versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes().decode("utf-8")), asset_version)
+
+
+# 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外。之後 web/ 有檔換了（pull 了沒重開）就重算一次
+PAGE = _build_page()
+_PAGE_STAMP = _web_stamp()
+
+
+def current_page() -> str:
+    global PAGE, _PAGE_STAMP
+    stamp = _web_stamp()
+    if stamp != _PAGE_STAMP:
+        PAGE, _PAGE_STAMP = _build_page(), stamp
+    return PAGE
 NO_CACHE = {"Cache-Control": "no-cache"}  # 每次都向伺服器確認（有 ETag，沒變就是 304）；不用 immutable：開發時改了檔沒重開，會被瀏覽器釘死
 
 
@@ -1985,14 +2004,14 @@ class WebFiles(StaticFiles):
 
 @app.get("/")
 def index():
-    return HTMLResponse(PAGE, headers=NO_CACHE)
+    return HTMLResponse(current_page(), headers=NO_CACHE)
 
 
 @app.get("/admin")
 def admin_page():
     """管理頁自己的網址（Joy 2026-11-01「把管理員工具獨立一個網址」）：同一支網頁，網頁看網址畫管理頁；不是管理者的人打開，
     網頁照常回到江湖（資料都在 /api/admin* 那幾條，那邊才擋人）。"""
-    return HTMLResponse(PAGE, headers=NO_CACHE)
+    return HTMLResponse(current_page(), headers=NO_CACHE)
 
 
 @app.get("/journal.css")
