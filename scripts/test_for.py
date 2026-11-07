@@ -18,6 +18,7 @@
 - tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
   CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。test_contract_features.py 逐包參數化的那幾條
   只跑 [<包>]（別的包那幾格 --deselect，第二輪第 75 批；改核心、改到契約檔本身、--all、整套與閘門全跑）。
+  包的 checks.py（內容驗證）再加 test_content.py：那幾包的驗證測試寫在那裡（PM 定，第二輪 F 波）。
 - 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal，全部拆包第 25 批的 world、
   第 32 批的 log_archive（它的 test_log_archive 收進核心測試）、第 36 批的 step、weekcard（NOT_CORE_TESTS）；
@@ -1289,6 +1290,9 @@ def pick(files: list[str], base: str | None = None,
                 result.files |= contract_tests()
                 result.contract_only.add(parts[2])
                 result.why.append(f"{f}：{parts[2]} 這一包的 tests/＋核心契約")
+                if path.name == "checks.py" and len(parts) == 4 and CONTENT_TEST in named:  # PM 定（第二輪 F 波）：包的內容驗證，測試寫在 test_content.py
+                    result.files.add(named[CONTENT_TEST])
+                    result.why.append(f"{f}：包的內容驗證 → {CONTENT_TEST}")
                 if path.name == "game_api.py":  # 第二輪第 72 批：engine 上的一行委派搬進表，照舊併上內文寫到那個名字的測試檔（包外直接叫它的）
                     writers = game_api_callers(f, base, hunks_of)
                     result.files |= writers

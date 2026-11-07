@@ -1219,6 +1219,14 @@ def test_a_package_tuning_file_picks_only_that_package():
         assert test_for.pick([not_a_package]).core, not_a_package
 
 
+def test_a_package_checks_file_also_picks_the_content_test():
+    """包的 checks.py（內容驗證）的測試寫在 test_content.py（第 95 批問的，PM 定）：改它併上那一檔；包裡別的檔不跟。"""
+    picked = test_for.pick(["tianxia/features/bounties/checks.py"])
+    assert test_for.CONTENT_TEST in {p.name for p in picked.files}
+    assert any("checks.py" in why and test_for.CONTENT_TEST in why for why in picked.why)
+    assert test_for.CONTENT_TEST not in {p.name for p in test_for.pick(["tianxia/features/bounties/actions.py"]).files}
+
+
 # core_step（全部拆包第 36 批「你這一步」）
 def test_the_core_tests_stay_what_the_pm_defined_when_step_and_weekcard_join_the_core():
     """step、weekcard 收進核心本體（第 36 批，計畫 1.5 甲案）同 world 只改「改了它挑什麼」：它們自己的 test_step（9 條）、test_weekcard（8 條）
