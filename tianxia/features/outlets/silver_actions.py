@@ -6,11 +6,18 @@ _silver_donate；全部拆包第 43 批搬進來，行為一個字不變）；Ga
 from __future__ import annotations
 
 from tianxia import economy, equipment, materials, prologue as prologue_rules, silver
+from tianxia import clinic  # 共用規則層（醫館的標籤）
 from tianxia import figures  # 共用規則層（大勢人物：此地在場的人物；第 40 批收進）
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 
 from .donate_actions import credit
+
+
+def at_clinic_town(ctx) -> bool:
+    """名師指點、買破境丹的地方（6.5）：帶醫館標籤的地點、不在路上（看標籤，不看 Config.heal_at_clinic：那個開關關著時哪裡都能療傷）。"""
+    p = ctx.state.player
+    return p.journey is None and clinic.CLINIC_TAG in (ctx.content.locations[p.location].tags or [])
 
 
 def silver_options(ctx) -> list[Option]:

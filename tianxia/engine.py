@@ -933,27 +933,9 @@ class Game:
     def _heal_msgs(self) -> list[str]:
         return team.heal(self.state, self.content, self.state.player.member, clinic.problem(self.state, self.content))
 
-    # ── 捐軍備（素材與經濟設計第六節）────────────────────────────
-
-    def _at_own_base(self) -> bool:
-        """人在自家陣營的大本營（territory.bases：投靠點，含不在戰線上的），開關（Config.economy.donate）開著、不在路上；散人沒有。
-        豪強分屬兩軍的季，豪強自己的投靠點與依附那一軍的投靠點都算（設計第六節）。"""
-        s, c = self.state, self.content
-        p = s.player
-        if not c.config.economy.donate or p.faction is None or p.journey is not None:
-            return False
-        return territory.bases(c).get(p.location) in {p.faction, self._side()}
-
     def econ_day(self) -> int:
         """素材與經濟的「一天」（升階的三階、捐軍備的上限）：同回體丹的換日（_pill_day，台灣 00:00）。機器人照它算。"""
         return self._pill_day()
-
-    # ── 捐軍備、銀兩出口（搬進功能包 tianxia/features/outlets/，全部拆包第 43 批；Game 留一行委派，本體在包裡）──
-
-    def _at_clinic_town(self) -> bool:
-        """名師指點、買破境丹的地方（6.5）：帶醫館標籤的地點、不在路上（看標籤，不看 Config.heal_at_clinic：那個開關關著時哪裡都能療傷）。"""
-        p = self.state.player
-        return p.journey is None and clinic.CLINIC_TAG in (self.content.locations[p.location].tags or [])
 
 
     def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:

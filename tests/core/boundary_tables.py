@@ -132,6 +132,8 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     ("status_view.status_data", "_war_help"): "點戰況圖卡看的說明：第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問",
     ("page_view.shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
     ("page_view.shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
+    ("page_view.shop_view", "_at_own_base"): "店面那一頁（打點的帳簿）要知道在不在大本營：同 (shop_view, _bribe_targets)",
+    ("page_view.shop_view", "_at_clinic_town"): "店面那一頁（打點的帳簿）要知道在不在醫館：同 (shop_view, _bribe_targets)",
     ("page_view.shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）店面那一頁接上店面登記（Shop）",
     ("page_view.season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
     ("page_view.now_entry_html", "_opening_pending"): "開局第一分鐘（城門口三選一還沒選）不放「剛剛」那張卡：江湖頁的「剛剛」是核心",

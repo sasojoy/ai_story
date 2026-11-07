@@ -10,4 +10,7 @@ TABLE = {
     "donate": donate_actions.donate,
     "donate_items": donate_actions.donate_items,
     "_bribe_targets": silver_actions.bribe_targets,
+    # core_rest
+    "_at_own_base": donate_actions.at_own_base,
+    "_at_clinic_town": silver_actions.at_clinic_town,
 }
