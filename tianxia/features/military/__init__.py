@@ -15,6 +15,7 @@ Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `#
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import ContentSlot
 
 
 class MilitaryFeature(Feature):
@@ -34,6 +35,16 @@ class MilitaryFeature(Feature):
     carried: tuple[str, ...] = ()
     # 第 2 階晉升奇遇與晉升表（第 33 批）、機緣、伏筆與準備事件（第 34 批；總表附錄甲）；content.py 照它到這一包的 content/ 載；檔名照舊
     content = ("promotions.json", "events/promotion.json", "opportunities.json", "foreshadows.json", "events/foreshadow_fragments.json", "events/foreshadow_prep.json")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("foreshadows", lambda *a: checks.check_foreshadows(*a)),
+            ContentSlot("promotions", lambda *a: checks.check_promotions(*a)),
+            ContentSlot("opportunities", lambda *a: checks.check_opportunities(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         return True
