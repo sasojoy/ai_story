@@ -12,13 +12,16 @@
 """
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass, field
 
-from .martial_arts import MartialArt
+from .core.content_base import NUMBER_IN_TEXT
+from .martial_arts import ATTRIBUTES, QUALITIES, MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
 from . import moves, tactics
 from .state import GameState
 from .world_state import WorldStateStore
+from .zh import to_traditional
 
 POINT_HOOKS = {"win_xinde", "train_stamina"}  # 這兩個的數字是點數（心得、體力），其他都是比例
 
@@ -332,3 +335,97 @@ def fixed_art(content: Content, art: MartialArt) -> bool:
     from . import arts as arts_mod
 
     return arts_mod.fixed(content, art.id)
+
+
+# ── 內容驗證（第二輪第 96 批）──
+TRAIT_LINE_SLOTS = {"who", "art", "foe"}  # 演出句的三個佔位（S1：出手的人、帶功效的那一門、對手）
+
+
+def _placeholder_problem(line: str) -> str | None:
+    """演出句的佔位有沒有問題；沒問題是 None。之後 trait_line 用 str.format(who=…, art=…, foe=…) 把句子套上去，
+    所以每一個佔位都要是乾淨的 {who}、{art}、{foe}（不接格式、不接轉換、不取屬性或索引），大括號要成對、不能有空的 {}；
+    載入時沒擋下的話，會在戰鬥打到一半才丟 ValueError、KeyError、AttributeError。
+    連續的 {{ 與 }} 在 str.format 裡是寫出一個大括號的跳脫，但演出句裡不會有人真的要大括號，多半是寫壞了的佔位，一律擋下。"""
+    if "{{" in line or "}}" in line:
+        return "不能有連續的 {{ 或 }}（演出句裡用不到大括號本身，佔位只能是 {who}、{art}、{foe}）"
+    try:
+        parsed = list(string.Formatter().parse(line))
+    except ValueError as e:  # 大括號沒有成對（{who搶先、多出來的 }）
+        return f"佔位的大括號沒有成對（{e}）"
+    for _, field, spec, conversion in parsed:
+        if field is None:  # 句子尾巴那一段純文字
+            continue
+        if field not in TRAIT_LINE_SLOTS or spec or conversion is not None:
+            written = "{" + field + (f"!{conversion}" if conversion else "") + (f":{spec}" if spec else "") + "}"
+            return f"用了不認得的佔位 {written}（只能是 {{who}}、{{art}}、{{foe}}，後面不能接格式或屬性）"
+    return None
+
+
+def check_traits(c: Content, need) -> None:
+    """武學的功效（content/traits.json、trait_lines.json，武學與成長設計 13.2、13.4、13.5）：一般功效一個屬性一個、八個都要有，
+    名字不重複；特別功效的 id 不重複；掛點不重複（Loadout 與 traits.amount 都是照掛點找，兩個掛同一點會悄悄只剩一個，
+    含 pool 是 false 的獨特功效）；武學（SkillDef.special）指的特別功效要存在，不在共用清單（pool 是 false）的只能給一門；
+    每個功效都有演出句、演出句的鍵都是功效名（鍵拼錯的永遠挑不到）。每一句都不能是空的、只用繁體中文、不能寫數字或百分比
+    （功效幾層、多少由規則算，句子只寫打法），佔位只能是乾淨的 {who}、{art}、{foe}（_placeholder_problem）。品質的強度倍數
+    （Config.trait_quality_multiplier）四個品質都要寫，少一個那一品的功效強度會悄悄變成 ×1。
+    這份內容選填：兩個檔都沒有就是沒有功效。"""
+    book = c.traits
+    specials = {t.id: t for t in book.special}
+    for quality in QUALITIES:
+        need(
+            quality in c.config.trait_quality_multiplier,
+            f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
+        )
+    if book.general or book.special:
+        primaries = [t.attribute for t in book.general if not t.id]
+        need(sorted(primaries) == sorted(ATTRIBUTES), "content/traits.json：每個屬性要有一個第一個一般功效（沒寫 id 的那個），八個都要有")
+        keys = [t.key for t in book.general]
+        need(len(keys) == len(set(keys)), "content/traits.json：一般功效的 id 不能重複，也不能跟屬性同名")
+        need(not {t.id for t in book.general if t.id} & {h.id for h in book.high}, "content/traits.json：一般功效的 id 不能跟高階技能的 id 一樣")
+        names = [t.name for t in book.general] + [t.name for t in book.special]
+        need(len(names) == len(set(names)), "content/traits.json：功效的名字不能重複")
+        need(len(specials) == len(book.special), "content/traits.json：特別功效的 id 不能重複")
+        general_hooks = [t.hook for t in book.general]
+        need(len(general_hooks) == len(set(general_hooks)), "content/traits.json：一般功效的掛點不能重複")
+        by_hook: dict[str, str] = {}
+        for t in book.special:
+            first = by_hook.setdefault(t.hook, t.id)
+            need(first == t.id, f"content/traits.json：特別功效 {first} 與 {t.id} 掛在同一個掛點 {t.hook}，身上只會留下一個")
+    if book.high:  # 武學技能分檔：高階技能一個屬性最多一個（照主屬性給），id 不重複，名字跟功效、戰法名一樣（演出句照它找）
+        attrs = [h.attribute for h in book.high]
+        need(len(attrs) == len(set(attrs)), "content/traits.json：高階技能一個屬性最多一個")
+        need(len({h.id for h in book.high}) == len(book.high), "content/traits.json：高階技能的 id 不能重複")
+        for h in book.high:
+            need(h.tactic.name == h.name, f"content/traits.json：高階技能 {h.id} 的戰法名字要跟技能名字一樣")
+            need(h.name not in {t.name for t in book.general} | {t.name for t in book.special}, f"content/traits.json：高階技能 {h.id} 跟功效同名")
+    if book.god:  # 特殊頓悟的神品模板：一路一型一個，id 不重複、跟高階技能不撞；帶的一般功效要是同一個屬性的
+        need(len({g.id for g in book.god}) == len(book.god), "content/traits.json：神品意境的 id 不能重複")
+        need(not {g.id for g in book.god} & ({h.id for h in book.high} | {t.key for t in book.general}), "content/traits.json：神品意境的 id 跟高階技能或一般功效撞了")
+        slots = [(g.attribute, g.lean, g.form) for g in book.god]
+        need(len(slots) == len(set(slots)), "content/traits.json：神品意境一路一型只能有一個")
+        generals = {t.key: t for t in book.general}
+        for g in book.god:
+            need(g.tactic.name == g.name, f"content/traits.json：神品意境 {g.id} 的戰法名字要跟模板名字一樣")
+            need(g.general in generals and generals[g.general].attribute == g.attribute, f"content/traits.json：神品意境 {g.id} 帶的一般功效 {g.general} 要是{g.attribute}的")
+            need(g.lean == "無" or (g.lean, g.attribute) in (("正", "陽"), ("邪", "陰")), f"content/traits.json：神品意境 {g.id} 正路要是陽、邪路要是陰")
+    owners: dict[str, list[str]] = {}
+    for skill in c.skills.values():
+        need(skill.kind == "武學" or skill.weapon is None, f"內功 {skill.id} 不能有兵器種類（兵器設計 2.3）")
+        if skill.special is not None:
+            need(skill.special in specials, f"武學 {skill.id}：特別功效 {skill.special} 不存在")
+            owners.setdefault(skill.special, []).append(skill.id)
+    for sid, skills in owners.items():
+        if sid in specials and not specials[sid].pool:
+            need(len(skills) == 1, f"特別功效 {sid} 不在共用清單裡，只能給一門（現在是 {'、'.join(skills)}）")
+    names = {t.name for t in book.general} | {t.name for t in book.special}
+    for name in sorted(names):
+        need(bool(c.trait_lines.get(name)), f"content/trait_lines.json：功效 {name} 沒有演出句")
+    for name, lines in c.trait_lines.items():
+        where = f"content/trait_lines.json：{name}"
+        need(name in names, f"{where} 不是 content/traits.json 裡的功效（鍵拼錯的句子永遠不會被挑到）")
+        for line in lines:
+            problem = _placeholder_problem(line)
+            need(problem is None, f"{where} 的句子「{line[:12]}」{problem}")
+            need(bool(line.strip()), f"{where}：有空白的句子")
+            need(to_traditional(line) == line, f"{where}：文字只能用繁體中文（「{line[:12]}」）")
+            need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")

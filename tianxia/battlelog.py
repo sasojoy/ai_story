@@ -232,7 +232,7 @@ def trait_line(
     句子由呼叫端給的 rng 挑（引擎用名號＋戰報流水號當種子，不碰 Game.rng）；內容沒有這個功效的句子（舊內容）就用一句通用的。
     low_hp 是這一場開打前氣血是不是真的低：不低時，帶 LOW_HP_MARKS 暗號的句子（厚的「氣血見底」）不挑；挑完沒句子了
     （內容只寫了那一句）就用通用的。預設 True＝每一句都能挑。
-    載入時 content.check_traits 已經確定每一句的佔位都是乾淨的 {who}、{art}、{foe}，所以這裡 format 不會丟例外。"""
+    載入時 traits.check_traits 已經確定每一句的佔位都是乾淨的 {who}、{art}、{foe}，所以這裡 format 不會丟例外。"""
     pool = content.trait_lines.get(name) or []
     mark = LOW_HP_MARKS.get(name)
     if mark and not low_hp:
