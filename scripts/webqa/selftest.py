@@ -4,7 +4,8 @@
   2. The same again: the fingerprint is the same (noise counts are allowed to move, they are not in it).
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round.
-  4. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
+  4. A comment added to a stylesheet: the replay runs from the gate and stays green.
+  5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
 usage: python selftest.py --sha <x> --out <dir> [--rounds c] [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only | --walk-only] [--only flows]
 
@@ -92,6 +93,8 @@ def main(argv=None) -> int:
             s = _gate(a, "mut_" + which, "--mutate", which)
             rows.append((f"c round --mutate {which} goes red", s["code"] == 1, f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})}"))
             rows.append((f"c round --mutate {which} ran the replay from the gate", s["replay"]["ran"] and any(x["round"].startswith("replay") for x in s["real"]), f"{s['replay']}"[:300]))
+        s = _gate(a, "quiet", "--mutate", gate.QUIET)
+        rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"
         s = _gate(a, "hostile_hang", "--mutate", "page-hang")
         rows.append(("a page stuck in a loop is exit 2, not a hang", s["code"] == 2, f"exit {s['code']} {s['took']}s tool {[t[:160] for t in s['tool'][:2]]}"))
