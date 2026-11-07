@@ -16,7 +16,7 @@
 | `view.py` | 地盤畫面：`conquest_view`、`siege_you`、`region_name`、`siege_live`、`siege_join`、`siege_margin`、`admin_choices`（管理者頁的下拉選單）；`SIEGE_STATUS`、`siege_status_text` |
 | `admin_actions.py` | 管理者救場：`conquest_set`、`conquest_progress`、`conquest_letter`、`conquest_cancel` |
 | `routes.py` | `GET /api/xingshi`；`admin_tools`：`conquest_set`、`conquest_progress`、`admin_conquest_letter`、`conquest_cancel`、`xingshi_now` |
-| `conquest_day.py`、`xingshi.py` | 規則模組（舊名 `tianxia/conquest_day.py`、`tianxia/xingshi.py` 留成指到同一個模組的別名）；`xingshi.check_lines` 驗 這一包的 `content/xingshi_lines.json` 的句型（原本在 `content.py`） |
+| `conquest_day.py`、`xingshi.py` | 規則模組；`xingshi.check_lines` 驗 這一包的 `content/xingshi_lines.json` 的句型（原本在 `content.py`） |
 
 `conquest_day` 的 `void`、`note_void`、`today`（連 `_rumor`）先搬進了共用規則層 `conquest`（`siege`、`orders` 就不必 import 包），`conquest_day` 裡留同名的 import。
 
@@ -33,9 +33,9 @@
 - `Game._conquest_side`（陣營是哪一軍）、`_sieges`、`_joinable`、`_cancel_siege`、`_flavor_sink`：包經 `ctx` 叫（服務清單）。
 - 沒有選項前綴：戰書走 `/api/do/conquest_letter`，不在選單上；假人不下戰書（`bot_policy` 只讀 `conquest` 規則）。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-過渡 import 共 1 處（包到舊模組，標了「# 過渡：待搬」；全部拆包第 40 批合完重印）：`view`→`atlas`。原本還有 `day_actions`→`annals`（第 29 批之二改 import 核心）、`letter_actions`→`ranks`、`view`→`ranks`（第 40 批 `ranks` 收進共用規則層，行尾註改寫成「共用規則層」），不算過渡。舊模組到包有 `engine.py` 的 GAME_IMPORTS 五行與 `conquest_day`、`xingshi` 兩個別名（理由在邊界測試的 `# territory_acts` 段）。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。
 第 50 批合完重印 **0 處**：`view`→`atlas` 收進共用規則層（`atlas` 第 50 批進 `registry.SHARED`），行尾註改「共用規則層」。
 
 ## 測試
@@ -52,7 +52,7 @@
 - 別包的：`tianxia/features/battle/tests/test_siege_cancel.py`（叫 `admin_conquest_cancel`）、`tianxia/features/sortie/tests/test_sortie_report.py`（叫 `_deliver_conquest`）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+**行狀記一筆讀核心**（全部拆包第 29 批之二）：`from tianxia.core import annal_base as annals`（核心本體）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `conquest`（`day_actions.conquest_tick(ctx, True)`，回傳不接）、`conquest.deliver`；`advance.turn` 的 `conquest`（`conquest_tick(ctx, False)`，回話接進 `msgs`）、`conquest.deliver`；`tick` 的 `conquest`（`conquest_tick(ctx, True)`，回話接進 `msgs`）。
 

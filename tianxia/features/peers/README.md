@@ -1,7 +1,7 @@
 # 玩家互動一（`tianxia/features/peers/`）
 
 此地還有誰、玩家卡與卡上的動作登記表、邀請框（打招呼、名帖、切磋、論武、結伴同行共用的 `invite:` 選項）、打招呼、贈物、名帖（定稿、遞、回帖、檢舉、管理者撤下與放回）。全部拆包第 37 批搬進來，行為一個字不變。
-第 38 批再搬進來：切磋、論武（三段式首創取名）、截殺（含策馬脫身），與假人答切磋、答論武、截殺（`spar`、`discuss`、`raid` 三個模組，舊名留別名）。
+第 38 批再搬進來：切磋、論武（三段式首創取名）、截殺（含策馬脫身），與假人答切磋、答論武、截殺（`spar`、`discuss`、`raid` 三個模組）。
 通緝（`wanted.py`）第 45 批搬進懸賞榜包（`tianxia/features/bounties/`），卡上動作的登記表搬進核心 `core/cards.py`；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，`Game` 上的名字掛在 `game_api.py` 的表）。
 
 - 導覽：`docs/guide/散人與玩家互動.md`（玩家卡、切磋、論武）。
@@ -10,15 +10,15 @@
 
 ## 裡面有什麼
 
-- `social.py`（原 `tianxia/social.py`，舊名是別名）：玩家卡 `card`、贈物、打招呼（`Gesture`、`calls`）。卡上動作的登記表 `ACTIONS`／`CardAction`／`CardButton`／`register`（切磋、論武、截殺、通緝也登記進同一張）在核心 `tianxia/core/cards.py`（第 45 批），`social` re-export 同一批物件。
+- `social.py`（原 `tianxia/social.py`）：玩家卡 `card`、贈物、打招呼（`Gesture`、`calls`）。卡上動作的登記表 `ACTIONS`／`CardAction`／`CardButton`／`register`（切磋、論武、截殺、通緝也登記進同一張）在核心 `tianxia/core/cards.py`（第 45 批），`social` re-export 同一批物件。
   「此地還有」的判斷（`here`、`visible`）與身分字（`side`、`affiliation`、`GONE`）不在這裡：先拆成核心的查詢服務 `tianxia/core/presence.py`（窗口 `Config.presence_seconds`），`social` 從那裡 re-export 同一批函式物件；
   酒肆（客人名單、查人）、探索（結算卡的「此地還有」）、狀態列都直接問核心。
-- `invites.py`（原 `tianxia/invites.py`）：邀請的帳（`WorldState.invites`）；`mingtie.py`（原 `tianxia/mingtie.py`）：名帖的規則；`mingtie_card.py`（原 `tianxia/mingtie_card.py`）：遞名帖掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（原本是 `engine.py` 頂端 import 它）。四個舊名都是指到同一個模組物件的別名。
+- `invites.py`（原 `tianxia/invites.py`）：邀請的帳（`WorldState.invites`）；`mingtie.py`（原 `tianxia/mingtie.py`）：名帖的規則；`mingtie_card.py`（原 `tianxia/mingtie_card.py`）：遞名帖掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（原本是 `engine.py` 頂端 import 它）。
 - `actions.py`：原本 `Game` 上的 6 個方法——`peers_here`、`peer`（`_peer`）、`peer_card`、`peer_request`、`peer_act`、`calls_here`。
 - `invite_actions.py`：7 個——`options`（`_invite_options`）、`invite`（`_invite`）、`answer_invite`、`answer_on_card`、`greet_back`、`tell_sender`、`status`（`_invite_status`）；加 `title`（原 `_action_title` 的 invite 那一支）與兩句邀請沒成局的字（`INVITE_LAPSED`、`INVITE_LAPSED_AWAY`，`engine` 照舊拿得到）。
 - `pair_actions.py`：6 個——同一對人的帳（`pair_key`、`pair_left`、`pair_tick`）與贈物（`gifts_left`、`gift_day_left`、`gift_day_tick`）。切磋、論武的帳還是它們自己用（第 38 批）。
 - `mingtie_actions.py`：12 個——`shared_or_none`、`face`、`view`、`screen`、`make`、`send_problem`、`send`、`swap`、`report`、`admin_reports`、`admin_remove`、`admin_restore`。
-- `spar.py`／`discuss.py`／`raid.py`（原 `tianxia/spar.py`、`discuss.py`、`raid.py`，舊名是別名）：切磋、論武、截殺掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（切磋 50、論武 55、截殺 60；通緝 65 還在 `engine.py` 頂端登記，第 45 批）。
+- `spar.py`／`discuss.py`／`raid.py`（原 `tianxia/spar.py`、`discuss.py`、`raid.py`）：切磋、論武、截殺掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（切磋 50、論武 55、截殺 60；通緝 65 還在 `engine.py` 頂端登記，第 45 批）。
 - `spar_actions.py`：7 個——`who_problem`（論武、截殺也問）、`left`、`answer_problem`、`refusal`、`send`、`spar`、`spar_record`。
 - `discuss_actions.py`：12 個——`left`、`items`、`cost_of`、`refusal`、`send`、`forge_pair`、`request`（A 段）、`forge`、`merge_problem`、`invite_problem`、`item_problem`、`discuss`（C 段），加 `DISCUSS_SAME`、`THEIR_SIDE`、`_refusal`。
   三段式的 B 段（`prepare_peer`、`screen_peer`）第 69 批進了 `routes.py`，路由照舊經 `shell.` 叫（殼留一行包裝：`tianxia/features/peers/tests/test_discuss.py` 換 `server.prepare_peer`、`server.screen_peer`）。
@@ -47,7 +47,7 @@
 結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；`Game` 上的名字掛在 `game_api.py` 的表）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
 `engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`test_discuss.py` 從 `engine` 拿的過渡；第 61 批拿掉，`test_discuss` 改讀 `discuss_actions`）。
 懸賞榜第 45 批成包，截殺讀的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處改讀核心 `core/bounty_base`。
-論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 3 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `fusion`。
+論武的 `discuss_actions` 讀共用層 `fusion`（合成與揣摩，第 87 批收進）。
 網頁那一半（`MT_INKS` 等）第 3 階才切，這一批不碰 `web/`。
 
 ## 測試
@@ -70,13 +70,13 @@
 - `tests/core/test_presence_window.py`（5 條）：「此地還有」的窗口（24 小時）與主機端兩支腳本刻意不跟著拉長——窗口的判斷已是核心的查詢服務（`core/presence.py`），這份留在核心測試；酒肆的 `tianxia/features/tavern/tests/test_tavern_seek_presence.py` 守「酒家說得出『此刻』不能比『此地還有』寬」，兩份不重複（一個管設定與腳本，一個管酒肆的查人），都原樣過。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-過渡 import 3 處（全部拆包第 45 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）；第 38 批加的 `discuss_actions.py` 到 `fusion`（合成與揣摩，`SHARED_LATER`）；`raid_actions.py` 到 `bounties` 第 45 批改讀核心 `core/bounty_base`。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`raid_actions.py` 讀核心 `core/bounty_base`。
 
 ## 量到的（第 37 批 Task 5）
 
-包的測試 14 條 6.8 秒；改包任一檔挑到 219 條；過渡 3 處；Game 委派 21 個加 `_yuedan_line`；`GAME_DIRECT` 7 個（切磋、論武，第 38 批拿掉）；`engine.py` 9,369 行。`same_behavior` 的 `peers`、`tavern`、`roam` 三軌三種設定整段、半舊半新逐位元組一樣。細節見計畫 5.4。
+包的測試 14 條 6.8 秒；改包任一檔挑到 219 條；Game 委派 21 個加 `_yuedan_line`；`GAME_DIRECT` 7 個（切磋、論武，第 38 批拿掉）；`engine.py` 9,369 行。`same_behavior` 的 `peers`、`tavern`、`roam` 三軌三種設定整段、半舊半新逐位元組一樣。細節見計畫 5.4。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `peers`（`actions.carry_season`：名帖與一天的次數，不看開關）。
 
@@ -100,5 +100,5 @@
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
-- `bots.py` 多 `_answer_discuss`（第 101 批）。`mingtie.py`、`bots.py` 到 `leaderboard` 第 88 批起、`discuss_actions.py` 到 `fusion` 第 87 批起都是共用規則層，上面寫的過渡 3 處清掉。
+- `bots.py` 多 `_answer_discuss`（第 101 批）。`mingtie.py`、`bots.py` 到 `leaderboard` 第 88 批起、`discuss_actions.py` 到 `fusion` 第 87 批起都是共用規則層。
 - `admin_mingtie_reports` 改由這一包登記的 `admin` 表 `mingtie` 格叫，不再是 server 叫（第 90 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

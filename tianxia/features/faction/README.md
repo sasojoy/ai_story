@@ -15,7 +15,7 @@
   加 `pending_options`（選單「接管整個選單」的三段：拜入要依附的門派之後還沒挑一邊、投靠確認、叛投確認；原本寫在 `_everyday_options` 裡）與 `SECT_LABEL`（原本寫在 `engine.py`）。
 - `lean_actions.py`：改幫三個——`lean_options`（`_lean_options`）、`lean_anytime`（選單上沒有它時照樣收；由 `MENU_ORDER["stale"]` 的 `lean` 格 `stale_cell` 叫，第二輪第 92 批）、`lean_step`。
 - `defect_actions.py`：叛投——`defect_step`（兩步：按、確定／再想想）、`left_names`、`leave_behind`、`defect_targets`；加 `defect_options`（`_everyday_options` 的叛投迴圈）與 `scene`（`SCENE_ORDER` 的 `own/defect`，叛投確認畫面）。
-- `defection.py`（原 `tianxia/defection.py`，舊名是別名）：叛投的規則——能不能叛投、去哪些槽、確認畫面的話（`prompt`）、`clear_progress`／`_clear_own`／`defect`。
+- `defection.py`（原 `tianxia/defection.py`）：叛投的規則——能不能叛投、去哪些槽、確認畫面的話（`prompt`）、`clear_progress`／`_clear_own`／`defect`。
 - `ending_actions.py`：季末與三方卡——`season_grant`（換季開場照上一季論功發起手資源與稱號）、`four_wins`、`ending_card`、`tier_outlook`、`tier_hint`、`gentry_now`、`sides_card`。
 - `bots.py`：假人的分數（原本 `bot_policy.score` 的 `defect`、`sect` 兩段；`faction:` 原本落到最後的 `None`）：三個前綴一律回 `None`。投靠與確認仍走 `bot_policy._toward_faction`（不經 `score`）。
 - 內容檔：`content = ("sects.json", "events/sects.json")`（門派與拜入門派的事件，總表附錄甲歸陣營；`content.py` 照它到這一包的 `content/` 載）。測試內容的 `sects.json` 在 `tests/content/`（全部拆包第 63 批）；測試內容裡拜入門派的 `join` 事件照舊在 `tests/fixtures/content/events/test.json`（那個檔不拆：dict 先後就是抽籤先後）。
@@ -58,10 +58,10 @@
 - 「你這一步」的去投靠那一格（第 36 批）：`tests/bots/test_step.py`（9：去投靠的目標是最近的投靠點、先後在新手目標之後）、`tests/map/test_weekcard.py`（7：散人的卡最後一件是去投靠）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_step`）鎖住。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-過渡 import 1 處（行尾標「過渡：待搬」；全部拆包第 45 批合完重印）：懸賞榜第 45 批成包，`join_actions.py`、`lean_actions.py`、`defection.py` 改讀核心 `core/bounty_base`（`stranded`、`STRANDED_*`、`drop_stranded`）；
-`events.event_candidates`（`join_actions.py`：拜入門派那一顆）。`ranks`（階與稱號；`defection.py`）第 40 批收進共用規則層，不算過渡（原本 5 處）。叛投的 `stranded` 格第 45 批由懸賞榜包登記（`BountiesFeature.defection()`），`_STRANDED_CORE` 空了留 `{}`。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`join_actions.py`、`lean_actions.py`、`defection.py` 讀核心 `core/bounty_base`（`stranded`、`STRANDED_*`、`drop_stranded`）。
+叛投的 `stranded` 格第 45 批由懸賞榜包登記（`BountiesFeature.defection()`），`_STRANDED_CORE` 空了留 `{}`。
 確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.grant` 的 `faction`（`ending_actions.season_grant`：開場那一則之後，`on_season_start` 在它之前）。
@@ -86,5 +86,5 @@
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
-- `bots.py` 多 `_toward_faction`（第 101 批）。`join_actions.py` 的 `events.event_candidates` 第 87 批起是共用規則層，不算過渡。
+- `bots.py` 多 `_toward_faction`（第 101 批）。`join_actions.py` 的 `events.event_candidates` 第 87 批起是共用規則層。
 - `check_faction_choices` 在這一包的 `checks.py`，原位經 `check_at` 叫（第 100 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

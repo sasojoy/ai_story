@@ -8,7 +8,7 @@
 ## 裡面有什麼
 
 - `tianxia/story_base.py`（**共用規則層**，不在包裡）：`storyline.py` 前半原樣搬出來的底座——常數（`WORLD`、`HISTORY`、`OPTION`、`JOURNAL`）、登記鉤子的字典（`TASKS`、`TASK_LEFT`、`REFRESH_HOOKS`、`FIGHT_HOOKS`、`END_HOOKS`）、`on`、`definition`、`active`、`room`、`here`、換字（`vary`）、開頭（`roll_start`、`start`、`_enter`）、`current`、`stage_art`、`question_text`、`open_quiz`、`heard`。放在共用層是因為別人也讀：核心的 `rules.fill_marks`（換字）、事件檢定（`heard`）、`Game` 的幾個讀取，與兩個已成包的包——探索包（`roll_start`）、有所感包（頓悟那一條線登記鉤子、開線、開第一題）；這些是模組層登記，不能改走 `ctx`。比總表寫的「換字那一小段」大，原因在計畫 Review Focus 1。
-- `storyline.py`（原 `tianxia/storyline.py` 的後半：`task_note`、`retry_note`、`waiting`、`doable`、`ready_event`、`label`、`options`、`pending_lines`、`quiz_menu`、`answer`、`wait_text`、`fought`、`route`、`tick`、`finish`、`aftermath`、`close`、`close_season`、`seen`……，與 `PENDING_HEAD`、`LATER_LABEL` 這些玩家看得到的字）：開頭 re-export `story_base` 的每一個名字，所以 `from tianxia import storyline`（舊名 `tianxia/storyline.py` 留成 `sys.modules` 別名，同一個模組物件）照舊拿得到全部，往 `storyline.TASKS[...]`、`FIGHT_HOOKS[...]` 裡登記的就是 `story_base` 同一個字典。
+- `storyline.py`（原 `tianxia/storyline.py` 的後半：`task_note`、`retry_note`、`waiting`、`doable`、`ready_event`、`label`、`options`、`pending_lines`、`quiz_menu`、`answer`、`wait_text`、`fought`、`route`、`tick`、`finish`、`aftermath`、`close`、`close_season`、`seen`……，與 `PENDING_HEAD`、`LATER_LABEL` 這些玩家看得到的字）：開頭 re-export `story_base` 的每一個名字，所以 `from tianxia.features.story import storyline` 拿得到全部，往 `storyline.TASKS[...]`、`FIGHT_HOOKS[...]` 裡登記的就是 `story_base` 同一個字典。
 - `actions.py`：原本 `Game` 上的 10 個方法（名字去掉前導底線、第一個參數 `ctx`；`story_act`、`story_fight`、`story_bout` 只有包裡叫，`Game` 不留），加上核心原位叫的 4 個本體（`story_menu`、`story_options`、`close_season`、`story_title`）。模組層 import `chapters`（章回主線；載入時往 `storyline.TASKS` 登記「章回的一拍」，原本是 `engine` 在模組層 import，載入時機不能晚）。
 - 掛鉤：`enabled` 一直是 True（線自己看 `Config.jianfa.storylines`；灰掉的包不接 choose，落到 else 當成事件選項炸掉）；`prefix = "story"`；`choose` 吃 `story:`（按「未了之事」那一顆、答題的答案 `story:<線>:a<序號>`、先擱著 `story:<線>:later`；標題＝線的名字，動作之前先拿）；`content`（四個長篇奇事的段落事件檔）；`player_fields`；核心的效果格 `effects()`（`story` 那一格：`storyline.effect_step`，一條線的一步——記號、往哪裡、紀念物收與交；全部拆包第 32 批，原本 `rules.apply_effect` 最後一段直接寫 `storylines`、`keepsakes`）。
 - **沒有 `bots.py`、沒有 `APIRouter`**（畫面在 `web/story.js`，第 66 批）：`bot_policy.score` 本來就沒有 `story:` 那一段（落到最後的 `None`），拿了前綴之後 `bot_pick` 預設回 `None`，一樣不按；整季機器人不按「先擱著（`story:*:later`）」第 60 批搬成這一包的 `Feature.bot_idle`（要比結尾，`bot_always` 是前綴，接不了）。`/api/do/story_seen` 在 `routes.py` 的 `main_actions`（第 68 批）；`/api/main` 的 `story_cards` 在殼的 `main_view`，照舊叫 `Game` 的委派。
@@ -28,11 +28,10 @@
 - `choose`、`_event_progress` 叫 `_story_tick`：每個動作結束那一格，不是掛鉤的位置；同步那一下第 55 批換成 `sync.deliver` 的 `story` 那一格（召見之後、席次之前）。
 - 標題與動作原本在 `_action_title` 與 `choose` 的 elif 鏈，換成 `choose` 掛鉤的 `Outcome(title, run)`。
 
-## 過渡（手冊 3.11）
+## import 的規矩（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：沒有了（全部拆包第 40 批合完重印 0 處）：`actions.py` 那一行 `chapters` 第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層」；`storyline.py` 的 `annals` 第 29 批之二改 import 核心。共用層 `story_base` → `atlas`（`here` 的大區）第 50 批起是共用層之間（`atlas` 收進 `registry.SHARED`），不再記；`story_base` → `chapters`（`vary` 的大事結果，函式裡）第 40 批起是共用層之間，不再記。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。
 - 章回的開回、收回（原本 `chapters.tick`，叫這一包的 `finish`）第 40 批整段搬進這一包：`storyline.chapter_tick`（`story_tick` 叫它，先後不變）；`chapters` 讀一條線的 `active`、`current`、`here`、`doable` 改讀底座 `story_base`（`waiting`、`doable` 與新的 `mark_of` 第 40 批搬進底座，`storyline.py` 照原名 re-export 同一個物件；`rules.check_condition` 的 `story_marks`、`story_marks_max` 經 `story_base.mark_of` 讀）；`chapters` 載入時往底座的 `story_base.TASKS` 登記章回的一拍，不 import 這一包。
-- 舊模組 → 包：`engine` 1 行（`story_actions`）、別名檔 `tianxia/storyline.py`；`bot`、腳本、測試（`weekcard` 第 36 批起收進核心，`OPTION` 改讀共用規則層的 `story_base`）。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的：二、查詢 `# story` 一段（`ctx._story_begin`：探索包叫它，原本列在三、過渡 explore 那一行）；包裡叫回 `Game` 的其餘都已在清單（`_present`、`_story_squad`、`_judged`、`_fight_with`、`_style_note`、`_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）。
 
 ## 測試
@@ -42,14 +41,14 @@
 另外要跑的（混在別人檔裡的，改這一包時連它們一起跑）：
 
 - `tests/core/test_chapters.py`（章回主線：經 `game._story_tick()` 走這一包的 `storyline.chapter_tick`〔第 40 批從 `chapters.tick` 整段搬進來〕，也用 `storyline.vary`、`TASKS`、`start`；檔名對不上，改 `storyline.py` 挑不到它）、`tests/web/test_week_card_web.py`（本週卡：`game._story_tick()`、`OPTION`）。
-- 有所感包的 `tianxia/features/sense/tests/test_epiphany.py`、`test_epiphany_name_web.py`（頓悟那一條線登記的鉤子，依賴 `story_base` 與 `storyline` 別名）。
+- 有所感包的 `tianxia/features/sense/tests/test_epiphany.py`、`test_epiphany_name_web.py`（頓悟那一條線登記的鉤子，依賴 `story_base` 與 `storyline`）。
 - 探索包的 `tianxia/features/explore/tests/test_explore_one.py`、`test_explore_one_polish.py`（擲開頭 `roll_start`）。
 
 ```
 python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/core/test_chapters.py tests/web/test_week_card_web.py
 ```
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+**行狀記一筆讀核心**（全部拆包第 29 批之二）：`from tianxia.core import annal_base as annals`（核心本體）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `story`（`actions.deliver_story`，不進回話）；`season.carry` 的 `story`（`actions.carry_season`，紀念物與跨季旗標）。
 
