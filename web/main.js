@@ -682,7 +682,8 @@
     const w = S.main.week_card;
     if (!w) return;
     S.wkOpen = S.wkOpen && S.wkOpen.key === wkKey(w) && S.wkOpen.id === id ? null : { key: wkKey(w), id };
-    wkRepaint(`[data-act="wk"][data-id="${id}"]`);
+    // 「這一季在打什麼」那一層蓋在上面：不把焦點還給卡上那一顆（程式設的焦點 iOS 會畫一圈框，Joy 2026-11-07 截圖的藍框就是它）
+    wkRepaint(id === "why" ? "" : `[data-act="wk"][data-id="${id}"]`);
   }
   function wkNext() {
     const w = S.main.week_card;
