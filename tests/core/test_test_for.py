@@ -1365,6 +1365,7 @@ def _real_service(module: str, function: str):
 @pytest.mark.parametrize("module, function, wants", [
     ("status_view", "status_data", {"test_renown_status.py", "test_jianghu_page_web.py", "test_explain2.py", "test_fronts.py"}),
     ("page_view", "shop_view", {"test_jianghu_page_web.py", "test_shop.py", "test_shop2.py", "test_journal.py", "test_rumor_layers.py", "test_front_lines.py"}),
+    ("scene_view", "scene_art", {"test_scene_art.py", "test_place_state.py", "test_marks_wired.py", "test_engine.py"}),  # 第 91 批量的：scene 1、place 1、marks 5、engine 5，併起來 12 個
 ])
 def test_the_real_view_files_pick_their_ground_not_core_and_smoke(module, function, wants):
     """真的 core/status_view.py、core/page_view.py 照 CORE_SERVICES 的底挑（第 81 批量的：status、jianghu 各只有 1 個檔，真的在測 status_data 的 test_explain2 24 處、
@@ -1374,6 +1375,15 @@ def test_the_real_view_files_pick_their_ground_not_core_and_smoke(module, functi
     assert wants | {"test_feature_boundaries.py"} <= names
     assert not picked.core and not picked.smoke
     assert len(names) <= test_for.IMPORT_CAP
+
+
+def test_the_scene_view_goes_by_its_ground_even_when_the_name_says_nothing():
+    """真的 core/scene_view.py（第 91 批開檔）：location_text、_own_ended 的名字認不出功能（service_word 空字串），改它們一樣挑到底的四群；
+    第 91 批量的：底裡 scene 1 個檔、place 1、marks 5、engine 5。"""
+    assert test_for.service_word("location_text") == test_for.service_word("_own_ended") == ""
+    for function in ("location_text", "_own_scene_text", "_own_ended", "_art_place"):
+        names = {p.name for p in _real_service("scene_view", function).files}
+        assert {"test_scene_art.py", "test_place_state.py", "test_marks_wired.py", "test_engine.py", "test_feature_boundaries.py"} <= names, function
 
 
 def test_a_real_view_helper_without_a_word_goes_with_the_functions_that_call_it():
@@ -1386,10 +1396,10 @@ def test_a_real_view_helper_without_a_word_goes_with_the_functions_that_call_it(
 
 
 def test_the_view_delegates_are_read_from_the_engine():
-    """Game 上委派給 status_view、page_view 的（test_for.core_delegates 照語法樹認）跟邊界測試的 CORE_VIEW_DELEGATES 是同一批；模組裡的函式名與方法名相同。"""
+    """Game 上委派給 status_view、page_view、scene_view 的（test_for.core_delegates 照語法樹認）跟邊界測試的 CORE_VIEW_DELEGATES 是同一批；模組裡的函式名與方法名相同。"""
     import test_feature_boundaries
     found = test_for.core_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8"))
-    views = {m: f for m, (mod, f) in found.items() if mod in ("status_view", "page_view")}
+    views = {m: f for m, (mod, f) in found.items() if mod in ("status_view", "page_view", "scene_view")}
     assert set(views) == set(test_feature_boundaries.CORE_VIEW_DELEGATES)
     assert all(m == f for m, f in views.items())
 

@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SceneHook, SeamHook, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -323,8 +323,8 @@ class Seams(Fake):
     def on_own_turn(self, ctx):
         self._note("on_own_turn")
 
-    def scene(self, ctx):
-        return "**假的宴席**" if self.seated else None
+    def scenes(self):  # core_scene（第二輪第 91 批）：原本的 scene 掛鉤
+        return (SceneHook("own", "feast", lambda ctx: "**假的宴席**" if self.seated else None),)
 
     def scene_over(self, ctx):
         return self.over
@@ -478,7 +478,7 @@ def test_a_verb_owner_names_the_squad_its_press_fights(game, seams):
 
 
 def test_the_scene_and_the_report_page_ask_the_packages(game, seams):
-    """場景卡：自己眼前的那一張問 scene（_own_scene_text 擂台之後）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
+    """場景卡：自己眼前的那一張問 scenes 登記的格（SCENE_ORDER["own"]）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
     自己眼前的事接在底下）。戰報頁那一筆問 record_detail。三個都不問 enabled。"""
     g = _made(game)
     seams.open = False
@@ -1782,6 +1782,102 @@ def _menu_core_slots(at):
     from tianxia.features.travel import departure
 
     return set({**engine._MENU_CORE, "block": atlas._BLOCK_CORE, "depart": departure._DEPART_CORE}.get(at, ()))
+
+
+# core_scene（第二輪第 91 批「場景卡收接縫」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第91批.md 第二節）
+
+
+class Sceney(Feature):
+    """只登記場景卡的格的假包；open 是 enabled 的答案（這些格不問它）。"""
+
+    name = "sceney"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def scenes(self):
+        return self.hooks
+
+
+def test_the_scene_order_is_the_table_in_the_plan():
+    """順序就是行為：每一個位置的格照換成掛鉤之前 if 鏈一支一支的先後（計畫第二節），連核心自己的格一起列，一格不挪。改這張表先過 PM。"""
+    assert features_core.SCENE_ORDER == {
+        "own": ("ended", "event", "duel", "arena", "feast", "sense", "story", "talk", "ally", "faction", "defect", "audience", "omen", "road", "place"),
+        "art": ("ended", "battle", "event", "bout", "feast", "sense", "talk", "place"),
+    }
+    assert Feature().scenes() == ()
+
+
+def test_a_package_can_only_take_a_scene_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一個位置都驗）、沒有的位置、兩包（或同一包兩次）登記同一格，scene_hooks 都丟 ValueError；
+    核心自己的格打錯字、沒有這個位置也丟。"""
+    run = lambda ctx: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("art", "story", run)])])  # 答題不在圖的表上是刻意的
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("nothing", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("own", "feast", run)]), Sceney([SceneHook("own", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("own", "feast", run), SceneHook("own", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("nothing")
+    with pytest.raises(ValueError):
+        features_core.scene_first("own", {"plce": run}, "ctx")
+    with pytest.raises(ValueError):
+        features_core.scene_first("nothing", {}, "ctx")
+
+
+def test_the_first_scene_slot_that_answers_takes_the_card_and_an_empty_answer_counts(monkeypatch):
+    """scene_first 照表的順序叫：包的與核心的格穿插，照表、不照登記的先後；關著的包照叫（原位不看開關）；第一個不是 None 的就回它、後面的不叫。
+    "" 與 {} 也算接管：取名的意境不在了文字就是空字串，不往下掉到地點；{} 是「這個畫面是我的，沒有圖」。那一格的包沒登記就跳過（契約測試換掉 FEATURES 時）。"""
+    calls = []
+
+    def note(slot, back=None):
+        return lambda ctx: calls.append((slot, ctx)) or back
+
+    hooks = [SceneHook("own", "road", note("road", "路上")), SceneHook("own", "sense", note("sense", "")), SceneHook("own", "duel", note("duel"))]
+    monkeypatch.setattr(registry, "FEATURES", [Sceney(hooks, open_=False)])
+    assert features_core.scene_first("own", {"ended": note("ended"), "place": note("place", "地點")}, "ctx") == ""
+    assert calls == [("ended", "ctx"), ("duel", "ctx"), ("sense", "ctx")]
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("art", "bout", lambda ctx: {})])])
+    assert features_core.scene_first("art", {"place": lambda ctx: {"kind": "place"}}, "ctx") == {}
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.scene_first("art", {"place": lambda ctx: {"kind": "place"}}, "ctx") == {"kind": "place"}
+    assert features_core.scene_first("art", {"ended": lambda ctx: None}, "ctx") is None
+
+
+def test_the_core_and_the_packages_take_every_scene_slot_exactly_once():
+    """核心自己的格與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑（scene_art 靠整條 own 鏈判斷，少一格圖會蓋錯或不見）、也沒有一格兩邊都寫。誰登記哪一格照計畫第二節鎖住。"""
+    from tianxia.core import scene_view
+
+    assert scene_view.OWN_CORE.keys() == {"ended", "event", "place"}
+    assert scene_view.ART_CORE.keys() == {"ended", "event", "place"}
+    for at, theirs in (("own", scene_view.OWN_CORE), ("art", scene_view.ART_CORE)):
+        mine = features_core.scene_hooks(at)
+        assert not mine.keys() & theirs.keys(), at
+        assert mine.keys() | theirs.keys() == set(features_core.SCENE_ORDER[at]), at
+    got = {f.name: sorted((h.at, h.slot) for h in f.scenes()) for f in features_core.registered() if f.scenes()}
+    assert got == {
+        "bout": sorted([("own", "duel"), ("own", "arena"), ("art", "bout")]),
+        "battle": [("art", "battle")],
+        "feast": sorted([("own", "feast"), ("art", "feast")]),
+        "sense": sorted([("own", "sense"), ("art", "sense")]),
+        "story": [("own", "story")],
+        "companions": sorted([("own", "talk"), ("art", "talk")]),
+        "faction": sorted([("own", "ally"), ("own", "faction"), ("own", "defect")]),
+        "socialize": [("own", "audience")],
+        "military": [("own", "omen")],
+        "travel": [("own", "road")],
+    }
 
 
 def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():

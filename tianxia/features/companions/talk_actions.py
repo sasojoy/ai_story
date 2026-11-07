@@ -1,6 +1,6 @@
 """人物對話（功能包；全部拆包第 20 批，計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）：原本 Game 上的 9 個方法（對話的 A 段 dialogue_request、
 C 段進鎖後重驗 checked_prepared、開口 open_dialogue、一輪 talk、帶路的路上說一句 road_say……），名字去掉前導底線、第一個參數是 ctx（第一階就是 Game）。
-Game 留一行的委派給 server（dialogue_request、say_max）、核心原位（choose 前段、交友與求見開口、場景文字）與測試；談著的時候的選單（Game._everyday_options
+Game 留一行的委派給 server（dialogue_request、say_max）、核心原位（choose 前段、交友與求見開口）與測試；場景文字與人像第二輪第 91 批起是場景卡的格（talk_scene、talk_art）；談著的時候的選單（Game._everyday_options
 裡 pending_companion 那一段）也搬進來（talk_options）。
 
 鎖外三段式：A（鎖內很快）dialogue_request 開單、B（鎖外慢）server.prepare_dialogue 叫 companion_agent.prepare_turn 請模型、C（鎖內）Game.choose 的
