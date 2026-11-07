@@ -1,7 +1,7 @@
 """銀兩出口（21 天季，正式季整合 6.5；tianxia/silver.py 是數字與字，這裡是選單與五樣）：自家大本營的捐銀兩、醫館的名師指點與買破境丹、
 鐵匠鋪的看火候、此地談得上話的大勢人物每一位一顆打點門路，都收進「打點」那一間店（不花體力）。
 原本 Game 上的 8 個方法（_silver_options、_bribe_targets、_silver_act、_close_dadian、_silver_bribe、_silver_furnace、_silver_mentor、
-_silver_donate；全部拆包第 43 批搬進來，行為一個字不變）；Game 留一行委派。`_at_clinic_town`（歸核心）留在 Game，包裡經 ctx 叫。
+_silver_donate；全部拆包第 43 批搬進來，行為一個字不變）；Game 留一行委派。`at_clinic_town`（第二輪第 99 批從 Game 搬來）也在這一檔，表上掛 `_at_clinic_town`，核心的店面那一頁與包裡經 ctx 叫。
 """
 from __future__ import annotations
 

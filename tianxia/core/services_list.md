@@ -90,16 +90,13 @@
 - 店面殼（七間店共用）：`ctx._shop_say(...)`、`ctx._shop_after(...)`（同上）、
   `ctx._shop_live(option_ids=None, shop="smith")`（那一串是不是眼前的選單）
 - 修練頁紀錄：`ctx._xinde()`、`ctx._menxia_entry(tag, xinde_before, ...)`（修練頁、煉製頁的動作寫進江湖紀錄，同一種連續的併成一則）
-- 線索（口訣、殘譜、鑄譜、秘方）：`ctx._scrap_find()`、`ctx._overhear(companion_id, msgs)`、
-  `ctx._solved_secrets()`、`ctx._note_solved(before)`；探索那一行悟意境被拿掉的原因 `ctx._insight_blocked(loc)`
+- 線索（口訣、殘譜、鑄譜、秘方）：`ctx._solved_secrets()`、`ctx._note_solved(before)`
 地點（大勢人物＋地圖區；總表附錄甲裁核心）
 - `ctx.place_minutes(loc_id)`（走到那裡要現實幾分鐘）、`ctx._figures_here()`（這個地點的大勢人物：核心的選單也叫）
-回體丹、醫館、地盤、本人對本人、操練的得、閒著（行動與地盤＋散人區）
+回體丹、地盤、本人對本人、操練的得、閒著（行動與地盤＋散人區）
 - 回體丹與體力：`ctx.pill_now()`、`ctx._pill_day()`、`ctx.pill_cap()`、`ctx.pills_left_today()`、`ctx._cost_option(...)`（同上）、
-  `ctx._pill_card_bonus()`、`ctx.take_stamina_pill(pill_only=False)`、`ctx._action_costs()`（各行動花的體力）、
-  `ctx._pill_find(rng)`
-- 醫館：`ctx._at_clinic_town()`（附錄甲裁核心：店面與打點都問）
-- 地盤：`ctx._push_progress(loc_id, nominal, source, how=None)`、`ctx._conquest_side()`、`ctx._at_own_base()`
+  `ctx._pill_card_bonus()`、`ctx.take_stamina_pill(pill_only=False)`、`ctx._action_costs()`（各行動花的體力）
+- 地盤：`ctx._push_progress(loc_id, nominal, source, how=None)`、`ctx._conquest_side()`
 - 本人對本人：`ctx._spar_power(who, against, seal=True)`、`ctx._spar_mirror(result, power)`、`ctx._raid_key(attacker, target)`
 - 操練的得：`ctx._drill_gains(squad, share=None, source="hold", echo=True)`、`ctx._drills_with(squad)`
 - 閒著：`ctx._idle()`（同上）、`ctx.is_idle()`（切磋、論武問的那一個）
@@ -164,7 +161,7 @@
 
 # outlets（全部拆包第 43 批「銀兩出口與捐軍備」：捐素材、捐銀兩、名師指點、買破境丹、看火候、打點門路與帳簿搬進銀兩出口包；
 # 計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.3）。包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：
-- `ctx._at_own_base()`、`ctx._at_clinic_town()`（人在自家大本營、帶醫館標籤的地點；附錄甲裁核心）、`ctx._pill_day()`（「一天」）、`ctx._idle()`、
+- `ctx._pill_day()`（「一天」）、`ctx._idle()`、
   `ctx._side()`、`ctx._log(msgs)`、`ctx._save_season()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx.push_trend(...)`（捐軍備推大本營那一條線）
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`、`figures`（第 40 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）。
 
@@ -514,5 +511,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # core_bots（第二輪第 101 批：每包的按法搬進 `bots.py`，三個新名字）
 - 鐵匠鋪與捐軍備的 `bots.py`（`trade_want`、`donate_want`，從 `bot` 搬來）叫 `ctx.econ_day()`（Game 本體：今天是這一季第幾天，素材買賣的每日額度算這個）
 - 決戰包的 `bots.py`（`_toward_battle`，從 `bot_policy` 搬來）叫 `ctx.travel(dest, mode)`（主人 travel）、`ctx.travel_options(dest)`（主人 map）
+
+# core_rest（第二輪第 99 批：有主的零碎歸位）
+- 拿掉的：`_scrap_find`、`_overhear`（探索包、人物情誼包的表掛著給測試叫，主人只剩自己）、`_insight_blocked`、`_pill_find`（探索包裡直叫，Game 不留）、`_at_own_base`、`_at_clinic_town`（銀兩出口包；核心的店面那一頁經 ctx 問，記在 `CORE_DELEGATE_CALLERS`）。
+- 主人換成共用層、清單不變（Game 留一行委派）：`ctx._figures_here()`（`figures.standing_here`）、`ctx._deliver_big_events()`（`timetable.deliver_big_events`）、`ctx._without_timetable(msgs)`（`timetable.without_announced`）。
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

@@ -310,3 +310,10 @@ for _name in ("timetable", "relations", "plans", "territory", "conquest", "siege
     SHARED[_name] += "載入時的內容驗證也在這裡：核心的 content 在 validate 裡函式內叫（第二輪第 96 批）。"
 # core_content（第二輪第 100 批）：check_figures 從 content.py 搬來，stances、errands 兩格經 features.check_at 問人物情誼包。
 SHARED["figures"] += "載入時的內容驗證也在這裡：check_figures，核心的 content 在 validate 裡函式內叫（第二輪第 100 批）。"
+# core_rest（第二輪第 99 批）：本體從 Game 搬進這幾格，上面別條線也在改，一句接在這裡
+SHARED["renown"] += "一下動作或同步之後接差距、比跨段、寫紀錄（after_action）也在這裡：核心的 engine 留一行委派（第二輪第 99 批）。"
+SHARED["marks"] += "同步時的防漏與出過力的行狀（tick、credits）也在這裡：核心的 engine 在 sync.deliver 那一格叫（第二輪第 99 批）。"
+SHARED["rumor_view"] += "「你不在的時候」那一則（deliver_away）也在這裡：核心的 sync 最後一句叫（第二輪第 99 批）。"
+SHARED["timetable"] += "時刻表大事補進江湖紀錄（deliver_big_events、without_announced）也在這裡：核心的 engine 留一行委派（第二輪第 99 批）。"
+SHARED["figures"] += "此地的大勢人物（standing_here）也在這裡：核心的 engine 留一行委派（第二輪第 99 批）。"
+SHARED["forge_secrets"] += "說書與殘譜的鑄器口訣（clue_line）也在這裡：核心的事件檢定、探索包直叫（第二輪第 99 批）。"
