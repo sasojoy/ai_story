@@ -2009,47 +2009,7 @@ class Game:
         return art.name if art is not None else art_id
 
     def _renown_after(self, synced: bool = False, fresh: list[JournalEntry] | None = None) -> None:
-        """名聲（設計 3.3、6.4、十一之二第 6 條）：這一下的名望、善名、惡名合成一行、接差距（renown.annotate），再比跨段（renown.watch）。
-        動作裡發現的接在這一下那一則江湖紀錄（最新一則、時間是此刻）的最後，得失那一排多一顆金色的「名號傳開」；這一下打了仗，戰報的
-        得失一樣接差距。同步時發現的（synced）另起一則「名聲」；fresh 是這一次同步補進來的那幾則（時間可能比此刻早，例如決戰收場那一刻），
-        一樣接差距。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
-        行狀記升段（只記到過的最高段以上）。開關關著什麼都不做。"""
-        s, c = self.state, self.content
-        if not renown.on(c):
-            return
-        entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None
-        if entry is not None:
-            entry.changes = renown.annotate(entry.changes, s, c)
-        for written in fresh or []:  # 同步時補進來的那幾則（決戰收場後補的戰報與軍餉、首創回饋、擂台的俸）也合成一行、接差距（FB-292）
-            written.changes = renown.annotate(written.changes, s, c)
-        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card is not None else None
-        if record is not None and not synced:
-            record.changes = renown.annotate(record.changes, s, c)
-        crossed = renown.watch(s, c, game_day(c, s.world))
-        if renown.news_up_due(s, c, crossed.up):  # 名聲 4.5：跨過威震州郡，天下大事傳一句（一季一人一次）
-            s.player.flags.add(renown.NEWS_UP_FLAG)
-            add_rumor(s, renown.NEWS_UP.format(name=s.player.name), content=c, layer="world")
-            # 傳聞在共用賽季裡，這裡自己存（FB-291）：動作照例先存季、再 _log，輪詢的同步只存角色——不存的話旗標跟著角色存了，
-            # 那一句卻沒進資料庫，之後也不會再傳
-            self._save_season()
-        if crossed.first and not s.player.renown_told:
-            s.player.renown_told = True
-            journal.add_entry(s, Draft(renown.TOLD_TITLE).entry(s.world.time, [renown.TOLD]))
-        # 名聲 5.1：浩然、血煞要走對那條路；善名惡名從懸賞、截殺來的（不經 rules.apply_effect）也在這裡接到
-        granted = insights.grant_by_name(s, c, self.world) if renown.on(c, "virtue_insight") else []
-        lines = crossed.lines + granted
-        if not lines:
-            return
-        marks = [journal.renown_mark(title) for title in crossed.up]
-        if entry is not None:
-            entry.lines += lines
-            entry.changes += marks
-        else:
-            fresh = Draft(renown.TOLD_TITLE).entry(s.world.time, lines)
-            fresh.changes += marks
-            journal.add_entry(s, fresh)
-        for text, weight in crossed.annals:
-            annals.note(s, c, annals.DEED, text, weight)
+        renown.after_action(self.state, self.content, self.world, self._save_season, synced, fresh)
 
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的

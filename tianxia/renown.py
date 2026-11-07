@@ -4,7 +4,8 @@
 純規則：段、稱號、門檻、季長倍數、名望那一半的折扣、得失後面的差距、跨段比對、說明卡的資料。開關都在 Config.renown（RenownTuning）；
 titles 關著時這裡每個函式都回「沒有」（段 0、空清單、None、倍數 1），其他開關要 titles 開著才有作用（on）。
 門檻乘季長倍數：開季時蓋進 WorldState.renown_scale（world_state.stamp_season），這裡只讀那一欄（scale）。
-只 import models、state、gender、world_state；rules、ranger、territory、team、bounties、arena……反過來呼叫它。"""
+只 import models、state、gender、world_state；rules、ranger、territory、team、bounties、arena……反過來呼叫它。
+after_action（一下動作或同步之後比跨段、寫紀錄；第二輪第 99 批從 Game._renown_after 搬來）函式裡讀 rules、journal、insights、annal_base，頂端 import 會繞圈。"""
 from __future__ import annotations
 
 import math
@@ -13,10 +14,14 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from . import calendar, four_tiers, gender
 from .models import Content
-from .state import GameState, RenownSeen, WorldState
+from .state import GameState, JournalEntry, RenownSeen, WorldState
+
+if TYPE_CHECKING:
+    from .world_state import WorldStateStore
 
 FAME_TITLES = ("無名小卒", "小有名氣", "名動一方", "威震州郡", "天下聞名")  # 第 0 段只寫在說明卡上，狀態列不寫
 PATHS = ("俠", "寇")
@@ -730,3 +735,55 @@ def watch(state: GameState, content: Content, day: int) -> Crossing:
     seen.fame, seen.path, seen.virtue = f, way, v
     out.lines = [line for line in out.lines if line]
     return out
+
+
+def after_action(
+    state: GameState, content: Content, world: WorldStateStore, save_season: Callable[[], None],
+    synced: bool = False, fresh: list[JournalEntry] | None = None,
+) -> None:
+    """名聲（設計 3.3、6.4、十一之二第 6 條）：這一下的名望、善名、惡名合成一行、接差距（annotate），再比跨段（watch）。
+    動作裡發現的接在這一下那一則江湖紀錄（最新一則、時間是此刻）的最後，得失那一排多一顆金色的「名號傳開」；這一下打了仗，戰報的
+    得失一樣接差距。同步時發現的（synced）另起一則「名聲」；fresh 是這一次同步補進來的那幾則（時間可能比此刻早，例如決戰收場那一刻），
+    一樣接差距。上線之後第一次看只記段、寫一則說明（一人只寫一次，renown_told 跨季帶著走）。
+    行狀記升段（只記到過的最高段以上）。開關關著什麼都不做。"""
+    from . import insights, journal  # noqa: PLC0415  rules 頂端 import 這裡：這幾樣都比這裡晚載入，頂端 import 會繞圈或改載入先後
+    from .core import annal_base as annals  # noqa: PLC0415  同上
+    from .journal import Draft  # noqa: PLC0415  同上
+    from .rules import add_rumor, game_day  # noqa: PLC0415  同上
+
+    s, c = state, content
+    if not on(c):
+        return
+    entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None
+    if entry is not None:
+        entry.changes = annotate(entry.changes, s, c)
+    for written in fresh or []:  # 同步時補進來的那幾則（決戰收場後補的戰報與軍餉、首創回饋、擂台的俸）也合成一行、接差距（FB-292）
+        written.changes = annotate(written.changes, s, c)
+    record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card is not None else None
+    if record is not None and not synced:
+        record.changes = annotate(record.changes, s, c)
+    crossed = watch(s, c, game_day(c, s.world))
+    if news_up_due(s, c, crossed.up):  # 名聲 4.5：跨過威震州郡，天下大事傳一句（一季一人一次）
+        s.player.flags.add(NEWS_UP_FLAG)
+        add_rumor(s, NEWS_UP.format(name=s.player.name), content=c, layer="world")
+        # 傳聞在共用賽季裡，這裡自己存（FB-291）：動作照例先存季、再 _log，輪詢的同步只存角色——不存的話旗標跟著角色存了，
+        # 那一句卻沒進資料庫，之後也不會再傳
+        save_season()
+    if crossed.first and not s.player.renown_told:
+        s.player.renown_told = True
+        journal.add_entry(s, Draft(TOLD_TITLE).entry(s.world.time, [TOLD]))
+    # 名聲 5.1：浩然、血煞要走對那條路；善名惡名從懸賞、截殺來的（不經 rules.apply_effect）也在這裡接到
+    granted = insights.grant_by_name(s, c, world) if on(c, "virtue_insight") else []
+    lines = crossed.lines + granted
+    if not lines:
+        return
+    marks = [journal.renown_mark(title) for title in crossed.up]
+    if entry is not None:
+        entry.lines += lines
+        entry.changes += marks
+    else:
+        fresh = Draft(TOLD_TITLE).entry(s.world.time, lines)
+        fresh.changes += marks
+        journal.add_entry(s, fresh)
+    for text, weight in crossed.annals:
+        annals.note(s, c, annals.DEED, text, weight)
