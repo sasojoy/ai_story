@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, StatusHook, WorldHook
+from tianxia.core.features import ContentSlot
 
 
 class SealFeature(Feature):
@@ -33,6 +34,14 @@ class SealFeature(Feature):
     carried: tuple[str, ...] = ("seal_seen",)
     # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
     content = ("seal.json",)
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("seal", lambda *a: checks.validate_seal(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """碎片開著：Config.seal.enabled，而且內容有 content/seal.json（seal.on）。掛鉤都不問它。"""

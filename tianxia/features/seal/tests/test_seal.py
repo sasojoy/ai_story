@@ -11,7 +11,7 @@ import pytest
 
 from conftest import install_season_one, install_showdowns, real_content
 from tianxia import naming, seal
-from tianxia.content import _validate_seal
+from tianxia.features.seal.checks import validate_seal
 from tianxia.models import ShardDef
 from pydantic import BaseModel, Field, ValidationError
 from tianxia.world_state import SealEvent, SealRegistry
@@ -35,10 +35,10 @@ def put_shards(content):
 
 
 def seal_problems(content) -> list[str]:
-    """只跑碎片那一段載入檢查（content._validate_seal），回所有不合格的原因。不跑整份 validate：install_season_one 的縮小時刻表
+    """只跑碎片那一段載入檢查（seal 包 checks.validate_seal），回所有不合格的原因。不跑整份 validate：install_season_one 的縮小時刻表
     引用了測試內容沒有的戰線、人物、地點（整份 validate 本來就不過，test_engine 的決戰測試也都不跑它）。"""
     problems: list[str] = []
-    _validate_seal(content, lambda ok, message: ok or problems.append(message))
+    validate_seal(content, lambda ok, message: ok or problems.append(message))
     return problems
 
 
