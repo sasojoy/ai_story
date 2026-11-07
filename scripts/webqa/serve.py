@@ -80,12 +80,13 @@ from tianxia.sqlite_world import open_world  # noqa: E402
 
 
 # Writers a request kicks off and leaves running: the next request would see their work on one side and not on the other.
-WRITERS = ("xingshi", "event-flavor", "battle-tales", "arena-crowd", "letter", "yuedan")
+WRITERS = ("xingshi", "event-flavor", "battle-tales", "arena-crowd", "letter", "yuedan", "tavern-chatter")
+WRITER_PREFIXES = ("zhuan-",)  # one thread a season: zhuan-1, zhuan-2
 
 
 def _writers_done(seconds: float = 8.0) -> None:
     deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline and any(t.name in WRITERS and t.is_alive() for t in threading.enumerate()):
+    while time.monotonic() < deadline and any((t.name in WRITERS or t.name.startswith(WRITER_PREFIXES)) and t.is_alive() for t in threading.enumerate()):
         time.sleep(0.02)
 
 

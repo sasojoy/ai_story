@@ -708,9 +708,9 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.load("/");
       await c.step(ACT("zhuan-open"), "zh_open", { who: "p1", wait: 800 });
       await c.step(ACT("zhuan-write"), "zh_write", { wait: 800 });
-      await c.step(ACT("zhuan-send"), "zh_send", { who: "p1", wait: 2000 });
       await c.step(ACT("zhuan-vertical"), "zh_vertical", {});
       await c.step(ACT("zhuan-share"), "zh_share", {});
+      await c.step(ACT("zhuan-send"), "zh_send", { who: "p1", wait: 2000 }); // the send button only shows once it is public
       await c.step(ACT("zhuan-rewrite"), "zh_rewrite", {});
       await c.step(ACT("zhuan-close"), "zh_close", { light: true });
       const news = async () => { await c.load("/"); await c.tab("news"); };

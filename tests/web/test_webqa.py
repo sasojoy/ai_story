@@ -3,6 +3,7 @@ import ast
 import gzip
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -277,6 +278,21 @@ def test_the_model_queue_is_off_in_the_wrapper():
     text = (TOOL / "serve.py").read_text(encoding="utf-8")
     assert "server.make_queue = lambda config: None" in text
     assert "server.make_queue" not in text.split("import server", 1)[0]
+
+
+def test_every_named_thread_is_a_writer_or_a_loop():
+    # 名單用完全相等比，zhuan-<季> 永遠對不上、tavern-chatter 沒列：列傳寫好的畫面走不到（第 77 批審查）。新開的背景執行緒也要在這裡表態
+    loops = {"world-scheduler", "push-watch", "narration", "notice-watch", "tales"}
+    tree = ast.parse((TOOL / "serve.py").read_text(encoding="utf-8"))
+    values = {n.targets[0].id: ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in ("WRITERS", "WRITER_PREFIXES")}
+    found = set()
+    for path in [ROOT / "server.py", *(ROOT / "tianxia").rglob("*.py")]:
+        if "tests" in path.parts:
+            continue
+        found |= set(re.findall(r"Thread\((?:[^()]|\([^()]*\))*?name=f?\"([^\"{]+)", path.read_text(encoding="utf-8"), re.S))
+    assert "zhuan-" in found and "tavern-chatter" in found  # 這支掃描自己有效
+    missing = {n for n in found - loops if n not in values["WRITERS"] and not n.startswith(values["WRITER_PREFIXES"])}
+    assert not missing
 
 
 def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
