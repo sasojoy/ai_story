@@ -84,3 +84,7 @@
 照條拆來：`test_faction_facade.py`（6 條，從 `tests/core/test_engine.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py` 多 `_toward_faction`（第 101 批）。`join_actions.py` 的 `events.event_candidates` 第 87 批起是共用規則層，不算過渡。
+- `check_faction_choices` 在這一包的 `checks.py`，原位經 `check_at` 叫（第 100 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

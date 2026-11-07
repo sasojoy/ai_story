@@ -83,7 +83,7 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/peers.js`（名帖的畫法與畫布；此地還有誰、邀請、`socialHtml`、玩家卡、`peerAct` 第 67 批從 `main.js` 切進來）、`web/peers.css`；點擊分派的 `case` 留 `app.js`。
+- 畫面：`web/peers.js`（名帖的畫法與畫布；此地還有誰、邀請、`socialHtml`、玩家卡、`peerAct` 第 67 批從 `main.js` 切進來）、`web/peers.css`；點擊分派第二輪第 84 批進這支 js；表單與 change 第 85 批。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `invites`（第一季才有）；`main` 表 `peers`（`here`、`calls`）。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`mingtie_remove`、`mingtie_restore`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
@@ -97,3 +97,7 @@
 照條拆來：`test_peers_page_web.py`（2 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_peers_shell.py`（3 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py` 多 `_answer_discuss`（第 101 批）。`mingtie.py`、`bots.py` 到 `leaderboard` 第 88 批起、`discuss_actions.py` 到 `fusion` 第 87 批起都是共用規則層，上面寫的過渡 3 處清掉。
+- `admin_mingtie_reports` 改由這一包登記的 `admin` 表 `mingtie` 格叫，不再是 server 叫（第 90 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

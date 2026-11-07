@@ -28,7 +28,7 @@
 
 - **22:00 換天不接世界層**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；換天與分紅在 `world_tick`、`sync`、`advance` 三處（五格，第 55 批換成 `SEAM_ORDER` 的 `tick`、`sync.deliver`、`advance.turn`）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。`Game` 上那兩個委派留給測試，`WORLD_ORDER` 不動。
 - **〈天下形勢〉的 B 段與背景執行緒**（`write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：第 69 批進了 `routes.py`（同月旦評 `write_yuedan`，見最後一段），照舊用殼的佇列、預算、`TALE_THREADS`。
-- `admin_choices` 的 `xingshi`、`conquest` 兩格照舊叫 `Game` 的委派（`/api/main` 的 `conquest`、`xingshi`、`xingshi_mark` 第 66 批改走 `status_slots`，`Game.xingshi_mark` 拿掉）。
+- `admin_choices` 的 `xingshi`、`conquest` 兩格第二輪第 90 批改走 `status_slots`（`admin` 表）（`/api/main` 的 `conquest`、`xingshi`、`xingshi_mark` 第 66 批改走 `status_slots`，`Game.xingshi_mark` 拿掉）。
 - `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）第 68 批搬進 `routes.py` 的 `main_actions`。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
 - `Game._conquest_side`（陣營是哪一軍）、`_sieges`、`_joinable`、`_cancel_siege`、`_flavor_sink`：包經 `ctx` 叫（服務清單）。
 - 沒有選項前綴：戰書走 `/api/do/conquest_letter`，不在選單上；假人不下戰書（`bot_policy` 只讀 `conquest` 規則）。

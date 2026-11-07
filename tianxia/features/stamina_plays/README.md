@@ -36,3 +36,6 @@
 **第 56 批（選單收接縫，核心批）**：`plays/head`、`block/ambush` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_stamina_play_head` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（設伏那一行），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py` 多 `_stamina_play`、`PLAY_CHANCE`、`PLAY_STAMINA`（第 101 批）；要換機會換這裡，換 `bot_policy` 打不到。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

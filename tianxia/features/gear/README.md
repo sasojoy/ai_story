@@ -16,7 +16,7 @@
 - `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
 - `views.py`：`gear_rows`（修練頁裝備那一塊）、`divine_book_view`（見聞榜單的神器譜）。
 - `bots.py`：假人看到 `market:` 的選項怎麼按（原本 `bot_policy.score` 的 market 兩行）；`MARKET_SCORE` 在這裡重寫一份同值常數（8.0），`bot_policy.MARKET_SCORE` 名字照舊。`act:market` 的分數第 60 批搬來（`enter`，`Verb.bot` 問；`bot.pick` 不按是 `Verb.bot_skip`）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
-- `web/gear.js`（檔照手冊 G9 在 `web/`，`web = ("gear.js",)`）：裝備格與馬市的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，57 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——俠客頁裝備那一段的一格 `gearEffect`、`gearCell`，坐騎圖 `horseImg`，馬市 `marketHtml`、`horseCard`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`renderShop`）、`HERO_GEAR_NAMES`、`GEAR_ICONS`。樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
+- `web/gear.js`（檔照手冊 G9 在 `web/`，`web = ("gear.js",)`）：裝備格與馬市的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，57 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——俠客頁裝備那一段的一格 `gearEffect`、`gearCell`，坐騎圖 `horseImg`，馬市 `marketHtml`、`horseCard`。點擊分派第二輪第 84 批進這支 js（`registerClicks`）；留在 `app.js`（殼）的：店面的框（`shopHtml`、`renderShop`）、`HERO_GEAR_NAMES`、`GEAR_ICONS`。樣子在 `web/shop.css`（第 86 批整段切出來，排在 `style.css` 正後面；殼，五包共用）。
 - 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有 `APIRouter`**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many` 第 68 批搬進 `routes.py` 的 `menxia_actions`；`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
 - `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
 
@@ -40,7 +40,7 @@
 
 ## 讀 這一包的 `content/gear.json` 的人
 
-`content.py` 的 `check_gear`、`check_signature_arms` 留在 `content.py`、不接 `check_content`（第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；`SHARED_LATER` 的 `leaderboard`（`gear_card` 讀 `signature_arms`，函式裡經舊名別名）；`mounts` 不讀。
+`check_gear`、`check_signature_arms` 在這一包的 `checks.py`，`content.validate` 原位經 `check_at` 叫，不接 `check_content`（第二輪第 100 批；第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；`SHARED_LATER` 的 `leaderboard`（`gear_card` 讀 `signature_arms`，函式裡經舊名別名）；`mounts` 不讀。
 
 ## 測試
 
@@ -60,3 +60,8 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_horse_art.py`（原 `tests/gear/`）、`test_shop2.py`（原 `tests/gear/`）、`test_shop2_web.py`（原 `tests/web/`）、`test_shop_polish.py`（原 `tests/gear/`）、`test_signature_arms.py`（原 `tests/gear/`）、`test_treasures.py`（原 `tests/gear/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：`market_want`、`MOUNT_SILVER_RESERVE`（第 89 批）、`visit_market`、`feed_mount`、`wear_better`（第 101 批）從 `bot` 搬來，舊名 re-export，換的要換 `gear.bots` 那一份。
+- 過渡：`views.py` 第 88 批改讀共用層 `art_cards.gear_rows`，少 `skillview` 這 1 處。`REF` 搬進 `core/signature_base`，`signature_arms` re-export，`leaderboard.gear_card` 讀核心那一份。
+- 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

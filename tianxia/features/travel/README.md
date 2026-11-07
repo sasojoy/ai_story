@@ -48,3 +48,8 @@
 照條拆來：`test_travel_facade.py`（53 條，從 `tests/core/test_engine.py` 拆來）、`test_travel_shell.py`（10 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：假人的分數 `score`（原 `bot_policy.score` 的 `move:` 那一段）與往哪裡走的常數、下一站（`_home`、`_front_*`、`_losing_front`、`_summons_hop`、`_bounty_hop`、`_order_hop`、`_order_hop_now`、`_focus_hop`、`_clinic_score`、`clinic_hop`、`CLINIC_AT`）第 89 批從 `bot_policy`、`bot` 搬來，舊名 re-export；別包也讀的走共用層 `bot_base`，一律寫 `bot_base.X`，換 `bot_base` 的才打得到。`next_hop` 第 101 批進 `bot_base`，移動包不留這個名字。
+- 過渡：`bots.py` 不再 import `bot`、`bot_policy`；`_focus_hop` 經 `game.sorties_left()` 碰出陣包（`CROSS_PACKAGE_CALLS`）。
+- 另外要跑（改 `bots.py`）：`tests/acts/test_clinic.py`、`tests/acts/test_conquest_flip.py`、`tests/battle/test_fronts.py`、`tests/figures/test_gentry_allied.py`、`tests/figures/test_promotions_high.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

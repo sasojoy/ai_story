@@ -24,3 +24,6 @@
 - 改 `actions.py` 的 `buy`、`purchase`、`view`：`tianxia/features/looks/tests/`、`tianxia/features/zhuan/tests/` 與 `tianxia/features/explore/tests/test_outing.py` 也叫它們（形象、列傳、走一趟的票）。`test_for` 挑這一包的 `tests/` 與契約、邊界，不會挑到別包的測試（第 58 批量過）。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「商城」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 畫面只剩貨架、紀錄、購買確認、易名帖、管理者查帳（`web/mall.js` 505 行，`mallClick` 13 個 case）；形象那一頁在 `web/looks.js`（第 94 批）。

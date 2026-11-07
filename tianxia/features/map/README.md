@@ -10,7 +10,7 @@
 
 | 檔 | 內容 |
 |---|---|
-| `__init__.py` | 登記：沒有前綴、沒有選項、沒有狀態鍵；`routes` 一個掛鉤；`web = ("map.js",)`（檔照手冊 G9 留在 `web/`，第 64～67 批殼化時再看）；`enabled` 一直是 True（輿圖沒有開關） |
+| `__init__.py` | 登記：沒有前綴、沒有選項、沒有狀態鍵；`routes` 一個掛鉤；`web = ("map.js", "map.css")`，輿圖的樣式第 86 批從 `style.css` 切進 `web/map.css`，link 排在 `style.css` 正後面（檔照手冊 G9 留在 `web/`，第 64～67 批殼化時再看）；`enabled` 一直是 True（輿圖沒有開關） |
 | `actions.py` | 原本 `Game` 上輿圖的 11 個方法（`self`→`ctx`）：`map_base`、`map_state`、`map_foes`（`_map_foes`）、`fierce_line`（`_fierce_line`）、`world_map_svg`、`minimap_svg`、`map_legend`、`map_header`、`map_places`、`place_detail`、`travel_options`；另有探索包問的兩個查詢 `open_places`、`mostly_here`（Game 上的 `_map_open_places`、`_map_mostly_here`） |
 | `views.py` | `/api/map` 的資料：`map_base_view`（底圖，照 `mapdata.base_key` 快取）、`map_view`（舊輿圖；殼的 `md` 當參數傳進來）、`MAP_BASE`／`MAP_BASE_KEEP`（快取字典，`server.MAP_BASE` 是同一個物件）、`DEFAULT_LAYER`；不碰 fastapi |
 | `routes.py` | `GET /api/map`、`GET /api/map/base`、`GET /api/map/state`（殼照 `FEATURES` 掛；一律照 `shell.<名字>` 當下讀，測試換掉 `server.map_view` 也看得到） |

@@ -15,7 +15,7 @@
 
 **接在別處的**：人物情誼包的 `companion_agent` 叫 `ends_for`（schema 多一個 enum 的 `persona`）、`prompt_lines`（提示多一段）、`hear`（記一筆、多一句）、
 `covers`（他歸這一包管時舊的性情漂移不讀也不寫）、`NONE`；包不准 import 包，這幾個呼叫手上又沒有 `ctx`，所以純規則放共用規則層（`registry.SHARED` 的 `persona_rules`；它只 import 核心的 `calendar`、`rules`、`models`、`state`）。
-`actions.py` 留包裡（要記行狀；行狀經核心 `core/annal_base`）。`server.figure_intro(cid, game)` 讀 `persona_rules.view`， 把如今與變化紀錄接進簡介（`figure_intro` 留在殼）。
+`actions.py` 留包裡（要記行狀；行狀經核心 `core/annal_base`）。`features/socialize/intro.py` 的 `figure_intro(cid, game)` 讀 `persona_rules.view`， 把如今與變化紀錄接進簡介（第二輪第 83 批搬進交友包）。
 **認領的欄位**：`PlayerState.persona_notes`（換季不帶）；季上 `WorldState.persona*`（換季整個重來＝全部歸回本性）。
 **數字**（`PersonaShiftRules`，全是【草】）：情誼 30／60／80 算 1／2／3 份；一天淨推力不到 3 份不動；一份 2 點、一天最多 8 點、一段 40 點；沒人推回 2 點；最多離起點 2 段。
 

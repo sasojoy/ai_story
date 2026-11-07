@@ -67,7 +67,7 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/guide.js`（引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章；路線發光、新手目標、說書人的框、`proGuide` 第 67 批從 `main.js` 切進來）、`web/guide.css`（新手目標；`.onb-dim`、`.glow`、`.lit` 要蓋別人，留 `style.css`）；點擊分派的 `case`、`choose` 留 `app.js`。
+- 畫面：`web/guide.js`（引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章；路線發光、新手目標、說書人的框、`proGuide` 第 67 批從 `main.js` 切進來）、`web/guide.css`（新手目標；`.onb-dim`、`.glow`、`.lit` 要蓋別人，留 `style.css`）；`choose` 留 `app.js`，點擊分派第二輪第 84 批進這支 js。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `newbie`；`main` 表 `guide`（`guide`、`prologue`、`onboard`）、`glow`（`actions.glow_slot` 改已經合進去的 `view["guide"]`，沒有鍵）。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`hints_off`（回 `None`，同委派）、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
@@ -79,3 +79,7 @@
 照條拆來：`test_guide_facade.py`（6 條，從 `tests/core/test_engine.py` 拆來）、`test_guide_page_web.py`（1 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_guide_shell.py`（5 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `take_stamina_pill`、`_top_up_pills` 的本體在 `tianxia/core/pills.py`（第 80 批）。
+- `howto.py` 函式裡的 `events` 第 87 批起是共用規則層，不算過渡；import 仍留在函式裡。

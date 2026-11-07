@@ -46,7 +46,7 @@
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
 - 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、整季機器人排除「名望不夠、會被打發的求見」第 60 批搬成這一包的 `bot_idle`（照舊問 `ctx.can_meet_figure`）。
 - 行動列底下交友、求見那幾行（第 59 批搬進 `menus.action_notes`，句子在這一包的 `howto.py`）：第 56 批起是 `notes/socialize` 那一格，`Game.action_notes` 不留委派（第 59 批的 `_social_notes` 合第 B 波時收掉）。
-- `/api/main` 的 `figures_here` 那一格（`status_slots`，第 66 批）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼、經 `frame.shell` 叫。點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS` 也留殼（`server.py`，合回第 4 段搬回來：要讀人物性子的 `persona_rules.view`，放包裡會變成包讀包），一樣經 `frame.shell` 叫、帶 `ctx`。
+- `/api/main` 的 `figures_here` 那一格（`status_slots`，第 66 批）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼、經 `frame.shell` 叫。點大勢人物的簡介 `figure_intro` 在包裡的 `intro.py`（第二輪第 83 批；`persona_rules` 已在共用層，不再是包讀包），殼留 `FIGURE_INTROS` 別名；`figure_face` 仍留殼。
 
 ## 過渡（手冊 3.11）
 
@@ -62,7 +62,7 @@
   點皇甫嵩，沒有模型他無心多談、名單收起）、`test_socialize_bots.py`（`call:back` 0.0、`call:<人物>` 不按、policy 問這一包）、`socialize_stage.py`（契約測試擺局面：平常）。
 - **`test_for` 挑不到的、另外要跑的**（混著別的功能，這一輪不搬、不拆）：`tests/core/test_precise_actions.py`（`_social_plan`、`_deliver_fortune`）、`tests/figures/test_day_scale.py`
   （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tianxia/features/guide/tests/test_hints.py`、`tests/arts/test_renown_explain.py`、
-  `tests/core/test_engine.py`（`call:`、`can_meet_figure`、`_talks_used`、抽不到事件的打發話）、`tests/figures/test_admin_timetable.py`、`tests/bots/test_bot_policy.py`
+  `tests/core/test_engine.py`（`call:`、`can_meet_figure`、`_talks_used`、抽不到事件的打發話）、`tianxia/features/admin/tests/test_admin_timetable.py`、`tests/bots/test_bot_policy.py`
   （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tianxia/features/seal/tests/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tianxia/features/guide/tests/test_explain.py`、
   `tianxia/features/peers/tests/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tianxia/features/guide/tests/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`server.figure_intro` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
@@ -84,3 +84,7 @@
 照條拆來：`test_socialize_facade.py`（23 條，從 `tests/core/test_engine.py` 拆來）、`test_socialize_page_web.py`（1 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_socialize_shell.py`（3 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 改 `intro.py` 另跑 `tianxia/features/persona/tests/test_persona.py`、`tests/web/test_revamp_web.py`（`test_for` 挑不到）。
+- `events`（`view.py`、`menus.py`、`actions.py`）第 87 批起是共用規則層，這 3 處不算過渡。

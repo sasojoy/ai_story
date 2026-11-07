@@ -9,7 +9,7 @@
 | `__init__.py` | 登記（`CraftFeature`）：`enabled` 一直是 True（自創有沒有開看 `Config.arts.create_xinde`，由 `create.allowed` 擋）；`prefix` 是 None——**沒有選項前綴、沒有 `choose`**：煉製頁全是網頁按鈕打 `/api/menxia/<op>`、`/api/do/<op>`。掛鉤只有 `routes`、`content`（`create_forms.json`，測試內容那一份在 `tests/content/`，全部拆包第 63 批；`preset_recipes.json` 是序章、命名、引導共用的，不歸這一包）、`on_drop_stale`（`create.prune`：舊三步單子收掉）、`player_fields` |
 | `create.py` | 自創的規則（原 `tianxia/create.py`，906 行；那個名字留成 `sys.modules` 別名，同一個模組物件）。擺式的幾何（`POSE_KEYS`、`stance_of`、`pose_read`、`preset`、`icon_pose`……）抽到共用規則層 `tianxia/pose.py`（`moves.stance_of_art` 認勢要用），`create` 照名字 re-export，`create.stance_of`、`create.preset` 照舊拿得到 |
 | `actions.py` | 原本 `Game` 上的 16 個方法：開爐 `forge_request`（A）、`forge`（C）、`forge_line`、`forge_preview`、`forge_picks`；自創 `begin`、`pose`、`intent_request`（A）、`intent`（C）、`reread_request`（A）、`reread`（C）、`reroll`、`back`、`name`、`cancel`、`view`。九個動作掛核心的 `@not_while_preparing`；三個 A 段自己問 `ctx._preparing()` |
-| `web/craft.js`（檔照手冊 G9 在 `web/`，`web = ("craft.js",)`） | 煉製頁的畫法（全部拆包第 64 批從 `app.js` 逐行切出來，806 行；計畫 `2026-11-06-網頁殼化-第64批.md`）：`pageCraft`、太極火爐與開爐、挑東西的抽屜、自創五步與擺式（`figBody`）、秘方與口訣書（`bookHtml`、`secretPop`）。段裡有兩個頂層監聽跟著走：`window` 的 scroll（爐子縮成一條）、`document` 的 pointer（擺式拖曳），所以這支要排在 `admin.js` 之後（`pointerdown` 都掛在 `document` 的冒泡階段，先後照舊）。檔尾 `registerPage("craft", { render: pageCraft })`。留在 `app.js`（殼）的：點擊與 change 分派的 `case`、`renderPage` 的 `fixedKiln`、`createShort`、`cnNum`。功法清單的篩選第 67 批從 `main.js` 切進來；樣子在 `web/craft.css`（第 67 批，載入先後在 `index.html`，要排在 `cultivation.css` 後面），煉製與爐那幾段跟引導的 `.onb-dim` 同權重，留 `style.css` |
+| `web/craft.js`（檔照手冊 G9 在 `web/`，`web = ("craft.js",)`） | 煉製頁的畫法（全部拆包第 64 批從 `app.js` 逐行切出來，806 行；計畫 `2026-11-06-網頁殼化-第64批.md`）：`pageCraft`、太極火爐與開爐、挑東西的抽屜、自創五步與擺式（`figBody`）、秘方與口訣書（`bookHtml`、`secretPop`）。段裡有兩個頂層監聽跟著走：`window` 的 scroll（爐子縮成一條）、`document` 的 pointer（擺式拖曳），所以這支要排在 `admin.js` 之後（`pointerdown` 都掛在 `document` 的冒泡階段，先後照舊）。檔尾 `registerPage("craft", { render: pageCraft })`。點擊與 change 分派第二輪第 84、85 批進這支 js（`registerClicks`、`registerChanges`）；留在 `app.js`（殼）的：`renderPage` 的 `fixedKiln`、`createShort`、`cnNum`。功法清單的篩選第 67 批從 `main.js` 切進來；樣子在 `web/craft.css`（第 67 批，載入先後在 `index.html`，要排在 `cultivation.css` 後面），煉製與爐那幾段跟引導的 `.onb-dim` 同權重，留 `style.css` |
 | `routes.py` | `/api/forge_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）、動作表、鎖外工作（見最後一段） |
 | `tests/` | `test_craft_smoke.py`（煙霧一條：week7 合一爐、自創一門）、`test_create_ritual.py`（原 `tests/arts/`：五步、擺式、成形、立名、招式）、`test_create_reread.py`（原 `tests/arts/`：重悟帖的重讀）、`test_create_stance_hints.py`（原 `tests/arts/`：擺式提示，連網頁的幾何讀法，要 node）。整檔搬過來，三個的 `Path(__file__).parents[2]` 改成 `[4]` |
 
@@ -50,3 +50,9 @@
 照條拆來：`test_craft_facade.py`（1 條，從 `tests/core/test_engine.py` 拆來）、`test_craft_shell.py`（22 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `forge_view.py`：煉製頁的預覽與提示（第 88 批從 skillview 切來）。靠舊名殼的測試：`scripts/test_for.py tianxia/skillview.py` 挑的那一份，改它另外跑。
+- `create` 的 `marks_of`、`look_text`、`tier_of` 與 `CLEAR`、`RARE`、`MARK_TEXT`、`TIER_TEXT` 第 88 批搬進共用層 `moves`，`create` re-export 同一批，`icon_pose` 本來就在 `pose`。`fusion` 第 87 批收進共用規則層；過渡 import 只剩 `create.py` 的 `annals`。
+- 假人：`pick_forge`、`create_art`、`_name_draft`、`_forge`、`MERGE_SHARE`、`FORGE_RESERVE` 等在 `bots.py`（第 101 批），`forge_and_cultivate`、`tend_arts` 留在殼；要換 `MERGE_SHARE`、`FORGE_RESERVE` 換 `bots.py` 那一份。
+- 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

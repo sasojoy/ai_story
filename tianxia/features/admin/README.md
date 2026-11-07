@@ -33,3 +33,7 @@
 
 `tests/`：`test_admin_timetable.py`、`test_season_pause.py`、`test_admin_routes.py`（每條路由、每個工具各打一條「不是管理者」）。
 別處要一起看的：`tianxia/features/military/tests/test_admin_triggers.py`、`tests/server/test_action_tables.py`、`tianxia/features/smithy/tests/test_divine_rotation.py`、`tests/acts/test_conquest_rules.py`。same_behavior 的軌：`switchboard`、`gavel`。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `admin_choices` 走 `STATUS_ORDER["admin"]`，20 格。`web/admin.js` 由這一包宣告，`test_for.WEB_SCRIPTS` 拿掉它，改管理頁照這一包挑（第 90 批）；submit、change 分支第 85 批搬進 `admin.js`。
+- 走不到的（`gavel` 軌的說明寫了）：跳到季末「時刻表上沒有下一件大事了」、神器用完那一句（`test_divine_rotation` 守）、第一季規則的季 `fire` 只回「沒有這件大事」。

@@ -62,3 +62,7 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_drill_gates_engine.py`（原 `tests/battle/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：`ACT_SCORES`、`NEED_MATERIAL_SCORE`、`OUTING_SCORE`（第 89 批）、`outing_segments`、`outing_say`、`OUTING_WEIGHTS`、`OUTING_SAY_CHANCE`（第 101 批）搬進這裡，舊名 re-export；`_crippled`、`_bounty_here`、`BOUNTY_SCORE`、`PRACTICE_SCORE` 走共用層 `bot_base`。
+- 過渡：`bots.py` 那 2 行 `bot_policy` 第 89 批清掉；`explore_actions.py` 的 `events` 兩行（連 `explore_base.py`、`checks.py` 函式裡那行）第 87 批起是共用規則層，不算過渡。另外要跑 `tests/core/test_contract_core.py`（`ACT_SCORES`）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

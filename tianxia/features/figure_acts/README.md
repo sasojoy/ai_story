@@ -44,7 +44,7 @@
 
 混著別的功能、留在原處的（`條數＝碰到這一包的／全檔`，用語法樹數過，數字是粗的）；改這一包時連它們一起跑：
 
-- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
+- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tianxia/features/admin/tests/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
   `tests/figures/test_figure_attrition.py`（4／9）、`tests/battle/test_rise.py`（4／10）、`tests/figures/test_gentry_allied.py`、`tests/figures/test_figure_life_batch3.py`（4／9，月旦評）
 - 打贏的一串：`tianxia/features/gear/tests/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tianxia/features/gear/tests/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tianxia/features/seal/tests/test_seal_duel.py`（12／27）
@@ -67,3 +67,8 @@
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`revive_figure`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
 **鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的月旦評 `_yuedan_waiting`、`write_yuedan`、`yuedan_once`、`YUEDAN_RUNNING`（`outlock` 掛鉤那一格 `yuedan`；殼留一行包裝 `yuedan_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：`CHALLENGE_SCORE`、`CHALLENGE_ODDS`、`STRIKE_ODDS` 第 89 批搬進這裡（舊名 re-export），`_crippled`、`ORDER_SCORE` 走共用層 `bot_base`；那 1 處 `bot_policy` 清掉。另外要跑 `tests/figures/test_figures.py`。
+- `yuedan.py` 函式裡到 `leaderboard` 那一處第 88 批起是共用規則層，不算過渡。
+- 這一包多登記 `admin` 表的 `fallen` 格（第 90 批）。

@@ -44,7 +44,7 @@
 - `_report_seat`：`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接；同步那一下第 55 批換成 `sync.deliver` 的 `seat` 那一格。
 - 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - 「你這一步」的格（`FEATURE.steps()`，全部拆包第 36 批；順序在核心的 `STEP_ORDER`）：`order`（`order_actions.step_items`／`step_place`：沒做完的軍令一道一件、目標是最近的摸清了的那一處、護糧還沒接這一道的糧車多 `then`；`ORDER_GAIN` 從 `weekcard` 搬來，字一個不改；原本 `weekcard._steps` 的軍令那一段與 `step._order_places`、`_target`、`_then` 的軍令那一支）、`foreshadow`（`fs_actions.step_items`／`step_place`：讀伏筆的 `next_step`、`next_trip` 就是這一格回答，核心不再經舊名 `foreshadow` 讀，第 34 批 PM 認定第 1 條）。`step_items` 讀殼算好傳進來的 `orders_view` 那一份、不重算；不問 `enabled`；目標的最近一處問新手引導包的查詢服務 `ctx._nearest_to`、地點寫法用核心 `tianxia.step.place`。
-- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）照舊叫 Game 的委派；管理者三顆鈕第 68 批搬進 `routes.py` 的 `admin_tools`（鈕的順序在 `web/admin.js`，`ADMIN_ACTIONS` 只是查表用的 dict，第 33 批認定第 2 條收掉）。
+- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）照舊叫 Game 的委派；管理者三顆鈕第 68 批搬進 `routes.py` 的 `admin_tools`（鈕的順序在 `web/admin.js`，`FEATURE_ADMIN_ACTIONS` 只是查表用的 dict，第 33 批認定第 2 條收掉）。
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py` 不在這一包（共用規則層；`orders`、`ranks` 全部拆包第 40 批收進 `registry.SHARED`）。
 - **第 34 批留在核心／共用層的接縫**（理由在邊界測試 `# military` 的第二段）：答題中的選單（`_fs_asking_options`，位置在店面之後、閉關之前）與場景文字（`_fs_asking_text`，在拜入／投靠／叛投／求見的畫面之後）、閒著的選單上機緣與伏筆最後一步（`_omen_options`，夾在 `_rank_action_options` 與託付之間）、遊歷打贏之後的官銀與密謀一處（`_fs_after_win`、`_opp_on_win`；第 26 批量過留原位：夾在懸賞那一個發布點前面、讀先算好的記功，只在單打服務那一處有）、`_hear_after_stamina`（`choose` 結尾與 `travel`，伏筆先機緣後、共用 `self.rng`）、`_settle_plots`（`sync` 與 `choose` 結尾）。都因位置固定或順序算行為，沒有對應的掛鉤。
 - **查詢服務 `tianxia/core/omen_base.py`**（核心本體）：核心的 `rules`（`grain_min` 的需求量換算；第 40 批起 `check_condition` 的 `clue_items` 也經它的 `clue_count` 讀）、`content`（天機表、題目）、共用規則層的 `ranks`（召見問這一階的機緣做過沒）、叛投確認畫面（`in_plot`）讀機緣、伏筆的「只讀」那一半，不 import 本包；`fs_rules`、`opp_rules` 從它 re-export 同一批名字。第 40 批多收了伏筆、機緣「讀」的那一半：`fs_active`、`event_ids`、`held_items`、`heard_texts`（連同填字那一串）、`opp_active`、`heard_clues`，另加新的 `clue_count`（`fs_rules`、`opp_rules` 照原名 re-export 同一個物件）。`content.py` 的 `check_foreshadows`、`check_opportunities` 因為夾在別的檢查中間、吃 `known` 與幾個局部變數，接不了 `check_content` 掛鉤（錯誤訊息的先後算行為），留在核心。
@@ -105,3 +105,9 @@
 照條拆來：`test_military_shell.py`（1 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 表的名單加 `admin_player_choices`（`admin_actions.player_choices`，路由在管理者包，第 90 批）。
+- `check_promotions`、`check_opportunities`、`check_foreshadows` 在這一包的 `checks.py`，原位經 `check_at` 叫，`known` 與局部變數照舊當參數傳（第 100 批）。
+- `step_actions` → `events` 第 87 批起是共用規則層，不算過渡。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

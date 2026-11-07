@@ -39,14 +39,14 @@
 - `act:bribe:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`（走銀兩四樣同一支 `press`），四樣的標題也接進 `Verb.title`，核心不再有銀兩那幾行。
 - `shop_view` 叫 `_bribe_targets`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
-- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
+- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。點擊分派第二輪第 84 批進這支 js（`registerClicks`）；留在 `app.js`（殼）的：店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子在 `web/shop.css`（第 86 批整段切出來，排在 `style.css` 正後面；殼，五包共用）。
 
 ## 測試
 
 `tianxia/features/outlets/tests/`（整檔屬於這一包的，原樣搬來，只改路徑字串；`test_econ_donate` 多一個 `@pytest.mark.smoke`——手冊 4.1 每一包至少一條煙霧）：
 
 - `test_silver_outlets.py`（15 條）：銀兩出口五樣（捐銀兩、名師指點、買破境丹、看火候、打點門路與帳簿）。
-- `test_dadian_shop.py`（12 條）：「打點」那一間店（進、離開、五樣收在店裡、店面那一頁）；兩條讀 `web/style.css` 的字斷言規則，只讀不改。
+- `test_dadian_shop.py`（12 條）：「打點」那一間店（進、離開、五樣收在店裡、店面那一頁）；兩條讀 `web/shop.css` 的字斷言規則，只讀不改。
 - `test_econ_donate.py`（11 條）：捐軍備（軍需官那一串、每天上限、推大本營、江湖頁的軍備存量、假人只離開）。
 - `test_silver_gates.py`（14 條）：**釘的是內容、不是這一包的程式**——真實內容裡選了就扣銀兩的事件選項都要帶 `min_stats.silver`，只讀 `content/events/`（總表附錄丙點名歸這一包；改事件內容時 `scripts/test_for.py` 照檔名挑到它）。
 - `outlets_stage.py`：契約測試的擺局面（坐在軍需官那一串前）。「打點」那一間店不擺：它的選單有核心 `act:` 前綴的銀兩出口幾樣，契約測試要求這一包給的選項都帶自己的前綴。
@@ -81,3 +81,6 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_econ_web.py`（原 `tests/web/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py` 多 `donate_want`、`donate_spare`（第 101 批）；`econ_day` 走服務清單。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

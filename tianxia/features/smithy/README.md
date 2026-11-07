@@ -17,7 +17,7 @@
 - `clue.py`：`smith_clue`（鐵匠順口；包裡其餘各檔一律經 `ctx._smith_clue` 叫，因為測試換掉 `Game._smith_clue`）。
 - `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）與動作表（見最後一段）。
 - `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數第 60 批搬來（`enter`，`Verb.bot` 問；`bot.pick` 不按是 `Verb.bot_skip`）；`bot_policy._smith_want` 名字留著（一行委派到這裡，測試讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
-- `web/smithy.js`（檔照手冊 G9 在 `web/`，`web = ("smithy.js",)`）：鐵匠鋪的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，519 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——`smithHtml`、架上 `shelfHtml`、打造 `forgePageHtml`（看火候 `furnace*`、就地熬 `brew*`、開爐與出爐卡 `revealHtml`、神器定名 `divineFormHtml`）、裝備庫 `rackHtml`、素材頁 `tradeHtml`、神器頁 `divineHtml`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`SHOP_ATTR`、`shopHtml`、`shopNoteHtml`、`shopDo`、`renderShop`、`shopPolled`）、`reduceMotion`。合成流程的樣子在 `web/smithy.css`（第 67 批，載入先後在 `index.html`）；架上的樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
+- `web/smithy.js`（檔照手冊 G9 在 `web/`，`web = ("smithy.js",)`）：鐵匠鋪的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，519 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——`smithHtml`、架上 `shelfHtml`、打造 `forgePageHtml`（看火候 `furnace*`、就地熬 `brew*`、開爐與出爐卡 `revealHtml`、神器定名 `divineFormHtml`）、裝備庫 `rackHtml`、素材頁 `tradeHtml`、神器頁 `divineHtml`。點擊分派第二輪第 84 批進這支 js（`registerClicks`）；留在 `app.js`（殼）的：店面的框（`SHOP_ATTR`、`shopHtml`、`shopNoteHtml`、`shopDo`、`renderShop`、`shopPolled`）、`reduceMotion`。合成流程的樣子在 `web/smithy.css`（第 67 批，載入先後在 `index.html`）；架上的樣子在 `web/shop.css`（第 86 批整段切出來；殼，五包共用）。
 - 掛鉤：`prefix = "smith"`；`choose` 接 `smith:*`（標題 `smithing.title(arg)`，在動作之前拿）；`verbs()` 一個 `Verb("smith")`（`run` 走進鐵匠鋪、`title` 是「鐵匠鋪・此地」）；`routes`；`content`（`forge_secrets.json`、`tier4_named.json`）；`bot_pick` 問 `bots.score`；`enabled`＝武器或防具開著、或此刻還坐在鐵匠鋪裡（開關在坐著時被關掉，離開還按得到；不看第一季開關）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -51,7 +51,7 @@
 - `test_forge_secrets.py`（19 條；`test_forge_divine`、`test_shop`、`test_weapons` 用它的 `BLADE`、`_smith`、`forge_content`）、`test_forge_divine.py`（36 條；`test_board_cards`、`test_weapons`、`test_shop` 用它的 `_forger`、`divine_content`、`STAR`）。
 - `test_divine_rotation.py`（14 條）與 `test_divine_collect.py`（6 條）；`test_shop2.py`、`tianxia/features/smithy/tests/test_smith_divine_web.py` 用 `test_divine_rotation` 的 `_smith`、`_forge_sword`。
 
-這五個檔共 134 條，附錄甲歸這一包（第 44 批先搬 4 個檔，其餘第 61 批搬來）。`test_kiln_round.py`（讀 `web/style.css` 與 `app.js`，煉製頁的開爐鈕）附錄甲也歸鐵匠鋪，第 61 批一起搬來。
+這五個檔共 134 條，附錄甲歸這一包（第 44 批先搬 4 個檔，其餘第 61 批搬來）。`test_kiln_round.py`（讀全部的樣式與 `app.js`，煉製頁的開爐鈕）附錄甲也歸鐵匠鋪，第 61 批一起搬來。
 
 **另外要跑的混合檔**（含這一包的測試，但檔案不屬於這一包，不拆）：
 
@@ -79,3 +79,8 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_divine_collect.py`（原 `tests/gear/`）、`test_divine_rotation.py`（原 `tests/gear/`）、`test_forge_divine.py`（原 `tests/gear/`）、`test_forge_secrets.py`（原 `tests/gear/`）、`test_kiln_round.py`（原 `tests/core/`）、`test_shop.py`（原 `tests/gear/`）、`test_shop_web.py`（原 `tests/web/`）、`test_smith_divine_web.py`（原 `tests/web/`）、`test_smith_labels_web.py`（原 `tests/web/`）、`test_tier4_shop_web.py`（原 `tests/web/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：`smith_want`、`forge_step`、`_forge_plans`、`forge_ready`、`FORGE_SILVER_RESERVE`（第 89 批）、`visit_smith`、`trade_want`、`trade_at_smith`、`keep_book_names`、`_name_originals`、`TIER3_WANT`、`TIER4_WANT`、`TRADE_SILVER_RESERVE`、`DIVINE_NAME_CHANCE`（第 101 批）從 `bot` 搬來，舊名 re-export，換的要換 `smithy.bots` 那一份。
+- `BIND_LINE`、`NAMED_LINE`、`bind_options`、`bound_alive`、`bond_lines` 第 88 批搬進 `core/smith_base`（`art_cards.gear_rows` 要讀），寫的 `bind_problem`、`bind_art` 留包裡，包 re-export。
+- 過渡 import：`bots` → `bot` 兩處第 89 批清掉，`fusion` 兩行第 87 批起是共用規則層，只剩 `shopview` 兩處。另外要跑 `tests/gear/test_armor.py`（`bot.smith_want`）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

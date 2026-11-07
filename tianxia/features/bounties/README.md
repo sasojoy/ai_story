@@ -22,7 +22,7 @@
 
 - `player_fields`：`picking_bounty`（榜開著）、`bounty_pick`（第三層指著哪一張求兵）、`bounties_done`（交差的總數，寫在 `rules._complete`）。
 - `carried = ()`：換季全部跟著新角色重來。
-- 不認領：`shop_line`、`shop_clue`、`shop_hold`（七間店共用，核心）；`Bounty` 類別與 `WorldState.bounties`、`rallies`、`bounty_seq`、`bounty_week`、`bounty_day` 的定義留 `state.py`；`Config.bounties` 留 `models.py`、`content.py` 的 `check_bounties` 留原處（第 34 批認定第 2 條）。
+- 不認領：`shop_line`、`shop_clue`、`shop_hold`（七間店共用，核心）；`Bounty` 類別與 `WorldState.bounties`、`rallies`、`bounty_seq`、`bounty_week`、`bounty_day` 的定義留 `state.py`；`Config.bounties` 留 `models.py`、`check_bounties` 在這一包的 `checks.py`，`content.validate` 原位經 `check_at` 叫（第二輪第 100 批；不接 `check_content`：第 34 批認定第 2 條）。
 - 包外直接讀寫的（第 34 批認定第 9 條，照實記、寫哪一批收）：~~`atlas.travel_block` 讀 `picking_bounty`、酒肆包 `tavern:board` 直接寫 `picking_bounty`、核心 `Game._idle` 讀 `picking_bounty`~~（第 56 批選單收接縫收了：`block`、`idle` 那兩格是這一包登記的，酒肆改叫核心 `bounty_base.sit_at_board`，只設這一欄、不清挑到哪一張）；`bot.py` 讀 `picking_bounty`、`shopview` 讀 `bounty_pick`（舊模組，假人底層與 `SHARED_LATER`）；~~引導包 `newbie.py`、列傳包 `standing.py`、傳承包 `legacy/rules.py` 讀 `bounties_done`~~（第 56 批收了：三處改問核心 `bounty_base.done_count`）。反過來：這一包的 `open_commissions`（在核心 `bounty_base`）讀人物情誼包認領的 `PlayerState.letters`，`_complete_commission` 寫 `parley_owed`。
 
 ## 委派與留在原位的接縫
@@ -37,7 +37,7 @@
 
 **事件**：`raid_win` 的發布點在 `actions.raid_bounty`；`aid_actions.py` 發 `aid`；其餘四種發布點在各包。`bus_bypasses` 擋 `bounties.on_*` 這種名字，所以包的 `bus()` 寫 `rules.on_*`。
 
-**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），點擊分派的 `case`、店面的框留在 `app.js`（殼）；`bountiesHtml`、`rewardChips` 與賞的樣子 `web/bounties.css` 第 67 批從 `main.js`、`style.css` 切進來；榜的樣子在 `style.css` 的店面那一段。
+**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），店面的框留在 `app.js`（殼），點擊分派第二輪第 84 批進這支 js（`registerClicks`）；`bountiesHtml`、`rewardChips` 與賞的樣子 `web/bounties.css` 第 67 批從 `main.js`、`style.css` 切進來；榜的樣子在 `web/shop.css`（第 86 批整段切出來；殼，五包共用）。
 
 ## 測試
 
@@ -50,7 +50,7 @@
 - 網頁：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去；第 61 批搬走的 18 條只是名字帶 page，這一包的那一條在 `test_bounties_shell.py`，`test_for` 挑得到）、`tests/bots/test_server_bots.py`（掃字）。
 - 留原處的：`tests/ranger/test_season21_daily.py`。
 - 「你這一步」：`tests/bots/test_step.py`、`tests/map/test_weekcard.py` 與 `tianxia/step.py` 模組說明列的那一串（`tests/core/test_chapters.py`、`tests/figures/test_week_unlock.py`、`tianxia/features/companions/tests/test_errands_weekcard.py`、`tianxia/features/guide/tests/test_opening.py`）。
-- 世界層四格（第 25 批認定第 7 條）：`tests/core/test_world.py` 與 `tianxia/world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tests/core/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tianxia/features/seal/tests/test_seal.py`、`test_seal_engine.py`、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`。
+- 世界層四格（第 25 批認定第 7 條）：`tests/core/test_world.py` 與 `tianxia/world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tianxia/features/admin/tests/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tianxia/features/seal/tests/test_seal.py`、`test_seal_engine.py`、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`。
 - 核心契約：`tests/core/test_contract_core.py`、`test_contract_features.py`、`test_feature_boundaries.py`、`test_social.py`、`tianxia/features/peers/tests/test_discuss.py`。
 - 人物：`tests/figures/test_figure_life_batch3.py`、`test_week_unlock.py`、`test_gentry_allied.py`；人物情誼包 `test_parley.py`、`test_parley_two.py`、`test_relations_letters.py`；陣營包 `test_four_wins_wiring.py`；探索包 `test_explore_one.py`、`test_explore_one_fix.py`；玩家互動包 `test_raid.py`；`tests/acts/test_territory.py`。
 - 經舊名用到懸賞榜、`test_for` 挑不到的：`tianxia/features/gear/tests/test_treasures.py`、`test_shop2.py`、`test_shop_polish.py`、`test_weapons.py`、`test_four_tiers.py`、`tianxia/features/explore/tests/test_drill_gates_engine.py`、`test_maxed_xinde.py`、`tests/bots/test_bot_policy_stuck.py`、`tests/core/test_precise_actions.py`、`tests/ranger/test_renown_ranger.py`、`tests/server/test_server.py`。
@@ -75,3 +75,8 @@
 照條拆來：`test_bounties_shell.py`（1 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `army_of`、`rallies`、`targets` 第 89 批搬進核心 `core/bounty_base`，`rules.py` re-export 同一批物件；`targets` 讀 `bounty_base` 自己那幾個名字，換 `rules.mine` 打不到 `targets`。
+- `bots.py` 多 `take_bounties`（第 101 批）。
+- 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

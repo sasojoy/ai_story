@@ -57,6 +57,11 @@ python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/c
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/story.js`（特殊事件的跳顯框；沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/story.css`（第 67 批）；點擊分派的 `case` 留 `app.js`。
+- 畫面：`web/story.js`（特殊事件的跳顯框；沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/story.css`（第 67 批）；點擊分派第二輪第 84 批進這支 js。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`story_seen`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `_event_progress` 的本體在 `tianxia/core/pushing.py`（第 80 批）。
+- `check_storylines` 在這一包的 `checks.py`，原位經 `check_at` 叫；`event_effects`、`stage_events` 在 `core/content_base.py`（`_fill_story_lines` 比 validate 早要用）。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

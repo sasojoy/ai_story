@@ -32,3 +32,6 @@
 
 **賣是商城包的事**：商品 `kind` 寫 `look`、`look` 寫哪一套、效果只寫 `{"look": 1}`（`mall.item_problems` 驗）；購買那一列 `data` 多記 `look_id`（商品下架了也認得）；同一套買過了不再賣（`LOOK_OWNED`）。
 **認領的欄位**：沒有角色上的欄位；`ArenaEntry.look`、`ArenaFight.skins`、`ArenaResult.skins` 是擂台的（`tianxia/state.py`），網頁的 `looks.me_look`／`foe_look`。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 畫面 `web/looks.js`（第 94 批從 `mall.js` 切出來，615 行）：形象頁、自建形象、市集、絕招、管理者區自建形象與成品牆，`looksClick` 26 個 act；`LooksFeature.web = ("looks.js",)`。樣式的 look 段還在 `web/mall.css`（第 104 批）。

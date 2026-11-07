@@ -24,7 +24,7 @@
 ## 還留在原位的接縫
 
 - `Game` 上的名字掛在 `game_api.py` 的表：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_profile`（第 29 批之二；換季存行狀：`save_annals` 的第四個引數）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前三個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
-- B 段（鎖外叫模型）第 69 批進了 `routes.py`：`write_zhuan`（殼留一行包裝）、`verdict_text`、`VERDICT_OWNER`（見最後一段）。留在 `server.py` 的：`ZHUAN_JOBS`、`ZHUAN_LOCK`、`_zhuan_key`（`zhuan_view`、測試、`same_behavior` 在讀），加上 `zhuan_view`、`zhuan_extras`、`zhuan_art_src`、`public_base`、`_season_arg`。`tests/server/test_server.py` 掃「鎖外叫模型的函式」認 `zhuan_job`、`verdict_text` 這幾個名字。
+- B 段（鎖外叫模型）第 69 批進了 `routes.py`：`write_zhuan`（殼留一行包裝）、`verdict_text`、`VERDICT_OWNER`（見最後一段）。留在殼的只剩 `ZHUAN_JOBS`、`_zhuan_key` 兩個別名與 `write_zhuan` 一行包裝；`zhuan_view`、`zhuan_extras`、`ZHUAN_LOCK`、`_season_arg` 在 `routes.py`（第二輪第 83 批），`public_base` 留殼（戰記也讀）。`tests/server/test_server.py` 掃「鎖外叫模型的函式」認 `zhuan_job`、`verdict_text` 這幾個名字。
 - 根目錄 `zhuan_html.py` 是別名檔（`server.py` 舊的 import、`tests/core/test_desktop_type.py` 讀的路徑）；`tests/core/test_shop_width.py` 讀這個檔斷言「不含 zhuan-layer」，別名檔也成立，但斷言的實質變弱了（真正的內容在包裡）。
 - 行狀拆兩半（全部拆包第 29 批之二）：記一筆的那一半（`note`、`entry`、`watch`、種類常數）在核心 `tianxia/core/annal_base.py`，`biography.py`、`actions.py` 與各包記行狀都 import 它（不算過渡）；查詢與行狀頁那一半（`profile`、`standing`、`tier_*`、`xingshi_notes`、`rows`）在 `standing.py`。舊名 `tianxia/annals.py` 是指到 `standing.py` 的 `sys.modules` 別名（`standing` re-export 核心那一半，兩半的名字都拿得到、同一批物件；從這一批起舊名 `annals` 算列傳包，包要記一筆一律 `from tianxia.core import annal_base as annals`，不准再 `from tianxia import annals`）。換季存行狀時的身家 `profile` 核心不能 import 包，經 `Game._zhuan_profile`（`game_api.py` 的表）。
 
@@ -48,7 +48,7 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 畫面：`web/zhuan.js`（玩家傳那一層與行狀）。
-- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `zhuan`（`actions.main_slot`，圖檔網址經 `frame.shell.zhuan_art_src`）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `zhuan`（`actions.main_slot`，圖檔網址是 `zhuan_end.art_src`）。
 
 **鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `write_zhuan`（`/api/zhuan/write` 經 `shell.write_zhuan`；殼留一行包裝）、`verdict_text`、`VERDICT_OWNER`。沒有 `/api/do/` 的 op，也不是動作之後才開的背景，不接 `outlock` 掛鉤。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。
 
@@ -57,3 +57,6 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_annals.py`（原 `tests/core/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 另外要跑：改 `zhuan_view`、`zhuan_extras` 另跑 `tianxia/features/mall/tests/test_mall_zhuan_items.py`（`test_for` 改 `zhuan/routes.py` 挑不到）。

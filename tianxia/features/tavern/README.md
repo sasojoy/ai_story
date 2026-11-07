@@ -1,6 +1,6 @@
 # 酒肆（`tianxia/features/tavern/`）
 
-帶「酒肆」標籤的城鎮裡的一間：聽消息、查人、打聽交情與素材、題壁、請全店喝一輪、藏行跡、反查、託酒家留意、買殺手與保鏢、問酒家（鎖外三段式）、鄰桌閒談。主動搬六包第 10 批搬進來的是引擎那一半（計畫 `docs/superpowers/plans/2026-10-31-酒肆包-第1批.md`）；網頁的畫法在 `web/tavern.js`（全部拆包第 65 批從 `app.js` 逐行切出來，116 行；`web = ("tavern.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）：`tavernHtml` 與四頁、`tavDo`。點擊分派的 `case` 留在 `app.js`（殼），樣子在 `web/tavern.css`（第 67 批；`.shop-layer.shop-tavern` 那一條留 `style.css` 原位，前面多一個 `}` 害它作廢，搬了畫面會變）。
+帶「酒肆」標籤的城鎮裡的一間：聽消息、查人、打聽交情與素材、題壁、請全店喝一輪、藏行跡、反查、託酒家留意、買殺手與保鏢、問酒家（鎖外三段式）、鄰桌閒談。主動搬六包第 10 批搬進來的是引擎那一半（計畫 `docs/superpowers/plans/2026-10-31-酒肆包-第1批.md`）；網頁的畫法在 `web/tavern.js`（全部拆包第 65 批從 `app.js` 逐行切出來，116 行；`web = ("tavern.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）：`tavernHtml` 與四頁、`tavDo`。點擊分派第二輪第 84 批進這支 js，樣子在 `web/tavern.css`（第 67 批；`.shop-layer.shop-tavern` 那一條與多的 `}`（FB-9441）第 86 批一起搬進 `web/shop.css` 檔尾，兩者不能拆開，拆開那一條就活過來、畫面會變）。
 
 - 導覽：`docs/guide/裝備與店面.md` 的酒肆那一條。
 - 設計稿：沒有版本號——https://claude.ai/artifact/3CfrzfpT1HzCxy6S985Q5W（企劃者 2026-10-18 核可；第三節託付留意、第六節買殺手、第八節問酒家）。

@@ -82,3 +82,8 @@
 照條拆來：`test_sortie_facade.py`（4 條，從 `tests/core/test_engine.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `_carry`、`push_trend`、`_deed_points` 的本體在 `tianxia/core/pushing.py`（第 80 批），`Game` 留一行委派。
+- 假人：`duel_moves`、`TRAIN_SCORE`、`DUTY_SCORE` 第 89 批搬進 `bots.py`，舊名 re-export；`_crippled`、`_cannot_push`、`_outmatched`、`_train_value`、`_bounty_here`、`ORDER_SCORE`、`BOUNTY_SCORE`、`PRACTICE_SCORE` 在共用層 `bot_base`，一律寫 `bot_base.X`；`foes` 拿掉，`bot_base._sortie_win` 問 `Game._sortie_foes`。
+- 過渡：`bots.py` 不再 import `bot`、`bot_policy`；`duel_actions.py` 改讀核心 `core/name_base.active`（第 87 批），`train_actions.py` 的 `events` 是共用規則層，這兩處不再算過渡。另外要跑 `tianxia/features/military/tests/test_opportunities.py`（`DUTY_SCORE`）。

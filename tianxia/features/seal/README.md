@@ -55,7 +55,7 @@
 
 ## 內容歸屬
 
-這一包的 `content/seal.json`（七片）；`content.py` 照它到這一包的 `content/` 載、照舊驗（`_validate_seal` 留原處、不接 `check_content`，第 34 批認定第 2 條）。`Config.seal`（`SealTuning`）留在 `models.py`。時刻表上標 `seal`（`emerge`／`stir`）與 `mandate_only` 的決戰在 `content/timetable.json`；`content.mandate_timetable` 只准 `timetable.py`、`content.py`、`models.py` 與 `core/seal_base.py` 讀（`test_seal_mandate.py` 守門）。
+這一包的 `content/seal.json`（七片）；`content.py` 照它到這一包的 `content/` 載、照舊驗（`validate_seal` 在這一包的 `checks.py`，原位經 `check_at` 叫、不接 `check_content`，第二輪第 100 批）。`Config.seal`（`SealTuning`）留在 `models.py`。時刻表上標 `seal`（`emerge`／`stir`）與 `mandate_only` 的決戰在 `content/timetable.json`；`content.mandate_timetable` 只准 `timetable.py`、`content.py`、`models.py` 與 `core/seal_base.py` 讀（`test_seal_mandate.py` 守門）。
 
 ## 測試
 
@@ -67,7 +67,7 @@
   - 事件 `outing` 的 seal 那一格：探索包 `tianxia/features/explore/tests/test_explore_one.py`（出門一趟收尾撿碎片）；`battle_end` 那一格與決戰包讀 `seal_base`：`tianxia/features/battle/tests/`。
   - 管理者工具與領地爭奪的季：`tests/acts/test_conquest_rules.py`（換 `seal.find`、叫 `_seal_find`）、`tests/figures/test_week7_season.py`、輿圖包 `tianxia/features/map/tests/test_mapdata.py`、`test_real_map.py`、地盤包 `tianxia/features/territory_acts/tests/test_xingshi.py`。
   - 誰登記了哪幾格：`tests/core/test_contract_core.py`、`tests/core/test_contract_features.py`（`test_a_new_season_keeps_only_what_the_package_carries[seal]` 定 `carried`）、`tests/core/boundary_tables.py`（`# seal` 那一組）；名望來源清單 `tianxia/features/guide/tests/test_explain2.py`（奪璽單挑那一行在 `features/seal/actions.py`）。
-  - 世界層五格（第 25 批認定第 7 條：`seal` 原本是 `world.py` 模組說明點名的世界層代叫舊模組，`test_for` 挑不到 `test_world` 那一串）：`tests/core/test_world.py` 與 `world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tests/core/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`tianxia/features/bounties/tests/test_bounties.py`、`test_season21_daily.py`、`tests/figures/test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tianxia/features/seal/tests/test_seal.py`、`test_seal_engine.py`（換季把沒收場的奪璽單挑記成未分勝負）、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_chapters.py`、`test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`（`tianxia/features/map/tests/test_world_map.py` 整檔 slow）。
+  - 世界層五格（第 25 批認定第 7 條：`seal` 原本是 `world.py` 模組說明點名的世界層代叫舊模組，`test_for` 挑不到 `test_world` 那一串）：`tests/core/test_world.py` 與 `world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tianxia/features/admin/tests/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`tianxia/features/bounties/tests/test_bounties.py`、`test_season21_daily.py`、`tests/figures/test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tianxia/features/seal/tests/test_seal.py`、`test_seal_engine.py`（換季把沒收場的奪璽單挑記成未分勝負）、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_chapters.py`、`test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`（`tianxia/features/map/tests/test_world_map.py` 整檔 slow）。
   - 量表：`scripts/measure_seal.py` 換 `seal.tier_for`、`seal.lean_shift`、包的 `actions.settle`、`Game._mandate_settle`、`Game._seal_challengers`、`Game._seal_spectators`、`seal_duel.finish`／`resolve`、`BotRunner._add_bot`、`SqliteWorldStore.open_season`——改這一包的收場、定天命、集結時跑一次小參數確認數字有記到（`open_season`、`lean_shift`、`_mandate_settle` 只在 `--mandate` 底下換；week7 預設 `--hours 60` 走不到天命之爭，要 `--hours 160`，修正輪量過）。比對：`scripts/same_behavior.py` 的 `relic`、`herald`、`world`、`effects`、`battle`、`progress` 幾軌與 `explore-compare`。
 - 一起跑（不含 slow；第 27 批 Task 3 跑過同一串加世界層那一串——那時這一包的五個檔還在 `tests/seal/`、還沒有煙霧——1,568 條、`-n 4` 約 58 秒）：`python -m pytest -q -n 4 tianxia/features/seal/tests tests/seal tests/core/test_rules.py tests/figures/test_promotions_huang.py tests/acts/test_conquest_rules.py tests/figures/test_week7_season.py tianxia/features/map/tests/test_mapdata.py tianxia/features/map/tests/test_real_map.py tianxia/features/territory_acts/tests/test_xingshi.py tianxia/features/explore/tests/test_explore_one.py tianxia/features/guide/tests/test_explain2.py tests/core/test_test_for.py tianxia/features/peers/tests/test_social.py tianxia/features/seal/tests/test_seal_acts_web.py tianxia/features/seal/tests/test_seal_web.py tianxia/features/battle/tests tests/core/test_world.py`，加上面世界層那一串。
 
@@ -90,7 +90,7 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）、`web/seal.css`（獨門行動，第 67 批；奪璽卡的 `.order-*` 跟軍令、懸賞共用，留 `style.css`）；點擊分派的 `case`、`sealWatched`、`sealTitle` 留 `app.js`。
+- 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）、`web/seal.css`（獨門行動，第 67 批；奪璽卡的 `.order-*` 跟軍令、懸賞共用，留 `style.css`）；`sealWatched`、`sealTitle` 留 `app.js`，點擊分派第二輪第 84 批進這支 js。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `seal`（`seal_duel`、`seal`、`seal_watch` 三個鍵）。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`seal_use`；`admin_tools`：`seal_emerge`、`seal_stir`、`seal_assign`、`seal_duel`、`seal_fix`、`seal_cancel`、`seal_sink_check`、`seal_mandate`（時間 `shell.time.time()`，引擎不讀時鐘）。`admin_seal_stir` 的委派搬完之後沒人叫（寫進回報）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
@@ -102,3 +102,7 @@
 整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_seal.py`（原 `tests/seal/`）、`test_seal_acts.py`（原 `tests/seal/`）、`test_seal_acts3.py`（原 `tests/seal/`）、`test_seal_acts_web.py`（原 `tests/web/`）、`test_seal_engine.py`（原 `tests/seal/`）、`test_seal_revamp.py`（原 `tests/seal/`）、`test_seal_web.py`（原 `tests/web/`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 舊模組 → 包少 `skillview`（`gear_rows` 第 88 批改讀核心 `seal_base.on`）。這一包多登記 `admin` 表的 `seal` 格（第 90 批）。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。

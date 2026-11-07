@@ -72,7 +72,7 @@
 # `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準；那幾行第 16 批合進 develop 時去重了（三、過渡留一句記它們原本寫的用法）。
 共用規則層的函式怎麼寫（第 6 批的 `siege.title`、`siege.settle`、`siege.verdict` 那一條一起定）：**不列在這張清單**。這張清單只管 Game 上的
 `ctx.<名字>`（邊界測試只認這個寫法）；共用規則層有哪些模組看 `tianxia/core/registry.SHARED`，包直接 import 那個模組、不註過渡。
-單打服務（戰鬥區；打一場的每一包都用）
+單打服務（戰鬥區；打一場的每一包都用；本體在 `tianxia/core/combat.py`，第二輪第 79 批，名字不變，`_squad_encounter`、`odds` 還在 `Game`；推大勢在 `core/pushing.py`、回體丹在 `core/pills.py`，第 80 批）
 - 大場面判讀：`ctx.is_big(squad)`、
   `ctx._judged(squad)`、`ctx._fight_with(squad, judged, **kw)`、
   `ctx._narrate(record, result, judged)`、`ctx._style_note(squad, result)`、`ctx._terrain_note()`
@@ -137,7 +137,7 @@
 - 共用的字：`BIG_FIGHT_WAIT`（大場面按下去、等模型判讀時按鈕上的字；事件的戰鬥選項、挑戰本人、遊歷與出陣都用，從這個模組 import）
 
 # companions（全部拆包第 19 批「人物情誼一」：主人都是核心，留在 Game 上；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.3）
-- `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第 16 批 PM 認定第 1 條留在 Game）、`ctx._apply(effect)`（效果套用：
+- `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第二輪第 80 批搬進 core/pushing.py）、`ctx._apply(effect)`（效果套用：
   勸降成了立痕跡；事件檢定的委派）
 - 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
 # companions（全部拆包第 20 批「人物情誼二」：人物對話與 NPC 智能 2.0 搬進人物情誼包要叫的；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md 1.3）
