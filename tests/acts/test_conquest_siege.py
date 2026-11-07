@@ -933,7 +933,7 @@ def test_day_turn_only_voids_letters_that_never_opened():
 
 def test_votes_and_the_22_settle_are_gone():
     assert "conquest_vote" not in server.MAIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
-    assert "conquest_settle_now" not in server.ADMIN_ACTIONS
+    assert "conquest_settle_now" not in server.FEATURE_ADMIN_ACTIONS
     assert {"conquest_progress", "admin_conquest_letter"} <= set(server.FEATURE_ADMIN_ACTIONS)  # 第 46 批搬進地盤包的 admin_tools。FB-609：管理者那一個改名，不蓋掉玩家的
     assert not hasattr(Game, "conquest_vote")
     assert not any(hasattr(conquest_day, name) for name in ("tally", "plan", "merge", "settle", "settle_now", "commander_picks"))
@@ -1725,12 +1725,10 @@ def test_the_admin_letter_has_its_own_name_and_players_are_refused(conquest_serv
 def test_player_and_admin_action_names_never_collide():
     """/api/do 先查管理者那一張：同名的玩家動作永遠走不到（FB-609）。兩張表、以及 api_do 先接走的那幾個，名字都不能重。
     功能包的管理者工具（server.FEATURE_ADMIN_ACTIONS，開發規範手冊 3.3 的 admin_tools）又排在這些前面、最先查，一樣不能跟它們重。"""
-    assert set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS) == set()
-    assert set(server.ADMIN_ACTIONS) & SPECIAL_OPS == set()
     assert set(server.MAIN_ACTIONS) & SPECIAL_OPS == set()
     tools = set(server.FEATURE_ADMIN_ACTIONS)
     assert "mall_reissue" in tools  # 讀到了（商城那三樣）
-    assert tools & (set(server.MAIN_ACTIONS) | set(server.ADMIN_ACTIONS) | SPECIAL_OPS) == set()
+    assert tools & (set(server.MAIN_ACTIONS) | SPECIAL_OPS) == set()
     assert "admin_conquest_letter" in server.FEATURE_ADMIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
 
 

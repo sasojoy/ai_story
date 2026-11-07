@@ -107,7 +107,7 @@ def siege_margin(ctx, slot) -> str:
                  if n.result and n.key == slot.key and n.loc == slot.loc and n.minute == slot.minute), "")
 
 def admin_choices(ctx) -> dict | None:
-    """設定頁管理者工具「領地爭奪」那一組的下拉選單（server.admin_choices 的 conquest；打開領地爭奪，PM 2026-10-22）：只在領地爭奪開著、
+    """設定頁管理者工具「領地爭奪」那一組的下拉選單（管理者包 admin_choices 的 conquest，這一包登記的格；打開領地爭奪，PM 2026-10-22）：只在領地爭奪開著、
     季還沒收的季有，其餘 None（網頁不畫）。blocks 是搶得下來的區塊（字寫此刻歸誰、每一條進度、冷卻、被戰書凍結），sides 是交戰兩軍
     （admin_conquest_set／progress／letter 只收這兩軍），sieges 是時程表上還沒打完、沒作罷的攻城（admin_conquest_cancel 的 id）。
     只給管理者看；字待 joy 潤。"""

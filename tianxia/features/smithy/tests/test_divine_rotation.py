@@ -7,6 +7,7 @@ from conftest import real_content
 
 from tianxia import divine, equipment, forge_secrets, smithing
 from tianxia.sqlite_world import open_world
+from tianxia.features.admin import routes as admin_routes
 
 pytestmark = pytest.mark.whole_content
 
@@ -122,10 +123,10 @@ def test_the_settings_page_warns_when_new_divines_run_out():
     c = _content()
     w = _opened(c)
     admin, _ = _admin_rolls(c, w)
-    assert server.admin_choices(admin)["divine_out"] == ""
+    assert admin_routes.admin_choices(server, admin)["divine_out"] == ""
     w.mutate(lambda s: setattr(s.divine, "seen", [r.id for r in c.forge_secrets.values() if r.divine]))
     admin, _ = _admin_rolls(c, w)
-    choices = server.admin_choices(admin)
+    choices = admin_routes.admin_choices(server, admin)
     assert choices["divine_out"] == divine.EXHAUSTED
     drawer = run(server.main_view(admin), "return H.adminHtml();", S={"admin": choices})
     assert f'<p class="muted">{divine.EXHAUSTED}</p>' in drawer

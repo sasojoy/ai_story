@@ -73,7 +73,7 @@
   移動包的出發收店裡各包那一段，第 57 批加 Game.choose 那幾顆「選單上、不建紀錄」的（quick），照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
 | howto()（HowtoHook） | 玩法說明的格（全部拆包第 59 批「引導二」）：設定抽屜那一頁（guide/howto.py 的 page）照檔尾寫死的順序表 HOWTO_ORDER 一格一格接；
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
-| status_slots()（StatusHook） | 狀態列（Game.status_data）與江湖畫面（server._main_view_body）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
+| status_slots()（StatusHook） | 狀態列（Game.status_data）、江湖畫面（server._main_view_body）與管理頁（features/admin/routes.py 的 admin_choices，第二輪第 90 批）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
   一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled；表外的格接在表尾（第二輪第 74 批） |
 
 ctx 第一階就是 Game；功能包只准叫 services_list.md 那張清單上的方法，和自己這一包的委派。

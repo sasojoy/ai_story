@@ -367,8 +367,8 @@ def test_bots_never_use_an_act():
 
 def test_the_player_action_is_seal_use_not_an_admin_one():
     """玩家動作跟管理者動作不同名（FB-609）。"""
-    assert "seal_use" in server.MAIN_ACTIONS and "seal_use" not in server.ADMIN_ACTIONS
-    assert not set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)
+    assert "seal_use" in server.MAIN_ACTIONS and "seal_use" not in server.FEATURE_ADMIN_ACTIONS
+    assert not set(server.MAIN_ACTIONS) & set(server.FEATURE_ADMIN_ACTIONS)
 
 
 @pytest.mark.slow

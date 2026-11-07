@@ -14,7 +14,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名；犒軍與自然回復共用一天的上限（aid_ 開頭那一段）
 從大勢人物包的 figure_aid 搬來，recover 直接叫。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figures.py＋煙霧＋邊界
 （第 15 批 PM 認定第 3 條；收進來之前經 atlas、chiefs、figure_life、orders、plans、ranks、rumor_view……往上找挑到 110 個檔）。另外跑（-n 4）
-直接 import 它的：tests/figures/ 的 test_admin_timetable、test_figure_attrition、test_figure_life、test_figure_life_batch3、test_front_lines、
+直接 import 它的：tianxia/features/admin/tests/test_admin_timetable、tests/figures/ 的 test_figure_attrition、test_figure_life、test_figure_life_batch3、test_front_lines、
 test_gentry_allied、test_orders、test_plans、test_promotions_high、test_promotions_huang、test_season21_caps、test_season21_frame、test_timetable、
 test_week7_season；tests/battle/ 的 test_chiefs、test_ranks、test_rise；
 tests/server/test_push_resistance；tianxia/features/ 的 seal/tests/test_seal_acts、test_seal_revamp、gear/tests/test_signature_arms、notify/tests/test_web_push、battle/tests/test_generals、test_siege_settle、companions/tests/test_relations_letters、

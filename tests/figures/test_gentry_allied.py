@@ -264,7 +264,7 @@ def test_donate_goes_to_the_side_stock(wk):
 
 
 def _settled(game):
-    """開季那一刻的結算（第 1 週的週初掛鉤：軍令、懸賞），同 Game._settle_season_start。"""
+    """開季那一刻的結算（第 1 週的週初掛鉤：軍令、懸賞），同 features/admin/actions.py 的 _settle_season_start。"""
     from tianxia.world import settle_season_start
 
     settle_season_start(game.state.world, game.content, random.Random(0))

@@ -613,10 +613,10 @@ def test_the_admin_resume_goes_through_the_one_resume_helper(content, world, mon
     """每一條「繼續」的路都走 world.resume_season_clock（三步的順序只寫在那一個地方）：管理者的按鈕也是。"""
     game, resumed = _paused_across_changshe(content, world)
     calls = []
-    from tianxia import engine
+    from tianxia.features.admin import actions as admin_actions
 
-    real = engine.resume_season_clock
-    monkeypatch.setattr("tianxia.engine.resume_season_clock", lambda *a, **k: calls.append(a) or real(*a, **k))
+    real = admin_actions.resume_season_clock
+    monkeypatch.setattr("tianxia.features.admin.actions.resume_season_clock", lambda *a, **k: calls.append(a) or real(*a, **k))
     game.admin_resume_clock(resumed)
     assert len(calls) == 1
 

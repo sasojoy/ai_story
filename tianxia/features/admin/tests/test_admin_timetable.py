@@ -15,6 +15,7 @@ from tianxia import calendar, rules, timetable
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game
+from tianxia.features.admin import routes as admin_routes
 from tianxia.state import Lock, TimelineResult
 from tianxia.sqlite_world import open_world
 from tianxia.world_state import season_length_days
@@ -29,7 +30,7 @@ from test_day_scale import SHORT, WEEKEND, _lake, _miss, _season, _talk_out, SCE
 from tianxia import rules, sensing
 from tianxia.models import TimetableEvent
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
+CONTENT_DIR = Path(__file__).parents[4] / "content"
 NOW = 1000.0
 
 
@@ -406,7 +407,7 @@ def _notes(game):
 
 
 def _row(game, event_id="changshe_fire"):
-    return next(r for r in server.timetable_choices(game)["timetable"] if r["id"] == event_id)
+    return next(r for r in admin_routes.timetable_choices(server, game)["timetable"] if r["id"] == event_id)
 
 
 def test_open_then_cancel_says_cancelled_in_both_places(on_fb099):
@@ -475,7 +476,7 @@ def test_the_drawer_shows_the_cancelled_wording(on_fb099):
     admin.admin_cancel_battle()
     m = server.main_view(admin)
     assert m["admin"] is True
-    drawer = run(m, "return H.adminHtml();", S={"admin": server.admin_choices(admin)})
+    drawer = run(m, "return H.adminHtml();", S={"admin": admin_routes.admin_choices(server, admin)})
     assert CANCELLED in drawer
     assert re.search(r'<span class="tt-name">第\d+週　長社火攻</span><span class="tt-state">開打後取消・待定結果</span>', drawer)
 

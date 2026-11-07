@@ -668,7 +668,7 @@ def schedulable(content: Content, season: WorldState | None = None) -> list[Time
 def clear_of_events(state: GameState, content: Content, mark: float) -> tuple[float, str | None]:
     """決戰的時間（曆時交界上）剛好碰上一件還沒結算的一般大事，就往後挪一個曆時，直到沒碰上（T10 審查 I1：同一刻那件大事
     先結算，排在它前面、還沒開成的決戰會照起點判掉，見 world.settle_waiting_showdowns）。回傳（挪好的時間, 第一次碰上的那件的標題）。
-    管理者排時間（Game._showdown_mark）與賽季時鐘繼續後把決戰往前挪（world.keep_showdowns_on_time）共用。"""
+    管理者排時間（features/admin/actions.py 的 _showdown_mark）與賽季時鐘繼續後把決戰往前挪（world.keep_showdowns_on_time）共用。"""
     cal_hour = calendar.cal_hour_seconds(content, state.world)
     regular = [e for e in _pending(state, content) if e.kind not in NOT_BY_SEASON_HOUR]
     avoided = None
