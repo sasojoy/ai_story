@@ -1035,7 +1035,7 @@
       const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
       const extras = S.hereExtras || [];
       const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
-      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${bp ? bpDropMoves(menu) : menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${typeof jieyiOfferHtml === "function" ? jieyiOfferHtml(m) : ""}${links}${free}${dutyCardHtml(m, parts)}${bp ? bpDropMoves(menu) : menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
     return `${hints}${resultCard}${bp}${peek}${letter}${now}${scene}${links}${guideUp}${free}${bp ? bpDropMoves(menu) : menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
@@ -1067,7 +1067,8 @@
   const PEOPLE_HEAD = "此地人物"; // 待 joy 潤
   const HERE_HEAD = "此地可為"; // 待 joy 潤
   // 點了人物才畫的那幾顆（護衛、犒軍、挑戰本人），與搬去酒肆的招募：不進此地可為
-  const FIG_ACT = /^(aid:guard:|aid:rally:|act:challenge:)/;
+  // 結義的答應、婉拒（jieyi:）畫在場景卡底下那一張「結義之邀」（web/jieyi.js 的 jieyiOfferHtml），也不進此地可為
+  const FIG_ACT = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:)/;
   const HIRE = /^hire:/;
   // 行動列四格的墨圖（web/img/acts/，金色水墨）：格子的 key → 圖名
   const ACT_ART = { explore: "explore", train: "sortie", social: "social", move: "move" };

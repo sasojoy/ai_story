@@ -552,4 +552,4 @@ def test_the_card_registry_is_one_table_in_the_core():
     assert social.ACTIONS is cards.ACTIONS and social.register is cards.register
     assert social.CardButton is cards.CardButton and social.CardAction is cards.CardAction
     assert sorted((a.order, k) for k, a in cards.ACTIONS.items()) == [
-        (10, "greet"), (15, "mingtie"), (20, "gift"), (50, "spar"), (55, "discuss"), (60, "raid"), (65, "wanted")]
+        (10, "greet"), (15, "mingtie"), (18, "jieyi"), (20, "gift"), (50, "spar"), (55, "discuss"), (60, "raid"), (65, "wanted")]
