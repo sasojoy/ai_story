@@ -65,6 +65,13 @@ def faction_open(content: Content, world: WorldState | None, faction_id: str | N
     return any(f.id == faction_id for f in factions_of(content, world))
 
 
+def sect_open(content: Content, world: WorldState | None, sect_id: str) -> bool:
+    """這個門派這一季還是門派：歸豪強的門派（曹氏莊院）在拿掉豪強的季不再是門派（企劃者 2026-11-07「曹氏莊院 不適合當門派」；
+    拜入的試煉照事件條件 gentry 收掉，酒肆問路也不提）。"""
+    owner = content.scenario.sect_owner(sect_id)
+    return owner is None or faction_open(content, world, owner.id)
+
+
 def allies_of(content: Content, faction_id: str | None) -> list[FactionDef]:
     """這個陣營可以依附的幾軍（照劇本的順序）；不是要依附的陣營是空的。"""
     found = content.scenario.find_faction(faction_id)

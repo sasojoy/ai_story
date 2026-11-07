@@ -56,6 +56,7 @@
     ],
     "condition": {
       "no_sect": true,
+      "gentry": true,
       "flags_none": [
         "叛出:cao_manor"
       ]

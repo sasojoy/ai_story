@@ -222,7 +222,7 @@ SCORE_PREDICT = 24
 def request(state: GameState, content: Content, f: Feast, text: str) -> ToastRequest:
     ch = content.characters.get(f.host)
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
-    host_side = figure_life.side_of(content, f.host)
+    host_side = figure_life.side_of(content, f.host, state.world)
     p = state.player
     side = p.ally or p.faction
     return ToastRequest(

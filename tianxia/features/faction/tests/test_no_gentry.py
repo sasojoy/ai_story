@@ -97,3 +97,28 @@ def test_a_season_opened_before_the_stamp_keeps_its_gentry(wk):
     assert "faction:haoqiang" in _ids(game)
     game.choose("faction:haoqiang")
     assert game.state.player.pending_faction == "haoqiang"
+
+
+def test_cao_manor_is_no_sect_and_xuchu_stands_with_the_army(wk):
+    """企劃者 2026-11-07：曹氏莊院下一季起不當門派（「曹氏莊院 不適合當門派」，拜入的試煉不出、酒肆問路不提）；許褚歸官軍（「按照建議改」）。"""
+    from tianxia import figure_life, roster
+    from tianxia.features.tavern import ask as tavern_ask
+    from tianxia.rules import check_condition
+
+    trial = wk.events["cao_manor_join"]
+    game = _game(wk, at="cao_manor")
+    st = game.state
+    assert not check_condition(trial.condition, st, wk)
+    assert not allied.sect_open(wk, st.world, "cao_manor") and allied.sect_open(wk, st.world, "yingchuan_academy")
+    assert not any("曹氏莊院" in line and "門派" in line for line in tavern_ask.place_lines(st, wk, "cao_manor"))
+    xuchu = wk.characters["xuchu"]
+    assert xuchu.side == "haoqiang" and figure_life.side_of(wk, "xuchu", st.world) == "guan"
+    st.player.faction = "guan"
+    assert roster.recruit_problem(st, wk, game.world, "xuchu") != roster.SIDE_ONLY.format(side="地方豪強")
+    st.player.faction = "huang"
+    assert roster.recruit_problem(st, wk, game.world, "xuchu") == roster.SIDE_ONLY.format(side="官軍")
+    # 章之前開的季（第 9 季）：試煉照出、許褚照舊站豪強
+    st.world.no_gentry = False
+    st.player.faction = None
+    assert check_condition(trial.condition, st, wk)
+    assert figure_life.side_of(wk, "xuchu", st.world) == "haoqiang"

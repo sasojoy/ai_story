@@ -228,6 +228,8 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         line, _, mark = key.partition(":")
         if story_base.mark_of(state, line, mark) > most:
             return False
+    if cond.gentry is not None and cond.gentry == bool(state.world.no_gentry):  # 拿掉豪強的季（allied.gentry_on）
+        return False
     if cond.level_min is not None and p.member.level < cond.level_min:
         return False
     # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的

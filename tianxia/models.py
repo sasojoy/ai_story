@@ -112,6 +112,9 @@ class Condition(_Strict):
     story_marks: dict[str, int] = Field(default_factory=dict)
     story_marks_max: dict[str, int] = Field(default_factory=dict)  # 同上，至多到幾（寫 0 是「沒記過」：例 沒跟蘇掌櫃交心的人才要檢定）
     level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
+    # 這一季有沒有地方豪強（allied.gentry_on；拿掉豪強的季 WorldState.no_gentry）要等於它：曹氏莊院的拜入試煉寫 true，
+    # 下一季起曹氏莊院不再是門派（企劃者 2026-11-07「曹氏莊院 不適合當門派」）；None 是不看
+    gentry: bool | None = None
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -1140,6 +1143,8 @@ class CharacterDef(_Strict):
     haunts: list[str] = Field(default_factory=list)
     follows: str | None = None
     side: str | None = None
+    # 拿掉地方豪強的季（WorldState.no_gentry，企劃者 2026-11-07「按照建議改」）：side 寫豪強的人改站這一方（許褚歸官軍）；空的照 side
+    side_two_sides: str | None = None
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
@@ -1147,6 +1152,12 @@ class CharacterDef(_Strict):
     # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
     hire_type: str | None = None
     hire_at: str | None = None
+
+    def side_in(self, world=None) -> str | None:
+        """這一季（WorldState）他站哪一方：拿掉地方豪強的季（no_gentry）有 side_two_sides 的照它，其他照 side。"""
+        if world is not None and world.no_gentry and self.side_two_sides is not None:
+            return self.side_two_sides
+        return self.side
 
 
 class PlanContest(_Strict):
