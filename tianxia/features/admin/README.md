@@ -1,0 +1,35 @@
+# 管理者包 `features/admin`
+
+第二輪第 90 批開的包（計畫 `docs/superpowers/plans/2026-11-07-第二輪-第90批.md`）。管理頁 `/admin` 與它的資料、重設密碼、季與時刻表的工具都在這裡；改管理頁只讀這一包與 `web/admin.js`。
+
+| 檔 | 做什麼 |
+|---|---|
+| `actions.py` | Game 上原本的 17 個方法：開季、收季、開下一季、暫停與繼續賽季時鐘、觸發大事、推動大勢、排時間、跳到下一件、定戰況、定結果、清鎖定 |
+| `game_api.py` | Game 上掛的 15 個名字（`_settle_season_start`、`_showdown_mark` 只有這一包叫，不掛） |
+| `routes.py` | `/admin`、`/api/admin`、`/api/admin/player`、`/api/admin/accounts`、`/api/admin/reset_password`；管理頁的選單 `admin_choices`、`timetable_choices`、`admin_now`；13 個管理者工具（`admin_tools`） |
+| `web/admin.js`（檔照手冊 G9 在 `web/`，`web = ("admin.js",)`） | 管理頁的畫法與表單；排在 `WEB_ORDER` 裡，`/` 的 script 先後不變 |
+
+**沒有**：選項前綴、`PlayerState` 欄位（`player_fields` 空的）、內容檔、`Config`、開關（`enabled` 回真）。假人不碰管理者。
+
+## 留在別處的
+
+- `Game` 留 `is_admin`、`_admin_refusal`、`_admin_target`、`_save_target`（管理者外殼，手冊第十五節波次 B、C 第 14 條）；`paused_minutes` 留（`main` 表 `admin` 那一格每個人都讀）。
+- 殼留 `/`、`main` 表的 `admin` 格、`api_do` 的先後（管理者工具 gate → 登入 → `is_admin` → `act`）、`PLAYER_ADMIN_ACTIONS`。
+- 玩家個人劇情那張選單 `admin_player_choices` 在軍情包（`features/military/admin_actions.py` 的 `player_choices`）。
+- `PAUSED_REFUSAL` 在 `core/services.py`（`Game._admin_refusal` 也用）。
+
+## `admin_choices` 的格
+
+`/api/admin` 那一份的鍵照 `core/features.py` 的 `STATUS_ORDER["admin"]` 一格一格叫，**鍵的先後與叫的先後都算行為**（假鐘同一個請求每叫一次走一步）。`battles`、`showdowns` 是決戰包的格，`fallen` 是大勢人物的行動，`seal` 是玉璽，`xingshi`、`conquest` 是地盤，`mingtie` 是玩家互動；其餘是 `admin_choices` 裡的閉包。別的包要多給管理頁一樣東西，在自己的 `status_slots` 登記 `StatusHook("admin", …)`。
+
+## 權限
+
+- `/api/admin`、`/api/admin/player`、`/api/admin/accounts`：不是管理者 403。
+- `/api/admin/reset_password`：回「（只有管理者能重設密碼。）」。
+- 13 個工具走 `/api/do/{op}`：殼的 `api_do` 擋，回「只有管理者能這麼做。」。
+- `/admin` 不擋（同一張 `PAGE`，資料都在 `/api/admin*`）。
+
+## 測試
+
+`tests/`：`test_admin_timetable.py`、`test_season_pause.py`、`test_admin_routes.py`（每條路由、每個工具各打一條「不是管理者」）。
+別處要一起看的：`tianxia/features/military/tests/test_admin_triggers.py`、`tests/server/test_action_tables.py`、`tianxia/features/smithy/tests/test_divine_rotation.py`、`tests/acts/test_conquest_rules.py`。same_behavior 的軌：`switchboard`、`gavel`。

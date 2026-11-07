@@ -75,6 +75,8 @@ from ..features import tale  # 戰記：全部拆包第 52 批（只接 routes �
 # notify
 from ..features import notify  # 手機通知：全部拆包第 53 批（只接 routes 與 threads，沒有選項、選單、店面；五條 /api/push 與 /sw.js 的路徑跟別的路由不重疊，順序不影響結果）
 from ..features import heroines  # 女子與隱線（Joy 2026-11-06「開工」；規則本體在共用層 heroine_rules）
+# admin
+from ..features import admin  # 管理者：第二輪第 90 批（只接 routes 與 admin_tools，沒有選項、選單、店面；路徑與別的路由不重疊，順序不影響結果）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -148,6 +150,8 @@ FEATURES: list[Feature] = [
     # notify（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
     notify.FEATURE,
     heroines.FEATURE,
+    # admin（排在最後〔照合併先後〕：只有 routes 與 admin_tools，路徑與別的路由不重疊，順序不影響結果）
+    admin.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

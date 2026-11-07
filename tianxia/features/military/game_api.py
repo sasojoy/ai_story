@@ -23,6 +23,7 @@ TABLE = {
     "admin_rotate_seats": admin_actions.rotate_seats,
     "_summons_plan": admin_actions.summons_plan,
     "admin_summon": admin_actions.summon,
+    "admin_player_choices": admin_actions.player_choices,
     "admin_give_opportunity": opp_actions.give_opportunity,
     "admin_give_fragment": fs_actions.give_fragment,
     "convoy_line": order_actions.convoy_line,
