@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
-from tianxia import figures, precise, roster
+from tianxia import figures, precise, roster, secret_recipes  # 共用規則層（秘方：人物引出口訣）
 from tianxia.core import xinshen  # 心神（核心的資源）：心神開著時對話扣它、不扣體力
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
@@ -115,7 +115,14 @@ def open_dialogue(ctx, companion_id: str, prepared: companion_agent.PreparedTurn
         ctx.state.player.stamina += ctx.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
         return dialogue_unavailable(ctx, companion_id)
     ctx._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（features/guide/actions.hint_box）
-    return msgs + ctx._overhear(companion_id, msgs)
+    return msgs + overhear(ctx, companion_id, msgs)
+
+
+def overhear(ctx, companion_id: str, msgs: list[str]) -> list[str]:
+    """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
+    if secret_recipes.overheard(ctx.state, ctx.content, ctx.world, companion_id, "\n".join(msgs)):
+        return [ctx.content.config.secrets.overheard]
+    return []
 
 
 def last_talk_line(ctx, companion_id: str) -> str:
@@ -178,7 +185,7 @@ def talk(ctx, arg: str, prepared: companion_agent.PreparedTurn | None = None, sa
     if not idle:
         actions.stance_credit(ctx, companion_id, heard)
     annal_talk(ctx, companion_id, ctx.state.player.affinities.get(companion_id, 0) - affinity, said)
-    msgs += ctx._overhear(companion_id, msgs)
+    msgs += overhear(ctx, companion_id, msgs)
     if on:  # 心神（Joy 2026-11-06）：要叫模型的這一輪不扣體力；生成不出來的那輪不扣
         ctx.xinshen_spend(cost)
     else:

@@ -74,7 +74,6 @@ GAME_DELEGATE_CALLERS = {
     # outlets
     # seal
     # sense
-    ("_insight_blocked", "_sense_missed"): "舊探索那一行（action_notes）句尾補什麼時候才悟得出：舊探索（留給序章與測試內容；總表第七節第 1 題選甲，沒有下一批要收）",
     ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
     ("_action_title", "_epiphany_title"): "dunwu: 那一下江湖紀錄的標題（同上，dunwu: 留在原位）",
     # socialize

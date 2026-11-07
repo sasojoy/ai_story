@@ -34,4 +34,6 @@ TABLE = {
     "outing_set_tale": outing_actions.outing_set_tale,
     "outing_ink_left": outing_actions.outing_ink_left,
     "admin_erase_inscription": outing_actions.admin_erase_inscription,
+    # core_rest
+    "_scrap_find": explore_base.scrap_find,
 }

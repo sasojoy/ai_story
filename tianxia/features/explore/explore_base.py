@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import random
 
+from tianxia import forge_secrets, secret_recipes  # 共用規則層（殘譜、半張鑄譜）
 from tianxia import insights  # 共用規則層（這裡悟不悟得出）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬四景）
 from tianxia import renown, team, territory, training, treasures  # 核心、共用規則層
@@ -61,6 +62,19 @@ def legend_find(ctx, rng: random.Random | None = None) -> list[str]:
         return []
     ctx.state.player.legend_items += 1
     return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
+
+
+def scrap_find(ctx) -> list[str]:
+    """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；再擲一次半張鑄譜（打造隱藏配方設計 6.2），記進鑄譜。
+    同 _tale_clue 用自己的亂數。"""
+    s, cfg = ctx.state, ctx.content.config.secrets
+    out = []
+    seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
+    if secret_recipes.roll(cfg.scrap_chance, seed):
+        clue = secret_recipes.hear(s, ctx.content, secret_recipes.tianji_of(ctx.world), secret_recipes.SCRAP, seed)
+        if clue:
+            out.append(cfg.scrap_frame.format(clue=clue))
+    return out + ctx._forge_clue(forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
 
 
 def explore_outcome(ctx) -> list[str]:

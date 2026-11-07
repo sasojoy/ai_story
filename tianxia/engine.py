@@ -965,15 +965,6 @@ class Game:
     def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
         return page_view.action_notes(self, option_ids)
 
-    def _insight_blocked(self, loc: Location) -> bool:
-        """探索那一行的悟意境那一支，是不是只因為這個遊戲日在這裡選錯過做法才拿掉（這裡本來悟得到、比重不是 0）：是的話那一行
-        句尾補一句什麼時候才悟得出（howto.explore_line）。"""
-        c = self.content
-        return (
-            self._sense_missed(loc)
-            and c.config.explore_mix_of(loc.tags).weights.get("insight", 0) > 0 and bool(insights.explore_gives(loc, c))
-        )
-
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         return event_check.choice_label_of(self, choice, odds)
 
@@ -1376,17 +1367,6 @@ class Game:
             return self._present(self.content.events[promotion])
         return self._explore()
 
-    def _pill_find(self, rng: random.Random) -> list[str]:
-        """素材那一拍掉一顆回體丹（21 天季，正式季整合 6.4；Config.checkin.pill_drop）：用探索自己的亂數（用途「回體丹」），
-        不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
-        c = self.content
-        chance = c.config.checkin.pill_drop
-        if chance <= 0 or not checkin_on(c, self.state.world) or rng.random() >= chance:
-            return []
-        self.state.player.stamina_pills += 1
-        name = c.config.stamina_pill_name
-        return [PILL_FOUND.format(name=name), f"{name} +1"]
-
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。
         減法季探索一顆開著時「探索」照舊是 act:explore、出現在同樣的那幾種選單上，判斷不必換訊號；序章另外擋（呼叫端）。"""
@@ -1647,18 +1627,6 @@ class Game:
     def _tale_clue(self, event: Event) -> list[str]:
         return event_check.tale_clue(self, event)
 
-    def _scrap_find(self) -> list[str]:
-        """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；再擲一次半張鑄譜（打造隱藏配方設計 6.2），記進鑄譜。
-        同 _tale_clue 用自己的亂數。"""
-        s, cfg = self.state, self.content.config.secrets
-        out = []
-        seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
-        if secret_recipes.roll(cfg.scrap_chance, seed):
-            clue = secret_recipes.hear(s, self.content, secret_recipes.tianji_of(self.world), secret_recipes.SCRAP, seed)
-            if clue:
-                out.append(cfg.scrap_frame.format(clue=clue))
-        return out + self._forge_clue(forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
-
     def _forge_clue(self, source: int, seed: str) -> list[str]:
         """說書與殘譜的鑄器口訣（打造隱藏配方設計 6.2）：擲 tale_chance／scrap_chance（自己的亂數），中了照 forge_secrets.hear 挑一句、
         記進鑄譜。"""
@@ -1668,12 +1636,6 @@ class Game:
             return []
         clue = forge_secrets.hear(self.state, self.content, secret_recipes.tianji_of(self.world), source, seed)
         return [frame.format(clue=clue)] if clue else []
-
-    def _overhear(self, companion_id: str, msgs: list[str]) -> list[str]:
-        """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
-        if secret_recipes.overheard(self.state, self.content, self.world, companion_id, "\n".join(msgs)):
-            return [self.content.config.secrets.overheard]
-        return []
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         return event_check.event_battle(self, event, choice)
