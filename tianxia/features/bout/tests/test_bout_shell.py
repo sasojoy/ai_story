@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 import server
 from conftest import at
-from tianxia import battle_instance
+from tianxia.core import battle_base as battle_instance  # 第二輪第 102 批：bout.routes 讀核心那一格
 from tianxia.sqlite_world import open_world
 # autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
 from server_kit import (  # noqa: F401

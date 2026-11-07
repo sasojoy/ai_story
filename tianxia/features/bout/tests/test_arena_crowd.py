@@ -243,7 +243,7 @@ def open_characters_save(game):
 def test_the_server_asks_the_crowd_outside_the_lock_and_rewrites_the_line(monkeypatch):
     from unittest import mock
 
-    from tianxia import battle_instance
+    from tianxia.core import battle_base as battle_instance  # 第二輪第 102 批：bout.routes 讀核心那一格
     from tianxia.sqlite_world import open_world
 
     server, game = _server_ring(monkeypatch)

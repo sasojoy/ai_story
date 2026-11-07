@@ -520,5 +520,8 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - 裝備包的 `market_actions.stale_cell`（馬市的鈕過時了，FB-195）叫 `ctx._shop_open()`（Game 本體：此刻坐在哪一間店；已經出了馬市就不改掌櫃的話）
 # shop（第二輪第 93 批：shopview 切五家，沒有新名字）
 - 店共用在 `core/shop_base.py`（包直接 import）；各包 `shop_view.py` 的 `page(ctx)` 叫 `ctx._pill_day()`、`ctx._battle_power()`，都是上面列著的；銀兩出口包另外問自己的 `_at_own_base`、`_at_clinic_town`（第 99 批搬進同一包）。
+# core_shared（第二輪第 102 批：`SHELL_FOREIGN` 收掉，包不再經殼碰別包的模組）
+- `ctx.mail_day_at(now)`（主人人物與同伴包 `companions`；這個現實時刻算哪一個送信日，只讀）：手機通知包的 `notify.routes._notice_keys` 在鎖內叫
+- `ctx.write_battle_tales(client, act, items, sides=, fallen=)`（主人決戰包 `battle`；決戰放手一搏一整回合的劇情，B 段，不讀狀態）：戰記包的 `tale.routes.narrate_once` 在鎖外叫
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

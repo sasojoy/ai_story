@@ -331,7 +331,7 @@ CROSS_PACKAGE_CALLS = {
     ("military", "admin"): {"_timetable_event"},
     ("military", "guide"): {"_nearest_to", "_note_action"},
     ("military", "sortie"): {"_duty_option"},
-    ("notify", "companions"): {"morning_mail"},
+    ("notify", "companions"): {"mail_day_at", "morning_mail"},  # mail_day_at：core_shared 第二輪第 102 批
     ("peers", "bounties"): {"_raid_bounty"},
     ("peers", "figure_acts"): {"_yuedan_line"},
     ("peers", "travel"): {"_join", "join_refusal"},
@@ -347,7 +347,7 @@ CROSS_PACKAGE_CALLS = {
     ("sortie", "guide"): {"_note_action"},
     ("sortie", "military"): {"_opp_after_success", "_order_credit"},
     ("stamina_plays", "bounties"): {"_raid_bounty"},
-    ("tale", "battle"): {"_tale_battles", "apply_battle_tales", "battle_tale_request"},
+    ("tale", "battle"): {"_tale_battles", "apply_battle_tales", "battle_tale_request", "write_battle_tales"},  # write_battle_tales：core_shared 第二輪第 102 批
     ("tavern", "battle"): {"_battle_now"},
     ("territory_acts", "battle"): {"_cancel_siege", "_joinable", "_sieges"},
     ("travel", "battle"): {"_sync_battle_presence"},
@@ -356,14 +356,6 @@ CROSS_PACKAGE_CALLS = {
     ("travel", "peers"): {"_peer", "_tell_sender"},
     ("travel", "sortie"): {"sorties_left"},
     ("travel", "stamina_plays"): {"_ambush_check"},
-}
-
-# 包經殼碰別包的模組（shell.<server.py 最外層 import 的模組>，指到別包）：(這一包, 模組的名字)。過渡，不准加，第 102 批收；跟全包掃到的比，多了少了都紅。
-SHELL_FOREIGN = {
-    ("bout", "battle_instance"),  # 3 處
-    ("notify", "letters"),  # 1 處
-    ("seal", "battle_instance"),  # 3 處
-    ("tale", "battle_instance"),  # 3 處
 }
 
 # core_bots（第二輪第 89 批）

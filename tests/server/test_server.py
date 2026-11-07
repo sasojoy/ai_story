@@ -2207,7 +2207,9 @@ def test_the_other_blocks_settled_on_the_jianghu_page_flag_the_way_back_too(game
 
 
 def test_duel_text_without_a_duel_asks_no_model(game, monkeypatch):
-    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
+    from tianxia.core import battle_base  # 第二輪第 102 批：bout.routes 讀核心那一格，換別名那一格打不到（這條是「不該評」，打不到會假綠）
+
+    monkeypatch.setattr(battle_base, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
     with at(game, 0.0), mock.patch("server.time.time", return_value=0.0):
         assert server.duel_text(game, "撒石灰") == ["（此刻無法這麼做。）"]
 

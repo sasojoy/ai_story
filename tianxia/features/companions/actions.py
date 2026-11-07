@@ -389,6 +389,11 @@ def deliver_mail(ctx, now: float) -> None:
         ctx._write(letters.TITLE, mail)
 
 
+def mail_day_at(ctx, now: float) -> int | None:
+    """這個現實時刻算哪一個送信日（letters.mail_day）；這一季沒開 morning_mail 回 None。手機通知的看守鎖內叫，不寫東西。"""
+    return letters.mail_day(ctx.content, ctx.state.world, now)
+
+
 def morning_mail(ctx, now: float) -> bool:
     """減法季「09:00 來信」（整合設計第十章，批 9）：伺服器的看守替開了推播的人送今天的信，不必等他上線（送了手機才跳得出
     「某某來信」）。只做同步裡書信那一格（letters.deliver），不補算體力、不算上線、不動「此地還有」；他下次同步照常，同一個

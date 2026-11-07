@@ -39,7 +39,7 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     SHARED_CORE_WORLD2, SHARED_LATER, SHARED_PENDING,
     STEP_PACKAGE_READS,
     # core_api（第二輪第 74 批）
-    CROSS_PACKAGE_CALLS, SHELL_FOREIGN,
+    CROSS_PACKAGE_CALLS,
     # core_bots（第二輪第 89 批）
     BOT_SHELL, BOT_SHELL_PENDING,
 )
@@ -1252,8 +1252,8 @@ def foreign_shell_refs(source: str, package: str) -> set[tuple[str, str]]:
             and points.get(node.attr, package) != package}
 
 
-def test_a_package_reaches_another_package_through_the_shell_only_on_the_written_list():
-    """shell.<名字> 指到別包是繞過 ctx 的跨包：只有 SHELL_FOREIGN 那幾列（過渡，不准加，第 102 批收），多了少了都紅。"""
+def test_no_package_reaches_another_package_through_the_shell():
+    """shell.<名字> 指到別包是繞過 ctx 的跨包，一處都不准（第二輪第 102 批收掉最後 4 列）。"""
     source = "def f(shell):\n    return shell.battle_instance.x\n"
     assert foreign_shell_refs(source, "tale") == {("tale", "battle_instance")}
     assert foreign_shell_refs(source, "battle") == set()
@@ -1262,7 +1262,7 @@ def test_a_package_reaches_another_package_through_the_shell_only_on_the_written
     for name in _packages():
         for path in _package_files(name):
             found |= foreign_shell_refs(path.read_text(encoding="utf-8"), name)
-    assert found == SHELL_FOREIGN
+    assert found == set(), f"經殼碰別包的模組，改走核心或 ctx 服務：{sorted(found)}"
 
 
 def service_list_leftovers() -> list[str]:
@@ -1322,5 +1322,4 @@ if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python 
     print(f"總表寫了、先不收的（SHARED_LATER）：{len(SHARED_LATER)} 個（{'、'.join(sorted(SHARED_LATER))}）")
     # core_api（第二輪第 74 批）
     print(f"跨包經 Game（CROSS_PACKAGE_CALLS）：{len(CROSS_PACKAGE_CALLS)} 對、{len(set().union(*CROSS_PACKAGE_CALLS.values()))} 個名字")
-    print(f"shell 指到別包（SHELL_FOREIGN，第 102 批收）：{len(SHELL_FOREIGN)} 列")
     print(f"服務清單上沒有包叫或只有主人叫（PM 每波清一次）：{len(service_list_leftovers())} 個（{'、'.join(service_list_leftovers())}）")
