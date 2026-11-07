@@ -1296,6 +1296,21 @@ def test_a_core_service_pick_with_too_many_files_falls_back_to_core_and_smoke(mo
     assert picked.core and picked.smoke and any("太多" in w for w in picked.why)
 
 
+def test_the_combat_service_file_picks_its_base_not_core_and_smoke():
+    """第 79 批開的真檔（FAKE_PUSHING 那幾條留給第 80 批）：take_toll 的名字認不出功能（take 在 SERVICE_STOP、沒有測試檔叫 toll），靠這個檔的底，
+    不跑核心測試與煙霧。battle_scores 經 ctx._battle_power 叫它（test_rise 換掉 Game._battle_power，要打得到）：_core_refs 只看 ast.Name，不往上算；
+    battle_scores 也在 battle 那一群，而 battle 就在底裡，所以沒漏。"""
+    assert test_for.service_word("take_toll") == ""
+    picked = test_for.pick(["tianxia/core/combat.py"], hunks_of=_core_hunk("combat", "take_toll"))
+    names = {p.name for p in picked.files}
+    assert {"test_battle_facade.py", "test_tactics.py", "test_engine.py", "test_feature_boundaries.py"} <= names
+    assert not picked.core and not picked.smoke
+    assert len(names) <= test_for.IMPORT_CAP
+    src = (ROOT / "tianxia" / "core" / "combat.py").read_text(encoding="utf-8")
+    assert "battle_scores" not in test_for._callers_up("battle_power", test_for._core_refs(src, src)[2])
+    assert test_for.service_word("battle_scores") == "battle" and test_for.word_tests("battle") <= picked.files
+
+
 def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
     """第 72 批留的：pick 裡 named（檔名 → 路徑）被 game_api 那一條蓋掉，game_api.py 排在內容檔、web/ 前面時 test_content、test_real_content、
     test_content_packs、test_server 都掉（排後面才挑得到）。"""

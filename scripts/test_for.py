@@ -933,7 +933,8 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
 # 邊界測試（push_trend → test_push*，202 條）。函式以外（import、說明、模組層）或指名了卻沒有差 → 照舊核心測試＋煙霧。
 # 寫到那個名字、可是檔名不是這一群的（test_opportunities 442 條只拿 push_trend 當準備動作）不挑：留給閘門，why 寫幾個檔，要當場驗就直接給檔名。
 CORE_SERVICES: dict[str, tuple[str, ...]] = {  # 模組 → 這個檔的底（改哪個函式都跑）；開檔的那一批照實調
-    "combat": ("battle", "squad"),
+    # 第 79 批開檔照實量：squad 0 個檔；battle 22、tactics 5、engine 5、encounter、fight、rounds、team 各 1，併起來 36 個（IMPORT_CAP 之內）
+    "combat": ("battle", "encounter", "fight", "rounds", "tactics", "team", "engine"),
     "pushing": ("push",),
     "pills": ("pill", "stamina"),
     "status_view": ("status", "jianghu"),
