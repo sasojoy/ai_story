@@ -90,6 +90,7 @@ def main(argv=None) -> int:
         for which in gate.MUTATIONS:
             s = _gate(a, "mut_" + which, "--mutate", which)
             rows.append((f"c round --mutate {which} goes red", s["code"] == 1, f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})}"))
+            rows.append((f"c round --mutate {which} ran the replay from the gate", s["replay"]["ran"] and any(x["round"].startswith("replay") for x in s["real"]), f"{s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"
         s = _gate(a, "hostile_hang", "--mutate", "page-hang")
         rows.append(("a page stuck in a loop is exit 2, not a hang", s["code"] == 2, f"exit {s['code']} {s['took']}s tool {[t[:160] for t in s['tool'][:2]]}"))

@@ -3,8 +3,12 @@
     python scripts/webqa/gate.py --base <sha> --head <sha> --out <dir>
 
 Exit 0 green, 1 real differences, 2 the tool broke (no browser, node or PIL; a server did not start; a patch target is gone;
-the driver died; a flow threw; a scene that has to be reached was not). Everything below --out is throwaway except summary.json,
-report.txt and red/. Noise is classified by noise.py; only what is left counts.
+the driver died or stopped answering; a flow threw; a scene that has to be reached was not). Everything below --out is throwaway except
+summary.json, report.txt and red/. Noise is classified by noise.py; only what is left counts.
+
+What the walk cannot see: it freezes animation, and it takes no pictures at 640, 641 and 900. Both come from the corpus replay (replay.py), and the
+replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
+why. Without it those three windows only have the page's size behind them: used values moving there are counted apart, as layout-no-pixels.
 """
 import argparse
 import concurrent.futures
@@ -27,6 +31,7 @@ MUST_REACH = os.path.join(HERE, "must_reach.txt")
 FORBIDDEN_PORTS = {7861}
 DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if os.name == "nt" else 0
 STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".ogg")
+STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
@@ -150,11 +155,11 @@ def mutate(copy: str, which: str) -> None:
         raise ToolBroke(f"no mutation {which}")
 
 
-def static_digest(web: str) -> dict:
+def static_digest(web: str, ext=STATIC_EXT) -> dict:
     out = {}
     for root, _, files in os.walk(web):
         for n in files:
-            if n.lower().endswith(STATIC_EXT):
+            if n.lower().endswith(ext):
                 p = os.path.join(root, n)
                 with open(p, "rb") as f:
                     out[os.path.relpath(p, web).replace(os.sep, "/")] = hashlib.sha256(f.read()).hexdigest()[:16]
@@ -242,12 +247,43 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
     out["compare_seconds"] = round(time.monotonic() - t0 - walked)
     if args.keep:
         out["walks"] = walks
-    if args.keep_corpus:
+    if args.dom_to:
         for walk, label in zip(walks, ("base", "head")):
-            shutil.copytree(os.path.join(walk, "dom"), os.path.join(args.keep_corpus, name, label, "dom"), dirs_exist_ok=True)
+            shutil.copytree(os.path.join(walk, "dom"), os.path.join(args.dom_to, name, label, "dom"), dirs_exist_ok=True)
     if not args.keep:
         shutil.rmtree(folder, ignore_errors=True)
     return out
+
+
+def stylesheet_changes(base_web: str, head_web: str) -> list[str]:
+    """The stylesheets and index.html (which lists them) that differ: what the replay is for."""
+    a, b = static_digest(base_web, STYLE_EXT), static_digest(head_web, STYLE_EXT)
+    return sorted(n for n in set(a) | set(b) if a.get(n) != b.get(n))
+
+
+def run_replay(args, work, copies, rounds, changed, expect, summary) -> None:
+    """Every round's snapshots against both commits' stylesheets: frozen with pictures at all six windows, then unfrozen for the animation declarations."""
+    sys.modules.setdefault("gate", sys.modules[__name__])  # replay.py imports this file by name: one module, one ToolBroke
+    import replay
+
+    corpus = os.path.join(work, "replay_corpus")
+    os.makedirs(corpus)
+    for r in rounds:
+        folder = os.path.join(args.dom_to, r, "base", "dom")
+        for name in os.listdir(folder):
+            shutil.copy(os.path.join(folder, name), os.path.join(corpus, f"{r}-{name}"))
+    t0 = time.monotonic()
+    done = {"ran": True, "changed": changed, "passes": {}}
+    summary["replay"] = done
+    for label, how in (("replay", {"frozen": True, "shoot": True}), ("replay-anim", {"frozen": False, "shoot": False})):
+        res = replay.replay(corpus, os.path.join(copies[0], "web"), os.path.join(copies[1], "web"), os.path.join(args.out, label), chrome=args.chrome, node=args.node, red_budget=args.red_left, **how)
+        args.red_left -= res["red_images"]
+        kept, excused = apply_expect(res["real"], expect)
+        summary["real"] += [{"round": label, **x} for x in kept]
+        summary["expected"] += [{"round": label, **x} for x in excused]
+        summary["tool"] += [f"{label}: {x}" for x in res["tool"]]
+        done["passes"][label] = {"snapshots": res["snapshots"], "shots": res["shots"], "same_shots": res["same_shots"], "real": len(res["real"]), "noise": res["noise"], "seconds": res["seconds"]}
+    done["seconds"] = round(time.monotonic() - t0)
 
 
 def must_reach_rows(rounds) -> tuple[dict, set]:
@@ -308,7 +344,7 @@ def apply_expect(real, expect):
 def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     lines = [f"webqa {summary['base']} -> {summary['head']}: {'GREEN' if summary['green'] else 'RED' if summary['exit'] == 1 else 'TOOL BROKE'} (exit {summary['exit']})",
              f"scenes {summary['scenes']} shots {summary['shots']} identical {summary['same_shots']} seconds {summary['seconds']}",
-             f"noise {summary['noise']}", f"fingerprint {summary['fingerprint']}", ""]
+             f"noise {summary['noise']}", f"fingerprint {summary['fingerprint']}", f"replay (pictures at 640, 641, 900; animation declarations) {summary['replay']}", ""]
     for t in summary["tool"]:
         lines.append(f"TOOL {t}")
     for row in summary["real"]:
@@ -336,7 +372,7 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
 def run(args) -> int:
     t0 = time.monotonic()
     summary = {"base": args.base, "head": args.head, "green": False, "exit": 2, "real": [], "expected": [], "noise": {}, "scenes": 0, "shots": 0, "same_shots": 0, "noise_rows": [], "not_reached": [], "missing_must_reach": [], "must_reach_quick_missing": [], "tool": [], "seconds": 0,
-               "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": []}
+               "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": [], "replay": {"ran": False, "why": "did not get that far"}}
     per_round = {}
     work = os.path.join(args.out, "_work")
     try:
@@ -367,6 +403,10 @@ def run(args) -> int:
         if args.expect:
             with open(args.expect, encoding="utf-8") as f:
                 expect = json.load(f)
+        changed = stylesheet_changes(os.path.join(copies[0], "web"), os.path.join(copies[1], "web"))
+        why_not = "--quick" if args.quick else "--no-replay" if args.no_replay else None if changed else "no stylesheet and no index.html differs"
+        args.dom_to = args.keep_corpus or (os.path.join(work, "corpus") if not why_not else None)
+        summary["replay"] = {"ran": False, "why": why_not or "the walk did not finish"}
         env = clean_env()
         args.red_left = 40
         coverage = {}
@@ -406,6 +446,8 @@ def run(args) -> int:
                     summary["must_reach_quick_missing" if r in soft else "missing_must_reach"].append(f"{r}:{name}")
         if summary["missing_must_reach"]:
             summary["tool"].append("scenes that have to be reached were not: " + ", ".join(summary["missing_must_reach"][:20]))
+        if not why_not and not summary["tool"]:  # a walk the tool already gave up on proves nothing about its snapshots
+            run_replay(args, work, copies, rounds, changed, expect, summary)
         total = sum(len(v) for v in coverage.values())
         summary["coverage"] = {"functions": total, "called": sum(1 for v in coverage.values() for hit in v.values() if hit), "not_called": {k: sorted(fn for fn, hit in v.items() if not hit) for k, v in sorted(coverage.items()) if not all(v.values())}}
         summary["exit"] = 2 if summary["tool"] else 1 if summary["real"] else 0
@@ -456,6 +498,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
     ap.add_argument("--no-must-reach", action="store_true", help="for walking old commits")
+    ap.add_argument("--no-replay", action="store_true", help="skip the replay even if a stylesheet differs (reproductions; the summary says so)")
     ap.add_argument("--swap-hosts", action="store_true", help="base on localhost, head on 127.0.0.1: does a difference follow the host or the code")
     ap.add_argument("--write-must-reach", action="store_true", help="write must_reach.txt from this walk")
     return ap

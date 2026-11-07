@@ -159,9 +159,18 @@ def test_a_changed_dom_a_changed_style_and_changed_clicks_are_real(compare, tmp_
 
 
 def test_a_used_value_moving_is_noise_and_stays_out_of_the_fingerprint(compare, tmp_path):
-    out = compare.compare(_walk(tmp_path / "a"), _walk(tmp_path / "b", vals=("red", "312.5px")), HOSTS)
+    out = compare.compare(_walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", vals=("red", "312.5px"), dots=0), HOSTS)
     assert out["real"] == [] and out["noise"] == {"layout-used": 1}
     assert out["fingerprint"]["A"]["style"] == out["fingerprint"]["B"]["style"]
+
+
+def test_a_used_value_with_no_picture_behind_it_is_counted_apart(compare, noise, tmp_path):
+    # 640、641、900 走的時候不拍照：只有頁面大小佐證，不准混進 layout-used（第 77 批審查）
+    out = compare.compare(_walk(tmp_path / "a"), _walk(tmp_path / "b", vals=("red", "312.5px")), HOSTS)
+    assert out["real"] == [] and out["noise"] == {"layout-no-pixels": 1}
+    assert noise.style_class({"margin-left"}, True, has_pixels=False) == "layout-no-pixels"
+    assert noise.style_class({"color"}, True, has_pixels=False) is None
+    assert noise.style_class({"margin-left"}, False, has_pixels=False) is None
 
 
 def test_anti_aliasing_beside_a_used_value_is_still_the_same_picture(compare, tmp_path):
@@ -245,6 +254,24 @@ def test_no_browser_is_exit_two(tmp_path):
     assert r.returncode == 2
     summary = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
     assert summary["exit"] == 2 and not summary["green"] and "no browser" in summary["tool"][0]
+
+
+def test_the_replay_is_for_stylesheets_and_the_page_that_lists_them(tmp_path):
+    gate = _load("gate")
+    a, b = tmp_path / "a", tmp_path / "b"
+    for web in (a, b):
+        web.mkdir()
+        (web / "index.html").write_text("<head></head>", encoding="utf-8")
+        (web / "style.css").write_text(".a{}", encoding="utf-8")
+        (web / "app.js").write_text("1", encoding="utf-8")
+    assert gate.stylesheet_changes(str(a), str(b)) == []
+    (b / "app.js").write_text("2", encoding="utf-8")
+    assert gate.stylesheet_changes(str(a), str(b)) == []  # 程式改了 DOM 會走到比對，不靠重播
+    (b / "style.css").write_text(".a{color:red}", encoding="utf-8")
+    (b / "new.css").write_text(".b{}", encoding="utf-8")
+    assert gate.stylesheet_changes(str(a), str(b)) == ["new.css", "style.css"]
+    (b / "index.html").write_text("<head><link></head>", encoding="utf-8")
+    assert "index.html" in gate.stylesheet_changes(str(a), str(b))
 
 
 def test_a_walk_that_never_ends_is_the_tool_not_a_hang():

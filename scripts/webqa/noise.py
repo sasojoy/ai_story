@@ -6,6 +6,8 @@ The classes (each one came from a real row of waves B and C):
   share        a fresh share code: the difference is only in /zhuan/CODE, /zhanji/CODE and the share row's rect
   tale         the chronicle link written earlier on one side: only in the link
   layout-used  used values read while layout was moving: only the properties below, and the pixels of that window agree
+  layout-no-pixels  the same properties on a window the walk takes no pictures of (640, 641, 900): only the page's size says they agree, so it is counted apart.
+               The pictures of those windows come from the replay, which gate.py runs when a stylesheet differs.
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
 order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
 when both sides still show them (compare.py).
@@ -89,12 +91,13 @@ def used_only(props, flip: bool = False) -> bool:
     return all(is_layout_used(p) or (flip and p in GUTTER_ALSO) for p in props)
 
 
-def style_class(props, pixels_same: bool, unstable: bool = False) -> str | None:
-    """props differ between the two sides on one window. Noise only when they are used values and that window looks the same."""
+def style_class(props, pixels_same: bool, unstable: bool = False, has_pixels: bool = True) -> str | None:
+    """props differ between the two sides on one window. Noise only when they are used values and that window looks the same.
+    has_pixels False: "looks the same" only means the page has the same size."""
     props = set(props)
-    if unstable or not props or not pixels_same:
+    if unstable or not props or not pixels_same or not all(is_layout_used(p) for p in props):
         return None
-    return "layout-used" if all(is_layout_used(p) for p in props) else None
+    return "layout-used" if has_pixels else "layout-no-pixels"
 
 
 def within_aa(pixels: int, levels: int) -> bool:
