@@ -10,8 +10,8 @@
 - close_season：江湖史在季末寫（PM 2026-10-25 第 4 件，照整合設計 5.2）——每個地點挑最高的那一條痕跡寫一句。
 公開的只有後果與痕跡：傳聞、江湖史、描寫都不帶名字，也不寫玩家寫的句子。
 
-只 import models、rules、state；接線在 engine（Game.location_text、_save_season／sync／world_tick 叫 fire_due、跨過門檻那一刻出過力的人的
-行狀 annals.MARK）、xingshi.facts、world.end_season（close_season）。開關是 rules.jianfa(content, world, "marks_visible")。
+只 import models、rules、state 與核心的行狀 annal_base；接線在 engine（Game.location_text、_save_season／world_tick 叫 fire_due、sync 叫 tick：
+防漏與跨過門檻那一刻出過力的人的行狀 annals.MARK）、xingshi.facts、world.end_season（close_season）。開關是 rules.jianfa(content, world, "marks_visible")。
 """
 from __future__ import annotations
 

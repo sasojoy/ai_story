@@ -146,6 +146,11 @@ _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
 # 格裡一律在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。
 
 
+def _deliver_marks(ctx: Game) -> None:
+    if marks_rules.tick(ctx.state, ctx.content):
+        ctx._save_season()
+
+
 def _deliver_plans(ctx: Game) -> None:
     settled = plans.deliver(ctx.state, ctx.content)  # 世界活起來：我插過手的盤算有了結果
     if settled:
@@ -211,7 +216,7 @@ _SEAM_CORE: dict[str, dict[str, Callable[..., Any]]] = {
         "results": lambda ctx: features_core.deliver_results(ctx),
         # 別人捎來的（接縫掛鉤，第 11 批）：酒肆包——風聲（有人在酒肆打聽你）、自己雇的殺手得手失手或到期退錢、託酒家留意的人有了準信或到期
         "notices": lambda ctx: features_core.deliver_notices(ctx),
-        "marks": lambda ctx: ctx._marks_tick(),  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
+        "marks": _deliver_marks,  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
         "plans": _deliver_plans,
         "summons": _deliver_summons,
     },
@@ -960,12 +965,10 @@ class Game:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
         apply_effect 的 trend 變動等既有程式碼都是這樣寫的，沒有、也不需要特別改寫成
         認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。
-        痕跡看得見（減法季批 4）：寫回之前先看有沒有痕跡過了門檻（痕跡只在有人記的那一下漲，記的那一下存季時發就夠；_marks_tick 防漏）。"""
+        痕跡看得見（減法季批 4）：寫回之前先看有沒有痕跡過了門檻（痕跡只在有人記的那一下漲，記的那一下存季時發就夠；marks.tick 防漏）。"""
         if jianfa(self.content, self.state.world, "marks_visible"):
             marks_rules.fire_due(self.state, self.content)
         self.world.save_season(self.state.world)
-
-    MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
 
     # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
     # 本體在 tianxia/core/combat.py（第二輪第 79 批），這裡留一行委派：server 的鎖外三段式、choose、事件檢定、各包在叫；_narrate 照舊是 staticmethod
