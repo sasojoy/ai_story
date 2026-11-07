@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook
+from tianxia.core.features import ContentSlot
 
 
 class SenseFeature(Feature):
@@ -23,6 +24,15 @@ class SenseFeature(Feature):
     # 換季全部跟著新角色重來（Game._reset_player_for_new_season 本來就不帶）。私有意境 own_insights／own_serial 是共用規則層 insights 的（合成也寫）
     player_fields = ("sensing", "sense_serial", "sense_misses", "epiphanies", "epiphany_dry", "god_naming")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("insight_scenes", lambda *a: checks.check_insight_scenes(*a)),
+            ContentSlot("insight_strong", lambda *a: checks.check_insight_strong(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """一直開著：有所感沒有總開關（有沒有場景看內容 content/insight_scenes.json），特殊頓悟看自己的 Config.epiphany——
