@@ -561,7 +561,7 @@ const mk = (c) => {
 };
 globalThis.document = {
   documentElement: { style: { getPropertyValue: (n) => vars[n] || "", setProperty: (n, v) => { vars[n] = v; } } },
-  getElementById: (id) => (id === "top" ? Object.assign(el.head, { querySelector: (sel) => (sel === ".who > .where" ? el.where : null), querySelectorAll: () => [] }) : null),
+  getElementById: (id) => (id === "top" ? Object.assign(el.head, { querySelector: (sel) => (sel === ".who .where:not(.sub)" ? el.where : null), querySelectorAll: () => [] }) : null),
   createRange: () => ({ selectNodeContents(n) { current = n; }, getBoundingClientRect: () => ({ right: current.end() }) }),
 };
 finish(input.cases.map((c) => {
