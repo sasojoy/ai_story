@@ -4,7 +4,8 @@
 內容寫在 content/storylines.json 與 content/events/chapter_*.json（產生器 scripts/story/gen_chapters.py）。
 
 - 開：投靠了那一方、前面那幾回（ChapterSpec.after）做完或收了、要等的大事（after_beat）結算了、自己這一回的大事（beat）還沒結算，
-  同步時就開（tick）。中途投靠的人從那一方此刻的那一回開始：大事已經結算的那幾回不開。
+  同步時就開（一條線包的 storyline.chapter_tick：開與收叫一條線的 start、finish，全部拆包第 40 批從這裡的 tick 整段搬過去；這一份收進
+  共用規則層，不 import 一條線包）。中途投靠的人從那一方此刻的那一回開始：大事已經結算的那幾回不開。
 - 做成：走進最後一段 wait（task「chapter_beat」）那一刻（after）。記一筆貢獻（chapter_contribution）、
   替推的那一方加份量（WorldState.chapter_weights，帶著 sway_marks 的記號另加）、做成的人數 +1（chapter_done，章回卡寫）。
 - 收：beat 結算了，wait 那一段的 task 成立，照結果記一個記號（「果成」「果不成」「果guan」「果huang」）往結局走；
@@ -13,13 +14,17 @@
   決戰（world._claim_showdown）照份量挪開打的起點，最多 chapter_edge_cap 點。份量照開根號：20 人跟 200 人的服都推得動。
 
 規則掛在 Config.jianfa.chapters（rules.jianfa），也要 storylines 開著。只讀時鐘 state.world.time。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（一條線的 active、current、here、doable 讀底座 story_base）。
+改這一份 scripts/test_for.py 只挑自己檔名的 tests/core/test_chapters.py＋煙霧＋邊界（收進來之前也只挑到它）；本週卡讀它（weekcard），weekcard.py
+說明「另外跑」那一串與一條線包的 tianxia/features/story/tests/ 也跑。
 """
 from __future__ import annotations
 
 import math
 from typing import TYPE_CHECKING
 
-from . import calendar, deeds, storyline, wins
+from . import calendar, deeds, story_base, wins
 from .rules import jianfa
 
 if TYPE_CHECKING:
@@ -88,32 +93,6 @@ def _ready(state: GameState, content: Content, line: StoryDef) -> bool:
     return True
 
 
-def tick(state: GameState, content: Content, world: WorldStateStore | None) -> list[str]:
-    """同步與每個動作之前（Game._story_tick）：換了陣營的作罷、大事結算了還沒做成的收成 missed、該開的開。回江湖紀錄要寫的話。"""
-    if not on(content, state.world):
-        return []
-    p, w = state.player, state.world
-    msgs: list[str] = []
-    for progress in storyline.active(state):
-        line = storyline.definition(content, progress)
-        if line is None or line.chapter is None:
-            continue
-        if line.chapter.side != p.faction:
-            progress.ending, progress.stage, progress.go, progress.due = LEFT, "", None, None
-            progress.ended_at = w.time
-            continue
-        result = w.timeline.get(line.chapter.beat)
-        if result is not None and progress.stage != WAIT and line.ending(MISSED) is not None:
-            progress.marks[outcome_mark(result.key)] = 1
-            msgs += storyline.finish(state, content, world, progress, line, line.ending(MISSED))
-    if p.faction is None or w.ended:  # 休季了：錯過的照樣收成 missed（不寫此事未了），不再開新的
-        return msgs
-    for line in lines(content, p.faction):
-        if _ready(state, content, line):  # 開的那一下不另寫一行、不跳卡：江湖頁最上面的章回卡換成這一回
-            storyline.start(state, content, line, custom=False, card=False)
-    return msgs
-
-
 def weight(line: StoryDef, progress: StoryProgress) -> float:
     """這一個人做成這一回的份量：1 加上帶著的記號各自另加的（ChapterSpec.sway_marks），最低 0。"""
     extra = sum(v for k, v in line.chapter.sway_marks.items() if progress.marks.get(k, 0) > 0)
@@ -136,8 +115,8 @@ def after(state: GameState, content: Content) -> list[str]:
         return []
     p, w = state.player, state.world
     msgs: list[str] = []
-    for progress in storyline.active(state):
-        line = storyline.definition(content, progress)
+    for progress in story_base.active(state):
+        line = story_base.definition(content, progress)
         if line is None or line.chapter is None or progress.stage != WAIT or progress.marks.get(DONE, 0) > 0:
             continue
         progress.marks[DONE] = 1
@@ -168,7 +147,7 @@ def _last_place(line: StoryDef) -> str | None:
 
 def _beat_task(state: GameState, content: Content, world: WorldStateStore, progress: StoryProgress, stage) -> bool:
     """wait 那一段：這一回的大事結算了就成立，順手記下結果的記號（結局照它分）。"""
-    line = storyline.definition(content, progress)
+    line = story_base.definition(content, progress)
     if line is None or line.chapter is None:
         return False
     result = state.world.timeline.get(line.chapter.beat)
@@ -178,7 +157,7 @@ def _beat_task(state: GameState, content: Content, world: WorldStateStore, progr
     return True
 
 
-storyline.TASKS[TASK] = _beat_task
+story_base.TASKS[TASK] = _beat_task
 
 
 # ── 改歷史 ────────────────────────────────────────────────
@@ -269,8 +248,8 @@ def current(state: GameState, content: Content) -> tuple[StoryDef, StoryProgress
     from . import timetable  # noqa: PLC0415
 
     best = None
-    for progress in storyline.active(state):
-        line = storyline.definition(content, progress)
+    for progress in story_base.active(state):
+        line = story_base.definition(content, progress)
         if line is None or line.chapter is None:
             continue
         event = timetable.find(content, line.chapter.beat)
@@ -294,7 +273,7 @@ def card(state: GameState, content: Content, stamp, place, live=None) -> dict | 
     line, progress = found
     spec = line.chapter
     event = timetable.find(content, spec.beat)
-    pair = storyline.current(content, progress)
+    pair = story_base.current(content, progress)
     stage = None if pair is None else pair[1]
     waiting = progress.stage == WAIT
     scene = not waiting and stage is not None and progress.opened and stage.event in content.events
@@ -305,12 +284,12 @@ def card(state: GameState, content: Content, stamp, place, live=None) -> dict | 
     else:
         hint = stage.hint if stage is not None else ""
     target = None  # 人已經站在那一段的地方（或那一幕正端在眼前）不給：不用再去輿圖
-    if stage is not None and not waiting and not scene and stage.where.locations and not storyline.here(state, content, stage.where):
+    if stage is not None and not waiting and not scene and stage.where.locations and not story_base.here(state, content, stage.where):
         target = place(stage.where.locations[0])
     at = timetable.when_in(state.world, content, event) if event is not None else None
     return {
         "line": line.id, "no": numeral(spec.no), "title": line.title, "side": spec.side, "hint": hint, "waiting": waiting, "scene": scene,
-        "here": storyline.doable(state, content, progress), "beat": event.title if event else "",
+        "here": story_base.doable(state, content, progress), "beat": event.title if event else "",
         "at": stamp(at) if at is not None and math.isfinite(at) else "", "live": live(spec.beat) if live is not None else None,
         "sway": sway_line(state, content, line), "target": target,
     }

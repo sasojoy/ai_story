@@ -8,7 +8,15 @@
 **陣營的事只寫成陣營軍情（Rumor.layer＝"faction"），issue 不回傳任何訊息**：季的事回傳的訊息會進觸發同步那個人的
 江湖紀錄，那個人可能是別的陣營。
 
-不 import world、atlas、engine（world 會 import 這裡，掛 WEEK_HOOKS）。"""
+不 import world、atlas、engine（world 會 import 這裡，掛 WEEK_HOOKS）。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（截糧的站問 territory.on，原本經出陣包 sortie.on）。
+改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_orders.py＋煙霧＋邊界（收進來之前經 atlas、rumor_view 往上找挑到 55 個檔）。
+另外跑（-n 4）直接 import 它的：tests/acts/ 的 test_conquest_flip、test_conquest_rules、test_conquest_siege、test_territory；tests/bots/test_step；
+tests/figures/ 的 test_admin_triggers、test_gentry_allied、test_seats、test_week7_season；tests/ranger/test_season21_daily；tests/server/test_push_resistance；
+tests/web/test_map_web；tianxia/features/ 的 map/tests/test_mapdata、test_mapdata_layers、sortie/tests/test_sortie_duel、test_sortie_duel_lean、
+test_sortie_duel_map、test_sortie_duel_words；slow 的 tests/bots/test_bot_policy_conquest、map/tests/test_jianfa_3d_map_foes、sortie/tests/test_sortie_report。
+世界的週初與每天代叫它（world._WEEK_CORE、_DAY_CORE），world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 import math
@@ -83,9 +91,9 @@ def neighbors(content: Content, loc_id: str) -> set[str]:
 def intercept_spots(content: Content, loc_id: str) -> set[str]:
     """截糧軍令的運糧隊在哪幾站（遇得上、打贏記功、假人往哪走都照它）：出陣開著時只在 {地點} 本身（FB-248，PM 2026-10-15：截糧的地點
     一律是戰線地點；相鄰站不再有糧隊，自家大本營截糧那一週的出陣照舊是守），關著時照舊是 {地點} 與相鄰站（neighbors）。"""
-    from . import sortie  # noqa: PLC0415  sortie → rules、territory：延後 import 只是保險
+    from . import territory  # noqa: PLC0415  出陣開著＝地盤開著（出陣包 rules.on 的本體就是 territory.on）：共用規則層，不 import 出陣包（全部拆包第 40 批）
 
-    return {loc_id} if sortie.on(content) else neighbors(content, loc_id)
+    return {loc_id} if territory.on(content) else neighbors(content, loc_id)
 
 
 def figure_name(content: Content, fid: str | None) -> str:
@@ -403,9 +411,9 @@ SIEGE_GUARD = "siege_guard"
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
     """領地爭奪：這一邊此刻進度最高、推得動的那一塊（attack），或自家被推得最高、守得動的那一塊（defend）（conquest_day.today；
     翻地與爭搶 PM 2026-10-20 第 1 條；第二批是每天公告的目標，投票與公告拿掉了）。"""
-    from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 
-    return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
+    return conquest.today(world, content, side, how) if world is not None and side is not None else []
 
 
 def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:

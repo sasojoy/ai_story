@@ -9,6 +9,7 @@ import pytest
 from conftest import real_content
 from tianxia import tavern, tavern_ask
 from tianxia.characters import CharacterStore
+from tianxia.core import xinshen
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
@@ -206,7 +207,7 @@ def test_cannot_act_outside_the_tavern():
 def test_a_bot_drops_in_asks_one_thing_and_leaves():
     from tianxia import bot_policy
     game = _game(silver=500)
-    game.state.player.newbie_done.add("tavern")  # 新手目標「在酒肆打聽一件事」的 20 兩另外驗（tests/test_training.py）
+    game.state.player.newbie_done.add("tavern")  # 新手目標「在酒肆打聽一件事」的 20 兩另外驗（tests/acts/test_training.py）
     rng = random.Random(1)
     old = bot_policy.TAVERN_CHANCE
     bot_policy.TAVERN_CHANCE = 1.0
@@ -315,6 +316,24 @@ def test_asking_the_keeper_three_steps():
     assert game.state.player.stats["silver"] == before - game._tavern_price(c.config.tavern.ask_price)
     assert msgs[1].startswith("酒家：「客官")
     assert game.state.player.tavern_notes[-1].kind == "ask"
+
+
+def test_with_xinshen_on_the_keeper_answers_three_times_a_day():
+    """心神開著（Joy 2026-11-06「問酒家不扣 一天最多三次 另算」）：答上來的才算一次，叫不動的不算；第四次 A 段就擋。"""
+    game = _game()
+    c = game.content
+    c.config.xinshen.enabled = True
+    game.choose("act:tavern")
+    req = game.tavern_ask_request("曹操好不好說話？")
+    assert game.tavern_ask(req.question, None, request=req) == [tavern.ASK_BUSY]  # 叫不動：不算
+    assert game.tavern_view()["asks_left"] == 3
+    for _ in range(3):
+        req = game.tavern_ask_request("最近哪裡最亂？")
+        game.tavern_ask(req.question, "客官，南陽一帶最不太平。", request=req)
+    assert game.tavern_view()["asks_left"] == 0
+    assert game.tavern_ask_request("最近哪裡最亂？") == [xinshen.ASKS_DONE]
+    c.config.xinshen.enabled = False
+    assert "asks_left" not in game.tavern_view()
 
 
 def test_the_keeper_does_not_answer_secrets_and_is_free_when_silent():

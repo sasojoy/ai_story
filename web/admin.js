@@ -16,20 +16,7 @@
     season: "賽季與時鐘", battle: "決戰與時刻表", trend: "大勢與事件", conquest: "領地爭奪", seal: "玉璽",
     player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉",
   };
-  const AD_OPEN_KEY = "tianxia.adOpen"; // 哪幾塊攤開著：這台裝置記著（讀寫失敗就照預設：只攤開「賽季與時鐘」）
-  function adOpen() {
-    if (S.adOpen) return S.adOpen;
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(AD_OPEN_KEY) || "null"); } catch (e) { saved = null; }
-    S.adOpen = saved && typeof saved === "object" ? saved : { season: true };
-    return S.adOpen;
-  }
-  function adminSecToggled(box) {
-    const open = adOpen();
-    open[box.dataset.sec] = box.open;
-    try { localStorage.setItem(AD_OPEN_KEY, JSON.stringify(open)); } catch (e) { /* 存不了就只記在這一次 */ }
-    if (box.open && box.dataset.sec === "looks" && !S.adLooks && S.main && S.main.mall && S.main.looks_admin) looksAdminDo("load"); // 攤開才抓訂單
-  }
+
 
   // 整頁：頂上一列（回江湖、標題、重新整理）、「現在」卡、各塊、底下的結果條
   function renderAdmin() {
@@ -61,39 +48,64 @@
     const a = S.admin;
     const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2><button class="btn small" data-act="ad-refresh">重新整理</button></header>`;
     if (!a) return `${head}<p class="muted ad-wait">${S.adFailed ? "管理資料沒拿到（連不上、或伺服器出錯）。按「重新整理」再試一次。" : "正在讀……"}</p>`;
-    const sec = (id, body, note = "") => body ? `<details class="ad-sec" data-sec="${id}"${adOpen()[id] ? " open" : ""}>
-        <summary><span class="ad-sec-title">${AD_SECS[id]}</span>${note ? `<span class="ad-sec-note">${esc(note)}</span>` : ""}</summary>
-        <div class="ad-body stack">${body}</div></details>` : "";
-    const now = a.now || {};
-    const fight = now.battle;
-    const looks = S.adLooks && S.adLooks.open ? S.adLooks.open.length : null;
+    // 介面重整（2026-11-05，設計稿 Admin）：四格狀態、常用的大鈕、分頁籤（一次只看一塊）、紅框的危險區（長按才算）
+    const tabs = Object.keys(AD_SECS).filter((id) => adSecBody(a, id)); // 每一塊都畫（下拉選單、欄位都在，大鈕也找得到），只露選到的那一塊
+    const tab = tabs.includes(S.adTab) ? S.adTab : tabs[0];
     return `${head}
-      ${adNowHtml(a)}
-      <p class="muted ad-hint">每一項按了都會先問一次才送出；做完留在這一頁，結果寫在畫面最底下那一條。</p>
-      ${sec("season", adSeasonHtml(a), [now.phase_text, S.main.paused != null ? "時鐘暫停中" : ""].filter(Boolean).join("・"))}
-      ${sec("battle", adBattleHtml(a), fight ? `${fight.name}・${fight.phase}` : "沒有在打的")}
-      ${sec("trend", adTrendHtml(a))}
-      ${sec("conquest", a.conquest ? conquestAdminHtml(a.conquest) : "")}
-      ${sec("seal", a.seal ? sealAdminHtml(a.seal) : "")}
-      ${sec("player", adPlayerSecHtml(a))}
-      ${sec("mall", S.main.mall ? mallAdminHtml() : "")}
-      ${sec("looks", S.main.mall && S.main.looks_admin ? looksAdminHtml() : "", looks ? `${looks} 張等著做` : "")}
-      ${sec("mingtie", a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : "", a.mingtie && a.mingtie.length ? `${a.mingtie.length} 張` : "")}
+      ${adTilesHtml(a)}
+      ${adBigHtml(a)}
+      <div class="ad-tabs" role="tablist">${tabs.map((id) => `<button role="tab" class="${id === tab ? "on" : ""}" aria-selected="${id === tab}" data-act="ad-tab" data-tab="${id}">${AD_SECS[id]}</button>`).join("")}</div>
+      ${tabs.map((id) => `<section class="card ad-body stack" data-sec="${id}"${id === tab ? "" : " hidden"}>${adSecBody(a, id)}</section>`).join("")}
+      ${adDangerHtml(a)}
+      <p class="muted ad-hint">一般的鈕按了先問一次才送出；紅框裡的要長按一秒。做完留在這一頁，結果寫在畫面最底下那一條。</p>
       ${adResultHtml()}`;
   }
 
-  // 「現在」卡：第幾季、在哪個階段、季曆此刻；時鐘停了寫停多久；在打的決戰（集結或開打、幾個人、第幾回合、戰局）；模型佇列；神器用完了
-  function adNowHtml(a) {
-    const now = a.now || {};
-    const fight = now.battle;
-    return `<section class="card ad-now" aria-label="現在">
-      <div class="ad-now-top"><b>${now.season ? `第 ${now.season | 0} 季` : "本季"}${now.phase_text ? `・${esc(now.phase_text)}` : ""}</b>${now.when ? `<span class="muted">${esc(now.when)}</span>` : ""}</div>
-      ${S.main.paused != null ? `<p class="ad-alert">賽季時鐘暫停中（已 ${S.main.paused} 分鐘）：全服不能行動，記得按「繼續」。</p>` : ""}
-      <p>決戰：${fight ? `<b>${esc(fight.name)}</b>・${esc(fight.phase)}・${fight.people | 0} 人${fight.round ? `・打完 ${fight.round | 0} 回合` : ""}・戰局 ${fight.trend | 0}` : '<span class="muted">沒有在集結或開打的</span>'}</p>
-      ${a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
-      ${a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}
-    </section>`;
+  function adSecBody(a, id) {
+    return {
+      season: adSeasonHtml(a, true), battle: adBattleHtml(a), trend: adTrendHtml(a),
+      conquest: a.conquest ? conquestAdminHtml(a.conquest) : "", seal: a.seal ? sealAdminHtml(a.seal) : "", player: adPlayerSecHtml(a),
+      mall: S.main.mall ? mallAdminHtml() : "", looks: S.main.mall && S.main.looks_admin ? looksAdminHtml() : "",
+      mingtie: a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : "",
+    }[id] || "";
   }
+  // 四格：季、決戰、在線、模型佇列
+  function adTilesHtml(a) {
+    const now = a.now || {}, fight = now.battle, q = a.llm_queue;
+    const tile = (k, v, sub, hot) => `<div class="ad-tile${hot ? " hot" : ""}"><small>${k}</small><b>${v}</b><span>${sub}</span></div>`;
+    return `<div class="ad-tiles">
+      ${tile("季", now.season ? `第 ${now.season | 0} 季` : "本季", esc([now.phase_text, S.main.paused != null ? `暫停 ${S.main.paused} 分` : ""].filter(Boolean).join("・")), S.main.paused != null)}
+      ${tile("決戰", fight ? esc(fight.phase) : "無", fight ? `${esc(fight.name)}・${fight.people | 0} 人` : "沒有在打的", !!fight)}
+      ${tile("在線", `${now.online | 0} 人`, "10 分鐘內", false)}
+      ${tile("模型", q ? `${q.running | 0}／${q.waiting | 0}` : "—", q ? "處理中／在排" : "佇列關著", q && q.waiting > 0)}
+    </div>${now.when ? `<p class="muted ad-when">${esc(now.when)}</p>` : ""}
+    ${S.main.paused != null ? `<p class="ad-alert">賽季時鐘暫停中（已 ${S.main.paused} 分鐘）：全服不能行動，記得按「繼續」。</p>` : ""}
+    ${a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}`;
+  }
+  // 常用的大鈕：快轉一小時、立刻開戰（去決戰那一頁挑）、推大勢（去大勢那一頁）、發軍令、天下形勢、跳到下一件
+  function adBigHtml(a) {
+    const go = (tab, name, sub) => `<button class="ad-big" data-act="ad-tab" data-tab="${tab}"><b>${name}</b><small>${sub}</small></button>`;
+    const op = (o, name, sub, extra = "") => `<button class="ad-big" data-act="admin" data-op="${o}"${extra}><b>${name}</b><small>${sub}</small></button>`;
+    return `<div class="ad-bigs">
+      ${op("fast_forward", "快轉 1 小時", "全服一起", ' data-hours="1"')}
+      ${go("battle", "立刻開戰", "挑一場")}
+      ${go("trend", "推大勢", "挑一條")}
+      ${a.season_one ? op("issue_orders", "發軍令", "立刻重發") : ""}
+      ${a.timetable && a.timetable.length ? op("jump_next", "跳下一件", "時刻表") : ""}
+      ${a.xingshi ? op("xingshi_now", "天下形勢", "現在開一篇") : ""}
+    </div>`;
+  }
+  // 危險區：暫停／繼續時鐘、立刻收季、開下一季（長按一秒才送，data-act="ad-hold"；照階段灰掉不對的）
+  function adDangerHtml(a) {
+    const off = (want) => (a.phase && a.phase !== want ? " disabled" : "");
+    const hold = (o, name, extra = "") => `<button class="ad-hold" data-act="ad-hold" data-op="${o}"${extra}><i></i><b>${name}</b><small>長按一秒</small></button>`;
+    return `<section class="ad-danger" aria-label="危險區"><div class="ad-danger-hd">危險區</div><div class="ad-holds">
+      ${S.main.paused != null ? hold("resume_clock", "▶ 繼續時鐘") : hold("pause_clock", "⏸ 暫停時鐘")}
+      ${hold("end_season", "立刻收季", off("running"))}
+      ${hold("next_season", "開下一季", off("resting"))}
+    </div></section>`;
+  }
+
 
   // 最近一件做完的事：釘在畫面底下，按「知道了」或做下一件才換掉。被拒的（括號開頭）紅字
   function adResultHtml() {
@@ -107,16 +119,17 @@
   const adTrendNow = (id) => { const t = ((S.admin && S.admin.now && S.admin.now.trends) || []).find((x) => x.id === id); return t ? t.value : null; };
   const adTrendOpts = (list) => (list || []).map((x) => { const v = adTrendNow(x.id); return `<option value="${esc(x.id)}">${esc(x.label)}${v == null ? "" : `（${v}）`}</option>`; }).join("");
 
-  function adSeasonHtml(a) {
+  function adSeasonHtml(a, tabbed = false) {
     // 開季、立刻收季、開啟下一季照賽季的階段（a.phase）灰掉不對的那幾顆（手機介面自檢 U-19）；舊伺服器沒給照舊都能按
+    // 分頁籤的版面（tabbed）：收季、開下一季、暫停時鐘在底下的危險區，這裡只留開季
     const seasonOff = (want) => (a.phase && a.phase !== want ? " disabled" : "");
     return `
-      <p class="muted">賽季（只有對的階段按得下去：籌備中開季、進行中收季、休季開下一季）</p>
-      <div class="row wrap seasons"><button class="btn" data-act="admin" data-op="open_season"${seasonOff("preparing")}>開季</button><button class="btn warn" data-act="admin" data-op="end_season"${seasonOff("running")}>⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season"${seasonOff("resting")}>⚠ 開啟下一季</button></div>
-      <p class="muted">賽季時鐘（停機維護前按「暫停」，開回來按「繼續」；暫停中全服不能行動，畫面照常可看）</p>
+      <p class="muted">賽季（只有對的階段按得下去：籌備中開季${tabbed ? "；收季、開下一季在底下的危險區" : "、進行中收季、休季開下一季"}）</p>
+      <div class="row wrap seasons"><button class="btn" data-act="admin" data-op="open_season"${seasonOff("preparing")}>開季</button>${tabbed ? "" : `<button class="btn warn" data-act="admin" data-op="end_season"${seasonOff("running")}>⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season"${seasonOff("resting")}>⚠ 開啟下一季</button>`}</div>
+      ${tabbed ? "" : `<p class="muted">賽季時鐘（停機維護前按「暫停」，開回來按「繼續」；暫停中全服不能行動，畫面照常可看）</p>
       <div class="row">${S.main.paused != null
         ? `<span class="muted">已暫停 ${S.main.paused} 分鐘</span><button class="btn" data-act="admin" data-op="resume_clock">▶ 繼續</button>`
-        : `<button class="btn warn" data-act="admin" data-op="pause_clock">⏸ 暫停賽季時鐘</button>`}</div>
+        : `<button class="btn warn" data-act="admin" data-op="pause_clock">⏸ 暫停賽季時鐘</button>`}</div>`}
       <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
       <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
       ${a.season_one ? `
@@ -384,4 +397,39 @@
       if (v != null) S.adResult.text += `（此刻 ${v}）`;
       renderKeepingSheet();
     });
+  }
+
+  // 危險區的長按（介面重整）：按住一秒、框裡的墨跑滿才送（不再另外問一次）；中途放開、滑出去就作罷。短按只說要長按
+  const AD_HOLD_MS = 1000;
+  let adHolding = null;
+  function adHoldStop() {
+    if (!adHolding) return;
+    clearTimeout(adHolding.timer);
+    adHolding.el.classList.remove("holding");
+    adHolding = null;
+  }
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("pointerdown", (ev) => {
+      const el = ev && ev.target && ev.target.closest ? ev.target.closest(".ad-hold") : null;
+      if (!el || el.disabled) return;
+      adHoldStop();
+      el.classList.add("holding");
+      adHolding = { el, timer: setTimeout(() => {
+        const op = el.dataset.op;
+        adHolding.fired = true;
+        adHoldStop();
+        el.dataset.fired = "1";
+        adminDo(op, { hours: 1 }, el.querySelector("b") ? el.querySelector("b").textContent : "");
+      }, AD_HOLD_MS) };
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((type) => document.addEventListener(type, () => adHoldStop(), true));
+  }
+  function adHoldClick(el) {
+    if (el.dataset.fired) { delete el.dataset.fired; return; } // 剛長按送出去的那一下放開也算一次點擊：不再提示
+    toast("這一顆要長按一秒才算。"); // 待 joy 潤
+  }
+  function adTabPick(id) {
+    S.adTab = id;
+    if (id === "looks" && !S.adLooks && S.main && S.main.mall && S.main.looks_admin) looksAdminDo("load"); // 點開才抓訂單
+    renderKeepingSheet();
   }

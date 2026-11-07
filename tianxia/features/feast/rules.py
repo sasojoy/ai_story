@@ -19,8 +19,9 @@ import re
 from pydantic import BaseModel
 
 from tianxia import gender
-from tianxia import figure_life  # 過渡：待搬（人物此刻在哪、心事、站哪一邊）
-from tianxia import seal_acts  # 過渡：待搬（收心：一日之內敬酒的情誼 ×2）
+from tianxia import figure_life  # 共用規則層（人物此刻在哪、心事、站哪一邊；第 40 批收進）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
+from tianxia.core.feast_base import _key, find, hosting, is_open, on, open_feasts, toasted  # noqa: F401  宴席「讀」的那一半在核心（全部拆包第 40 批），re-export 同一批
 from tianxia.models import Content
 from tianxia.rules import add_rumor
 from tianxia.state import Feast, GameState, Toast
@@ -58,42 +59,12 @@ TOASTED_BEFORE = "這一場你已經敬過酒了。"
 BAD_TEXT = "敬酒詞要寫一到二十個字。"
 
 
-def on(content: Content) -> bool:
-    return figure_life.on(content) and content.config.figure_life.feasts
-
-
-def find(state: GameState, feast_id: int | None) -> Feast | None:
-    return next((f for f in state.world.feasts if f.id == feast_id), None) if feast_id is not None else None
-
-
-def is_open(state: GameState, f: Feast) -> bool:
-    return not f.settled and f.start <= state.world.time < f.end
-
-
-def open_feasts(state: GameState) -> list[Feast]:
-    return [f for f in state.world.feasts if is_open(state, f)]
-
-
-def hosting(state: GameState, cid: str) -> Feast | None:
-    """cid 此刻在擺的那一場（擺宴的人不走動：figure_life._act 先問它）。"""
-    return next((f for f in open_feasts(state) if f.host == cid), None)
-
-
 def here(state: GameState, content: Content) -> list[Feast]:
     """人在這裡、這裡正擺著的宴（在路上不算）。"""
     p = state.player
     if not on(content) or p.journey is not None:
         return []
     return [f for f in open_feasts(state) if f.place == p.location]
-
-
-def toasted(state: GameState, f: Feast) -> bool:
-    key = _key(state.player.name)
-    return any(_key(t.name) == key for t in f.toasts)
-
-
-def _key(name: str) -> str:
-    return name.casefold()
 
 
 def host_name(content: Content, f: Feast) -> str:
@@ -298,4 +269,11 @@ def text_problem(text: str) -> str | None:
     if not text or len(text) > TOAST_LIMIT:
         return BAD_TEXT
     return None
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 step 的 feast 那一格（tianxia/core/features.py 的 WORLD_ORDER）
+def world_step(vehicle: GameState, content: Content, world, step: float) -> None:
+    """世界一步（原本 world.advance_world_state 裡人物行事之後、盤算之前那一行）：時間到了的宴散席，席間最佳那一句上天下大事。
+    不看開關（settle 本來就「開關關著也照散」）；不接回傳值。"""
+    settle(vehicle, content)
 

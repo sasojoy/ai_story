@@ -1,11 +1,16 @@
 """陣營裡的階級（計畫 T5、第一季設計 5.2、5.3）：頭銜、召見、晉升、部下、每日彙整。
 
-只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。"""
+只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名。改這一份 scripts/test_for.py 只挑自己檔名的
+tests/battle/test_ranks.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/acts/test_conquest_siege、tests/arts/test_explain2、
+tests/core/test_precise_actions、tests/figures/ 的 test_admin_triggers、test_gentry_allied、test_promotions_high、test_promotions_huang、
+test_rumor_layers、test_season21_caps、test_seats、test_week7_season。"""
 from __future__ import annotations
 
 from . import allied, calendar, figures, seats
 from .models import Content, PromotionCast, PromotionDef
-from .rules import add_rumor, season_one
+from .rules import EffectRun, add_rumor, season_one
 from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
@@ -216,9 +221,9 @@ def check_summons(state: GameState, content: Content) -> list[str]:
     promo = promotion_for(content, p.faction, rank)
     if promo is None or p.contrib < threshold(content, rank):
         return []
-    from . import opportunities  # noqa: PLC0415  opportunities → ranks：在函式裡 import，避免循環
+    from .core import omen_base  # noqa: PLC0415  軍情第 34 批：機緣做過沒改問核心的查詢服務 omen_base（ranks 不 import 軍情包）
 
-    if rank >= 3 and not opportunities.done_for_rank(state, content, rank):
+    if rank >= 3 and not omen_base.done_for_rank(state, content, rank):
         if rank in p.rank_hinted:
             return []
         p.rank_hinted.append(rank)
@@ -366,3 +371,33 @@ def flush_news(state: GameState, content: Content, before_day: int | None) -> No
         when = "今日" if day >= today else "昨日"
         add_rumor(state, f"{when}升為{titles[rank]}的有：{'、'.join(names)}。", content=content, layer="faction",
                   faction=faction)
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的三格（靠山、召見往下一段、晉升與部下），原本那幾段逐字搬；
+# 核心（rules._EFFECT_CORE）延後 import 代叫（共用規則層 ranks，全部拆包第 40 批收進，照舊核心代叫）。先後在 core/features.py 的 EFFECT_ORDER
+
+
+def effect_patron(r: EffectRun) -> list[str]:
+    """效果的 patron 那一格：豪強的靠山（晉升奇遇 4.2；正式版丙一）。"""
+    if r.effect.patron is not None:
+        r.state.player.patron = r.effect.patron
+    return []
+
+
+def effect_summons_next(r: EffectRun) -> list[str]:
+    """效果的 summons_next 那一格：晉升奇遇演完一段，召見往下一段（正式版丙一）；排在 promote 前面，下一段的召見那一句先出
+    （晉升會清召見）。"""
+    if r.effect.summons_next is not None:
+        return next_leg(r.state, r.content, r.effect.summons_next)
+    return []
+
+
+def effect_promote(r: EffectRun) -> list[str]:
+    """效果的 promote 那一格（promote、followers 兩個欄位）：晉升奇遇（計畫 T5）；開關關著時什麼都不做。晉升有寫、部下空著也叫 add_followers。"""
+    effect, state, content = r.effect, r.state, r.content
+    msgs: list[str] = []
+    if effect.promote is not None or effect.followers:
+        if effect.promote is not None:
+            msgs += promote(state, content, effect.promote)
+        msgs += add_followers(state, content, effect.followers)
+    return msgs

@@ -2,7 +2,7 @@
 企劃者 2026-11-04 照建議：五型在酒肆花銀兩招、名字隨機）。README.md 寫這一包做什麼、導覽與設計稿。
 
 - actions.py：「此地還能做」裡每一型一顆（此地酒肆還沒有主的第一位）、按下去付錢入隊
-- 人在 content/hirelings.json（scripts/make_hirelings.py 照 Config.hire 生；載進人物表、標 hire_type／hire_at）
+- 人在這一包的 content/hire.json（scripts/make_hirelings.py 照 Config.hire 生；載進人物表、標 hire_type／hire_at）
 """
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ BOT_SCORE = 6.0  # 假人：銀兩夠、名下沒滿，路過酒肆偶爾招一�
 
 class HireFeature(Feature):
     name = "hire"
+    web = ("hire.js",)  # 酒肆裡的招募同伴（全部拆包第 67 批從 main.js 切出來）
     prefix = "hire"  # hire:<人物 id>
-    content = ("hirelings.json",)  # content.py 照舊讀進人物表
+    content = ("hire.json",)  # content.py 照它到這一包的 content/ 載進人物表
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
 
@@ -34,6 +35,16 @@ class HireFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return Outcome(title=actions.TITLE, run=lambda: actions.act(ctx, arg))
+
+    def status(self, ctx):
+        """坐在酒肆裡時，此地能招的那幾位（介面重整 2026-11-05：網頁把招募畫在酒肆的聽消息那一頁；坐進酒肆後選單只剩酒肆那幾顆，
+        按下去時網頁先出酒肆再按 hire:<id>）。沒坐在酒肆裡不給這個鍵。"""
+        if not ctx.state.player.picking_tavern:
+            return {}
+        from . import actions  # noqa: PLC0415
+
+        hires = [{"id": o.id, "label": o.label, "enabled": o.enabled} for o in actions.options(ctx)]
+        return {"hires": hires} if hires else {}
 
     def bot_pick(self, ctx, option):
         return BOT_SCORE if option.enabled else None

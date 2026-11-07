@@ -24,7 +24,7 @@ TIER_NAMES = {1: "駑馬", 2: "良駒", 3: "名駒"}  # 5.6（待 joy 潤）
 NOUNS = {1: "馬", 2: "駒", 3: "駒"}  # 名字＝毛色＋這個字；名駒的專名是裝備三的內容（template），還沒有時照「駒」（待 joy 潤）
 COATS = ("棗騮", "青驄", "黑鬃", "白蹄", "花斑", "黃棕")  # 待 joy 潤：12 個名字都過了 naming.name_problem、沒在內容裡出現過
 # 馬的圖（Joy 2026-10-17「我要真的水墨畫」，圖由她另外產）：每種毛色一張、兩匹名駒各一張，檔名 web/horse-<鍵>.webp；
-# 鍵照毛色的拼音、名駒照 template。圖還沒放進 web/ 的鍵，網頁照舊畫原本的色塊（server.HORSE_ART 只列真的有檔的）
+# 鍵照毛色的拼音、名駒照 template。圖還沒放進 web/ 的鍵，網頁照舊畫原本的色塊（server.horse_art() 只列真的有檔的）
 COAT_ART = {"棗騮": "zaoliu", "青驄": "qingcong", "黑鬃": "heizong", "白蹄": "baiti", "花斑": "huaban", "黃棕": "huangzong"}
 STEED_ART = {"tashuang_ju": "tashuang", "polang_ju": "polang"}
 WEAR_WORD = equipment.WEAR_WORDS["mount"]  # 「飽足度」：寫到它的地方都讀這個，不寫死（3.1、2.5）
@@ -194,7 +194,7 @@ def grade(item: Equipment) -> str:
 # ---- 飽足與餵（5.4） ----
 
 def hunger(state: GameState, content: Content, mode: str) -> list[str]:
-    """抵達新的一站（Game._arrivals 的 new_leg）：身上那匹扣飽足度（步行、趕路 −5，疾行 −10）；第一次低到 edge_warn 以下回一句提醒
+    """抵達新的一站（移動包 departure.arrivals 的 new_leg）：身上那匹扣飽足度（步行、趕路 −5，疾行 −10）；第一次低到 edge_warn 以下回一句提醒
     （只一次，餵過或換一匹才重設）。沒騎馬、開關關著不扣。結伴同行時每個人照自己的馬扣（各自那一份 Game 的 _arrivals）。"""
     item, rule = riding(state, content), content.config.mounts
     if item is None:

@@ -14,8 +14,9 @@ import pytest
 import server
 from conftest import no_plans, no_territory, real_content
 from tianxia import (
-    atlas, calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
+    calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
 )
+from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層、詳情那一半；同檔有區域變數叫 layers
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
@@ -235,7 +236,7 @@ def test_the_map_marks_only_places_you_can_hear(on):
     _rumor(game, "宛城一帶有人鬧事。", "wan_city")  # 南陽：別的大區
     _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world")  # 天下大事：人人聽得到
     _rumor(game, "黃巾在盧植營外佈了暗哨。", "luzhi_camp", layer="faction", faction="huang")  # 敵方的軍情
-    assert atlas.news_places(game.state, on) == {"changshe", "julu_altar"}
+    assert map_layers.news_places(game.state, on) == {"changshe", "julu_altar"}
     marks = _story_marks(game)
     assert "✦" in marks.get("changshe", "") and "✦" in marks.get("julu_altar", "")
     assert "✦" not in marks.get("wan_city", "") and "✦" not in marks.get("luzhi_camp", "")
@@ -247,10 +248,10 @@ def test_the_star_clears_after_three_calendar_days(on):
     day = _day(game)
     _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world", time=0.0)
     game.state.world.time = 3 * day - 1
-    assert atlas.news_places(game.state, on) == {"julu_altar"}
+    assert map_layers.news_places(game.state, on) == {"julu_altar"}
     game.state.world.time = 3 * day + 1
-    assert atlas.news_places(game.state, on) == set()
-    assert "最近 3 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", lambda squad: "穩勝")
+    assert map_layers.news_places(game.state, on) == set()
+    assert "最近 3 天沒有大事或傳聞" in map_layers.detail_text(game.state, on, "yingchuan", lambda squad: "穩勝")
 
 
 def test_the_detail_panel_lists_only_what_you_can_hear(on):
@@ -259,19 +260,19 @@ def test_the_detail_panel_lists_only_what_you_can_hear(on):
     _rumor(game, "長社一帶有人鬧事。", "changshe")
     _rumor(game, "宛城一帶有人鬧事。", "wan_city")
     odds = lambda squad: "穩勝"  # noqa: E731
-    assert "長社一帶有人鬧事。" in atlas.detail_text(game.state, on, "changshe", odds)
-    there = atlas.detail_text(game.state, on, "wan_city", odds)
+    assert "長社一帶有人鬧事。" in map_layers.detail_text(game.state, on, "changshe", odds)
+    there = map_layers.detail_text(game.state, on, "wan_city", odds)
     assert "宛城一帶" not in there
-    assert atlas.NEWS_FAR in there and "沒有大事或傳聞" not in there  # 聽不到那一區：不替玩家斷言「沒有消息」
-    assert "最近 3 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", odds)  # 自己這一區沒有，才是真的沒有
-    assert [r.text for r in atlas.recent_news(game.state, on, "changshe")] == ["長社一帶有人鬧事。"]
+    assert map_layers.NEWS_FAR in there and "沒有大事或傳聞" not in there  # 聽不到那一區：不替玩家斷言「沒有消息」
+    assert "最近 3 天沒有大事或傳聞" in map_layers.detail_text(game.state, on, "yingchuan", odds)  # 自己這一區沒有，才是真的沒有
+    assert [r.text for r in map_layers.recent_news(game.state, on, "changshe")] == ["長社一帶有人鬧事。"]
 
 
 def test_a_leaders_recent_news_skips_what_you_cannot_hear(on):
     game = _game(on, at="yingchuan")
     _rumor(game, "張曼成在宛城點兵。", "wan_city")
     _rumor(game, "有人在長社說起張曼成。", "changshe")
-    assert [r.text for r in atlas.leader_news(game.state, on, "張曼成")] == ["有人在長社說起張曼成。"]
+    assert [r.text for r in map_layers.leader_news(game.state, on, "張曼成")] == ["有人在長社說起張曼成。"]
 
 
 def test_with_the_switch_off_the_map_marks_like_before(real):
@@ -279,7 +280,7 @@ def test_with_the_switch_off_the_map_marks_like_before(real):
     game = _game(real, at="yingchuan")
     _rumor(game, "宛城一帶有人鬧事。", "wan_city", time=0.0)
     game.state.world.time = 2 * 86400
-    assert atlas.news_places(game.state, real) == {"wan_city"}
+    assert map_layers.news_places(game.state, real) == {"wan_city"}
     assert "✦" in _story_marks(game).get("wan_city", "")
 
 
@@ -296,9 +297,9 @@ def test_the_star_window_is_the_board_length_so_a_local_star_never_outlives_its_
     _rumor(game, "潁川更早的事。", "yingchuan", time=edge - 1)  # 本區、剛撤板
     _rumor(game, "鉅鹿剛出的大事。", "julu_altar", layer="world", time=edge + 1)
     _rumor(game, "盧植營更早的大事。", "luzhi_camp", layer="world", time=edge - 1)  # 天下大事，也過了 ✦ 的天數
-    assert atlas.news_places(game.state, on) == {"changshe", "julu_altar"}
+    assert map_layers.news_places(game.state, on) == {"changshe", "julu_altar"}
     odds = lambda squad: "穩勝"  # noqa: E731
-    assert f"最近 {days} 天沒有大事或傳聞" in atlas.detail_text(game.state, on, "yingchuan", odds)  # 本區剛撤板：板上沒有了
+    assert f"最近 {days} 天沒有大事或傳聞" in map_layers.detail_text(game.state, on, "yingchuan", odds)  # 本區剛撤板：板上沒有了
 
 
 # ── Task 4：見聞頁分四層 ───────────────────────────────────
@@ -541,7 +542,7 @@ def test_with_the_switch_off_there_are_no_layers(real):
 
 @pytest.fixture
 def server_season_one(monkeypatch):
-    """server.CONTENT 是正式內容：照週末設定打開第一季、季已經開打（同 tests/test_server.py 的 season_already_open）。"""
+    """server.CONTENT 是正式內容：照週末設定打開第一季、季已經開打（同 tests/server/test_server.py 的 season_already_open）。"""
     config = server.CONTENT.config
     monkeypatch.setattr(config, "auto_open_first_season", True)
     monkeypatch.setattr(config, "season_one", True)
@@ -566,7 +567,7 @@ def test_the_main_view_has_no_layers_with_the_switch_off(monkeypatch):
 
 
 def _js_function(js: str, header: str) -> str:
-    """app.js 裡 IIFE 內的一個函式本體（同 tests/test_server.py 的 _js_function）。"""
+    """app.js 裡 IIFE 內的一個函式本體（同 tests/server/test_server.py 的 _js_function）。"""
     start = js.index(header)
     return js[start:js.index("\n  }\n", start)]
 
@@ -916,7 +917,7 @@ def test_the_star_window_keeps_world_days_when_the_switch_is_on_but_the_stamp_is
     assert not rules.season_one(real, game.state.world)
     game.state.world.time = 10 * 86400
     _rumor(game, "宛城一帶有人鬧事。", "wan_city", time=8 * 86400)
-    assert atlas.news_places(game.state, real) == {"wan_city"}
+    assert map_layers.news_places(game.state, real) == {"wan_city"}
 
 
 def test_a_factions_local_rumor_needs_both_the_faction_and_the_region(on):

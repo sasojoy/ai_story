@@ -4,7 +4,7 @@
 事件端出 pending_event。用正式內容（season21）開局（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。
 
 2d（企劃者 2026-10-26「只抽一件事情，然後體力先維持不動」，同天體力改 15）：以前連抽三拍，這個檔斷言三拍與體力 18 的測試照新規則改；
-一趟只有一件事的整體行為在 tests/test_explore_one_single.py。"""
+一趟只有一件事的整體行為在 tianxia/features/explore/tests/test_explore_one_single.py。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -55,8 +55,8 @@ def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
 def test_closed_season_keeps_the_old_menu():
     game = ready(plain_game(), side="guan", loc="yingchuan")
     ids = _ids(game)
-    assert "explore:gather" in ids and "act:drill" in ids
-    assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == "探索"
+    assert not [i for i in ids if i.startswith("explore:")] and "act:drill" not in ids
+    assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == f"探索（體力 {game._action_costs()['explore']}）"
 
 
 def test_one_press_costs_six_and_writes_one_outing_entry():
@@ -95,6 +95,7 @@ def test_the_event_trip_leaves_a_pending_event():
 
 def test_town_encounters_are_street_toughs_that_push_nothing_and_count_no_bounty():
     game = ready(jianfa_game(), side="guan", loc="yingchuan")
+    game.content.storylines["duruo"].start.chance = 0  # 陽翟書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是出門打地痞
     c, p = game.content, game.state.player
     plan = game.outing_plan()
     assert plan.kind == explore_one.TOWN and plan.how == "town" and plan.foe.id == "dipi"
@@ -142,7 +143,7 @@ def test_nothing_gained_fills_one_tier_one_material():
     assert any(line.startswith("獲得 ") for line in msgs)
     bag = sum(p.materials.values())
     _reset(game)
-    with _beat("material"), mock.patch("tianxia.explore_modes.gather_finds", return_value=[]):
+    with _beat("material"), mock.patch.object(explore_one, "gather_finds", return_value=[]):
         msgs = game.choose("act:explore")
     assert sum(p.materials.values()) == bag + 1
     assert any(line.startswith("獲得 ") for line in msgs)
@@ -168,7 +169,7 @@ def test_a_strike_bounty_here_makes_the_trip_that_bounty():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     foe = game._wild_foes(game.content.locations["yingshui"])[0]
     bounty = mock.Mock(kind="strike", location="yingshui", squad=foe.id)
-    with mock.patch("tianxia.bounties.mine", return_value=[bounty]):
+    with mock.patch("tianxia.core.bounty_base.mine", return_value=[bounty]):
         plan = game.outing_plan()
         assert plan.how == "bounty" and plan.foe.id == foe.id and plan.hint == "渡口有賞" and plan.boss is None
         assert game.mostly_here() == "渡口有賞"  # 四格那一格的小字跟鈕同一個字（/api/main 的 mostly）
@@ -227,7 +228,7 @@ def test_bots_score_the_one_explore_button():
     assert value in (bot_policy.OUTING_SCORE, bot_policy.OUTING_SCORE + bot_policy.NEED_MATERIAL_SCORE)  # 剛出師缺素材：潁水河畔素材不比遭遇少
     assert bot.explore_choice([o.id for o in game.options(odds=False)]) == "act:explore"
     off = ready(plain_game(), side="guan", loc="yingshui")
-    assert bot_policy.score(off, next(o for o in off.options(odds=False) if o.id == "act:explore"), BotProfile(personality="普通", seed=1, faction="guan", season_number=1)) is None  # 三選一的入口
+    assert bot_policy.score(off, next(o for o in off.options(odds=False) if o.id == "act:explore"), BotProfile(personality="普通", seed=1, faction="guan", season_number=1)) == bot_policy.ACT_SCORES["explore"]  # 舊探索是真的探索
 
 
 def test_outing_lines_are_checked_when_loaded():

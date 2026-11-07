@@ -291,7 +291,7 @@ def test_the_web_shows_the_three_values_and_the_sealed_one():
     next_season(game)
     game.choose("legacy:seal:0")
     view = server.main_view(game)
-    top = run(view, "return H.topHtml();", S={"showMore": True})
+    top = run(view, "return H.heroMoreHtml(H.S.main.status);")  # 介面重整：傳承那一行在俠客頁的「屬性」
     assert 'data-act="legacy-open"' in top and "正氣 10" in top and "識海封著：寒江獨照" in top
     page = run_page(view["legacy"], "main")
     assert page.count('class="lg-slip open"') == 2 and "俠義的事多一種做法" in page  # 正氣 5、10 兩道（長句在竹簡的 aria-label）

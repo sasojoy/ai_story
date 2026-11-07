@@ -1,7 +1,7 @@
 """名聲複驗（2026-10-16）：價錢後面打折的原因在網頁上怎麼畫。
 FB-296：鐵匠鋪店面「素材」頁的升階格子只寫「5 兩」，伺服器給了 cost_note（「（威震州郡・九折）」）網頁沒畫。
 FB-297：375 寬折行斷在詞中間（「九／折」「八五／折」，宛城那顆三段的最後一行只剩「折））」）：每一段「稱號・N折」包成不折行的小段
-（FB-132 的 .nb），字一個不改。真引擎的資料餵給 app.js 的假瀏覽器（tests/test_prologue_web.py、test_econ_web.py）。"""
+（FB-132 的 .nb），字一個不改。真引擎的資料餵給 app.js 的假瀏覽器（tests/web/test_prologue_web.py、test_econ_web.py）。"""
 from __future__ import annotations
 
 import html
@@ -78,12 +78,12 @@ def _clinic_game():
 
 
 def test_the_clinic_button_under_here_keeps_each_reason_whole():
-    """「此地還能做」那一顆醫館療傷（閒著時在這裡）：每一段原因包成小段。"""
+    """此地可為「全部」那一串裡的醫館療傷（閒著時在這裡；圓章上只寫名字）：每一段原因包成小段。"""
     game = _clinic_game()
     m = server.main_view(game)
     label = next(o["label"] for o in m["options"] if o["id"] == "act:heal")
     assert label.endswith("兩（威震州郡・九折，州郡大俠・八五折））")
-    page = page_run(m, "return H.pageJianghu();")
+    page = page_run(m, "return H.pageJianghu();", S={"hereAll": True}).split('class="sheet here-all"')[1]
     button = re.search(r'<button[^>]*data-id="act:heal"[^>]*>(.*?)</button>', page, re.S).group(1)
     assert '<span class="nb">（威震州郡・九折，</span><span class="nb">州郡大俠・八五折））</span>' in button
     assert _text(button).strip() == label

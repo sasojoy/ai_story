@@ -99,10 +99,10 @@ def effect_of(content: Content, item: Equipment | None) -> str | None:
 
 def effect_text(content: Content, key: str) -> str:
     """「求見門檻 −3」「打贏的心得 +20%」（待 joy 潤）：數字照 Config.treasures.effects；百分比 .5 進位（不用 round／:.0%，同 mounts.pct）。
-    探索悟意境（觀山石）照探索三選一的開關寫（PM 2026-10-16）：開著時是靜心感悟擲中的機會多幾個百分點（Config.explore_modes.sense_treasure_points），
-    關著才是探索悟意境那一支的比重 ×{x}。"""
-    if key == "insight" and content.config.explore_modes.enabled:
-        return INSIGHT_SENSE_TEXT.format(n=f"{content.config.explore_modes.sense_treasure_points:g}")
+    探索悟意境（觀山石；PM 2026-10-16）：Config.sense_treasure_points 不是 0 時是感悟擲中的機會多幾個百分點，
+    0（測試內容）才是探索悟意境那一支的比重 ×{x}。"""
+    if key == "insight" and content.config.sense_treasure_points:
+        return INSIGHT_SENSE_TEXT.format(n=f"{content.config.sense_treasure_points:g}")
     value = content.config.treasures.effects.get(key, 0.0)
     return EFFECT_TEXT.get(key, "").format(
         x=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%", n=f"{value:g}", item=content.config.legend_item_name,
@@ -265,7 +265,7 @@ def deliver(state: GameState, content: Content, item: Equipment, *, hold: bool =
 
 
 def deliver_held(state: GameState, content: Content) -> list[str]:
-    """寄放的東西補發（6.5；Game._deliver_held_gear 同步與快轉時叫）：那一欄開著、拿得下就照 2.2 補（那一欄空著就穿上，否則進
+    """寄放的東西補發（6.5；裝備包 gift_actions.deliver_held_gear 同步與快轉時叫）：那一欄開著、拿得下就照 2.2 補（那一欄空著就穿上，否則進
     裝備庫），一次補到裝備庫滿為止，補不完的（與那一欄關著的）留著。閉關中也補（計畫「要 PM 定的」第 4 條：寶物閉關中本來就能換）。"""
     p = state.player
     if not p.held_gear:

@@ -347,6 +347,6 @@ def donate_target(content: Content, world: WorldState, faction: str, loc_id: str
 
 
 def donate_push(content: Content, points: int) -> float:
-    """捐 points 點推大勢的量（PM 2026-10-15 同意）：每點 donate_push_per_point，再打事件的五折（Config.explore_modes.event_trend_share）。
+    """捐 points 點推大勢的量（PM 2026-10-15 同意）：每點 donate_push_per_point，再打五折（donate_trend_share）。
     季長倍數與盡頭阻力在 Game.push_trend（source="donate"）再打，跟出陣共用每人每日的推力上限。"""
-    return points * content.config.economy.donate_push_per_point * content.config.explore_modes.event_trend_share
+    return points * content.config.economy.donate_push_per_point * content.config.economy.donate_trend_share

@@ -20,7 +20,7 @@ from tianxia.state import PlayerState, TimelineResult
 
 @pytest.fixture
 def real(real):
-    real.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
+    real.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tianxia/features/companions/tests/test_companions.py）
     return real
 
 

@@ -276,7 +276,7 @@ def pvp_ratio(content: Content, card: dict | None, foe: dict | None) -> float:
 def pvp_unrole(content: Content, role: str, scores: dict[str, float]) -> tuple[str, dict[str, float]]:
     """五項屬性的季、玩家對打（擂台、奪璽單挑）不給職位加成（企劃者 2026-11-04 平衡總表：盾陣的固守、三成氣血疊在一起，
     全統御在中低段贏六成多；斥候加的奇襲是最弱的一招）：拿掉職位、份量把拿手那一招多的那一截除回去。職位留在全服決戰的大場面。"""
-    from . import battle_instance  # 延後 import：只有這裡用得到
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
     move = battle_instance.ROLE_MOVES.get(role)
     if not role:
         return role, scores
@@ -302,7 +302,7 @@ def pvp_faced(content: Content, power: float, scores: dict[str, float], card: di
     ratio = pvp_ratio(content, card, foe)
     if ratio == 1.0:
         return power, scores, bare
-    from . import battle_instance  # 延後 import：只有這裡用得到
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
     tuning = content.config.battle
     new = power * ratio
     step = battle_instance.strength(tuning, new) / max(1e-9, battle_instance.strength(tuning, power))
@@ -938,7 +938,7 @@ def points_between(cfg, before: int, after: int) -> int:
 def level_points(state: GameState, content: Content, before: int, after: int) -> int:
     """本人從第 before 級升到第 after 級拿到幾點屬性（升級的五個地方都走這一個：grant_team_exp、決戰軍餉、翻地分紅、切磋、頭目戰）。
     減法季屬性五段（Config.jianfa 的 stat_milestones）開著：升級不給點，跨過一個境界（milestone_levels）給 stat_points_per_milestone，
-    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。
+    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，修練包 actions.milestone_card；配完點清掉）；關著照 points_between。
     五項屬性的季（attrset.on）：每級照配比自己長（讀的時候算），這裡只給每 bonus_every 級送的點（attrset.bonus_between）。"""
     if attrset.on(content, getattr(state, "world", None)):
         return attrset.bonus_between(content, before, after)

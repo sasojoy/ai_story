@@ -149,7 +149,7 @@ def _add(content, event_id, locations=(), **extra):
 
 def shown(state, content, action, rng, pool=None):
     """抽一則、當作端給玩家了：Game._present 才把它記進輪替（events.note_round），pick_event 本身不改狀態
-    （見 tests/test_event_rotation.py）。"""
+    （見 tests/bots/test_event_rotation.py）。"""
     event = pick_event(state, content, action, rng, pool)
     if event is not None:
         note_round(state, content, event, action)

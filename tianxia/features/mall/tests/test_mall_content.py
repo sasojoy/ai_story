@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import copy_test_content, real_content
 
 from tianxia import mall
 from tianxia.content import ContentError, load_content
@@ -23,7 +22,7 @@ def _item(**over) -> dict:
 
 def _load(tmp_path, items: list[dict]):
     root = tmp_path / "content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     (root / "mall.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
     return load_content(root)
 

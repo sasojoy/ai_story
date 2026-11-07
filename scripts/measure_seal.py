@@ -1,6 +1,6 @@
 """玉璽碎片的量表（docs/superpowers/specs/2026-10-11-玉璽碎片-design.md 15.2；計畫 2026-10-12-玉璽-1-核心.md Task 12）：只量不改。
 
-跑真的程式（包住 scripts/sim_season_one.py::run_season，攔下 seal.on_muster、Game._seal_settle、seal_duel.finish 記數字），印：
+跑真的程式（包住 scripts/sim_season_one.py::run_season，攔下 seal.on_muster、玉璽包的 actions.settle〔全部拆包第 27 批前是 Game._seal_settle〕、seal_duel.finish 記數字），印：
 - 每季：現世沒有、哪一片、得主的戰功名次；
 - 每次璽動：持有者那一方四檔、挑得出幾個合格的挑戰者、單挑每回合氣勢、結果、單挑係數、再擲中沒中；
 - 一季易手幾次、隱沒幾片；新角色快照的份量比；季末碎片在真人、假人手上各幾片；持有者所在陣營的大勝比例；
@@ -46,6 +46,7 @@ from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content as _load_content  # noqa: E402
 from tianxia.content import profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
+from tianxia.features.seal import actions as seal_actions  # noqa: E402  時刻表決戰收場那一格（全部拆包第 27 批：事件 battle_end 直接叫包的 settle）
 from tianxia.models import MOVES, Content  # noqa: E402
 from tianxia.sqlite_world import SqliteWorldStore, open_world  # noqa: E402
 from tianxia.world_state import SealDuel, SealSide  # noqa: E402
@@ -61,7 +62,7 @@ SALT = "measure"
 ROUND_SECONDS = 20.0
 
 
-def load_content(root: Path, profile: str | None = "weekend") -> Content:
+def load_content(root: Path, profile: str | None = "week7") -> Content:
     """照 sim_season_one 的載法：週末設定（"none" 是不帶設定覆寫檔的十四天季）、第一季開著（run_season 自己再設一次）。"""
     content = _load_content(root, profile=None if profile in (None, "none") else profile)
     content.config.season_one = True
@@ -216,7 +217,7 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
     current: dict = {"tier": None, "eligible": 0}
     edges: dict[str, list[float]] = {}
     assigned: list[str] = []
-    real_settle, real_tier, real_finish, real_resolve = Game._seal_settle, seal.tier_for, seal_duel.finish, seal_duel.resolve
+    real_settle, real_tier, real_finish, real_resolve = seal_actions.settle, seal.tier_for, seal_duel.finish, seal_duel.resolve
     real_challengers, real_spectators, real_add = Game._seal_challengers, Game._seal_spectators, BotRunner._add_bot
     real_open, real_shift, real_mandate = SqliteWorldStore.open_season, seal.lean_shift, Game._mandate_settle
     tuning = content.config.battle
@@ -318,7 +319,7 @@ def measure_season(content: Content, seed: int, factions, hours: float, force_st
             open_world(db_path).mutate(lambda st: setattr(st.seal, "salt", f"measure-{seed}"))
             with contextlib.ExitStack() as stack:
                 for target, name, value in (
-                    (seal, "tier_for", tier_for), (Game, "_seal_settle", settle), (Game, "_seal_challengers", challengers),
+                    (seal, "tier_for", tier_for), (seal_actions, "settle", settle), (Game, "_seal_challengers", challengers),
                     (Game, "_seal_spectators", spectators), (seal_duel, "finish", finish), (seal_duel, "resolve", resolve),
                     (BotRunner, "_add_bot", add_bot),
                 ):
@@ -410,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--factions", type=int, nargs=3, default=[5, 5, 5], metavar=("GUAN", "HUANG", "HAOQIANG"))
     parser.add_argument("--hours", type=float, default=60.0)
     parser.add_argument("--tick", type=float, default=60.0)
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="week7")
     parser.add_argument("--decisive-week", type=int, default=None)
     parser.add_argument("--force-stir", action="store_true")
     parser.add_argument("--holders", type=int, default=0)

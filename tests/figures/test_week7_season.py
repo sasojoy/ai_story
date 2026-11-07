@@ -1,6 +1,7 @@
 """7 天濃縮測試季（企劃者 2026-10-20，計畫 docs/superpowers/plans/2026-10-20-七天濃縮季.md）：week7 設定走 21 天季那一套骨架
 （照現實天的季曆、現實天換日、照天排的時刻表、每天的軍令懸賞推線、簽到、銀兩出口、第 6 批的上限與人物回復），季曆分三段
 （第 1～2、3～4、5～7 天）當三「週」，大決戰在第 2、4、7 天。21 天季、週末的季一個字都不變。"""
+# 畫法在 web/military.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random
@@ -11,7 +12,7 @@ from conftest import real_content
 from tianxia import calendar, checkin, figures, orders, ranks, rules, silver, timetable, treasures, world
 from tianxia.state import new_game_state
 from tianxia.world_state import fresh_season, stamp_season
-from tianxia import calendar, duel, explore_modes, howto, orders, renown, rules, seats, timetable, world, yuedan
+from tianxia import calendar, duel, howto, orders, renown, rules, seats, timetable, world, yuedan
 from tianxia.state import Order, YuedanEntry, new_game_state
 import re
 import test_prologue_web
@@ -360,9 +361,6 @@ def test_a_week_is_a_segment_for_week_long_spans():
 WED14_fb501 = 1792549800 + 3.5 * HOUR  # 2026-10-21 週三 14:00（台灣）
 
 
-BOSS = "段鐵頭"  # 頭目次數用完那一句的名字（FB-672：explore_modes.boss_gone 多一個 name）
-
-
 def _content(profile):
     return real_content(profile) if profile else real_content()
 
@@ -402,37 +400,6 @@ def test_other_seasons_keep_their_week_words(profile):
     if profile != "season21":  # 21 天季的軍令每天一道，軍令的字與 words 照「今日／每天」（FB-502，test_fb502_season21_order_words）
         assert calendar.week_words(content, season) is None
         assert [calendar.week_word(k, content, season) for k in ("order_this", "order_that", "order_each")] == ["本週", "這週", "每週一"]
-
-
-# ── 4. 練功鈕「這一週他不再現身」──
-
-
-def test_the_boss_line_names_the_next_segment_day():
-    c7 = real_content("week7")
-    state = _state(c7)
-    # FB-672：這一句多帶頭目的名字（「這一段他不再現身」→「這一段頭目某某不再現身」）；哪一天再來、哪一種季寫哪個詞這一張沒動
-    state.world.time = DAY + HOUR  # 第 2 天：第 1 段，下一段第 3 天
-    assert explore_modes.boss_gone(state, c7, BOSS) == "這一段頭目段鐵頭不再現身，第 3 天 00:00 再來"
-    state.world.time = 3 * DAY + HOUR  # 第 4 天：第 2 段，下一段第 5 天
-    assert explore_modes.boss_gone(state, c7, BOSS) == "這一段頭目段鐵頭不再現身，第 5 天 00:00 再來"
-    state.world.time = 5 * DAY  # 第 6 天：最後一段，季末之前不再重算
-    assert explore_modes.boss_gone(state, c7, BOSS) == explore_modes.BOSS_GONE_SEASON.format(name=BOSS)
-
-
-def test_the_boss_line_reads_the_live_option_on_week7():
-    """引擎那一顆練功鈕（Game._practice_option 的頭目分支）走 boss_gone：用滿這一段的次數就寫段。"""
-    c7 = real_content("week7")
-    state = _state(c7, now=WED14_fb501)
-    boss = next(iter(c7.duels))
-    state.player.duel_tally[duel.week_key(state, c7, boss)] = c7.config.duel.per_boss_week
-    assert duel.used_up(state, c7, boss)
-    assert explore_modes.boss_gone(state, c7, BOSS).startswith("這一段頭目段鐵頭不再現身，第 3 天")
-
-
-@pytest.mark.parametrize("profile,line", [("season21", explore_modes.BOSS_GONE_WEEK), (None, explore_modes.BOSS_GONE_SEASON)])
-def test_other_seasons_keep_the_boss_line(profile, line):
-    content = _content(profile)
-    assert explore_modes.boss_gone(_state(content), content, BOSS) == line.format(name=BOSS)
 
 
 # ── 5. 名聲：每週通緝、每週海捕文書 ──
@@ -608,7 +575,7 @@ def test_admin_view_labels_and_lines(profile, monkeypatch):
 # ── 原 test_fb501_week7_words_web.py（整檔搬進來） ──
 # FB-501 的網頁那一半（7 天濃縮季 QA 第 7 件清單）：軍令卡、大事小標、季末結算卡、輿圖（天下怎麼變、總覽、地點的易手、正在看第幾段、
 # 比第幾段）、管理者（每週的事、立刻發軍令、開季、暫停、繼續、重發軍令、輪替席次）在 7 天季照段（或今日）寫；21 天季、週末照原本的字。
-# 在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的資料；沒有 node 就略過。
+# 在 node 裡跑整支 app.js（tests/kit/webharness.py），餵伺服器真的會給的資料；沒有 node 就略過。
 
 # 輿圖第三版第 4 批：總覽（overviewHtml）挪到卡底下（cardExtras）、地點的卡換成 placeCard、「天下」那一條（hudHtml）拿掉了，
 # 比第幾段改看版圖變化那一格（timelineHtml 的處數底下）

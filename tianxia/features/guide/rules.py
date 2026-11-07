@@ -1,8 +1,8 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from tianxia import calendar, library, prologue  # 核心、共用規則層
-from tianxia import explore_modes, ranks  # 過渡：待搬
+from tianxia import calendar, library, precise, prologue  # 核心、共用規則層
+from tianxia import ranks  # 共用規則層（階級，第 40 批收進）
 from . import enlist
 # 序章步驟的獎勵那一行的記號（HutReward）：核心的 Game._guide 認它，型別在核心（全部拆包第 22 批），這裡照舊叫得到
 from tianxia.core.services import HutReward  # noqa: F401
@@ -10,7 +10,7 @@ from tianxia.martial_arts import QUALITIES
 from tianxia.models import Content, Ending, TutorialGoal, TutorialStep
 from tianxia.rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from tianxia.state import GameState
-from tianxia.world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off  # 過渡：待搬
+from tianxia.world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off  # 核心本體
 from tianxia.world_state import WorldStateStore
 
 # 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）：九成到還沒滿
@@ -66,7 +66,7 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
         return False
     if not goal.action and goal.any_action and action not in goal.any_action:
         return False
-    if goal.wild and explore_modes.is_town(content, content.locations[state.player.location]):
+    if goal.wild and precise.is_town(content, content.locations[state.player.location]):
         return False
     if goal.locations and state.player.location not in goal.locations:
         return False

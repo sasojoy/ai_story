@@ -681,7 +681,7 @@
   },
   "tests": {
    "tests/acts/test_conquest_siege.py": "攻城 86 條（slow 2）：決戰第 6 批的方法與地盤都測，跟 siege.py 一起定。",
-   "tests/battle/test_spar.py": "切磋 18 條，跟切磋那一組走。",
+   "tianxia/features/peers/tests/test_spar.py": "切磋 18 條，跟切磋那一組走。",
    "tests/battle/test_level_cap.py": "tests/battle 是混合資料夾：等級、屬性、經驗閘、練成這幾個（含 test_stat_milestones*、test_drill_gates*、test_practice_hardening、test_zhuifeng_quality、test_trait_numbers）屬武學與成長或行動與地盤。",
    "tests/battle/test_fronts.py": "戰線、四勝利、晉升（含 test_four_wins_wiring、test_ranks）屬大勢人物與賽季。",
    "tests/battle/test_explore.py": "探索（含 test_explore_one*、test_drill_gates_engine）屬行動與地盤（六包第 4 批），三選一那幾條整套拿掉。",

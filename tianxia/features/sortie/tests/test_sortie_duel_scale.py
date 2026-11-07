@@ -21,7 +21,7 @@ def test_jianfa_seasons_carry_their_own_duel_scale(profile, duel, old):
     assert c.config.sortie.model_copy(update={"duel_progress_scale": None, "treasure_cap": SortieRules().treasure_cap}) == SortieRules()
 
 
-@pytest.mark.parametrize("profile", [None, "weekend"])
+@pytest.mark.parametrize("profile", [None])
 def test_other_seasons_have_no_duel_scale(profile):
     c = real_content(profile)
     assert c.config.sortie.duel_progress_scale is None

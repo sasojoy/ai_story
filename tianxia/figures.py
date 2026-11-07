@@ -9,7 +9,18 @@
 - 改：apply（時刻表的人物結局與接手）、defeat（挑戰本人打贏扣聲威）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。
-人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
+人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名；犒軍與自然回復共用一天的上限（aid_ 開頭那一段）
+從大勢人物包的 figure_aid 搬來，recover 直接叫。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figures.py＋煙霧＋邊界
+（第 15 批 PM 認定第 3 條；收進來之前經 atlas、chiefs、figure_life、orders、plans、ranks、rumor_view……往上找挑到 110 個檔）。另外跑（-n 4）
+直接 import 它的：tests/figures/ 的 test_admin_timetable、test_figure_attrition、test_figure_life、test_figure_life_batch3、test_front_lines、
+test_gentry_allied、test_orders、test_plans、test_promotions_high、test_promotions_huang、test_season21_caps、test_season21_frame、test_timetable、
+test_week7_season；tests/battle/ 的 test_chiefs、test_ranks、test_rise；tests/seal/test_seal_acts、test_seal_revamp；tests/gear/test_signature_arms；
+tests/server/test_push_resistance、test_web_push；tianxia/features/ 的 battle/tests/test_generals、test_siege_settle、companions/tests/test_relations_letters、
+test_stances、figure_acts/tests/test_challenge_season、test_figure_aid、map/tests/test_open_map、military/tests/test_opportunities、test_opportunities_two、
+outlets/tests/test_silver_outlets；slow 的 tests/bots/test_bot_policy_conquest、tests/season/test_real_content。世界一步代叫它（world._STEP_CORE），
+world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 from . import calendar, push, relations, seal_acts
@@ -84,6 +95,13 @@ def of_character(content: Content, character_id: str) -> str | None:
     return next((fid for fid, fig in content.figures.items() if fig.character == character_id), None)
 
 
+def side_name(content: Content, fid: str | None) -> str:
+    """大勢人物站哪一邊（陣營的名字）；不是大勢人物、劇本沒有那個陣營是空字串。"""
+    fig = content.figures.get(fid) if fid else None
+    found = content.scenario.find_faction(fig.faction) if fig is not None else None
+    return found.name if found is not None else ""
+
+
 def challenge_on(content: Content, world: WorldState) -> bool:
     """這一季有沒有「挑戰大勢人物本人」（挑戰每季都有設計 3.1）：人物表有人、劇本有陣營才有；第一季的規則開著一定有（打擊軍令
     靠它交差），其他季看 Config.figure_challenge_every_season（主機的退路：關掉就回到「只有第一季」）。"""
@@ -129,6 +147,15 @@ def present_at(state: GameState, content: Content, loc_id: str) -> list[str]:
     ]
 
 
+def heroine_ending(state: GameState, content: Content, cid: str) -> str | None:
+    """女子（content/heroines.json，女子與隱線包 features/heroines 讀它；Joy 2026-11-06「開工」）那一條奇事收在哪一個留得下她的
+    結局；不是女子、沒走、還在走、收在別的結局（失敗、季末沒收）是 None。放在共用規則層：placed_characters 要問，共用規則層不 import 包。"""
+    hd = content.heroines.get(cid)
+    progress = None if hd is None else state.player.storylines.get(hd.line)
+    ending = None if progress is None else progress.ending
+    return ending if hd is not None and ending in hd.endings else None
+
+
 def placed_characters(state: GameState, content: Content) -> dict[str, str | None]:
     """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
     None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
@@ -136,6 +163,10 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     out: dict[str, str | None] = {}
     if life_on(content):  # 人物活起來：不是大勢人物的人物照每日行事走到的地方（沒走過的照 talk_at，不寫）
         out.update(state.world.whereabouts)
+    for cid, hd in content.heroines.items():  # 女子：還沒走完她那一條奇事的不在任何地方；結局換了地方的（stay）在那裡
+        ending = heroine_ending(state, content, cid)
+        if ending is None or ending in hd.stay:
+            out[cid] = None if ending is None else hd.stay[ending]
     if not challenge_on(content, state.world):
         return out
     for fid, fig in content.figures.items():
@@ -260,10 +291,10 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
 
 
 def _stance_push(state: GameState, content: Content, fid: str) -> float:
-    """人物心意照著做的那一個要他推線乘幾倍（stances.push_scale）。stances → calendar、rules：延後 import。"""
-    from . import stances  # noqa: PLC0415
+    """人物心意照著做的那一個要他推線乘幾倍（stance_world.push_scale）。stance_world → calendar、rules：延後 import。"""
+    from . import stance_world  # noqa: PLC0415
 
-    return stances.push_scale(state, content, fid)
+    return stance_world.push_scale(state, content, fid)
 
 
 # ── 時刻表的人物結局 ─────────────────────────────────────
@@ -423,6 +454,65 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
     return lines
 
 
+# ── core_world2：犒軍與自然回復共用一天的上限（全部拆包第 40 批：大勢人物包 figure_aid 的 on、_day、_life、left_today、restore、
+# _prune_tally 原樣搬來、改名 aid_ 開頭；包裡 re-export 回原名）。recover 直接叫 aid_restore，不 import 包。
+
+
+def aid_on(content: Content) -> bool:
+    return content.config.figure_aid.enabled and bool(content.figures)
+
+
+def _aid_day(state: GameState, content: Content) -> int:
+    """「今天」的號碼（calendar.world_day：21 天季台灣 00:00 換日，其他季世界天）。"""
+    return calendar.world_day(state.world.time, content, state.world)
+
+
+def _aid_life():
+    """「大勢人物擴充」那一份（tianxia/figure_life.py，PR #58）在的話，一天的上限照它的帳（gain_left／note_gain，募兵、自然回復、
+    犒軍共用 Config.figure_life.daily_gain_cap）；不在照這裡的 daily_restore_cap 與 aid_tally。兩份先後合進 main 都對得上。"""
+    try:
+        from tianxia import figure_life  # noqa: PLC0415  figure_life → figures：延後 import（兩個都在共用規則層）
+    except ImportError:
+        return None
+    return figure_life if hasattr(figure_life, "gain_left") else None
+
+
+def aid_left_today(state: GameState, content: Content, fid: str) -> float:
+    """這位人物今天還能回幾點聲威（開關關著不設上限）。"""
+    life = _aid_life()
+    if life is not None:
+        return life.gain_left(state.world, content, fid)
+    if not aid_on(content):
+        return float("inf")
+    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_aid_day(state, content)}", 0.0)
+
+
+def aid_restore(state: GameState, content: Content, fid: str, amount: float) -> int:
+    """替人物補聲威 amount（自然回復、犒軍、人物自己募兵共用）：補到開季值、一天有上限（left_today）。回傳真的補了幾點。"""
+    fig = content.figures.get(fid)
+    now = state.world.figures.get(fid)
+    if fig is None or now is None or amount <= 0:
+        return 0
+    room = min(fig.start_prestige - now.prestige, aid_left_today(state, content, fid))
+    gained = max(0, int(min(int(amount), room)))
+    if gained:
+        now.prestige += gained
+        life = _aid_life()
+        if life is not None:
+            life.note_gain(state.world, content, fid, gained)
+        else:
+            key = f"restored:{fid}:{_aid_day(state, content)}"
+            state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
+            _aid_prune_tally(state, content)
+    return gained
+
+
+def _aid_prune_tally(state: GameState, content: Content) -> None:
+    today = _aid_day(state, content)
+    for k in [k for k in state.world.aid_tally if k.rsplit(":", 1)[-1].isdigit() and int(k.rsplit(":", 1)[-1]) < today - 1]:
+        del state.world.aid_tally[k]
+
+
 def recover(state: GameState, content: Content, cal_hours: float) -> None:
     """沒有時刻表的季（甲 (b)）：存檔裡有寫的人物（沒被打過的本來就是開季值），在場、聲威低於人物表的開季值時，每個季曆天回
     figure_prestige_regen 點（累積在 trend_accum["regen:<id>"]，滿一點加一點），回到開季值為止；退場、重創、不在場的不回，
@@ -441,9 +531,8 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
             continue
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
-        if whole:  # 跟犒軍共用一天的上限（figure_aid.restore；開關關著照舊補到開季值）
-            from . import figure_aid  # noqa: PLC0415  figure_aid → figures：延後 import
-            figure_aid.restore(state, content, fid, whole)
+        if whole:  # 跟犒軍共用一天的上限（aid_restore；開關關著照舊補到開季值）
+            aid_restore(state, content, fid, whole)
         rest = max(0.0, pending - whole)
         if rest and now.prestige < fig.start_prestige:
             w.trend_accum[key] = rest

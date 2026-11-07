@@ -132,7 +132,7 @@
     "tests/acts/test_econ_gather_sortie.py（一類一顆之前的出陣銀兩；另一半是三選一找素材）",
     "tests/bots/test_bot_policy_conquest.py",
     "tests/web/test_core_loop_web.py",
-    "tests/ranger/test_raid.py::test_a_melee_and_an_ambush_note_the_rivals_name_to_keep_too"
+    "tianxia/features/peers/tests/test_raid.py::test_a_melee_and_an_ambush_note_the_rivals_name_to_keep_too"
    ]
   },
   "features/explore": {
@@ -530,10 +530,10 @@
    ],
    "tests": [
     "tests/core/test_social.py",
-    "tests/battle/test_spar.py",
+    "tianxia/features/peers/tests/test_spar.py",
     "tests/arts/test_discuss.py",
     "tests/bots/test_mingtie.py",
-    "tests/ranger/test_raid.py",
+    "tianxia/features/peers/tests/test_raid.py",
     "tests/core/test_presence_window.py"
    ],
    "tests_mixed": [

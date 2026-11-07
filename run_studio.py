@@ -27,7 +27,7 @@ from pathlib import Path
 
 import console
 from tianxia import database, power_save
-from tianxia.content import env_profile, load_content, profile_line
+from tianxia.content import serving_profile, load_content, profile_line
 from tianxia.features.looks import actions, cutting, studio
 from tianxia.features.looks.studio_api import ClaudeCritic, GeminiPainter
 from tianxia.sqlite_world import open_world
@@ -57,7 +57,7 @@ def _painter(argv: list[str]):
 def main(argv: list[str]) -> int:
     console.use_utf8()
     once, anytime = "--once" in argv, "--anytime" in argv
-    profile = env_profile()
+    profile = serving_profile()
     content = load_content(ROOT / "content", profile=profile)
     store = open_world()
     root = actions.images_beside(store.db.path)

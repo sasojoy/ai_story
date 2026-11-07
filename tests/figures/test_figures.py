@@ -11,7 +11,8 @@ import re
 from unittest import mock
 
 from conftest import FixedRandom, no_plans, no_territory, real_content
-from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
+from tianxia import battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
+from tianxia.features.map import layers
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates
@@ -65,14 +66,14 @@ def real():
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
     c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻
-    c.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+    c.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）
     return c
 
 
 @pytest.fixture
 def on(real):
     """同一份真實內容，開關打開（第一季濃縮版）。倒下時盟友、仇敵的反應（人物活起來第二批）關著：這裡量的是接位鏈與那一句
-    天下大事，反應另在 tests/test_relations_letters.py。"""
+    天下大事，反應另在 tianxia/features/companions/tests/test_relations_letters.py。"""
     real.config.season_one = True
     real.config.figure_life.reactions = False
     return no_territory(real)  # 地盤不開（豪強分屬兩軍的開關拿掉之前，這一份本來就沒有地盤）
@@ -293,7 +294,7 @@ def test_who_stands_where(on):
     on.config.season_one = False  # 規則沒開：沒有時刻表的季也有挑戰本人（挑戰每季都有設計 3.3），人物照存檔（季中種好的那一份）站
     assert figures.placed_characters(s, on) == placed
     on.config.figure_challenge_every_season = False  # 緊急開關關著：大家照 talk_at
-    assert figures.placed_characters(s, on) == {}
+    assert figures.placed_characters(s, on) == dict.fromkeys(on.heroines)  # 女子沒走完她的奇事照舊不在
 
 
 # ── Task 3：每曆時的推動 ─────────────────────────────────
@@ -397,27 +398,27 @@ def test_sim_players_stand_down_in_season_one(on):
 
 def test_the_map_shows_the_figures_where_they_stand(on):
     s = _season(on)
-    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
-    assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
-    assert atlas.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
-    assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
-    assert atlas.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
-    assert atlas.leader_activity(s, on, "董卓") == atlas.LEADER_QUIET
-    assert "- 聲威 60（越高越難打）。" in atlas.leader_text(s, on, "波才")
+    assert layers.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
+    assert layers.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
+    assert layers.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
+    assert layers.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
+    assert layers.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
+    assert layers.leader_activity(s, on, "董卓") == layers.LEADER_QUIET
+    assert "- 聲威 60（越高越難打）。" in layers.leader_text(s, on, "波才")
     s.world.figures["luzhi"].status = "jailed"
-    assert atlas.haunters(s, on, "luzhi_camp") == []
+    assert layers.haunters(s, on, "luzhi_camp") == []
 
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
     """規則關著的季照舊標虛擬玩家（龍頭人物）。挑戰每季都有（設計 3.8）：緊急開關關著時，給了地點也不寫聲威；開著時人物此刻
     就站在這裡才寫（黃巾別部營寨的波才寫、潁川的皇甫嵩不寫——他站在長社）。"""
     s = _season(real)
-    assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
-    assert atlas.haunters(s, real, "mengjin_ford") == []
-    assert "聲威" in atlas.leader_text(s, real, "波才", "huangjin_camp")
-    assert "聲威" not in atlas.leader_text(s, real, "皇甫嵩", "yingchuan")
+    assert layers.haunters(s, real, "huangjin_camp") == ["波才"]
+    assert layers.haunters(s, real, "mengjin_ford") == []
+    assert "聲威" in layers.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in layers.leader_text(s, real, "皇甫嵩", "yingchuan")
     real.config.figure_challenge_every_season = False
-    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in layers.leader_text(s, real, "波才", "huangjin_camp")
 
 
 # ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────
@@ -827,7 +828,7 @@ def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(o
 def test_nothing_changes_with_the_switch_off(real, world):
     """Review Focus 5：開關關著（beta 那一季）：沒有挑戰的選項、人物照 characters.json 的 talk_at 站（下獄也看不到）、
     存檔沒有人物，交友照舊找波才。現在「開關關著」是挑戰每季都有的緊急開關（Config.figure_challenge_every_season）：14 天的季
-    預設有挑戰本人，見 tests/test_challenge_season.py。"""
+    預設有挑戰本人，見 tianxia/features/figure_acts/tests/test_challenge_season.py。"""
     real.config.figure_challenge_every_season = False
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     game.state.player.stats["fame"] = 50
@@ -851,9 +852,8 @@ def test_bot_challenges_target_figure(on, world):
         assert bot_policy.score(bot, challenge, profile) is None
     with mock.patch.object(Game, "challenge_odds", return_value="有把握"):
         assert bot_policy.score(bot, challenge, profile) == bot_policy.CHALLENGE_SCORE
-        # 探索三選一開著（出陣探索與地盤）：「探索」入口不給分，比的是找素材（缺素材時加的那一份也算進去）
-        bot.state.player.materials = {}
-        assert bot_policy.score(bot, Option(id="explore:gather", label="找素材"), profile) < bot_policy.CHALLENGE_SCORE
+        bot.state.player.materials = {}  # 探索的分（缺素材時加的那一份也算進去）比挑戰本人低
+        assert bot_policy.score(bot, Option(id="act:explore", label="探索"), profile) < bot_policy.CHALLENGE_SCORE
     on.config.bot_strength = 1.0  # 一定挑最高分
     with mock.patch.object(Game, "challenge_odds", return_value="穩勝"), _fight():
         bot_policy.take_turn(bot, profile, random.Random(0))

@@ -329,7 +329,7 @@ NOW = 1_000_000.0
 
 
 def _traveller(content, name, horse=None, stamina=100.0):
-    """結伴同行的一方（同 tests/test_social.py 的 _player）：在小鎮、存回資料庫。"""
+    """結伴同行的一方（同 tianxia/features/peers/tests/test_social.py 的 _player）：在小鎮、存回資料庫。"""
     _on(content)
     game = Game.new(content, name, rng=random.Random(0))
     game.client = None
@@ -727,7 +727,7 @@ RAID_NOW = 1000.0
 
 @pytest.fixture
 def riders(content, world):
-    """截殺的兩個人（同 tests/test_raid.py 的 pair）：官軍甲、黃巾乙在湖邊，坐騎開著、都還沒騎馬。"""
+    """截殺的兩個人（同 tianxia/features/peers/tests/test_raid.py 的 pair）：官軍甲、黃巾乙在湖邊，坐騎開著、都還沒騎馬。"""
     from conftest import install_season_one
     from tianxia.models import FactionDef
     install_season_one(content)

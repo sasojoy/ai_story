@@ -15,7 +15,11 @@
 - 引將的目標清單也問行程（displaces，FB-9038）：窗口（現在到期滿）內行程會把這個人（本人的站、盤算公告與結算，或他跟著的人的站）搬離他此刻
   所在的地方，目標灰掉、起用按不下去；結果靠還沒擲的骰子時，只要有一種結果會搬他就算。照 on(content) 開，不看季種類（盤算每種季都有）。
 - 結算也改那個地點的樣子（place_state.apply：PlanContest.place_win／place_lose，預設打過一仗；世界活起來第二批）。
-只 import models、state、rules、calendar、figures、figure_life、deeds、place_state、renown、seal_acts；world、engine 呼叫它。"""
+只 import models、state、rules、calendar、figures、figure_life、deeds、place_state、renown、seal_acts；world、engine 呼叫它。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING，第 51 批）。
+改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_plans.py＋煙霧＋邊界；收進來之前挑到的 tianxia/features/seal/tests/test_seal_acts.py 另外跑；
+世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 import random

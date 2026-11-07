@@ -19,13 +19,14 @@
 - 收場（verdict）：攻方贏（大勝或險勝）就易手（conquest.flip：照推滿那樣分紅、冷卻）；否則原主人留著（中立還是中立）、攻方的條砍半。
   三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷、進度照留。
 只 import models、state、battle_instance、chiefs（龍頭上陣的挑法：全部拆包第 8 批 generals 進決戰包時留在共用規則層的那一塊）、territory、
-conquest、conquest_day（作罷）、world_state 型別。"""
+conquest（作罷）、world_state 型別。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import atlas, battle_instance, chiefs, conquest, conquest_day, territory
-from .battle_instance import GUARD, Commander, SiegeInfo
+from . import atlas, chiefs, conquest, territory
+from .core import battle_base as battle_instance
+from .core.battle_base import GUARD, Commander, SiegeInfo
 from .models import BattleDef, Content
 from .state import DayNote, GameState, Rumor, SiegeSlot, WorldState
 
@@ -357,7 +358,7 @@ def open_waiting(world: WorldStateStore, content: Content, now: float) -> list[s
             if slot.id in opened:
                 slot.status, slot.record_id = "open", opened[slot.id]
             elif slot.id in voided:
-                conquest_day.void(s, content, slot, voided[slot.id])
+                conquest.void(s, content, slot, voided[slot.id])
         for line in msgs:
             _rumor(s, line)
 
@@ -389,9 +390,9 @@ def settle(world: WorldState, content: Content, battle: battle_instance.BattleIn
     if info_.void or battle.unfinished:
         # 作罷不發天下大事（攻方沒人到：人少的服每天空轉會洗版，PM 裁決 19）：時程表記 void，沒人到的另記一筆 day_log
         if slot is not None:
-            conquest_day.void(world, content, slot)
+            conquest.void(world, content, slot)
             if info_.void == "absent":
-                conquest_day.note_void(world, slot, "absent")
+                conquest.note_void(world, slot, "absent")
         return {"taken": None, "winner": "", "margin": "", "title": battle.outcome_title or battle_instance.UNFINISHED_TITLE}
     taken, winner, margin = verdict(info_, battle, definition)
     if battle_instance.melee(battle):  # 三方混戰（裁決 22）：寫出誰補上最後一刀（具名），或守軍守住

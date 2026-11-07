@@ -15,7 +15,7 @@
 『三邊合起來』（每個機器人獨佔一個資料庫，合起來當全服的粗估）。
 打造第二批起另印神器原品、仿品幾把，與一季拿到幾個三階（新來源另計）。
 
-用法：.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile weekend]
+用法：.venv/Scripts/python.exe scripts/measure_secrets.py --seeds 1 2 3 4 5 [--profile week7]
 """
 from __future__ import annotations
 
@@ -208,7 +208,7 @@ def _fmt_forge(row: dict) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="week7")
     args = parser.parse_args()
     profile = None if args.profile in ("", "none", "default") else args.profile
     rows: dict[str, list[dict]] = {side: [] for side in SIDES}

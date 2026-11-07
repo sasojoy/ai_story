@@ -1,7 +1,8 @@
 """FB-225：桌機上店面拉滿整個螢幕（主料、輔料兩格各半個螢幕寬、素材格四欄拉滿），企劃者「最主要是寬度的設計沒有照著 UI 框架延續」。
 遊戲本體在電腦上是一欄 640px（.shell、.tabs-inner）；店面、武學譜那本書、遊戲裡讀傳那一層也照這一欄：底色只畫在欄裡、欄外是頁面底色，
 欄裡的東西照欄排，會捲的那一層照舊整片寬（兩邊各留一條捲軸寬的溝）、捲的內容包在 .shop-col。手機（窄於 641px）一條規則都不生效。
-CSS 照原字查；畫面照 tests/test_shop2_web.py 的假瀏覽器跑整支 app.js。"""
+CSS 照原字查；畫面照 tianxia/features/gear/tests/test_shop2_web.py 的假瀏覽器跑整支 app.js。"""
+# 畫法在 web/smithy.js、web/gear.js、web/outlets.js、web/tavern.js、web/bounties.js、web/bout.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import re
@@ -144,7 +145,7 @@ def test_reading_a_biography_in_game_follows_the_column_but_the_public_page_does
     assert rules[".zhuan-layer > .zh-bar, .zhuan-layer > .zh-head"] == f"margin-left: {side}; margin-right: {side};"
     for selector in ",".join(rules).split(","):
         assert selector.strip().startswith(".zhuan-layer"), selector
-    assert "zhuan-layer" not in (server.ROOT / "zhuan_html.py").read_text(encoding="utf-8")
+    assert "zhuan-layer" not in (server.ROOT / "tianxia" / "features" / "zhuan" / "zhuan_html.py").read_text(encoding="utf-8")
 
 
 def _shop_col(html: str) -> str:

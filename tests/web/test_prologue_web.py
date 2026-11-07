@@ -3,6 +3,8 @@ web/app.js 沒有建置步驟、也沒有前端測試框架：這裡把整支 ap
 最後一行啟動的呼叫換成「把要測的函式交出來」，餵它**真的**引擎給的 /api/main 與 /api/menxia 內容（序章測試內容，走到每一步），
 檢查畫出來的 HTML 與發光的鈕。沒有 node 就略過。沒有瀏覽器可開，這是瀏覽器驗收那一步（手機寬度 375 的排版另看）的替身：
 驗的是「哪一步畫什麼、藏什麼、哪顆鈕發光」，不是長相。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json
@@ -32,7 +34,7 @@ const vm = require("vm");
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
   "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "weekCardHtml", "chapterCardHtml", "trendsTopHtml", "sheetHtml", "adminHtml", "applyGlow",
   "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine",
-  "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
+  "heroMoreHtml", "hereSort", "dutyParts", "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];
@@ -107,7 +109,7 @@ finish(new Function("H", "m", "T", input.script)(H, input.m, { els, fake, el, bu
 
 
 def run(m, script, *, S=None, menxia=None, stored=None, responses=None):
-    """在 node 裡跑 app.js（tests/webharness.py）：m 是 /api/main 回的那份（S.main）、menxia 是 /api/menxia 回的那份，script 是函式本體
+    """在 node 裡跑 app.js（tests/kit/webharness.py）：m 是 /api/main 回的那份（S.main）、menxia 是 /api/menxia 回的那份，script 是函式本體
     （可用 H、m、T；要等網路的寫成 async，fetch 是假的：T.calls 記下問了什麼，responses 是「網址開頭 → 回的 JSON」）。"""
     return webharness.run(DRIVER, {
         "m": m, "script": script, "S": S or {}, "menxia": menxia, "stored": stored or {}, "responses": responses or {},
@@ -229,7 +231,7 @@ def test_after_the_prologue_the_ordinary_screen_comes_back(hut, content):
     assert m["prologue"] is None
     out = run(m, "return { tabs: H.tabsHtml(), top: H.topHtml(), shown: H.shown('tab:map') && H.shown('board') && H.shown('act:move') };")
     assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "map", "news"] and out["shown"] is True
-    assert "第 " in out["top"] and "toggle-more" in out["top"]  # 平常的狀態列：日期、點名號展開
+    assert "第 " in out["top"] and 'data-act="hero-attrs"' in out["top"]  # 平常的狀態列：日期、點名號去俠客頁的屬性（介面重整）
 
 
 # ── 本週卡（減法季批 1：取代態勢｜大事｜主線三塊小標） ────────────────────
@@ -900,14 +902,14 @@ def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):
 # joy 在 GitHub 上也做了 FB-092～095（PR #30、#31），併進 main 之後 PM 裁示 joy 的為準（chain-on-main，2026-10-07）：我們的重複做法
 # 拿掉了（FB-092 整段都是 joy 的，這裡沒有測試）。留下的是我們加在 joy 的做法上、joy 沒有的東西（結語、一週保底、網頁的「在下面 ↓」），
 # 以及跑在 joy 的程式上、joy 的測試沒蓋到的情況。用真實內容（conftest 的 real、on：這個測試自己的一份複本）；網頁的部分（web/app.js 的
-# applyGlow、guideCue、choose 的 ask）照 tests/test_prologue_web.py 的做法放進 node 跑（scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
+# applyGlow、guideCue、choose 的 ask）照 tests/web/test_prologue_web.py 的做法放進 node 跑（scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
 # 新寫的句子都在待 joy 潤的清單上（見 fb-report.md）：這裡的測試只認事實（講了什麼、對不對得上規則），不鎖死字句。
 
 # ── FB-093：入伍第 2 步沒說軍令怎麼出力 ─────────────────────────────────
 # joy 的版本（2026-10-07 併進 main，PM 裁示 joy 的為準）：每一道沒達成的軍令卡寫怎麼做（atlas.order_how）；第 2 步的 order_hint 點名
 # 守勢行動；伺服器在框上帶能完成這一步的選項 id（guide.glow，enlist.glow），網頁讓它們發光、「此地還能做」打開。
 # 這裡留下的是 joy 的測試沒蓋到的：每一種軍令卡、黃巾的守勢行動名字；我們的結語（不再整段背五種軍令）；網頁上我們加在 joy 的發光上的
-# 三樣——收著的摺疊改由標題列發光、「在下面 ↓」、摺疊在那一步開頭只自動打開一次（tests/test_jianghu_page_web.py）。
+# 三樣——收著的摺疊改由標題列發光、「在下面 ↓」、摺疊在那一步開頭只自動打開一次（tests/web/test_jianghu_page_web.py）。
 
 DUTY = {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
 
@@ -971,7 +973,7 @@ def test_fb093_the_ending_no_longer_recites_every_kind(on):
 
 
 # ── FB-094：豪強入伍第 2 步這一週做不到 ─────────────────────────────────
-# joy 選甲（Game._duty：守勢行動不在這週軍令裡也算第 2 步；tests/test_orders.py 三邊各一條）。這裡留下 joy 的測試沒蓋到的：
+# joy 選甲（Game._duty：守勢行動不在這週軍令裡也算第 2 步；tests/figures/test_orders.py 三邊各一條）。這裡留下 joy 的測試沒蓋到的：
 # 有守城軍令時巡哨照樣替它記一次又走完這一步、別的行動不算；豪強的結語（我們的）；一週（季曆）之後還沒做完，引薦人照樣說結語、
 # 入伍段關起來（我們加的保底，joy 的版本沒有：enlist.expire、PlayerState.enlist_since）。
 
@@ -1075,10 +1077,10 @@ def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_thei
 
 # ── FB-095：剛出師的新角色去黃巾別部營寨遊歷，挨了三場打 ───────────────────────────
 # joy 的版本：遊歷的標籤寫「必敗」時選項帶 confirm（engine.TRAIN_CONFIRM），網頁用自己的 ask() 問一次、按「照打」才送；師父出師那句
-# 多一句別去營寨惹事（joy 的測試：tests/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下 joy 的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
+# 多一句別去營寨惹事（joy 的測試：tests/figures/test_orders.py::test_hopeless_training_asks_first_and_fair_training_does_not）。這裡留下 joy 的測試沒蓋到的：真的算出來的必敗、勝算表上每一個字、不算勝算的
 # 選單（機器人）不問也不擲骰、伺服器照常打、網頁上問與取消（同一個 Option.confirm、同一個 ask()，PM 裁示用到同一件東西的測試留著）。
 # 出陣探索與地盤（2026-10-14）：散人沒有出陣鈕，打仗的鈕是投靠了陣營的人在別人地盤上的「出陣・攻」（同一個 act:train、同一套勝算與問句），
-# 所以這一段換成官軍的人站在黃巾別部營寨（黃巾的大本營）；舊遊歷的問句見 tests/test_orders.py（那裡關著出陣）。
+# 所以這一段換成官軍的人站在黃巾別部營寨（黃巾的大本營）；舊遊歷的問句見 tests/figures/test_orders.py（那裡關著出陣）。
 
 
 def _train(game):

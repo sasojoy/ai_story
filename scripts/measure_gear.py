@@ -18,10 +18,10 @@ smithing.temper，只算 slot 是 armor、淬煉次數真的多了的）；「�
 所以含挑戰本人；掉的氣血、內傷照整季算。
 遊歷野怪的場數與勝率同 measure_weapons：state.battles 只留最近 20 場，所以在 observe 裡照流水號逐步累計新出現的戰報。
 
-兩組（設計第十節）：14 天設定（不給 --profile）種子 1～5；週末設定（--profile weekend --steer）種子 1～5——週末的機器人一季只打
+兩組（設計第十節）：14 天設定（不給 --profile）種子 1～5；7 天濃縮季（--profile week7 --steer）種子 1～5——週末的機器人一季只打
 9～29 場（FB-129），--steer 照 measure_sanren._steer 一半的時候照手上的懸賞、軍令走，手上沒事就在這裡遊歷。模型一律不連。
 
-用法：.venv/Scripts/python.exe scripts/measure_gear.py --seeds 1 2 3 4 5 [--profile weekend --steer]
+用法：.venv/Scripts/python.exe scripts/measure_gear.py --seeds 1 2 3 4 5 [--profile week7 --steer]
 """
 from __future__ import annotations
 

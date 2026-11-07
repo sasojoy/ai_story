@@ -16,7 +16,8 @@ from typing import NamedTuple
 
 from pydantic import BaseModel
 
-from tianxia import battle_instance, calendar, prologue, tactics
+from tianxia import calendar, prologue, tactics
+from tianxia.core import battle_base as battle_instance
 from tianxia.core.duel_base import (  # noqa: F401  單挑底層進了核心（全部拆包第 12 批）：同一批函式物件，duel.push_of 這些照舊拿得到
     TELLS, Scene, blow_taken, counter, edge_words, gamble_roll, harm_of, move_label, push_of, success_of, verdict_at,
 )
@@ -42,14 +43,6 @@ def used_up(state: GameState, content: Content, boss_id: str) -> bool:
     if tuning.per_boss_week:
         return tally.get(week_key(state, content, boss_id), 0) >= tuning.per_boss_week
     return tally.get(season_key(state, boss_id), 0) >= tuning.per_boss_season
-
-
-def cooldown_left(state: GameState, tuning: DuelTuning) -> float:
-    """離冷卻結束還有幾世界秒（不在冷卻是 0）。"""
-    last = state.player.duel_last
-    if not cooling(state, tuning):
-        return 0.0
-    return tuning.cooldown_seconds - (state.world.time - last[1])
 
 
 def cooling(state: GameState, tuning: DuelTuning) -> bool:

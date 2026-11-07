@@ -8,7 +8,7 @@ explore_rules）；函式名＝原本的方法名去掉前導底線，一個例�
 Game 上留 7 個一行委派（第 3＋4 批是 9 個；核心原位的選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題在全部拆包
 第 11 批換成 act 子動詞的掛鉤〔__init__.py 的 verbs〕，`_outing_option`、`_explore_one` 拿掉；還在叫的：輿圖、server 的 mostly 與輿圖、
 出陣包〔_outing_on〕、bot_policy、腳本、測試）。包裡互相叫直接叫這裡的函式；經 ctx 叫的是 `_outing_plan`、`outing_plan`、`odds`
-（這一包的 tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）與 `outing_plan`、
+（這一包的 tianxia/features/explore/tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）與 `outing_plan`、
 `map_mostly` 照搬原本寫法的 `ctx._outing_on()`；第 11 批的 verbs() 與 outing_note 直接叫 outing_on（沒有測試換掉它，手冊第十五節）。
 擲骰都用自己的亂數（explore_rules.rng_for），Game.rng 一次都不多、不少（頭目戰與仗本身照它們原本的）。
 """
@@ -20,26 +20,24 @@ import random
 from dataclasses import dataclass
 
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
-from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路、打探交差、打贏交差）
+from tianxia.core import bounty_base
+from tianxia import conquest  # 共用規則層（站在自家領地多給的那一個）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
-from tianxia import explore_modes  # 過渡：待搬（探索三選一，企劃者 10/31 定不搬：找素材那一套 gather_finds、補料 one_of）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
 from tianxia import insights  # 共用規則層（悟不悟得出）
 from tianxia import journal, team
-from tianxia import mapdata  # 過渡：待搬（輿圖：勝算的字、關著時的「多半」）
-from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出來）
 from tianxia import materials  # 共用規則層（素材的發放）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
 from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
-from tianxia import sensing  # 過渡：待搬（有所感：這一處今天悟錯過沒）
-from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
+from tianxia import story_base  # 共用規則層（一條線的底座：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
+from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
-from tianxia.rules import jianfa
+from tianxia.rules import day_turn, jianfa
 
-from . import explore_rules, outing_rules
+from . import explore_rules, howto, outing_rules
 
 
 @dataclass(frozen=True)
@@ -62,20 +60,20 @@ class OutingPlan:
 
 def outing_on(ctx) -> bool:
     """探索一顆在這一季開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa），而且不在序章裡（序章照舊按「探索」走寫好的那幾步）。
-    開著時選單上只剩一顆「探索」（act:explore，出門一趟），不畫三選一（explore:*）、尋敵、城裡操練。"""
+    開著時選單上只剩一顆「探索」（act:explore，出門一趟）。"""
     return jianfa(ctx.content, ctx.state.world, "explore_one") and not prologue_rules.active(ctx.state, ctx.content)
 
 
 def outing_foe(ctx, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
-    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-    _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
+    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到）；
+    **可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
     問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
     就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
     不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
     s, c = ctx.state, ctx.content
-    for b in bounties.mine(s, c):
+    for b in bounty_base.mine(s, c):
         if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not ctx._drills_with(c.squads[b.squad]):
-            if ctx.odds(b.squad) == mapdata.LOSE_WORD:
+            if ctx.odds(b.squad) == LOSE_WORD:
                 continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）
             return "bounty", c.squads[b.squad]
     side = ctx._side()
@@ -102,7 +100,7 @@ def outing_weights(ctx, loc: Location, *, has_foes: bool, bounty_here: bool, hid
     # 一次性與奇遇（rare）加可重複的（common）就是全部（pool=None），一趟只問一次，找到一則就夠
     if not event_rules.has_event_candidates(s, c, "explore", hidden=hidden):
         weights[explore_rules.EVENT] = 0
-    if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
+    if not insights.explore_gives(loc, c) or ctx._sense_missed(loc):  # 選錯過做法問有所感包（查詢服務，全部拆包第 24 批：包不 import 包）
         weights[explore_rules.INSIGHT] = 0
     return weights
 
@@ -129,7 +127,7 @@ def mostly_here(ctx) -> str:
     plan = ctx.outing_plan()
     if plan is not None:
         return plan.hint
-    return mapdata.mostly_here(ctx.state, ctx.content)
+    return ctx._map_mostly_here()  # 輿圖包的查詢（全部拆包第 49 批；原本直接叫 mapdata.mostly_here）
 
 
 def outing_plan(ctx) -> OutingPlan | None:
@@ -150,7 +148,7 @@ def map_mostly(ctx) -> dict[str, str] | None:
         return None
     out: dict[str, str] = {}
     hidden = event_rules.hidden_events(ctx.state, ctx.content)  # 藏起來的事件不看站在哪，四十幾處共用一份，不必每處重算
-    for loc_id in mapview.open_places(ctx.state, ctx.content):
+    for loc_id in ctx._map_open_places():  # 輿圖包的查詢（全部拆包第 49 批；原本直接叫 mapview.open_places）
         with standing_at(ctx, loc_id):
             plan = ctx._outing_plan(ctx.content.locations[loc_id], hidden=hidden)
         out[loc_id] = explore_rules.tail_of(plan.how, plan.weights)
@@ -177,13 +175,32 @@ def outing_option(ctx, loc: Location) -> Option:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫三選一、舊探索那一行）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 ctx._insight_blocked）。"""
     if not outing_on(ctx):
-        return None
-    from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
-
+        c = ctx.content
+        legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
+        blocked = ctx._insight_blocked(loc)
+        kind, until = day_turn(c, ctx.state.world) if blocked else ("at", None)
+        return howto.explore_line(ctx._explore_weights(loc), legend, blocked, until, later=kind == "later")
     plan = ctx._outing_plan(loc)
     return howto.outing_line(plan.weights, plan.foe_note)
+
+
+def home_gather(ctx, loc: Location, mids: list[str]) -> list[str]:
+    """領地爭奪：人站在自家領地找素材，Config.conquest.gather_bonus_chance 的機會多一個同屬性的一階（設計 4.5；散人在開季中立的區塊也算）。
+    屬性照這一下找到的第一個素材，沒找到照地點寫的第一種素材；擲骰用這一次探索自己的亂數（用途「領地」），不碰 Game.rng。
+    開關關著、不在自家是空的，一個字都不變。"""
+    s, c = ctx.state, ctx.content
+    if not conquest.home(s, c):
+        return []
+    rng = explore_rules.find_rng(ctx.world.get_season_number(), s.player.name, s.player.explore_seq, "領地")
+    if rng.random() >= c.config.conquest.gather_bonus_chance:
+        return []
+    pool = [m for m in [*mids, *loc.materials] if m in c.materials]
+    attribute = c.materials[pool[0]].attribute if pool else None
+    mid = explore_rules.one_of(c, {attribute} if attribute else set(), 1, rng)
+    line = materials.grant(s, c, mid) if mid is not None else None
+    return [conquest.HOME_GATHER_LINE, line] if line else []
 
 
 def explore_one(ctx) -> list[str]:
@@ -210,7 +227,7 @@ def explore_one(ctx) -> list[str]:
     beat = explore_rules.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
     # 一條線（特殊事件）：在開頭的地方擲中了，這一趟就是那條線的第一段（關著、沒有線不擲；用自己的亂數，不動拍子）
     boost = outing_rules.rare_boost(s, c)  # 走一趟：段數越多，稀有的越容易來（不在路上是 1）
-    strand = storyline.roll_start(s, c, roll("奇事"), boost=boost)
+    strand = story_base.roll_start(s, c, roll("奇事"), boost=boost)
     if strand is not None:
         beat = explore_rules.EVENT
     say, lines = roll("段落"), c.outing_lines
@@ -224,7 +241,7 @@ def explore_one(ctx) -> list[str]:
     ctx._beat = {"kind": beat, "rare": strand is not None, "won": None}  # 走一趟讀這一段是什麼（_outing_walk）
     rng = roll("結算")
     if beat == explore_rules.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
-        mids = explore_modes.gather_finds(c, loc, rng, sure=True, boost=boost)
+        mids = explore_rules.gather_finds(c, loc, rng, boost=boost)
         ctx._beat["rare"] = any(c.materials[m].tier >= 2 for m in mids if m in c.materials)
         top = next((c.materials[m].name for m in mids if m in c.materials and c.materials[m].tier >= outing_rules.FEAT_TIER), "")
         if top:  # 稀世的素材：這一趟收的時候記一則行狀（outing.FEAT_ANNAL）
@@ -264,7 +281,7 @@ def explore_one(ctx) -> list[str]:
         out += ctx._duel_start(boss)
     if not got_any:  # 這一趟沒收穫（素材找不到料、遭遇打輸或沒對手）：補一個一階素材（設計 4.1【PM】）
         kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
-        mid = explore_modes.one_of(c, kinds, 1, roll("補"))
+        mid = explore_rules.one_of(c, kinds, 1, roll("補"))
         granted = materials.grant(s, c, mid) if mid is not None else None
         if granted:
             story.append(explore_rules.line(lines, "close", "empty", say, place=loc.name,
@@ -272,7 +289,7 @@ def explore_one(ctx) -> list[str]:
             out.append(granted)
     # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
     extras = ctx._pill_find(roll("回體丹")) + ctx._scrap_find() + ctx._legend_find(roll("破境丹"))
-    extras += bounties.on_explore(s, c, ctx.world, loc.id) + ctx._seal_find(loc.id)  # 打探懸賞：出門一趟就算
+    extras += ctx.publish("outing", loc.id)  # 事件 outing（第 26 批）：打探懸賞（出門一趟就算）→撿玉璽碎片
     if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
         ctx._outing_close.add("capped")
     for key in explore_rules.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
@@ -311,7 +328,7 @@ def outing_fight(ctx, loc: Location, plan: OutingPlan) -> tuple[list[str], str, 
     if record is not None:
         record.label = battlelog.OUTING_LABEL
     if won and not town:
-        done = bounties.on_win(s, c, ctx.world, loc.id, foe.id)
+        done = ctx.publish("win", loc.id, foe.id)  # 事件 win（第 26 批）：懸賞榜的討伐
         changes, notes = battlelog.split_changes(done, for_record=True)
         record.changes += changes
         record.notes += notes

@@ -34,6 +34,8 @@ def test_it_makes_the_package_registers_it_and_adds_the_guide_heading(repo):
         ast.parse(path.read_text(encoding="utf-8"))  # 生出來的程式讀得懂
     init = (pkg / "__init__.py").read_text(encoding="utf-8")
     assert 'name = "tavern2"' in init and 'prefix = "tavern2"' in init and "FEATURE = Tavern2Feature()" in init
+    assert "web: tuple[str, ...] = ()" in init and "content: tuple[str, ...] = ()" in init  # 畫面、內容檔怎麼宣告（手冊第十五節 G8、G9）
+    assert "tianxia/features/tavern2/content/" in init and "不要手改 index.html 的 script" in init
     assert b"\r\n" in (pkg / "__init__.py").read_bytes()  # 工作樹是 CRLF
     smoke = (pkg / "tests" / "test_tavern2_smoke.py").read_text(encoding="utf-8")  # 每一包至少一條煙霧（手冊 4.3）
     assert "@pytest.mark.smoke\ndef test_tavern2_" in smoke.replace("\r\n", "\n")
@@ -43,6 +45,21 @@ def test_it_makes_the_package_registers_it_and_adds_the_guide_heading(repo):
     guide = (repo / "docs" / "guide" / "大勢人物與賽季.md").read_text(encoding="utf-8")
     assert guide.startswith("# 大勢人物與賽季") and "## 酒肆（功能包 `tianxia/features/tavern2/`）" in guide
     assert len(made) == 6
+
+
+def test_the_stage_file_is_registered_after_the_last_stage_line(repo):
+    """tests/core/test_test_for.py 的 STAGE_PACKAGES：沒登記的話每一個新包都讓 test_the_stage_packages_are_every_package_with_a_stage_file 紅。"""
+    (repo / "tests" / "core").mkdir(parents=True)
+    path = repo / "tests" / "core" / "test_test_for.py"
+    path.write_bytes('STAGE_PACKAGES = ["a"]\r\nSTAGE_PACKAGES += ["b"]  # 乙\r\n\r\n\r\ndef test_x():\r\n    assert sorted(STAGE_PACKAGES)\r\n'.encode("utf-8"))
+    made = new_feature.make(repo, "tavern2", "酒肆", "大勢人物與賽季")
+    assert path in made and len(made) == 7
+    lines = path.read_bytes().decode("utf-8").split("\r\n")  # 工作樹是 CRLF
+    assert lines[1] == 'STAGE_PACKAGES += ["b"]  # 乙'
+    assert lines[2].startswith('STAGE_PACKAGES += ["tavern2"]') and lines[3] == ""
+    namespace: dict = {}
+    exec("\n".join(lines[:3]), namespace)  # 接上去的那一行是讀得懂的程式
+    assert namespace["STAGE_PACKAGES"] == ["a", "b", "tavern2"]
 
 
 def test_a_second_package_lines_up_after_the_first(repo):

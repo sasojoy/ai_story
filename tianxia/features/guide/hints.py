@@ -12,7 +12,7 @@ from collections.abc import Iterable
 
 from tianxia import allied, calendar
 from tianxia.models import Content
-from tianxia.state import GameState, HintNote
+from tianxia.state import GameState, HintNote, PlayerState
 
 # 設計 5.2 的十八條（第 7 條 h_snubbed 與第 18 條 h_mandate 不看狀態，由事件自己叫 Game._hint），加上 explain-1 的 h_bond（第一次交友、
 # 第一次跟人物談話：情誼有什麼用）；content/hints.json 的 id 只能是這些。觸發條件在 Game._hint_triggers（計畫三 Task 2）
@@ -120,3 +120,10 @@ def show(state: GameState, content: Content, note: HintNote) -> bool:
     if defined(content, note.id):
         state.player.hints_seen.add(note.id)
     return True
+
+
+def defect_clear(p: PlayerState) -> None:
+    """叛投 clear 位置的 hints 那一格（core_effects：全部拆包第 32 批；GuideFeature.defection() 登記；原本 defection.clear_progress 那一行逐字搬）：
+    舊陣營的引薦人排著還沒說的提示作廢（新手引導計畫三，N7）：換了邊之後由新的引薦人說；師父的（by 是空的）不動。
+    p.faction 這時候還是舊陣營（clear_progress 裡還沒改投）。不問開關（原位本來就不看）。"""
+    p.hint_queue = [n for n in p.hint_queue if p.faction is None or n.by != p.faction]

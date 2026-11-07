@@ -1,6 +1,6 @@
 """商城第三批：假人這一版不買（設計 4.8），而且別人看得到的地方都沒有元寶、購買的字樣，看不出誰是假人。
 
-- 假人照樣拿封測發放（第一批 test_mall.py 的 test_bots_get_the_same_grant），但從不叫 Game.mall_buy：帳上只有發放、沒有購買紀錄。
+- 假人照樣拿封測發放（第一批 test_mall.py 的 test_bots_get_the_same_grant），但從不叫商城包的 actions.buy、purchase：帳上只有發放、沒有購買紀錄。
 - 一個真人買了月卡與回體丹、一個假人只拿了發放：第三個人看到的「此地還有」、兩張玩家卡、傳聞、江湖史、大事、榜單，與兩人的戰報、
   行狀（會寫進公開的傳）都沒有元寶、商城、月卡、購買這類字，兩張玩家卡的鍵一樣。
 - 假人程式的主控台輸出（run_bots）不寫元寶、商城。"""
@@ -17,7 +17,7 @@ import run_bots
 from tianxia import leaderboard, server_bots
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import name_key, open_characters
-from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.models import MallItem
 from tianxia.sqlite_world import open_world
 from tianxia.wallet import Wallet
@@ -44,7 +44,7 @@ def _no_mall_words(seen: object) -> list[str]:
 
 
 def test_online_bots_take_the_grant_but_never_buy(on, monkeypatch):
-    """假人在線、每一輪都動：每個假人照樣拿到封測發放，一次都沒叫 mall_buy，帳上只有發放、沒有購買紀錄。"""
+    """假人在線、每一輪都動：每個假人照樣拿到封測發放，一次都沒叫 actions.buy、purchase，帳上只有發放、沒有購買紀錄。"""
     world = open_world()
     world.seed_first_season(on)
     _install(on)
@@ -54,13 +54,15 @@ def test_online_bots_take_the_grant_but_never_buy(on, monkeypatch):
     on.config.bots_min_per_faction = 1
     on.config.bot_tick_seconds = 1000  # 在線就一定做一個動作
     calls: list[str] = []
-    real_buy = Game.mall_buy
 
-    def watched(self, item_id, ref):
-        calls.append(self.state.player.name)
-        return real_buy(self, item_id, ref)
+    def watched(real):
+        def call(ctx, item_id, ref, qty=1):
+            calls.append(ctx.state.player.name)
+            return real(ctx, item_id, ref, qty)
+        return call
 
-    monkeypatch.setattr(Game, "mall_buy", watched)
+    for name in ("buy", "purchase"):  # 路由叫 purchase、buy 也走它：兩個都換，只換 buy 這條測試就空驗了
+        monkeypatch.setattr(mall_actions, name, watched(getattr(mall_actions, name)))
     acted = 0
     for _ in range(25):
         report = runner.tick()
@@ -81,8 +83,10 @@ def test_what_others_see_says_nothing_about_the_mall(on):
     """真人買了月卡與回體丹、假人只拿了發放：第三個人看得到的東西都沒有商城的字樣，兩張玩家卡長得一樣。"""
     buyer = _player(on, "沈浪", save=False)
     buyer.mark_seen(NOW)
-    assert buyer.mall_buy("card_30", "card-ref-0001") and buyer.mall_bought == "card_30"
-    assert buyer.mall_buy("pills_5", "pill-ref-0001") and buyer.mall_bought == "pills_5"
+    got = mall_actions.purchase(buyer, "card_30", "card-ref-0001")
+    assert got.lines and got.bought == "card_30"
+    got = mall_actions.purchase(buyer, "pills_5", "pill-ref-0001")
+    assert got.lines and got.bought == "pills_5"
     _done(buyer)
     bot = _player(on, "某假人", bot=True, save=False)
     bot.own_turn_checks()

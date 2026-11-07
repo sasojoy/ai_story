@@ -16,28 +16,20 @@ import random
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
+from tianxia import materials, precise  # 共用規則層（找素材那一下：素材表、算不算城鎮）
+
 if TYPE_CHECKING:
     from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
 
-TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）
-EVENT, ENCOUNTER, MATERIAL, INSIGHT = "event", "encounter", "material", "insight"
-KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一趟可能發生的四類事（比重的鍵照這個順序）
+# 六種地點、四類事、「多半」那兩個字的算法（match、kind_of、table_weights、mostly_of、mostly_in、hint_in）：輿圖包要用、又不能 import 探索包，
+# 全部拆包第 49 批搬到 core/services.py（# map 那一段）、第 50 批移到核心的 core/explore_base.py，這裡 re-export（`explore_rules.kind_of is explore_base.kind_of`）
+from tianxia.core.explore_base import (  # noqa: E402,F401
+    BALANCED, BEAT_MOSTLY, CAMP, ENCOUNTER, EVENT, FILL, FORD, HILL, INSIGHT, KINDS, MATERIAL, PLACE_WORDS, TEMPLE, TOWN, WILD,
+    hint_in, kind_of, match, mostly_in, mostly_of, table_weights,
+)
 # 上一趟在這裡要選的那件事若是這幾類，這一趟不再抽它：同一處的感悟是同一則（設計 4.1「同一處連續兩趟要選的拍不同一則」）。
 # 事件不在這裡：事件的不重照舊交給 events.rotation_pool，連兩趟都抽到事件是兩則不同的。
 REPEATS_SAME = (INSIGHT,)
-FILL = MATERIAL  # 什麼都抽不出來（比重全是 0）補素材
-
-
-def match(cfg: JianfaNumbers, tags: Iterable[str]) -> ExploreOneTable | None:
-    """這組地點標籤靠自己對得上哪一張表：照 `explore_tables` 的順序，第一張有共同標籤的；一個都對不上是 None。
-    內容驗證（每個正式地點都歸得到一張）問它；探索本身問 `kind_of`。"""
-    have = set(tags)
-    return next((t for t in cfg.explore_tables if have & set(t.tags)), None)
-
-
-def kind_of(cfg: JianfaNumbers, loc) -> ExploreOneTable:
-    """這一處用哪一張表：`match`；標籤一張都對不上的歸最後一張（野）。"""
-    return match(cfg, loc.tags) or cfg.explore_tables[-1]
 
 
 def encounter_only() -> dict[str, int]:
@@ -95,8 +87,35 @@ def draw(rng: random.Random, weights: Mapping[str, float], *, last_choice: str |
 
 def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
     """出門這一趟、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng；
-    跟 `explore_modes.rng_for`（「探索|…」）分開，這一件事裡叫的舊結算照舊用它自己的。"""
+    跟 `find_rng`（「探索|…」）分開，這一件事裡叫的舊結算照舊用它自己的。"""
     return random.Random(f"出門|{season}|{name}|{serial}|{what}")
+
+
+# ── 找素材那一下（全部拆包第 13 批從探索三選一搬來）──
+
+
+def find_rng(season: int, name: str, serial: int, what: str) -> random.Random:
+    """找素材那一下、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng。
+    字是「探索|…」，**不要併進上面的 `rng_for`（「出門|…」）**：自家領地多給的那一個（`home_gather`）的亂數序列會變。"""
+    return random.Random(f"探索|{season}|{name}|{serial}|{what}")
+
+
+def one_of(content, kinds: set[str], tier: int, rng: random.Random) -> str | None:
+    """這一階、這幾種屬性的素材挑一個（一個都沒有就從同階全部挑）；同階一個都沒有是 None。"""
+    pool = [m for m in materials.by_tier(content, tier) if m.attribute in kinds] or materials.by_tier(content, tier)
+    return rng.choice(pool).id if pool else None
+
+
+def gather_finds(content, loc, rng: random.Random, boost: float = 1.0) -> list[str]:
+    """素材那一拍撿到的素材 id：屬性照這裡寫的素材（Location.materials），沒寫就從同階全部挑；一定給一個一階（不擲骰）；
+    城外再照危險度（Config.jianfa.second_tier）擲一次，中了多一個二階。三階不從這裡來。
+    boost：走一趟的稀有倍數（outing.rare_boost），乘在二階那一顆的機會上。"""
+    kinds = {content.materials[m].attribute for m in loc.materials if m in content.materials}
+
+    found = [one_of(content, kinds, 1, rng)]
+    if not precise.is_town(content, loc) and rng.random() < content.config.jianfa.second_tier.get(loc.danger, 0.0) * boost:
+        found.append(one_of(content, kinds, 2, rng))
+    return [mid for mid in found if mid is not None]
 
 
 # ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──
@@ -108,37 +127,9 @@ def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
 # 「假裝站過去」叫 _outing_plan 取得（看的人是誰、有沒有對手、懸賞、自家營寨都算進去）；玩法說明列六張表的樣子（hint_in）是講地點種類的通則，照表本身
 # （沒有危險度，後面接一句危險的地方遇敵多些）、序章裡沒有比重可看時名字旁的退路（mostly_in）也照表。
 # 以前（FB-832）寫的是寫死的一組字、只有招牌類的比重是 0 才改寫，寺的「多悟」就跟表對不上（事件 50、感悟 30）。
-PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
-BEAT_MOSTLY = {EVENT: "多事", ENCOUNTER: "多敵", MATERIAL: "多料", INSIGHT: "多悟"}  # 比重最高的那一類寫成哪兩個字
-BALANCED = "參半"  # 最高的有兩類以上並列
 BOUNTY_WORD = "有賞"  # 接了這裡的討伐懸賞：「多半」那兩個字換成「有賞」（設計 4.1）：「野外有賞」
 SPAR_WORD = "比劃"  # 自家營寨：遭遇是跟同袍比劃（輿圖名字旁寫這兩個字，鈕上寫 SPAR_HINT）
 SPAR_HINT = "同袍" + SPAR_WORD  # 自家營寨：遭遇是跟同袍比劃（待 joy 潤）
-
-
-def mostly_of(weights: Mapping[str, float]) -> str:
-    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一趟補素材（FILL）所以寫「多料」。"""
-    top = max((weights.get(kind, 0) for kind in KINDS), default=0)
-    if top <= 0:
-        return BEAT_MOSTLY[FILL]
-    best = [kind for kind in KINDS if weights.get(kind, 0) == top]
-    return BALANCED if len(best) > 1 else BEAT_MOSTLY[best[0]]
-
-
-def table_weights(table: ExploreOneTable) -> dict[str, int]:
-    """一張表的四欄（事件、遭遇、素材、感悟），照 KINDS 的順序。"""
-    return {EVENT: table.event, ENCOUNTER: table.encounter, MATERIAL: table.material, INSIGHT: table.insight}
-
-
-def mostly_in(table: ExploreOneTable) -> str:
-    """這一種地點的「多半」兩個字，照它的表算（沒有危險度、不看誰站在那裡）：序章裡沒有比重可看時輿圖名字旁的退路
-    （平常是 Game.map_mostly 照每一處自己的比重，tail_of）。"""
-    return mostly_of(table_weights(table))
-
-
-def hint_in(table: ExploreOneTable) -> str:
-    """這一種地點的小字，照它的表算（沒有危險度）：玩法說明列六張表的樣子、沒有比重可看時的退路。"""
-    return PLACE_WORDS[table.kind] + mostly_in(table)
 
 
 def named_hint(table: ExploreOneTable) -> str:

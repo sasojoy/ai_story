@@ -760,6 +760,13 @@ class PlayerState(BaseModel):
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
     talks_today: dict[str, list[int]] = Field(default_factory=dict)  # 人物 id -> [第幾個遊戲日（rules.game_day，跟著季長縮）, 當天已聊幾輪]
+    # 心神（tianxia/core/xinshen.py）：免費與月卡那兩份今天剩幾點、各是哪一天（回體丹那一套的第幾天）補的；不是今天補的就當滿的。
+    # 存著的（凝神香）不在這裡，記在帳號（mall_entitlements）。換回沒有心神的舊程式只丟掉今天剩幾點，隔天本來就補滿
+    xinshen_free: int = 0
+    xinshen_free_day: int = -1
+    xinshen_card: int = 0
+    xinshen_card_day: int = -1
+    tavern_asks: list[int] = Field(default_factory=list)  # 問酒家：[回體丹那一套的第幾天, 那天問了幾次]（心神開著才數，Config.xinshen.ask_per_day）
     picking_audience: bool = False  # 按了「求見」、正在挑要拜會哪一位人物（兩位以上大勢人物的地點）；舊存檔沒這欄就是沒在挑
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
@@ -794,7 +801,7 @@ class PlayerState(BaseModel):
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
     figure_dented: dict[str, int] = Field(default_factory=dict)  # 人物 id → 上一次打贏他而扣到聲威是第幾個遊戲日（figure_dent_once_per_day；叛投不清）
     figure_rare_drops: int = 0  # 這一季挑戰本人掉了幾個三階（兩條來源合算：預設表、保證的那一個；丁 (c) 的一人一季上限 figure_rare_cap；換季跟著新角色歸零）
-    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
+    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：裝備包 gift_actions.deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
@@ -916,7 +923,7 @@ class PlayerState(BaseModel):
     # 舊存檔沒這欄就是每個池子都還沒看過；角色每季重來，所以每季自然清空
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
-    explore_seq: int = 0  # 這一季第幾次探索三選一（explore_modes.rng_for 的種子；角色每季重來）
+    explore_seq: int = 0  # 這一季第幾次探索（探索包 rng_for、find_rng 的種子；角色每季重來）
     # 減法季批 2（Config.jianfa；整合設計 4.1、4.2、4.5）。四個都是 0／空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
     fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
@@ -989,7 +996,7 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
-    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 已經通知過（或不必通知）的絕學定名（FB-083，修練包 actions.deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
     # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
     renames_told: list[str] = Field(default_factory=list)
     # 行狀（玩家傳，tianxia/annals.py）：這一季值得寫進傳裡的事，照份量留最多 Config.biography.cap 則。角色每季重來，換季前存進
@@ -1013,7 +1020,7 @@ class PlayerState(BaseModel):
     bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
     picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
     # 懸賞榜第三層：正在替哪一張求兵挑東西（懸賞 id，懸賞榜設計 4.4）。按「交出…」記下；回到懸賞榜、返回、交完、打開懸賞榜時清掉。
-    # 那一張下榜了、交不出了，選單當它不存在（Game._bounty_options），所以存檔修補、出發都不必另外收
+    # 那一張下榜了、交不出了，選單當它不存在（懸賞榜包 actions.options），所以存檔修補、出發都不必另外收
     bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
@@ -1029,6 +1036,9 @@ class PlayerState(BaseModel):
     # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
+    persona_notes: dict[str, PersonaNote] = Field(default_factory=dict)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
+    heroines: HeroineNotes = Field(default_factory=lambda: HeroineNotes())  # 女子與隱線（features/heroines）：隱線走到哪，換季重來
+    heroines_adult: bool = False  # 女子與隱線：設定頁的「成人內容」（預設關，打開前確認年滿十八歲；換季照帶）
     errands: list[ErrandState] = Field(default_factory=list)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
@@ -1128,7 +1138,7 @@ class PlayerState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in QUIET_DEFAULTS:
-                if key in data and not data[key]:
+                if key in data and (not data[key] or (key == "heroines" and not any(data[key].values()))):  # heroines 是子模型：三格都空才算沒用到
                     del data[key]
         return data
 
@@ -1146,6 +1156,8 @@ QUIET_DEFAULTS = (
     "keepsakes", "lasting",  # 長篇奇事
     "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
     "legacy",  # 傳承（features/legacy）
+    "persona_notes",  # 人物性子（features/persona）
+    "heroines", "heroines_adult",  # 女子與隱線（features/heroines）
 )
 
 
@@ -1404,6 +1416,25 @@ class StoryCard(BaseModel):
     image: str | None = None
     ending: str = ""  # 結局的名字（end 才有）
     failed: bool = False
+
+
+class HeroineNotes(BaseModel):
+    """女子與隱線（功能包 features/heroines；PlayerState.heroines，換季重來；成人內容的開關另外一格 PlayerState.heroines_adult）。steps 是每位女子的隱線應下到第幾段（人物 id → 3 或 4；換季重來）；scene 是此刻端在眼前、還沒選的那一段
+    （「人物 id:段」；None 是沒有）；declined 是婉拒的那一天（人物 id → 遊戲日），同一天不再問。"""
+
+    steps: dict[str, int] = Field(default_factory=dict)
+    scene: str | None = None
+    declined: dict[str, int] = Field(default_factory=dict)
+
+
+class PersonaNote(BaseModel):
+    """你跟一位人物說過哪些在推他性子的話（功能包 features/persona；PlayerState.persona_notes）：一人一天一筆（day 是 rules.game_day），
+    said 是往哪一頭推過幾次（兩頭的叫法 → 次數；簡介寫「你勸過他 N 次」），told 是已經記過行狀的換段（WorldState.persona_log 的 seq）。"""
+
+    day: int = 0
+    said: dict[str, int] = Field(default_factory=dict)
+    first: dict[str, float] = Field(default_factory=dict)  # 第一次往那一頭推的世界秒：之前就換的段不算你勸成的
+    told: list[int] = Field(default_factory=list)
 
 
 class StanceNote(BaseModel):
@@ -1799,6 +1830,18 @@ class SealAct(BaseModel):
     side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
+class PersonaShift(BaseModel):
+    """人物的一條性子換了一段（功能包 features/persona；WorldState.persona_log）：seq 流水號、哪一位（對話人物 id）、哪一條、換到第幾段、
+    往哪一頭（ends 的叫法）、哪一刻（世界秒）。簡介的變化紀錄與勸過的人的行狀照它。"""
+
+    seq: int
+    who: str
+    axis: str
+    stage: int
+    toward: str
+    at: float
+
+
 class StanceOn(BaseModel):
     """一位大勢人物此刻照哪一個心意做事（WorldState.stance_active；stances.check 在到門檻那一刻寫）：哪一個、哪一刻、哪一週。"""
 
@@ -1842,6 +1885,14 @@ class WorldState(BaseModel):
     stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
     stance_week: int = 0
     stance_active: dict[str, StanceOn] = Field(default_factory=dict)
+    # 人物性子（功能包 features/persona）：這一季每一條性子此刻的值（對話人物 id → 性子 id → -100～100；沒寫的照史實的起點）、
+    # 結算到第幾個遊戲日、今天記下的淨推力與總份數（往 ends[1] 是正）、上一次結算時在拉鋸的那幾條、換段的紀錄。換季整個重來（Joy 11/6「全部歸回本性」）
+    persona: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_day: int = 0
+    persona_push: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_tug: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_torn: dict[str, list[str]] = Field(default_factory=dict)
+    persona_log: list[PersonaShift] = Field(default_factory=list)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1901,7 +1952,7 @@ class WorldState(BaseModel):
     @classmethod
     def _drop_retired_bounties(cls, value: list[Bounty]) -> list[Bounty]:
         """求藝（kind "art"）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」）：那之前開的季，榜上可能還掛著求藝，讀進來就丟掉，
-        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（Game._bounty_options）。"""
+        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（懸賞榜包 actions.options）。"""
         return [b for b in value if b.kind not in RETIRED_BOUNTY_KINDS]
 
     @model_serializer(mode="wrap")
@@ -1912,7 +1963,8 @@ class WorldState(BaseModel):
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
                         "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq", "places",
-                        "inscriptions", "inscription_seq", "attrs_v2"):
+                        "inscriptions", "inscription_seq", "attrs_v2",
+                        "persona", "persona_day", "persona_push", "persona_tug", "persona_torn", "persona_log"):
                 if key in data and not data[key]:
                     del data[key]
         return data

@@ -287,6 +287,7 @@ def test_dodge_and_fall_are_painted_from_a_gray_silhouette_but_reviewed_against_
 
 def test_the_run_silhouette_drops_the_hat_boys_sword():
     """跑步的剪影去掉斗笠小子腰間的劍（2026-11-04 #495：留著劍的剪影六張都被判「帶兵器」）：細長的拿掉，身體一點不少。"""
+    pytest.importorskip("scipy")  # make_pose_refs 要 scipy（畫坊程式才裝；跟下面真的切圖那幾條同一個規矩）
     import importlib.util
     from pathlib import Path
 

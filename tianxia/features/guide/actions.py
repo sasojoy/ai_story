@@ -6,17 +6,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, create, figures, howto, sensing, training  # 過渡：待搬
-from tianxia import checkin, chuangong, seal  # 過渡：待搬（碰到才說的簽到、傳功、玉璽碎片）
+from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批收進、大勢人物 figures 第 40 批收進）
 from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
 from tianxia.characters import name_key
-from tianxia import attrset, insight_fx, journal, library, martial_arts, roster, team  # 核心、共用規則層
+from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
+from tianxia.core import omen_base, seal_base, services  # 核心：碰到才說的伏筆、玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
+from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
-from tianxia.rules import season_one
+from tianxia.rules import season_one, stance_rule_note
 from tianxia.state import HintNote
 
-from . import enlist, newbie, opening, rules
+from . import enlist, howto, newbie, opening, rules
 from . import hints as hint_rules  # 跟 engine 一樣叫 hint_rules：函式裡有區域變數叫 hints
 
 if TYPE_CHECKING:
@@ -90,10 +91,7 @@ def graduate_pass(ctx: Game, step: TutorialStep) -> bool:
         ctx.choose(ctx.rng.choice(good).id)
         return True
     if p.sensing is not None:  # 草廬的有所感：做法都選得對；不畫，順其自然落回那個基本意境（假人不叫模型）
-        if p.sensing.stage == "choose":
-            ctx.choose(f"{sensing.PREFIX}{ctx.rng.randrange(len(sensing.current(s, c)[1].methods))}")
-        else:
-            ctx.choose(sensing.LET_GO)
+        ctx.choose(ctx._sense_prologue_choice())  # 按哪一顆問有所感包（查詢服務，全部拆包第 24 批：包不 import 包）
         return True
     fused = prologue_rules.slotted_arts(s, c, ctx.world)
     if goal.action == "view_tab":
@@ -299,8 +297,8 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     if want("h_field_lose") and sum(1 for r in s.battles if r.label == training.PRACTICE and r.tier not in team.WIN_TIERS
                                     and r.tier != "僵持") >= 2:
         on.append("h_field_lose")
-    if want("h_create") and create.on(c) and p.created_count == 0 and create.allowed(s, c) is None \
-            and p.stats.get("xinde", 0) >= create.price(s, c):
+    if want("h_create") and ctx._create_on() and p.created_count == 0 and ctx._create_allowed() is None \
+            and p.stats.get("xinde", 0) >= ctx._create_price():
         on.append("h_create")
     if want("h_tavern") and ctx._tavern_on() and ctx._tavern_here() and p.location not in prologue_rules.onboard_towns(c):  # 老周在那裡教過酒肆
         on.append("h_tavern")
@@ -325,7 +323,7 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     if want("h_spectator") and status is not None and p.faction is None and p.name not in status[0].participants \
             and ctx._at_battle(status[1]):
         on.append("h_spectator")
-    if want("h_foreshadow") and any(p.fragments.values()):
+    if want("h_foreshadow") and omen_base.heard_any(s):
         on.append("h_foreshadow")
     if want("h_event_reveal") and p.events_seen:
         on.append("h_event_reveal")
@@ -352,19 +350,19 @@ def _more_triggers(ctx: Game, want) -> list[str]:
     if want("h_raid_guard") and c.config.raid.enabled and not w.ended and c.scenario.factions and (
             name_key(p.name) in w.raided or (p.faction is not None and not roster.raid_newbie(s, c))):
         on.append("h_raid_guard")
-    if want("h_checkin") and checkin.on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
+    if want("h_checkin") and services.checkin_on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
         on.append("h_checkin")
     if want("h_mall") and c.config.mall.enabled and p.member.level >= SETTLED_LEVEL:
         on.append("h_mall")
     # 形象：上過一次擂台（看過自己那副模樣）；形象開著＝商城開著而且有形象可賣（looks.rules.on 同一條；包不能 import 包）
     if want("h_looks") and c.config.mall.enabled and c.looks and any(r.kind == "arena" for r in s.battles):
         on.append("h_looks")
-    if want("h_seal") and seal.on(c) and seal.shard_of(ctx.world.seal_state().registry, p.name) is not None:
+    if want("h_seal") and seal_base.on(c) and seal_base.key(p.name) in seal_base.holders(ctx.world.seal_state().registry):
         on.append("h_seal")
     # 宴客：人在擺著的宴席那裡（同 feast.rules.is_open；包不能 import 包）
     if want("h_feast") and any(not f.settled and f.start <= w.time < f.end and f.place == p.location for f in w.feasts):
         on.append("h_feast")
-    if want("h_chuangong") and chuangong.on(c) and chuangong.cheapest(s, c, ctx.world) is not None:
+    if want("h_chuangong") and ctx._chuangong_ready():
         on.append("h_chuangong")
     if want("h_mount") and mounts.on(c) and (p.mount is not None or equipment.in_slot(p, "mount")):
         on.append("h_mount")
@@ -419,7 +417,7 @@ def check_newbie(ctx: Game) -> None:
 
 
 def nearest_to(ctx: Game, targets: set[str]) -> str | None:
-    """離這裡最近的那一個地點（先照摸清的路，都走不到照所有開放的地點，同 _nearest_practice）；這裡就是的話回這裡。"""
+    """離這裡最近的那一個地點（先照摸清的路，都走不到照所有開放的地點，同 clinic.nearest）；這裡就是的話回這裡。"""
     s, c = ctx.state, ctx.content
     if s.player.location in targets:
         return s.player.location
@@ -456,6 +454,23 @@ def newbie_view(ctx: Game) -> dict | None:
     rows = [{"key": goal.key, "text": newbie.text_of(s, c, goal), "reward": newbie.reward_text(c, goal), "go": newbie_go(ctx, goal.go),
              "drifter": goal.key == "side" and s.player.faction is None} for goal in newbie.todo(s)]
     return {"title": newbie.TITLE, "rows": rows, "done": len(s.player.newbie_done), "total": len(newbie.GOALS)}
+
+
+# core_step（全部拆包第 36 批「你這一步」）：newbie 那一格（core/features.py 的 STEP_ORDER：伏筆之後、去投靠之前）
+def newbie_step_items(ctx: Game, status: dict) -> list[dict]:
+    """「你這一步」的新手目標那幾件（原本 weekcard._steps 的新手目標那一段）：讀殼算好傳進來的 status["newbie"]（newbie_view 那一份，不重算），
+    每一條一件、多一個 i（第幾條）。"""
+    out: list[dict] = []
+    view = status.get("newbie")
+    if view:
+        for i, r in enumerate(view["rows"]):
+            out.append({"kind": "newbie", "text": r["text"], "i": i, "reward": r.get("reward", ""), step_rules.REF: ("newbie", r.get("key"), r.get("go"))})
+    return out
+
+
+def newbie_step_place(ctx: Game, ref: tuple) -> tuple:
+    """新手目標那一件的 (id, target, None)（原本 step._target 的新手目標那一支）：「去做」帶去的地點（newbie_go 的 move），不是地點的 target 是 None。"""
+    return ref[1], step_rules.place(ctx, (ref[2] or {}).get("move")), None
 
 
 def newbie_drifter(ctx: Game) -> list[str]:
@@ -635,3 +650,80 @@ def mark_veteran(ctx: Game) -> bool:
 
 def enlist_expire(ctx: Game) -> list[str]:
     return enlist.expire(ctx.state, ctx.content)
+
+
+def deliver_enlist(ctx: Game) -> None:
+    """sync.deliver 的 enlist 那一格（core_seams，全部拆包第 55 批）：第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄。不進回話。"""
+    ctx._guide(enlist_expire(ctx))
+
+
+def carry_season(ctx: Game, old, fresh) -> None:
+    """season.carry 的 guide 那一格，排最前面（core_seams，全部拆包第 55 批；照原位搬，不看開關）。序章的 begin、skip_onboarding 會寫 fresh，後面的格照蓋，跟原本一樣。"""
+    c = ctx.content
+    # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
+    # 舊存檔先換算成新引導的步數（設計 7.2）
+    step = prologue_rules.migrated_step(old.player, c)
+    carried = step >= base_step_count(ctx)
+    if carried:
+        fresh.player.tutorial_step = step
+        fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
+    elif prologue_rules.has(c):
+        if step < c.tutorial.prologue_steps and not old.player.bot:
+            prologue_rules.begin(fresh, c)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
+        else:
+            # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬；假人不走初入江湖
+            t = c.tutorial
+            fresh.player.tutorial_step = t.prologue_steps
+            if old.player.bot:
+                prologue_rules.skip_onboarding(fresh, c)
+    if enlist_done(ctx, old):
+        fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
+    # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
+    # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
+    fresh.player.hints_seen = set(old.player.hints_seen)
+    fresh.player.hints_off = old.player.hints_off
+    book = c.hints
+    if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
+        fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
+    fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪
+
+
+# ── 玩法說明（全部拆包第 59 批「引導二」）：Game 留一行委派的四個；句子在 howto.py，這裡只照這個人此刻的狀態把引數算好 ──
+
+
+def top_up_line(ctx: Game, added: int) -> str:
+    """回體丹補到送的數字那一行（Game._top_up_pills：讀檔那一刻，沒有掛鉤）。"""
+    return howto.top_up_line(ctx.content, added)
+
+
+def howto_text(ctx: Game) -> str:
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
+        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
+        真的有人能招募時才寫。"""
+        c = ctx.content
+        rule = stance_rule_note(ctx.state, c) if season_one(c, ctx.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
+        return howto.page(
+            c, ctx.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
+        )
+
+
+def stamina_help(ctx: Game, newbie: bool, button: bool) -> list[str]:
+    """點體力條看的說明（status_data 表 help 那一格的 stamina_help；第 66 批的表裡，那一格留在核心、照舊叫委派）。button：體力條上有沒有那顆鈕。"""
+    s, c = ctx.state, ctx.content
+    return howto.stamina_lines(
+        c, s.world, newbie, s.player.stamina_pills, button=button, today=ctx.pills_left_today(),
+        card=ctx._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
+    )
+
+
+def war_help(ctx: Game) -> dict[str, list[str]]:
+    """點戰況圖卡、態勢、大事、主線看的說明（status_data 表 war 那一格的 war_help：同上）。"""
+    return howto.war_help(ctx.state, ctx.content)
+
+
+def glow_slot(ctx: Game, frame) -> dict:
+    """main 表的 glow 那一格（全部拆包第 66 批）：入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開。
+    改 guide 那一格已經合進去的 view["guide"]，自己沒有鍵。"""
+    if frame.view["guide"] is not None:
+        frame.view["guide"]["glow"] = enlist_glow(ctx, [o.id for o in frame.options if o.enabled])
+    return {}

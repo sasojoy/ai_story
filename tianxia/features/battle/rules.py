@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from tianxia import battle_instance  # 共用規則層（戰鬥規則核心：補劇情的單子用它的 TaleItem）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來：補劇情的單子用它的 TaleItem）
 
 ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算一段）
 GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法

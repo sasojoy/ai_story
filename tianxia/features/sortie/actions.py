@@ -16,14 +16,13 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender, team
 from tianxia import allied  # 共用規則層（豪強依附的那一軍：混戰撞不撞得上）
-from tianxia import annals  # 過渡：待搬（行狀：混戰那一筆交手）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推不推得動、混戰的對象）
 from tianxia import encounter  # 共用規則層（單次判定：混戰）
 from tianxia import four_tiers  # 共用規則層（素材四階：打贏照掉落表掉素材）
-from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import materials  # 共用規則層（素材的掉落與發放）
-from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、出陣回報的軍令小籤）
+from tianxia import orders  # 共用規則層（軍令：截糧的運糧隊、出陣回報的軍令小籤；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥、不掉東西）
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
@@ -38,6 +37,7 @@ from tianxia.state import FrontReport
 
 from . import duel_actions  # 出陣約戰（第 2 批搬進同一包）：約戰開著時出陣那一格與次數
 from . import duel_rules as sortie_duel
+from . import howto  # 行動列底下那一行的句子（第 59 批搬進包）
 from . import rules
 from . import train_actions  # 舊遊歷、操練、守勢（第 17 批搬進同一包）：遊歷的鈕與那一行、打的那一場、大場面挑哪一路
 

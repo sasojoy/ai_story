@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia.content import env_profile, load_content  # noqa: E402
+from tianxia.content import serving_profile, load_content  # noqa: E402
 from tianxia.features.legacy import rules as R  # noqa: E402
 from tianxia.state import LegacyBook  # noqa: E402
 
@@ -89,7 +89,7 @@ def main() -> None:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=Path)
-    parser.add_argument("--profile", default=env_profile())
+    parser.add_argument("--profile", default=serving_profile())
     parser.add_argument("--demo", action="store_true")
     parser.add_argument("--seasons", type=int, default=5)
     parser.add_argument("--keen", type=float, default=400.0)

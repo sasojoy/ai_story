@@ -41,7 +41,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
     - **擺局面的 `/__qa/edit` 只改呼叫時給的那幾格**：第 17 批那一版每次都補滿體力、把 `joined_at` 擺成 -1e9，新手期就沒了，新手目標卡（`newbie_view`）直接變 None。驗引導、新手目標、新手期的批特別要注意。
     - **便宜的第二道穩定性證明**：「HEAD 對 HEAD」那一輪的 HEAD 回應，跟「HEAD 對 BASE」那一輪的 HEAD 回應逐檔比；分開跑兩次一樣，才證明局面真的凍住。
     - PowerShell 的 `Start-Process -RedirectStandardOutput` 指到還不存在的資料夾時照樣回 PID，但行程根本沒跑、也沒有輸出檔：先建好資料夾。
-  - 引導的畫面（截圖時用）：碰到才說的框在江湖頁排在眼下要事與懸賞卡下面，375 寬第一屏看不到；框上沒有寫「知道了」的按鈕（收起是右上的 ✕），要找 `p.guide-text` 的字。season21、week7 的新角色一建好 `tutorial_step` 就是 18（走完）、站在城門口，初入江湖 e1～e7 只有草廬的季才有；`h_event_reveal` 建角色時就排進去，選完三選一才上框。
+  - 引導的畫面（截圖時用）：碰到才說的框在江湖頁排在眼下要事與懸賞卡下面，375 寬第一屏看不到；框上沒有寫「知道了」的按鈕（收起是右上的 ✕），要找 `p.guide-text` 的字。season21、week7 的新角色一建好 `tutorial_step` 就是 18（走完）、站在城門口，初入江湖 e1～e7 只有舊季與換季時步數停在 11～17 的舊存檔走得到；`h_event_reveal` 建角色時就排進去，選完三選一才上框。
   - 位元組一樣之後再拍三張圖做 sanity（375 淺、375 深、1280）。動到 `web/`、server 的路由分派、第 3 階的批照舊完整實機 QA（並排截圖＋逐像素）。
 - **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
 - 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。
@@ -82,7 +82,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **擋 11434**：有人登入時，伺服器會預熱模型（`server._warm_model` 連 Ollama）。在複本的 `content/config.json` 加一個鍵 `"ollama_url": "http://127.0.0.1:9"`（只改 scratchpad 的複本），就打不到 11434。
   - **要看等模型的中間狀態**（〈天下形勢〉的「還在落筆」之類）：`127.0.0.1:9` 一叫就失敗、伺服器馬上照固定段收，中間狀態一次輪詢都撐不過。改開一個假的模型：Python `http.server`，GET 回 `{"models": []}`、POST 睡 25 秒再回 500，複本的 `ollama_url` 指到它（2026-10-21 翻地 QA，FB-578）。
 - **埠與 host**：先用 `netstat -ano | grep LISTEN` 挑沒人用的埠。cookie 照 host 分、不分埠，所以每個驗收都用自己的 `<名字>.localhost`（例 `qa7check.localhost:7893`）。同一個驗收要同時登兩個帳號，也要換 host。
-- **設定**：現役只有 `week7`（7 天濃縮季）與 `season21`（21 天季）兩種（企劃者 2026-10-31「現在只有7天跟21天兩種版本」），驗收照這兩種。`weekend` 與空字串（預設，14 天的季）排在全部拆包總表第 13、14 批整套拿掉；在那之前只在「關著不變」「前後一字不變」的對照裡照舊比，不再當成要驗收的季。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
+- **設定**：現役只有 `week7`（7 天濃縮季）與 `season21`（21 天季）兩種（企劃者 2026-10-31「現在只有7天跟21天兩種版本」），驗收照這兩種。`weekend` 第 14 批關門了（設了起不來，「找不到設定覆寫檔」）；沒帶（空字串）時伺服器、`run_bots.py`、主機端工具套 `season21`。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
 - **帳號**：`TIANXIA_PROFILE=… <python> scripts/set_password.py <帳號> --character <名號> --db <db> --local-dir <scratchpad>/local`。
   - 密碼寫在 `local/<帳號>_password.txt`，要用就從檔案讀，不要貼進對話。
   - 這樣建的角色不走草廬序章。要驗序章，就打 `POST /api/register {login,password,again}`，再打 `POST /api/character {name,gender}`（網頁註冊的那一條路）。
@@ -120,7 +120,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
 - **時刻表決戰的開法**（2026-10-22 長社火攻）：每一場一季只開得了一次，取消了也不能再開（`showdowns_opened`）——同一季要看第二種佔領就用新的資料庫，或 `end_season`＋`next_season`；`start_showdown` 的 id 是時刻表那一列（`changshe_fire`、`wancheng`、`guangzong`、`tianming`），宛城要第 3 週那件已結算；`tianming` 先 `seal_mandate when=now`（回「蓋上天命之季的章」）否則回「時刻表上沒有這一場決戰」。要驗「時間到了自己開」：`schedule {id, at}` 只會對齊到季曆整點，之後 `fast_forward hours=1` 推過去。排在後面的攻城戰書不會被 `cancel_battle` 一起取消，取消一場後下一場馬上開，連按到「沒有進行中的決戰」。
-- **`/api/do/<op>` 先查 `ADMIN_ACTIONS`**：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
+- **`/api/do/<op>` 先查管理者那兩張**（先後：各包的管理者工具 `server.FEATURE_ADMIN_ACTIONS` → `ADMIN_ACTIONS` → 鎖外三段式 `OUTLOCK_OPS` → `MAIN_ACTIONS`）：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & (set(server.ADMIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS))`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
 
@@ -160,8 +160,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - JS 範本字串（反引號）裡的 `\b` 是退格字元、不是字界：在 `Runtime.evaluate` 的字串裡找英文字用 `(^|[^a-z])bot([^a-z]|$)`。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
-  - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
-  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。
+  - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。第 67 批起樣式分在 `style.css` 與 `web/<包>.css`，改到哪一支換哪一支。
+  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。畫法在包的檔（`web/<包>.js`，第 64～67 批切出去的）就比 `*/<包>.js*`。
   - `clickSel` 拿的是第一個符合的元素：先確認它的框不是 0×0（藏起來的那一層在前，見上面 `.r-top`），不然點到別的東西、什麼都沒發生。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
@@ -176,12 +176,16 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **新測試對修前的程式有沒有牙**：`git archive -o tests.tar <修後 sha> tests pyproject.toml`，`shutil.copytree` 修前複本再把 tar 解進去，在那裡跑新測試檔。抓行為的測試（這次的 `test_fb664_*`）會失敗，只驗新函式的測試（`test_fb663_*` 切 `REVEAL_GAP`）會因為「找不到 const」整個失敗、說明不了行為，行為的證據要靠實機。
   - **CDP 送觸控與滾輪的坑**（2026-10-22 輿圖拖縮 QA）：`Input.dispatchTouchEvent` 的 `touchMove` 少列一指**不會**放開那一指（照舊按著、變成兩指捏）；要「放開一指、另一指接著拖」就送 `touchEnd`、`touchPoints` 只列要放開的那一指，其餘照舊按著。`Emulation.setDeviceMetricsOverride` 兩倍像素（手機）時 `mouseWheel` 的 `deltaY` 到頁面只剩一半（60 → 30），算縮放倍率要照頁面收到的值。驗「跟著手指走」「以中點為中心」之前先算內容框對可見區還有沒有空隙：夾邊會合法地吃掉位移（1 倍區圖往上、放大後貼邊），先放大到四邊都有空隙再量；點東西之前先 `elementFromPoint`（放大後名字框可能跑到分頁列底下，點到的是分頁）。同一個帳號在兩個無頭瀏覽器同時登入會互相踢掉，量測腳本照順序跑。
   - **常駐擺位小幫手 + node CDP 掃全部地點 × 身分 × 寬度**（2026-10-22 練功入口，258 次量測約 11 分鐘）：node 用 `child_process.spawn` 起一個常駐的 venv python 小幫手（從 stdin 一行一個 JSON `{name, loc, faction, stamina, tutorial_step, set, state}`，`import server` 之後用 `open_characters().load/save` 改存檔、印一行 ok；`state` 設 `GameState` 的欄位，例 `pending_event: null`），比每個場景開一個 python 快得多（不必 `node:sqlite` 寫 JSON 路徑）。一個場景＝擺位、導覽、等 `.act-bar`、依序 `Emulation.setDeviceMetricsOverride` 換寬度（不必重載，CSS 重排就好）、跑一段量測 JS 回傳每格的 `b`／`small` Range 寬與格子內寬（`clientWidth` 扣 padding）、被切的旗標、`document.documentElement.scrollWidth` 對 `innerWidth`、`.act-notes p` 的 `scrollWidth`；結果寫成 JSON，再用 Python 總結「每種小字出現幾次、最寬幾 px、有幾個被切」。注意：`*.localhost` 只有 Chromium 認得，系統 Python 的 `requests` 解不出來（回 `getaddrinfo failed`）：打 API 的腳本一律用 `127.0.0.1:<埠>`（cookie 不跨用，各自登入），瀏覽器才用 `<名字>.localhost`。
-  - **同一支腳本跑不同的季＝不同的設定檔 + 不同的複本**：`TIANXIA_PROFILE`（`week7`、`weekend`、`season21`、空字串＝14 天）各一個暫存資料庫、各一組 `set_password.py` 帳號；`.ps1` 傳空字串引數會被吃掉，用 `default` 這種記號再在腳本裡換回空字串；`"-"` 也不行（被當成參數名）。要驗的開關不在設定檔切得到時，另解一份複本、只改複本的 `content/config.json`（在最上面加一行，例 `{"precise_actions": false,` 或把 `"conquest": {"enabled": false}` 換成 true；領地爭奪開著才有「出陣（不在爭奪之列）」，一類一顆關著才有四格行動列）。新舊對照：兩份複本各跑一次，比量測 JSON（格子鍵、文字、寬高、底下每一行的文字）與伺服器掃描（`/api/main` 的選項標籤、`action_notes`）。
+  - **同一支腳本跑不同的季＝不同的設定檔 + 不同的複本**：`TIANXIA_PROFILE`（`week7`、`season21`；第 14 批起沒帶也是 season21）各一個暫存資料庫、各一組 `set_password.py` 帳號；`.ps1` 傳空字串引數會被吃掉，用 `default` 這種記號再在腳本裡換回空字串；`"-"` 也不行（被當成參數名）。要驗的開關不在設定檔切得到時，另解一份複本、只改複本的 `content/config.json`（在最上面加一行，例 `{"precise_actions": false,` 或把 `"conquest": {"enabled": false}` 換成 true；領地爭奪開著才有「出陣（不在爭奪之列）」，一類一顆關著才有四格行動列）。新舊對照：兩份複本各跑一次，比量測 JSON（格子鍵、文字、寬高、底下每一行的文字）與伺服器掃描（`/api/main` 的選項標籤、`action_notes`）。
   - **PowerShell 的 `| Select-Object -First N` 也會砍掉子行程**：`& powershell -File start_variant.ps1 ... | Select-Object -First 3` 拿到 3 行就把整串（包括後面要跑的 node）收掉、exit 255，工作被標成 failed、但伺服器（`Start-Process` 起的）還活著。要截輸出就導進檔案再讀。前台最多 600 秒，再久的（變體整輪約 5～10 分鐘）一律 `Start-Process powershell -File` 丟背景、`Wait-Process -Timeout` 等。
 
   - **driver.mjs 的帳號密碼資料夾是啟動時寫死的**（2026-11-03 鐵匠鋪網頁 QA）：換資料庫或換季要重開 driver，而且要等舊的 Chrome 放開設定檔，不然會 EBUSY。
   - **320 寬某一輪跑歪時，先量 `innerWidth` 對 `scrollWidth`**：有東西把整頁撐寬之後（例 FB-9210「剛剛」那張卡的小章），照座標點會點到別的鈕（那一次把短劍換上了）。
   - **決戰集結中，懸賞榜的店面那一層不出現**：要比店面，先 `cancel_battle`。
+  - **無頭 Chromium 在 mobile 與 desktop 之間切換時，1280 的捲軸佔位會跳 15px**（第二波實機，同一份程式也會變）：看到整屏差先看 `scrollWidth`。
+  - **SVG 元素沒有 `.click()`**：要 dispatch `MouseEvent`。
+  - **`setView` 縮回 375 之後，fit 類別要等約 450ms 才量得準**。
+  - **CDP Profiler 的 preciseCoverage 列得出哪些函式沒走到**：拿來找漏掉的頁面。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。擺角色的銀兩也一樣：在第一次同步之前改，同步後對不上（2026-11-03：擺 3 兩，同步後變 33）。
@@ -203,8 +207,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 時段之外要跑真的 `run_bots.main(ticks=N)`（跟伺服器同一個資料庫）：包一支腳本，把 `tianxia.server_bots.is_online` 換成永遠在線、`load_content` 之後設 `bot_tick_seconds = 1000`（在線就一定做事），`run_bots.time.sleep` 縮短。`_wait` 每一輪還是要照 `bot_tick_seconds ÷ BATTLE_TICK_SECONDS` 一步一步查決戰，40 輪約 12 分鐘；要更快，就把 `run_bots._wait` 也換掉。
   - 包一層的 `run_bots.main` 把 `time.sleep` 換成 `min(s, nap)` 時，`nap` 用 0.02：`_wait` 每一輪要走 `bot_tick_seconds ÷ BATTLE_TICK_SECONDS` 步，nap 0.5 一輪要 100 秒（2026-10-22 上線預演二，30 輪跑了五分鐘才 1 輪）。真的時鐘下假人在路上要走現實的幾分鐘，40 輪看不到推地；要看假人推地，複製資料庫、`BotRunner` 假時鐘 300 步×60 秒，在 `Game.choose` 外面包一層數 `act:train`（範本 `scratchpad/qa-rel1022b/s/botpush.py`）。
   - 假人跑完多半在路上（`player.journey` 不是 null），「此地還有」與玩家卡都找不到他。要驗他的卡，就改存檔把 `journey` 清成 null。
-  - **驗「假人／整季機器人照舊按得到某個選項」**（2026-10-22 練功入口，選項 id 不變）：跟伺服器同一個資料庫（伺服器開著，共用行動鎖）跑一支 venv python：`server_bots.is_online = lambda profile, now: True`、`content.config.bot_tick_seconds = 1000.0`、`bot_fill_seconds = 1.0`，`BotRunner(content, client=None, rng=random.Random(7), clock=lambda: base + i * 40)` 逐輪 `tick()`（假時鐘每輪往前 40 秒，week7 一小時是季曆 12 小時，80 輪才三小時、不會把 7 天季跑完），並把 `Game.choose` 換成先記 `option_id` 再呼叫原本的（數 `explore:practice` 之類）；80 輪約 1 分鐘補到 13 個假人、動 1018 次、0 個 failed。整季機器人：`bot.play_season(content, seed, max_steps=1500, now=time.time())`，`TIANXIA_DB` 指到 repo 外的暫存檔、`load_content(Path("content"), os.environ.get("TIANXIA_PROFILE") or None)`。事後唯讀開資料庫，在假人的 `data.journal` 找練功開打那一句（`找上…練手`）當真的有打的證據；玩家那邊把 `/api/main` 的 JSON 與頁面 DOM（`outerHTML` 拿掉 `<script>`、`innerText`）掃「假人／機器人／bot」，再把角色擺到假人站的地方看「此地還有」。注意 `web/app.js` 的註解也會送到每個玩家的瀏覽器：新加的註解寫了「假人、整季機器人」（舊的一處在「真人假人是同一份名單」）。
-  - **做出「已談滿」「頭目冷卻」「頭目次數用完」的畫面**：已談滿＝`server.game_for(名號)` 拿 `Game`，`p.stats["fame"] = 999`、對 `game._figures_here()` 每位呼叫 `game._count_talk(cid)` 共 `game._talk_cap()` 次，`server.open_characters().save(game.state)`（孟津渡單人地點只有董卓）；頭目＝角色擺在只有頭目的地點、`POST api/choose {"id": "explore:practice"}` 再一直按 `duel:*`（`duel:flee` 除外）到選單上沒有為止（約 4 回合；week7 每個頭目一段只打兩場，`per_boss_week` 2）；冷卻是現實 2 小時，管理者 `api/do/fast_forward {"hours": 3}` 清掉、再打第二場，再快轉 3 小時就是「這一段頭目段鐵頭不再現身，第 3 天 00:00 再來」（week7；FB-672 起帶頭目的名字，21 天季「這一週頭目…不再現身」，週末與 14 天「這一季頭目…不再現身」；冷卻中「頭目約 2 小時後才會再現身」不帶名字）。week7 的段界是現實天：跨到第 2 段（第 3 天）要快轉 48、再跨到第 3 段（第 5 天）再 48，快轉 4 只推 4 小時、句子不變。
+  - **驗「假人／整季機器人照舊按得到某個選項」**（2026-10-22 練功入口，選項 id 不變）：跟伺服器同一個資料庫（伺服器開著，共用行動鎖）跑一支 venv python：`server_bots.is_online = lambda profile, now: True`、`content.config.bot_tick_seconds = 1000.0`、`bot_fill_seconds = 1.0`，`BotRunner(content, client=None, rng=random.Random(7), clock=lambda: base + i * 40)` 逐輪 `tick()`（假時鐘每輪往前 40 秒，week7 一小時是季曆 12 小時，80 輪才三小時、不會把 7 天季跑完），並把 `Game.choose` 換成先記 `option_id` 再呼叫原本的（數 `act:explore` 之類）；80 輪約 1 分鐘補到 13 個假人、動 1018 次、0 個 failed。整季機器人：`bot.play_season(content, seed, max_steps=1500, now=time.time())`，`TIANXIA_DB` 指到 repo 外的暫存檔、`load_content(Path("content"), os.environ.get("TIANXIA_PROFILE") or None)`。事後唯讀開資料庫，在假人的 `data.journal` 找練功開打那一句（`找上…練手`）當真的有打的證據；玩家那邊把 `/api/main` 的 JSON 與頁面 DOM（`outerHTML` 拿掉 `<script>`、`innerText`）掃「假人／機器人／bot」，再把角色擺到假人站的地方看「此地還有」。注意 `web/app.js` 的註解也會送到每個玩家的瀏覽器：新加的註解寫了「假人、整季機器人」（舊的一處在「真人假人是同一份名單」）。
+  - **做出「已談滿」「頭目冷卻」「頭目次數用完」的畫面**：已談滿＝`server.game_for(名號)` 拿 `Game`，`p.stats["fame"] = 999`、對 `game._figures_here()` 每位呼叫 `game._count_talk(cid)` 共 `game._talk_cap()` 次，`server.open_characters().save(game.state)`（孟津渡單人地點只有董卓）；頭目＝角色擺在只有頭目的地點、`POST api/choose {"id": "act:explore"}`（第 13 批拿掉練功，探索一顆撞上頭目才有這一段）再一直按 `duel:*`（`duel:flee` 除外）到選單上沒有為止（約 4 回合；week7 每個頭目一段只打兩場，`per_boss_week` 2）；冷卻是現實 2 小時，管理者 `api/do/fast_forward {"hours": 3}` 清掉、再打第二場，再快轉 3 小時就是「這一段頭目段鐵頭不再現身，第 3 天 00:00 再來」（week7；FB-672 起帶頭目的名字，21 天季「這一週頭目…不再現身」，其他季「這一季頭目…不再現身」；冷卻中「頭目約 2 小時後才會再現身」不帶名字）。week7 的段界是現實天：跨到第 2 段（第 3 天）要快轉 48、再跨到第 3 段（第 5 天）再 48，快轉 4 只推 4 小時、句子不變。
 
 ## 只能靠引擎腳本驗的（寫法看 `引擎驗收.md`）
 - **角色存檔不含賽季**（2026-10-26）：腳本裡 `CharacterStore.load(名號).world` 永遠是空的預設值，「全服的東西有沒有送」（`signature_arms`、名將贈禮）要讀 `open_world(db).get_season()`；不然「沒送」的斷言假過。對話要走真伺服器時，開一個假 Ollama（`引擎驗收.md` 第 12 節）。
@@ -221,13 +225,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **「得：」帳對存檔差額**：每一趟快照前後的經驗、心得、銀兩、丹、素材，逐項對帳上的數字；兩版（`git archive` 各解一份、同一組亂數）各跑一次再逐趟比。**每個新角色第一趟的存檔差額一定多 +2 顆回體丹**（新手目標 `level5`、`side` 各 +1，第一次 `choose` 就發），不是漏帳，先動作一趟再量或把它排除。判「多出一則單獨的『心得 +N』訊息」要排除戰報卡片明細（`⚔` 那一則後面緊跟的得失行），不然每場仗都誤報。
   - **一個行程只 `boot` 一種設定**：同一個行程連叫兩次 `qc.boot`（兩種 profile）會把 stdout 包兩次（`I/O operation on closed file`）、第二個資料庫 `open_season` 的 assert 也會掛；每種設定一個行程，PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`。
   - **開著的那一份對照要分類，不是看總差**：關著的季 0 行差就過；開著的季用 token diff 把每一對不同的行切成片段彙整（按 `，、。「」（）|` 切 token 再 `difflib`；直接字元層級 `SequenceMatcher` 在幾 KB 的行上會跑好幾分鐘），每一類都要對得上這一批改的東西；存檔另外逐欄走 JSON 比，**江湖紀錄與滾動 `log` 會因為訊息變少而整串位移，要排除它們**才看得出實際入帳（心得、經驗、素材、丹、銀兩）有沒有動。
-  - **探索一顆開著時城裡操練（`act:drill`）不畫、直叫回「（此刻無法這麼做。）」**：只有操練會叫的事件型提示（`h_drill_done`）在那種季玩不到，只能用 `hints.note_for(state, content, id)` 驗字（四種身分、六種季各印一次，兩版逐字比），可達性另外按按看。
+  - **城裡操練（`act:drill`）第 13 批拿掉了，直叫回「（此刻無法這麼做。）」**：只有操練會叫的事件型提示（`h_drill_done`）玩不到，只能用 `hints.note_for(state, content, id)` 驗字（四種身分、六種季各印一次，兩版逐字比），可達性另外按按看。
   - **開實機看**：`/api/main` 有 `mostly` 與 `options`（`act:explore` 的 `label`＝「探索（體力 18・野外多料）」），行動列的格子是 `button.act-ink`（小字在 `small`），「剛剛」那張卡是 `.now-one`（拿 `innerText` 就有「得：…」那一行與底下的標籤）；讓角色在同一個頁面按鈕、用頁面自己的 `fetch('/api/main')` 前後各讀 `status.xinde`／`status.exp.have` 對帳，不必再用 `requests` 登入（再登入同一帳號會把分頁的 session 踢掉）。出門一趟抽到「有悟」那一拍會把選單換成 `sense:0..3`，要先按掉才能再按探索。
 - **列傳、評曰、商城的票**（2026-10-26 批 7b，`cb202c8c` 對 `9f68f257`；範本 scratchpad `qajf7b\`：`kit.py`、`v2_annals.py`、`v3_mall.py`、`cmpq\cmp_qa.py`）：
   - **腳本 `import server` 之後先 `server.CONTENT = c`**：`server.zhuan_extras`（公開頁的紀念印與插畫）照模組層的 `CONTENT` 判開關，那一份照啟動時的環境變數載；腳本沒設 `TIANXIA_PROFILE` 就是不帶設定、減法季關著，回 `{}`，看起來像「公開頁沒蓋印」。
   - **收季要哪一軍贏就自己給結局**：`store.mutate_season(lambda s: end_season(_season_vehicle(c, s), c, store, ending=<scenario.endings 裡 winner 是那一軍的>))`（`from tianxia.world import end_season, _season_vehicle`），角色要先存進資料庫（論功讀 `CharacterStore.books`）；之後每人同步一次才記論功的行狀。
   - **假模型**：一個物件有 `chat_structured(messages, schema, **kw)`，照系統提示第一句裡的人物名回 `schema(verdict="…")` 或丟例外；`game.client = fake`、`server.QUEUE = None` 再叫 `server.verdict_text(game, job)`，B 段清理（假名、數字、太長、簡轉繁）都驗得到。實機模型擋掉時 `/api/zhuan/write` 背景十幾秒照備援寫成（`by: rule`、評曰全照固定句），輪詢 `/api/zhuan?season=N` 的 `written`。
-  - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `g._mall_moment()` 與 `g.mall_view()`；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。
+  - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `mall_actions.moment(g)` 與 `mall_actions.view(g)`（`from tianxia.features.mall import actions as mall_actions`；`Game.mall_*` 第 58 批拿掉了）；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。
   - 公開頁有額外樣式時 `<style>` 裡本來就有 `.zh-art`，判有沒有插畫要找 `<figure class="zh-art"`；要看有圖的樣子，在複本放一個假的 `web/img/zhuan/<鍵>.webp`（驗完刪掉）。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。

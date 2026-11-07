@@ -1,0 +1,36 @@
+"""人物性子的純規則：本體在共用規則層 tianxia/persona_rules.py（合回 develop 第 4 段，PM 定：人物情誼包的 companion_agent 要叫，包不准 import 包）。
+這裡 re-export 同一批物件（`rules.X is persona_rules.X`，tianxia/features/persona/tests/test_persona.py 守），包裡與測試照舊寫 `rules.X`。"""
+from __future__ import annotations
+
+from tianxia.persona_rules import (  # noqa: F401  re-export
+    NONE,
+    SPAN,
+    HEARD,
+    RUMOR,
+    CHRONICLE,
+    HISTORY,
+    TORN,
+    ANNAL,
+    MINE,
+    cfg,
+    on,
+    axes,
+    covers,
+    center,
+    stage_of,
+    bounds,
+    value,
+    stage,
+    find_end,
+    ends_for,
+    weight,
+    heard_today,
+    record,
+    hear,
+    settle,
+    _one_day,
+    _shift,
+    annals_due,
+    prompt_lines,
+    view,
+)

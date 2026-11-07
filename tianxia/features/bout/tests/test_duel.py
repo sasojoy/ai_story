@@ -6,7 +6,8 @@ import random
 
 import pytest
 
-from tianxia import battle_instance, bot, bot_policy, duel, rules
+from tianxia import bot, bot_policy, duel, rules
+from tianxia.core import battle_base as battle_instance  # 全部拆包第 54 批：duel_actions 沒給分數時讀核心的 assess_gamble，換這一格才打得到
 from tianxia.content import ContentError, validate
 from tianxia.engine import DUEL_FLEE, Game
 from tianxia.models import MOVES, DuelBoss, DuelFoe, FactionDef
@@ -273,6 +274,7 @@ def test_the_season_bot_never_flees(setup):
         assert bot.pick(game, game.options(odds=False), rng) != DUEL_FLEE
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_content_checks_the_faces(setup):
     content, _ = setup
     content.duels = {"x": _boss(foes=[DuelFoe(side="huang", name="甲", title="乙", intro="", win="", lose="")])}

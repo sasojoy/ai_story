@@ -10,7 +10,8 @@ import pytest
 import webharness
 from conftest import real_content
 
-from tianxia import atlas, battlelog, encounter, howto, team, terrain
+from tianxia import battlelog, encounter, howto, team, terrain
+from tianxia.features.map import layers
 from tianxia.content import check_terrain_arts
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -274,7 +275,7 @@ def test_a_story_fight_writes_it_too(content, world):
 
 def test_the_old_detail_panel_has_a_terrain_line(content, world):
     g = _lake(content, world)
-    assert atlas.TERRAIN_LABEL + WATER_LINE in g.place_detail("lake")
+    assert layers.TERRAIN_LABEL + WATER_LINE in g.place_detail("lake")
     assert "此地火氣最濃：剛猛的功夫在這裡得勢，柔勁的施展不開。" in g.place_detail("town")
     content.config.terrain_arts.enabled = False
     assert "地利" not in g.place_detail("lake")

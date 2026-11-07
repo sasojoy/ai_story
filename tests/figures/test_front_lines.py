@@ -7,14 +7,13 @@ from __future__ import annotations
 import json
 import random
 import re
-import shutil
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 import server
-from conftest import FIXTURE, FixedRandom, real_content
+from conftest import FixedRandom, copy_test_content, real_content
 from tianxia import battle_instance, battlelog, figures, front_lines, journal, rules, team, world
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -421,7 +420,7 @@ def test_the_bands_are_one_two_to_three_and_four_up():
 
 def copy_fixture(tmp_path) -> Path:
     dest = tmp_path / "content"
-    shutil.copytree(FIXTURE, dest)
+    copy_test_content(dest)
     return dest
 
 

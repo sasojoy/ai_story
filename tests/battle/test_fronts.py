@@ -10,7 +10,8 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, classic_rules, real_content
-from tianxia import atlas, battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
+from tianxia import battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
+from tianxia.features.map import layers
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -110,12 +111,12 @@ def test_switch_off_world_and_screens_look_as_before(real):
     assert fresh_season(real).trends == {"huangjin": 25, "yuxi": 0}
     text = game.trends_text()
     assert "黃巾聲勢" in text and not any(name in text for name in ("潁川汝南", "南陽", "冀州", "豪強割據"))
-    regions = {r.id: atlas.region_trends(game.state, real, r) for r in real.map.regions}
+    regions = {r.id: layers.region_trends(game.state, real, r) for r in real.map.regions}
     assert regions == {
         "youzhou": [("黃巾聲勢", 25)], "jizhou": [("黃巾聲勢", 25)], "luoyang": [],
         "yingru": [("黃巾聲勢", 25)], "nanyang": [("黃巾聲勢", 25)],
     }
-    assert "讓黃巾聲勢上升" in atlas.leader_activity(game.state, real, "波才")
+    assert "讓黃巾聲勢上升" in layers.leader_activity(game.state, real, "波才")
     svg = mapview.render_map(game.state, real, "situation")
     for region in real.map.regions:
         if region.id != "luoyang":
@@ -229,11 +230,11 @@ def test_old_world_leader_activity_still_names_the_front_pushes(on):
     """同一種舊季（存檔的 revealed 沒有三條戰線）：龍頭人物的活動說明照樣寫出他推哪條戰線，不會把公開的戰線當成還沒浮現。"""
     game = _game(on)
     s = game.state
-    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")  # 新的一季：基準
+    assert "潁川汝南下降" in layers.leader_activity(s, on, "皇甫嵩")  # 新的一季：基準
     s.world.trends = {"huangjin": 25, "yuxi": 0}
     s.world.revealed = {"huangjin"}
-    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")
-    assert "潁川汝南上升" in atlas.leader_activity(s, on, "波才")
+    assert "潁川汝南下降" in layers.leader_activity(s, on, "皇甫嵩")
+    assert "潁川汝南上升" in layers.leader_activity(s, on, "波才")
 
 
 def test_front_key_at_luoyang_pushes_nothing_when_on(on):
@@ -254,7 +255,7 @@ def test_map_tints_each_region_by_its_front(on):
     game = _game(on)
     s = game.state
     _set_fronts(s, 30, 70, 90)
-    regions = {r.id: atlas.region_trends(s, on, r) for r in on.map.regions}
+    regions = {r.id: layers.region_trends(s, on, r) for r in on.map.regions}
     assert regions == {
         "youzhou": [("冀州", 90)], "jizhou": [("冀州", 90)], "luoyang": [],
         "yingru": [("潁川汝南", 30)], "nanyang": [("南陽", 70)],
@@ -438,7 +439,7 @@ def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
     rules.change_trend(s, real, "huangjin", 5)  # 照 beta 推得動
     assert s.world.trends["huangjin"] == 30
     assert "fronts" not in game.status_data() and "stances" not in game.status_data()
-    regions = {r.id: atlas.region_trends(s, real, r) for r in real.map.regions}
+    regions = {r.id: layers.region_trends(s, real, r) for r in real.map.regions}
     assert regions["jizhou"] == [("黃巾聲勢", 30)] and regions["luoyang"] == []
     assert "潁川汝南" not in game.trends_text()
 

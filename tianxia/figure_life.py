@@ -9,13 +9,23 @@
 - 風聞（spread）：玩家做了份量夠的事，跟這件事有關的人物記一句、情誼照表動；對話提示照 prompt_lines 帶進去。
 - 華佗坐診（healer_factor）：他此刻在的醫館療傷打折。
 
-只 import models、state、figures、rules、calendar、push、atlas（延後）；engine、world、team、companion_agent 呼叫它。"""
+只 import models、state、figures、rules、calendar、push、atlas（延後）；engine、world、team、companion_agent 呼叫它。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
+設宴是世界層 life 那一格（core/features.py 的 WORLD_ORDER；宴客包登記，tick 每一輪每一位對話人物叫一次、在求援之前）。讀璽效 seal_acts、
+輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；求援與人物懸賞（post_rally、post_figure、RALLY_POSTED、how、enemy_name）讀核心 core/bounty_base（第 45 批）。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
+test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tianxia/features/seal/tests/test_seal_acts.py、
+tianxia/features/companions/tests/ 的 test_companions、test_parley_schema、test_parley_two、test_relations_letters、tianxia/features/feast/tests/test_feast.py；
+世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 import random
 
 from . import calendar, figures, push, relations, renown, seal_acts
 from .calendar import DAY
+from .core import feast_base  # 全部拆包第 40 批：誰在擺宴、開著的宴問核心的查詢服務（宴客包 re-export 同一批），不 import 宴客包
+from .core import features as features_core  # 全部拆包第 40 批：設宴是世界層 life 那一格（core/features.py 只 import option，不會循環）
+from .core.services import note_cheer  # 全部拆包第 19 批「先做」：等著寫道賀信的那一格走核心（書信搬進人物情誼包，舊模組不必為了它 import 包）
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import GameState, WorldState
@@ -138,18 +148,18 @@ def tick(state: GameState, content: Content) -> None:
     first, w.life_turn = w.life_turn < 0, turn
     if first:
         return
-    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
+    hooks = features_core.world_hooks("life")  # 世界層 life：每一位對話人物設宴（宴客包登記；全部拆包第 40 批），一輪取一次
 
     movers = [cid for cid, ch in content.characters.items() if ch.deep_interaction and ch.follows is None]
     for cid in movers:
-        if feasts.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批）
+        if feast_base.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批；宴席讀的那一半在核心 feast_base）
             _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
     for cid, ch in content.characters.items():  # 跟著走的人最後才動：關羽、張飛跟著劉備
         if ch.follows is not None and ch.deep_interaction:
             _follow(state, content, cid, ch.follows)
     for cid, ch in content.characters.items():  # 第三批：宴客、求援委託（排在走動之後：照他這一輪走到的地方）
         if ch.deep_interaction:
-            feasts.maybe_open(state, content, cid, turn)
+            features_core.world_run("life", {}, state, content, cid, turn, hooks=hooks)  # 設宴（宴客包；包沒登記時不跑）
             _maybe_rally(state, content, cid, turn)
 
 
@@ -157,7 +167,7 @@ RALLY_MOODS = ("焦慮",)  # 戰線吃緊、聲威大損：對自己陣營全部
 
 
 def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> None:
-    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（bounties.post_rally），陣營軍情一句。"""
+    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（core/bounty_base.post_rally），陣營軍情一句。"""
     tuning = content.config.figure_life
     fid = figures.of_character(content, cid)
     if not tuning.rallies or fid is None or figures.state_of(state, content, fid).status != "active":
@@ -166,14 +176,14 @@ def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> Non
         return
     if random.Random(f"求援|{state.world.tianji}|{cid}|{turn}").random() >= tuning.rally_chance:
         return
-    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+    from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
-    made = bounties.post_rally(state, content, cid)
+    made = bounty_base.post_rally(state, content, cid)
     if made is None:
         return
     side = made.faction
-    add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
-                                                  how=bounties.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
+    add_rumor(state, bounty_base.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
+                                                  how=bounty_base.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
               made.location, content=content, layer="faction", faction=side)
 
 
@@ -355,18 +365,18 @@ def _rush_to(state: GameState, content: Content, cid: str, region: str | None, s
 
 def _post(state: GameState, content: Content, cid: str, motive: str, region: str | None, spot: str | None,
           fallen: str, posted: set[str]) -> list[str]:
-    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+    from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
     side = side_of(content, cid)
     if side is None or side in posted:
         return []
-    made = bounties.post_figure(state, content, cid, motive, region, spot)
+    made = bounty_base.post_figure(state, content, cid, motive, region, spot)
     if made is None:
         return []
     posted.add(side)
     tmpl = REVENGE_LINE if motive == "復仇" else HUNT_LINE
     return [tmpl.format(who=content.characters[cid].name, place=_place(content, made.location),
-                        enemy=bounties.enemy_name(content, made), fallen=fallen)]
+                        enemy=bounty_base.enemy_name(content, made), fallen=fallen)]
 
 
 # ── 風聞 ─────────────────────────────────────────────────
@@ -412,10 +422,16 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         if moved:
             deltas.setdefault(moved, []).append(ch.name)
         if moved > 0:  # 第二批：他欣賞你做的事，情誼夠的話會寫信道賀
-            from . import letters  # noqa: PLC0415  letters → figure_life
-
-            letters.note_cheer(state, content, cid, text)
+            note_cheer(state, content, cid, text)
     return [HEARD.format(names="、".join(names), delta=d) for d, names in sorted(deltas.items())]
+
+
+def feast_invites(state: GameState, content: Content) -> list:
+    """此刻開著、你還沒敬過酒的宴（書信的邀宴問，letters._feast_letter）；宴客關著是空的。書信是人物情誼包的、宴客是宴客包的，包不能互相 import：
+    經這裡問（全部拆包第 19 批；第 40 批 figure_life 收進共用規則層，改讀核心的 feast_base，不 import 宴客包）。只讀。"""
+    if not feast_base.on(content):
+        return []
+    return [f for f in feast_base.open_feasts(state) if not feast_base.toasted(state, f)]
 
 
 def prompt_lines(state: GameState, content: Content, cid: str) -> str:

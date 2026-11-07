@@ -12,22 +12,23 @@ Game.admin_end_season、admin_next_season 裡的兩段，核心經 on_season_clo
   打完的那一場）、merit_line、highlight_line
 - 只能觀戰與整個取代畫面：watching_battle、fighting；份量快照補上：backfill_battle_scores（決戰打到一半上線那一版；收場補送那一格先叫它）
 
-留在 Game 的經 ctx：被測試換掉的 _battle_status（tests/core/test_engine.py、tests/arts/test_hints.py：數一次請求推幾次）、_apply_battle_outcome
+留在 Game 的經 ctx：被測試換掉的 _battle_status（tests/core/test_engine.py、tianxia/features/guide/tests/test_hints.py：數一次請求推幾次）、_apply_battle_outcome
 （tests/server/test_server.py：套用結果時壞一次）、_deliver_battle_results（tests/core/test_renown_cross.py）、戰力快照（核心的單打服務：_battle_scores
 〔換掉〕、_battle_gear、_battle_role、_battle_road）；形象包的 _round_mvp（回合首功：決戰包不 import 形象包）；玉璽的 _mandate_weight、_seal_bare、
-_seal_settle、_deliver_seal_results；時刻表大事的 _deliver_big_events；地盤的 _conquest_side；Game 上的暫時旗標 _battle_ref（寄放）。這一包自己的
+_deliver_seal_results（決戰收場的 _seal_settle 改發事件 battle_end：ctx.publish，第 26 批）；時刻表大事的 _deliver_big_events；地盤的 _conquest_side；Game 上的暫時旗標 _battle_ref（寄放）。這一包自己的
 （sieges、muster、generals、escorts、這一檔互相叫）直接叫函式：測試只是直接叫 Game 上的委派、沒有換掉它們（手冊第十五節 PM 11/01）。
 """
 from __future__ import annotations
 
-from tianxia import allied, battle_instance, siege, territory, timetable  # 共用規則層（豪強依附、戰鬥規則核心、攻城、地盤、時刻表）
+from tianxia import allied, siege, territory, timetable  # 共用規則層（豪強依附、攻城、地盤、時刻表）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
-from tianxia import seal  # 過渡：待搬（玉璽：天命之爭）
+from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：天命之爭、保底收場、天命未定那一句；全部拆包第 27 批）
 from tianxia.models import BattleDef
 from tianxia.rules import recompute_trends, resolve_trends, season_one, world_trend_value
 from tianxia.state import Rumor, TimelineResult, WorldState
-from tianxia.world import _season_vehicle, showdown_key  # 過渡：待搬（季的事用的空殼玩家、時刻表決戰照實際那一版的結果鍵）
-from tianxia.world import open_waiting_showdown as open_waiting  # 過渡：待搬（開時間到了、在等的那一場決戰）
+from tianxia.world import _season_vehicle, showdown_key  # 核心本體：季的事用的空殼玩家、時刻表決戰照實際那一版的結果鍵
+from tianxia.world import open_waiting_showdown as open_waiting  # 核心本體：開時間到了、在等的那一場決戰
 
 from . import escorts, generals, muster, sieges
 
@@ -172,7 +173,7 @@ def battle_for_me(ctx, tick: bool = True) -> tuple[battle_instance.BattleInstanc
     """這個人的選單、場景、放手一搏、決戰的動作看的那一場：同 battle_status（tick 照樣把戰鬥追到現在），只是序章裡一律當作
     沒有（FB-113）——草廬與序章開場都在潁川汝南，以前長社火攻集結時新人第一個畫面就是兩顆投效，按了之後序章被戰場蓋掉、
     又走不開。不給投效與加入、不畫戰場；修好之前就上了名單的人也一樣（只是被代選固守，收場不領軍餉，見 view.showdown_pay）。"""
-    status = ctx._battle_status(tick=tick)  # 經 Game：tests/core/test_engine.py、tests/arts/test_hints.py 換掉它（數一次請求推幾次）
+    status = ctx._battle_status(tick=tick)  # 經 Game：tests/core/test_engine.py、tianxia/features/guide/tests/test_hints.py 換掉它（數一次請求推幾次）
     return None if prologue_rules.active(ctx.state, ctx.content) else status
 
 
@@ -369,7 +370,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
     跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
     event = timetable.find(ctx.content, definition.timetable_event) if definition.timetable_event else None  # 天命之爭也找得到（玉璽二）
     result: dict[str, object] = {}
-    unsettled = seal.is_mandate_battle(ctx.content, definition) and seal.deserted(battle, definition)  # 天命未定（玉璽二）
+    unsettled = seal_base.is_mandate_battle(ctx.content, definition) and seal_base.deserted(battle, definition)  # 天命未定（玉璽二）
 
     def _resolve(season: WorldState) -> None:
         lock = season.locks.get(definition.timetable_event)
@@ -385,7 +386,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
             return
         if unsettled:  # 天命之爭保底收場：天命未定（8.3；要 PM 定的第 4 條），時間軸記成跳過，不公告哪一軍勝、沒有勝方加給
             season.timeline[event.id] = TimelineResult(key=timetable.SKIPPED, time=season.time)
-            result.update(title=seal.MANDATE_UNSETTLED_TITLE, side="", margin="", reason="", text="", trends={})
+            result.update(title=seal_base.MANDATE_UNSETTLED_TITLE, side="", margin="", reason="", text="", trends={})
             return
         key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
         timetable.resolve(_season_vehicle(ctx.content, season), ctx.content, event, ctx.rng, key=key)
@@ -408,7 +409,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
         b.outcome_world_flags = []
 
     ctx.world.mutate_battle(_relabel)
-    ctx._seal_settle(battle, definition, result)  # 玉璽碎片：先挑挑戰者、再挑現世的得主（3.3、4.5）；只寫登記、天下大事、江湖史，接著讀回的賽季看得到
+    ctx.publish("battle_end", battle, definition, result)  # 事件 battle_end（第 26 批）：玉璽碎片：先挑挑戰者、再挑現世的得主（3.3、4.5）；只寫登記、天下大事、江湖史，接著讀回的賽季看得到
     ctx.state.world = ctx.world.get_season()
     ctx._deliver_big_events()
     ctx._deliver_battle_results()

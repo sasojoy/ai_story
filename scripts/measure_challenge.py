@@ -9,7 +9,7 @@
 
 對照（設計第十一節）：--regen N、--cap N（Config.figure_prestige_regen／figure_daily_loss_cap）、--outcome a|c（a：在記憶體裡
 讓退場的龍頭人物照常出手、不記 out_flag）、--no-challenge（緊急開關關掉：就是改之前的 14 天季）、--no-huangjin-end（拿掉黃巾聲勢
-80 收季，輸出第一行寫明）、--players N（伺服器人數上限 server_max_players）、--profile weekend（週末設定當基準）。
+80 收季，輸出第一行寫明）、--players N（伺服器人數上限 server_max_players）、--profile week7（7 天濃縮季當基準）。
 
 數字照實印，不為了量表調參數；要調由企劃者定。「挑戰佔的收入」是佔打仗收入（每一場戰報記的心得、經驗）的比例，不含事件、閉關。
 """
@@ -33,6 +33,7 @@ from tianxia import world as world_mod  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
+from tianxia.features.figure_acts import challenge as figure_challenge  # noqa: E402
 from tianxia.martial_arts import QUALITIES  # noqa: E402
 
 DAY = 86400.0
@@ -101,7 +102,7 @@ def _tier3(game) -> int:
 
 def instrument(tally: ChallengeTally, outcome: str) -> list:
     """包函式（只在記憶體裡）：回傳要 start／stop 的 patch 清單。"""
-    real_challenge, real_rewards, real_figure_tier3 = Game._challenge, Game._battle_rewards, Game._figure_tier3
+    real_challenge, real_rewards, real_figure_tier3 = Game._challenge, Game._battle_rewards, figure_challenge.tier3
     real_drop, real_seize, real_engine_seize = treasures.challenge_drop, cultivation.seize, Game._seize
     real_tick = BotRunner.tick
     kind_now: list[str] = []
@@ -254,7 +255,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("server", "season-bot"), default="server")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--profile", default="none", help="none＝預設設定（14 天）；weekend＝週末設定")
+    parser.add_argument("--profile", default="none", help="none＝不帶設定檔（14 天）；week7＝7 天濃縮季")
     parser.add_argument("--regen", type=float, default=None)
     parser.add_argument("--cap", type=int, default=None)
     parser.add_argument("--outcome", choices=("a", "c"), default="c")

@@ -38,6 +38,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 ```
 
 - `$env:TIANXIA_DB` 只對打這行的那個視窗有效，所以兩個視窗都要打。
+- 沒設 `TIANXIA_PROFILE` 就是 `season21`（21 天季；第 14 批起，週末設定與不帶設定的 14 天季關門了）；要 7 天的季，兩個視窗都多打一行 `$env:TIANXIA_PROFILE = "week7"`。`weekend` 起不來（「找不到設定覆寫檔」）。啟動時印的「設定：…」兩邊要一樣。
 - 兩個程式啟動時都會印一行「資料庫：…」，**兩行要一樣**。不一樣就是設錯了，假人會跑在另一個世界。
 - 假人照作息只在晚上（19～24 點）和中午前後（11:30～13:00 開始）上線，其他時間沒動靜是正常的。
 
@@ -78,7 +79,7 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 
 打開之後，伺服器每隔幾秒自己推一次全服的事：世界時間、時刻表的大事、時間到了開決戰、決戰的集結與回合逾時、季末。沒有人開著網頁時也照樣跑。關著的時候跟以前一樣，要有人連線（或假人程式在跑）世界才會動。
 
-- **現在是開的**（減法季批 0，設計稿第十章「伺服器排程打開」）：開關是 `world_tick_seconds`，`content/config.json` 寫 10，每一份設定（weekend、season21、week7）都照它。程式本身的預設還是 0（關），測試內容照那個。
+- **現在是開的**（減法季批 0，設計稿第十章「伺服器排程打開」）：開關是 `world_tick_seconds`，`content/config.json` 寫 10，每一份設定（season21、week7）都照它。程式本身的預設還是 0（關），測試內容照那個。
 - 要關：在用的設定檔加上 `"world_tick_seconds": 0`（例如 `content/profiles/week7.json`），重開伺服器。數字是 0（關）或至少 1 秒，寫 0.5 之類的伺服器會開不起來。
 - 重開伺服器之後，啟動訊息在「設定：…」下面會多一行 `排程：每 10 秒推一次全服的事…`；關著時是 `排程：關（世界時間等有人連線才推）`。
 - 假人程式照舊另外開，兩個可以同時開。
@@ -94,8 +95,8 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 
 打開之後，網頁有變化時伺服器會主動通知，不用等下一次輪詢：自己的另一個分頁做了動作，1～2 秒內跟著更新；大事發生、決戰打完一回合（「世界變了」），**預設設定下反而比輪詢慢**：平均約 7.5 秒、最慢約 25 秒才更新（每 10 秒輪詢是平均 5 秒、最慢 10 秒）。要等的三段是：兩次通知至少隔 10 秒、看守每 5 秒看一次世界、各分頁再隨機等 0～10 秒才去抓（免得全服同時擠進來）。所以推送省的是**請求數**（平常每 60 秒才問一次，輪詢是每 10 秒），不是延遲；試玩要快就照下面把兩個數字調小。關著的時候跟以前一樣，每 10 秒問一次。
 
-- **現在是關的**：開關是 `push_events`，預設 `false`。玩家用的設定（`content/config.json`、`content/profiles/weekend.json`）都還沒打開。要在哪一份打開，等驗收過了由 PM 決定。
-- 怎麼打開：在用的設定檔加上 `"push_events": true`，重開伺服器（跟排程一樣：週末設定是 `content/profiles/weekend.json`；用的是預設設定，就加在 `content/config.json`）。
+- **`season21`、`week7` 是開的**：開關是 `push_events`，預設 `false`，`content/config.json` 沒寫，兩份設定檔（`content/profiles/season21.json`、`week7.json`）打開。
+- 怎麼打開：在用的設定檔加上 `"push_events": true`，重開伺服器（跟排程一樣：寫在 `content/profiles/<名字>.json`；沒帶設定的伺服器是 `season21.json`）。
   - 啟動訊息在排程那一行下面會多一行 `推送：開（SSE；世界每 5 秒看一次，兩次通知至少隔 10 秒）`；關著時是 `推送：關（分頁每 10 秒輪詢）`。
   - 另外兩個數字可以不動：`push_watch_seconds`（看守每幾秒看一次世界，預設 5，要大於 0）、`push_world_min_seconds`（兩次「世界變了」的通知至少隔幾秒，也是各分頁收到之後隨機等多久才去抓，預設 10，0 是不限制）。想讓世界的變化更快出現，就把兩個都調小。**試玩建議 `push_watch_seconds` 寫 2、`push_world_min_seconds` 寫 2～3**（平均約 2.5 秒、最慢約 8 秒）；代價是同一時間更多人一起來問，所以 `push_world_min_seconds` 要大於等於開著的分頁數 ÷ 30（一百個分頁以內 2～3 秒；三百個分頁就是預設的 10 秒）。
   - **推送和排程請一起開**（兩個都加：`"push_events": true` 和 `"world_tick_seconds": 10`，排程見上一節）。看守只看世界、不推進世界；時間到了該結算的事（決戰回合與集結的期限、時刻表的大事），平常是排程或假人程式推進的。只開推送、排程關著、也沒有假人程式在跑（例如一兩個人的小型試玩）時，過了期限沒有人動作，就要等某個人的下一次輪詢才結算；推送開著時輪詢是每 60 秒一次（以前 10 秒），所以最多晚 60 秒才結算，結算之後世界的通知又晚 5～10 秒才到。排程開著，期限一到最多 10 秒內就結算，推送再把它送出去。有假人程式在跑時，假人每 20 秒一輪也會推進決戰，影響比較小，但兩個一起開還是對的。
@@ -323,7 +324,7 @@ Remove-Item C:\Users\User\tianxia-ops\PAUSED               # 恢復看守
 
   ```powershell
   $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
-  $env:TIANXIA_PROFILE = "weekend"   # 跟伺服器同一份設定；伺服器沒設就不要設
+  $env:TIANXIA_PROFILE = "week7"   # 跟伺服器同一份設定；伺服器沒設就不要設（沒帶兩邊都是 season21）
   .venv\Scripts\python.exe scripts\season_clock.py pause     # 關伺服器之前
   .venv\Scripts\python.exe scripts\season_clock.py resume    # 伺服器開回來之後
   .venv\Scripts\python.exe scripts\season_clock.py status    # 看現在是停著還是在走
@@ -399,6 +400,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1 
 伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。
 
 **封存檔**（2026-10-31，審查 S-12）：開下一季時，上上季的傳聞與決戰回合紀錄會搬到資料庫旁邊的 `tianxia-archive.sqlite`（跟著 `TIANXIA_DB` 換名字），遊戲本身不再讀它、是備用的。備份腳本只備份主檔，要留著封存的資料就把這個檔一起複製走（換季之後做一次就好，它只在換季時變）。
+
+**往來紀錄**（2026-11-06，介面重整）：玩家跟大勢人物說過的話記在資料庫旁邊的 `tianxia-talk.sqlite`，兩季以前的搬到 `tianxia-talk-archive.sqlite`（都跟著 `TIANXIA_DB` 換名字）。備份腳本只備份主檔，這兩個檔跟封存檔一樣自己複製走（伺服器開著也可以複製，最多少掉剛寫的那幾句）。丟了只是看不到舊的往來紀錄，遊戲照玩。
 
 **手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
@@ -558,7 +561,7 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 - 封測的 5000 元寶寫在 `content/profiles/week7.json` 的 `"mall": {"enabled": true, "beta_grant": 5000}`。兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "week7"`，開機印的「設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）」兩邊要一樣。
 - 每個角色第一次進來（登入之後第一次讀到江湖畫面；假人是它自己那一輪）發一次、江湖紀錄一則「商城」；之後再開新的一季、重新登入都不再發。還沒建角色的帳號要等建了角色才發。
-- 其他設定（不設、`weekend`、`season21`）照 `content/config.json` 的 `"mall": {"enabled": true}`：商城照樣開著、看得到，但**不發元寶**（大家都是 0，買不了東西）。
+- 其他設定（`season21`，不設也是它）照 `content/config.json` 的 `"mall": {"enabled": true}`：商城照樣開著、看得到，但**不發元寶**（大家都是 0，買不了東西）。
 - 要臨時關掉商城：沒設 `week7` 時改 `content/config.json` 的 `"mall"` 成 `{"enabled": false}`；設了 `week7` 時改的是 `content/profiles/week7.json` 那一段的 `"enabled"`（設定覆寫檔是整段蓋過去的，改 `config.json` 沒用）。兩個程式一起重開。關著時沒有入口、商城的網址都回 404、月卡不加回體丹上限、也不發元寶；帳都還在資料庫裡，開回來照舊。
 
 **對帳：`scripts/mall_ledger.py`**（只讀；伺服器開著也可以跑）
@@ -586,6 +589,8 @@ cd C:\Ray\專案\天下大勢
 
 ## 換成第一季濃縮版的那一天
 
+> **這一節是 2026-10-04 那一次的紀錄，已經做完了。** 週末設定第 14 批拿掉了（`TIANXIA_PROFILE=weekend` 起不來，回「找不到設定覆寫檔」），沒帶設定的伺服器套 `season21`。現在要照這個順序做，第 1 步就不是「先不套」（沒帶也是 season21），第 3 步帶要的設定（下面的指令已經換成 `week7`）。
+
 企劃者定了「換季重來、不開新資料庫」：帳號和江湖史留著，beta 這一季收掉，開新的一季。順序照下面走（PM 2026-10-04 定）。
 
 > QA 2026-10-04 演練過全部五步：先用舊程式建一份 beta 季、跑了 3 天，再換新程式收季、套週末設定、開季（第 1、2、4、5 步在 main `94a93ce`，第 3 步在 `8d34ea3`）。結果見 [濃縮版-驗收清單.md](濃縮版-驗收清單.md) 的 T0、T2。
@@ -600,12 +605,12 @@ cd C:\Ray\專案\天下大勢
 3. **套週末設定再開伺服器**：停掉伺服器，在同一個視窗多打一行再開：
 
    ```powershell
-   $env:TIANXIA_PROFILE = "weekend"
+   $env:TIANXIA_PROFILE = "week7"
    .venv\Scripts\python.exe -u server.py --port 7861 --share
    ```
 
-   - 它會一次換掉四個值：第一季開關、一季 2.5 天、人數上限 2，外加測試期間的「一鍵補滿體力」開關（狀態列體力條上的鈕寫「補滿」、按一下直接補滿、不花丹；`content/profiles/weekend.json`）。
-   - 啟動時「資料庫：…」下面會印 `設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 2）　測試期一鍵補滿體力：開`。沒設的時候印 `設定：預設`。最後那句「測試期一鍵補滿體力：開」就是補滿開著的記號；測試期結束把 `weekend.json` 的 `beta_free_refill` 拿掉之後，這句不再印。
+   - 它會換掉第一季開關、季長與人數上限（`content/profiles/week7.json`；2026-10-04 那一次是週末設定：一季 2.5 天、人數上限 2、測試期一鍵補滿體力）。
+   - 啟動時「資料庫：…」下面會印 `設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）`。沒設的時候印 `設定：season21（第一季濃縮版規則開啟、季長 21 天、人數上限 20）`（第 14 批起）。
    - 建議先做完第 2 步（收季）再設這一行，但順序弄反也不會出事：現在這一季是舊版開的，沒有記下季長，新程式一律照它開季時的 14 天算，不會因為週末設定變成 2.5 天而自己收掉，也不會跑時刻表（FB-037，QA 2026-10-04 在 main `610174e` 複測過）。
    - QA 2026-10-04 在 main `8d34ea3` 演練過這一步：收季後帶設定重開、開下一季，新的一季記下「濃縮版、2.5 天」，照季曆跑。
 4. **開啟下一季**：⚙ → 管理者工具 →「⚠ 開啟下一季」→「確定開啟下一季」。
@@ -626,7 +631,7 @@ cd C:\Ray\專案\天下大勢
 
 ## 截殺太兇時：緊急開關
 
-懸賞榜第一批起，截殺、通緝、懸賞榜、遊俠名號每一季都有（不只週末設定）。上線之後要是假人截殺真人太兇（假人每一輪有一成機會截殺此地勝算「穩勝」「有把握」的敵對陣營玩家），不必退版：
+懸賞榜第一批起，截殺、通緝、懸賞榜、遊俠名號每一季都有。上線之後要是假人截殺真人太兇（假人每一輪有一成機會截殺此地勝算「穩勝」「有把握」的敵對陣營玩家），不必退版：
 
 1. 在 `content/config.json` 最外層加一段 `"raid": {"enabled": false}`（已經有 `"raid"` 就在裡面加 `"enabled": false`）。
 2. 照上面「怎麼停」把 `server.py` 與 `run_bots.py` 都停掉，再照「開伺服器和假人」一起重開（兩邊啟動時印的「設定：…」要一樣）。
@@ -653,7 +658,7 @@ $bots = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" 
 ```
 
 - **2026-10-13 起不加 `--share`**：網址是固定的 https://tianxiadashi.com（見上面「固定網域」），隧道另外開一個行程，伺服器重開網址不變、不必再等 log 印網址、也不必重新發給玩家。還要臨時網址時才加 `--share`（公開網址印在 `server_out.log`，大約 7 秒後出現；用 `Get-Content server_out.log -Encoding UTF8` 讀，不加 `-Encoding UTF8` 中文會變亂碼）。
-- 啟動訊息還是要對：`server_out.log` 與 `bots_out.log` 的「資料庫：…」「設定：…」兩行要一樣。
+- 啟動訊息還是要對：`server_out.log` 與 `bots_out.log` 的「資料庫：…」「設定：…」兩行要一樣。第 14 批起沒帶 `TIANXIA_PROFILE` 印 season21，這台是 `week7` 的話兩個程式都要帶（上面的 `Start-Process` 沿用這個視窗的環境變數）。
 - `-u` 一定要加。沒加的話，Python 寫檔時會先存在緩衝裡，伺服器其實已經開好了，log 卻一直是空的。
 - **停的時候用 `/T` 關整棵**：`taskkill /PID <server 的 PID> /T /F`，假人也一樣。實測這樣會連 cloudflared 一起關掉。
 - **不要只關「正在聽 7861 的那個 PID」**：`.venv` 的 python.exe 會再開一個真正的 python，cloudflared 是那個 python 開出來的。只關它的話，cloudflared 會留著、繼續連 7861，**重開後舊網址照樣進得到新伺服器**（FB-021）。

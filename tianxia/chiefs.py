@@ -9,7 +9,8 @@
 """
 from __future__ import annotations
 
-from . import atlas, battle_instance, figures
+from . import atlas, figures
+from .core import battle_base as battle_instance
 from .models import BattleDef, Content
 from .state import GameState
 
