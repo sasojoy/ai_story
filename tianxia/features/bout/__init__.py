@@ -168,6 +168,7 @@ class BoutFeature(Feature):
                 MenuHook("quick", "duel", lambda ctx, kind, arg, option_id: duel_actions.duel_act(ctx, arg) if kind == "duel" else None),
                 MenuHook("quick", "arena", lambda ctx, kind, arg, option_id: (
                     arena_actions.arena_act(ctx, arg) if kind == "arena" and (arg in MOVES or option_id == arena_rules.YIELD_ID) else None)),
+                MenuHook("stale", "arena", lambda ctx, option, option_id: arena_actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 

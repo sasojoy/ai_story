@@ -27,6 +27,25 @@ if TYPE_CHECKING:
     from tianxia.engine import Game
 
 
+def page_quiet(arg: str, entry) -> bool:
+    """Outcome.quiet（第二輪第 92 批；原本在 Game.choose 後半）：鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁，沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」。"""
+    return arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
+
+
+def forge_merges(arg: str) -> bool:
+    """Outcome.merge（同上）：打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
+    打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）會全部併進上一爐那一則。"""
+    return smith_base.is_forge_step(arg) and arg != "forge"
+
+
+def forged_fold(ctx: Game, arg: str):
+    """Outcome.fold（同上；動作之後才叫，要讀動作之後的單子）。FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
+    收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。
+    收掉的只有單子自己的回話（smith_base.is_step_line）：前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）。"""
+    forged = arg.partition(":")[0] == smith_base.GO_VERB and ctx.state.player.smith_draft is None
+    return smith_base.is_step_line if forged else False
+
+
 def smith_options(ctx: Game) -> list[Option]:
     """鐵匠鋪的第二層選單（兵器設計 4.1；裝備四欄設計 4.6）：分兵器、防具兩頁（equipment.page；兩欄都開著時預設兵器頁，
     「離開」前一顆切到另一頁；只開一欄就只有那一頁、沒有切頁鈕）。打造兵器…／打造防具…挑到一半（smith_draft）時整份換成那一步。

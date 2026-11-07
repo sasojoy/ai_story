@@ -149,6 +149,7 @@ class FactionFeature(Feature):
                 MenuHook("here", "lean", lambda ctx, loc, cost, odds: lean_actions.lean_options(ctx)),
                 MenuHook("idle", "faction", lambda ctx: join_actions.picking_ally(ctx)),
                 MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
+                MenuHook("stale", "lean", lambda ctx, option, option_id: lean_actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 

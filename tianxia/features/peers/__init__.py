@@ -38,6 +38,13 @@ class PeersFeature(Feature):
     player_fields = ("mingtie", "mingtie_box", "mingtie_day", "mingtie_made", "mingtie_sent", "mingtie_hidden", "taunt_muted", "gift_day", "gifts_today")
     carried = player_fields
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
+            "peer_brief": None,
+        }
+
     def enabled(self, ctx) -> bool:
         return True
 

@@ -42,6 +42,15 @@ class CompanionsFeature(Feature):
             ContentSlot("companions", lambda *a: checks.check_companions(*a)),
         )
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。這四個原本是 Game 的類別屬性。"""
+        return {
+            "_persuade_said": None,  # 勸降的 C 段（actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
+            "_talk_turn": None,  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給這一包的 choose 掛鉤（服務清單四、寄放）
+            "_talk_said": None,
+            "_parley_decision": None,  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
+        }
+
     def enabled(self, ctx) -> bool:
         return True
 
@@ -136,6 +145,7 @@ class CompanionsFeature(Feature):
                 MenuHook("here", "errand", lambda ctx, loc, cost, odds: actions.errand_options(ctx)),
                 MenuHook("block", "talk", lambda state, content: talk_actions.travel_block(state, content)),
                 MenuHook("quick", "errand", lambda ctx, kind, arg, option_id: actions.errand_ask(ctx, arg) if kind == "errand" else None),
+                MenuHook("stale", "recruit", lambda ctx, option, option_id: actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 
@@ -158,7 +168,7 @@ class CompanionsFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """招募：act:recruit（舊招募：這裡那一位）與 act:recruit:<人物>（招這一位），按下去與紀錄標題（原本 Game._act、_action_title 原位）；不問 enabled（原位不看開關）。
-        不認得的人物標題回 None，照舊掉到核心的「提前出關」。兩個分頁搶人的 FB-363 那一句回 Refused（只在 engine），留在 Game.choose 前段。"""
+        不認得的人物標題回 None，照舊掉到核心的「提前出關」。兩個分頁搶人的 FB-363 那一句是 stale/recruit 那一格（actions.stale_cell，第二輪第 92 批）。"""
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 

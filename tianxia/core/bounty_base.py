@@ -1,5 +1,5 @@
 """懸賞榜「別人讀」的那一半（全部拆包第 45 批；照 smith_base、convoy_base、omen_base、seal_base）：懸賞榜包 features/bounties/rules.py 的純函式與字句原樣搬來，
-包 re-export 同一批物件。誰讀：核心的事件檢定（join_note）、Game 原位（收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）、共用規則層的 figure_life（求援與人物懸賞）、
+包 re-export 同一批物件。誰讀：核心的事件檢定（join_note）、Game 原位（收店、榜的入口、投靠那一下作廢、第 2 週才開）、共用規則層的 figure_life（求援與人物懸賞）、
 讀懸賞榜的包（人物情誼、陣營、探索、新手引導、輿圖、玩家互動、體力玩法、酒肆、移動；要寫交差的走事件與 ctx 的委派）。只靠核心與共用規則層就跑得起來，不 import 包。
 
 - 字句：KIND_NAMES、OFFICIAL、ENEMY、BOARD、SEASON_END、BROWSE_VERBS、PICKED、UNPICKED、RALLY_AID、RALLY_POSTED、STRIKE_* 六句、LAPSED_SIDE、LAPSED_LEAN、STRANDED_JOIN、
@@ -27,7 +27,7 @@ from ..models import Choice, Content, Location
 from ..state import Bounty, GameState, PlayerState, WorldState
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "arms": "求兵"}
-# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（Game.choose）；交出每一張各一則、各寫各的得失（FB-161：
+# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（包的 Outcome.quiet）；交出每一張各一則、各寫各的得失（FB-161：
 # 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
 BROWSE_VERBS = ("pick", "unpick")
 PICKED = "你替「{what}」挑一件要交的東西。"  # 待 joy 潤：按了 bounty:pick 的回話（pick_line）
@@ -380,7 +380,7 @@ def hunting(state: GameState, content: Content, target: str) -> bool:
 
 
 def is_browse_line(line: str) -> bool:
-    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：Game.choose 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
+    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：包的 Outcome.quiet 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
     head, _, tail = PICKED.partition("{what}")
     return line == UNPICKED or (len(line) > len(head) + len(tail) and line.startswith(head) and line.endswith(tail))
 

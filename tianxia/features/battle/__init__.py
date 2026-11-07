@@ -42,6 +42,15 @@ class BattleFeature(Feature):
     player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
     carried = ("battle_results_seen",)  # season.carry 那一格照帶（不看開關，同商城、出陣的 carried）
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
+            "_escort_picked": False,
+            "_escort_now": None,
+            "_battle_ref": None,  # 領地爭奪第二批：這一下按的鈕指定的那一場（加入鈕帶 @流水號，_battle_choose 設、_battle_now 讀）
+        }
+
     def enabled(self, ctx) -> bool:
         """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
         第 11 批的接縫掛鉤不問它（下面）。"""

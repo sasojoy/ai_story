@@ -22,7 +22,7 @@ from tianxia.core import battle_base as battle_instance
 from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import MOVES, Squad
 from tianxia.rules import add_rumor
@@ -509,11 +509,21 @@ def arena_title(ctx, arg: str) -> str:
 
 
 def arena_fight_problem(ctx, option_id: str) -> str | None:
-    """按到灰掉的挑擂鈕（原本 Game.choose 查完選單之後那一段；兩個分頁、畫面還沒重抓）：為什麼挑不了、還要等多久；Game 原位照它回 Refused。
+    """按到灰掉的挑擂鈕（原本 Game.choose 查完選單之後那一段；兩個分頁、畫面還沒重抓）：為什麼挑不了、還要等多久；stale_cell 照它回 Refused。
     守擂的人不在榜上是 None（照原本的 foe and …）。"""
     foe = ctx.state.world.arena.get(option_id.removeprefix("arena:fight:"))
     return foe and arena.challenge_problem(ctx.state.world, ctx.state.player.name, foe, ctx.content.config.arena,
                                            arena_left(ctx), ctx.content.config.time_scale)
+
+
+def stale_cell(ctx, option: Option | None, option_id: str) -> Refused | None:
+    """stale/arena 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）
+    回為什麼不成、還要等多久，**不寫江湖紀錄**（這一支不叫 _log，別的幾格有叫）。沒有原因回 None，照舊「此刻無法這麼做」。"""
+    if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
+        problem = arena_fight_problem(ctx, option_id)
+        if problem:
+            return Refused([f"（{problem}。）"])
+    return None
 
 
 def travel_block(state, content) -> TravelBlock | None:

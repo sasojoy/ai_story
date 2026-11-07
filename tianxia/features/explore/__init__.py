@@ -33,6 +33,19 @@ class ExploreFeature(Feature):
     player_fields = ("outing", "outing_last", "explore_seq", "fight_day", "fights_today")
     carried: tuple[str, ...] = ()
 
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。每次回新的：_outing_close 兩份 Game 不能共用。"""
+        return {
+            "_outing_busy": False,  # 走一趟正在走（outing_actions.outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
+            "_loot_scale": 1.0,  # 打贏的心得與銀兩倍數：探索包遭遇那一場（城裡的地痞 town_loot_scale）才不是 1
+            # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
+            "_drop_scale": 1.0,
+            "_gate_scale": 1.0,  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（explore_actions.fight_gate）；其餘是 1
+            "_outing_close": set(),  # 這一趟出門打了折的那幾道閘（explore_actions.fight_gate 記、explore_one 寫段落結尾那一句）
+            "_beat": None,  # 走一趟：剛剛那一次探索抽到什麼（explore_actions.explore_one 寫、outing_actions.outing_walk 讀）
+            "_outing_upset": False,  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、探索包的 explore_one 讀）
+        }
+
     def enabled(self, ctx) -> bool:
         """減法季探索一顆開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa；走一趟另要 outing 子開關）。不擲骰、不碰存檔。
         這一包沒有遊戲當下的掛鉤（選項、選單、狀態……），開關只決定那幾個叫不叫；動作本身各自先問一次開關（搬包之前就是這樣）。"""

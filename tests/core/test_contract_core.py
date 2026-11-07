@@ -10,7 +10,7 @@ from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
 from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SceneHook, SeamHook, Shop, Verb, WorldHook
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.engine import Game
 
 DAY = 24 * 3600.0
@@ -1687,6 +1687,7 @@ def test_the_menu_order_is_the_table_in_the_plan():
         "depart": ("bounties", "escort", "smithy", "gear", "shops"),
         "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
         "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # 第 57 批
+        "stale": ("lean", "bounties", "market", "recruit", "arena"),  # 第二輪第 92 批
     }
     assert Feature().menus() == ()
 
@@ -1896,15 +1897,15 @@ def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
         "seal": sorted([("tick", "seal"), ("front", "seal"), ("quick", "seal")]),
         "battle": [("quick", "battle")],
         "zhuan": [("rest", "zhuan")],
-        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena")]),
+        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena"), ("stale", "arena")]),
         "sense": sorted([("take", "sense"), ("idle", "sense"), ("quick", "canvas")]),
         "story": sorted([("take", "story"), ("here", "story")]),
-        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand")]),
-        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction")]),
+        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand"), ("stale", "recruit")]),
+        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction"), ("stale", "lean")]),
         "socialize": sorted([("take", "audience"), ("here", "social"), ("notes", "socialize"), ("idle", "audience"), ("block", "audience")]),
-        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties")]),
+        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties"), ("stale", "bounties")]),
         "smithy": sorted([("take", "smithy"), ("here", "smithy"), ("idle", "smithy"), ("open", "smithy"), ("depart", "smithy"), ("block", "smithy")]),
-        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear")]),
+        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear"), ("stale", "market")]),
         "outlets": sorted([("here", "donate"), ("here", "dadian"), ("idle", "outlets"), ("block", "outlets")]),
         "tavern": sorted([("idle", "tavern"), ("block", "tavern")]),
         "military": sorted([("take", "omen"), ("here", "order"), ("here", "rank2"), ("here", "rank"), ("here", "omen"), ("idle", "omen")]),
@@ -2054,6 +2055,147 @@ def test_the_quick_row_answers_after_the_menu_check_and_before_the_journal(game,
     assert "走到 choose 掛鉤。" in g.choose("fake:go")
     assert [c[0] for c in calls] == list(features_core.MENU_ORDER["quick"])
     assert len(g.state.journal) == journal + 1
+
+
+def test_the_stale_row_answers_after_the_menu_lookup_and_before_the_cannot_line(game, monkeypatch):
+    """Game.choose 的 stale（第二輪第 92 批）：查完選單之後、「此刻無法」之前照表的先後問，每一格拿到查到的那一顆與 id；
+    回 Refused 就直接回它、後面的不問、不再 _log（寫不寫江湖紀錄是格自己的事）；回 Option 換掉查到的那一顆、照它往下走；都回 None 照舊往下。"""
+    calls, answers = [], {}
+
+    def slot(name):
+        return lambda ctx, option, option_id: calls.append((name, option.id if option else None, option_id)) or answers.get(name)
+
+    monkeypatch.setattr(registry, "FEATURES", [Quicky([
+        MenuHook("take", "gear", lambda ctx: [Option(id="fake:go", label="假的那一顆")]),
+        *(MenuHook("stale", name, slot(name)) for name in features_core.MENU_ORDER["stale"]),
+    ])])
+    g = _made(game)
+
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]
+    assert calls == [(name, None, "fake:gone") for name in features_core.MENU_ORDER["stale"]]
+
+    calls.clear()
+    log = len(g.state.log)
+    answers["market"] = Refused(["不成。"])
+    got = g.choose("fake:gone")
+    assert isinstance(got, Refused) and got == ["不成。"] and len(g.state.log) == log
+    assert [c[0] for c in calls] == ["lean", "bounties", "market"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="假的那一顆")
+    assert "走到 choose 掛鉤。" in g.choose("fake:gone")
+    assert [c[0] for c in calls] == ["lean"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="灰的", enabled=False)
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]  # 換上來的灰的照舊擋
+
+    calls.clear()
+    answers.clear()
+    assert "走到 choose 掛鉤。" in g.choose("fake:go")
+    assert calls == [(name, "fake:go", "fake:go") for name in features_core.MENU_ORDER["stale"]]
+
+
+def test_the_outcome_says_how_the_journal_entry_lands(game, monkeypatch):
+    """Outcome 接在 run 後面的三格（第二輪第 92 批）：沒給就是一下一則；quiet 拿建好的這一則、真的就不寫；merge 併進同標題那一則；fold 在動作之後才叫、回的東西交給 add_entry。
+    現有兩格的先後與預設不准動（各包都用位置或名字建）。"""
+    order, made = [], {}
+
+    class Landy(Quicky):
+        def choose(self, ctx, kind, arg):
+            return made[arg] if kind == "fake" else None
+
+    def said(line):
+        return lambda: order.append("run") or [line]
+
+    monkeypatch.setattr(registry, "FEATURES", [Landy([
+        MenuHook("take", "gear", lambda ctx: [Option(id=f"fake:{name}", label=name) for name in ("plain", "quiet", "loud", "merge", "fold")]),
+    ])])
+    g = _made(game)
+    bare = Outcome("標題", said("x"))
+    assert (bare.quiet, bare.merge, bare.fold) == (None, False, None)
+
+    made["plain"] = Outcome("一樣的標題", said("第一句。"))
+    start = len(g.state.journal)
+    g.choose("fake:plain")
+    assert len(g.state.journal) == start + 1 and g.state.journal[0].lines[:1] == ["第一句。"]
+
+    seen = []
+    made["quiet"] = Outcome("一樣的標題", said("翻頁。"), quiet=lambda entry: seen.append(entry.lines) or True)
+    g.choose("fake:quiet")
+    assert len(g.state.journal) == start + 1 and seen and seen[0][:1] == ["翻頁。"]
+
+    made["loud"] = Outcome("一樣的標題", said("第二句。"), quiet=lambda entry: False)
+    g.choose("fake:loud")
+    assert len(g.state.journal) == start + 2  # quiet 是假的、沒給 merge：照舊另起一則
+
+    made["merge"] = Outcome("一樣的標題", said("第三句。"), merge=True)
+    g.choose("fake:merge")
+    assert len(g.state.journal) == start + 2 and g.state.journal[0].lines[:2] == ["第二句。", "第三句。"]
+
+    order.clear()
+    made["fold"] = Outcome("一樣的標題", said("結果。"), merge=True, fold=lambda: order.append("fold") or (lambda line: line == "第二句。"))
+    g.choose("fake:fold")
+    assert order == ["run", "fold"]  # fold 在動作之後才叫（判斷要讀動作之後的狀態）
+    assert len(g.state.journal) == start + 2
+    assert g.state.journal[0].lines[:2] == ["結果。", "第三句。"]  # 收掉 fold 說是的那一行、其餘接在結果句後面（add_entry）
+
+
+SCRATCH_FLAGS = {
+    "explore": {"_outing_busy": False, "_loot_scale": 1.0, "_drop_scale": 1.0, "_gate_scale": 1.0, "_outing_close": set(), "_beat": None, "_outing_upset": False},
+    "gear": {"_affinity_before": None},
+    "battle": {"_escort_picked": False, "_escort_now": None, "_battle_ref": None},
+    "sortie": {"_clash_won": False, "_sortie_marked": False, "_sortie_moved": 0.0, "_sortie_flipped": False},
+    "smithy": {"smith_result": None},
+    "peers": {"peer_brief": None},
+    "cultivation": {"forged": False, "forged_thing": None, "secret_solved": None},
+    "companions": {"_persuade_said": None, "_talk_turn": None, "_talk_said": None, "_parley_decision": None},
+}
+
+
+def test_the_scratch_flags_are_declared_by_their_packages_and_do_not_clash():
+    """Feature.scratch()（第二輪第 92 批）：24 個旗標照包宣告、預設值照原本的 Game.__init__；名字不重複、不撞 Game 類別上的東西（不然 setattr 會蓋掉方法）；
+    每次回新的 dict，_outing_close 兩份 Game 不能共用。"""
+    got = {f.name: f.scratch() for f in registry.DECLARED if f.scratch()}
+    assert got == SCRATCH_FLAGS
+    names = [name for flags in got.values() for name in flags]
+    assert len(names) == len(set(names)) == 24
+    assert not [name for name in names if hasattr(Game, name)]
+    for f in registry.DECLARED:
+        assert f.scratch() is not f.scratch()
+    assert Feature().scratch() == {}
+
+
+def _has_every_scratch_flag(g: Game) -> bool:
+    return all(hasattr(g, name) for flags in SCRATCH_FLAGS.values() for name in flags)
+
+
+def test_every_game_has_the_scratch_flags_before_it_drops_stale_references(game, monkeypatch):
+    """scratch_init 在 _drop_stale_references 之前跑完（那一支會換季、跑掛鉤，會讀旗標）；_kin、_admin_target、_load_kin 開的也有；FEATURES 換掉（假的或空的）建的也有
+    （核心的 combat、pushing、choose 照樣讀，所以走 DECLARED 不走 registered）；兩份 Game 的 _outing_close 不是同一個。"""
+    from tianxia.characters import CharacterStore
+
+    assert _has_every_scratch_flag(game)
+
+    other = game._kin(game.state.model_copy(deep=True))
+    assert _has_every_scratch_flag(other) and other._outing_close is not game._outing_close
+
+    other.state.player.name = "別人"
+    CharacterStore(game.world.db).save(other.state)
+    assert game._load_kin("別人") is not None and _has_every_scratch_flag(game._load_kin("別人"))
+    target = game._admin_target("別人")
+    assert target is not game and _has_every_scratch_flag(target)
+
+    seen = []
+    real = Game._drop_stale_references
+    monkeypatch.setattr(Game, "_drop_stale_references", lambda self: seen.append(_has_every_scratch_flag(self)) or real(self))
+    for features in ([], [Menuy([])]):
+        monkeypatch.setattr(registry, "FEATURES", features)
+        built = Game(game.content, game.state, game.rng, game.world)
+        assert _has_every_scratch_flag(built)
+    assert seen == [True, True]
 
 
 class Tailed(Feature):

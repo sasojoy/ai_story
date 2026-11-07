@@ -30,18 +30,15 @@ GAME_DELEGATE_CALLERS = {
     ("options", "_watching_battle"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("options", "_fighting"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     # bounties
-    ("choose", "_bounty_stale"): "FB-162 被搶的那一句回 Refused（伺服器照它跳提示）；choose_unlisted 回 list、而且在查選單之前，位置與回傳都不同，照 FB-195 馬市那一支留原位",
     # bout
-    ("choose", "_arena_fight_problem"): "按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久：在查完選單之後、「此刻無法」之前，choose_unlisted 在查選單之前，不是這個位置",
     # companions
     ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：不是動作，是重驗、驗過的那一輪要傳給後面的格；MENU_ORDER 的 quick 接不了（第 57 批）",
     ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
     # cultivation
-    ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
+    ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game（第二輪第 92 批 Refused 進了核心，這三步搬得動了，這批不搬）；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
     # explore
     ("_act", "_explore"): "關著探索一顆時的舊探索（扣體力、晉升奇遇、序章的舊探索都在它前面；第 11 批 README 認定留原位，不改成 Verb）",
     # faction
-    ("choose", "_lean_anytime"): "「改幫…」不在選單上時照樣收（在路上、決戰的大區，設計 3.2）：要先查選單、查不到才問它，choose 掛鉤在查選單之後，位置不對",
     ("choose", "_join_lean"): "投靠或拜入陣營名下的門派那一下，動作之後、入伍段之前給傾向：位置固定、動作之後的收尾沒有對應的掛鉤",
     # gear
     ("choose", "_general_gifts"): "位置固定、沒有對應的掛鉤（名將贈禮夾在「引導」與 check_thresholds 之間，choose 後半的先後算行為）",
@@ -134,7 +131,7 @@ CORE_TOP_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 
 # 事件檢定（核心本體 tianxia/core/event_check.py）：Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法：server、假人、測試、探索包與 Game 原位在叫的。
 CORE_EVENT_DELEGATES = {  # 只有 event_check 自己叫的 _answer_branch、_deed_credit 不留委派
-    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label",  # 事件卡
+    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label", "_pending_options",  # 事件卡
     "_choose", "_tale_clue", "_event_battle", "_apply",  # 固定選項
     "_free_text_of", "_branches", "event_free_text_prompt", "free_text_request", "answer_event", "add_gamble_narration",  # 隨口應對
 }

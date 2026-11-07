@@ -77,6 +77,7 @@
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
 | status_slots()（StatusHook） | 狀態列（Game.status_data）、江湖畫面（server._main_view_body）與管理頁（features/admin/routes.py 的 admin_choices，第二輪第 90 批）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
   一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled；表外的格接在表尾（第二輪第 74 批） |
+| scratch() | 包寄放在 Game 上的旗標 {名字: 預設值}（core_choose：第二輪第 92 批）：Game 建好時 scratch_init 照 registry.DECLARED 一包一包擺上去，不問 enabled；每次回新的 dict。不進存檔 |
 
 ctx 第一階就是 Game；功能包只准叫 services_list.md 那張清單上的方法，和自己這一包的委派。
 """
@@ -140,10 +141,15 @@ class Verb:
 
 @dataclass(frozen=True)
 class Outcome:
-    """choose 接走一顆選項：title 是這一下江湖紀錄的標題（核心在動作之前先拿，同 Game._action_title），run 做那個動作、回那幾句話。"""
+    """choose 接走一顆選項：title 是這一下江湖紀錄的標題（核心在動作之前先拿，同 Game._action_title），run 做那個動作、回那幾句話。
+    後面三格（core_choose，第二輪第 92 批）管這一則紀錄怎麼落，沒給就是一下一則：quiet(entry) 建好這一則之後問，真的就不寫（只是翻頁）；merge 併進上一則同標題的（journal.add_entry）；
+    fold() 動作之後要寫那一則時才叫，回 add_entry 的 fold（是函式因為 Outcome 在動作之前建，判斷可能要讀動作之後的狀態）。"""
 
     title: str
     run: Callable[[], list[str]]
+    quiet: Callable[[Any], bool] | None = None
+    merge: bool = False
+    fold: Callable[[], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -225,6 +231,8 @@ class FeatureHooks(Protocol):
     def threads(self, shell: Any) -> None: ...
     # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled）
     def status_slots(self) -> tuple[StatusHook, ...]: ...
+    # core_choose（第二輪第 92 批：包寄放在 Game 上的旗標；不問 enabled，走 registry.DECLARED，見 scratch_init）
+    def scratch(self) -> dict[str, Any]: ...
 
 
 class Feature:
@@ -366,6 +374,9 @@ class Feature:
 
     def status_slots(self) -> tuple[StatusHook, ...]:
         return ()
+
+    def scratch(self) -> dict[str, Any]:
+        return {}
 
     def __repr__(self) -> str:
         return f"<功能包 {self.name}>"
@@ -1332,6 +1343,8 @@ class MenuHook:
 # depart  移動包 departure.depart 最前面：動身了，店收起來          (ctx)                      menu_run，回傳不接
 # block   atlas.travel_block：現在不能安排前往的原因               (state, content)           menu_first（沒有 ctx：party 拿別人的 state 問，格裡一律讀傳進來的）
 # quick   Game.choose 查完選單、清掉「剛剛」與引導之後、建紀錄之前  (ctx, kind, arg, option_id)  menu_first（第 57 批：選單上、不建紀錄的那幾顆；回的話由核心 _log 一次，格裡不寫紀錄。回 None 照舊往下）
+# stale   Game.choose 查完選單、「此刻無法」之前：鈕過時了（兩個分頁搶）  (ctx, option, option_id)  menu_first（第二輪第 92 批；option 是選單上查到的那一顆或 None。回 Refused 就直接回給玩家，寫不寫江湖紀錄〔_log〕由格自己定；
+#         回 Option 換掉查到的那一顆〔「改幫…」不在選單上照樣收〕；回 None 照舊往下。跟 SEAM_ORDER 的 stale.*〔清失效參照，讀檔那一下〕是兩件事）
 MENU_ORDER: dict[str, tuple[str, ...]] = {
     "tick": ("seal",),
     "front": ("seal",),
@@ -1348,6 +1361,7 @@ MENU_ORDER: dict[str, tuple[str, ...]] = {
     "depart": ("bounties", "escort", "smithy", "gear", "shops"),
     "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
     "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # core_seams（全部拆包第 57 批）
+    "stale": ("lean", "bounties", "market", "recruit", "arena"),  # core_choose（第二輪第 92 批）
 }
 
 
@@ -1855,3 +1869,17 @@ def attach_game_api(cls: type, tables: dict[str, dict[str, Callable | str]] | No
     for table in tables.values():
         for name, value in table.items():
             setattr(cls, name, value)
+
+
+# core_choose（第二輪第 92 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第92批.md 第二節）
+
+
+def scratch_init(ctx: Game) -> None:
+    """每一包宣告的旗標（Feature.scratch）擺上這一份 Game。Game.__init__ 在 _drop_stale_references 正上方叫：那一支會換季、跑掛鉤，會讀旗標；
+    _kin、_load_kin、_admin_target 開的 Game 都走 __init__，一樣有。走 registry.DECLARED、不走 registered()、不看 enabled（理由同 pack_content）：
+    測試常把 FEATURES 換掉再建 Game，核心的 combat、pushing、choose 照樣讀這些旗標，少了就 AttributeError。"""
+    from .registry import DECLARED  # noqa: PLC0415  同 pack_content
+
+    for f in DECLARED:
+        for name, value in f.scratch().items():
+            setattr(ctx, name, value)
