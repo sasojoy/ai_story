@@ -17,6 +17,7 @@
 選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有 APIRouter（管理者的 seal_*、seal_use 在 routes.py 的 admin_tools、main_actions，全部拆包第 68 批；seal_text 是鎖外三段式，第 69 批進 routes.py 的 outlock）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ class SealFeature(Feature):
     # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
     carried: tuple[str, ...] = ("seal_seen",)
-    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
+    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：validate_seal 在 checks.py，content.validate 原位經 check_at 叫，不接 check_content，第 34 批認定第 2 條）；檔名照舊
     content = ("seal.json",)
 
     # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找

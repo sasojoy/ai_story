@@ -7,6 +7,7 @@
 - routes.py：/api/sense、/api/sense_read、/api/sense_warm（原本寫在 server.py；殼照 FEATURES 掛）
 
 掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scene（接縫掛鉤：有所感的卡、取名那一張）、routes。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ class SenseFeature(Feature):
     web = ("sense.js",)  # 有所感的畫布、悟來的那一筆、神品意境取名（全部拆包第 66 批從 app.js 切出來）；OWN_NAME_* 第 67 批從 main.js 切進來
     # sense:<做法>、sense:draw、sense:let（有所感）；dunwu:think、dunwu:<候選>、dunwu:own（特殊頓悟取名）。Feature.prefix 收 tuple（第 11 批）
     prefix = ("sense", "dunwu")
-    content = ("insight_scenes.json",)  # content.py 照它到這一包的 content/ 載、content.check_insight_scenes 照舊驗（核心沒有 import 這一包）；檔名照舊
+    content = ("insight_scenes.json",)  # content.py 照它到這一包的 content/ 載、checks.check_insight_scenes 照舊驗（content.validate 原位經 check_at 叫，核心沒有 import 這一包）；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：有所感那一份與流水號、選錯的帳；特殊頓悟這一季的次數與保底、等著取名的那一個。
     # 換季全部跟著新角色重來（Game._reset_player_for_new_season 本來就不帶）。私有意境 own_insights／own_serial 是共用規則層 insights 的（合成也寫）
     player_fields = ("sensing", "sense_serial", "sense_misses", "epiphanies", "epiphany_dry", "god_naming")

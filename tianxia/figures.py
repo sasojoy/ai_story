@@ -20,7 +20,8 @@ test_week7_season；tests/battle/ 的 test_chiefs、test_ranks、test_rise；
 tests/server/test_push_resistance；tianxia/features/ 的 seal/tests/test_seal_acts、test_seal_revamp、gear/tests/test_signature_arms、notify/tests/test_web_push、battle/tests/test_generals、test_siege_settle、companions/tests/test_relations_letters、
 test_stances、figure_acts/tests/test_challenge_season、test_figure_aid、map/tests/test_open_map、military/tests/test_opportunities、test_opportunities_two、
 outlets/tests/test_silver_outlets；slow 的 sortie/tests/test_bot_policy_conquest、tests/season/test_real_content。世界一步代叫它（world._STEP_CORE），
-world.py 說明「另外跑」那一串也跑。"""
+world.py 說明「另外跑」那一串也跑。
+內容驗證 check_figures 在檔尾（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改這一份帶不到）。"""
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -164,7 +165,7 @@ def heroine_ending(state: GameState, content: Content, cid: str) -> str | None:
 def placed_characters(state: GameState, content: Content) -> dict[str, str | None]:
     """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
     None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
-    14 天的季沒人退場時跟 talk_at 一模一樣（content.check_figures 驗開季地點等於 talk_at）。"""
+    14 天的季沒人退場時跟 talk_at 一模一樣（check_figures 驗開季地點等於 talk_at）。"""
     out: dict[str, str | None] = {}
     if life_on(content):  # 人物活起來：不是大勢人物的人物照每日行事走到的地方（沒走過的照 talk_at，不寫）
         out.update(state.world.whereabouts)

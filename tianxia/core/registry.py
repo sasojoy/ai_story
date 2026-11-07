@@ -290,3 +290,5 @@ DECLARED = tuple(FEATURES)
 for _name in ("timetable", "relations", "plans", "territory", "conquest", "siege", "push", "traits", "signature", "terrain", "battlelog",
               "forge_secrets", "secret_recipes", "orders"):
     SHARED[_name] += "載入時的內容驗證也在這裡：核心的 content 在 validate 裡函式內叫（第二輪第 96 批）。"
+# core_content（第二輪第 100 批）：check_figures 從 content.py 搬來，stances、errands 兩格經 features.check_at 問人物情誼包。
+SHARED["figures"] += "載入時的內容驗證也在這裡：check_figures，核心的 content 在 validate 裡函式內叫（第二輪第 100 批）。"

@@ -1,4 +1,4 @@
-"""內容驗證共用的小工具（core_content：第二輪第 96 批，從 content.py 搬來）：共用層各模組的 check_* 與 content.validate 都讀它。
+"""內容驗證共用的小工具（core_content：第二輪第 96 批，從 content.py 搬來）：共用層各模組的 check_*、各包的 checks.py 與 content.validate 都讀它（check_line、event_effects、stage_events 第二輪第 100 批搬來）。
 
 同 event_check 不進 MODULES（那一份是 tianxia/<名字>.py 頂層的核心模組），也不進 test_for.CORE_SERVICES。只 import models、zh，不 import content。
 """

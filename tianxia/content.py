@@ -88,21 +88,19 @@ from .models import (
     StatDef,
     SteedDef,
     StoryDef,
-    TREASURE_EFFECTS,
     Tier4Named,
     TimetableEvent,
     TraitBook,
     TreasureDef,
     Tutorial,
-    WEAPON_KINDS,
     allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES
-from .naming import GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
+from .naming import PRESET_CLASH, name_problem
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
-from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
+from .weapons import NOUNS as WEAPON_NOUNS, kind_problem as weapon_kind_problem
 from .zh import to_traditional
-from .core.content_base import NUMBER_IN_TEXT, TIMETABLE_SIDES, check_line as _check_line, check_traditional as _check_traditional, event_effects, stage_events, week7 as _week7
+from .core.content_base import TIMETABLE_SIDES, check_line as _check_line, event_effects, stage_events, week7 as _week7
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
