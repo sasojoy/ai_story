@@ -14,11 +14,11 @@ from tianxia import economy  # 共用規則層
 from tianxia import four_tiers  # 共用規則層
 from tianxia import silver  # 共用規則層
 from tianxia import team  # 核心
-from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option  # 核心
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import smith_base  # 核心（打造單子讀的那一小半：收店那兩格讀，core_seams）
 
+from . import shop_view
 from . import smithing
 from . import forge_actions
 from . import trade_actions
@@ -174,9 +174,9 @@ def trade_on(ctx: Game) -> bool:
 def material_options(ctx: Game) -> list[Option]:
     """鐵匠鋪的素材頁（素材與經濟設計第四、五節；店面關著時、整季機器人與假人看的那一串）：背包裡收得了的每一種一顆「賣一個」，
     手上有低一階料的每個（屬性, 階）一顆「升一個」（三階寫今天還能換幾個；按不下去的灰掉寫為什麼），回兵器／防具頁，最後「離開」。
-    字與按得下去與否都照店面的 shopview.trade_view（同一份規則）。都不花體力。"""
+    字與按得下去與否都照店面的 shop_view.trade_view（同一份規則）。都不花體力。"""
     s, c = ctx.state, ctx.content
-    trade = shopview.trade_view(s, c, ctx._pill_day()) or {"sell": [], "upgrade": []}
+    trade = shop_view.trade_view(s, c, ctx._pill_day()) or {"sell": [], "upgrade": []}
     opts = [
         Option(id=f"smith:sell:{row['id']}", enabled=row["problem"] is None,
                label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]) + row["dark"])  # 名聲 5.2：（黑市價）
@@ -269,7 +269,7 @@ def enter(ctx: Game) -> list[str]:
     equipment.open_smith(ctx.state.player, ctx.content)  # 打開鐵匠鋪（見 smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
     ctx.state.player.shop_clue = ""
     ctx._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
-    ctx.state.player.smith_rule = shopview.next_rule(ctx.state, ctx.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
+    ctx.state.player.smith_rule = shop_view.next_rule(ctx.state, ctx.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
     return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
 
 

@@ -6,8 +6,8 @@ armament_view；全部拆包第 43 批搬進來，行為一個字不變）；Gam
 from __future__ import annotations
 
 from tianxia import calendar, economy, equipment, journal, materials, wins
-from tianxia import shopview  # 過渡：待搬（店面：素材屬性的排序）
 from tianxia import territory  # 共用規則層（大本營在哪）
+from tianxia.core import shop_base
 from tianxia.core.option import Option
 from tianxia.journal import Draft
 from tianxia.rules import season_one
@@ -47,7 +47,7 @@ def donate_options(ctx) -> list[Option]:
     room = economy.donate_room(s, c, day)
     opts = [Option(id="donate:room", label=economy.DONATE_LEFT.format(n=room), enabled=False)]
     # 一階排最前面（最該捐的）、三階排最後（要留著打神器，免得一按就捐掉）；同階照剛柔快慢
-    held_by_tier = sorted(materials.bag_contents(s, c), key=lambda pair: (pair[0].tier, shopview.attribute_rank(pair[0].attribute)))
+    held_by_tier = sorted(materials.bag_contents(s, c), key=lambda pair: (pair[0].tier, shop_base.attribute_rank(pair[0].attribute)))
     for material, held in held_by_tier:
         if economy.donate_points(c, material.id) <= 0:
             continue

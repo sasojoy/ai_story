@@ -71,6 +71,14 @@ class TavernFeature(Feature):
             ),)
         return self._shops
 
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：酒肆，本體在 actions.tavern_view。"""
+        if shop != "tavern":
+            return None
+        from . import actions  # noqa: PLC0415
+
+        return actions.tavern_view(ctx)
+
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:

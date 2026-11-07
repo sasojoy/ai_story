@@ -53,6 +53,7 @@
 | record_detail(ctx, record) | Game.battle_detail：戰報頁那一筆（決戰照 battles 表重讀完整戰況） |
 | on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
+| shop_view(ctx, shop) | 店面那一頁的資料（shop_page，core/page_view.shop_view 問；一間店只有一包認，開頭先認店；第二輪第 93 批） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
   這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad）。帶後綴的 act:<verb>:<後綴>（全部拆包第 57 批：tail_run、tail_title、tail_squad）問同一張表；
   只有 act:heal 與舊探索 act:explore 留在 _act 原位（計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 第四節）。
@@ -209,6 +210,7 @@ class FeatureHooks(Protocol):
     # battle（全部拆包第 8 批：收季的收兵；第 11 批 PM 認定第 7 條「兩段要一起進收季的位置」）
     def on_season_close(self, ctx: Game, reread: bool) -> None: ...
     def shops(self) -> tuple[Shop, ...]: ...
+    def shop_view(self, ctx: Game, shop: str) -> dict | None: ...
     def verbs(self) -> tuple[Verb, ...]: ...
     # core_world（全部拆包第 25 批：世界層的格，位置與先後在 WORLD_ORDER；不問 enabled）
     def world(self) -> tuple[WorldHook, ...]: ...
@@ -341,6 +343,9 @@ class Feature:
 
     def shops(self) -> tuple[Shop, ...]:
         return ()
+
+    def shop_view(self, ctx: Game, shop: str) -> dict | None:
+        return None
 
     def verbs(self) -> tuple[Verb, ...]:
         return ()
@@ -751,6 +756,16 @@ def shop_open(ctx: Game) -> str | None:
     for shop in _shops(ctx, gated=False):
         if shop.inside(ctx):
             return shop.key if shop.here(ctx) else None
+    return None
+
+
+def shop_page(ctx: Game, shop: str) -> dict | None:
+    """店面那一頁的資料（core/page_view.shop_view，第二輪第 93 批）：問每一包，第一個不是 None 的回去（一間店只有一包認，契約測試守）。
+    不問 enabled：原本的分派不看開關，_shop_open 的 open 格也不看。"""
+    for f in registered():
+        view = f.shop_view(ctx, shop)
+        if view is not None:
+            return view
     return None
 
 

@@ -429,6 +429,22 @@ def test_a_closed_shop_gives_no_menu_or_entry_but_still_opens_its_page_and_close
     assert not seams.in_shop
 
 
+def test_the_shop_page_asks_the_packages_even_a_closed_one_and_takes_the_first_answer(monkeypatch):
+    """店面那一頁（第二輪第 93 批）：features.shop_page 問每一包，第一個不是 None 的回去；不問 enabled（原本的分派不看開關）；沒有包認是 None。"""
+    class Pack(Feature):
+        name = "pack"
+
+        def enabled(self, ctx) -> bool:
+            return False
+
+        def shop_view(self, ctx, shop):
+            return {"shop": shop, "ctx": ctx} if shop == "fakeshop" else None
+
+    monkeypatch.setattr(registry, "FEATURES", [Feature(), Pack()])
+    assert features_core.shop_page("這個 ctx", "fakeshop") == {"shop": "fakeshop", "ctx": "這個 ctx"}
+    assert features_core.shop_page("這個 ctx", "別間") is None
+
+
 def test_choose_takes_the_unlisted_ones_first_and_hears_the_package_after_each_action(game, seams):
     """choose_unlisted 在查選單、建紀錄之前問（不在選單上的也接得到、不寫江湖紀錄、不走做完一件事那一下）；after_action 在每個動作的
     最後（記下陣營之後、存回季之前），回的話接在動作的話後面。兩個都不問 enabled。"""

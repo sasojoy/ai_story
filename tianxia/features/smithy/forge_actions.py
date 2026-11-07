@@ -11,8 +11,8 @@ from tianxia import silver  # 共用規則層
 from tianxia import journal  # 核心
 from tianxia.journal import Draft  # 核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章）
-from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 
+from . import shop_view
 from . import smithing
 from . import trade_actions
 
@@ -32,15 +32,15 @@ def smith_forge_once(ctx: Game, kind: str, main: str, aux: str) -> tuple[Equipme
     item, msgs = smithing.forge(s, c, ctx.world, kind, main, aux, rng=rng, report=report)
     if item is not None:
         s.player.smith_draft = None
-        ctx._shop_say(shopview.forged_key(item))
+        ctx._shop_say(shop_view.forged_key(item))
     else:
         ctx._shop_after(problem, "refused")
     return item, msgs, report
 
 
 def smith_line(ctx: Game, kind: str, main: str | None = None, aux: str | None = None) -> dict:
-    """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
-    return shopview.smith_line(ctx.state, ctx.content, ctx.world, str(kind), main or None, aux or None)
+    """店面打造頁爐裡放了什麼，這一爐會怎樣（shop_view.smith_line；/api/smith_line）。只讀。"""
+    return shop_view.smith_line(ctx.state, ctx.content, ctx.world, str(kind), main or None, aux or None)
 
 
 def smith_forge(ctx: Game, kind: str, main: str, aux: str) -> list[str]:
@@ -48,7 +48,7 @@ def smith_forge(ctx: Game, kind: str, main: str, aux: str) -> list[str]:
     smithing.forge_problem 整個重驗才打——打的是同一個 smithing.forge（隱藏配方、神器原品與仿品、首位發現、名望回饋、熟手次數都照現在），
     跟一步一步單子的開爐同一條（_smith_forge_once：防具自己的亂數、兵器 Game.rng），打完收起單子；鐵匠順口照擲（同 _smith）。
     一爐一則「打造」江湖紀錄（不併進上一則）；被拒絕的不收錢、不收料、不寫紀錄，掌櫃那一句換成原因。
-    出爐卡給網頁：ctx.smith_result（shopview.forged_card；被拒絕是 None）。"""
+    出爐卡給網頁：ctx.smith_result（shop_view.forged_card；被拒絕是 None）。"""
     s, c = ctx.state, ctx.content
     p = s.player
     ctx.smith_result = None
@@ -65,7 +65,7 @@ def smith_forge(ctx: Game, kind: str, main: str, aux: str) -> list[str]:
             p.shop_clue = clue[0]
         msgs = msgs + clue
     journal.add_entry(s, Draft(smithing.FORGE_TITLE).entry(s.world.time, msgs))
-    ctx.smith_result = shopview.forged_card(s, c, ctx.world, item, report)
+    ctx.smith_result = shop_view.forged_card(s, c, ctx.world, item, report)
     ctx._save_season()
     return ctx._log(msgs)
 

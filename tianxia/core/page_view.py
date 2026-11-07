@@ -5,13 +5,13 @@ _bulletin_events、_news_on_cards、_chip、_now_entry、_now_start 外面沒人
 要傳 callable 的：ctx.stamp、ctx._day_stamp（有委派）；_chip 沒有委派，functools.partial(_chip, ctx)（journal.ChipFn 都是 chip(change, seed) 位置參數）。
 
 - 行動列底下那幾行：action_notes
-- 店面：_shop_say、_shop_after、_shop_open、_shop_live、shop_view（分派照搬，第 93 批才改）。_shop_open 讀 OPEN_CORE：engine._MENU_CORE["open"] 指到它（核心不 import engine），鍵不變
+- 店面：_shop_say、_shop_after、_shop_open、_shop_live、shop_view（第 93 批起問包：features.shop_page，一間店只有一包認）。_shop_open 讀 OPEN_CORE：engine._MENU_CORE["open"] 指到它（核心不 import engine），鍵不變
 - 公告與結算卡：bulletin、_bulletin_events、_news_on_cards、season_result
 - 三方卡、本週卡的分鐘：place_minutes
 - 見聞與江湖史：trends_text、rumors_text、rumor_layers、chronicle_text、_timeline
 - 江湖紀錄與「剛剛」：_day_stamp、_chip、latest_entry_html、journal_top_html、now_entry_html、_now_entry、now_front、journal_html、_now_start、shows_battle_card、battle_extra_html
 
-名字的綁法照 engine：engine 拿名字的（rules 的 season_one、audible……）這裡也拿名字，engine 叫模組屬性的（journal.、shopview.、timetable.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
+名字的綁法照 engine：engine 拿名字的（rules 的 season_one、audible……）這裡也拿名字，engine 叫模組屬性的（journal.、shop_base.、timetable.……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。
 engine 在 `from .core.event_check import …` 之後才 import 這一份（這裡 import 的模組那時都已經載入，載入順序不變）。
 
 改這一份要跑的測試：scripts/test_for.py（CORE_SERVICES：這個檔的底 jianghu、shop、shop2、journal、rumor、front，加改到的函式那一群）；
@@ -22,12 +22,12 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any
 
-from .. import atlas, battlelog, calendar, economy, equipment, journal, mounts, rumor_view, shopview, timetable
+from .. import atlas, battlelog, calendar, journal, mounts, rumor_view, timetable
 from .. import prologue as prologue_rules
 from ..rules import (
     HUANGJIN, audible, ears_of, front_chip, front_ids, is_revealed, season_one, trend_name, trend_shown, trend_value,
 )
-from . import arena_ranks, seal_base
+from . import arena_ranks, seal_base, shop_base
 from . import features as features_core
 
 if TYPE_CHECKING:
@@ -68,15 +68,15 @@ def action_notes(ctx: Game, option_ids: Iterable[str]) -> dict[str, str]:
 
 def _shop_say(ctx: Game, key: str, problem: str | None = None) -> None:
     """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
-    撐到什麼時候（shopview.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
+    撐到什麼時候（shop_base.hold_for，FB-192：problem 是被拒的原因，錢不夠那一句照它記要多少銀兩）。"""
     p = ctx.state.player
     p.shop_line, p.shop_line_seed = key, int(ctx.state.world.time)
-    p.shop_hold = shopview.hold_for(ctx.state, ctx.content, key, problem)
+    p.shop_hold = shop_base.hold_for(ctx.state, ctx.content, key, problem)
 
 
 def _shop_after(ctx: Game, problem: str | None, done: str, keyer=None) -> None:
-    """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shopview.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
-    _shop_say(ctx, (keyer or shopview.problem_key)(problem, done), problem)
+    """照這一下的擋法記掌櫃那一句：做成了是 done，被拒照 shop_base.problem_key（懸賞榜照 board_key）換成情況鍵，連同被拒的原因（FB-192）。"""
+    _shop_say(ctx, (keyer or shop_base.problem_key)(problem, done), problem)
 
 
 def _shop_open(ctx: Game) -> str | None:
@@ -88,41 +88,25 @@ def _shop_open(ctx: Game) -> str | None:
 
 
 def _shop_live(ctx: Game, option_ids=None, shop: str = "smith") -> bool:
-    """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
+    """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shop_base.BACKS：鐵匠鋪 smith:back、
     馬市 market:back、懸賞榜 bounty:back 或第三層的 bounty:unpick），而且前面沒有決戰、奪璽單挑的鈕。決戰開打、休季時選單換成三招
     或「休季中」，店裡那一串根本不在上面（picking_* 卻還是真的）：這時給店面，出店會被拒絕、人就困在店裡，休季還開得了爐
     （第一批終審 Critical 1）。集結時決戰的鈕排在店裡那一串前面：照舊畫那一串，加入、趕到的鈕不被蓋住。
     option_ids 是現在的選單（main_view 已經讀過就傳進來）；沒給就讀一次（不推進戰鬥）。"""
     ids = [o.id for o in ctx.options(odds=False, tick=False)] if option_ids is None else list(option_ids)
-    return any(back in ids for back in shopview.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
+    return any(back in ids for back in shop_base.BACKS[shop]) and not any(i.startswith(("battle:", "seal:")) for i in ids)
 
 
 def shop_view(ctx: Game, option_ids=None) -> dict | None:
     """店面（店面獨立介面設計 6.1）：開關開著、有一間店開著（_shop_open）、那間店那一串是眼前的選單（_shop_live）才有；
-    照哪一間店給 shopview 的 smith_view、market_view 或 board_view。"""
-    s, c = ctx.state, ctx.content
+    照哪一間店問那一包（Feature.shop_view，features.shop_page；一間店只有一包認）。"""
+    c = ctx.content
     if not c.config.shop_screens:
         return None
     shop = _shop_open(ctx)
     if shop is None or not _shop_live(ctx, option_ids, shop):
         return None
-    if shop == "arena":
-        return shopview.arena_view(s, c, ctx.world, ctx._battle_power(), ctx.arena_left(), bare=ctx._battle_power(seal=False))
-    if shop == "donate":
-        return shopview.donate_view(s, c, ctx._pill_day())
-    if shop == "dadian":
-        day = ctx._pill_day()
-        base = ctx._at_own_base()
-        return shopview.dadian_view(s, c, day=day, room=economy.donate_room(s, c, day) if base else 0, base=base,
-                                    clinic=ctx._at_clinic_town(), smith=equipment.smith_open(s, c), bribe=ctx._bribe_targets(),
-                                    prologue=prologue_rules.active(s, c))
-    if shop == "tavern":
-        return ctx.tavern_view()
-    if shop == "smith":  # 打造頁的爐火（鐵匠鋪與合成流程 3.2，forge.furnace）要回體丹的換日與序章：Game 才知道
-        view = shopview.smith_view(s, c, ctx.world, day=ctx._pill_day(), prologue=prologue_rules.active(s, c))
-        view["trade"] = shopview.trade_view(s, c, ctx._pill_day())  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
-        return view
-    return {"market": shopview.market_view, "board": shopview.board_view}[shop](s, c, ctx.world)
+    return features_core.shop_page(ctx, shop)
 
 
 def bulletin(ctx: Game) -> list[str]:
