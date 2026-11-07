@@ -114,7 +114,7 @@ def problems_of(source: str, module: str) -> list[str]:
                 out.setdefault((line, parts[2]), f"{module}:{line} import 了別的包 {parts[2]}（要用別包的東西走核心的服務，手冊 3.4）")
             continue
         if not _module_exists(".".join(parts[:2])):
-            continue  # from tianxia import 名字（不是模組）
+            continue  # 解不到的舊名歸 test_every_tianxia_import_resolves 擋
         out.setdefault((line, parts[1]), f"{module}:{line} import 了 {parts[1]}：包只准 import 核心、共用層、自己這一包（手冊 3.4）")
     return list(out.values())
 
@@ -276,6 +276,39 @@ def test_the_shared_scanner_catches_an_old_module():
     assert outside_imports("from .core import features\nfrom .models import Content\nfrom tianxia import calendar, siege\n", m) == set()
     assert outside_imports("from tianxia import TYPE_NAME_NOT_A_MODULE\nimport json\nfrom pydantic import BaseModel\n", m) == set()
     assert outside_imports("from .features.battle import rules\n", m) == set()
+
+
+# 第 103 批收掉別名之後，舊名對應的檔不在了，上面幾條掃描會把它當「from tianxia import 名字」放行；寫在函式裡的 import 要跑到那一行才炸。
+UNRESOLVED_OK = {("scripts/sb/tracks/explore.py", "tianxia.explore_modes")}  # 包在 try/except ImportError 裡，認舊程式用的
+
+
+def unresolved_imports(source: str, module: str) -> set[str]:
+    """source 裡解不到模組的 tianxia 名字。tianxia/__init__.py 沒有名字，tianxia.<x> 一定要是檔；更深的 a.b.c 是 a.b 裡的名字也算解得到。"""
+    out = set()
+    for _, name in imports_of(source, module, type_checking=True):
+        parent = name.rsplit(".", 1)[0]
+        if name != "tianxia" and not _module_exists(name) and (parent == "tianxia" or not _module_exists(parent)):
+            out.add(name)
+    return out
+
+
+def test_the_unresolved_scanner_catches_an_old_name():
+    """unresolved_imports 本身抓得到（不然下面那一條永遠綠）：寫在函式裡、三種寫法都算；真的模組、模組裡的名字、標準庫不算。"""
+    assert unresolved_imports("def f():\n    from tianxia import letters\n", "tianxia.features.tavern.rules") == {"tianxia.letters"}
+    assert unresolved_imports("def f():\n    from . import letters\n", "tianxia.engine") == {"tianxia.letters"}
+    assert "tianxia.letters" in unresolved_imports("def f():\n    from tianxia.letters import mail_day\n", "tianxia.fusion")
+    assert "tianxia.features.tavern.letters.x" in unresolved_imports("from .letters import x\n", "tianxia.features.tavern.rules")
+    assert unresolved_imports("from . import calendar\nfrom .core import features\nfrom tianxia.models import Config\nimport json\n", "tianxia.engine") == set()
+
+
+@pytest.mark.slow  # 六百多個檔都要 parse，約 6 秒
+def test_every_tianxia_import_resolves():
+    """tianxia、腳本、server.py、run_bots.py 裡每一個 tianxia 的 import 都解得到，最外層與函式裡都算（測試自己跑得到，不掃）。"""
+    files = [p for p in sorted(TIANXIA.rglob("*.py")) if "tests" not in p.relative_to(ROOT).parts]
+    files += [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
+    found = {(p.relative_to(ROOT).as_posix(), name) for p in files
+             for name in unresolved_imports(p.read_text(encoding="utf-8"), _modname(p))}
+    assert not found - UNRESOLVED_OK, f"解不到的舊名（舊名對照看 docs/guide/核心與存檔.md）：{sorted(found - UNRESOLVED_OK)}"
 
 
 def test_the_game_reaches_the_packages_only_through_the_listed_methods():
