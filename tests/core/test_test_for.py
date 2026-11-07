@@ -1032,6 +1032,7 @@ STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "figure_ac
 STAGE_PACKAGES += ["seal"]  # seal（全部拆包第 27 批）：玉璽包的 seal_stage.py（擺「懷璽」：有登記、有抄本）；接在這裡、不改上一行（並行的拆包線各寫各的一行）
 STAGE_PACKAGES += ["legacy", "hire"]  # 合回 develop（2026-11-06）：傳承、招募的 <包>_stage.py
 STAGE_PACKAGES += ["persona"]  # 人物性子（develop cf927227，合回第 4 段）：persona_stage.py
+STAGE_PACKAGES += ["heroines"]  # 女子與隱線（PR #179）：heroines_stage.py
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

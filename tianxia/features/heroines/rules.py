@@ -1,0 +1,36 @@
+"""女子與隱線的純規則：本體在共用規則層 tianxia/heroine_rules.py（人物情誼包的 companion_agent 要叫，包不准 import 包；同人物性子的做法）。
+這裡 re-export 同一批物件，包裡與測試照舊寫 `rules.X`。"""
+from __future__ import annotations
+
+from tianxia.heroine_rules import (  # noqa: F401  re-export
+    MINOR,
+    FORCE,
+    EXPLICIT,
+    ROMANCE,
+    FALLBACK,
+    FALLBACK_OPTION,
+    ADULT_ON,
+    ADULT_OFF,
+    NO_BOT,
+    ROLE_REAL,
+    ROLE_OWN,
+    AFTER,
+    LIMIT_PLAIN,
+    LIMIT_KISS,
+    LIMIT_LOVERS,
+    on,
+    notes,
+    adult,
+    heroine,
+    ending_of,
+    present,
+    step,
+    next_scene,
+    hidden_talk,
+    role,
+    limit_step,
+    prompt_lines,
+    banned,
+    hits,
+    clean,
+)

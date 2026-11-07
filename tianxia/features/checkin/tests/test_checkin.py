@@ -21,6 +21,7 @@ def _game(profile="season21", open_at=MON + 10 * HOUR, *, prologue=False, setup=
     c = real_content(profile)
     c.config.admins = ["沈浪"]
     c.config.train_event_chance = 0.0
+    c.storylines["duruo"].start.chance = 0  # 開局在陽翟：書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是探索的素材拍
     if setup is not None:
         setup(c)
     store = open_world()
