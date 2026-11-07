@@ -232,12 +232,12 @@ def test_a_swirling_attack_does_not_spin_the_figure_and_a_sky_drop_is_not_a_desc
 
 
 def test_the_shop_examples_show_off_every_motion_path_and_mark():
-    """萬寶閣「想不到就點」的絕招例句（web/mall.js MOVE_EXAMPLES；Joy 11/5 要例句演得出多種施放）：每一句都收得下（中文、字數），
+    """萬寶閣「想不到就點」的絕招例句（web/looks.js MOVE_EXAMPLES；Joy 11/5 要例句演得出多種施放）：每一句都收得下（中文、字數），
     合起來關鍵字導演就排得出每一種法相出場、主攻路線、對手異狀。"""
     import re
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[4] / "web" / "mall.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[4] / "web" / "looks.js").read_text(encoding="utf-8")
     body = re.search(r"const MOVE_EXAMPLES = \[(.*?)\];", js, re.S).group(1)
     lines = re.findall(r'"([^"]+)"', body)
     assert "一劍寒光九萬里" in lines and len(lines) >= 9
