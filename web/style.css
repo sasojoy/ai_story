@@ -732,6 +732,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .wk-box button:focus:not(:focus-visible) { outline: none; } /* 手指按下去不畫藍框（Joy 2026-11-07 截圖），鍵盤才畫 */
 .wk-box button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-sheet .wk-nextev { margin: 8px 0; }
+.ck-pop h3 { margin: 0 0 6px; font: 700 18px var(--serif); }
+.ck-pop .ck-step { font-weight: 600; }
+.ck-pop .ck-pop-ok { display: block; width: 100%; margin-top: 12px; min-height: 44px; }
 .wk-rules { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
 .wk-rules > summary { list-style: none; cursor: pointer; color: var(--accent); font-size: 14px; }
 .wk-rules > summary::-webkit-details-marker { display: none; }

@@ -574,7 +574,7 @@
     const two = sc.cols.filter((c) => c.id === "guan" || c.id === "huang");
     return `<div class="wk-mid"><p class="ch-next"><b>${WK_JOIN}</b>${WK_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
   }
-  const WK_MORE = "這一季在打什麼・下一件・簽到", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
+  const WK_MORE = "這一季在打什麼・下一件", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
   function wkBoxHtml(m, w, open) {
     const bp = typeof bpOn === "function" && bpOn(m);
     const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
@@ -669,7 +669,7 @@
     const howto = s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO; // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
     if (sheet) { // 拉起來的那一層（PM 2026-11-07：別又是一大片字）：三方、下一件、新手、簽到各一小塊；收季規則、這一季在打什麼、可能的結局收進最底「玩法說明」
       const rules = `${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${warHelp(m, "stance")}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`;
-      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
+      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複
         + `<details class="wk-rules"><summary>${WK_RULES}</summary>${rules}${howto}</details>`;
     }
     return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
@@ -987,7 +987,8 @@
     // 合併的本週卡（2026-11-07）裡已經有章回與投靠鈕：卡在的時候不另畫章回卡與三方卡；收起來（×）只剩章回卡、三方卡照舊
     const box = !letterCard && m.week_card && shown("quest") && !wkHidden(m, "strip");
     const sidesFirst = box || (m.on_road && m.week_card && shown("quest") && !wkHidden(m, "strip")) ? "" : sidesFirstHtml(m);
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top"));
+    const ckPop = typeof ckPopHtml === "function" && !pro() ? ckPopHtml(m) : ""; // 每天第一次登入的簽到小窗（checkin.js）
+    const peek = ckPop + (letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top")));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
@@ -1011,7 +1012,7 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     const hints = jhHintsHtml(m);
-    if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirst}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    if (m.on_road) return `${ckPop}${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirst}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     // 戰場面板（battle.js，Joy 2026-11-06 大決戰優化，設計稿方案甲）：開打、集結時排在最上面，出招鈕與放手一搏的輸入框緊接在面板裡；

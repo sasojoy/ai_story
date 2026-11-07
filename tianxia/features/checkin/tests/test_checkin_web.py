@@ -126,3 +126,31 @@ def test_real_status_renders():
     game.sync(MON + 5 * DAY + 10 * HOUR)  # 第 6 天：挑四階
     html = run({"status": game.status_data()})["html"]
     assert "第 6 天" in html and html.count("data-attr") == 4
+
+
+POP_DRIVER = r"""
+const S = { main: input.m };
+const store = new Map(Object.entries(input.stored || {}));
+const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+const H = new Function("S", "localStorage", [
+  ...["esc", "CK_ATTR", "CK_LAST", "CK_SEEN", "CK_POP_OK", "CK_POP_LATER", "ckDayKey"].map(konst),
+  ...["ckGift", "checkinPeek", "ckSeen", "ckPopClose", "ckPopHtml"].map(fn),
+  "return { ckPopHtml, ckPopClose };",
+].join("\n"))(S, localStorage);
+const first = H.ckPopHtml(input.m);
+H.ckPopClose();
+finish({ first, again: H.ckPopHtml(input.m), stored: store.get("tianxia.ckSeen") || "" });
+"""
+
+
+def test_the_first_login_of_the_day_pops_the_sign_in_once():
+    """Joy 2026-11-07「簽到在每天登入的時候跳出來簽就好？」：當天第一次跳一個小窗（.sheet，開著底下鎖住），寫今天的份與七天那一排；
+    按「收下」就關、同一天不再跳；要挑的那天窗裡就是四顆挑的鈕、關的鈕寫「等一下再挑」；特殊事件的跳顯框還沒看完先不跳。"""
+    done = _m(done=True, step="今天的份領過了：回體丹 2 顆。")
+    out = webharness.run(POP_DRIVER, {"m": done})
+    assert 'class="sheet ck-pop"' in out["first"] and "今天的份領過了" in out["first"] and out["first"].count('class="ck-day') == 7
+    assert '>收下</button>' in out["first"] and out["again"] == "" and out["stored"]
+    pick = _m(pick=[{"attribute": "剛", "name": "玄鐵", "held": 1}])
+    out = webharness.run(POP_DRIVER, {"m": pick})
+    assert 'data-act="checkin" data-attr="剛"' in out["first"] and ">等一下再挑</button>" in out["first"]
+    assert webharness.run(POP_DRIVER, {"m": {**done, "story_cards": [{"kind": "end"}]}})["first"] == ""
