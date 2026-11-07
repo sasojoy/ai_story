@@ -19,6 +19,30 @@ FACADE_SHELL_FILES = {"shell.js"}  # 殼的掛鉤本身（新加的，不是切�
 # 第 85 批：包的表單與 change 框（登記那一行、函式頭、帶 // <包>Form、// <包>Change 的收尾）與 app.js 查表的三行，同樣只認字面；
 # 每包鏈的第一行（base 是 } else if、head 是 if）只認這 9 個；battle.js 清掉舊註解與恆真守衛的那兩行，有沒有被清掉的那一段都放行（這兩行寫進預期差異）
 # 第 104 批：main.js、admin.js 拿掉恆真守衛的三行與 cultivation.js、companions.js、app.js 改舊註解的四行，同樣認整行字面、新舊兩種寫法都放行（這七行寫進預期差異）
+# 第 105 批：faction 的畫法從 main.js 搬進 faction.js、頂層名字帶包名前綴：改名碰到的 10 行舊字與 11 行新字（main.js 那一行常數拆成兩行），認整行字面、新舊兩種寫法都放行（這幾行寫進預期差異）
+FACTION_RENAMED_LINES = (
+    '  const WK_JOIN = "先投一方", WK_JOIN_NOTE = "，才有章回、軍令和戰功", WK_JOIN_BTN = "投{side}", WK_HERE = "就在這"; // 待 joy 潤',
+    '  function wkJoinHtml(m) {',
+    '      const sub = near ? `${esc(near.name)}・${near.minutes | 0 ? `${near.minutes | 0} 分` : WK_HERE}` : esc(c.where[0] || "");',
+    '      return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${WK_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;',
+    '    return `<div class="wk-mid"><p class="ch-next"><b>${WK_JOIN}</b>${WK_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;',
+    '  function wkSidesSheetHtml(sc) {',
+    '      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? WK_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;',
+    '    const ch = chapterCardHtml(m, true), join = ch ? "" : wkJoinHtml(m);',
+    '      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複',
+    '  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局", WK_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤',
+    '  const FACTION_JOIN = "先投一方", FACTION_JOIN_NOTE = "，才有章回、軍令和戰功", FACTION_JOIN_BTN = "投{side}", FACTION_HERE = "就在這"; // 待 joy 潤',
+    '  function factionJoinHtml(m) {',
+    '      const sub = near ? `${esc(near.name)}・${near.minutes | 0 ? `${near.minutes | 0} 分` : FACTION_HERE}` : esc(c.where[0] || "");',
+    '      return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${FACTION_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;',
+    '    return `<div class="wk-mid"><p class="ch-next"><b>${FACTION_JOIN}</b>${FACTION_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;',
+    '  function factionSidesSheetHtml(sc) {',
+    '      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? FACTION_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;',
+    '    const ch = chapterCardHtml(m, true), join = ch ? "" : factionJoinHtml(m);',
+    '      return `${m.sides_card ? factionSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複',
+    '  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局"; // 待 joy 潤',
+    '  const FACTION_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤',
+)
 FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pageJianghu\b"
                                 r"|\bregisterClicks\(|^  async function \w+Click\(act, el, ev\) \{$|^    switch \(act\) \{$|^\s*\} // \w+Click$"
                                 r"|^      const clicked = CLICKS\[act\];$|^      if \(clicked\) return await clicked\(act, el, ev\);"
@@ -35,7 +59,8 @@ FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pa
                                 r"""|^    sceneAsMe\(hm && hm\.worn \? hm\.worn\.style : ""\); // 台上站的是自己（(?:mall|looks)\.js）$"""
                                 r"|^  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（(?:mall|looks)\.js 的 openMallMoves）。$"
                                 r"|^  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；(?:server\.figure_intro|socialize 包 intro\.py 的 figure_intro)）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，$"
-                                r"|^  // 電腦上整片寬的 \.shop-body 照舊捲，內容照遊戲那一欄排（(?:style|shop)\.css 的 FB-225 那一段；手機上 \.shop-col 沒有樣式）$")
+                                r"|^  // 電腦上整片寬的 \.shop-body 照舊捲，內容照遊戲那一欄排（(?:style|shop)\.css 的 FB-225 那一段；手機上 \.shop-col 沒有樣式）$"
+                                + "".join(f"|^{re.escape(line)}$" for line in FACTION_RENAMED_LINES))
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 
@@ -59,6 +84,7 @@ class FacadeScenario(Scenario):
     第 84 批把點擊的 case 從 app.js 搬進各包：case 行照舊算在這一條，放行的只有框與查表的字面（FACADE_SHELL_LINES）；map 軌比的 map.js 去掉框（MAP_CLICK_FRAME）。
     第 85 批把表單與 change 的分支從 app.js 搬進各包：分支的行照舊算在這一條，放行的只有框、查表的三行、每包鏈的第一行（只認那 9 個）與 battle.js 清掉舊註解、恆真守衛的那兩行。
     第 104 批把 sayLine、gatherSay 從 app.js 搬進 companions.js、explore.js：函式的行照舊算在這一條；放行的只有拿掉恆真守衛的三行與改舊註解的四行。
+    第 105 批把 wkJoinHtml、wkSidesSheetHtml 從 main.js 搬進 faction.js 並改名（factionJoinHtml、factionSidesSheetHtml，常數帶 FACTION 前綴）：其餘的行照舊算在這一條；放行的只有改名碰到的 10 行舊字＋11 行新字（FACTION_RENAMED_LINES）。
     半舊半新：這一包沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣三種人再打一遍。
     這一軌走不到的：瀏覽器真的執行這些檔（切檔之後的載入順序由網頁測試與波末實機驗）；/static/index.html 這個沒有人連的裸檔。
     假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
