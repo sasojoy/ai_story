@@ -6,6 +6,9 @@
 - 內傷：CLINIC_MIN_SILVER、CLINIC_URGENT、can_pay_clinic、injury_share、_crippled（醫館那幾個門檻的 CLINIC_AT、clinic_hop 只有移動讀，在 features/travel/bots.py）。
 - 出陣的值：_duel_value、_train_value、_cannot_push、_outmatched、_sortie_win、SORTIE_WIN、SORTIE_WIN_FLOOR。
 - 懸賞：_bounty_here（讀核心 core/bounty_base，不讀懸賞榜包）。
+- 素材留多少（第二輪第 101 批，從 bot 搬來；鐵匠鋪與捐軍備都讀）：TRADE_KEEP、TRADE_MOVES、trade_keep。
+- 取名的單子（第二輪第 101 批，從 bot_policy 搬來；煉製、修練、有所感、玩家互動四包開單，bot_runner 接）：NO_NAME、ForgeJob、MasterJob、SenseJob、DiscussJob、EpiphanyJob、NamingSlot。
+- 下一站（第二輪第 101 批，從移動包搬來；移動、決戰、陣營都讀）：next_hop。
 - 一次 pick 的快取：_TURN、_turn_cached、turn_cache。**_TURN 只有這一份**，bot_policy 不留這個名字；殼碰不得私有成員（邊界測試 test_the_bot_shell_touches_nothing_private_on_the_game），
   所以 bot_policy.pick 走公開的 turn_cache。
 
@@ -13,16 +16,17 @@
 函式裡也不行；Game 只放型別註記。_sortie_win 問 Game._sortie_foes（服務清單上有；出陣包 actions.sortie_foes 掛在 Game 上的同一個函式）。
 
 另外跑：改這一份 scripts/test_for.py 只挑自己檔名（tests/bots/test_bot_base.py）、煙霧與邊界，挑不到的是讀它的那幾包與舊名：
-tianxia/features/{travel,sortie,explore,figure_acts}/tests、tests/bots、tests/acts/test_clinic.py、test_conquest_flip.py、test_conquest_rules.py、tests/battle/test_fronts.py、
+tianxia/features/{travel,sortie,explore,figure_acts,battle,faction,smithy,outlets,stamina_plays,peers,craft,cultivation,sense}/tests、tests/bots、tests/acts/test_clinic.py、test_conquest_flip.py、test_conquest_rules.py、tests/battle/test_fronts.py、
 tests/figures/test_figures.py、test_gentry_allied.py、test_promotions_high.py；same_behavior 的 tally 軌與 bots 段。
 """
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import allied, conquest, rules, team
+from . import allied, atlas, conquest, four_tiers, naming, rules, team
 from .core import bounty_base
 from .state import PLAYER
 
@@ -168,3 +172,86 @@ def _outmatched(game: Game, loc_id: str | None) -> bool:
     if conquest.holder(s.world, c, loc_id) == side or not conquest.capturable(c, loc_id):
         return False
     return _sortie_win(game, loc_id) < SORTIE_WIN_FLOOR
+
+
+# 第二輪第 101 批（從 bot 搬來）：鐵匠鋪的 trade_want、trade_at_smith 與捐軍備的 donate_want、donate_spare 都讀
+# 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
+TRADE_KEEP = {1: 12, 2: 10, 3: 5}  # 三階只在素材四階開著時算（trade_keep）：留夠一次三換四
+TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下都會讓背包離留的量更近，本來就停得下來）
+
+
+def trade_keep(content) -> dict[int, int]:
+    """每一階留幾個不賣不捐（TRADE_KEEP）：素材四階開著時三階照一、二階的規矩、留夠三換四的（正式季整合 8.1：「留兩個三階湊神器」
+    改成留四階，四階本來就不收）；關著照舊只有一、二階（三階不賣不捐）。"""
+    return dict(TRADE_KEEP) if four_tiers.on(content) else {t: n for t, n in TRADE_KEEP.items() if t < 3}
+
+
+# 第二輪第 101 批（從 bot_policy 搬來）：煉製、修練、有所感、玩家互動四包開單，bot_runner 接
+NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：鎖內一定不叫模型（同 server.NO_NAME）
+
+
+@dataclass(frozen=True)
+class ForgeJob:
+    """要請模型取名（或挑一個）的一爐：A 段在鎖內開的單，交給 bot_runner 在鎖外取名、再拿鎖開爐。"""
+
+    insight_ids: tuple[str, ...]
+    request: naming.NamingRequest
+
+
+@dataclass(frozen=True)
+class MasterJob:
+    """要請模型另取新名字的絕學定名（企劃者 2026-10-06：不沿用原名）：A 段在鎖內開的單，交給 bot_runner。"""
+
+    art_id: str
+    request: naming.NamingRequest
+
+
+@dataclass(frozen=True)
+class SenseJob:
+    """有所感畫完那一筆、要請模型取名的私有意境（悟意境設計 0.2b 第 9 點：假人的首悟也要叫模型取名，不然首悟紀錄的名字是
+    字表的樣子）：A 段在鎖內開的單（sensing.SenseRequest），交給 bot_runner 在鎖外取名、再拿鎖交回 Game.sense_draw。"""
+
+    request: object  # sensing.SenseRequest
+
+
+@dataclass(frozen=True)
+class DiscussJob:
+    """答應論武、首創要請模型取名（或挑一個）的那一爐：A 段在鎖內開的單（Game.peer_request），交給 bot_runner 在鎖外取名，
+    C 段再拿鎖交回 Game.peer_act（params 帶 proposed）。"""
+
+    sender: str
+    item: str
+    request: naming.NamingRequest
+
+
+@dataclass(frozen=True)
+class EpiphanyJob:
+    """特殊頓悟按「靜心思名」：A 段在鎖內開的單（epiphany.NameAsk），交給 bot_runner 在鎖外請模型取三個名字，
+    C 段再拿鎖交回 Game.epiphany_names（不然候選全是字表的樣子，首悟的名字看得出是假人）。"""
+
+    request: object  # epiphany.NameAsk
+
+
+@dataclass
+class NamingSlot:
+    """這一輪這個假人能不能把一件取名交給模型（首創的爐或絕學定名；bot_runner 給：一次一件、兩件之間要隔一段時間）。
+    open 時開成單子放進 job；不 open 時那一爐不開、那個名先不定，skipped 加一（只是數字，主控台只印總數）。"""
+
+    open: bool = False
+    job: ForgeJob | MasterJob | SenseJob | DiscussJob | EpiphanyJob | None = None
+    skipped: int = 0
+    model: bool = True  # 這個假人程式叫得到模型（有 client、設定開著）；叫不到時頓悟取名直接用字表，不然那個假人一季都卡在取名
+
+
+# 第二輪第 101 批（從移動包搬來）：移動、決戰、陣營都讀
+def next_hop(game: Game, targets: list[str]) -> str | None:
+    """從所在地往路程最近的目標走的下一站：照地圖連線走路程最短的路（地圖擴充設計 3.2）、跳過還沒開放的地點
+    （不管摸清了沒）；已經在目標上或走不到時回傳 None。"""
+    if game.state.player.location in targets:
+        return None
+    found = atlas.shortest_routes(game.state, game.content)
+    reachable = [found[t] for t in targets if t in found and found[t].path]
+    if not reachable:
+        return None
+    best = min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
+    return best.path[0]

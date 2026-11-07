@@ -270,8 +270,8 @@ SHARED: dict[str, str] = {
     "heroine_rules": "女子與隱線的純規則（出不出現、隱線端得出哪一段、給模型的角色與分寸、寫回來的過濾）：人物情誼包的 companion_agent 每一輪對話都叫 role、"
                      "prompt_lines、clean，手上沒有 ctx；女子與隱線包的 rules re-export 同一批物件。只 import 核心的 rules、models、state 與同一層的 figures",
     # core_bots（第二輪第 89 批「假人一」）
-    "bot_base": "假人好幾包都讀的那一半（分數常數、內傷、出陣的值、一次 pick 的快取）：出陣、探索、挑戰本人、移動四包的 bots.py 都叫，放進哪一包都會變成包 import 包，"
-                "留在假人殼又得在函式裡跳回去；只 import 核心的 rules、team、state、core.bounty_base 與同一層的 allied、conquest",
+    "bot_base": "假人好幾包都讀的那一半（分數常數、內傷、出陣的值、一次 pick 的快取，第二輪第 101 批再加素材留多少、取名的單子、下一站）：出陣、探索、挑戰本人、移動、決戰、陣營、鐵匠鋪、捐軍備、煉製、修練、有所感、玩家互動這幾包的 bots.py 都叫，放進哪一包都會變成包 import 包，"
+                "留在假人殼又得在函式裡跳回去；只 import 核心的 rules、team、state、naming、core.bounty_base 與同一層的 allied、atlas、conquest、four_tiers",
 }
 
 # seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；
