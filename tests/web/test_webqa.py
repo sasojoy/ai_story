@@ -247,6 +247,30 @@ def test_no_browser_is_exit_two(tmp_path):
     assert summary["exit"] == 2 and not summary["green"] and "no browser" in summary["tool"][0]
 
 
+def test_a_walk_that_never_ends_is_the_tool_not_a_hang():
+    gate = _load("gate")
+    slow = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        with pytest.raises(gate.ToolBroke, match="round main still running"):
+            gate.wait_all([slow], 0.1, "round main")
+    finally:
+        slow.kill()
+        slow.wait()
+    done = subprocess.Popen([sys.executable, "-c", "pass"])
+    gate.wait_all([done], 20, "round main")
+
+
+@pytest.mark.parametrize("script", ["driver.mjs", "replay.mjs"])
+def test_the_browser_cannot_hold_the_walk_forever(script):
+    text = (TOOL / script).read_text(encoding="utf-8")
+    assert "ws.onclose" in text and "ANSWER_SECONDS" in text and "clearTimeout" in text
+
+
+def test_a_dialog_is_answered_and_shows_as_a_console_line():
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
+    assert "Page.javascriptDialogOpening" in text and "Page.handleJavaScriptDialog" in text and "report.console.push(`${sceneNow}: dialog" in text
+
+
 def test_the_real_servers_port_is_refused(tmp_path):
     pytest.importorskip("PIL")
     fake = tmp_path / "fake.exe"

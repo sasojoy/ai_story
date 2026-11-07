@@ -18,12 +18,26 @@ for (const d of [SHOTS, STY]) mkdirSync(d, { recursive: true });
 const PROFILE = join(OUT, "chrome-profile");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
+const ANSWER_SECONDS = 120; // same as the walk: a browser that stopped answering ends the replay, exit 2
+let dead = null;
+function die(why) {
+  if (dead) return;
+  dead = new Error(why);
+  for (const { no } of [...pending.values()]) no(dead);
+  pending.clear();
+}
 const report = { label, round: "replay", facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [], hashes: {} };
 
 const chrome = spawn(process.env.TIANXIA_WEBQA_CHROME, ["--headless=new", `--remote-debugging-port=${CHROME_PORT}`, `--user-data-dir=${PROFILE}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
 let ws, seq = 0, sceneNow = "(start)";
 const pending = new Map();
-const cdp = (method, params = {}) => new Promise((ok, no) => { const id = ++seq; pending.set(id, { ok, no }); ws.send(JSON.stringify({ id, method, params })); });
+const cdp = (method, params = {}) => new Promise((ok, no) => {
+  if (dead) return no(dead);
+  const id = ++seq;
+  const timer = setTimeout(() => die(`no answer to ${method} in ${ANSWER_SECONDS}s, at ${sceneNow}`), ANSWER_SECONDS * 1000);
+  pending.set(id, { ok: (r) => { clearTimeout(timer); ok(r); }, no: (e) => { clearTimeout(timer); no(e); } });
+  ws.send(JSON.stringify({ id, method, params }));
+});
 async function connect() {
   for (let i = 0; i < 60; i++) {
     try {
@@ -35,6 +49,7 @@ async function connect() {
     } catch (e) { await sleep(300); }
   }
   if (!ws) throw new Error("no browser on port " + CHROME_PORT);
+  ws.onclose = () => die(`the browser went away, at ${sceneNow}`);
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
     if (d.id && pending.has(d.id)) { const { ok, no } = pending.get(d.id); pending.delete(d.id); d.error ? no(new Error(JSON.stringify(d.error))) : ok(d.result); return; }

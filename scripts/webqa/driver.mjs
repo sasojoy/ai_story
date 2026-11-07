@@ -21,13 +21,25 @@ const PW = "qa-" + "test-only-" + "pw1"; // test value, only valid on the throwa
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(`[${label}]`, ...a);
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
+// Nothing the walk asks takes this long. A page stuck in a loop or a dead browser never answers at all, and from then on nothing can be believed: the walk stops, exit 2.
+const ANSWER_SECONDS = 120;
+let dead = null;
+function die(why) {
+  if (dead) return;
+  dead = new Error(why);
+  for (const { no } of [...pending.values()]) no(dead);
+  pending.clear();
+}
 
 // ---- plain API (node), cookie by hand ----
 const jars = {};
 async function api(who, path, body, method) {
   const headers = { "Content-Type": "application/json" };
   if (jars[who]) headers.Cookie = `tx_session=${jars[who]}`;
-  const res = await fetch(API + path, { method: method || (body === undefined ? "GET" : "POST"), headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const res = await fetch(API + path, { method: method || (body === undefined ? "GET" : "POST"), headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(ANSWER_SECONDS * 1000) }).catch((e) => {
+    if (e.name === "TimeoutError") die(`no answer from ${path} in ${ANSWER_SECONDS}s, at ${sceneNow}`);
+    throw e;
+  });
   const sc = res.headers.get("set-cookie");
   if (sc) { const m = /tx_session=([^;]+)/.exec(sc); if (m) jars[who] = m[1]; }
   const text = await res.text();
@@ -63,10 +75,15 @@ async function connect() {
     } catch (e) { await sleep(500); }
   }
   if (!ws) throw new Error("no browser on port " + CHROME_PORT);
+  ws.onclose = () => die(`the browser went away, at ${sceneNow}`);
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
     if (d.id && pending.has(d.id)) { const { ok, no } = pending.get(d.id); pending.delete(d.id); d.error ? no(new Error(JSON.stringify(d.error))) : ok(d.result); return; }
     const p = d.params;
+    if (d.method === "Page.javascriptDialogOpening") { // the page has none today; one on the head alone would hold every evaluate forever. Say so, and answer it.
+      report.console.push(`${sceneNow}: dialog ${p.type}: ${p.message}`);
+      cdp("Page.handleJavaScriptDialog", { accept: true }).catch(() => {});
+    }
     if (d.method === "Runtime.exceptionThrown") report.exceptions.push(`${sceneNow}: ${(p.exceptionDetails.exception && p.exceptionDetails.exception.description) || p.exceptionDetails.text}`);
     if (d.method === "Runtime.consoleAPICalled" && (p.type === "error" || p.type === "warning")) report.console.push(`${sceneNow}: ${p.type}: ${p.args.map((a) => a.value || a.description || "").join(" ")}`);
     if (d.method === "Log.entryAdded" && (p.entry.level === "error" || p.entry.level === "warning")) report.console.push(`${sceneNow}: log ${p.entry.level}: ${p.entry.text} ${p.entry.url || ""}`);
@@ -82,7 +99,13 @@ async function connect() {
     }
   };
 }
-const cdp = (method, params = {}) => new Promise((ok, no) => { const id = ++seq; pending.set(id, { ok, no }); ws.send(JSON.stringify({ id, method, params })); });
+const cdp = (method, params = {}) => new Promise((ok, no) => {
+  if (dead) return no(dead);
+  const id = ++seq;
+  const timer = setTimeout(() => die(`no answer to ${method} in ${ANSWER_SECONDS}s, at ${sceneNow}`), ANSWER_SECONDS * 1000);
+  pending.set(id, { ok: (r) => { clearTimeout(timer); ok(r); }, no: (e) => { clearTimeout(timer); no(e); } });
+  ws.send(JSON.stringify({ id, method, params }));
+});
 async function ev(expr) {
   const r = await cdp("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true });
   if (r.exceptionDetails) throw new Error("eval failed: " + ((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || "").slice(0, 300) + " :: " + expr.slice(0, 80));
@@ -389,7 +412,7 @@ try {
     if (ONLY.length && !ONLY.includes(name)) continue;
     log("== flow", name);
     sceneNow = `flow:${name}`;
-    try { await fn(ctx); } catch (e) { report.steps.push(`FLOW ${name} threw: ${e && e.stack || e}`); log("FLOW THREW", name, String(e && e.stack || e).slice(0, 600)); }
+    try { await fn(ctx); } catch (e) { if (dead) throw dead; report.steps.push(`FLOW ${name} threw: ${e && e.stack || e}`); log("FLOW THREW", name, String(e && e.stack || e).slice(0, 600)); }
   }
   // what the browser parsed, every stylesheet rule
   if (jars.p1) await asPlayer("p1"); else await load("/");

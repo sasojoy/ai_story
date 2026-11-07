@@ -28,6 +28,11 @@ FORBIDDEN_PORTS = {7861}
 DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if os.name == "nt" else 0
 STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".ogg")
 MUTATIONS = ("card-padding", "css-last")
+HOSTILE = {  # selftest only: a page that does what the walk must survive
+    "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
+    "page-alert": 'document.addEventListener("click", () => { alert("webqa selftest"); }, { capture: true, once: true });',
+}
+ROUND_SECONDS = {"fast": 5400, "full": 16200}  # the slowest round so far, main on fast, took 34 minutes
 PORT_LOCK = threading.Lock()
 
 
@@ -96,6 +101,16 @@ def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
 
 
+def wait_all(procs, seconds: float, what: str) -> None:
+    """Each of them done within seconds, or the tool broke. The caller's finally kills what is left."""
+    deadline = time.monotonic() + seconds
+    for p in procs:
+        try:
+            p.wait(max(0.01, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as e:
+            raise ToolBroke(f"{what} still running after {seconds}s") from e
+
+
 def clean_env() -> dict:
     """Nothing from outside decides how the walk goes: no QA_*, no TIANXIA_* (admins, database, profile, public url). The hash seed stays fixed or sets come out in another order."""
     env = {k: v for k, v in os.environ.items() if not k.startswith(("QA_", "TIANXIA_"))}
@@ -128,6 +143,9 @@ def mutate(copy: str, which: str) -> None:
         lines.insert(links[-1], line)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write("\n".join(lines))
+    elif which in HOSTILE:
+        with open(os.path.join(copy, "web", "app.js"), "a", encoding="utf-8", newline="") as f:
+            f.write("\n" + HOSTILE[which] + "\n")
     else:
         raise ToolBroke(f"no mutation {which}")
 
@@ -206,8 +224,7 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
             walks.append(walk)
             drivers.append(subprocess.Popen([args.node, "--no-warnings", os.path.join(HERE, "driver.mjs"), label, page, api, walk, str(cdp)],
                                             stdout=open(os.path.join(folder, f"{label}.driver.out"), "wb"), stderr=open(os.path.join(folder, f"{label}.driver.err"), "wb"), env=env, cwd=folder, creationflags=DETACHED))
-        for d in drivers:
-            d.wait()
+        wait_all(drivers, args.round_seconds or ROUND_SECONDS[args.corpus], f"round {name}")
     finally:
         for d in drivers:
             if d.poll() is None:
@@ -434,7 +451,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=MUTATIONS, help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
     ap.add_argument("--no-must-reach", action="store_true", help="for walking old commits")

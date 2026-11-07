@@ -4,6 +4,7 @@
   2. The same again: the fingerprint is the same (noise counts are allowed to move, they are not in it).
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round.
+  4. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
 usage: python selftest.py --sha <x> --out <dir> [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only | --walk-only] [--only flows]
 
@@ -89,6 +90,11 @@ def main(argv=None) -> int:
         for which in gate.MUTATIONS:
             s = _gate(a, "mut_" + which, "--mutate", which)
             rows.append((f"c round --mutate {which} goes red", s["code"] == 1, f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})}"))
+        a.only = a.only or "accounts,smoke"
+        s = _gate(a, "hostile_hang", "--mutate", "page-hang")
+        rows.append(("a page stuck in a loop is exit 2, not a hang", s["code"] == 2, f"exit {s['code']} {s['took']}s tool {[t[:160] for t in s['tool'][:2]]}"))
+        s = _gate(a, "hostile_alert", "--mutate", "page-alert")
+        rows.append(("an alert on the head alone goes red and the walk goes on", s["code"] == 1 and any(x["class"] == "console-head-only" for x in s["real"]), f"exit {s['code']} real {[x['class'] for x in s['real']][:6]}"))
     held = all(ok for _, ok, _ in rows)
     for name, ok, detail in rows:
         print("ok  " if ok else "FAIL", name, "|", detail)

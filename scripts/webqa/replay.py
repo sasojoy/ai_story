@@ -36,6 +36,7 @@ ORIGIN = re.compile(r"https?://(?:127\.0\.0\.1|localhost):\d+")
 SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
 HEAD = re.compile(r"<head\b[^>]*>(.*?)</head>", re.S | re.I)
 ANIMATION_PROPS = ("animation-", "transition-")
+REPLAY_SECONDS = 3600  # about 1.3 seconds a snapshot
 TYPES = {".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".gif": "image/gif", ".ico": "image/x-icon", ".woff2": "font/woff2", ".woff": "font/woff"}
 
 
@@ -155,8 +156,7 @@ def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, sh
             walks.append(walk)
             procs.append(subprocess.Popen([node, "--no-warnings", os.path.join(HERE, "replay.mjs"), label, origin, walk, str(cdp), list_file, *flags],
                                           stdout=open(os.path.join(work, f"{label}.out"), "wb"), stderr=open(os.path.join(work, f"{label}.err"), "wb"), env=env, cwd=work, creationflags=gate.DETACHED))
-        for p in procs:
-            p.wait()
+        gate.wait_all(procs, REPLAY_SECONDS, "replay")
     finally:
         for p in procs:
             if p.poll() is None:
