@@ -115,6 +115,7 @@ class SwitchboardScenario(Scenario):
     unpaused 繼續、接著做舊程式寫到一半的：聞笛應戰、墨衡擺式成了（「此式偏剛」）、立名回「先立意」（立意是三段式、不在動作表）、擱下；
     core_ops 別軌都沒打到、留在殼裡的 8 個：匿名開關、性別（定了改不了那一句）、療傷（氣血無恙那一句）、推得動的大勢線、定戰況、排時間（test 沒有時刻表，回一句）、清鎖定、跳下一件；
     admin_ops 管理者表每一個 op（季的三顆除外）：空的 body、六種壞值；targets 動到別人存檔的 op 帶真的名字（_tell_tabs 第二個參數是那個名字；mingtie_restore、outing_erase 不在那張表，是空字串）；
+    accounts 管理頁重設密碼那兩條（第二輪第 90 批補）：沒登入、玩家擋住，管理者搜帳號、重設（查無此人、太短、太長、照名號、照帳號），重設之後舊密碼登不進、舊的工作階段失效、臨時密碼登得進；
     bots 假人兩個若干輪（假人走 Game 的公開方法、不走動作表，這一段確定委派沒被動到；test 沒有輪到假人，online 0）；season 收季、休季每個玩家動作打一次、開下一季。
     管理頁（/api/admin、/api/admin/player）在 setup、opened、half、core_ops、admin_ops、season 的尾巴整份記下來（畫面逐字不變）。
 
@@ -126,7 +127,7 @@ class SwitchboardScenario(Scenario):
     MO, WEN = "墨衡", "聞笛"
     LOC = "runan_wilds"
     PHASES_FIRST = ["setup", "tables", "strangers", "not_admin", "preparing", "opened", "main_ops", "menxia_ops", "half"]
-    PHASES_SECOND = ["resume", "paused", "unpaused", "core_ops", "admin_ops", "targets", "bots", "season"]
+    PHASES_SECOND = ["resume", "paused", "unpaused", "core_ops", "admin_ops", "targets", "accounts", "bots", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -230,11 +231,12 @@ class SwitchboardScenario(Scenario):
         s = self.server
         emit("MAIN_ACTIONS 的鍵", list(s.MAIN_ACTIONS))
         emit("MENXIA_ACTIONS 的鍵", list(s.MENXIA_ACTIONS))
-        admin = set(s.ADMIN_ACTIONS) | set(s.FEATURE_ADMIN_ACTIONS)
+        leftover = getattr(s, "ADMIN_ACTIONS", {})  # 第二輪第 90 批把殼的那一張搬進管理者包（base 還有、head 沒有；合起來的名字不變）
+        admin = set(leftover) | set(s.FEATURE_ADMIN_ACTIONS)
         emit("管理者動作（兩張表合起來）", sorted(admin))
         emit("暫停中照做", sorted(s.PAUSE_OK_ACTIONS))
         emit("動到別人的存檔", sorted(s.PLAYER_ADMIN_ACTIONS))
-        emit("這一軌沒列到的 op", [sorted(set(s.MAIN_ACTIONS) - set(SWITCH_MAIN)), sorted(set(s.MENXIA_ACTIONS) - set(SWITCH_MENXIA)), sorted(set(s.ADMIN_ACTIONS) - set(SWITCH_ADMIN))])
+        emit("這一軌沒列到的 op", [sorted(set(s.MAIN_ACTIONS) - set(SWITCH_MAIN)), sorted(set(s.MENXIA_ACTIONS) - set(SWITCH_MENXIA)), sorted(set(leftover) - set(SWITCH_ADMIN))])
 
     def strangers(self) -> None:
         """沒登入：每一個 op 一下（功能包的管理者工具也要 401、不是 404）；跨表的、不認得的 op。"""
@@ -350,6 +352,24 @@ class SwitchboardScenario(Scenario):
         self.probe(ADMIN, "/api/do/mingtie_remove", {"name": self.MO, "version": 0}, keep=True)
         self.probe(ADMIN, "/api/do/mingtie_restore", {"name": self.MO, "version": 0}, keep=True)
         self.probe(ADMIN, "/api/do/outing_erase", {"name": self.MO, "id": 1}, keep=True)
+
+    def accounts(self) -> None:
+        """管理頁重設密碼那兩條（第二輪第 90 批補，之前沒有一軌打到）：不是管理者一律擋；管理者搜帳號（空的、名號、帳號不分大小寫、搜不到、壞值、萬用字元）、重設（查無此人、太短、太長、沒帶、照名號、照帳號）。
+        重設之後那個帳號所有裝置都登出：舊的工作階段失效、舊密碼登不進、臨時密碼登得進。"""
+        login = self.login_of(self.WEN)
+        for who in (None, self.MO):
+            self.probe(who, "/api/admin/accounts", {"q": login})
+            self.probe(who, "/api/admin/reset_password", {"target": login, "temp": "temp-pass-1"})
+        for q in ("", self.WEN, login.upper(), "沒有這個人", None, "%"):
+            self.probe(ADMIN, "/api/admin/accounts", {"q": q}, keep=True)
+        for body in ({"target": "沒有這個人", "temp": "temp-pass-1"}, {"target": login, "temp": "123"}, {"target": login, "temp": "長" * 200}, {},
+                     {"target": self.WEN, "temp": "temp-pass-1"}, {"target": login, "temp": "temp-pass-2"}):
+            self.probe(ADMIN, "/api/admin/reset_password", body, keep=True)
+        self.main(self.WEN)
+        self.call(self.WEN, "POST", "/api/login", {"login": login, "password": self.passwords[self.WEN]})
+        self.passwords[self.WEN] = "temp-pass-2"
+        self.relogin(self.WEN)
+        self.main(self.WEN)
 
     def bots(self) -> None:
         """假人：BotRunner 兩個（官軍）若干輪。假人走 Game 的公開方法、不走動作表，這一段看的是委派沒被動到。"""
