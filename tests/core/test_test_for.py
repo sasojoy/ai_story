@@ -1137,6 +1137,7 @@ STAGE_PACKAGES += ["seal"]  # seal（全部拆包第 27 批）：玉璽包的 se
 STAGE_PACKAGES += ["legacy", "hire"]  # 合回 develop（2026-11-06）：傳承、招募的 <包>_stage.py
 STAGE_PACKAGES += ["persona"]  # 人物性子（develop cf927227，合回第 4 段）：persona_stage.py
 STAGE_PACKAGES += ["heroines"]  # 女子與隱線（PR #179）：heroines_stage.py
+STAGE_PACKAGES += ["mail"]  # 帖友書信（scripts/new_feature.py 生的 mail_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

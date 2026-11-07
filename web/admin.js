@@ -14,7 +14,7 @@
   // 管理頁的幾塊（照用途）：id、標題。沒東西的那一塊不畫（領地爭奪、玉璽、商城、形象、名帖照開關與有沒有資料）
   const AD_SECS = {
     season: "賽季與時鐘", battle: "決戰與時刻表", trend: "大勢與事件", conquest: "領地爭奪", seal: "玉璽",
-    player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉",
+    player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉", mail: "書信檢舉",
   };
 
 
@@ -67,6 +67,7 @@
       conquest: a.conquest ? conquestAdminHtml(a.conquest) : "", seal: a.seal ? sealAdminHtml(a.seal) : "", player: adPlayerSecHtml(a),
       mall: S.main.mall ? mallAdminHtml() : "", looks: S.main.mall && S.main.looks_admin ? looksAdminHtml() : "",
       mingtie: a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : "",
+      mail: a.mail && a.mail.length && typeof mailAdminHtml === "function" ? mailAdminHtml(a.mail) : "", // 帖友書信（web/mail.js）
     }[id] || "";
   }
   // 四格：季、決戰、在線、模型佇列
@@ -367,6 +368,10 @@
       seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
       mingtie_remove: [`撤下 ${body.name} 的第 ${body.version} 版名帖：畫與自題那一句清掉（頭銜照留），他的江湖紀錄會寫一句，收過這一張的人也看不到了，確定？`, "確定撤下"],
       mingtie_restore: [`放回 ${body.name} 的第 ${body.version} 版名帖：檢舉清掉、大家照舊看得到（檢舉過的人自己那裡照樣藏著），確定？`, "確定放回"],
+      // 帖友書信的檢舉（web/mail.js 的 mailAdminHtml；待 joy 潤）
+      mail_remove: ["撤下這一封信：寄的人與收的人都看不到了，確定？", "確定撤下"],
+      mail_keep: ["這一封信看過沒事：檢舉清掉（檢舉的人那裡照樣收著），確定？", "確定"],
+      mail_mute: body.days ? [`停 ${body.name} 寄信 ${body.days} 天：這段時間他寫不了信（收照收），確定？`, "確定停寄"] : [`解開 ${body.name} 的停寄，確定？`, "確定解開"],
       seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
       // 蓋章的後果要寫明（審查 I2）：天命之季過後再換季，七片全部散去、每一位持有者都失去碎片
       seal_mandate: body.when === "cancel"
@@ -475,6 +480,7 @@
             body.when = el.dataset.when || ""; // 蓋天命之季：next／now（玉璽二）
             body.hide = el.dataset.hide === "1"; // 領地爭奪的季「強制現世」是「現在藏一片」（問句不同；送出去的欄位一樣）
           }
+          if (op.startsWith("mail_")) { body.id = Number(el.dataset.id || 0); body.name = el.dataset.name || ""; body.days = Number(el.dataset.days || 0); }
           if (op.startsWith("mingtie_")) { body.name = el.dataset.name || ""; body.version = Number(el.dataset.version || 0); }
           if (op === "conquest_set" || op === "conquest_progress" || op === "admin_conquest_letter") { // 領地爭奪一組：區塊、陣營、進度照欄位讀
             const pick = (id) => document.getElementById(id) || {};

@@ -38,7 +38,7 @@
     const can = !z.card.hidden && z.name !== me;
     return `<div class="mt-zoom-layer" data-act="mt-unzoom" role="dialog" aria-label="${esc(z.name)}的名帖">
       <div class="mt-zoom-box">${mtCardHtml(z.card, z.name, "zoom")}${z.when ? `<p class="mt-when">${esc(z.when)}</p>` : ""}
-        <div class="row"><button class="btn ghost small" data-act="mt-unzoom">收起</button>${can ? '<button class="btn ghost small mt-report" data-act="mt-report">檢舉這一張</button>' : ""}</div></div></div>`;
+        <div class="row"><button class="btn ghost small" data-act="mt-unzoom">收起</button>${z.name !== me && typeof mailShown === "function" && mailShown() ? `<button class="btn small" data-act="mail-write" data-name="${esc(z.name)}">寫信</button>` : ""}${can ? '<button class="btn ghost small mt-report" data-act="mt-report">檢舉這一張</button>' : ""}</div></div></div>`;
   }
   async function mtReport() {
     const z = S.mtZoom;

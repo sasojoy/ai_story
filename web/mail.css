@@ -1,0 +1,53 @@
+/* 帖友書信（web/mail.js；tianxia/features/mail）：信匣一列一位帖友、往來是一張張信紙（自己寫的深一點）、名號前兩字一方朱印 */
+
+.mail-list { padding: 0; overflow: hidden; }
+.mail-row {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  width: 100%; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); text-align: left; font: inherit;
+}
+.mail-row:last-child { border-bottom: 0; }
+.mail-seal {
+  width: 38px; height: 38px; border-radius: 6px; background: var(--accent); color: var(--accent-ink);
+  font-family: var(--serif); font-size: 13px; line-height: 1.1; display: grid; place-items: center; text-align: center; white-space: pre;
+}
+.mail-who { min-width: 0; display: flex; flex-direction: column; }
+.mail-who b { font-family: var(--serif); }
+.mail-peek { font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-when { font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; align-items: flex-end; gap: 3px; white-space: nowrap; }
+.mail-dot {
+  display: inline-block; min-width: 16px; height: 16px; line-height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-ink); font-size: 11px; font-style: normal; text-align: center;
+}
+.mail-friends { display: flex; flex-wrap: wrap; gap: 6px; }
+.mail-foot { font-size: 13px; }
+.mail-blocked summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.mail-blocked .row { justify-content: space-between; padding: 4px 0; }
+
+.mail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mail-head b { font-family: var(--serif); font-size: 17px; }
+.mail-more-btn { margin-left: auto; font-size: 20px; line-height: 1; padding: 2px 8px; }
+.mail-menu { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 8px; }
+.mail-menu button { text-align: left; background: none; border: 0; color: var(--ink); font: inherit; padding: 4px 0; }
+.mail-menu p { font-size: 12px; margin: 0; }
+
+.mail-thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.mail-season { align-self: center; font-size: 12px; color: var(--ink-2); margin: 2px 0; }
+.mail-older { align-self: center; }
+.mail-letter {
+  max-width: 88%; align-self: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card); font-family: var(--serif); font-size: 15px; line-height: 1.75;
+}
+.mail-letter.mine { align-self: flex-end; background: var(--card-2); }
+.mail-letter p { margin: 0; overflow-wrap: anywhere; }
+.mail-sig { display: block; text-align: right; font-family: var(--sans); font-size: 11px; line-height: 1.6; color: var(--ink-2); margin-top: 4px; }
+.mail-report { font-size: 11px; color: var(--ink-2); margin-left: 4px; }
+
+.mail-compose { display: flex; flex-direction: column; gap: 6px; }
+.mail-paper { width: 100%; min-height: 110px; resize: vertical; font-family: var(--serif); line-height: 1.7; box-sizing: border-box; }
+.mail-send-row { justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mail-send-row .muted { font-size: 12px; flex: 1 1 auto; min-width: 0; }
+.mail-send-row .btn { flex: 0 0 auto; width: auto; padding-inline: 28px; }
+.mail-cant { font-size: 14px; }
+
+.mail-admin-row { border-top: 1px solid var(--line); padding: 8px 0; }
+.mail-admin-row blockquote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--line); font-family: var(--serif); }
