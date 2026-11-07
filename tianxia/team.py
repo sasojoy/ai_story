@@ -1152,7 +1152,7 @@ def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
     - team.py：trait_mods（`.get("power_from_difficulty")`、`"double_luck" in`）、fight（`"no_loss" in`）、
       take_encounter_toll（`"no_injury" in`）。
     - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
-      _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
+      _play_rounds（`.get("no_loss")`）、combat.trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
       `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
     - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
     # 本命戰法第三批（定案 /mnt/project-files/plan/武學與兵器戰法定案.md）：先手、破甲、險、連環、借力改成回合裡的戰法（tactics.py），

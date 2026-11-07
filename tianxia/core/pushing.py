@@ -13,8 +13,8 @@
 - 包的委派（CORE_DELEGATE_CALLERS）：event_progress → _story_tick（一條線，位置不動：前面提早回那一支、後面接在 push_progress 之後那一支）。
 - 留在 Game 上的：state、content、_side、_pill_day；push_progress 讀 ctx._clash_won、寫 ctx._sortie_marked、ctx._sortie_moved、ctx._sortie_flipped：那是 Game 的欄位，不是這裡的模組變數。
 
-名字的綁法照 engine：engine 拿名字的（change_trend、front_ids、is_revealed、resolve_goals、resolve_trend、world_trend_value、season_length_days）這裡也拿名字，叫模組屬性的（calendar、conquest、push、seal_acts、
-territory、wins、outcome_rules）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣；deed_points 的 wins_rules.credit 這裡寫 wins.credit，engine 的 wins_rules 與 wins 是同一個模組的兩個別名。
+名字的綁法照搬之前的 engine：engine 拿名字的（change_trend、front_ids、is_revealed、resolve_goals、resolve_trend、world_trend_value、season_length_days）這裡也拿名字，叫模組屬性的（calendar、conquest、push、seal_acts、
+territory、wins、outcome_rules）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣；deed_points 的 wins_rules.credit 這裡寫 wins.credit，搬之前 engine 的 wins_rules 與 wins 是同一個模組（wins_rules 第 98 批拿掉）的兩個別名。
 engine 自己的 DAY 跟 calendar.DAY 同值同型別（86400）。引擎的 change_trend 換成假的腳本（scripts/sim_trend_sources.py）要連這裡的 pushing.change_trend 一起換。
 engine 在 `from .core import combat` 之後才 import 這一份（這裡 import 的模組那時都已經載入，載入順序不變）。同 event_check 不進 MODULES、不進 FEATURES；這裡不 import 包。
 

@@ -50,7 +50,7 @@ CLASH_THEIRS_WON = "{rival}在{place}出陣，撞上了你；你逼退了{him}�
 CLASH_THEIRS_LOST = "{rival}在{place}出陣，撞上了你；你不敵，{him}那一下推得更多。"
 CLASH_THEIRS_DRAW = "{rival}在{place}出陣，撞上了你；兩人鬥了一陣不分高下，各自退開。"
 
-# sortie（全部拆包第 17 批：原本寫在 engine.py；那邊留成 import，三個測試檔照舊從 engine 拿）
+# sortie（全部拆包第 17 批：原本寫在 engine.py；測試第二輪第 98 批起從這裡拿）
 # 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事。
 # 騎著馬時改用 TRAIN_CONFIRM_RIDING（裝備四欄 5.11），TRAIN_CONFIRM 本身不動（三個測試檔拿它比全等）
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"

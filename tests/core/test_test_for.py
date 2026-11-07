@@ -1331,6 +1331,17 @@ def test_the_combat_service_file_picks_its_base_not_core_and_smoke():
     assert test_for.service_word("battle_scores") == "battle" and test_for.word_tests("battle") <= picked.files
 
 
+# core_imports（第二輪第 98 批）
+def test_the_combat_service_file_names_the_squad_encounter_it_took_over():
+    """第 98 批把 _squad_encounter 收進真檔：底不動（service_word 是 encounter，本來就在底裡），hunk 落在 squad_encounter 時 why 寫到它，不跑核心測試與煙霧。
+    寫到 _squad_encounter、可是檔名不在底裡的 7 個檔（test_fronts、test_characters……）只拿它當準備動作，留給閘門。"""
+    assert test_for.service_word("squad_encounter") == "encounter"
+    picked = test_for.pick(["tianxia/core/combat.py"], hunks_of=_core_hunk("combat", "squad_encounter"))
+    assert not picked.core and not picked.smoke
+    assert {"test_encounter.py", "test_tactics.py", "test_engine.py", "test_feature_boundaries.py"} <= {p.name for p in picked.files}
+    assert any("squad_encounter" in w for w in picked.why)
+
+
 def test_the_push_and_pill_service_files_pick_their_base_not_core_and_smoke():
     """第 80 批開的真檔：goals、deed_points 的名字認不出功能（service_word 空字串），靠這個檔的底，不跑核心測試與煙霧；refill_stamina 的底是 pill、stamina。
     push_trend、push_room 經 ctx.daily_push_cap 叫它（test_seal_acts 換掉 Game.daily_push_cap，要打得到）：_core_refs 只看 ast.Name，不往上算；

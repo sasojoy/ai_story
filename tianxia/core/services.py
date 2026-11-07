@@ -38,7 +38,7 @@ class RaidSpoils:
     evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
 
 
-# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單與結伴分收穫要讀、核心的換季重設與讀檔清舊〔_drop_stale_references〕也讀，**留在核心**〔第 48 批 PM 認定〕，engine 照舊叫得到）
+# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單與結伴分收穫要讀、核心的換季重設與讀檔清舊〔_drop_stale_references〕也讀，**留在核心**〔第 48 批 PM 認定〕）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {  # 留核心：讀檔清舊與換季重設還讀（第 47 批 PM 認定第 4 條）
     "think": ("邊走邊想", "想過了"),
@@ -62,7 +62,7 @@ class HutReward(str):
 def drill_share(amount: int, share: float) -> int:
     """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
     操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
-    （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
+    （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡。測試從這裡拿，engine 第 98 批起不留這個名字。）"""
     return int(amount * share + 0.5)
 
 

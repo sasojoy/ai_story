@@ -1,6 +1,6 @@
 """單打服務（核心本體；第二輪第 79 批，計畫 docs/superpowers/plans/2026-11-07-第二輪-第79批.md，導覽 docs/guide/戰鬥.md）：
 打一場的每一包都用的那幾段。原本是 Game 上的 40 個方法，本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3），函式名拿掉開頭的底線
-（is_big、fight_request 照舊），Game 留 35 個一行委派（server、假人、事件檢定、各包、測試與 Game 原位在叫；只有這裡叫的 exp_changes、trait_say、
+（is_big、fight_request 照舊），Game 留 36 個一行委派（第 98 批收進 squad_encounter 多一個；server、假人、事件檢定、各包、測試與 Game 原位在叫；只有這裡叫的 exp_changes、trait_say、
 trait_lines、thin_drops、battle_mount 不留）。_narrate、_spar_power、_spar_mirror 在 Game 上照舊是 staticmethod（懸賞、玉璽的測試用 staticmethod 換 _spar_power）。
 
 - 大場面：is_big、fight_squad、fight_request（A 段，鎖內只讀）、checked_fight（C 段重驗）、fight_gone、judged、fight_with、style_note、terrain_note、narrate
@@ -8,20 +8,24 @@ trait_lines、thin_drops、battle_mount 不留）。_narrate、_spar_power、_sp
 - 操練的帳與立功：drill_gains、exp_changes、famed_news、deed_fame、record_exp
 - 收場：lose_silver、player_hp_and_cap、player_hp、hp_facts、take_toll、play_rounds、trait_say、trait_lines、story_squad、tier3、battle_rewards、thin_drops、seize、file_battle
 - 本人對本人：spar_power、spar_mirror
+- 打一場的主流程：squad_encounter（第二輪第 98 批）
 - 模組層的名字：TollFacts、LOW_HP_RATIO、FIGHT_LEFT、FIGHT_CHANGED、FIGHT_GONE_LINES（engine 照名字 import 回 FIGHT_GONE_LINES、LOW_HP_RATIO）
 
 哪些經 ctx（手冊第十五節「換掉的才打得到」；tests/core/boundary_tables.py 的 COMBAT_VIA_CTX 守）：
-- 被測試、腳本換掉的 8 個 Game 方法（judged、lose_silver、battle_rewards、seize、battle_power、battle_scores、spar_power、fight_request），模組裡只有兩處
-  互叫碰到它們：battle_scores → ctx._battle_power、checked_fight → ctx.fight_request。其餘 6 個模組裡沒有人互叫，都經 _squad_encounter 的 self._x 或包的 ctx._x，
-  打得到。模組裡其他互叫直接叫函式（不多跳一層）。
-- 包的委派（CORE_DELEGATE_CALLERS）：battle_marks → _escort_carry、_seal_bare；battle_gear → _duel_cut；seize → _seize_chance。
-- 留在 Game 上的：state、content、world、rng、client、options、_draft、_fight、_last_wear、_loot_scale、_gate_scale、_drop_scale。
+- 被測試、腳本換掉的 8 個 Game 方法（judged、lose_silver、battle_rewards、seize、battle_power、battle_scores、spar_power、fight_request），模組裡互叫碰到它們的都寫 ctx._x：
+  battle_scores → ctx._battle_power、checked_fight → ctx.fight_request、squad_encounter → ctx._judged、ctx._lose_silver、ctx._battle_rewards、ctx._seize。
+  其餘 2 個（battle_scores、spar_power）模組裡沒有人互叫，都經包的 ctx._x，打得到。模組裡其他互叫直接叫函式（不多跳一層）。
+- 包的委派（CORE_DELEGATE_CALLERS）：battle_marks → _escort_carry、_seal_bare；battle_gear → _duel_cut；seize → _seize_chance；
+  squad_encounter → _drill、_sortie_rewards、train_trend_push、duel_on、_order_credit、_fs_after_win、_opp_on_win。
+- 留在 Game 上的：state、content、world、rng、client、options、_draft、_fight、_last_wear、_loot_scale、_gate_scale、_drop_scale、_drills_with；
+  別的核心檔經 ctx：push_trend、_push_progress（pushing）、publish（事件）。
   judged、file_battle 會寫 ctx._fight、ctx._last_wear：那是 Game 的欄位，不是這裡的模組變數。
 
-_squad_encounter（打一場的主流程）的本體第 79 批還在 Game（engine.py，照舊在 GAME_DIRECT）：它留著，sortie.on、sortie.PROLOGUE_FIGHT 就不必換、字不必搬核心，
-擲骰順序碰都不碰；收它的事交第 98 批。它照舊叫 self._x（都有委派）。
+squad_encounter（打一場的主流程，第二輪第 98 批從 Game 收進來，Game 留 _squad_encounter 一行委派）逐行照抄，擲骰與呼叫的先後一行都沒動，只換兩個名字：
+sortie.on → territory.on（features/sortie/rules.py 的 on 整個函式就是 return territory.on(content)，tests、tianxia、scripts 沒有人換掉這兩個，是同一件事）；
+sortie.PROLOGUE_FIGHT → PROLOGUE_FIGHT（字搬進 core/services.py，出陣包與 engine 留的名字是同一個物件）。事件 win 的發布點跟著搬，位置不動。
 
-名字的綁法照 engine：engine 拿名字的（add_rumor、game_day、season_one、PLAYER、drill_share）這裡也拿名字，engine 叫模組屬性的（team、encounter、materials、
+名字的綁法照搬之前的 engine：engine 拿名字的（add_rumor、front_of、game_day、season_one、PLAYER、drill_share）這裡也拿名字，engine 叫模組屬性的（team、encounter、materials、
 treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。各有自己一份亂數的（lose_silver、tier3、thin_drops、play_rounds）種子字串一個字不動，
 不碰 Game.rng；battle_rewards、fight_with 的 ctx.rng 是 Game 上那一顆。engine 在 `from .core import event_check` 之後才 import 這一份
 （這裡 import 的模組那時都已經載入，載入順序不變）。同 event_check 不進 MODULES、不進 FEATURES；這裡不 import 包。
@@ -30,10 +34,11 @@ treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打�
 - scripts/test_for.py：這個檔在 CORE_SERVICES。hunk 落在函式、類別、常數上 → 名字的功能群＋這個檔的底（檔名有 battle、encounter、fight、rounds、tactics、team、engine 的，
   量到 36 個檔）＋邊界測試；函式以外（import、這段說明、模組層）或指名了卻沒有差 → 核心測試＋煙霧。互叫經 ctx 的（battle_scores → ctx._battle_power、checked_fight →
   ctx.fight_request）不會往上算（_core_refs 只看 ast.Name），那兩個都有底蓋著。
-- 寫到這些名字、可是檔名不在底裡的只拿它當準備動作，留給閘門（why 寫幾個檔），要當場驗直接給檔名。tests/season、tests/core/test_engine.py 的 slow 留閘門（要看加 --slow）。
+- 寫到這些名字、可是檔名不在底裡的只拿它當準備動作，留給閘門（why 寫幾個檔），要當場驗直接給檔名（寫到 _squad_encounter 的 test_fronts、test_characters、test_contract_core、test_journal、test_front_lines、test_push、test_opportunities_two 也是）。tests/season、tests/core/test_engine.py 的 slow 留閘門（要看加 --slow）。
 - same_behavior：compare --tracks aftermath（這一批開的一軌：等判讀時選項沒了、經驗換心得、落敗保銀兩、掉落打折、寶物多掉、戰力快照），其餘經 events、sortie、train、story、
-  roam、strip、tavern、battle、muster、progress、ring、bout、crossblade、figact、stamina。走不到的 4 行（序章雪恥、沒滿級卻換心得、三階發素材失敗）寫在那一軌的說明。
-- 反方向（第 36 批認定第 1 條）：這裡 import 的 22 個模組都是核心或共用層，test_for.pick 在搬之前、之後挑的一樣，沒有少挑到的，不必另外跑。
+  roam、strip、tavern、battle、muster、progress、ring、bout、crossblade、figact、stamina。走不到的 4 行（fight_request 的序章雪恥、沒滿級卻換心得、三階發素材失敗）寫在那一軌的說明。
+  squad_encounter 的序章標題那一行經 redress 一軌（第 98 批開的；其餘經 aftermath、train、roam、strip）。
+- 反方向（第 36 批認定第 1 條）：這裡 import 的 24 個模組（第 98 批多 atlas、territory）都是核心或共用層，test_for.pick 在搬之前、之後挑的一樣，沒有少挑到的，不必另外跑。
 """
 from __future__ import annotations
 
