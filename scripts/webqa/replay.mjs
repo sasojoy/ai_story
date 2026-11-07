@@ -108,8 +108,16 @@ try {
       facts.sty[v[0]] = sha(d.els.map((r) => r.join(" ")).join("\n"));
       writeFileSync(join(STY, `${id}__${v[0]}.json.gz`), gzipSync(JSON.stringify(d)));
       if (SHOOT) {
-        const r = await cdp("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
-        const buf = Buffer.from(r.data, "base64");
+        // The same picture twice in a row: a background image still being decoded or rescaled shows up here, not between the two sides (y_fig_log, 16 px at 20 levels, one shot in 2,706).
+        let buf, seen = null;
+        for (let i = 0; i < 5; i++) {
+          const r = await cdp("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
+          buf = Buffer.from(r.data, "base64");
+          const h = sha(buf);
+          if (h === seen) break;
+          seen = h;
+          await sleep(50);
+        }
         const f = `${id}__${v[0]}.png`;
         report.hashes[f] = sha(buf);
         writeFileSync(join(SHOTS, f), buf);
