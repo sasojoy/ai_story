@@ -16,9 +16,18 @@ LOOM_OLD_SHEETS = ("style.css", "mall.css", "zhuan.css", "legacy.css")  # 以前
 FACADE_SHELL_FILES = {"shell.js"}  # 殼的掛鉤本身（新加的，不是切出來的）：base 沒有這一支，由網頁測試守
 # 殼化本來就要改的那幾行（renderPage 那張分頁表、包檔尾的登記）：兩邊都不算，其餘每一行要一樣多
 # 第 84 批：包的點擊框（registerClicks 那一行、函式頭、switch、兩個帶 // <包>Click 的收尾）與 app.js 查表的兩行，只認字面，單獨的 } 不放行
+# 第 85 批：包的表單與 change 框（登記那一行、函式頭、帶 // <包>Form、// <包>Change 的收尾）與 app.js 查表的三行，同樣只認字面；
+# 每包鏈的第一行（base 是 } else if、head 是 if）只認這 9 個；battle.js 清掉舊註解與恆真守衛的那兩行，有沒有被清掉的那一段都放行（這兩行寫進預期差異）
 FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pageJianghu\b"
                                 r"|\bregisterClicks\(|^  async function \w+Click\(act, el, ev\) \{$|^    switch \(act\) \{$|^\s*\} // \w+Click$"
-                                r"|^      const clicked = CLICKS\[act\];$|^      if \(clicked\) return await clicked\(act, el, ev\);")
+                                r"|^      const clicked = CLICKS\[act\];$|^      if \(clicked\) return await clicked\(act, el, ev\);"
+                                r"|\bregisterForms\(|\bregisterChanges\(|^  async function \w+Form\(form, data\) \{$|^  async function \w+Change\(ev\) \{$|^\s*\} // \w+(?:Form|Change)$"
+                                r'|^      const filed = FORMS\[form\.id\] \|\| \(form\.dataset && FORMS\["op:" \+ form\.dataset\.op\]\);$|^      if \(filed\) return await filed\(form, data\);$'
+                                r"|^    await Promise\.all\(CHANGES\.map\(\(fn\) => fn\(ev\)\)\);$"
+                                r'|^      (?:\} else )?if \(form\.id === "(?:peer-amount|say-form|own-name-form|gather-say-form|tav-ask|name-art|ad-mall-form|ad-player-form)"\) \{$'
+                                r'|^      (?:\} else )?if \(form\.dataset && form\.dataset\.op === "shop-name-divine"\) \{$'
+                                r"|^  // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）(?:；只切 main\.js 的網頁測試沒有 battle\.js：照舊)?$"
+                                r"""|^    if \((?:typeof bpOn === "function" && )?bpOn\(m\) && m\.battle_panel\.me && !base\.startsWith\('<p class="battle-fold"'\)\) return bpTrim\(siegeStrip\(battleMvpHtml\(m\) \+ base, m\.siege\), m\);$""")
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 
@@ -40,6 +49,7 @@ class FacadeScenario(Scenario):
     「所有 js 的行」：每一支去掉檔頭（"use strict"; 以前的說明）之後的每一行（不含空行與 FACADE_SHELL_LINES）排序取 sha256，加上行數——
     切檔只換位置，所以這一個數字兩邊要一樣；改到任何一行就紅（selftest 的改一個字就是這一條抓的）。只驗每一行還在，不驗先後：先後由切檔腳本的逐段比對與網頁測試守。
     第 84 批把點擊的 case 從 app.js 搬進各包：case 行照舊算在這一條，放行的只有框與查表的字面（FACADE_SHELL_LINES）；map 軌比的 map.js 去掉框（MAP_CLICK_FRAME）。
+    第 85 批把表單與 change 的分支從 app.js 搬進各包：分支的行照舊算在這一條，放行的只有框、查表的三行、每包鏈的第一行（只認那 9 個）與 battle.js 清掉舊註解、恆真守衛的那兩行。
     半舊半新：這一包沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣三種人再打一遍。
     這一軌走不到的：瀏覽器真的執行這些檔（切檔之後的載入順序由網頁測試與波末實機驗）；/static/index.html 這個沒有人連的裸檔。
     假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
