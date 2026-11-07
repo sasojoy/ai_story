@@ -23,7 +23,7 @@ import random
 from dataclasses import dataclass
 
 from .core import annal_base as annals
-from . import arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing
+from . import arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes
 from .martial_arts import Insight, MartialArt, shown_creator
 from .models import Content
 from .ollama_client import OllamaClient
@@ -524,8 +524,8 @@ def _merge_own(
     if proposed is None:
         proposed = _named(client, content, world, _merge_messages(ia, ib), None)
     p = state.player
-    name, note, _ = sensing.own_name(state, content, world, f"{key}|{p.name}|{p.own_serial + 1}", proposed)
-    result = sensing.add_own(state, Insight(
+    name, note, _ = insights.own_name(state, content, world, f"{key}|{p.name}|{p.own_serial + 1}", proposed)
+    result = insights.add_own(state, Insight(
         id="", name=name, attribute=attribute, lean=lean, creator=p.name, creator_shown=p.name, note=note,
         parents=sorted([ia.id, ib.id]), place=ia.place or ib.place,
     ))
