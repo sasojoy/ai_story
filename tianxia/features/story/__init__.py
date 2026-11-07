@@ -12,6 +12,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 from __future__ import annotations
 
 from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SeamHook
+from tianxia.core.features import ContentSlot
 
 
 class StoryFeature(Feature):
@@ -24,6 +25,14 @@ class StoryFeature(Feature):
     # 紀念物與跨季旗標換季跟著角色（Game._reset_player_for_new_season），其餘換季重來
     player_fields = ("storylines", "story_open", "story_cards", "keepsakes", "lasting")
     carried = ("keepsakes", "lasting")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("storylines", lambda *a: checks.check_storylines(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """一直開著：原本 choose 的 story: 那一支與標題、選單都不看任何開關（線自己看 Config.jianfa.storylines〔storyline.on〕；關著時選單上沒有 story: 的選項，
