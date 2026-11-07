@@ -967,38 +967,6 @@ class Game:
 
     MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
 
-    def _marks_tick(self) -> None:
-        """痕跡看得見（減法季批 4）：同步時補發過了門檻還沒發的（防漏），再替自己記出過力的那幾則行狀（_mark_credits）；
-        有改到季（發了、名號拿掉了）才存季。關著什麼都不做。"""
-        if not jianfa(self.content, self.state.world, "marks_visible"):
-            return
-        fired = marks_rules.fire_due(self.state, self.content)
-        if self._mark_credits() or fired:
-            self._save_season()
-
-    def _mark_credits(self) -> bool:
-        """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
-        不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
-        回有沒有記到。"""
-        s, c = self.state, self.content
-        w, name = s.world, s.player.name
-        mine = [mark for mark, names in w.mark_helpers.items() if mark in w.marks_fired and name in names]
-        if not mine:
-            return False
-        by_mark = {r.mark: r for r in c.mark_rules}
-        for mark in mine:
-            names = w.mark_helpers[mark]
-            names.remove(name)
-            if not names:
-                del w.mark_helpers[mark]
-            rule = by_mark.get(mark)
-            if rule is None:
-                continue
-            loc = c.locations.get(marks_rules.place_of(mark))
-            annals.note(s, c, annals.MARK, self.MARK_ANNAL.format(rumor=rule.rumor), 2,
-                        place=loc.name if loc is not None else "", time=w.marks_fired[mark])
-        return True
-
     # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
     # 本體在 tianxia/core/combat.py（第二輪第 79 批），這裡留一行委派：server 的鎖外三段式、choose、事件檢定、各包在叫；_narrate 照舊是 staticmethod
 
