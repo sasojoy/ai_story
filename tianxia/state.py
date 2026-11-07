@@ -760,6 +760,13 @@ class PlayerState(BaseModel):
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
     talks_today: dict[str, list[int]] = Field(default_factory=dict)  # 人物 id -> [第幾個遊戲日（rules.game_day，跟著季長縮）, 當天已聊幾輪]
+    # 心神（tianxia/core/xinshen.py）：免費與月卡那兩份今天剩幾點、各是哪一天（回體丹那一套的第幾天）補的；不是今天補的就當滿的。
+    # 存著的（凝神香）不在這裡，記在帳號（mall_entitlements）。換回沒有心神的舊程式只丟掉今天剩幾點，隔天本來就補滿
+    xinshen_free: int = 0
+    xinshen_free_day: int = -1
+    xinshen_card: int = 0
+    xinshen_card_day: int = -1
+    tavern_asks: list[int] = Field(default_factory=list)  # 問酒家：[回體丹那一套的第幾天, 那天問了幾次]（心神開著才數，Config.xinshen.ask_per_day）
     picking_audience: bool = False  # 按了「求見」、正在挑要拜會哪一位人物（兩位以上大勢人物的地點）；舊存檔沒這欄就是沒在挑
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──

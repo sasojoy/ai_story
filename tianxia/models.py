@@ -3911,6 +3911,23 @@ class CheckIn(_Strict):
     pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
 
 
+class XinshenTuning(_Strict):
+    """心神（設計稿 https://claude.ai/artifact/NbTxoAPdroin7N9cRjCiP3 第 4 版；Joy 2026-11-06「可以 寫」）：跟人物說話這種要叫模型的互動
+    不扣體力，改扣每天補滿的心神（tianxia/core/xinshen.py）。三份分開記：免費（每天 00:00 補到 free_daily）、月卡（卡的期間每天補到
+    card_daily）、存著的（萬寶閣凝神香，記在帳號、不過期、換季帶著走）。一般交談先扣月卡、再扣免費、最後動存著的；隱線只扣免費那一份。
+    enabled 預設關：關著時對話照舊扣 Config.talk_stamina 體力、每位人物每天照舊 talk_turns_per_day 輪、問酒家不限次數，一個字都不變。"""
+
+    enabled: bool = False
+    name: str = "心神"  # 寫給玩家看的名字（Joy 2026-11-06 決策卡挑的）
+    free_daily: int = Field(default=6, ge=0)  # 免費：每天補到幾點（Joy「基本一天最多5-10心神」）
+    card_daily: int = Field(default=4, ge=0)  # 月卡：卡的期間另外每天補到幾點（6＋4＝10）
+    option_cost: int = Field(default=1, ge=0)  # 按模型寫的選項一輪扣幾點
+    say_cost: int = Field(default=2, ge=0)  # 「自己說…」一輪扣幾點
+    # 同一位人物每個遊戲日最多聊幾輪（Joy 同意 8）：前 talk_turns_per_day（＋玄紐）輪照舊長情誼、開條件；之後照樣聊、他照樣記得，情誼與條件不動
+    turns_per_figure: int = Field(default=8, ge=1)
+    ask_per_day: int = Field(default=3, ge=0)  # 問酒家一人一天最多幾次（不扣心神，另算；Joy「問酒家不扣 一天最多三次 另算」）；0 是不限
+
+
 class MallTuning(_Strict):
     """商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；tianxia/mall.py、tianxia/wallet.py）。enabled 預設關、測試內容明寫關、
     正式內容與 week7 開；關著時不發元寶、不讀不寫商城的三張表（月卡不加上限）、商城的 API 都 404，其餘一個字都不變（4.10）。
@@ -4230,6 +4247,7 @@ class Config(_Strict):
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
+    xinshen: XinshenTuning = Field(default_factory=XinshenTuning)  # 心神：跟人物交談扣的點數（見 XinshenTuning；tianxia/core/xinshen.py）
     mall: MallTuning = Field(default_factory=MallTuning)  # 商城：元寶錢包、商品、月卡、封測發放（見 MallTuning；商品在 content/mall.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）

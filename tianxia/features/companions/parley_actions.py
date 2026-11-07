@@ -89,6 +89,8 @@ def prompt(ctx, cid: str, road: bool = False) -> str:
     s, c = ctx.state, ctx.content
     if not parley.on(c) or parley.asks_left(s, c, cid) <= 0:
         return ""
+    if not road and ctx._talk_idle(cid):  # 心神開著、今天長情誼的那幾輪用完了：只是閒聊，不開條件
+        return ""
     asks, conditions = lists(ctx, cid, road)
     hostile = parley.enemy(s, c, cid, ctx._side())
     gift = parley.gift_text(parley.gift_of(s, c, cid)) if any(a.id == "gift" for a in asks) else ""

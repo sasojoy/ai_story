@@ -11,6 +11,7 @@ from typing import Any
 
 from tianxia import journal, precise, renown, roster
 from tianxia.core.services import SNUB_NOTE
+from tianxia.core import xinshen  # 心神（核心的資源）：長滿情誼的那一輪多一句
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia.events import pick_event  # 過渡：待搬（事件：抽一則）
 from tianxia.journal import Draft
@@ -136,6 +137,8 @@ def count_talk(ctx, companion_id: str) -> list[str]:
     """記一輪；這個遊戲日聊滿了就自動告辭，寫明什麼時候再來（待 joy 潤）。"""
     ctx.state.player.talks_today[companion_id] = [game_day(ctx.content, ctx.state.world), view.talks_used(ctx, companion_id) + 1]
     if view.talks_left(ctx, companion_id) > 0:
+        if xinshen.on(ctx.content) and view.talks_used(ctx, companion_id) == view.talk_cap(ctx):  # 剛好長滿：之後照樣聊、情誼不再動
+            return [f"（今天跟{ctx.content.characters[companion_id].name}的情誼已到頂，再聊也不會再動；明天再來。）"]  # 待 joy 潤
         return []
     ctx.state.player.pending_companion = None
     name, (kind, moment) = ctx.content.characters[companion_id].name, view.talks_reopen(ctx)

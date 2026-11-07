@@ -45,7 +45,7 @@ def audience_options(ctx) -> list[Option]:
     （談滿的寫換日的那一刻）；每個遊戲日的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
     c = ctx.content
     cost = c.config.action_cost["socialize"]
-    per_day = view.talk_cap(ctx)
+    per_day = view.talk_full_cap(ctx)
     opts = []
     for companion_id in ctx._figures_here():
         ch = c.characters[companion_id]
@@ -71,7 +71,7 @@ def audience_options(ctx) -> list[Option]:
 def audience_intro(ctx) -> str:
     """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物各算各的，一個遊戲日最多談幾輪、什麼時候重新算起。"""
     here = ctx.content.locations[ctx.state.player.location].name
-    per_day = view.talk_cap(ctx)
+    per_day = view.talk_full_cap(ctx)
     # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
     bonds = "、".join(f"{ctx.content.characters[cid].name} {ctx.state.player.affinities.get(cid, 0)}" for cid in ctx._figures_here())
     kind, moment = view.talks_reopen(ctx)

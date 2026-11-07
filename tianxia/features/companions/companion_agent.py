@@ -430,17 +430,18 @@ def _record_turn(state: GameState, companion_id: str, player_action: str, turn: 
 
 def _apply_turn(
     state: GameState, character: CharacterDef, companion_id: str, player_action: str, turn: CompanionTurn,
-    tag: str | None, content: Content | None = None, hear: bool = False,
+    tag: str | None, content: Content | None = None, hear: bool = False, idle: bool = False,
 ) -> list[str]:
     """回合收尾共用邏輯：查表覆寫好感度、記錄對話、更新關係現況，回傳要顯示的訊息。
     content 給了才算名聲的冷淡（5.2：敬俠的人遇上寇，加的情誼打折，renown.cold），那一輪多一句原因。
-    hear：這一輪是玩家說的話（選選項、自己說；開口那一輪不是）——人物心意開著時模型歸的 stance 記一筆（stances.hear）、多一句。"""
+    hear：這一輪是玩家說的話（選選項、自己說；開口那一輪不是）——人物心意開著時模型歸的 stance 記一筆（stances.hear）、多一句。
+    idle：心神開著、今天跟他長情誼的那幾輪用完了（ctx._talk_idle，交友求見包）——照樣記對話與記憶，情誼不動、心意不記。"""
     p = state.player
     if content is not None:  # 女子（features/heroines）：寫回來的、玩家打的過一次過濾，擋到的換成固定的一句（不是女子原樣）
         narrative, options, player_action, blocked = heroines.clean(state, content, companion_id, turn.narrative, list(turn.options), player_action)
         if blocked:
             turn = turn.model_copy(update={"narrative": narrative, "options": options})
-    delta = resolve_tag_delta(tag, character)
+    delta = 0 if idle else resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta
     delta = renown.warmed(content, cooled, state) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
@@ -464,7 +465,7 @@ def _apply_turn(
         msgs.append(renown.COLD_LINE.format(name=character.name))
     if delta:
         msgs.append(f"（情誼 {'+' if delta >= 0 else ''}{delta}）")  # 玩家看到的一律叫「情誼」（explain-1）；程式裡照舊叫 affinity／好感度
-    if hear and content is not None:
+    if hear and content is not None and not idle:
         msgs += stances.hear(state, content, companion_id, getattr(turn, "stance", None))
         msgs += persona.hear(state, content, companion_id, getattr(turn, "persona", None), before)  # 份量照這一句之前的情誼
     return msgs
@@ -495,7 +496,7 @@ def start_dialogue(
 
 def continue_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    choice_index: int, rng: Random, turn: CompanionTurn | None = None,
+    choice_index: int, rng: Random, turn: CompanionTurn | None = None, idle: bool = False,
 ) -> list[str]:
     """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。
     先生成、成功了才記交友 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
@@ -508,8 +509,9 @@ def continue_dialogue(
 
     if turn is None:
         turn = _generate(client, character, state, content, world, companion_id, player_action)
-    world.record_companion_tag(companion_id, tag or "尋常寒暄")
-    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content, hear=True)
+    if not idle:
+        world.record_companion_tag(companion_id, tag or "尋常寒暄")
+    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content, hear=True, idle=idle)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     if not persona.covers(content, companion_id):  # 人物性子接手的人物，舊的性情漂移不再寫
@@ -519,7 +521,7 @@ def continue_dialogue(
 
 def say_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (),
+    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (), idle: bool = False,
 ) -> list[str]:
     """「自己說」：玩家不挑上一輪的選項，自己打一句話（1～20 字，呼叫端驗過、轉過繁體）。模型把那句話歸類（player_tag），
     好感度照那一類查表（清單外的當尋常寒暄）；之後跟 continue_dialogue 一樣記交友 tag、記對話、給本命武學、整理記憶。
@@ -531,8 +533,9 @@ def say_dialogue(
     if decide is not None:  # NPC 智能 2.0：引擎擲完骰、換上那一版回話（Game._parley_decide）
         turn = decide(turn)
     tag = free_tag(turn)
-    world.record_companion_tag(companion_id, tag)
-    msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content, hear=True)
+    if not idle:
+        world.record_companion_tag(companion_id, tag)
+    msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content, hear=True, idle=idle)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     if not persona.covers(content, companion_id):  # 人物性子接手的人物，舊的性情漂移不再寫

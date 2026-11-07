@@ -462,6 +462,8 @@
         ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span><em class="lbl">氣血 </em>${s.hp}/${s.hp_max}</span>${s.injury >= 1
         ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>` : "",
       shown("silver") ? `<div class="num" data-glow="silver"><em>銀</em>${s.silver}</div>` : "",
+      // 心神（跟人物交談扣的；伺服器關著時沒有 s.xinshen）：今天剩幾點／今天補到多少，有凝神香存著的另寫「存 N」
+      s.xinshen && shown("silver") ? `<div class="num xs" title="${esc(s.xinshen.name)}：跟人物交談用，每天 00:00 補滿"><em>${esc(s.xinshen.name)}</em>${s.xinshen.now | 0}/${s.xinshen.cap | 0}${s.xinshen.bank ? `<small>存${s.xinshen.bank | 0}</small>` : ""}</div>` : "", // 待 joy 潤
       // 心得、名望、善惡、五項屬性搬到「俠客」頁（整合設計 6.2）；序章裡心得亮了、銀兩還沒亮時照舊寫在這裡（序章的話要你看它）
       shown("xinde") && !shown("silver") ? `<div class="num" data-glow="xinde"><em>心得</em>${s.xinde}</div>` : "",
     ].join("");

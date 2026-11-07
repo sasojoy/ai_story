@@ -739,8 +739,8 @@ GAME_DELEGATES |= {
     # 別的包經 ctx 問的（服務清單二、查詢）：_can_meet、_socialize_figure、_count_talk（人物對話的 A 段與每一輪收尾）、_social_plan、_brush_off（開口與開單）
     "_social_plan", "_count_talk", "_brush_off",
     # server、假人、腳本、測試在叫的：can_meet_figure（bot.py）、socialize_starts_dialogue、socialize_is_futile（bot_policy）、_talk_cap（玉璽測試）、
-    # _talks_used（tests/core/test_engine.py、tests/server/test_server.py）、_deep_interaction_target（tests/season/test_real_content.py）
-    "can_meet_figure", "socialize_starts_dialogue", "socialize_is_futile", "_talk_cap", "_talks_used", "_deep_interaction_target",
+    # _talks_used（tests/core/test_engine.py、tests/server/test_server.py）、_deep_interaction_target（tests/season/test_real_content.py）；_talk_idle（心神：人物情誼包經 ctx 問）
+    "can_meet_figure", "socialize_starts_dialogue", "socialize_is_futile", "_talk_cap", "_talk_idle", "_talks_used", "_deep_interaction_target",
 }
 _ACT_VERB = "act:socialize、act:call 是 act 子動詞（總表第 57 批才接 Verb.cell、Verb.note、Verb.run）：行動列那一格、底下那一行、按下去，留在核心原位叫這一包的委派"
 _AUDIENCE_ONE = "單人地點的「求見某某」（call:<人物>）那一顆：選單上直接列的求見，是 act 子動詞那一格旁邊的選項建構（總表第 57 批），四個分支問閉門不見、見不見得到、差多少、談滿了沒"
