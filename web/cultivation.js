@@ -921,3 +921,120 @@
   function askMeltInsight(el) {
     ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
   }
+  async function cultivationClick(act, el, ev) {
+    switch (act) {
+        case "hero-tab": heroStay(() => { S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); }); break; // Joy 11/7「按完不要都給我跳置頂」
+        case "attr-help": heroStay(() => { S.attrHelp = !S.attrHelp; renderPage(); }); break; // 屬性頁的「？」：五項各管什麼
+        case "xinde-more": heroStay(() => { S.xindeOpen = !S.xindeOpen; renderPage(); }); break; // 屬性頁心得那一行：點開看整句提示
+        case "hero-move-show": await heroMoveShow(el.dataset.id || ""); break; // 俠客頁武學卡底下的絕招演一次
+        case "hero-move-go": await heroMoveGo(el.dataset.style || ""); break; // 換一招：萬寶閣絕招那一頁
+        case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：開那一樣的抽屜
+        case "self-sec": { // 俠客頁「功法庫・意境 ›」那一顆：攤開底下那個摺疊、捲到它
+          (S.selfOpen || (S.selfOpen = {}))[el.dataset.sec] = true;
+          renderPage();
+          const box = document.querySelector(`details.self-fold[data-sec="${CSS.escape(el.dataset.sec)}"]`);
+          if (box && box.scrollIntoView) box.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        }
+        case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
+        case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
+        case "kind": S.kind = el.dataset.kind; renderPage(); break;
+        case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
+        case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "lib-filter": setLibFilter(el.dataset.filter); renderPage(); break;
+        case "lib-all": S.libAll = true; renderPage(); break;
+        case "melt-mode": S.meltSel = S.meltSel ? null : { arts: [], ins: [] }; S.artOpen = null; S.meltOpen = null; S.meltNote = null; renderPage(); break;
+        case "melt-pick": meltToggle("arts", el.dataset.id); break;
+        case "melt-pick-ins": meltToggle("ins", el.dataset.id); break;
+        case "melt-shown": meltPickShown(); break;
+        case "melt-weak": meltView().weak = !meltView().weak; renderPage(); break;
+        case "melt-open": S.meltOpen = S.meltOpen === el.dataset.key ? null : el.dataset.key; renderPage(); break;
+        case "melt-clear": if (S.meltSel) { S.meltSel = { arts: [], ins: [] }; renderPage(); } break;
+        case "melt-go": askMeltMany(el); break;
+        case "rack-all": S.rackAll = true; renderPage(); break;
+        case "ins-open": S.insOpen = S.insOpen === el.dataset.id ? null : el.dataset.id; S.artOpen = null; S.pdrawer = false; renderPage(); break;
+        case "slot-pick": { // 空槽：攤開（再點收起）手上空著的意境
+          const same = S.slotPick && S.slotPick.art === el.dataset.id && S.slotPick.i === Number(el.dataset.i);
+          S.slotPick = same ? null : { art: el.dataset.id, i: Number(el.dataset.i) };
+          renderPage(); break;
+        }
+        case "slot-in": S.slotPick = null; await mx("slot", { art: el.dataset.id, insight: el.dataset.ins, index: Number(el.dataset.i) }); break;
+        case "ascend-ok": await mx("ascend_dismiss", {}); break;
+        case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;
+        case "person":
+          S.person = S.person === el.dataset.key ? null : el.dataset.key;
+          await loadMenxia();
+          break;
+        case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
+        case "feed": await mx("feed"); break;
+        case "release-mate": { // 歷史武將同行：放他回江湖，先問一次（問句伺服器寫好，roster.RELEASE_CONFIRM）
+          const who = S.person;
+          ask(el.dataset.confirm, "放他走", async () => { S.person = null; await mx("release", { person: who }); });
+          break;
+        }
+        case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
+        case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）
+          const pick = document.getElementById("bind-art-" + el.dataset.id);
+          if (pick && pick.value) ask("綁了之後不能改配（那一門熔掉、交掉才能再配），確定嗎？", "綁上", () => mx("bind_art", { weapon: el.dataset.id, art: pick.value }));
+          break;
+        }
+        case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
+          ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
+          break;
+        case "switch": {
+          // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
+          await mx("switch", { art: el.dataset.id }); // 真的送出了才收起卡片（mx 換上伺服器回來的那一份才收）；還在忙或失敗就照舊開著
+          break;
+        }
+        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; S.insOpen = null; S.pdrawer = false; renderPage(); break;
+        case "cultivate": {
+          // 服丹衝關（use_legend，伺服器只認真正的布林 true）。真的擲了骰（mx 換上了伺服器回來的那一份 menxia、丹少了一枚）
+          // 才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
+          const id = el.dataset.id, pill = el.dataset.by === "pill";
+          const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
+          const was = S.menxia?.legend_items;
+          await mx("cultivate", { art: id, use_legend: pill });
+          if (row && pill && typeof was === "number") {
+            // 看手上的丹（不是那一列的 legend：被拒絕時那一列也會變成 null，例如體力在別處花掉了，那時不能播彈回）
+            const now = (S.menxia?.owned_arts || []).find((a) => a.id === id);
+            const won = !!now && now.quality === "絕學";
+            if (won || (S.menxia?.legend_items ?? was) < was) breakAnim(row, won);
+          }
+          break;
+        }
+        case "melt": askMelt(el); break;
+        case "melt-insight": askMeltInsight(el); break;
+    } // cultivationClick
+  } // cultivationClick
+  registerClicks(cultivationClick, ["hero-tab", "attr-help", "xinde-more", "hero-move-show", "hero-move-go", "hero-node", "self-sec", "drawer-close", "ins-filter", "kind", "mx", "art-info", "lib-filter", "lib-all", "melt-mode", "melt-pick", "melt-pick-ins", "melt-shown", "melt-weak", "melt-open", "melt-clear", "melt-go", "rack-all", "ins-open", "slot-pick", "slot-in", "ascend-ok", "slot-out", "person", "wield", "feed", "release-mate", "teach", "bind-art", "dismantle", "switch", "art", "cultivate", "melt", "melt-insight"]);
+  async function cultivationForm(form, data) {
+      if (form.id === "name-art") {
+        // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name", { name: data.name });
+        // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
+        const again = document.querySelector('#name-art input[name="name"]');
+        if (again && S.menxia && S.menxia.naming) again.value = data.name;
+      } else if (form.dataset && form.dataset.op === "name-divine") {
+        // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
+        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
+        // 定成了那一列不再畫表單，找不到就什麼都不放
+        if (document.getElementById("name-divine-" + form.dataset.id)) {
+          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          renderPage();
+        }
+        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
+      } // cultivationForm
+  } // cultivationForm
+  registerForms(cultivationForm, ["name-art", "op:name-divine"]);
+  async function cultivationChange(ev) {
+    if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
+      meltView()[ev.target.dataset.key] = ev.target.value;
+      renderPage();
+    }
+  } // cultivationChange
+  registerChanges(cultivationChange);

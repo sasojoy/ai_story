@@ -85,3 +85,10 @@
         ${r.changes.length ? `<p class="reward">${esc(r.changes.join("・"))}</p>` : ""}
         <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
   }
+  async function boutClick(act, el, ev) {
+    switch (act) {
+        case "arena-tab": S.arenaTab = el.dataset.tab; renderShop(false); break; // 擂台：台下／擂台榜
+        case "arena-seen": S.arenaSeen = Number(el.dataset.id); renderShop(); break; // 收起收場卡
+    } // boutClick
+  } // boutClick
+  registerClicks(boutClick, ["arena-tab", "arena-seen"]);

@@ -171,3 +171,35 @@
     renderPage();
     await choose(document.querySelector(`[data-id="${CSS.escape(last)}"]`) || document.body, last);
   }
+  async function companionsClick(act, el, ev) {
+    switch (act) {
+        case "fig-open": S.fig = el.dataset.id; renderPage(); break;
+        case "fig-close": S.fig = null; renderPage(); break;
+        case "fig-act": { const id = el.dataset.id; S.fig = null; renderPage(); await choose(document.querySelector(`[data-id="${CSS.escape(id)}"]`) || el, id); break; }
+        case "fig-talk": await figTalk(el.dataset.id); break;
+        case "fig-log": await openFigLog(el.dataset.id); break;
+        case "fig-log-close": S.figLog = null; renderPage(); break;
+        case "fig-log-season": await openFigLog(S.figLog.id, el.dataset.s); break;
+        case "fig-log-more": await moreFigLog(); break;
+        case "letter-open": {
+          const id = Number(el.dataset.id), wasOpen = el.getAttribute("aria-expanded") === "true";
+          S.letterOpen = wasOpen ? null : id;
+          S.letterShut = wasOpen ? id : null; // 一到就攤開的那一封（開局的託付）收攏了就記著，重畫不再自己攤開
+          renderPage();
+          break;
+        }
+        case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
+        case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
+    } // companionsClick
+  } // companionsClick
+  registerClicks(companionsClick, ["fig-open", "fig-close", "fig-act", "fig-talk", "fig-log", "fig-log-close", "fig-log-season", "fig-log-more", "letter-open", "letter-read", "letter-decline"]);
+  async function companionsForm(form, data) {
+      if (form.id === "say-form") {
+        if (!data.text.trim()) return;
+        await sayLine(form, data.text.trim());
+      } else if (form.id === "persuade-form") {
+        if (!data.text.trim()) return;
+        await persuadeSay(form, data.text.trim());
+      } // companionsForm
+  } // companionsForm
+  registerForms(companionsForm, ["say-form", "persuade-form"]);

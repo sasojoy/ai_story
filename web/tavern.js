@@ -122,3 +122,43 @@
       if (notes && notes.length && (notes.length !== seen || notes[0].when + notes[0].title !== top)) S.shopNote = null;
     });
   }
+  async function tavernClick(act, el, ev) {
+    switch (act) {
+        case "tav-tab": S.tavTab = el.dataset.tab; S.shopNote = null; renderShop(false); break; // 酒肆：四頁
+        case "tav-do": await tavDo(el.dataset.op); break;
+        case "tav-mode": S.tavAsk = el.dataset.mode; renderShop(); break; // 打聽：查人在哪／打聽情誼
+        case "tav-tier": S.tavTier = Number(el.dataset.tier); renderShop(); break; // 買殺手：三檔
+        case "tav-hit-name": { const box = document.querySelector('#tav-hit input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
+        case "tav-name": { const box = document.querySelector('#tav-ask input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
+    } // tavernClick
+  } // tavernClick
+  registerClicks(tavernClick, ["tav-tab", "tav-do", "tav-mode", "tav-tier", "tav-hit-name", "tav-name"]);
+  async function tavernForm(form, data) {
+      if (form.id === "tav-ask") {
+        if (!data.target.trim()) return;
+        const seek = S.tavAsk !== "ties";
+        if (seek) S.tavWatch = !!data.watch;
+        await tavDo(seek ? "seek" : "ties", { target: data.target.trim(), text: seek && data.watch ? "watch" : "" });
+      } else if (form.id === "tav-q") {
+        if (!data.text.trim()) return;
+        await tavDo("", { text: data.text.trim() }, "tavern_ask");
+        const box = document.querySelector('#tav-q input[name="text"]');
+        if (box && S.shopNote == null) box.value = "";
+      } else if (form.id === "tav-mat") {
+        if (!data.material) return;
+        S.tavMat = data.material;
+        await tavDo("material", { target: data.material });
+      } else if (form.id === "tav-hit") {
+        if (!data.target.trim()) return;
+        S.tavHush = !!data.hush;
+        const tier = S.main.shop.hits.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
+        const name = S.main.shop.hits.tiers.find((t) => t.tier === tier).name;
+        ask(`雇${name}去找${data.target.trim()}？`, "雇", () => tavDo("hit", { target: data.target.trim(), text: `${tier}${data.hush ? ":hush" : ""}` }));
+      } else if (form.id === "tav-wall") {
+        if (!data.text.trim()) return;
+        await tavDo("wall", { text: data.text.trim() });
+        const box = document.querySelector('#tav-wall input[name="text"]');
+        if (box && !(S.shopNote || "").startsWith("一句最多")) box.value = "";
+      } // tavernForm
+  } // tavernForm
+  registerForms(tavernForm, ["tav-ask", "tav-q", "tav-mat", "tav-hit", "tav-wall"]);

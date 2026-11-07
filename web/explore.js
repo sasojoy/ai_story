@@ -29,3 +29,21 @@
     const form = saying ? `<form class="free answer gather-say" id="gather-say-form"><input class="input" name="text" maxlength="20" placeholder="${esc(GATHER_SAY_HINT)}" aria-label="${esc(say.label)}"><button class="btn primary small" type="submit">${esc(GATHER_SAY_GO)}</button></form>` : "";
     return `${head}<div class="gather-branches" role="group" aria-label="找素材">${cells}${form}</div>`;
   }
+  async function exploreClick(act, el, ev) {
+    switch (act) {
+        case "gather-wheel": // 找素材分支（第 32 項）：「找素材」點了在它底下攤開（再點一次收起）；輸入框跟著收
+          S.gatherOpen = !S.gatherOpen;
+          S.gatherSaying = false;
+          renderPage();
+          if (S.gatherOpen) revealMoveCard();
+          break;
+    } // exploreClick
+  } // exploreClick
+  registerClicks(exploreClick, ["gather-wheel"]);
+  async function exploreForm(form, data) {
+      if (form.id === "gather-say-form") {
+        if (!data.text.trim()) return;
+        await gatherSay(form, data.text.trim());
+      } // exploreForm
+  } // exploreForm
+  registerForms(exploreForm, ["gather-say-form"]);

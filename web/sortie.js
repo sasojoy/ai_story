@@ -223,3 +223,26 @@
     const head = `${list.length} 張${far ? `・${far} 張在別區` : ""}${live.length ? "・窗滿就開打" : ""}`;
     return `<div class="card sx-duels" id="sortie-duels"><p class="sx-h"><b>約戰</b><span>${esc(head)}</span></p>${list.map((d) => sxRow(m, d)).join("")}</div>`;
   }
+  async function sortieClick(act, el, ev) {
+    switch (act) {
+        case "sortie-open": // 出陣約戰（丙）：出陣那一格點了在行動列底下展開出陣前那張卡、不送 act:train；再點收起。灰著也點得開
+          S.wheelSel = S.wheelSel === SX_OPEN ? null : SX_OPEN;
+          S.sortieAnswer = null;
+          S.sortiePick = [];
+          renderPage();
+          if (S.wheelSel) revealMoveCard();
+          break;
+        case "sortie-answer": // 約戰卡上的「應戰」：同一張封三招的卡，卡頂寫應戰・那一塊
+          S.wheelSel = null;
+          S.sortieAnswer = el.dataset.id;
+          S.sortiePick = [];
+          renderPage();
+          revealMoveCard();
+          break;
+        case "sortie-move": sortieMove(Number(el.dataset.round), el.dataset.move); break; // 封三招挑一招
+        case "sortie-send": await sortieSend(); break; // 封好三招，出陣（應戰）
+        case "sortie-join": await sortieDo("sortie_join", { id: el.dataset.id }); break; // 同袍的約戰：同去
+        case "sortie-far": await sortieTravel(el.dataset.id); break; // 別區那一張的「前往 N 分」
+    } // sortieClick
+  } // sortieClick
+  registerClicks(sortieClick, ["sortie-open", "sortie-answer", "sortie-move", "sortie-send", "sortie-join", "sortie-far"]);

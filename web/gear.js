@@ -64,3 +64,9 @@
         <button class="btn primary horse-act" data-act="choose" data-id="${esc(a.id)}" ${a.enabled ? "" : "disabled"}><b>${esc(a.label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</button>
       </article>`;
   }
+  async function gearClick(act, el, ev) {
+    switch (act) {
+        case "shop-horse": S.shopHorse = el.dataset.id; renderShop(); break; // 馬市點一匹（第三節）：只換底下那張卡
+    } // gearClick
+  } // gearClick
+  registerClicks(gearClick, ["shop-horse"]);

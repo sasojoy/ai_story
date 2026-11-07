@@ -220,11 +220,11 @@
     return at >= 0 ? html.slice(0, at) + strip + html.slice(at + head.length) : strip + html;
   }
   // 場景卡裡的戰場那一塊。戰場面板開著（main.battle_panel，battle.js；Joy 2026-11-06 大決戰優化）時戰局條畫在面板裡，
-  // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）；只切 main.js 的網頁測試沒有 battle.js：照舊
+  // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）
   function battleInner(m) {
     const base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
     // 自己在場上：戰局條、陣容、主將令、回合數都在面板上，場景卡只留戰報；還沒加入（要按加入、投效）的照舊整段（面板不畫戰局條）
-    if (typeof bpOn === "function" && bpOn(m) && m.battle_panel.me && !base.startsWith('<p class="battle-fold"')) return bpTrim(siegeStrip(battleMvpHtml(m) + base, m.siege), m);
+    if (bpOn(m) && m.battle_panel.me && !base.startsWith('<p class="battle-fold"')) return bpTrim(siegeStrip(battleMvpHtml(m) + base, m.siege), m);
     return siegeStrip(withGauge(base, m.battle_gauge, battleMvpHtml(m)), m.siege);
   }
   // 攤開、收起都整頁重畫，原本有焦點的那一行（那一顆）跟著不見：焦點放回新畫出來的開關，鍵盤再按一次就收起、再攤開
@@ -442,3 +442,14 @@
     bpMark(p.key, new Set([...seen, ...ids]));
     bpShow(fresh[fresh.length - 1], p);
   }
+  async function battleClick(act, el, ev) {
+    switch (act) {
+        case "bp-log": document.querySelector("#page .b-round")?.scrollIntoView({ behavior: "smooth", block: "center" }); break; // 戰場面板「完整戰報」：捲到場景卡的戰報
+        case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）
+        case "battle-shut": battleShut(); break; // 攤開的戰場底下「收起戰場」
+        case "mvp-replay": if (typeof mvpReopen === "function") mvpReopen(); break; // 決戰的回合 MVP：戰場底下那一行「再看一次」重新跳出視窗
+        case "mvp-again": if (typeof mvpAgain === "function") mvpAgain(); break; // MVP 視窗裡：絕招從頭再演一次
+        case "mvp-close": if (typeof mvpClose === "function") mvpClose(); break; // MVP 視窗收起
+    } // battleClick
+  } // battleClick
+  registerClicks(battleClick, ["bp-log", "battle-open", "battle-shut", "mvp-replay", "mvp-again", "mvp-close"]);
