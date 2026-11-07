@@ -1294,20 +1294,6 @@
     if (S.reportOpen && S.reports.tale_id != null) await loadTale(S.reports.tale_id);
   }
 
-  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
-  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
-  function heroStay(draw) {
-    const page = document.getElementById("page");
-    const y = window.scrollY || 0;
-    draw();
-    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
-    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
-    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
-    const target = Math.min(y, Math.max(0, tabsTop - 8));
-    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
-    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
-    window.scrollTo(0, target);
-  }
   async function goTab(tab) {
     const pg = document.getElementById("page");
     if (pg && pg.style) pg.style.minHeight = ""; // 俠客頁撐高的那一截（heroStay）換頁就放掉
