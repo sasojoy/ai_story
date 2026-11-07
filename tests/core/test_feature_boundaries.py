@@ -37,6 +37,8 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     STEP_PACKAGE_READS,
     # core_api（第二輪第 74 批）
     CROSS_PACKAGE_CALLS, SHELL_FOREIGN,
+    # core_bots（第二輪第 89 批）
+    BOT_SHELL, BOT_SHELL_PENDING,
 )
 TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
@@ -954,6 +956,27 @@ def test_the_bot_shell_touches_nothing_private_on_the_game():
     assert private_touches("class A:\n    def f(self):\n        return self._x, self.__class__\n") == []
     for name in ("bot_policy.py", "bot.py", "bot_runner.py", "server_bots.py"):
         assert private_touches((TIANXIA / name).read_text(encoding="utf-8")) == [], name
+
+
+# core_bots（第二輪第 89 批）
+def shell_imports(source: str, module: str) -> set[str]:
+    """這個檔 import 了哪幾支假人殼：函式裡也算、標了「過渡：待搬」也算，if TYPE_CHECKING: 底下的不算（imports_of 已經略過）。"""
+    return {name.split(".")[1] for _, name, _ in imports_of(source, module) if name.count(".") >= 1 and name.split(".")[1] in BOT_SHELL}
+
+
+def test_no_package_imports_the_bot_shell():
+    """假人殼（bot、bot_policy、bot_runner、server_bots）接在包的上面（第二輪第 89 批把包要讀的搬走了）：包再 import 就是跳回舊模組，延後 import 或標過渡都不放行。
+    兩包以上讀的進共用層 bot_base，一包讀的進那一包的 bots.py。只准比 BOT_SHELL_PENDING 少，不准多。"""
+    module = "tianxia.features.x.bots"
+    assert shell_imports("def f():\n    from tianxia import bot_policy as bp\n", module) == {"bot_policy"}  # 掃描本身抓得到：函式裡的
+    assert shell_imports("from tianxia import bot  # 過渡：待搬\n", module) == {"bot"}  # 標了過渡的
+    assert shell_imports("def f():\n    from ...bot_runner import BotRunner\n", module) == {"bot_runner"}  # 相對的
+    assert shell_imports("from tianxia.server_bots import active\n", module) == {"server_bots"}
+    assert shell_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tianxia import bot\n", module) == set()  # 只給型別看的
+    assert shell_imports("from tianxia import bot_base, botany\n", module) == set()  # 共用層 bot_base 不算
+    found = {(_modname(path).removeprefix("tianxia.features."), shell) for name in _packages() for path in _package_files(name)
+             for shell in shell_imports(path.read_text(encoding="utf-8"), _modname(path))}
+    assert found <= BOT_SHELL_PENDING, f"包不准 import 假人殼：{sorted(found - BOT_SHELL_PENDING)}"
 
 
 def test_bot_pick_asks_the_packages_for_what_it_skips():

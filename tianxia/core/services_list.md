@@ -504,4 +504,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
+# core_bots（第二輪第 89 批：沒有新名字）
+- 移動包的 `bots.py`（`_focus_hop`，從 `bot_policy` 搬來）叫 `ctx.sorties_left()`，那一行上面列了（主人 sortie）；共用層 `bot_base` 叫的 `game._sortie_foes(loc)`、`game.sorties_left()` 也是列著的這兩個。
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
