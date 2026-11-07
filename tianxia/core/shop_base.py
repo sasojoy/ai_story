@@ -7,6 +7,8 @@
 
 各間店的畫面資料在包裡（Feature.shop_view，core/features.shop_page 問；一間店只有一包認）：smithy、bout、outlets、bounties、gear 各一個 shop_view.py，酒肆在 tavern 的 actions.tavern_view。
 BACKS 寫字面：讓包 import 這一檔拿常數會多一條載入得早的路（mounts → shop_base → bounty_base → weapons）；包裡那幾個常數跟這裡一樣，tianxia/features/smithy/tests/test_shop.py 鎖住。
+
+改這一份要另外跑（test_for 照名字挑不到）：check_shop_lines 經 validate 測，跑 tianxia/features/smithy/tests/test_shop.py、tests/core/test_content.py；靠 tianxia/shopview.py 那個殼的測試跑 scripts/test_for.py tianxia/shopview.py。
 """
 from __future__ import annotations
 

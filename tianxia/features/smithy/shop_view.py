@@ -453,7 +453,9 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
         dark = state is not None and any(economy.black_market(state, content, t) for t in tiers)
         out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；{NOT_SOLD_NOTE[four_tiers.on(content)]}）"
     return out
-BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
+
+
+BLACK_MARKET ="（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
 BLACK_MARKET_CAP = "照黑市價收"  # 收購那一段的標題
 
 
