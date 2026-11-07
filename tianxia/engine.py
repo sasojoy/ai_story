@@ -1187,9 +1187,9 @@ class Game:
         if kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批）
             return self._epiphany_title()
         # act 子動詞的標題都由主人給（接縫掛鉤，第 11 批；其餘的全部拆包第 57 批接上，帶後綴的走 Verb.tail_title）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問，
-        # 只有帶後綴的與銀兩那四樣要 kind == "act"（第 57 批拿掉過，補回：base 這幾種都看 kind；_action_title("sect", "furnace") 是「提前出關」）；
+        # 只有帶後綴的與 Verb.act_only 那幾樣要 kind == "act"（_action_title("sect", "furnace") 是「提前出關」）；
         # 主人不接照舊查表：舊探索、沒有主人時的遊歷、療傷（留核心，計畫第四節）；其餘（act:break、sect:）是「提前出關」
-        owned = features_core.act_title(self, arg) if kind == "act" or not (":" in arg or arg in ("silver_donate", "mentor", "furnace", "buy_legend")) else None
+        owned = features_core.act_title(self, arg, kind)
         if owned is not None:
             return owned
         here = c.locations[s.player.location].name

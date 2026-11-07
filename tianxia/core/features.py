@@ -133,6 +133,8 @@ class Verb:
     tail_bot: Callable[[Any, Any, str], float | None] | None = None
     bot_skip: bool = False
     tail_bot_skip: bool = False
+    # core_rest（第二輪第 99 批）：標題只在 kind == "act" 才問主人（銀兩那四樣；別的 kind 帶同一個字照舊是「提前出關」，同帶後綴的）
+    act_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -780,10 +782,12 @@ def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
     return None
 
 
-def act_title(ctx: Game, verb: str) -> str | None:
-    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣，kind 的門在呼叫端：帶後綴的與銀兩那四樣要 kind == "act"）。帶後綴的（第 57 批）問 tail_title。"""
+def act_title(ctx: Game, verb: str, kind: str = "act") -> str | None:
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣，只有帶後綴的與 Verb.act_only 那幾樣要 kind == "act"）。帶後綴的（第 57 批）問 tail_title。"""
     head, sep, tail = verb.partition(":")
     for v in _verbs(None, head):
+        if kind != "act" and (sep or v.act_only):
+            continue
         if sep:
             got = v.tail_title(ctx, tail) if v.tail_title is not None else None
         else:
