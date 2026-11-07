@@ -34,7 +34,7 @@ from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名�
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
 from tianxia import ranks  # 共用規則層（晉升：離下一階還差多少；第 40 批收進）
 from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
-from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
+from tianxia.core import name_base  # 核心（這一季效力中的：補位）
 from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
 from tianxia import wins  # 共用規則層（三陣營四勝利：貢獻記在哪一軍）
 from tianxia.calendar import DAY
@@ -491,7 +491,7 @@ def duel_candidates_for(ctx: Game) -> Callable[[SortieDuel], list[SortieSide]]:
             rows: list[SortieSide] = []
             for state in CharacterStore(ctx.world.db).all(bots_only=True):
                 p = state.player
-                if p.bot is None or not server_bots.active(p.bot, season) or p.journey is not None or p.location is None:
+                if p.bot is None or not name_base.active(p.bot, season) or p.journey is not None or p.location is None:
                     continue
                 state.world = ctx.state.world  # 存檔不帶季（exclude）：豪強依附哪一軍、威力都照手上這一份季算
                 side = allied.side_of(state, c)

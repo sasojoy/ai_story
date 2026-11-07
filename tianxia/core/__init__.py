@@ -60,8 +60,8 @@
   掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
 
 # mall（全部拆包第 58 批：商城收尾）
-- name_base.py：保留的名號——FAMOUS_NAMES、reserved_names（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名共用，
-  商城包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。
+- name_base.py：保留的名號——FAMOUS_NAMES、reserved_names，與這一季效力中的 active（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名、出陣約戰補位共用，
+  商城包、出陣包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。
 # guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md）
 - howto_base.py：玩法說明兩包以上要用的那幾樣——一節的寫法 section、一成兩成 tenth、會推戰況的陣營 order_pushers、SOME_PLACES；各節在各包的 howto.py，
   順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。

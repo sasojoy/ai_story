@@ -5,6 +5,9 @@
 另外跑：改這一個 scripts/test_for.py 照核心挑（核心測試＋煙霧，加上寫到這兩個名字的 tests/bots/test_server_bots.py、tests/figures/test_figures.py）。
 本體還在 server_bots 時挑得到的 tianxia/features/mall/tests/test_mall_card_daily.py（易名帖撞保留的名號）、tests/server/test_server.py
 （註冊撞保留的名號）、tests/bots/test_bot_runner.py（假人取名）挑不到了，另外跑這三個檔（第 36 批認定第 1 條，第 58 批量過）。
+
+這一季效力中的 active（第二輪第 87 批從 server_bots 搬來，它 re-export 同一個物件）：出陣約戰補位讀它（出陣包 duel_actions.candidates），
+包不 import 假人的模組。改 active 另外跑 tests/bots/test_server_bots.py、tianxia/features/sortie/tests/test_sortie_duel_bots.py、tests/bots/test_bot_runner.py。
 """
 from __future__ import annotations
 
@@ -12,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..models import Content
+    from ..state import BotProfile
 
 FAMOUS_NAMES = frozenset((  # 三國名人：server_bots 的字庫組得出其中一些（趙雲、周瑜、馬超⋯⋯），假人不能頂著這些名號
     "曹操 劉備 孫權 孫策 孫堅 關羽 張飛 趙雲 馬超 黃忠 魏延 諸葛亮 龐統 法正 姜維 周瑜 魯肅 呂蒙 陸遜 甘寧 "
@@ -28,3 +32,8 @@ def reserved_names(content: Content) -> frozenset[str]:
     沒有對話人物，公告照樣寫他們的名字）、管理者的名號。"""
     figures = {fig.name for fig in content.figures.values()}
     return FAMOUS_NAMES | {ch.name for ch in content.characters.values()} | figures | frozenset(content.config.admins)
+
+
+def active(profile: BotProfile, season_number: int) -> bool:
+    """這一季被叫醒、替某個陣營效力中（不是退隱）。"""
+    return profile.faction is not None and profile.season_number == season_number
