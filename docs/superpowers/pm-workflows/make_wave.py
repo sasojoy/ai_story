@@ -622,13 +622,17 @@ def b103():
     ])
 
 
+WEB_G = "**這一波沒動 `web/`，但收了 70 個舊模組、路由與 `server.py` 的 import 都動了；函式裡才 import 的舊名要走到才會炸，這也是第二輪最後一次走全程。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」不用做。** 都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。量分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0：same=true。結束碼 1：逐列分成①工具誤報（寫進 report，不算 diffs）②這一波真的改了（寫進 diffs，same=false）。結束碼 2：工具壞了，same=true、report 開頭寫「比對沒跑完」與原因。\n3. 工具走不到的實機各走一次，主控台 0 錯誤、網路沒有 4xx／5xx、伺服器的 log 沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`：第 102 批改過的路由（單挑的文字、擂台開賽與圍觀、奪璽單挑、戰記）、手機通知的登記頁；管理頁各分頁。\n4. F 波沒走到的兩樣各試一次，叫不出來不要硬試，寫清楚：跟人物對話送出一句（`sayLine`）、採集喊話（`gatherSay`）。\n5. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`，有就是 blocker。\n**不修工具、不修程式、不跑 selftest，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+
+
 WAVES["G"] = dict(
     round2=True,
     extra_lenses=[
-        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次（`features/looks/cutting` 要 scipy，這台 venv 沒裝，除外）；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）照舊跑得動。"),
+        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次（`features/looks/cutting` 要 scipy，這台 venv 沒裝，除外）；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）與根目錄的 `server_push.py`、`console.py`、`llm_queue.py`、`run_studio.py`、`run_bots.py` 照舊跑得動；**函式裡才 import 的**舊名用語法樹掃，不靠 grep 的字串樣子。`scripts/new_feature.py` 生一包出來，邊界與契約照舊綠（生在暫存複本，不留）。"),
     ],
     lines=[dict(name="收口", batches=[b102, b103])],
     merge_port=8332, fix_port=8333,
+    web_check=dict(ports="8334、8335", steps=WEB_G),
 )
 
 
