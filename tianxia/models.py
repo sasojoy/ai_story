@@ -1535,6 +1535,8 @@ class TutorialStep(_Strict):
     # 五項屬性的季（attrset.on）改說的話與那一行（空的照 text、line）：配點那一步改成挑成長配比（每 10 級才送點，升一級沒有點可配）
     text_v2: str = ""
     line_v2: str = ""
+    # 拿掉地方豪強的季（allied.gentry_on 是 False，企劃者 2026-11-07）改說的話：空的照 text（師父送行、初入江湖那兩段講到豪強的才寫）
+    text_two_sides: str = ""
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
@@ -1676,6 +1678,7 @@ class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+    drifter_line_two_sides: str = ""  # 拿掉地方豪強的季（allied.gentry_on 是 False）那一行：只寫兩軍；空的照 drifter_line
 
 
 class OpeningSender(_Strict):
@@ -4438,6 +4441,10 @@ class Config(_Strict):
     # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
     # 軍階，豪強版的只能升到三階」）：沒有開關，蓋了第一季章的季就是（allied.on）；沒有第一季規則的季（14 天）照舊是第三方豪強。
     # 2026-10-31 開關 haoqiang_allied 連豪強第三方的季（割據、攪局、第三方臨時投效）一起拿掉（T-05，企劃者「都照建議」）
+    # 地方豪強這個陣營（劇本寫了 allies 的陣營）還在不在（企劃者 2026-11-07 決策卡「下一季起整個拿掉」）：開季時蓋章
+    # （WorldState.no_gentry＝not gentry；allied.gentry_on），正在跑的季照它自己的章——章之前開的季（第 9 季）豪強照舊到季末。
+    # content/config.json 寫 false：下一季起只剩官軍、黃巾、散人。模型預設 true，測試內容與沒寫這個鍵的設定一個字都不變
+    gentry: bool = True
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。

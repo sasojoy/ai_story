@@ -1524,7 +1524,9 @@ def test_the_find_roll_scales_for_the_holding_side(monkeypatch):
 def test_a_gentry_follower_gets_the_scale_on_the_side_he_follows_and_a_ranger_never_does(monkeypatch):
     """FB-571（PM 裁決）：豪強依附一軍，那一軍佔著的藏處算他的自家（照 rules.side_of，同療傷、打造、買馬的地盤折扣）；散人沒有自家、不乘
     ——沒人佔的藏處控制方是 None、散人的 side 也是 None，不能被 None == None 騙成「自家」。"""
-    game = _game_seal(find=0.0)
+    content = _content(find=0.0)
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
+    game = _game_seal(find=0.0, content=content)
     loc = _cache(game).loc
     calls = []
     monkeypatch.setattr(seal, "find", lambda reg_, tianji, name, seq, own_, cfg_: calls.append(own_) or False)

@@ -1,7 +1,7 @@
 """大勢人物的行動包：玩法說明「挑戰大勢人物」那一節（全部拆包第 59 批；原 tianxia/howto.py，字一個不動；順序在核心 HOWTO_ORDER）。"""
 from __future__ import annotations
 
-from tianxia import figures, rules, territory
+from tianxia import allied, figures, rules, territory
 from tianxia.models import Content
 from tianxia.state import WorldState
 
@@ -34,7 +34,7 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
         return []
     sides = {fig.faction for fig in content.figures.values()}
     # 豪強分屬兩軍的季：豪強照依附那一邊只打對面的人物（Game._challenge_options 照 _side），不寫「兩邊都打」
-    both = [] if rules.haoqiang_allied(content, season) else [f.name for f in content.scenario.factions if f.id not in sides]
+    both = [] if rules.haoqiang_allied(content, season) else [f.name for f in allied.factions_of(content, season) if f.id not in sides]
     act = territory.SORTIE_NAME if territory.on(content) else "遊歷"  # FB-251：出陣開著時寫「體力同出陣」（挑戰本人照舊讀 action_cost["train"]）
     lines = [CHALLENGE_WHO.format(both=CHALLENGE_BOTH.format(names="、".join(both)) if both else "", act=act)]
     if cfg.snub_hours > 0:

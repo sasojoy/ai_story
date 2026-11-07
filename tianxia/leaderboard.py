@@ -16,7 +16,7 @@ seal/tests/test_seal_acts_hidden、test_seal_revamp_hidden。
 """
 from __future__ import annotations
 
-from . import arts, library, martial_arts, team
+from . import allied, arts, library, martial_arts, team
 from .characters import CharacterStore, open_characters
 from .core import arena_ranks  # 擂台榜的名次與稱號（核心的查詢服務；擂台本身在單挑包）
 from .models import Content
@@ -231,7 +231,8 @@ def contribution_rankings(
     """第一季結算畫面的各陣營出力前五（計畫 T9）：這一季的角色、有陣營、貢獻大於 0，照貢獻排（同分照存檔順序）。
     名字一律寫名號（排行榜不能匿名，傳聞分層第七節）；真人與假人一樣列、看不出來。劇本的每個陣營都有一格，沒人出力是空的。"""
     season_number = world.get_season_number()
-    ranks: dict[str, list[tuple[str, int]]] = {f.id: [] for f in content.scenario.factions}
+    # 拿掉地方豪強的季（allied.factions_of）沒有豪強那一格
+    ranks: dict[str, list[tuple[str, int]]] = {f.id: [] for f in allied.factions_of(content, world.get_season())}
     for state in (characters or open_characters()).all():
         p = state.player
         if p.season_number != season_number or p.faction not in ranks or p.contrib <= 0:

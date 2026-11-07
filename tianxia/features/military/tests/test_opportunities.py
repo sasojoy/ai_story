@@ -450,6 +450,7 @@ def test_talisman_not_deliverable_off_base(on):
 
 
 def test_refugees_roll_after_duty(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _game(on, faction="haoqiang", at="cao_manor")
     game.state.player.stamina = 100
     _opp(on, "hao_refugees").accumulate.chance = 1.0  # 每次都遇到流民
