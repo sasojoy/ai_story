@@ -18,7 +18,7 @@ for (const d of [SHOTS, STY]) mkdirSync(d, { recursive: true });
 const PROFILE = join(OUT, "chrome-profile");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
-const report = { label, round: "replay", facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, toasts: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [], hashes: {} };
+const report = { label, round: "replay", facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [], hashes: {} };
 
 const chrome = spawn(process.env.TIANXIA_WEBQA_CHROME, ["--headless=new", `--remote-debugging-port=${CHROME_PORT}`, `--user-data-dir=${PROFILE}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
 let ws, seq = 0, sceneNow = "(start)";

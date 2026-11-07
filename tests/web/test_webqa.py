@@ -114,7 +114,7 @@ def test_expected_rows_only_count_when_they_match(noise):
 
 # ── 兩邊的比對（不開瀏覽器，假的走法紀錄） ──
 
-def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪", dots=None, width=None) -> Path:
+def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪", dots=None, width=None, toast="") -> Path:
     """dots: 這一鏡有一張 375-light 的截圖，塗黑這麼多個點（None 是沒有圖）。width: 視窗量到的 scrollWidth。"""
     for sub in ("dom", "style", "main", "shots"):
         (root / sub).mkdir(parents=True)
@@ -135,7 +135,7 @@ def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-
     with gzip.open(root / "style" / f"{sid}__375-light.json.gz", "wt", encoding="utf-8") as f:
         json.dump(doc, f)
     report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": list(steps), "apiCalls": [], "hashes": hashes, "pyErrors": [],
-              "scenes": {sid: {"text": text, "layout": {"375-light": {"sw": width or 375}}, "shots": shots, "sty": {"375-light": key}, "vol": {}, "unstable": False}}}
+              "scenes": {sid: {"text": text, "toast": toast, "layout": {"375-light": {"sw": width or 375}}, "shots": shots, "sty": {"375-light": key}, "vol": {}, "unstable": False}}}
     if fatal:
         report["fatal"] = fatal
     (root / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
@@ -188,6 +188,16 @@ def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
         (walk / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
     out = compare.compare(a2, b2, HOSTS)
     assert out["real"] == [] and out["noise"] == {"gutter": 1}
+
+
+def test_the_toasts_words_count_when_both_sides_still_show_them(compare, tmp_path):
+    a = _walk(tmp_path / "a", toast="已經存好了。")
+    assert compare.compare(a, _walk(tmp_path / "b", toast="已經存好了。"), HOSTS)["real"] == []
+    assert _classes(compare.compare(a, _walk(tmp_path / "c", toast="沒有存到。"), HOSTS)) == ["toast"]
+    out = compare.compare(a, _walk(tmp_path / "d"), HOSTS)  # 3.2 秒自己收掉：只有一邊還在，不比
+    assert out["real"] == [] and out["info"]["toast on one side"] == ["001_scene"]
+    share = compare.compare(_walk(tmp_path / "e", toast="已複製 http://127.0.0.1:8292/zhuan/AbC"), _walk(tmp_path / "f", toast="已複製 http://localhost:8293/zhuan/ZzZ"), HOSTS)
+    assert share["real"] == []  # 分享碼與主機照舊遮掉
 
 
 def test_a_dead_driver_is_the_tool_not_the_pages(compare, tmp_path):

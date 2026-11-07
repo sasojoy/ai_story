@@ -50,7 +50,7 @@ async function py(code) {
 const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${CHROME_PORT}`, `--user-data-dir=${PROFILE}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
 let ws, seq = 0, sceneNow = "(start)";
 const pending = new Map();
-const report = { label, round: ROUND, facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, toasts: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [] };
+const report = { label, round: ROUND, facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [] };
 const cov = {};
 async function connect() {
   for (let i = 0; i < 60; i++) {

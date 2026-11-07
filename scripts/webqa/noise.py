@@ -7,7 +7,8 @@ The classes (each one came from a real row of waves B and C):
   tale         the chronicle link written earlier on one side: only in the link
   layout-used  used values read while layout was moving: only the properties below, and the pixels of that window agree
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
-order (that is what splitting a file looks like: the pixels and computed styles still have to agree).
+order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
+when both sides still show them (compare.py).
 All of it needs the DOM and the styles to agree after masking, and neither side unstable. Anything else is real.
 """
 import re

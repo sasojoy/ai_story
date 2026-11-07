@@ -220,6 +220,13 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for side, f in (("A", x), ("B", y)):
             if f.get("gutterOdd"):
                 res.info["gutterOdd"].append(f"{side} {sid}")
+        # the toast's words: screenshots hide it and the DOM masks it. It goes by itself after 3.2 s, so it only counts when both sides still show it
+        ta, tb = x.get("toast"), y.get("toast")
+        if ta and tb:
+            if noise.mask_main(ta, hosts) != noise.mask_main(tb, hosts):
+                res.red(sid, "toast", {"A": ta[:200], "B": tb[:200]})
+        elif ta or tb:
+            res.info["toast on one side"].append(sid)
         # the DOM
         fa, fb = os.path.join(a, "dom", sid + ".html"), os.path.join(b, "dom", sid + ".html")
         dom_same = True
