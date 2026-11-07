@@ -900,7 +900,7 @@
 
   // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求兵挑東西）
   // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）。三間店捲的那一層（.shop-body）裡面一律再包一層 .shop-col：
-  // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（style.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
+  // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（shop.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
     const kind = shop.shop || "smith";
     // 商城（商城第二批）：網頁自己開的那一層（mallShop），出店只是收起來、不送伺服器
@@ -1569,52 +1569,6 @@
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
     // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
     if (sent && document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
-  }
-
-
-  // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
-  async function sayLine(form, text) {
-    await busy(async () => {
-      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
-      const submitBtn = form.querySelector("[type=submit]");
-      submitBtn.textContent = "對方沉吟中…";
-      const stop = watchQueue(submitBtn, "對方沉吟中…");
-      try {
-        const r = await api("/api/say", { text, option: sayingId() });
-        S.saying = false;
-        applyMain(r.main);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } finally {
-        stop();
-        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
-        submitBtn.textContent = "說出口";
-      }
-    });
-  }
-
-  // 找素材的「自己說」（第 32 項）：送出後要等模型評這個找法（同隨口應對），按鈕先寫「盤算中……」；等候的話照 waitLineFor(GATHER_SAY_ID)
-  const GATHER_SAY_WAIT = "盤算中……"; // 待 joy 潤
-  async function gatherSay(form, text) {
-    await busy(async () => {
-      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
-      const submitBtn = form.querySelector("[type=submit]");
-      submitBtn.textContent = GATHER_SAY_WAIT;
-      const stop = watchQueue(submitBtn, GATHER_SAY_WAIT);
-      try {
-        const r = await api("/api/do/gather_text", { text });
-        S.gatherSaying = false;
-        S.wheelSel = null; // 同按了別的探索：收起展開的探索（分支展開與否照記著，S.gatherOpen）
-        applyMain(r.main);
-        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        // 被擋下來的那一句（字數不對、換了做法）在江湖紀錄裡沒有，用提示泡泡講；做成了的結果在「剛剛」
-        if (said && !said.startsWith("你：")) toast(said);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } finally {
-        stop();
-        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
-        submitBtn.textContent = GATHER_SAY_GO;
-      }
-    }, waitLineFor(GATHER_SAY_ID));
   }
 
 

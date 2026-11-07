@@ -576,7 +576,7 @@
   }
   const WK_MORE = "這一季在打什麼・下一件", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
   function wkBoxHtml(m, w, open) {
-    const bp = typeof bpOn === "function" && bpOn(m);
+    const bp = bpOn(m);
     const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
     const ch = chapterCardHtml(m, true), join = ch ? "" : wkJoinHtml(m);
     const free = m.sides_card && !m.sides_card.joined;
@@ -1018,7 +1018,7 @@
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     // 戰場面板（battle.js，Joy 2026-11-06 大決戰優化，設計稿方案甲）：開打、集結時排在最上面，出招鈕與放手一搏的輸入框緊接在面板裡；
     // 本週卡、「剛剛」與場景卡排到面板底下（第一屏是倒數、主將、出招）
-    const bp = typeof bpOn === "function" && bpOn(m) ? bpPanelHtml(m, myTurn ? free : "") : "";
+    const bp = bpOn(m) ? bpPanelHtml(m, myTurn ? free : "") : "";
     if (bp && myTurn) {
       return `${hints}${resultCard}${bp}${bpDropMoves(menu)}${scene}${peopleAfter}${guide}${letter}${peek}${now}${links}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }

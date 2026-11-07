@@ -301,7 +301,7 @@
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     // 大勢線的名字不帶「（現在 N）」（選單上多寫的那一段），問句另外寫現在多少、做完多少
     const trendName = (id) => picked(id).replace(/（-?\d+）$/, "");
-    const was = (id) => (typeof adTrendNow === "function" ? adTrendNow(id) : null);
+    const was = (id) => adTrendNow(id);
     const fightName = (S.admin && S.admin.now && S.admin.now.battle && S.admin.now.battle.name) || "";
     // 21 天季的「繼續」（PM 2026-10-19，跟 world.RESUME_SKIP_REAL 一致）；待 joy 潤
     // 季長與對回什麼照季寫（S.admin.realign，同 world.realign_line；FB-501：7 天的季「對回現實的日子」），沒給照 21 天季那一句

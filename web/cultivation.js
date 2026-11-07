@@ -280,10 +280,10 @@
     S.heroMoveShow = mid;
     render();
     const hm = S.main && S.main.hero_move;
-    sceneAsMe(hm && hm.worn ? hm.worn.style : ""); // 台上站的是自己（mall.js）
+    sceneAsMe(hm && hm.worn ? hm.worn.style : ""); // 台上站的是自己（looks.js）
     if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
-  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
+  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（looks.js 的 openMallMoves）。
   // 萬寶閣也用 #scene-preview 那一塊畫布：先把俠客頁這一塊收起來
   async function heroMoveGo(style) {
     S.heroMoveShow = null;
