@@ -15,7 +15,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, Verb
 from tianxia.core.services import ROAD_TASKS
 
 
@@ -106,6 +106,17 @@ class TravelFeature(Feature):
                 MenuHook("here", "move", lambda ctx, loc, cost, odds: menu.move_options(ctx, loc)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/road 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：在路上那一張。"""
+        if self._scenes is None:
+            from . import road_actions  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "road", lambda ctx: road_actions.road_scene(ctx)),)
+        return self._scenes
 
     # howto（全部拆包第 59 批「引導二」）
     def howto(self) -> tuple[HowtoHook, ...]:

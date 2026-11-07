@@ -2,7 +2,7 @@
 本體一字沒改，self 換成 ctx）。
 
 投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面，「確定」才真的投靠，「再想想」就作罷；豪強分屬兩軍的季
-投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_join_lean、_faction_prompt（場景原位在叫；sect_options 第 56 批起是 here/sect 那一格，委派拿掉）；_ally_options 只有包裡的
+投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_join_lean（_faction_prompt 第二輪第 91 批起場景是 own/faction 那一格，委派拿掉；sect_options 第 56 批起是 here/sect 那一格，委派拿掉）；_ally_options 只有包裡的
 pending_options 叫（沒有委派）；_faction_step 只有包的 choose 掛鉤叫（沒有委派）。選單「接管整個選單」的待確認那三段搬成 pending_options
 （第 56 批起是 take/faction 那一格，委派拿掉）。
 
@@ -127,6 +127,22 @@ def faction_prompt(ctx, faction) -> str:
     held = bounty_base.stranded(ctx.state, ctx.content, side)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
     lost = bounty_base.STRANDED_JOIN.format(n=len(held)) if held else ""
     return f"投靠後這一季不能改投（叛投另論）。{lost}{counts}。確定投靠{allied.label(ctx.content, faction.id, p.pending_ally)}？"
+
+
+def ally_scene(ctx) -> str | None:
+    """場景卡 own/ally 那一格（core_scene，第二輪第 91 批；原本 Game._own_scene_text 那一段）：拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）。"""
+    if not allied.needs_ally(ctx.state, ctx.content):
+        return None
+    return f"**依附哪一邊**\n\n{allied.ALLY_AFTER_SECT.format(counts=ctx.faction_counts_text())}"
+
+
+def faction_scene(ctx) -> str | None:
+    """場景卡 own/faction 那一格（core_scene，第二輪第 91 批；原本 Game._own_scene_text 那一段）：投靠的確認畫面。"""
+    pending = ctx.state.player.pending_faction
+    if not pending:
+        return None
+    faction = ctx.content.scenario.faction(pending)
+    return f"**投靠{faction.name}**\n\n{faction_prompt(ctx, faction)}"
 
 
 def pending_options(ctx) -> list[Option] | None:

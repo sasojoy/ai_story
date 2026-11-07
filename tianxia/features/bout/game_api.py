@@ -14,7 +14,6 @@ TABLE = {
     # （_battle_gear）、奪璽單挑的參戰者與沒參戰的持有者（kin、game）在叫
     "_duel_cut": duel_actions.duel_cut,
     "_duel_start": duel_actions.duel_start,
-    "_duel_scene": duel_actions.duel_scene,
     "duel_free_text_prompt": duel_actions.duel_free_text_prompt,
     "duel_free_text_note": duel_actions.duel_free_text_note,
     "duel_text_request": duel_actions.duel_text_request,
@@ -27,7 +26,6 @@ TABLE = {
     "_arena_fight_problem": arena_actions.arena_fight_problem,
     "_arena_options": arena_actions.arena_options,
     "_arena_join": arena_actions.arena_join,
-    "_arena_scene": arena_actions.arena_scene,
     "arena_crowd_request": arena_actions.arena_crowd_request,
     "apply_arena_crowd": arena_actions.apply_arena_crowd,
     "_deliver_arena": arena_actions.deliver_arena,

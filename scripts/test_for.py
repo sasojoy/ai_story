@@ -943,7 +943,8 @@ CORE_SERVICES: dict[str, tuple[str, ...]] = {  # 模組 → 這個檔的底（�
     "pills": ("pill", "stamina"),
     "status_view": ("status", "jianghu", "explain", "explain2", "fronts"),  # 第 81 批照實調：status、jianghu 各只有 1 個檔，真的在測 status_data 的 test_explain2、test_fronts 原本挑不到
     "page_view": ("jianghu", "shop", "shop2", "journal", "rumor", "front"),  # 第 81 批照實調：test_shop2、test_journal 原本挑不到
-    "scene_view": ("scene",),
+    # 第 91 批開檔照實量：scene 1 個檔（test_scene_art）、place 1、marks 5、engine 5，併起來 12 個（IMPORT_CAP 之內）；location_text、_own_ended 的名字認不出功能（service_word 空字串），靠底
+    "scene_view": ("scene", "place", "marks", "engine"),
 }
 # 名字裡這些字不是功能：拿來對測試檔名會誤中（test_free_text、test_real_content、test_for_world、_player_hp_and_cap、_reset_player_for_new_season）
 SERVICE_STOP = frozenset({"and", "for", "free", "real", "text", "line", "lines", "core", "new", "set", "get", "day", "daily", "base", "local", "load", "take", "data"})

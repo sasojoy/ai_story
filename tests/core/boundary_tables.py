@@ -29,19 +29,13 @@ GAME_DELEGATE_CALLERS = {
     ("options", "_battle_for_me"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("options", "_watching_battle"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("options", "_fighting"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
-    ("scene_art", "_battle_for_me"): "場景卡的圖：全服戰鬥蓋著場景時沒有圖（序章裡不算）：殼的場景卡（總表第 64～67 批）；位置固定、沒有對應的掛鉤（全部拆包第 8 批計畫 1.4）",
     # bounties
     ("choose", "_bounty_stale"): "FB-162 被搶的那一句回 Refused（伺服器照它跳提示）；choose_unlisted 回 list、而且在查選單之前，位置與回傳都不同，照 FB-195 馬市那一支留原位",
     # bout
     ("choose", "_arena_fight_problem"): "按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久：在查完選單之後、「此刻無法」之前，choose_unlisted 在查選單之前，不是這個位置",
-    ("_own_scene_text", "_duel_scene"): "自己眼前的場景卡（頭目戰、擂台排在宴客的席位之前）：scene 掛鉤在擂台之後，接上去會排到宴客後面",
-    ("_own_scene_text", "_arena_scene"): "同上",
     # companions
     ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：不是動作，是重驗、驗過的那一輪要傳給後面的格；MENU_ORDER 的 quick 接不了（第 57 批）",
     ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
-    ("_own_scene_text", "_last_talk_line"): "談話畫面名字底下的「上回」那一行：場景文字（_own_scene_text）的一部分。不接 scene 掛鉤的理由（第 20 批審查）：掛鉤坐在一條線的答題（storyline.question_text）之前，談話這一段在答題之後；包的登記順序又是人物情誼排在有所感前面，接成掛鉤得替它補「答題開著就讓路」與「有所感開著就讓路」兩道守衛，位置算行為，這一批的軌證明不了兩者永不並存，所以維持委派",
-    ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
-    ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
     # cultivation
     ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
     # explore
@@ -49,8 +43,6 @@ GAME_DELEGATE_CALLERS = {
     # faction
     ("choose", "_lean_anytime"): "「改幫…」不在選單上時照樣收（在路上、決戰的大區，設計 3.2）：要先查選單、查不到才問它，choose 掛鉤在查選單之後，位置不對",
     ("choose", "_join_lean"): "投靠或拜入陣營名下的門派那一下，動作之後、入伍段之前給傾向：位置固定、動作之後的收尾沒有對應的掛鉤",
-    ("_own_scene_text", "_faction_prompt"): "場景那一段的順序算行為（談著、選邊、投靠、叛投確認、求見…）：位置固定，場景的掛鉤是第 55～57 批",
-    ("_own_scene_text", "_defect_scene"): "同上（叛投確認畫面的場景）",
     # gear
     ("choose", "_general_gifts"): "位置固定、沒有對應的掛鉤（名將贈禮夾在「引導」與 check_thresholds 之間，choose 後半的先後算行為）",
     ("choose", "_signature_arms"): "位置固定、沒有對應的掛鉤（同上：本命兵器與名將贈禮同一處）",
@@ -70,14 +62,12 @@ GAME_DELEGATE_CALLERS = {
     ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
     ("choose", "_settle_plots"): "做完一個動作之後的集體密謀結算：位置在回話的最後一段，沒有對應的掛鉤",
     ("choose", "_hear_after_stamina"): "花體力的動作之後抽伏筆片段與機緣線索：位置在 choose 結尾、after_action 之前，伏筆先機緣後、共用 self.rng，擲骰順序算行為，沒有對應的掛鉤",
-    ("_own_scene_text", "_fs_asking_text"): "答題中的場景文字排在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前，scene 掛鉤在更前面（有所感、宴席之後、談話之前），位置不同不能接",
     # outlets
     # seal
     # sense
     ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
     ("_action_title", "_epiphany_title"): "dunwu: 那一下江湖紀錄的標題（同上，dunwu: 留在原位）",
     # socialize
-    ("_own_scene_text", "_audience_intro"): "求見畫面的說明（picking_audience）：場景文字夾在叛投確認與伏筆答題之間，`scene` 掛鉤坐在更前面，位置算行為",
     # sortie
     # story
     ("_reset_player_for_new_season", "_story_close_season"): "還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳，夾在 _zhuan_past 與 _zhuan_profile 中間（同上）；on_season_end 在 save_annals 之後、又只問開著的包",
@@ -158,6 +148,7 @@ CORE_VIEW_DELEGATES = {
     "bulletin", "season_result", "place_minutes",  # 公告、結算卡、分鐘
     "trends_text", "rumors_text", "rumor_layers", "chronicle_text",  # 見聞與江湖史
     "_day_stamp", "latest_entry_html", "journal_top_html", "now_entry_html", "now_front", "journal_html", "shows_battle_card", "battle_extra_html",  # 江湖紀錄與「剛剛」
+    "scene_text", "_own_scene_text", "scene_art", "location_text", "place_state_view",  # 場景卡（core_scene，第二輪第 91 批）
 }
 
 # 被測試換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：event_check 裡叫它們一律經 ctx，不直接叫模組裡的本體。

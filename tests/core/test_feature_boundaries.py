@@ -623,11 +623,11 @@ def test_the_push_and_pill_services_call_the_patched_game_methods_through_ctx(mo
 
 
 # core_views（第二輪第 81 批）
-VIEW_MODULES = {"status_view", "page_view"}
+VIEW_MODULES = {"status_view", "page_view", "scene_view"}  # scene_view：core_scene（第二輪第 91 批）
 
 
 def test_the_game_reaches_the_views_only_through_its_one_line_delegates():
-    """Game 上叫 status_view、page_view 的只有 CORE_VIEW_DELEGATES 那幾個一行的委派（多一處就是把畫面的邏輯寫回 Game、或委派加了邏輯）；
+    """Game 上叫 status_view、page_view、scene_view 的只有 CORE_VIEW_DELEGATES 那幾個一行的委派（多一處就是把畫面的邏輯寫回 Game、或委派加了邏輯）；
     engine._MENU_CORE 的 "open" 那一格指到 page_view.OPEN_CORE（_shop_open 讀的是同一份，核心不 import engine）。"""
     from tianxia import engine
     from tianxia.core import page_view

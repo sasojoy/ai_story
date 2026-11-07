@@ -49,7 +49,7 @@
 | choose_unlisted(ctx, option_id) | Game.choose 查選單之前：不在選單上的動作（約戰的 sortie:*） |
 | after_action(ctx) | Game.choose 最後：本人做完一件事（殺手檢查） |
 | on_own_turn(ctx) | Game.own_turn_checks 最前面：本人這一輪（商城的封測發放） |
-| scene(ctx)、scene_over(ctx) | Game._own_scene_text 擂台之後（坐在宴席上）；Game.scene_text 最前面（蓋在畫面上的戰場） |
+| scene_over(ctx) | core/scene_view.scene_text 最前面（蓋在畫面上的戰場）；自己眼前的那一張與圖是 scenes()（core_scene，第二輪第 91 批） |
 | record_detail(ctx, record) | Game.battle_detail：戰報頁那一筆（決戰照 battles 表重讀完整戰況） |
 | on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
@@ -72,6 +72,7 @@
   _reset_player_for_new_season 裡各包那一段，照檔尾寫死的順序表 SEAM_ORDER 一格一格叫（包與核心的段穿插），不問 enabled |
 | menus()（MenuHook） | 選單與動身的格（core_seams：全部拆包第 56 批）：Game.options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、
   移動包的出發收店裡各包那一段，第 57 批加 Game.choose 那幾顆「選單上、不建紀錄」的（quick），照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
+| scenes()（SceneHook） | 場景卡的格（core_scene：第二輪第 91 批）：core/scene_view.py 的 _own_scene_text、scene_art 照順序表 SCENE_ORDER 一格一格問（包與核心的格穿插），第一個不是 None 的算，不問 enabled |
 | howto()（HowtoHook） | 玩法說明的格（全部拆包第 59 批「引導二」）：設定抽屜那一頁（guide/howto.py 的 page）照檔尾寫死的順序表 HOWTO_ORDER 一格一格接；
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
 | status_slots()（StatusHook） | 狀態列（Game.status_data）、江湖畫面（server._main_view_body）與管理頁（features/admin/routes.py 的 admin_choices，第二輪第 90 批）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
@@ -197,7 +198,6 @@ class FeatureHooks(Protocol):
     def choose_unlisted(self, ctx: Game, option_id: str) -> list[str] | None: ...
     def after_action(self, ctx: Game) -> list[str]: ...
     def on_own_turn(self, ctx: Game) -> None: ...
-    def scene(self, ctx: Game) -> str | None: ...
     def scene_over(self, ctx: Game) -> tuple[str, bool] | None: ...
     def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None: ...
     # battle（全部拆包第 8 批：收季的收兵；第 11 批 PM 認定第 7 條「兩段要一起進收季的位置」）
@@ -217,6 +217,8 @@ class FeatureHooks(Protocol):
     def seams(self) -> tuple[SeamHook, ...]: ...
     # core_seams（全部拆包第 56 批：選單與動身的格，先後在 MENU_ORDER；不問 enabled）
     def menus(self) -> tuple[MenuHook, ...]: ...
+    # core_scene（第二輪第 91 批：場景卡的格，先後在 SCENE_ORDER；不問 enabled）
+    def scenes(self) -> tuple[SceneHook, ...]: ...
     # howto（全部拆包第 59 批：玩法說明的格，先後在 HOWTO_ORDER；不問 enabled）
     def howto(self) -> tuple[HowtoHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
@@ -320,9 +322,6 @@ class Feature:
     def on_own_turn(self, ctx: Game) -> None:
         return None
 
-    def scene(self, ctx: Game) -> str | None:
-        return None
-
     def scene_over(self, ctx: Game) -> tuple[str, bool] | None:
         return None
 
@@ -357,6 +356,9 @@ class Feature:
         return ()
 
     def menus(self) -> tuple[MenuHook, ...]:
+        return ()
+
+    def scenes(self) -> tuple[SceneHook, ...]:  # core_scene
         return ()
 
     def howto(self) -> tuple[HowtoHook, ...]:
@@ -690,17 +692,8 @@ def on_own_turn(ctx: Game) -> None:
         f.on_own_turn(ctx)
 
 
-def scene(ctx: Game) -> str | None:
-    """自己眼前的場景卡（Game._own_scene_text：擂台之後、有所感之前）：第一個不是 None 的算。"""
-    for f in registered():
-        got = f.scene(ctx)
-        if got is not None:
-            return got
-    return None
-
-
 def scene_over(ctx: Game) -> tuple[str, bool] | None:
-    """蓋在畫面上的（Game.scene_text 最前面）：(那一段, 要不要整個取代自己眼前的事)；第一個不是 None 的算。"""
+    """蓋在畫面上的（core/scene_view.scene_text 最前面）：(那一段, 要不要整個取代自己眼前的事)；第一個不是 None 的算。"""
     for f in registered():
         got = f.scene_over(ctx)
         if got is not None:
@@ -1413,6 +1406,67 @@ def menu_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list
 def menu_any(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> bool:
     """一格一格叫，第一個真值就停、回 True；都不是回 False。"""
     return any(run(*args) for run in _menu_slots(at, core))
+
+
+# core_scene（第二輪第 91 批「場景卡收接縫」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第91批.md 第二節）
+
+
+@dataclass(frozen=True)
+class SceneHook:
+    """場景卡的一格（Feature.scenes() 回一串）：core/scene_view.py 在 at 那個位置照 SCENE_ORDER[at] 一格一格問，輪到 slot 就叫 run(ctx)，回 None 是「不是我，往下問」。
+    照 registered() 問、不看 enabled（原位那幾行本來就不看包的開關，坐席、談著、投靠的髒存檔關著開關也要照舊；options、on_drop_stale 只問開著的包，所以接不了，第 42 批認定第 7 條）。
+    包的 run 在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 場景卡的順序表：位置 → 那一個位置的格，照換成掛鉤之前 if 鏈一支一支的先後。順序就是行為（誰蓋住誰；art 的 place 要讀整條 own 鏈來判斷是不是真的站在地點上，少一格整張圖會蓋錯或不見），
+# 所以寫死、連核心自己的格一起列。包登記自己那一格（Feature.scenes()），其餘由核心代叫（core/scene_view.py 的 OWN_CORE、ART_CORE）。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：scripts/same_behavior.py 的 vista、stack 兩軌（兩層以上疊著的先後只有它們比）。
+#
+# 位置  核心在哪裡問                       每一格回什麼
+# own   core/scene_view._own_scene_text    那一張的 Markdown；""（取名的意境不在了）也算接管
+# art   core/scene_view.scene_art          {} 是「這個畫面是我的，沒有圖」、非空 dict 是那張圖（scene_art 把 {} 換回 None）。答題、取名不在表上是刻意的：疊在談著上面時文字是答題、圖是人像
+SCENE_ORDER: dict[str, tuple[str, ...]] = {
+    "own": ("ended", "event", "duel", "arena", "feast", "sense", "story", "talk", "ally", "faction", "defect", "audience", "omen", "road", "place"),
+    "art": ("ended", "battle", "event", "bout", "feast", "sense", "talk", "place"),
+}
+
+
+def scene_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 menu_hooks）。"""
+    if at not in SCENE_ORDER:
+        raise ValueError(f"場景卡沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.scenes():
+            if hook.slot not in SCENE_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了場景卡表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"場景卡的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def scene_first(at: str, core: dict[str, Callable[..., Any]], ctx: Game) -> Any:
+    """照 SCENE_ORDER[at] 一格一格叫：包登記了用包的，沒有用 core 那一份（核心自己的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）跳過。
+    第一個不是 None 的就回它、後面的不叫（""、{} 也算接管）；都是 None 回 None。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    own = scene_hooks(at)  # 沒有這個位置在這裡丟
+    order = SCENE_ORDER[at]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了場景卡 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is None:
+            continue
+        got = run(ctx)
+        if got is not None:
+            return got
+    return None
 
 
 # howto（全部拆包第 59 批「引導二」；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第二節）

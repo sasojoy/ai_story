@@ -6,13 +6,13 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
   底座〔登記鉤子的字典、開線、換字、題目文字〕在共用規則層 tianxia/story_base.py（核心的 rules、事件檢定與探索包、有所感包也讀），storyline.py re-export 它的每個名字
 - actions.py：原本 Game 上的 10 個方法（Game 留 10 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
 
-掛鉤：choose（只吃 story:）、scene（接縫掛鉤：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由；/api/do/story_seen 在 routes.py 的 main_actions（全部拆包第 68 批）、
+掛鉤：choose（只吃 story:）、scenes（SCENE_ORDER 的 own/story 格：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由；/api/do/story_seen 在 routes.py 的 main_actions（全部拆包第 68 批）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
 checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
-from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SeamHook
+from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SceneHook, SeamHook
 from tianxia.core.features import ContentSlot
 
 
@@ -53,12 +53,16 @@ class StoryFeature(Feature):
         """答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，整季機器人不按、答題照隨機答完（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
         return option.id.endswith(":later")
 
-    def scene(self, ctx):
-        """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 有所感、取名之後的一支）：一條線的答題；沒有答題是 None。
-        不問 enabled（原位本來就不看開關）。排在有所感包、宴客包之後（FEATURES 的順序），第一個不是 None 的算。"""
-        from . import actions  # noqa: PLC0415
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
 
-        return actions.scene(ctx)
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/story 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：一條線的答題；沒有答題是 None。圖的表上沒有這一格是刻意的：疊在談著上面時文字是答題、圖是人像。"""
+        if self._scenes is None:
+            from . import actions  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "story", lambda ctx: actions.scene(ctx)),)
+        return self._scenes
 
     # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）
     _effects: tuple[EffectHook, ...] | None = None

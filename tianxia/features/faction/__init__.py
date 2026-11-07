@@ -10,7 +10,7 @@ checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, slot_some
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, StepHook, slot_some
 from tianxia.core.features import ContentSlot
 
 
@@ -151,6 +151,21 @@ class FactionFeature(Feature):
                 MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的三格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：還沒挑依附哪一邊、投靠的確認、叛投的確認。髒存檔照舊：投靠或叛投的那一軍不在了，這裡照舊丟 LookupError。"""
+        if self._scenes is None:
+            from . import defect_actions, join_actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "ally", lambda ctx: join_actions.ally_scene(ctx)),
+                SceneHook("own", "faction", lambda ctx: join_actions.faction_scene(ctx)),
+                SceneHook("own", "defect", lambda ctx: defect_actions.scene(ctx) if ctx.state.player.pending_defect else None),
+            )
+        return self._scenes
 
     # howto（全部拆包第 59 批「引導二」）
     def howto(self) -> tuple[HowtoHook, ...]:

@@ -90,7 +90,7 @@ def asking_options(ctx) -> list:
 
 
 def asking_text(ctx) -> str | None:
-    """答題中的場景文字。核心原位 _own_scene_text 在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前問它。"""
+    """答題中的場景文字（場景卡 own/omen 那一格，第二輪第 91 批）：在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前（SCENE_ORDER）。"""
     return fs_rules.asking_text(ctx.state, ctx.content, ctx.world)
 
 

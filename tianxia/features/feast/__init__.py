@@ -7,7 +7,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, Outcome, SceneHook, WorldHook
 
 
 class FeastFeature(Feature):
@@ -51,12 +51,20 @@ class FeastFeature(Feature):
 
         return bots.score(option)
 
-    def scene(self, ctx):
-        """自己眼前的場景卡（接縫掛鉤，全部拆包第 11 批；原本 Game._own_scene_text 擂台之後那一行）：坐在宴席上時是主人、地方、最近三句
-        敬酒詞那一張；沒坐著是 None。不問 enabled：原位本來就不看宴客開關。"""
-        from . import actions  # noqa: PLC0415
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
 
-        return actions.scene(ctx)
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的兩格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看宴客開關）：坐在宴席上時是主人、地方、最近三句敬酒詞那一張，沒坐著（或那一場不能敬了）是 None；
+        圖看 feasting 這個欄位、不看 seat：宴席散了文字已經掉回底下那一張，圖照舊沒有，要等畫面同步收掉欄位（髒存檔照舊）。"""
+        if self._scenes is None:
+            from . import actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "feast", lambda ctx: actions.scene(ctx)),
+                SceneHook("art", "feast", lambda ctx: {} if ctx.state.player.feasting is not None else None),
+            )
+        return self._scenes
 
     # core_world（全部拆包第 25 批「世界層掛鉤」）
     _world: tuple[WorldHook, ...] | None = None
