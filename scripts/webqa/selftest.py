@@ -1,12 +1,12 @@
 """Does the gate still tell the truth? On one commit:
 
-  1. --rounds c, base against base: green.
+  1. --rounds c, base against base: green. --rounds main,v,extra walks those instead: wave D's false rows only showed on main, v and extra.
   2. The same again: the fingerprint is the same (noise counts are allowed to move, they are not in it).
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round.
   4. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
-usage: python selftest.py --sha <x> --out <dir> [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only | --walk-only] [--only flows]
+usage: python selftest.py --sha <x> --out <dir> [--rounds c] [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only | --walk-only] [--only flows]
 
 Exit 0 all held, 1 something did not. summary: <out>/selftest.json.
 """
@@ -25,9 +25,9 @@ import replay  # noqa: E402
 import unpack  # noqa: E402
 
 
-def _gate(a, out_name, *extra) -> dict:
+def _gate(a, out_name, *extra, rounds="c") -> dict:
     out = os.path.join(a.out, out_name)
-    argv = ["--base", a.sha, "--head", a.sha, "--out", out, "--rounds", "c", *extra]
+    argv = ["--base", a.sha, "--head", a.sha, "--out", out, "--rounds", rounds, *extra]
     if a.only:
         argv += ["--only", a.only]
     for flag, value in (("--ports", a.ports), ("--cdp-ports", a.cdp_ports), ("--chrome", a.chrome), ("--node", a.node), ("--repo", a.repo)):
@@ -47,7 +47,7 @@ def _replay_controls(a, rows: list) -> None:
     shutil.rmtree(work, ignore_errors=True)
     copy = unpack.unpack(a.repo, a.sha, os.path.join(work, "base"))
     web = os.path.join(copy, "web")
-    dom = os.path.join(corpus, "c", "base", "dom")
+    dom = os.path.join(corpus, a.rounds.split(",")[0], "base", "dom")
     r = replay.replay(dom, web, web, os.path.join(work, "same"), cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
     rows.append(("replay same against same", not r["real"] and not r["tool"], f"snapshots {r['snapshots']} (with #map-host {r['with_map_host']}) real {len(r['real'])} noise {r['noise']} {r['seconds']}s"))
     r = replay.replay(dom, web, web, os.path.join(work, "anim"), frozen=False, shoot=False, cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
@@ -67,6 +67,7 @@ def main(argv=None) -> int:
     ap.add_argument("--sha", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--repo", default=gate.REPO)
+    ap.add_argument("--rounds", default="c", help="what the two same walks cover (the positive controls stay on c); the first one is the replay's corpus")
     ap.add_argument("--ports")
     ap.add_argument("--cdp-ports")
     ap.add_argument("--chrome")
@@ -80,9 +81,9 @@ def main(argv=None) -> int:
     rows = []
     corpus = os.path.join(a.out, "corpus")
     if not a.replay_only:
-        s1 = _gate(a, "same1", "--keep-corpus", corpus)
+        s1 = _gate(a, "same1", "--keep-corpus", corpus, rounds=a.rounds)
         rows.append(("base against base is green", s1["code"] == 0, f"exit {s1['code']} real {len(s1['real'])} noise {s1['noise']} {s1['took']}s"))
-        s2 = _gate(a, "same2")
+        s2 = _gate(a, "same2", rounds=a.rounds)
         rows.append(("the same walk again has the same fingerprint", s1["fingerprint"] == s2["fingerprint"], f"{s1['fingerprint']} / {s2['fingerprint']} noise {s2['noise']}"))
     if not a.walk_only:
         _replay_controls(a, rows)

@@ -2,7 +2,7 @@
 
 The classes (each one came from a real row of waves B and C):
   aa           anti-aliasing on rounded corners: at most 12 levels and 100 pixels
-  gutter       the 15px scrollbar landed on one side only: only at desktop widths, sw 1265 against 1280
+  gutter       the 15px scrollbar landed on one side only: never at phone width, sw 15 apart (1265 against 1280, 626 against 641); grid tracks may move with it
   share        a fresh share code: the difference is only in /zhuan/CODE, /zhanji/CODE and the share row's rect
   tale         the chronicle link written earlier on one side: only in the link
   layout-used  used values read while layout was moving: only the properties below, and the pixels of that window agree
