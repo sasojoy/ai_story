@@ -203,7 +203,7 @@ def tale_clue(ctx, event: Event) -> list[str]:
         clue = secret_recipes.hear(s, ctx.content, secret_recipes.tianji_of(ctx.world), secret_recipes.TALE, seed)
         if clue:
             out.append(cfg.tale_frame.format(clue=clue))
-    return out + ctx._forge_clue(forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
+    return out + forge_secrets.clue_line(s, ctx.content, ctx.world, forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
 
 
 def event_battle(ctx, event: Event, choice: Choice) -> list[str]:

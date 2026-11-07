@@ -182,6 +182,20 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     return out
 
 
+def standing_here(state: GameState, content: Content) -> list[str]:
+    """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
+    「還要改進」第 5 點）。有挑戰本人的季（figures.challenge_on，每季都有），人物表上的人照他此刻的所在與狀態
+    （figures.placed_characters，T4）：轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方；14 天的季沒人退場時
+    跟 talk_at 一樣。緊急開關關著（figure_challenge_every_season）時照 talk_at，一個字都不變。"""
+    s, c = state, content
+    here = s.player.location
+    placed = placed_characters(s, c)
+    return [
+        cid for cid, ch in c.characters.items()
+        if ch.deep_interaction and (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))
+    ]
+
+
 def commander(state: GameState, content: Content, front: str | None, faction: str) -> str | None:
     """那條戰線上那一方當下的主將（人物 id）：在場、戰線是 front、陣營是 faction 的人物裡，人物表排最前面的那位——
     人物表的順序就是位階（皇甫嵩在朱儁前、朱儁在孫堅前、張角在張寶前、盧植在董卓前）。沒有就是 None：時刻表的

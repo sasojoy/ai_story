@@ -74,7 +74,7 @@ def scrap_find(ctx) -> list[str]:
         clue = secret_recipes.hear(s, ctx.content, secret_recipes.tianji_of(ctx.world), secret_recipes.SCRAP, seed)
         if clue:
             out.append(cfg.scrap_frame.format(clue=clue))
-    return out + ctx._forge_clue(forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
+    return out + forge_secrets.clue_line(s, ctx.content, ctx.world, forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
 
 
 def explore_outcome(ctx) -> list[str]:

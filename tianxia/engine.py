@@ -1358,17 +1358,7 @@ class Game:
         return pushing.push_room(self, trend_id)
 
     def _figures_here(self) -> list[str]:
-        """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
-        「還要改進」第 5 點）。有挑戰本人的季（figures.challenge_on，每季都有），人物表上的人照他此刻的所在與狀態
-        （figures.placed_characters，T4）：轉往冀州的皇甫嵩、到任的董卓在盧植營；下獄、退場、重創的不在任何地方；14 天的季沒人退場時
-        跟 talk_at 一樣。緊急開關關著（figure_challenge_every_season）時照 talk_at，一個字都不變。"""
-        s, c = self.state, self.content
-        here = s.player.location
-        placed = figures.placed_characters(s, c)
-        return [
-            cid for cid, ch in c.characters.items()
-            if ch.deep_interaction and (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))
-        ]
+        return figures.standing_here(self.state, self.content)
 
     def _shop_say(self, key: str, problem: str | None = None) -> None:
         return page_view._shop_say(self, key, problem)
@@ -1584,16 +1574,6 @@ class Game:
 
     def _tale_clue(self, event: Event) -> list[str]:
         return event_check.tale_clue(self, event)
-
-    def _forge_clue(self, source: int, seed: str) -> list[str]:
-        """說書與殘譜的鑄器口訣（打造隱藏配方設計 6.2）：擲 tale_chance／scrap_chance（自己的亂數），中了照 forge_secrets.hear 挑一句、
-        記進鑄譜。"""
-        rule = self.content.config.forge_secrets
-        chance, frame = (rule.tale_chance, rule.tale_frame) if source == forge_secrets.TALE else (rule.scrap_chance, rule.scrap_frame)
-        if not secret_recipes.roll(chance, seed):
-            return []
-        clue = forge_secrets.hear(self.state, self.content, secret_recipes.tianji_of(self.world), source, seed)
-        return [frame.format(clue=clue)] if clue else []
 
     def _event_battle(self, event: Event, choice: Choice) -> list[str]:
         return event_check.event_battle(self, event, choice)

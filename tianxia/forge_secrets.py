@@ -437,6 +437,17 @@ def smith_items(content: Content, season: WorldState | None, tianji: int, locati
     return items
 
 
+def clue_line(state: GameState, content: Content, world: WorldStateStore, source: int, seed: str) -> list[str]:
+    """說書與殘譜的鑄器口訣（打造隱藏配方設計 6.2）：擲 tale_chance／scrap_chance（自己的亂數），中了照 forge_secrets.hear 挑一句、
+    記進鑄譜。"""
+    rule = content.config.forge_secrets
+    chance, frame = (rule.tale_chance, rule.tale_frame) if source == TALE else (rule.scrap_chance, rule.scrap_frame)
+    if not secret_recipes.roll(chance, seed):
+        return []
+    clue = hear(state, content, secret_recipes.tianji_of(world), source, seed)
+    return [frame.format(clue=clue)] if clue else []
+
+
 def hear_smith(state: GameState, content: Content, tianji: int) -> str | None:
     """鐵匠順口（6.2）：這家知道的線索（smith_items）裡你還沒聽過的第一樣，直接記進鑄譜（不走 hear 的挑法，同人物順口）；
     同一家講完它知道的之前不重複（素材與經濟設計第三節），都聽過了不再說，回 None。"""
