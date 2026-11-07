@@ -7,6 +7,7 @@ from . import actions, menus, view
 
 TABLE = {
     "_talk_cap": view.talk_cap,
+    "_talk_idle": view.talk_idle,
     "_social_plan": view.social_plan,
     "_socialize": actions.socialize,
     "_can_meet": view.figure_can_meet,

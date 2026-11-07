@@ -51,6 +51,7 @@ from .models import (
     GOOD_HORSE,
     GearBook,
     GiftDef,
+    HeroineDef,
     Hints,
     InsightDef,
     InsightScene,
@@ -364,6 +365,8 @@ def load_content(root: Path, profile: str | None = None, *, only: str | None = N
         mall=_index(MallItem, _read(at("mall.json"))) if at("mall.json").exists() else {},  # 商城的商品（joy 寫）
         looks=_index(Look, _read(at("looks.json"))) if at("looks.json").exists() else {},  # 擂台形象（功能包 looks）
         relations=[_build(RelationDef, raw) for raw in _read(at("relations.json"))] if at("relations.json").exists() else [],
+        heroines={cid: _build(HeroineDef, raw) for cid, raw in _read(at("heroines.json")).items() if not cid.startswith("_")}
+        if at("heroines.json").exists() else {},  # 女子與隱線（features/heroines）
         personas={cid: [_build(PersonaAxis, raw) for raw in rows] for cid, rows in _read(at("personas.json")).items() if not cid.startswith("_")}
         if at("personas.json").exists() else {},  # 人物性子（features/persona）
         itineraries=[_build(Itinerary, raw) for raw in _read(at("itineraries.json"))] if at("itineraries.json").exists() else [],

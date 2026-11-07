@@ -70,6 +70,7 @@ from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core import battle_base as battle_instance  # battle（全部拆包第 54 批）：決戰的資料型別與判定（核心本體）；規則那一半在決戰包，Game 上沒有方法讀它
+from .core import xinshen  # 心神：跟人物交談扣的點數（核心的資源，同體力；Config.xinshen）
 from .core import omen_base  # 正在答題（軍情包認領的 fs_asking；core_seams，全部拆包第 56 批：_own_scene_text 改問它）
 from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
@@ -919,6 +920,39 @@ class Game:
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         features_core.seam_run("own_turn", {}, self)
+
+    # ── 心神（tianxia/core/xinshen.py；功能包經服務清單的 ctx.xinshen_purse／xinshen_spend 叫）──
+
+    def _xinshen_card(self) -> bool:
+        return xinshen.card_active(self._wallet(), self._mall_owner(), self._pill_day())
+
+    def xinshen_purse(self) -> xinshen.Purse:
+        """此刻手上的心神（免費、月卡、存著的三份）。"""
+        return xinshen.purse(self.state, self.content, self._pill_day(), self._xinshen_card(), xinshen.bank(self._wallet(), self._mall_owner()))
+
+    def xinshen_spend(self, n: int, free_only: bool = False) -> bool:
+        """扣 n 點心神：一般交談先扣月卡、再扣免費、最後動存著的；free_only（女性角色的隱線）只扣免費那一份。夠就扣、回 True。"""
+        wallet = self._wallet()
+        from_bank = xinshen.spend(self.state, self.content, self._pill_day(), self._xinshen_card(),
+                                  xinshen.bank(wallet, self._mall_owner()), n, free_only)
+        if from_bank is None:
+            return False
+        if from_bank:
+            xinshen.use_bank(wallet, self._mall_owner(), from_bank)
+        return True
+
+    def xinshen_view(self) -> dict | None:
+        """狀態列的心神那一格；關著是 None。"""
+        if not xinshen.on(self.content):
+            return None
+        return xinshen.view(self.content, self.xinshen_purse(), self._xinshen_card())
+
+    def xinshen_asks_left(self) -> int | None:
+        """今天還能問酒家幾次（心神開著才限）；不限是 None。"""
+        return xinshen.asks_left(self.state, self.content, self._pill_day())
+
+    def xinshen_note_ask(self) -> None:
+        xinshen.note_ask(self.state, self.content, self._pill_day())
 
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力／氣血回復、閉關出關、新立門戶福緣——
@@ -3520,6 +3554,7 @@ class Game:
                     **({"today": self.pills_left_today()} if c.config.stamina_pills_per_day > 0 else {}),
                     **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill and not prologue_rules.active(s, c) else {}),
                 },
+                **({"xinshen": self.xinshen_view()} if xinshen.on(c) else {}),  # 心神（跟人物交談扣的）：關著時沒有這個鍵，畫面照舊
             }
 
         def vitals(ctx, data) -> dict:

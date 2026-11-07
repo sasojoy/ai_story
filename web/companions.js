@@ -109,8 +109,12 @@
     // 場景的第一段是「**名字**（情誼 N）」：名字在名牌上、情誼在框底，不寫第二次
     const scene = (sceneUnderArt(m).scene || "").replace(new RegExp(`^<p><strong>${t.name}</strong>[^<]*</p>\\s*`), "");
     const [, chips] = m.now ? splitChips(m.now) : ["", ""];
+    // 「告辭」拿出選項那一串、釘在右上角（Joy 2026-11-07「句子長被卡到沒辦法按告辭離開而卡在這個頁面」）：他的話一長，宣紙框蓋住選項的下半截，
+    // 排在最後的告辭被壓在框底下按不到。選項那一串的底邊也停在宣紙框的上面（style.css .vn-menu），自己捲
+    const leaveRe = /<button\b[^>]*data-id="talk:leave"[^>]*>[\s\S]*?<\/button>/;
+    const leave = (String(menu).match(leaveRe) || [""])[0];
     return `<div class="vn-layer talk" role="dialog" aria-label="與${esc(t.name)}說話">${vnBack(m)}${t.face ? `<img class="vn-fig" src="${esc(t.face)}" alt="">` : ""}
-      <div class="vn-menu">${menu}</div>
+      ${leave ? `<div class="vn-leave">${leave}</div>` : ""}<div class="vn-menu">${leave ? String(menu).replace(leaveRe, "") : menu}</div>
       ${vnBox(t.name, t.side, `${chips ? `<div class="vn-chips">${chips}</div>` : ""}<div class="vn-say">${scene}</div>`, `情誼 ${t.affinity}`)}</div>`;
   }
 

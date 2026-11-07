@@ -2,6 +2,7 @@
 照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
 from __future__ import annotations
 
+from tianxia.features.socialize import view as socialize_view
 import random
 import re
 
@@ -306,7 +307,7 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_m
     (cid,) = game._figures_here()
     p.flags.add(f"結識:{cid}")
     p.fortune = True
-    p.talks_today[cid] = [rules.game_day(content, game.state.world), content.config.talk_turns_per_day]
+    p.talks_today[cid] = [rules.game_day(content, game.state.world), socialize_view.talk_full_cap(game)]  # 心神開著時一天能談到 turns_per_figure 輪
     m = server.main_view(game)
     ids = [o["id"] for o in m["options"]]
     assert "act:socialize" not in ids and not next(o for o in m["options"] if o["id"] == f"call:{cid}")["enabled"]
@@ -315,5 +316,5 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_m
     face = cell[cell.index(">") + 1:]  # 格子上看得到的字（標籤裡 data-why 那一句不算）
     assert "<b>求見</b><small>已談滿</small>" in face and "00:00" not in face
     note = game._talked_out_note()
-    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 2 天 ") and note.endswith(" 之後再來")
+    assert note.startswith(f"已經談滿 {socialize_view.talk_full_cap(game)} 輪，第 2 天 ") and note.endswith(" 之後再來")
     assert f'data-why="{note}"' in cell  # 整句在點了浮出的那一句（減法季批 1 拿掉了行動列底下那一行）

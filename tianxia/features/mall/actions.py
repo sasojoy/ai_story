@@ -14,6 +14,7 @@ from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.name_base import reserved_names  # 保留的名號：易名帖撞名照建角色（全部拆包第 58 批）
 from tianxia.core.services import ART as ZHUAN_ART, NO_SUCH_PLAYER, art_problem  # 這一季用不上的列傳插畫票不賣（FB-845；全部拆包第 29 批進核心服務）
+from tianxia.core import xinshen  # 心神（核心的資源）：凝神香跟著心神的開關上架
 from tianxia.rules import jianfa
 from tianxia.state import GameState, JournalEntry, Rumor
 from tianxia.wallet import Wallet
@@ -80,7 +81,8 @@ def moment(ctx: Game) -> mall.Moment:
     c, w = ctx.content, ctx.state.world
     phase = ctx.world.season_phase()
     rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
-    rules = frozenset(part for part in rules_named if jianfa(c, w, part))
+    # 凝神香寫 rule "xinshen"：看心神的開關（Config.xinshen.enabled），不是 Config.jianfa 的子開關
+    rules = frozenset(part for part in rules_named if (xinshen.on(c) if part == xinshen.EFFECT else jianfa(c, w, part)))
     blocked: dict[str, str] = {}
     if "zhuan_end" in rules and (unfit := art_problem(ctx.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
         blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(ZHUAN_ART)})

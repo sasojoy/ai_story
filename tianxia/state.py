@@ -769,6 +769,13 @@ class PlayerState(BaseModel):
     last_offered_dialogue: dict[str, list[list[str]]] = Field(default_factory=dict)  # 人物 id -> [選項文字清單, 對應tag清單]
     turns_since_consolidation: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 距離上次記憶梳理幾輪
     talks_today: dict[str, list[int]] = Field(default_factory=dict)  # 人物 id -> [第幾個遊戲日（rules.game_day，跟著季長縮）, 當天已聊幾輪]
+    # 心神（tianxia/core/xinshen.py）：免費與月卡那兩份今天剩幾點、各是哪一天（回體丹那一套的第幾天）補的；不是今天補的就當滿的。
+    # 存著的（凝神香）不在這裡，記在帳號（mall_entitlements）。換回沒有心神的舊程式只丟掉今天剩幾點，隔天本來就補滿
+    xinshen_free: int = 0
+    xinshen_free_day: int = -1
+    xinshen_card: int = 0
+    xinshen_card_day: int = -1
+    tavern_asks: list[int] = Field(default_factory=list)  # 問酒家：[回體丹那一套的第幾天, 那天問了幾次]（心神開著才數，Config.xinshen.ask_per_day）
     picking_audience: bool = False  # 按了「求見」、正在挑要拜會哪一位人物（兩位以上大勢人物的地點）；舊存檔沒這欄就是沒在挑
 
     # ── 煉製素材（無限煉製第一刀，見 tianxia/materials.py）──
@@ -1039,6 +1046,8 @@ class PlayerState(BaseModel):
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict, json_schema_extra=QUIET)
     persona_notes: dict[str, PersonaNote] = Field(default_factory=dict, json_schema_extra=QUIET)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
+    heroines: HeroineNotes = Field(default_factory=lambda: HeroineNotes(), json_schema_extra=QUIET)  # 女子與隱線（features/heroines）：隱線走到哪，換季重來
+    heroines_adult: bool = Field(False, json_schema_extra=QUIET)  # 女子與隱線：設定頁的「成人內容」（預設關，打開前確認年滿十八歲；換季照帶）
     errands: list[ErrandState] = Field(default_factory=list, json_schema_extra=QUIET)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
@@ -1138,7 +1147,7 @@ class PlayerState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in QUIET_DEFAULTS:
-                if key in data and not data[key]:
+                if key in data and (not data[key] or (key == "heroines" and not any(data[key].values()))):  # heroines 是子模型：三格都空才算沒用到
                     del data[key]
         return data
 
@@ -1402,6 +1411,15 @@ class StoryCard(BaseModel):
     image: str | None = None
     ending: str = ""  # 結局的名字（end 才有）
     failed: bool = False
+
+
+class HeroineNotes(BaseModel):
+    """女子與隱線（功能包 features/heroines；PlayerState.heroines，換季重來；成人內容的開關另外一格 PlayerState.heroines_adult）。steps 是每位女子的隱線應下到第幾段（人物 id → 3 或 4；換季重來）；scene 是此刻端在眼前、還沒選的那一段
+    （「人物 id:段」；None 是沒有）；declined 是婉拒的那一天（人物 id → 遊戲日），同一天不再問。"""
+
+    steps: dict[str, int] = Field(default_factory=dict)
+    scene: str | None = None
+    declined: dict[str, int] = Field(default_factory=dict)
 
 
 class PersonaNote(BaseModel):

@@ -60,6 +60,7 @@ def test_the_tired_paragraph_says_so():
 
 def test_a_foe_two_bands_below_you_pays_one_tenth():
     game = ready(jianfa_game(), side="guan", loc="yingchuan", level=30)  # 城裡的地痞：難度 8（第 0 檔），三十級是第 3 檔
+    game.content.storylines["duruo"].start.chance = 0  # 陽翟書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是出門打地痞
     record = _outing_fight(game)
     assert record.opponent == game.content.squads["dipi"].name
     assert record.exp == round(10 * 0.1)

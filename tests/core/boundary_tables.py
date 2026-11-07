@@ -270,7 +270,7 @@ CROSS_PACKAGE_CALLS = {
     ("companions", "battle"): {"_settle_partings"},
     ("companions", "guide"): {"_hint"},
     ("companions", "military"): {"_fs_hear_talk", "_omen_talk_options", "_opp_hear_topic"},
-    ("companions", "socialize"): {"_can_meet", "_count_talk", "_socialize_figure"},
+    ("companions", "socialize"): {"_can_meet", "_count_talk", "_socialize_figure", "_talk_idle"},
     ("companions", "travel"): {"_depart"},
     ("cultivation", "guide"): {"_check_hints"},
     ("explore", "bout"): {"_boss_face", "_boss_ready", "_duel_start"},

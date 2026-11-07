@@ -388,7 +388,7 @@
     // 名號底下所在那一行（📍 地名　季曆時刻，FB-493）：字尾超過那一欄（瀏覽器會收成「…」）就加 .split，地名一行、時刻一行（企劃者
     // 2026-10-20 挑乙）。同條上那兩個字：topHtml 不帶，每次從一行量起；量 Range 不量 scrollWidth（多出不到半 px 時兩個都是整數、一樣大，
     // 瀏覽器卻照樣收「…」）。序章只寫地名（沒有 .where-at）不折；還沒排版（寬 0）不動。要排在 --top-h 前面：折了狀態列高一截
-    const where = typeof document.createRange === "function" && head && typeof head.querySelector === "function" ? head.querySelector(".who > .where") : null;
+    const where = typeof document.createRange === "function" && head && typeof head.querySelector === "function" ? head.querySelector(".who .where:not(.sub)") : null; // 介面重整把它包進 .who-col，舊的 .who > .where 量不到（Joy 11/7 截圖時刻被截成「09:…」）
     if (where && where.querySelector(".where-at")) {
       where.classList.remove("split");
       const range = document.createRange();
@@ -462,6 +462,8 @@
         ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span><em class="lbl">氣血 </em>${s.hp}/${s.hp_max}</span>${s.injury >= 1
         ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>` : "",
       shown("silver") ? `<div class="num" data-glow="silver"><em>銀</em>${s.silver}</div>` : "",
+      // 心神（跟人物交談扣的；伺服器關著時沒有 s.xinshen）：今天剩幾點／今天補到多少，有凝神香存著的另寫「存 N」
+      s.xinshen && shown("silver") ? `<div class="num xs" title="${esc(s.xinshen.name)}：跟人物交談用，每天 00:00 補滿"><em>${esc(s.xinshen.name)}</em>${s.xinshen.now | 0}/${s.xinshen.cap | 0}${s.xinshen.bank ? `<small>存${s.xinshen.bank | 0}</small>` : ""}</div>` : "", // 待 joy 潤
       // 心得、名望、善惡、五項屬性搬到「俠客」頁（整合設計 6.2）；序章裡心得亮了、銀兩還沒亮時照舊寫在這裡（序章的話要你看它）
       shown("xinde") && !shown("silver") ? `<div class="num" data-glow="xinde"><em>心得</em>${s.xinde}</div>` : "",
     ].join("");
@@ -1193,6 +1195,28 @@
   }
 
 
+  // 成人內容（features/heroines；設計稿「三位女子出場」第三節，Joy 2026-11-06）：預設關；打開之前先跳確認卡，按了確認才送出。
+  // 這一季的內容沒有女子時伺服器不給 main.heroines，這一格不出現。字句待 joy 潤
+  function adultRow() {
+    const h = S.main && S.main.heroines;
+    if (!h) return "";
+    if (S.adultAsk) {
+      return `<div class="card adult-ask"><p>成人內容是成年角色之間、彼此情願的親密情節，只有你自己看得到，不會寫進傳聞、江湖史或列傳。</p>
+        <p><b>我已年滿十八歲，願意看到成人內容。</b></p>
+        <div class="row"><button class="btn small primary" data-act="adult-yes">確認</button><button class="btn small ghost" data-act="adult-no">取消</button></div></div>`;
+    }
+    return `<label class="toggle"><input type="checkbox" id="adult" ${h.adult ? "checked" : ""}> 成人內容（預設關；打開要確認年滿十八歲）</label>`;
+  }
+
+  async function adultSet(value) {
+    await busy(async () => {
+      const r = await api("/api/heroines/adult", { value });
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+    }, SENT_WAITING);
+  }
+
   function sheetHtml() {
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     const s = S.main.status;
@@ -1204,6 +1228,7 @@
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
         ${renameRow()}
+        ${adultRow()}
         ${pushRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
@@ -1292,7 +1317,23 @@
     if (S.reportOpen && S.reports.tale_id != null) await loadTale(S.reports.tale_id);
   }
 
+  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
+  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
+  function heroStay(draw) {
+    const page = document.getElementById("page");
+    const y = window.scrollY || 0;
+    draw();
+    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
+    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
+    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
+    const target = Math.min(y, Math.max(0, tabsTop - 8));
+    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
+    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
+    window.scrollTo(0, target);
+  }
   async function goTab(tab) {
+    const pg = document.getElementById("page");
+    if (pg && pg.style) pg.style.minHeight = ""; // 俠客頁撐高的那一截（heroStay）換頁就放掉
     S.tab = tab;
     S.message = "";
     S.artOpen = null;
@@ -1674,7 +1715,10 @@
       renderPage();
       if (batch || (stay && note === "lib")) { document.querySelector(".melt-result")?.scrollIntoView({ block: batch ? "center" : "nearest", behavior: "smooth" }); return; }
       const now = stay ? placeTop(place.to) : null;
-      if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
+      // 介面重整的俠客頁：結果那一行（#mx-msg）在分頁鈕底下，不是頁首，回頂上反而看不到；留在原地，結果那一行不在畫面裡才捲到它（Joy 11/7 不要跳頂）
+      if (now === null && S.tab === "practice" && (typeof uiV2 === "function" && uiV2()) && !pro() && !guideMoved && !needsName) {
+        if (S.message) document.getElementById("mx-msg")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
   }
@@ -1837,7 +1881,7 @@
         case "fig-log-more": await moreFigLog(); break;
         case "rv-scene": S.sceneRvOpen = !S.sceneRvOpen; renderPage(); break;
         case "hero-attrs": S.heroTab = "attrs"; await goTab("practice"); break; // 狀態列的名號：去俠客頁的屬性
-        case "hero-tab": S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); window.scrollTo({ top: 0 }); break;
+        case "hero-tab": heroStay(() => { S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); }); break; // Joy 11/7「按完不要都給我跳置頂」
         case "now-more": nowToggle(el); break; // 原地展開／收起，不重畫整頁（重畫會讓「剛剛」再播一次浮現動畫）
         case "rounds-more": {
           // 同上，原地展開／收起；展開時其餘回合照 style.css 的延遲一回合一回合浮現
@@ -1938,14 +1982,15 @@
         case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renownDraw(); break; // 2C：展開時「名聲」那一行；介面重整在屬性頁「怎麼來」
         case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renownDraw(); break; // 點圓點看那一段
         case "renown-sanren": S.renownSanren = !S.renownSanren; renownDraw(); break; // 散人另有的好處
-        case "attr-help": S.attrHelp = !S.attrHelp; renderPage(); break; // 屬性頁的「？」：五項各管什麼
-        case "xinde-more": S.xindeOpen = !S.xindeOpen; renderPage(); break; // 屬性頁心得那一行：點開看整句提示
+        case "attr-help": heroStay(() => { S.attrHelp = !S.attrHelp; renderPage(); }); break; // 屬性頁的「？」：五項各管什麼
+        case "xinde-more": heroStay(() => { S.xindeOpen = !S.xindeOpen; renderPage(); }); break; // 屬性頁心得那一行：點開看整句提示
         case "renown-open": // 6B：金色的「名號傳開」；介面重整之後名聲那一條在俠客頁的「屬性」（狀態列不再攤開）
           S.renownOpen = true; S.renownDot = null;
           if ((typeof uiV2 === "function" && uiV2()) && !pro() && !onb()) { S.heroTab = "attrs"; await goTab("practice"); window.scrollTo(0, 0); break; }
           S.showMore = true; renderTop(); window.scrollTo(0, 0); break;
         case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
+        case "ck-pop-close": ckPopClose(); renderPage(); break; // 每天第一次登入的簽到小窗：收下或等一下再挑，同一天不再跳
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "hero-move-show": await heroMoveShow(el.dataset.id || ""); break; // 俠客頁武學卡底下的絕招演一次
@@ -2002,6 +2047,8 @@
         case "rename-ask": { const v = (document.getElementById("rename-name") || {}).value || ""; if (v.trim()) { S.renameAsk = v.trim(); render(); } break; }
         case "rename-back": S.renameAsk = null; render(); break;
         case "rename-go": await renameGo(); break;
+        case "adult-yes": S.adultAsk = null; await adultSet(true); break;
+        case "adult-no": S.adultAsk = null; render(); break;
         case "gender-go": S.genderPick = null; await doMain("gender", { value: el.dataset.value }); break;
         case "ad-tab": adTabPick(el.dataset.tab); break; // 管理頁的分頁籤（介面重整）
         case "ad-hold": adHoldClick(el); break; // 危險區：短按只提示要長按（長按在 admin.js 的 pointerdown）
@@ -2401,6 +2448,9 @@
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
+    if (ev.target.id === "adult") { // 成人內容：打開先跳確認卡（勾先放回去，確認了才算），關掉直接送
+      if (ev.target.checked) { ev.target.checked = false; S.adultAsk = true; render(); } else await adultSet(false);
+    }
     if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
       const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
       if (box && v != null) box.value = v;

@@ -51,6 +51,8 @@
 - `ctx.wallet`：WalletService（下面）——`tokens(kind)`、`consume(kind)`、`purchases()`、`card_bonus()`、`item_for(effect)`
 - `ctx._wallet()`：商城開著時的 Wallet（資料庫那一側）；關著是 None。`ctx._mall_owner()`：錢包的主人（名號的 casefold）
 - `ctx.pill_cap()`、`ctx.pills_left_today()`：回體丹一天的上限（含月卡）與今天還能服幾顆
+- `ctx.xinshen_purse()`、`ctx.xinshen_spend(n, free_only=False)`：心神（跟人物交談扣的；tianxia/core/xinshen.py）此刻手上幾點、扣 n 點；
+  女性角色的隱線一律 free_only（只扣每天免費那一份）。`ctx.xinshen_asks_left()`、`ctx.xinshen_note_ask()`：問酒家今天還能問幾次、記一次（酒肆包）
 
 共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
 # battle（全部拆包第 6 批：PM 定的「siege.py 不搬，這一批用到的名字列進共用段、標主人」）
@@ -252,6 +254,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # socialize（全部拆包第 21 批：交友求見的本體搬進 features/socialize，Game 留一行委派回答別的包；第 20 批原本列在三、過渡 companions 那一段）
 - `ctx._can_meet(companion_id)`（見不見得到他：名望到了門檻、或結識過）、`ctx._socialize_figure()`（交友會直接開口的那位人物）、
   `ctx._count_talk(companion_id)`（記一輪，聊滿了自動告辭）：人物對話的 A 段 dialogue_request 與每一輪收尾問它們
+- `ctx._talk_idle(companion_id)`（心神開著、今天跟他長情誼的那幾輪用完了，這一輪只是閒聊）：人物對話的一輪、選單與「自己說」的條件那一段問它
 - `ctx._open_dialogue(companion_id, prepared)`（主人人物情誼，第 20 批已搬、Game 留一行委派：交友碰上人物、指名求見之後開口對話；
   原本是 Game 的方法，交友求見成包之前核心原位直接叫，記在邊界測試的 GAME_DELEGATE_CALLERS）
 # story（全部拆包第 30 批「一條線」；主人：一條線包。計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.3）

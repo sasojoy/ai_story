@@ -3491,6 +3491,35 @@ class HireRules(_Strict):
     ])
 
 
+class HeroineScene(_Strict):
+    """隱線的一段（功能包 features/heroines；設計稿「三位女子出場」第三節，Joy 2026-11-06「那先甲就好」「開工」）：玩家開了成人內容、
+    情誼到 affinity、上一段應下了（step 是第幾段：3 動情、4 相許），「此地還能做」多一顆 label；按下去端出 text，接著選 accept／decline。
+    寫好的固定文字，不叫模型；尺度照甲（寫到熄燈，隔天早上接著寫）。"""
+
+    step: int = Field(ge=3, le=4)
+    affinity: int = Field(ge=0, le=100)
+    label: str
+    text: str
+    accept_label: str
+    accept: str
+    decline_label: str
+    decline: str
+
+
+class HeroineDef(_Strict):
+    """一位女子（content/heroines.json；功能包 features/heroines）：line 是她出場的那一條奇事（storylines.json 的 id）；
+    endings 是走到哪幾個結局她會留下來（結局 id → 給模型的「故事之後」那一段）；hidden 是哪幾個結局之後開得了隱線；
+    scenes 是隱線的兩段；prompt 是隱線走到第幾段之後給模型的那一句（段 → 句子）；stay 是哪幾個結局之後她換了地方
+    （結局 id → 地點 id；沒寫的留在人物表的 talk_at）。"""
+
+    line: str
+    endings: dict[str, str] = Field(min_length=1)
+    stay: dict[str, str] = Field(default_factory=dict)
+    hidden: list[str] = Field(default_factory=list)
+    scenes: list[HeroineScene] = Field(default_factory=list)
+    prompt: dict[int, str] = Field(default_factory=dict)
+
+
 class PersonaStage(_Strict):
     """人物性子的一段（features/persona/content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
     short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
@@ -3941,6 +3970,23 @@ class CheckIn(_Strict):
     pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
 
 
+class XinshenTuning(_Strict):
+    """心神（設計稿 https://claude.ai/artifact/NbTxoAPdroin7N9cRjCiP3 第 4 版；Joy 2026-11-06「可以 寫」）：跟人物說話這種要叫模型的互動
+    不扣體力，改扣每天補滿的心神（tianxia/core/xinshen.py）。三份分開記：免費（每天 00:00 補到 free_daily）、月卡（卡的期間每天補到
+    card_daily）、存著的（萬寶閣凝神香，記在帳號、不過期、換季帶著走）。一般交談先扣月卡、再扣免費、最後動存著的；隱線只扣免費那一份。
+    enabled 預設關：關著時對話照舊扣 Config.talk_stamina 體力、每位人物每天照舊 talk_turns_per_day 輪、問酒家不限次數，一個字都不變。"""
+
+    enabled: bool = False
+    name: str = "心神"  # 寫給玩家看的名字（Joy 2026-11-06 決策卡挑的）
+    free_daily: int = Field(default=6, ge=0)  # 免費：每天補到幾點（Joy「基本一天最多5-10心神」）
+    card_daily: int = Field(default=4, ge=0)  # 月卡：卡的期間另外每天補到幾點（6＋4＝10）
+    option_cost: int = Field(default=1, ge=0)  # 按模型寫的選項一輪扣幾點
+    say_cost: int = Field(default=2, ge=0)  # 「自己說…」一輪扣幾點
+    # 同一位人物每個遊戲日最多聊幾輪（Joy 同意 8）：前 talk_turns_per_day（＋玄紐）輪照舊長情誼、開條件；之後照樣聊、他照樣記得，情誼與條件不動
+    turns_per_figure: int = Field(default=8, ge=1)
+    ask_per_day: int = Field(default=3, ge=0)  # 問酒家一人一天最多幾次（不扣心神，另算；Joy「問酒家不扣 一天最多三次 另算」）；0 是不限
+
+
 class MallTuning(_Strict):
     """商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；tianxia/mall.py、tianxia/wallet.py）。enabled 預設關、測試內容明寫關、
     正式內容與 week7 開；關著時不發元寶、不讀不寫商城的三張表（月卡不加上限）、商城的 API 都 404，其餘一個字都不變（4.10）。
@@ -4260,6 +4306,7 @@ class Config(_Strict):
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
+    xinshen: XinshenTuning = Field(default_factory=XinshenTuning)  # 心神：跟人物交談扣的點數（見 XinshenTuning；tianxia/core/xinshen.py）
     mall: MallTuning = Field(default_factory=MallTuning)  # 商城：元寶錢包、商品、月卡、封測發放（見 MallTuning；商品在 content/mall.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
@@ -5661,6 +5708,7 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
+    heroines: dict[str, HeroineDef] = Field(default_factory=dict)  # 女子與隱線（content/heroines.json，features/heroines）：人物 id → 她的設定；沒有這個檔就是空的
     personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（features/persona/content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：

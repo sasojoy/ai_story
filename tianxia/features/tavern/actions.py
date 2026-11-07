@@ -28,6 +28,7 @@ from tianxia import shopview  # 過渡：待搬（店面：掌櫃那一句、素
 from tianxia.core import presence  # 此地還有誰、站哪一邊（核心的查詢服務，第 37 批）
 from tianxia.calendar import DAY, HOUR
 from tianxia.characters import CharacterStore, name_key
+from tianxia.core import xinshen  # 心神（核心的資源）：問酒家一天幾次的那一句
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import Squad
@@ -737,6 +738,8 @@ def tavern_ask_request(ctx: Game, text: str) -> tavern_rules.AskRequest | list[s
         return [equipment.NOT_NOW]
     q = str(text or "").strip()
     problem = tavern_rules.ask_problem(c, q)
+    if problem is None and ctx.xinshen_asks_left() == 0:  # 心神開著：問酒家一天最多 Config.xinshen.ask_per_day 次（不扣心神，另算）
+        problem = xinshen.ASKS_DONE
     if problem is None:
         problem = tavern_rules.pay_problem(s, tavern_price(ctx, c.config.tavern.ask_price))
     if problem is not None:
@@ -765,6 +768,8 @@ def tavern_ask_once(ctx: Game, text: str) -> list[str]:
     cfg = c.config.tavern
     q = text.strip()
     problem = tavern_rules.ask_problem(c, q)
+    if problem is None and ctx.xinshen_asks_left() == 0:  # 心神開著：一天的次數用完了
+        problem = xinshen.ASKS_DONE
     if problem is not None:
         ctx._shop_after(problem, "refused")
         return [problem]
@@ -788,6 +793,7 @@ def tavern_ask_once(ctx: Game, text: str) -> list[str]:
         ctx._shop_say("nothing")
         return [tavern_rules.ASK_BUSY]
     lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_HIM.format(a=reply)]
+    ctx.xinshen_note_ask()  # 真的叫了模型、答上來的那一次才算（叫不動退錢的、問秘密的不算）
     if tavern_rules.unsure(reply):  # 酒家說不上來：退一半，指一條路（企劃者 2026-10-27）
         refund = tavern_price(ctx, cfg.ask_price) // 2
         tavern_rules.pay(s, -refund)
@@ -850,6 +856,7 @@ def tavern_view(ctx: Game) -> dict:
         "walls": [{"who": w.who, "text": w.text, "when": ctx.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
         "wall_chars": cfg.wall_chars,
         "ask_chars": cfg.ask_chars,
+        **({"asks_left": left} if (left := ctx.xinshen_asks_left()) is not None else {}),  # 問酒家今天還能問幾次（心神開著才有這個鍵）
         "watch": {"price": tavern_price(ctx, int(round(cfg.seek_price * cfg.watch_share))),
                   "mine": [tavern_rules.WATCH_ACTIVE.format(name=w.target, until=real_stamp(ctx, w.until_real))
                            for w in p.tavern_watches if w.until_real > ctx.now]},

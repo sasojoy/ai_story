@@ -42,3 +42,29 @@
     return `<section class="card ck-card" aria-label="簽到"><h3>${CK_PICK_TITLE.replace("{day}", k.day)}<small>${CK_PICK_NOTE}</small></h3>
       <div class="ck-pick">${k.pick.map((x) => `<button class="ck-p4 ${CK_ATTR[x.attribute] || ""}" data-act="checkin" data-attr="${esc(x.attribute)}"><b>${esc(x.attribute)}</b>${esc(x.name)}<small>有 ${x.held}</small></button>`).join("")}</div></section>`;
   }
+
+  // 每天第一次登入跳一個簽到小窗（Joy 2026-11-07「簽到在每天登入的時候跳出來簽就好？藏那麼裡面不好吧」）：引擎當天第一次同步已經自動領了
+  // （_auto_checkin），這裡寫今天領到什麼、七天那一排標出今天；要挑四階的日子窗裡直接挑。挑完或按「收下」就關，同一天（照簽到的第幾天）
+  // 這個瀏覽器不再跳；記不住（私密視窗）就這一次關了算數。窗是 .sheet：開著時底下鎖住不捲（syncScrollLock）
+  const CK_SEEN = "tianxia.ckSeen";
+  // 待 joy 潤：小窗底下那一顆
+  const CK_POP_OK = "收下";
+  const CK_POP_LATER = "等一下再挑";
+  const ckDayKey = (k) => `${k.day}|${k.week.map((d) => d.label).join(",")}`;
+  function ckSeen(k) {
+    if (S.ckSeen === undefined) { try { S.ckSeen = localStorage.getItem(CK_SEEN) || ""; } catch (e) { S.ckSeen = ""; } }
+    return S.ckSeen === ckDayKey(k);
+  }
+  function ckPopClose() {
+    const k = S.main && S.main.status && S.main.status.checkin;
+    if (!k) return;
+    S.ckSeen = ckDayKey(k);
+    try { localStorage.setItem(CK_SEEN, S.ckSeen); } catch (e) { /* 私密視窗：這一次關了算數 */ }
+  }
+  function ckPopHtml(m) {
+    const k = m.status && m.status.checkin, peek = k && checkinPeek(m);
+    if (!peek || ckSeen(k) || (m.story_cards || []).length) return ""; // 特殊事件的跳顯框還沒看完：先看那幾張，看完才跳簽到
+    const close = `<button class="btn ${k.done ? "primary" : "ghost"} ck-pop-ok" data-act="ck-pop-close">${k.done ? CK_POP_OK : CK_POP_LATER}</button>`;
+    return `<div class="sheet-bg" data-act="ck-pop-close"></div><div class="sheet ck-pop" role="dialog" aria-label="簽到"><div class="grip"></div>`
+      + `<h3>簽到</h3>${peek.panel}${close}</div>`;
+  }

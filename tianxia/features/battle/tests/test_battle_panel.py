@@ -165,7 +165,7 @@ def test_the_week_strip_drops_its_two_army_numbers_during_a_battle(showdown):
     week = {"key": "w1", "label": "本週", "when": "第 1 週", "theme": "黃巾起事", "sides": {"guan": 53, "huang": 47}, "steps": [], "notes": []}
     on = run({**m, "week_card": week}, 'return H.weekCardHtml(m, "strip");')
     off = run({**m, "week_card": week, "battle_panel": None}, 'return H.weekCardHtml(m, "strip");')
-    assert 'class="wk-sides"' in off and 'class="wk-sides"' not in on and 'class="wk-strip' in on
+    assert 'class="wk-bar"' in off and 'class="wk-bar"' not in on and 'class="card wk-box' in on  # 合併卡（2026-11-07）的拔河條
 
 
 def test_every_free_text_move_is_called_the_same(on):

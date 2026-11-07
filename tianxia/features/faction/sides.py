@@ -58,7 +58,8 @@ def _places(game: Game, faction) -> list[str]:
 
 def sides_card(game: Game) -> dict | None:
     """三方卡（整合設計 3.4）：劇本沒有陣營、序章裡、休季是 None。欄位：
-    {"cols": [{"id", "name", "goal", "now", "gives", "where": [地名], "mine"}], "joined": bool, "lean": None}。
+    {"cols": [{"id", "name", "goal", "now", "gives", "where": [地名], "mine"}], "joined": bool, "lean": None}；
+    官軍、黃巾兩欄多 bar（這一方到幾分就收季，沒有是 None）與 bar_title（那一種結局）。
     四勝利開著的季（批 3c）：每一欄多 join_at、gives 照四階寫、豪強那一欄的 now 寫兩本帳；lean 是豪強此刻幫的那一軍 id；
     投靠了的人多 tier_hint（「第三階・還差 40」）、豪強多 ledger（{"guan": 120, "huang": 40}）。"""
     s, c = game.state, game.content
@@ -73,8 +74,10 @@ def sides_card(game: Game) -> dict | None:
         if f.id in ("guan", "huang"):
             other = "huang" if f.id == "guan" else "guan"
             now = f"態勢 {standing[f.id]}" if standing is not None else ""
+            bar = _bar(c, f.id)  # 本週卡的拔河條兩端畫這一線（Joy 2026-11-07「能知道是哪一方佔上風」）
             cols.append({"id": f.id, "name": STANCE_NAMES[f.id], "goal": _goal(c, f.id, other), "now": now,
-                         "gives": WIN_GIVES[f.id] if four else WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id})
+                         "gives": WIN_GIVES[f.id] if four else WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id,
+                         "bar": bar[0] if bar else None, "bar_title": bar[1] if bar else ""})
         elif four:  # 地方豪強（整合設計 3.1：兩本帳、幫哪一軍隨時換）
             cols.append({"id": f.id, "name": f.name, "goal": HAOQIANG_GOAL, "now": HAOQIANG_NOW_PENDING,
                          "gives": WIN_GIVES["haoqiang"], "where": _places(game, f), "mine": mine == f.id})

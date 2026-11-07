@@ -1,5 +1,6 @@
 """socialize 這一包的測試，從 tests/web/test_jianghu_page_web.py 拆來（全部拆包第 61 批，只搬位置、不改斷言）。"""
 from __future__ import annotations
+from tianxia.features.socialize import view as socialize_view
 import pytest
 import webharness
 from tianxia import rules
@@ -18,7 +19,7 @@ def test_a_talked_out_single_figure_social_cell_says_so_briefly_too():
     (cid,) = game._figures_here()
     p.flags.add(f"結識:{cid}")
     p.fortune = True
-    p.talks_today[cid] = [rules.game_day(content, game.state.world), content.config.talk_turns_per_day]
+    p.talks_today[cid] = [rules.game_day(content, game.state.world), socialize_view.talk_full_cap(game)]  # 心神開著時一天能談到 turns_per_figure 輪
     option = next(o for o in game.options() if o.id == "act:socialize")
     note = game._talked_out_note()
     assert not option.enabled and option.label == f"交友（{note}）"
