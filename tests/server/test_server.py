@@ -1,3 +1,4 @@
+import os
 import ast
 import contextlib
 import hashlib
@@ -4250,6 +4251,24 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
             assert top not in names, (top, names.get(top), name)
             names[top] = name
     assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
+
+
+def test_the_page_versions_follow_a_pull_without_a_restart(tmp_path, monkeypatch):
+    """2026-11-07 對話告辭急修：主機只 pull、沒重開，頁面上的 ?v= 還是啟動時那一份，手機一直拿舊檔。web/ 的檔換了，頁面就重算。"""
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text('<link rel="stylesheet" href="/static/a.css">', encoding="utf-8")
+    (web / "a.css").write_text("a{}", encoding="utf-8")
+    monkeypatch.setattr(server, "WEB", web)
+    monkeypatch.setattr(server.features_core, "with_scripts", lambda html: html)
+    monkeypatch.setattr(server, "PAGE", server.PAGE)  # 測完換回正式那一份
+    monkeypatch.setattr(server, "_PAGE_STAMP", ())
+    first = server.current_page()
+    assert server.current_page() is first  # 沒換檔不重算
+    (web / "a.css").write_text("a{color:red}", encoding="utf-8")
+    os.utime(web / "a.css", ns=(1, 1))
+    second = server.current_page()
+    assert second != first and f"?v={server.content_version(b'a{color:red}')}" in second
 
 
 class _OneShot(server_push.PushHub):
