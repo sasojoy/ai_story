@@ -44,7 +44,6 @@ import hashlib
 import json
 import os
 import re
-import secrets
 import shutil
 import subprocess
 import sys
@@ -67,21 +66,18 @@ from starlette.concurrency import run_in_threadpool
 import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
-# 這一行的先後不算行為：玩家卡按鈕的先後靠 order=（features/peers/social.py 照 (order, id) 排），洗牌 50 次結果仍只有一種（手冊第十五節「波次 B、C」第 8 條，收回第 69 批那條）。
-# 全部拆包第 69 批搬走鎖外工作之後 arena_crowd、ascend、biography、duel、outing、seal_duel、social、tavern、yuedan 殼已經不用，留到收尾再清。
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
-    naming, narration, outing,
+    battle_instance, flavor, battlelog, calendar, companion_agent, create, divine, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
+    naming, narration,
     ollama_client, power_save, rules,
-    precise, seal, seal_duel, server_bots, social, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
-    talk_log, zhuan_end,
+    precise, seal, server_bots, speech, team, timetable, training, treasures, weekcard, xingshi,
+    talk_log,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line, serving_profile
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
-from tianxia import persona_rules  # 人物性子：簡介的如今與變化紀錄（共用規則層）
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
