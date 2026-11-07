@@ -2670,6 +2670,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .card.scene.rv.has-art > .scene-art figcaption { padding-bottom: 30px; }
 .vn-plate i { position: relative; }
 .vn-layer.talk .vn-fig { left: -70px; width: min(320px, 80vw); }
+/* 對話（Joy 2026-11-07 卡在對話裡）：宣紙框最高三成多一點、框裡自己捲；選項那一串底邊停在宣紙框上面、自己捲；告辭釘在右上角 */
+.vn-layer.talk .vn-paper { max-height: 34vh; max-height: 34dvh; }
+.vn-layer.talk .vn-menu { top: calc(62px + var(--top)); max-height: none; bottom: calc(18px + var(--bottom) + 34vh + 32px); bottom: calc(18px + var(--bottom) + 34dvh + 32px); }
+.vn-leave { position: absolute; right: 12px; top: calc(14px + var(--top)); z-index: 4; }
+.vn-leave .btn { min-height: 40px; padding: 4px 16px; border-radius: 20px; border: 1px solid rgba(244, 237, 224, 0.5); background: rgba(29, 24, 18, 0.75); color: #f4ede0; font: 15px var(--kai); }
+.vn-leave .btn .k { display: none; }
 .vn-menu .options .btn[data-id="talk:leave"] { align-self: flex-end; background: rgba(29, 24, 18, 0.7); color: #f4ede0; border-radius: 16px; padding: 4px 14px; min-height: 32px; }
 /* 管理頁（介面重整）：四格狀態、大鈕、分頁籤、危險區 */
 .ad-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 6px; }
