@@ -8,7 +8,7 @@ import random
 from typing import TYPE_CHECKING, NamedTuple
 
 from tianxia import bot_base, naming, team, weapons
-from tianxia import fusion  # 過渡：待搬
+from tianxia import fusion  # 共用規則層（合成與揣摩，第 87 批登記）
 
 from . import create
 
