@@ -2,11 +2,19 @@
 
 _crippled、_bounty_here、BOUNTY_SCORE、PRACTICE_SCORE 別包也讀，第二輪第 89 批搬進共用層 bot_base，一律寫 `bot_base.X`，測試換 bot_base 的才打得到；
 ACT_SCORES、NEED_MATERIAL_SCORE、OUTING_SCORE 只有這一包讀（殼的 score 讀 ACT_SCORES 的舊名），同一批從 bot_policy 搬來，舊名 re-export。**模組層不准碰 engine 與假人殼**（bot_policy 模組層 import 這個檔）。
-走一趟挑幾段、走完那一句在 bot.py（整季機器人與假人共用的底層，不搬）。
+走一趟挑幾段、走完那一句（OUTING_WEIGHTS、outing_segments、OUTING_SAY_CHANCE、outing_say；整季機器人與假人共用）第二輪第 101 批從 bot 搬來，舊名 re-export 同一批物件。
 """
 from __future__ import annotations
 
+import random
+from typing import TYPE_CHECKING
+
 from tianxia import bot_base
+
+from . import outing_rules as outing
+
+if TYPE_CHECKING:
+    from tianxia.engine import Game
 
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
 # 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：多半給素材的那一趟再加這一份。計畫寫 0.5，那樣缺素材的探索（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
@@ -49,3 +57,25 @@ def _short_of_materials(game) -> bool:
     """背包裡的一階素材少於 NEED_MATERIAL_BELOW 個（修兵器、餵馬、糧草都吃一階）。"""
     mats = game.content.materials
     return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
+
+
+OUTING_WEIGHTS = {1: 1, 3: 3, 5: 2}  # 假人走一趟挑幾段的比重（只在體力夠的段數裡挑）【預設】
+
+
+def outing_segments(game: Game, rng: random.Random) -> int:
+    """假人走一趟挑幾段（tianxia/outing.py）：體力夠走的段數照 OUTING_WEIGHTS 挑一種；一段都走不起是 0。"""
+    c, p = game.content, game.state.player
+    ok = [n for n in outing.segments(c) if p.stamina >= outing.cost(c, n)]
+    if not ok:
+        return 0
+    return rng.choices(ok, weights=[OUTING_WEIGHTS.get(n, 1) for n in ok])[0]
+
+
+OUTING_SAY_CHANCE = 0.15  # 假人走完一趟留一句預設句的機會（不寫自己的話，同名帖自題從句庫挑）【預設】
+
+
+def outing_say(game: Game, rng: random.Random) -> list[str]:
+    """假人走完一趟（剛收、還能留言）有 OUTING_SAY_CHANCE 的機會留一句預設句（Game.outing_say，免費）；其餘什麼都不做。"""
+    if outing.say_ok(game.state) is None or rng.random() >= OUTING_SAY_CHANCE:
+        return []
+    return game.outing_say(rng.randrange(len(outing.PRESETS)))
