@@ -21,7 +21,7 @@ from . import (
     allied, armor, atlas, battlelog, calendar, clinic, conquest, divine, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
-    shopview, signature, skillview,
+    shopview, signature, art_cards,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
 from . import flavor
@@ -1055,7 +1055,7 @@ class Game:
         if not clinic.on(c) or not clinic.here(s, c) or int(member.injury) < 1:
             return None
         problem = team.heal_problem(s, c, member)
-        note = skillview.heal_note(s, c)
+        note = art_cards.heal_note(s, c)
         return Option(id="act:heal", label=f"{clinic.HEAL}（{note if problem is None else problem.rstrip('。')}）",
                       enabled=problem is None)
 
@@ -2907,8 +2907,8 @@ class Game:
     # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/cultivation/view.py，這裡留一行委派）──────
 
     def heal_button(self) -> dict:
-        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
-        return skillview.heal_button(self.state, self.content)
+        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 art_cards.heal_button）。"""
+        return art_cards.heal_button(self.state, self.content)
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 
@@ -3572,10 +3572,10 @@ class Game:
                 # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
                 **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
                 # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
-                "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
-                "stat_uses_note": skillview.STAT_CHECK_NOTE,
+                "stat_uses": art_cards.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
+                "stat_uses_note": art_cards.STAT_CHECK_NOTE,
                 # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
-                "hint": None if self._preparing() else skillview.practice_hint(s, c),
+                "hint": None if self._preparing() else art_cards.practice_hint(s, c),
                 "team": mates,
                 "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
             }
