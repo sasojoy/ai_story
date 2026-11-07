@@ -7,7 +7,7 @@ world（每天 00:00、每週一的掛鉤 daily、weekly_reset）。放進哪一
 規則的說明在包裡那一份的開頭與導覽〈大勢人物與賽季〉「人物心意與託付」。
 
 開關是 rules.jianfa(content, world, "stances")；關著每個函式都當沒有這回事（季上的欄位不讀不寫）。
-只 import models、state、rules、calendar、conquest 與 figures（延後；figures 第 40 批收進共用規則層，邊界測試 SHARED_PENDING）。"""
+只 import models、state、rules、calendar、conquest 與 figures（延後；figures 第 40 批收進共用規則層）。"""
 from __future__ import annotations
 
 from . import calendar, rules

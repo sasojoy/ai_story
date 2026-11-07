@@ -15,7 +15,6 @@ from . import prologue as prologue_rules
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from .engine import FREE_TEXT_OPTION, GROWTH_PREFIX, Game, Option
 from .core import features as features_core
-from .martial_arts import next_quality
 from .models import Content
 from .models import Outcome  # 減法季批 4：pick_outcome 的位子
 from .sqlite_world import open_world

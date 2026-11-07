@@ -7,7 +7,7 @@ from __future__ import annotations
 
 # ── engine.py ──
 
-# 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。第 98 批起它一處都不 import 包（TYPE_CHECKING 底下的型別註記不算）：這張表是空的，要加先過 PM（要接一包先想掛鉤）。
+# 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。第 98 批起它一處都不 import 包（第 102 批起連 TYPE_CHECKING 底下也不寫包名）：這張表是空的，要加先過 PM（要接一包先想掛鉤）。
 GAME_IMPORTS: set[str] = set()
 
 # 核心自己的邏輯直接叫包（沒有對應的掛鉤）。核心的接縫都換成了接縫掛鉤（tianxia/core/features.py）；第 98 批起這張表是空的，要加先過 PM。

@@ -75,7 +75,7 @@ def test_a_module_picks_the_tests_that_import_it(shopview_reads_server_bots):
     # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
     # core_step（全部拆包第 36 批）：weekcard 收進核心本體（MODULES），核心不往上走——chapters 往上找的舊模組變成 0 個（量的：dependents("chapters")
     # 是空的、改 chapters 挑 1 個檔 test_chapters）。直接 import 的那一半照舊用 chapters；「經 import 它的模組再挑」那一行換成還是舊模組的
-    # skillview ← shopview（改 skillview 挑 52 個檔，why 一行「經 shopview（依賴它的 1 個模組）再挑到 11 個檔」；兩個都是 SHARED_LATER，收的那一批再換）
+    # skillview ← shopview（改 skillview 挑 52 個檔，why 一行「經 shopview（依賴它的 1 個模組）再挑到 11 個檔」；兩個當時都不在共用層，收的那一批再換）
     # core_world2（全部拆包第 40 批）：chapters 收進共用規則層，改它照「自己檔名的＋煙霧＋邊界」挑，test_chapters 靠檔名挑到、不是靠 import。
     # 直接 import 的那一半換成還是舊模組的伺服器假人 server_bots ← test_bot_runner（量的：改 server_bots 挑 8 個檔、dependents 是空的〔import 它的
     # bot_policy、bot_runner 是 DRIVERS〕，test_bot_runner 檔名對不上、只靠直接 import 挑到；server_bots 不在總表任何一批，第 66 批以前不會動）
@@ -94,7 +94,7 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it(shopview_re
     mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。mapview：mapview、mapdata 第 49 批搬進輿圖包、舊名成了別名，
     換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。core_step：step、weekcard 第 36 批收進核心本體（MODULES），
     改 step 跑核心測試、不往上找，換成還是舊模組的事件抽選 events——經 narration 挑到只 import narration 的 test_narration
-    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
+    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個當時都不在共用層，第 40 批照留、理由改寫成 events 只剩讀事件分級 tiers、narration 只剩讀 events，收的那一批再換〕。
     第二輪第 87 批 events、narration 收進共用規則層（共用層只挑自己檔名＋煙霧），換成還是舊模組的門下頁 skillview——經 shopview 挑到只 import shopview 的 test_bounty_tags
     〔量的：改 skillview 挑 54 個檔、core 與 smoke 都假、dependents("skillview") 只有 shopview；第 88 批切 skillview 時再換〕。
     第二輪第 88 批：舊模組沒有真例子了，換假的邊 shopview → server_bots（fixture 的說明）。）"""

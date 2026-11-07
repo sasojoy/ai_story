@@ -2,7 +2,7 @@
 Game 留 8 個一行委派（server、假人、測試、核心原位與探索包在叫的）；sense、sense_apply 只有這一包在叫。第一個參數 ctx 是 Game（手冊 3.3）；
 叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式。sense_draw、epiphany_names 掛核心的 outing_watch
 （走一趟停在要選的事上時記那一下的得失；原本是 engine 模組層的 _outing_watch）。
-最後兩段是 choose、scene 掛鉤的本體，與核心原位、探索包、引導包叫的服務的本體（Game._sense_missed……）。"""
+最後兩段是 choose 掛鉤、場景掛鉤（Feature.scenes）的本體，與核心原位、探索包、引導包叫的服務的本體（Game._sense_missed……）。"""
 from __future__ import annotations
 
 import random
@@ -157,7 +157,7 @@ def method_help(ctx: Game, option_ids: Iterable[str]) -> dict | None:
     return got
 
 
-# ── 接縫掛鉤的本體（scene：原本 Game._own_scene_text 宴客那一行之後的兩支）──
+# ── 場景掛鉤（Feature.scenes）的本體（scene：原本 Game._own_scene_text 宴客那一行之後的兩支）──
 
 
 def scene(ctx: Game) -> str | None:

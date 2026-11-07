@@ -28,11 +28,11 @@ from . import timetable  # 共用規則層（時刻表大事補進江湖紀錄�
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
-from . import outcomes as outcome_rules  # noqa: F401  第二輪第 92 批之後 engine 沒人用了，只留著載入先後（拿掉的話 event_llm、outcomes 晚約 30 個模組才載入，量過；第 98 批清這一區時一起看）
+from . import outcomes as outcome_rules  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 outcomes、event_llm 各晚 10 個模組才載入（第二輪第 102 批量）
 from .models import FreeTextChoice, Outcome
-from .rules import jianfa
+from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
-from . import wins  # noqa: F401  第二輪第 92 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.wins 晚 5 個模組才載入，波 F 合完量過）
+from . import wins  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 tianxia.wins 晚 6 個模組才載入（第二輪第 102 批量）
 from .characters import CharacterStore, name_key
 from .journal import LOG_BREAK, Draft
 from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、第 2 週才開）
@@ -46,7 +46,6 @@ from .rules import (
     add_season_rumor,
     humanize,
 )
-from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
@@ -66,7 +65,7 @@ from .core.services import outing_watch as _outing_watch
 if TYPE_CHECKING:  # 型別註記用，只放核心與共用層；包的型別寫字串（核心不 import 包，連這裡也不准，第二輪第 102 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 from .core.services import not_while_preparing as _not_while_preparing
-from . import story_base  # noqa: F401  第二輪第 91 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.story_base 晚 3 個模組才載入，波 F 合完量過）
+from . import story_base  # noqa: F401  engine 本身不讀，留著是 run_bots 的載入先後：拿掉的話 tianxia.story_base 晚 2 個模組才載入（第二輪第 102 批量）
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
 from .state import (
