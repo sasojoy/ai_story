@@ -57,14 +57,14 @@ def _column() -> int:
 def test_the_desktop_block_starts_just_above_the_game_column():
     """斷點是 641px：手機（375、390、430）與欄寬以內的視窗一條都不生效，畫面一個像素都不變。"""
     assert DESKTOP == f"@media (min-width: {_column() + 1}px) {{"
-    assert _block(_css(), "FB-225")
+    assert _block(_css("shop.css"), "FB-225")
 
 
 def test_the_shop_draws_its_colors_only_in_the_game_column():
     """三間店的底色（爐火、土黃、木紋）照欄寬畫在中間、不重複；欄外是遊戲本來的頁面底色。深色主題的馬市那一條在前面，蓋不掉這一條。
     （功能包切出去的樣式排在 style.css 後面，蓋得掉這一條：見下一條。）"""
     col = _column()
-    rules = _rules(_block(_css(), "FB-225"))
+    rules = _rules(_block(_css("shop.css"), "FB-225"))
     # 軍需帳（素材與經濟 B6）、擂台的紅布（FB-306）、打點的雅間（第 9 批畫面乙）、商城的紫檀（商城第二批）同一條
     bg = rules[".shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena, "
                ".shop-layer.shop-dadian, .shop-layer.shop-mall"]
@@ -77,7 +77,7 @@ def test_a_package_stylesheet_paints_its_shop_color_in_the_game_column_again():
     它替自己那一層寫的 background 簡寫會把上面那一條欄寬的底色蓋回整片寬（2026-10-31 商城切出來時實機 1280 寬量到的退步）。
     所以上面那一條列到的那一層，只要在功能包的檔裡寫了 background 簡寫，同一個檔在它後面的電腦寬那一段就要照上面那一條再寫一次。"""
     col = _column()
-    layers = [s.strip() for s in next(sel for sel in _rules(_block(_css(), "FB-225")) if ".shop-layer.shop-smith" in sel).split(",")]
+    layers = [s.strip() for s in next(sel for sel in _rules(_block(_css("shop.css"), "FB-225")) if ".shop-layer.shop-smith" in sel).split(",")]
     page = (server.WEB / "index.html").read_text(encoding="utf-8")
     checked = []
     for name in (n for n in features_core.web_files() if n.endswith(".css")):
@@ -100,7 +100,7 @@ def test_everything_in_the_shop_lines_up_with_the_game_column():
     """招牌那一列、店內分頁、出爐的麻布與卡貼齊欄邊；掌櫃話照手機的 14px、放大的紙照 12px 往裡縮；捲的內容照手機左右各 12px。"""
     half = _column() // 2
     side = f"max(0px, calc(50% - {half}px))"
-    rules = _rules(_block(_css(), "FB-225"))
+    rules = _rules(_block(_css("shop.css"), "FB-225"))
     assert rules[".shop-layer > .shop-bar, .shop-layer > .shop-tabs"] == f"margin-left: {side}; margin-right: {side};"
     line = f"max(14px, calc(50% - {half - 14}px))"
     assert rules[".shop-layer > .shop-line"] == f"margin-left: {line}; margin-right: {line};"
@@ -115,7 +115,7 @@ def test_everything_in_the_shop_lines_up_with_the_game_column():
 def test_the_book_follows_the_same_column():
     """武學譜、鑄譜那本書（店裡的鑄譜鈕也開它）：書頁的底與返回列、封面都在欄裡，欄外是頁面底色；書頁原本就置中。"""
     col, half = _column(), _column() // 2
-    rules = _rules(_block(_css(), "FB-225"))
+    rules = _rules(_block(_css("shop.css"), "FB-225"))
     book = rules[".book-layer"]
     assert "scrollbar-gutter: stable both-edges" in book and book.count(f"50% 0 / min(100%, {col}px) 100% no-repeat") == 2
     assert book.rstrip(";").endswith("var(--paper)") and "var(--bk-paper-2)" in book
@@ -126,7 +126,7 @@ def test_the_book_follows_the_same_column():
 def test_the_desktop_rules_stay_inside_the_shop_and_the_book():
     """這一段只動店面與書：每一條都掛在 .shop-layer／.shop-board／.book- 底下（FB-305 的店面字級用 :where(.shop-layer) 掛、不加權重），
     碰不到江湖頁；.shop-col 與捲軸溝只在桌機區塊裡寫。"""
-    css = _css()
+    css = _css() + _css("shop.css")
     block = _block(css, "FB-225")
     for selector in ",".join(_rules(block)).split(","):
         assert selector.strip().startswith((".shop-layer", ".shop-board", ".book-", ":where(.shop-layer)")), selector
@@ -200,7 +200,7 @@ def test_the_board_puts_its_notes_in_the_column_and_the_paper_outside_the_scroll
 
 
 def test_fb240_the_page_keeps_its_scrollbar_gutter_on_desktop_only():
-    css = _css()
+    css = _css() + _css("shop.css")
     block = _block(css, "FB-240")
     assert DESKTOP == f"@media (min-width: {_column() + 1}px) {{"  # 跟 FB-225 同一個斷點：手機一條都不生效
     assert _rules(block) == {"html": "scrollbar-gutter: stable;"}
@@ -210,7 +210,7 @@ def test_fb240_the_page_keeps_its_scrollbar_gutter_on_desktop_only():
 
 # ── 原 test_fb306_shop_column.py（整檔搬進來） ──
 # FB-306（FB-225 漏的）：電腦上店面的內容照遊戲那一欄（640）排。web/app.js 每一個店面捲的那一層（.shop-body）裡面一律先包
-# 一層 .shop-col（擂台的台下、擂台榜、打到一半原本沒包，「你還沒報名守擂」那一格與挑戰者的卡拉滿整個螢幕）；web/style.css 電腦寬
+# 一層 .shop-col（擂台的台下、擂台榜、打到一半原本沒包，「你還沒報名守擂」那一格與挑戰者的卡拉滿整個螢幕）；web/shop.css 電腦寬
 # 那一段讓擂台的紅布底色也只畫在那一欄、剛打完的收場卡貼齊欄邊。手機上 .shop-col 沒有樣式，這兩樣都不動手機。
 
 WEB = Path(__file__).resolve().parents[2] / "web"
@@ -219,7 +219,7 @@ WEB = Path(__file__).resolve().parents[2] / "web"
 APP = webharness.app_source()
 
 
-CSS = (WEB / "style.css").read_text(encoding="utf-8")
+CSS = (WEB / "shop.css").read_text(encoding="utf-8")
 
 
 def _desktop_block() -> str:

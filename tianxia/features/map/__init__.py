@@ -15,7 +15,7 @@ from tianxia.core.features import Feature
 class MapFeature(Feature):
     name = "map"
     prefix = None  # 輿圖是只讀的畫面，選單上沒有 map: 的選項（view_map 是新手引導包的、tab:map 是揭曉鍵）
-    web = ("map.js",)  # 輿圖的畫面；app.js 的 loadMap 是殼呼叫的入口，留在 app.js
+    web = ("map.js", "map.css")  # 輿圖的畫面；app.js 的 loadMap 是殼呼叫的入口，留在 app.js
     # content/map.json 是核心 models.Content.map 的，不歸這一包；沒有 PlayerState 欄位
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()

@@ -120,7 +120,7 @@ def test_the_held_seal_moves_further_left_on_wide_screens():
     """FB-390：寬過 641px 時「已揭」換成 13px，揭著的朱印照新的字寬往左讓（手機也從 34px 挪到 38px：量到壓了 3px）。"""
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     phone, wide = css.split("@media (min-width: 641px)", 1)[0], css.split("@media (min-width: 641px)", 1)[1]
     assert ".shop-board .note.held .corner { right: 38px; }" in phone
     assert ".shop-board .note.held .corner { right: 46px; }" in wide

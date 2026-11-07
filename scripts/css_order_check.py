@@ -1,9 +1,11 @@
-"""style.css 切檔的先後檢查（全部拆包第 67 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第67批.md 第三節）。只讀檔。
+"""切樣式檔的先後檢查（全部拆包第 67 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第67批.md 第三節。第 86 批起比所有樣式，
+計畫 docs/superpowers/plans/2026-11-07-第二輪-第86批.md 第四節）。只讀檔。
 
     python scripts/css_order_check.py <base 根> <head 根>
 
-同權重後蓋前，所以把一段 CSS 搬到別支檔、排到別的規則後面，可能改掉畫面。這支把 base 的 web/style.css 跟 head 照 index.html 載入的
-style.css＋切出去的那幾支（mall.css 以前的）逐條對起來，找「先後反了」而且「可能打到同一個元素、權重一樣、同一類屬性、值不一樣」的規則對。
+同權重後蓋前，所以把一段 CSS 搬到別支檔、排到別的規則後面，可能改掉畫面。這支把 base 與 head 各自照 index.html 載入的所有樣式
+（/static/ 底下的；一支一支 parse 再接起來，不接文字：多的 } 不跨檔，同瀏覽器）逐條對起來，
+找「先後反了」而且「可能打到同一個元素、權重一樣、同一類屬性、值不一樣」的規則對。
 0 對才算過；回傳碼 1 表示有。保守：判不出來就算可能（多報只會多留幾段在 style.css）。
 
 「可能打到同一個元素」怎麼算：主體的 class 要在 js、py 的同一個 class 屬性裡一起出現過（classList 加上去的算都可能）；
@@ -355,6 +357,7 @@ class Co:
         self.pre = [t for t in co if t.endswith("*")]
     def can(self, a, b):
         if a == b: return True
+        if frozenset((a, b)) in NOT_SAME_EL: return False
         if a in self.wild or b in self.wild: return True
         if b in self.co.get(a, ()): return True
         pa = [t for t in self.pre if prefix_hit(t, a)]
@@ -965,14 +968,27 @@ def conflicts2(tops, rank, nest, leaves_cache=None):
 
 # ── 手動認定（讀過程式才寫）──────────────────────────────────────────────
 NOT_EVERYWHERE = {"peer-focus": {"btn", "small", "peer-acts"}}  # classList 加的，但只加在玩家卡那幾顆鈕上（peers.js 的 peerFocus）
+# 逐對的認定：這兩個 class 碰不到同一個元素（第 86 批讀過 map.js、guide.js、app.js 才寫）。不放進 NOT_EVERYWHERE：它把整個 class 拿出 wild，
+# .glow 會落在 #page 任何一顆鈕上、夥伴列不完，放進去 .glow 對 .btn 這種也一起不算了，工具變鬆。
+# 共同的事實：.mapx 與底下的東西只在有底圖時畫（map.js 的 pageMap，沒底圖只有一行 .muted），有底圖就畫在 #map-host（showMapHost），
+# 它在 body 底下、不在 #app 裡（mapHost）。node 的假瀏覽器才畫在 #page。
+NOT_SAME_EL = {frozenset(pair) for pair in (
+    # guide.js 的 applyFocus：只加在 #top、#page、nav.tabs 裡的元素（不在這三塊裡的跳過）
+    ("onb-dim", "mv-side"), ("onb-dim", "mv-geo"), ("onb-dim", "mv-reg"), ("onb-dim", "mv-fab"), ("onb-dim", "mv-ground"), ("onb-dim", "mdrawer"),
+    # guide.js 的 .glow：#page [data-id]、#page .act-move [data-id]、[data-glow~=…]；map.js 一處 data-glow 都沒寫
+    ("glow", "mv-fight"), ("glow", "mv-pulse"), ("glow", "mv-side"), ("glow", "mv-you"), ("glow", "mv-eta"), ("glow", "mv-q"), ("glow", "w-melee"), ("glow", "mdrawer"),
+    # guide.js 的 .lit：只有 [data-glow~=…]
+    ("lit", "mv-fight"), ("lit", "mv-pulse"), ("lit", "w-melee"),
+    # 工具把 class="mv-pin ink${dim}"（map.js）認成前綴 ink*；.ink-drop 只由 drop.className = "ink-drop"（app.js）建，身上沒別的 class
+    ("ink-drop", "mv-pin"),
+)}
 DEAD_CLASSES = ("insight",)  # 沒有任何 class 屬性寫到（"insight" 只是資料的 kind），規則碰不到元素
 NOT_INSIDE = {("vn-menu", "gather-branches")}  # vn-menu 放的是對話選單（companions.js 的 vnTalkHtml）；對話時選項只有 talk:*（talk_actions.py），沒有 explore:gather:*
 
 
-def head_sheets(head: Path) -> list[str]:
-    """head 的 index.html 載入的樣式：style.css 起、mall.css 以前（切出去的都排在這一段；mall.css 以後的三支 base 就排在 style.css 後面）。"""
-    names = re.findall(r'href="/static/([^"]+\.css)"', (head / "web" / "index.html").read_text(encoding="utf-8"))
-    return names[names.index("style.css"):names.index("mall.css")]
+def page_sheets(root: Path) -> list[str]:
+    """index.html 載入的所有樣式，照載入的先後（/journal.css 是伺服器生的，不在 web/ 底下，不算）。"""
+    return re.findall(r'href="/static/([^"]+\.css)"', (root / "web" / "index.html").read_text(encoding="utf-8"))
 
 
 def read_css(path: Path) -> str:
@@ -982,7 +998,12 @@ def read_css(path: Path) -> str:
 def main(argv: list[str]) -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
     base, head = Path(argv[1]), Path(argv[2])
-    tops = parse(read_css(base / "web" / "style.css"))
+    tops = []
+    where = []  # 每一條規則在 base 哪一支
+    for name in page_sheets(base):
+        for top in parse(read_css(base / "web" / name)):
+            tops.append(top)
+            where.append(name)
     waiting: dict[str, list[int]] = {}
     for ti, top in enumerate(tops):
         waiting.setdefault(top.raw, []).append(ti)
@@ -990,7 +1011,7 @@ def main(argv: list[str]) -> int:
     sheet_of: dict[int, str] = {}
     extra = []
     n = 0
-    sheets = head_sheets(head)
+    sheets = page_sheets(head)
     for name in sheets:
         for top in parse(read_css(head / "web" / name)):
             got = waiting.get(top.raw)
@@ -1000,13 +1021,13 @@ def main(argv: list[str]) -> int:
             ti = got.pop(0)
             rank[ti], sheet_of[ti] = n, name
             n += 1
-    lost = [(tops[ti].start, tops[ti].raw[:60]) for ti in range(len(tops)) if ti not in rank]
+    lost = [(where[ti], tops[ti].start, tops[ti].raw[:60]) for ti in range(len(tops)) if ti not in rank]
     print("載入先後：", sheets)
     print("base 有、head 不見的規則：", len(lost), lost[:5])
     print("head 多出來的規則：", len(extra), extra[:5])
     if lost or extra:
         return 1
-    print("搬走的規則：", sum(1 for ti in rank if sheet_of[ti] != "style.css"), "／", len(tops))
+    print("換了檔的規則：", sum(1 for ti in rank if sheet_of[ti] != where[ti]), "／", len(tops))
     web = head / "web"
     pys = [str(p) for p in head.joinpath("tianxia").rglob("*.py") if "tests" not in p.parts] + [str(head / "server.py")]
     paths = [str(p) for p in web.glob("*.js") if p.name != "sw.js"] + [str(web / "index.html")] + pys
@@ -1028,7 +1049,7 @@ def main(argv: list[str]) -> int:
         if (x[2], x[3]) in shown:
             continue
         shown.add((x[2], x[3]))
-        print(f"  {x[2][:56]} ｜ {x[3][:56]}  {x[4]}  base 第 {tops[x[0]].start}、{tops[x[1]].start} 行")
+        print(f"  {x[2][:56]} ｜ {x[3][:56]}  {x[4]}  base {where[x[0]]}:{tops[x[0]].start}、{where[x[1]]}:{tops[x[1]].start}（head {sheet_of[x[0]]}、{sheet_of[x[1]]}）")
     return 1 if res else 0
 
 

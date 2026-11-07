@@ -67,6 +67,29 @@ def test_unrelated_elements_stay_quiet(tmp_path):
     assert got.returncode == 0, got.stdout
 
 
+def test_a_swap_across_sheets_is_reported_as_a_swap(tmp_path):
+    """第 86 批起比所有樣式：base 的 .outer i 在 style.css、.inner i 在 moved.css，head 兩支對調。報的是「先後反了」，不是「多出來」。"""
+    js = INNER + '  function card(v) {\n    return `<div class="outer">${innerHtml()}</div>`;\n  }\n'
+    outer, inner = ".outer i { color: red; }\n", ".inner i { color: blue; }\n"
+    _tree(tmp_path / "base", outer, inner, js)
+    _tree(tmp_path / "head", inner, outer, js)
+    got = subprocess.run([sys.executable, str(TOOL), str(tmp_path / "base"), str(tmp_path / "head")],
+                         capture_output=True, text=True, encoding="utf-8")
+    assert got.returncode == 1, got.stdout
+    assert "head 多出來的規則： 0" in got.stdout and "base 有、head 不見的規則： 0" in got.stdout
+    assert "先後反了又可能打架的規則對： 1" in got.stdout
+    assert "base style.css:1、moved.css:1" in got.stdout
+
+
+def test_not_same_el_only_clears_that_pair(tool):
+    """逐對的認定只擋那一對：.glow 是 classList 加的（wild），對別的 class 照舊算可能，工具不會因為這張表變鬆。"""
+    assert frozenset(("glow", "mv-fight")) in tool.NOT_SAME_EL
+    co = tool.Co({}, set(), {"glow"}, set())
+    assert not co.can("glow", "mv-fight") and not co.can("mv-fight", "glow")
+    assert co.can("glow", "btn")
+    assert co.can("mv-fight", "mv-fight")
+
+
 def test_short_prefix_with_a_hyphen_takes_any_data_value(tool):
     assert tool.prefix_hit("k-*", "k-material")
     assert tool.prefix_hit("g-*", "g-redgold")
@@ -92,3 +115,33 @@ def test_real_sheets_keep_the_level_cells_over_the_tag_pill():
     order = re.findall(r'href="/static/([^"]+\.css)"', (ROOT / "web" / "index.html").read_text(encoding="utf-8"))
     text = "\n".join((ROOT / "web" / name).read_text(encoding="utf-8") for name in order)
     assert text.index("\n.mc-tags i {") < text.index("\n.lv i {")
+
+
+# 第 86 批切走的前綴：這些規則現在在 map.css、shop.css，排在 style.css 後面。.m-gap 不在那一批的範圍，照位置留在 style.css。
+CUT_PREFIXES = re.compile(r"\.mv-|\.m-(?!gap(?![\w-]))|\.mapx|\.map-|#map-|\.mdrawer|\.mgrab|\.mbody|\.shop-|\.ring-|\.forge-|\.ledger-")
+
+
+def _selectors(css: str) -> list[str]:
+    """每一個大括號前面的那一段（選擇器與 @media 條件）；註解與屬性值不算。"""
+    return [s.strip() for s in re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.S))]
+
+
+def test_style_css_stays_free_of_the_cut_prefixes():
+    """靜默失效（第二輪總表第九節第 3 條）：接在 style.css 尾巴覆寫同權重的輿圖、店面規則，git 不報衝突，但 map.css、shop.css 載入得比較晚，蓋不掉。"""
+    hits = [s for s in _selectors((ROOT / "web" / "style.css").read_text(encoding="utf-8")) if CUT_PREFIXES.search(s)]
+    assert not hits, f"寫進 web/map.css 或 web/shop.css：它們排在 style.css 後面，寫在 style.css 尾巴蓋不掉：{hits[:5]}"
+
+
+@pytest.mark.parametrize("css, hits", [
+    pytest.param(".shop-layer .x { color: red; }", [".shop-layer .x"], id="plain"),
+    pytest.param(":where(.shop-layer) .x { color: red; }", [":where(.shop-layer) .x"], id="where"),
+    pytest.param(".card.ring-a, .y { color: red; }", [".card.ring-a, .y"], id="compound"),
+    pytest.param("@media (min-width: 641px) {\n  #map-host .x { color: red; }\n}", ["#map-host .x"], id="in-media"),
+    pytest.param(".m-foo { color: red; }", [".m-foo"], id="m-other"),
+    pytest.param(".m-gap2 { color: red; }", [".m-gap2"], id="m-gap-longer"),
+    pytest.param(".m-gap { color: red; }", [], id="m-gap-stays"),
+    pytest.param(".xshop-a, .mapping { color: red; }", [], id="other-names"),
+    pytest.param("/* .shop-layer { } */ .x { background: url(a.shop-b.png); }", [], id="comment-and-value"),
+])
+def test_the_cut_prefix_check_bites(css, hits):
+    assert [s for s in _selectors(css) if CUT_PREFIXES.search(s)] == hits

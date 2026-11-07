@@ -152,7 +152,7 @@ def test_the_ledger_stacks_its_pages_below_360():
     """FB-411：比 360 窄時兩頁放不下，改成上下兩頁（第二頁的左邊線換成上邊線）；360 以上照舊並排。"""
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     narrow = css.split("@media (max-width: 359px)")[1].split("\n}\n")[0]
     assert ".shop-layer.shop-dadian .ledger { grid-template-columns: 1fr; }" in narrow
     assert ".shop-layer.shop-dadian .ledger-page + .ledger-page {" in narrow and "border-top" in narrow
@@ -162,7 +162,7 @@ def test_the_ledger_css_keeps_text_at_twelve_px_and_has_a_desktop_column():
     import re
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     sizes = [float(x) for x in re.findall(r"\.shop-dadian[^{]*\{[^}]*?font(?:-size)?:[^;}]*?(\d+(?:\.\d+)?)px", css)]
     assert sizes and min(sizes) >= 12
     assert ".shop-layer.shop-dadian" in css.split("@media (min-width: 641px)")[1]  # 電腦上底色只畫中間那一欄（FB-225）

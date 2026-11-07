@@ -84,7 +84,7 @@ def test_the_rule_takes_the_smiths_usual_line_in_a_gold_frame():
 def test_the_new_rules_sit_in_the_shop_section():
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert ".shop-layer .cells.four .cell-row { grid-template-columns: 1.6em repeat(4, minmax(0, 1fr)); }" in css
     assert ".shop-layer .cells.four .cell-row .t4 { grid-column: 5; }" in css
     assert ".shop-layer .up-rows.four .up-row { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); }" in css
