@@ -400,7 +400,7 @@ def switch_off(name: str, monkeypatch) -> None:
     elif name == "heroines":
         monkeypatch.setattr(server.CONTENT, "heroines", {})
     elif name == "notify":
-        assert server.WEB_PUSH is None  # 測試沒跑 start_web_push，就是關著
+        monkeypatch.setattr(server, "WEB_PUSH", None)  # start_web_push 沒跑就是關著；同一個行程別的測試可能留著值
     elif name == "zhuan":
         monkeypatch.setattr(config.jianfa, "zhuan_end", False)
     elif name == "smithy":
