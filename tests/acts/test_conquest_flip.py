@@ -13,7 +13,7 @@ from conquest_kit import announce, conquest_game, go, join, plain_game, win_sort
 from tianxia import annals, calendar, conquest, materials
 import re
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import bot_policy, conquest, conquest_day, orders
+from tianxia import bot_base, bot_policy, conquest, conquest_day, orders
 from tianxia.engine import Option
 from tianxia.state import BotProfile, Order
 import random
@@ -422,7 +422,7 @@ def test_bots_do_not_sortie_where_they_cannot_push(monkeypatch):
     """QA：開季的截糧軍令把官軍的假人拉到下曲陽（官軍開季碰不到、推不動），在那裡一直出陣、連輸中立駐軍。
     2026-10-22（7 天季領地爭奪調整）之後假人出陣也看勝算（bot_policy._outmatched，測試在 test_bot_policy_conquest.py）：剛建的假人在荒丘
     攻打的贏面不到門檻；這一條只鎖「推不推得動」，勝算一律當成穩勝。"""
-    monkeypatch.setattr(bot_policy, "_sortie_win", lambda game, loc_id: 1.0)
+    monkeypatch.setattr(bot_base, "_sortie_win", lambda game, loc_id: 1.0)
     game = _bot(go(join(conquest_game("season21", name="假官"), "guan"), "xiaquyang"), "guan")
     w, c = game.state.world, game.content
     _intercept(game, "guan", "xiaquyang", "jizhou")
@@ -760,7 +760,7 @@ def test_event_at_block_pushes_progress_once():
 def test_bot_train_value_follows_progress(monkeypatch):
     # 2026-10-22（7 天季領地爭奪調整）之後假人出陣也看勝算（bot_policy._outmatched，測試在 test_bot_policy_conquest.py）：剛建的人打不贏
     # 南陽官道的駐軍；這一條只鎖「推不推得動」，勝算一律當成穩勝
-    monkeypatch.setattr(bot_policy, "_sortie_win", lambda game, loc_id: 1.0)
+    monkeypatch.setattr(bot_base, "_sortie_win", lambda game, loc_id: 1.0)
     game = go(join(conquest_game("season21"), "huang"), "nanyang_huangjin_camp")
     profile = BotProfile(personality="普通", seed=1, faction="huang", season_number=1)
     assert bot_policy._train_value(game, profile, "nanyang_road") > 0  # 碰得到的中立地：推得動
