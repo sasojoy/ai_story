@@ -25,6 +25,15 @@ _squad_encounter（打一場的主流程）的本體第 79 批還在 Game（engi
 treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。各有自己一份亂數的（lose_silver、tier3、thin_drops、play_rounds）種子字串一個字不動，
 不碰 Game.rng；battle_rewards、fight_with 的 ctx.rng 是 Game 上那一顆。engine 在 `from .core import event_check` 之後才 import 這一份
 （這裡 import 的模組那時都已經載入，載入順序不變）。同 event_check 不進 MODULES、不進 FEATURES；這裡不 import 包。
+
+改這一份要跑的測試：
+- scripts/test_for.py：這個檔在 CORE_SERVICES。hunk 落在函式、類別、常數上 → 名字的功能群＋這個檔的底（檔名有 battle、encounter、fight、rounds、tactics、team、engine 的，
+  量到 36 個檔）＋邊界測試；函式以外（import、這段說明、模組層）或指名了卻沒有差 → 核心測試＋煙霧。互叫經 ctx 的（battle_scores → ctx._battle_power、checked_fight →
+  ctx.fight_request）不會往上算（_core_refs 只看 ast.Name），那兩個都有底蓋著。
+- 寫到這些名字、可是檔名不在底裡的只拿它當準備動作，留給閘門（why 寫幾個檔），要當場驗直接給檔名。tests/season、tests/core/test_engine.py 的 slow 留閘門（要看加 --slow）。
+- same_behavior：compare --tracks aftermath（這一批開的一軌：等判讀時選項沒了、經驗換心得、落敗保銀兩、掉落打折、寶物多掉、戰力快照），其餘經 events、sortie、train、story、
+  roam、strip、tavern、battle、muster、progress、ring、bout、crossblade、figact、stamina。走不到的 4 行（序章雪恥、沒滿級卻換心得、三階發素材失敗）寫在那一軌的說明。
+- 反方向（第 36 批認定第 1 條）：這裡 import 的 22 個模組都是核心或共用層，test_for.pick 在搬之前、之後挑的一樣，沒有少挑到的，不必另外跑。
 """
 from __future__ import annotations
 

@@ -33,7 +33,6 @@ GAME_DIRECT = {
 GAME_DELEGATE_CALLERS = {
     # battle
     ("options", "_battle_menu"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
-    ("_battle_marks", "_escort_carry"): "戰力快照（核心的單打服務）帶這一次加入的同伴：沒有掛鉤，總表第 15 批登記戰力快照時再看",
     ("options", "_battle_for_me"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("options", "_watching_battle"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
     ("options", "_fighting"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",
@@ -45,7 +44,6 @@ GAME_DELEGATE_CALLERS = {
     ("_own_scene_text", "_duel_scene"): "自己眼前的場景卡（頭目戰、擂台排在宴客的席位之前）：scene 掛鉤在擂台之後，接上去會排到宴客後面",
     ("_own_scene_text", "_arena_scene"): "同上",
     ("shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
-    ("_battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，_battle_gear 在核心",
     # companions
     ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：不是動作，是重驗、驗過的那一輪要傳給後面的格；MENU_ORDER 的 quick 接不了（第 57 批）",
     ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
@@ -53,7 +51,6 @@ GAME_DELEGATE_CALLERS = {
     ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
     ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
     # cultivation
-    ("_seize", "_seize_chance"): "核心的單打服務收尾擲絕學的契機：留原位（第 26 批量過：在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報；原位行尾標「# 留原位：第 26 批」）",
     ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
     # explore
     ("_act", "_explore"): "關著探索一顆時的舊探索（扣體力、晉升奇遇、序章的舊探索都在它前面；第 11 批 README 認定留原位，不改成 Verb）",
@@ -96,7 +93,6 @@ GAME_DELEGATE_CALLERS = {
     # outlets
     ("shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
     # seal
-    ("_battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
     ("admin_resolve_event", "_mandate_settle"): "管理者「定結果」替天命之爭定天命：時刻表的救場工具是核心，接在 timetable.resolve 與存季之後、讀回季之前，沒有對應的掛鉤",
     # sense
     ("_insight_blocked", "_sense_missed"): "舊探索那一行（action_notes）句尾補什麼時候才悟得出：舊探索（留給序章與測試內容；總表第七節第 1 題選甲，沒有下一批要收）",
@@ -142,6 +138,11 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {
     ("event_check.answer_branch", "_general_gifts"): "同上（隨口應對的分岔那一支）",
     ("event_check.answer_branch", "_signature_arms"): "同上",
     ("event_check.answer_branch", "_gift_entry"): "同上",
+    # core_combat（第二輪第 79 批：單打服務搬進 core/combat.py，這四對從 GAME_DELEGATE_CALLERS 搬過來，理由字照搬）
+    ("combat.battle_marks", "_escort_carry"): "戰力快照（核心的單打服務）帶這一次加入的同伴：沒有掛鉤，總表第 15 批登記戰力快照時再看",
+    ("combat.battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
+    ("combat.battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，_battle_gear 在核心",
+    ("combat.seize", "_seize_chance"): "核心的單打服務收尾擲絕學的契機：留原位（第 26 批量過：在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報；原位行尾標「# 留原位：第 26 批」）",
 }
 
 # 頂層的核心模組（MODULES 裡放在 tianxia/ 底下的）經 game 叫包的委派。現在沒有。
@@ -161,6 +162,32 @@ EVENT_CHECK_VIA_CTX = {
     "apply": ("_apply", "tests/figures/test_seats.py 換掉 Game._apply：效果裡記的貢獻要排在抄帳之前"),
     "free_text_request": ("free_text_request", "tests/server/test_server.py 換掉 Game.free_text_request：暫停中不問引擎"),
 }
+
+# 單打服務（核心本體 tianxia/core/combat.py，第二輪第 79 批）：Game 上本體只有一行 `return combat.<名>(self, …)` 的方法（下面那三個 staticmethod 沒有 self）。
+# 只有 combat 自己叫的 _exp_changes、_trait_say、_trait_lines、_thin_drops、_battle_mount 不留委派
+CORE_COMBAT_DELEGATES = {
+    "is_big", "_fight_squad", "fight_request", "_checked_fight", "_fight_gone", "_judged", "_fight_with", "_style_note", "_terrain_note", "_narrate",  # 大場面
+    "_battle_power", "_battle_scores", "_battle_role", "_battle_troops", "_battle_gear", "_battle_marks", "_battle_road", "_battle_neili_cap",  # 戰力快照
+    "_drill_gains", "_famed_news", "_deed_fame", "_record_exp",  # 操練的帳與立功
+    "_lose_silver", "_player_hp_and_cap", "_player_hp", "_hp_facts", "_take_toll", "_play_rounds", "_story_squad", "_tier3", "_battle_rewards", "_seize", "_file_battle",  # 收場
+    "_spar_power", "_spar_mirror",  # 本人對本人
+}
+# 照舊是 staticmethod（懸賞、玉璽的測試用 staticmethod 換 _spar_power）：委派的第一個參數不是 self
+CORE_COMBAT_STATIC_DELEGATES = {"_narrate", "_spar_power", "_spar_mirror"}
+
+# 被測試、腳本換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：combat 裡一律不直接叫模組裡的本體。模組裡的函式 → Game 上的委派、誰換掉它。
+# 模組裡真的有人互叫的只有 COMBAT_CALLED_THROUGH_CTX 那兩個（寫成 ctx.<委派>）；其餘 6 個模組裡沒有人互叫，都經 _squad_encounter 的 self._x 或包的 ctx._x，打得到
+COMBAT_VIA_CTX = {
+    "judged": ("_judged", "tianxia/features/guide/tests/test_prologue.py 換掉 Game._judged：序章寫好的那一場不看判讀"),
+    "lose_silver": ("_lose_silver", "scripts/measure_mounts.py 換掉 Game._lose_silver：量策馬脫身"),
+    "battle_rewards": ("_battle_rewards", "scripts/measure_challenge.py 換掉 Game._battle_rewards：量挑戰本人的獎勵"),
+    "seize": ("_seize", "scripts/measure_challenge.py 換掉 Game._seize：量挑戰本人的頓悟"),
+    "battle_power": ("_battle_power", "tests/battle/test_rise.py 換掉 Game._battle_power：頭目的難度照你的高度快照"),
+    "battle_scores": ("_battle_scores", "tests/core/test_engine.py 換掉 Game._battle_scores：排程不該算份量"),
+    "spar_power": ("_spar_power", "tianxia/features/bounties/tests/test_bounties.py、tianxia/features/seal/tests/test_seal_revamp_hidden.py 用 staticmethod 換掉 Game._spar_power"),
+    "fight_request": ("fight_request", "tianxia/features/craft/tests/test_craft_shell.py 換掉 Game.fight_request：暫停中不問引擎"),
+}
+COMBAT_CALLED_THROUGH_CTX = {"_battle_power", "fight_request"}  # battle_scores → ctx._battle_power、checked_fight → ctx.fight_request
 
 # ── 共用規則層 ──
 
