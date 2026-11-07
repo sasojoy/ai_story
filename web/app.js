@@ -192,6 +192,7 @@
       setMain(data.main);
       closeEvents(); // 重新連：現在這個登入的連線（上一個帳號的、登入失效前的，不能留著）
       connectEvents(); // main.push 是 true 才真的連（預設關：不開 EventSource）
+      if (S.patchNotes === undefined) loadPatchNotes(); // 有沒看過的改版就跳一次（patchPopHtml）
     } else {
       S.stage = data.stage === "create" ? "create" : "gate";
       closeEvents();
@@ -808,6 +809,37 @@
     } catch (e) { S.patchNotes = []; }
     const box = document.getElementById("gate-patch");
     if (box) box.innerHTML = gatePatchHtml(S.patchNotes);
+    if (S.stage === "game" && S.tab === "jianghu" && patchUnseen().length) renderPage(); // 進了遊戲才讀到：有沒看過的就跳
+  }
+  // 進遊戲後跳一次的改版資訊（Joy 2026-11-07「以前改版資訊是在登入那邊 但是現在幾乎不會到那頁 因為會記錄session」）：
+  // 有這支手機還沒看過的新版就從底下跳一張，照給玩家的格式【天下大勢　改版資訊 M/D】、新功能／調整／修正一項一行；按「知道了」就關、
+  // 記下最新那一次，下一次改版才再跳。好幾次沒看的：最新那次攤開，其餘各收成一行。序章裡、特殊事件的跳顯框還沒看完先不跳；
+  // 這支手機從沒看過任何一次的只給最新那一次。簽到小窗排在它後面（同一刻只跳一張）。記不住（私密視窗）就這一次關了算數
+  const PATCH_SEEN = "tianxia.patchSeen";
+  const PATCH_OK = "知道了";
+  // 認一次改版：日期加三段各幾條（同一天補發一次也算新的）
+  const patchKey = (p) => `${p.date}|${["new", "tweak", "fix"].map((k) => (p[k] || []).length).join(",")}`;
+  function patchUnseen() {
+    const notes = S.patchNotes || [];
+    if (S.patchSeen === undefined) { try { S.patchSeen = localStorage.getItem(PATCH_SEEN) || ""; } catch (e) { S.patchSeen = ""; } }
+    const at = notes.findIndex((p) => patchKey(p) === S.patchSeen);
+    return at < 0 ? notes : notes.slice(0, at);
+  }
+  function patchPopHtml(m) {
+    if (pro() || (m.story_cards || []).length) return "";
+    if (!S.patchNotes) return ""; // 進遊戲那一刻（enter）才讀一次；還沒讀到不跳
+    const [top, ...older] = patchUnseen();
+    if (!top) return "";
+    return `<div class="sheet-bg" data-act="patch-close"></div><div class="sheet patch-pop" role="dialog" aria-label="改版資訊"><div class="grip"></div>`
+      + `<div class="patch-card"><h3>【天下大勢　改版資訊 ${esc(top.date)}】</h3>${patchLines(top)}`
+      + `${(S.patchSeen ? older : []).map((p) => `<details class="patch-old"><summary>改版資訊 ${esc(p.date)}</summary>${patchLines(p)}</details>`).join("")}</div>`
+      + `<button class="btn primary patch-ok" data-act="patch-close">${PATCH_OK}</button></div>`;
+  }
+  function patchPopClose() {
+    const top = (S.patchNotes || [])[0];
+    if (!top) return;
+    S.patchSeen = patchKey(top);
+    try { localStorage.setItem(PATCH_SEEN, S.patchSeen); } catch (e) { /* 私密視窗：這一次關了算數 */ }
   }
 
   function renderCreate() {
@@ -1990,6 +2022,7 @@
           S.showMore = true; renderTop(); window.scrollTo(0, 0); break;
         case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
+        case "patch-close": patchPopClose(); renderPage(); break; // 進遊戲後跳的改版資訊：看過了，下一次改版才再跳
         case "ck-pop-close": ckPopClose(); renderPage(); break; // 每天第一次登入的簽到小窗：收下或等一下再挑，同一天不再跳
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
