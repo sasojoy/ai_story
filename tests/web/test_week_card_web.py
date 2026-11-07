@@ -141,7 +141,7 @@ def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
     assert 'class="sheet wk-sheet"' in sheet and 'class="sides"' in sheet and 'class="sheet-bg" data-act="wk" data-id="why"' in sheet
     for col in m["sides_card"]["cols"]:
         assert col["name"] in sheet and col["where"][0] in sheet
-    assert 'data-act="howto-open"' in sheet and "<details" not in sheet
+    assert 'data-act="howto-open"' in sheet and '<details class="side' not in sheet and '<details class="wk-rules">' in sheet
     m = _main(faction="guan")
     sheet = run(m, "return H.weekCardHtml(H.S.main);", S=_why(m))
     assert '<div class="side side-guan mine">' in sheet and '<details class="side side-huang">' in sheet and "投靠在哪" not in sheet

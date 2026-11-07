@@ -587,14 +587,14 @@
       + `<button class="wk-x" data-act="wk-hide" data-id="strip" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button></div></section>`;
   }
   // 點最下面那一行拉起來的那一層：自己那一方攤開、別方收成一行（點了攤開）；投靠在哪只給還沒投靠的人。其餘照以前「為什麼」那一塊
-  const WK_SHEET = "這一季在打什麼";
+  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局", WK_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤
   function wkSidesSheetHtml(sc) {
     if (!sc) return "";
     const rows = SIDES_ROWS.filter(([k]) => sc.joined ? k !== "where" : true);
     const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
     return `<div class="sides">${sc.cols.map((c) => (!sc.joined || c.mine
       ? `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>${dl(c)}</div>`
-      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc(c.now || "")}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;
+      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? WK_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;
   }
   function wkSheetHtml(m, w) {
     return `<div class="sheet-bg" data-act="wk" data-id="why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${WK_SHEET}"><div class="grip"></div>`
@@ -666,10 +666,16 @@
     const nb = newbiePeek(m), ck = checkinPeek(m);
     const next = m.week_card && m.week_card.next ? `<p class="wk-nextev"><b>下一件</b>${esc(m.week_card.next)}</p>` : "";
     const locked = m.week_card && m.week_card.locked ? `<p class="wk-locked">${esc(m.week_card.locked)}</p>` : ""; // 第 2 週才開的功能（6.6，批 5）
-    return `${m.sides_card ? (sheet ? wkSidesSheetHtml(m.sides_card) : sidesTableHtml(m.sides_card)) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
+    const howto = s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO; // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
+    if (sheet) { // 拉起來的那一層（PM 2026-11-07：別又是一大片字）：三方、下一件、新手、簽到各一小塊；收季規則、這一季在打什麼、可能的結局收進最底「玩法說明」
+      const rules = `${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${warHelp(m, "stance")}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`;
+      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
+        + `<details class="wk-rules"><summary>${WK_RULES}</summary>${rules}${howto}</details>`;
+    }
+    return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
       + `${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`
       + `${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
-      + (s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO); // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
+      + howto;
   }
   // 點「為什麼」「今日簽到」：原地換掉本週卡（不重畫整頁，「剛剛」不重播），焦點還給同一顆
   function wkTap(id) {
