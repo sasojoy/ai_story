@@ -272,6 +272,13 @@ def test_what_the_wrapper_patches_is_still_in_server_py():
     assert set(wanted) - _names_in(ROOT / "server.py") == set()
 
 
+def test_the_model_queue_is_off_in_the_wrapper():
+    # 佇列一格、別的寫手佔著就跳過，那一篇放回單子等 30 秒，而時鐘是凍的：第 77 批第一次全量 extra:069～074 一邊多一筆天下形勢
+    text = (TOOL / "serve.py").read_text(encoding="utf-8")
+    assert "server.make_queue = lambda config: None" in text
+    assert "server.make_queue" not in text.split("import server", 1)[0]
+
+
 def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
     gate = _load("gate")
     for name in gate.ROUNDS:

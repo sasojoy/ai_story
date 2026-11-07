@@ -37,7 +37,7 @@ random.seed(0)
 import server  # noqa: E402
 
 # every name of server.py this file reaches for
-PATCH_NAMES = ("CONTENT", "app", "main", "narration_round", "BOARDS_CACHE", "GAMES", "world_step", "WORLD_GAME", "_monotonic", "open_characters", "start_scheduler")
+PATCH_NAMES = ("CONTENT", "app", "main", "narration_round", "BOARDS_CACHE", "GAMES", "world_step", "WORLD_GAME", "_monotonic", "open_characters", "start_scheduler", "make_queue")
 # the seal module draws its shard secrets from here; it has lived in two places
 SEAL_MODULES = ("tianxia.features.seal.seal", "tianxia.seal")
 
@@ -67,6 +67,10 @@ server.narration_round = lambda *a, **k: None
 # The world only moves on requests. The scheduler ticks on the wall clock, so whether a tick lands before or after the walk's next
 # request differs from side to side: wave D saw a xingshi essay written on one side only because of it.
 server.start_scheduler = lambda interval: None
+# The model queue has one slot and skips a writer when another holds it. The chronicle loop runs on the wall clock, so who got skipped differed from side
+# to side, and a skipped essay goes back on the shelf with a retry 30 frozen seconds away: wave D saw one more line in the rumours on one side, six scenes long.
+# With no queue every writer just calls the dead port and writes its fixed text.
+server.make_queue = lambda config: None
 _seal.secrets = types.SimpleNamespace(token_hex=lambda n=16: "ab" * n)
 
 from fastapi import Body, Request  # noqa: E402

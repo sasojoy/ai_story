@@ -321,7 +321,7 @@ export const flows = [
     await c.load("/");
   }],
   ["tale_done", async (c) => {
-    // the chronicle writer holds the model queue; the day's essay queued behind it would be skipped on one side and written on the other
+    // the chronicle is written on the wall clock: the scenes after this one should not depend on how far it got
     for (let t = 0; t < 30; t++) {
       const seen = [];
       for (let id = 1; id < 8; id++) { const r = await c.api("p1", `/api/tale/${id}`); seen.push(r.json && r.json.status); }
