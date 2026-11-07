@@ -933,8 +933,13 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
 # 邊界測試（push_trend → test_push*，202 條）。函式以外（import、說明、模組層）或指名了卻沒有差 → 照舊核心測試＋煙霧。
 # 寫到那個名字、可是檔名不是這一群的（test_opportunities 442 條只拿 push_trend 當準備動作）不挑：留給閘門，why 寫幾個檔，要當場驗就直接給檔名。
 CORE_SERVICES: dict[str, tuple[str, ...]] = {  # 模組 → 這個檔的底（改哪個函式都跑）；開檔的那一批照實調
-    "combat": ("battle", "squad"),
-    "pushing": ("push",),
+    # 第 79 批開檔照實量：squad 0 個檔；battle 22、tactics 5、engine 5、encounter、fight、rounds、team 各 1，併起來 36 個（IMPORT_CAP 之內）
+    "combat": ("battle", "encounter", "fight", "rounds", "tactics", "team", "engine"),
+    # 第 80 批開檔照實量：push 7 個檔沒有一條蓋 goals（test_fronts、test_gentry_allied）、deed_points（test_gentry_ledgers、test_outcomes_answer、test_outcomes_classify）、
+    # push_progress、event_progress（test_conquest_flip）、shaped、daily_push_cap（test_season21_daily），而 shaped、resisted_line(s)、goals、deed_points 的名字認不出功能（service_word 空字串），靠底。
+    # conquest 7、season21 5、fronts 1、gentry 5、outcomes 6，併起來 31 個（IMPORT_CAP 之內）
+    "pushing": ("push", "conquest", "season21", "fronts", "gentry", "outcomes"),
+    # 第 80 批開檔照實量：pill 2、stamina 6，併起來 7 個（test_pill_per_day、test_stamina_pill、test_stamina_refill 都在；pill_cap 另外寫到的 test_mall、test_wallet 留閘門）
     "pills": ("pill", "stamina"),
     "status_view": ("status", "jianghu"),
     "page_view": ("jianghu", "shop"),

@@ -274,7 +274,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
                 gains.append((label(path), line.strip().split("#")[0].strip()))
     assert gains == [
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
-        ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
+        ("core/combat.py", 'return renown.gain(ctx.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
         # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
         ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
         ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
