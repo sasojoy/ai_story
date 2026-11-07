@@ -7,7 +7,8 @@ import random
 import pytest
 
 from conftest import classic_rules, real_content
-from tianxia import atlas, figures, orders, push, territory, timetable
+from tianxia import figures, orders, push, territory, timetable
+from tianxia.features.military import order_cards
 from tianxia.engine import Game
 from tianxia.models import PushResistance
 from tianxia.sqlite_world import open_world
@@ -188,8 +189,8 @@ def test_fb248_every_intercept_slot_is_a_front_place():
 def test_fb248_the_intercept_card_names_only_the_place():
     game = _game_fb248("guan", "changshe")
     order = _intercept(game, "guan", "runan_wilds")
-    assert atlas.order_how(game.state, game.content, order) == atlas.INTERCEPT_SORTIE.format(place="汝南荒野")
-    assert "附近" not in atlas.order_how(game.state, game.content, order)
+    assert order_cards.order_how(game.state, game.content, order) == order_cards.INTERCEPT_SORTIE.format(place="汝南荒野")
+    assert "附近" not in order_cards.order_how(game.state, game.content, order)
 
 
 def test_fb256_the_legend_line_is_no_longer_than_the_one_that_fit():

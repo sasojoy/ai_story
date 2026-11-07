@@ -10,6 +10,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import atlas, figures, howto, mapview
+from tianxia.features.military import order_cards
 from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -109,7 +110,7 @@ def test_order_cards_never_say_a_place_is_unexplored():
         Order(id="o2", template="siege", faction="huang", week=week, front="yingru", quota=4, text="（測試）"),
         Order(id="o3", template="siege", faction="huang", week=week, front="jizhou", quota=4, text="（測試）"),
     ]
-    strike, *sieges = (atlas.order_how(s, c, o) for o in s.world.orders)
+    strike, *sieges = (order_cards.order_how(s, c, o) for o in s.world.orders)
     assert f"他現在在{c.locations[figures.state_of(s, c, 'luzhi').location].name}" in strike
     for how in (strike, *sieges):
         assert "摸清" not in how

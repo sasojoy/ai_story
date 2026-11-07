@@ -13,6 +13,7 @@ import pytest
 
 from conftest import classic_rules
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
+from tianxia.features.military import order_cards
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層那一半（strike_marks、STRIKE_MARK）；同檔有區域變數叫 layers
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -1245,7 +1246,7 @@ def test_hopeless_training_asks_first_and_fair_training_does_not(on):
 # ── 原 test_fb_batch_c.py ──
 
 # ── FB-221：黃巾在潁川汝南的攻城只寫「到潁川汝南一帶遊歷」，記得了次數的地方卻只有官軍大營 ──
-# 攻城記得了次數的地點（orders.siege_places）只有一兩處時，卡上寫出地名（atlas.siege_how，order_how 攻城那一支）；
+# 攻城記得了次數的地點（orders.siege_places）只有一兩處時，卡上寫出地名（order_cards.siege_how，order_how 攻城那一支）；
 # 沒摸清的只寫大區、不洩漏名字（同打擊）；三處以上照舊寫一帶。
 
 
@@ -1261,12 +1262,12 @@ def _siege_card(on, faction, front, at, visited=()):
 
 def test_fb221_the_yellow_turbans_siege_names_the_government_camp(on):
     from conftest import classic_rules
-    from tianxia import atlas, orders
+    from tianxia import orders
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/acts/test_territory.py
     assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
     known = _siege_card(on, "huang", "yingru", at="guangzong", visited=["guan_camp"])
-    assert known == "到官軍大營遊歷，打贏一場官軍記一次。" == atlas.SIEGE_AT.format(where="官軍大營", enemy="官軍", note="")
+    assert known == "到官軍大營遊歷，打贏一場官軍記一次。" == order_cards.SIEGE_AT.format(where="官軍大營", enemy="官軍", note="")
 
 
 def test_fb221_two_places_are_both_named(on):
@@ -1281,9 +1282,9 @@ def test_fb221_two_places_are_both_named(on):
 
 def test_fb221_three_or_more_places_still_say_the_whole_front(on):
     from conftest import classic_rules
-    from tianxia import atlas, orders
+    from tianxia import orders
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/acts/test_territory.py
     places = orders.siege_places(on, "guan", "yingru")
-    assert len(places) > atlas.SIEGE_NAMED_MAX
+    assert len(places) > order_cards.SIEGE_NAMED_MAX
     assert _siege_card(on, "guan", "yingru", at="changshe", visited=places) == "到潁川汝南一帶遊歷，打贏一場對面的兵記一次。"

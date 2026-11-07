@@ -262,7 +262,7 @@ SHARED: dict[str, str] = {
                 "timetable 與底座 story_base 讀；一條線包叫",
     "rumor_view": "見聞的分層（天下、地方、個人線索）：核心的 engine〔見聞頁〕讀；個人線索讀伏筆、機緣（核心的查詢服務 omen_base）與軍令 orders",
     # map2（全部拆包第 50 批「輿圖二」：atlas 拆兩半，這一半不再 import 出陣包、讀包認領的 fs_asking、tagalong 改問核心的 omen_base、travel_base）
-    "atlas": "江湖輿圖的地點、大區、路線與走法時間、軍令卡的寫法與打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py）："
+    "atlas": "江湖輿圖的地點、大區、路線與走法時間、打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py；軍令卡的寫法第二輪第 97 批進了軍情包 order_cards.py）："
              "核心的 engine、content、rules 讀；移動、地盤、設伏、軍情、出陣、人物情誼、酒肆、決戰、引導、輿圖十包與假人都讀",
     # seal（全部拆包第 51 批「玉璽三」：seal_acts 拆兩半，包這一半是 features/seal/acts.py）
     "seal_acts": "璽效查詢（引將釘人、頒詔、承露、傳檄、收心、鎮地的此刻生效與期滿回原處）：核心的 world、rules、team 讀；"
