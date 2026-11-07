@@ -12,7 +12,7 @@ pytestmark = pytest.mark.whole_content
 
 
 def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
-    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 skillview）。"""
+    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 art_view、forge_view）。"""
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.arts = ["lake_kick"]
     game.state.player.insights = ["feng"]

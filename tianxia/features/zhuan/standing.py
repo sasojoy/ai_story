@@ -10,7 +10,7 @@ import re
 
 from tianxia.core import bounty_base  # 核心（這一季完成了幾張懸賞，core_seams）
 from tianxia.core.annal_base import KINDS, TIER, XINGSHI, clip, figure_name, note
-from tianxia.core.annal_base import *  # noqa: F401,F403  舊名 tianxia.annals 是指到這個模組的別名：核心那一半也要在這裡拿得到（同一個物件）
+from tianxia.core.annal_base import *  # noqa: F401,F403  核心那一半也要在這裡拿得到（同一個物件）
 from tianxia.core.annal_base import _gear, _notable  # noqa: F401
 from tianxia.models import Content
 from tianxia.state import GameState, WorldState

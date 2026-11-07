@@ -2,7 +2,7 @@
 
 只讀：不改數值、不碰亂數、不 import engine。board_key 是懸賞榜這一下的情況鍵（actions 記掌櫃那一句時用）；店共用的（掌櫃那一句）在 core/shop_base。
 page 是店面那一頁的組法（Feature.shop_view 轉交；core/features.shop_page 問）。
-靠 tianxia/shopview.py 那個殼的測試（tests/gear/test_four_tiers.py、test_weapons.py、tests/arts/test_renown_trade.py、tests/battle/test_tactics_bouts.py……）改這一檔時 test_for 挑不到：另外跑 scripts/test_for.py tianxia/shopview.py。
+包外讀這一檔的測試改這一檔時 test_for 挑不到：另外跑 `git grep -l bounties_shop -- tests tianxia/features` 列的那幾個。
 """
 from __future__ import annotations
 

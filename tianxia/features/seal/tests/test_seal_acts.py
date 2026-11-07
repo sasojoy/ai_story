@@ -609,7 +609,7 @@ def test_the_peak_scale_is_the_only_caller_of_the_edict():
     from tianxia.features.cultivation import cultivation
 
     root = Path(__file__).resolve().parents[4] / "tianxia"
-    # 路徑（全部拆包第 23 批）：cultivation.py 搬進修練包 tianxia/features/cultivation/，舊名 tianxia/cultivation.py 是別名；功能包一起掃（測試不算）
+    # 路徑（全部拆包第 23 批）：cultivation.py 搬進修練包 tianxia/features/cultivation/；功能包一起掃（測試不算）
     callers = [f.relative_to(root).as_posix() for f in sorted(root.rglob("*.py")) if f.name != "seal_acts.py" and "tests" not in f.parts
                and "edict_cultivate(" in f.read_text(encoding="utf-8")]
     assert callers == ["features/cultivation/cultivation.py"]

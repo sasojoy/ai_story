@@ -2,7 +2,7 @@
 特殊頓悟（心靈拷問、心境小試、心魔、取名）。全部拆包第 24 批搬進來。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 - sensing.py：有所感的規則（原 tianxia/sensing.py）；epiphany.py：特殊頓悟（原 tianxia/epiphany.py：import 的時候登記一條線的鉤子）；
-  glyph.py：讀筆畫（原 tianxia/glyph.py）；insight_llm.py：看圖取名的 B 段（原 tianxia/insight_llm.py）——舊名都留成別名
+  glyph.py：讀筆畫（原 tianxia/glyph.py）；insight_llm.py：看圖取名的 B 段（原 tianxia/insight_llm.py）
 - actions.py：原本 Game 上的 10 個方法（Game 留 8 個一行委派）與核心原位、探索包、引導包叫的 7 個服務的本體
 - routes.py：/api/sense、/api/sense_read、/api/sense_warm（原本寫在 server.py；殼照 FEATURES 掛）
 

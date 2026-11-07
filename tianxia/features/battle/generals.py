@@ -1,5 +1,5 @@
 """龍頭上陣（Joy 2026-10-17 清單第 2 條「大決戰雙方龍頭武將應該要參與且有份量」；數字在 Config.battle.generals）。全部拆包第 8 批從
-tianxia/generals.py 搬進決戰包（舊名是別名：sys.modules，同一個模組物件）；誰上陣、份量、池子的挑法（on、pick）留在共用規則層
+tianxia/generals.py 搬進決戰包；誰上陣、份量、池子的挑法（on、pick）留在共用規則層
 tianxia/chiefs.py（共用規則層的 siege.commanders 也讀），這裡照舊 re-export（generals.on、generals.pick 是同一個函式物件）。
 測試要換挑法請換 chiefs.on、chiefs.pick：換掉這裡的名字只改到 on_muster，攻城的留守照舊（搬之前換 generals 兩處都變；第 8 批審查 nit）。
 

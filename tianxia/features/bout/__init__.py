@@ -4,7 +4,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 單挑底層（剋、推力、挨打、防具、放手一搏、勝負：頭目戰、擂台、奪璽單挑共用）在核心 tianxia/core/duel_base.py；擂台的名次與稱號
 （酒肆、名帖、玩家卡、榜單都讀）在核心 tianxia/core/arena_ranks.py——這一包的規則模組從那兩份 re-export。
 
-- duel_rules.py、arena_rules.py、arena_crowd.py：純規則（原 tianxia/duel.py、arena.py、arena_crowd.py；那三個名字留成指到這裡的別名）
+- duel_rules.py、arena_rules.py、arena_crowd.py：純規則（原 tianxia/duel.py、arena.py、arena_crowd.py）
 - duel_actions.py、arena_actions.py：原本 Game 上頭目戰 16 個、擂台 22 個方法（Game 留 28 個一行委派，含 5 個新開的查詢與審查修正
   補的頭目戰選單）
 - bots.py：假人的分數（原本 bot_policy.score 的 duel、arena 那兩段）

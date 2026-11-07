@@ -13,7 +13,7 @@ from sb.tracks.explore import ExploreScenario, _explore_rules
 
 # ═══════════════════════════ sense：有所感與頓悟一軌（全部拆包第 24 批，dev/sense-1） ═══════════════════════════
 # 有所感（探索撞上、選做法、擲中、畫一筆或順其自然）、自己畫字的意境（看圖取名的三段式）、特殊頓悟（拷問、小試、心魔、取名）的本體從
-# engine.py 與 tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py 搬進新包 tianxia/features/sense/（舊名留成別名；計畫
+# engine.py 與 tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py 搬進新包 tianxia/features/sense/（計畫
 # docs/superpowers/plans/2026-11-01-有所感包-第1批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
 
 SENSE_NAME = ("寒潭孤月", "像深夜的潭水，冷而圓滿。")  # 假模型替自己悟的意境取的名字與一句說明（insight_llm.name 的 B 段）

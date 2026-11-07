@@ -4,7 +4,7 @@
 盯狀態變化的 mark、watch，與種類常數 SHOWDOWN…STORY、KINDS、GROUPS、UNHEARD），寫進 PlayerState.annals／annals_mark：
 核心（engine、event_check）、舊模組 fusion 與各包都經它，不 import 列傳包（核心不准 import 包；smithing 照舊 import 舊名 annals，拿到的是
 同一批物件，第 41 批鐵匠鋪合併時改）。列傳包的 standing.py 管查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）。
-舊名 tianxia/annals.py 是指到 standing.py 的 sys.modules 別名（standing 用 import * 加 _gear、_notable re-export 這裡的名字，同一批物件）。
+standing 用 import * 加 _gear、_notable re-export 這裡的名字，同一批物件。
 
 原本寫在 tianxia/annals.py，一個字沒改（只有 watch、mark 裡兩個延後 import 從 from . 改成 from ..）。與 event_check、omen_base 同樣不進 MODULES。
 

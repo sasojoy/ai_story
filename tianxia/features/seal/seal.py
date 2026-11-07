@@ -5,7 +5,7 @@
 - 擲骰一律用 dice（密鹽｜天機｜用途｜…，設計 5.13 的種子表），不碰 Game.rng。密鹽只在伺服器與假人程式啟動時用 secrets 產生
   （ensure_salt，server.main／run_bots.main 叫；計畫「要 PM 定的」第 8 條），引擎裡只讀：測試與量表腳本沒有密鹽（空字串），
   同樣的種子跑出同樣的結果。密鹽不顯示、不進指紋。每一份亂數取數的順序寫在用它的函式說明裡。
-- 全部拆包第 27 批（玉璽一）整份從 tianxia/seal.py 搬進玉璽包（舊名 tianxia/seal.py 是指到這一份的 sys.modules 別名，換掉的屬性兩邊都看得到）。
+- 全部拆包第 27 批（玉璽一）整份從 tianxia/seal.py 搬進玉璽包。
   只 import 核心（models、state、world_state 與核心本體 core/seal_base：核心與決戰包「不得不讀」的那一小半，第 27 批搬過去、這裡 re-export
   同一批函式物件）與共用規則層（battle_instance、treasures；函式裡的 conquest）；engine 的委派、包的 actions、admin、season 與世界層、事件、
   效果的格（__init__.py）叫這裡（effect_runic 在叫的那一下才從 tianxia.rules 拿 season_one，第 32 批；PM 認定不統一）。

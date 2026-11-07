@@ -2,7 +2,7 @@
 主動搬六包第 10 批搬進來（引擎那一半）；網頁的畫法在 web/tavern.js（全部拆包第 65 批），樣子在 web/tavern.css（第 67 批）。README.md 寫這一包做什麼、導覽與設計稿、
 認領的欄位、還留在原位的接縫。
 
-- rules.py：純規則（原 tianxia/tavern.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/tavern.py）
 - ask.py：問酒家照問句找事實（原 tianxia/tavern_ask.py；同上）
 - actions.py：原本 Game 上酒肆的 43 個方法（Game 留一行委派）
 - bots.py：假人的分數（原本 bot_policy.score 的 tavern 那一段）

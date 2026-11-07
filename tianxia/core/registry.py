@@ -165,7 +165,7 @@ SHARED: dict[str, str] = {
     # shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.2）：只登記、不搬程式。
     # 戰鬥引擎（9 個）：核心的 team 打每一場都讀，每一種打一場的包都用，放進哪一包都會變成包 import 包
     "encounter": "單次判定（威力差、勝算、四種結果）：核心的 team、content 讀，Game 的單打服務（大場面判讀、切磋、截殺、設伏、頭目戰與擂台的"
-                 "收場、戰力快照）也叫；出陣、酒肆的殺手那一場與大勢人物的護衛（figure_aid）都叫，門下頁的說明（skillview）也讀",
+                 "收場、戰力快照）也叫；出陣、酒肆的殺手那一場與大勢人物的護衛（figure_aid）都叫，門下頁的說明（art_view）也讀",
     "rounds": "一般的仗一回合一回合的演出（from_clash）：核心的 team 照它寫戰報的回合；戰報 battlelog 也讀",
     "tactics": "回合與本命戰法、相剋：核心的 team、state、world_state、content 都讀；決戰包的戰況、出陣約戰的三招、擂台、單挑都叫",
     "styles": "大場面對手的路數（一門打不遍）：核心的 team 算威力時讀；單打服務的戰報那一句、人物對話也用",
@@ -173,7 +173,7 @@ SHARED: dict[str, str] = {
     "rise": "江湖水漲（大場面、頭目跟得上變強的人）：核心的 rules 讀；單打服務的劇情戰與勝算都經它",
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
-    # 武學與裝備的規則（22 個；總表寫 25 個，fusion 第 87 批才收，skillview、shopview 第 88、93 批切開、只留給測試的殼）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
+    # 武學與裝備的規則（22 個；總表寫 25 個，fusion 第 87 批才收，skillview、shopview 第 88、93 批切開，殼第 103 批收掉）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
     "arts": "武學的評分、裝卸、意境格（arts.score）：核心的 team 讀；修練、煉製、榜單、序章都叫",
     "insight_fx": "意境效果池與層數：武學 arts、意境 insights、功法庫、序章讀；修練、有所感成包之後也要",
@@ -278,7 +278,7 @@ SHARED: dict[str, str] = {
     "fusion": "合成與揣摩：煉製、鐵匠鋪、玩家互動（論武）三包叫，假人 bot、門下頁 art_cards、煉製頁 forge_view 讀；私有意境的取名與收進存檔第 87 批搬進共用層 insights，不再 import 有所感包。"
               "不進任何一包（第二輪總表不做的清單）",
     # core_shared（第二輪第 88 批：art_cards 從 skillview 切出來；leaderboard 收進來；計畫 docs/superpowers/plans/2026-11-07-第二輪-第88批.md）
-    "art_cards": "武學與裝備的唯讀卡片（狀態列的用途與提示、療傷鈕、榜單的功法卡與裝備卡、修練頁裝備那一塊）：engine、同一層的 leaderboard、舊模組 shopview、修練、煉製、"
+    "art_cards": "武學與裝備的唯讀卡片（狀態列的用途與提示、療傷鈕、榜單的功法卡與裝備卡、修練頁裝備那一塊）：engine、同一層的 leaderboard、各包的 shop_view、修練、煉製、"
                  "裝備三包讀；只 import 核心與同一層，函式裡也不 import 包",
     "leaderboard": "賽季榜單：核心的 world（收季、江湖史）與 server 讀，人物舉措（月旦評）、玩家互動（名帖）兩包讀；只 import 核心與同一層，功法卡、裝備卡讀 art_cards "
                    "在函式裡（world import 這裡，art_cards 牽動多）",

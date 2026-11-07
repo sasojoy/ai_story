@@ -5,7 +5,7 @@
 抽事件時先照 Config.jianfa.tier_mix 挑一階、再在那一階裡照權重抽（narrow）。第二、三階的檢定不吃第一階的放寬（rules.check_outlook，
 Check.tier 由載入時蓋）。掛在減法季的子開關 event_tiers：關著時第二、三階一則都抽不到，第一階照舊。
 
-共用規則層（第二輪第 87 批收進 registry.SHARED）：不 import 功能包與舊名的別名，名次讀核心的 arena_ranks。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界
+共用規則層（第二輪第 87 批收進 registry.SHARED）：不 import 功能包，名次讀核心的 arena_ranks。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界
 （收進來之前挑 22 個檔）。另外跑（-n 4）slow 的 tests/core/test_event_tiers、tests/season/test_real_content，加上 events.py 說明「另外跑」那一串（經 events 讀到它）。
 """
 

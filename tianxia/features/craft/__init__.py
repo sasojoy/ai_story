@@ -2,7 +2,7 @@
 （執器、擺式、立意、成形、立名）、重悟帖、作罷。全部拆包第 44 批搬進來（計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- create.py：自創的規則（原 tianxia/create.py；舊名留成別名）。擺式的幾何抽到共用規則層 tianxia/pose.py，create 照名字 re-export
+- create.py：自創的規則（原 tianxia/create.py）。擺式的幾何抽到共用規則層 tianxia/pose.py，create 照名字 re-export
 - actions.py：原本 Game 上的 16 個方法（Game 留 16 個一行委派給 server、假人、測試與核心原位、引導包）
 - routes.py：/api/forge_line（原本寫在 server.py；殼照 FEATURES 掛）
 

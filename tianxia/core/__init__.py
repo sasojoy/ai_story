@@ -18,8 +18,7 @@
   ——查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史讀它；單挑包的 arena_rules re-export 同一批。同 event_check 不進 MODULES。
 - annal_base.py（zhuan：全部拆包第 29 批之二）：行狀「記一筆」的那一半——note、entry、trim、kept_names、clip、first_sentence、figure_name、on、heard、
   盯狀態變化的 mark、watch，與種類常數（SHOWDOWN…STORY、KINDS、GROUPS、UNHEARD）；engine、event_check、fusion 與各包記行狀都經它。
-  查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）在列傳包 features/zhuan/standing.py；舊名 tianxia/annals.py 是指到
-  standing 的 sys.modules 別名（standing re-export 這裡的名字，兩半都拿得到）。同 event_check 不進 MODULES。
+  查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）在列傳包 features/zhuan/standing.py（standing re-export 這裡的名字，兩半都拿得到）。同 event_check 不進 MODULES。
 - omen_base.py（military：全部拆包第 34 批）：機緣與伏筆「只讀」的那一小半——伏筆需求量的換算（scale、need）、天機表與題目（GUANYIN、
   TIANJI、FIGURE_SLOT、TIANJI_ANSWER、trips、asks_of）、召見與叛投確認畫面讀的機緣（done_for_rank、in_plot）；rules、content、ranks、
   defection 讀它，軍情包的 fs_rules、opp_rules re-export 同一批。同 event_check 不進 MODULES。
@@ -52,8 +51,7 @@
 - battle_base.py（battle：全部拆包第 54 批）：全服決戰的資料型別與「讀」的那一半——全服狀態存的 BattleInstance、BattleRoundRecord、SiegeInfo 這些型別，加上核心、
   共用規則層、假人殼、別的包非讀不可的判定（move_scores、idle、merit、call_orders、outcome_reason、result_at、start_muster、shift_deadlines、assess_gamble、clean_story……，
   共 63 個名字）；world_state、sqlite_world、world、team、duel_base、seal_base、chiefs、conquest、event_llm、siege、tale、seal_duel、bot_policy、bot_runner、engine 與
-  bout、seal、territory_acts、looks、faction 幾包讀它。規則那一半在決戰包 features/battle/instance.py，它 re-export 這裡的名字；舊名 tianxia/battle_instance.py 是指到
-  instance 的 sys.modules 別名。同 event_check 不進 MODULES。
+  bout、seal、territory_acts、looks、faction 幾包讀它。規則那一半在決戰包 features/battle/instance.py，它 re-export 這裡的名字。同 event_check 不進 MODULES。
 
 # bounties（全部拆包第 45 批：懸賞榜成包；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）
 - cards.py：玩家卡的動作登記表——CardButton、CardAction、ACTIONS、register（原本在玩家互動包的 social.py，第 37 批 PM 認定第 3 條）；玩家互動包的卡模組與懸賞榜包的通緝都登記進這一張，

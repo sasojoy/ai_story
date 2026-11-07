@@ -1,6 +1,6 @@
 """NPC 智能 2.0（功能包；全部拆包第 20 批，計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）：原本 Game 上的 19 個方法
 （開口求他做事的兩份清單與提示、C 段驗模型挑的事並擲骰、他答應的事真的去做、條件的接與還、食言、他主動開口求你、帶路、陪你出陣與商量打法），
-名字去掉前導的 `_parley_`、第一個參數是 ctx（第一階就是 Game）。純規則在 parley.py（原本 tianxia/parley.py，舊名留成別名）。
+名字去掉前導的 `_parley_`、第一個參數是 ctx（第一階就是 Game）。純規則在 parley.py（原本 tianxia/parley.py）。
 
 Game 留一行的委派給測試與核心原位（談著的時候的選單、路上的選項、並肩出陣）；包裡互相叫直接叫函式。
 `ctx._parley_decision` 是 Game 的暫存（這一輪「自己說」擲出來的結果：decide 記、talk_actions 的 talk 與 road_say 收尾時拿去做事），在服務清單的四、寄放。

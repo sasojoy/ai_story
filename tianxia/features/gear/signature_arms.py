@@ -8,8 +8,8 @@
 - 拿到時江湖史一行、天下大事傳聞一句（具名）；上神器譜（book_rows，forge_secrets.divine_book 併進去，跨季讀 seasons 表）。
 - 不擲骰：兩條路都是門檻，不碰 Game.rng（FB-129）。
 
-只 import models、state、weapons、treasures、figures、rules、core.signature_base（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；舊名 tianxia/signature_arms.py
-留成指到這裡的別名（leaderboard.gear_card、測試）；engine 的 _drop_stale_references 第 55 批起讀核心的 core/signature_base.py。
+只 import models、state、weapons、treasures、figures、rules、core.signature_base（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；
+engine 的 _drop_stale_references 第 55 批起讀核心的 core/signature_base.py。
 """
 from __future__ import annotations
 

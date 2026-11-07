@@ -25,7 +25,7 @@ from sb.harness import ADMIN, BUF, CLOCK0, PROFILES, SUBCOMMANDS, _digest, _firs
 
 EXPLORE_BOT_PROFILES = ("season21", "week7")  # 走一趟、探索一顆開著的兩種（不帶、weekend、測試內容關著）
 EXPLORE_MUTANT_PROFILE = "week7"
-# selftest 故意改的一個字：走一趟（同一趟留第二句那一句）、探索一顆（紀錄的結果標記「得料」）各一句；舊名的檔、搬進包的檔兩處找。
+# selftest 故意改的一個字：走一趟（同一趟留第二句那一句）、探索一顆（紀錄的結果標記「得料」）各一句；搬進包的檔裡找。
 # 那兩處在整檔照搬的規則模組裡；動作模組（本體從 Game 搬過去、self 換成 ctx 的那兩個檔）另各改一處（審查修正）：探索一顆每一下少扣
 # 1 體力、走一趟中途離開不收成「中途離開」——搬之前在 engine.py，搬進包之後在 explore_actions.py、outing_actions.py
 EXPLORE_MUTATIONS = {
@@ -42,7 +42,7 @@ EXPLORE_MUTATIONS = {
 
 
 def _gather_finds_hosts() -> list:
-    """gather_finds 住在哪幾個模組：第 13 批之前是 tianxia/explore_modes.py，之後是探索包的 explore_rules（舊名 explore_one 是它的別名）；
+    """gather_finds 住在哪幾個模組：第 13 批之前是 tianxia/explore_modes.py，之後是探索包的 explore_rules；
     第 13 批做到一半（探索一顆已經改叫 explore_rules、三選一還在）是兩個都有。"""
     hosts = [_explore_rules()] if hasattr(_explore_rules(), "gather_finds") else []
     try:
@@ -53,7 +53,7 @@ def _gather_finds_hosts() -> list:
 
 
 def _explore_rules():
-    """探索一顆的純規則模組：base 是 tianxia/explore_one.py，head 是指到探索包 explore_rules 的別名（同一個模組物件；換掉它的屬性兩邊都打得到）。"""
+    """探索一顆的純規則模組：讀探索包的 explore_rules（第二輪第 103 批舊名 explore_one 收掉）。"""
     from tianxia.features.explore import explore_rules as explore_one
 
     return explore_one

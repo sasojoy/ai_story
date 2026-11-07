@@ -1056,7 +1056,7 @@ def test_the_forge_does_not_ask_the_model_for_a_move_the_hut_refuses(fresh):
 
 
 def test_melt_and_cultivate_buttons_follow_the_script(fresh):
-    """修練頁的按鈕與動作的拒絕走同一個判斷（skillview.art_rows）：序章裡不能熔的、不能修練的，按鈕按不下去、寫原因。"""
+    """修練頁的按鈕與動作的拒絕走同一個判斷（art_view.art_rows）：序章裡不能熔的、不能修練的，按鈕按不下去、寫原因。"""
     _to_step(fresh, 9)
     rows = {row["id"]: row for row in fresh.art_rows()}
     assert rows["junk"]["melt"]["ok"] and "退回心得" in rows["junk"]["melt"]["note"]

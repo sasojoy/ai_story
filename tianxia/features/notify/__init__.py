@@ -2,7 +2,7 @@
 （減法季整合設計第十章「回來的理由」，批 9）。包名不叫 push：tianxia/push.py 是推力規則（共用規則層）。
 本包的細節與還留在殼的接縫看 README.md；計畫 docs/superpowers/plans/2026-11-06-手機通知包-第1批.md。
 
-- notices.py：五種事（舊名 tianxia/notices.py 留成 sys.modules 別名）；純函式，只讀存檔與決戰。
+- notices.py：五種事；純函式，只讀存檔與決戰。
 - webpush.py：Web Push 的加密、VAPID 簽名、訂閱小檔 PushStore、WebPush 送出（server_push.py 的下半段搬來，舊名檔尾再匯出）。
 - routes.py：看守一輪（notice_round）、開看守（start_web_push）、/api/push 五條與 /sw.js（server.py 搬來）。
 

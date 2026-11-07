@@ -1099,7 +1099,7 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
-    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，舊名是包 rules 的別名，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
+    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
     （全部拆包第 27 批：玉璽包那兩格照包的模組屬性找 actions.seal_find、actions.settle，原本是 Game 上的 _seal_find、_seal_settle）。"""
     from tianxia.features.bounties import rules as bounties
     from tianxia.features.military import convoy_actions
@@ -1323,7 +1323,7 @@ def test_the_core_and_the_packages_take_every_step_slot_exactly_once():
 
 
 def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
-    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找舊名 tianxia.bounties，第 45 批成了包 rules 的別名；包的格找自己的模組）：換掉的照樣打得到，參數照傳
+    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找包的 rules；包的格找自己的模組）：換掉的照樣打得到，參數照傳
     （軍令那一格拿殼傳進來的 orders、新手目標那一格拿 status；託付、伏筆、去投靠讀 ctx 上的 state 與 content）。"""
     from wins_kit import wins_game
 

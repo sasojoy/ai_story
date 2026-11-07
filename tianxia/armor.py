@@ -243,7 +243,7 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
 
 
 def rows(state: GameState, content: Content, neigong: MartialArt | None) -> dict:
-    """修練頁的防具那一段（skillview.gear_rows）：身上那件、裝備庫裡的防具。開關關著時 worn 是 None、rack 是空的。"""
+    """修練頁的防具那一段（art_cards.gear_rows）：身上那件、裝備庫裡的防具。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not equipment.on(content, "armor"):
         return {"worn": None, "rack": []}

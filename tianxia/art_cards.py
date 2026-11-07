@@ -1,9 +1,9 @@
 """武學與裝備的唯讀卡片（第二輪第 88 批從 tianxia/skillview.py 切出來）：狀態列（stat_uses、practice_hint）、療傷鈕（heal_note、heal_button）、
 榜單（shown_art、shown_gear）、功法卡（art_card）、裝備那一塊（gear_rows）與修練頁兩邊都讀的小零件。只讀狀態與內容、只產生文字，不改任何東西。
 
-共用規則層（core/registry.py 的 SHARED）：engine、leaderboard、shopview 與修練、煉製、裝備三包讀；不 import 任何一包，連函式裡都不行。
+共用規則層（core/registry.py 的 SHARED）：engine、leaderboard、各包的 shop_view 與修練、煉製、裝備三包讀；不 import 任何一包，連函式裡都不行。
 
-另外要跑的：靠舊名殼 skillview 的測試都在 `scripts/test_for.py tianxia/skillview.py` 挑的那一份（test_for 改這一檔照共用層的規矩只挑邊界測試加煙霧）。
+另外要跑的：讀這一檔的測試（`git grep -l "import art_cards" -- tests tianxia/features` 列的那幾個；test_for 改這一檔照共用層的規矩只挑邊界測試加煙霧）。
 """
 from __future__ import annotations
 

@@ -29,7 +29,7 @@ UPGRADE_DAY_FULL = "三階一天只煉得出一個，明日 00:00 後再來"
 UPGRADE_NO_WAY = "這一階煉不出來"
 UPGRADE_NO_KIND = "沒有這樣的料"
 UPGRADE_SHORT = "{name}不夠：要 {need} 個，手上 {have} 個"
-SILVER_SHORT = "還差 {short} 兩"  # 同 weapons／smithing 的寫法：店面掌櫃那一句照「還差」認錢不夠（shopview.problem_key）
+SILVER_SHORT = "還差 {short} 兩"  # 同 weapons／smithing 的寫法：店面掌櫃那一句照「還差」認錢不夠（shop_base.problem_key）
 DONATE_DONE = "你把{items}交給軍需官，記進{faction}的軍備。"
 DONATE_FULL = "今天已捐滿 {cap} 點，明日 00:00 後再捐"
 DONATE_TOO_BIG = "這一樣一個就 {points} 點，今天只剩 {room} 點收得下"
@@ -51,7 +51,7 @@ UPGRADE_SEASON_LEFT = "・這一季還能換 {n} 個"  # 三換四（素材四�
 UPGRADE_REFUSED = "熬【{low}】×{need}（{problem}）"
 
 
-ATTRIBUTE_ORDER = ("剛", "柔", "快", "慢")  # 列升階的順序（同 shopview.ATTRIBUTE_ROWS）；其餘屬性排在後面
+ATTRIBUTE_ORDER = ("剛", "柔", "快", "慢")  # 列升階的順序（同 shop_base.ATTRIBUTE_ROWS）；其餘屬性排在後面
 
 
 def _material(content: Content, mid: str) -> Material | None:

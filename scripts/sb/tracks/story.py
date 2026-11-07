@@ -12,7 +12,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ story：一條線＋簽到一軌（全部拆包第 30 批，dev/story-1） ═══════════════════════════
 # 一條線（tianxia/storyline.py 與 Game 上 story_*、_story_*、_mirror_squad 十個方法、story: 前綴）與每日簽到（tianxia/checkin.py 與
-# Game 上 check_in、_auto_checkin、checkin_view 三個方法）搬進新包 tianxia/features/story/ 與 tianxia/features/checkin/（舊名留成別名；計畫
+# Game 上 check_in、_auto_checkin、checkin_view 三個方法）搬進新包 tianxia/features/story/ 與 tianxia/features/checkin/（計畫
 # docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md）。角色的名字都是原創的（PM 11/04：新開的軌不用既有作品的人名）。
 
 _STORY_CHECKIN_DAY = 6  # 簽到要挑四階的第一天（Config.checkin.tier4_days 的第一個）；前半快轉到這一天、人都還沒領

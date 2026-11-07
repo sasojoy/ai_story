@@ -199,7 +199,7 @@ def price_here(state: GameState, content: Content, heal: bool = False) -> float:
 
 def price_parts(state: GameState, content: Content, heal: bool = False) -> list[str]:
     """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
-    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。heal 同 price_here。"""
+    醫館另有俠的那一半（renown.clinic_part），art_cards.heal_note 接在後面、寫在同一個括號裡（FB-294）。heal 同 price_here。"""
     here = place_state.factor(state.world, content, state.player.location)  # 地點會變樣：戰火、饑荒的市價（不看名聲的開關：是這裡的樣子）
     place = [f"{place_state.NAMES[place_state.kind_at(state.world, content, state.player.location)]}・{renown.discount_word(here)}"] if here != 1.0 else []
     if not renown.on(content, "discount"):

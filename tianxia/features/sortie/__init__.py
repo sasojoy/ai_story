@@ -1,7 +1,7 @@
 """出陣（投靠了陣營的人在領地爭奪的區塊上攻、守；混戰；出陣回報；約戰；舊遊歷、序章雪恥、跟自家隊伍操練、守勢）。功能包，開發規範手冊 3.2；
 主動搬六包第 1、2 批與全部拆包第 17 批（出陣三）搬進來。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- rules.py：純規則（原 tianxia/sortie.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/sortie.py）
 - actions.py：原本 Game 上出陣本體、混戰、出陣回報的 21 個方法（Game 留一行委派），與 act:train 那一格的 train_*（第 11 批）
 - duel_rules.py、duel_actions.py：出陣約戰（第 2 批）
 - train_actions.py：舊遊歷、序章雪恥、跟自家隊伍操練、守勢、遊歷推大勢（第 17 批；Game 留 8 個一行委派）

@@ -1,6 +1,6 @@
 """榜單點開看卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡，才知道有多強，也讓知識流通」）：
-武學榜、內功榜那一列點開是主人身上那一門的唯讀功法卡（skillview.shown_art，跟主人修練頁那張同一份料、沒有任何按主人才按得到的東西）；
-神器譜那一筆點開是那一把的裝備卡（skillview.shown_gear）。只開得了榜上看得到的那幾列（leaderboard.art_card、gear_card）。
+武學榜、內功榜那一列點開是主人身上那一門的唯讀功法卡（art_cards.shown_art，跟主人修練頁那張同一份料、沒有任何按主人才按得到的東西）；
+神器譜那一筆點開是那一把的裝備卡（art_cards.shown_gear）。只開得了榜上看得到的那幾列（leaderboard.art_card、gear_card）。
 伺服器 /api/board_card 只讀、不拿行動鎖；網頁的列變成鈕、卡疊在抽屜裡，卡上沒有 data-act。"""
 from __future__ import annotations
 
