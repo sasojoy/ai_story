@@ -16,18 +16,15 @@ from . import arts as arts_mod
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battlelog, calendar, clinic, conquest, economy, encounter, equipment,
-    fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
-    materials, mounts, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
+    allied, atlas, battlelog, calendar, clinic, conquest, economy,
+    fight_llm, figures, forge_secrets, gender, insights, journal, library, place_state, plans,
+    mounts, precise, ranks, renown, roster, seal_acts, secret_recipes, sensing,
     shopview, signature, art_cards,
-    sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
+    sortie, team, territory, treasures, week_unlock,
 )
 from . import flavor
 from .flavor import FlavorJob
-from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
-from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
 from . import speech
-from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
@@ -68,7 +65,6 @@ from .core import features as features_core  # 核心照 FEATURES 問每一包�
 from .core import battle_base as battle_instance  # battle（全部拆包第 54 批）：決戰的資料型別與判定（核心本體）；規則那一半在決戰包，Game 上沒有方法讀它
 from .core import xinshen  # 心神：跟人物交談扣的點數（核心的資源，同體力；Config.xinshen）
 from .core import omen_base  # 正在答題（軍情包認領的 fs_asking；core_seams，全部拆包第 56 批：_own_scene_text 改問它）
-from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import PAUSED_REFUSAL, PAUSED_TEXT, WalletService, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
@@ -101,6 +97,7 @@ from .features.companions import actions as companions_actions  # 過渡：Game 
 if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
     from .features.companions import companion_agent, parley
     from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
+    from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 # cultivation（全部拆包第 23 批「修練」）：裝飾器搬進核心的共用的小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing；籌備中那兩句第 24 批先搬了，
 # `# sense` 那一行 import）；
 # 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
@@ -144,7 +141,7 @@ from .core import smith_base  # 打造單子讀的那一小半（全部拆包第
 # 名帖遞帖的登記（mingtie_card）改在包載入時做；原本那兩行 invites、social 的 import 是切磋、論武還在原位用的，第 38 批搬進包之後沒人用，拿掉了
 # peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
 from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tianxia/features/peers/tests/test_discuss.py 從 engine 拿
-from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
+from .core import arena_ranks  # 擂台的名次與稱號（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
 
