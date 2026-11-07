@@ -106,12 +106,12 @@ from .tactics import figure_arts
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
+from .core.content_base import NUMBER_IN_TEXT, TIMETABLE_SIDES, check_traditional as _check_traditional, week7 as _week7
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
-TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方
 TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
     "fixed": ["fixed"],
     "roll": ["成", "不成"],
@@ -724,21 +724,12 @@ def _material_sources(c: Content) -> set[str]:
     return reachable
 
 
-NUMBER_IN_TEXT = re.compile(r"[0-9０-９%％]")  # 心裡話不能攤出成功率（也不能寫難度）
-
-
 def _check_line(need, where: str, text: str, numbers: str = "") -> None:
     """玩家看得到、寫死在內容裡的一句：不能是空白、只能用繁體中文、不能寫數字或百分比。numbers 接在「不能寫數字或百分比」
     後面，說明這一類的句子為什麼不能寫（有所感的場景、心裡話、戰況變化各有一句）。"""
     need(bool(text.strip()), f"{where}：有空白的句子")
     need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
     need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比{numbers}（「{text[:12]}」）")
-
-
-def _check_traditional(need, where: str, text: str | None) -> None:
-    """寫了的話只能用繁體中文（時刻表、伏筆的文字：空白另有檢查，數字可以寫）。"""
-    if text:
-        need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}…」）")
 
 
 def check_insight_scenes(c: Content, need) -> None:
@@ -1300,11 +1291,6 @@ def check_traits(c: Content, need) -> None:
             need(bool(line.strip()), f"{where}：有空白的句子")
             need(to_traditional(line) == line, f"{where}：文字只能用繁體中文（「{line[:12]}」）")
             need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
-
-
-def _week7(c: Content) -> bool:
-    """這一份設定是 7 天濃縮季（照現實天的季、季曆分段）：內容要照天另寫 7 天的那一份（real7、active_from_day7、cal_day_*7）。"""
-    return bool(c.config.season21 and c.config.season_segments)
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
