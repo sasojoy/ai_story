@@ -58,6 +58,9 @@
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
+- 第 106 批，上面每一條都再帶：tianxia/、scripts/、根目錄的 .py、.mjs（/tests/ 底下不算；docs、內容不算）跑舊名掃描 test_every_tianxia_import_resolves 那一條（Pick.nodes，連 slow、另一條指令）；
+  包的 routes.py 帶 test_action_tables.py、test_outlock.py；web/ 帶 test_server_bots.py（FB-673）與 test_shell_stays_thin.py；scripts/*.py 帶邊界測試；content/ 也帶 test_shell_stays_thin.py（它守 content/ 的名單）；
+  核心測試與核心契約（CORE_GLOBS、CONTRACT_GLOBS）都含 test_shell_stays_thin.py。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
   「import 它」都順著 tests/kit/ 往下找一層（reached，第二輪第 75 批：test_battle_page_web → jianghu_kit → webharness）；web/ 的「寫到檔名」也看 kit 的內文（web_text，KIT_TEXT_BLIND 不算）。
@@ -179,9 +182,15 @@ NOT_CORE_TESTS = NOT_CORE_TESTS | {"step", "weekcard"}
 # merge_back（主幹合回 develop，2026-11-06，PM 認定第 1 條）：attrset 進核心本體，同 world、step 先不收它的 test_attrset（467 行）；改 attrset.py 照舊跑它（自己檔名的測試）。
 NOT_CORE_TESTS = NOT_CORE_TESTS | {"attrset"}
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
-CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
+CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py", "test_shell_stays_thin.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
-CONTRACT_GLOBS = ("test_contract*.py", "test_feature_boundaries.py")
+CONTRACT_GLOBS = ("test_contract*.py", "test_feature_boundaries.py", "test_shell_stays_thin.py")
+# 第 106 批：守門跟著帶。殼的名單（Game、app.js、style.css、content/……）；FB-673 掃 web/；包的路由表與鎖外三段式；
+# 舊名掃描整個檔只有這一條是 slow 又跟每一個程式檔有關，只跑這一條（Pick.nodes，約 6 秒）。
+SHELL_LOCK_TEST = "test_shell_stays_thin.py"
+BOT_WORD_TEST = "test_server_bots.py"
+ROUTE_GUARD_TESTS = ("test_action_tables.py", "test_outlock.py")
+IMPORT_SCAN_NODE = f"tests/core/{BOUNDARY_TEST}::test_every_tianxia_import_resolves"
 HUNK_FILES = {"tianxia/engine.py"}  # 看 hunk 落在哪個方法的（委派 → 那一包；其餘 → 核心測試＋煙霧＋寫到那個方法名的）
 # 內文是假的原始碼、或名單寫滿了各包的委派名，不算「寫到那個名字」的測試檔（_index、action_files）：test_test_for 的假 engine 寫了
 # _tavern_price、_pill_day……；核心契約與邊界測試固定跟著核心走（改核心照核心測試挑到〔CORE_GLOBS〕、改包與包的委派照核心契約挑到〔contract_tests〕）。
@@ -196,7 +205,7 @@ PER_PACKAGE_CONTRACT = "test_contract_features.py"
 class Pick:
     """挑到的東西。files 整個檔跑（不含 slow，--slow 才含）；own 是改到的測試檔本身（也在 files 裡，連 slow 一起跑）；
     runs_js 是包裡真的執行改到的那個包的 js 的網頁測試（也在 files 裡，跟 own 一樣連 slow 一起跑）；
-    core 加核心測試；smoke 加煙霧；everything 是整套。"""
+    core 加核心測試；smoke 加煙霧；everything 是整套；nodes 是指名的幾條測試 id，連 slow 一起跑、另一條指令（node_commands）。"""
     files: set[Path] = field(default_factory=set)
     own: set[Path] = field(default_factory=set)
     runs_js: set[Path] = field(default_factory=set)
@@ -205,10 +214,11 @@ class Pick:
     everything: bool = False
     why: list[str] = field(default_factory=list)
     contract_only: set[str] = field(default_factory=set)  # 逐包的核心契約只跑這幾包（空的＝不限；core、改到契約檔本身也不限，_contract_deselect）
+    nodes: set[str] = field(default_factory=set)
 
     @property
     def empty(self) -> bool:
-        return not (self.files or self.core or self.smoke or self.everything)
+        return not (self.files or self.core or self.smoke or self.everything or self.nodes)
 
     @property
     def with_slow(self) -> set[Path]:
@@ -1227,7 +1237,7 @@ def pick(files: list[str], base: str | None = None,
     def content_route(path: Path) -> None:
         # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
         # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
-        for name in (CONTENT_TEST, REAL_CONTENT_TEST, PACK_CONTENT_TEST):
+        for name in (CONTENT_TEST, REAL_CONTENT_TEST, PACK_CONTENT_TEST, SHELL_LOCK_TEST):
             if name in named:
                 result.files.add(named[name])
         result.files |= {t for t in tests if path.name in _text(t)}
@@ -1238,6 +1248,16 @@ def pick(files: list[str], base: str | None = None,
     for raw in files:
         f = raw.replace("\\", "/")
         path = Path(f)
+        if (path.suffix in (".py", ".mjs") and (f.startswith(("tianxia/", "scripts/")) or "/" not in f)
+                and "/tests/" not in f and IMPORT_SCAN_NODE not in result.nodes):
+            result.nodes.add(IMPORT_SCAN_NODE)
+            result.why.append(f"{f} 這種程式檔：舊名掃描那一條（{IMPORT_SCAN_NODE}）連 slow 跑，只跑這一條")
+        if f.startswith("tianxia/features/") and f.split("/")[3:] == ["routes.py"]:  # 包的路由：動作表與鎖外三段式只有這兩個檔守
+            result.files |= {named[n] for n in ROUTE_GUARD_TESTS if n in named}
+            result.why.append(f"{f}：包的路由 → {'、'.join(ROUTE_GUARD_TESTS)}")
+        if f.startswith("web/"):  # 放在 owner、SHELL_HUNK_JS 的判斷之前：那兩支會提早 continue
+            result.files |= {named[n] for n in (BOT_WORD_TEST, SHELL_LOCK_TEST) if n in named}
+            result.why.append(f"{f}：送到玩家瀏覽器的檔 → {BOT_WORD_TEST}（FB-673）、{SHELL_LOCK_TEST}（殼的名單）")
         if path.name == "conftest.py" and (f.startswith("tests/") or f.startswith("tianxia/features/")):
             given = (hunks_of or {}).get(f)
             hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
@@ -1386,6 +1406,9 @@ def pick(files: list[str], base: str | None = None,
             result.files |= {t for t in tests if mod in reached(t) or t.stem == f"test_{mod}"
                              or t.stem.startswith(f"test_{mod}_") or (first != mod and t.stem == f"test_{first}")
                              or (f.startswith("scripts/") and f"{mod}.py" in _text(t))}
+            if f.startswith("scripts/"):  # 腳本 import 包有反方向的名單（第 106 批：稽核注入綠）
+                result.files |= {t for t in tests if t.name == BOUNDARY_TEST}
+                result.why.append(f"{f}：腳本 → 邊界測試")
             if f == f"tianxia/{path.name}":
                 ups = dependents(mod)
                 if ups:
@@ -1528,7 +1551,14 @@ def pytest_commands(chosen: Pick, slow: bool, extra: list[str], tmp: Path | None
     寫進 tmp 底下的檔，用 pytest 的 @檔名。"""
     return [_command(goal, marker, extra, chosen.everything, None if tmp is None else tmp / f"targets-{i}.txt",
                      _contract_deselect(chosen, goal))
-            for i, (goal, marker) in enumerate(_slow_split(chosen, slow))]
+            for i, (goal, marker) in enumerate(_slow_split(chosen, slow)) if goal]  # 沒有目標不下指令：pytest 不帶目標等於整套（第 106 批：只挑到 nodes）
+
+
+def node_commands(chosen: Pick, extra: list[str]) -> list[list[str]]:
+    """Pick.nodes 那幾條（連 slow）另一條指令，不併進 pytest_commands（其他挑到的照舊不含 slow）；整套本來就含，不用另跑。"""
+    if chosen.everything or not chosen.nodes:
+        return []
+    return [_command(sorted(chosen.nodes), "slow or not slow", extra, False, None)]
 
 
 def _slow_only(chosen: Pick) -> list[str]:
@@ -1584,6 +1614,8 @@ def describe(chosen: Pick, slow: bool = False) -> list[str]:
         lines.append(f"核心測試：核心模組自己的測試＋test_engine，不含 slow（{len(core_tests())} 個檔）")
     if chosen.smoke:
         lines.append(f"煙霧：標了 smoke 的 {len(smoke_ids())} 條")
+    if chosen.nodes:
+        lines.append("另外連 slow 跑這幾條：" + " ".join(sorted(chosen.nodes)))
     if chosen.why:
         lines.append("為什麼：")
         lines += [f"  {w}" for w in chosen.why]
@@ -1621,13 +1653,16 @@ def main(argv: list[str] | None = None) -> int:
     print("\n".join(describe(chosen, args.slow)), flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         cmds = pytest_commands(chosen, args.slow, extra, Path(tmp))
+        nodes = node_commands(chosen, extra)
         if args.count:
             for cmd in cmds:
                 label = "連 slow 一起跑的那幾個檔" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
                 print(f"{label}：" + count(cmd), flush=True)
+            for cmd in nodes:
+                print("另外連 slow 跑的那幾條：" + count(cmd), flush=True)
         if args.list or args.count:
             return 0
-        return finish([subprocess.call(cmd, cwd=ROOT) for cmd in cmds], chosen, args.slow)
+        return finish([subprocess.call(cmd, cwd=ROOT) for cmd in [*cmds, *nodes]], chosen, args.slow)
 
 
 if __name__ == "__main__":
