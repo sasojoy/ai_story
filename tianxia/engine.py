@@ -1209,7 +1209,6 @@ class Game:
         return page_view.shop_view(self, option_ids)
 
 
-
     def _side(self) -> str | None:
         """敵我的一個讀法（allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
         return allied.side_of(self.state, self.content)

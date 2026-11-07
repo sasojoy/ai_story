@@ -64,7 +64,6 @@ GAME_DELEGATE_CALLERS = {
     # sense
     ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
     ("_action_title", "_epiphany_title"): "dunwu: 那一下江湖紀錄的標題（同上，dunwu: 留在原位）",
-    # socialize
     # sortie
     # story
     ("_reset_player_for_new_season", "_story_close_season"): "還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳，夾在 _zhuan_past 與 _zhuan_profile 中間（同上）；on_season_end 在 save_annals 之後、又只問開著的包",
