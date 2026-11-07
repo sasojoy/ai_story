@@ -170,7 +170,7 @@ def test_feature_packages_only_import_the_core_the_shared_layer_or_their_own_pac
     for name in _packages():
         for path in _package_files(name):
             found += problems_of(path.read_text(encoding="utf-8"), _modname(path))
-    assert found == []
+    assert not found, "\n".join(found)
 
 
 def feature_target(mod: str) -> str | None:
@@ -263,7 +263,7 @@ def test_the_core_never_imports_a_feature_package_except_the_registry():
     for name in sorted(CORE):
         found += [f"{name}.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / f"{name}.py")]
     found += [f"engine.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / "engine.py") if mod not in GAME_IMPORTS]
-    assert found == []
+    assert not found, f"核心不准 import 包（要接一包先想掛鉤）：{found}"
 
 
 def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_imports_a_package():
@@ -273,7 +273,8 @@ def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_impo
     for name in SHARED:
         assert (TIANXIA / f"{name}.py").exists(), name
         assert name not in CORE and name not in aliases() and name not in _packages(), name
-    assert [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")] == []
+    found = [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")]
+    assert not found, f"共用層不准 import 包：{found}"
 
 
 # 總表第六節第 5 條「共用規則層可以 import 核心本體與同層」：共用規則層的模組 import 的別的 tianxia 模組只能是核心本體（MODULES、tianxia/core/）
@@ -870,7 +871,8 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     files = ([TIANXIA / "engine.py"] + sorted((TIANXIA / "core").glob("*.py")) + [TIANXIA / f"{name}.py" for name in sorted(CORE)]
              + [path for name in _packages() for path in _package_files(name)])
     found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
-    assert {path: lines for path, lines in found.items() if lines} == {}
+    hits = {path: lines for path, lines in found.items() if lines}
+    assert not hits, f"不准直接叫事件的訂閱者，走 ctx.publish：{hits}"
     old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
            "def _arrive(self, s, c, loc_id):\n    convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)\n"
            "def _raid_bounty(self, target):\n    msgs = bounties.on_raid_win(self.state, self.content, self.world, target)\n"
@@ -1275,7 +1277,8 @@ def test_the_bot_base_touches_only_the_listed_names_on_the_game():
     """共用層 bot_base 准拿 Game（第二輪第 102 批落地認定），碰的 game.xxx 只有 BOT_BASE_GAME，多了少了都紅；拿 Game 的參數一律叫 game，別名才掃得到。"""
     assert game_names_touched("def f(game):\n    return game._side() + game.state.world\n") == {"_side", "state"}  # 掃描本身抓得到
     source = (TIANXIA / "bot_base.py").read_text(encoding="utf-8")
-    assert game_names_touched(source) == BOT_BASE_GAME
+    touched = game_names_touched(source)
+    assert touched == BOT_BASE_GAME, f"bot_base 碰了名單外的 {sorted(touched - BOT_BASE_GAME)}；名單上沒人碰的 {sorted(BOT_BASE_GAME - touched)}（boundary_tables.BOT_BASE_GAME）"
     other = [arg.arg for node in ast.walk(ast.parse(source)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
              for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
              if arg.annotation is not None and re.search(r"\bGame\b", ast.unparse(arg.annotation)) and arg.arg != "game"]
