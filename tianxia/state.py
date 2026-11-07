@@ -1138,7 +1138,7 @@ class PlayerState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in QUIET_DEFAULTS:
-                if key in data and not data[key]:
+                if key in data and (not data[key] or (key == "heroines" and not any(data[key].values()))):  # heroines 是子模型：三格都空才算沒用到
                     del data[key]
         return data
 

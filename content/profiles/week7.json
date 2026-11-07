@@ -11,4 +11,5 @@
  "jianfa": {"enabled": true, "week_unlock": false, "stat_milestones": false}, "epiphany": {"enabled": true, "retry_days": 0.0833333, "trial_wait_days": 0.0833333},
  "push_events": true, "llm_queue_slots": 1, "llm_queue_wait_seconds": 45,
  "attributes": {"v2": {"enabled": true}}, "legacy": {"enabled": true},
- "persona_shift": {"enabled": true}}
+ "persona_shift": {"enabled": true},
+ "xinshen": {"enabled": true}}
