@@ -208,7 +208,7 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.load("/");
     await c.click(ACT("sheet"));
     await c.shoot("x_push_sheet", {});
-    await c.step("#push-on", "x_push_on", { wait: 2500 });
+    await c.step("#push-on", "x_push_on", { wait: 4000 });
     await c.step(ACT("push-test"), "x_push_test", { wait: 1200 });
     await c.step("#push-on", "x_push_off", { wait: 1500 });
     await c.load("/");

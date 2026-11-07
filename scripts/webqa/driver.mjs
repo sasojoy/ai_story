@@ -275,6 +275,11 @@ async function load(path = "/", { keepCards = false } = {}) {
     report.steps.push(`${sceneNow} story-ok dismissed`);
     await settle(260);
   }
+  // The daily check-in sheet opens after the story cards. Left open it locks the page and covers the lower half of a 375 shot (42cf09f90, 299 of 522 snapshots in wave E).
+  if (!keepCards && await ev(`(() => { const el = document.querySelector('.ck-pop-ok'); if (!el || el.disabled) return ""; el.click(); return "ok"; })()`) === "ok") {
+    report.steps.push(`${sceneNow} check-in sheet dismissed`);
+    await settle(260);
+  }
 }
 async function asPlayer(who) {
   await cdp("Network.setCookie", { name: "tx_session", value: jars[who], url: PAGE + "/", httpOnly: true, sameSite: "Lax" });

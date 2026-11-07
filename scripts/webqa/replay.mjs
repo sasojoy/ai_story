@@ -97,7 +97,8 @@ try {
     }
     await ev(`document.fonts ? document.fonts.ready.then(() => 1) : 1`).catch(() => 0);
     // Images decode off the main thread, the lazy portraits load late: a shot right after load shows them at a lower quality, on one side only (014_bt_muster, 936 px at 24 levels, one run in four).
-    await ev(`Promise.all([...document.images].map((i) => i.decode().catch(() => 0))).then(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(1))); setTimeout(() => r(1), 400); }))`).catch(() => 0);
+    // A loading="lazy" image off the screen never loads and its decode() never answers (the mall pages), so the wait has a ceiling.
+    await ev(`Promise.race([Promise.all([...document.images].map((i) => i.decode().catch(() => 0))), new Promise((r) => setTimeout(r, 1500))]).then(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(1))); setTimeout(() => r(1), 400); }))`).catch(() => 0);
     const facts = { layout: {}, shots: [], sty: {}, vol: {}, unstable: false };
     const views = SHOOT ? ALL_VIEWS : ALL_VIEWS.filter((v) => v[0] !== "375-dark");
     for (const v of views) {
