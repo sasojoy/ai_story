@@ -32,6 +32,7 @@ from . import outcomes as outcome_rules  # noqa: F401  第二輪第 92 批之後
 from .models import FreeTextChoice, Outcome
 from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
+from . import wins  # noqa: F401  第二輪第 92 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.wins 晚 5 個模組才載入，波 F 合完量過）
 from .characters import CharacterStore, name_key
 from .journal import LOG_BREAK, Draft
 from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、第 2 週才開）
@@ -44,7 +45,6 @@ from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     add_season_rumor,
     humanize,
-    season_one,
 )
 from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
@@ -68,6 +68,7 @@ if TYPE_CHECKING:  # 型別註記用（companion_agent 搬進人物情誼包之�
     from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 from .core.services import not_while_preparing as _not_while_preparing
+from . import story_base  # noqa: F401  第二輪第 91 批之後 engine 沒人用了，只留著載入先後（run_bots：拿掉的話 tianxia.story_base 晚 3 個模組才載入，波 F 合完量過）
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
 from .state import (
