@@ -42,7 +42,7 @@
   第一個字的（mingtie_card → test_mingtie.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
   tianxia/<模組>.py 另外照模組之間最外層的 import 往上找（dependents；10/31 測試自檢 T-02：改 might.py 以前挑 0 個檔）：
   import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
-  AGGREGATOR_FANOUT 個的：shopview……；skillview 第二輪第 88 批切開之後只是給測試的殼）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
+  AGGREGATOR_FANOUT 個的）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
   核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
   （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔（registered_actions；
   搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
@@ -379,7 +379,7 @@ def web_text(test: Path) -> str:
 # - engine 與假人的三支（DRIVERS：bot、bot_policy、bot_runner，經 Game 什麼都碰）：engine 照它自己那一條（hunk 落在哪個
 #   方法）另外挑，「import 了 engine」不算相關；拿 bot 當驅動的測試檔有三十幾個，算進來改 outing.py 也挑到七十幾個檔。
 # - 核心模組（CORE_MODULES）：改核心照核心那一條；X 被核心 import，也不把 import 核心的幾百個測試檔算進來。
-# - 彙整的模組（自己 import 至少 AGGREGATOR_FANOUT 個 tianxia 模組的：bot、shopview、mapdata……；world 第 25 批收進核心）：
+# - 彙整的模組（自己 import 至少 AGGREGATOR_FANOUT 個 tianxia 模組的：bot……；world 第 25 批收進核心）：
 #   import 它的測試檔算，可是不再往上走（不然 bot 一路帶出整套）。
 # 函式裡的 import（多半是為了繞開互相 import 的圈）與 TYPE_CHECKING 底下的不算邊：算進來一百二十個模組連成一圈。
 # 往上找到的（不含直接 import 的）超過 IMPORT_CAP 個測試檔時（tactics、zh、martial_arts 這種底層模組）：不一個一個挑，
@@ -468,7 +468,7 @@ def registered_actions(mod: str) -> tuple[str, ...]:
     try:
         path = TIANXIA / f"{mod}.py"
         if mod not in _ENGINE_SIDE_IMPORT.findall(engine.read_text(encoding="utf-8")):
-            # 搬進功能包之後，登記改在包的 __init__.py 載入時做（全部拆包第 37 批：mingtie_card 進了玩家互動包，舊名是別名）：
+            # 搬進功能包之後，登記改在包的 __init__.py 載入時做（全部拆包第 37 批：mingtie_card 進了玩家互動包）：
             # 同一個寫法，模組在那一包的資料夾裡
             path = next((init.parent / f"{mod}.py" for init in sorted((TIANXIA / "features").glob("*/__init__.py"))
                          if mod in _ENGINE_SIDE_IMPORT.findall(init.read_text(encoding="utf-8"))), None)
@@ -778,29 +778,29 @@ def _import_target(node: ast.ImportFrom, path: Path) -> str:
     return ".".join(base + ([node.module] if node.module else []))
 
 
+_PACKAGE_IMPORT = re.compile(r"^[ \t]*from[ \t]+(tianxia\.features\.\w+)[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
+
+
 @functools.lru_cache(maxsize=None)
-def old_aliases() -> dict[str, frozenset[str]]:
-    """舊名的別名（開發規範手冊 3.11：tianxia/<舊名>.py 只寫 `from tianxia.features.<包> import <模組> as _x` 與
-    `sys.modules[__name__] = _x`）：包裡的模組全名 → 指到它的舊名（{"tianxia.features.bout.duel_rules": {"duel"}, …}；出陣包也有一個
-    duel_rules，舊名是 sortie_duel，所以照全名分）。照語法樹讀、不 import。"""
+def local_names_in_tests() -> dict[str, frozenset[str]]:
+    """測試給包裡的模組取的本地名（`from tianxia.features.<包> import <模組> as <本地名>`）：模組全名 → 本地名
+    （{"tianxia.features.bout.duel_rules": {"duel"}, …}；出陣包也有一個 duel_rules，本地名是 sortie_duel，所以照全名分）。
+    第二輪第 103 批舊名的別名收掉之後，測試照舊寫 duel.push_of，這張表接手「那個字指到哪個模組」。用正規式讀，不建語法樹（imported 同一個理由）。"""
     found: dict[str, set[str]] = collections.defaultdict(set)
-    for path in sorted(TIANXIA.glob("*.py")):
-        src = path.read_text(encoding="utf-8")
-        if "sys.modules[__name__]" not in src:
-            continue
-        tree = _parse(src)
-        for node in (tree.body if tree else []):
-            if isinstance(node, ast.ImportFrom) and _import_target(node, path).startswith("tianxia.features."):
-                for a in node.names:
-                    found[f"{_import_target(node, path)}.{a.name}"].add(path.stem)
+    for test in all_tests():
+        for m in _PACKAGE_IMPORT.finditer(_text(test)):
+            for part in m.group(2).split("#")[0].strip("() ").replace("\n", " ").split(","):
+                words = part.split()
+                if len(words) == 3 and words[1] == "as":
+                    found[f"{m.group(1)}.{words[0]}"].add(words[2])
     return {k: frozenset(v) for k, v in found.items()}
 
 
 @functools.lru_cache(maxsize=None)
 def core_reexports(module: str) -> dict[str, frozenset[str]]:
     """tianxia/core/<module>.py 的名字被別的模組照抄出去（`from tianxia.core.<module> import 名字`：包把留在核心的那一半 re-export
-    同一批函式物件，例：單挑包的 duel_rules、arena_rules 照抄 duel_base、arena_ranks）→ {名字: {照抄的模組名, 指到它的舊名別名}}。
-    測試經這幾個字寫（duel.push_of、arena.title_for、`from tianxia import duel as duel_rules`）也算寫到核心的那個名字（全部拆包第 12 批
+    同一批函式物件，例：單挑包的 duel_rules、arena_rules 照抄 duel_base、arena_ranks）→ {名字: {照抄的模組名, 測試給那個模組取的本地名}}。
+    測試經這幾個字寫（duel.push_of、arena.title_for）也算寫到核心的那個名字（全部拆包第 12 批
     審查修正）。整個模組 import 進來的（`from .core import duel_base as duel_rules`）不算：那一份寫得到模組名。照語法樹讀、不 import。"""
     found: dict[str, set[str]] = collections.defaultdict(set)
     target = f"tianxia.core.{module}"
@@ -816,7 +816,7 @@ def core_reexports(module: str) -> dict[str, frozenset[str]]:
                 for a in node.names:
                     if a.name != "*" and (a.asname or a.name) == a.name:
                         dotted = ".".join(path.relative_to(ROOT).with_suffix("").parts)
-                        found[a.name] |= {path.stem} | old_aliases().get(dotted, frozenset())
+                        found[a.name] |= {path.stem} | local_names_in_tests().get(dotted, frozenset())
     return {k: frozenset(v) for k, v in found.items()}
 
 
@@ -879,7 +879,7 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     hunk 落在哪個最外層的函式、類別、常數 → 連模組裡直接叫它、用到它的（一路往上：只有 answer_event 在叫的 answer_branch、
     deed_credit 沒留委派，照 answer_event 挑；經 ctx.<委派> 叫的不算）→ 每一個的：
     - 函式：Game 上委派給它的方法名（_present、_choose、answer_event；照 engine.py 認，core_delegates），加上模組名與函式名寫在
-      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或那個模組的舊名寫的（`duel.push_of`、`arena.title_for`：
+      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或測試給那個模組取的本地名寫的（`duel.push_of`、`arena.title_for`：
       core_reexports、names_through；全部拆包第 12 批審查修正）；
     - 類別、常數：那個識別字（EVIL_ANNAL、FreeTextRequest：engine 照名字 import 回來，測試從 engine 拿）。
     跟 base 沒有差（指名了這個檔）照整個檔算；挑到的超過 IMPORT_CAP 個檔不一個一個挑（只剩核心測試＋煙霧）。說明、import 這種

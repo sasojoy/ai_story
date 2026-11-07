@@ -200,9 +200,6 @@ PUSHING_CALLED_THROUGH_CTX = {"daily_push_cap"}  # push_trend、push_room → ct
 
 # ── 共用規則層 ──
 
-# core_shared（第二輪第 88 批）：只留給測試的殼。產品程式一律讀真正的位置，最外層與函式裡都不准 import（test_product_code_does_not_import_a_test_only_shell）。
-TEST_ONLY_SHELLS = ("howto", "skillview", "shopview")  # howto：第二輪第 102 批，產品 0 處、只有測試讀；第 103 批連殼收掉
-
 # 收進共用規則層之後函式裡也不准 import 包的那七個（test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function）。
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
 
