@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
+import { freeze, landed, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
 
 const [label, PAGE, API, OUT, CHROME_PORT] = process.argv.slice(2);
 const ROUND = process.env.QA_ROUND || "c";
@@ -126,7 +126,7 @@ async function stable(width, max = 3000) {
   while (Date.now() - t0 < max) {
     const s = await ev(STABLE_SIG).catch(() => null);
     if (s !== null && s === last) same++; else { same = 1; last = s; }
-    if (same >= 4 && s !== null && Number(s.split("|")[0]) === width) return true;
+    if (same >= 4 && s !== null && landed(s, width)) return true;
     await sleep(100);
   }
   return false;

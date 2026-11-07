@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, ALL_VIEWS, SHOT_VIEWS, STABLE_SIG, STYLE_DUMP, LAYOUT, CSS_RULES } from "./snippets.mjs";
+import { freeze, landed, ALL_VIEWS, SHOT_VIEWS, STABLE_SIG, STYLE_DUMP, LAYOUT, CSS_RULES } from "./snippets.mjs";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
@@ -74,7 +74,7 @@ async function stable(width) {
   let last = null;
   for (let i = 0; i < 40; i++) {
     const s = await ev(STABLE_SIG).catch(() => null);
-    if (s !== null && s === last && Number(s.split("|")[0]) === width) return true;
+    if (s !== null && s === last && landed(s, width)) return true;
     last = s;
     await sleep(40);
   }

@@ -24,6 +24,10 @@ export const freeze = ({ mask = true, still = true } = {}) => `(() => { const SE
 // the layout's signature: size of the page, where the shell sits, a hash of every class on the page. innerWidth tells whether the new width has landed at all.
 export const STABLE_SIG = `(() => { const d = document.documentElement; const s = document.querySelector(".shell"); const r = s ? s.getBoundingClientRect() : null; let x = 2166136261; for (const e of document.querySelectorAll("*")) { const c = e.getAttribute("class") || ""; for (let i = 0; i < c.length; i++) { x ^= c.charCodeAt(i); x = Math.imul(x, 16777619); } x ^= 124; x = Math.imul(x, 16777619); } return innerWidth + "|" + d.scrollHeight + "|" + d.scrollWidth + "|" + (r ? [r.left, r.top, r.width, r.height].join() : "") + "|" + (x >>> 0); })()`;
 
+// Has the new width landed? A phone's layout viewport widens to fit what overflows (the open move card at 375 measures 383, on both sides, with nothing moving):
+// that counts. Only near a phone width, and every window the walk comes from is 640 or wider, so an old width cannot pass for it.
+export const landed = (sig, width) => { const [w, , sw] = sig.split("|").map(Number); return w === width || (width <= 480 && w > width && w === sw && w - width < 100); };
+
 // every element under body plus ::before and ::after that exist: property text deduplicated by hash inside one scene.
 // The walk leaves #toast out: it drops its class 3.2 s after showing, on the wall clock, so it flips from side to side (wave D, 002_opening_event and 170_cr_pick2 at 640).
 // The replay keeps it: there both sides get the same snapshot, and that is where a change to the toast's own styles shows.

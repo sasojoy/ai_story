@@ -4,6 +4,7 @@ import gzip
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -291,6 +292,19 @@ def test_a_walk_that_never_ends_is_the_tool_not_a_hang():
 def test_the_browser_cannot_hold_the_walk_forever(script):
     text = (TOOL / script).read_text(encoding="utf-8")
     assert "ws.onclose" in text and "ANSWER_SECONDS" in text and "clearTimeout" in text
+
+
+def test_a_phone_viewport_widened_by_an_overflow_has_landed():
+    # 第 77 批第一次全量的 v:009～011：移動卡展開時 375 量到 383，版面一動不動卻被標 unstable，連帶 .shell margin 不准歸雜訊
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("no node")
+    src = (TOOL / "snippets.mjs").as_uri()
+    cases = [("383|2106|383|0,0,375,2106|1", 375, True), ("375|2106|375|x|1", 375, True), ("1265|800|1265|x|1", 375, False), ("640|800|640|x|1", 375, False),
+             ("383|2106|390|x|1", 375, False), ("641|800|641|x|1", 640, False), ("1280|800|1280|x|1", 1280, True)]
+    code = f"const {{ landed }} = await import({json.dumps(src)}); console.log(JSON.stringify({json.dumps([c[:2] for c in cases])}.map(([s, w]) => landed(s, w))));"
+    out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
+    assert json.loads(out.stdout) == [c[2] for c in cases]
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():
