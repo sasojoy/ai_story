@@ -34,7 +34,6 @@ TABLE = {
     "_parley_keep": parley_actions.keep,
     "_parley_owed_line": _parley_owed_line,
     "_parley_ask_label": parley_actions.ask_label,
-    "_last_talk_line": talk_actions.last_talk_line,
     "affinity_text": talk_actions.affinity_text,
     "_annal_talk": talk_actions.annal_talk,
     "say_max": talk_actions.say_max,

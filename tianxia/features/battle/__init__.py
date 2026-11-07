@@ -24,7 +24,7 @@ battle: 的分派是 MENU_ORDER["quick"] 的 battle 那一格（全部拆包第 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook, WorldHook, slot_some
+from tianxia.core.features import Feature, MenuHook, SceneHook, SeamHook, StatusHook, WorldHook, slot_some
 
 
 class BattleFeature(Feature):
@@ -146,6 +146,15 @@ class BattleFeature(Feature):
 
             self._menus = (MenuHook("quick", "battle", lambda ctx, kind, arg, option_id: muster.battle_choose(ctx, arg) if kind == "battle" else None),)
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 art/battle 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：全服戰鬥蓋著場景時沒有圖（序章裡不算）。經 ctx 叫：tick=False，只看不推進。"""
+        if self._scenes is None:
+            self._scenes = (SceneHook("art", "battle", lambda ctx: {} if ctx._battle_for_me(tick=False) is not None else None),)
+        return self._scenes
 
     # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
     _status_slots: tuple[StatusHook, ...] | None = None

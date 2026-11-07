@@ -6,12 +6,12 @@
 - actions.py：原本 Game 上的 10 個方法（Game 留 8 個一行委派）與核心原位、探索包、引導包叫的 7 個服務的本體
 - routes.py：/api/sense、/api/sense_read、/api/sense_warm（原本寫在 server.py；殼照 FEATURES 掛）
 
-掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scene（接縫掛鉤：有所感的卡、取名那一張）、routes。
+掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scenes（SCENE_ORDER 的 sense 格：有所感的卡、取名那一張）、routes。
 checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另外跑 tests/core/test_content.py，test_for 改包帶不到）
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook
 from tianxia.core.features import ContentSlot
 
 
@@ -54,12 +54,20 @@ class SenseFeature(Feature):
         """特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；整季機器人先按靜心思名、再從三個候選裡挑（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
         return option.id == "dunwu:own"
 
-    def scene(self, ctx):
-        """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 宴客那一行之後的兩支）：有所感的卡、特殊頓悟取名那一張；
-        都不是是 None。不問 enabled（原位本來就不看開關）。"""
-        from . import actions  # noqa: PLC0415
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
 
-        return actions.scene(ctx)
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的兩格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：有所感的卡、特殊頓悟取名那一張，都不是是 None；
+        圖只看 sensing、不看 god_naming：取名疊在談著上面時文字是取名、圖是人像。"""
+        if self._scenes is None:
+            from . import actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "sense", lambda ctx: actions.scene(ctx)),
+                SceneHook("art", "sense", lambda ctx: {} if ctx.state.player.sensing is not None else None),
+            )
+        return self._scenes
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）

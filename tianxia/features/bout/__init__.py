@@ -18,7 +18,7 @@ checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SceneHook, SeamHook, Shop, Verb, WorldHook
 from tianxia.core.features import ContentSlot
 
 
@@ -170,6 +170,21 @@ class BoutFeature(Feature):
                     arena_actions.arena_act(ctx, arg) if kind == "arena" and (arg in MOVES or option_id == arena_rules.YIELD_ID) else None)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的三格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：頭目戰、擂台那一張；這兩個畫面都沒有圖。"""
+        if self._scenes is None:
+            from . import arena_actions, duel_actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "duel", lambda ctx: duel_actions.duel_scene(ctx) if ctx.state.player.duel is not None else None),
+                SceneHook("own", "arena", lambda ctx: arena_actions.arena_scene(ctx) if ctx.state.player.arena is not None else None),
+                SceneHook("art", "bout", lambda ctx: {} if ctx.state.player.duel is not None or ctx.state.player.arena is not None else None),
+            )
+        return self._scenes
 
     def outlock(self, shell):
         from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）

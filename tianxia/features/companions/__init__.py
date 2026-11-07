@@ -9,7 +9,7 @@ checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, StepHook, Verb, slot_some
 from tianxia.core.features import ContentSlot
 
 
@@ -138,6 +138,20 @@ class CompanionsFeature(Feature):
                 MenuHook("quick", "errand", lambda ctx, kind, arg, option_id: actions.errand_ask(ctx, arg) if kind == "errand" else None),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的兩格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：談著的那一張與那個人的像。"""
+        if self._scenes is None:
+            from . import talk_actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "talk", lambda ctx: talk_actions.talk_scene(ctx)),
+                SceneHook("art", "talk", lambda ctx: talk_actions.talk_art(ctx)),
+            )
+        return self._scenes
 
     # core_seams（全部拆包第 57 批「分派與標題收接縫」）
     _verbs: tuple[Verb, ...] | None = None

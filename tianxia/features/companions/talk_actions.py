@@ -128,6 +128,30 @@ def last_talk_line(ctx, companion_id: str) -> str:
     return f"*上回（{ctx.stamp(memo.at)}{where}）：{memo.text}*\n\n"
 
 
+def talk_scene(ctx) -> str | None:
+    """場景卡 own/talk 那一格（core_scene，第二輪第 91 批；原本 Game._own_scene_text 談著那一段）：沒談著是 None。"""
+    s, c = ctx.state, ctx.content
+    if not s.player.pending_companion:
+        return None
+    character = c.characters[s.player.pending_companion]
+    history = s.player.dialogue_history.get(s.player.pending_companion, [])
+    last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
+    # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）；上回見面談過的事多一行（Joy 2026-10-23）
+    return f"**{character.name}**（{affinity_text(ctx, s.player.pending_companion)}）\n\n{last_talk_line(ctx, s.player.pending_companion)}{last}"
+
+
+def talk_art(ctx) -> dict | None:
+    """場景卡 art/talk 那一格（core_scene，第二輪第 91 批；原本 Game.scene_art 談著那一段）：沒談著是 None；談著的人沒有像是 {}（這個畫面是我的，沒有圖）。"""
+    s, c = ctx.state, ctx.content
+    if not s.player.pending_companion:
+        return None
+    character = c.characters[s.player.pending_companion]
+    if not character.image:
+        return {}
+    sub = affinity_text(ctx, s.player.pending_companion)
+    return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
+
+
 def dialogue_unavailable(ctx, companion_id: str) -> list[str]:
     """這一輪生成不出對話（模型叫不動）：這輪不算數、對話結束（企劃者決定：不要卡在同一句
     保底反應裡白扣體力）。"""

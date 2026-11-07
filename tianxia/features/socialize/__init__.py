@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, Verb
 
 
 class SocializeFeature(Feature):
@@ -78,6 +78,17 @@ class SocializeFeature(Feature):
                 MenuHook("block", "audience", lambda state, content: menus.travel_block(state, content)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/audience 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：求見名單那一張。"""
+        if self._scenes is None:
+            from . import menus  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "audience", lambda ctx: menus.audience_scene(ctx)),)
+        return self._scenes
 
     # core_seams（全部拆包第 57 批「分派與標題收接縫」）
     _verbs: tuple[Verb, ...] | None = None

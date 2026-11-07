@@ -17,7 +17,7 @@ from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, armor, atlas, battlelog, calendar, clinic, conquest, economy, encounter, equipment,
-    fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
+    fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, plans,
     materials, mounts, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
     shopview, signature, art_cards,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
@@ -56,7 +56,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     HUANGJIN, add_rumor, add_season_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    ears_of, fill_marks, game_day, here_regions,
+    ears_of, game_day, here_regions,
     chaos_fronts, front_chip, front_ids, front_of, humanize,
     is_revealed, learn_skill, resolve_goals, resolve_trend, roll_check,
     season_one, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -69,7 +69,6 @@ from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core import battle_base as battle_instance  # battle（全部拆包第 54 批）：決戰的資料型別與判定（核心本體）；規則那一半在決戰包，Game 上沒有方法讀它
 from .core import xinshen  # 心神：跟人物交談扣的點數（核心的資源，同體力；Config.xinshen）
-from .core import omen_base  # 正在答題（軍情包認領的 fs_asking；core_seams，全部拆包第 56 批：_own_scene_text 改問它）
 from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import PAUSED_REFUSAL, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
@@ -113,8 +112,6 @@ from .core.services import not_while_preparing as _not_while_preparing
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tianxia/features/guide/tests/test_prologue.py 從 engine 拿
 # checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
 from .core.services import PILL_FOUND, checkin_on
-# story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
-from . import story_base
 # figure_acts（全部拆包第 31 批）：大勢人物的行動（挑戰本人、護衛犒軍探望、盤算、月旦評、管理者救回人物）的 14 個一行委派
 from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡：Game 上盤算的 3 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
@@ -150,10 +147,10 @@ from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # 
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
+from .core import scene_view  # core_scene（第二輪第 91 批）：場景卡的文字與圖（Game 上留一行委派；哪一張照 core/features.py 的 SCENE_ORDER）
 
 HOUR = 3600
 DAY = 86400
-SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
 # （SECT_LABEL：拜入門派那一顆的字，全部拆包第 35 批搬進陣營包 features/faction/join_actions.py）
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
@@ -1457,11 +1454,7 @@ class Game:
 
 
     def place_state_view(self) -> dict | None:
-        """地點會變樣（main.place_state）：此刻所在地的樣子 {kind, name, line}；太平、在路上、關著是 None。"""
-        s = self.state
-        if s.player.journey is not None:
-            return None
-        return place_state.view(s.world, self.content, s.player.location)
+        return scene_view.place_state_view(self)
 
     # ── 宴客（搬進功能包 tianxia/features/feast/；server 的三段式照舊叫 Game 的這三個，過渡留一行委派）──
 
@@ -2293,114 +2286,16 @@ class Game:
     # ── 畫面文字 ──────────────────────────────────────────
 
     def location_text(self) -> str:
-        loc = self.content.locations[self.state.player.location]
-        # 地點會變樣（世界活起來第二批）：不是太平的地方，地名那一行底下多一段「〔戰火〕這一帶剛打過仗……」；地名那一行不動
-        # （有畫時網頁照 scene_art 的 head 把它拿掉、疊在畫上）。太平、關著一個字都不變
-        mood = place_state.view(self.state.world, self.content, loc.id)
-        head = f"【{loc.name}】危險 {'★' * loc.danger}" + (f"\n\n〔{place_state.NAMES[mood['kind']]}〕{mood['line']}" if mood is not None else "")
-        if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
-            return f"{head}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
-        return f"{head}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
+        return scene_view.location_text(self)
 
     def scene_art(self) -> dict | None:
-        """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
-        path 是 web/img/ 底下不含副檔名的路徑；head 是場景 Markdown 的第一行（地名那一行、事件標題、人名），有圖時網頁把它疊在圖上、
-        不在卡片裡寫第二次。事件開著（pending_event）→ 事件的類型圖 events/<Event.image>；跟人物談話 → 他的像（CharacterDef.image）；
-        平常站在地點 → Location.image，沒寫就是所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world。
-        其餘的畫面一律 None、一字不變：全服戰鬥蓋著場景、季收了、單挑、擂台、宴席、有所感、投靠與叛投、求見名單、伏筆問話、在路上，
-        還有事件沒寫 image、人物沒有像。圖檔在不在是伺服器的事（server.scene_art）。"""
-        s, c = self.state, self.content
-        p = s.player
-        if s.world.ended or self._battle_for_me(tick=False) is not None:
-            return None
-        if s.pending_event:
-            event = c.events[s.pending_event]
-            own = story_base.stage_art(s, c)  # 一條線事件段的專屬圖（StoryStage.image）蓋過事件的類型圖
-            if not event.image and own is None:
-                return None
-            path = own or f"events/{event.image}"
-            return {"kind": "event", "path": path, "title": event.title, "sub": "", "head": f"**{event.title}**"}
-        if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
-            return None
-        if p.pending_companion:
-            character = c.characters[p.pending_companion]
-            if not character.image:
-                return None
-            sub = self.affinity_text(p.pending_companion)
-            return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
-        if self._own_scene_text() != self.location_text():  # 投靠、叛投、求見、伏筆問話、在路上……都不是地點的描寫
-            return None
-        loc = c.locations[p.location]
-        if loc.image:
-            path = loc.image
-        else:
-            region = atlas.region_of(c, loc.id)
-            path = f"places/{region.id}" if region is not None else "places/world"
-        art = {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
-        mood = place_state.view(s.world, c, loc.id)  # 地點會變樣：疊在畫上的那一行多寫此刻的樣子，畫照樣子換色調（網頁的 mood-<kind>）
-        if mood is not None:
-            art["sub"] += f"・{mood['name']}"
-            art["mood"] = mood["kind"]
-        return art
+        return scene_view.scene_art(self)
 
     def scene_text(self) -> str:
-        """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
-        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。
-        蓋在畫面上的問功能包（scene_over，接縫掛鉤，第 11 批）：決戰包回（戰場那一段, 要不要整個取代）。"""
-        over = features_core.scene_over(self)
-        if over is None:
-            return self._own_scene_text()
-        battle_scene, whole = over
-        if whole:
-            return battle_scene  # 開打後在場上的人：戰場取代整個畫面；其餘照常遊玩，自己眼前的事接在底下（同 options）
-        return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
+        return scene_view.scene_text(self)
 
     def _own_scene_text(self) -> str:
-        s, c = self.state, self.content
-        if s.world.ended:
-            if season_one(c, s.world):  # 第一季：結局寫在江湖頁最上面的結算卡（season_result），場景寫所在的地方（FB-046）
-                return self.location_text()
-            return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
-        if s.pending_event:
-            event = c.events[s.pending_event]
-            return f"**{event.title}**\n\n{fill_marks(self._event_text(event), s)}"
-        if s.player.duel is not None:
-            return self._duel_scene()
-        if s.player.arena is not None:
-            return self._arena_scene()
-        # 自己眼前的場景卡（接縫掛鉤，第 11 批）：宴客包——坐在宴席上那一張；有所感包（全部拆包第 24 批）——有所感的卡、特殊頓悟取名那一張
-        seat = features_core.scene(self)
-        if seat is not None:
-            return seat
-        if s.player.pending_companion:
-            character = c.characters[s.player.pending_companion]
-            history = s.player.dialogue_history.get(s.player.pending_companion, [])
-            last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
-            # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）；上回見面談過的事多一行（Joy 2026-10-23）
-            return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{self._last_talk_line(s.player.pending_companion)}{last}"
-        if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）
-            return f"**依附哪一邊**\n\n{allied.ALLY_AFTER_SECT.format(counts=self.faction_counts_text())}"
-        if s.player.pending_faction:
-            faction = self.content.scenario.faction(s.player.pending_faction)
-            return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
-        if s.player.pending_defect:
-            return self._defect_scene()  # 「叛投X」的確認畫面（陣營包 defect_actions.scene，第 35 批）
-        if s.player.picking_audience:
-            title = SOCIAL_LIST_TITLE if precise.on(c, s.world) else "求見"
-            return f"**{title}**\n\n{self._audience_intro()}"
-        asking = self._fs_asking_text() if omen_base.fs_answering(s) else None
-        if asking is not None:
-            return asking
-        if s.player.journey is not None:
-            # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
-            halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
-            tasks = "邊走邊想、沿途打聽、路邊採集"  # 全圖開放拿掉了留意地形（FB-300，同 howto）
-            return (
-                f"**在路上**{halted}\n\n"
-                f"路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；{tasks}，"
-                "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
-            )
-        return self.location_text()
+        return scene_view._own_scene_text(self)
 
     def feature_status(self) -> dict:
         """功能包合進江湖畫面頂層的資料（FEATURES 的 status，照清單的順序；例：商城的入口 main.mall）。server.main_view 放在原本商城那一格。"""

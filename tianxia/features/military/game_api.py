@@ -9,7 +9,6 @@ TABLE = {
     "_report_seat": seat_actions.report_seat,
     "_settle_plots": opp_actions.settle_plots,
     "_hear_after_stamina": fs_actions.hear_after_stamina,
-    "_fs_asking_text": fs_actions.asking_text,
     "_fs_after_win": fs_actions.after_win,
     "_opp_on_win": opp_actions.on_win,
     "_hear_from_event": fs_actions.hear_from_event,

@@ -15,7 +15,7 @@ checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了另
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, StepHook, Verb, slot_some
 from tianxia.core.features import ContentSlot
 
 
@@ -179,6 +179,18 @@ class MilitaryFeature(Feature):
                 MenuHook("idle", "omen", lambda ctx: omen_base.fs_answering(ctx.state)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/omen 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：伏筆的最後一步正在答題那一張；題目不在了回 None，照舊往下問。"""
+        if self._scenes is None:
+            from tianxia.core import omen_base  # noqa: PLC0415
+            from . import fs_actions  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "omen", lambda ctx: fs_actions.asking_text(ctx) if omen_base.fs_answering(ctx.state) else None),)
+        return self._scenes
 
     # core_seams（全部拆包第 57 批「分派與標題收接縫」）
     _verbs: tuple[Verb, ...] | None = None
