@@ -1,5 +1,6 @@
 """對話「自己說」的網頁那一半：選單上那一顆按了才換成 20 字的輸入框（照隨口應對），送出走 /api/say，等的時候寫「對方沉吟中…」；
 交談結束、選單上沒有那一顆了，輸入框跟著收起。餵真的引擎給的 /api/main（tests/web/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
+# 畫法在 web/companions.js（第二輪第 104 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 from unittest import mock
