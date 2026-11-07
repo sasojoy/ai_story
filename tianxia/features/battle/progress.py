@@ -20,7 +20,7 @@ _deliver_seal_results（決戰收場的 _seal_settle 改發事件 battle_end：c
 """
 from __future__ import annotations
 
-from tianxia import allied, siege, territory, timetable  # 共用規則層（豪強依附、攻城、地盤、時刻表）
+from tianxia import allied, territory, timetable  # 共用規則層（豪強依附、地盤、時刻表）
 from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：天命之爭、保底收場、天命未定那一句；全部拆包第 27 批）
@@ -30,7 +30,7 @@ from tianxia.state import Rumor, TimelineResult, WorldState
 from tianxia.world import _season_vehicle, showdown_key  # 核心本體：季的事用的空殼玩家、時刻表決戰照實際那一版的結果鍵
 from tianxia.world import open_waiting_showdown as open_waiting  # 核心本體：開時間到了、在等的那一場決戰
 
-from . import escorts, generals, muster, sieges
+from . import escorts, generals, muster, siege_rules, sieges
 
 # ── 好幾場戰鬥並存（領地爭奪第二批 Task 10）：時刻表決戰一場（world.get_battle）＋攻城戰一串（world.get_sieges）──
 # 沒有攻城戰時一切照舊（這一季沒開領地爭奪時 sieges 不讀資料庫、回空的）。有的時候每個人看「自己的那一場」（battle_now）：
@@ -231,11 +231,11 @@ def advance_battle_round(ctx, battle: battle_instance.BattleInstance, definition
     tuning = ctx.content.config.battle  # 三招的數字（排程的 Game 與玩家的 Game 讀同一份內容，所以結算一致）
     if battle.phase == "muster" and now >= battle.muster_deadline_real:
         battle_instance.close_muster(battle, definition, ctx.rng, now, tuning=tuning)
-        if siege.void_absent(ctx.content, battle):  # 攻城戰（領地爭奪第二批）：攻方一個人都沒到，這一場作罷
+        if siege_rules.void_absent(ctx.content, battle):  # 攻城戰（領地爭奪第二批）：攻方一個人都沒到，這一場作罷
             battle.end_time = ctx.state.world.time
             return [battle.unfinished_text]
-        siege.lone_army(ctx.content, battle, definition)  # 三方混戰只有一軍到場（裁決 23）：轉回單方攻中立地
-        siege.size_melee_guard(ctx.content, battle)  # 三方混戰（裁決 22）：守將的池子照兩軍到場的人數定
+        siege_rules.lone_army(ctx.content, battle, definition)  # 三方混戰只有一軍到場（裁決 23）：轉回單方攻中立地
+        siege_rules.size_melee_guard(ctx.content, battle)  # 三方混戰（裁決 22）：守將的池子照兩軍到場的人數定
     if battle.phase != "active":
         return []
     for p in list(battle.participants.values()):
@@ -448,7 +448,7 @@ def watching_battle(ctx, battle: battle_instance.BattleInstance, definition: Bat
     me = battle.participants.get(ctx.state.player.name)
     if me is not None:
         return me.away
-    if battle.siege is not None and not siege.slots(battle.siege, ctx._conquest_side()):
+    if battle.siege is not None and not siege_rules.slots(battle.siege, ctx._conquest_side()):
         return True  # 攻城戰（領地爭奪第二批）：這一仗沒有自己站得進去的格（另一軍攻中立地，裁決 8），照常遊玩
     return not muster.at_battle(ctx, definition)
 

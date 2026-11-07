@@ -46,11 +46,11 @@ def _say(book: dict[str, str], fallback: str, fid: str, **kw) -> str:
 
 def _viewer_side(ctx, battle) -> str | None:
     """同 view.battle_gauge：在場上看自己那一邊，還沒加入看自己陣營那一邊；攻城戰站不進任何一格的兩邊都不算我方。"""
-    from tianxia import siege  # 共用規則層（攻城）
+    from . import siege_rules  # 攻城誰站哪一格
 
     p = battle.participants.get(ctx.state.player.name)
     side = p.faction if p is not None else ctx._side()
-    if p is None and battle.siege is not None and not siege.slots(battle.siege, ctx._conquest_side()):
+    if p is None and battle.siege is not None and not siege_rules.slots(battle.siege, ctx._conquest_side()):
         return None
     return side
 

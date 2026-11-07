@@ -5,6 +5,7 @@ import pytest
 
 from conquest_kit import announce, conquest_game, go, join, plain_game
 from tianxia import battle_instance, battlelog, conquest, conquest_day, rules, siege
+from tianxia.features.battle import siege_rules
 from tianxia.state import BattleRecord
 import random
 from conquest_kit import conquest_game, go, join, plain_game
@@ -790,13 +791,13 @@ def test_nobody_shows_up_is_still_void_even_with_a_guard_helper():
 def test_the_absent_army_cannot_come_late_and_the_scene_says_so():
     game = _game_melee()
     battle = _start(game, _add(game, _open_melee(game), {"甲": "guan"}))
-    assert siege.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
-    assert siege.slots(battle.siege, "guan") == ["guan"]
-    assert siege.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
+    assert siege_rules.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
+    assert siege_rules.slots(battle.siege, "guan") == ["guan"]
+    assert siege_rules.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
     assert battle.siege.absent == "huang"
-    line = siege.scene_line(game.content, battle.siege, battle)
-    assert line.startswith(siege.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
-    assert siege.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
+    line = siege_rules.scene_line(game.content, battle.siege, battle)
+    assert line.startswith(siege_rules.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
+    assert siege_rules.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
 
 
 # ── 原 test_conquest_letter.py（整檔搬進來） ──

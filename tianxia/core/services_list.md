@@ -57,8 +57,8 @@
 共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
 # battle（全部拆包第 6 批：PM 定的「siege.py 不搬，這一批用到的名字列進共用段、標主人」）
 - 共用規則層的名字（不是 Game 上的、也不在這個模組；包直接 import 那個模組）：`siege.title`（攻城戰的名字「攻城・地點」）、
-  `siege.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、`siege.verdict`（誰贏、大勝或險勝）——主人：共用規則層
-  （地盤與攻城；總表附錄甲，`tianxia/siege.py` 不搬）。第 11 批開了共用規則層的名單（`tianxia/core/registry.SHARED`），`siege` 登記在上面：
+  ——主人：共用規則層；`siege_rules.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、`siege_rules.verdict`（誰贏、大勝或險勝）第二輪第 97 批進了決戰包 `features/battle/siege_rules.py`，不是共用規則層了
+  （`tianxia/siege.py` 留開集結、留守、名字、內容驗證）。第 11 批開了共用規則層的名單（`tianxia/core/registry.SHARED`），`siege` 登記在上面：
   包 import 它不必註「過渡：待搬」（同一行還有別的舊模組的照註）；其餘的共用規則層模組總表第 15 批登記
 
 選單與分派（explore：主動搬六包第 3＋4 批加的這一段）
@@ -70,7 +70,7 @@
 # 不必再一個一個加。上面已經列了的照列一次名字（同上）；三、過渡裡寫成別的主人的 12 個（`odds`、`_squad_encounter`、`_pill_find`、
 # `_scrap_find`、`_push_progress`、`_conquest_side`、`_spar_power`、`_spar_mirror`、`_raid_key`、`_drill_gains`、`_drills_with`、
 # `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準；那幾行第 16 批合進 develop 時去重了（三、過渡留一句記它們原本寫的用法）。
-共用規則層的函式怎麼寫（第 6 批的 `siege.title`、`siege.settle`、`siege.verdict` 那一條一起定）：**不列在這張清單**。這張清單只管 Game 上的
+共用規則層的函式怎麼寫（第 6 批的 `siege.title`、`siege.settle`、`siege.verdict` 那一條一起定；後兩個第二輪第 97 批進了決戰包 `siege_rules.py`）：**不列在這張清單**。這張清單只管 Game 上的
 `ctx.<名字>`（邊界測試只認這個寫法）；共用規則層有哪些模組看 `tianxia/core/registry.SHARED`，包直接 import 那個模組、不註過渡。
 單打服務（戰鬥區；打一場的每一包都用）
 - 大場面判讀：`ctx.is_big(squad)`、
