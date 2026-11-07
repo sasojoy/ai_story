@@ -193,3 +193,13 @@
     } // companionsClick
   } // companionsClick
   registerClicks(companionsClick, ["fig-open", "fig-close", "fig-act", "fig-talk", "fig-log", "fig-log-close", "fig-log-season", "fig-log-more", "letter-open", "letter-read", "letter-decline"]);
+  async function companionsForm(form, data) {
+      if (form.id === "say-form") {
+        if (!data.text.trim()) return;
+        await sayLine(form, data.text.trim());
+      } else if (form.id === "persuade-form") {
+        if (!data.text.trim()) return;
+        await persuadeSay(form, data.text.trim());
+      } // companionsForm
+  } // companionsForm
+  registerForms(companionsForm, ["say-form", "persuade-form"]);

@@ -19,3 +19,17 @@
   function registerClicks(fn, acts) {
     for (const act of acts) CLICKS[act] = fn;
   }
+
+  // 表單分派：包登記自己認的表單（registerForms(tavernForm, ["tav-ask", …])），不照 id 認的寫 "op:<data-op>"；app.js 的 submit 監聽查到就交給它，查不到才走殼自己那條 else-if
+  const FORMS = Object.create(null);
+
+  function registerForms(fn, keys) {
+    for (const key of keys) FORMS[key] = fn;
+  }
+
+  // change 分派：包登記一支（registerChanges(notifyChange)），裡面照舊自己比 ev.target；app.js 的 change 監聽每一支同步叫一次（一個元素只有一包認）
+  const CHANGES = [];
+
+  function registerChanges(fn) {
+    CHANGES.push(fn);
+  }

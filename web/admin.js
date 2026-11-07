@@ -502,3 +502,53 @@
     } // adminClick
   } // adminClick
   registerClicks(adminClick, ["ad-refresh", "ad-result-close", "ad-find", "ad-pick", "ad-gen", "ad-tab", "ad-hold", "admin"]);
+  async function adminForm(form, data) {
+      if (form.id === "ad-player-form") {
+        // 管理者查一個玩家（玩家個人劇情）：查到了畫他的召見、機緣、伏筆三列；查不到的原因寫在表單那一行。抽屜不關
+        const name = (data.name || "").trim();
+        S.adPlayerName = name;
+        if (!name) { S.adPlayer = null; formMsg(form, "先填名號。"); return; }
+        S.adPlayer = await api("/api/admin/player", { name });
+        renderKeepingSheet(); // 查到的那個人就在表單底下：抽屜停在原地（審查 M-2）
+      } else if (form.id === "reset-form") {
+        // 重設密碼也先問一次（G3）。結果寫在表單那一行、也釘在管理頁底下（成了的那一條連臨時密碼一起寫，私下告訴他之前不必再找一次）；
+        // 失敗時欄位留著改，跟改密碼一樣
+        const target = (data.target || "").trim();
+        const temp = String(data.temp || "");
+        S.adResetTarget = target;
+        if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
+        if (temp.length < AD_PW_MIN) { formMsg(form, `臨時密碼至少 ${AD_PW_MIN} 個字（可以按「產生一組」）。`); return; }
+        ask(`重設 ${target} 的密碼，臨時密碼是「${temp}」：他原本的密碼不能再用，確定？`, "確定重設", async () => {
+          // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
+          // 抽屜整個關了就改用提示泡泡講
+          const say = (text, ok = false) => {
+            const now = document.getElementById("reset-form");
+            if (now) formMsg(now, text, ok);
+            else if (text) toast(text);
+            return now;
+          };
+          say("");
+          try {
+            const r = await api("/api/admin/reset_password", data);
+            const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+            if (S.adminPage) {
+              S.adResult = { text: ok ? `${r.message}臨時密碼：${temp}（私下告訴他，登入後到設定改掉）` : r.message, ok };
+              if (ok) { S.adResetTarget = ""; S.adAccounts = null; }
+              renderKeepingSheet();
+            }
+            const now = say(r.message, ok);
+            if (ok && now) now.reset();
+          } catch (e) {
+            say(failText(e));
+          }
+        });
+      } // adminForm
+  } // adminForm
+  registerForms(adminForm, ["ad-player-form", "reset-form"]);
+  async function adminChange(ev) {
+    if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
+      const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
+      if (box && v != null) box.value = v;
+    }
+  } // adminChange
+  registerChanges(adminChange);

@@ -173,3 +173,10 @@
     } // senseClick
   } // senseClick
   registerClicks(senseClick, ["sense-clear", "sense-send"]);
+  async function senseForm(form, data) {
+      if (form.id === "own-name-form") {
+        if (!data.text.trim()) return;
+        await godName(form, data.text.trim());
+      } // senseForm
+  } // senseForm
+  registerForms(senseForm, ["own-name-form"]);

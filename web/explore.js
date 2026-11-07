@@ -40,3 +40,10 @@
     } // exploreClick
   } // exploreClick
   registerClicks(exploreClick, ["gather-wheel"]);
+  async function exploreForm(form, data) {
+      if (form.id === "gather-say-form") {
+        if (!data.text.trim()) return;
+        await gatherSay(form, data.text.trim());
+      } // exploreForm
+  } // exploreForm
+  registerForms(exploreForm, ["gather-say-form"]);

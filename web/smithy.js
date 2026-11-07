@@ -569,3 +569,14 @@
     } // smithyClick
   } // smithyClick
   registerClicks(smithyClick, ["divine-keep", "shop-tab", "trade-up", "trade-sell", "shop-more", "shop-kind", "shop-cell", "shop-brew", "shop-slot", "shop-go", "shop-furnace", "shop-unwrap", "shop-keep", "shop-wield", "shop-dismantle", "rack-repair", "rack-temper", "rack-pick", "rack-melt", "dv-cell", "shop-divine-keep"]);
+  async function smithyForm(form, data) {
+      if (form.dataset && form.dataset.op === "shop-name-divine") {
+        // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        const said = await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        if (document.getElementById("shop-name-divine-" + form.dataset.id)) { S.divineWhy[form.dataset.id] = said; renderShop(); } // 被拒的原因留在表單裡（FB-193）
+        const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
+      } // smithyForm
+  } // smithyForm
+  registerForms(smithyForm, ["op:shop-name-divine"]);

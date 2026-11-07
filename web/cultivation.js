@@ -1007,3 +1007,34 @@
     } // cultivationClick
   } // cultivationClick
   registerClicks(cultivationClick, ["hero-tab", "attr-help", "xinde-more", "hero-move-show", "hero-move-go", "hero-node", "self-sec", "drawer-close", "ins-filter", "kind", "mx", "art-info", "lib-filter", "lib-all", "melt-mode", "melt-pick", "melt-pick-ins", "melt-shown", "melt-weak", "melt-open", "melt-clear", "melt-go", "rack-all", "ins-open", "slot-pick", "slot-in", "ascend-ok", "slot-out", "person", "wield", "feed", "release-mate", "teach", "bind-art", "dismantle", "switch", "art", "cultivate", "melt", "melt-insight"]);
+  async function cultivationForm(form, data) {
+      if (form.id === "name-art") {
+        // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name", { name: data.name });
+        // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
+        const again = document.querySelector('#name-art input[name="name"]');
+        if (again && S.menxia && S.menxia.naming) again.value = data.name;
+      } else if (form.dataset && form.dataset.op === "name-divine") {
+        // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
+        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
+        // 定成了那一列不再畫表單，找不到就什麼都不放
+        if (document.getElementById("name-divine-" + form.dataset.id)) {
+          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          renderPage();
+        }
+        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
+      } // cultivationForm
+  } // cultivationForm
+  registerForms(cultivationForm, ["name-art", "op:name-divine"]);
+  async function cultivationChange(ev) {
+    if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
+      meltView()[ev.target.dataset.key] = ev.target.value;
+      renderPage();
+    }
+  } // cultivationChange
+  registerChanges(cultivationChange);

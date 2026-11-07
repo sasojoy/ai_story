@@ -234,3 +234,8 @@
     } // notifyClick
   } // notifyClick
   registerClicks(notifyClick, ["push-how", "push-how-back", "push-test", "push-yes", "push-no"]);
+  async function notifyChange(ev) {
+    if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
+    if (ev.target.classList && ev.target.classList.contains("push-kind")) await pushKind(ev.target.dataset.kind, ev.target.checked); // 五種各一個開關
+  } // notifyChange
+  registerChanges(notifyChange);

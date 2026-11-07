@@ -1092,3 +1092,16 @@
     } // mallClick
   } // mallClick
   registerClicks(mallClick, ["rename-ask", "rename-back", "rename-go", "mall-open", "mall-moves", "mall-goto", "mall-close", "mall-tab", "mall-pick", "mall-cat", "look-sub", "prompt-ex-more", "prompt-ex", "look-pick", "look-seg", "look-filter", "look-more", "look-fold", "look-sell", "look-redo", "move-tab", "move-form", "mall-qty", "mall-claim", "look-wear", "look-order", "look-withdraw", "move-order", "move-preview", "move-show", "look-show", "market-buy", "market-list", "market-unlist", "move-bind", "looks-admin", "ad-show", "mall-retry", "mall-admin"]);
+  async function mallForm(form, data) {
+      if (form.id === "ad-mall-form") {
+        // 管理者查一個人的元寶帳（商城第二批）：查到了畫在表單底下，查不到的原因寫在表單那一行。抽屜不關
+        const name = (data.name || "").trim();
+        S.adMallName = name;
+        S.adMallMsg = ""; S.adMallOk = false;
+        S.adMallNote = String((document.getElementById("ad-mall-note") || {}).value || "");
+        if (!name) { S.adMall = null; formMsg(form, "先填名號或帳號。"); return; }
+        S.adMall = await api("/api/admin/mall", { name });
+        renderKeepingSheet();
+      } // mallForm
+  } // mallForm
+  registerForms(mallForm, ["ad-mall-form"]);

@@ -1960,27 +1960,8 @@
     if (ev.target.id === "adult") { // 成人內容：打開先跳確認卡（勾先放回去，確認了才算），關掉直接送
       if (ev.target.checked) { ev.target.checked = false; S.adultAsk = true; render(); } else await adultSet(false);
     }
-    if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
-      const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
-      if (box && v != null) box.value = v;
-    }
-    if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
-    if (ev.target.classList && ev.target.classList.contains("push-kind")) await pushKind(ev.target.dataset.kind, ev.target.checked); // 五種各一個開關
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
-    if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
-      const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
-      if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }
-    }
-    if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
-      meltView()[ev.target.dataset.key] = ev.target.value;
-      renderPage();
-    }
-    if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
-      const v = craftView();
-      v[ev.target.dataset.key] = ev.target.value;
-      v.all = false;
-      renderPage();
-    }
+    await Promise.all(CHANGES.map((fn) => fn(ev)));
   });
 
   // 狀態列點名號展開／收起更多數值（S1）。鍵盤也按得到（Enter、空白鍵）；狀態列整塊重畫，所以按完把焦點放回去
@@ -2040,147 +2021,26 @@
     const submit = form.querySelector("[type=submit]");
     formMsg(form, ""); // 上一次的結果訊息留到這次送出為止
     try {
+      const filed = FORMS[form.id] || (form.dataset && FORMS["op:" + form.dataset.op]);
+      if (filed) return await filed(form, data);
       if (form.id === "gate-form") {
         submit.disabled = true;
         enter(await api(S.gateMode === "register" ? "/api/register" : "/api/login", data));
-      } else if (form.id === "peer-amount") {
-        const i = S.peer ? S.peer.amountFor : null;
-        const n = Math.floor(Number(data.amount));
-        if (i == null || !(n >= 1)) return;
-        S.peer.amountFor = null;
-        await peerAct(i, false, n, data.choice || "");
-      } else if (form.id === "peer-text") {
-        const i = S.peer ? S.peer.textFor : null;
-        if (i == null) return;
-        S.peer.textFor = null;
-        await peerAct(i, false, 0, "", (data.text || "").trim());
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));
       } else if (form.id === "answer-form" || form.id === "outing-answer") { // outing-answer：走一趟那張卡上的隨口應對（outing.js）
         if (!data.text.trim()) return;
         await answer(form, data.text.trim());
-      } else if (form.id === "say-form") {
-        if (!data.text.trim()) return;
-        await sayLine(form, data.text.trim());
-      } else if (form.id === "persuade-form") {
-        if (!data.text.trim()) return;
-        await persuadeSay(form, data.text.trim());
-      } else if (form.id === "own-name-form") {
-        if (!data.text.trim()) return;
-        await godName(form, data.text.trim());
-      } else if (form.id === "gather-say-form") {
-        if (!data.text.trim()) return;
-        await gatherSay(form, data.text.trim());
-      } else if (form.id === "tav-ask") {
-        if (!data.target.trim()) return;
-        const seek = S.tavAsk !== "ties";
-        if (seek) S.tavWatch = !!data.watch;
-        await tavDo(seek ? "seek" : "ties", { target: data.target.trim(), text: seek && data.watch ? "watch" : "" });
-      } else if (form.id === "tav-q") {
-        if (!data.text.trim()) return;
-        await tavDo("", { text: data.text.trim() }, "tavern_ask");
-        const box = document.querySelector('#tav-q input[name="text"]');
-        if (box && S.shopNote == null) box.value = "";
-      } else if (form.id === "tav-mat") {
-        if (!data.material) return;
-        S.tavMat = data.material;
-        await tavDo("material", { target: data.material });
-      } else if (form.id === "tav-hit") {
-        if (!data.target.trim()) return;
-        S.tavHush = !!data.hush;
-        const tier = S.main.shop.hits.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
-        const name = S.main.shop.hits.tiers.find((t) => t.tier === tier).name;
-        ask(`雇${name}去找${data.target.trim()}？`, "雇", () => tavDo("hit", { target: data.target.trim(), text: `${tier}${data.hush ? ":hush" : ""}` }));
-      } else if (form.id === "tav-wall") {
-        if (!data.text.trim()) return;
-        await tavDo("wall", { text: data.text.trim() });
-        const box = document.querySelector('#tav-wall input[name="text"]');
-        if (box && !(S.shopNote || "").startsWith("一句最多")) box.value = "";
       } else if (form.id === "free-form" || form.id === "arena-free") {
         if (!data.text.trim()) return;
         await doMain(["duel_text", "seal_text", "feast_text"].includes(form.dataset.op) ? form.dataset.op : "battle_text", { text: data.text }); // 決戰、奪璽或頭目戰的放手一搏
-      } else if (form.id === "name-art") {
-        // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
-        if (!data.name.trim()) { toast("先取個名字。"); return; }
-        await mx("name", { name: data.name });
-        // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
-        const again = document.querySelector('#name-art input[name="name"]');
-        if (again && S.menxia && S.menxia.naming) again.value = data.name;
-      } else if (form.dataset && form.dataset.op === "name-divine") {
-        // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
-        if (!data.name.trim()) { toast("先取個名字。"); return; }
-        await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
-        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
-        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
-        // 定成了那一列不再畫表單，找不到就什麼都不放
-        if (document.getElementById("name-divine-" + form.dataset.id)) {
-          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-          renderPage();
-        }
-        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
-        if (again) again.value = data.name;
-      } else if (form.dataset && form.dataset.op === "shop-name-divine") {
-        // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）
-        if (!data.name.trim()) { toast("先取個名字。"); return; }
-        const said = await shopMx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
-        if (document.getElementById("shop-name-divine-" + form.dataset.id)) { S.divineWhy[form.dataset.id] = said; renderShop(); } // 被拒的原因留在表單裡（FB-193）
-        const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
-        if (again) again.value = data.name;
-      } else if (form.id === "ad-mall-form") {
-        // 管理者查一個人的元寶帳（商城第二批）：查到了畫在表單底下，查不到的原因寫在表單那一行。抽屜不關
-        const name = (data.name || "").trim();
-        S.adMallName = name;
-        S.adMallMsg = ""; S.adMallOk = false;
-        S.adMallNote = String((document.getElementById("ad-mall-note") || {}).value || "");
-        if (!name) { S.adMall = null; formMsg(form, "先填名號或帳號。"); return; }
-        S.adMall = await api("/api/admin/mall", { name });
-        renderKeepingSheet();
-      } else if (form.id === "ad-player-form") {
-        // 管理者查一個玩家（玩家個人劇情）：查到了畫他的召見、機緣、伏筆三列；查不到的原因寫在表單那一行。抽屜不關
-        const name = (data.name || "").trim();
-        S.adPlayerName = name;
-        if (!name) { S.adPlayer = null; formMsg(form, "先填名號。"); return; }
-        S.adPlayer = await api("/api/admin/player", { name });
-        renderKeepingSheet(); // 查到的那個人就在表單底下：抽屜停在原地（審查 M-2）
       } else if (form.id === "pw-form") {
         // 改密碼、重設密碼一律回 200，訊息就是結果（失敗時寫原因）；成功才清空欄位，失敗留著讓人改
         const r = await api("/api/password", data);
         const ok = r.message === "密碼已更新。";
         formMsg(form, r.message, ok);
         if (ok) form.reset();
-      } else if (form.id === "reset-form") {
-        // 重設密碼也先問一次（G3）。結果寫在表單那一行、也釘在管理頁底下（成了的那一條連臨時密碼一起寫，私下告訴他之前不必再找一次）；
-        // 失敗時欄位留著改，跟改密碼一樣
-        const target = (data.target || "").trim();
-        const temp = String(data.temp || "");
-        S.adResetTarget = target;
-        if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
-        if (temp.length < AD_PW_MIN) { formMsg(form, `臨時密碼至少 ${AD_PW_MIN} 個字（可以按「產生一組」）。`); return; }
-        ask(`重設 ${target} 的密碼，臨時密碼是「${temp}」：他原本的密碼不能再用，確定？`, "確定重設", async () => {
-          // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
-          // 抽屜整個關了就改用提示泡泡講
-          const say = (text, ok = false) => {
-            const now = document.getElementById("reset-form");
-            if (now) formMsg(now, text, ok);
-            else if (text) toast(text);
-            return now;
-          };
-          say("");
-          try {
-            const r = await api("/api/admin/reset_password", data);
-            const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
-            if (S.adminPage) {
-              S.adResult = { text: ok ? `${r.message}臨時密碼：${temp}（私下告訴他，登入後到設定改掉）` : r.message, ok };
-              if (ok) { S.adResetTarget = ""; S.adAccounts = null; }
-              renderKeepingSheet();
-            }
-            const now = say(r.message, ok);
-            if (ok && now) now.reset();
-          } catch (e) {
-            say(failText(e));
-          }
-        });
       }
     } catch (e) {
       if (submit) submit.disabled = false;

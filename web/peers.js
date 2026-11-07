@@ -444,3 +444,25 @@
     } // peersClick
   } // peersClick
   registerClicks(peersClick, ["peer", "peer-close", "peer-answer", "peer-act", "peer-pick", "here-more", "calls-more", "party-leave", "renown-peer", "mt-edit", "mt-close", "mt-ink", "mt-pen", "mt-undo", "mt-clear", "mt-title", "mt-shuffle", "mt-save", "mt-zoom-peer", "mt-zoom-mine", "mt-zoom-box", "mt-unzoom", "mt-report"]);
+  async function peersForm(form, data) {
+      if (form.id === "peer-amount") {
+        const i = S.peer ? S.peer.amountFor : null;
+        const n = Math.floor(Number(data.amount));
+        if (i == null || !(n >= 1)) return;
+        S.peer.amountFor = null;
+        await peerAct(i, false, n, data.choice || "");
+      } else if (form.id === "peer-text") {
+        const i = S.peer ? S.peer.textFor : null;
+        if (i == null) return;
+        S.peer.textFor = null;
+        await peerAct(i, false, 0, "", (data.text || "").trim());
+      } // peersForm
+  } // peersForm
+  registerForms(peersForm, ["peer-amount", "peer-text"]);
+  async function peersChange(ev) {
+    if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
+      const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
+      if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }
+    }
+  } // peersChange
+  registerChanges(peersChange);

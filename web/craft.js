@@ -900,3 +900,12 @@
     } // craftClick
   } // craftClick
   registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub"]);
+  async function craftChange(ev) {
+    if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
+      const v = craftView();
+      v[ev.target.dataset.key] = ev.target.value;
+      v.all = false;
+      renderPage();
+    }
+  } // craftChange
+  registerChanges(craftChange);
