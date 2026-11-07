@@ -204,3 +204,13 @@ def test_the_howto_page_says_talk_spends_xinshen(on, game):
 
     text = howto.page(on, game.state.world, recruitable=False)
     assert "扣心神：按選項 1 點、自己說 2 點" in text and "還能聊到第 8 輪" in text
+
+
+def test_the_real_incense_goes_on_sale_with_the_switch():
+    """凝神香直接上架（Joy 2026-11-07「凝神香要直接上架」）：正式內容只看心神的開關，不等日期。"""
+    from conftest import real_content
+
+    content = real_content()
+    for item_id in ("xinshen_5", "xinshen_30"):
+        sale = content.mall[item_id].on_sale
+        assert sale.rule == xinshen.EFFECT and sale.start is None and sale.end is None
