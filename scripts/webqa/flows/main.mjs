@@ -102,6 +102,7 @@ export const flows = [
       }
       await c.step(ACT("battle-shut"), "bt_shut", { light: true });
       await c.step(ACT("battle-open"), "bt_open", { light: true });
+      await c.leave(); // the page would see the end first and play the overlay away (wave D: on one side only, 17 rows on 025_bt_end)
       for (let hop = 0; hop < 14; hop++) {
         const m = await c.api("p1", "/api/main");
         if (!m.json || !m.json.battle_gauge) break;
