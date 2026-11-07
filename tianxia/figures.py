@@ -23,11 +23,16 @@ outlets/tests/test_silver_outlets；slow 的 sortie/tests/test_bot_policy_conque
 world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from . import calendar, push, relations, seal_acts
 from .calendar import DAY
+from .core.content_base import week7 as _week7
+from .models import Condition
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import FigureState, GameState, WorldState
+from .zh import to_traditional
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
 FATE_STATUS = {"退場": "retired", "重創": "crippled", "下獄": "jailed", "到任": "active"}
@@ -682,3 +687,87 @@ def mood_scale(state: GameState, content: Content, fid: str) -> float:
     mood = mood_of(state, content, fid)
     tuning = content.config.figure_life
     return tuning.hurt_scale if mood == "負傷" else tuning.grief_scale if mood == "悲憤" else 1.0
+
+
+# ── 內容驗證（第二輪第 100 批）──
+def _condition_flags(c: Content) -> set[str]:
+    """劇本與事件的條件（含 any_of 底下的）讀到的世界旗標（world_flags_all／world_flags_none）。"""
+    flags: set[str] = set()
+
+    def walk(obj) -> None:
+        if isinstance(obj, Condition):
+            flags.update(obj.world_flags_all)
+            flags.update(obj.world_flags_none)
+        if isinstance(obj, BaseModel):
+            for name in type(obj).model_fields:
+                walk(getattr(obj, name))
+        elif isinstance(obj, (list, tuple)):
+            for item in obj:
+                walk(item)
+        elif isinstance(obj, dict):
+            for item in obj.values():
+                walk(item)
+
+    walk(c.scenario)
+    walk(list(c.events.values()))
+    return flags
+
+
+def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
+    """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
+    隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物，而且人物的 id 就是對話人物的 id（伏筆用對話人物的 id 讀人物的
+    狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
+    from .core.features import check_at  # noqa: PLC0415  登記的包延後載入（包會 import 這一層）
+
+    faction_ids = [f.id for f in c.scenario.factions]
+    owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
+    week7 = _week7(c)
+    for fid, fig in c.figures.items():
+        where = f"大勢人物 {fid}"
+        if fig.character is not None:
+            known(where, [fig.character], c.characters, "人物")
+            need(owner.setdefault(fig.character, fid) == fid, f"{where}：人物 {fig.character} 已經是 {owner[fig.character]} 了")
+            need(fig.character == fid, f"{where}：對話人物要跟人物 id 一樣（現在是 {fig.character}）——伏筆用人物 id 找他的狀態")
+        known(where, [fig.faction], faction_ids, "陣營")
+        if fig.front is not None:
+            known(where, [fig.front], front_ids, "戰線")
+        known(where, [fig.location], c.locations, "地點")
+        known(where, [fig.squad], c.squads, "敵方隊伍")
+        squad = c.squads.get(fig.squad)
+        need(squad is None or squad.faction == fig.faction, f"{where}：隊伍 {fig.squad} 的陣營要跟人物一樣（{fig.faction}）")
+        need(
+            fig.active_from_week <= c.config.season_weeks,
+            f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
+        )
+        need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
+            not c.config.season21 or week7 or fig.active_from_week <= 1 or fig.active_from_day is not None,
+            f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
+        )
+        need(  # 7 天濃縮季同上，寫 7 天的那一份
+            not week7 or fig.active_from_week <= 1 or fig.active_from_day7 is not None,
+            f"{where}：7 天濃縮季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day7",
+        )
+        need(
+            fig.active_from_day7 is None or fig.active_from_day7 < 7,
+            f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
+        )
+        need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        check_at("stances", c, need, where, fig)
+        check_at("errands", c, need, where, fig)
+        if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
+            need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
+        meet = c.characters.get(fig.character) if fig.character is not None else None
+        if meet is not None and fig.start_status == "active":  # 挑戰每季都有設計 3.3：14 天的季沒人退場時求見的地方跟現在一樣
+            spot = meet.talk_at or meet.recruit_at
+            need(spot == fig.location,
+                 f"{where}：開季在場、有對話人物的人物，開季地點（{fig.location}）要等於 {fig.character} 的 talk_at（{spot}）")
+        if fig.successor is None:
+            continue
+        known(where, [fig.successor], c.figures, "大勢人物")
+        heir = c.figures.get(fig.successor)
+        need(heir is None or heir.faction == fig.faction, f"{where}：接位的 {fig.successor} 要跟他同一個陣營")
+        chain, nxt = [fid], fig.successor
+        while nxt in c.figures and nxt not in chain:
+            chain.append(nxt)
+            nxt = c.figures[nxt].successor
+        need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")

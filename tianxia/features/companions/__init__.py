@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
+from tianxia.core.features import ContentSlot
 
 
 class CompanionsFeature(Feature):
@@ -29,6 +30,16 @@ class CompanionsFeature(Feature):
     )
     # 對話紀錄、說過的話、梳理的輪數換季照帶（Game._reset_player_for_new_season；history_start 是它從 dialogue_history 的長度算的，不另認領）
     carried: tuple[str, ...] = ("dialogue_history", "used_dialogue_options", "turns_since_consolidation")
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("stances", lambda *a: checks.check_stances(*a)),
+            ContentSlot("errands", lambda *a: checks.check_errands(*a)),
+            ContentSlot("companions", lambda *a: checks.check_companions(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         return True

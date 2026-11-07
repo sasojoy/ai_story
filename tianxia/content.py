@@ -851,159 +851,6 @@ def check_shop_lines(c: Content, need) -> None:
                 need(bool(c.shop_lines.get(shop, {}).get(key)), f"shop_lines.{shop} 缺少情況 {key}（這間店開著時每一種情況至少一句）")
 
 
-def _condition_flags(c: Content) -> set[str]:
-    """劇本與事件的條件（含 any_of 底下的）讀到的世界旗標（world_flags_all／world_flags_none）。"""
-    flags: set[str] = set()
-
-    def walk(obj) -> None:
-        if isinstance(obj, Condition):
-            flags.update(obj.world_flags_all)
-            flags.update(obj.world_flags_none)
-        if isinstance(obj, BaseModel):
-            for name in type(obj).model_fields:
-                walk(getattr(obj, name))
-        elif isinstance(obj, (list, tuple)):
-            for item in obj:
-                walk(item)
-        elif isinstance(obj, dict):
-            for item in obj.values():
-                walk(item)
-
-    walk(c.scenario)
-    walk(list(c.events.values()))
-    return flags
-
-
-def check_companions(c: Content, need) -> None:
-    """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
-    要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
-    big = {fig.character for fig in c.figures.values() if fig.character}
-    faction_ids = {f.id for f in c.scenario.factions}
-    for cid, ch in c.characters.items():
-        if not ch.recruitable:
-            continue
-        where = f"人物 {cid}"
-        need(cid not in big, f"{where}：大勢人物不能標 recruitable（人物表寫了他）")
-        need(ch.deep_interaction, f"{where}：標了 recruitable 要能深度對話（deep_interaction）")
-        need(ch.side is None or ch.side in faction_ids, f"{where}：side {ch.side} 不是劇本的陣營")
-
-
-def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
-    """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
-    隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物，而且人物的 id 就是對話人物的 id（伏筆用對話人物的 id 讀人物的
-    狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
-    faction_ids = [f.id for f in c.scenario.factions]
-    owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
-    week7 = _week7(c)
-    for fid, fig in c.figures.items():
-        where = f"大勢人物 {fid}"
-        if fig.character is not None:
-            known(where, [fig.character], c.characters, "人物")
-            need(owner.setdefault(fig.character, fid) == fid, f"{where}：人物 {fig.character} 已經是 {owner[fig.character]} 了")
-            need(fig.character == fid, f"{where}：對話人物要跟人物 id 一樣（現在是 {fig.character}）——伏筆用人物 id 找他的狀態")
-        known(where, [fig.faction], faction_ids, "陣營")
-        if fig.front is not None:
-            known(where, [fig.front], front_ids, "戰線")
-        known(where, [fig.location], c.locations, "地點")
-        known(where, [fig.squad], c.squads, "敵方隊伍")
-        squad = c.squads.get(fig.squad)
-        need(squad is None or squad.faction == fig.faction, f"{where}：隊伍 {fig.squad} 的陣營要跟人物一樣（{fig.faction}）")
-        need(
-            fig.active_from_week <= c.config.season_weeks,
-            f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
-        )
-        need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
-            not c.config.season21 or week7 or fig.active_from_week <= 1 or fig.active_from_day is not None,
-            f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
-        )
-        need(  # 7 天濃縮季同上，寫 7 天的那一份
-            not week7 or fig.active_from_week <= 1 or fig.active_from_day7 is not None,
-            f"{where}：7 天濃縮季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day7",
-        )
-        need(
-            fig.active_from_day7 is None or fig.active_from_day7 < 7,
-            f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
-        )
-        need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
-        check_stances(c, need, where, fig)
-        check_errands(c, need, where, fig)
-        if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
-            need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
-        meet = c.characters.get(fig.character) if fig.character is not None else None
-        if meet is not None and fig.start_status == "active":  # 挑戰每季都有設計 3.3：14 天的季沒人退場時求見的地方跟現在一樣
-            spot = meet.talk_at or meet.recruit_at
-            need(spot == fig.location,
-                 f"{where}：開季在場、有對話人物的人物，開季地點（{fig.location}）要等於 {fig.character} 的 talk_at（{spot}）")
-        if fig.successor is None:
-            continue
-        known(where, [fig.successor], c.figures, "大勢人物")
-        heir = c.figures.get(fig.successor)
-        need(heir is None or heir.faction == fig.faction, f"{where}：接位的 {fig.successor} 要跟他同一個陣營")
-        chain, nxt = [fid], fig.successor
-        while nxt in c.figures and nxt not in chain:
-            chain.append(nxt)
-            nxt = c.figures[nxt].successor
-        need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
-
-
-STANCE_MAX = 3  # 一位人物最多幾個心意（整合設計 5.4「2～3 個」）
-
-
-def check_stances(c: Content, need, where: str, fig) -> None:
-    """人物心意（減法季批 6，整合設計 5.4）：要有對話人物（歸類在對話裡）、最多 STANCE_MAX 個、id 不重複、id 不是 stances.NONE；
-    字只用繁體；改做的事裡痕跡的鍵是「地點 id:痕跡名」、地點存在、倍數至少 1。"""
-    if not fig.stances:
-        return
-    need(fig.character is not None, f"{where}：有心意的人物要有對話人物（心意在跟他說話時歸類）")
-    need(len(fig.stances) <= STANCE_MAX, f"{where}：心意最多 {STANCE_MAX} 個（現在 {len(fig.stances)} 個）")
-    ids = [x.id for x in fig.stances]
-    need(len(set(ids)) == len(ids), f"{where}：心意的 id 重複了（{ids}）")
-    for x in fig.stances:
-        at = f"{where} 的心意 {x.id}"
-        need(x.id != "none", f"{at}：id 不能是 none（模型歸不進任何一種時填的）")
-        for text in (x.name, x.hint, x.rumor, x.chronicle):
-            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
-        for key, times in x.action.marks.items():
-            loc, sep, name = key.partition(":")
-            need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
-            need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
-        if x.action.event_daily is not None:  # 生效時開的人物事件（批 6 修正輪）：從探索的池子抽、可重複（每人每天一則由 stances 管）
-            ev = c.events.get(x.action.event_daily)
-            need(ev is not None, f"{at}：event_daily 的事件 {x.action.event_daily} 不存在")
-            if ev is not None:
-                need("explore" in ev.actions and not ev.once and not ev.qiyu and not ev.fortune and ev.free_text is None,
-                     f"{at}：event_daily 的事件 {ev.id} 要是探索抽得到、可重複、沒有隨口應對的事件")
-
-
-ERRAND_SLOTS = ("{place}", "{hero}")  # 託付的字認得的插槽（errands.give、task_text 填）
-
-
-def check_errands(c: Content, need, where: str, fig) -> None:
-    """託付的池子（減法季批 6，整合設計 5.5、5.9）：要有對話人物（信是他寫的）、id 不重複、地點存在；勸降要寫 persuade（勸不成打的隊伍存在、
-    痕跡是「地點 id:痕跡名」、推的線是 front 或戰線 id），其他兩種不寫；寫了 stance 要是他自己的心意；字只用繁體、只用認得的插槽。"""
-    if not fig.errands:
-        return
-    need(fig.character is not None, f"{where}：有託付的人物要有對話人物（託付以他的信送到）")
-    ids = [d.id for d in fig.errands]
-    need(len(set(ids)) == len(ids), f"{where}：託付的 id 重複了（{ids}）")
-    stance_ids = {x.id for x in fig.stances}
-    lines = {t.id for t in c.scenario.trends} | {"front"}
-    for d in fig.errands:
-        at = f"{where} 的託付 {d.id}"
-        need(d.target in c.locations, f"{at}：地點 {d.target} 不存在")
-        need(d.stance is None or d.stance in stance_ids, f"{at}：心意 {d.stance} 不是他的心意（{sorted(stance_ids)}）")
-        need((d.kind == "persuade") == (d.persuade is not None), f"{at}：勸降才寫 persuade、勸降一定要寫")
-        for text in (d.task, d.text, d.to):
-            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
-            need(not [s for s in re.findall(r"\{[^}]*\}", text) if s not in ERRAND_SLOTS], f"{at}：只認得 {ERRAND_SLOTS}（{text}）")
-        if d.persuade is not None:
-            need(d.persuade.foe in c.squads, f"{at}：勸不成打的隊伍 {d.persuade.foe} 不存在")
-            for key in d.persuade.marks:
-                loc, sep, name = key.partition(":")
-                need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
-            need(set(d.persuade.trend) <= lines, f"{at}：推的線只能是 front 或戰線 id（{sorted(d.persuade.trend)}）")
-
-
 RECRUITER_SLOTS = ("{本週}", "{每週}")  # 入伍段引薦人的話裡照軍令多久一道換的字（enlist.SLOTS，FB-502）
 
 
@@ -1461,6 +1308,7 @@ def validate(c: Content) -> None:
     from .conquest import check_conquest_blocks  # noqa: PLC0415
     from .forge_secrets import validate_forge_secrets, validate_named_clash, validate_tier4_named  # noqa: PLC0415
     from .core.features import check_at  # noqa: PLC0415
+    from .figures import check_figures  # noqa: PLC0415
 
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
@@ -2475,7 +2323,7 @@ def validate(c: Content) -> None:
                 need(first == f"{fid}:{x.id}", f"大勢人物 {fid} 的心意 {x.id}：事件 {x.action.event_daily} 已經掛在 {first}")
     check_relations(c, need, known)
     check_itineraries(c, need, known)
-    check_companions(c, need)
+    check_at("companions", c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
