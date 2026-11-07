@@ -130,6 +130,12 @@ def _selectors(css: str) -> list[str]:
     return [s.strip() for s in re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.S))]
 
 
+def test_index_loads_style_then_map_then_shop():
+    """第 86 批 link 的位置就是行為：這三支排在各包的樣式前面、先後固定。shop.css 刻意不登記成哪一包的（契約測試查不到它），只有這條查 / 有沒有載它。"""
+    order = re.findall(r'href="/static/([^"]+\.css)"', (ROOT / "web" / "index.html").read_text(encoding="utf-8"))
+    assert order[:3] == ["style.css", "map.css", "shop.css"]
+
+
 def test_style_css_stays_free_of_the_cut_prefixes():
     """靜默失效（第二輪總表第九節第 3 條）：接在 style.css 尾巴覆寫同權重的輿圖、店面規則，git 不報衝突，但 map.css、shop.css 載入得比較晚，蓋不掉。"""
     hits = [s for s in _selectors((ROOT / "web" / "style.css").read_text(encoding="utf-8")) if CUT_PREFIXES.search(s)]
