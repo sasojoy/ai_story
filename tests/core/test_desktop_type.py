@@ -1,7 +1,7 @@
 """電腦寬的店面字級（FB-305，企劃者 10/16 從對照圖選甲）：web/shop.css 店面那一段（三間店、擂台、素材頁與軍需帳）每一條寫了字級的
 規則，在 @media (min-width: 641px) 裡都有一條同一個選擇器（不是掛在 .shop-layer／.shop-board 底下的前面加 :where(.shop-layer)，
 權重不變）、字級 ×1.3（四捨五入到 0.5px）的，而且先後跟店面那一段一樣；手機（沒有 media 的那一條）的值不動。
-功能包切出去的樣式（開發規範手冊 3.7；FEATURES 登記的 web 裡的 .css，現在是商城的 web/mall.css）一起管：那個檔裡掛在店面那一層
+功能包切出去的樣式（開發規範手冊 3.7；FEATURES 登記的 web 裡的 .css，現在是商城的 web/mall.css、形象的 web/looks.css）一起管：那個檔裡掛在店面那一層
 （.shop-layer／.shop-board）底下、不在 media 裡的規則算店面那一段，接在 shop.css 那一段後面（index.html 照這個順序載入）；
 電腦寬那一段同樣接在 shop.css 的後面。
 讀的是 CSS 原文：webharness 沒有排版，量不到 computed style（實機比對在 docs/superpowers/feedback/ 的 FB-305 那一筆）。"""
