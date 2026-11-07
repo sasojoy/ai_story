@@ -12,7 +12,6 @@ from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from . import arts as arts_mod
-# （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
@@ -71,29 +70,16 @@ from .core.services import HutReward  # guide（全部拆包第 22 批）：序�
 # 兩個測試檔在拿；choose、answer_event 照舊掛 @_outing_watch）
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
-# explore
-# tavern（擺在宴客與出陣之間：別條拆包線在 core.services 之後、出陣那一行之後各加一段，不貼在一起）
 
 if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
     from .features.companions import companion_agent, parley
     from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
-# cultivation（全部拆包第 23 批「修練」）：裝飾器搬進核心的共用的小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing；籌備中那兩句第 24 批先搬了，
-# `# sense` 那一行 import）；
-# 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
 from .core.services import not_while_preparing as _not_while_preparing
-# seal（全部拆包第 27 批）：Game 上玉璽碎片季流程的 11 個一行委派（核心原位、殼的 ADMIN_ACTIONS、決戰包經 ctx、測試與量表腳本叫的）。
-# 第 28 批（玉璽二）：碎片卡、獨門行動、奪璽單挑、管理者六個也搬進包（Game 留 22 個一行委派）；頂端的 seal_rules 與 seal_duel 沒人用了，拿掉
-# smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 12 個一行委派（server、假人、測試與核心原位的選單叫的）
-# checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
 from .core.services import PILL_FOUND, checkin_on
-# story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
 from . import story_base
-# checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
-# 軍令卡、押糧、第 2 階與第 3／4 階行動、席次抄帳、管理者的軍令與召見的 15 個一行委派
-# territory_acts（全部拆包第 46 批）：戰書與攻城時段、22:00 換天與分紅補送、〈天下形勢〉、地盤畫面、管理者救場的 20 個一行委派
 from .state import (
     ONBOARDING_VERSION, PLAYER, GameState, JournalEntry,
     new_game_state,
@@ -113,9 +99,6 @@ from .core import pills  # 回體丹的本體（第二輪第 80 批；Game 上�
 from .core.pills import PILL_DAY_FULL, REFILL_FULL, REFILL_HUT, REFILL_LINE, REFILL_TITLE, _cn_count  # noqa: F401  tests/bots/test_pill_per_day.py、test_stamina_refill.py 從 engine 拿
 from .core import signature_base  # 本命兵器的名字照內容讀（core_seams，全部拆包第 55 批：清失效參照 signature 那一格；原本經舊名 signature_arms 讀）
 from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
-# peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
-# 名帖遞帖的登記（mingtie_card）改在包載入時做；原本那兩行 invites、social 的 import 是切磋、論武還在原位用的，第 38 批搬進包之後沒人用，拿掉了
-# peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
 from .core import arena_ranks  # 擂台的名次與稱號（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
@@ -123,29 +106,12 @@ from .core import page_view, status_view  # core_views（第二輪第 81 批）�
 HOUR = 3600
 DAY = 86400
 SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
-# （SECT_LABEL：拜入門派那一顆的字，全部拆包第 35 批搬進陣營包 features/faction/join_actions.py）
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
 
-# （TollFacts、LOW_HP_RATIO 搬進核心的單打服務 tianxia/core/combat.py，第二輪第 79 批；_points 是死碼，拿掉。上面 import 回 LOW_HP_RATIO，`from tianxia.engine import LOW_HP_RATIO` 照舊）
-
-# （RANK_ACTION_PREFIX 搬進核心的共用的字 core/services.py，全部拆包第 33 批；上面 import 回來，`from tianxia.engine import RANK_ACTION_PREFIX` 照舊）
-# （FREE_TEXT_OPTION、EVIL_ANNAL 與 FreeTextRequest、FreeTextOutcome 搬進核心的事件檢定 tianxia/core/event_check.py，全部拆包第 16 批；
-# 上面 import 回來，`from tianxia.engine import FREE_TEXT_OPTION` 照舊拿得到）
-# （SAY_OPTION、PLAN_OPTION、ROAD_SAY、TEXT_TALKS、SAY_MAX、say_text 搬進核心的共用的字與小函式 tianxia/core/services.py，全部拆包第 20 批；
-# 上面 import 回來，`from tianxia.engine import SAY_OPTION` 照舊拿得到）
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
 ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）；寫字面（＝ features/bout/arena_rules.YIELD_ID）：單挑搬成包之後模組層不碰包
-# （RAID_AFTER_CLASH、RAID_SHIELD_CLASH 隨截殺搬進玩家互動包 raid_actions.py，全部拆包第 38 批）
-
-
-# （管理者「立刻發軍令」「立刻輪替席次」回話用的 ADMIN_REISSUE_*、ADMIN_ROTATE_* 五個常數，全部拆包第 33 批搬進 tianxia/features/military/admin_actions.py）
-
-
-# （RaidSpoils 全部拆包第 39 批搬進 tianxia/core/services.py；上面 import 回來，`from tianxia.engine import RaidSpoils` 照舊是同一個類別）
-# （管理者給的伏筆片段、機緣線索在玩家江湖紀錄裡的標題 HEARD_TITLE，全部拆包第 34 批搬進 tianxia/features/military/opp_actions.py）
-# （FIGHT_LEFT、FIGHT_CHANGED、FIGHT_GONE_LINES 搬進 tianxia/core/combat.py，第二輪第 79 批；上面 import 回 FIGHT_GONE_LINES，server 照舊從 engine 拿）
 
 
 class Refused(list):
@@ -153,17 +119,10 @@ class Refused(list):
     所以伺服器要把這句話直接傳去網頁跳提示（server.api_choose 看 isinstance）。是 list 的子類，其他地方照一般的訊息清單用。
     不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
 
-
-# 賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL（全部拆包第 24 批）與裝飾器 _not_while_preparing（第 23 批）搬進核心的共用的字與小函式
-# （tianxia/core/services.py）：上面 import 回來，`from tianxia.engine import PREPARING_REFUSAL` 照舊拿得到
 GROWTH_PREFIX = "growth:"  # 開季準備卡上挑成長配比的鈕（growth:<配比>；growth:custom 只打開自己配的那一塊）
 GROWTH_LOCKED = "這一季的成長配比已經定了，下一季開季再挑。"
 GROWTH_CUSTOM_ASK = "（在卡上自己配五項，配好按「定下來」。）"
-# （回體丹那一群的字 REFILL_*、PILL_DAY_FULL、CN_COUNTS、_cn_count 搬進 tianxia/core/pills.py，第二輪第 80 批；上面 import 回測試從 engine 拿的那幾個。PROLOGUE_REST 不是這一群，留這裡）
 PROLOGUE_REST = "調息（照師父教的吐納，把體力調回來）"  # 序章教體力那一步（打坐 2026-10-12 拿掉，只留這一下）
-
-
-# 頭目戰放手一搏鎖外評估的單子 DuelTextRequest 搬進單挑包（features/bout/duel_rules.py，全部拆包第 12 批）
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
 ONBOARD_SEVEN = 5  # 新手引導重做（老周七步、草廬第 7 步改服丹）的版本章：章是 4 的存檔讀檔時照 prologue.seven_step 換步數
@@ -171,10 +130,7 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）；擂台同
 # （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
-# （叛投 after 位置的 leave_behind 那一格：全部拆包第 35 批改由陣營包登記〔FactionFeature.defection()〕，原本核心代叫的 _DEFECT_AFTER_CORE 拿掉；食言〔parley〕是人物情誼包登記的）
 # core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組）。BUS_ORDER 在 core/features.py；契約測試讀這一份。
-# 懸賞的五格（win、outing、explore、arrive、raid_win 的 bounties）與第 45 批開的 aid 全部拆包第 45 批由懸賞榜包登記（BountiesFeature.bus()），每一列都空了留 {}
-# 玉璽的兩格（outing、battle_end 的 seal）全部拆包第 27 批改由玉璽包登記（SealFeature.bus()）；battle_end 那一列空了留 {}（契約鎖 keys 跟 BUS_ORDER 一樣）
 _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
     "win": {},
     "outing": {},
@@ -245,7 +201,6 @@ def _carry_rack(ctx: Game, old: GameState, fresh: GameState) -> None:
 _SEAM_CORE: dict[str, dict[str, Callable[..., Any]]] = {
     "sync.close": {
         # 搬成包的店（店面登記，第 11 批；酒肆，與全部拆包第 12 批的擂台〔擂台關了、季收了〕）：關了、人被挪走了就收起來（接在舊的五間店後面）
-        # （picking_donate、picking_dadian：全部拆包第 43 批換成銀兩出口包的店面登記，這裡收）
         "shops": lambda ctx: features_core.drop_shops(ctx),
     },
     "sync.deliver": {
@@ -266,7 +221,6 @@ _SEAM_CORE: dict[str, dict[str, Callable[..., Any]]] = {
     "season.carry": {"ties": _carry_ties, "self": _carry_self, "rack": _carry_rack},
     "stale.early": {"resting": _drop_resting},
     "stale.mid": {
-        # （picking_donate、picking_dadian：捐軍備關了、人不在大本營了、銀兩出口這裡一樣都做不了了，全部拆包第 43 批換成銀兩出口包的店面登記，這裡收）
         # 搬成包的店（店面登記，第 11 批；酒肆，與全部拆包第 12 批的擂台〔擂台關了、季收了〕）：關了、人不在那裡了就收起來（接在舊的五間店後面）
         "shops": lambda ctx: features_core.drop_shops(ctx),
         # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
@@ -332,8 +286,6 @@ _MENU_CORE: dict[str, dict[str, Callable[..., Any]]] = {
     "plays": {"options": lambda ctx: features_core.options(ctx)},
     "open": page_view.OPEN_CORE,  # 店面登記的店（第 81 批：格搬進 core/page_view.py，_shop_open 也讀它）
 }
-
-# （走一趟的裝飾器 _outing_watch 搬進核心〔tianxia/core/services.py 的 outing_watch，全部拆包第 24 批〕：上面 import 回來，同一個名字）
 
 
 class Game:
@@ -1075,10 +1027,6 @@ class Game:
                         place=loc.name if loc is not None else "", time=w.marks_fired[mark])
         return True
 
-    # ── 酒肆（企劃者 2026-10-18）：本體在功能包 tianxia/features/tavern/actions.py（主動搬六包第 10 批），這裡留一行委派——server 的
-    # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位的 shop_view（tavern_view）。選單接管那一格、act:tavern、sync 的下線殺手與
-    # 三個 deliver、choose 最後那一下殺手檢查、紀錄標題第 11 批換成接縫掛鉤（酒肆包的 shops、verbs、on_away、deliver_notices、after_action）──
-
     # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
     # 本體在 tianxia/core/combat.py（第二輪第 79 批），這裡留一行委派：server 的鎖外三段式、choose、事件檢定、各包在叫；_narrate 照舊是 staticmethod
 
@@ -1299,10 +1247,6 @@ class Game:
     def _deed_points(self, points: int, *, capped: bool = True) -> int:
         return pushing.deed_points(self, points, capped=capped)
 
-    # ── 人物心意（減法季批 6）：本體在 tianxia/features/companions/actions.py（全部拆包第 19 批），這裡留一行委派 ────────────
-
-    # ── 託付與勸降（減法季批 6）：本體同上 ────────────
-
     _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
     _talk_turn: companion_agent.PreparedTurn | None = None  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給人物情誼包的 choose 掛鉤（服務清單四、寄放）
     _talk_said: str | None = None
@@ -1311,34 +1255,11 @@ class Game:
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         return event_check.add_gamble_narration(self, outcome, narration)
 
-    # ── 有所感與頓悟：本體在功能包 tianxia/features/sense/actions.py（全部拆包第 24 批），這裡留一行委派 ──
-    # （_sense、_sense_apply 只有包裡叫：sense: 由 choose 掛鉤接走；epiphany_names、sense_draw 在包裡掛核心的 outing_watch）
-
-    # ── 有所感的服務（全部拆包第 24 批）：核心原位（選單、清失效參照、舊探索、choose、紀錄標題）與別的包（探索、新手引導）叫的，
-    # 本體在 sense_actions；探索包的查詢服務 _rare_boost（有所感擲特殊頓悟乘它）──
-
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
-        # （faction：投靠、確認、選邊、改幫；defect：叛投。標題全部拆包第 35 批換成陣營包 choose 掛鉤的 Outcome.title，拿掉；sect 沒有自己的支，掉到最後的「提前出關」）
-        # （move：「前往 <地點名>」，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
-        # （talk：「交談・某人」、parley:road：「同行・某人」，第 20 批審查換成人物情誼包 choose 掛鉤的 Outcome.title，拿掉）
-        # （call：「求見・某某」「收回名帖」，全部拆包第 21 批換成交友求見包 choose 掛鉤的 Outcome.title，拿掉）
-        # （sense：「有所感・場景」，全部拆包第 24 批換成有所感包 choose 掛鉤的 Outcome.title，拿掉）
-        # （learn：「學藝・<武學名>」，全部拆包第 23 批換成修練包 choose 掛鉤的 Outcome.title，拿掉）
-        # （fs：「作罷」「<這一趟>・<所在>」，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
-        # （road：折返跟「前往」同一個標題、路上小事寫它自己的名字，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
-        # （opp：機緣的標題，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
-        # （bounty：「懸賞榜」，全部拆包第 45 批換成懸賞榜包 choose 掛鉤的 Outcome.title，拿掉）
-        # （smith：鐵匠鋪的標題，全部拆包第 41 批換成鐵匠鋪包 choose 掛鉤的 Outcome.title，拿掉）
-        # （market：馬市的標題，全部拆包第 42 批換成裝備包 choose 掛鉤的 Outcome.title，拿掉）
-        # （donate、dadian 的標題：全部拆包第 43 批換成銀兩出口包 choose 掛鉤的 Outcome.title 與 act 子動詞的 Verb.title，拿掉）
-        # （kind == "aid"、"plan"：標題由大勢人物包的 choose 掛鉤給，全部拆包第 31 批）
-        # （kind == "arena"：報名、挑人的標題由單挑包的 choose 掛鉤給，全部拆包第 12 批）
-        # （kind == "invite"：標題由玩家互動包的 choose 掛鉤給，全部拆包第 37 批）
-        # （story：寫線的名字，全部拆包第 30 批換成一條線包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批）
             return self._epiphany_title()
         # act 子動詞的標題都由主人給（接縫掛鉤，第 11 批；其餘的全部拆包第 57 批接上，帶後綴的走 Verb.tail_title）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問，
@@ -1466,10 +1387,6 @@ class Game:
         name = c.config.stamina_pill_name
         return [PILL_FOUND.format(name=name), f"{name} +1"]
 
-    # ── 減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 的 explore_one）：本體在功能包 tianxia/features/explore/explore_actions.py（主動搬六包第 3＋4 批），這裡留一行委派 ──
-
-    # ── 走一趟（企劃者 2026-10-29～30）：本體在功能包 tianxia/features/explore/outing_actions.py（主動搬六包第 3＋4 批），這裡留一行委派 ──
-
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。
         減法季探索一顆開著時「探索」照舊是 act:explore、出現在同樣的那幾種選單上，判斷不必換訊號；序章另外擋（呼叫端）。"""
@@ -1562,10 +1479,6 @@ class Game:
     def _battle_neili_cap(self) -> float:
         return combat.battle_neili_cap(self)
 
-    # ── 好幾場戰鬥並存（領地爭奪第二批 Task 10）：時刻表決戰一場（world.get_battle）＋攻城戰一串（world.get_sieges）──
-    # 攻城那幾個（_sieges、_definition_of、_tick_siege、_cancel_siege）的本體在 tianxia/features/battle/sieges.py（全部拆包第 6 批）；推進與結算
-    # （我在哪一場、一回合一回合推、收兵、收場與論功）的本體在 tianxia/features/battle/progress.py（全部拆包第 8 批），這裡留一行委派。
-
     def _without_timetable(self, msgs: list[str]) -> list[str]:
         """推進的訊息拿掉時刻表大事的公告（world.timetable.resolve 回的「【江湖大事】＋公告全文」）：那些由
         _deliver_big_events 補進每個人的江湖紀錄，不再只進剛好推進到那一刻的人的那一則。
@@ -1622,15 +1535,8 @@ class Game:
         self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))  # 名聲設計 3.2
         self._save_season()  # 補到第幾個人記在共用賽季裡
 
-    # ── 全服決戰收場補送（戰報、江湖紀錄、軍餉、行狀、戰功；FB-027）：本體在 tianxia/features/battle/view.py（主動搬六包第 5 批），這裡留一行委派 ──
-
-    # ── 全服決戰的畫面（戰局條、攻城條、場景、一回合一段的戰況、點名、已送出／在場）：本體在 tianxia/features/battle/view.py，這裡留一行委派 ──
-
     def event_free_text_prompt(self) -> str | None:
         return event_check.event_free_text_prompt(self)
-
-    # ── 決戰的放手一搏（輸入框、鎖外三段式的 A、C 段）與補劇情（server.narrate_once 的 A、C 段）：本體在 tianxia/features/battle/view.py，
-    # 這裡留一行委派 ──
 
     def _present(self, event: Event, action: str | None = None) -> list[str]:
         return event_check.present(self, event, action)
@@ -1665,21 +1571,14 @@ class Game:
     def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         return combat.drill_gains(self, squad, share, source, echo)
 
-    # ── 出陣（出陣探索與地盤設計第二節）：本體在功能包 tianxia/features/sortie/actions.py（主動搬六包第 1 批），這裡留一行委派 ──
-
     def _push_progress(self, loc_id: str, nominal: float, source: str, how: str | None = None) -> list[str]:
         return pushing.push_progress(self, loc_id, nominal, source, how)
 
     def _event_progress(self) -> list[str]:
         return pushing.event_progress(self)
 
-    # ── 一條線（特殊事件與特殊頓悟的底座）：本體在 tianxia/features/story/actions.py（全部拆包第 30 批），這裡留一行委派 ──
-    # （_story_act、_story_fight、_story_bout 只有包裡叫：story: 由 choose 掛鉤接走，不留）
-
     def event_tier(self) -> dict | None:
         return event_check.event_tier(self)
-
-    # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）、出陣的鈕、出陣、獎勵、守：本體在 tianxia/features/sortie/actions.py，這裡留一行委派 ──
 
     # 天下聞名點名、立功給名望、戰報的經驗（_famed_news、_deed_fame、_record_exp）：本體在 tianxia/core/combat.py（第二輪第 79 批）
     def _famed_news(self, place: str, foe: str, tier: str) -> None:
@@ -1690,9 +1589,6 @@ class Game:
 
     def _record_exp(self, record, exp: int, source: str = "battle") -> list[str]:
         return combat.record_exp(self, record, exp, source)
-
-    # ── 出陣約戰（減法季批 3b；整合設計 4.3）：本體在 tianxia/features/sortie/duel_actions.py，這裡留一行委派（主動搬六包第 2 批）──
-    # 貼、應戰、同去、兩張卡（server、假人、測試在叫）；三處結算（world_tick、sync、advance）與假人程式那一下；核心原位那幾處
 
     # 收場：本體在 tianxia/core/combat.py（第二輪第 79 批），這裡留一行委派；_trait_say、_trait_lines 只有它們自己叫，不留
     def _lose_silver(self, record) -> list[str]:
@@ -1824,8 +1720,6 @@ class Game:
             and not features_core.menu_any("idle", {}, self)
         )
 
-    # ── 閉關（本體在功能包 tianxia/features/seclusion/，全部拆包第 39 批；這裡留一行委派給 server 的修練頁、_advance_player_local 與測試）──
-
     def _solved_secrets(self) -> list[str]:
         """這一季已經參透的秘方（開爐、裝意境之前記一份，做完跟 _note_solved 比）。"""
         return list(secret_recipes.manual(self.state, secret_recipes.tianji_of(self.world)).solved)
@@ -1844,10 +1738,6 @@ class Game:
             lines=[card["note"]] if card["note"] else [],
         ))
 
-    # ── 修練（全部拆包第 23 批：本體在修練包 tianxia/features/cultivation/actions.py，server、假人、測試照舊叫 Game，這裡留一行委派）──
-
-    # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
-
     @_not_while_preparing
     def heal(self) -> list[str]:
         """修練頁的療傷鈕：只在醫館做得了（clinic.py；不在醫館回「這裡沒有醫館，最近的在…」，什麼都不動）。"""
@@ -1860,16 +1750,10 @@ class Game:
     def take_stamina_pill(self, *, pill_only: bool = False) -> list[str]:
         return pills.take_stamina_pill(self, pill_only=pill_only)
 
-    # ── 每日簽到：本體在 tianxia/features/checkin/actions.py（全部拆包第 30 批），這裡留一行委派 ──
-
-    # ── 領地爭奪：翻地與爭搶（輿圖簡化設計第四章）——戰書、換天的掛鉤、分紅送到、畫面資料。投票與 22:00 公告結算拿掉了（PM 2026-10-20）──
-
     def _conquest_side(self) -> str | None:
         """替哪一軍推進度、下戰書、打攻城（豪強分屬兩軍：依附的那一軍）；散人、不是兩軍是 None。"""
         side = allied.side_of(self.state, self.content)
         return side if side in conquest.SIDES else None
-
-    # ── 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py，計畫第五章 Task 16、17）──
 
     def pill_now(self) -> float:
         return pills.pill_now(self)
@@ -1943,18 +1827,6 @@ class Game:
             return Refused(self._log([GROWTH_LOCKED]))
         return self._apply_growth(preset, custom)
 
-    # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
-    # 切磋掛在玩家卡上（玩家互動包 spar.py 載入時登記進 social.ACTIONS，動作在 spar_actions.py，全部拆包第 38 批）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，
-    # 在他自己那一把行動鎖裡做；對方那一份照 social 的做法拿（_peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。收到的邀請也列在選單上
-    # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，玩家互動包 bots._answer_invite）。邀請存在這一季的 WorldState.invites。
-    # 「是假人」不影響任何一句話。這裡留的是同一對人的帳與邀請框的一行委派（第 37 批），加結伴同行的一行委派（移動包 party.py，第 48 批）。
-
-    # ── 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
-    # 走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、不佔你的持有）；持有上限、「已經有了」照舊各自擋。
-    # 武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
-    # 開爐的是答應的那一方（玩家互動包 discuss_actions：request 是 A 段，伺服器在鎖外取名〔server.prepare_peer、screen_peer〕，discuss 是 C 段；全部拆包第 38 批），
-    # 發邀請的那一方接著照配方合出同一門。這裡留的是測試叫的一行委派。
-
     # 本人對本人（_spar_power、_spar_mirror）的本體在 tianxia/core/combat.py（第二輪第 79 批）；照舊是 staticmethod（懸賞、玉璽的測試用 staticmethod 換 _spar_power）
     @staticmethod
     def _spar_power(who: Game, against: Game, *, seal: bool = True) -> float:
@@ -1963,11 +1835,6 @@ class Game:
     @staticmethod
     def _spar_mirror(result: encounter.EncounterResult, power: float) -> encounter.EncounterResult:
         return combat.spar_mirror(result, power)
-
-    # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
-    # 每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。
-    # 兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：
-    # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     @staticmethod
     def _raid_key(attacker: str, target: str) -> str:
@@ -1981,18 +1848,6 @@ class Game:
         if prologue_rules.active(self.state, self.content) or self.state.world.ended:
             return []
         return features_core.menu_lines("plays", _MENU_CORE["plays"], self)
-
-    # 設伏劫道、屯糧練兵的本體在功能包 tianxia/features/stamina_plays/（全部拆包第 39 批）；這裡留一行委派給 sync、_arrivals 與測試
-
-    # ── 單人頭目戰（Joy 2026-10-10：「有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）：本體在功能包
-    # tianxia/features/bout/duel_actions.py（全部拆包第 12 批），這裡留一行委派——server 的輸入框與鎖外三段式、腳本、測試，與核心原位的
-    # choose（出招不建紀錄）、打到一半的選單（_everyday_options）、場景卡、探索撞上頭目、奪璽單挑的陣營名；只有包裡叫的那幾個
-    # （_duel_after、_bout_rng……）不留 ──
-
-    # ── 擂台（Joy 2026-10-14 選「隨時挑擂」：報名留分身，別人隨時來挑，照積分排名，只算本季）：本體在功能包
-    # tianxia/features/bout/arena_actions.py（全部拆包第 12 批），這裡留一行委派——server 的看台三段式、假人、測試，與核心原位的
-    # choose（灰掉的挑擂鈕、出招不建紀錄）、閉關中與路上的入口、場景卡、sync 的補送、店面那一頁。坐在擂台邊的選單、此地還能做的入口、
-    # 收店、打開擂台、報名與挑人換成單挑包的店面登記、act 子動詞與 choose 掛鉤；擂台的名次與稱號在核心 tianxia/core/arena_ranks.py ──
 
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
@@ -2021,8 +1876,6 @@ class Game:
         journal.add_entry(self.state, entry, merge=True)
         self._check_hints()  # 修練頁、煉製頁的動作做完看一遍（新手引導計畫三）：修練失敗留下熟練度、合成、熔煉改變持有，說的話接在這一則的 guide
         return []
-
-    # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/cultivation/view.py，這裡留一行委派）──────
 
     def heal_button(self) -> dict:
         """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 art_cards.heal_button）。"""
@@ -2077,8 +1930,6 @@ class Game:
         p.gender, p.gender_chosen = value, True
         return [GENDER_SET.format(word=value)]
 
-    # ── 大地圖 ────────────────────────────────────────────
-
     # ── 管理者 ────────────────────────────────────────────
 
     def is_admin(self) -> bool:
@@ -2099,28 +1950,6 @@ class Game:
         if self.world.paused_at() is not None:  # 開戰、觸發、推動、排時間、跳到下一件、救場：都等「繼續」之後
             return [PAUSED_REFUSAL]
         return None
-
-    # 立刻開戰的選單、立刻開戰、取消決戰（admin_battles、admin_start_battle、admin_cancel_battle）與三場大戲那三顆鈕：本體在
-    # tianxia/features/battle/admin.py（全部拆包第 6 批），這裡留一行委派
-
-    # ── 管理者：每週的事（管理者觸發鈕第 1 組，企劃者 2026-10-07）────────────
-    # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
-
-    # ── 管理者：玉璽碎片（玉璽碎片設計第十二節；公告不寫管理者，效果跟自然發生一樣）──────────
-
-    # ── 管理者：三場大戲（管理者觸發鈕第 3 組）──────────────────────
-    # 「立刻開戰」（admin_start_battle）早就照時刻表開時刻表決戰（world.open_showdown：照版本挑那一筆、照前線戰況定起點、
-    # 在 WorldState.showdowns_opened 記下開過了，時間到了不再開）。這裡只是每一場一顆鈕、照時刻表的大事認，按不下去時說清楚為什麼。
-    # 本體在 tianxia/features/battle/admin.py（全部拆包第 6 批），這裡留一行委派。
-
-    # ── 玩家之間的互動（social.py，企劃者 2026-10-08）────────────────────
-    # 同一個地點的人看得到彼此：場景底下一行「此地還有誰」、點名字打開玩家卡、卡上的動作鈕（social.ACTIONS）。
-    # 替對方寫東西（收到的禮、邀請、招呼）在同一把行動鎖裡讀他的存檔、改完存回去；不替他補算時間——補算會把他的
-    # last_real 推到此刻，下了線的人就會一直掛在名單上。真人假人一樣對待（伺服器假人設計第五節）。
-
-    # ── 名帖（Joy 2026-10-19；tianxia/mingtie.py 的說明）與贈物一天的次數 ──
-
-    # ── 玩家之間的互動・第二層：打招呼與結伴的回應、逾時、結伴同行（social.py 的說明）──
 
     def _kin(self, state: GameState) -> Game:
         """別人的那一份 Game（不叫模型、不補算他的時間；賽季與「現在」接上你這一份），替他寫東西用。"""
