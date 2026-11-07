@@ -34,6 +34,7 @@ from tianxia.core.bounty_base import (  # noqa: F401  別人讀的那一半搬�
     quota, RALLY_AID, RALLY_POSTED, SEASON_END, _side, _side_ok, stranded, STRANDED_JOIN, STRANDED_LOST, STRIKE_GATHER,
     STRIKE_OUTING, STRIKE_OUTING_RANGER, STRIKE_PRACTICE, STRIKE_PRECISE, STRIKE_SORTIE, _strike_spots, _takeable, title,
     to_season_end, unit_of, UNPICKED, visible,
+    army_of, rallies, targets,  # 第二輪第 89 批：假人往哪裡走（移動包 bots._bounty_hop 讀 targets）；照舊 rules.rallies 叫的換這一份打得到
 )
 from tianxia.characters import name_key
 from tianxia.core.option import Option
@@ -123,13 +124,6 @@ def due_short(b: Bounty, content: Content, world: WorldState) -> str:
             return f"到第 {at.week - 1} 週・剩 {left}"
         return f"期限 第 {at.week} 週・剩 {left}"
     return f"期限 {calendar.day_text(b.expires)}・剩 {left}"
-
-
-def army_of(state: GameState, content: Content) -> str | None:
-    """站哪一軍（名聲 4.6）：照 rules.side_of（就是 allied.side_of；豪強分屬兩軍的季，依附官軍或黃巾的豪強是那一軍），
-    只認官軍、黃巾；散人、沒有依附的第三方豪強（14 天的季）是 None。"""
-    side = allied.side_of(state, content)
-    return side if side in ENEMY else None
 
 
 def stale_line(state: GameState, content: Content, world: WorldStateStore, arg: str) -> str:
@@ -396,18 +390,6 @@ def _figure_thanks(state: GameState, content: Content, b: Bounty, amount: int) -
 
 
 RALLY_DONE = "【求援】{who}的求援你辦成了：「{title}」。"  # 待 joy 潤
-
-
-def rallies(state: GameState, content: Content) -> list[Bounty]:
-    """我看得到、還辦得了的求援委託（WorldState.rallies；大勢人物擴充第三批）：掛單的是我這一邊（army_of：官軍、黃巾，依附的豪強
-    照依附那一軍）、沒過期、還有名額、我還沒辦過。不用揭，辦成了前 quota 個有賞。懸賞榜關著、休季沒有。"""
-    w = state.world
-    side = army_of(state, content)
-    if not active(state, content) or side is None:
-        return []
-    me = name_key(state.player.name)
-    return [b for b in w.rallies
-            if b.faction == side and b.expires > w.time and _left(b) > 0 and me not in (name_key(t) for t in b.done_by)]
 
 
 def _complete_rally(ctx, b: Bounty) -> list[str]:
@@ -1036,17 +1018,6 @@ def _hang_asks(w: WorldState, content: Content, give_rng: random.Random, give_ki
                 silver=cfg.silver.get(kind, 0), deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute,
                 weapon_kind=weapon_kind,
             ))
-
-
-def targets(state: GameState, content: Content) -> list[str]:
-    """假人往哪裡走：手上每一張要去的地點（討伐、打探：那裡；護送：終點）。"""
-    out = []
-    for b in mine(state, content) + open_commissions(state, content) + rallies(state, content):  # 委託、求援也去（擴充第二、三批）
-        if b.kind == "escort":
-            out.append(b.end)
-        elif b.kind in ("strike", "scout"):
-            out.append(b.location)
-    return [loc for loc in out if loc in content.locations]
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:
