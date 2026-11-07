@@ -44,10 +44,10 @@ def test_the_strip_gets_a_note_line_only_when_there_is_something_to_say():
     plain = run(_main(gap=None, unlock=None, cap=None), "return H.weekCardHtml(H.S.main);")
     assert "wk-note" not in plain
     html = run(_main(gap=GAP, unlock=UNLOCK, cap=week_unlock.CAP_NOTE), "return H.weekCardHtml(H.S.main);")
-    note = html[html.index('<p data-wk="top" class="wk-note">'):]
+    note = html[html.index('<p class="wk-note">'):]
     note = note[: note.index("</p>")]
-    assert GAP in note and UNLOCK in note and week_unlock.CAP_NOTE in note
-    assert html.index("wk-strip") < html.index("wk-note") < html.index("wk-card")  # 灰線底下、眼下要事上面
+    assert GAP in note and UNLOCK in note and week_unlock.CAP_NOTE in note  # 測試的 main 沒投靠：離贏還差多少照寫
+    assert html.index("wk-head") < html.index("wk-note") < html.index("wk-card")  # 合併卡上一格（主題底下）、眼下要事上面
 
 
 def test_why_lists_what_opens_in_week_two():

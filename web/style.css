@@ -700,6 +700,56 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .wk-quest { margin-top: 10px; font-size: 13px; }
 .wk-quest h3 { font-size: 14px; margin: 0 0 4px; }
 .peek-dot { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gang); }
+/* 合併的本週卡（Joy 2026-11-07 說好，設計稿 2GNxNC7…）：上一格第 N 週＋主題（最多兩行）＋兩軍態勢拔河條，中一格章回或投靠鈕，最下一行拉起那一層 */
+.wk-box { padding: 0; overflow: hidden; }
+.wk-box > * { padding: 9px 12px; }
+.wk-box > * + * { border-top: 1px solid var(--line); }
+.wk-top { display: grid; gap: 6px; }
+.wk-head { display: flex; align-items: baseline; gap: 8px; margin: 0; min-width: 0; }
+.wk-head .wk-seg { flex: none; font: 700 15px/1.3 var(--serif); color: var(--accent); white-space: nowrap; }
+.wk-head .wk-th { flex: 1 1 auto; min-width: 0; font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-box .wk-note { margin: 0; }
+.wk-tug { display: grid; gap: 3px; }
+.wk-tug-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+.wk-lead { font: 700 14px var(--serif); color: var(--ink); }
+.wk-lead.side-guan, .wk-bar .side-guan { color: var(--kuai); }
+.wk-lead.side-huang, .wk-bar .side-huang { color: var(--gold); }
+.wk-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.wk-bar > b { flex: none; min-width: 3.2em; font-weight: 700; }
+.wk-bar > b.side-huang { text-align: right; }
+.wk-track { position: relative; flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--gold); }
+.wk-track > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 6px 0 0 6px; background: var(--kuai); }
+.wk-track > s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); opacity: 0.55; }
+.wk-track > u { position: absolute; top: -4px; width: 4px; height: 20px; margin-left: -2px; background: var(--card); border: 1px solid var(--ink); border-radius: 2px; }
+.wk-gap { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-2); }
+.wk-mid.ch-in { display: grid; gap: 2px; }
+.wk-join { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.wk-join-btn { display: grid; gap: 0; min-height: 44px; padding: 6px; border: 0; border-radius: 10px; font: 700 14px/1.35 var(--serif); color: #fff; background: var(--kuai); }
+.wk-join-btn.side-huang { background: var(--gold); color: #2a241d; }
+.wk-join-btn small { font: 400 11px var(--sans); opacity: 0.9; }
+.wk-morebar { display: flex; align-items: center; padding-top: 0 !important; padding-bottom: 0 !important; }
+.wk-more { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0; border: 0; background: none; text-align: left; font: 13px var(--sans); color: var(--accent); cursor: pointer; }
+.wk-box button:focus:not(:focus-visible) { outline: none; } /* 手指按下去不畫藍框（Joy 2026-11-07 截圖），鍵盤才畫 */
+.wk-box button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wk-sheet .wk-nextev { margin: 8px 0; }
+.ck-pop h3 { margin: 0 0 6px; font: 700 18px var(--serif); }
+.ck-pop .ck-step { font-weight: 600; }
+.ck-pop .ck-pop-ok { display: block; width: 100%; margin-top: 12px; min-height: 44px; }
+.wk-rules { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.wk-rules > summary { list-style: none; cursor: pointer; color: var(--accent); font-size: 14px; }
+.wk-rules > summary::-webkit-details-marker { display: none; }
+.wk-rules > summary::after { content: " ›"; }
+.wk-rules[open] > summary::after { content: " ⌄"; }
+.wk-sheet details.side > summary h4 small { white-space: normal; }
+.wk-sheet-th { margin: 0 0 8px; font-size: 14px; line-height: 1.55; color: var(--ink-2); }
+.wk-sheet-th b { color: var(--accent); margin-right: 6px; font-family: var(--serif); }
+.wk-sheet details.side > summary { list-style: none; cursor: pointer; }
+.wk-sheet details.side > summary::-webkit-details-marker { display: none; }
+.wk-sheet details.side > summary h4 { margin: 0; }
+.wk-sheet details.side > summary h4::after { content: "›"; margin-left: auto; color: var(--ink-2); font-weight: 400; }
+.wk-sheet details.side[open] > summary h4 { margin-bottom: 4px; }
+.wk-sheet details.side[open] > summary h4::after { transform: rotate(90deg); }
+.wk-sheet details.side > summary h4 small { color: var(--ink-2); }
 .sides { display: grid; gap: 8px; margin-bottom: 8px; }
 .side { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 .side.mine { border-color: var(--gold); border-width: 2px; }
