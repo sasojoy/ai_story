@@ -612,19 +612,20 @@ def b102():
         "- 範圍照那一節。**`CLAUDE.md` 這批不碰**：要改的句子放 docs，PM 改、先給企劃者看。`new_feature.py` 範本與手冊 G11 補新鈕用 `registerClicks`、CSS link 的位置（第 84、86 批留的）這批做。故意寫一行違規要紅，每一條硬規矩都試一次、印出訊息。",
         "- 第 103 批會把殼收掉，`SHARED_LATER` 之類這批拿掉時，三個殼（`howto`、`skillview`、`shopview`）照 `TEST_ONLY_SHELLS` 走，不開別的白名單。",
         "- **E 波審查留的守門，這批一起做（PM 定）**：①共用層 `bot_base` 准拿 `Game`，第 89 批開的路（`bot_base._sortie_win` 叫 `game._sortie_foes`）照認，手冊第十五節寫落地認定；`tests/core/boundary_tables.py` 加一張 `bot_base` 准碰的 `game.xxx` 名單，邊界測試掃 `tianxia/bot_base.py`，不在名單就紅。其他共用層不准拿 `Game`。②`test_nobody_calls_an_event_subscriber_outside_the_publish_points` 的掃描範圍補上核心服務檔（`core/`），搬進核心的函式也要守；掃得到才算（先寫一行違規證明會紅）。③`BOT_SHELL_PENDING` 已是空集合，連名字與用到它的測試分支一起拿掉。",
+        "- **F 波留的（PM 定）**：`engine.py` 的 `TYPE_CHECKING` 裡的包名（`companion_agent`、`parley`、`xingshi`）也清，註記寫字串或寬一點的型別，核心不 import 包不留這個例外；`from .rules import jianfa` 重複的那一行拿掉（量過先後不變）；`from . import wins`、`story_base`、`outcome_rules` 三行是為了 `run_bots` 的載入先後留的，理由註解寫實（『第 98 批清這一區時一起看』已過時）。",
     ])
 
 
 def b103():
     return r2f(103, "別名與測試殼收掉", "core_shared", "dev/alias-end", "8331", [
-        "- 範圍照那一節，從第 102 批的結果開，數字開工全部重量。**PM 會在開工前量開著的分支**，舊名的 PR 合進來會 `ImportError`，是認了的。用腳本改、語法樹驗（除 import 與字串全一樣），`pytest --collect-only` 條目一樣。`same_behavior` 的 `MUTATIONS` 舊名跟著改。`CLAUDE.md`、`docs/guide` 的舊名句子放 docs，文件輪做。",
+        "- 範圍照那一節，從第 102 批的結果開，數字開工全部重量。**PM 11/07 量過開著的分支**：別名 67 個，新加的行用到舊名的只有擱著的 `feature/map-view`（落後 `develop` 1,838 筆，本來就要重做），Joy 那條 11/07 的 `claude/project-thread-li7stm-*` 沒用到，所以可以做。之後舊名的 PR 合進來會 `ImportError`，是認了的。用腳本改、語法樹驗（除 import 與字串全一樣），`pytest --collect-only` 條目一樣。`same_behavior` 的 `MUTATIONS` 舊名跟著改。`CLAUDE.md`、`docs/guide` 的舊名句子放 docs，文件輪做。",
     ])
 
 
 WAVES["G"] = dict(
     round2=True,
     extra_lenses=[
-        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）照舊跑得動。"),
+        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次（`features/looks/cutting` 要 scipy，這台 venv 沒裝，除外）；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）照舊跑得動。"),
     ],
     lines=[dict(name="收口", batches=[b102, b103])],
     merge_port=8332, fix_port=8333,
