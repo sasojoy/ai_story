@@ -808,25 +808,6 @@ def check_insight_strong(c: Content, need) -> None:
              f"{where}：有所感的場景沒有一段線索指得到最濃的「{d.name}」（{d.attribute}）")
 
 
-def check_terrain_arts(c: Content, need) -> None:
-    """地利（武學隨地理環境）：開著時，每一種當過最濃的意境都要有戰報那兩句（match:<id>、clash:<id>），它的屬性與它剋的那一路
-    都要有輿圖那一行的字（words）；同伴那一句要帶 {name}。不然戰報、輿圖會悄悄少一句。"""
-    cfg = c.config.terrain_arts
-    if not cfg.enabled or not c.config.insight_strong.enabled:
-        return
-    from .martial_arts import ATTRIBUTE_COUNTERS  # noqa: PLC0415  同 check_insight_strong 延後
-
-    for sid in sorted({loc.insight_strong for loc in c.locations.values() if loc.insight_strong}):
-        d = c.insights.get(sid)
-        if d is None:
-            continue  # 認不得的意境由 check_insight_strong 擋
-        for key in (f"match:{sid}", f"clash:{sid}"):
-            need(bool(cfg.lines.get(key)), f"地利：最濃的意境 {sid} 要寫戰報那一句 terrain_arts.lines[{key}]")
-        for attribute in (d.attribute, ATTRIBUTE_COUNTERS.get(d.attribute)):
-            need(attribute in cfg.words, f"地利：最濃的意境 {sid} 要寫輿圖那一行的屬性字 terrain_arts.words[{attribute}]")
-    need("{name}" in cfg.lines.get("mate_match", ""), "地利：同伴那一句 terrain_arts.lines[mate_match] 要帶 {name}")
-
-
 def check_faction_choices(c: Content, need) -> None:
     """選項照陣營分邊（Condition.factions／factions_none，企劃者 2026-10-08「加入黃巾軍了，探索還一堆打黃巾的任務」）之後，
     每一種身分（散人與每個陣營）碰得到的事件，至少要剩一個選項看得見——不然那個人會卡在一則沒有選項的事件上。
@@ -1452,61 +1433,6 @@ def _condition_flags(c: Content) -> set[str]:
     return flags
 
 
-def check_relations(c: Content, need, known) -> None:
-    """人物之間的關係（content/relations.json，大勢人物擴充第二批）：人物都存在、兄弟與仇敵至少兩人（寫了 faction 的仇敵一人就行）、
-    師生與上下要有 head、head 不在 members 裡、faction 要是劇本的陣營。"""
-    factions = [f.id for f in c.scenario.factions]
-    for i, rel in enumerate(c.relations):
-        where = f"relations.json 第 {i + 1} 條（{rel.kind}）"
-        known(where, rel.members + ([rel.head] if rel.head else []), c.characters, "人物")
-        need(len(set(rel.members)) == len(rel.members), f"{where}：members 重複")
-        if rel.kind in ("mentor", "chief"):
-            need(rel.head is not None and rel.head not in rel.members, f"{where}：要寫 head，而且不能也在 members 裡")
-            need(len(rel.members) >= 1, f"{where}：members 至少一人")
-        else:
-            need(rel.head is None, f"{where}：{rel.kind} 不寫 head")
-            need(len(rel.members) >= (1 if rel.faction else 2), f"{where}：至少兩人（寫了 faction 的仇敵一人就行）")
-        if rel.faction is not None:
-            need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
-            known(where, [rel.faction], factions, "陣營")
-
-
-def check_itineraries(c: Content, need, known) -> None:
-    """人物的行程（content/itineraries.json，世界活起來）：人物存在、能深度對話、不是跟著別人走的（follows）、一人一份；
-    站的 id 全檔不重複、照 day 排、地點存在；if_won／if_lost 指的是更早的盤算；盤算的陣營與大勢線存在、退到的地點存在。"""
-    factions = [f.id for f in c.scenario.factions]
-    trends = [t.id for t in c.scenario.trends]
-    seen_who: set[str] = set()
-    stops: dict[str, tuple[float, bool]] = {}
-    for it in c.itineraries:
-        where = f"itineraries.json 的 {it.who}"
-        known(where, [it.who], c.characters, "人物")
-        need(it.who not in seen_who, f"{where}：同一個人只能有一份行程")
-        seen_who.add(it.who)
-        ch = c.characters.get(it.who)
-        if ch is not None:
-            need(ch.deep_interaction, f"{where}：要能深度對話（每日行事只動這種人）")
-            need(ch.follows is None, f"{where}：跟著別人走的人（follows）不寫行程，跟著帶頭的人走")
-        need(bool(it.stops), f"{where}：至少一站")
-        last = 0.0
-        for st in it.stops:
-            at = f"{where} 的 {st.id}"
-            need(st.id not in stops, f"{at}：站的 id 全檔重複")
-            need(st.day >= last, f"{at}：要照 day 排")
-            last = st.day
-            known(at, [st.place], c.locations, "地點")
-            for ref in st.if_won + st.if_lost:
-                need(ref in stops and stops[ref][1], f"{at}：if_won／if_lost 的 {ref} 要是更早的盤算")
-            if st.contest is None:
-                need(bool(st.text), f"{at}：一般的一站要寫 text")
-            else:
-                known(at, [st.contest.side], factions, "陣營")
-                known(at, list(st.contest.trends_win) + list(st.contest.trends_lose), trends, "大勢線")
-                if st.contest.lose_place is not None:
-                    known(at, [st.contest.lose_place], c.locations, "地點")
-            stops[st.id] = (st.day, st.contest is not None)
-
-
 def check_companions(c: Content, need) -> None:
     """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
     要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
@@ -2122,15 +2048,6 @@ def check_bounties(c: Content, need) -> None:
         )
 
 
-def check_core_loop(c: Content, need) -> None:
-    """出陣探索與地盤的設定（Config.push_resistance、jianfa.second_tier）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
-    r = c.config.push_resistance
-    need(r.full_within <= r.half_within,
-         f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
-    need(set(c.config.jianfa.second_tier) <= {1, 2, 3},
-         f"Config.jianfa.second_tier 的鍵是危險度 1～3：{sorted(c.config.jianfa.second_tier)}")
-
-
 def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
     """地盤（Scenario.territory，出陣探索與地盤設計第四節）：戰線認得、兩頭有陣營；可易手的地點真的在那條戰線上、不是大本營、
     不重複；每一處戰線地點都有歸屬（大本營、fixed 或 lines）；站的隊伍是那一方的、每個可能的控制方都有；時刻表的 control
@@ -2255,17 +2172,6 @@ def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None
             region = atlas.region_of(c, loc_id)
             tid = f"siege_{region.id}" if region is not None else None
             need(tid in c.battles and c.battles[tid].siege, f"{where} {loc_id}：所在的大區要有攻城範本（battles.json 的 {tid}）")
-
-
-def check_siege_templates(c: Content, need) -> None:
-    """攻城範本（BattleDef.siege，領地爭奪第二批）：id 是 siege_<大區>、寫了大區、兩軍依序是官軍與黃巾（戰局以官軍為正向）、不是時刻表決戰。"""
-    for battle in c.battles.values():
-        if not battle.siege:
-            continue
-        where = f"攻城範本 {battle.id}"
-        need(battle.region is not None and battle.id == f"siege_{battle.region}", f"{where}：id 要是 siege_<大區>、要寫 region")
-        need([f.id for f in battle.factions] == ["guan", "huang"], f"{where}：陣營要依序是 guan、huang")
-        need(battle.timetable_event is None and battle.version is None, f"{where}：攻城範本不是時刻表決戰")
 
 
 def check_duels(c: Content, need, known) -> None:
@@ -2404,6 +2310,12 @@ def validate(c: Content) -> None:
         raise RuntimeError(f"這份內容只載了 {c._only_pack} 這一包，不能拿來驗內容：測試標 @pytest.mark.whole_content 拿整份")
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
+    # core_content（第二輪第 96 批）：timetable、conquest 這幾支頂層 import 多，函式內 import
+    from .relations import check_relations  # noqa: PLC0415
+    from .plans import check_itineraries  # noqa: PLC0415
+    from .siege import check_siege_templates  # noqa: PLC0415
+    from .push import check_core_loop  # noqa: PLC0415
+    from .terrain import check_terrain_arts  # noqa: PLC0415
 
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}

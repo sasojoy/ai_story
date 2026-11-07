@@ -12,7 +12,7 @@ from conftest import real_content
 
 from tianxia import battlelog, encounter, howto, team, terrain
 from tianxia.features.map import layers
-from tianxia.content import check_terrain_arts
+from tianxia.terrain import check_terrain_arts
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

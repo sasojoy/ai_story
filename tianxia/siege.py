@@ -438,3 +438,15 @@ def _note_result(world: WorldState, slot: SiegeSlot, info_: SiegeInfo, battle: b
         taken=taken or "", margin=margin, keeper=keeper, attackers=list(info_.attackers),
         blow=guard.felled_by if guard is not None and taken is not None else "",
     ))
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_siege_templates(c: Content, need) -> None:
+    """攻城範本（BattleDef.siege，領地爭奪第二批）：id 是 siege_<大區>、寫了大區、兩軍依序是官軍與黃巾（戰局以官軍為正向）、不是時刻表決戰。"""
+    for battle in c.battles.values():
+        if not battle.siege:
+            continue
+        where = f"攻城範本 {battle.id}"
+        need(battle.region is not None and battle.id == f"siege_{battle.region}", f"{where}：id 要是 siege_<大區>、要寫 region")
+        need([f.id for f in battle.factions] == ["guan", "huang"], f"{where}：陣營要依序是 guan、huang")
+        need(battle.timetable_event is None and battle.version is None, f"{where}：攻城範本不是時刻表決戰")

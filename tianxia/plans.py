@@ -467,3 +467,40 @@ def card(state: GameState, content: Content, plan: Plan, *, when: str, minutes: 
         "mine": joined(state, plan),
         "acts": acts,
     }
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_itineraries(c: Content, need, known) -> None:
+    """人物的行程（content/itineraries.json，世界活起來）：人物存在、能深度對話、不是跟著別人走的（follows）、一人一份；
+    站的 id 全檔不重複、照 day 排、地點存在；if_won／if_lost 指的是更早的盤算；盤算的陣營與大勢線存在、退到的地點存在。"""
+    factions = [f.id for f in c.scenario.factions]
+    trends = [t.id for t in c.scenario.trends]
+    seen_who: set[str] = set()
+    stops: dict[str, tuple[float, bool]] = {}
+    for it in c.itineraries:
+        where = f"itineraries.json 的 {it.who}"
+        known(where, [it.who], c.characters, "人物")
+        need(it.who not in seen_who, f"{where}：同一個人只能有一份行程")
+        seen_who.add(it.who)
+        ch = c.characters.get(it.who)
+        if ch is not None:
+            need(ch.deep_interaction, f"{where}：要能深度對話（每日行事只動這種人）")
+            need(ch.follows is None, f"{where}：跟著別人走的人（follows）不寫行程，跟著帶頭的人走")
+        need(bool(it.stops), f"{where}：至少一站")
+        last = 0.0
+        for st in it.stops:
+            at = f"{where} 的 {st.id}"
+            need(st.id not in stops, f"{at}：站的 id 全檔重複")
+            need(st.day >= last, f"{at}：要照 day 排")
+            last = st.day
+            known(at, [st.place], c.locations, "地點")
+            for ref in st.if_won + st.if_lost:
+                need(ref in stops and stops[ref][1], f"{at}：if_won／if_lost 的 {ref} 要是更早的盤算")
+            if st.contest is None:
+                need(bool(st.text), f"{at}：一般的一站要寫 text")
+            else:
+                known(at, [st.contest.side], factions, "陣營")
+                known(at, list(st.contest.trends_win) + list(st.contest.trends_lose), trends, "大勢線")
+                if st.contest.lose_place is not None:
+                    known(at, [st.contest.lose_place], c.locations, "地點")
+            stops[st.id] = (st.day, st.contest is not None)

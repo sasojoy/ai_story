@@ -65,3 +65,23 @@ def mood(state: GameState, content: Content, cid: str, span: float) -> str | Non
             return "悲憤"
         glad = glad or kind == "foe"
     return "得意" if glad else None
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_relations(c: Content, need, known) -> None:
+    """人物之間的關係（content/relations.json，大勢人物擴充第二批）：人物都存在、兄弟與仇敵至少兩人（寫了 faction 的仇敵一人就行）、
+    師生與上下要有 head、head 不在 members 裡、faction 要是劇本的陣營。"""
+    factions = [f.id for f in c.scenario.factions]
+    for i, rel in enumerate(c.relations):
+        where = f"relations.json 第 {i + 1} 條（{rel.kind}）"
+        known(where, rel.members + ([rel.head] if rel.head else []), c.characters, "人物")
+        need(len(set(rel.members)) == len(rel.members), f"{where}：members 重複")
+        if rel.kind in ("mentor", "chief"):
+            need(rel.head is not None and rel.head not in rel.members, f"{where}：要寫 head，而且不能也在 members 裡")
+            need(len(rel.members) >= 1, f"{where}：members 至少一人")
+        else:
+            need(rel.head is None, f"{where}：{rel.kind} 不寫 head")
+            need(len(rel.members) >= (1 if rel.faction else 2), f"{where}：至少兩人（寫了 faction 的仇敵一人就行）")
+        if rel.faction is not None:
+            need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
+            known(where, [rel.faction], factions, "陣營")

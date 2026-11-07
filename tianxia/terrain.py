@@ -78,3 +78,22 @@ def place_line(content: Content, loc_id: str) -> str:
     words = content.config.terrain_arts.words
     bad = ATTRIBUTE_COUNTERS.get(strong.attribute, "")
     return PLACE_LINE.format(name=strong.name, good=words.get(strong.attribute, strong.attribute), bad=words.get(bad, bad))
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_terrain_arts(c: Content, need) -> None:
+    """地利（武學隨地理環境）：開著時，每一種當過最濃的意境都要有戰報那兩句（match:<id>、clash:<id>），它的屬性與它剋的那一路
+    都要有輿圖那一行的字（words）；同伴那一句要帶 {name}。不然戰報、輿圖會悄悄少一句。"""
+    cfg = c.config.terrain_arts
+    if not cfg.enabled or not c.config.insight_strong.enabled:
+        return
+
+    for sid in sorted({loc.insight_strong for loc in c.locations.values() if loc.insight_strong}):
+        d = c.insights.get(sid)
+        if d is None:
+            continue  # 認不得的意境由 check_insight_strong 擋
+        for key in (f"match:{sid}", f"clash:{sid}"):
+            need(bool(cfg.lines.get(key)), f"地利：最濃的意境 {sid} 要寫戰報那一句 terrain_arts.lines[{key}]")
+        for attribute in (d.attribute, ATTRIBUTE_COUNTERS.get(d.attribute)):
+            need(attribute in cfg.words, f"地利：最濃的意境 {sid} 要寫輿圖那一行的屬性字 terrain_arts.words[{attribute}]")
+    need("{name}" in cfg.lines.get("mate_match", ""), "地利：同伴那一句 terrain_arts.lines[mate_match] 要帶 {name}")
