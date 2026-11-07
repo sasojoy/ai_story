@@ -7,7 +7,6 @@ sanguo-companions 合併大幅重寫：拿掉 battle.py 的 3v3 全自動戰鬥�
 from __future__ import annotations
 
 import contextlib
-import math
 import random
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
@@ -138,6 +137,9 @@ from .world_state import WorldStateStore, season_length_days
 from .core import event_check  # 事件檢定的本體（Game 上留一行委派）
 from .core import combat  # 單打服務的本體（第二輪第 79 批：大場面、戰力快照、操練與立功、收場、本人對本人；Game 上留一行委派）。排在這裡：它 import 的模組這時都已經載入，載入的先後一個都不變
 from .core.combat import FIGHT_GONE_LINES, LOW_HP_RATIO  # noqa: F401  server、tests/core/test_engine.py 從 engine 拿
+from .core import pushing  # 推大勢的本體（第二輪第 80 批；Game 上留一行委派）。排在這裡：它 import 的模組這時都已經載入，載入的先後一個都不變
+from .core import pills  # 回體丹的本體（第二輪第 80 批；Game 上留一行委派）。同上
+from .core.pills import PILL_DAY_FULL, REFILL_FULL, REFILL_HUT, REFILL_LINE, REFILL_TITLE, _cn_count  # noqa: F401  tests/bots/test_pill_per_day.py、test_stamina_refill.py 從 engine 拿
 from .core import presence  # 「此地還有」的判斷與身分字（全部拆包第 37 批：從 social 拆進核心）
 from .core import signature_base  # 本命兵器的名字照內容讀（core_seams，全部拆包第 55 批：清失效參照 signature 那一格；原本經舊名 signature_arms 讀）
 from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
@@ -198,20 +200,8 @@ class Refused(list):
 GROWTH_PREFIX = "growth:"  # 開季準備卡上挑成長配比的鈕（growth:<配比>；growth:custom 只打開自己配的那一塊）
 GROWTH_LOCKED = "這一季的成長配比已經定了，下一季開季再挑。"
 GROWTH_CUSTOM_ASK = "（在卡上自己配五項，配好按「定下來」。）"
-# 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
-REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
-REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
-REFILL_FULL = "體力是滿的，用不著補。"  # 體力本來就是滿的：跟丹的「這時候服丹是糟蹋」一樣，只回一句話、不寫紀錄
+# （回體丹那一群的字 REFILL_*、PILL_DAY_FULL、CN_COUNTS、_cn_count 搬進 tianxia/core/pills.py，第二輪第 80 批；上面 import 回測試從 engine 拿的那幾個。PROLOGUE_REST 不是這一群，留這裡）
 PROLOGUE_REST = "調息（照師父教的吐納，把體力調回來）"  # 序章教體力那一步（打坐 2026-10-12 拿掉，只留這一下）
-PILL_DAY_FULL = "今天已服{n}顆，明日 00:00 後再服。"  # 回體丹一天的上限（企劃者 2026-10-12）
-CN_COUNTS = {1: "一", 2: "兩", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九", 10: "十"}
-
-
-def _cn_count(n: int) -> str:
-    return CN_COUNTS.get(n, str(n))
-
-
-REFILL_HUT = "草廬裡先照師父說的做，體力等出了草廬再補。"  # 序章裡不能補（序章的體力是照步驟算好的），跟丹的「出了草廬再吃」同一個道理
 
 
 # 頭目戰放手一搏鎖外評估的單子 DuelTextRequest 搬進單挑包（features/bout/duel_rules.py，全部拆包第 12 批）
@@ -557,19 +547,9 @@ class Game:
             game._note_gift()
         return game
 
+    # 回體丹（_top_up_pills、take_stamina_pill、pill_now、pill_cap、pills_left_today）：本體在 tianxia/core/pills.py（第二輪第 80 批），這裡留一行委派；_refill_stamina 只有它自己叫，不留。_pill_day、_day_of、_pill_card_bonus 留原位
     def _top_up_pills(self) -> None:
-        """拿掉一鍵補滿之後補回體丹（企劃者 2026-10-12；見 PlayerState.pills_topped_to）：讀檔那一刻，贈送的數比上次補到的多，
-        手上不到那個數就補到那個數、江湖紀錄寫一行。真人、假人、整季機器人一樣（假人看不出來）。"""
-        cfg, p = self.content.config, self.state.player
-        target = cfg.beta_gift_stamina_pills if cfg.beta_gift else 0
-        if target <= p.pills_topped_to:
-            return
-        p.pills_topped_to = target
-        if p.stamina_pills >= target:
-            return
-        added = target - p.stamina_pills
-        p.stamina_pills = target
-        self._write(cfg.stamina_pill_name, [self._top_up_line(added)])
+        return pills.top_up_pills(self)
 
     def _reconcile_season(self) -> None:
         """把 self.state.world 對齊到目前的共用賽季（設計文件「真正共享賽季」討論，取代
@@ -1377,26 +1357,9 @@ class Game:
     ) -> list[str]:
         return event_check.answer_event(self, request, llm_rate, moral, outcome)
 
+    # 文字的事的貢獻：本體在 tianxia/core/pushing.py（第二輪第 80 批），這裡留一行委派
     def _deed_points(self, points: int, *, capped: bool = True) -> int:
-        """記 points 點陣營貢獻進「文字的事」那一本（整合設計 5.3：分岔的後果、心意一筆、託付辦成了；減法季批 4、6）：有那一邊才記
-        （散人不記，同推線），一天（季曆日）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
-        capped=False（託付辦成了，PM 2026-10-26：一週才一件，共用的話分岔記滿那一天託付就記不到）：照數全記，也不佔那一天的額度。
-        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。回實際記了幾點。"""
-        s, c = self.state, self.content
-        if not points or self._side() is None:
-            return 0
-        w, p = s.world, s.player
-        at = calendar.point(w.time, c, w)
-        if not capped:
-            wins_rules.credit(p, c, w, at.week, points)
-            return points
-        if p.deed_day != at.cal_day:
-            p.deed_day, p.deed_today = at.cal_day, 0
-        room = outcome_rules.contribution_room(points, p.deed_today, c.config.jianfa.deed_contribution_cap)
-        if room:
-            p.deed_today += room
-            wins_rules.credit(p, c, w, at.week, room)
-        return room
+        return pushing.deed_points(self, points, capped=capped)
 
     # ── 人物心意（減法季批 6）：本體在 tianxia/features/companions/actions.py（全部拆包第 19 批），這裡留一行委派 ────────────
 
@@ -1582,14 +1545,9 @@ class Game:
         減法季探索一顆開著時「探索」照舊是 act:explore、出現在同樣的那幾種選單上，判斷不必換訊號；序章另外擋（呼叫端）。"""
         return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
 
+    # 還推得動多少：本體在 tianxia/core/pushing.py（第二輪第 80 批），這裡留一行委派
     def _push_room(self, trend_id: str) -> float:
-        """自己今天在這條線上還推得動多少（每人每曆日上限，緩衝後的量）：跟 push_trend 走 push.py 的同一個算法（push.room）。
-        第一季的規則沒開時 push_trend 不設上限，這裡也是無限。"""
-        s, c = self.state, self.content
-        if not calendar.season_one_on(s.world, c):
-            return math.inf
-        day = calendar.point(s.world.time, c, s.world).cal_day
-        return push.room(s.player.pushed, day, trend_id, self.daily_push_cap())
+        return pushing.push_room(self, trend_id)
 
     def _figures_here(self) -> list[str]:
         """這個地點的大勢人物（不管見不見得到）：可招募的 7 位在 recruit_at，鎖定的龍頭人物在 talk_at（不可招募，見
@@ -1865,57 +1823,21 @@ class Game:
         """這支隊伍是自己陣營的：遇上了不打，改成一起操練（見 _drill）。"""
         return squad.faction is not None and squad.faction == self.state.player.faction
 
+    # 推大勢（season_scale 到 _carry、_push_progress、_event_progress、_goals、push_trend）：本體在 tianxia/core/pushing.py（第二輪第 80 批），這裡留一行委派；_resisted_line 只有它自己叫，不留
     def season_scale(self) -> float:
-        """季長倍數（FB-165，企劃者 2026-10-12「要隨著賽季長度而調整」）：min(1, Config.drill_push_base_days ÷ 這一季的季長)。
-        季長照開季時蓋的章（world_state.season_length_days，季曆用的同一個），不讀電腦時鐘：週末設定（2.5 天）是 1，14 天約 0.18，
-        季越長越小。規則關著的季事件的大勢效果照它縮放（push_trend）；操練另見 drill_scale。"""
-        days = season_length_days(self.state.world, self.content)
-        return min(1.0, self.content.config.drill_push_base_days / days) if days > 0 else 1.0
+        return pushing.season_scale(self)
 
     def daily_push_cap(self) -> float:
-        """每人每曆日每條線推得動多少（第一季，push.split_by_cap 的上限）：Config.daily_push_cap；盡頭阻力開著時再乘季長倍數
-        （設計 5.2：週末設定 1，7 天的季約 0.36）。push_trend 與 _push_room 都讀它。"""
-        cfg = self.content.config
-        if calendar.season21_on(self.state.world, self.content):  # 21 天季：自己的上限，不乘季長倍數（正式季整合設計 7.4）
-            return cfg.season21_daily.push_daily_cap
-        return cfg.daily_push_cap * (self.season_scale() if cfg.push_resistance.enabled else 1.0)
+        return pushing.daily_push_cap(self)
 
     def _resisted_lines(self) -> set[str]:
-        """盡頭阻力與事件五折只管戰線（設計 5.1、3.2）：三條戰線照這一季的規則換成真的會動的線——第一季是三條戰線本身，
-        規則關著的季是它們合成的那一條（黃巾聲勢）。玉璽線索不算。"""
-        c, w = self.content, self.state.world
-        return {line for front in front_ids(c) if (line := resolve_trend(c, w, front)) is not None}
+        return pushing.resisted_lines(self)
 
     def _shaped(self, trend_id: str, delta: float, source: str) -> tuple[float, bool]:
-        """玩家這一下真的要推多少（設計 3.2、5.1、5.2）：可重複的事件推戰線打 event_trend_share；第一季的出陣乘季長倍數（規則關著的季
-        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。"""
-        c, w = self.content, self.state.world
-        cfg = c.config
-        amount = float(delta)
-        if trend_id not in self._resisted_lines():
-            return amount, False
-        if source == "event":
-            amount *= cfg.event_trend_share
-        season21 = calendar.season21_on(w, c)
-        if season21 and source in ("sortie", "donate", "event"):  # 21 天季（7.4）：出陣、捐軍備、可重複的事件同一個速度，不乘季長倍數
-            amount *= cfg.season21_daily.push_speed
-        if not cfg.push_resistance.enabled:
-            return amount, False
-        if source in ("sortie", "donate") and calendar.season_one_on(w, c) and not season21:  # 捐軍備照出陣（素材與經濟設計第六節第 2 點）
-            amount *= self.season_scale()
-        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, push.tuning_for(w, c))
-        return amount * share, share < 1
+        return pushing.shaped(self, trend_id, delta, source)
 
     def _carry(self, trend_id: str, amount: float) -> int:
-        """把縮放後的推力 amount 加進這一季這條線的零頭（WorldState.trend_accum，同一條線一個值、正負抵銷），回傳滿了的整數點數。
-        決定性，不擲骰、不動 Game.rng。"""
-        w = self.state.world
-        whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), amount)
-        if rest:
-            w.trend_accum[trend_id] = rest
-        else:
-            w.trend_accum.pop(trend_id, None)
-        return whole
+        return pushing.carry(self, trend_id, amount)
 
     # 操練的帳：本體在 tianxia/core/combat.py（第二輪第 79 批）；_exp_changes 只有它自己叫，不留委派
     def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
@@ -1924,57 +1846,10 @@ class Game:
     # ── 出陣（出陣探索與地盤設計第二節）：本體在功能包 tianxia/features/sortie/actions.py（主動搬六包第 1 批），這裡留一行委派 ──
 
     def _push_progress(self, loc_id: str, nominal: float, source: str, how: str | None = None) -> list[str]:
-        """領地爭奪：推（攻：自己那一條往上）或拉（守：每一條往下）這一塊的進度（翻地與爭搶，輿圖簡化設計 4.1、4.2）。推多少＝nominal ×
-        Config.conquest.progress_scale（出陣）÷ √n（n 同推線的人數緩衝），出陣再乘集火（conquest.focus_bonus）與混戰得勝（_clash_won）；
-        事件（source="event"）推 event_progress、不乘 progress_scale、不吃集火、不記出陣那一筆。推不動（conquest.push_problem）是空的。
-        出陣照推線那一本帳記貢獻（名目量）、記一筆出陣（conquest.mark：正在推的人、集火、混戰讀它）、進活躍名單。推滿當場易手（conquest.flip）。
-        how 沒給照這裡此刻是不是自己的（自己的守、不是的攻）。回那幾句話。"""
-        s, c = self.state, self.content
-        w, p = s.world, s.player
-        side = self._side()
-        if side is None:
-            return []
-        how = how or ("hold" if conquest.holder(w, c, loc_id) == side else "attack")
-        if conquest.push_problem(w, c, side, loc_id, how) is not None:
-            return []
-        cfg = c.config
-        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
-        scale = cfg.conquest.progress_scale if source == "sortie" else 1.0
-        # 傳檄（玉璽碎片改版第 2 批）：這一塊算進的那條線有照自家算的傳檄，進度同樣放大（人數緩衝之前）；沒有時一個字都不變
-        if (writ := seal_acts.writ_factor(w, c, conquest.line_of(w, c, loc_id), side)) != 1.0:
-            scale *= writ
-        amount = push.buffered(nominal * scale, push.active_count(s, side, w.time, window))
-        notes = ""
-        if source == "sortie":
-            focus = conquest.focus_bonus(w, c, loc_id, side, p.name)
-            if focus:
-                amount *= 1 + focus
-                notes += conquest.FOCUS_NOTE.format(pct=round(focus * 100))
-            if self._clash_won:
-                amount *= cfg.conquest.clash_scale
-                notes += conquest.CLASH_NOTE
-        done = conquest.push(w, c, loc_id, side, p.name, amount, how, notes)
-        conquest.tally(w, c, self._pill_day(), side, p.name, done.moved)  # 今天推了多少（出陣回報的小籤）
-        if source == "sortie":
-            conquest.mark(w, c, loc_id, p.name, side, how, done.moved)
-            self._sortie_marked = True
-            self._sortie_moved += done.moved
-            self._sortie_flipped = self._sortie_flipped or done.flipped
-            if calendar.season_one_on(w, c):
-                gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                wins.credit(p, c, w, calendar.point(w.time, c, w).week, gained)
-        w.active_pushers.setdefault(side, {})[p.name] = w.time
-        w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
-        return done.lines
+        return pushing.push_progress(self, loc_id, nominal, source, how)
 
     def _event_progress(self) -> list[str]:
-        """領地爭奪：在一塊區塊做完一則事件，往自己那一邊推一次進度（Config.conquest.event_progress；計畫 2.3）：自己的地方是拉、別人的與中立地是推。
-        散人、在路上、事件還串著下一則、開關關著、此刻推不動都是空的。"""
-        s, c = self.state, self.content
-        p = s.player
-        if s.pending_event is not None or p.journey is not None or not conquest.on(c, s.world) or p.location is None:
-            return self._story_tick()  # 一條線：段落事件了結了，照記下的那一步往下走（下一段就在這裡時直接端出來）
-        return self._push_progress(p.location, c.config.conquest.event_progress, "event") + self._story_tick()
+        return pushing.event_progress(self)
 
     # ── 一條線（特殊事件與特殊頓悟的底座）：本體在 tianxia/features/story/actions.py（全部拆包第 30 批），這裡留一行委派 ──
     # （_story_act、_story_fight、_story_bout 只有包裡叫：story: 由 choose 掛鉤接走，不留）
@@ -1990,13 +1865,6 @@ class Game:
 
     def _deed_fame(self, kind: str) -> list[str]:
         return combat.deed_fame(self, kind)
-
-    def _resisted_line(self) -> str:
-        """盡頭阻力打了折的那一下接哪一句（FB-432）：人站在自家陣營控制的地方（守、巡哨、傳道、在自家地盤碰上的事）推過頭是
-        STEADY_LINE，其餘（攻、散人、沒有控制方的地方）照舊 RESISTED_LINE。"""
-        side, loc = self._side(), self.state.player.location
-        mine = side is not None and loc is not None and territory.controller(self.state.world, self.content, loc) == side
-        return push.STEADY_LINE if mine else push.RESISTED_LINE
 
     def _record_exp(self, record, exp: int, source: str = "battle") -> list[str]:
         return combat.record_exp(self, record, exp, source)
@@ -2036,80 +1904,10 @@ class Game:
         return combat.tier3(self, squad, record, chance, tag, source)
 
     def _goals(self) -> dict[str, int]:
-        """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。
-        照那一邊（_side）：豪強分屬兩軍的季是依附那一軍的目標，所以豪強的守勢行動、修築塢堡、遊歷也往那一軍推。"""
-        faction = self.content.scenario.find_faction(self._side())
-        return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
+        return pushing.goals(self)
 
     def push_trend(self, trend_id: str, delta: float, *, source: str) -> list[str]:
-        """玩家自己造成的大勢推動一律走這裡（遊歷、出陣、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
-        第一季設計第七節的規則，掛在第一季開關後面——開關關著（或這一季開季時是關的）就是 change_trend，一個字都不變：
-        1. 陣營人數緩衝：推力 ÷ √n，n＝自己陣營 active_window_days 個曆日內推過大勢的成員（含自己這一次、含假人，最少 1）；
-        2. 每人每曆日對每條線的上限（緩衝後算）：超過的部分不推大勢；
-        3. 貢獻帳：替自己陣營的目標方向推才記，contrib_per_push × 推力（不打緩衝的折），超過上限的部分只記 over_cap_contrib_ratio；
-        4. 散人照推、照受上限，n 當 1，不記貢獻也不進活躍名單。
-        緩衝後常有小數：不足一點的記在全服的 trend_accum（每條線一個），滿一點才真的推；回傳 change_trend 的訊息
-        （第一季規則開著時戰線是機器可讀的戰況變化，畫面上換成一句話，見 front_lines；開關關著是既有的「（黃巾聲勢 +2）」），
-        只有整數真的動了才有。
-        出陣探索與地盤（2026-10-14）：推之前先照 _shaped 打事件五折、第一季出陣的季長倍數、盡頭阻力（三個開關都關著時一個字都不變），
-        打了阻力的那一下後面多一句 push.RESISTED_LINE（站在自家控制的地方是 STEADY_LINE，_resisted_line）；每人每曆日上限讀 daily_push_cap；
-        貢獻照收到的 delta（名目量）全額記。
-        source 是註記（"train"、"sortie"、"drill"、"event"、"event_once"……），不存檔。"""
-        s, c = self.state, self.content
-        w, p = s.world, s.player
-        amount, resisted = self._shaped(trend_id, delta, source)
-        # 傳檄（玉璽碎片改版第 2 批）：那一軍的人在那條線上往自家目標推，乘在盡頭阻力與季長倍數之後、人數緩衝與每人每日上限之前（上限照舊）；
-        # 貢獻照收到的 delta（名目量）記、不跟著放大。沒有傳檄時一個字都不變（不乘 1.0：int 會變成 float）
-        if (writ := seal_acts.writ_factor(w, c, trend_id, self._side(), amount)) != 1.0:
-            amount *= writ
-        tail = [self._resisted_line()] if resisted else []
-        if not calendar.season_one_on(w, c):
-            # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
-            # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
-            # 遊歷打贏（source="train"）也照季長縮放（企劃者 2026-10-13，FB-168：不縮放的話兩天裡兩邊的遊歷就能把黃巾聲勢從 25
-            # 推到 60 或砸到 0，決戰「要嘛第一天開、要嘛整季不開」）。決戰收場不走這裡、不縮放；操練的縮放在出陣包 train_actions.drill_push 先算好，
-            # 傳進來的已經是整數點數。一季只會發生一次的事件（source="event_once"：事件標了 once，或這一下新立世界旗標，
-            # rules.apply_effect 判斷）照原本的量（FB-166）。出陣（source="sortie"）跟遊歷打贏一樣照季長縮放；打過折
-            # （事件五折、盡頭阻力）的量有零頭，一律記進 trend_accum。
-            scale = self.season_scale() if source in ("event", "train", "sortie", "donate") else 1.0
-            if (scale < 1 or amount != int(amount)) and is_revealed(w, c, trend_id):
-                whole = self._carry(trend_id, amount * scale)
-                return (change_trend(s, c, trend_id, whole) if whole else []) + tail
-            return change_trend(s, c, trend_id, int(amount)) + tail
-        if amount == 0 or (amount < 0 and not is_revealed(w, c, trend_id)):  # 開季時才補蓋章的季沒記到新加的公開線，照樣算浮現
-            return []  # change_trend 也不會動的推動：不能拿來刷貢獻、也不算活躍
-        cfg = c.config
-        now = w.time
-        at = calendar.point(now, c, w)
-        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
-        key = f"{at.cal_day}:{trend_id}"
-        side = self._side()  # 人數緩衝、貢獻、活躍名單都照那一邊（豪強分屬兩軍：依附的那一軍）
-        pushed = push.buffered(abs(amount), push.active_count(s, side, now, window))
-        used = push.used_today(p.pushed, at.cal_day, trend_id)
-        moved, _ = push.split_by_cap(pushed, used, self.daily_push_cap())  # 還推得動多少只在 push.room_left 算（_push_room 也走它）
-        p.pushed = push.recent_days(p.pushed, at.cal_day)
-        p.pushed[key] = used + moved
-
-        msgs: list[str] = []
-        if moved > 0:
-            whole, rest = push.take_whole(w.trend_accum.get(trend_id, 0.0), moved if amount > 0 else -moved)
-            if rest:
-                w.trend_accum[trend_id] = rest
-            else:
-                w.trend_accum.pop(trend_id, None)
-            if whole:
-                msgs = change_trend(s, c, trend_id, whole)
-
-        if side is not None:  # 散人：照推，但不記貢獻、不進活躍名單
-            faction = c.scenario.find_faction(side)
-            goal = faction.goals.get(trend_id, 0) if faction is not None else 0
-            # 捐軍備（source="donate"）的貢獻照捐的份量在 donate_actions.take 記，推力不另記（PM 2026-10-15）
-            if source != "donate" and goal and (goal > 0) == (amount > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
-                gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                wins.credit(p, c, w, at.week, gained)
-            w.active_pushers.setdefault(side, {})[p.name] = now
-        w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
-        return msgs + tail
+        return pushing.push_trend(self, trend_id, delta, source=source)
 
     # 獎勵、頓悟的契機、歸檔（_battle_rewards、_seize、_file_battle）：本體在 tianxia/core/combat.py（第二輪第 79 批）；_thin_drops 只有它自己叫，不留委派
     def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
@@ -2238,38 +2036,7 @@ class Game:
 
     @_not_while_preparing
     def take_stamina_pill(self, *, pill_only: bool = False) -> list[str]:
-        """服一顆回體丹（企劃者 2026-10-07）：體力回 stamina_pill_restore，夾在上限。沒有丹、體力是滿的、還在草廬序章裡
-        （序章的體力是照步驟算好的：探索、合成、修練剛好用完，接著才教調息，prologue.start_stamina）、今天已經服滿
-        （stamina_pills_per_day，pills_left_today）都只回一句話、不收丹。吃了才寫江湖紀錄（數值變化寫體力與丹）。
-        測試期間 Config.beta_free_refill 打開時，同一個入口改成免費補滿（_refill_stamina），不收丹。pill_only 是給假人與
-        整季機器人的：他們照舊只吃丹（bot.take_pill），不吃這份測試期間的免費補滿；開關關著時 pill_only 沒有作用。"""
-        p, cfg = self.state.player, self.content.config
-        hut_pill = prologue_rules.pills_open(self.state, self.content)  # 序章教服丹那一步起（新手引導重做）：照真的服一顆
-        if cfg.beta_free_refill and not pill_only and not hut_pill:
-            return self._refill_stamina()
-        name = cfg.stamina_pill_name
-        if p.stamina_pills <= 0:
-            return self._log([f"你身上沒有{name}了。"])
-        if prologue_rules.active(self.state, self.content) and not hut_pill:
-            return self._log([f"草廬裡先照師父說的做，{name}留著出了草廬再吃。"])
-        if self.pills_left_today() == 0:
-            return self._log([PILL_DAY_FULL.format(n=_cn_count(self.pill_cap()))])
-        if p.stamina >= cfg.stamina_max:
-            return self._log(["體力是滿的，這時候服丹是糟蹋。"])
-        before = p.stamina
-        p.stamina = min(float(cfg.stamina_max), p.stamina + cfg.stamina_pill_restore)
-        p.stamina_pills -= 1
-        today = self._pill_day()
-        p.pills_today = (p.pills_today if p.pill_day == today else 0) + 1
-        p.pill_day = today
-        msgs = [f"你服下一顆{name}，一股暖意自丹田散開，精神為之一振。"]
-        journal.add_entry(self.state, JournalEntry(
-            time=self.state.world.time, title=f"服下{name}", lines=msgs,
-            changes=[f"體力 +{round(p.stamina - before)}", f"{name} -1"],
-        ))
-        p.guide_done = []
-        rewards = self._guide(self._note_action("pill"))  # 序章「服一顆回體丹」（新手引導重做）
-        return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"] + rewards)
+        return pills.take_stamina_pill(self, pill_only=pill_only)
 
     # ── 每日簽到：本體在 tianxia/features/checkin/actions.py（全部拆包第 30 批），這裡留一行委派 ──
 
@@ -2283,8 +2050,7 @@ class Game:
     # ── 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py，計畫第五章 Task 16、17）──
 
     def pill_now(self) -> float:
-        """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
-        return self.now + self.advanced_real
+        return pills.pill_now(self)
 
     def _pill_day(self) -> int:
         """現在是第幾天（Config.pill_day_utc_offset_hours 的時區、00:00 換日；從 1970-01-01 起算）。"""
@@ -2295,14 +2061,7 @@ class Game:
         return int((t + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
     def pill_cap(self) -> int:
-        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
-        商城的月卡（錢包服務的 card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
-        cfg = self.content.config
-        if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
-            cap = cfg.newbie_pills_per_day
-        else:
-            cap = cfg.stamina_pills_per_day
-        return cap if cap <= 0 else cap + self._pill_card_bonus()
+        return pills.pill_cap(self)
 
     def _pill_card_bonus(self) -> int:
         """今天月卡讓回體丹上限多幾顆（ctx.wallet.card_bonus，開發規範手冊 3.10）；商城關著、沒有卡、今天不在卡的期間裡是 0。
@@ -2326,29 +2085,7 @@ class Game:
         return name_key(self.state.player.name)
 
     def pills_left_today(self) -> int | None:
-        """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
-        cap = self.pill_cap()
-        if cap <= 0:
-            return None
-        p = self.state.player
-        return max(0, cap - (p.pills_today if p.pill_day == self._pill_day() else 0))
-
-    def _refill_stamina(self) -> list[str]:
-        """測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07；take_stamina_pill 在開關打開時走這裡）：
-        補到 stamina_max（狀態列顯示的那個上限），不收丹、不收銀兩、不限次數。規矩跟丹一模一樣：還在草廬序章裡、體力已經是滿的
-        都只回一句話（不寫紀錄、不動東西）；籌備中由 take_stamina_pill 的 _not_while_preparing 擋；其餘不看——閉關中、
-        在路上都照補、不動那個狀態（丹也不看 busy_until、journey）。補成了寫一則江湖紀錄（數值變化只寫體力，沒有丹的那一項）。"""
-        p, cfg = self.state.player, self.content.config
-        if prologue_rules.active(self.state, self.content):
-            return self._log([REFILL_HUT])
-        if p.stamina >= cfg.stamina_max:
-            return self._log([REFILL_FULL])
-        gained = f"體力 +{int(cfg.stamina_max) - int(p.stamina)}"  # 狀態列顯示 int(體力)：寫的數字就是條子實際走的那一段（體力有小數是常態）
-        p.stamina = float(cfg.stamina_max)
-        journal.add_entry(self.state, JournalEntry(
-            time=self.state.world.time, title=REFILL_TITLE, lines=[REFILL_LINE], changes=[gained],
-        ))
-        return self._log([REFILL_LINE, gained])
+        return pills.pills_left_today(self)
 
     def _season_prep(self) -> list[Option] | None:
         """開季準備卡（企劃者 2026-11-05「至少需要導引」）：進新的一季第一個畫面，依序 ① 挑這一季的成長配比（五項屬性的季、還沒挑）
