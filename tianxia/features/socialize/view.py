@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from tianxia import precise, ranks, roster, treasures  # 共用規則層（階級 ranks 第 40 批收進；precise、roster、treasures）
+from tianxia.core import xinshen  # 心神（核心的資源）：開著時每位人物一天能談到 turns_per_figure 輪
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE, SOCIAL_NO_ONE
 from tianxia.events import event_candidates, has_events_here  # 過渡：待搬（事件：候選、這個地點有沒有）
 from tianxia.models import Event
@@ -18,8 +19,20 @@ AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單�
 
 
 def talk_cap(ctx) -> int:
-    """跟每位人物每個遊戲日能談的輪數：talk_turns_per_day ＋ 玄紐（玉璽碎片設計 7.1）。"""
+    """跟每位人物每個遊戲日能長情誼的輪數：talk_turns_per_day ＋ 玄紐（玉璽碎片設計 7.1）。心神關著時也就是能談的輪數。"""
     return ctx.content.config.talk_turns_per_day + round(treasures.amount(ctx.state, ctx.content, "talk_turns"))
+
+
+def talk_full_cap(ctx) -> int:
+    """跟每位人物每個遊戲日最多能談的輪數：心神開著時是 Config.xinshen.turns_per_figure（Joy 同意 8；玄紐給得更多時照玄紐），
+    關著照舊 talk_cap。"""
+    cap = talk_cap(ctx)
+    return max(cap, ctx.content.config.xinshen.turns_per_figure) if xinshen.on(ctx.content) else cap
+
+
+def talk_idle(ctx, companion_id: str) -> bool:
+    """這一輪只是閒聊（心神開著、今天跟他長情誼的那幾輪用完了）：照樣聊、他照樣記得，情誼、心意、條件不再動。"""
+    return xinshen.on(ctx.content) and talks_used(ctx, companion_id) >= talk_cap(ctx)
 
 
 def talkable(ctx, companion_id: str) -> bool:
@@ -96,8 +109,8 @@ def talks_used(ctx, companion_id: str) -> int:
 
 
 def talks_left(ctx, companion_id: str) -> int:
-    """這個遊戲日還能跟這位人物聊幾輪。"""
-    return max(0, talk_cap(ctx) - talks_used(ctx, companion_id))
+    """這個遊戲日還能跟這位人物聊幾輪（心神開著時連閒聊的那幾輪，talk_full_cap）。"""
+    return max(0, talk_full_cap(ctx) - talks_used(ctx, companion_id))
 
 
 def talks_reopen(ctx) -> tuple[str, str | None]:
@@ -136,7 +149,7 @@ def talked_out_note(ctx) -> str:
     ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。開頭一律是「已經談滿」：網頁行動列的格子認它，只寫「已談滿」（審查 I1）。"""
     kind, moment = talks_reopen(ctx)
     when = f"{moment} 之後再來" if moment else "過一陣子再來" if kind == "later" else "這一季之內不能再來"  # 「過一陣子」：FB-102
-    return f"已經談滿 {talk_cap(ctx)} 輪，{when}"
+    return f"已經談滿 {talk_full_cap(ctx)} 輪，{when}"
 
 
 def starts_dialogue(ctx) -> bool:

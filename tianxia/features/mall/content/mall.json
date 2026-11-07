@@ -40,6 +40,36 @@
     "draft": "PM 佔位：名字、說明、價錢待 joy"
   },
   {
+    "id": "xinshen_5",
+    "name": "凝神香",
+    "note": "點一支，心神多五點。存著不過期，換季也帶著走；每天補的心神先用，用完才動存著的。",
+    "price": 30,
+    "kind": "consumable",
+    "effects": {
+      "xinshen": 5
+    },
+    "on_sale": {
+      "rule": "xinshen",
+      "start": "2026-11-14"
+    },
+    "draft": "Joy 2026-11-06 定 5 點 30 元寶；心神開關開著、跑一週後（11/14 起）才上架；說明待 joy 潤"
+  },
+  {
+    "id": "xinshen_30",
+    "name": "凝神香一盒",
+    "note": "一盒三十點心神。存著不過期，換季也帶著走；每天補的心神先用，用完才動存著的。",
+    "price": 150,
+    "kind": "consumable",
+    "effects": {
+      "xinshen": 30
+    },
+    "on_sale": {
+      "rule": "xinshen",
+      "start": "2026-11-14"
+    },
+    "draft": "Joy 2026-11-06 定 30 點 150 元寶；同上；說明待 joy 潤"
+  },
+  {
     "id": "rewrite_zhuan",
     "name": "重修列傳",
     "note": "休季時，你的列傳能多重寫一次。一季最多買兩張。",

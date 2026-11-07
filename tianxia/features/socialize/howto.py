@@ -44,10 +44,20 @@ def day_every(content: Content, season: WorldState) -> str:
     return f"每 {' '.join(parts)}（現實時間）"
 
 
+def xinshen_line(content: Content, season: WorldState, socialize_cost: int) -> str:
+    """心神開著時交友那一行（tianxia/core/xinshen.py）：見面花體力，說話扣心神；每天補多少、月卡多多少、每位人物前幾輪長情誼。待 joy 潤。"""
+    cfg, x = content.config, content.config.xinshen
+    return (f"- **交友**（體力 {socialize_cost}）：見這裡的人物談話。說話不花體力、扣{x.name}：按選項 {x.option_cost} 點、自己說 {x.say_cost} 點；"
+            f"{x.name}每天 00:00 補到 {x.free_daily}（月卡多 {x.card_daily}），萬寶閣的凝神香可以存著用。同一位人物{day_every(content, season)}"
+            f"前 {cfg.talk_turns_per_day} 輪會長情誼，之後還能聊到第 {x.turns_per_figure} 輪，情誼不再動。")
+
+
 def socialize_section(content: Content, season: WorldState) -> list[str]:
     """玩法說明交友那一條（HOWTO_ORDER 的 socialize）。"""
     cfg = content.config
     cost = cfg.action_cost
+    if cfg.xinshen.enabled:  # 心神開著：見面花體力，說話扣心神
+        return [xinshen_line(content, season, cost["socialize"])]
     return [
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{SEEK_NAME}裡。"

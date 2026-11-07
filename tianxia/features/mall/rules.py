@@ -22,6 +22,7 @@ from tianxia import library  # 共用規則層（功法庫上限 cap_of，開發
 from tianxia.characters import name_key
 # 票的庫存、月卡加的上限、哪一件賣這種效果搬進核心的錢包服務（開發規範手冊 3.10）；這裡照舊叫得到（mall.tokens……）
 from tianxia.core.services import CARD_KEY, card_bonus, item_for, look_ids, tokens  # noqa: F401
+from tianxia.core import xinshen  # 心神（核心的資源）：凝神香的效果名、退款時收回存著的
 from tianxia.models import Content, MallItem
 from tianxia.state import GameState
 from tianxia.wallet import Wallet
@@ -57,6 +58,9 @@ EFFECTS: dict[str, EffectSpec] = {
     # 題壁墨（走一趟，Joy 2026-10-29～30「任意留言需要消耗商城道具」「題壁墨都先只能元寶買」）：不改角色，那一列購買就是一張；
     # 走完一趟自己寫一句時用掉一張（data 記 used、place、inscription；outing.INK）。換季也帶著走
     "inscribe": EffectSpec("consumable", "題壁墨 {n} 張", 99),
+    # 凝神香（心神，Joy 2026-11-06「可以 寫」）：不改角色，那一列購買記存了幾點；用掉的記在帳號（tianxia/core/xinshen.py）。
+    # 帳號的，不過期、換季帶著走；扣的時候先扣每天補的那兩份。效果名就是 xinshen.EFFECT
+    "xinshen": EffectSpec("consumable", "心神 {n} 點（存著，換季也帶著走）", 999),
     # 擂台形象（功能包 looks；Joy 2026-10-31「預設形象就是斗笠小子」、買的東西不能不見）：商品的 look 寫哪一套，購買那一列的 data 記
     # look_id，那一列就是這一套（帳號的，換季也帶著走）；穿哪一套在萬寶閣的「形象」那一頁換
     "look": EffectSpec("look", "擂台形象一套（換季也帶著走）", 1),
@@ -391,6 +395,8 @@ def _deliver(
     if rerolls:
         state.player.create_rerolls += rerolls
         changes.append(f"重悟帖 +{rerolls}")
+    if item.effects.get(xinshen.EFFECT, 0):
+        changes.append(f"{content.config.xinshen.name} +{item.effects[xinshen.EFFECT]}（存著）")  # 待 joy 潤
     if item.look:
         look = content.looks.get(item.look)
         changes.append(LOOK_GOT.format(name=look.name if look else item.look))
@@ -634,6 +640,12 @@ def refund(
             took.append(PILLS_BACK.format(pill=content.config.legend_item_name, n=back))
             if back < legend:
                 took.append(PILLS_USED.format(n=legend - back))
+        stored = int(bought.data.get(xinshen.EFFECT, 0))
+        if stored:  # 凝神香：這一筆還沒用的收回（標退了就不算），用掉的不追
+            back = max(0, stored - int(bought.data.get(xinshen.SPENT, 0)))
+            took.append(f"{content.config.xinshen.name}收回 {back} 點。")  # 待 joy 潤
+            if back < stored:
+                took.append(f"用掉的 {stored - back} 點不追。")  # 待 joy 潤
         rerolls = int(bought.data.get("create_reroll", 0))
         if rerolls:  # 重悟帖換季帶著走（同回體丹）：還在手上的收回，用掉的不追
             back = min(rerolls, state.player.create_rerolls)
@@ -702,7 +714,7 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
         out.append(f"{where}：上架日期的開始（{window.start}）在結束（{window.end}）之後")
     if any(n < 1 for n in window.seasons):
         out.append(f"{where}：上架的季要是正整數（寫了 {window.seasons}）")
-    if window.rule is not None and not isinstance(getattr(content.config.jianfa, window.rule, None), bool):
+    if window.rule is not None and window.rule != xinshen.EFFECT and not isinstance(getattr(content.config.jianfa, window.rule, None), bool):
         out.append(f"{where}：上架的子開關 {window.rule} 不是 Config.jianfa 的子開關")
     for slot in re.findall(r"\{[^{}]*\}", item.note):  # 說明裡照季換字的插槽（FB-849）
         if slot not in SLOTS:

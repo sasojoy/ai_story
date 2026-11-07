@@ -13,6 +13,7 @@ from __future__ import annotations
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia import figures, precise, roster
+from tianxia.core import xinshen  # 心神（核心的資源）：心神開著時對話扣它、不扣體力
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text
@@ -151,6 +152,11 @@ def talk(ctx, arg: str, prepared: companion_agent.PreparedTurn | None = None, sa
         return parley_actions.answer(ctx, companion_id, arg)
     if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
         return parley_actions.plan(ctx, companion_id, prepared, said)
+    on = xinshen.on(ctx.content)
+    cost = talk_cost(ctx, SAY_OPTION if arg == "say" else "talk")
+    if on and not ctx.xinshen_purse().can(cost):  # 心神不夠（選項本來就灰著；直接叫進來的也擋）
+        return [xinshen.short_line(ctx.content)]
+    idle = ctx._talk_idle(companion_id)  # 今天跟他長情誼的那幾輪用完了：照樣聊，情誼、心意、條件不動
     affinity = ctx.state.player.affinities.get(companion_id, 0)
     heard = actions.stance_before(ctx, companion_id)
     ctx._parley_decision = None
@@ -160,19 +166,23 @@ def talk(ctx, arg: str, prepared: companion_agent.PreparedTurn | None = None, sa
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 ctx._quick_client(), ctx.state, ctx.content, ctx.world, companion_id, said,
                 turn=companion_agent.prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                decide=lambda turn: parley_actions.decide(ctx, companion_id, turn, said=said or ""),
+                decide=None if idle else (lambda turn: parley_actions.decide(ctx, companion_id, turn, said=said or "")), idle=idle,
             )
         else:
             msgs = companion_agent.continue_dialogue(
                 ctx._quick_client(), ctx.state, ctx.content, ctx.world, companion_id, int(arg), ctx.rng,
-                turn=companion_agent.prepared_turn(prepared),
+                turn=companion_agent.prepared_turn(prepared), idle=idle,
             )
     except companion_agent.DialogueUnavailable:
         return dialogue_unavailable(ctx, companion_id)
-    actions.stance_credit(ctx, companion_id, heard)
+    if not idle:
+        actions.stance_credit(ctx, companion_id, heard)
     annal_talk(ctx, companion_id, ctx.state.player.affinities.get(companion_id, 0) - affinity, said)
     msgs += ctx._overhear(companion_id, msgs)
-    ctx.state.player.stamina -= ctx.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
+    if on:  # 心神（Joy 2026-11-06）：要叫模型的這一輪不扣體力；生成不出來的那輪不扣
+        ctx.xinshen_spend(cost)
+    else:
+        ctx.state.player.stamina -= ctx.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
     msgs += ctx._count_talk(companion_id)
     decision, ctx._parley_decision = ctx._parley_decision, None
     return msgs + parley_actions.finish(ctx, companion_id, decision)
@@ -226,15 +236,35 @@ def road_say(ctx, prepared: companion_agent.PreparedTurn | None, said: str | Non
     return msgs + parley_actions.finish(ctx, cid, decision)
 
 
+def talk_cost(ctx, option_id: str) -> int:
+    """對話這一輪的價錢：心神開著照 Config.xinshen（自己說比按選項貴），關著是體力 talk_stamina。"""
+    cfg = ctx.content.config
+    if not xinshen.on(ctx.content):
+        return cfg.talk_stamina
+    return cfg.xinshen.say_cost if option_id == SAY_OPTION else cfg.xinshen.option_cost
+
+
+def talk_option(ctx, option_id: str, label: str, have: xinshen.Purse | None, idle: bool) -> Option:
+    """對話的一顆：心神關著照舊花體力（_cost_option）；開著寫「心神 N」、付不起灰掉，閒聊的那幾輪多寫一句情誼已到頂。"""
+    cost = talk_cost(ctx, option_id)
+    if have is None:
+        return ctx._cost_option(option_id, label, cost)
+    notes = [xinshen.cost_note(ctx.content, cost)] + ([xinshen.IDLE_NOTE] if idle else [])
+    return Option(id=option_id, label=f"{label}（{'・'.join(notes)}）", enabled=have.can(cost))
+
+
 def talk_options(ctx) -> list[Option]:
     """跟人物談著的時候的整個選單（Game._everyday_options 裡 pending_companion 那一段，位置算行為，第 56 批起是 take/talk 那一格）：
     上一輪給的選項（花體力）、自己說、伏筆的片段與機緣的話題（固定文字、不花體力）、NPC 智能 2.0 的條件與欠的事，最後一定有「告辭」。"""
     s, c = ctx.state, ctx.content
     dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
-    talk_cost = c.config.talk_stamina
-    opts = [ctx._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
-    if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
-        opts.append(ctx._cost_option(SAY_OPTION, "自己說…", talk_cost))
+    have = ctx.xinshen_purse() if xinshen.on(c) else None  # 心神開著：不花體力，扣心神（tianxia/core/xinshen.py）
+    idle = ctx._talk_idle(s.player.pending_companion)
+    opts = [talk_option(ctx, f"talk:{i}", text, have, idle) for i, text in enumerate(dialogue_options)]
+    if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：輪數跟按選項一樣；心神開著時比按選項貴
+        opts.append(talk_option(ctx, SAY_OPTION, "自己說…", have, idle))
+    if have is not None and dialogue_options and not have.can(talk_cost(ctx, "talk")):  # 心神用完了：寫明早幾點補回來
+        opts.append(Option(id="talk:short", label=xinshen.short_line(c), enabled=False))
     opts += ctx._omen_talk_options(s.player.pending_companion)  # 伏筆的片段（計畫 T7）、機緣的話題（正式版乙一）：固定文字、不花體力（軍情，第 34 批查詢服務）
     opts += parley_actions.options(ctx, s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
     opts.append(Option(id="talk:leave", label="告辭"))
