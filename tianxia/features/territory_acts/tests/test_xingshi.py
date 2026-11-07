@@ -1,7 +1,7 @@
 """領地爭奪第三批 A：〈天下形勢〉（設計 3.10；計畫第五章 Task 16、17，第六章 6.3、6.4）。
 
 每天 22:00 結算那一刻（Game._conquest_tick）開一張單：事實是上一篇以來的 day_log（易手、守住、作罷、主將為什麼挑那一塊）、三條線比前一篇
-往哪一邊動、天下大事（不帶數字的那幾則）。伺服器鎖外請模型寫一篇（server.write_xingshi → xingshi_once，三段式），寫不出來、過
+往哪一邊動、天下大事（不帶數字的那幾則）。伺服器鎖外請模型寫一篇（包的 routes.write_xingshi → xingshi_once，三段式），寫不出來、過
 grace_seconds 沒交回，照固定段收（下一個同步的人、或伺服器排程）。收下那一刻天下大事一則、江湖史一筆、見聞「形勢」頁多一篇。
 模型不給任何數字；假人程式的 Game 沒有 client，不叫模型。"""
 from __future__ import annotations
@@ -488,7 +488,7 @@ def test_lines_file_has_every_key(tmp_path):
 # 順帶（同一輪 QA）：管理者白天按「現在就開一篇」時，正在打的那一場不寫「一仗打到入夜」（fighting_day）。
 #
 # 輿圖第三版第 5 批：原本還有一條「舊季（第二批投票那一版）的眾議、主將定奪照舊是下一仗」，那兩種 day_log 收掉了（領地爭奪從沒合進
-# develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/test_conquest_rules.py 守。
+# develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/acts/test_conquest_rules.py 守。
 
 
 def _tw_fb610(y, mo, d, h, mi=0) -> float:

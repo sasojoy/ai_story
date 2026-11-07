@@ -3,7 +3,7 @@
 
 開關 Config.mall.enabled 關著時這裡的 API 全部 404（4.10）。購買在行動鎖裡（act）：扣元寶、寫購買紀錄、發貨同一筆交易。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-商城的動作直接叫這一包的 actions（Game.mall_* 那幾個一行的委派是給還沒改的呼叫端過渡用的，手冊 3.10；包自己不繞回 Game）。
+商城的動作直接叫這一包的 actions（Game 上的委派全部拆包第 58 批拿掉了；包自己不繞回 Game）。
 """
 import re
 import secrets
@@ -65,7 +65,7 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/mall/buy")
     def api_mall_buy(request: Request, body: dict = Body(...)):
-        """買東西（actions.buy）：{item, ref, qty}（qty 一次買幾件，不給是 1；Joy 2026-10-22）；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
+        """買東西（actions.purchase）：{item, ref, qty}（qty 一次買幾件，不給是 1；Joy 2026-10-22）；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
         掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
         （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
         _mall_on()
@@ -74,9 +74,9 @@ def router(shell) -> APIRouter:
         got: dict = {}
 
         def buy(g):
-            out = actions.buy(g, item, ref, max(1, min(mall.MAX_QTY, shell._int(body.get("qty"), 1))))
-            got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
-            return out
+            receipt = actions.purchase(g, item, ref, max(1, min(mall.MAX_QTY, shell._int(body.get("qty"), 1))))
+            got["bought"], got["already"] = receipt.bought, receipt.already  # 從這一次的回傳值拿，不住在 Game 上
+            return receipt.lines
 
         msgs = shell.act(game, buy)
         shell._tell_tabs(game)

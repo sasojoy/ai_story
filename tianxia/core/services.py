@@ -113,6 +113,10 @@
 - 核心的：`ctx._preparing()`（籌備中）、`ctx._journal_guide(notes)`（引導的話記進這一則江湖紀錄的引導那幾行）、`ctx._free_text_of(event)`
   （這一則事件有沒有隨口應對：事件檢定的委派）
 - 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）
+# guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第三節）
+- `ctx.howto_text()`（設定抽屜那一頁：/api/howto 的路由〔guide/routes.py〕照 server 原本的寫法問 Game；本體 guide/actions.py，留委派給路由與二十幾個測試）
+- （拿掉：`_audience_hall`、`_fame_gap`、`_talks_left`、`_talked_out_note`。行動列底下交友、求見那幾行〔socialize/menus.py 的 action_notes〕
+  現在直接問交友求見包的 `view.audience_hall`、`view.fame_gap`、`view.talks_left`、`view.talked_out_note`，不再經 ctx）
 # sense（全部拆包第 24 批「有所感與頓悟」：搬進有所感包的動作要掛、要回的；原本在 engine.py 模組層，包不能 import engine，搬到這裡，engine 照舊叫得到）
 - 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 Game 上探索包的委派 `_outing_watched`
   〔核心叫它，記在邊界測試的 CORE_DELEGATE_CALLERS；包不必直接叫〕；
@@ -339,7 +343,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
   `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
 - `ctx._smith_clue(paid=True)`（鐵匠順口：花了銀兩或素材之後擲一次，中了說出這家知道的隱藏配方那一句；只讀、自己的亂數不動 ctx.rng。主人：鐵匠鋪包，
-  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tianxia/features/smithy/tests/test_econ_smith.py、tests/gear/test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
+  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tianxia/features/smithy/tests/test_econ_smith.py、tianxia/features/smithy/tests/test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
 - `ctx.smith_line(kind, main, aux)`（店面打造頁爐裡放了什麼、這一爐會怎樣，只讀；包自己的 `/api/smith_line` 路由經殼的 `look(game, lambda g: g.smith_line(…))` 叫，
   路由裡的變數叫 g；本體在 `features/smithy/forge_actions.py`，Game 留一行委派給 server 與測試）
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
@@ -375,14 +379,14 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `figures.recover` 直接叫，大勢人物包的 `figure_aid` re-export 回原名（`on`、`left_today`、`restore`……）
 
 # travel（全部拆包第 48 批「移動二」：出發與抵達的補算、在路上那一行字、結伴同行搬進 features/travel；計畫 docs/superpowers/plans/2026-11-07-移動包-第2批.md 1.8）。
-# 本體搬進包，Game 留一行委派（呼叫端不在移動包：sync、advance、status_data、殼、玩家互動包、人物對話、腳本與測試換掉的）；包經 ctx 叫自己的委派，
+# 本體搬進包，Game 留一行委派（呼叫端不在移動包：sync、advance、玩家互動包、人物對話、腳本與測試換掉的）；包經 ctx 叫自己的委派，
 # 測試換掉 Game 上的名字（例 `_depart`、`_arrivals`）時包裡才打得到：
 - `ctx._depart(route, mode, pace=None)`（出發：收店、散掉答應了卻先走的結伴、扣體力、排抵達時刻、帶跟著的人一起；人物帶路答應之後他親自帶你動身，步調照他的腳程；
   路上折返、改道也走它）
 - `ctx._arrivals()`（補算已經到了的站，一站一站抵達；sync、advance 叫，`stamina_plays` 包測試、`test_seats` 直接叫；包內在別人那份 Game 上也叫 `other._arrivals()`）
-- `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（`/api/main` 的 `journey` 那一句）
+- `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（在路上那一句；狀態列 `journey` 那一格第 66 批起直接叫本體）
 - `ctx._join(inv, other)`（答應結伴同行；玩家互動包 `answer_invite` 叫）、`ctx.join_refusal(leader)`（答應跟某人結伴，不行的原因；假人回結伴邀請〔`bots.answer_call`〕先問它）、
-  `ctx._party_expires()`（sync 叫：答應了、帶頭的人過了 `party_wait_seconds` 沒動身就散）、`ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
+  `ctx.party_view()`（結伴那一行；`/api/main` 的 `party` 那一格第 66 批起直接叫本體）
 - 移動包要叫、上面還沒列的核心與別包的 Game 方法：`ctx._ambush_check(came_from, stop, when)`（主人體力玩法包，Game 留委派；`_arrivals` 迴圈中途每換一段查一次伏兵）、
   `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
   `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）
@@ -467,13 +471,13 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 # sortie（全部拆包第 17 批「出陣三」）
 （`ctx._parley_backing_here()`：全部拆包第 20 批人物對話成包，改列二、查詢服務 `# companions` 那一段）
 - `ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(loc_id=None)`、`ctx._train_push(trend_id, delta)`（出陣包自己的委派：
-  tianxia/features/companions/tests/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
+  tianxia/features/companions/tests/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tianxia/features/guide/tests/test_explain.py 換掉 `Game.train_trend_push`，
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
   `ctx.allocate_stat(stat)`、`ctx.pick_growth(preset)`（五項屬性的季，序章配點那一步；主人修練 features/cultivation，本體 actions.pick_growth，Game 留三步）、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
-- `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
+- `ctx._hint_triggers(only)`（這一包自己的委派：tianxia/features/guide/tests/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 
 # bout（全部拆包第 12 批：單挑包自己的委派，被測試或腳本換掉的，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
@@ -522,7 +526,6 @@ explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起
   `_outing_watch` 搬來〕套在 choose、answer_event 與有所感包的 epiphany_names、sense_draw 上，看它不再套一層）
 - `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀）
 
-- `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
 
@@ -558,6 +561,35 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
+# core_seams（全部拆包第 55 批；補算與換季的格，計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 五）：sync 的 plots 那一格（軍情包）經 ctx 叫，
+# 測試換掉 Game 上的名字時才打得到（tests/figures/test_seats.py、features/smithy/tests/test_weapons_forge.py）
+- `ctx._settle_plots()`（不在線時收場的密謀結算；回那幾句）
+
+# core_seams（全部拆包第 57 批；act 子動詞接進 Verb，計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 六）：格裡經 ctx 叫，測試、腳本換掉 Game 上的名字時才打得到
+# （tianxia/features/guide/tests/test_explain.py、scripts/measure_challenge.py）；`_present`、`_action_costs`、`_hint` 已經在一、共用服務
+- `ctx._socialize(prepared)`（交友那一下的本體：交友求見包）、`ctx._challenge(fid)`（挑戰本人按下去：大勢人物包）、`ctx._figure_squad(fid)`（挑戰本人對手那一路，江湖水漲算過：大勢人物包）
+
+# core_bots（全部拆包第 60 批；假人殼收尾，計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 七、九）：act: 那幾格的分數搬進包的 bots.py，條件經 ctx 叫，
+# scripts/same_behavior.py 的 tally 軌換掉 Game 上的名字時才打得到（`_side`、`challenge_odds`、`outing_plan`、`duel_on` 已經在清單上）
+- `ctx.fatigue_next()`（探索包：下一場的疲勞）、`ctx.socialize_starts_dialogue()`、`ctx.socialize_is_futile()`、`ctx.can_meet_figure(fid)`（交友求見包：開口是不是對話、會不會白跑、求見見不見得到）、
+  `ctx.sortie_mode()`、`ctx.duel_convoy_here()`（出陣包：這一下攻或守、運糧隊在不在這裡）
+
+# shell_server（全部拆包第 69 批；三段式的 A、C 段：鎖外那一段搬進各包 routes.py，A、C 照舊經 Game 的委派叫——假人走同一批委派、測試換 Game.xxx 要打得到；同戰記第 52 批那三個。只給各包自己的 routes.py 接三段式，別包不叫：test_feature_boundaries.py 的 RELAY_OWNERS 守，這一段加名字要一起加）
+- 決戰：`ctx.battle_text_request(text)`、`ctx.submit_battle_custom_action(text, rate)`
+- 單挑：`ctx.arena_crowd_request()`、`ctx.apply_arena_crowd(note, text)`、`ctx.duel_text_request(text)`、`ctx.duel_gamble(...)`
+- 人物情誼：`ctx.letter_request()`、`ctx.apply_letter(note, text)`、`ctx.persuade_request(errand_id, text)`、`ctx.persuade(request, rate)`、`ctx.dialogue_request(option_id, text)`、`ctx.say_max()`
+- 煉製：`ctx.create_request(text)`、`ctx.create_intent(text, reading=)`、`ctx.create_reread_request(text)`、`ctx.create_reread(text, reading)`、`ctx.forge_request(art_id, insight_ids)`
+- 修練：`ctx.ascend_request()`、`ctx.ascend_line(request, value)`
+- 探索：`ctx.outing_tale_request()`、`ctx.outing_say(preset, text, verdict)`、`ctx.outing_set_tale(text, request)`
+- 宴客：`ctx.feast_text_request(text)`、`ctx.feast_toast(text, rate, request)`
+- 大勢人物的行動：`ctx.yuedan_request()`、`ctx.apply_yuedan(note, lines)`
+- 玩家互動：`ctx.peer_request(name, action, params)`
+- 玉璽：`ctx.seal_text_request(text)`、`ctx.seal_gamble(...)`
+- 有所感：`ctx.epiphany_request()`、`ctx.epiphany_names(request, names)`、`ctx.sense_request(points, image)`、`ctx.sense_draw(request, proposed)`
+- 酒肆：`ctx.tavern_chatter_request()`、`ctx.apply_tavern_chatter(request, lines)`、`ctx.tavern_ask_request(text)`、`ctx.tavern_ask(question, reply, request=)`
+- 地盤：`ctx.xingshi_waiting()`、`ctx.xingshi_request()`、`ctx.settle_xingshi(request, essay)`、`ctx.release_xingshi(request)`
+- 列傳：`ctx.biography_request(season, rewrite)`、`ctx.write_biography(request, text, now, verdicts=)`
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
@@ -579,7 +611,7 @@ PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，�
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
 # military（全部拆包第 33 批：原本寫在 engine.py；軍情包的第 3、4 階行動選單要產生它、又不能 import engine，搬到這裡，engine 照舊叫得到）
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
-# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
+# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；移動被擋〔移動包 menu.move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
@@ -668,7 +700,7 @@ def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
 
 
 # sense（全部拆包第 24 批「有所感與頓悟」）：原本寫在 engine.py；搬進有所感包的動作要掛裝飾器、要回籌備中那一句，又不能 import engine，
-# 搬到這裡，engine 照舊叫得到（`from tianxia.engine import PREPARING_REFUSAL`：tests/bots/test_stamina_refill.py、tests/gear/test_shop.py）。
+# 搬到這裡，engine 照舊叫得到（`from tianxia.engine import PREPARING_REFUSAL`：tests/bots/test_stamina_refill.py、tianxia/features/smithy/tests/test_shop.py）。
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
@@ -775,7 +807,7 @@ def not_while_preparing(action):
 
 
 # socialize（全部拆包第 21 批「交友求見」）：原本寫在 engine.py；交友求見搬進包要用、核心的選單與挑戰本人也讀、又不能 import engine，搬到這裡，
-# engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到：tests/core/test_social.py、tests/web/test_jianghu_page_web.py）
+# engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到：tianxia/features/peers/tests/test_social.py、tests/web/test_jianghu_page_web.py）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
@@ -825,7 +857,7 @@ def illustration_for(state: GameState, content: Content, season: WorldState) -> 
 
 def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
     """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
-    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
+    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（列傳包 actions.options 也是這兩條），
     季中看不出會是第幾階，照舊賣。"""
     p = state.player
     if content.scenario.find_faction(p.faction) is None:

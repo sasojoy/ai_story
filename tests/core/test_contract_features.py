@@ -144,8 +144,9 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
     home = type(feature).__module__
     # core_world（第 25 批）：世界層的格（WorldHook）也一樣；core_effects（第 32 批）：效果的格（EffectHook）、叛投的格（DefectHook）也一樣；
     # core_eventbus（第 26 批）：事件的格（BusHook）也一樣；core_step（第 36 批）：「你這一步」的格（StepHook）也一樣
+    # 玩法說明的格（HowtoHook，第 59 批）也一樣
     for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection(), *feature.bus(),
-                 *feature.steps()]:
+                 *feature.steps(), *feature.howto()]:
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):
@@ -181,13 +182,13 @@ def test_a_patched_package_function_reaches_the_seam_before_and_after_the_first_
 
 
 def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
-    """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）現在還記在三個地方：登記、index.html、tests/kit/webharness.APP_FILES（第 3 階才由伺服器
-    照 FEATURES 生成）。三份要對得上：漏寫進 index.html 頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。
+    """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）：js 的 script 標籤第 64 批起由伺服器照 FEATURES 生成（features_core.with_scripts），
+    css 的 link 與 tests/kit/webharness.APP_FILES 還是手寫的。要對得上：漏寫進去頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。
     js 排在殼的 app.js 前面（頂層的名字同在一個全域裡，app.js 一載入就用得到），css 排在 style.css 後面（同權重的它說了算）。"""
     import webharness
 
     web = ROOT / "web"
-    page = (web / "index.html").read_text(encoding="utf-8")
+    page = features_core.with_scripts((web / "index.html").read_text(encoding="utf-8"))
     files = features_core.web_files()
     assert files == [name for f in FEATURES for name in f.web] and len(files) == len(set(files))
     for name in files:
@@ -372,3 +373,24 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
         assert not own & set(core[at]) and own | set(core[at]) == set(order), at
     # 週初、每天那兩串照表建、一格一個函式（season_events 照串列的順序叫）
     assert len(world.WEEK_HOOKS) == len(features_core.WORLD_ORDER["week"]) and len(world.DAY_HOOKS) == len(features_core.WORLD_ORDER["day"])
+
+
+# shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）
+def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypatch):
+    """真的 FEATURES 登記的格＋核心、殼傳進 status_run 的格＝STATUS_ORDER，沒有重疊——不然 status_run 會叫包的那一份、核心那一份變死碼；少一格畫面就少鍵。"""
+    import server
+
+    real = features_core.status_run
+    core: dict[str, set[str]] = {}
+
+    def spy(table, slots, frame, ctx):
+        core[table] = set(slots)
+        return real(table, slots, frame, ctx)
+
+    monkeypatch.setattr(features_core, "status_run", spy)
+    view = server.main_view(_game())
+    assert list(view)[:5] == ["status", "quest", "scene", "art", "options"]
+    assert core.keys() == features_core.STATUS_ORDER.keys()
+    for table, order in features_core.STATUS_ORDER.items():
+        own = set(features_core.status_hooks(table))
+        assert not own & core[table] and own | core[table] == set(order), table

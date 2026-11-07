@@ -1,0 +1,11 @@
+/* 天下大勢：軍情的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 第一季的本週軍令（計畫 T6） */
+.orders .order, .bounties .order { padding: 8px 0; border-top: 1px solid var(--line); }
+.orders .order:first-child, .bounties .order:first-child { border-top: 0; padding-top: 0; }
+
+/* 打擊那道軍令多一行「怎麼打、他在哪」（FB-072）：字色比上面的軍令文字深一點、前面一條金線，看得出是補充說明；窄螢幕自然換行 */
+.order-how { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--gold); font-size: 12.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+.order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }

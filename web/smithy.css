@@ -1,0 +1,83 @@
+/* 天下大勢：鐵匠鋪與合成流程的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* ── 鐵匠鋪與合成流程（設計稿 2026-10-29；網頁 A、C、E 批）：確認框的清單、打造頁的灰格與小單、爐火、裝備庫、神器頁。
+   店面那一層的字級一律寫 em（同酒肆、玉璽那一層）：手機上 .shop-layer 吃 body 的 15px，電腦寬那一欄 19.5px，跟著放大 1.3 倍，
+   不必在店面那一段補電腦寬的雙胞胎（tests/core/test_desktop_type.py 只掃店面那一段）。店面是固定的暗底，顏色照店面那一套；
+   確認框是紙底，照主題變數 ── */
+.ask-list { margin: -6px 0 14px; padding: 8px 10px 8px 26px; max-height: 40vh; overflow-y: auto; border-radius: 10px; background: var(--card-2);
+  font-size: 14px; line-height: 1.6; } /* 批量拆解：一件一行拆成什麼（3.4） */
+/* 打造頁缺料的灰格（3.3）：虛線框、暗一點；點了的那一格金框，熬的小單從畫面底下浮上來（企劃者 2026-11-03 挑「乙 從畫面底下浮一張」：
+   同確認框那一層，問句底下一行淡字寫機率與上限）。鐵匠那一句換成熬的結果時左邊那條線換成亮金 */
+.shop-layer .cell.brew { border-style: dashed; background: rgba(0, 0, 0, 0.22); color: #d9c394; }
+.shop-layer .cell.brew .nm { font-size: 1.1em; font-weight: 600; }
+.shop-layer .cell.brew.none { justify-content: center; padding-top: 6px; opacity: 0.4; }
+.shop-layer .cell.brew.on { border-style: solid; border-color: #f2c46a; box-shadow: 0 0 0 1px #f2c46a inset; }
+.ask .ask-sub { margin-top: -8px; font-size: 14px; }
+.shop-layer .shop-line.brewed { border-left-color: #f2c46a; color: #f2e5c6; }
+/* 打造頁的爐火（3.2）：中間的火是一顆鈕（不畫框），看過了還沒開爐時爐子整座亮一點、火大一圈、慢慢晃（開爐竄火那一下照舊優先）；
+   減少動態效果的人不晃。火的下緣掛一枚小籤（企劃者 2026-11-03 挑「丙 火上一枚小籤」）：不佔一行、開爐鈕不被往下推；
+   還沒看金底、看過了金框金字、看不了灰（點了講整句原因） */
+.shop-layer .furnace:has(> .fu-fire) { grid-template-columns: 1fr 5em 1fr; } /* 中間那一欄照字級寬（手機 75px、電腦 97.5px）：小籤不壓到兩邊的料格 */
+.shop-layer .furnace .fu-fire { position: relative; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 50%; }
+.shop-layer .furnace .fu-fire[aria-disabled="true"] { cursor: default; }
+.shop-layer .furnace .fu-fire:focus-visible { outline: 2px solid #f2c46a; outline-offset: 2px; }
+.shop-layer .fu-tag { position: absolute; left: 50%; bottom: -1.1em; transform: translateX(-50%); white-space: nowrap; padding: 0.15em 0.65em;
+  border: 1px solid #f2c46a; border-radius: 1em; background: #f2c46a; color: #1e1510; font: 600 0.8em/1.4 var(--sans); }
+.shop-layer .fu-tag.hot { background: rgba(30, 19, 12, 0.88); color: #f2c46a; }
+.shop-layer .fu-tag.off { border-color: #6b4a2e; background: #3a2a1e; color: #a08a6a; }
+.shop-layer .furnace.hot { background: radial-gradient(circle at 50% 70%, #c8561e 0%, #6a2c12 52%, #2a1a10 100%); box-shadow: 0 0 22px 2px rgba(255, 150, 60, 0.35); }
+.shop-layer .furnace.hot:not(.firing) .flame svg { filter: drop-shadow(0 0 8px rgba(255, 196, 96, 0.9)) brightness(1.12); transform: scale(1.18);
+  animation: fu-hot 1.6s ease-in-out infinite; }
+@keyframes fu-hot { 0%, 100% { transform: scale(1.14); } 50% { transform: scale(1.24) translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }
+/* 裝備庫一列（3.4；企劃者 2026-11-03 從三張對比圖挑「乙 右邊二乘二」，原本是名字一行、四顆鈕一整行）：勾選框｜名字與那一行數字｜
+   右邊四顆鈕二乘二（換上、修／淬煉、拆解），鈕上的小字只在小段之間換行（FB-297）。右邊那一欄寫 em：小字跟著字級放大，375 寬一顆 82px，
+   最長的灰鈕原因「本命兵器不能拆」（約 71px）放得下；比 359px 窄（320）放不下，二乘二改排在名字底下。勾了的那一列左邊一條金線；
+   拆不得的不給勾。「拆解勾選的 N 件」排在最底下，勾了至少一件才黏在捲的那一層底下（勾完不用捲回最底下找；沒勾時不擋著列表） */
+.shop-layer .rk-cap { margin-top: 14px; }
+.shop-layer .rk-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 11.4em; gap: 6px 10px; align-items: start; padding: 10px 4px; }
+.shop-layer .rk-row.on { background: rgba(242, 196, 106, 0.08); box-shadow: inset 3px 0 0 #f2c46a; }
+.shop-layer .rk-pick { position: relative; width: 1.47em; height: 1.47em; margin-top: 0.1em; padding: 0; border: 1.5px solid #b7862b; border-radius: 4px;
+  background: transparent; cursor: pointer; }
+.shop-layer .rk-pick.on { background: #f2c46a; border-color: #f2c46a; }
+.shop-layer .rk-pick.on::after { content: ""; position: absolute; left: 34%; top: 12%; width: 26%; height: 52%; border: solid #1e1510; border-width: 0 2px 2px 0;
+  transform: rotate(45deg); }
+.shop-layer .rk-pick:disabled { opacity: 0.3; cursor: default; }
+.shop-layer .rk-pick:focus-visible { outline: 2px solid #f2c46a; outline-offset: 2px; }
+.shop-layer .rk-btns { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 359px) {
+  .shop-layer .rk-row { grid-template-columns: auto minmax(0, 1fr); }
+  .shop-layer .rk-btns { grid-column: 1 / -1; grid-row: auto; }
+}
+.shop-layer .rk-btn { flex-direction: column; gap: 0; min-height: 2.9em; padding: 4px 3px; line-height: 1.25; }
+.shop-layer .rk-btn b { font-size: 0.93em; }
+.shop-layer .rk-btn small { font-size: 0.75em; font-weight: 400; opacity: 0.9; }
+.shop-layer .rk-btn:disabled { opacity: 0.6; }
+/* 神器頁（3.8）：架上頁鐵匠那一句底下一行連過去；上半「江湖已見」一件一列（你手上有的那一枚標籤亮），鑄譜上有、還沒人打出的虛線框；
+   下半收藏冊一件一枚圓印（企劃者 2026-11-03 挑「乙 圓印」，原本是方格）：一排五枚，你有的亮、這一季打出的框粗、點著的外圈一道，
+   沒人打出過的「？」虛線、淡。圓寫 em（電腦寬跟著放大），4.4 倍字級裝得下三字兩行（六個字的定名）；欄比圓窄（320 寬）就照欄寬 */
+/* 左右邊照鐵匠那一句（.shop-line）：手機 14px，電腦寬對齊遊戲那一欄（50% − 306px 在手機上是負的，max 取 14px，不必另開 641px 的 media） */
+.shop-layer .dv-link { display: block; width: auto; margin: 0 max(14px, calc(50% - 306px)) 4px; padding: 6px 10px; border: 1px solid #6b4a2e; border-radius: 8px;
+  background: rgba(242, 196, 106, 0.06); color: #f2c46a; font: 0.87em/1.4 var(--serif); text-align: left; cursor: pointer; }
+.shop-layer .dv-h { margin: 14px 2px 6px; font: 600 0.93em var(--serif); color: #f2c46a; letter-spacing: 2px; }
+.shop-layer .dv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 8px 10px;
+  border: 1px solid #6b4a2e; border-radius: 10px; background: rgba(43, 26, 16, 0.85); }
+.shop-layer .dv-row b { font: 600 0.93em var(--serif); color: #f2e5c6; }
+.shop-layer .dv-row.mine { border-color: #b7862b; }
+.shop-layer .dv-row.solved { display: grid; gap: 2px; border-style: dashed; }
+.shop-layer .dv-who { display: grid; gap: 2px; min-width: 0; }
+.shop-layer .dv-who small, .shop-layer .dv-row.solved small { font-size: 0.8em; color: #c9b28a; }
+.shop-layer .dv-tag { flex: none; padding: 2px 8px; border: 1px solid #6b4a2e; border-radius: 10px; font-size: 0.8em; color: #a08a6a; white-space: nowrap; }
+.shop-layer .dv-tag.on { border-color: #f2c46a; background: #f2c46a; color: #1e1510; }
+.shop-layer .dv-album { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 6px; justify-items: center; align-items: center; } /* 印（鈕與「？」）一樣大：鈕不跟著拉、不帶通用的下邊距 */
+.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; width: min(4.4em, 100%); min-height: 0; aspect-ratio: 1; margin: 0; padding: 2px;
+  border: 1px solid #6b4a2e; border-radius: 50%; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.25 var(--serif); text-align: center; opacity: 0.6; }
+.shop-layer button.dv-cell { cursor: pointer; }
+.shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
+.shop-layer .dv-cell.dv-now { border-width: 2px; border-color: #f2c46a; } /* 不叫 .now：江湖頁那一條沒加範圍、帶淡入動畫 */
+.shop-layer .dv-cell.on { opacity: 1; box-shadow: 0 0 0 2px #f2e5c6; }
+.shop-layer .dv-cell.unknown { border-style: dashed; opacity: 0.35; }
+.shop-layer .dv-line { margin: 8px 2px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 0.8em/1.5 var(--serif); color: #e8d6ad; }
+
+.shop-layer .rk-go { margin-top: 10px; }
+.shop-layer .rk-go.live { position: sticky; bottom: 0; padding: 18px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), #1e130c 40%); }

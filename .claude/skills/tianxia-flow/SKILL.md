@@ -48,7 +48,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 
 - pytest 一律 `-n 4`（同一台同時最多兩份測試；不寫 `-n auto`）。
 - **`scripts/test_for.py` 照手冊 4.3 挑**（第 0 階 2026-10-31 合進 develop；手冊最後一節寫了落地時跟原文不同的地方）：
-  - 照功能群挑，「import 了 engine」不再算相關：`engine.py` 看改到 Game 的哪個方法（改酒肆的方法 43 條）；核心改了（`models.py`、`state.py`、核心模組、`engine.py` 的共用方法與核心服務）跑核心測試＋`-m smoke`（約 1,500 條、約一分鐘；欄位名帶功能前綴的再加那一群）；`tianxia/features/<包>/` 跑那一包的 `tests/`＋核心契約。
+  - 照改到的檔挑，「import 了 engine」不算相關：`engine.py` 的一行委派照那一包挑，其餘方法跑核心測試＋`-m smoke`＋內文寫到那個方法名的檔（第 61 批拿掉了照方法名分功能群）；`models.py`、`state.py`、核心模組跑核心測試＋`-m smoke`（約 1,650 條，11/07 量）；`server.py` 再加 `tests/server/test_server.py` 與全部 `test_*_shell.py`；`tianxia/features/<包>/` 跑那一包的 `tests/`＋核心契約。
   - **slow 不自動跟，`--slow` 才加**；改到的測試檔本身照舊連 slow。開跑前會列出「整個檔標 slow、這一次不跑」的檔：那些正是你這一包的，加 `--slow`。
   - 預設 `-n 4`，`--` 之後給的 `-n X` 照給的；`--list` 每一段寫為什麼挑，`--count` 數條數。
 - **開發中**：只跑跟這一次改動直接相關的測試，**不跑整套**。（**QA 不重跑開發跑過的測試**，只在實機驗畫面與手感；派工單點名的才跑：手冊 4.2、`tianxia-qa`。）

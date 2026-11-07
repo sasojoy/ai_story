@@ -6,8 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、抵達時刻；第 50 批收進）
-from tianxia.core import bounty_base
-from tianxia import equipment, journal, mounts, precise
+from tianxia import journal, mounts, precise
 from tianxia.core import features as features_core
 from tianxia.journal import Draft
 from tianxia.models import TravelMode
@@ -21,6 +20,18 @@ if TYPE_CHECKING:
     from tianxia.engine import Game
 
 
+def _drop_escort(ctx: Game) -> None:
+    ctx.state.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
+
+
+# core_seams（全部拆包第 56 批「選單收接縫」）：動身收店由移動包代叫的格；懸賞榜、鐵匠鋪、馬市各包登記 depart 那一格（第三層挑到哪一張、打造到一半的單子、掌櫃那一句一起收，
+# 不看坐不坐著都清，所以不走店面登記的 close_shops）。先後是 MENU_ORDER["depart"]。
+_DEPART_CORE = {
+    "escort": _drop_escort,
+    "shops": lambda ctx: features_core.close_shops(ctx),  # 搬成包的店也收起來（店面登記，第 11 批；酒肆、擂台〔全部拆包第 12 批〕；軍需官、打點〔第 43 批〕）
+}
+
+
 def depart(ctx: Game, route: atlas.Route, mode: TravelMode, pace: float | None = None) -> list[str]:
     """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
     疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 arrivals）。
@@ -28,12 +39,7 @@ def depart(ctx: Game, route: atlas.Route, mode: TravelMode, pace: float | None =
     新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
     騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
     s, c = ctx.state, ctx.content
-    bounty_base.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
-    s.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
-    equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
-    mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
-    # （picking_donate、picking_dadian：全部拆包第 43 批換成銀兩出口包的店面登記，下面 close_shops 收）
-    features_core.close_shops(ctx)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆、擂台〔全部拆包第 12 批〕）
+    features_core.menu_run("depart", _DEPART_CORE, ctx)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪、馬市與別的店）收起來，不留在路上
     rerouting = s.player.journey is not None
     start = None if rerouting else s.player.location
     parted = travel_party.part_ways(ctx) if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了

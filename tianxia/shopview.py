@@ -39,7 +39,7 @@ BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:b
          "donate": ("donate:back",), "dadian": ("dadian:back",), "tavern": ("tavern:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
-RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/gear/test_shop.py 鎖住兩邊一樣）
+RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tianxia/features/smithy/tests/test_shop.py 鎖住兩邊一樣）
 
 
 def problem_key(problem: str | None, done: str) -> str:
@@ -630,7 +630,7 @@ def dadian_view(state: GameState, content: Content, *, day: int, room: int, base
 
 def donate_view(state: GameState, content: Content, day: int) -> dict:
     """大本營的軍需帳（素材與經濟設計第六節；Game.shop_view 在軍需官那一串開著時給）：招牌、軍需官那一句、出店（donate:back）、
-    陣營四種軍備的存量（同 Game.armament_view 的順序）、今天還能捐幾點與上限，背包裡每一種素材一格（照剛柔快慢、再照階排：份量、
+    陣營四種軍備的存量（同銀兩出口包 armament_view 的順序）、今天還能捐幾點與上限，背包裡每一種素材一格（照剛柔快慢、再照階排：份量、
     今天最多收得下幾個 take〔economy.donate_take〕、捐不了的原因〔economy.donate_problem〕、進哪一樣軍備）。捐出送
     MAIN_ACTIONS["donate"] 的 items（挑好的幾種一起捐，一則紀錄）。day 是回體丹的換日。"""
     p = state.player
@@ -807,7 +807,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     揭著的在前、交得出的求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（紙上的 due_line、告示上短的 due_short，FB-196）、重賞、求兵
     你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求兵「交出…」（bounty:pick，
     交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
-    同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
+    同懸賞榜包 actions.options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
     不寫：照現在的選單寫陣營，畫面不露出誰是假人（設計 6.6）。"""
     p = state.player
     shown = bounties.visible(state, content)
@@ -816,7 +816,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     picked = next((b for b in shown if b.id == p.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
     picked_items = bounties.fitting(state, content, world, picked) if picked is not None else []
     if not picked_items:
-        picked = None  # 那一張下榜了、交不出了就當它不存在（同 _bounty_options）
+        picked = None  # 那一張下榜了、交不出了就當它不存在（同懸賞榜包 actions.options）
     ranked = []
     for order, b in enumerate(shown):
         title = bounties.title(content, b)

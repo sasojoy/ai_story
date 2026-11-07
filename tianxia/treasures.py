@@ -265,7 +265,7 @@ def deliver(state: GameState, content: Content, item: Equipment, *, hold: bool =
 
 
 def deliver_held(state: GameState, content: Content) -> list[str]:
-    """寄放的東西補發（6.5；Game._deliver_held_gear 同步與快轉時叫）：那一欄開著、拿得下就照 2.2 補（那一欄空著就穿上，否則進
+    """寄放的東西補發（6.5；裝備包 gift_actions.deliver_held_gear 同步與快轉時叫）：那一欄開著、拿得下就照 2.2 補（那一欄空著就穿上，否則進
     裝備庫），一次補到裝備庫滿為止，補不完的（與那一欄關著的）留著。閉關中也補（計畫「要 PM 定的」第 4 條：寶物閉關中本來就能換）。"""
     p = state.player
     if not p.held_gear:

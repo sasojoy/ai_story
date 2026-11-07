@@ -446,4 +446,4 @@ def test_the_page_wiring_is_where_the_server_expects_it():
     assert poll.index("pollInFlight = true;") < poll.index("lastPoll = Date.now()") < poll.index('api("/api/main")')
     set_main = src[src.index("  function setMain("):src.index("\n  }\n", src.index("  function setMain("))]
     assert "lastPoll = Date.now()" in set_main
-    assert "pushLive: false," in src[src.index("  const S = {"):src.index("  const $app")]
+    assert "pushLive: false," in src[src.index("  const S = {"):src.index("\n  };", src.index("  const S = {"))]

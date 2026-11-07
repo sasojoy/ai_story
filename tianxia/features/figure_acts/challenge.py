@@ -2,8 +2,8 @@
 打贏的那一串（心得與經驗、他敗走、掉寶物、三階、四階）、僵持。原本 Game 上的 13 個方法，名字去掉前導底線、第一個參數是 ctx。會改狀態。
 
 `challenge` 的先後（扣體力 → 護衛那一關 → 判讀 → 打 → 戰報 → 贏了才有的一串 → 僵持／落敗 → 扣血 → 回合 → 頓悟 → 戰報 → 名聲 → 行狀）逐字照搬，
-`msgs.insert(0, …)`、`msgs.insert(1, …)` 的位置也算行為。`act:challenge:<人物>` 是 act 子動詞（總表第 57 批才接 Verb），按下去、選單那一格、標題都還在核心原位叫
-Game 的委派。被測試換掉的 odds（Game.challenge_odds）在 options 裡經 ctx 叫才打得到；被測試換掉的 _rout 也經 ctx 叫（Game 留一行委派）。
+`msgs.insert(0, …)`、`msgs.insert(1, …)` 的位置也算行為。`act:challenge:<人物>` 是 act 子動詞（第 57 批接進 Verb 的 tail_*：按下去、標題、打哪一路，按下去與打哪一路經 ctx 叫
+Game 的委派：scripts/measure_challenge.py 換掉 Game._challenge）；選單那一格是 options（MENU_ORDER["here"]）。被測試換掉的 odds（Game.challenge_odds）在 options 裡經 ctx 叫才打得到；被測試換掉的 _rout 也經 ctx 叫（Game 留一行委派）。
 """
 from __future__ import annotations
 
@@ -275,3 +275,9 @@ def held_tier3(ctx) -> int:
     """背包裡的三階素材合計（_challenge 照它算挑戰本人這一場的預設表掉了幾個三階，記進 figure_rare_drops）。"""
     mats = ctx.content.materials
     return sum(n for mid, n in ctx.state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier == 3)
+
+
+def drop_stale(ctx) -> None:
+    """stale.late 的 figure_acts 那一格（core_seams，全部拆包第 55 批；照原位搬）：內容改版拿掉的大勢人物（T4）。"""
+    p, c = ctx.state.player, ctx.content
+    p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}

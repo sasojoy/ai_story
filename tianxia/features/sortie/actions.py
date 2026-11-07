@@ -21,7 +21,6 @@ from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推不推得動、混戰的對象）
 from tianxia import encounter  # 共用規則層（單次判定：混戰）
 from tianxia import four_tiers  # 共用規則層（素材四階：打贏照掉落表掉素材）
-from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import materials  # 共用規則層（素材的掉落與發放）
 from tianxia import orders  # 共用規則層（軍令：截糧的運糧隊、出陣回報的軍令小籤；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
@@ -38,6 +37,7 @@ from tianxia.state import FrontReport
 
 from . import duel_actions  # 出陣約戰（第 2 批搬進同一包）：約戰開著時出陣那一格與次數
 from . import duel_rules as sortie_duel
+from . import howto  # 行動列底下那一行的句子（第 59 批搬進包）
 from . import rules
 from . import train_actions  # 舊遊歷、操練、守勢（第 17 批搬進同一包）：遊歷的鈕與那一行、打的那一場、大場面挑哪一路
 

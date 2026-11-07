@@ -9,15 +9,16 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, slot_some
 
 
 class FactionFeature(Feature):
     name = "faction"
+    web = ("faction.js",)  # 三方卡的表與先投一方（全部拆包第 67 批從 main.js 切出來）
     prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
     bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
     player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來
-    content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
+    content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照它到這一包的 content/ 載；檔名照舊
     carried: tuple[str, ...] = ()
     _defection: tuple[DefectHook, ...] | None = None
 
@@ -80,6 +81,10 @@ class FactionFeature(Feature):
 
         return bots.score(option)
 
+    def bot_idle(self, ctx, option):
+        """拜入門派 sect:<事件>（一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（整季機器人還是隨機挑，婉拒的就不再按。原本 bot.pick 那一條；不問 enabled）。"""
+        return option.id.startswith("sect:") and option.id.partition(":")[2] in ctx.state.player.seen_events
+
     def defection(self) -> tuple[DefectHook, ...]:
         """叛投：clear 位置的 progress 那一格（階、召見、部下、貢獻、兩本帳、捐獻；原本 defection._CLEAR_CORE）與 after 位置的 leave_behind 那一格
         （寫了新陣營不合的同伴當場回江湖；原本 engine._DEFECT_AFTER_CORE）：不問 enabled。位置在 DEFECT_ORDER，一個字不動。
@@ -106,6 +111,62 @@ class FactionFeature(Feature):
             self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
                                     place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.grant 的 faction 那一格（順序在 SEAM_ORDER；不問 enabled：on_season_start 在開場那一則之前、這一格在它之後）：上一季論了功的人起手資源與稱號（ending_actions.season_grant）。"""
+        if self._seams is None:
+            from . import ending_actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("season.grant", "faction", lambda ctx, old: ending_actions.season_grant(ctx, old)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：待確認的畫面接管整個選單（空的也算，髒存檔）；此地的拜入、投靠、叛投、改幫；還沒挑依附哪一邊不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import defect_actions, join_actions, lean_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "faction", lambda ctx: join_actions.pending_options(ctx)),
+                MenuHook("here", "sect", lambda ctx, loc, cost, odds: join_actions.sect_cell(ctx)),
+                MenuHook("here", "join", lambda ctx, loc, cost, odds: join_actions.join_options(ctx)),
+                MenuHook("here", "defect", lambda ctx, loc, cost, odds: defect_actions.defect_options(ctx)),
+                MenuHook("here", "lean", lambda ctx, loc, cost, odds: lean_actions.lean_options(ctx)),
+                MenuHook("idle", "faction", lambda ctx: join_actions.picking_ally(ctx)),
+                MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
+            )
+        return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的join、factions 兩格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("join", lambda content, season, page: words.join_section(content, season)),
+            HowtoHook("factions", lambda content, season, page: words.factions_section(content, season)),
+        )
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import ending_actions, sides  # noqa: PLC0415
+
+            self._status_slots = (
+                # 三方卡（減法季批 1，整合設計 3.4）：劇本沒有陣營、序章裡、休季沒有這個鍵
+                StatusHook("main", "sides_card", lambda ctx, frame: slot_some("sides_card", sides.sides_card(ctx))),
+                # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵。批 3c 的「你這一步」與三方卡資料補在 week_card、sides_card 裡，這裡不另送一份
+                StatusHook("main", "ending", lambda ctx, frame: slot_some("ending", ending_actions.ending_card(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = FactionFeature()

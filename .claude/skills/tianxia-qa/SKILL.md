@@ -120,7 +120,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
 - **時刻表決戰的開法**（2026-10-22 長社火攻）：每一場一季只開得了一次，取消了也不能再開（`showdowns_opened`）——同一季要看第二種佔領就用新的資料庫，或 `end_season`＋`next_season`；`start_showdown` 的 id 是時刻表那一列（`changshe_fire`、`wancheng`、`guangzong`、`tianming`），宛城要第 3 週那件已結算；`tianming` 先 `seal_mandate when=now`（回「蓋上天命之季的章」）否則回「時刻表上沒有這一場決戰」。要驗「時間到了自己開」：`schedule {id, at}` 只會對齊到季曆整點，之後 `fast_forward hours=1` 推過去。排在後面的攻城戰書不會被 `cancel_battle` 一起取消，取消一場後下一場馬上開，連按到「沒有進行中的決戰」。
-- **`/api/do/<op>` 先查 `ADMIN_ACTIONS`**：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
+- **`/api/do/<op>` 先查管理者那兩張**（先後：各包的管理者工具 `server.FEATURE_ADMIN_ACTIONS` → `ADMIN_ACTIONS` → 鎖外三段式 `OUTLOCK_OPS` → `MAIN_ACTIONS`）：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & (set(server.ADMIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS))`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
 
@@ -160,8 +160,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - JS 範本字串（反引號）裡的 `\b` 是退格字元、不是字界：在 `Runtime.evaluate` 的字串裡找英文字用 `(^|[^a-z])bot([^a-z]|$)`。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
-  - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
-  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。
+  - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。第 67 批起樣式分在 `style.css` 與 `web/<包>.css`，改到哪一支換哪一支。
+  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。畫法在包的檔（`web/<包>.js`，第 64～67 批切出去的）就比 `*/<包>.js*`。
   - `clickSel` 拿的是第一個符合的元素：先確認它的框不是 0×0（藏起來的那一層在前，見上面 `.r-top`），不然點到別的東西、什麼都沒發生。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
@@ -182,6 +182,10 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **driver.mjs 的帳號密碼資料夾是啟動時寫死的**（2026-11-03 鐵匠鋪網頁 QA）：換資料庫或換季要重開 driver，而且要等舊的 Chrome 放開設定檔，不然會 EBUSY。
   - **320 寬某一輪跑歪時，先量 `innerWidth` 對 `scrollWidth`**：有東西把整頁撐寬之後（例 FB-9210「剛剛」那張卡的小章），照座標點會點到別的鈕（那一次把短劍換上了）。
   - **決戰集結中，懸賞榜的店面那一層不出現**：要比店面，先 `cancel_battle`。
+  - **無頭 Chromium 在 mobile 與 desktop 之間切換時，1280 的捲軸佔位會跳 15px**（第二波實機，同一份程式也會變）：看到整屏差先看 `scrollWidth`。
+  - **SVG 元素沒有 `.click()`**：要 dispatch `MouseEvent`。
+  - **`setView` 縮回 375 之後，fit 類別要等約 450ms 才量得準**。
+  - **CDP Profiler 的 preciseCoverage 列得出哪些函式沒走到**：拿來找漏掉的頁面。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。擺角色的銀兩也一樣：在第一次同步之前改，同步後對不上（2026-11-03：擺 3 兩，同步後變 33）。
@@ -227,7 +231,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **腳本 `import server` 之後先 `server.CONTENT = c`**：`server.zhuan_extras`（公開頁的紀念印與插畫）照模組層的 `CONTENT` 判開關，那一份照啟動時的環境變數載；腳本沒設 `TIANXIA_PROFILE` 就是不帶設定、減法季關著，回 `{}`，看起來像「公開頁沒蓋印」。
   - **收季要哪一軍贏就自己給結局**：`store.mutate_season(lambda s: end_season(_season_vehicle(c, s), c, store, ending=<scenario.endings 裡 winner 是那一軍的>))`（`from tianxia.world import end_season, _season_vehicle`），角色要先存進資料庫（論功讀 `CharacterStore.books`）；之後每人同步一次才記論功的行狀。
   - **假模型**：一個物件有 `chat_structured(messages, schema, **kw)`，照系統提示第一句裡的人物名回 `schema(verdict="…")` 或丟例外；`game.client = fake`、`server.QUEUE = None` 再叫 `server.verdict_text(game, job)`，B 段清理（假名、數字、太長、簡轉繁）都驗得到。實機模型擋掉時 `/api/zhuan/write` 背景十幾秒照備援寫成（`by: rule`、評曰全照固定句），輪詢 `/api/zhuan?season=N` 的 `written`。
-  - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `g._mall_moment()` 與 `g.mall_view()`；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。
+  - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `mall_actions.moment(g)` 與 `mall_actions.view(g)`（`from tianxia.features.mall import actions as mall_actions`；`Game.mall_*` 第 58 批拿掉了）；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。
   - 公開頁有額外樣式時 `<style>` 裡本來就有 `.zh-art`，判有沒有插畫要找 `<figure class="zh-art"`；要看有圖的樣子，在複本放一個假的 `web/img/zhuan/<鍵>.webp`（驗完刪掉）。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。

@@ -3,6 +3,7 @@
 引擎給 main.battle_panel（features/battle/panel.py：一個倒數、兩邊上陣人物的血條、主將令、自己的陣中氣血、一回合一行的戰報、
 關鍵時刻），網頁（web/battle.js）畫在江湖頁最上面、出招鈕緊接在底下；狀態列的氣血在決戰裡換成陣中氣血（Joy 11/6「決戰時顯示的血量
 跟決戰內實際血量不一致」）。"""
+# 樣式在 web/battle_panel.css（排在 legacy.css 後面）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

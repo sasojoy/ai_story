@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import journal, prologue, team, treasures
+from tianxia.core.option import Option
 from tianxia.state import JournalEntry
 
 if TYPE_CHECKING:
@@ -55,3 +56,16 @@ def finish(ctx: Game, end_time: float) -> list[str]:
     else:
         journal.add_entry(ctx.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
     return [msg]
+
+
+def finish_due(ctx: Game) -> list[str] | None:
+    """local 的 seclusion 那一格（core_seams，全部拆包第 55 批；原位的判斷搬過來）：閉關到期了就出關（回的那幾句接進補算的回話）。"""
+    p = ctx.state.player
+    if p.busy_until is not None and ctx.state.world.time >= p.busy_until:
+        return finish(ctx, p.busy_until)
+    return None
+
+
+def busy_cell(ctx: Game) -> list[Option]:
+    """busy/seclusion 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：閉關中的「提前出關」，後面接擂台那一格（閉關中也能上擂台，PM 轉述 Joy 2026-10-14）。"""
+    return [Option(id="act:break", label="提前出關")]

@@ -15,6 +15,7 @@ from tianxia import attrset  # 核心（五項屬性）
 from tianxia import growth, journal, library, naming, team
 from tianxia import prologue as prologue_rules  # 序章（共用規則層；Game.new 有個參數也叫 prologue，照 engine 叫 prologue_rules）
 from tianxia import skillview  # 過渡：待搬（修練頁的說明：熔了還能重學、配點那一句；共用規則層 SHARED_LATER）
+from tianxia.core.option import Option
 from tianxia.core.services import not_while_preparing
 from tianxia.martial_arts import is_renamed
 from tianxia.rules import jianfa
@@ -391,3 +392,13 @@ def chuangong_lessons(ctx, key: str | None) -> list[dict]:
         {"what": row.what, "label": row.label, "effect": row.effect, "problem": row.problem}
         for row in chuangong_rules.lessons(ctx.state, ctx.content, ctx.world, key)
     ]
+
+
+def lesson_options(ctx) -> list[Option]:
+    """here/lessons 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：拜師學藝（武學與成長設計附錄 B）：不花體力。"""
+    s, c = ctx.state, ctx.content
+    opts: list[Option] = []
+    for skill, problem in library.lessons_here(s, c):
+        note = library.lesson_note(skill) if problem is None else problem
+        opts.append(Option(id=f"learn:{skill.id}", label=f"學{skill.name}（{note}）", enabled=problem is None))
+    return opts

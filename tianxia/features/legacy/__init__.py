@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, SeamHook
 
 
 class LegacyFeature(Feature):
@@ -16,7 +16,7 @@ class LegacyFeature(Feature):
     bot_always = ("legacy:skip",)  # 開季時一直按得下去：整季機器人不按
     player_fields = ("legacy",)  # PlayerState.legacy（LegacyBook）
     web = ("legacy.js", "legacy.css")  # 傳承頁、識海頁的畫法（legacy.js 的 legacyPageHtml）與樣子
-    carried = ("legacy",)  # 換季照帶（Game._reset_player_for_new_season，不看開關；結算在 on_season_start）
+    carried = ("legacy",)  # 換季照帶（season.carry 那一格，不看開關；結算在 on_season_start）
 
     def enabled(self, ctx) -> bool:
         return ctx.content.config.legacy.enabled
@@ -52,6 +52,19 @@ class LegacyFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(option)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 legacy 那一格（順序在 SEAM_ORDER；不看開關，同出陣那兩格；結算在 on_season_start）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "legacy", _carry_season),)
+        return self._seams
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.legacy = old.player.legacy  # 傳承（features/legacy）
 
 
 FEATURE = LegacyFeature()

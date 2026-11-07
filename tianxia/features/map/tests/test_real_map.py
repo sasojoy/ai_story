@@ -318,7 +318,7 @@ def _ids(connections):
 # ── FB-184：官軍沒有操練點 → 潁川郡與長社之間新開「官軍大營」──
 # 掛在潁川郊野上（同黃巾別部營寨掛在長社上）：潁川郡 → 潁川郊野 → 長社那條路的中間站，開局兩步走得到。
 # 直接接長社，汝南荒野的小地圖上它跟黃巾別部營寨的方向字疊在一起（試過 37 個位置都疊）；也接潁川郡的話，
-# 離潁川郡不超過 4.8 分鐘、離草廬 60 以上又不壓到初戰地圖的位置找不到（tests/test_real_map.py、test_real_content.py）
+# 離潁川郡不超過 4.8 分鐘、離草廬 60 以上又不壓到初戰地圖的位置找不到（tianxia/features/map/tests/test_real_map.py、test_real_content.py）
 
 
 def test_fb184_the_government_army_drills_at_a_camp_between_yingchuan_and_changshe(real):

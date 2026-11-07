@@ -13,7 +13,16 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
+from tianxia.core.features import Outlock, OutlockJob
+
 from . import tale, tale_html
+
+
+def outlock(shell) -> Outlock:
+    """決戰放手一搏的劇情（narrate_battle）：動作之後看一眼、放鎖才開。定時背景的 tale_round 不在這裡，照舊走 threads 掛鉤（全部拆包第 69 批）。"""
+    return Outlock(jobs=(
+        OutlockJob("tale", lambda game: shell._tales_waiting(game), lambda game, got: shell.narrate_battle(game)),
+    ))
 
 
 def _tales_waiting(shell, game) -> bool:

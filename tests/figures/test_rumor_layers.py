@@ -542,7 +542,7 @@ def test_with_the_switch_off_there_are_no_layers(real):
 
 @pytest.fixture
 def server_season_one(monkeypatch):
-    """server.CONTENT 是正式內容：照週末設定打開第一季、季已經開打（同 tests/test_server.py 的 season_already_open）。"""
+    """server.CONTENT 是正式內容：照週末設定打開第一季、季已經開打（同 tests/server/test_server.py 的 season_already_open）。"""
     config = server.CONTENT.config
     monkeypatch.setattr(config, "auto_open_first_season", True)
     monkeypatch.setattr(config, "season_one", True)
@@ -567,7 +567,7 @@ def test_the_main_view_has_no_layers_with_the_switch_off(monkeypatch):
 
 
 def _js_function(js: str, header: str) -> str:
-    """app.js 裡 IIFE 內的一個函式本體（同 tests/test_server.py 的 _js_function）。"""
+    """app.js 裡 IIFE 內的一個函式本體（同 tests/server/test_server.py 的 _js_function）。"""
     start = js.index(header)
     return js[start:js.index("\n  }\n", start)]
 

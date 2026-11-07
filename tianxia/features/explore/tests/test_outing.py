@@ -14,6 +14,7 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_one, outing, precise, speech, team
 from tianxia.core import presence
 from tianxia.encounter import EncounterResult
+from tianxia.features.mall import actions as mall_actions
 from tianxia.state import Inscription
 
 MAT, EVT, ENC = explore_one.MATERIAL, explore_one.EVENT, explore_one.ENCOUNTER
@@ -220,7 +221,8 @@ def _with_ink(game, n: int = 1) -> None:
     game.now = game.now or 1_800_000_000.0  # 用掉的那一張記用掉的時刻（0 會被當成沒用）
     Wallet(game.world.db).post(name_key(game.state.player.name), 1000, "grant", "test:ink", time=game.now)
     for i in range(n):
-        assert game.mall_buy("inscribe_ink", f"ink-{i}") and game.mall_bought == "inscribe_ink"
+        got = mall_actions.purchase(game, "inscribe_ink", f"ink-{i}")
+        assert got.lines and got.bought == "inscribe_ink"
 
 
 def test_a_preset_line_is_free_and_one_per_trip():

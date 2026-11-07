@@ -207,6 +207,12 @@ def heard_texts(state: GameState, content: Content, world: WorldStateStore | Non
     ]
 
 
+def heard_any(state: GameState) -> bool:
+    """聽過伏筆片段了嗎（PlayerState.fragments，軍情包認領）：引導包碰到才說的提示 h_foreshadow 照它判，包不直接讀別包的欄位
+    （第 34 批 PM 認定第 9 條，第 B 波照做）。"""
+    return any(state.player.fragments.values())
+
+
 def opp_active(state: GameState, content: Content) -> bool:
     from ..rules import season_one  # noqa: PLC0415  rules 最外層不 import 這裡，反過來延後
     return season_one(content, state.world) and bool(content.opportunities)

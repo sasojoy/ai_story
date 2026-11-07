@@ -22,7 +22,7 @@ def _game(at="yingchuan_wilds", faction="guan", jianfa=True):
 
 
 def test_every_place_says_what_it_mostly_holds_by_its_icon():
-    # 照小圖的是減法季探索一顆關著的季；開著時照出門一趟的表（三處跟小圖不同），見 tests/test_explore_one.py
+    # 照小圖的是減法季探索一顆關著的季；開著時照出門一趟的表（三處跟小圖不同），見 tianxia/features/explore/tests/test_explore_one.py
     base = _game(jianfa=False).map_base()
     assert all(p["mostly"] == mapdata.MOSTLY[p["glyph"]] for p in base["places"])
     assert set(mapdata.MOSTLY) == {"城", "營", "寺", "渡", "山", "野"}

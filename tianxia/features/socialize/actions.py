@@ -24,6 +24,25 @@ def call_title(ctx, arg: str) -> str:
     return "收回名帖" if arg == "back" else f"求見・{ctx.content.characters[arg].name}"
 
 
+def open_audience(ctx) -> list[str]:
+    """act:call：打開求見選單（見 menus.audience_options），不花體力（原本 Game._act 那一支，全部拆包第 57 批接進 Verb）。"""
+    ctx.state.player.picking_audience = True
+    return [f"你遞上名帖，準備求見{ctx.content.locations[ctx.state.player.location].name}的人物。"]
+
+
+def press(ctx, prepared: Any) -> list[str]:
+    """act:socialize 按下去（原本 Game._act 最後那一段，全部拆包第 57 批照原位的先後搬來；先後算行為）：先問召見、再扣體力；在召見的地點交友端出晉升奇遇（計畫 T5；
+    一類一顆開著時不再換掉，正式季整合 2.10，應召照舊在「此地還能做」），這一支不排提示；其餘交友、第一次交友排一條「情誼有什麼用」（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）。
+    ctx._socialize 經 Game 叫：tianxia/features/guide/tests/test_explain.py 換掉的是 Game 上的名字。"""
+    promotion = ranks.summons_event(ctx.state, ctx.content)
+    ctx.state.player.stamina -= ctx._action_costs()["socialize"]
+    if promotion is not None and not precise.on(ctx.content, ctx.state.world):
+        return ctx._present(ctx.content.events[promotion])
+    msgs = ctx._socialize(prepared)
+    ctx._hint("h_bond")
+    return msgs
+
+
 def socialize(ctx, prepared: Any = None) -> list[str]:
     """交友（act:socialize，體力呼叫端已經扣了）：福緣到了先發福緣；這裡至多一位人物、見得到就開口對話；不然抽一則
     這裡的交友事件，沒有就是打發話。一類一顆開著時照 social_plan（precise_socialize）。"""
@@ -178,3 +197,10 @@ def no_audience_line(ctx) -> str:
                 return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
             return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
     return "此地無人可訪，你只好悻悻離去。"
+
+
+def fortune_due(ctx) -> list[str] | None:
+    """local 的 fortune 那一格（core_seams，全部拆包第 55 批；原位的判斷搬過來）：福緣到期自己送上門（回的那幾句接進補算的回話）。"""
+    if roster.fortune_overdue(ctx.state, ctx.content):
+        return deliver_fortune(ctx)
+    return None

@@ -5,7 +5,7 @@
 - seal.py：碎片的規則與字句（原 tianxia/seal.py 整份；那個名字留成指到這裡的 sys.modules 別名）。核心與決戰包讀的那一小半在核心本體
   tianxia/core/seal_base.py，這裡 re-export 同一批。
 - actions.py：原本 Game 上的季流程（抄本、撿到、份量快照與加權、補送、奪璽單挑的戰報、定天命、收場）；Game 留一行委派
-- admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（殼的 ADMIN_ACTIONS 叫）
+- admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（測試、管理頁的讀取叫）；管理者工具在 routes.py 的 admin_tools（全部拆包第 68 批）
 - season.py：開季藏一片、天命之季的章、舊季收尾（原本核心 sqlite_world 的三段）
 
 第 28 批「玉璽二」再搬進來（計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
@@ -14,23 +14,24 @@
 - card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
 - bots.py：假人看到 seal: 一律不按
 
-選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
+選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有 APIRouter（管理者的 seal_*、seal_use 在 routes.py 的 admin_tools、main_actions，全部拆包第 68 批；seal_text 是鎖外三段式，第 69 批進 routes.py 的 outlock）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
-接縫 deliver_results（sync 的收場補送）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
+接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, StatusHook, WorldHook
 
 
 class SealFeature(Feature):
     name = "seal"
-    prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（engine 的 options／choose 原位叫委派）
+    web = ("seal.js", "seal.css")  # 奪璽卡、碎片卡與獨門行動（全部拆包第 66 批從 app.js 切出來；獨門行動的樣子第 67 批從 style.css 切出來）；sealWatched、sealTitle 留在 app.js 伺服器推送那一段
+    prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（MENU_ORDER 的 front、quick 那兩格）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
-    # 核心換季（_reset_player_for_new_season）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
+    # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
     carried: tuple[str, ...] = ("seal_seen",)
-    # 七片碎片（content.py 照舊讀、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
+    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
     content = ("seal.json",)
 
     def enabled(self, ctx) -> bool:
@@ -104,6 +105,83 @@ class SealFeature(Feature):
                 EffectHook("shard", lambda r: seal.effect_shard(r)),
             )
         return self._effects
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync 補算自己的時間之前、清失效參照中段照登記重抄抄本（actions.copy_heirloom：碎片關著時也要叫、
+        把抄本清掉，on_sync、on_drop_stale 只問開著的包，接不了）；排程那一下推奪璽單挑（duel_actions.tick）；換季照帶。建一次就留著，在叫的那一下才照模組屬性找。"""
+        if self._seams is None:
+            from . import actions, duel_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.heirloom", "seal", lambda ctx: actions.copy_heirloom(ctx)),
+                SeamHook("stale.mid", "seal", lambda ctx: actions.copy_heirloom(ctx)),
+                SeamHook("tick", "seal", lambda ctx: duel_actions.tick(ctx)),
+                SeamHook("season.carry", "seal", _carry_season),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的三格（順序在 MENU_ORDER；不問 enabled）：誰輪詢誰推奪璽單挑（tick，同決戰，5.4）；單挑的那幾顆排在決戰的鈕與平常的選單最前面（front）；
+        按下去的那一招不建紀錄（quick，第 57 批；收場由 _deliver_seal_results 補一份戰報與一則紀錄，5.9）。"""
+        if self._menus is None:
+            from . import duel_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("tick", "seal", lambda ctx: duel_actions.tick(ctx)),
+                MenuHook("front", "seal", lambda ctx: duel_actions.options(ctx)),
+                MenuHook("quick", "seal", lambda ctx, kind, arg, option_id: duel_actions.act(ctx, arg) if kind == "seal" else None),
+            )
+        return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的兩個插句（fame_seal、land_seal，核心 HOWTO_INSERTS）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("fame_seal", lambda content, season, page: words.fame_seal(content)),
+            HowtoHook("land_seal", lambda content, season, page: words.land_seal(content)),
+        )
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import card, duel_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 奪璽卡（玉璽碎片設計 5.10）：全服看得到，沒有單挑是 None；持有者的碎片卡（第十節）；seal_watch 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
+                StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
+            )
+        return self._status_slots
+
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
+    fresh.player.seal_seen = old.player.seal_seen
 
 
 FEATURE = SealFeature()

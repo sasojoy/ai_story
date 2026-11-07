@@ -9,13 +9,13 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, StatusHook
 
 
 class TaleFeature(Feature):
     name = "tale"
     prefix = None  # 沒有選項：戰記是只讀的畫面，寫的是背景執行緒
-    web: tuple[str, ...] = ()  # tale.css 不在 index.html（只有戰記頁自己連）；app.js 的戰記歸總表第 66 批
+    web = ("tale.js",)  # 戰報頁的戰記連結、戰記那一層與目錄（全部拆包第 66 批從 app.js 切出來）；tale.css 不宣告（宣告的 css 都要有 link，它只有戰記頁自己連）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
@@ -31,6 +31,23 @@ class TaleFeature(Feature):
     def threads(self, shell) -> None:
         """殼開、測試停：只有 server.main 經 start_threads 叫到這裡；TALES_STOP、TALES_THREAD 留殼（tests/conftest.py 收尾認這兩個名字）。"""
         shell.start_tales(shell.CONTENT.config)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            self._status_slots = (
+                # 江湖史最上面那排「戰記」：[{battle_id, title, season, result}]，新的在前；開關關著是空的（本體經殼的薄包裝 server.tale_index）
+                StatusHook("main", "tales", lambda ctx, frame: {"tales": frame.shell.tale_index(ctx)}),
+            )
+        return self._status_slots
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
 
 
 FEATURE = TaleFeature()

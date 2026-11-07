@@ -283,7 +283,7 @@ def clean(text: str | None) -> str | None:
     return out
 
 
-# ── 模型寫文章（鎖外；server.write_xingshi）──────────────
+# ── 模型寫文章（鎖外；包的 routes.write_xingshi）──────────────
 
 
 class XingshiRequest(BaseModel):

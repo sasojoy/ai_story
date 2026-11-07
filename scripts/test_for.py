@@ -11,7 +11,7 @@
   python scripts/test_for.py -- -x -k fuse   # -- 之後的參數原樣交給 pytest（-- -n 2 會換掉預設的 -n 4）
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
-- 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal、全部拆包第 25 批收進來的
+- 「核心測試」＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal、全部拆包第 25 批收進來的
   world 的 test_world、test_world_map 不收，第 36 批收進來的 step、weekcard 的 test_step、test_weekcard 也不收，NOT_CORE_TESTS）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
@@ -23,37 +23,33 @@
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
-  state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
   留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
-- tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
-  → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
-  （SHARED_METHODS）、方法以外、或方法名認不出功能 → 看 hunk 裡提到哪些功能前綴；都沒有 → 核心測試＋煙霧。
-  落在手冊 3.3 列為 ctx 的共用服務（CORE_METHODS：_log、_write、_save_season、_side、_pill_day……）→ 核心測試＋煙霧
-  （名字像功能也一樣），hunk 裡提到的功能前綴另外加。
-- server.py：hunk 落在哪條路由 → 路由前綴（/api/mall → mall）那一群＋tests/server/test_server.py；
-  /api/do、/api/choose 這種不帶功能的路由看 hunk 裡提到什麼；殼（登入、鎖、路由以外）→ 核心測試＋煙霧＋test_server.py。
-- 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_tavern_web.py），
-  加上內文叫最多的是那一群的（至少 DOMINANT_MIN 次；走一趟 outing_* 的引擎測試叫 test_explore_one*）；
-  兩樣都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
-  內文是假原始碼的（test_test_for，TEXT_BLIND）不照內文歸群。
+- tianxia/engine.py：hunk 落在一行委派 → 那一包的 tests/＋核心契約＋內文寫到那個方法名的測試檔（engine_delegates，舊檔裡是胖方法、
+  這一次才換成委派的不算委派）。落在其餘的方法（Game 的門面與核心）→ 核心測試＋煙霧＋內文寫到那個方法名的測試檔，同 core_module_callers：
+  寫到它的超過 IMPORT_CAP 個檔不併（choose、sync 這種）；方法以外 → 核心測試＋煙霧。核心測試本來就含核心契約，只改到委派的另外帶核心契約。
+  內文是假原始碼、或名單寫滿委派名的（test_test_for、核心契約，TEXT_BLIND）不算寫到。全部拆包第 61 批拿掉了照方法名、hunk 裡的字分功能群的過渡挑法。
+- server.py：核心測試＋煙霧＋tests/server/test_server.py＋全部 test_*_shell.py（第 61 批從 test_server 拆進各包的）。路由都在包裡，改路由是改包。
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的、檔名是模組名
   第一個字的（mingtie_card → test_mingtie.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
   tianxia/<模組>.py 另外照模組之間最外層的 import 往上找（dependents；10/31 測試自檢 T-02：改 might.py 以前挑 0 個檔）：
   import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
   AGGREGATOR_FANOUT 個的：skillview、shopview……）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
   核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
-  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions；
+  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔（registered_actions；
   搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
+  包裡的內容檔（tianxia/features/<包>/content/，全部拆包第 62 批）兩條都走：內容這一條＋那一包的 tests/＋核心契約。
+  內容這一條再加 test_content_packs.py（新檔忘了寫進 Feature.content 時載入不報錯，只有它抓得到）。
 - web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
+  包裡的測試內容（tianxia/features/<包>/tests/content/，全部拆包第 63 批）：同 tests/fixtures/，再加那一包的 tests/ 與 test_content_packs.py。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
   別的 fixture 用到它的連那一個的使用者）；autouse 的 fixture、最外層的 import 與 sys.path、或用到的檔超過 CONFTEST_CAP 個
   （content、game 這種）→ 煙霧。整套留給每日整套。
@@ -86,7 +82,7 @@ WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在�
 # 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
 # 功能包的 js（mall.js；outing.js 主動搬六包第 3＋4 批登記成探索包的）也在 APP_FILES 裡，可是照那一包挑（feature_web）；
 # test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
-WEB_SCRIPTS = {"main.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js"}  # map.js 第 49 批起是輿圖包登記的網頁檔（feature_web）
+WEB_SCRIPTS = {"shell.js", "main.js", "arena_anim.js", "arena_scene.js", "admin.js", "state.js", "fit.js", "app.js"}  # map.js 第 49 批起是輿圖包登記的網頁檔（feature_web）
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -94,7 +90,9 @@ CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在�
 DEFAULT_BASE = "origin/develop"
 BASE_ENV = "TIANXIA_TEST_BASE"
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
+PACK_CONTENT_TEST = "test_content_packs.py"  # 內容改了也跟：包裡新檔忘了宣告（Feature.content）時載入不報錯、事件靜靜少掉，只有這支抓得到，新檔名又不會寫在它裡面
 SERVER_TEST = "test_server.py"
+SHELL_TEST = re.compile(r"test_\w+_shell\.py")  # 第 61 批從 test_server 拆進各包的路由與殼的測試
 
 CORE_INIT = ROOT / "tianxia" / "core" / "__init__.py"
 
@@ -170,59 +168,10 @@ NOT_CORE_TESTS = NOT_CORE_TESTS | {"attrset"}
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
 CONTRACT_GLOBS = ("test_contract*.py", "test_feature_boundaries.py")
-HUNK_FILES = {"tianxia/engine.py", "tianxia/models.py", "tianxia/state.py", "server.py"}  # 看 hunk 落在哪裡的四個大檔
-# 大家都插一段的 Game 方法（手冊第一節量到的）：落在這裡不看方法名，看 hunk 裡提到哪些功能前綴
-SHARED_METHODS = {
-    "choose", "_everyday_options", "sync", "status_data", "__init__",
-    "_reset_player_for_new_season", "_drop_stale_references", "options", "new",
-}
-# 共用服務（手冊 3.1「共用服務（記錄、花費、錢包、時刻）」、3.3 的 ctx 清單）：每一個都被叫幾十上百次，改到就是改核心
-# → 核心測試＋煙霧（hunk 裡提到的功能前綴另外加）。名字像功能（_save_season、_pill_day、_guide、_wallet）也不照名字分群。
-# tests/core/test_test_for.py 守這裡的每一個都還是 Game 的方法。
-CORE_METHODS = {
-    "_log", "_write", "_save_season", "_side", "_pill_day", "_cost_option", "stamp", "_guide", "_quick_client",
-    "_wallet",
-    "publish",  # core_eventbus（全部拆包第 26 批）：事件的發布點，七處叫
-}
-# 不是功能前綴的字：方法名第一個字是它的（_deliver_seal_results、apply_tavern_chatter、_can_x）往後找下一個認得的字，
-# hunk 裡出現它也不算。寫在這裡的字有自己的測試檔名也不算（test_for、test_in_lock_model_timeout、test_real_content……）。
-# 挑多一點沒關係，挑漏了每日整套會抓到（手冊二之 3「偶爾晚一點才知道別處壞了，可以接受」）；看 --list 的「為什麼」調這兩張表。
-GENERIC = {
-    # 核心的模組與物件：到處都會寫到
-    "self", "game", "state", "world", "content", "config", "rules", "models", "team", "calendar", "gender", "naming",
-    "characters", "accounts", "database", "engine", "server", "core", "sqlite", "api", "now", "options", "option",
-    "choose", "sync", "status", "player", "players", "kind", "arg", "args", "id", "ids", "text", "line", "lines",
-    "power", "step", "week", "tier", "tiers", "order", "card", "day", "daily", "mark", "four",
-    # 一般的動詞（方法名的第一個字是動詞時，功能在後面：_deliver_seal_results → seal、_settle_siege → siege）
-    "can", "is", "at", "own", "owned", "set", "check", "checked", "drop", "take", "record", "file", "view", "add",
-    "write", "open", "count", "read", "act", "call", "calls", "say", "run", "restore", "present", "carry", "hold",
-    "lose", "play", "depart", "finish", "make", "load", "use", "shows", "log", "reset", "share", "shared", "switch",
-    "tick", "fold", "highlight", "watch", "begin", "surface", "hear", "backfill", "join", "seek", "deliver", "apply",
-    "settle", "advance", "move", "mutate", "submit", "skip", "remove", "auto", "decline", "cancel", "cancelled",
-    "rewrite", "tell", "hide", "mirror", "place", "leave", "meet",
-    # 一般的名詞、形容詞、介系詞
-    "note", "notes", "action", "actions", "save", "free", "in", "name", "init", "quick", "new", "top", "for", "copy",
-    "everyday", "close", "cost", "why", "choice", "odds", "prepared", "judged", "here", "home", "mostly", "last",
-    "no", "side", "sides", "left", "my", "without", "people", "shaped", "held", "thin", "part", "lead", "when",
-    "real", "big", "back", "stamp", "latest", "report", "general", "news", "region", "watching", "absent",
-    "fighting", "wild", "standing", "definition", "joinable", "round", "exp", "hp", "solved", "deep", "branches",
-    "member", "location", "town", "paused", "method", "phase", "credit", "talked", "famed", "resisted", "nearest",
-    "quest", "do", "main", "me", "static", "test", "tests", "web", "app", "index", "stale", "references",
-}
-# 是功能前綴，可是共用的程式裡到處都寫得到（team.resolve_art、self.world.season、map() 內建函式）：
-# 方法名、欄位名是它的照它分群，hunk 裡提到它不算
-SCAN_SKIP = {"art", "arts", "season", "map", "xinde"}
-# 一個測試檔叫某一群的方法（或寫那一群的選項 id）至少這麼多次、而且是它叫最多的那一群，就算那一群的測試檔（_dominant）。
-# 2026-10-31 重放 develop 最近 250 筆改 engine.py 的提交（176 筆同時改了測試檔）：只看檔名時 engine.py 那一份挑法蓋到
-# 65 筆的全部被改測試檔，加這一條 81 筆，不含 slow 的條數中位數 152 → 227；把「內文叫到就算」全加進來是 118 筆、
-# 中位數 1,204 條（太多：拿 admin_*、practice_* 當準備動作的測試到處都是）。
-DOMINANT_MIN = 3
-# 內文是假的原始碼、不是在叫那一群的測試檔：不照內文歸群（_dominant 與 group_files 的備案都不算它）。test_test_for 的
-# 假 engine 寫了 _tavern_price、_pill_day……，照「內文叫最多」會算進酒肆、pill、season（10/31 審查：每一列多它 31 條）。
-# 改 scripts/test_for.py 照舊挑到它（檔名 test_<模組>）。
-# 核心契約與邊界測試（CONTRACT_GLOBS 那幾個）也不照內文歸群（全部拆包第 11 批）：邊界測試的名單寫滿了各包的委派名，照「內文叫最多」
-# 歸到哪一群跟著名單翻（develop b1eeb4ec 時是 sortie 群），契約的假包叫 _pill_day 被算進 pill 群。它們固定跟著核心走：改核心照核心測試
-# 挑到（CORE_GLOBS）、改包與包的委派照核心契約挑到（contract_tests）。
+HUNK_FILES = {"tianxia/engine.py"}  # 看 hunk 落在哪個方法的（委派 → 那一包；其餘 → 核心測試＋煙霧＋寫到那個方法名的）
+# 內文是假的原始碼、或名單寫滿了各包的委派名，不算「寫到那個名字」的測試檔（_index、action_files）：test_test_for 的假 engine 寫了
+# _tavern_price、_pill_day……；核心契約與邊界測試固定跟著核心走（改核心照核心測試挑到〔CORE_GLOBS〕、改包與包的委派照核心契約挑到〔contract_tests〕）。
+# 改 scripts/test_for.py 照舊挑到 test_test_for（檔名 test_<模組>）。
 TEXT_BLIND = frozenset({"test_test_for.py", "test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"})
 
 
@@ -505,9 +454,9 @@ def registered_actions(mod: str) -> tuple[str, ...]:
 
 
 def action_files(kind: str) -> set[Path]:
-    """寫到動作名字串（"wanted"、'wanted'）的測試檔，加上那個字的功能群（group_files）。"""
+    """寫到動作名字串（"wanted"、'wanted'）的測試檔。"""
     quoted = (f'"{kind}"', f"'{kind}'")
-    return {t for t in all_tests() if t.name not in TEXT_BLIND and any(q in _text(t) for q in quoted)} | group_files(kind)
+    return {t for t in all_tests() if t.name not in TEXT_BLIND and any(q in _text(t) for q in quoted)}
 
 
 def _parts(ident: str) -> list[str]:
@@ -515,146 +464,21 @@ def _parts(ident: str) -> list[str]:
     return [p.lower() for p in re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])", ident)]
 
 
-def words(text: str) -> set[str]:
-    """一段程式裡的字（self._tavern_seek、TavernNote、"tavern:seek" 都拆出 tavern）。"""
-    return {p for ident in re.findall(r"[A-Za-z][A-Za-z0-9_]*", text) for p in _parts(ident)}
-
-
-def _forms(word: str) -> set[str]:
-    """一個字的單複數（bounty／bounties、annal／annals、sortie／sorties）。"""
-    forms = {word, word + "s", word + "es"}
-    if word.endswith("ies"):
-        forms.add(word[:-3] + "y")
-    if word.endswith("y"):
-        forms.add(word[:-1] + "ies")
-    if word.endswith("es"):
-        forms.add(word[:-2])
-    if word.endswith("s"):
-        forms.add(word[:-1])
-    return forms
-
-
 @functools.lru_cache(maxsize=None)
-def _index() -> tuple[dict[str, frozenset[Path]], dict[str, frozenset[Path]]]:
-    """（檔名的字 → 測試檔, 內文的識別字與選項 id 前綴（"tavern: 記成 tavern:）→ 測試檔）。"""
-    by_name: dict[str, set[Path]] = collections.defaultdict(set)
+def _index() -> dict[str, frozenset[Path]]:
+    """內文的識別字 → 寫到它的測試檔（TEXT_BLIND 不算）。"""
     by_text: dict[str, set[Path]] = collections.defaultdict(set)
     for t in all_tests():
-        for tok in t.stem.split("_")[1:]:
-            by_name[tok].add(t)
         if t.name in TEXT_BLIND:
             continue
-        text = _text(t)
-        for ident in set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text)):
+        for ident in set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", _text(t))):
             by_text[ident].add(t)
-        for prefix in set(re.findall(r"[\"']([a-z][a-z0-9]*):", text)):
-            by_text[prefix + ":"].add(t)
-    return ({k: frozenset(v) for k, v in by_name.items()}, {k: frozenset(v) for k, v in by_text.items()})
-
-
-@functools.lru_cache(maxsize=None)
-def _engine_groups() -> dict[str, frozenset[str]]:
-    """Game 的方法照第一個字分群：{tavern: {_tavern_open, tavern_do, …}}（用正規式讀方法名，不建語法樹）。"""
-    engine = ROOT / "tianxia" / "engine.py"
-    groups: dict[str, set[str]] = collections.defaultdict(set)
-    text = engine.read_text(encoding="utf-8") if engine.exists() else ""
-    start = re.search(r"^class Game\b", text, re.M)
-    body = text[start.end():] if start else ""
-    end = re.search(r"^(?:class |def |async def |@)", body, re.M)  # Game 後面下一個最外層的 def／class
-    for name in re.findall(r"^    (?:async[ \t]+)?def[ \t]+(\w+)", body[: end.start()] if end else body, re.M):
-        groups[_first_word(name)].add(name)
-    return {k: frozenset(v) for k, v in groups.items()}
-
-
-def group_files(word: str) -> set[Path]:
-    """功能群 word 的測試檔：檔名有那個字的，加上內文叫最多的是這一群的（_dominant：走一趟的方法叫 outing_*，
-    引擎測試叫 test_explore_one*）；兩樣都沒有的群，改用內文寫到那一群的 Game 方法名（_feast_menu）
-    或那一群的選項 id（"feast:）的。"""
-    by_name, by_text = _index()
-    hit: set[Path] = set()
-    for f in _forms(word):
-        hit |= by_name.get(f, frozenset())
-    hit |= _dominant().get(word, frozenset())
-    if not hit:
-        for ident in (*_engine_groups().get(word, ()), word + ":"):
-            hit |= by_text.get(ident, frozenset())
-    return hit
-
-
-@functools.lru_cache(maxsize=None)
-def _candidates() -> frozenset[str]:
-    """可能是功能前綴的字：Game 方法名、tianxia/ 底下模組名的第一個字與功能包的名字，扣掉 GENERIC
-    （vocabulary 再扣掉沒有測試檔的）。"""
-    found: set[str] = set(_engine_groups())
-    found.update(_first_word(p.stem) for p in (ROOT / "tianxia").glob("*.py"))
-    if FEATURES.is_dir():
-        found.update(p.name for p in FEATURES.iterdir() if p.is_dir() and not p.name.startswith("_"))
-    return frozenset(w for w in found - GENERIC if w)
-
-
-@functools.lru_cache(maxsize=None)
-def _dominant() -> dict[str, frozenset[Path]]:
-    """測試檔照「內文叫最多的是哪一群」分：數每一群的 Game 方法名（方法名第一個認得的字當群，同 _feature_words）
-    與選項 id（"outing:）各出現幾次，最多的那一群（一樣多就都算）至少 DOMINANT_MIN 次才算。
-    檔名對不上功能的測試檔靠這一條歸群；只拿別群的方法當準備動作（admin_open_season）的不會被算進那一群。"""
-    words_ok = _candidates()
-    owner: dict[str, str] = {}
-    for methods in _engine_groups().values():
-        for m in methods:
-            w = next((p for p in _parts(m) if p in words_ok), None)
-            if w:
-                owner[m] = w
-    found: dict[str, set[Path]] = collections.defaultdict(set)
-    for t in all_tests():
-        if t.name in TEXT_BLIND:
-            continue
-        text = _text(t)
-        tally: collections.Counter[str] = collections.Counter()
-        for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
-            if ident in owner:
-                tally[owner[ident]] += 1
-        for prefix in re.findall(r"[\"']([a-z][a-z0-9]*):", text):
-            if prefix in words_ok:
-                tally[prefix] += 1
-        top = max(tally.values(), default=0)
-        if top >= DOMINANT_MIN:
-            for w, n in tally.items():
-                if n == top:
-                    found[w].add(t)
-    return {k: frozenset(v) for k, v in found.items()}
-
-
-@functools.lru_cache(maxsize=None)
-def vocabulary() -> frozenset[str]:
-    """功能前綴：_candidates 裡有測試檔的。"""
-    return frozenset(w for w in _candidates() if group_files(w))
+    return {k: frozenset(v) for k, v in by_text.items()}
 
 
 def _first_word(name: str) -> str:
     parts = _parts(name)
     return parts[0] if parts else ""
-
-
-def _feature_words(name: str) -> list[str]:
-    """名字裡第一個認得的功能前綴（tavern_seek → tavern；_can_enter_battle → battle；TavernNote → tavern）。"""
-    vocab = vocabulary()
-    for w in _parts(name):
-        if w in vocab:
-            return [w]
-    return []
-
-
-def scan(lines: Lines) -> set[str]:
-    """hunk 裡提到的功能前綴（共用方法、殼、方法以外用）。"""
-    return (words("\n".join(text for _, text in lines)) & vocabulary()) - SCAN_SKIP
-
-
-def scan_changed(removed: Lines, added: Lines) -> set[str]:
-    """方法以外（import 那一串）：只算拿掉或加上的字，不算同一行原本就有的（改一行 import 不會帶出整串模組）。"""
-    before = words("\n".join(t for _, t in removed))
-    after = words("\n".join(t for _, t in added))
-    changed = (before ^ after) or (before | after)
-    return (changed & vocabulary()) - SCAN_SKIP
 
 
 _SMOKE = re.compile(r"^([ \t]*)@pytest\.mark\.smoke\b[^\n]*\n(?:\1@[^\n]*\n)*\1(?:async[ \t]+)?(?:def|class)[ \t]+(\w+)", re.M)
@@ -687,10 +511,10 @@ def smoke_ids() -> tuple[str, ...]:
 
 
 def core_tests() -> list[Path]:
-    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：核心模組（CORE_MODULES，扣掉 NOT_CORE_TESTS）自己檔名的
+    """「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：核心模組（CORE_MODULES，扣掉 NOT_CORE_TESTS）自己檔名的
     測試（test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
-    tests/core/test_engine*.py（Game 門面；第 2 階搬包時屬於包的搬走，條數往下掉）＋ tests/core/ 的核心契約、
-    邊界、錢包服務測試（CORE_GLOBS，第 1 階才有）。不再是整個 tests/core/（雜燴：test_social、test_factions……）。"""
+    tests/core/test_engine*.py（Game 門面；屬於包的第 61 批搬走了）＋ tests/core/ 的核心契約、
+    邊界、錢包服務測試（CORE_GLOBS，第 1 階才有）。不再是整個 tests/core/（雜燴：test_factions……）。"""
     own = {t for t in all_tests() for mod in CORE_MODULES - NOT_CORE_TESTS
            if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
     globbed = {t for pattern in CORE_GLOBS for t in CORE_TESTS.glob(pattern)}
@@ -825,56 +649,44 @@ def engine_delegates(src: str) -> dict[str, str]:
 
 
 def engine_groups(hunk_list: list[Hunk], old_src: str,
-                  new_src: str) -> tuple[set[str], bool, list[str], set[str], set[Path]]:
-    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼, 委派到的包, 寫到那幾個委派名的測試檔）。hunk 落在一行委派
-    （engine_delegates）上照那一包挑（那一包的 tests/＋核心契約，同改那一包的檔；第 11 批：以前照方法名的第一個字分群，_settle_siege 算
-    siege、admin_start_battle 算 admin），再加內文寫到那個方法名的測試檔（包外直接叫它的混合檔：_battle_scene_text 的 test_engine、
-    test_seal……；第 11 批審查）。是不是委派照舊檔認：舊檔裡是胖方法、這一次換成委派的（往後的搬包批）照舊照方法名分群，守那段舊本體的
-    混合檔才挑得到（第 11 批審查：照新舊兩份的聯集認，test_train_variety 就掉了）；舊檔沒有這個方法的才照新檔認。"""
+                  new_src: str) -> tuple[bool, list[str], set[str], set[Path]]:
+    """engine.py 的 hunk → （要不要核心測試＋煙霧, 為什麼, 委派到的包, 寫到那幾個方法名的測試檔）。hunk 落在一行委派
+    （engine_delegates）上照那一包挑（那一包的 tests/＋核心契約，同改那一包的檔），再加內文寫到那個方法名的測試檔（包外直接叫它的）。
+    是不是委派照舊檔認：舊檔裡是胖方法、這一次換成委派的不算委派（守那段舊本體的測試才挑得到）；舊檔沒有這個方法的才照新檔認。
+    其餘的方法（Game 的門面與核心，第 61 批拿掉照名字分功能群之後）→ 核心測試＋煙霧＋內文寫到那個方法名的測試檔，同 core_module_callers：
+    寫到它的超過 IMPORT_CAP 個檔不併（choose、sync 這種）。方法以外 → 核心測試＋煙霧。"""
     def spans_of(src: str):
         methods = _game_methods(src)
         tops = [(name, start, end) for name, start, end, node in _top_level(src)
                 if not (isinstance(node, ast.ClassDef) and name == "Game")]
         return methods + tops
 
-    found: set[str] = set()
     core = False
     why: list[str] = []
     packages: set[str] = set()
     callers: set[Path] = set()
     old_methods = {name for name, _, _ in _game_methods(old_src)}
     delegates = {**{n: p for n, p in engine_delegates(new_src).items() if n not in old_methods}, **engine_delegates(old_src)}
-    by_text = _index()[1]
-    for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
-        label = name or "方法以外"
+    by_text = _index()
+    for name in _split(hunk_list, old_src, new_src, spans_of):
         if name in delegates:
             packages.add(delegates[name])
             named = set(by_text.get(name, frozenset()))
             callers |= named
-            why.append(f"{label}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約"
+            why.append(f"{name}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約"
                        + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
             continue
-        if name in CORE_METHODS:
-            hits = scan(removed + added)
-            core = True
-            found |= hits
-            why.append(f"{label}：共用服務（手冊 3.3）→ 核心測試＋煙霧"
-                       + (f"，另外提到 {'、'.join(sorted(hits))}" if hits else ""))
+        core = True
+        if name is None:
+            why.append("方法以外 → 核心測試＋煙霧")
             continue
-        if name is not None and name not in SHARED_METHODS:
-            hit = _feature_words(name)
-            if hit:
-                found.update(hit)
-                why.append(f"{label} → {hit[0]}")
-                continue
-        hits = scan(removed + added) if name else scan_changed(removed, added)
-        if hits:
-            found |= hits
-            why.append(f"{label} 提到 {'、'.join(sorted(hits))}")
+        named = set(by_text.get(name, frozenset()))
+        if len(named) > IMPORT_CAP:
+            why.append(f"{name}：不是委派 → 核心測試＋煙霧；寫到 {name} 的測試檔有 {len(named)} 個，太多不併（其他留給每日整套；要當場驗用 --all）")
         else:
-            core = True
-            why.append(f"{label} 沒提到功能前綴 → 核心測試＋煙霧")
-    return found, core, why, packages, callers
+            callers |= named
+            why.append(f"{name}：不是委派 → 核心測試＋煙霧" + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
+    return core, why, packages, callers
 
 
 # ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心本體裡掛鉤、清單以外的模組 ─────────────
@@ -1008,7 +820,7 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     whole = not hunk_list
     seeds = sorted(refs) if whole else sorted(n for n in _split(
         hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)]) if n is not None)
-    by_text = _index()[1]
+    by_text = _index()
     reexported = core_reexports(module)
     files: set[Path] = set()
     why: list[str] = []
@@ -1052,72 +864,6 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     if len(files) > IMPORT_CAP:
         return set(), [*why, f"寫到那幾個名字的測試檔有 {len(files)} 個，太多 → 只有核心測試＋煙霧（其他留給每日整套；要當場驗用 --all）"]
     return files, why
-
-
-def fields_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], list[str]]:
-    """models.py、state.py 的 hunk → （類別名或欄位名帶的功能前綴, 為什麼）；核心測試＋煙霧另外一定加。"""
-    def spans_of(src: str):
-        return [(name, start, end) for name, start, end, _ in _top_level(src)]
-
-    found: set[str] = set()
-    why: list[str] = []
-    for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
-        hits = set(_feature_words(name)) if name else set()
-        for _, text in removed + added:  # 欄位名（行首的識別字）帶功能前綴的：mall_tokens: dict → mall
-            m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:=]", text)
-            if m:
-                hits.update(_feature_words(m.group(1)))
-        hits -= SCAN_SKIP
-        if hits:
-            found |= hits
-            why.append(f"{name or '類別以外'} → {'、'.join(sorted(hits))}")
-    return found, why
-
-
-def _route_paths(node) -> list[str]:
-    paths = []
-    for d in getattr(node, "decorator_list", []):
-        if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute)
-                and d.func.attr in {"get", "post", "put", "delete", "patch", "api_route"}
-                and d.args and isinstance(d.args[0], ast.Constant) and isinstance(d.args[0].value, str)):
-            paths.append(d.args[0].value)
-    return paths
-
-
-def server_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], bool, list[str]]:
-    """server.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼）；test_server.py 另外一定加。"""
-    routes: dict[str, set[str]] = collections.defaultdict(set)
-
-    def spans_of(src: str):
-        spans = []
-        for name, start, end, node in _top_level(src):
-            routes[name].update(_route_paths(node))
-            spans.append((name, start, end))
-        return spans
-
-    found: set[str] = set()
-    core = False
-    why: list[str] = []
-    for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
-        paths = sorted(routes.get(name, ())) if name else []
-        hits: set[str] = set()
-        for p in paths:  # /api/mall/buy → mall；/api/sense_read → sense；/api/do/{op} 認不出 → 看 hunk
-            for seg in p.split("/"):
-                if seg and not seg.startswith("{"):
-                    hits.update(w for w in _parts(seg) if w in vocabulary())
-        if name and not paths:
-            hits.update(_feature_words(name))
-        hits -= SCAN_SKIP
-        if not hits:
-            hits = scan(removed + added) if name else scan_changed(removed, added)
-        label = (f"{name}（{'、'.join(paths)}）" if paths else name) if name else "函式以外"
-        if hits:
-            found |= hits
-            why.append(f"{label} → {'、'.join(sorted(hits))}")
-        else:
-            core = True
-            why.append(f"{label}：殼 → 核心測試＋煙霧")
-    return found, core, why
 
 
 _CONFTEST_IMPORT = re.compile(r"^[ \t]*from[ \t]+conftest[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
@@ -1207,15 +953,16 @@ def pick(files: list[str], base: str | None = None,
     named = {t.name: t for t in tests}
     result = Pick()
 
-    def add_group(found: set[str], source: str) -> None:
-        for w in sorted(found):
-            hit = group_files(w)
-            result.files |= hit
-            if not hit:
-                result.why.append(f"{source}：{w} 這一群沒有測試檔")
-
     def own_named(mod: str) -> set[Path]:
         return {t for t in tests if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
+
+    def content_route(path: Path) -> None:
+        # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
+        # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
+        for name in ("test_content.py", REAL_CONTENT_TEST, PACK_CONTENT_TEST):
+            if name in named:
+                result.files.add(named[name])
+        result.files |= {t for t in tests if path.name in _text(t)}
 
     def core_and_smoke() -> None:
         result.core = result.smoke = True
@@ -1243,6 +990,13 @@ def pick(files: list[str], base: str | None = None,
             result.files |= hit
             result.why.append(f"{f}：寫到 {path.name} 的 {len(hit)} 個檔")
             continue
+        if f.startswith("tianxia/features/") and path.parts[3:5] == ("tests", "content"):  # core_content：包裡的測試內容（第 63 批），不補就落進下面那一支、什麼都挑不到
+            hit = {t for t in tests if path.name in _text(t)}
+            result.files |= hit | set((FEATURES / path.parts[2] / "tests").rglob("test_*.py"))
+            if PACK_CONTENT_TEST in named:
+                result.files.add(named[PACK_CONTENT_TEST])
+            result.why.append(f"{f}：寫到 {path.name} 的 {len(hit)} 個檔＋{path.parts[2]} 這一包的 tests/＋{PACK_CONTENT_TEST}")
+            continue
         if f.startswith("tests/") or (f.startswith("tianxia/features/") and "/tests/" in f):
             if path.name.startswith("test_") and path.suffix == ".py":
                 if (ROOT / f).exists():
@@ -1259,6 +1013,8 @@ def pick(files: list[str], base: str | None = None,
             continue
         if f.startswith("tianxia/features/"):
             parts = f.split("/")
+            if parts[3:4] == ["content"]:  # 包裡的內容檔（全部拆包第 62 批）：內容那一條＋下面包那一條
+                content_route(path)
             pkg_tests = FEATURES / parts[2] / "tests" if len(parts) > 3 else None
             if pkg_tests is not None:
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
@@ -1280,38 +1036,28 @@ def pick(files: list[str], base: str | None = None,
                 continue
             result.why.append(f"{f}：核心 → 核心測試＋煙霧")
             continue
+        if f == "server.py":  # 第 61 批：路由都在包裡，server.py 只剩殼；拆進各包的路由測試（test_*_shell.py）跟著它
+            core_and_smoke()
+            result.files |= {t for t in tests if t.name == SERVER_TEST or SHELL_TEST.fullmatch(t.name)}
+            result.why.append(f"{f}：殼 → 核心測試＋煙霧＋{SERVER_TEST}＋全部 test_*_shell.py")
+            continue
         if f in HUNK_FILES:
             given = (hunks_of or {}).get(f)
             hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
-            mod = path.stem
-            if mod == "server" and SERVER_TEST in named:
-                result.files.add(named[SERVER_TEST])
-            if mod in ("models", "state"):
-                result.files |= own_named(mod)
             if not hunk_list:  # 指名了、可是跟 base 沒有差：照整個檔算
                 core_and_smoke()
                 result.why.append(f"{f}：跟 base 沒有差異，照整個檔算 → 核心測試＋煙霧")
                 continue
-            if mod == "engine":
-                found, core, why, packages, callers = engine_groups(hunk_list, old_src, new_src)
-                for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
-                    pkg_tests = FEATURES / pkg / "tests"
-                    result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
-                result.files |= callers
-                # 核心契約與邊界測試一律帶（第 11 批審查）：Game 新叫了一個包的名字，只有邊界測試的 GAME_* 名單抓得到；它們不照內文歸群了
-                # （TEXT_BLIND），改 engine 上非核心、非委派的方法以前碰巧在 sortie 群才挑得到（_squad_encounter）。要跑核心測試時不另加
-                # （核心測試本來就含它們，CORE_GLOBS）。
-                if not core:
-                    result.files |= contract_tests()
-                    why = [*why, "engine.py 有改動 → 核心契約與邊界測試（GAME_* 名單只有邊界測試守）"]
-            elif mod == "server":
-                found, core, why = server_groups(hunk_list, old_src, new_src)
-            else:
-                found, why = fields_groups(hunk_list, old_src, new_src)
-                core, why = True, ["核心 → 核心測試＋煙霧", *why]
-            if core:
+            core, why, packages, callers = engine_groups(hunk_list, old_src, new_src)
+            for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
+                pkg_tests = FEATURES / pkg / "tests"
+                result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+            result.files |= callers
+            if core:  # 核心測試本來就含核心契約與邊界（CORE_GLOBS）
                 core_and_smoke()
-            add_group(found, f)
+            else:  # 核心契約與邊界測試一律帶（第 11 批審查）：Game 新叫了一個包的名字，只有邊界測試的 GAME_* 名單抓得到
+                result.files |= contract_tests()
+                why = [*why, "engine.py 有改動 → 核心契約與邊界測試（GAME_* 名單只有邊界測試守）"]
             result.why.extend(f"{f}：{w}" for w in why)
             continue
         if path.suffix == ".py" and f.startswith("tianxia/") and path.stem in CORE_MODULES:
@@ -1350,12 +1096,7 @@ def pick(files: list[str], base: str | None = None,
                     result.why.append(f"{f}：engine 為了登記才 import 它（動作 {kind}）→ 寫到 \"{kind}\" 的 {len(hit)} 個檔")
             continue
         if f.startswith("content/"):
-            # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
-            # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
-            for name in ("test_content.py", REAL_CONTENT_TEST):
-                if name in named:
-                    result.files.add(named[name])
-            result.files |= {t for t in tests if path.name in _text(t)}
+            content_route(path)
             continue
         owner = feature_web().get(path.name) if f.startswith("web/") and f.count("/") == 1 else None
         if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）

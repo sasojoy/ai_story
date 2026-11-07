@@ -8,7 +8,7 @@ explore_rules）；函式名＝原本的方法名去掉前導底線，一個例�
 Game 上留 7 個一行委派（第 3＋4 批是 9 個；核心原位的選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題在全部拆包
 第 11 批換成 act 子動詞的掛鉤〔__init__.py 的 verbs〕，`_outing_option`、`_explore_one` 拿掉；還在叫的：輿圖、server 的 mostly 與輿圖、
 出陣包〔_outing_on〕、bot_policy、腳本、測試）。包裡互相叫直接叫這裡的函式；經 ctx 叫的是 `_outing_plan`、`outing_plan`、`odds`
-（這一包的 tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）與 `outing_plan`、
+（這一包的 tianxia/features/explore/tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）與 `outing_plan`、
 `map_mostly` 照搬原本寫法的 `ctx._outing_on()`；第 11 批的 verbs() 與 outing_note 直接叫 outing_on（沒有測試換掉它，手冊第十五節）。
 擲骰都用自己的亂數（explore_rules.rng_for），Game.rng 一次都不多、不少（頭目戰與仗本身照它們原本的）。
 """
@@ -35,9 +35,9 @@ from tianxia.core.option import Option
 from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
-from tianxia.rules import jianfa
+from tianxia.rules import day_turn, jianfa
 
-from . import explore_rules, outing_rules
+from . import explore_rules, howto, outing_rules
 
 
 @dataclass(frozen=True)
@@ -175,11 +175,13 @@ def outing_option(ctx, loc: Location) -> Option:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫舊探索那一行）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 ctx._insight_blocked）。"""
     if not outing_on(ctx):
-        return None
-    from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
-
+        c = ctx.content
+        legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
+        blocked = ctx._insight_blocked(loc)
+        kind, until = day_turn(c, ctx.state.world) if blocked else ("at", None)
+        return howto.explore_line(ctx._explore_weights(loc), legend, blocked, until, later=kind == "later")
     plan = ctx._outing_plan(loc)
     return howto.outing_line(plan.weights, plan.foe_note)
 

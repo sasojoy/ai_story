@@ -68,3 +68,13 @@ def peer_act(ctx, name: str, action: str, params: dict | None = None) -> list[st
 def calls_here(ctx) -> list[dict]:
     """場景底下「別人遞給你、還沒回的」打招呼、結伴、切磋邀請（social.calls）。"""
     return social.calls(ctx)
+
+
+def carry_season(ctx: Game, old, fresh) -> None:
+    """season.carry 的 peers 那一格（core_seams，全部拆包第 55 批；照原位搬，不看開關）。名帖（Joy 2026-10-19）：自己那一張、收到的、藏起來的、不接誰的挑釁話都是自己的東西，
+    跨季保留；一天的次數照回體丹不能換季多一輪。這一季值得留名的頭銜寫進 title_book（「第N季 天下第一」）由這一包的 on_season_start 接（全部拆包第 37 批）。"""
+    fresh.player.mingtie, fresh.player.mingtie_box = old.player.mingtie, old.player.mingtie_box
+    fresh.player.mingtie_hidden, fresh.player.taunt_muted = old.player.mingtie_hidden, old.player.taunt_muted
+    fresh.player.mingtie_day, fresh.player.mingtie_made, fresh.player.mingtie_sent = (
+        old.player.mingtie_day, old.player.mingtie_made, old.player.mingtie_sent)
+    fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, old.player.gifts_today

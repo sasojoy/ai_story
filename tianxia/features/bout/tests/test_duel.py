@@ -274,6 +274,7 @@ def test_the_season_bot_never_flees(setup):
         assert bot.pick(game, game.options(odds=False), rng) != DUEL_FLEE
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_content_checks_the_faces(setup):
     content, _ = setup
     content.duels = {"x": _boss(foes=[DuelFoe(side="huang", name="甲", title="乙", intro="", win="", lose="")])}

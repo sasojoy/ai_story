@@ -1,5 +1,5 @@
 """江湖頁減法（減法季批 1，整合設計第六章；本週卡照 Joy 2026-10-24 挑的乙案）的網頁部分：本週卡（灰線＋只剩「你這一步」的卡）、
-還沒投靠的人的三方卡、「剛剛」收成一行、事件選項前的小圖示、灰掉的主鈕點了浮出為什麼。照 tests/test_prologue_web.py 的做法把整支網頁放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；
+還沒投靠的人的三方卡、「剛剛」收成一行、事件選項前的小圖示、灰掉的主鈕點了浮出為什麼。照 tests/web/test_prologue_web.py 的做法把整支網頁放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；
 沒有 node 就略過。（以前那一排小標的測試 test_peek_row.py 跟著小標一起拿掉了）"""
 from __future__ import annotations
 

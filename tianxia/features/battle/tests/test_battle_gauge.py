@@ -1,6 +1,7 @@
 """決戰的即時戰局條與看得懂的推進說法（Joy 2026-10-10 轉玩家反饋：「大決戰時……有辦法看即時戰局？那個推進多少我都不知道是啥意思」）。
 引擎給資料（battle_instance.gauge、Game.battle_gauge／card_gauge／record_gauge），網頁畫條（web/app.js 的 gaugeHtml）；
 句子裡不再寫「戰局推進 N」「戰局 a→b」，改成 shove 的三段說法，數字只畫在條上。"""
+# 畫法在 web/battle.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

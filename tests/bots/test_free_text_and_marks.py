@@ -352,7 +352,7 @@ def test_free_text_stat_must_be_a_check_stat(tmp_path):
 # 所以提示詞不動，引擎這邊擋：潤色插回江湖紀錄時（Game.add_gamble_narration），那一段已經含結果句（空白、標點不算，event_llm.
 # tells_the_outcome）就拿掉引擎那一行；沒含照舊接在後面。
 #
-# 假的模型：把 requests.post 換掉（tests/test_ollama_client.py 的做法），走真的 event_llm.narrate_event_gamble；不連任何網路。
+# 假的模型：把 requests.post 換掉（tests/bots/test_ollama_client.py 的做法），走真的 event_llm.narrate_event_gamble；不連任何網路。
 
 REAL_CHAT_TEXT = OllamaClient.chat_text  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」
 
@@ -452,7 +452,7 @@ def test_a_paragraph_without_the_outcome_is_followed_by_it_as_before(failed_gamb
 ], ids=["half", "all-but-the-end"])
 def test_part_of_the_outcome_is_not_enough_to_drop_it(failed_gamble, model, paragraph):
     """只寫了結果句的一部分：引擎那一行照接，沒寫到的那一截（甩掉追兵）才不會不見。寫到的那一截收在潤色的尾巴上，
-    那一截從潤色切掉（FB-222，tests/test_free_text_and_marks.py），不寫兩次。"""
+    那一截從潤色切掉（FB-222，tests/bots/test_free_text_and_marks.py），不寫兩次。"""
     _, lines = _polish(failed_gamble, model, paragraph)
     assert OUTCOME in lines and lines[lines.index(OUTCOME) - 1] == "你剛扛起擔子。"
     assert _bare("".join(lines)).count(_bare("巡夜的兵卒發現了你")) == 1
@@ -598,7 +598,7 @@ def test_trim_echo_leaves_everything_else_alone(narration, outcome):
 #   內容寫好的結果句不接，潤色照惡行寫（narrate_event_gamble 的 evil），沒寫成用 rules.EVIL_DONE 收尾；行狀照實寫。
 # - 「善」「中」、或「惡」沒擲中：一個字都不變。不碰 Game.rng 的序列。
 #
-# 假的模型：mock 的 client，或把 requests.post 換掉走真的 OllamaClient.chat_structured（tests/test_ollama_client.py 的做法）；
+# 假的模型：mock 的 client，或把 requests.post 換掉走真的 OllamaClient.chat_structured（tests/bots/test_ollama_client.py 的做法）；
 # 不連任何網路，也不碰 11434。
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」
@@ -628,7 +628,7 @@ STORY = "你一言不發地揮鏟掘土，把那哀求的郡兵推進坑裡填�
 
 @pytest.fixture
 def make(content, world):
-    """測試內容的「醉漢」事件掛上這個隨口應對；劇本補兩個陣營（tests/test_ranger.py 的做法：散人加的善名惡名才記遊俠名號的帳），
+    """測試內容的「醉漢」事件掛上這個隨口應對；劇本補兩個陣營（tests/ranger/test_ranger.py 的做法：散人加的善名惡名才記遊俠名號的帳），
     打開行狀。make(rng) 開一個停在這則事件上的角色（每次換一個名號），rng 在開好之後才換上（擲骰從同一個地方開始）。"""
     content.scenario.factions = [
         FactionDef(id="guan", name="官軍", join_at=["town"]),

@@ -9,11 +9,11 @@
   tests/core/test_contract_core.py 逐字鎖住（核心測試，會跟著跑）。
 - 每一格的行為由別處的測試蓋，test_for 挑不到，另外跑（-n 4，不含 slow）：
   - 晉升與部下、召見往下一段、靠山：tests/figures/test_promotions_high.py、tests/figures/test_promotions_huang.py
-  - 伏筆、捐糧、片段：tests/figures/test_foreshadow.py（與 test_promotions_huang.py）
-  - 舊鏈的玉璽碎片：tests/core/test_rules.py（apply_effect 立碎片旗標那 5 條；改 rules.py 時是自己檔名挑得到）、tests/seal/test_seal.py；
+  - 伏筆、捐糧、片段：tianxia/features/military/tests/test_foreshadow.py（與 test_promotions_huang.py）
+  - 舊鏈的玉璽碎片：tests/core/test_rules.py（apply_effect 立碎片旗標那 5 條；改 rules.py 時是自己檔名挑得到）、tianxia/features/seal/tests/test_seal.py；
     符文殘片：tests/figures/test_promotions_huang.py（這兩格第 27 批改由玉璽包登記，玉璽包 README「另外要跑的」也列了）
   - 一條線的一步與紀念物：tianxia/features/story/tests/test_story_*.py；結識同伴：tianxia/features/companions/tests/test_companions.py
-  - 其餘：tests/arts/test_renown_insight.py、tests/gear/test_treasures.py、tests/battle/test_fronts.py、tests/core/test_drill_push.py、
+  - 其餘：tests/arts/test_renown_insight.py、tianxia/features/gear/tests/test_treasures.py、tests/battle/test_fronts.py、tianxia/features/sortie/tests/test_drill_push.py、
     tianxia/features/guide/tests/test_enlist.py、tianxia/features/cultivation/tests/test_zhuifeng_quality.py、tests/figures/test_rumor_layers.py
 - 與 scripts/same_behavior.py 的 effects 一軌（compare --tracks effects，season21、week7、test 三種）。
 - 反過來：改這裡代叫的共用規則層（ranks 的 effect_* 那幾格）或包登記的格（軍情包的伏筆三格、玉璽包的 effect_runic、effect_shard）時，

@@ -3,6 +3,7 @@
 收場時 Game._file_showdown 把整場一回合一段的戰況快照進自己的戰報（BattleRecord.log，照先後；每一段最後一條是自己出了什麼，
 BattleParticipant.moves），戰報頁最後一段「完整戰況」；網頁（app.js 的 roundBlocks 帶 report）每一回合收成一行、點了展開。
 決戰與奪璽單挑（battlelog.BIG_KINDS）不佔一般那 MAX_RECORDS 場，戰報列表另外一組排在最上面。"""
+# 畫法在 web/battle.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import re

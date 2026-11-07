@@ -90,7 +90,7 @@ def test_a_strike_bounty_here_makes_every_trip_that_bounty_fight_and_handing_it_
     assert plan.how == "bounty" and plan.hint == "野外有賞" and plan.boss is None
     assert plan.weights == {explore_one.EVENT: 0, explore_one.ENCOUNTER: 100, explore_one.MATERIAL: 0, explore_one.INSIGHT: 0}
     # 2e（FB-880，企劃者 2026-10-26）：對懸賞那一路必敗就不強制。打輸的幾趟會掉氣血、掉到必敗就放開，這條要看的是「打得過卻沒交差，
-    # 下一趟還是那一路」，所以勝算釘在難分勝負（必敗放開的規則在 tests/test_explore_one_2e.py）
+    # 下一趟還是那一路」，所以勝算釘在難分勝負（必敗放開的規則在 tianxia/features/explore/tests/test_explore_one_2e.py）
     with mock.patch.object(game, "odds", return_value="難分勝負"):
         for i in range(8):  # 打輸了沒交差：下一趟還是那一路
             _, fights = _trip(game, "落敗")
@@ -108,7 +108,7 @@ def test_a_strike_bounty_here_makes_every_trip_that_bounty_fight_and_handing_it_
 @pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_paragraph_of_one_trip_has_no_three_beat_connectives():
     """正式內容的句子庫與真的出門回來的那一段，都不出現接著、最後這類三拍才有的接續字。"""
-    lines = json.loads((Path(__file__).resolve().parents[4] / "content" / "outing_lines.json").read_text(encoding="utf-8"))
+    lines = json.loads((Path(__file__).resolve().parents[1] / "content" / "outing_lines.json").read_text(encoding="utf-8"))
     sentences = [s for group in lines.values() for pool in group.values() for s in pool]
     assert sentences and not [s for s in sentences if any(word in s for word in CONNECTIVES)]
     game = ready(jianfa_game(), side="guan", loc="yingshui")

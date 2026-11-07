@@ -11,7 +11,7 @@ from pathlib import Path
 # 測試照區塊分資料夾（2026-10-27 測試整理 2；資料夾對 CLAUDE.md 的區塊表）：tests/kit/ 是共用工具（webharness、conquest_kit……），
 # 各資料夾的測試檔照舊互相 import（from test_prologue_web import run），所以每個資料夾都放上 sys.path。資料夾之間檔名不能重複。
 # 功能包的 tests/（tianxia/features/<包>/tests/）也放上去：搬進包的測試檔還有別的資料夾的測試在 import（出陣第 1 批：
-# tests/acts/test_econ_gather_sortie.py 借 test_sortie 的 _game、_fight；只跑那一個檔時 tianxia/features/conftest.py 不會載入）
+# tianxia/features/sortie/tests/test_econ_gather_sortie.py 借 test_sortie 的 _game、_fight；只跑那一個檔時 tianxia/features/conftest.py 不會載入）
 _TESTS = Path(__file__).resolve().parent
 for _d in [*sorted(p for p in _TESTS.iterdir() if p.is_dir() and p.name not in ("fixtures", "__pycache__")),
            *sorted(p for p in (_TESTS.parent / "tianxia" / "features").glob("*/tests") if p.is_dir())]:
@@ -60,27 +60,49 @@ def _dump(content: Content) -> bytes:
     return pickle.dumps(content, pickle.HIGHEST_PROTOCOL)
 
 
-def _content_key(root, profile) -> tuple:
-    """快取的鍵：哪個資料夾、哪份設定覆寫檔，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
+def _content_key(root, profile, only=None) -> tuple:
+    """快取的鍵：哪個資料夾、哪份設定覆寫檔、只載哪一包，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
     這台機器的 `.local/admins.txt`（路徑與內容）與環境變數 `TIANXIA_ADMINS`。動了這兩樣的測試拿到的是另一份母本。
     ADMINS_FILE 在呼叫的當下讀，所以 monkeypatch 換掉它也算數。"""
     admins_file = Path(content_mod.ADMINS_FILE)
     local = admins_file.read_text(encoding="utf-8") if admins_file.exists() else None
-    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS")
+    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS"), only
 
 
-def cached_content(root, profile=None) -> Content:
-    """root 的內容（profile 是設定覆寫檔）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
+def cached_content(root, profile=None, only=None) -> Content:
+    """root 的內容（profile 是設定覆寫檔；only 是只載核心加一包，全部拆包第 63 批，只有測試內容可以、這一份不驗）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
     （第一次也是複本，母本誰都拿不到）。兩件事要知道：
     - 母本是在第一個要它的測試當下建的，那個測試當時的環境（monkeypatch 過的東西）會跟著進母本、再進之後每一份複本。
       所以 patch 了載入或驗證路徑（load_content、validate 會碰到的東西）的測試不要用這裡，自己直接 load_content。
     - 鍵不看資料夾裡的檔：root 在一個工作階段裡不能改（正式內容、測試內容、序章母本資料夾都不改）。要改檔再載入的測試
       用自己的一份資料夾（prologue_root、copy_fixture）直接 load_content。"""
-    key = _content_key(root, profile)
+    key = _content_key(root, profile, only)
     if key not in _MASTERS:
-        master = load_content(root, profile)
+        master = load_content(root, profile, only=only)
         _MASTERS[key] = (master, _dump(master))
     return pickle.loads(_MASTERS[key][1])
+
+
+def copy_real_content(dest: Path) -> None:
+    """真實內容抄成一份攤平的（content/ 整份加各包宣告的檔，都在 dest/<rel>，全部拆包第 62 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是真實的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_content
+
+    shutil.copytree(REAL_CONTENT, dest)
+    for rel, path in pack_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
+
+
+def copy_test_content(dest: Path) -> None:
+    """測試內容抄成一份攤平的（tests/fixtures/content 整份加各包的測試內容，都在 dest/<rel>，全部拆包第 63 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是測試內容的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_test_content
+
+    shutil.copytree(FIXTURE, dest)
+    for rel, path in pack_test_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
 
 
 def real_content(profile=None) -> Content:
@@ -114,7 +136,7 @@ def old_attrs(content: Content) -> Content:
 
 def no_week_unlock(content: Content) -> Content:
     """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進
-    擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/test_week_unlock.py。"""
+    擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/figures/test_week_unlock.py。"""
     content.config.jianfa.week_unlock = False
     return content
 
@@ -141,7 +163,7 @@ def renown_on(content: Content) -> Content:
 
 def renown_unscaled(content: Content) -> Content:
     """名聲門檻不乘季長倍數（Config.renown.scale 關掉，開季不蓋 renown_scale 的章），回傳同一份內容：名聲的測試寫的是門檻的原數
-    （名望 10／25／50／90），以前靠 2.5 天週末季的倍數剛好是 1；週末季封存後（2026-10-25）改叫它。倍數本身在 tests/test_renown.py 測。"""
+    （名望 10／25／50／90），以前靠 2.5 天週末季的倍數剛好是 1；週末季封存後（2026-10-25）改叫它。倍數本身在 tests/core/test_renown.py 測。"""
     content.config.renown.scale = False
     return content
 
@@ -179,14 +201,14 @@ def no_real_ollama_flavor_calls(monkeypatch):
     fixture content 的 ollama_url（指向故意關閉的 port，見 tests/fixtures/content/
     config.json）各自真的嘗試連線一次才失敗——雖然每次只要 ~2 秒，但乘上整個套件的測試
     數量會拖到以分鐘計。預設回傳空字串（等同「這次沒有潤色句」，跟真的連不上時的行為
-    一致），需要真的驗證 flavor 呼叫內容的測試（tests/test_flavor.py、test_engine.py 的
+    一致），需要真的驗證 flavor 呼叫內容的測試（tests/core/test_flavor.py、test_engine.py 的
     重遊/重複事件測試）自己用 mock.patch.object 覆蓋這個預設值即可。
 
     同一個理由也適用於 chat_structured——battle_instance.py::assess_action_success_rate
     現在每次自訂戰鬥行動送出都會呼叫一次，不假掉的話同樣會對關閉的 port 真的連線才
     失敗（優雅退回保底值，不影響測試正確性，只是拖慢）。這裡讓它直接拋例外，模擬
     「連不上」，跟真正連不上時的行為（各呼叫端自己的 graceful fallback）一致；
-    tests/test_real_content.py 用真實內容時已經有自己的 autouse fixture 蓋掉這個
+    tests/season/test_real_content.py 用真實內容時已經有自己的 autouse fixture 蓋掉這個
     預設值，那邊不受影響。"""
     from tianxia.ollama_client import OllamaClient
 
@@ -207,7 +229,7 @@ def no_host_power_save(monkeypatch, tmp_path_factory):
     """測試不看這台主機的省電模式（tianxia/power_save.py）：旗標檔是 repo 裡的 .local/power_save，
     主機上開著省電模式的時候，client.keep_alive 會回 5m，於是 test_ollama_client.py 那幾個
     「keep_alive 照設定」的測試整組掛掉（2026-10-18 實機踩到）。每個測試都指到一個不存在的旗標、
-    環境變數也清掉；要測省電模式本身的在 tests/test_power_save.py 裡自己設。"""
+    環境變數也清掉；要測省電模式本身的在 tests/bots/test_power_save.py 裡自己設。"""
     from tianxia import power_save
 
     monkeypatch.delenv(power_save.ENV, raising=False)
@@ -285,7 +307,8 @@ def isolated_database(tmp_path, monkeypatch):
 
 @pytest.fixture
 def content():
-    """測試內容（tests/fixtures/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。"""
+    """測試內容（tests/fixtures/content 加各包的 tests/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。
+    包的測試用 tianxia/features/conftest.py 那一份（只載核心加那一包，全部拆包第 63 批）。"""
     return cached_content(FIXTURE)
 
 
@@ -322,7 +345,7 @@ def _prologue_master(tmp_path_factory):
     測試不直接用它：要改內容再載入的測試（驗證）用 prologue_root（自己的一份複本），只要載入好的內容用 prologue_content。
     prologue_root 每次複製前後、以及工作階段結束時，都檢查這個資料夾裡每個檔都沒被改過。"""
     root = tmp_path_factory.mktemp("prologue") / "prologue_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     for name in ("tutorial.json", "preset_recipes.json", "insight_scenes.json"):
         shutil.copy(PROLOGUE / name, root / name)
     shutil.copy(PROLOGUE / "events.json", root / "events" / "prologue.json")
@@ -384,7 +407,7 @@ def _hints_master(tmp_path_factory):
     （五條）。測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
     跟序章母本一樣：測試不直接用它（hints_root 給自己的一份複本、hints_content 給載入好的複本），每次複製前後都檢查沒被改過。"""
     root = tmp_path_factory.mktemp("hints") / "hints_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     shutil.copy(HINTS / "hints.json", root / "hints.json")
     scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
     scenario["factions"] = [{"id": "guan", "name": "官軍", "join_at": []}]
@@ -710,7 +733,7 @@ LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",
     "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry",
-    "tests/ranger/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week",
+    "tianxia/features/bounties/tests/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week",
     "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off",
     "tianxia/features/sortie/tests/test_sortie_duel_bots.py::test_a_bots_only_server_clears_every_duel_within_a_day",
     "tests/season/test_sim_scripts.py::test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts",

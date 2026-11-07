@@ -1,7 +1,7 @@
 """龍頭上陣（Joy 2026-10-17 第 2 條「大決戰雙方龍頭武將應該要參與且有份量」）的共用規則那一半：每回合喊一招主將令、照份量出手、
 被集火與點名打得到、敗走推戰局（battle_instance 的回合規則），與誰上陣、份量、池子的挑法（共用規則層 tianxia/chiefs.py 的 pick）。
 
-全部拆包第 8 批合進 develop 時從 tests/battle/test_generals.py 拆出來（PM 定，手冊第十五節「第 8 批的 PM 認定」第 1 條）：改共用規則層的
+全部拆包第 8 批合進 develop 時從 tianxia/features/battle/tests/test_generals.py 拆出來（PM 定，手冊第十五節「第 8 批的 PM 認定」第 1 條）：改共用規則層的
 chiefs.py 照檔名挑得到這一檔；決戰包那一半（收場扣聲威 after_battle、陣前那一行）在 tianxia/features/battle/tests/test_generals.py。
 斷言一個字沒改；挑法那一條原本叫 generals.pick（決戰包 re-export 的同一個函式物件），這裡直接叫 chiefs.pick。"""
 from __future__ import annotations

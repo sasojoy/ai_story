@@ -1,5 +1,5 @@
 """列傳包的動作（全部拆包第 29 批：原本 Game 上的 20 個方法，計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md 1.1）。
-Game 留 9 個一行委派（換季的 _zhuan_past、同步的 _zhuan_tick、_everyday_options 的 _zhuan_options、server 與測試叫的 annals_view、biography_entry、
+Game 留 7 個一行委派（同步那一下第 55 批換成 sync.deliver 的 zhuan 那一格，休季那幾顆第 56 批換成 rest 那一格；換季的 _zhuan_past、server 與測試叫的 annals_view、biography_entry、
 biography_request、write_biography、biography_view、share_biography）；其餘 11 個只在包內互相叫，直接拿掉。
 寫傳的三段式：A biography_request（request，鎖內只讀）→ B server.write_zhuan（鎖外叫模型，留在殼；鎖外工作的掛鉤是總表第 69 批）→
 C write_biography（write，鎖內重驗：request 再問一次，對不上就不存）。
@@ -297,3 +297,13 @@ def choose_unlisted(ctx: Game, option_id: str) -> list[str] | None:
     if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in ctx.options(odds=False)):
         return ctx._log(act(ctx, option_id))
     return None
+
+
+def main_slot(ctx: Game, frame) -> dict:
+    """main 表的 zhuan 那一格（全部拆包第 66 批）：休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀沒有這個鍵。"""
+    zhuan = entry(ctx)
+    if zhuan is None:
+        return {}
+    if zhuan.get("illustration"):  # 列傳插畫（減法季批 7b）：圖檔在才給網址，沒有是 None
+        zhuan["illustration_src"] = frame.shell.zhuan_art_src(zhuan["illustration"])
+    return {"zhuan": zhuan}

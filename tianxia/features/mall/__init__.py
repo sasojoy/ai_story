@@ -1,12 +1,12 @@
 """商城（萬寶閣）：元寶錢包的賣與記帳、月卡、易名帖、管理者工具（功能包；開發規範手冊 3.2、3.10）。README.md 寫這一包做什麼、導覽與設計稿。
 
 - rules.py：純規則（原 tianxia/mall.py；那個名字留成指到這裡的別名）；rename.py：易名帖換名號的規矩
-- actions.py：原本 Game 上的 mall_*（Game 留一行委派）；routes.py：/api/mall/…（殼照 FEATURES 掛）
+- actions.py：原本 Game 上的 mall_*（全部拆包第 58 批起 Game 不留委派）；routes.py：/api/mall/…（殼照 FEATURES 掛）
 - 錢包（tianxia/wallet.py）與票的庫存、消耗（ctx.wallet）是核心的服務：別的功能用票叫核心，不叫這一包
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, HowtoHook, SeamHook
 
 
 class MallFeature(Feature):
@@ -57,6 +57,28 @@ class MallFeature(Feature):
             if item.name in seen:
                 need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
             seen.setdefault(item.name, item.id)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 mall 那一格（順序在 SEAM_ORDER；不看開關：on_season_start 只問開著的包，花元寶買的不能換季就不見）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "mall", _carry_season),)
+        return self._seams
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的mall 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("mall", lambda content, season, page: words.mall_section(content)),)
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    # 破境丹、重悟帖萬寶閣賣（花元寶買的不能換季就不見），同回體丹剩下的帶著走（Joy 2026-10-21「再研究一下有沒有什麼瑕疵」）
+    fresh.player.legend_items = old.player.legend_items
+    fresh.player.create_rerolls = old.player.create_rerolls
 
 
 FEATURE = MallFeature()

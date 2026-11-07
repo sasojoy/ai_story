@@ -282,7 +282,7 @@ def test_content_checks_catch_bad_targets_and_stray_story_steps():
 
 
 def _fuzhi(game):
-    """《符水與湯藥》：南陽郊野探索、擲中（chance 照 1）就開。走完各條路在 tests/core/test_story_fuzhi.py。"""
+    """《符水與湯藥》：南陽郊野探索、擲中（chance 照 1）就開。走完各條路在 tianxia/features/story/tests/test_story_fuzhi.py。"""
     game.content.storylines["fuzhi"].start.chance = 1.0
     _explore(game)
     assert game.state.pending_event == "fuzhi_1"

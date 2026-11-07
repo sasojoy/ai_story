@@ -1,7 +1,7 @@
 """名帖（Joy 2026-10-19；規則在 mingtie.py）：給別人看的樣子、名帖匣、定稿、遞、回帖、檢舉，與管理者看檢舉、撤下、放回
 （原本 Game 上的 _shared_or_none、mingtie_face、mingtie_view、mingtie_screen、make_mingtie、mingtie_send_problem、mingtie_send、_mingtie_swap、
 report_mingtie、admin_mingtie_reports、admin_mingtie_remove、admin_mingtie_restore；全部拆包第 37 批搬進來，行為一個字不變）。
-管理者的三個留委派（server 的 admin_choices 與 ADMIN_ACTIONS 兩個照舊叫 Game，這一批管理者工具不搬）。
+管理者的三個留委派（server 的 admin_choices 叫 Game；撤下、放回兩個工具第 68 批搬進這一包的 routes.py，委派留給測試）。
 """
 from __future__ import annotations
 

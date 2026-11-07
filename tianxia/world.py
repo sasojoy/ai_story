@@ -11,11 +11,11 @@
     tests/figures/test_seats.py（WEEK_HOOKS[0]）、tests/core/test_season_pause.py（catch_up_season）、
     tianxia/features/companions/tests/test_stances_tie.py（DAY_HOOKS 叫 stances.daily）、tests/figures/test_week7_season.py
   - 經世界一步、週初、每天、開季、收季、開集結推這裡代叫的舊模組（_STEP_CORE、_WEEK_CORE、_DAY_CORE、_MUSTER_CORE、
-    settle_season_start、end_season）：tests/ranger/test_bounties.py（規則關著的季每週掛單、開季那一格）、tests/ranger/test_season21_daily.py、
+    settle_season_start、end_season）：tianxia/features/bounties/tests/test_bounties.py（規則關著的季每週掛單、開季那一格）、tests/ranger/test_season21_daily.py、
     tests/figures/test_season21_frame.py、tests/figures/test_season21_caps.py、tests/figures/test_plans.py、tests/figures/test_figure_life.py、
     tests/figures/test_figure_attrition.py、tests/battle/test_fronts.py、tests/figures/test_front_lines.py、tests/figures/test_finale.py、
-    tests/figures/test_admin_triggers.py、tests/figures/test_calendar.py、tests/seal/test_seal.py、
-    tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
+    tianxia/features/military/tests/test_admin_triggers.py、tests/figures/test_calendar.py、tianxia/features/seal/tests/test_seal.py、
+    tianxia/features/seal/tests/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tianxia/features/seal/tests/test_seal_acts.py、tests/acts/test_conquest_rules.py、
     tianxia/features/stamina_plays/tests/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
 - 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
 - 反過來：改這裡代叫的舊模組（seal_acts……；bounties 第 45 批已成包、改由懸賞榜包登記 step、week、day、start 的 bounties 那四格，懸賞榜包 README「另外要跑的」照抄上面那一串；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格；seal 第 27 批成包、

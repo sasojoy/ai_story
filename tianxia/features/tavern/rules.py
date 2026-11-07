@@ -685,7 +685,7 @@ def _split_line(text: str) -> tuple[str, str]:
     return (who, said) if sep else ("", text)
 
 
-# ── 酒客閒談（模型寫鄰桌那幾句；server.write_chatter 在背景寫，一間酒肆 chatter_hours 換一段）────────────
+# ── 酒客閒談（模型寫鄰桌那幾句；routes.write_chatter 在背景寫，一間酒肆 chatter_hours 換一段）────────────
 CHATTER_KEEP = 4  # 話頭最多幾條
 CHATTER_LINE = 45  # 一句最多幾個字（含「誰：」與引號）
 CHATTER_WHO = 8  # 說話的人最多幾個字

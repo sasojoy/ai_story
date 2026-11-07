@@ -1,6 +1,6 @@
 """管理者的軍令與召見（功能包 military；全部拆包第 33 批）：立刻發本週軍令、立刻輪替第 4 階席次、立刻替人發召見（與管理者玩家選單共用的召見規劃）。
 原本 Game 上的 4 個方法（admin_issue_orders、admin_rotate_seats、_summons_plan、admin_summon）與回話用的五個常數；名字去掉前導的 admin_ 與底線。
-第一個參數是 ctx。會改狀態。路由（/api/admin 的 issue_orders、rotate_seats、summon 三顆鈕）照舊在 server.py 叫 Game 的委派。
+第一個參數是 ctx。會改狀態。/api/do 的 issue_orders、rotate_seats、summon 三顆鈕在這一包的 routes.py（全部拆包第 68 批）。
 """
 from __future__ import annotations
 

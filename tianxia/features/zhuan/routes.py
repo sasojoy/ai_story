@@ -1,15 +1,14 @@
 """列傳的 API（功能包 tianxia/features/zhuan/；原本寫在 server.py，全部拆包第 29 批照有所感的做法搬進來）：殼（server 模組，參數 shell）
 照 FEATURES 掛（server 的 features_core.routers 那一行；路徑與別的路由不重疊，先後不影響）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-寫傳的鎖外三段式（A、B、C，B 段叫模型）、評曰的鎖外一條、傳的畫面 zhuan_view、公開頁的 extras 照舊在殼的
-server.write_zhuan／verdict_text／zhuan_view／zhuan_extras（tests/server/test_server.py 掃鎖外叫模型的函式認這幾個名字；鎖外工作的掛鉤是總表第 69 批），
-這裡只接路由。"""
+傳的畫面 zhuan_view、公開頁的 extras 照舊在殼的 server.zhuan_view／zhuan_extras。
+寫傳的鎖外三段式（write_zhuan，A、B、C，B 段叫模型）與評曰的鎖外一條（verdict_text）第 69 批搬進這個檔（tests/server/test_server.py 掃鎖外叫模型的函式認這幾個名字）。"""
 import secrets
 
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import HTMLResponse
 
-from . import actions, zhuan_html
+from . import actions, biography, zhuan_end, zhuan_html
 
 
 def router(shell) -> APIRouter:
@@ -60,3 +59,65 @@ def router(shell) -> APIRouter:
                                             extras=shell.zhuan_extras(store, row)))
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def write_zhuan(shell, game, season: int, rewrite: bool) -> bool:
+    """開一個背景執行緒寫那一季的傳：A 鎖內開單 → B 鎖外請模型寫（model_call，佇列開著要排隊；預算 Config.biography.budget_seconds）
+    → C 鎖內重驗再存（Game.write_biography；模型寫不出來就照規則拼）。同一篇已經在寫就不再開；開了回 True。"""
+    key = shell._zhuan_key(game, season)
+    with shell.ZHUAN_LOCK:
+        if key in shell.ZHUAN_JOBS:
+            return False
+        shell.ZHUAN_JOBS[key] = shell.time.monotonic()
+
+    def zhuan_job() -> None:
+        try:
+            with shell._locked(game):
+                request = game.biography_request(season, rewrite)
+            if request is None:
+                return
+            budget = game.content.config.biography.budget_seconds
+            started = shell.time.monotonic()
+
+            def ask() -> str | None:
+                return biography.write(game.client, request, budget - (shell.time.monotonic() - started))
+
+            text = shell.model_call(game, ask, fallback=None, left=budget)
+            if not request.verdicts:  # 關著的季、沒有人替你寫評曰：跟以前一模一樣
+                with shell._locked(game):
+                    game.write_biography(request, text, shell.time.time())
+                return
+            verdicts = {job.fid: verdict_text(shell, game, job) for job in request.verdicts}  # 寫完正文再逐條寫評曰（減法季批 7b-2）
+            with shell._locked(game):
+                game.write_biography(request, text, shell.time.time(), verdicts=verdicts)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，網頁問的時候照「還沒寫」
+            shell.traceback.print_exc()
+        finally:
+            with shell.ZHUAN_LOCK:
+                shell.ZHUAN_JOBS.pop(key, None)
+
+    shell.threading.Thread(target=zhuan_job, name=f"zhuan-{season}", daemon=True).start()
+    return True
+
+
+VERDICT_OWNER = "#評曰"  # 人物評曰在佇列裡的名號尾巴：跟這個人自己的請求分開排，當假人排在真人後面
+
+
+def verdict_text(shell, game, job) -> str:
+    """一條人物評曰（減法季批 7b-2；zhuan_job 在鎖外叫）：請模型照他的口氣寫一句（zhuan_end.write_verdict），預算
+    Config.jianfa.verdict_budget_seconds（含排隊）；佇列開著時當假人排、排在真人後面（同書信 letter_once）。寫不出來是空字串（照固定句）。"""
+    jf = game.content.config.jianfa
+    started = shell._monotonic()
+
+    def ask() -> str:
+        return zhuan_end.write_verdict(shell.within_budget(game.client, jf.verdict_budget_seconds - (shell._monotonic() - started)), job, jf.verdict_chars)
+
+    if shell.QUEUE is None:
+        return ask()
+    try:
+        return shell.QUEUE.run(game.state.player.name.casefold() + VERDICT_OWNER, ask, fallback="", bot=True, wait=jf.verdict_budget_seconds)
+    except (shell.Busy, shell.QueueTimeout):
+        return ""

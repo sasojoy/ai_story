@@ -238,7 +238,7 @@ def test_suggestion_order_follows_the_existing_rule_once_the_odds_are_there():
 # 迎戰的是守軍郡國兵，必敗。改成跟 3d 標攻的地方同一份規則：對手與勝算照貼約戰時會迎戰的守軍那一路（Game._duel_squad）；攻不了的原因、
 # 「出陣」那一格（不標攻、不推薦）照舊。搶不下來的（大本營、廣宗）沒有守軍迎戰，照舊列站的隊伍；約戰關著的季照 3d 的規則不動。
 #
-# 寫法沿用 tests/test_jianfa_3d_map_foes.py：兩軍、week7／season21、開季與季中（季中另外擺一塊冷卻中、一塊被戰書凍結）。
+# 寫法沿用 tianxia/features/map/tests/test_jianfa_3d_map_foes.py：兩軍、week7／season21、開季與季中（季中另外擺一塊冷卻中、一塊被戰書凍結）。
 
 
 # 季中多擺的兩塊（對方的、本來連得上）：一塊剛易手還在冷卻、一塊被戰書凍結。照看的那一邊挑：{看的人: (冷卻那一塊, 凍結那一塊)}

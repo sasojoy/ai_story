@@ -1,131 +1,69 @@
-/* 全服決戰的戰場面板（battle.js；Joy 2026-11-06 大決戰優化，設計稿 JsNAYuqgMn3JJoTENCKza6 方案甲）。
- * 面板本身是夜色的墨底（兩種模式一樣：它是「戰場」那一塊），底下的戰局條、出招鈕、戰報照頁面的宣紙色。 */
-.bp-wrap { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
-.bp { --bp-ink: #f3e9d4; --bp-dim: #d9c9a8; --bp-night: #1d1812; --bp-guan: #8fb6e0; --bp-huang: #e8c06a; --bp-red: #e05a3c;
-  position: relative; overflow: hidden; border-radius: var(--radius, 14px); background: var(--bp-night); color: var(--bp-ink);
-  padding: 12px 14px; box-shadow: var(--shadow); }
-.bp::before { content: ""; position: absolute; inset: 0; background: var(--bp-bg) center / cover no-repeat; opacity: 0.32; filter: grayscale(0.3); }
-.bp > * { position: relative; }
-.bp-top { display: flex; align-items: flex-start; gap: 10px; }
-.bp-t { flex: 1; min-width: 0; }
-.bp-t h3 { margin: 0; font-family: var(--serif); font-size: 20px; font-weight: 700; letter-spacing: 0.04em; color: var(--bp-ink); }
-.bp-t p { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--bp-dim); }
-.bp-clock { flex: none; min-width: 84px; text-align: center; }
-.bp-clock .bp-n { display: block; font-family: var(--serif); font-size: 30px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
-.bp-clock .bp-w { display: block; font-size: 11px; color: var(--bp-dim); margin-top: 2px; }
-.bp-ring { display: block; height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.18); overflow: hidden; margin-top: 5px; }
-.bp-ring > i { display: block; height: 100%; background: #e9b44c; transition: width 1s linear; }
-.bp-clock.hot .bp-n { color: #ff8a73; }
-.bp-clock.hot .bp-ring > i { background: #ff6a52; }
-.bp-gens { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-.bp-side { min-width: 0; }
-.bp-sname { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--bp-guan); }
-.bp-sname.side-huang { color: var(--bp-huang); }
-.bp-side.right .bp-sname { text-align: right; }
-.bp-gen { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
-.bp-side.right .bp-gen { flex-direction: row-reverse; text-align: right; }
-.bp-face { position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: #ece0c8;
-  border: 2px solid var(--bp-guan); display: grid; place-items: center; }
-.bp-side.right .bp-face { border-color: var(--bp-huang); }
-.bp-gen.main .bp-face { width: 46px; height: 46px; }
-.bp-face img { position: absolute; left: 50%; top: 0; width: 160%; transform: translateX(-50%); z-index: 1; }
-.bp-face img + em { display: none; }
-.bp-face em { font-style: normal; font-family: var(--serif); font-weight: 700; color: #2a241d; }
-.bp-gi { flex: 1; min-width: 0; }
-.bp-gn { margin: 0; font-family: var(--serif); font-weight: 700; font-size: 14px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bp-gn small { font-family: var(--sans); font-weight: 400; font-size: 10px; color: var(--bp-dim); margin: 0 4px; }
-.bp-hp { display: block; height: 7px; border-radius: 99px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 3px; }
-.bp-hp > i { display: block; height: 100%; background: linear-gradient(90deg, #c0392b, var(--bp-red)); transition: width 0.6s ease; }
-.bp-side.right .bp-hp > i { margin-left: auto; }
-.bp-hpn { display: block; font-size: 10px; color: var(--bp-dim); font-variant-numeric: tabular-nums; }
-.bp-gen.low .bp-hp > i { animation: bp-throb 1.2s ease-in-out infinite; }
-.bp-gen.down { opacity: 0.45; filter: grayscale(1); }
-@keyframes bp-throb { 50% { filter: brightness(1.7); } }
-.bp-order { margin: 4px 0 0; background: rgba(168, 50, 42, 0.88); color: #fff; border-radius: 8px; padding: 4px 10px; font-size: 13px; }
-.bp-order b { font-family: var(--serif); }
-.bp-gauge .gauge { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius, 14px); padding: 8px 12px 6px; }
-/* 出招鈕：一顆一格，三格一排 */
-.bp-moves { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
-.bp-mv { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 6px; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--card); color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
-.bp-mv b { font-family: var(--serif); font-size: 19px; }
-.bp-mv small { font-size: 11px; color: var(--ink-2); line-height: 1.3; text-align: center; }
-.bp-mv.ord { border: 2px solid var(--accent); background: var(--accent-soft); }
-.bp-mv em { font-style: normal; font-size: 10px; color: #fff; background: var(--accent); border-radius: 99px; padding: 0 6px; }
-.bp-mv[aria-disabled="true"], .bp-mv:disabled { opacity: 0.5; }
-.bp-mv:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bp-sent { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
-.bp-sent b { font-family: var(--serif); display: block; }
-.bp-sent small { color: var(--ink-2); }
-.bp-sent.out { color: var(--bad); }
-/* 一回合一行的戰報 */
-.bp-feed { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px 4px; }
-.bp-fh { display: flex; justify-content: space-between; align-items: center; margin: 2px 0 4px; font-size: 12px; color: var(--ink-2); letter-spacing: 0.1em; }
-.bp-fh .linkish { letter-spacing: 0; color: var(--accent); font-weight: 700; }
-.bp-fr { display: flex; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--line); font-size: 13px; }
-.bp-rn { flex: none; width: 34px; font-family: var(--serif); color: var(--ink-2); }
-.bp-ft { flex: 1; min-width: 0; }
-.bp-ft p { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
-.bp-mine { color: var(--ink) !important; }
-.bp-chip { display: inline-block; font-size: 10px; font-weight: 700; color: #fff; border-radius: 4px; padding: 0 5px; margin-right: 4px; background: var(--ink-2); }
-.bp-chip.side-guan { background: var(--kuai); }
-.bp-chip.side-huang { background: var(--gold); color: #2a241d; }
-.bp-chip.k { background: var(--hp); }
-.bp-dmg { display: inline-block; margin-right: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.bp-dmg.left { color: var(--kuai); }
-.bp-dmg.right { color: var(--rn-kou, #9a5a1e); }
-.bp-hit.fall { color: var(--ink) !important; font-weight: 700; }
-.bp-merit { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px; }
-.bp-merit > summary { cursor: pointer; font-weight: 700; display: flex; justify-content: space-between; font-size: 13px; }
-.bp-merit > summary span { font-weight: 400; color: var(--ink-2); }
-.bp-merit .g-merit { margin-top: 6px; }
-/* 狀態列的陣中氣血 */
-.bar.hp.bp-hpbar { outline: 2px solid #e9b44c; outline-offset: 1px; }
-.bar.hp.bp-hpbar > i { background: #7a1f17; }
-/* 別的分頁：分頁列上方的戰場小條 */
-.bp-mini { position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px));
-  bottom: calc(68px + var(--bottom, 0px)); z-index: 40; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 14px;
-  background: #1d1812; color: #f3e9d4; padding: 8px 12px; font: inherit; text-align: left; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); cursor: pointer; }
-.bp-mt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
-.bp-mt b { font-family: var(--serif); }
-.bp-mt small { color: #d9c9a8; font-size: 11px; }
-.bp-mini .bp-n { font-family: var(--serif); font-size: 18px; color: #e9b44c; font-variant-numeric: tabular-nums; }
-.bp-go { background: var(--accent); color: #fff; border-radius: 99px; padding: 2px 10px; font-weight: 700; font-size: 12px; }
-/* 關鍵時刻蓋上來的那一層 */
-.bp-ov { position: fixed; inset: 0; z-index: 80; background: rgba(20, 15, 10, 0.86); color: #f6ecd6; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; text-align: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
-  animation: bp-in 0.25s ease-out; cursor: pointer; }
-.bp-ov.gone { opacity: 0; transition: opacity 0.25s; }
-@keyframes bp-in { from { opacity: 0; transform: scale(1.04); } }
-.bp-ov-in { max-width: 420px; width: 100%; display: flex; flex-direction: column; align-items: center; }
-.bp-duo { display: flex; align-items: flex-end; justify-content: center; }
-.bp-duo img { width: min(44vw, 190px); height: min(58vw, 250px); object-fit: cover; object-position: top; }
-.bp-duo img.r { transform: scaleX(-1); }
-.bp-vs { position: relative; z-index: 1; margin: 0 -14px 80px; font-family: var(--serif); font-size: 34px; font-weight: 700; color: #e9b44c; }
-.bp-solo { position: relative; }
-.bp-solo img { width: min(62vw, 250px); height: min(80vw, 320px); object-fit: cover; object-position: top; }
-.bp-solo.gray img { filter: grayscale(1) brightness(0.8); }
-.bp-solo.shake img { animation: bp-shake 0.4s 3; }
-@keyframes bp-shake { 25% { transform: translateX(-5px) rotate(-1deg); } 75% { transform: translateX(5px) rotate(1deg); } }
-.bp-slash { position: absolute; left: -10%; right: -10%; top: 40%; height: 5px; background: #ff5a3c; transform: rotate(-24deg); box-shadow: 0 0 14px #ff5a3c;
-  animation: bp-cut 0.35s ease-out both; }
-@keyframes bp-cut { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-.bp-big { margin: 8px 0 4px; font-family: var(--serif); font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
-.bp-big.small { font-size: 18px; }
-.bp-say { margin: 8px 0 0; background: rgba(251, 247, 239, 0.95); color: #2a241d; border-radius: 12px; padding: 10px 14px; text-align: left;
-  font-family: var(--serif); font-size: 16px; max-width: 320px; }
-.bp-say b { display: block; color: var(--accent); font-size: 13px; }
-.bp-sub { margin: 6px 0 0; font-size: 13px; color: #d9c9a8; }
-.bp-sub.mine { color: #e9b44c; font-weight: 700; }
-.bp-hpbig { display: block; width: 220px; height: 9px; border-radius: 99px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin: 4px auto; }
-.bp-hpbig > i { display: block; height: 100%; background: #ff5a3c; }
-.bp-res { margin: 0; font-family: var(--serif); font-size: 46px; font-weight: 700; color: #e9b44c; }
-.bp-res.win { color: #8fb6e0; }
-.bp-res.lose { color: #b9a98c; }
-.bp-card { margin: 10px 0 0; background: rgba(251, 247, 239, 0.95); color: #2a241d; border-radius: 12px; padding: 10px 16px; font-family: var(--serif); font-size: 16px; }
-.bp-card small { display: block; font-family: var(--sans); font-size: 12px; color: #6b6155; }
-.bp-tap { position: absolute; bottom: calc(18px + var(--bottom, 0px)); margin: 0; font-size: 12px; color: #b7a888; }
-@media (prefers-reduced-motion: reduce) {
-  .bp-ov, .bp-solo.shake img, .bp-slash, .bp-gen.low .bp-hp > i { animation: none; }
-  .bp-ring > i, .bp-hp > i { transition: none; }
-}
+/* 天下大勢：全服決戰的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 決戰集結時還沒參戰（FB-105）：加入的鈕在戰場名字那一行的右邊（app.js 的 musterScene）。鈕是 .btn.small（38px 高，點得到），
+   上下各 −8px：佔的高度只有 22px，不高過名字那一行，剛剛、場景與整排行動一個 px 都不往下推（375×812 估過，見 tests/web/test_jianghu_page_web.py）。
+   名字與鈕中間那一小句（.muster-note，「報名在這裡 →」）佔剩下的寬度、靠右貼著鈕；放不下就省略號收尾——基準寬度 0（flex: 1 1 0），
+   這一行永遠不會因為它折行。散人臨時投效的兩顆字多、放不進名字旁邊：另起一行（.wide）、兩顆並排，這一行就是實打實的 38px，
+   不往上吃（不然蓋到名字）；那一小句留在名字右邊往下指 */
+.scene .muster-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 2px; }
+.scene .muster-head > p { flex: none; margin: 0; font: 600 16px var(--serif); }
+.scene .muster-note { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.scene .muster-join { display: flex; flex: none; flex-wrap: wrap; gap: 6px; margin: 0; }
+.scene .muster-join .btn { width: auto; margin: -8px 0; }
+.scene .muster-join.wide { flex-basis: 100%; }
+.scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
+/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血。同一州兩場以上自己這一邊的攻城一起集結（FB-553）也是這一排：
+   加入鈕一場一顆、鈕上寫是哪一場，擠在名字那一行會撐出橫捲（375 寬 488px）；一顆佔滿一行，字長只往下折 */
+.scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
+.scene .muster-join.pick .btn { width: 100%; min-width: 0; margin: 0; padding: 6px 8px; }
+/* 攻城戰畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲；app.js 的 siegeStrip）：取代場景的名字那一行，「攻城・地點｜守方：某某」——
+   一道城牆色的左框、淡底；名字照原本的襯線字，後面幾段小一號。每一段不折行（.nb），只在「｜」那裡換行。排在 .scene > p:first-child 與
+   .muster-head > p 後面（同一級，後寫的贏）。集結時這一條自己佔一行（比名字長，跟「報名在這裡」與加入的鈕擠一行會把那一小句擠成一個字），
+   那一小句與鈕排在它底下 */
+.scene > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; margin: 0 0 6px; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+.scene .muster-head > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; flex: 1 1 100%; min-width: 0; margin: 0; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+/* FB-576：只有一顆加入鈕時那一排排在攻城條底下，鈕照 FB-105 的 −8px 往上吃，6px 的列距吃掉還壓到條 2px：條底下的這一顆上邊只吃 −4px
+   （留 2px 的縫，那一排多佔 4px）。名字旁邊的那一顆（決戰、沒有攻城條）照舊 −8px；.wide、.pick 本來就是 0 */
+.scene .muster-head > p.siege-strip ~ .muster-join:not(.wide):not(.pick) .btn { margin-top: -4px; }
+.siege-strip .ss-title { font: 600 15px/1.6 var(--serif); color: var(--ink); }
+.siege-strip .ss-sep { padding: 0 2px; opacity: 0.55; }
+/* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
+   沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
+.scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.scene blockquote p { margin: 0; }
+/* 決戰的戰況一回合一段（Joy 2026-10-14，app.js 的 roundBlocks）：最新那一回合攤開、一行一條；舊的回合各收成一行，點了攤開；戰報頁的完整戰況（.report-detail）每一回合都收成一行 */
+:is(.scene, .report-detail) .b-round { margin: 6px 0; border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
+:is(.scene, .report-detail) .b-round.latest { border-left-color: var(--accent); }
+:is(.scene, .report-detail) .b-rhead { margin: 0 0 2px; font: 600 14px var(--serif); color: var(--accent); }
+:is(.scene, .report-detail) .b-lines { list-style: none; margin: 0; padding: 0; }
+:is(.scene, .report-detail) .b-lines li { margin: 0; padding: 3px 0; font-size: 14.5px; line-height: 1.6; }
+:is(.scene, .report-detail) .b-lines li + li { border-top: 1px dashed var(--line); }
+:is(.scene, .report-detail) .b-lines li:first-child { font-weight: 600; }
+:is(.scene, .report-detail) details.b-round > summary { display: flex; gap: 8px; align-items: baseline; cursor: pointer; font-size: 13px; line-height: 1.6; color: var(--ink-2); list-style: none; padding: 4px 0; }
+:is(.scene, .report-detail) details.b-round > summary::-webkit-details-marker { display: none; }
+:is(.scene, .report-detail) details.b-round > summary::before { content: "▸"; flex: none; }
+:is(.scene, .report-detail) details.b-round[open] > summary::before { content: "▾"; }
+:is(.scene, .report-detail) details.b-round > summary b { flex: none; font: 600 13px var(--serif); color: var(--ink); }
+:is(.scene, .report-detail) details.b-round > summary span { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+:is(.scene, .report-detail) details.b-round[open] > summary span { display: none; }
+:is(.scene, .report-detail) details.b-round .b-lines { font-size: 14px; }
+/* 每一條是哪一軍的：左邊一道那一軍的顏色、開頭一個小標籤（Joy 2026-10-14「看不出誰是官軍誰是黃巾」；顏色同戰局條） */
+:is(.scene, .report-detail) .b-lines li.b-side { padding-left: 8px; border-left: 3px solid var(--c, var(--line)); margin-left: -2px; }
+:is(.scene, .report-detail) .b-lines .side-guan { --c: var(--kuai); }
+:is(.scene, .report-detail) .b-lines .side-huang { --c: var(--gold); }
+:is(.scene, .report-detail) .b-lines .side-haoqiang { --c: var(--rou); }
+:is(.scene, .report-detail) .b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--c, var(--line)); color: #fff; font: 600 12px/1.6 var(--sans); vertical-align: 1px; }
+:is(.scene, .report-detail) .side-huang .b-tag { color: #2a241d; } /* 金底配白字太淡：兩種模式都用深墨（同戰局條） */
+
+/* 決戰三招的按鈕：名字在左（佔剩下的寬度），招與分數在右邊一小行不換行，十一、十二個字的名字也不會把按鈕折成兩行 */
+.options .btn .b-name { flex: 1 1 auto; min-width: 0; }
+.options .btn .b-move { flex: none; margin-left: auto; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+
+/* 決戰一軍這一回合發動武學摺成的那一列（main.js 的 warFolds，Joy 2026-10-30）：摘要一行像一般的一條，右邊一個小三角；點開是逐人那幾句（字小一號、淡一點） */
+.b-fold { display: inline; }
+.b-fold > summary { display: inline; cursor: pointer; list-style: none; }
+.b-fold > summary::-webkit-details-marker { display: none; }
+.b-fold > summary::after { content: " ▾"; color: var(--ink-2); font-size: 12px; }
+.b-fold[open] > summary::after { content: " ▴"; }
+:is(.scene, .report-detail) .b-fold-lines { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); }
+:is(.scene, .report-detail) .b-lines .b-fold-lines li { font-weight: 400; font-size: 13.5px; color: var(--ink-2); padding: 2px 0; border-top: 0; }

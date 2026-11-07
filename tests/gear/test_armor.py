@@ -131,7 +131,7 @@ def test_armor_can_be_changed_in_seclusion_and_on_the_road(content, world):
     game = _town(content, world)
     p = game.state.player
     p.rack = [_jacket(aid="甲:2", name="鐵葉甲", attribute="剛"), _jacket(aid="甲:3", name="軟皮甲", attribute="柔")]
-    p.busy_until = game.state.world.time + 3600.0  # 閉關中（同 tests/test_engine.py 的寫法）
+    p.busy_until = game.state.world.time + 3600.0  # 閉關中（同 tests/core/test_engine.py 的寫法）
     assert game.wield_weapon("甲:2") == ["你換上了【鐵葉甲】。"] and p.armor.id == "甲:2"
     p.busy_until = None
     game.choose("move:lake")
@@ -301,7 +301,7 @@ def _hp_lost(state, content, world, tier):
 
 
 def _soft(game, layers=3):
-    """身上換一門化勁 layers 層的武學（照 tests/test_trait_numbers.py::_wear；三層是 30%）。
+    """身上換一門化勁 layers 層的武學（照 tests/battle/test_trait_numbers.py::_wear；三層是 30%）。
     武學重構：功效照槽裡的意境，裝一個強度 layers 的柔意境（自己悟的）進槽。"""
     from tianxia.martial_arts import Insight, generate_from_name
     art = generate_from_name("護體拳", "武學", "護體拳", attribute="柔").model_copy(update={"origin": "fused", "affinity": ["柔"]})
@@ -318,7 +318,7 @@ def _soft(game, layers=3):
 
 
 def _fought(game, tier):
-    """在湖邊打一場、結果寫死（同 tests/test_trait_numbers.py::_fought），回傳那一場的戰報。"""
+    """在湖邊打一場、結果寫死（同 tests/battle/test_trait_numbers.py::_fought），回傳那一場的戰報。"""
     if game.state.player.location != "lake":
         walk_to(game, "lake")
     result = encounter.EncounterResult(tier=tier, margin=0, our_power=10, difficulty=5)

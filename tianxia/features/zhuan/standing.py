@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from tianxia.core import bounty_base  # 核心（這一季完成了幾張懸賞，core_seams）
 from tianxia.core.annal_base import KINDS, TIER, XINGSHI, clip, figure_name, note
 from tianxia.core.annal_base import *  # noqa: F401,F403  舊名 tianxia.annals 是指到這個模組的別名：核心那一半也要在這裡拿得到（同一個物件）
 from tianxia.core.annal_base import _gear, _notable  # noqa: F401
@@ -43,7 +44,7 @@ def profile(state: GameState, content: Content, season: WorldState | None = None
         "team": [figure_name(content, cid) for cid in p.team],
         "showdowns": p.showdowns,
         "top_merits": p.top_merits,
-        "bounties": p.bounties_done,
+        "bounties": bounty_base.done_count(p),
         "start": content.scenario.start_location,
         "place": (content.locations[p.location].name if p.location in content.locations else ""),
         **extra,

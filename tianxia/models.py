@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PrivateAttr, field_validator, model_serializer, model_validator
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
@@ -1410,7 +1410,7 @@ REVEAL_KEYS = frozenset({
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
 })
-# 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
+# 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/guide.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
 GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
@@ -1422,7 +1422,7 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
 # 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
 # allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。兩道檢查，都不是萬全的：
-#   tests/core/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
+#   tianxia/features/guide/tests/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
 #   tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
 #   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
 ALLOW_FIXED = frozenset({
@@ -3433,7 +3433,7 @@ class HireRules(_Strict):
 
 
 class PersonaStage(_Strict):
-    """人物性子的一段（content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
+    """人物性子的一段（features/persona/content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
     short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
 
     text: str
@@ -3517,6 +3517,11 @@ class EpiphanyRules(_Strict):
     wis_step: float = Field(default=0.05, ge=0)
     wis_cap: float = Field(default=1.5, ge=1)
     pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
+    # 神品意境一個人同時能有幾份（企劃者 2026-11-06「可以有兩份神品意境」；本來寫死一份）。
+    # 兩處都讀它：arts.slot_problem（同時裝幾份）與 features/legacy 的識海解封（身上有幾份就不給解）。
+    # 本來的一份會卡死識海：這一季自己先悟到一份，上一季封進識海的那一份就永遠解不開——而神品熔不得、
+    # 也不能合成（library.melt_insight_problem、fusion.merge_problem），玩家沒有任何辦法放掉它（正式站第 9 季踩到）。
+    god_cap: int = Field(default=2, ge=1)
     demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
     retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
     # 心境小試抽到「靜候」那一種時要等幾個遊戲日（FB-902）：預設 1.0 是設計稿的「靜候一日」，
@@ -3675,7 +3680,7 @@ class ConquestRules(_Strict):
 
 class XingshiTuning(_Strict):
     """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，伺服器鎖外
-    請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
+    請模型照那一天的事實寫一篇旁白（三段式，地盤行動包 routes.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
     模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
 
     enabled: bool = True  # 【預設】正式開；領地爭奪本身還關著（ConquestRules.enabled），開了領地爭奪就有
@@ -5593,7 +5598,7 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
-    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
+    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（features/persona/content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
@@ -5610,6 +5615,10 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    # core_content（全部拆包第 63 批）：這一份只載了哪一包（load_content(only=)，只有測試內容、只有測試用；validate 看它）。不是欄位：不進 model_fields、
+    # 不進序列化；pickle、deepcopy、model_copy 都帶著（測試的複本也擋得住）
+    _only_pack: str | None = PrivateAttr(default=None)
 
     def banned_name_list(self) -> list[str]:
         """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""

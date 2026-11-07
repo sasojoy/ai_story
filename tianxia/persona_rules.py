@@ -1,6 +1,6 @@
 """人物性子的純規則（設計稿 https://claude.ai/artifact/R8w6aMxgeH89djeKYC7n5U，Joy 2026-11-06「可以」、換季選「全部歸回本性」）。
 
-- 每位人物兩條性子（content/personas.json，PersonaAxis）：一把兩頭的尺分五段，起點照史實，最多離起點 reach 段。
+- 每位人物兩條性子（features/persona/content/personas.json，PersonaAxis）：一把兩頭的尺分五段，起點照史實，最多離起點 reach 段。
 - 值是 -100～100（往 ends[1] 是正），一段 40 點：第 i 段是 [-100 + 40i, -60 + 40i)，最後一段含 100。起點是那一段的正中間。
 - 跟他說話那一輪模型只歸「這句在把他往哪一頭推」（填 ends 的叫法或 NONE）；引擎記一筆：一人對一位人物一天一筆，份量照情誼（bands），
   不到第一檔不算、也不佔今天那一筆。
