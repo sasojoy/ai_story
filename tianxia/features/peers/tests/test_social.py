@@ -11,7 +11,8 @@ from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.state import BotProfile
 import re
-from tianxia import howto, rules
+from tianxia.features.socialize import howto as socialize_howto
+from tianxia import rules
 from tianxia.engine import SNUB_NOTE, Game
 from test_discuss import pair  # noqa: F401（fixture）
 from tianxia import atlas, fusion
@@ -390,7 +391,7 @@ def test_a_fame_short_audience_names_the_gap_like_the_menu(guan):
 def test_the_talked_out_and_the_open_audience_keep_their_lines(guan, on):
     guan.state.player.stats["fame"] = 100
     option, note = _cell_and_note(guan)
-    assert option.enabled and note == howto.call_line("波才", True)
+    assert option.enabled and note == socialize_howto.call_line("波才", True)
     guan.state.player.talks_today["bocai"] = [rules.game_day(on, guan.state.world), on.config.talk_turns_per_day]
     option, note = _cell_and_note(guan)
     assert not option.enabled and note == _detail(option.label) == guan._talked_out_note()  # noqa: SLF001

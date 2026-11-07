@@ -8,7 +8,8 @@ import pytest
 
 from tianxia import bot
 from tianxia.features.cultivation import cultivation
-from tianxia import howto, skillview
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.cultivation import art_view
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -44,10 +45,10 @@ def test_no_xinde_way_to_break_through(game):
     p.stats["xinde"], p.stamina = 5000, 200
     assert not hasattr(game.content.config, "legend_xinde_price") and not hasattr(game.content.config, "legend_xinde_step")
     assert not hasattr(cultivation, "legend_price") and not hasattr(cultivation, "buy_legend")
-    assert not hasattr(game, "buy_legend") and not hasattr(bot, "buy_pill") and not hasattr(howto, "legend_buy_lines")
+    assert not hasattr(game, "buy_legend") and not hasattr(bot, "buy_pill") and not hasattr(guide_howto, "legend_buy_lines")
     with pytest.raises(TypeError):
         game.cultivate(art_id, use_xinde=True)
-    row = next(r for r in skillview.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
+    row = next(r for r in art_view.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
     assert row["cultivate"]["xinde"] is None and row["cultivate"]["legend"] is None and not row["cultivate"]["ok"]
     assert "破境丹" in row["cultivate"]["note"]  # 沒丹：等契機或服丹那一句
     assert game.cultivate(art_id) == [cultivation.CHANCE_LINE.format(name="旋風腿", pill="破境丹")]
@@ -57,7 +58,7 @@ def test_no_xinde_way_to_break_through(game):
 def test_the_pill_button_shows_only_with_a_pill_in_hand(game):
     p = game.state.player
     art_id = _ready_for_jue(game)
-    row = lambda: next(r for r in skillview.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
+    row = lambda: next(r for r in art_view.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
     assert row()["cultivate"]["legend"] is None
     p.legend_items = 2
     lg = row()["cultivate"]["legend"]

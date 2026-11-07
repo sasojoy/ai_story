@@ -560,13 +560,13 @@ def test_card_line_mismatch_wording_per_kind(content, world):
 
 
 def test_player_card_has_the_weapon_line(content, world):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
     _on(content)
     game = _game(content, world)
-    assert "兵器" not in skillview.member_card(game.state, content, world, "player")
+    assert "兵器" not in art_view.member_card(game.state, content, world, "player")
     game.state.player.weapon = _blade(attribute="快")
     game.state.player.member.wugong_id = "sword"
-    assert "【試刃】" in skillview.member_card(game.state, content, world, "player")
+    assert "【試刃】" in art_view.member_card(game.state, content, world, "player")
 
 
 def test_rows_for_the_practice_page(content, world):
@@ -1462,7 +1462,7 @@ def test_final_f5_the_divine_book_counts_armor_copies_in_jian():
 
 def test_final_f6_the_shop_marks_a_clashing_weapon_on_the_shelf_and_the_forged_card(content, world):
     """終審 F6：架上的貨卡與出爐卡也寫「加成 +0%・配得上你的武學」——同 FB-127，相剋時補一句。"""
-    from tianxia import shopview
+    from tianxia.features.smithy import shop_view as smithy_shop
 
     _on(content)
     game = _town(content, world)
@@ -1470,10 +1470,10 @@ def test_final_f6_the_shop_marks_a_clashing_weapon_on_the_shelf_and_the_forged_c
     kind = weapons.art_weapon(art.id, content, world)
     clash = next(a for a in ATTRS if weapons.counters(a, art.attribute) or weapons.counters(art.attribute, a))
     item = _blade(kind=kind, attribute=clash)
-    assert weapons.CLASH_NOTE in shopview.forged_card(game.state, content, world, item, {})["value"]
+    assert weapons.CLASH_NOTE in smithy_shop.forged_card(game.state, content, world, item, {})["value"]
     match = _blade(kind=kind, attribute=art.attribute)
-    assert weapons.CLASH_NOTE not in shopview.forged_card(game.state, content, world, match, {})["value"]
-    shelf = shopview._weapon_shelf(game.state, content, world, art)
+    assert weapons.CLASH_NOTE not in smithy_shop.forged_card(game.state, content, world, match, {})["value"]
+    shelf = smithy_shop._weapon_shelf(game.state, content, world, art)
     for ware, stocked in zip(shelf, weapons.stock(game.state, content)):
         if ware["value"]:
             assert (weapons.CLASH_NOTE in ware["value"]) == weapons.clashes(stocked, art), ware

@@ -543,12 +543,12 @@ def test_a_server_bot_in_the_market_never_gets_stuck_and_usually_buys(content, w
 # ── Task 5：修練頁、角色卡 ──
 
 def test_gear_rows_have_a_mount_slot_with_feed_on_the_worn_horse(content, world):
-    from tianxia import skillview
+    from tianxia import art_cards
     game = _game(content, world, horse=_horse(edge=60))
     p = game.state.player
     p.materials = {"gang_1": 1}
     p.rack = [_horse(hid="騎:2", name="青驄駒", tier=2, quality="中品")]
-    gear = skillview.gear_rows(game.state, content, world)
+    gear = art_cards.gear_rows(game.state, content, world)
     [slot] = gear["slots"]  # 測試內容武器、防具關著：只有坐騎那一段
     assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("mount", "坐騎", mounts.EMPTY, mounts.RACK_NOTE)
     worn = slot["worn"]
@@ -561,25 +561,25 @@ def test_gear_rows_have_a_mount_slot_with_feed_on_the_worn_horse(content, world)
     assert (spare["wield_ok"], spare["wield_note"]) == (True, "")
     assert gear["used"] == 1
     content.config.mounts.enabled = False
-    assert skillview.gear_rows(game.state, content, world)["slots"] == []
+    assert art_cards.gear_rows(game.state, content, world)["slots"] == []
 
 
 def test_a_rack_horse_cannot_be_wielded_on_the_road(content, world):
     """設計 2.3：路上不能換坐騎——修練頁裝備庫那一列的「換上」在路上灰掉、寫原因，不必按了才知道（按下去 equipment.wield 也擋）。"""
-    from tianxia import skillview
+    from tianxia import art_cards
     game = _game(content, world, horse=_horse())
     game.state.player.rack = [_horse(hid="騎:2", name="青驄駒", tier=2)]
     game.choose("move:lake")
-    [spare] = skillview.gear_rows(game.state, content, world)["slots"][0]["rack"]
+    [spare] = art_cards.gear_rows(game.state, content, world)["slots"][0]["rack"]
     assert (spare["wield_ok"], spare["wield_note"]) == (False, mounts.ON_ROAD)
 
 
 def test_player_card_has_the_mount_line(content, world):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
     game = _game(content, world)
-    assert "坐騎" not in skillview.member_card(game.state, content, world, "player")
+    assert "坐騎" not in art_view.member_card(game.state, content, world, "player")
     game.state.player.mount = _horse(edge=60)
-    lines = skillview.member_card(game.state, content, world, "player").splitlines()
+    lines = art_view.member_card(game.state, content, world, "player").splitlines()
     line = mounts.card_line(game.state, content)  # 整行待 joy 潤：只鎖名字、飽足度、省幾成
     assert "【棗騮馬】" in line and f"{mounts.WEAR_WORD} 60" in line and "20%" in line  # 設計 2.5：25%×飽足係數 0.8
     assert line in lines and lines.index(line) > next(i for i, x in enumerate(lines) if x.startswith("武學"))

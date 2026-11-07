@@ -8,7 +8,8 @@ import pytest
 from conftest import next_season
 
 from tianxia.features.mall import rules as mall
-from tianxia import roster, skillview
+from tianxia import roster
+from tianxia.features.cultivation import art_view
 from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions
@@ -507,7 +508,7 @@ def test_the_practice_row_sends_a_player_without_a_pill_to_the_mall(on):
     game = _ready(on)
     game.world.claim_skill_name(kicker_art())
     ripen(equip(game.state))
-    row = lambda: next(r for r in skillview.art_rows(game.state, on, game.world) if r["id"] == "旋風腿")  # noqa: E731
+    row = lambda: next(r for r in art_view.art_rows(game.state, on, game.world) if r["id"] == "旋風腿")  # noqa: E731
     game.state.player.legend_items = 0
     assert row()["cultivate"]["shop"] == "legend_1"
     game.state.player.legend_items = 1

@@ -13,7 +13,9 @@ import test_week7_season as fb501web
 from conftest import real_content
 from tianxia import calendar
 from tianxia.features.guide import enlist, rules as guide
-from tianxia import howto, orders, world
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia import orders, world
 from tianxia.state import Order, new_game_state
 
 HOUR, DAY = 3600, 86400
@@ -440,9 +442,9 @@ def test_weekend_and_fourteen_day_keep_every_week_word(profile):
 def test_season21_howto_says_orders_come_every_day():
     c21 = real_content("season21")
     state = _state(c21)
-    quest = "".join(howto.war_help(state, c21)["quest"])
+    quest = "".join(guide_howto.war_help(state, c21)["quest"])
     assert "投靠陣營之後每天有軍令" in quest and "每週一" not in quest
-    join = "".join(howto.join_lines(c21, state.world))
+    join = "".join(faction_howto.join_lines(c21, state.world))
     assert "**軍令**：每天發令" in join and "今日的軍令卡在江湖頁行動列底下" in join and "每週一" not in join
 
 

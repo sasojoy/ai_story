@@ -667,7 +667,7 @@ def test_chenglu_speeds_stamina_in_its_region_only():
 
 @pytest.mark.slow
 def test_chenglu_makes_the_clinic_free_in_its_region():
-    from tianxia import skillview, team
+    from tianxia import art_cards, team
 
     c, w, g = _holder("chenglu", at="yingchuan_wilds")
     patient = _person(c, w, "病人", side="guan", at="yingchuan")  # 潁川郡有醫館
@@ -678,7 +678,7 @@ def test_chenglu_makes_the_clinic_free_in_its_region():
 
     def heal(game):
         plan = team.heal_plan(game.state, c, game.state.player.member)
-        note = skillview.heal_note(game.state, c)
+        note = art_cards.heal_note(game.state, c)
         return plan, note, game.heal(), game.state.player.stats["silver"], game.state.player.member.injury
 
     plan, note, msgs, silver, injury = _do(c, w, "病人", heal)

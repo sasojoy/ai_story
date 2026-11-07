@@ -107,11 +107,11 @@ def test_season21_daily_loss_cap_sums_across_players():
 
 
 def test_howto_and_atlas_mention_recovery_in_season21():
-    from tianxia import howto
+    from tianxia.features.figure_acts import howto as figure_acts_howto
     from tianxia.features.map import layers
 
     s, c = _state()
-    text = "".join(howto._challenge_lines(c, s.world))
+    text = "".join(figure_acts_howto._challenge_lines(c, s.world))
     assert "一天最多被打掉 15 點" in text and "慢慢回來" in text
     assert layers.REGEN_NOTE in layers._regen_note(s, c)
 

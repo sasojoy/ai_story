@@ -527,16 +527,15 @@ def check(base: str) -> int:
         old_seq = [row for row in import_seq(old_tree, rel) if not (row[0] in SHELLS and row[1] == f"tianxia.{row[0]}")]
         new_seq = import_seq(new_tree, rel)
         if shells:
+            # 基準那份要是新序列的子序列，多出來的只能是殼換成的本地名
             allowed = {local for shell in shells for local in SHELLS[shell]}
-            kept = collections.Counter(old_seq)
             filtered = []
+            at = 0
             for row in new_seq:
-                if kept[row] > 0:
-                    kept[row] -= 1
+                if at < len(old_seq) and row == old_seq[at]:
+                    at += 1
                     filtered.append(row)
-                elif row[0] in allowed and shell_real.get(row[1]) == row[0]:
-                    continue
-                else:
+                elif not (row[0] in allowed and shell_real.get(row[1]) == row[0]):
                     filtered.append(row)
             new_seq = filtered
         old_dump = ast.dump(Blank(shells).visit(old_tree))

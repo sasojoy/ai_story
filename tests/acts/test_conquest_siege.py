@@ -35,7 +35,8 @@ from tianxia.state import Order
 from tianxia.features.battle import instance as battle_instance
 from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, plain_game, press
-from tianxia import conquest, howto
+from tianxia import conquest
+from tianxia.features.sortie import howto as sortie_howto
 from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, press
 from tianxia import conquest
@@ -1433,34 +1434,34 @@ def test_state_of_a_block_follows_the_slot():
 
 def test_attack_line_says_where_the_siege_is():
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
-    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road")  # 沒排攻城：隨時推得動
+    assert sortie_howto.SORTIE_PROGRESS in _note(game, "nanyang_road")  # 沒排攻城：隨時推得動
     slot = announce(game, "nanyang_road", "huang")  # 戰書排了一場：凍結
     for status, phase, why in FROZEN:
         _put(game, slot, status, phase)
         note = _note(game, "nanyang_road")
-        assert howto.SORTIE_BLOCKED.format(why=why) in note, (status, phase)
+        assert sortie_howto.SORTIE_BLOCKED.format(why=why) in note, (status, phase)
         assert game.sortie_progress("nanyang_road") == 0.0  # 列與記：寫推不動就真的推不動
     for status in ("done", "void"):  # 打完（這裡沒易手：輸了砍半另算）、作罷：解凍
         _put(game, slot, status, "")
-        assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road"), status
+        assert sortie_howto.SORTIE_PROGRESS in _note(game, "nanyang_road"), status
         assert game.sortie_progress("nanyang_road") > 0
 
 
 def test_own_block_under_siege_says_the_same_in_the_hold_line():
     """自家的區塊被下了戰書（守）：凍結的那一段照實寫在哪一步，不接「有人來攻時守拉的量…」（攻城已經排了）；打完照常守得動。"""
     game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
-    assert howto.SORTIE_BLOCKED_HOLD.format(why=conquest.WHY_IDLE, half="一半") in _note(game, "yingchuan_wilds")  # 沒人推：照舊
+    assert sortie_howto.SORTIE_BLOCKED_HOLD.format(why=conquest.WHY_IDLE, half="一半") in _note(game, "yingchuan_wilds")  # 沒人推：照舊
     press(game, "yingchuan_wilds", "huang")
-    assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")  # 黃巾在推：守得動
+    assert sortie_howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")  # 黃巾在推：守得動
     slot = announce(game, "yingchuan_wilds", "huang")
     for status, phase, why in FROZEN:
         _put(game, slot, status, phase)
         note = _note(game, "yingchuan_wilds")
         assert note.startswith("這裡是自家地盤：不用打，") and "拿自家隊伍" in note, (status, phase)
-        assert howto.SORTIE_BLOCKED.format(why=why) in note and "有人來攻時" not in note, (status, phase)
+        assert sortie_howto.SORTIE_BLOCKED.format(why=why) in note and "有人來攻時" not in note, (status, phase)
         assert game.sortie_progress("yingchuan_wilds") == 0.0
     _put(game, slot, "done", "")
-    assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
+    assert sortie_howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
 
 
 def test_another_block_is_not_dragged_along():

@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 import webharness
-from tianxia import fusion, journal, library, skillview
+from tianxia import fusion, journal, library, art_cards
+from tianxia.features.craft import forge_view
+from tianxia.features.cultivation import art_view
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -113,19 +115,19 @@ def test_the_melt_row_and_result_say_where_a_starter_art_can_be_learned_again(co
     content.config.starter_skills = ["basic_breath", "basic_fist"]
     state.player.member.wugong_id = "fist"
     state.player.arts = ["basic_fist"]
-    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
+    (row,) = [r for r in art_view.art_rows(state, content, world) if r["id"] == "basic_fist"]
     assert state.player.location == "town"  # 站在城鎮裡
     assert row["relearn"] == "熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學粗淺拳腳」。"
     state.player.location = "lake"  # 離開城鎮：寫離你最近的那一座
-    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
+    (row,) = [r for r in art_view.art_rows(state, content, world) if r["id"] == "basic_fist"]
     assert row["relearn"] == "熔了還能免費重學：到任何城鎮（離你最近的是小鎮），在江湖頁「此地還能做」找「學粗淺拳腳」。"
-    worn = [r for r in skillview.art_rows(state, content, world) if r["worn"]]
+    worn = [r for r in art_view.art_rows(state, content, world) if r["worn"]]
     assert all(r["relearn"] is None for r in worn)  # 身上正在練的不能熔，不寫
 
 
 def test_an_art_taught_for_a_fee_names_the_place_and_the_fee(content, world, state):
     state.player.arts = ["lake_kick"]
-    (row,) = skillview.art_rows(state, content, world)
+    (row,) = art_view.art_rows(state, content, world)
     assert row["relearn"] == "熔了想拿回來，到湖邊再學一次（學費 10 兩），在江湖頁「此地還能做」找「學湖邊腿法」。"
 
 
@@ -133,7 +135,7 @@ def test_an_art_you_forged_or_were_given_has_no_relearn_note(content, world, sta
     art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0})
     assert world.claim_skill_name(art)
     state.player.arts = ["旋風腿", "fist"]  # 合成出來的、內容直接給的絕學（沒有學得到的地方）
-    assert [r["relearn"] for r in skillview.art_rows(state, content, world)] == [None, None]
+    assert [r["relearn"] for r in art_view.art_rows(state, content, world)] == [None, None]
 
 
 def test_the_melt_question_is_one_sentence_built_on_the_server_for_the_three_kinds_of_art(content, world, state):
@@ -144,7 +146,7 @@ def test_the_melt_question_is_one_sentence_built_on_the_server_for_the_three_kin
     _library(world, state, [("旋風腿", "下品", 5, "武學")])
     state.player.arts += ["basic_fist", "fist"]
     state.player.art_levels.update({"basic_fist": 1, "fist": 1})
-    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    rows = {r["id"]: r for r in art_view.art_rows(state, content, world)}
     starter = rows["basic_fist"]["melt"]["confirm"]  # 零心得的基礎武學
     assert starter == (
         "把【粗淺拳腳】熔掉？這門熔了沒有心得，只空出一格。熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學粗淺拳腳」。"
@@ -159,7 +161,7 @@ def test_the_melt_question_is_one_sentence_built_on_the_server_for_the_three_kin
 def test_a_zero_value_art_taught_for_a_fee_names_the_fee_in_the_same_sentence(content, world, state):
     state.player.member.wugong_id = "basic_fist"
     state.player.arts = ["lake_kick"]  # 第一成：退 0；各地教、要學費
-    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "lake_kick"]
+    (row,) = [r for r in art_view.art_rows(state, content, world) if r["id"] == "lake_kick"]
     assert row["melt"]["confirm"] == (
         "把【湖邊腿法】熔掉？這門熔了沒有心得，只空出一格。熔了想拿回來，到湖邊再學一次（學費 10 兩），在江湖頁「此地還能做」找「學湖邊腿法」。"
     )
@@ -211,14 +213,14 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
     ids = list(content.insights)
     for n, (a, b) in enumerate(itertools.combinations(ids, 2)):
         state = _merger(content, f"甲{n}", [a, b])
-        line = skillview.forge_line(state, content, world, [a, b])
+        line = forge_view.forge_line(state, content, world, [a, b])
         shown = re.search(r"→ 一個新的意境（屬(.)・", line)
         assert shown, line
         made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
         assert made is not None and made.attribute == shown.group(1), (a, b, line)
     for a in ids:  # 意境效果池：同一種的兩份是揣摩，預覽寫揉完的層數，合了真的到二重
         state = _merger(content, f"乙{a}", [a, f"{a}~2"])
-        line = skillview.forge_line(state, content, world, [a, f"{a}~2"])
+        line = forge_view.forge_line(state, content, world, [a, f"{a}~2"])
         assert line.startswith("**揣摩**") and "二重" in line, line
         fusion.merge(state, content, world, None, a, f"{a}~2")
         assert arts.strength_of(state, a) == 2
@@ -226,13 +228,13 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
 
 def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(content, world):
     first = _merger(content, "甲", ["feng", "huo"])
-    assert skillview.forge_line(first, content, world, ["feng", "huo"]).endswith("\n沒人合過。")
+    assert forge_view.forge_line(first, content, world, ["feng", "huo"]).endswith("\n沒人合過。")
     made, _ = fusion.merge(first, content, world, _named("燎原"), "feng", "huo")
-    again = skillview.forge_line(first, content, world, ["feng", "huo"])
+    again = forge_view.forge_line(first, content, world, ["feng", "huo"])
     assert "沒人合過" not in again and "會合出" not in again
     assert "\n再合一份「燎原」，效果另擲。" in again and "⚠" not in again  # 意境效果池：合過的再合是另一份
     other = _merger(content, "乙", ["feng", "huo"])
-    line = skillview.forge_line(other, content, world, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
+    line = forge_view.forge_line(other, content, world, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
     assert f"\n會合出「燎原」（屬{made.attribute}）。" in line and "沒人合過" not in line
 
 
@@ -241,14 +243,14 @@ def test_the_merge_preview_says_the_attribute_the_recipe_and_the_cost(content, w
     state.player.member.wugong_id = "basic_fist"
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
-    merge = skillview.forge_line(state, content, world, ["feng", "huo"])
+    merge = forge_view.forge_line(state, content, world, ["feng", "huo"])
     assert re.search(r"（屬.・", merge) and merge.endswith("\n沒人合過。"), merge
     assert "花 5 點心得、5 點體力" in merge
 
 
 def test_the_merge_preview_still_refuses_what_you_do_not_hold(content, world, state):
     state.player.insights = ["feng"]
-    line = skillview.forge_line(state, content, world, ["feng", "shui"])
+    line = forge_view.forge_line(state, content, world, ["feng", "shui"])
     assert line.startswith("⚠") and "屬" not in line and "→" not in line
 
 
@@ -257,9 +259,9 @@ def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(con
 
     member, p = state.player.member, state.player
     # 卷軸卡的療傷鈕自己寫字（內傷與 heal_cost）；伺服器只說按不按得下去與原因，不再送 label（review-ap3 M4：沒有人讀它）
-    assert skillview.heal_button(state, content) == {"ok": False, "why": "氣血無恙，不用療傷。", "clinic": None, "note": None}
+    assert art_cards.heal_button(state, content) == {"ok": False, "why": "氣血無恙，不用療傷。", "clinic": None, "note": None}
     member.injury, p.stats["silver"] = 35.0, 100
-    assert skillview.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "內傷 35・18 兩"}
+    assert art_cards.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "內傷 35・18 兩"}
     assert team.heal_cost(content, member) == 18  # 每 2 點內傷 1 兩，進位：頁面上寫的價錢是 server 的 heal_cost
     team.heal(state, content, member)
     assert p.stats["silver"] == 100 - 18 and member.injury == 0  # 寫的價錢就是真的收的價錢
@@ -268,9 +270,9 @@ def test_heal_button_shows_the_price_and_matches_what_healing_really_charges(con
 def test_heal_button_is_greyed_out_with_the_reason_when_there_is_no_silver(content, state):
     """銀兩不夠全治時治一部分（team.heal_plan，PM 2026-10-12）；一兩都沒有才灰掉。"""
     state.player.member.injury, state.player.stats["silver"] = 35.0, 5
-    assert skillview.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "治 10 點・5 兩（還剩 25 點）"}
+    assert art_cards.heal_button(state, content) == {"ok": True, "why": None, "clinic": None, "note": "治 10 點・5 兩（還剩 25 點）"}
     state.player.stats["silver"] = 0
-    assert skillview.heal_button(state, content) == {"ok": False, "why": "銀兩不足：療傷需要 18 兩。", "clinic": None, "note": None}
+    assert art_cards.heal_button(state, content) == {"ok": False, "why": "銀兩不足：療傷需要 18 兩。", "clinic": None, "note": None}
     from tianxia import team
 
     assert team.heal(state, content, state.player.member) == ["銀兩不足：療傷需要 18 兩。"]  # 按下去（舊版畫面）回的是同一句
@@ -279,7 +281,7 @@ def test_heal_button_is_greyed_out_with_the_reason_when_there_is_no_silver(conte
 def test_heal_button_does_not_offer_to_heal_a_wound_the_status_bar_does_not_show(content, state):
     """狀態列的內傷是 int()：不到 1 點不寫；按鈕也不亮（以前就是這樣，改成伺服器給的之後不能變）。"""
     state.player.member.injury, state.player.stats["silver"] = 0.6, 100
-    assert not skillview.heal_button(state, content)["ok"]
+    assert not art_cards.heal_button(state, content)["ok"]
 
 
 def test_the_menxia_view_carries_the_heal_button(real):
@@ -465,7 +467,7 @@ def test_the_library_is_sorted_worn_first_then_quality_then_level_then_name(cont
         ("丙丙拳", "下品", 9, "武學"), ("乙乙拳", "上品", 2, "武學"), ("甲甲拳", "中品", 5, "武學"), ("丁丁功", "絕學", 1, "內功"),
         ("戊戊拳", "中品", 7, "武學"), ("己己拳", "中品", 7, "武學"), ("庚庚拳", "下品", 9, "武學"),
     ])
-    rows = skillview.art_rows(state, content, world)
+    rows = art_view.art_rows(state, content, world)
     assert [r["worn"] for r in rows] == [True, True] + [False] * 7  # 身上的先
     rest = [(r["name"], r["quality"], r["level"]) for r in rows if not r["worn"]]  # 品質是玩家自己那一份（art_quality）
     assert rest == [
@@ -479,7 +481,7 @@ def test_the_worn_arts_follow_the_same_order_among_themselves(content, world, st
     state.player.member.neigong_id, state.player.member.neigong_level = "basic_breath", 2
     state.player.member.wugong_id, state.player.member.wugong_level = "basic_fist", 5
     state.player.art_quality["basic_breath"] = "中品"
-    rows = skillview.art_rows(state, content, world)
+    rows = art_view.art_rows(state, content, world)
     assert [r["id"] for r in rows] == ["basic_breath", "basic_fist"]  # 中品的內功排在下品的武學前面
 
 
@@ -490,7 +492,7 @@ def test_the_same_order_reaches_the_page_data(real):
     game.state.player.arts = ["lishi_chui", "zhuifeng", "taiping_gun"]
     game.state.player.art_levels.update({"lishi_chui": 2, "zhuifeng": 6, "taiping_gun": 4})
     page = [r["id"] for r in server.menxia_view(game)["owned_arts"]]
-    assert page == [r["id"] for r in skillview.art_rows(game.state, game.content, game.world)]  # 兩頁畫的是同一份順序
+    assert page == [r["id"] for r in art_view.art_rows(game.state, game.content, game.world)]  # 兩頁畫的是同一份順序
     assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
 
 
@@ -819,7 +821,7 @@ def test_batch_melt_mode_lists_every_art_with_a_tick_and_sums_what_is_ticked():
 
 
 def _judged_rows():
-    """批量熔煉要判斷好壞的資料（skillview.melt_judge）：w2 比身上弱、帶兩種功效；w3 比身上強、絕招；n2 本命戰法。"""
+    """批量熔煉要判斷好壞的資料（art_view.melt_judge）：w2 比身上弱、帶兩種功效；w3 比身上強、絕招；n2 本命戰法。"""
     rows = _melt_rows()
     rows[2].update(gen="精進", judge={"power": 12.4, "worn_diff": -2.1, "traits": [{"name": "破甲", "layers": 2}, {"name": "借力", "layers": 1}],
                                      "special": None, "ultimate": None, "tactic": None}, compare="比身上的甲拳弱一些")
@@ -971,7 +973,7 @@ def test_each_library_row_carries_what_batch_melting_needs_to_judge_it(real):
     from tianxia.martial_arts import power_at
     game = _real_game(real)
     game.state.player.arts = ["caocao_wugong", "jichu_quanjiao"]
-    rows = {r["id"]: r for r in skillview.art_rows(game.state, real, game.world)}
+    rows = {r["id"]: r for r in art_view.art_rows(game.state, real, game.world)}
     worn = game.state.player.member.wugong_id
     sig = rows["caocao_wugong"]["judge"]
     mine = team.player_art(game.state, real, game.world, "caocao_wugong")
@@ -981,7 +983,7 @@ def test_each_library_row_carries_what_batch_melting_needs_to_judge_it(real):
     assert sig["traits"] == [{"name": traits.general(real, a).name, "layers": traits.traits_of(mine).count(a), "tier": 1} for a in dict.fromkeys(traits.traits_of(mine))]
     assert rows[worn]["judge"]["worn_diff"] is None  # 身上那門自己沒得比
     game.state.player.insights = ["feng"]
-    ins = skillview.insight_rows(game.state, real, game.world)[0]
+    ins = art_view.insight_rows(game.state, real, game.world)[0]
     assert ins["rank"] == 1 and ins["mood"] is None and ins["melt"] == real.config.melt_insight_xinde
 
 

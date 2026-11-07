@@ -10,7 +10,13 @@ import pytest
 
 from conftest import copy_real_content, no_week_unlock, real_content
 
-from tianxia import economy, equipment, forge_secrets, four_tiers, howto, materials, renown, shopview, skillview
+from tianxia import economy, equipment, forge_secrets, four_tiers
+from tianxia.features.outlets import howto as outlets_howto
+from tianxia import materials, renown
+from tianxia.core import shop_base
+from tianxia.features.smithy import shop_view as smithy_shop
+from tianxia.features.outlets import shop_view as outlets_shop
+from tianxia.features.cultivation import art_view
 
 
 def test_real_content_has_four_tier4_materials_at_the_end():
@@ -25,7 +31,7 @@ def test_real_content_has_four_tier4_materials_at_the_end():
 def test_tier_words_cover_four():
     assert materials.TIER_NAMES[4] == "神品"
     assert equipment.TIER_WORDS[4] == "四階"
-    assert shopview.TIER_NAMES[4] == "四階"
+    assert shop_base.TIER_NAMES[4] == "四階"
     assert forge_secrets.TIER_WORDS[4] == "四"
 
 
@@ -42,7 +48,7 @@ def test_bag_line_says_four_tiers(world):
     c = real_content()
     game = Game.new(c, "四階", world=world)
     game.state.player.materials = {"gang_4": 1}
-    text = skillview.bag_text(game.state, c)
+    text = art_view.bag_text(game.state, c)
     assert "凡品、靈品、天品、神品四階" in text
 
 
@@ -125,23 +131,23 @@ def test_the_menu_counts_three_to_four_per_season():
 def test_the_materials_page_counts_three_to_four_per_season():
     """FB-342：素材頁升階格的上限字由伺服器給（三換四是這一季、開關關著的二換三是今天），最上面那一句講清楚三換四一定同屬性。"""
     game = _econ_game(bag={"gang_3": 5, "gang_2": 10})
-    rows = {(r["attribute"], r["tier"]): r for r in shopview.trade_view(game.state, game.content, DAY)["upgrade"]}
+    rows = {(r["attribute"], r["tier"]): r for r in smithy_shop.trade_view(game.state, game.content, DAY)["upgrade"]}
     assert rows[("剛", 4)]["left_text"] == "這一季還能 2 個" and rows[("剛", 3)]["left_text"] == ""
-    hint = shopview.trade_view(game.state, game.content, DAY)["hint"]
+    hint = smithy_shop.trade_view(game.state, game.content, DAY)["hint"]
     assert "三換四一定是同一個屬性" in hint
     off = _econ_game(bag={"gang_2": 10}, on=False)
-    rows = {(r["attribute"], r["tier"]): r for r in shopview.trade_view(off.state, off.content, DAY)["upgrade"]}
+    rows = {(r["attribute"], r["tier"]): r for r in smithy_shop.trade_view(off.state, off.content, DAY)["upgrade"]}
     assert rows[("剛", 3)]["left_text"] == "今天還能 1 個"
-    assert "三換四" not in shopview.trade_view(off.state, off.content, DAY)["hint"]
+    assert "三換四" not in smithy_shop.trade_view(off.state, off.content, DAY)["hint"]
 
 
 def test_the_depot_says_tier4_is_not_taken_when_only_tier4_is_left():
     """FB-343：背包只剩四階時，軍需帳那一格不說「背包裡沒有素材」，說四階不收。"""
     game = _econ_game(bag={"gang_4": 2})
-    view = shopview.donate_view(game.state, game.content, DAY)
-    assert view["cells"] == [] and view["empty"] == shopview.DONATE_TIER4_ONLY
+    view = outlets_shop.donate_view(game.state, game.content, DAY)
+    assert view["cells"] == [] and view["empty"] == outlets_shop.DONATE_TIER4_ONLY
     game.state.player.materials = {}
-    assert shopview.donate_view(game.state, game.content, DAY)["empty"] == shopview.DONATE_EMPTY
+    assert outlets_shop.donate_view(game.state, game.content, DAY)["empty"] == outlets_shop.DONATE_EMPTY
 
 
 def test_tier4_cannot_be_donated():
@@ -185,13 +191,13 @@ def test_tier4_counts_as_reachable_through_the_upgrade():
 
 def test_captions_and_howto_say_tier3_sells():
     c = no_week_unlock(real_content("week7"))
-    caps = shopview._trade_captions(c)
+    caps = smithy_shop._trade_captions(c)
     assert "三階 18 兩" in caps["sell_cap"] and "四階不收，留著打神器" in caps["sell_cap"]
-    text = "".join(howto.economy_lines(c))
+    text = "".join(outlets_howto.economy_lines(c))
     assert "三階 18 兩" in text and "四階不收，留著打神器" in text and "三階不收" not in text
     c.config.four_tiers.enabled = False
-    assert "三階不收" in shopview._trade_captions(c)["sell_cap"]
-    assert "三階不收" in "".join(howto.economy_lines(c))
+    assert "三階不收" in smithy_shop._trade_captions(c)["sell_cap"]
+    assert "三階不收" in "".join(outlets_howto.economy_lines(c))
 
 
 # ── Task 3：四階不算糧草、不送人、不被搶；拆四階裝備回三階 ──────────────
@@ -395,8 +401,8 @@ def test_the_shop_forge_line_hints_named_for_tier4_main():
 
     game = _forge_game({"gang_4": 1, "gang_3": 1})
     s, c, w = game.state, game.content, game.world
-    assert shopview.smith_line(s, c, w, "劍", "gang_4", "gang_3")["named_hint"] == smithing.NAMED_HINT
-    assert shopview.smith_line(s, c, w, "劍", "gang_3", "gang_4")["named_hint"] == ""
+    assert smithy_shop.smith_line(s, c, w, "劍", "gang_4", "gang_3")["named_hint"] == smithing.NAMED_HINT
+    assert smithy_shop.smith_line(s, c, w, "劍", "gang_3", "gang_4")["named_hint"] == ""
 
 
 def test_old_gear_without_named_entry_loads():
@@ -499,7 +505,7 @@ def test_rule_line_only_with_tier4():
     game.state.player.materials["rou_4"] = 1
     game.choose("act:smith")
     assert game.state.player.smith_rule in game.content.shop_lines["smith"]["rules"]
-    assert shopview.smith_view(game.state, game.content, game.world)["rule"] == game.state.player.smith_rule
+    assert smithy_shop.smith_view(game.state, game.content, game.world)["rule"] == game.state.player.smith_rule
 
 
 def test_rules_rotate_without_repeating():
@@ -514,7 +520,7 @@ def test_clue_beats_rule():
     game = _smith_game({"gang_4": 1})
     game.choose("act:smith")
     game.state.player.shop_clue = "鐵匠順口說了一句"
-    assert shopview.smith_view(game.state, game.content, game.world)["rule"] == ""
+    assert smithy_shop.smith_view(game.state, game.content, game.world)["rule"] == ""
 
 
 def test_rules_never_name_a_recipe():

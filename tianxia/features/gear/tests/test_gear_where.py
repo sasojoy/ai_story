@@ -1,11 +1,11 @@
 """FB-138：修練頁「裝備」那一塊，每一段都要說得出「哪裡買得到、哪裡得來」——新角色身上什麼都沒有時，網頁畫一塊精簡的（見 tests/web/test_weapons_web.py），
-地點資料出在 skillview.gear_rows 每一段的 where：鐵匠鋪看「城鎮」標籤、馬市看「馬市」標籤、寶物寫來源，一律從內容讀，不寫死地名。"""
+地點資料出在 art_cards.gear_rows 每一段的 where：鐵匠鋪看「城鎮」標籤、馬市看「馬市」標籤、寶物寫來源，一律從內容讀，不寫死地名。"""
 from __future__ import annotations
 
 import random
 
 from conftest import real_content
-from tianxia import equipment, mounts, skillview, treasures
+from tianxia import equipment, mounts, art_cards, treasures
 from tianxia.engine import Game
 
 
@@ -25,7 +25,7 @@ def _game(content, world, at):
 
 
 def _where(game, world):
-    return {s["slot"]: s["where"] for s in skillview.gear_rows(game.state, game.content, world)["slots"]}
+    return {s["slot"]: s["where"] for s in art_cards.gear_rows(game.state, game.content, world)["slots"]}
 
 
 def test_each_slot_says_where_to_get_one(content, world):

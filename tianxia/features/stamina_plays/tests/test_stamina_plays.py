@@ -318,10 +318,10 @@ def test_a_server_bot_sets_ambushes_and_walks_into_them_like_anyone(real, world)
 
 def test_the_howto_page_explains_ambush_with_the_config_numbers(real):
     """玩法說明的「行動」那一段多一行設伏（開著才寫），數字讀設定。"""
-    from tianxia import howto
+    from tianxia.features.stamina_plays import howto as stamina_plays_howto
 
     cfg = real.config.ambush
-    line = howto.ambush_lines(real)[0]
+    line = stamina_plays_howto.ambush_lines(real)[0]
     assert "**設伏**" in line and f"體力 {cfg.stamina}" in line and f"{cfg.hours:g} 小時" in line and f"最多 {cfg.silver_cap} 兩" in line
     cfg.enabled = False
-    assert howto.ambush_lines(real) == []
+    assert stamina_plays_howto.ambush_lines(real) == []

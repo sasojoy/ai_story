@@ -13,7 +13,9 @@ from conftest import CHANGSHE_LOCKED, CHANGSHE_LOSER, FixedRandom, idle_step, in
 from tianxia import bot, bot_policy, calendar
 from tianxia.features.companions import companion_agent
 from tianxia.features.military import fs_rules as foreshadow
-from tianxia import rules, skillview, team, timetable
+from tianxia import rules
+from tianxia.features.cultivation import art_view
+from tianxia import team, timetable
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
@@ -761,7 +763,7 @@ def test_no_guanyin_or_foreshadow_items_leak_when_no_chain_reads_them(fs, world,
 
     def shown(game: Game) -> list[str]:
         entry = game.state.journal[0]
-        texts = entry.lines + entry.changes + [entry.tag, skillview.bag_text(game.state, fs)]
+        texts = entry.lines + entry.changes + [entry.tag, art_view.bag_text(game.state, fs)]
         if game.state.battles:
             record = game.state.battles[0]
             texts += record.notes + record.changes + record.materials

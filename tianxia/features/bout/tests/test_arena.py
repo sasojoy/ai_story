@@ -10,7 +10,7 @@ import random
 import pytest
 
 from tianxia.features.bout import arena_rules as arena
-from tianxia import atlas, bot, bot_policy, rules, shopview
+from tianxia import atlas, bot, bot_policy, rules
 from tianxia.features.peers import social
 from tianxia.characters import CharacterStore
 from tianxia.engine import ARENA_YIELD, Game
@@ -243,10 +243,10 @@ def test_the_cooldown_says_how_long_to_wait(ring):
     assert game.choose("arena:fight:乙") == ["（剛挑過，約 2 小時 15 分後可再挑。）"]
     assert arena.wait_text(10) == "約 1 分鐘" and arena.wait_text(3600) == "約 1 小時"
     assert "明日 00:00" in arena.challenge_problem(w, "甲", foe, cfg, 0)
-    from tianxia import shopview
-    view = shopview.arena_view(game.state, content, world, 100.0, 5)
+    from tianxia.features.bout import shop_view as bout_shop
+    view = bout_shop.arena_view(game.state, content, world, 100.0, 5)
     assert view["foes"][0]["short"] == ["約 2 小時 15 分後", "可再挑"]
-    spent = shopview.arena_view(game.state, content, world, 100.0, 0)
+    spent = bout_shop.arena_view(game.state, content, world, 100.0, 0)
     assert spent["foes"][0]["short"][0] == "明日 00:00" and spent["purse"] == arena.SPENT_PURSE
 
 

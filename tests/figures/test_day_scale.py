@@ -12,7 +12,9 @@ from conftest import FixedRandom, install_season_one, walk_to
 
 from tianxia import calendar
 from tianxia.features.companions import companion_agent
-from tianxia import howto, rules
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.socialize import howto as socialize_howto
+from tianxia import rules
 from tianxia.features.sense import sensing
 from tianxia.engine import Game
 from tianxia.features.travel import road_actions
@@ -262,7 +264,7 @@ def test_the_note_row_spells_out_a_talked_out_audience(content):
     ch.deep_interaction, ch.audience_fame = True, 0
     content.config.talk_turns_per_day = 4
     game.state.player.fortune = True
-    assert game.action_notes(["call:mate"])["call:mate"] == howto.call_line("韓鐵", True)
+    assert game.action_notes(["call:mate"])["call:mate"] == socialize_howto.call_line("韓鐵", True)
     game.state.player.talks_today["mate"] = [rules.game_day(content, game.state.world), 4]
     moment = rules.day_ends_text(content, game.state.world)
     assert game.action_notes(["call:mate"])["call:mate"] == game._talked_out_note() == f"已經談滿 4 輪，{moment} 之後再來"
@@ -505,7 +507,7 @@ def test_a_mark_in_a_fourteen_day_season_still_counts_once_a_whole_day(content):
 
 def test_the_howto_page_writes_the_weekend_day_in_real_time(content):
     game = _game(content, WEEKEND, one=True)
-    page = howto.page(content, game.state.world, recruitable=False)
+    page = guide_howto.page(content, game.state.world, recruitable=False)
     assert "同一位人物每 4 小時 17 分（現實時間）最多 3 輪" in page
     assert "選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）" in page
     assert "每天最多" not in page and "今天在那裡" not in page
@@ -513,4 +515,4 @@ def test_the_howto_page_writes_the_weekend_day_in_real_time(content):
 
 def test_the_howto_page_keeps_every_day_for_a_fourteen_day_season(content):
     game = _game(content, 14)
-    assert "同一位人物每天最多 3 輪" in howto.page(content, game.state.world, recruitable=False)
+    assert "同一位人物每天最多 3 輪" in guide_howto.page(content, game.state.world, recruitable=False)

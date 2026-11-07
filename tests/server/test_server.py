@@ -22,7 +22,9 @@ from tianxia import atlas
 from tianxia.features.battle import instance as battle_instance
 from tianxia import calendar
 from tianxia.features.companions import companion_agent
-from tianxia import database, fight_llm, journal, naming, skillview, sqlite_world
+from tianxia import database, fight_llm, journal, naming
+from tianxia.features.cultivation import art_view
+from tianxia import sqlite_world
 from tianxia.features.tale import tale
 from tianxia import team
 from tianxia.accounts import NAME_TAKEN
@@ -2120,10 +2122,10 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
 
 
 def test_the_menxia_payload_carries_the_attribute_note_both_pages_fold_away(client):
-    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 skillview.attribute_line 照程式的規則寫，網頁只放進去。"""
+    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 art_view.attribute_line 照程式的規則寫，網頁只放進去。"""
     _player(client)
     note = client.get("/api/menxia").json()["attribute_note"]
-    assert note == skillview.attribute_line(server.CONTENT)
+    assert note == art_view.attribute_line(server.CONTENT)
     assert "×1.3" in note and "剛柔" in note
 
 

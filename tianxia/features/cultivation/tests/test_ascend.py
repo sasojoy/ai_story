@@ -9,7 +9,9 @@ import pytest
 from tianxia.features.cultivation import ascend
 from tianxia.features.craft import create
 from tianxia.features.cultivation import cultivation
-from tianxia import moves, skillview, tactics, team, traits
+from tianxia import moves, art_cards
+from tianxia.features.cultivation import art_view
+from tianxia import tactics, team, traits
 from tianxia.content import load_content
 from tianxia.engine import Game
 
@@ -109,13 +111,13 @@ def test_seize_in_a_fight_goes_through_the_ascension(content):
 def test_the_row_shows_the_fifth_ring_and_the_ripe_marks(content):
     game = _made(content, "看卡人")
     s, w = game.state, game.world
-    row = next(r for r in skillview.art_rows(s, content, w) if r["id"] == "疾風掌")
-    assert row["fifth"] == {"on": False, "name": "", "note": skillview.RIPE_NOTE}
-    assert f"（{skillview.RIPE_MOVE}）" in row["tactic"]
+    row = next(r for r in art_view.art_rows(s, content, w) if r["id"] == "疾風掌")
+    assert row["fifth"] == {"on": False, "name": "", "note": art_cards.RIPE_NOTE}
+    assert f"（{art_cards.RIPE_MOVE}）" in row["tactic"]
     ascend.ascend(s, content, w, "疾風掌", "seize")
-    row = next(r for r in skillview.art_rows(s, content, w) if r["id"] == "疾風掌")
+    row = next(r for r in art_view.art_rows(s, content, w) if r["id"] == "疾風掌")
     assert row["fifth"]["on"] and row["fifth"]["name"] == "追風影"
-    assert row["tactic"].startswith("絕〔追風影〕") and skillview.RIPE_MOVE not in row["tactic"]
+    assert row["tactic"].startswith("絕〔追風影〕") and art_cards.RIPE_MOVE not in row["tactic"]
 
 
 def test_the_after_blow_follows_the_slots():

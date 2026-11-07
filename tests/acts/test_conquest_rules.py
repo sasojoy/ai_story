@@ -26,11 +26,14 @@ from tianxia.features.territory_acts import conquest_day
 from conquest_kit import announce, conquest_game, join, plain_game
 from tianxia import conquest
 from tianxia.features.territory_acts import conquest_day
-from tianxia import howto, orders
+from tianxia.features.territory_acts import howto as territory_acts_howto
+from tianxia.features.sense import howto as sense_howto
+from tianxia import orders
 from tianxia.state import Order
 from tianxia.world import keep_showdowns_on_time
 from tianxia.features.territory_acts import conquest_day
-from tianxia import howto
+from tianxia.features.territory_acts import howto as territory_acts_howto
+from tianxia.features.sense import howto as sense_howto
 from tianxia.features.territory_acts import xingshi
 from tianxia.state import DayNote
 from tianxia import conquest, rules
@@ -660,7 +663,7 @@ def test_siege_and_defend_orders_follow_the_highest_block():
 
 def test_howto_has_the_flip_rules():
     game = conquest_game("season21")
-    lines = " ".join(howto.territory_lines(game.content, True, game.state.world))
+    lines = " ".join(territory_acts_howto.territory_lines(game.content, True, game.state.world))
     assert "推滿" in lines and "戰書" in lines and "投票" not in lines
 
 
@@ -710,11 +713,11 @@ def test_the_conquest_howto_speaks_of_the_new_map():
     """玩法說明「地盤」那一節：輿圖第三版沒有局勢層了，寫天下圖的地面與區圖的名字框。領地爭奪的季第 5 批先改；關著的季原本一個字不動，
     PM 2026-10-22 定也改（設計 5.6：關著的季也用新畫法；關著的季對照只差這一句與意境那一句）。"""
     game = conquest_game("season21")
-    on = "".join(howto.territory_lines(game.content, season=game.state.world))
+    on = "".join(territory_acts_howto.territory_lines(game.content, season=game.state.world))
     assert "局勢層" not in on and "天下圖" in on and "區圖" in on
     for profile in ("week7", None, "season21"):
         plain = plain_game(profile)
-        off = "".join(howto.territory_lines(plain.content, season=plain.state.world))
+        off = "".join(territory_acts_howto.territory_lines(plain.content, season=plain.state.world))
         assert "局勢層" not in off and "天下圖的地面、區圖名字框的顏色就是此刻誰佔著" in off, profile
 
 
@@ -722,11 +725,11 @@ def test_the_conquest_howto_speaks_of_the_new_map():
 def test_the_strongest_insight_howto_points_at_the_region_map():
     """玩法說明「靜心感悟」那一句（STRONG_HOWTO）：輿圖第三版拿掉了意境濾鏡（第 4 批），改寫區圖名字底下的意境字與卡上的「最濃」
     （PM 2026-10-22，每一種季都改）。"""
-    assert "濾鏡" not in howto.STRONG_HOWTO and "區圖" in howto.STRONG_HOWTO and "最濃" in howto.STRONG_HOWTO
+    assert "濾鏡" not in sense_howto.STRONG_HOWTO and "區圖" in sense_howto.STRONG_HOWTO and "最濃" in sense_howto.STRONG_HOWTO
     for profile in ("week7", None, "season21"):
         game = plain_game(profile)
         text = game.howto_text()
-        assert "濾鏡" not in text and "局勢層" not in text and howto.STRONG_HOWTO in text, profile
+        assert "濾鏡" not in text and "局勢層" not in text and sense_howto.STRONG_HOWTO in text, profile
 
 
 # ── 原 test_conquest_fb530_wall.py（整檔搬進來） ──
@@ -1686,11 +1689,11 @@ def test_the_admin_hides_one_now_under_conquest_and_still_forces_emergence_other
 
 def test_the_howto_says_where_shards_come_from_without_saying_where():
     """玩法說明「地盤」：碎片只在開季中立的地方、探索才撿得到（設計 3.9，玩家看得出為什麼要搶這一塊）；不寫是哪一塊。碎片關著不寫。"""
-    from tianxia import howto
+    from tianxia.features.territory_acts import howto as territory_acts_howto
 
     c = _content()
-    lines = [line for line in howto.conquest_lines(c) if "碎片" in line]
+    lines = [line for line in territory_acts_howto.conquest_lines(c) if "碎片" in line]
     assert len(lines) == 1 and "探索" in lines[0] and "沒人知道" in lines[0]
     assert not any(c.locations[loc].name in lines[0] for loc in _neutral_seal(c))
     c.config.seal.enabled = False
-    assert not any("碎片" in line for line in howto.conquest_lines(c))
+    assert not any("碎片" in line for line in territory_acts_howto.conquest_lines(c))

@@ -17,7 +17,9 @@ from tianxia.world_state import fresh_season, stamp_season
 from tianxia.features.admin import routes as admin_routes
 from tianxia import calendar
 from tianxia.features.bout import duel_rules as duel
-from tianxia import howto, orders, renown, rules, seats, timetable, world
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.faction import howto as faction_howto
+from tianxia import orders, renown, rules, seats, timetable, world
 from tianxia.features.figure_acts import yuedan
 from tianxia.state import Order, YuedanEntry, new_game_state
 import re
@@ -420,7 +422,7 @@ def test_renown_perks_say_each_segment_on_week7():
     kou = [p for t in range(1, 5) for p in renown.virtue_perks(c7, "寇", t, s7)]
     assert "敵方陣營每段通緝你" in fame and not any("每週" in p for p in fame)
     assert any(p.startswith("官府每段貼你的海捕文書") for p in kou) and not any("每週" in p for p in kou)
-    howto_text = "".join(howto.renown_lines(c7, s7))
+    howto_text = "".join(guide_howto.renown_lines(c7, s7))
     assert "每段通緝你" in howto_text and "官府每段貼你" in howto_text
 
 
@@ -440,9 +442,9 @@ def test_renown_perks_keep_each_week_elsewhere(profile):
 def test_howto_says_orders_come_every_day_on_week7():
     c7 = real_content("week7")
     state = _state(c7)
-    quest = "".join(howto.war_help(state, c7)["quest"])
+    quest = "".join(guide_howto.war_help(state, c7)["quest"])
     assert "投靠陣營之後每天有軍令" in quest and "每週一" not in quest
-    join = "".join(howto.join_lines(c7, state.world))
+    join = "".join(faction_howto.join_lines(c7, state.world))
     assert "**軍令**：每天發令" in join and "今日的軍令卡在江湖頁行動列底下" in join
     assert "每週一" not in join and "本週" not in join
 

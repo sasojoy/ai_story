@@ -109,13 +109,13 @@ def test_the_percentages_come_from_the_engines_pairing(worn, content, world):
 
 
 def test_the_pair_clause_is_the_same_pairing_the_card_shows_after_switching(worn, content, world):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
 
     art = _art(world, "剛拳", "剛")
     worn.player.arts = [art.id]
     assert team.compare_with_worn(worn, content, world, art).endswith("整體 −20%")
     team.switch_art(worn, content, world, art.id)
-    assert "內外搭配 -20%" in skillview.boost_line(worn, content, world)  # 門下卡上換上後真的是這個數（卡上的減號是半形，句子照 W6 用 −）
+    assert "內外搭配 -20%" in art_view.boost_line(worn, content, world)  # 門下卡上換上後真的是這個數（卡上的減號是半形，句子照 W6 用 −）
 
 
 # ── 改練的回話 ────────────────────────────────────────────

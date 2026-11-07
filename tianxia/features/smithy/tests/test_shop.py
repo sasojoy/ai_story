@@ -7,14 +7,17 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import armor, equipment, shopview
+from tianxia import armor, equipment
+from tianxia.core import shop_base
+from tianxia.features.smithy import shop_view as smithy_shop
+from tianxia.features.outlets import shop_view as outlets_shop
 from tianxia.features.smithy import smithing
 from tianxia import weapons
 from tianxia.content import validate
 
 pytestmark = pytest.mark.whole_content
 
-LINES = {"smith": {key: [f"鐵匠說{key}之一。", f"鐵匠說{key}之二。"] for key in shopview.SITUATIONS["smith"]}}
+LINES = {"smith": {key: [f"鐵匠說{key}之一。", f"鐵匠說{key}之二。"] for key in shop_base.SITUATIONS["smith"]}}
 
 
 def _smith(content, world, silver=300, name="試鋪"):
@@ -43,7 +46,7 @@ def _smith(content, world, silver=300, name="試鋪"):
 def test_the_switch_is_on_by_default_and_the_lines_load_from_content():
     c = real_content()
     assert c.config.shop_screens is True
-    for key in shopview.SITUATIONS["smith"]:
+    for key in shop_base.SITUATIONS["smith"]:
         assert c.shop_lines["smith"][key], key
     validate(c)
 
@@ -69,7 +72,7 @@ def test_a_missing_situation_is_refused_when_the_smithy_is_open():
 def test_entering_and_each_smith_action_record_a_keeper_situation(content, world):
     game = _smith(content, world)
     p = game.state.player
-    assert p.shop_line == "enter" and shopview.line_text(game.state, content, "smith") in LINES["smith"]["enter"]
+    assert p.shop_line == "enter" and shop_base.line_text(game.state, content, "smith") in LINES["smith"]["enter"]
     game.choose("smith:buy:劍")
     assert p.shop_line == "buy"
     p.stats["silver"] = 3
@@ -87,10 +90,10 @@ def test_entering_and_each_smith_action_record_a_keeper_situation(content, world
 
 def test_the_keeper_line_stays_put_across_polls(content, world):
     game = _smith(content, world)
-    first = shopview.line_text(game.state, content, "smith")
+    first = shop_base.line_text(game.state, content, "smith")
     game.sync(50.0)
-    assert shopview.line_text(game.state, content, "smith") == first
-    lines = {shopview.line_text(game.state, content, "smith") for _ in range(5)}
+    assert shop_base.line_text(game.state, content, "smith") == first
+    lines = {shop_base.line_text(game.state, content, "smith") for _ in range(5)}
     assert lines == {first}
 
 
@@ -109,24 +112,24 @@ def test_backs_written_out_match_the_constants_in_the_packages():
 def test_problem_and_forged_keys():
     from tianxia.state import Weapon
 
-    assert shopview.problem_key(None, "buy") == "buy"
-    assert shopview.problem_key("還差 12 兩", "buy") == "short_silver"
-    assert shopview.problem_key(equipment.RACK_FULL, "buy") == "rack_full"
-    assert shopview.problem_key("刀口還利", "repair") == "refused"
+    assert shop_base.problem_key(None, "buy") == "buy"
+    assert shop_base.problem_key("還差 12 兩", "buy") == "short_silver"
+    assert shop_base.problem_key(equipment.RACK_FULL, "buy") == "rack_full"
+    assert shop_base.problem_key("刀口還利", "repair") == "refused"
     w = Weapon(id="兵:1", name="試刃", kind="劍", attribute="剛", tier=1, quality="中品")
-    assert shopview.forged_key(w) == "forge_mid"
-    assert shopview.forged_key(w.model_copy(update={"secret": "t_blade"})) == "forge_named"
-    assert shopview.forged_key(w.model_copy(update={"original": True})) == "forge_divine"
-    assert shopview.forged_key(w.model_copy(update={"copy_of": "鑄|t_star"})) == "forge_divine"
+    assert smithy_shop.forged_key(w) == "forge_mid"
+    assert smithy_shop.forged_key(w.model_copy(update={"secret": "t_blade"})) == "forge_named"
+    assert smithy_shop.forged_key(w.model_copy(update={"original": True})) == "forge_divine"
+    assert smithy_shop.forged_key(w.model_copy(update={"copy_of": "鑄|t_star"})) == "forge_divine"
 
 
 def test_the_smith_clue_takes_over_the_keeper_line_for_one_action(content, world, monkeypatch):
     game = _smith(content, world)
     monkeypatch.setattr(game, "_smith_clue", lambda paid=True: ["鐵匠順口說了一句口訣。"])
     game.choose("smith:buy:劍")
-    assert shopview.line_text(game.state, content, "smith") == "鐵匠順口說了一句口訣。"
+    assert shop_base.line_text(game.state, content, "smith") == "鐵匠順口說了一句口訣。"
     game.choose("smith:page:armor")
-    assert shopview.line_text(game.state, content, "smith") in LINES["smith"]["buy"]
+    assert shop_base.line_text(game.state, content, "smith") in LINES["smith"]["buy"]
 
 
 # ── Task 2：smith_view 與 main_view ──
@@ -218,11 +221,11 @@ def test_cells_say_why_a_material_cannot_go_in(content, world):
     line = game.smith_line("劍")
     cells = {c["id"]: c for c in line["cells"]}
     assert cells["gang_1"]["ok"] and cells["gang_1"]["to"] == "main"
-    assert not cells["gang_2"]["ok"] and cells["gang_2"]["why"] == shopview.SHORT_CELL.format(n=30)  # 二階工錢 60
+    assert not cells["gang_2"]["ok"] and cells["gang_2"]["why"] == smithy_shop.SHORT_CELL.format(n=30)  # 二階工錢 60
     game.state.player.materials["kuai_1"] = 1
     line = game.smith_line("劍", "kuai_1")
     cells = {c["id"]: c for c in line["cells"]}
-    assert cells["kuai_1"]["main"] and not cells["kuai_1"]["ok"] and cells["kuai_1"]["why"] == shopview.ONLY_ONE
+    assert cells["kuai_1"]["main"] and not cells["kuai_1"]["ok"] and cells["kuai_1"]["why"] == smithy_shop.ONLY_ONE
     assert cells["gang_1"]["ok"] and cells["gang_1"]["to"] == "aux"
 
 
@@ -296,7 +299,7 @@ def test_direct_forging_matches_the_step_by_step_forge(content, world, kind):
     assert (sp.materials, sp.stats["silver"], sp.forge_counts) == (dp.materials, dp.stats["silver"], dp.forge_counts)
     top, old = direct.state.journal[0], step.state.journal[0]
     assert top.title == smithing.FORGE_TITLE and (top.lines, top.changes) == (old.lines, old.changes)
-    assert dp.smith_draft is None and dp.shop_line == shopview.forged_key(b)
+    assert dp.smith_draft is None and dp.shop_line == smithy_shop.forged_key(b)
 
 
 def test_two_direct_forges_make_two_journal_entries(content, world):
@@ -621,7 +624,7 @@ def test_the_furnace_state_is_the_same_one_the_dadian_page_reads():
     from tianxia import silver
 
     game = _fire()
-    ledger = lambda: shopview.dadian_view(  # noqa: E731
+    ledger = lambda: outlets_shop.dadian_view(  # noqa: E731
         game.state, game.content, day=game._pill_day(), room=0, base=False, clinic=False, smith=True, bribe=[], prologue=False)
     assert silver.HANG_FURNACE not in ledger()["hang"]
     game.smith_furnace()
@@ -720,7 +723,7 @@ def test_the_outlet_setting_off_also_hides_the_furnace_in_a_season_that_has_them
 
 def test_a_direct_smith_view_without_the_day_has_no_furnace(content, world):
     game = _smith(content, world)
-    assert shopview.smith_view(game.state, content, world)["forge"]["furnace"] is None
+    assert smithy_shop.smith_view(game.state, content, world)["forge"]["furnace"] is None
 
 
 # ── 鐵匠鋪與合成流程 3.4（B 批）：修與淬煉裝備庫裡的那一件（MENXIA_ACTIONS["repair_item"]、["temper_item"]）──
@@ -792,12 +795,12 @@ def test_the_keeper_says_the_next_thing_and_the_smith_may_let_a_clue_slip(conten
     p = game.state.player
     monkeypatch.setattr(game, "_smith_clue", lambda paid=True: [])  # 先不讓鐵匠說溜嘴：掌櫃那一句照情況鍵挑
     game.repair_item("兵:1")
-    assert p.shop_line == "repair" and shopview.line_text(game.state, content, "smith") in LINES["smith"]["repair"]
+    assert p.shop_line == "repair" and shop_base.line_text(game.state, content, "smith") in LINES["smith"]["repair"]
     game.temper_item("甲:2")
-    assert p.shop_line == "temper" and shopview.line_text(game.state, content, "smith") in LINES["smith"]["temper"]
+    assert p.shop_line == "temper" and shop_base.line_text(game.state, content, "smith") in LINES["smith"]["temper"]
     monkeypatch.setattr(game, "_smith_clue", lambda paid=True: ["鐵匠順口說了一句口訣。"])  # 花了錢或料之後擲鐵匠順口（smith_chance）
     game.repair_item("甲:2")
-    assert p.shop_clue == "鐵匠順口說了一句口訣。" and shopview.line_text(game.state, content, "smith") == p.shop_clue
+    assert p.shop_clue == "鐵匠順口說了一句口訣。" and shop_base.line_text(game.state, content, "smith") == p.shop_clue
     assert "鐵匠順口說了一句口訣。" in game.state.journal[0].lines
     monkeypatch.setattr(game, "_smith_clue", lambda paid=True: [])
     game.temper_item("兵:1")
@@ -831,9 +834,9 @@ def test_a_refused_repair_item_for_silver_gives_way_once_the_silver_is_there(con
     game = _gear(content, world, silver=2)
     p = game.state.player
     assert game.repair_item("甲:2") == ["（還差 3 兩。）"] and p.shop_line == "short_silver"
-    assert shopview.line_text(game.state, content, "smith") in LINES["smith"]["short_silver"]
+    assert shop_base.line_text(game.state, content, "smith") in LINES["smith"]["short_silver"]
     p.stats["silver"] = 300
-    assert shopview.line_text(game.state, content, "smith") in LINES["smith"]["enter"]
+    assert shop_base.line_text(game.state, content, "smith") in LINES["smith"]["enter"]
 
 
 def test_repair_and_temper_item_need_the_smithy_open_and_the_menu_in_front(content, world):

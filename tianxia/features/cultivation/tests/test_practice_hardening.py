@@ -7,7 +7,8 @@
 import pytest
 
 from tianxia.features.cultivation import cultivation
-from tianxia import skillview, team
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.battlelog import new_record
 from tianxia.models import Breakthrough, Config
 
@@ -97,7 +98,7 @@ def test_the_upper_grade_at_its_peak_waits_for_a_chance_and_costs_nothing_in_the
 def test_the_practice_row_shows_the_force_odds_not_a_climb(kicker, hard, world):
     at(kicker, 10)
     kicker.player.legend_items = 2
-    row = next(r for r in skillview.art_rows(kicker, hard, world) if r["id"] == "旋風腿")
+    row = next(r for r in art_view.art_rows(kicker, hard, world) if r["id"] == "旋風腿")
     assert row["cultivate"]["ok"] and row["cultivate"]["note"].endswith("體力 10")
     assert row["cultivate"]["legend"] == {
         "count": 2, "bonus": 15, "label": "服下破境丹強行衝關（剩 2 枚）", "note": "約 15% 衝開・體力 10",

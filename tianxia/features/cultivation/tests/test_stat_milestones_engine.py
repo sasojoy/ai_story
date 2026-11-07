@@ -83,14 +83,14 @@ def test_each_point_weighs_double_in_a_jianfa_season():
 
 def test_hp_cap_is_one_number_everywhere():
     """根骨的氣血上限加倍：狀態列、本人氣血與上限、決戰的池子、角色卡都是同一個數（沒傳 season 的漏網之魚會讓兩邊對不上）。"""
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
 
     game = ready(jianfa_game(stat_milestones=True), side="guan", loc="yingshui")
     p = game.state.player
     p.stats["con"] = 12
     cap = game._player_hp_and_cap()[1]
     assert game.status_data()["hp_max"] == round(cap) == round(game._battle_neili_cap())
-    assert f"/{cap:.0f}" in skillview.member_card(game.state, game.content, game.world, team.PLAYER)
+    assert f"/{cap:.0f}" in art_view.member_card(game.state, game.content, game.world, team.PLAYER)
     off = ready(plain_game(), side="guan", loc="yingshui")
     off.state.player.stats["con"] = 12
     assert cap > off._player_hp_and_cap()[1]
@@ -111,14 +111,14 @@ def test_allocating_says_what_the_point_did():
 
 
 def test_the_stat_line_shows_numbers_in_a_jianfa_season():
-    from tianxia import skillview
+    from tianxia import art_cards
 
     game = ready(jianfa_game(stat_milestones=True), side="guan", loc="yingshui")
     game.state.player.stats["str"] = 8
-    uses = dict(skillview.stat_uses(game.content, game.state))
+    uses = dict(art_cards.stat_uses(game.content, game.state))
     assert uses["臂力"] == "武學威力 +18%"
     off = ready(plain_game(), side="guan", loc="yingshui")
-    assert dict(skillview.stat_uses(off.content, off.state)) == dict(skillview.stat_uses(off.content))
+    assert dict(art_cards.stat_uses(off.content, off.state)) == dict(art_cards.stat_uses(off.content))
 
 
 def test_bots_fill_one_stat_before_the_next():

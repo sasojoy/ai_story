@@ -1,11 +1,12 @@
 """商城第三批：玩法說明多一段「商城」（元寶只能儲值取得、不能換銀兩；這一版封測發放；月卡怎麼算）。
-玩法說明不看個人（howto.page），月卡寫成規則；點體力條看的那幾句照這個人此刻的上限寫（FB-480，test_mall.py）。
+玩法說明不看個人（guide_howto.page），月卡寫成規則；點體力條看的那幾句照這個人此刻的上限寫（FB-480，test_mall.py）。
 商城關著時玩法說明一個字都不提元寶。數字全讀 Config 與商品表。"""
 from __future__ import annotations
 
 import pytest
 
-from tianxia import howto
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.mall import howto as mall_howto
 from tianxia.models import MallItem
 from tianxia.world_state import fresh_season
 
@@ -29,8 +30,8 @@ def on(content):
 
 def _section(content) -> str:
     """玩法說明裡「商城」那一段（標題到下一個標題之前）；沒有這一段是空字串。"""
-    page = howto.page(content, fresh_season(content), recruitable=False)
-    head = f"#### {howto.MALL_TITLE}"
+    page = guide_howto.page(content, fresh_season(content), recruitable=False)
+    head = f"#### {mall_howto.MALL_TITLE}"
     if head not in page:
         return ""
     return page.split(head, 1)[1].split("\n####", 1)[0]
@@ -39,7 +40,7 @@ def _section(content) -> str:
 @pytest.mark.smoke
 def test_the_page_has_a_mall_section(on):
     text = _section(on)
-    assert howto.MALL_COIN in text  # 元寶只能儲值取得、不能換銀兩
+    assert mall_howto.MALL_COIN in text  # 元寶只能儲值取得、不能換銀兩
     assert "每個角色第一次進來先撥 5000 元寶" in text  # 封測發放（beta_grant）
     assert "回體丹多 1 顆（平常 2 → 3、新手期 5 → 6）" in text  # 月卡（card_pill_bonus、stamina_pills_per_day、newbie_pills_per_day）
     assert "還沒到期再買，從到期日往後接" in text
@@ -49,7 +50,7 @@ def test_the_page_has_a_mall_section(on):
 def test_no_grant_no_grant_line(on):
     on.config.mall.beta_grant = 0
     text = _section(on)
-    assert howto.MALL_COIN in text and "先撥" not in text
+    assert mall_howto.MALL_COIN in text and "先撥" not in text
 
 
 def test_the_card_line_follows_the_numbers(on):
@@ -68,5 +69,5 @@ def test_no_card_line_when_pills_are_unlimited_or_no_card_is_sold(on):
 
 def test_mall_off_page_says_nothing_about_it(on):
     on.config.mall.enabled = False
-    page = howto.page(on, fresh_season(on), recruitable=False)
-    assert f"#### {howto.MALL_TITLE}" not in page and "元寶" not in page
+    page = guide_howto.page(on, fresh_season(on), recruitable=False)
+    assert f"#### {mall_howto.MALL_TITLE}" not in page and "元寶" not in page

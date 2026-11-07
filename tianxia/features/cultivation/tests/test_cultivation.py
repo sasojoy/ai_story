@@ -9,7 +9,9 @@ import pytest
 
 from tianxia import arts as arts_mod
 from tianxia.features.cultivation import cultivation
-from tianxia import fusion, library, skillview, team
+from tianxia import fusion, library
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.state import InsightFx, new_game_state
 
@@ -183,7 +185,7 @@ def test_each_failed_pill_on_the_same_art_raises_the_next_try(kicker, content, w
     assert cultivation.force_odds(kicker, content, world, "旋風腿") == 100 and p.legend_fails == {"旋風腿": 9}
     p.legend_fails["旋風腿"] = 30
     assert cultivation.force_odds(kicker, content, world, "旋風腿") == content.config.legend_fail_cap
-    row = next(r for r in skillview.art_rows(kicker, content, world) if r["id"] == "旋風腿")
+    row = next(r for r in art_view.art_rows(kicker, content, world) if r["id"] == "旋風腿")
     assert "已衝過 30 次" in row["cultivate"]["legend"]["note"]
     cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
     assert p.legend_fails == {} and p.art_quality["旋風腿"] == "絕學"
@@ -496,7 +498,7 @@ def test_after_a_rename_the_name_shows_everywhere_and_the_id_still_keys(kicker, 
     # 顯示：新名字
     assert team.resolve_art("旋風腿", content, world).name == "風神腿"
     assert team.player_art(kicker, content, world, "旋風腿").name == "風神腿"
-    (row,) = [r for r in skillview.art_rows(kicker, content, world) if r["id"] == "旋風腿"]
+    (row,) = [r for r in art_view.art_rows(kicker, content, world) if r["id"] == "旋風腿"]
     assert (row["name"], row["quality"], row["attribute"], row["level"]) == ("風神腿", "絕學", "快", 10)
     # 認東西：還是 id
     assert "旋風腿" in library.owned_arts(kicker) and kicker.player.art_quality == {"旋風腿": "絕學"}
@@ -664,15 +666,15 @@ def test_cultivating_and_naming_wait_while_the_season_is_preparing(adept):
 
 def test_the_practice_row_only_offers_the_pill_on_the_last_step(adept):
     """修練頁那一列：到了極處才按得下去、寫衝開的機會與丹的數目；沒到的灰掉、寫原因。"""
-    row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
+    row = next(r for r in art_view.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
     assert row["cultivate"]["ok"] and row["cultivate"]["legend"]["bonus"] == 15 and row["cultivate"]["legend"]["count"] == 1
     assert row["cultivate"]["xinde"] is None  # 武學重構：沒有以心得修練了
     adept.state.player.art_levels["旋風腿"] = 9
-    row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
+    row = next(r for r in art_view.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
     assert not row["cultivate"]["ok"] and row["cultivate"]["legend"] is None and "第9成" in row["cultivate"]["note"]
     adept.state.player.art_levels["旋風腿"] = 10
     adept.state.player.art_quality["旋風腿"] = "中品"
-    row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
+    row = next(r for r in art_view.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
     assert not row["cultivate"]["ok"] and row["cultivate"]["note"] == cultivation.NO_RANK_LINE
 
 

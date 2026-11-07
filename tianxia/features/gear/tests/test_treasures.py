@@ -530,12 +530,12 @@ def test_a_treasure_can_be_swapped_any_time_even_in_seclusion(content, world):
 
 
 def test_gear_rows_have_a_treasure_slot_with_effects(content, world):
-    from tianxia import skillview
+    from tianxia import art_cards
     _book(content)
     game = _game(content, world)
     p = game.state.player
     p.treasure, p.rack = _item("audience", "寶:1"), [_item("win_material", "寶:2")]
-    gear = skillview.gear_rows(game.state, content, world)
+    gear = art_cards.gear_rows(game.state, content, world)
     [slot] = gear["slots"]  # 測試內容其他三欄關著：只有寶物那一段
     assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("treasure", "寶物", treasures.EMPTY, treasures.RACK_NOTE)
     assert slot["worn"]["effect_text"] == treasures.effect_text(content, "audience")
@@ -543,20 +543,20 @@ def test_gear_rows_have_a_treasure_slot_with_effects(content, world):
     assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text", "might"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）；might 是換上後的戰力
     assert gear["held_note"] == ""
     p.held_gear = [_item("seclusion", "寶:3")]
-    assert "【入定蒲團】" in skillview.gear_rows(game.state, content, world)["held_note"]
+    assert "【入定蒲團】" in art_cards.gear_rows(game.state, content, world)["held_note"]
     content.config.treasures.enabled = False
-    assert skillview.gear_rows(game.state, content, world)["slots"] == []
+    assert art_cards.gear_rows(game.state, content, world)["slots"] == []
 
 
 def test_player_card_has_the_treasure_line(content, world):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
     _book(content)
     game = _game(content, world)
-    assert "寶物" not in skillview.member_card(game.state, content, world, "player")
+    assert "寶物" not in art_view.member_card(game.state, content, world, "player")
     game.state.player.treasure = _item("audience")
     line = treasures.card_line(game.state, content)  # 整行待 joy 潤：只鎖名字與效果
     assert "【烏木名刺】" in line and treasures.effect_text(content, "audience") in line
-    assert line in skillview.member_card(game.state, content, world, "player").splitlines()
+    assert line in art_view.member_card(game.state, content, world, "player").splitlines()
 
 
 def test_the_practice_page_wield_action_puts_a_treasure_on(content, world):

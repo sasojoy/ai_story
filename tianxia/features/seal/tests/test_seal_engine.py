@@ -597,13 +597,13 @@ def test_the_card_countdown_stops_while_the_clock_is_paused(sealed, world):
 
 def test_the_heirloom_row_is_not_called_swappable(sealed, world):
     """FB-180：寶物段的說明寫「隨時能換」，傳承那一件不能換下：有傳承時說明多一句；寶物關著、只有傳承時不寫寶物那一套。"""
-    from tianxia import skillview
+    from tianxia import art_cards
 
     _setup(sealed, world)
     holder = _player(sealed, world, "懷璽")
     sealed.config.treasures.enabled = True
-    block = next(b for b in skillview.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
+    block = next(b for b in art_cards.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
     assert "不能換下" in block["note"]
     sealed.config.treasures.enabled = False
-    block = next(b for b in skillview.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
+    block = next(b for b in art_cards.gear_rows(holder.state, sealed, world)["slots"] if b["slot"] == "treasure")
     assert "不能換下" in block["note"] and "隨時能換" not in block["note"]

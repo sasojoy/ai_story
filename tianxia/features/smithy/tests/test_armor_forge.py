@@ -712,7 +712,7 @@ def test_a_divine_original_armor_is_top_quality_for_the_cap_and_the_rows_write_i
     data = armor.rows(s, content, ng)
     assert data["worn"]["temper_max"] == 6 and data["rack"][0]["temper_max"] == 7
     assert data["worn"]["wear_note"] == "" and data["rack"][0]["wear_note"] == "磨得慢"
-    from tianxia import shopview
-    view = shopview.smith_view(s, content, world)
+    from tianxia.features.smithy import shop_view as smithy_shop
+    view = smithy_shop.smith_view(s, content, world)
     assert view["worn"]["item"]["temper_max"] == 6 and view["rack"]["rows"][0]["temper_max"] == 7
     assert view["worn"]["item"]["wear_note"] == "" and view["rack"]["rows"][0]["wear_note"] == "磨得慢"
