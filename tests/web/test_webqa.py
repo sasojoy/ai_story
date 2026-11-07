@@ -73,6 +73,14 @@ def test_used_values_only_when_the_window_looks_the_same(noise):
     assert noise.style_class({"margin-left", "color"}, True) is None
 
 
+def test_grid_tracks_only_count_when_the_scrollbar_is_what_differs(noise):
+    # 第 77 批第一次全量的 main:089_bd_drop 寬 641：BODY inline-size 641 對 626，連 grid-template-columns、rows 一起動
+    props = {"block-size", "grid-template-columns", "grid-template-rows", "inline-size", "margin-left"}
+    assert noise.used_only(props, flip=True) is True
+    assert noise.used_only(props, flip=False) is False
+    assert noise.used_only(props | {"color"}, flip=True) is False
+
+
 def test_share_and_chronicle_only_inside_their_rects(noise):
     assert noise.pixel_class(9000, 200, view="375-light", only_share=True) == "share"
     assert noise.pixel_class(9000, 200, view="375-light", only_tale=True) == "tale"
@@ -162,6 +170,23 @@ def test_anti_aliasing_beside_a_used_value_is_still_the_same_picture(compare, tm
     # 超過抗鋸齒的量就不是同一張圖：樣式與像素都紅
     out = compare.compare(_walk(tmp_path / "c", dots=0), _walk(tmp_path / "d", vals=("red", "312.5px"), dots=500), HOSTS)
     assert _classes(out) == ["pixel", "style"]
+
+
+def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
+    grid = ("grid-template-columns", "inline-size")
+    a = _walk(tmp_path / "a", props=grid, vals=("600px", "641px"), width=641)
+    out = compare.compare(a, _walk(tmp_path / "b", props=grid, vals=("585px", "626px"), width=626), HOSTS)
+    assert _classes(out) == ["style"]  # 375 沒有捲軸這回事：照舊紅
+    a2, b2 = _walk(tmp_path / "a2", props=grid, vals=("600px", "641px"), width=641), _walk(tmp_path / "b2", props=grid, vals=("585px", "626px"), width=626)
+    for walk in (a2, b2):
+        (walk / "style" / "001_scene__375-light.json.gz").rename(walk / "style" / "001_scene__641.json.gz")
+        report = json.loads((walk / "report.json").read_text(encoding="utf-8"))
+        scene = report["scenes"]["001_scene"]
+        scene["sty"]["641"] = scene["sty"].pop("375-light")
+        scene["layout"]["641"] = scene["layout"].pop("375-light")
+        (walk / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    out = compare.compare(a2, b2, HOSTS)
+    assert out["real"] == [] and out["noise"] == {"gutter": 1}
 
 
 def test_a_dead_driver_is_the_tool_not_the_pages(compare, tmp_path):

@@ -289,7 +289,7 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
             la, lb = x.get("layout", {}).get(view) or {}, y.get("layout", {}).get(view) or {}
             flip = noise.scrollbar_flip(view, la.get("sw"), lb.get("sw"))
             props = props_of.get(view, set())
-            used_only = bool(props) and view not in broken and all(noise.is_layout_used(p) for p in props)
+            used_only = bool(props) and view not in broken and noise.used_only(props, flip)
             if props:
                 if flip and used_only and dom_same and not unstable:
                     res.noise["gutter"] += 1
@@ -301,7 +301,7 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
                     if cls:
                         res.noise[cls] += 1
                     else:
-                        res.red(sid, "style", {"view": view, "props": sorted(props)[:12], "examples": examples_of.get(view, [])})
+                        res.red(sid, "style", {"view": view, "props": sorted(props), "examples": examples_of.get(view, [])})
             elif flip and view in STYLE_ONLY_VIEWS and not unstable:
                 res.noise["gutter"] += 1
             for f, d in sorted(mine.items()):

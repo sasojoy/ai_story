@@ -18,6 +18,7 @@ GUTTER_PX = 15
 
 LAYOUT_USED_EXACT = {"width", "height", "block-size", "inline-size", "top", "right", "bottom", "left", "perspective-origin", "transform-origin"}
 LAYOUT_USED_PREFIX = ("margin-", "inset")
+GUTTER_ALSO = {"grid-template-columns", "grid-template-rows"}  # the used tracks of a grid move with the 15px; only when the scrollbar is what differs
 
 SHARE_PATTERNS = ((re.compile(r"/zhuan/[A-Za-z0-9_-]+"), "/zhuan/CODE"), (re.compile(r"/zhanji/[A-Za-z0-9_-]+"), "/zhanji/CODE"))
 TOAST = re.compile(r'<div id="toast"[^>]*>.*?</div>', re.S)
@@ -80,6 +81,11 @@ def mask_main(text: str, hosts=None) -> str:
 
 def is_layout_used(prop: str) -> bool:
     return prop in LAYOUT_USED_EXACT or prop.startswith(LAYOUT_USED_PREFIX)
+
+
+def used_only(props, flip: bool = False) -> bool:
+    """Every property is a used value; flip: the two sides disagree about the scrollbar, so the grid tracks count too."""
+    return all(is_layout_used(p) or (flip and p in GUTTER_ALSO) for p in props)
 
 
 def style_class(props, pixels_same: bool, unstable: bool = False) -> str | None:
