@@ -2222,6 +2222,59 @@ def test_the_howto_page_is_the_table_joined_and_slots_look_up_their_functions_wh
     assert "第五十九批換掉的" in guide_words.page(content, season, recruitable=False)
 
 
+# core_content（第二輪第 100 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第100批.md 第二節）：位置固定的內容驗證
+class ContentSlotter(Feature):
+    """只登記內容驗證格的假包。"""
+
+    name = "content_slotter"
+
+    def __init__(self, hooks):
+        self.hooks = tuple(hooks)
+
+    def enabled(self, ctx):
+        return False
+
+    def content_slots(self):
+        return self.hooks
+
+
+def test_a_feature_takes_no_content_slot_by_default_and_the_table_is_the_plan():
+    assert Feature().content_slots() == ()
+    assert features_core.CONTENT_SLOTS == (
+        "insight_scenes", "insight_strong", "faction_choices", "seal", "stances", "errands", "companions", "foreshadows", "promotions", "opportunities",
+        "duels", "gear", "signature_arms", "bounties", "storylines")
+
+
+def test_check_at_only_knows_its_table_and_only_one_package_a_slot(monkeypatch):
+    """打錯字、表外的格、同一格登記兩次（兩包或同一包）都丟 ValueError；每一次都驗登記的全部格，不只驗問的那一格。"""
+    hook = features_core.ContentSlot
+    none = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "DECLARED", ())
+    with pytest.raises(ValueError):
+        features_core.check_at("no_such_slot", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("no_such_slot", none)]),))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("duels", none)]), ContentSlotter([hook("duels", none)])))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("duels", none), hook("duels", none)]),))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+
+
+def test_check_at_reads_declared_not_features_and_passes_what_the_call_site_passes(monkeypatch):
+    """契約測試把 FEATURES 換成 [] 時內容母本可能正好在建：照舊驗（讀 DECLARED）。多傳的參數原樣傳；沒人登記的格跳過。"""
+    seen = []
+    slotter = ContentSlotter([features_core.ContentSlot("gear", lambda content, need, *args: seen.append((content, need, args)))])
+    monkeypatch.setattr(registry, "DECLARED", (slotter,))
+    monkeypatch.setattr(registry, "FEATURES", [])
+    features_core.check_at("gear", "內容", "need", "known")
+    assert seen == [("內容", "need", ("known",))]
+    features_core.check_at("duels", "內容", "need")
+    assert len(seen) == 1
+
+
 # shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）：狀態列與江湖畫面的格
 class Slotter(Feature):
     """只登記狀態列格的假包；open 是 enabled 的答案（狀態列的格不問它）。"""

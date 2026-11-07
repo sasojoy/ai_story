@@ -26,6 +26,7 @@
 | outlock(shell) | server：/api/do/{op} 先接走的鎖外三段式（ops）與放鎖之後要開的背景寫字（jobs），殼啟動時問、不看 enabled、登記的全掛；jobs 的先後是寫死的 OUTLOCK_ORDER。**手冊 3.3 表外**（全部拆包第 69 批，總表第六節第 1 條寫明的跨包機制，見檔尾 shell_server 那一段） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；/ 的 script 標籤（web_scripts、with_scripts；css 的 link 還是 index.html 手寫）；content.py 讀的檔（第 62 批起在包裡的 content/，pack_content；第 63 批起測試內容在包裡的 tests/content/，pack_test_content）。check_content **手冊 3.3 表外**（見下） |
+| content_slots()（ContentSlot）、check_at(slot, content, need, *args) | core_content（第二輪第 100 批）：content.validate 與 figures.check_figures 的原位（單一包的內容驗證，先後由那幾行定，格在 CONTENT_SLOTS；不看 enabled、讀 registry.DECLARED）。**手冊 3.3 表外**（見下面 check_content 底下那一段） |
 
 比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
 - menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
@@ -185,6 +186,7 @@ class FeatureHooks(Protocol):
     def outlock(self, shell: Any) -> Outlock: ...  # shell_server
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
+    def content_slots(self) -> tuple[ContentSlot, ...]: ...  # core_content（第二輪第 100 批）
     # ── 接縫掛鉤（第 11 批；不問 enabled，Shop.menu、Shop.entry、Verb.cell 除外）──
     def on_due(self, ctx: Game) -> None: ...
     def on_away(self, ctx: Game, away_from: float) -> None: ...
@@ -291,6 +293,9 @@ class Feature:
 
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None:
         return None
+
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        return ()
 
     def on_due(self, ctx: Game) -> None:
         return None
@@ -545,6 +550,62 @@ def check_content(content: Content, need: Callable[[bool, str], None]) -> None:
     """載入內容時各包的驗證（content.validate；關著的包照驗：檔案寫壞了早點知道）。"""
     for f in registered():
         f.check_content(content, need)
+
+
+# core_content（第二輪第 100 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第100批.md 第二節）：單一包的內容驗證，位置固定的格。
+# 這些驗證的先後夾在 content.validate、figures.check_figures 的固定幾行之間，先後就是行為（第一個錯誤的全文不准變），接 check_content 會全部挪到
+# check_features 那一處（手冊第 34 批認定第 2 條），所以原位一行換一行、叫 check_at。
+@dataclass(frozen=True)
+class ContentSlot:
+    """一格內容驗證（Feature.content_slots() 回一串）：check(content, need, *原位多傳的) 跟搬之前同一個簽名。包的函式在叫的那一下才照模組屬性找（同 HowtoHook）。"""
+
+    slot: str
+    check: Callable[..., None]
+
+
+# 格的先後由 content.validate、check_figures 那幾行定，這張表不排先後，只擋打錯字與鎖主人。改表先過 PM（同 BUS_ORDER）；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 格              主人                原位多傳的
+# insight_scenes  有所感 sense
+# insight_strong  有所感 sense
+# faction_choices 陣營 faction
+# seal            玉璽 seal
+# stances         人物情誼 companions where, fig（check_figures 的迴圈裡）
+# errands         人物情誼 companions where, fig（check_figures 的迴圈裡）
+# companions      人物情誼 companions
+# foreshadows     軍情 military       known, region_ids, front_ids, counters_written
+# promotions      軍情 military       known
+# opportunities   軍情 military       known, front_ids
+# duels           單挑 bout           known
+# gear            裝備 gear           known
+# signature_arms  裝備 gear           known
+# bounties        懸賞 bounties
+# storylines      長篇奇事 story
+CONTENT_SLOTS: tuple[str, ...] = (
+    "insight_scenes", "insight_strong", "faction_choices", "seal", "stances", "errands", "companions", "foreshadows", "promotions", "opportunities",
+    "duels", "gear", "signature_arms", "bounties", "storylines",
+)
+
+
+def check_at(slot: str, content: Content, need: Callable[[bool, str], None], *args: Any) -> None:
+    """叫 slot 那一格的內容驗證。走 registry.DECLARED、不走 registered()，不看 enabled：搬之前這些驗證不看 FEATURES，契約測試把 FEATURES 換成假的或 []
+    時內容母本可能正好在建（DECLARED 那裡的理由），讀 registered() 就靜靜少驗。slot 不在表上、每一次驗登記的全部格：表外的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 howto_hooks）；沒人登記就跳過（契約測試鎖 15 格都有主）。"""
+    from .registry import DECLARED  # noqa: PLC0415  同 pack_content
+
+    if slot not in CONTENT_SLOTS:
+        raise ValueError(f"內容驗證沒有 {slot} 這一格")
+    own: dict[str, ContentSlot] = {}
+    for f in DECLARED:
+        for hook in f.content_slots():
+            if hook.slot not in CONTENT_SLOTS:
+                raise ValueError(f"{f.name} 登記了內容驗證表上沒有的格 {hook.slot}")
+            if hook.slot in own:
+                raise ValueError(f"內容驗證的 {hook.slot} 登記了兩次（{f.name}）")
+            own[hook.slot] = hook
+    hook = own.get(slot)
+    if hook is not None:
+        hook.check(content, need, *args)
 
 
 def web_files() -> list[str]:

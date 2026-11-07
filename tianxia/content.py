@@ -102,7 +102,7 @@ from .naming import GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
-from .core.content_base import NUMBER_IN_TEXT, TIMETABLE_SIDES, check_traditional as _check_traditional, week7 as _week7
+from .core.content_base import NUMBER_IN_TEXT, TIMETABLE_SIDES, check_line as _check_line, check_traditional as _check_traditional, event_effects, stage_events, week7 as _week7
 
 FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭遇戰的結果：條件 fight_tiers 可以寫的值
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
@@ -715,14 +715,6 @@ def _material_sources(c: Content) -> set[str]:
     return reachable
 
 
-def _check_line(need, where: str, text: str, numbers: str = "") -> None:
-    """玩家看得到、寫死在內容裡的一句：不能是空白、只能用繁體中文、不能寫數字或百分比。numbers 接在「不能寫數字或百分比」
-    後面，說明這一類的句子為什麼不能寫（有所感的場景、心裡話、戰況變化各有一句）。"""
-    need(bool(text.strip()), f"{where}：有空白的句子")
-    need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
-    need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比{numbers}（「{text[:12]}」）")
-
-
 def check_insight_scenes(c: Content, need) -> None:
     """有所感的場景（content/insight_scenes.json，悟意境設計 3.1、4.1）。沒有這個檔就不檢查（探索照舊直接悟）。
     - 每段三到四個做法、屬性各不相同；hints 要是它自己做法裡有的屬性；locations 要是存在的地點、tags 要至少對得上一個地點。
@@ -890,15 +882,6 @@ ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底�
 STORY_ART = re.compile(r"^stories/[a-z0-9_]+$")  # 一條線、段落卡與結局的專屬圖（web/img/stories/<鍵>.webp；頓悟是 dunwu_*）
 
 
-def event_effects(ev: Event) -> list[Effect]:
-    """一則事件寫的每一個效果：選項的成敗、隨口應對的成敗與分岔的每一種後果。"""
-    out = [e for ch in ev.choices for e in (ch.effect, ch.fail_effect)]
-    if ev.free_text is not None:
-        out += [ev.free_text.effect, ev.free_text.fail_effect]
-        out += [e for o in ev.free_text.outcomes for e in (o.effect, o.fail_effect)]
-    return out
-
-
 def event_endings(ev: Event) -> list[Effect]:
     """一則事件了結時真的會套的那幾個效果：每個選項的成套（有檢定或開打的再加敗套）、隨口應對的成敗或分岔每一種後果的成敗。"""
     out = []
@@ -910,21 +893,6 @@ def event_endings(ev: Event) -> list[Effect]:
         if not free.outcomes_only:
             out += [free.effect, free.fail_effect]
     return out
-
-
-def stage_events(c: Content, line) -> dict[str, str]:
-    """一條線的段落事件與它們 next_event 串下去的事件（事件 id → 哪一段）：都算這一條線的，選項可以寫 story。"""
-    owned: dict[str, str] = {}
-    for stage in line.stages:
-        todo = [stage.event] if stage.event else []
-        while todo:
-            eid = todo.pop()
-            ev = c.events.get(eid)
-            if ev is None or eid in owned:
-                continue
-            owned[eid] = stage.id
-            todo += [eff.next_event for eff in event_effects(ev) if eff.next_event]
-    return owned
 
 
 def _fill_story_lines(c: Content) -> None:
@@ -1830,6 +1798,7 @@ def validate(c: Content) -> None:
     from .territory import check_territory  # noqa: PLC0415
     from .conquest import check_conquest_blocks  # noqa: PLC0415
     from .forge_secrets import validate_forge_secrets, validate_named_clash, validate_tier4_named  # noqa: PLC0415
+    from .core.features import check_at  # noqa: PLC0415
 
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
