@@ -64,4 +64,6 @@ python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/c
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `_event_progress` 的本體在 `tianxia/core/pushing.py`（第 80 批）。
 - `check_storylines` 在這一包的 `checks.py`，原位經 `check_at` 叫；`event_effects`、`stage_events` 在 `core/content_base.py`（`_fill_story_lines` 比 validate 早要用）。
-- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。
+
+場景卡（第二輪第 91 批）：`scene` 掛鉤換成登記 `SCENE_ORDER` 的 `own/story`；圖的表上沒有這一格是刻意的（疊在談著上面時文字是答題、圖是人像）。

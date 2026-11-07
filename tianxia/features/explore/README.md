@@ -28,7 +28,7 @@
 
 **舊探索的底（全部拆包第 18 批）**：`explore_base.py` 的本體叫 `Game` 上被測試換掉的名字一律經 `ctx`——`_explore_weights`、`_explore_can`、`_legend_find`、`_wild_foes`（`scripts/same_behavior.py`、`test_treasures`、`test_explain` 在 `Game` 上換掉它們，直接叫模組函式就換不到）；`_explore_outcome`、`_here_squads` 沒人換過，包內直接叫。`Game._practice_tier`、`_wild_foes` 是查詢服務（引導包、輿圖地點詳情問）。`tianxia/training.py` 的分級（`tier_of`、`TIER_WORDS`、`PLACE_LINE`、`is_town`、`PRACTICE`）不進這一包，登記在共用規則層（`registry.SHARED`）。這一批搬進來的程式碰的 `PlayerState` 欄位：`legend_items`（破境丹：修練包用，這一包只加一、不讀）、`explore_seq`（上面已認領）、`sense_misses`（有所感包的）、`faction`（核心）——不新增認領。
 
-**還留在原位的接縫（不是核心的接縫）**：`_act` 裡關著時的舊探索（扣體力、晉升奇遇、序章的舊探索都在那裡）、輿圖（第 49 批成包：`map_base`、`map_state` 叫 `map_mostly` 那兩對在包裡經 ctx 叫，邊界清單拿掉）、探索包回答有所感包的查詢服務 `ctx._rare_boost()`（Game 上一行叫 `outing_rules.rare_boost`：擲特殊頓悟乘它；全部拆包第 24 批，原本 `Game._sense` 直接讀）；換季那一下題壁墨的字照帶（PR #117）原本寫在核心 `sqlite_world.next_season`（PR #117 原本叫 `outing.carry`，可是核心不准 import 包、那時世界那一層的換季沒有掛鉤，合 develop 時把那兩行寫回核心），全部拆包第 25 批開了世界層掛鉤之後交回這一包（世界層 `next` 的 `inscriptions` 那一格，見「認領的欄位」）；收尾的掉落（回體丹 `_pill_find`、殘譜 `_scrap_find`、破境丹 `_legend_find`）照原本的順序在包裡經 `ctx` 叫，接著打探懸賞與玉璽碎片照第 26 批的寫法發事件（`explore_actions.py` 291 `ctx.publish("outing", loc.id)`，核心 `engine._BUS_CORE` 代叫 `bounties.on_explore`，撿碎片那一格第 27 批起由玉璽包登記〔`features/seal/actions.seal_find`〕；見下面「事件的發布點」）；`server` 的 `/api/do/outing`、`outing_say`（鎖外審字）、`outing_tale`（鎖外三段式）、`outing_erase`、`/api/main` 的 `outing` 與 `mostly`、輿圖的 mostly；`bot.py` 的 `outing_segments`、`outing_say`；`bot_policy.take_turn` 那兩段（停著的那一趟先接著走、挑到探索就挑段數出發；分數第 60 批搬進 `bots.py`）；`howto`、`mapdata`（`explore_one` 別名）；網頁一行沒動。`tests/core/boundary_tables.py` 的 `GAME_DELEGATE_CALLERS`（`GAME_DIRECT` 原本那一筆 `_sense` 第 24 批換成查詢服務 `_rare_boost`、拿掉）（探索第 11 批之前 9 對，換掉 7 對之後剩輿圖的兩對，第 49 批輿圖成包拿掉，現在 0 對）逐條寫理由。
+**還留在原位的接縫（不是核心的接縫）**：`_act` 裡關著時的舊探索（扣體力、晉升奇遇、序章的舊探索都在那裡）、輿圖（第 49 批成包：`map_base`、`map_state` 叫 `map_mostly` 那兩對在包裡經 ctx 叫，邊界清單拿掉）、探索包回答有所感包的查詢服務 `ctx._rare_boost()`（Game 上一行叫 `outing_rules.rare_boost`：擲特殊頓悟乘它；全部拆包第 24 批，原本 `Game._sense` 直接讀）；換季那一下題壁墨的字照帶（PR #117）原本寫在核心 `sqlite_world.next_season`（PR #117 原本叫 `outing.carry`，可是核心不准 import 包、那時世界那一層的換季沒有掛鉤，合 develop 時把那兩行寫回核心），全部拆包第 25 批開了世界層掛鉤之後交回這一包（世界層 `next` 的 `inscriptions` 那一格，見「認領的欄位」）；收尾的掉落（回體丹 `explore_actions.pill_find`、殘譜 `explore_base.scrap_find`〔表上留 `_scrap_find` 給測試〕、破境丹 `_legend_find`；第二輪第 99 批）照原本的順序在包裡經 `ctx` 叫，接著打探懸賞與玉璽碎片照第 26 批的寫法發事件（`explore_actions.py` 291 `ctx.publish("outing", loc.id)`，核心 `engine._BUS_CORE` 代叫 `bounties.on_explore`，撿碎片那一格第 27 批起由玉璽包登記〔`features/seal/actions.seal_find`〕；見下面「事件的發布點」）；`server` 的 `/api/do/outing`、`outing_say`（鎖外審字）、`outing_tale`（鎖外三段式）、`outing_erase`、`/api/main` 的 `outing` 與 `mostly`、輿圖的 mostly；`bot.py` 的 `outing_segments`、`outing_say`；`bot_policy.take_turn` 那兩段（停著的那一趟先接著走、挑到探索就挑段數出發；分數第 60 批搬進 `bots.py`）；`howto`、`mapdata`（`explore_one` 別名）；網頁一行沒動。`tests/core/boundary_tables.py` 的 `GAME_DELEGATE_CALLERS`（`GAME_DIRECT` 原本那一筆 `_sense` 第 24 批換成查詢服務 `_rare_boost`、拿掉）（探索第 11 批之前 9 對，換掉 7 對之後剩輿圖的兩對，第 49 批輿圖成包拿掉，現在 0 對）逐條寫理由。
 
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
 - 探索事件池（`content/events/explore_*.json`）的獎勵上限：`tests/core/test_event_reward_caps.py`（只寫 `explore_` 前綴，照檔名挑不到；搬進包之前就是這樣）。
@@ -46,12 +46,13 @@
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（探索那一行與說明頁探索那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
 
-**第 59 批合完重印**：`explore_actions.py` 的過渡剩 `events` 兩行（函式裡的 `howto` 改讀包裡那一份，拉到檔頭）。行動列底下舊探索那一行（`Game.action_notes` 原位）併進這一包的 `Verb.note`：`outing_note` 關著探索一顆時不再回 `None`，寫舊探索那一行（`ctx._explore_weights`、`ctx._insight_blocked`、`rules.day_turn`；engine 那一段只剩問 `act_note`）。
+**第 59 批合完重印**：`explore_actions.py` 的過渡剩 `events` 兩行（函式裡的 `howto` 改讀包裡那一份，拉到檔頭）。行動列底下舊探索那一行（`Game.action_notes` 原位）併進這一包的 `Verb.note`：`outing_note` 關著探索一顆時不再回 `None`，寫舊探索那一行（`ctx._explore_weights`、`explore_actions.insight_blocked`、`rules.day_turn`；engine 那一段只剩問 `act_note`）。
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `outing`、`mostly`。
-- 畫面：`web/outing.js`（走一趟）、`web/explore.js`（`gatherWheel`，全部拆包第 67 批從 `main.js` 切出來，沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/explore.css`（全部拆包第 67 批從 `style.css` 切出來）。
+- 寄放的旗標：`_outing_busy`、`_loot_scale`、`_drop_scale`、`_gate_scale`、`_outing_close`、`_beat`、`_outing_upset` 由這一包的 `scratch()` 宣告（第二輪第 92 批，不進存檔）。
+- 畫面：`web/outing.js`（走一趟）、`web/explore.js`（`gatherSay` 與 `GATHER_SAY_WAIT` 第 104 批從 `app.js` 搬來；`gatherWheel`，全部拆包第 67 批從 `main.js` 切出來，沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/explore.css`（全部拆包第 67 批從 `style.css` 切出來）。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`outing`；`admin_tools`：`outing_erase`。留言（`outing_say`）與遊記（`outing_tale`）是鎖外三段式，第 69 批也搬進來（見下一段）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 

@@ -31,12 +31,13 @@
 - 包裡互相叫直接叫函式（出陣本體、約戰的 `sortie_mode_of`、`sortie_foes`、`sortie_host`、`duel_on`、`duty_credit` 也直接叫）；**只有**測試、腳本換掉的經 `ctx`：`ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(…)`、`ctx._train_push(…)`、`ctx._parley_backing_here()`（並肩出陣，主人人物情誼）、`ctx.sorties_left()`（服務清單三、過渡的 `# sortie` 那一段）。推大勢的共用服務（`push_trend`、`_goals`、`season_scale`、`_carry`、`_push_room`）與共用的字 `BIG_FIGHT_WAIT` 在一、共用服務。
 
 **還留在原位的**（不是核心的接縫，`tests/core/boundary_tables.py` 逐條寫為什麼、哪一批收）：
-- 核心的單打服務 `_squad_encounter`：遇上自家隊伍改操練（`self._drill`）、遊歷打贏推大勢（`self.train_trend_push`；留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，結果交給 `push_trend`，不在發布點上），行尾標「# 留原位：第 26 批」）、序章那一場戰報標題寫「雪恥」（`sortie.on`、`PROLOGUE_FIGHT`：戰報在單打服務裡建、裡面就存檔，從包外改不到；要拿掉得在單打服務開「這一場戰報叫什麼」的位置，交 PM）。軍情 `_order_options` 叫 `_duty_option`（總表第 33 批）。`_action_title` 那張表的 `train`（`Verb.title` 先答，表那一格只是沒有主人時的字）；`duty`（陣營自己的名字）第 57 批接進 `Verb.title`。
-- 「打完之後」（PM 定第 11 批不開掛鉤，第 26 批量過留原位）：`_squad_encounter` 的 as_sortie 打贏回頭叫 `_sortie_rewards`（出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）、約戰開著時不推進度（是查詢，決定記功與推進度走哪一支，不是事件）；行尾標「# 留原位：第 26 批」。
-- `_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，服務清單的寄放段）；輿圖（`map_state`、`_map_foes`：輿圖的線還在飛）。
+- 核心的單打服務（本體在 `core/combat.py` 的 `squad_encounter`，`Game._squad_encounter` 一行委派，第二輪第 98 批）：遇上自家隊伍改操練（`self._drill`）、遊歷打贏推大勢（`self.train_trend_push`；留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，結果交給 `push_trend`，不在發布點上），行尾標「# 留原位：第 26 批」）、序章那一場戰報標題寫「雪恥」（判斷走 `territory.on`，`sortie.on` 整個函式就是它；字 `PROLOGUE_FIGHT` 在 `core/services.py`，`rules.py` 只 import 同一個物件；戰報在單打服務裡建、裡面就存檔，「這一場戰報叫什麼」的位置不開，第二輪總表裁決第 2 條）。軍情 `_order_options` 叫 `_duty_option`（總表第 33 批）。`_action_title` 那張表的 `train`（`Verb.title` 先答，表那一格只是沒有主人時的字）；`duty`（陣營自己的名字）第 57 批接進 `Verb.title`。
+- 「打完之後」（PM 定第 11 批不開掛鉤，第 26 批量過留原位）：`core/combat.py` 的 `squad_encounter` as_sortie 打贏回頭叫 `_sortie_rewards`（出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）、約戰開著時不推進度（是查詢，決定記功與推進度走哪一支，不是事件）；行尾標「# 留原位：第 26 批」。
+- `_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，這一包的 `scratch()` 宣告，第二輪第 92 批；服務清單的寄放段）；輿圖（`map_state`、`_map_foes`：輿圖的線還在飛）。
 - `server`：`main_view` 的 `front`（`sortie`、`sortie_card`、`sorties` 第 66 批改走 `status_slots`，位置在 `STATUS_ORDER`）、`may_judge_fight`、`MAIN_ACTIONS` 的 `sortie_go`、`sortie_answer`、`sortie_join` 與 `_moves`、通知 `current_notices(..., world.sortie_duels())`。
 - 假人：`act:train`、`act:duty` 的分數與 `duel_play` 第 60 批搬進 `bots.py`（`Verb.bot`）；`Game._duel_power` 沒人叫了，拿掉（`duel_play` 直接叫 `duel_actions.duel_power`；委派 528 → 527）。移動分數在移動包，`bot.py` 約戰開著時把 `act:train` 換成 `sortie:go` 那兩行；`bot_policy` 的出陣那幾段（`_train_value`〔`game.train_trend_push`〕、`_sortie_win`〔問 `bots.foes`〕、`_outmatched`、`_focus_hop`……）與 `_duel_value`、`take_turn` 那幾行，`bot.duel_go`／`duel_moves`、`bot_runner._duel_tick`——照舊叫 Game 的公開方法與 `sortie_duel` 這個舊名。
-- 舊模組：`howto` 的 `duel_line`、`duel_lines`、`CONQUEST_JOIN_DUEL`，`notices._duels`、`DUEL_SOURCES`，`atlas.SIEGE_AREA_DUEL`，`annals.DUEL`，`biography` 的 TIES。網頁一行沒動。
+- 舊模組：`howto` 的 `duel_line`、`duel_lines`、`CONQUEST_JOIN_DUEL`，`notices._duels`、`DUEL_SOURCES`，`order_cards.SIEGE_AREA_DUEL`，`annals.DUEL`，`biography` 的 TIES。網頁一行沒動。
+- 第二輪第 98 批起 `GAME_DIRECT` 是空的，`_squad_encounter` 那 7 對搬到 `CORE_DELEGATE_CALLERS`，鍵是 `("combat.squad_encounter", <委派>)`；下面是當時的數字。
 - `tests/core/boundary_tables.py` 的 `GAME_DIRECT`、`GAME_DELEGATE_CALLERS` 逐條寫理由（第 2 批時 11 個、31 對；第 11 批之後出陣與約戰剩 `GAME_DIRECT` 7 個〔`_act`、`_squad_encounter`、`_train_squad_ids`、`_duty_option`、`_duty`、`map_state`、`_map_foes`〕、`GAME_DELEGATE_CALLERS` 17 對；第 17 批之後剩 `GAME_DIRECT` 3 個〔`_squad_encounter`、`map_state`、`_map_foes`〕、`GAME_DELEGATE_CALLERS` 11 對：拿掉 9 對、加 `(_squad_encounter, _drill)`、`(_squad_encounter, train_trend_push)`、`(_order_options, _duty_option)` 3 對）。
 
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節；dev/sortie-1 審查用突變量過）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
@@ -87,3 +88,5 @@
 - `_carry`、`push_trend`、`_deed_points` 的本體在 `tianxia/core/pushing.py`（第 80 批），`Game` 留一行委派。
 - 假人：`duel_moves`、`TRAIN_SCORE`、`DUTY_SCORE` 第 89 批搬進 `bots.py`，舊名 re-export；`_crippled`、`_cannot_push`、`_outmatched`、`_train_value`、`_bounty_here`、`ORDER_SCORE`、`BOUNTY_SCORE`、`PRACTICE_SCORE` 在共用層 `bot_base`，一律寫 `bot_base.X`；`foes` 拿掉，`bot_base._sortie_win` 問 `Game._sortie_foes`。
 - 過渡：`bots.py` 不再 import `bot`、`bot_policy`；`duel_actions.py` 改讀核心 `core/name_base.active`（第 87 批），`train_actions.py` 的 `events` 是共用規則層，這兩處不再算過渡。另外要跑 `tianxia/features/military/tests/test_opportunities.py`（`DUTY_SCORE`）。
+
+`_squad_encounter` 序章那一場的標題由 `same_behavior` 的 `redress` 一軌走到（第二輪第 98 批新開）。

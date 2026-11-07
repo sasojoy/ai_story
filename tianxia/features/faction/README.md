@@ -11,10 +11,10 @@
 
 ## 裡面有什麼
 
-- `join_actions.py`：投靠與拜入門派——`sect_options`（`_sect_options`）、`sect_choose`（`sect:` 端出那一則事件）、`ally_options`、`faction_step`（投靠兩步：按、確定／再想想；選邊）、`bot_lean`、`join_lean`（`_join_lean`）、`faction_prompt`（`_faction_prompt`）；
+- `join_actions.py`：投靠與拜入門派——`sect_options`（`_sect_options`）、`sect_choose`（`sect:` 端出那一則事件）、`ally_options`、`faction_step`（投靠兩步：按、確定／再想想；選邊）、`bot_lean`、`join_lean`（`_join_lean`）、`ally_scene`、`faction_scene`（`SCENE_ORDER` 的 `own/ally`、`own/faction`，第二輪第 91 批）；
   加 `pending_options`（選單「接管整個選單」的三段：拜入要依附的門派之後還沒挑一邊、投靠確認、叛投確認；原本寫在 `_everyday_options` 裡）與 `SECT_LABEL`（原本寫在 `engine.py`）。
-- `lean_actions.py`：改幫三個——`lean_options`（`_lean_options`）、`lean_anytime`（`_lean_anytime`：選單上沒有它時照樣收）、`lean_step`。
-- `defect_actions.py`：叛投——`defect_step`（兩步：按、確定／再想想）、`left_names`、`leave_behind`、`defect_targets`；加 `defect_options`（`_everyday_options` 的叛投迴圈）與 `scene`（`_own_scene_text` 叛投確認畫面那一段）。
+- `lean_actions.py`：改幫三個——`lean_options`（`_lean_options`）、`lean_anytime`（選單上沒有它時照樣收；由 `MENU_ORDER["stale"]` 的 `lean` 格 `stale_cell` 叫，第二輪第 92 批）、`lean_step`。
+- `defect_actions.py`：叛投——`defect_step`（兩步：按、確定／再想想）、`left_names`、`leave_behind`、`defect_targets`；加 `defect_options`（`_everyday_options` 的叛投迴圈）與 `scene`（`SCENE_ORDER` 的 `own/defect`，叛投確認畫面）。
 - `defection.py`（原 `tianxia/defection.py`，舊名是別名）：叛投的規則——能不能叛投、去哪些槽、確認畫面的話（`prompt`）、`clear_progress`／`_clear_own`／`defect`。
 - `ending_actions.py`：季末與三方卡——`season_grant`（換季開場照上一季論功發起手資源與稱號）、`four_wins`、`ending_card`、`tier_outlook`、`tier_hint`、`gentry_now`、`sides_card`。
 - `bots.py`：假人的分數（原本 `bot_policy.score` 的 `defect`、`sect` 兩段；`faction:` 原本落到最後的 `None`）：三個前綴一律回 `None`。投靠與確認仍走 `bot_policy._toward_faction`（不經 `score`）。
@@ -31,12 +31,12 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 上的名字掛在 `game_api.py` 的表（`_season_grant` 第 55 批換成 `season.grant` 那一格，拿掉）：`_sect_options`、`_lean_options`、`_lean_anytime`、`_join_lean`、`_faction_prompt`、`_four_wins`、`ending_card`、`tier_hint`、`sides_card`，加三個新的——
-`_faction_pending_options`（選單接管整個選單的待確認三段，位置固定）、`_defect_options`（選單的叛投迴圈）、`_defect_scene`（叛投確認畫面的場景）。`_ally_options`、`_left_names` 沒有原位的呼叫端，不留委派。
+`Game` 上的名字掛在 `game_api.py` 的表（`_season_grant` 第 55 批換成 `season.grant` 那一格，拿掉）：`_sect_options`、`_lean_options`、`_join_lean`、`_four_wins`、`ending_card`、`tier_hint`、`sides_card`，加三個新的——
+`_faction_pending_options`（選單接管整個選單的待確認三段，位置固定）、`_defect_options`（選單的叛投迴圈）。`_ally_options`、`_left_names` 沒有原位的呼叫端，不留委派。
 其餘 `_faction_step`、`_bot_lean`、`_lean_step`、`_defect_step`、`_leave_behind`、`_tier_outlook`、`_gentry_now` 只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 的 `faction`／`defect`／`sect` 與 `_action_title` 的 `faction`／`defect`（`Outcome`）、`bot_policy.score` 的 `defect`／`sect`、`bot.py` 的 `defect:`／`faction:lean:` 排除（`bot_always`）、叛投兩格（`_CLEAR_CORE`、`_DEFECT_AFTER_CORE` 拿掉）。
 還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）。整季機器人 `sect:` 看過才排除（條件式）第 60 批搬成這一包的 `Feature.bot_idle`。
-核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`_own_scene_text` 選邊與投靠確認的場景判斷（叛投那一段已是 `_defect_scene` 委派）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。
+核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。選邊、投靠、叛投確認的場景第二輪第 91 批登記 `SCENE_ORDER`，核心不再讀這幾個欄位做場景判斷。
 包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services_list.md` 二、查詢服務 `# faction`）。
 叛投確認畫面問押糧經核心的 `core/convoy_base.py`（第 35 批 PM 認定第 3 條認了，照 `omen_base` 前例；它只讀軍情包認領的 `PlayerState.convoy`、不寫，`held(state)` 一個函式）。
 
@@ -87,4 +87,4 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py` 多 `_toward_faction`（第 101 批）。`join_actions.py` 的 `events.event_candidates` 第 87 批起是共用規則層，不算過渡。
-- `check_faction_choices` 在這一包的 `checks.py`，原位經 `check_at` 叫（第 100 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。
+- `check_faction_choices` 在這一包的 `checks.py`，原位經 `check_at` 叫（第 100 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

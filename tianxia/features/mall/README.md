@@ -6,7 +6,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`MallFeature`）：`enabled`＝`Config.mall.enabled`、`status`（江湖畫面的 `mall`）、`admin_tools`、`routes`、`check_content`、`on_own_turn`（封測發放，全部拆包第 11 批的接縫掛鉤）；`web`＝`mall.js`、`mall.css`（在 `web/`，第 3 階才搬進包）、`content`＝`mall.json`（在 `content/`） |
+| `__init__.py` | 登記（`MallFeature`）：`enabled`＝`Config.mall.enabled`、`status`（江湖畫面的 `mall`）、`admin_tools`、`routes`、`check_content`、`on_own_turn`（封測發放，全部拆包第 11 批的接縫掛鉤）；`web`＝`mall.js`、`mall.css`（在 `web/`，第 3 階才搬進包；形象段沒寫字級的規則第 104 批搬到 `web/looks.css`，字級與電腦寬留 `mall.css`）、`content`＝`mall.json`（在 `content/`） |
 | `rules.py` | 純規則（原 `tianxia/mall.py`；那個名字留成別名給測試） |
 | `rename.py` | 易名帖換名號的規矩（`clash`；`swap` 在核心 `tianxia/core/swap.py`） |
 | `actions.py` | 原本 `Game` 上的 `mall_*`、`admin_mall_*`（全部拆包第 58 批委派全拿掉，路由與測試直接叫這裡）；`purchase` 回 `Receipt`（`lines`、`bought`、`already`，路由從回傳值拿），`buy` 只要句子 |

@@ -12,9 +12,9 @@
   `donate_options`（軍需官那一串）、`donate_choice`（`donate:back`、`donate:<素材>:<個數>`）、`donate`、`donate_items`（寫一則「捐軍備」紀錄）、`take`（收下：扣背包、記今天的點數）、
   `credit`（捐素材、捐銀兩共用：軍備存量、貢獻、推大本營那一條線）、`armament_view`（江湖頁的陣營軍備存量）。
 - `silver_actions.py`：原本 `Game` 上的 8 個方法——`silver_options`（打點那一間店裡的幾樣）、`bribe_targets`、`silver_act`（五樣的分派）、`close_dadian`、`bribe`、`furnace`、`mentor`、`silver_donate`。
-  `_at_clinic_town`（附錄甲裁核心）留在 `Game`，包裡經 ctx 叫。
+  `at_clinic_town` 本體在 `silver_actions.py`、`at_own_base` 在 `donate_actions.py`（第二輪第 99 批，蓋掉舊的附錄甲裁核心），表上掛 `_at_clinic_town`、`_at_own_base`，店面那一頁（本包 `shop_view.py`）經 ctx 問。
 - `bots.py`：假人看到 `donate:`、`dadian:` 的選項怎麼按（原本 `bot_policy.score` 的 dadian、donate 兩段）——萬一停在店裡只會離開。`act:donate`、`act:dadian`（第 60 批接進 Verb）：`bot` 回 None（假人不進）、`bot_skip`（整季機器人不按）；`silver_donate`、`mentor`、`furnace`、`buy_legend`、`bribe:` 不寫，照舊落到 `ACT_SCORES` 的 0.0（隨機挑得到，不是不按）。
-- 數字與字不在包裡：`tianxia/silver.py`（銀兩出口）、`tianxia/economy.py`（捐軍備）、店面那一頁的資料 `shopview.dadian_view`、`donate_view` 中 `shopview` 還沒收進 `registry.SHARED`（邊界測試的 SHARED_LATER），是過渡 import。
+- 數字與字不在包裡：`tianxia/silver.py`（銀兩出口）、`tianxia/economy.py`（捐軍備）、店面那一頁的資料在本包 `shop_view.py`（`dadian_view`、`donate_view`，第二輪第 93 批，`Feature.shop_view` 認 `donate`、`dadian`）。
 - 掛鉤：`prefix = ("donate", "dadian")`；`choose` 接 `donate:*`、`dadian:*`（標題在動作之前拿）；`bot_pick` 問 `bots.score`；`bot_always = ("donate:", "dadian:")`；
   `enabled`＝捐軍備開著、銀兩出口開著、或此刻還坐在其中一間店裡（開關在坐著時被關掉，離開還按得到）。
   `shops()` 兩間店（`donate`、`dadian`：坐在店裡的選單、哪一間開著、動身與此地不開了收店；`entry` 回 None）；`verbs()` 六個 act 子動詞（`donate`、`dadian`、`silver_donate`、`mentor`、`furnace`、`buy_legend`；
@@ -37,7 +37,7 @@
 
 - `_everyday_options` 叫 `_donate_option`、`_silver_options`：「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後，順序是行為（`/api/main` 的選項一顆一顆逐位元組）；若放進 `Shop.entry` 會跑到療傷前面。
 - `act:bribe:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`（走銀兩四樣同一支 `press`），四樣的標題也接進 `Verb.title`，核心不再有銀兩那幾行。
-- `shop_view` 叫 `_bribe_targets`。
+- 店面那一頁（本包 `shop_view.py`）直接叫 `silver_actions.bribe_targets`（第二輪第 93 批）；`game_api.py` 的 `_bribe_targets` 表項之後沒人叫，要清另排。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
 - 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。點擊分派第二輪第 84 批進這支 js（`registerClicks`）；留在 `app.js`（殼）的：店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子在 `web/shop.css`（第 86 批整段切出來，排在 `style.css` 正後面；殼，五包共用）。
 
@@ -60,7 +60,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 1 處（全部拆包第 40 批合完重印）：`donate_actions` 到 `shopview`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
+過渡 import 0 處：`donate_actions` 第二輪第 93 批改讀 `core/shop_base.attribute_rank`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `outlets`（今天捐過的照帶，不看開關）。
 
@@ -84,3 +84,5 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py` 多 `donate_want`、`donate_spare`（第 101 批）；`econ_day` 走服務清單。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+
+- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。

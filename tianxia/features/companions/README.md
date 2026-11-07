@@ -31,7 +31,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 上的名字掛在 `game_api.py` 的表（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；第 66 批拿掉 `talk_view`、`errands_view`：`/api/main` 改走 `status_slots`）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
+`Game` 上的名字掛在 `game_api.py` 的表（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；第 66 批拿掉 `talk_view`、`errands_view`：`/api/main` 改走 `status_slots`）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`affinity_text`（談話那張人物卡，測試直接叫；場景文字與人像第二輪第 91 批改登記 `SCENE_ORDER` 的 `own/talk`、`art/talk`，本體 `talk_actions.talk_scene`、`talk_art`）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 這兩格是字（第 98 批，邊界名單 `GAME_TABLE_TEXTS`；`test_ranks` 讀）；`_persuade_said`、`_talk_turn`、`_talk_said`、`_parley_decision` 由這一包的 `scratch()` 宣告（第二輪第 92 批，不再是 `Game` 的類別屬性；`_talk_turn`、`_talk_said` 仍由 `Game.choose` 寫）。`talk_actions.overhear`（第 99 批從 `Game` 搬來，人物原字原句引出口訣；表上留 `_overhear` 給測試）。
 
 往來紀錄留在殼的：`TALK_LOG`、`talk_store`、`_log_talk` 與 `server.act` 動作前後那兩行（鎖外包裝；`after_action` 拿不到動作前的那一份，接不了掛鉤）。殼的 `from tianxia import talk_log` 走別名不改；路由一律當下讀 `shell._game`、`shell.talk_store`、`shell.name_key`、`shell.figure_face`（測試換掉的看得到）。
 
@@ -39,10 +39,10 @@
 
 - 選單（`_everyday_options` × `_recruit_options`、`_errand_options`、`_talk_options`、`_parley_road_option`）：選項的順序算行為，`options` 掛鉤在體力玩法之後、`menu` 掛鉤要照包排（總表第 55～57 批）。
 - 同步（第 55 批起是 `sync.deliver` 的 `stances`、`mail` 兩格，委派拿掉）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
-- `act:recruit`、`act:recruit:<id>`：第 57 批接進 `Verb`（同一個 `Verb` 的 `run`、`title` 與 `tail_run`、`tail_title`；`_action_title` 的招募那一格跟著搬）。`choose` 的 FB-363（兩個分頁搶人，回 `Refused`，那個類別只在 engine、包 import 不到）留在 `Game.choose` 前段（第 57 批計畫第四節，位置不動）。
+- `act:recruit`、`act:recruit:<id>`：第 57 批接進 `Verb`（同一個 `Verb` 的 `run`、`title` 與 `tail_run`、`tail_title`；`_action_title` 的招募那一格跟著搬）。FB-363（兩個分頁搶人，回 `Refused`）第二輪第 92 批改登記 `MENU_ORDER["stale"]` 的 `recruit` 格（`actions.stale_cell`）。
 - `choose` 前段：勸降只叫出輸入框第 57 批換成 `MENU_ORDER["quick"]` 的 `errand` 那一格（委派 `_errand_ask` 拿掉）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
-- 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
+- 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字與人像：登記 `own/talk`、`art/talk`，位置在 `SCENE_ORDER`（第二輪第 91 批）。
 
 別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式第 69 批搬進這一包的 `routes.py`，`server` 留一行包裝）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
 
@@ -54,7 +54,7 @@
 - 第 45、51 批都合完重印 **0 處**：`letters.py`、`parley.py` 讀懸賞榜改讀核心 `core/bounty_base`（第 45 批）；`companion_agent.py` 讀的 `seal_acts` 留原名收進共用規則層（第 51 批），改註。
 - **`letters._feast_letter` 問 `figure_life.feast_invites`**：書信不能 import 宴客包（包 import 包）；第 40 批 `figure_life` 收進共用規則層，`feast_invites` 改讀核心的 `core/feast_base`（宴客包 re-export 同一批），設宴改成世界層 `life` 那一格（宴客包登記），`figure_life` 不再 import 宴客包。
 - `figure_life.spread` 記道賀走核心 `services.note_cheer`（`letters.note_cheer` 是同一個函式）；`_settle_partings` 是決戰包的查詢服務（服務清單二）。
-- 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `_deed_points`、`_apply`、`note_cheer`、`CHEERS_KEEP`（第 19 批）、`SAY_OPTION`、`PLAN_OPTION`、`ROAD_SAY`、`TEXT_TALKS`、`SAY_MAX`、`say_text`、`BACKED_LINE`、`PLAN_MISS`（第 20 批，原本在 `engine.py`、`parley.py`）；二、查詢 `_settle_partings`、`_recruit_target`、`_recruitable_here`、`_parley_backing_here`；三、過渡 `_can_meet`、`_socialize_figure`、`_count_talk`（交友求見第 21 批）、`_depart`（移動）；四、寄放 `_persuade_said`、`_parley_decision`。
+- 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `_deed_points`、`_apply`、`note_cheer`、`CHEERS_KEEP`（第 19 批）、`SAY_OPTION`、`PLAN_OPTION`、`ROAD_SAY`、`TEXT_TALKS`、`SAY_MAX`、`say_text`、`BACKED_LINE`、`PLAN_MISS`（第 20 批，原本在 `engine.py`、`parley.py`）；二、查詢 `_settle_partings`、`_recruit_target`、`_recruitable_here`、`_parley_backing_here`；三、過渡 `_can_meet`、`_socialize_figure`、`_count_talk`（交友求見第 21 批）、`_depart`（移動）；四、寄放 `_persuade_said`、`_talk_turn`、`_talk_said`、`_parley_decision`（這一包的 `scratch()` 宣告）。
 
 ## 測試
 
@@ -84,7 +84,7 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/companions.js`（託付的勸降那一句；書信、點人物、對話、往來紀錄、`figTalk` 第 67 批從 `main.js` 切進來）、`web/companions.css`。
+- 畫面：`web/companions.js`（託付的勸降那一句；書信、點人物、對話、往來紀錄、`figTalk` 第 67 批從 `main.js` 切進來；`sayLine` 第 104 批從 `app.js` 搬來）、`web/companions.css`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `say_max`、`companions`（`talk_actions.main_slot`：`talk`、`figure`、`errands`，`face` 經 `frame.shell.figure_face`）、`letter`。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`letter_read`、`letter_decline`；`menxia_actions`：`join`、`leave`、`release`。名冊的核對（`api_menxia_do` 在鎖裡先查 `roster_lines`）留在殼；勸降（`persuade_text`）第 69 批進 `routes.py`（見下一段）。 `join`、`leave`、`release` 的 `Game` 的委派上掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
@@ -102,4 +102,4 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `_deed_points` 的本體在 `tianxia/core/pushing.py`（第 80 批）。
 - `check_stances`、`check_errands`、`check_companions` 在這一包的 `checks.py`，由 `figures.check_figures` 的迴圈與 `validate` 經 `check_at` 叫（第 100 批）。
-- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

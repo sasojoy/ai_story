@@ -33,6 +33,7 @@
 
 - `player_fields`：`mingtie`、`mingtie_box`、`mingtie_day`、`mingtie_made`、`mingtie_sent`、`mingtie_hidden`、`taunt_muted`、`gift_day`、`gifts_today`。
 - `carried`：全部（自己的名帖、收到的、檢舉過的、不接誰的挑釁話、一天的次數都跨季；第 55 批起是 `season.carry` 的 `peers` 那一格〔`actions.carry_season`〕）。
+- `Game.peer_brief` 由這一包的 `scratch()` 宣告（第二輪第 92 批，不進存檔）。
 - 不認領：`title_book`（過去幾季掙到的頭銜，名帖印得出來）——換季時要加上這一季掙到的，不是原樣帶走，由 `on_season_start` 接；`tagalong`（結伴同行的跟隨）屬移動包。
 - 全服帳（`SharedWorldState`，不分季）：`mingtie_reports`、`mingtie_removed`、`mingtie_cleared`；這一季的 `WorldState`：`invites`、`gift_tally`。第 38 批的 `spar_tally`、`discuss_tally`、`raids`、`raided`（混戰、設伏共用）、`clashes`、`clashed`（混戰寫、截殺的拒絕話讀）：資料在核心、不認領。沒有 `PlayerState` 欄位，資料表沒改。
 

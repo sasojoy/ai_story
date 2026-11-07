@@ -53,3 +53,5 @@
 - `bots.py`：假人的分數 `score`（原 `bot_policy.score` 的 `move:` 那一段）與往哪裡走的常數、下一站（`_home`、`_front_*`、`_losing_front`、`_summons_hop`、`_bounty_hop`、`_order_hop`、`_order_hop_now`、`_focus_hop`、`_clinic_score`、`clinic_hop`、`CLINIC_AT`）第 89 批從 `bot_policy`、`bot` 搬來，舊名 re-export；別包也讀的走共用層 `bot_base`，一律寫 `bot_base.X`，換 `bot_base` 的才打得到。`next_hop` 第 101 批進 `bot_base`，移動包不留這個名字。
 - 過渡：`bots.py` 不再 import `bot`、`bot_policy`；`_focus_hop` 經 `game.sorties_left()` 碰出陣包（`CROSS_PACKAGE_CALLS`）。
 - 另外要跑（改 `bots.py`）：`tests/acts/test_clinic.py`、`tests/acts/test_conquest_flip.py`、`tests/battle/test_fronts.py`、`tests/figures/test_gentry_allied.py`、`tests/figures/test_promotions_high.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+
+在路上的場景（第二輪第 91 批）搬進 `road_actions.road_scene`，登記 `SCENE_ORDER` 的 `own/road`。

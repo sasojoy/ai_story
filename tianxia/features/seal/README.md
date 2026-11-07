@@ -105,4 +105,4 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - 舊模組 → 包少 `skillview`（`gear_rows` 第 88 批改讀核心 `seal_base.on`）。這一包多登記 `admin` 表的 `seal` 格（第 90 批）。
-- 另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。
+- 另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。

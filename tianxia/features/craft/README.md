@@ -17,7 +17,7 @@
 
 **`Game` 上的名字掛在 `game_api.py` 的表**（第二輪第 72 批之前是一行委派：19 個）：16 個搬進 `actions.py` 的（`forge_request`、`forge`、`forge_line`、`forge_preview`、`forge_picks`、`create_begin`、`create_pose`、`create_request`、`create_intent`、`create_reread_request`、`create_reread`、`create_reroll`、`create_back`、`create_name`、`create_cancel`、`create_view`；這一包 `routes.py` 的 `menxia_actions`、`prepare_forge`、`create_intent`、`create_reread`（A、C 段照舊經 `Game`），假人 `bot_policy.tend_arts`、`bot.create_art`，引導包 `ctx.forge`，測試在叫），加三個查詢服務 `_create_on`、`_create_allowed`、`_create_price`（引導包碰到才說的 `h_create` 問：原本引導包直接 import `create`；服務清單二、查詢服務 `# craft`）。包裡互相叫直接叫函式；經 `ctx` 的是服務清單上的共用服務（`_log`、`_xinde`、`_menxia_entry`、`_save_season`、`_quick_client`、`_preparing`、`_solved_secrets`、`_note_solved`、`forged`、`forged_thing`、`secret_solved`、`client`）。規則照模組屬性叫（`create.set_intent`……：測試換掉模組上的，這裡照樣打得到）。
 
-**接到掛鉤的**：`_drop_stale_references` 的 `create.prune(s, c)` → `on_drop_stale`（原本接在 `arts_mod.prune` 之後、`p.naming` 之前，現在接在最後；`create.prune` 只動 `p.creating`，中間到 `features_core.on_drop_stale` 沒有任何一行讀 `creating`，結果不變）；`/api/forge_line` → `routes`。
+**接到掛鉤的**：首創名望回饋 `actions.deliver_echoes` 登記 `sync.deliver` 的 `echoes` 格（`seams()`，第二輪第 99 批）；`_drop_stale_references` 的 `create.prune(s, c)` → `on_drop_stale`（原本接在 `arts_mod.prune` 之後、`p.naming` 之前，現在接在最後；`create.prune` 只動 `p.creating`，中間到 `features_core.on_drop_stale` 沒有任何一行讀 `creating`，結果不變）；`/api/forge_line` → `routes`。
 
 **還留在原位的**（`tests/core/boundary_tables.py` 的 `GAME_DELEGATE_CALLERS` 逐條寫理由）：
 - 狀態列的 `create` 那一格：`status_slots`（第 66 批；位置在 `STATUS_ORDER`）。`create_view` 委派留給測試。

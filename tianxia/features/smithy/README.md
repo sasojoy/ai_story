@@ -15,6 +15,7 @@
 - `gear_actions.py`：`repair_item`、`temper_item`、`gear_work`（修練頁裝備庫那一列的修與淬煉，走 `/api/menxia/…`）。
 - `divine_actions.py`：`name_divine`、`bind_art`（`@_not_while_preparing` 裝飾器留在 `Game` 的委派上）。
 - `clue.py`：`smith_clue`（鐵匠順口；包裡其餘各檔一律經 `ctx._smith_clue` 叫，因為測試換掉 `Game._smith_clue`）。
+- `shop_view.py`：鐵匠鋪那一頁（第二輪第 93 批從 `shopview` 切來：`forged_card`、`next_rule`、`smith_line`、`trade_view`，`page` 是組法），`Feature.shop_view` 認 `smith`。
 - `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）與動作表（見最後一段）。
 - `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數第 60 批搬來（`enter`，`Verb.bot` 問；`bot.pick` 不按是 `Verb.bot_skip`）；`bot_policy._smith_want` 名字留著（一行委派到這裡，測試讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
 - `web/smithy.js`（檔照手冊 G9 在 `web/`，`web = ("smithy.js",)`）：鐵匠鋪的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，519 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——`smithHtml`、架上 `shelfHtml`、打造 `forgePageHtml`（看火候 `furnace*`、就地熬 `brew*`、開爐與出爐卡 `revealHtml`、神器定名 `divineFormHtml`）、裝備庫 `rackHtml`、素材頁 `tradeHtml`、神器頁 `divineHtml`。點擊分派第二輪第 84 批進這支 js（`registerClicks`）；留在 `app.js`（殼）的：店面的框（`SHOP_ATTR`、`shopHtml`、`shopNoteHtml`、`shopDo`、`renderShop`、`shopPolled`）、`reduceMotion`。合成流程的樣子在 `web/smithy.css`（第 67 批，載入先後在 `index.html`）；架上的樣子在 `web/shop.css`（第 86 批整段切出來；殼，五包共用）。
@@ -34,6 +35,8 @@
 **店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 41 批計畫 1.9 量過，第 56 批選單收接縫定案，計畫第四節）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`smith_page`、`smith_rule` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 smith 分支與 `sync.close`、`stale.mid` 的收店（第 55 批）不動。
 
 核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）；**全部拆包第 40 批（核心批）收了**：五個純函式連同它們讀的常數（`ARMOR_KIND`、問句與回報那幾句）與 `here` 抽到核心小模組 `tianxia/core/smith_base.py`（照 `omen_base`），`smithing.py` 照原名 re-export 同一個物件；`engine` 的 `choose`、`_drop_stale_references`、`sync` 三處改讀 `smith_base`、不再 import `smithing`，邊界測試那三筆 `GAME_DIRECT` 還原（11 → 8）、`GAME_IMPORTS` 拿掉 `tianxia.smithing`（84 → 83）。
+
+第二輪第 92 批：`choose` 那一處不再讀 `smithing`（切頁不寫、打造併成一則、開爐只留結果改由 `Outcome` 三格給：`shelf_actions.page_quiet`、`forge_merges`、`forged_fold`），只剩 `_drop_stale_references`、`sync` 兩處；`smith_result` 由這一包的 `scratch()` 宣告。
 
 ## 測試
 
@@ -64,7 +67,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 6 行（shopview 兩處、fusion 兩行、bot 兩處〔`want`、第 60 批的 `enter`〕；邊界測試的「包 → 舊模組」列 6 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
+過渡 import 共 6 行（shopview 兩處〔第二輪第 93 批清了〕、fusion 兩行、bot 兩處〔`want`、第 60 批的 `enter`〕；邊界測試的「包 → 舊模組」列 6 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
 
 **行狀記一筆 import 核心**（第 41 批合併時改，第 41 批 PM 認定第 10 條）：開發時 `smithing` 是 `from tianxia import annals, fusion` 一行；第 29 批之二把行狀拆兩半之後，舊名 `tianxia.annals` 是指到列傳包 `standing.py` 的別名（經別名 import 就是包 import 包，邊界測試擋），合併時拆成兩行：`from tianxia import fusion`（過渡）與 `from tianxia.core import annal_base as annals`（核心本體，不算過渡；包裡只用 `annals.note`、`annals.DEED`，都在記一筆那一半）。
 
@@ -73,6 +76,8 @@
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「鐵匠鋪與神器」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`smith_forge`、`smith_sell`、`smith_upgrade`、`smith_furnace`；`menxia_actions`：`name_divine`、`bind_art`、`repair_item`、`temper_item`。`api_do` 回 `forged` 那一格（`op == "smith_forge"`）留在殼。 `name_divine`、`bind_art` 的 `Game` 的委派上掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 
@@ -83,4 +88,4 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py`：`smith_want`、`forge_step`、`_forge_plans`、`forge_ready`、`FORGE_SILVER_RESERVE`（第 89 批）、`visit_smith`、`trade_want`、`trade_at_smith`、`keep_book_names`、`_name_originals`、`TIER3_WANT`、`TIER4_WANT`、`TRADE_SILVER_RESERVE`、`DIVINE_NAME_CHANCE`（第 101 批）從 `bot` 搬來，舊名 re-export，換的要換 `smithy.bots` 那一份。
 - `BIND_LINE`、`NAMED_LINE`、`bind_options`、`bound_alive`、`bond_lines` 第 88 批搬進 `core/smith_base`（`art_cards.gear_rows` 要讀），寫的 `bind_problem`、`bind_art` 留包裡，包 re-export。
-- 過渡 import：`bots` → `bot` 兩處第 89 批清掉，`fusion` 兩行第 87 批起是共用規則層，只剩 `shopview` 兩處。另外要跑 `tests/gear/test_armor.py`（`bot.smith_want`）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+- 過渡 import：`bots` → `bot` 兩處第 89 批清掉，`fusion` 兩行第 87 批起是共用規則層，`shopview` 兩處第 93 批也清了。另外要跑 `tests/gear/test_armor.py`（`bot.smith_want`）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

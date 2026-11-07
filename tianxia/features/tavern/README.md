@@ -28,13 +28,15 @@
 - 店面登記 `shops()`（`Shop("tavern", …)`）：坐在酒肆裡時選單整個是酒肆那一串（`_everyday_options` 擂台之後）、「此地還能做」裡的 `act:tavern` 入口（馬市之後）、`_shop_open`、`_depart` 收店、`sync` 與 `_drop_stale_references` 的「人不在酒肆了就收店」。
 - act 子動詞 `verbs()`（`Verb("tavern", …)`）：`_act` 的 `act:tavern` → `actions.tavern_enter`、`_action_title` 的招牌。
 - `on_away`（`sync` 下線那一段的殺手）、`deliver_notices`（三個 deliver：照舊不看酒肆開關，關掉之後雇主照樣領退款、風聲照樣送到）、`after_action`（`choose` 最後那一下殺手檢查）。
-- 還在原位的：`shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改，第 41 批）、`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`（第 68 批進 `routes.py`）；`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）第 69 批也進 `routes.py`。
+- 店面那一頁第二輪第 93 批接 `Feature.shop_view`，轉交 `actions.tavern_view`（本體留 `actions.py`）。
+- 還在原位的：`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`（第 68 批進 `routes.py`）；`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）第 69 批也進 `routes.py`。
 
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 **3 處**：`actions.py` → `bounties`、`shopview`，`rules.py` → `atlas`；`figures`〔`rules.py`、`ask.py` 函式裡〕、`figure_life`〔`rules.py` 函式裡三處〕第 40 批收進共用規則層，不算過渡，原本 8 處；`annals` 第 29 批之二改 import 核心；以下是更早的寫法）12 處：`actions.py` 4（`annals`、`bounties`、`shopview`、`social`）、`rules.py` 7（`annals`、`atlas`、`figures`，函式裡的 `arena`、`figure_life` 三處）、`ask.py` 1（`figures`）。原本 24 處；`battlelog`、`encounter`、`equipment`、`renown`、`roster`、`territory`、`treasures`、`prologue`、`allied`、`zh` 全部拆包第 15 批登記進共用規則層（`tianxia/core/registry.py` 的 `SHARED`），那幾行行尾改註「共用規則層」，不算過渡。
 - 第 45 批合完重印 **1 處**：`actions.py` → `shopview`；`actions.py` 讀懸賞榜（`BOARD`、`board_here`、`visible`、`open_bounties`）改讀核心 `core/bounty_base`，`tavern:board` 直接寫 `picking_bounty` 第 56 批收。
 - 第 50 批合完重印 **2 處**：`actions.py` → `bounties`、`shopview`；`rules.py` 讀 `atlas` 的大區第 50 批收進共用規則層，改註。
+- 第二輪第 93 批：`actions.py` → `shopview` 清了（`line_text`、`attribute_rank` 改讀 `core/shop_base`）。
 - 服務清單（`tianxia/core/services_list.md`）這一包加的：`_shop_say`、`_shop_after`、`_idle`、`_last_wear`（共用）、`_battle_now`（過渡，決戰）、`_tavern_seek_exact`、`_tavern_reply`（寄放）。
 
 ## 測試

@@ -17,7 +17,7 @@
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
 - `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。`act:call` 不按、`act:socialize`（`act_socialize`）第 60 批接進 `Verb.bot`；`Feature.bot_idle` 問 `idle_call`（整季機器人不按名望不夠的求見）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled` 一直是 True（一類一顆 `precise`、福緣 `roster` 各有自己的開關，包本身沒有總開關）；`prefix = "call"`；`choose` 接 `call:`（`Outcome.title` 在動作之前拿，
-  `prepared` 經 `ctx._talk_turn` 寄放）；`bot_pick` 問 `bots.score`；`bot_always` 不宣告。`menu`、`scene` 沒接（見下）。
+  `prepared` 經 `ctx._talk_turn` 寄放）；`bot_pick` 問 `bots.score`；`bot_always` 不宣告。`menu` 沒接（見下）；求見畫面登記 `SCENE_ORDER` 的 `own/audience`（第二輪第 91 批，本體 `menus.audience_scene`）。
 - 對話（`ctx._open_dialogue`）、事件呈現（`ctx._present`）、引導提示（`ctx._hint`）、閉門不見（`ctx._snubbed_character`）都經 `ctx`，不 import 人物情誼包；人物情誼包經 `ctx` 問這一包的
   `_can_meet`、`_socialize_figure`、`_count_talk`、`_social_plan`、`_brush_off`（服務清單二、查詢）。
 
@@ -28,7 +28,7 @@
 - 內容：這一包的 `content/events/recruit.json`、`social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照它到這一包的 `content/` 載）。`figure_intros.json`（人物簡介）留在 `content/`：只有殼的 `server.py` 讀，`Content` 不讀、這一包不宣告。
   `recruit.json` 第 63 批歸這一包：7 則的 `actions` 都是 `socialize`、沒有 `recruit` 效果（跟附錄甲裁給人物情誼的招募 `_recruit*` 無關）。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
-  `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
+  `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 也在 `view.py`（第二輪第 91 批，不再留在 `engine.py`）。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_audience` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
@@ -40,7 +40,7 @@
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
 - `act:socialize`、`act:call`：第 57 批接進 `Verb`（按下去與紀錄標題，本體 `actions.press`、`actions.open_audience`）；選單與底下那幾行第 56 批是 `here/social`、`notes/socialize`，單人地點的「求見某某」那一顆同在這幾行裡。
-- 求見名單（`_everyday_options` × `_audience_options`）與求見畫面（`_own_scene_text` × `_audience_intro`）：`menu`、`scene` 掛鉤坐在談著、選邊、投靠確認、叛投確認那幾個 `picking_*` 之前，
+- 求見名單（`_everyday_options` × `_audience_options`）與求見畫面（第二輪第 91 批起是 `SCENE_ORDER` 的 `own/audience`，先後在表上）：`menu` 掛鉤坐在談著、選邊、投靠確認、叛投確認那幾個 `picking_*` 之前，
   名單夾在叛投確認與懸賞榜中間、畫面夾在叛投之後，接成掛鉤就改了它們並存時誰先；位置算行為，所以不接。
 - 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。

@@ -20,18 +20,20 @@
 - 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有 `APIRouter`**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many` 第 68 批搬進 `routes.py` 的 `menxia_actions`；`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
 - `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
 
+- `shop_view.py`：馬市那一頁（`market_view`，第二輪第 93 批從 `shopview` 切來）。
+
 ## 認領的欄位（手冊 3.5：留在原地）
 
 - `player_fields = ("picking_market",)`（馬市第二層選單開著）。
 - `carried = ()`：換季全部跟著新角色重來。
-- 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`Game._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services_list.md` 四、寄放，屬性留在 `Game.__init__`。
+- 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`_affinity_before`（這一包的 `scratch()` 宣告，第二輪第 92 批；`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services_list.md` 四、寄放，屬性留在 `Game.__init__`。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_market` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
 `Game` 上的名字掛在 `game_api.py` 的表（`_market_options` 第 56 批換成 `take` 那一格，拿掉）：`_market`、`_people_here`（測試直接叫）、`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（server 的 `MENXIA_ACTIONS`、假人 `bot.feed_mount`／`bot.wear_better`）、`_general_gifts`、`_signature_arms`、`_gift_entry`（`choose` 後半與核心事件檢定叫；`_signature_arms` 還有大勢人物包的挑戰本人經 `ctx` 叫，列在 `core/services_list.md` 二、查詢服務）、`gear_rows`、`divine_book_view`（server）。
 
-**店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 56 批選單收接縫定案，計畫第四節，理由同鐵匠鋪、懸賞榜）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`shop_line` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 market 分支、`sync.close`、`stale.mid` 的收店（第 55 批）與 `choose` 裡 FB-195 被搶的那一句（`mounts.stale_problem`，在 `choose` 掛鉤之前）不動。
+**店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 56 批選單收接縫定案，計畫第四節，理由同鐵匠鋪、懸賞榜）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`shop_line` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`sync.close`、`stale.mid` 的收店（第 55 批）不動。馬市那一頁第二輪第 93 批進本包 `shop_view.py`（`market_view`，`Feature.shop_view` 認 `market`）；FB-195 馬市的鈕過時了那一句第 92 批改登記 `MENU_ORDER["stale"]` 的 `market` 格（`market_actions.stale_cell`）。
 
 核心原位碰這一包的，邊界名單（`tests/core/boundary_tables.py` 的 `# gear` 那一組）逐條記理由：
 - `GAME_DELEGATE_CALLERS`：`choose → _general_gifts`、`_signature_arms`、`_gift_entry`（位置固定）。
@@ -51,9 +53,11 @@
 - **另外要跑的**（`test_for` 不會因為改這一包挑到）：`tests/season/test_sim_scripts.py` 的 `measure_mounts`、`measure_treasures` 兩條 slow（量表腳本換掉的是 `mounts.buy`／`mounts.feed`、`treasures.gifts_due`／`treasures.deliver_held` 與 `Game.wield_weapon`，包裡一律照模組屬性叫，換得到）；`tests/server/test_server.py`（殼）。
 - 一起跑（包的 tests、上面的混合檔與「另外要跑的」；venv 的 python）：`python -m pytest -q -n 4 tianxia/features/gear/tests tests/gear/test_mounts.py tests/gear/test_weapons.py tests/gear/test_armor.py tests/gear/test_board_cards.py tianxia/features/smithy/tests/test_forge_divine.py tianxia/features/smithy/tests/test_shop.py tests/bots/test_bot_policy.py tests/core/test_shop_width.py tests/server/test_server.py tianxia/features/seal/tests/test_seal.py tianxia/features/gear/tests/test_shop2_web.py`；量表兩條是 slow，另跑 `python -m pytest -q tests/season/test_sim_scripts.py -m "slow or not slow" -k "mounts_measure or treasures_measure"`。
 
-**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close`、`stale.mid` 的 `gear` 收馬市（`market_actions.close_gone`）；`sync.deliver`、`advance.held` 的 `held_gear` 補寄放（`gift_actions.deliver_held_gear`，位置固定在 `_deliver_big_events` 之後）。
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close`、`stale.mid` 的 `gear` 收馬市（`market_actions.close_gone`）；`sync.deliver`、`advance.held` 的 `held_gear` 補寄放（`gift_actions.deliver_held_gear`，位置固定在 `_deliver_big_events`（本體在 `timetable.deliver_big_events`，`Game` 留一行委派）之後）。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `menxia_actions`：`wield`、`dismantle`、`feed`、`dismantle_many`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+- 改 `shop_view.py` 另外要跑 `scripts/test_for.py tianxia/shopview.py`（14 個測試檔還經那個殼讀名字，第二輪第 93 批）。
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 
@@ -64,4 +68,4 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py`：`market_want`、`MOUNT_SILVER_RESERVE`（第 89 批）、`visit_market`、`feed_mount`、`wear_better`（第 101 批）從 `bot` 搬來，舊名 re-export，換的要換 `gear.bots` 那一份。
 - 過渡：`views.py` 第 88 批改讀共用層 `art_cards.gear_rows`，少 `skillview` 這 1 處。`REF` 搬進 `core/signature_base`，`signature_arms` re-export，`leaderboard.gear_card` 讀核心那一份。
-- 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶不到 `tests/core/test_content.py`、`tests/core/test_content_packs.py`。
+- 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。
