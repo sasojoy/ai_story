@@ -8,13 +8,16 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
+from typing import get_args
 
 from . import calendar, front_lines, materials, team
 from . import rounds as rounds_mod  # state 也有一個 Fighter（戰報的陣容），這裡用別名免得混淆
+from .core.content_base import NUMBER_IN_TEXT
 from .encounter import EncounterResult, describe_result
-from .models import Content, Squad
+from .models import Attribute, Content, Squad
 from .state import BattleRecord, Fighter, GameState, LevelUps
 from .world_state import WorldStateStore
+from .zh import to_traditional
 
 MAX_RECORDS = 20  # 存檔保留最近幾場（一般的仗；BIG_KINDS 另外算）
 # 大事件的仗（全服決戰、奪璽單挑）不佔一般那 MAX_RECORDS 場、不被遊歷野怪洗掉（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）；
@@ -344,3 +347,23 @@ def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text)
         *_gains_block(record),
         *([FULL_LOG_HEAD, *record.log] if record.log else []),
     ])
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_combat_lines(c: Content, need) -> None:
+    """回合演出的句型（content/combat_lines.json，武學與成長設計 8.2；S1／Joy 照內容表手改）：我方八種屬性都要有句子
+    （武學一定有屬性）；對手的每種屬性可以不寫（退回 theirs_any）。每一句都不能是空的、只用繁體中文、不能寫阿拉伯數字
+    或百分比（後面接的「對手氣勢 -N」「你氣血 -N」才是數字，句子裡再寫數字會攪在一起；國字的「一步一步」可以），也不能寫
+    【】（武學名的「以【某某】」由引擎加上）。"""
+    lines = c.combat_lines
+    for attribute in get_args(Attribute):
+        need(bool(lines.ours.get(attribute)), f"combat_lines.ours 缺少屬性 {attribute}")
+    pools = [(f"combat_lines.ours.{a}", pool) for a, pool in lines.ours.items()]
+    pools += [(f"combat_lines.theirs.{a}", pool) for a, pool in lines.theirs.items()]
+    pools += [("combat_lines.bare", lines.bare), ("combat_lines.theirs_any", lines.theirs_any)]
+    for where, pool in pools:
+        for text in pool:
+            need(bool(text.strip()), f"{where}：有空白的句子")
+            need(to_traditional(text) == text, f"{where}：文字只能用繁體中文（「{text[:12]}」）")
+            need(not NUMBER_IN_TEXT.search(text), f"{where}：不能寫數字或百分比，回合的數字由引擎接在後面（「{text[:12]}」）")
+            need("【" not in text and "】" not in text, f"{where}：不能寫【】，武學名由引擎加上（「{text[:12]}」）")
