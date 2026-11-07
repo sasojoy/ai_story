@@ -90,6 +90,10 @@ def style_class(props, pixels_same: bool, unstable: bool = False) -> str | None:
     return "layout-used" if all(is_layout_used(p) for p in props) else None
 
 
+def within_aa(pixels: int, levels: int) -> bool:
+    return pixels <= AA_MAX_PIXELS and levels <= AA_MAX_LEVELS
+
+
 def pixel_class(pixels: int, levels: int, *, view: str, sw_a=None, sw_b=None, only_share: bool = False, only_tale: bool = False,
                 clean: bool = True, unstable: bool = False, same_size: bool = True) -> str | None:
     """One screenshot differs. clean: DOM and styles agree after masking (for the gutter: styles differ only in used values)."""
@@ -101,7 +105,7 @@ def pixel_class(pixels: int, levels: int, *, view: str, sw_a=None, sw_b=None, on
         return "tale"
     if view not in ("375-light", "375-dark") and sw_a is not None and sw_b is not None and abs(sw_a - sw_b) == GUTTER_PX:
         return "gutter"
-    if pixels <= AA_MAX_PIXELS and levels <= AA_MAX_LEVELS:
+    if within_aa(pixels, levels):
         return "aa"
     return None
 

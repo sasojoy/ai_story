@@ -105,17 +105,28 @@ def test_expected_rows_only_count_when_they_match(noise):
 
 # ── 兩邊的比對（不開瀏覽器，假的走法紀錄） ──
 
-def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪") -> Path:
+def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪", dots=None, width=None) -> Path:
+    """dots: 這一鏡有一張 375-light 的截圖，塗黑這麼多個點（None 是沒有圖）。width: 視窗量到的 scrollWidth。"""
     for sub in ("dom", "style", "main", "shots"):
         (root / sub).mkdir(parents=True)
     sid = "001_scene"
+    shots, hashes = [], {}
+    if dots is not None:
+        from PIL import Image
+
+        img = Image.new("RGB", (40, 40), (255, 255, 255))
+        for i in range(dots):
+            img.putpixel((i % 40, i // 40), (250, 250, 250))
+        name = f"{sid}__375-light.png"
+        img.save(root / "shots" / name)
+        shots, hashes = [name], {name: f"dots{dots}"}
     (root / "dom" / f"{sid}.html").write_text(dom, encoding="utf-8")
     key = "\x01".join(vals)
     doc = {"props": list(props), "els": [["BODY.", key]], "dict": {key: key}}
     with gzip.open(root / "style" / f"{sid}__375-light.json.gz", "wt", encoding="utf-8") as f:
         json.dump(doc, f)
-    report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": list(steps), "apiCalls": [], "hashes": {}, "pyErrors": [],
-              "scenes": {sid: {"text": text, "layout": {"375-light": {"sw": 375}}, "shots": [], "sty": {"375-light": key}, "vol": {}, "unstable": False}}}
+    report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": list(steps), "apiCalls": [], "hashes": hashes, "pyErrors": [],
+              "scenes": {sid: {"text": text, "layout": {"375-light": {"sw": width or 375}}, "shots": shots, "sty": {"375-light": key}, "vol": {}, "unstable": False}}}
     if fatal:
         report["fatal"] = fatal
     (root / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
@@ -142,6 +153,15 @@ def test_a_used_value_moving_is_noise_and_stays_out_of_the_fingerprint(compare, 
     out = compare.compare(_walk(tmp_path / "a"), _walk(tmp_path / "b", vals=("red", "312.5px")), HOSTS)
     assert out["real"] == [] and out["noise"] == {"layout-used": 1}
     assert out["fingerprint"]["A"]["style"] == out["fingerprint"]["B"]["style"]
+
+
+def test_anti_aliasing_beside_a_used_value_is_still_the_same_picture(compare, tmp_path):
+    # 第 77 批第一次全量的 main:124_ex_1_choose：.shell margin 312.5 對 0，同窗一張圖 13 px、1 色階（波末閘門實測）
+    out = compare.compare(_walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", vals=("red", "312.5px"), dots=13), HOSTS)
+    assert out["real"] == [] and out["noise"] == {"layout-used": 1, "aa": 1}
+    # 超過抗鋸齒的量就不是同一張圖：樣式與像素都紅
+    out = compare.compare(_walk(tmp_path / "c", dots=0), _walk(tmp_path / "d", vals=("red", "312.5px"), dots=500), HOSTS)
+    assert _classes(out) == ["pixel", "style"]
 
 
 def test_a_dead_driver_is_the_tool_not_the_pages(compare, tmp_path):

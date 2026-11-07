@@ -295,7 +295,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
                     res.noise["gutter"] += 1
                 else:
                     has_shots = any(view_of(f) == view for f in files)  # the walk has no pixels at the three breakpoint widths, the replay does
-                    pixels_same = not mine if has_shots else la == lb
+                    # an image that only differs by anti-aliasing is still the same picture (wave D: 124_ex_1_choose, 13 px and 1 level beside a .shell margin)
+                    pixels_same = all("size" not in d and noise.within_aa(d["pixels"], d["levels"]) for d in mine.values()) if has_shots else la == lb
                     cls = None if view in broken else noise.style_class(props, pixels_same, unstable)
                     if cls:
                         res.noise[cls] += 1
