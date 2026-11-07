@@ -1117,12 +1117,11 @@ from boundary_tables import GAME_TABLE_TEXTS  # noqa: E402  自己這一段另 i
 
 
 def test_the_prologue_fight_label_is_one_object_in_the_core():
-    """序章那一場的字搬進核心（第 98 批）：單打服務、出陣包、engine 留的名字是同一個物件。"""
-    from tianxia import engine
+    """序章那一場的字搬進核心（第 98 批）：單打服務、出陣包是同一個物件（engine 留的名字沒人讀，第 99 批拿掉）。"""
     from tianxia.core import combat, services
     from tianxia.features.sortie import rules
 
-    assert engine.PROLOGUE_FIGHT is services.PROLOGUE_FIGHT is rules.PROLOGUE_FIGHT is combat.PROLOGUE_FIGHT
+    assert services.PROLOGUE_FIGHT is rules.PROLOGUE_FIGHT is combat.PROLOGUE_FIGHT
 
 
 

@@ -19,7 +19,7 @@ from . import (
     fight_llm, figures, forge_secrets, gender, insights, journal, library, place_state, plans,
     mounts, precise, ranks, renown, roster, seal_acts, secret_recipes,
     signature, art_cards,
-    team, territory, treasures, week_unlock,
+    team, treasures, week_unlock,
 )
 from . import flavor
 from .flavor import FlavorJob
@@ -46,8 +46,8 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    add_rumor, add_season_rumor,
-    fill_marks, game_day,
+    add_season_rumor,
+    fill_marks,
     humanize,
     season_one,
 )
@@ -62,7 +62,6 @@ from .core import omen_base  # 正在答題（軍情包認領的 fs_asking；cor
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import PAUSED_REFUSAL, PAUSED_TEXT, WalletService, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
-from .core.services import PROLOGUE_FIGHT  # noqa: F401  core_imports（第二輪第 98 批）：序章那一場的字搬進核心，留這個名字
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import SNUB_NOTE, SOCIAL_NO_ONE  # noqa: F401  socialize（全部拆包第 21 批）：交友求見的三個共用的字搬進核心的共用的字（SOCIAL_NO_ONE、SNUB_NOTE 測試從 engine 拿）
 from .core.services import RaidSpoils  # stamina_plays（全部拆包第 39 批）：移動被擋的標籤與設伏／截殺共用的贏家帳
@@ -77,7 +76,6 @@ if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情�
     from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
     from . import encounter, tactics  # core_imports（第二輪第 98 批）：委派的型別註記，執行時不用
 from .core.services import not_while_preparing as _not_while_preparing
-from .core.services import PILL_FOUND, checkin_on
 from . import story_base
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
@@ -105,7 +103,6 @@ from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, Fre
 from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變
 
 HOUR = 3600
-DAY = 86400
 SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
