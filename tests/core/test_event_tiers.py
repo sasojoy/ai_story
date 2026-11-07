@@ -52,7 +52,7 @@ def test_the_arena_and_virtue_doors():
     s, c = game.state, game.content
     assert tiers.door_tier(s, c, "擂主") == 1
     entry = SimpleNamespace(rank=7)
-    with mock.patch("tianxia.arena.entry_of", return_value=entry):
+    with mock.patch("tianxia.core.arena_ranks.entry_of", return_value=entry):
         assert tiers.door_tier(s, c, "擂主") == 2
         entry.rank = 1
         assert tiers.door_tier(s, c, "擂主") == 3

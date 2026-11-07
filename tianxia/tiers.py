@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import random
 
-from . import arena, renown
+from . import renown
+from .core import arena_ranks
 from .models import Content, Event
 from .rules import jianfa
 from .state import GameState
@@ -30,7 +31,7 @@ def _reached(state: GameState, content: Content, door: str, need: int) -> bool:
         return renown.fame_tier(state, content) >= need
     if door in ("俠義", "綠林"):
         return renown.path(state) == ("俠" if door == "俠義" else "寇") and renown.virtue_tier(state, content) >= need
-    entry = arena.entry_of(state.world, state.player.name)  # 擂主：名次至少到第幾名
+    entry = arena_ranks.entry_of(state.world, state.player.name)  # 擂主：名次至少到第幾名
     return entry is not None and entry.rank <= need
 
 
