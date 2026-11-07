@@ -514,11 +514,11 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - 決戰包的 `bots.py`（`_toward_battle`，從 `bot_policy` 搬來）叫 `ctx.travel(dest, mode)`（主人 travel）、`ctx.travel_options(dest)`（主人 map）
 
 # core_rest（第二輪第 99 批：有主的零碎歸位）
-- 拿掉的：`_scrap_find`、`_overhear`（探索包、人物情誼包的表掛著給測試叫，主人只剩自己）、`_insight_blocked`、`_pill_find`（探索包裡直叫，Game 不留）、`_at_own_base`、`_at_clinic_town`（銀兩出口包；核心的店面那一頁經 ctx 問，記在 `CORE_DELEGATE_CALLERS`）。
+- 拿掉的：`_scrap_find`、`_overhear`（探索包、人物情誼包的表掛著給測試叫，主人只剩自己）、`_insight_blocked`、`_pill_find`（探索包裡直叫，Game 不留）、`_at_own_base`、`_at_clinic_town`（銀兩出口包；店面那一頁第 93 批也搬進包裡，同包經 ctx 問，不用上清單）。
 - 主人換成共用層、清單不變（Game 留一行委派）：`ctx._figures_here()`（`figures.standing_here`）、`ctx._deliver_big_events()`（`timetable.deliver_big_events`）、`ctx._without_timetable(msgs)`（`timetable.without_announced`）。
 # core_choose（第二輪第 92 批：choose 前段那五支被拒搬成 MENU_ORDER["stale"] 的格，一個新名字）
 - 裝備包的 `market_actions.stale_cell`（馬市的鈕過時了，FB-195）叫 `ctx._shop_open()`（Game 本體：此刻坐在哪一間店；已經出了馬市就不改掌櫃的話）
 # shop（第二輪第 93 批：shopview 切五家，沒有新名字）
-- 店共用在 `core/shop_base.py`（包直接 import）；各包 `shop_view.py` 的 `page(ctx)` 叫 `ctx._pill_day()`、`ctx._at_own_base()`、`ctx._at_clinic_town()`、`ctx._battle_power()`，都是上面列著的。
+- 店共用在 `core/shop_base.py`（包直接 import）；各包 `shop_view.py` 的 `page(ctx)` 叫 `ctx._pill_day()`、`ctx._battle_power()`，都是上面列著的；銀兩出口包另外問自己的 `_at_own_base`、`_at_clinic_town`（第 99 批搬進同一包）。
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
