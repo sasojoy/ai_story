@@ -611,6 +611,7 @@ def b102():
     return r2f(102, "過渡收口", "core_shared", "dev/transit-end", "8330", [
         "- 範圍照那一節。**`CLAUDE.md` 這批不碰**：要改的句子放 docs，PM 改、先給企劃者看。`new_feature.py` 範本與手冊 G11 補新鈕用 `registerClicks`、CSS link 的位置（第 84、86 批留的）這批做。故意寫一行違規要紅，每一條硬規矩都試一次、印出訊息。",
         "- 第 103 批會把殼收掉，`SHARED_LATER` 之類這批拿掉時，三個殼（`howto`、`skillview`、`shopview`）照 `TEST_ONLY_SHELLS` 走，不開別的白名單。",
+        "- **E 波審查留的守門，這批一起做（PM 定）**：①共用層 `bot_base` 准拿 `Game`，第 89 批開的路（`bot_base._sortie_win` 叫 `game._sortie_foes`）照認，手冊第十五節寫落地認定；`tests/core/boundary_tables.py` 加一張 `bot_base` 准碰的 `game.xxx` 名單，邊界測試掃 `tianxia/bot_base.py`，不在名單就紅。其他共用層不准拿 `Game`。②`test_nobody_calls_an_event_subscriber_outside_the_publish_points` 的掃描範圍補上核心服務檔（`core/`），搬進核心的函式也要守；掃得到才算（先寫一行違規證明會紅）。③`BOT_SHELL_PENDING` 已是空集合，連名字與用到它的測試分支一起拿掉。",
     ])
 
 
