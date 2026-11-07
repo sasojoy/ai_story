@@ -7,23 +7,10 @@ from __future__ import annotations
 
 # ── engine.py ──
 
-# 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。它是核心裡唯一另外 import 包的地方：只准下面這幾樣，多一處就紅
-# （要接一包先想掛鉤；真的要過渡就加進這裡、回報寫明）。
-GAME_IMPORTS = {
-    "tianxia.features.battle.rules",  # Game.BATTLE_GAMBLE_* 類別屬性、委派的型別註記；測試從 engine 拿決戰的字
-    "tianxia.features.bout.duel_rules",  # Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
-    "tianxia.features.companions.actions",  # Game.SELF_IN_TEAM、FOLLOWER_IN_TEAM 類別屬性
-    "tianxia.features.cultivation.actions",  # MELT_MANY_PROLOGUE：test_prologue 從 engine 拿
-    "tianxia.features.figure_acts.plan_actions",  # 已經沒人用，第 98 批拿掉
-    "tianxia.features.peers.invite_actions",  # INVITE_LAPSED、INVITE_LAPSED_AWAY：test_discuss 從 engine 拿
-    "tianxia.features.sortie.rules",  # CLASH_*、TRAIN_CONFIRM*：測試從 engine 拿
-    "tianxia.guide",  # note_action（舊名別名）：tests/core/test_engine.py 換 tianxia.engine.note_action，第 98 批進引導包
-    "tianxia.sensing",  # 舊名別名：測試與 tianxia/sensing.py 經 engine.sensing 讀
-    "tianxia.sortie",  # 舊名別名：序章的戰報標籤（sortie.on、PROLOGUE_FIGHT）
-}
+# 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。第 98 批起它一處都不 import 包（TYPE_CHECKING 底下的型別註記不算）：這張表是空的，要加先過 PM（要接一包先想掛鉤）。
+GAME_IMPORTS: set[str] = set()
 
-# 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）。核心的接縫（選單、補算時間、行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、
-# 戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心自己的接縫：還沒搬的別的功能（或同一包還沒搬的那一半）叫包。
+# 核心自己的邏輯直接叫包（沒有對應的掛鉤）。核心的接縫都換成了接縫掛鉤（tianxia/core/features.py）；第 98 批起這張表是空的，要加先過 PM。
 GAME_DIRECT: dict[str, str] = {}
 
 # core_imports（第二輪第 98 批）：各包的表上不是函式的格（字 → 包）。原本是 Game 的類別屬性，只有測試從 Game 讀。
@@ -35,7 +22,7 @@ GAME_TABLE_TEXTS = {
     "FOLLOWER_IN_TEAM": "companions",
 }
 
-# 核心自己的邏輯叫委派（呼叫端, 委派）；GAME_DIRECT 的方法裡叫的也列。
+# 核心自己的邏輯叫委派（呼叫端, 委派）。
 GAME_DELEGATE_CALLERS = {
     # battle
     ("options", "_battle_menu"): "battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，menu、options 掛鉤又只問開著的包；不接（第 56 批）",

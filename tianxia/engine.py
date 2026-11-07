@@ -18,9 +18,9 @@ from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, atlas, battlelog, calendar, clinic, conquest,
     fight_llm, figures, forge_secrets, gender, insights, journal, library, place_state, plans,
-    mounts, precise, ranks, renown, roster, seal_acts, secret_recipes, sensing,
+    mounts, precise, ranks, renown, roster, seal_acts, secret_recipes,
     signature, art_cards,
-    sortie, team, territory, treasures, week_unlock,
+    team, territory, treasures, week_unlock,
 )
 from . import flavor
 from .flavor import FlavorJob
@@ -37,9 +37,6 @@ from .characters import CharacterStore, name_key
 from .events import (
     free_text_note, visible_choices,
 )
-# guide（全部拆包第 22 批）：新手引導的本體在 tianxia/features/guide/；Game._note_action 叫的是這裡的 note_action（別名 tianxia.guide，
-# tests/core/test_engine.py 換的是 tianxia.engine.note_action），其餘的委派叫包的 actions
-from .guide import note_action
 from .journal import LOG_BREAK, Draft
 from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
@@ -76,20 +73,6 @@ from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
 # explore
 # tavern（擺在宴客與出陣之間：別條拆包線在 core.services 之後、出陣那一行之後各加一段，不貼在一起）
-from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tianxia/features/peers/tests/test_raid.py 從 engine 拿
-# sortie（全部拆包第 17 批）：舊遊歷、操練、守勢的 8 個一行委派；必敗先問的那兩句搬進包（test_orders、test_mounts、test_prologue_web 從 engine 拿）
-from .features.sortie.rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING  # noqa: F401  過渡：三個測試檔從 engine 拿
-# battle
-from .features.battle import rules as battle_rules  # 過渡：決戰的字（Game.BATTLE_GAMBLE_* 類別屬性、委派的型別註記）
-from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine 拿（test_companions_battle、test_followers_matter、
-    ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
-    ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
-)
-# bout
-from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
-# companions（全部拆包第 19 批：人物情誼一）
-from .features.companions import actions as companions_actions  # 過渡：Game 上人物情誼的 29 個一行委派（招募、名下、心意、託付、書信）
-# companions（全部拆包第 20 批：人物情誼二）
 
 if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
     from .features.companions import companion_agent, parley
@@ -102,13 +85,10 @@ from .core.services import not_while_preparing as _not_while_preparing
 # seal（全部拆包第 27 批）：Game 上玉璽碎片季流程的 11 個一行委派（核心原位、殼的 ADMIN_ACTIONS、決戰包經 ctx、測試與量表腳本叫的）。
 # 第 28 批（玉璽二）：碎片卡、獨門行動、奪璽單挑、管理者六個也搬進包（Game 留 22 個一行委派）；頂端的 seal_rules 與 seal_duel 沒人用了，拿掉
 # smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 12 個一行委派（server、假人、測試與核心原位的選單叫的）
-from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tianxia/features/guide/tests/test_prologue.py 從 engine 拿
 # checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
 from .core.services import PILL_FOUND, checkin_on
 # story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
 from . import story_base
-# figure_acts（全部拆包第 31 批）：大勢人物的行動（挑戰本人、護衛犒軍探望、盤算、月旦評、管理者救回人物）的 14 個一行委派
-from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡：Game 上盤算的 3 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
@@ -136,7 +116,6 @@ from .core import smith_base  # 打造單子讀的那一小半（全部拆包第
 # peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
 # 名帖遞帖的登記（mingtie_card）改在包載入時做；原本那兩行 invites、social 的 import 是切磋、論武還在原位用的，第 38 批搬進包之後沒人用，拿掉了
 # peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
-from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tianxia/features/peers/tests/test_discuss.py 從 engine 拿
 from .core import arena_ranks  # 擂台的名次與稱號（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 from .core import page_view, status_view  # core_views（第二輪第 81 批）：狀態列、江湖頁與店面的本體（Game 上留一行委派）；排在上面的 import 都做完之後，載入的先後不變

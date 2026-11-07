@@ -359,11 +359,12 @@ def test_the_game_reaches_the_packages_only_through_the_listed_methods():
     imports, direct, callers = game_links()
     assert imports == GAME_IMPORTS
     assert direct == set(GAME_DIRECT)
+    assert not GAME_IMPORTS and not GAME_DIRECT  # 第 98 批鎖成空：核心不 import 包是真的（要加先過 PM）
     assert {(caller, callee) for caller, callee in callers if callee in GAME_DELEGATES} == set(GAME_DELEGATE_CALLERS)
 
 
 def reverse_imports() -> list[str]:
-    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名、Game 的委派那兩行）。
+    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名）。
     PM 每搬一包在交接記還剩幾處，跟 transitional_imports()（包 import 舊模組）兩個方向都記；核心的 registry.py 不算。"""
     files = [p for p in sorted(TIANXIA.glob("*.py"))] + [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
     out = []
@@ -374,9 +375,9 @@ def reverse_imports() -> list[str]:
 
 
 def test_the_reverse_transitional_imports_come_from_old_modules():
-    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的只有 engine.py 准的那兩行），而且數得到（不然交接記的數是空的）。"""
+    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的一筆都不准：第 98 批起 GAME_IMPORTS 是空的），而且數得到（不然交接記的數是空的）。"""
     found = reverse_imports()
-    assert any(e.startswith("tianxia/engine.py:") for e in found) and any(e.startswith("server.py:") for e in found)
+    assert any(e.startswith("server.py:") for e in found)
     for entry in found:
         stem = entry.split(":", 1)[0].removeprefix("tianxia/").removesuffix(".py")
         assert stem not in CORE or entry.rsplit(" ", 1)[1] in GAME_IMPORTS, entry
