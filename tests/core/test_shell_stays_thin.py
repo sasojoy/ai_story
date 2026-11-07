@@ -14,7 +14,16 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+import server
+from fastapi.testclient import TestClient
+# autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
+from server_kit import (  # noqa: F401
+    _no_landing, _no_preset_recipes, _player, cheap_password_hashing, client, fresh_server_memory,
+    model_breaker_closed, save_dir, scheduler_off, season_already_open,
+)
 from shell_tables import (
+    ADMIN_NO_GATE,
     APP_JS_CASES,
     APP_JS_FORM_IDS,
     APP_JS_TARGET_IDS,
@@ -25,12 +34,21 @@ from shell_tables import (
     GAME_INIT_ATTRS,
     GAME_METHODS,
     MAIN_JS_TOP,
+    NO_LOGIN_ROUTES,
     PLAYER_PLAIN_FIELDS,
+    ROUTE_GATE_EXCEPTIONS,
+    ROUTES_NO_SWITCH,
     SHELL_APP_CALLS,
+    SHELL_ASSIGNED,
     STYLE_CSS_CLASSES,
     VALIDATE_READS,
     WORLD_PLAIN_FIELDS,
 )
+from starlette.routing import Mount
+from test_server_bots import leaks  # FB-673 的掃描器（FORBIDDEN）；conftest 放了 tests/bots 的路徑
+
+from tianxia.core import features as features_core
+from tianxia.core.registry import FEATURES
 
 ROOT = Path(__file__).resolve().parents[2]
 NOD_ONLY = "真的要留在這裡：企劃者或 Joy 點頭、PR 寫原話"
@@ -331,3 +349,138 @@ def test_content_events_has_no_new_file():
 
 def test_validate_reads_no_new_field():
     only_listed("tianxia/content.py 的 validate 讀的 c.<欄位>", validate_reads(), VALIDATE_READS, CONTENT_HOME)
+
+
+# ── 8. 登入與開關 ──
+GATE_HOME = "路由第一行要有 gate，關著丟 404（照 tianxia/features/heroines/routes.py 的 api_adult 開頭）；不用登入的路由要寫理由"
+
+
+def flat_routes(app) -> list[tuple[str, object]]:
+    """(方法, 路由)。這個版本的 FastAPI 把包的 router 包成私有的 _IncludedRouter，有 original_router 就往裡走；Mount（/static）跳過。"""
+    out: list[tuple[str, object]] = []
+
+    def walk(routes) -> None:
+        for route in routes:
+            inner = getattr(route, "original_router", None)
+            if inner is not None:
+                walk(inner.routes)
+            elif not isinstance(route, Mount):
+                out.extend((method, route) for method in sorted(route.methods - {"HEAD", "OPTIONS"}))
+
+    walk(app.routes)
+    return out
+
+
+def hit(http, method: str, route):
+    """路徑參數、查詢參數都填 1，POST 帶空的 json：參數檢查不該比登入先擋（不然 422 會被當成不用登入）。"""
+    query = {param.name: "1" for param in route.dependant.query_params}
+    return http.request(method, re.sub(r"\{[^}]+\}", "1", route.path), params=query, json={} if method == "POST" else None)
+
+
+def no_login_replies() -> dict[tuple[str, str], object]:
+    """沒 cookie 打每一條路由，不是 401 的留下來。"""
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    replies = {(method, route.path): hit(anon, method, route) for method, route in flat_routes(server.app)}
+    return {key: reply for key, reply in replies.items() if reply.status_code != 401}
+
+
+def test_no_new_route_works_without_login():
+    only_listed("不用登入就打得到的路由", no_login_replies(), NO_LOGIN_ROUTES, GATE_HOME)
+
+
+ROUTED_PACKS = {feature.name: feature for feature in FEATURES if feature.routes(server) is not None}
+
+
+def switch_off(name: str, monkeypatch) -> None:
+    """把這一包的開關關掉；新包一律 Config.<包>.enabled（new_feature.py 生的 tuning 預設 False）。"""
+    config = server.CONTENT.config
+    if name in ("mall", "looks"):
+        monkeypatch.setattr(config.mall, "enabled", False)
+    elif name == "heroines":
+        monkeypatch.setattr(server.CONTENT, "heroines", {})
+    elif name == "notify":
+        assert server.WEB_PUSH is None  # 測試沒跑 start_web_push，就是關著
+    elif name == "zhuan":
+        monkeypatch.setattr(config.jianfa, "zhuan_end", False)
+    elif name == "smithy":
+        monkeypatch.setattr(config.weapons, "enabled", False)
+        monkeypatch.setattr(config.armor, "enabled", False)
+    else:
+        switch = getattr(config, name, None)
+        assert switch is not None, f"{name} 有路由，但 Config 沒有 {name}。該放哪：tianxia/core/tuning/{name}.py 的 enabled（new_feature.py 生的）。沒有開關要列進 ROUTES_NO_SWITCH：{NOD_ONLY}。"
+        monkeypatch.setattr(switch, "enabled", False)
+
+
+def test_the_switch_sweep_sees_the_packages():
+    assert len(ROUTED_PACKS) > len(ROUTES_NO_SWITCH) >= 1 and set(ROUTED_PACKS) & set(ROUTES_NO_SWITCH), "有路由的包沒掃到幾個：掃法壞了"
+
+
+@pytest.mark.parametrize("name", sorted(set(ROUTED_PACKS) - set(ROUTES_NO_SWITCH)))
+def test_package_routes_are_404_with_the_switch_off(name, monkeypatch):
+    player = TestClient(server.app, raise_server_exceptions=False)
+    _player(player)
+    switch_off(name, monkeypatch)
+    routes = flat_routes(ROUTED_PACKS[name].routes(server))
+    assert routes, f"{name} 一條路由都沒掃到：掃法壞了"
+    replies = {(method, route.path): hit(player, method, route).status_code for method, route in routes}
+    extra = {key: status for key, status in replies.items() if status != 404 and key not in ROUTE_GATE_EXCEPTIONS}
+    assert not extra, f"{name} 的開關關著，路由還回 {extra}。該放哪：{GATE_HOME}。例外：{NOD_ONLY}，列進 ROUTE_GATE_EXCEPTIONS 寫理由。"
+
+
+def test_no_new_admin_tool_without_a_gate():
+    no_gate = {name for name, tool in server.FEATURE_ADMIN_ACTIONS.items() if tool.gate is features_core.no_gate}
+    only_listed("AdminTool 用 no_gate 的工具", no_gate, ADMIN_NO_GATE, "新工具 AdminTool(<開關的 gate>, …)：包的開關關著就不准叫（Feature.admin_tools，tianxia/core/features.py）")
+
+
+# ── 9. shell 與路由重複 ──
+
+
+def shell_assigned() -> set[str]:
+    """包裡賦值的 shell.<名字>，加 setattr(shell, …)。"""
+    found: set[str] = set()
+
+    def targets_of(target: ast.AST):
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for item in target.elts:
+                yield from targets_of(item)
+        elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "shell":
+            yield target.attr
+
+    for path in (ROOT / "tianxia" / "features").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "/tests/" in path.relative_to(ROOT).as_posix() or "shell" not in text:
+            continue
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    found.update(targets_of(target))
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                found.update(targets_of(node.target))
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "setattr"
+                  and len(node.args) > 1 and isinstance(node.args[0], ast.Name) and node.args[0].id == "shell"):
+                second = node.args[1]
+                found.add(second.value if isinstance(second, ast.Constant) else ast.unparse(second))
+    return found
+
+
+def test_shell_assigns_no_new_name():
+    only_listed("包賦值的 shell.<名字>", shell_assigned(), SHELL_ASSIGNED, "包自己的狀態放包的模組；殼不再長新的模組變數（手冊 G8～G10）")
+
+
+def test_routes_are_unique():
+    routes = flat_routes(server.app)
+    own = sum(1 for _, route in routes if route.endpoint.__module__ == "server")
+    assert len(routes) - own > own, "看不到 router 裡的路由：掃法壞了，FastAPI 換版要看 flat_routes"
+    same = sorted(key for key, count in Counter((method, route.path) for method, route in routes).items() if count > 1)
+    assert not same, f"同一個方法加路徑掛了兩次 {same}：後掛的那條永遠走不到。該放哪：換一條路徑，或併進原本那條。這條沒有名單、不開例外。"
+
+
+# ── 10. 看不出假人 ──
+
+
+def test_no_login_replies_do_not_say_who_is_a_bot():
+    """FB-673 掃 web/；這條掃不用登入就拿得到的回應（body 加 headers）。`name="robots"` 是分享頁 404 的 meta，不算。"""
+    replies = no_login_replies()
+    assert replies, "一條回應都沒打到：掃法壞了"
+    found = {key: hits[:3] for key, reply in replies.items() if (hits := leaks(reply.text.replace('name="robots"', "") + "\n" + str(reply.headers)))}
+    assert not found, f"不用登入就看得到假人字樣 {found}。該放哪：任何畫面、回應都不能透露誰是假人（FB-673；CLAUDE.md 原則「伺服器假人跟真人完全一樣」），這條沒有名單、不開例外。"

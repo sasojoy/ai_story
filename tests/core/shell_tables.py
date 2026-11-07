@@ -238,3 +238,67 @@ VALIDATE_READS = frozenset("""
 _only_pack banned_names battles characters config craft_names events figures foreshadows gear insight_scenes insights locations
 mandate_timetable map mark_rules materials opening preset_recipes road_sights scenario sects skills squads timetable tutorial
 """.split())
+
+# ── 不用登入就打得到的路由（方法, 路徑）→ 理由：沒 cookie 打一次、不是 401 的都算。多一條要寫理由 ──
+NO_LOGIN_ROUTES = {
+    # 真的公開
+    ("GET", "/"): "登入頁與遊戲殼頁，資料都在 /api",
+    ("GET", "/admin"): "管理頁的殼頁，資料都在 /api/admin*（test_admin_routes 鎖著）",
+    ("GET", "/journal.css"): "分享頁的樣式",
+    ("GET", "/sw.js"): "手機通知的 service worker，瀏覽器不帶登入來拿",
+    ("GET", "/manifest.webmanifest"): "安裝到手機主畫面用的",
+    ("GET", "/api/patch_notes"): "登入頁底下的近期改版",
+    ("GET", "/api/me"): "問自己登入了沒，沒登入回空的",
+    ("POST", "/api/login"): "登入本身",
+    ("POST", "/api/register"): "註冊本身",
+    ("POST", "/api/logout"): "沒登入登出也是 200",
+    ("GET", "/zhuan/{code}"): "公開的傳：分享代碼，唯讀",
+    ("GET", "/zhanji/{code}"): "公開的戰記：分享代碼，唯讀",
+    ("GET", "/api/looks/img/{look}/{sheet}"): "形象圖，<img> 不帶登入、只回圖",
+    # 先於登入擋掉：沒登入也不是 401，但碰不到資料
+    ("POST", "/api/mall/rename"): "先驗名號（空名 400），給了名號才問登入",
+    ("GET", "/api/push"): "_web_push：沒開推送 404，開了要登入",
+    ("POST", "/api/push/prefs"): "_web_push：同上",
+    ("POST", "/api/push/test"): "_web_push：同上",
+    ("POST", "/api/push/subscribe"): "_web_push：同上",
+    ("POST", "/api/push/unsubscribe"): "_web_push：同上",
+    ("POST", "/api/menxia/{op}"): "不認得的 op 404，認得的要登入",
+    ("GET", "/api/events"): "HUB 是 None（沒開推送）就 404，連登入都不問",
+}
+
+# ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──
+ROUTE_GATE_EXCEPTIONS = {
+    ("GET", "/sw.js"): "notify：檔案本身，推送關著也拿得到；開關看 Config.web_push.enabled，由 _web_push 擋 /api/push 那五條",
+    ("GET", "/api/annals"): "zhuan：見聞的行狀看 annals.on，不看 zhuan_end（Feature.enabled 沒有掛鉤吃這個開關）",
+    ("GET", "/api/zhuan"): "zhuan：傳本身看 annals.on，zhuan_end 只管季末論功與多的選項；填的 season 1 不對丟 GameError 400，開著也一樣",
+    ("POST", "/api/zhuan/write"): "zhuan：同上，寫不了丟 GameError 400，開著也一樣",
+    ("POST", "/api/zhuan/share"): "zhuan：同上，分享不了丟 GameError 400，開著也一樣",
+    ("POST", "/api/smith_line"): "smithy：店面打造頁問這一爐會怎樣，不算行動、不存檔，路由不問開關",
+}
+
+# ── 有路由、Feature.enabled 恆 True（沒有開關可關）的包 → 理由 ──
+ROUTES_NO_SWITCH = {
+    "guide": "教學說明，每一季都有",
+    "companions": "人物與對話紀錄，每一季都有",
+    "sense": "有所感沒有總開關（有沒有場景看內容）",
+    "craft": "煉製頁每一季都有（自創有沒有開看 Config.arts.create_xinde）",
+    "territory_acts": "形勢頁，有沒有地盤看 territory.on",
+    "peers": "玩家卡與名帖，每一季都有",
+    "travel": "一律開著：選單不走 Feature.options",
+    "map": "輿圖每一季都有",
+    "tale": "戰記沒有開關（start_tales 一定開）",
+    "admin": "沒有開關；管理者認的是 Game.is_admin",
+}
+
+# AdminTool 用 no_gate 的工具（FEATURE_ADMIN_ACTIONS 裡 gate 是 features_core.no_gate）
+ADMIN_NO_GATE = frozenset("""
+cancel_battle clear_lock end_season fast_forward fire give_fragment give_opportunity issue_orders jump_next mingtie_remove
+mingtie_restore next_season open_season outing_erase pause_clock push_trend resolve_event resume_clock revive_figure rotate_seats
+schedule seal_assign seal_cancel seal_duel seal_emerge seal_fix seal_mandate seal_sink_check seal_stir set_trend start_battle
+start_showdown summon
+""".split())
+
+# 包裡准賦值的 shell.<名字>（狀態放殼的模組變數，測試從 server.<名字> 讀）。新狀態放包自己的模組
+SHELL_ASSIGNED = frozenset("""
+NOTICE_THREAD TALES TALES_CLIENT TALES_THREAD TALE_RUNNING WEB_PUSH
+""".split())
