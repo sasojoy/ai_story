@@ -7,49 +7,44 @@ Ollama）；只有「結識」一定接受；心得攢夠一定步數就拿去�
 """
 from __future__ import annotations
 
-import hashlib
 import random
 from collections.abc import Callable
-from typing import NamedTuple
 
-from . import arts as arts_mod, allied, attrset, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import allied, clinic, cultivation, library, naming, sensing, team
 from . import prologue as prologue_rules
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
-from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
-from . import outing  # 走一趟：假人挑段數（outing_segments）
 from .engine import FREE_TEXT_OPTION, GROWTH_PREFIX, Game, Option
-from .rules import jianfa
 from .core import features as features_core
-from .martial_arts import MartialArt, next_quality
+from .martial_arts import next_quality
 from .models import Content
 from .models import Outcome  # 減法季批 4：pick_outcome 的位子
 from .sqlite_world import open_world
 from .world_state import WorldStateStore
-# 別包也讀的、包自己讀的第二輪第 89 批搬走了（bot_base 與各包的 bots.py；包不再跳回這個檔）。舊名留著，同一批物件：這個檔自己照舊叫（visit_smith、visit_market、duel_go……），測試與腳本讀；
-# 要換掉那幾個函式的換新位置那一份，換這裡打不到
-from .bot_base import CLINIC_MIN_SILVER, CLINIC_URGENT, can_pay_clinic, injury_share  # noqa: F401
+# 別包也讀的、包自己讀的第二輪第 89 批搬走了（bot_base 與各包的 bots.py；包不再跳回這個檔），每包的按法第二輪第 101 批也搬走了。舊名留著，同一批物件：這個檔自己照舊叫（play_season、forge_and_cultivate、pick……），測試與腳本讀；
+# 讀者留在這個檔的（pick 讀 awaits_chance、forge_and_cultivate 讀 pick_forge）換這裡打得到，讀者搬走的（pick_forge 讀 MERGE_SHARE、FORGE_RESERVE，sense_pick 讀 SENSE_DRAW）要換新位置那一份。
+# forge_and_cultivate、spend_xinde、wants_heal、can_practise、take_pill 留在這裡：同時排幾包的事，或碰 Game 本體的療傷、服丹；包不准 import 包
+from .bot_base import CLINIC_MIN_SILVER, CLINIC_URGENT, TRADE_KEEP, TRADE_MOVES, can_pay_clinic, injury_share, trade_keep  # noqa: F401
+from .features.battle.bots import enlist_pick  # noqa: F401
+from .features.bounties.bots import take_bounties  # noqa: F401
+from .features.checkin.bots import check_in  # noqa: F401
+from .features.craft.bots import CREATE_INTENTS, CREATE_RESERVE, FORGE_RESERVE, FORGE_TRIES, MERGE_SHARE, ForgePlan, _name_draft, create_art, pick_forge  # noqa: F401
+from .features.cultivation.bots import (  # noqa: F401
+    CULTIVATE_RESERVE, TEACH_MAX, TEACH_RESERVE, TRAIT_WEIGHT, _worth, allocate_points, awaits_chance, break_way, growth_key, melt_the_weakest, slot_insights,
+    switch_to_the_strongest, takes_the_pill, teach, worn_first,
+)
+from .features.explore.bots import OUTING_SAY_CHANCE, OUTING_WEIGHTS, outing_say, outing_segments  # noqa: F401
 from .features.figure_acts.bots import CHALLENGE_ODDS  # noqa: F401
-from .features.gear.bots import MOUNT_SILVER_RESERVE, market_want  # noqa: F401
-from .features.smithy.bots import FORGE_SILVER_RESERVE, _forge_plans, forge_ready, forge_step, smith_want  # noqa: F401
+from .features.gear.bots import MOUNT_SILVER_RESERVE, feed_mount, market_want, visit_market, wear_better  # noqa: F401
+from .features.outlets.bots import donate_spare, donate_want  # noqa: F401
+from .features.sense.bots import SENSE_DRAW, SENSE_RIGHT, sense_draw, sense_pick, sense_stroke  # noqa: F401
+from .features.smithy.bots import (  # noqa: F401
+    FORGE_SILVER_RESERVE, TIER3_WANT, TIER4_WANT, TRADE_SILVER_RESERVE, _forge_plans, forge_ready, forge_step, keep_book_names, smith_want, trade_at_smith, trade_want, visit_smith,
+)
 from .features.sortie.bots import duel_moves  # noqa: F401
 from .features.travel.bots import CLINIC_AT, clinic_hop  # noqa: F401
 
 HALF_HOUR = 1800
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
-
-FORGE_TRIES = 4  # 意境＋意境試幾組（被擋下就換一組）
-SENSE_RIGHT = 0.6  # 有所感時挑到選得對的做法的機會（其餘從全部做法裡隨便挑，可能也挑對）：看得懂場景的玩家大多挑得對
-SENSE_DRAW = 0.8  # 進了感悟狀態之後真的畫一筆（其餘順其自然，落回做法那個基本意境）
-MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會開一爐（煉製只剩意境＋意境）
-FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
-CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
-# 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
-TRADE_KEEP = {1: 12, 2: 10, 3: 5}  # 三階只在素材四階開著時算（trade_keep）：留夠一次三換四
-TIER3_WANT = 2  # 素材四階關著（舊規則）：那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
-TIER4_WANT = 2  # 素材四階：那個屬性的四階少於這麼多才三換四（一件神器要主輔兩個四階，正式季整合 8.1）
-TRADE_SILVER_RESERVE = 30  # 升階付完工錢至少還留幾兩（療傷用，同 MOUNT_SILVER_RESERVE）
-TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下都會讓背包離留的量更近，本來就停得下來）
-TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
 def wants_heal(game: Game) -> bool:
@@ -75,58 +70,6 @@ def take_pill(game: Game) -> None:
         game.take_stamina_pill(pill_only=True)
 
 
-def check_in(game: Game) -> None:
-    """每日簽到（21 天季，正式季整合 8.1）：今天還沒簽就簽，四階的日子照名號＋季數的種子挑屬性（checkin.bot_attribute）。只走
-    Game.check_in（真人按「簽到」小標的同一條路）；畫面沒有簽到（關著、序章裡、休季）或今天簽過了都不叫。整季機器人與伺服器假人共用。"""
-    view = game.checkin_view()
-    if view is None or view["done"]:
-        return
-    p = game.state.player
-    game.check_in(checkin.bot_attribute(game.content, p.name, p.season_number) if view["pick"] else "")
-
-
-def growth_key(game: Game) -> str:
-    """假人這一季挑哪一套成長配比：照名號挑五套預設之一（不擲骰；allocate_points 與開季準備卡的 growth: 鈕同一個）。"""
-    presets = game.content.config.attributes.v2.presets
-    return presets[int(hashlib.md5(game.state.player.name.encode("utf-8")).hexdigest(), 16) % len(presets)].key
-
-
-def allocate_points(game: Game, rng: random.Random) -> None:
-    """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。
-    迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
-    拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
-    p, cap = game.state.player, game.content.config.stat_cap
-    if attrset.on(game.content, game.state.world):
-        # 五項屬性的季（屬性與跨季架構 v2 3.1）：照名號挑一套配比（不擲骰，跟真人一樣按「成長」那一排），送的點全配在那一套最重的那一項
-        if p.growth_preset is None:
-            game.pick_growth(growth_key(game))
-        split = attrset.split(game.state, game.content)
-        top = max(attrset.keys(game.content), key=lambda k: split.get(k, 0))
-        for _ in range(p.stat_points):
-            before = p.stat_points
-            game.allocate_stat(top)
-            if p.stat_points >= before:
-                return
-        return
-    if jianfa(game.content, game.state.world, "stat_milestones"):
-        # 減法季屬性五段（設計 4.5「配滿一項是一條路」）：照名號挑一條路（growth.stat_path：力、巧、韌、悟、博排個先後），第一項配滿再第二項；
-        # 不擲骰。整季機器人與伺服器假人同一個（bot_policy.look_after 叫這裡）
-        for stat in growth.plan_points(p.stats, p.stat_points, cap, growth.stat_path(p.name)):
-            before = p.stat_points
-            game.allocate_stat(stat)
-            if p.stat_points >= before:  # 被拒絕：再試也一樣
-                return
-        return
-    for _ in range(p.stat_points):
-        open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < cap]
-        if not open_stats:
-            return
-        before = p.stat_points
-        game.allocate_stat(rng.choice(open_stats))
-        if p.stat_points >= before:  # 被拒絕：再試也一樣
-            return
-
-
 def spend_xinde(game: Game, rng: random.Random) -> None:
     """有內傷先療傷；接著身上兩門各練一成——付得起才練（練成花心得，開局就有基礎武學，沒有空欄位要自創了）。
     不追求最優策略，只求機器人不會把心得放著不用，也不會一直去撞「心得不足」。"""
@@ -136,45 +79,6 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
         if can_practise(game, kind):
             game.practice(kind)
     teach(game)
-
-
-TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死
-TEACH_MAX = 20  # 一次最多傳幾下（價錢越後越貴，通常幾下就停；這只是保險）
-
-
-def teach(game: Game, limit: int = TEACH_MAX) -> int:
-    """傳功門下（整季機器人與假人共用）：名冊上最便宜、按得下去的那一項（chuangong.cheapest），付完還剩 TEACH_RESERVE 才傳；
-    一直傳到付不起或 limit 下為止。只走 Game.chuangong，不擲亂數。回傳傳了幾下。"""
-    done = 0
-    while done < limit:
-        lesson = chuangong.cheapest(game.state, game.content, game.world)
-        if lesson is None or game.state.player.stats.get("xinde", 0) - lesson.price < TEACH_RESERVE:
-            break
-        game.chuangong(lesson.key, lesson.what)
-        done += 1
-    return done
-
-
-class ForgePlan(NamedTuple):
-    """挑好的一爐（還沒開）：兩個意境（煉製只剩意境＋意境，Joy 2026-10-21）。"""
-
-    insight_ids: tuple[str, ...]
-
-
-def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | None:
-    """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、手上不到兩個意境、或什麼都合不了就是 None。
-    只挑、不開爐，什麼都不改。merge_share 沒給就在呼叫的當下讀模組常數 MERGE_SHARE（量平衡的腳本改它要有效）。"""
-    merge_share = MERGE_SHARE if merge_share is None else merge_share
-    state, content, world = game.state, game.content, game.world
-    p = state.player
-    if len(p.insights) < 2 or p.stamina < FORGE_RESERVE or rng.random() >= merge_share:
-        return None
-    for _ in range(FORGE_TRIES):
-        a = rng.choice(p.insights)  # 意境效果池：同一份放兩次合不了，第二格從其餘的挑（同一種的另一份就是揣摩）
-        b = rng.choice([i for i in p.insights if i != a])
-        if fusion.merge_problem(state, content, world, a, b) is None:
-            return ForgePlan((a, b))
-    return None
 
 
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:
@@ -201,193 +105,6 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
                 break
 
 
-def worn_first(game: Game) -> list[str]:
-    """修練挑哪一門：身上的兩門先（武學、內功），再照功法庫的順序。成數門檻（方案 A）與火候（方案 C）都綁在練成上，
-    身上那兩門才練得上去；契機也只看身上那兩門。整季機器人與伺服器假人共用。"""
-    member, owned = game.state.player.member, library.owned_arts(game.state)
-    worn = [a for a in (member.wugong_id, member.neigong_id) if a in owned]
-    return worn + [a for a in owned if a not in worn]
-
-
-def awaits_chance(game: Game) -> bool:
-    """身上有一門上品到了極處（cultivation.ready：第十成）、等著契機：機器人這時有挑戰本人可打就去打（見 pick）。"""
-    state, content, world = game.state, game.content, game.world
-    member = state.player.member
-    if content.config.breakthrough.chance <= 0 or state.player.naming is not None:
-        return False
-    return any(
-        art_id and cultivation.ready(state, content, world, art_id)[0] for art_id in (member.wugong_id, member.neigong_id)
-    )
-
-
-def break_way(game: Game, art_id: str) -> dict:
-    """這一門到了極處要怎麼強行衝關（cultivate 的關鍵字）：手上有丹就服（use_legend）；沒丹是空的，等契機
-    （Joy 2026-10-21 拿掉心得衝關；萬寶閣的破境丹假人不買）。整季機器人與假人共用。"""
-    return {"use_legend": True} if takes_the_pill(game, art_id) else {}
-
-
-def takes_the_pill(game: Game, art_id: str) -> bool:
-    """這一門到了極處、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服）。
-    只在這一步傳 use_legend：別的門用不上丹。"""
-    state, content, world = game.state, game.content, game.world
-    return state.player.legend_items > 0 and cultivation.ready(state, content, world, art_id)[0]
-
-
-def melt_the_weakest(game: Game) -> None:
-    """滿了：熔掉功法庫裡第十成威力最低的一門；庫是空的就化掉一個沒有武學靠它修練的意境。"""
-    state, content, world = game.state, game.content, game.world
-    spare = [(team.player_art(state, content, world, a), a) for a in state.player.arts]
-    spare = [  # 熔不得的（本命武學）不挑
-        (art.top_power, a) for art, a in spare
-        if art is not None and library.melt_problem(state, a, art.name, content=content) is None
-    ]
-    if spare:
-        game.melt_art(min(spare)[1])
-        return
-    loose = [i for i in state.player.insights if arts_mod.where_slotted(state, i) is None]  # 裝在武學上的不熔
-    if loose:
-        game.melt_insight(loose[0])
-
-
-def _worth(content: Content, art: MartialArt) -> float:
-    """機器人眼中這門武學的價值：第十成威力，加上功效（設計 13.7：不看功效就量不出功效的價值）。每一層一般功效（乘過這一份的
-    品質倍數，跟遊戲裡算層數同一份 traits.multiplier）、每個特別功效，各加 TRAIT_WEIGHT 的威力。內容沒有功效就只看威力。"""
-    if not content.traits.general:
-        return art.top_power
-    layers = len(traits.traits_of(art)) * traits.multiplier(content, art.quality) + (1 if art.special else 0)
-    return art.top_power * (1 + TRAIT_WEIGHT * layers)
-
-
-CREATE_RESERVE = 50  # 自創付完心得要剩這麼多（練成、揣摩還要用）
-CREATE_INTENTS = ("風過林梢，影不留痕", "山不動而勢壓人", "一息吐納，百脈皆通", "水無常形，隨勢而走", "烈火燎原，一往無前")
-
-
-def slot_insights(game: Game) -> int:
-    """把手上沒裝在任何一門上的意境裝進身上兩門的空槽（武學先、內功後；收得下的才裝）。整季機器人與假人共用；
-    只走 Game.slot_insight、不擲亂數。回傳裝了幾個。"""
-    state, content, world = game.state, game.content, game.world
-    member = state.player.member
-    done = 0
-    for art_id in (member.wugong_id, member.neigong_id):
-        if not art_id:
-            continue
-        for insight_id in list(state.player.insights):
-            if arts_mod.where_slotted(state, insight_id) is not None:
-                continue
-            if arts_mod.slot_problem(state, content, world, art_id, insight_id) is None:
-                game.slot_insight(art_id, insight_id)
-                done += 1
-    return done
-
-
-def create_art(game: Game, rng: random.Random) -> bool:
-    """自創一門（tianxia/create.py 五步一次走完）：心得付完還剩 CREATE_RESERVE 才做。種類挑身上那一門比較弱的那一種；
-    兵器照身上武學的種類（推不出來隨機），行功之法隨機；架式從預設的幾個挑一個再稍微動一下；意從 CREATE_INTENTS 挑、
-    照關鍵字表讀（假人不叫模型）；名字走退路字表（看得出來是假人：之後要補模型取名）。伺服器假人與整季機器人共用。"""
-    state, content, world = game.state, game.content, game.world
-    p = state.player
-    if p.creating is not None and p.creating.paid and p.creating.step == "name":
-        return _name_draft(game)  # 立意時付過心得的單子（上一次取名取不到）：接著取名，不丟掉
-    if create.allowed(state, content) is not None or p.stats.get("xinde", 0) - create.price(state, content) < CREATE_RESERVE:
-        return False
-    if p.creating is not None:
-        game.create_cancel()
-    worn = [(team.player_art(state, content, world, a), k) for a, k in ((p.member.wugong_id, "武學"), (p.member.neigong_id, "內功"))]
-    kind = min(worn, key=lambda x: x[0].top_power if x[0] is not None else 0)[1]
-    forms = [f.key for f in create.forms_of(content, kind)]
-    if not forms:
-        return False
-    form = weapons.art_weapon(p.member.wugong_id, content, world) if kind == "武學" else None
-    game.create_begin(kind, form if form in forms else rng.choice(forms))
-    if p.creating is None:
-        return False
-    names = [x.name for x in content.create_forms.presets] or [create.DEFAULT_PRESET]
-    pose = create.preset(content, rng.choice(names))
-    pose = {k: v + rng.uniform(-15, 15) for k, v in pose.items()}
-    game.create_pose(pose)
-    game.create_intent(rng.choice(CREATE_INTENTS))
-    if p.creating is None or p.creating.step != "name":
-        game.create_cancel()
-        return False
-    return _name_draft(game)
-
-
-def _name_draft(game: Game) -> bool:
-    """替成了形的單子取名（退路字表）。都撞名就留著單子（心得立意時付過了），下一次接著取：第一次用原本那一批，
-    之後照這一刻的時辰換一批（不然每次都撞同幾個名字）。"""
-    p = game.state.player
-    draft = p.creating
-    seed = f"自創|{p.name}|{p.created_count}" + (f"|{int((game.now or 0) // 3600)}" if draft.name_tries else "")
-    draft.name_tries += 1
-    for salt in range(naming.CLAIM_ATTEMPTS):
-        name = naming.fallback_name(game.content, seed, draft.kind, salt=salt)
-        game.create_name(name)
-        if p.creating is None:
-            return True
-    return False
-
-
-def switch_to_the_strongest(game: Game) -> None:
-    """功法庫裡有比身上這門值錢的（同一種、照自己修練到的品質算第十成威力，再加上功效，設計 13.7）就改練上去。"""
-    state, content, world = game.state, game.content, game.world
-    for art_id in list(state.player.arts):
-        art = team.player_art(state, content, world, art_id)
-        if art is None:
-            continue
-        slot = "neigong_id" if art.kind == "內功" else "wugong_id"
-        current = team.player_art(state, content, world, getattr(state.player.member, slot))
-        if current is None or _worth(content, art) > _worth(content, current):
-            game.switch_art(art_id)
-
-
-def sense_pick(game: Game, rng: random.Random) -> str | None:
-    """有所感的時候挑什麼（整季機器人與伺服器假人共用，悟意境設計 0.4）：還沒選做法就挑一個（SENSE_RIGHT 的機會挑選得對的），
-    進了感悟狀態就畫（sensing.DRAW，呼叫端要接著 sense_draw）或順其自然。不在有所感是 None。"""
-    got = sensing.current(game.state, game.content)
-    if got is None:
-        return None
-    s, scene, loc = got
-    if s.stage == "draw":
-        return sensing.DRAW if rng.random() < SENSE_DRAW else sensing.LET_GO
-    pool = insights.pool_attributes(loc, game.content)
-    right = [i for i, j in enumerate(s.order) if scene.prologue or scene.methods[j].attribute in pool]
-    if right and rng.random() < SENSE_RIGHT:
-        return f"{sensing.PREFIX}{rng.choice(right)}"
-    return f"{sensing.PREFIX}{rng.randrange(len(s.order))}"
-
-
-def sense_stroke(game: Game, rng: random.Random, same: bool = False) -> list[list[float]]:
-    """機器人不會畫：照它想要的屬性挑一筆現成的（glyph.SAMPLES）。same＝畫跟做法一樣的屬性（一定落回基本意境、不用取名）。"""
-    s = game.state.player.sensing
-    attribute = s.method if same and s is not None and s.method in glyph.SAMPLES else rng.choice(sorted(glyph.SAMPLES))
-    return glyph.SAMPLES[attribute]
-
-
-def sense_draw(game: Game, rng: random.Random) -> list[str]:
-    """整季機器人畫一筆：A 段開單、C 段直接交回（沒給名字：Game.sense_draw 在鎖內用短逾時問一次，取不到走退路字表）。"""
-    req = game.sense_request(sense_stroke(game, rng))
-    if isinstance(req, str):
-        return game.choose(sensing.LET_GO)
-    return game.sense_draw(req)
-
-
-def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
-    """投靠了陣營、卻不是交戰兩軍的機器人（地方豪強）怎麼臨時投效（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營」）：
-    投人少的那一軍，一樣多照名號＋這一場的雜湊挑（不碰亂數）。散人不走這裡（散人的假人不投效）；選單上沒有投效鈕是 None。"""
-    battle = game.battle_now()  # 有攻城戰時是自己看的那一場（領地爭奪第二批）
-    sides = [i for i in option_ids if i.startswith("battle:enlist:")]
-    if battle is None or not sides or game.state.player.faction is None:
-        return None
-    counts = {  # 鈕 id 可能帶「@流水號」（同一個大區兩場以上，領地爭奪第二批）
-        i: sum(1 for p in battle.participants.values() if p.faction == i.removeprefix("battle:enlist:").partition("@")[0]) for i in sides
-    }
-
-    def tie(option_id: str) -> str:
-        return hashlib.sha256(f"{game.state.player.name}|{battle.battle_id}|{option_id}".encode()).hexdigest()
-
-    return min(sides, key=lambda i: (counts[i], tie(i)))
-
-
 def explore_choice(ids, want: str = "material") -> str | None:
     """要探索時按哪一顆：act:explore，不在選單上是 None。量表與腳本共用；want 留著（量表與 same_behavior 帶它）。"""
     return "act:explore" if "act:explore" in ids else None
@@ -406,28 +123,6 @@ def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str
     （bot_policy.take_turn）也照舊不按。留著位子：之後要做就照個性挑一種的 id，直接交給 Game.answer_event 的 outcome
     （不經模型、不寫字；江湖紀錄與行狀照真人一樣只寫類名，看不出是假人）。"""
     return None
-
-
-OUTING_WEIGHTS = {1: 1, 3: 3, 5: 2}  # 假人走一趟挑幾段的比重（只在體力夠的段數裡挑）【預設】
-
-
-def outing_segments(game: Game, rng: random.Random) -> int:
-    """假人走一趟挑幾段（tianxia/outing.py）：體力夠走的段數照 OUTING_WEIGHTS 挑一種；一段都走不起是 0。"""
-    c, p = game.content, game.state.player
-    ok = [n for n in outing.segments(c) if p.stamina >= outing.cost(c, n)]
-    if not ok:
-        return 0
-    return rng.choices(ok, weights=[OUTING_WEIGHTS.get(n, 1) for n in ok])[0]
-
-
-OUTING_SAY_CHANCE = 0.15  # 假人走完一趟留一句預設句的機會（不寫自己的話，同名帖自題從句庫挑）【預設】
-
-
-def outing_say(game: Game, rng: random.Random) -> list[str]:
-    """假人走完一趟（剛收、還能留言）有 OUTING_SAY_CHANCE 的機會留一句預設句（Game.outing_say，免費）；其餘什麼都不做。"""
-    if outing.say_ok(game.state) is None or rng.random() >= OUTING_SAY_CHANCE:
-        return []
-    return game.outing_say(rng.randrange(len(outing.PRESETS)))
 
 
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
@@ -478,258 +173,6 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             return rng.choice(hard).id
     # 約戰開著（減法季批 3b）：挑到出陣那一格換成真的貼一張（封好三招）；那一格每貼一次就扣次數、起冷卻，不是永遠按得下去
     return duel_go(game, rng.choice(options).id, rng) if options else None
-
-
-def take_bounties(game: Game) -> None:
-    """城裡的懸賞榜上有揭得下的就揭、有交得出的求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
-    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求兵不揭（take_problem 擋）。
-    揭的做不做得成看之後隨機走到哪裡。"""
-    s, c = game.state, game.content
-
-    def enabled() -> set[str]:
-        return {o.id for o in game.options(odds=False) if o.enabled}
-
-    if s.pending_event or not bounties.board_here(s, c):
-        return
-    takeable = any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c))
-    if not takeable and bounties.give_choice(s, c, game.world) is None:
-        return  # 沒得揭，也沒得交
-    if "act:bounties" not in enabled():
-        return
-    game.choose("act:bounties")
-    for option in game.options(odds=False):
-        if option.enabled and option.id.startswith("bounty:take:"):
-            game.choose(option.id)
-    for _ in range(c.config.bounties.give_list):  # 交到沒得交為止（一張一人一次：每交一張就少一張）
-        move = bounties.give_choice(s, c, game.world)
-        if move is None or f"bounty:pick:{move[0]}" not in enabled():
-            break
-        game.choose(f"bounty:pick:{move[0]}")
-        give = f"bounty:give:{move[0]}:{move[1]}"
-        if give not in enabled():
-            game.choose("bounty:unpick")
-            break
-        game.choose(give)
-    if s.player.picking_bounty:
-        game.choose("bounty:back")
-
-
-def keep_book_names(game: Game) -> None:
-    """整季機器人打出神器原品：一律按「沿用譜名」（Game.name_divine(keep=True)；設計第十一節：整季機器人不上線，不用擔心看得出來）。"""
-    for item_id in forge_secrets.unnamed_originals(game.state, game.world):
-        game.name_divine(item_id, keep=True)
-
-
-def visit_market(game: Game) -> None:
-    """城裡有馬市就看一眼（裝備四欄設計第九節）：照 market_want 換、買、餵（最多各一次），最後離開。不花體力。
-    沒事要做時連選單都不叫。假人不走這裡（bot_policy 照 market_want 給分）。"""
-    s = game.state
-    if s.pending_event or market_want(game) is None:
-        return
-
-    def enabled() -> set[str]:
-        return {o.id for o in game.options(odds=False) if o.enabled}
-
-    if "act:market" not in enabled():
-        return
-    game.choose("act:market")
-    for _ in range(3):
-        move = market_want(game)
-        if move is None or move not in enabled():
-            break
-        game.choose(move)
-    if s.player.picking_market:
-        game.choose(mounts.BACK)
-
-
-def feed_mount(game: Game) -> None:
-    """飽足低於 mounts.FEED_AT 就餵（設計第九節：約每 10 段一次；走 Game.feed_mount，同修練頁的「餵」）：閒著時哪裡都能餵，
-    在路上、閉關中、沒有一階素材時什麼都不做。整季機器人每一步看一次，假人在 bot_policy.look_after 看。"""
-    s, c = game.state, game.content
-    item = mounts.riding(s, c)
-    if item is not None and item.edge < mounts.FEED_AT and mounts.feed_problem(s, c) is None:
-        game.feed_mount()
-
-
-def wear_better(game: Game) -> None:
-    """裝備庫裡有更好的寶物或更快的馬就換上（裝備四欄設計第九節；整季機器人每一步看一次，假人在 bot_policy.look_after 看）：
-    寶物照 treasures.wanted（固定順序；寶物不設限制，身上已經是最前面的就不換），馬照 mounts.better_mount（吃飽的腳力，同馬市的
-    wanted；路上不換，2.3）。走 Game.wield_weapon（修練頁的「換上」），跟真人一樣。拿到新的、那一欄空著時本來就自動穿上，這裡只管換；不叫模型。"""
-    s, c = game.state, game.content
-    tid = treasures.wanted(s, c)
-    if tid is not None:
-        game.wield_weapon(tid)
-    if s.player.journey is None and (horse := mounts.better_mount(s, c)) is not None:
-        game.wield_weapon(horse)
-
-
-def trade_want(game: Game) -> tuple | None:
-    """鐵匠鋪的下一件素材買賣（素材與經濟計畫 B5；整季機器人與假人共用）：先升階、再賣，沒事是 None。
-    素材四階開著時（正式季整合 8.1）：三換四是那個屬性的四階少於 TIER4_WANT、這一季還能換；其餘每一階照一般的料：高一階不夠換下一階、
-    低一階比留的（trade_keep）多出一份以上；三階跟一、二階一樣多的賣、捐，四階不賣不捐（本來就不收）。關著照舊：
-    升三階：那個屬性的三階少於 TIER3_WANT、二階夠換、今天還能換；升二階：二階不夠換一個三階、一階比留的（TRADE_KEEP）多出一份以上；
-    升階付完工錢要剩 TRADE_SILVER_RESERVE；出來的屬性隨機（economy.upgrade_outcomes），出什麼收什麼、照舊往下算。
-    賣：一階、二階多過留的量的部分。三階不賣。回 ("upgrade", 屬性, 階) 或 ("sell", 素材, 個數)。"""
-    s, c = game.state, game.content
-    econ = c.config.economy
-    held = s.player.materials
-    keep = trade_keep(c)
-    if econ.upgrade:
-        day = game.econ_day()
-        needs = economy.upgrade_needs(c)
-        four = four_tiers.on(c)
-        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 高階先
-            high, low = economy.upgrade_pair(c, attribute, tier)
-            need = needs[tier]
-            if tier == four_tiers.TIER:  # 三換四（正式季整合 8.1）：那個屬性的四階少於 TIER4_WANT 就換，一季照規矩
-                wanted = held.get(high.id, 0) < TIER4_WANT
-            elif tier >= 3 and not four:  # 素材四階關著：舊規則，三階留著湊神器
-                wanted = held.get(high.id, 0) < TIER3_WANT
-            else:  # 一般的料（素材四階開著時三階也是）：高一階不夠換下一階、低一階比留的多出一份以上
-                wanted = held.get(high.id, 0) < needs.get(tier + 1, need) and held.get(low.id, 0) >= keep.get(low.tier, 0) + need
-            affordable = s.player.stats.get("silver", 0) - economy.upgrade_cost(s, c, tier) >= TRADE_SILVER_RESERVE
-            if wanted and affordable and economy.upgrade_problem(s, c, attribute, tier, day) is None:
-                return ("upgrade", attribute, tier)
-    if econ.sell:
-        for mid, n in sorted(held.items()):
-            material = c.materials.get(mid)
-            spare = keep.get(material.tier) if material is not None else None
-            if spare is not None and n > spare and economy.sell_price_for(s, c, material.tier) is not None:
-                return ("sell", mid, n - spare)
-    return None
-
-
-def trade_keep(content) -> dict[int, int]:
-    """每一階留幾個不賣不捐（TRADE_KEEP）：素材四階開著時三階照一、二階的規矩、留夠三換四的（正式季整合 8.1：「留兩個三階湊神器」
-    改成留四階，四階本來就不收）；關著照舊只有一、二階（三階不賣不捐）。"""
-    return dict(TRADE_KEEP) if four_tiers.on(content) else {t: n for t, n in TRADE_KEEP.items() if t < 3}
-
-
-def trade_at_smith(game: Game) -> None:
-    """人在鐵匠鋪（選單開著）時照 trade_want 升、賣到沒事為止（走店面的 Game.smith_upgrade／smith_sell，跟真人按鈕同一條）。
-    不在鐵匠鋪什麼都不做：不為了它繞路。"""
-    if not game.state.player.picking_smith:
-        return
-    for _ in range(TRADE_MOVES):
-        move = trade_want(game)
-        if move is None:
-            return
-        before = dict(game.state.player.materials)
-        if move[0] == "upgrade":
-            game.smith_upgrade(move[1], move[2])
-        else:
-            game.smith_sell(move[1], move[2])
-        if game.state.player.materials == before:
-            return  # 被拒絕（店那一串不在眼前之類）：不再試
-
-
-def donate_want(game: Game) -> tuple[str, int] | None:
-    """在自家大本營捐什麼（素材與經濟計畫 B5）：今天還有點數時，一階、二階多過留的量（TRADE_KEEP）的部分，一階先；三階不捐。
-    回 (素材, 個數)（個數已經照今天剩的點數切過），沒事是 None。人在不在大本營由 donate_spare 問。"""
-    s, c = game.state, game.content
-    if not c.config.economy.donate:
-        return None
-    room = economy.donate_room(s, c, game.econ_day())
-    keep = trade_keep(c)
-    for tier in sorted(keep):
-        for mid, n in sorted(s.player.materials.items()):
-            material = c.materials.get(mid)
-            points = economy.donate_points(c, mid)
-            if material is None or material.tier != tier or points <= 0:
-                continue
-            count = min(n - keep[tier], room // points)
-            if count > 0:
-                return mid, count
-    return None
-
-
-def donate_spare(game: Game) -> None:
-    """人在自家大本營、閒著時，照 donate_want 捐到沒事為止（Game.donate，跟真人同一條）；不在大本營什麼都不做：不為了它繞路。"""
-    for _ in range(TRADE_MOVES):
-        if not game.can_donate_here():
-            return
-        move = donate_want(game)
-        if move is None:
-            return
-        before = dict(game.state.player.materials)
-        game.donate(*move)
-        if game.state.player.materials == before:
-            return
-
-
-def visit_smith(game: Game) -> None:
-    """城裡有鐵匠鋪就看一眼（兵器設計第六節、四欄設計第九節）：先在兵器頁照 weapons.wanted 換、買、修，再照 smithing.forge_plan
-    打一把、把裝備庫裡更好的換上、淬煉手上那把、收掉打造的單子；再切到防具頁照 armor.wanted 換、買、修，照 smithing.armor_plan 打一件
-    （打出來比身上那件好就換上：armor.wanted 先看裝備庫）、淬煉身上那件、收掉單子；最後離開。兵器的事先做完才切防具頁
-    （打造與淬煉的鈕各在各頁）。每一頁換買修最多按四下。不花體力。假人不走這裡（bot_policy 照 smith_want 與 forge_step，打造但不淬煉）。"""
-    s, c, w = game.state, game.content, game.world
-
-    def art():
-        return team.player_art(s, c, w, s.player.member.wugong_id)
-
-    def inner():
-        return team.player_art(s, c, w, s.player.member.neigong_id)
-
-    def enabled() -> set[str]:
-        return {o.id for o in game.options(odds=False) if o.enabled}
-
-    def press(wanted: Callable[[], str | None]) -> None:
-        for _ in range(4):
-            move = wanted()
-            if move is None or move not in enabled():
-                break
-            game.choose(move)
-
-    def finish_draft() -> None:
-        if s.player.smith_draft is not None and smithing.CANCEL in enabled():
-            game.choose(smithing.CANCEL)  # 單子走到一半（按不下去）：收掉，不留在單子上（單子開著時也沒有切頁鈕、沒有離開）
-
-    if s.pending_event or not equipment.smith_open(s, c):
-        return
-    if (smith_want(game) is None and not smithing.has_errand(s, c, w, art()) and not smithing.armor_errand(s, c, w, inner())
-            and trade_want(game) is None):
-        return
-    if "act:smith" not in enabled():
-        return
-    game.choose("act:smith")
-    trade_at_smith(game)  # 素材與經濟（計畫 B5）：先升階、把多的賣掉（賣了有錢買修打）
-    if equipment.page(s.player, c) == "weapon":  # 進門停在兵器頁（武器關著時直接是防具頁，這一段跳過）
-        press(lambda: weapons.wanted(s, c, w, art()))
-        plan = smithing.forge_plan(s, c, w, art())
-        if plan is not None:
-            for oid in smithing.wizard_steps(*plan):
-                if oid not in enabled():
-                    break
-                game.choose(oid)
-        better = smithing.better_in_rack(s, c, w, art())
-        if better is not None and f"smith:wield:{better.id}" in enabled():
-            game.choose(f"smith:wield:{better.id}")
-        weapon = s.player.weapon  # 淬煉最多幾次照這一把的品質（鐵匠鋪與合成流程 3.6）
-        for _ in range(smithing.temper_cap(weapon, c) if weapon is not None else 0):
-            if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
-                break
-            game.choose(smithing.TEMPER)
-        finish_draft()
-        if (armor.wanted(s, c, inner()) is not None or smithing.armor_errand(s, c, w, inner())) and "smith:page:armor" in enabled():
-            game.choose("smith:page:armor")  # 防具的事在另一頁：兵器的事（含打造、淬煉）做完才切過去
-    if equipment.page(s.player, c) == "armor":
-        press(lambda: armor.wanted(s, c, inner()))
-        plan = smithing.armor_plan(s, c, w, inner())
-        if plan is not None:
-            for oid in smithing.wizard_steps(*plan):
-                if oid not in enabled():
-                    break
-                game.choose(oid)
-            finish_draft()
-            press(lambda: armor.wanted(s, c, inner()))  # 打出來進了裝備庫、比身上那件好：換上
-        worn_armor = s.player.armor
-        for _ in range(smithing.temper_cap(worn_armor, c) if worn_armor is not None else 0):
-            if not smithing.armor_temper_wanted(s, c, w, inner()) or smithing.ARMOR_TEMPER not in enabled():
-                break
-            game.choose(smithing.ARMOR_TEMPER)
-        finish_draft()
-    if s.player.picking_smith:
-        game.choose("smith:back")
 
 
 def play_season(

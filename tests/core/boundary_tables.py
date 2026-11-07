@@ -263,7 +263,9 @@ CROSS_PACKAGE_CALLS = {
     ("battle", "cultivation"): {"_seize_chance"},
     ("battle", "faction"): {"_four_wins"},
     ("battle", "looks"): {"_battle_ult", "_round_mvp"},
+    ("battle", "map"): {"travel_options"},  # core_bots 第二輪第 101 批：_toward_battle
     ("battle", "seal"): {"_deliver_seal_results", "_mandate_weight", "_seal_bare"},
+    ("battle", "travel"): {"travel"},  # core_bots 第二輪第 101 批：_toward_battle
     ("bounties", "companions"): {"_letter_thank", "_parley_ask_label", "_parley_keep", "_parley_owed_line", "_parley_settle_task"},
     ("bout", "looks"): {"arena_look", "arena_move"},
     ("checkin", "guide"): {"_opening_gate", "_opening_pending"},

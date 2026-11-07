@@ -6,6 +6,7 @@ from conftest import walk_to
 from test_bot import armed
 from test_engine import _open_three_move_battle, _warlord_in_battle
 from tianxia import battle_instance, bot, bot_policy, fusion, insight_fx, library, naming
+from tianxia.features.craft import bots as craft_bots
 from tianxia.engine import Option
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect, FactionDef, Location,
@@ -531,7 +532,7 @@ def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_
 def arts_only(monkeypatch):
     """這幾個測試只看合成：每輪必合（有兩個意境、體力有餘時必開一爐），不修練。"""
     monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
-    monkeypatch.setattr(bot, "MERGE_SHARE", 1.0)
+    monkeypatch.setattr(craft_bots, "MERGE_SHARE", 1.0)
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
 
 

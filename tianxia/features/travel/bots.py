@@ -1,8 +1,8 @@
 """假人看到移動的選項怎麼按（開發規範手冊 3.8；原本寫在 bot_policy.score 的 move: 那一段，全部拆包第 47 批）。
 road:（折返、路上小事）假人不按：score 沒有這一支，落到最後回 None，這裡一樣。
 
-往哪裡走的分數常數與下一站（next_hop、_home、_front_*、_losing_front、_summons_hop、_bounty_hop、_order_hop、_focus_hop、_clinic_score、clinic_hop）第二輪第 89 批從 bot_policy、bot 搬來，
-舊名 re-export 同一批物件。別包也讀的（_side、_train_value、_turn_cached、_cannot_push、_outmatched、injury_share……）在共用層 bot_base，一律寫 `bot_base.X`，測試換 bot_base 的才打得到。
+往哪裡走的分數常數與下一站（_home、_front_*、_losing_front、_summons_hop、_bounty_hop、_order_hop、_focus_hop、_clinic_score、clinic_hop）第二輪第 89 批從 bot_policy、bot 搬來，
+舊名 re-export 同一批物件。別包也讀的（_side、_train_value、_turn_cached、_cannot_push、_outmatched、injury_share，第 101 批再加 next_hop：決戰、陣營也讀……）在共用層 bot_base，一律寫 `bot_base.X`，測試換 bot_base 的才打得到。
 **模組層不准碰 engine 與假人殼**（bot、bot_policy 模組層 import 這個檔）。"""
 from __future__ import annotations
 
@@ -64,19 +64,6 @@ def clinic_hop(game: Game) -> str | None:
     return None if route is None else route.path[0]
 
 
-def next_hop(game: Game, targets: list[str]) -> str | None:
-    """從所在地往路程最近的目標走的下一站：照地圖連線走路程最短的路（地圖擴充設計 3.2）、跳過還沒開放的地點
-    （不管摸清了沒）；已經在目標上或走不到時回傳 None。"""
-    if game.state.player.location in targets:
-        return None
-    found = atlas.shortest_routes(game.state, game.content)
-    reachable = [found[t] for t in targets if t in found and found[t].path]
-    if not reachable:
-        return None
-    best = min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
-    return best.path[0]
-
-
 def _home(game: Game, profile: BotProfile) -> set[str]:
     """陣營的地盤（假人往這一帶走）。第一季濃縮版（開關開著）：己方輸得最多的那條戰線上的所有地點（第一季設計
     第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。
@@ -101,7 +88,7 @@ def _front_hop(game: Game, profile: BotProfile) -> str | None:
     光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
     faction_id = bot_base._side(game) or profile.faction  # 豪強分屬兩軍：依附那一軍輸得最多的戰線
     front = _losing_front(game, faction_id) if faction_id is not None else None
-    return None if front is None else next_hop(game, _front_locations(game.content, front))
+    return None if front is None else bot_base.next_hop(game, _front_locations(game.content, front))
 
 
 def _losing_front(game: Game, faction_id: str) -> str | None:
@@ -120,13 +107,13 @@ def _losing_front(game: Game, faction_id: str) -> str | None:
 def _summons_hop(game: Game) -> str | None:
     """往召見的地點，路程最近的那一站；沒有召見、已經在、走不到時是 None（計畫 T5）。"""
     summons = game.state.player.summons
-    return next_hop(game, [summons.location]) if summons is not None else None
+    return bot_base.next_hop(game, [summons.location]) if summons is not None else None
 
 
 def _bounty_hop(game: Game) -> str | None:
     """往手上的懸賞要去的地方，路程最近的那一站；沒有、已經在、走不到時是 None。"""
     places = bounty_base.targets(game.state, game.content)
-    return next_hop(game, places) if places else None
+    return bot_base.next_hop(game, places) if places else None
 
 
 def _order_hop(game: Game) -> str | None:
@@ -146,7 +133,7 @@ def _order_hop_now(game: Game) -> str | None:
         # 攻城的地方要出陣攻打贏才記得到：贏面太低的不去（守城、護糧、打擊人物不靠出陣攻打，照走）
         keep = set(orders.targets(s, c, side, skip=frozenset({"intercept", "siege"})))
         places = [loc for loc in places if loc in keep or not bot_base._outmatched(game, loc)]
-    return next_hop(game, places) if places else None
+    return bot_base.next_hop(game, places) if places else None
 
 
 def _focus_hop(game: Game) -> str | None:
@@ -173,7 +160,7 @@ def _focus_hop(game: Game) -> str | None:
 
         for loc in sorted(ready, key=order):
             if not bot_base._outmatched(game, loc):
-                return next_hop(game, [loc])  # 已經在那裡是 None
+                return bot_base.next_hop(game, [loc])  # 已經在那裡是 None
         return None
 
     return bot_base._turn_cached(("focus_hop",), compute)

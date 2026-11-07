@@ -11,6 +11,7 @@ from tianxia.battle_instance import BattleParticipant, BattleRound
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game
+from tianxia.features.craft import bots as craft_bots
 from tianxia.models import (
     BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome,
     FactionDef,
@@ -582,7 +583,7 @@ def _armed_bots(runner, content, clock, monkeypatch, count=1):
     投靠好了、沒有在路上也沒有待處理的事件，存回去；每輪必合、不修練、不練成（心得只花在合成上）。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
     monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
-    monkeypatch.setattr(bot, "MERGE_SHARE", 1.0)
+    monkeypatch.setattr(craft_bots, "MERGE_SHARE", 1.0)
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
     monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 0.0)
     content.config.bots_min_per_faction = 1
