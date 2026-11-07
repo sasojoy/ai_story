@@ -1043,3 +1043,52 @@
     });
   }
 
+  async function mallClick(act, el, ev) {
+    switch (act) {
+        case "rename-ask": { const v = (document.getElementById("rename-name") || {}).value || ""; if (v.trim()) { S.renameAsk = v.trim(); render(); } break; }
+        case "rename-back": S.renameAsk = null; render(); break;
+        case "rename-go": await renameGo(); break;
+        // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
+        case "mall-open": await openMall(); break;
+        case "mall-moves": await openMallMoves(el.dataset.style || ""); break; // 直接進萬寶閣的絕招那一頁（data-style 開那一種打法）
+        case "mall-goto": await openMall(); mallPick(el.dataset.id); break; // 別頁引過來買某一件（修練頁沒丹時的破境丹）
+        case "mall-close": closeMall(); break;
+        case "mall-tab": await mallTabTo(el.dataset.tab); break;
+        case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
+        case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
+        case "prompt-ex-more": moveExMore(); break; // 絕招例句換下一批三句
+        case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
+        case "look-pick": lookPickTo(el.dataset.id || ""); break; // 形象那一頁點一套：台子上換成它
+        case "look-seg": lookSegTo(el.dataset.seg || "mine"); break; // 我的／官方／市集
+        case "look-filter": lookFilterTo(el.dataset.filter || "all"); break; // 我的那一頁篩哪一類
+        case "look-more": lookMore(); break; // 再看一頁
+        case "look-fold": lookFold(el.dataset.what); break; // 摺起來的展開（沒掛的、更早退回的）
+        case "look-sell": lookSellTo(el.dataset.id || ""); break; // 那一套跳出定價框
+        case "look-redo": lookRedo(el.dataset.id); break; // 退回的改一改再送
+        case "move-tab": moveTabTo(el.dataset.tab || ""); break; // 招式庫的打法分頁
+        case "move-form": moveFormOpen(); break; // 寫一招新的（展開）
+        case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
+          const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
+          if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);
+          break;
+        }
+        case "mall-claim": await mallClaim(); break;
+        case "look-wear": await lookWear(el.dataset.id || ""); break; // 萬寶閣「形象」那一頁換上一套
+        case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
+        case "look-withdraw": lookWithdrawAsk(el); break; // 撤回還沒上架的單（先問一次，元寶全退）
+        case "move-order": moveOrderAsk(el.dataset.basic === "1"); break; // 絕招下單（先問一次）：通用 60 不畫圖、獨門 300 畫圖等審核
+        case "move-preview": await movePreview(); break; // 一句話自創的絕招：先看看（不扣元寶）
+        case "move-show": await moveShowTo(el.dataset.id || ""); break; // 招式庫做好了的那一招演一次
+        case "look-show": lookShowTo(el.dataset.id || "", el.dataset.name || ""); break; // 一套形象看動作（再按一次收起）
+        case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
+        case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
+        case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
+        case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招換上身（id 0 是脫下來）
+        case "looks-admin": await looksAdminAsk(el.dataset.op, el.dataset.id, el.dataset.slot); break; // 管理頁「自建形象」：上架、退回先問一次
+        case "ad-show": await adShow(el.dataset.kind, el.dataset.id); break; // 管理頁的全服成品動畫牆：點一個就演（再點收起）
+        case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
+        case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
+    } // mallClick
+  } // mallClick
+  registerClicks(mallClick, ["rename-ask", "rename-back", "rename-go", "mall-open", "mall-moves", "mall-goto", "mall-close", "mall-tab", "mall-pick", "mall-cat", "look-sub", "prompt-ex-more", "prompt-ex", "look-pick", "look-seg", "look-filter", "look-more", "look-fold", "look-sell", "look-redo", "move-tab", "move-form", "mall-qty", "mall-claim", "look-wear", "look-order", "look-withdraw", "move-order", "move-preview", "move-show", "look-show", "market-buy", "market-list", "market-unlist", "move-bind", "looks-admin", "ad-show", "mall-retry", "mall-admin"]);

@@ -6,6 +6,15 @@
  */
 "use strict";
 
+  async function legacyClick(act, el, ev) {
+    switch (act) {
+        case "legacy-open": S.legacy = "main"; S.legacySlip = null; render(); break; // 傳承頁（features/legacy）
+        case "legacy-close": S.legacy = null; render(); break;
+        case "legacy-view": S.legacy = el.dataset.v === "shihai" ? "shihai" : "main"; render(); { const L = document.querySelector(".lg-layer"); if (L) L.scrollTop = 0; } break;
+        case "legacy-slip": S.legacySlip = S.legacySlip === el.dataset.k ? null : el.dataset.k; render(); break;
+    } // legacyClick
+  } // legacyClick
+  registerClicks(legacyClick, ["legacy-open", "legacy-close", "legacy-view", "legacy-slip"]);
   // 傳承（features/legacy；main.legacy）：展開的屬性裡一行入口，按了打開傳承頁（S.legacy = "main"）；識海頁是 S.legacy = "shihai"。
   // 兩頁的樣子在 web/legacy.css（企劃者 2026-11-04「要有真的傳承、識海的感覺」，示意 BsEscEEXvy8BVgw9hM89Si）
   const LG_AXES = [["zheng", "正氣"], ["xie", "邪氣"], ["luck", "機緣"]];

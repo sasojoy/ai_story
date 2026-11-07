@@ -122,3 +122,14 @@
       if (notes && notes.length && (notes.length !== seen || notes[0].when + notes[0].title !== top)) S.shopNote = null;
     });
   }
+  async function tavernClick(act, el, ev) {
+    switch (act) {
+        case "tav-tab": S.tavTab = el.dataset.tab; S.shopNote = null; renderShop(false); break; // 酒肆：四頁
+        case "tav-do": await tavDo(el.dataset.op); break;
+        case "tav-mode": S.tavAsk = el.dataset.mode; renderShop(); break; // 打聽：查人在哪／打聽情誼
+        case "tav-tier": S.tavTier = Number(el.dataset.tier); renderShop(); break; // 買殺手：三檔
+        case "tav-hit-name": { const box = document.querySelector('#tav-hit input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
+        case "tav-name": { const box = document.querySelector('#tav-ask input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
+    } // tavernClick
+  } // tavernClick
+  registerClicks(tavernClick, ["tav-tab", "tav-do", "tav-mode", "tav-tier", "tav-hit-name", "tav-name"]);

@@ -442,3 +442,14 @@
     bpMark(p.key, new Set([...seen, ...ids]));
     bpShow(fresh[fresh.length - 1], p);
   }
+  async function battleClick(act, el, ev) {
+    switch (act) {
+        case "bp-log": document.querySelector("#page .b-round")?.scrollIntoView({ behavior: "smooth", block: "center" }); break; // 戰場面板「完整戰報」：捲到場景卡的戰報
+        case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）
+        case "battle-shut": battleShut(); break; // 攤開的戰場底下「收起戰場」
+        case "mvp-replay": if (typeof mvpReopen === "function") mvpReopen(); break; // 決戰的回合 MVP：戰場底下那一行「再看一次」重新跳出視窗
+        case "mvp-again": if (typeof mvpAgain === "function") mvpAgain(); break; // MVP 視窗裡：絕招從頭再演一次
+        case "mvp-close": if (typeof mvpClose === "function") mvpClose(); break; // MVP 視窗收起
+    } // battleClick
+  } // battleClick
+  registerClicks(battleClick, ["bp-log", "battle-open", "battle-shut", "mvp-replay", "mvp-again", "mvp-close"]);

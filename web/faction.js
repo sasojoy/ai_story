@@ -20,3 +20,9 @@
     return `<details class="card sides-first"${S.sidesOpen ? " open" : ""}><summary data-act="sides-first">${SIDES_FIRST}<small>${where}</small></summary>`
       + `<p class="sides-note">${SIDES_FIRST_NOTE}</p>${sidesTableHtml(sc)}</details>`;
   }
+  async function factionClick(act, el, ev) {
+    switch (act) {
+        case "sides-first": S.sidesOpen = !el.parentElement.open; break; // 摺疊照瀏覽器自己開合；記下來，輪詢重畫時照舊
+    } // factionClick
+  } // factionClick
+  registerClicks(factionClick, ["sides-first"]);

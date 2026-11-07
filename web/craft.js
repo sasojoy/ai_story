@@ -857,3 +857,46 @@
     const now = artFilter(page);
     return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
   }
+  async function craftClick(act, el, ev) {
+    switch (act) {
+        case "secret-close": document.getElementById("sp-pop")?.remove(); break;
+        case "secret-book": document.getElementById("sp-pop")?.remove(); S.bookFrom = window.scrollY; S.book = "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
+        case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
+        case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
+        case "create-kind": { const c = S.main.status.create; S.createPick = { kind: el.dataset.val, form: "" }; if (c) renderPage(); break; }
+        case "create-pick": { if (S.createPick) S.createPick.form = el.dataset.val; renderPage(); break; }
+        case "create-begin": if (S.createPick && S.createPick.form) await mx("create_begin", { kind: S.createPick.kind, form: S.createPick.form }); break;
+        case "create-preset": { // 起手的幾個架式：套上再拖
+          const p = ((S.main.status.create || {}).presets || []).find((q) => q.name === el.dataset.val);
+          if (p) { S.createPose = { ...p.angles }; const svg = document.getElementById("create-rig"); if (svg) rigRedraw(svg); }
+          break;
+        }
+        case "create-pose": if (S.createPose) await mx("create_pose", { pose: S.createPose }); break;
+        case "create-intent": await createIntent(); break;
+        case "create-back": await mx("create_back", { to: el.dataset.to }); break;
+        case "create-name": {
+          const n = document.getElementById("create-name"), m = document.getElementById("create-move");
+          document.activeElement?.blur?.(); // 手機的鍵盤先在這一下收起，不要等換頁那一刻才收、整頁再跳一次
+          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); break; // 立好了 mx 直接回修練頁
+        }
+        case "create-cancel": await createCancel(); break; // 付過心得的先問一次（3.1）
+        case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
+        case "create-reread": await createReread(); break; // 重悟帖的第二個用法：重讀這句意（Joy 2026-10-22）
+        case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
+        case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
+        case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
+        case "pick": pick(el.dataset.type, el.dataset.id); break;
+        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
+        case "pot-lock": if (S.busy) break; toggleLock(Number(el.dataset.i)); break;
+        case "forge": await forge(); break;
+        case "craft-all": craftView().all = true; renderPage(); break;
+        case "pot-open": if (S.busy) break; if (S.forgeSel.length >= 2) { toast("爐裡已經放滿了，點上面的拿出來再換。"); break; } S.craftPick = true; renderPage(); break;
+        case "pot-close": S.craftPick = false; renderPage(); break; // 縮起來的爐子底下的預覽：捲回去看整張卡
+        case "craft-ok": craftView().okOnly = !craftView().okOnly; renderPage(); break;
+        case "forge-hub":
+          if (forgeReady()) await forge();
+          else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
+          break;
+    } // craftClick
+  } // craftClick
+  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub"]);

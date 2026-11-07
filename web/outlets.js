@@ -116,3 +116,13 @@
     if (!items.length) return;
     await shopDo("donate", { items }, () => { S.donatePick = {}; });
   }
+  async function outletsClick(act, el, ev) {
+    switch (act) {
+        // 軍需帳（素材與經濟 B6）：挑一格、＋−個數、全選一階、捐出
+        case "dn-cell": donateCell(el.dataset.id, el.dataset.why); break;
+        case "dn-step": donateStep(el.dataset.id, Number(el.dataset.d)); break;
+        case "dn-tier1": donateTierOne(); break;
+        case "dn-go": await donateGo(); break;
+    } // outletsClick
+  } // outletsClick
+  registerClicks(outletsClick, ["dn-cell", "dn-step", "dn-tier1", "dn-go"]);

@@ -531,3 +531,41 @@
         ${pending ? divineFormHtml(card.id, pending, true, card.unit) : ""}
         <div class="btns${card.where === "rack" ? "" : " one"}">${btns}</div></article></div>`;
   }
+  async function smithyClick(act, el, ev) {
+    switch (act) {
+        case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
+        // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; S.shopBrew = null; S.divinePick = null; renderShop(false); break;
+        // 鐵匠鋪素材頁（素材與經濟 B6）：升一個（灰掉的只說原因）、賣一個、全賣（先問一次）
+        case "trade-up":
+          if (el.dataset.why) toast(el.dataset.why);
+          else await shopDo("smith_upgrade", { attribute: el.dataset.attr, tier: Number(el.dataset.tier) });
+          break;
+        case "trade-sell":
+          if (el.dataset.confirm) ask(el.dataset.confirm, "賣掉", () => shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) }));
+          else await shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) || 1 });
+          break;
+        case "shop-more": S.shopMore = true; renderShop(); break;
+        case "shop-kind": setPot({ kind: el.dataset.kind }); break;
+        case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
+        case "shop-brew": shopBrew(el.dataset.attr, Number(el.dataset.tier), el.dataset.why); break; // 打造頁的灰格（3.3）：點了從底下浮小單
+        case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
+        case "shop-go": await smithForge(); break;
+        case "shop-furnace": await smithFurnace(); break; // 打造頁的爐火（3.2）：看火候
+        case "shop-unwrap": S.shopOpened = true; renderShop(); break; // 點開麻布（2.3）
+        case "shop-keep": S.shopReveal = null; S.shopOpened = false; renderShop(); break; // 收下、留在裝備庫：收起出爐卡
+        case "shop-wield":
+          await shopMx("wield", { weapon: el.dataset.id });
+          if (S.shopReveal && S.shopReveal.id === el.dataset.id) { S.shopReveal = null; S.shopOpened = false; renderShop(); } // 出爐卡上的「換上」：換好了卡收起
+          break;
+        case "shop-dismantle": ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => shopMx("dismantle", { weapon: el.dataset.id })); break;
+        // 裝備庫那一列的修、淬煉、勾選與批量拆解（鐵匠鋪與合成流程 3.4）：id 是裝備庫的「兵:N」「甲:N」，修淬完照舊留在裝備庫
+        case "rack-repair": await shopMx("repair_item", { item: el.dataset.id }); break;
+        case "rack-temper": await shopMx("temper_item", { item: el.dataset.id }); break;
+        case "rack-pick": rackPick(el.dataset.id); break;
+        case "rack-melt": rackMelt(); break;
+        case "dv-cell": await divinePick(el.dataset.id); break; // 神器頁收藏冊的一格（3.8）：翻出神器譜那一行
+        case "shop-divine-keep": await shopMx("name_divine", { weapon: el.dataset.id, keep: true }); break;
+    } // smithyClick
+  } // smithyClick
+  registerClicks(smithyClick, ["divine-keep", "shop-tab", "trade-up", "trade-sell", "shop-more", "shop-kind", "shop-cell", "shop-brew", "shop-slot", "shop-go", "shop-furnace", "shop-unwrap", "shop-keep", "shop-wield", "shop-dismantle", "rack-repair", "rack-temper", "rack-pick", "rack-melt", "dv-cell", "shop-divine-keep"]);

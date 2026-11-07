@@ -125,3 +125,10 @@
     return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
       <summary>🪧 懸賞（${list.length}）${level ? `<span class="order-level">${esc(level)}</span>` : ""}</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
   }
+  async function bountiesClick(act, el, ev) {
+    switch (act) {
+        case "board-zoom": await boardZoom(el, el.dataset.id); break; // 懸賞榜點一張告示（第四節）：放大成一張紙
+        case "board-close": await boardClose(el); break; // 放回去、收起
+    } // bountiesClick
+  } // bountiesClick
+  registerClicks(bountiesClick, ["board-zoom", "board-close"]);

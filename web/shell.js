@@ -12,3 +12,10 @@
   function registerPage(name, page) {
     PAGES[name] = page;
   }
+
+  // 點擊分派：包登記自己認的 data-act（registerClicks(mapClick, ["map-home", …])），app.js 的 click 監聽查到就交給它，查不到才走殼自己的 switch
+  const CLICKS = Object.create(null); // 沒有原型：data-act 是 constructor 這種字也查不到，跟 switch 一樣什麼都不做
+
+  function registerClicks(fn, acts) {
+    for (const act of acts) CLICKS[act] = fn;
+  }

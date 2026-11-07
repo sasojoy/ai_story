@@ -433,3 +433,72 @@
     if (id === "looks" && !S.adLooks && S.main && S.main.mall && S.main.looks_admin) looksAdminDo("load"); // 點開才抓訂單
     renderKeepingSheet();
   }
+  async function adminClick(act, el, ev) {
+    switch (act) {
+        // 管理頁（admin.js；Joy 2026-11-01 管理者工具獨立一個網址）：設定抽屜頂上那顆「管理者工具 ›」是一般的連結（/admin），這幾顆是管理頁上的
+        case "ad-refresh": await adminReload(true); break;
+        case "ad-result-close": S.adResult = null; renderKeepingSheet(); break;
+        case "ad-find": await adminFind(); break;
+        case "ad-pick": adminPick(el.dataset.login); break;
+        case "ad-gen": adminGenTemp(); break;
+        case "ad-tab": adTabPick(el.dataset.tab); break; // 管理頁的分頁籤（介面重整）
+        case "ad-hold": adHoldClick(el); break; // 危險區：短按只提示要長按（長按在 admin.js 的 pointerdown）
+        case "admin": {
+          const op = el.dataset.op;
+          const body = { hours: Number(el.dataset.hours || 1) };
+          if (op === "start_battle") body.id = document.getElementById("ad-battle").value;
+          if (op === "fire") body.id = document.getElementById("ad-fire").value;
+          if (op === "push_trend") { body.id = document.getElementById("ad-trend").value; body.amount = Number(document.getElementById("ad-amount").value || 0); }
+          if (op === "schedule") {
+            const input = document.getElementById(`tt-at-${el.dataset.id}`);
+            if (!input || !input.value) { toast("先選一個時間。"); break; }
+            body.id = el.dataset.id;
+            body.at = new Date(input.value).getTime() / 1000;
+            body.title = (S.admin.timetable.find((r) => r.id === body.id) || {}).label || body.id;
+            body.when = input.value.replace("T", " ");
+          }
+          if (op === "set_trend") { body.id = document.getElementById("ad-front").value; body.value = Number(document.getElementById("ad-value").value || 0); }
+          if (op === "resolve_event") { const [id, key] = document.getElementById("ad-result").value.split("|"); body.id = id; body.key = key; }
+          if (op === "clear_lock") body.id = document.getElementById("ad-lock").value;
+          if (op === "revive_figure") body.id = document.getElementById("ad-fallen").value;
+          if (op === "start_showdown") {
+            body.id = el.dataset.id;
+            body.title = ((S.admin && S.admin.showdowns) || []).find((s) => s.id === body.id)?.label || body.id;
+          }
+          if (op.startsWith("seal_")) { // 玉璽一組：碎片、名號、狀態、局勢係數照欄位讀（假瀏覽器沒有這些欄位時是空的）
+            const val = (id) => (document.getElementById(id) || {}).value || "";
+            body.id = val("ad-seal");
+            body.name = val("ad-seal-name").trim();
+            body.state = val("ad-seal-state") || "held";
+            body.factor = Number(val("ad-seal-factor") || 1);
+            body.take = el.dataset.take === "1";
+            body.when = el.dataset.when || ""; // 蓋天命之季：next／now（玉璽二）
+            body.hide = el.dataset.hide === "1"; // 領地爭奪的季「強制現世」是「現在藏一片」（問句不同；送出去的欄位一樣）
+          }
+          if (op.startsWith("mingtie_")) { body.name = el.dataset.name || ""; body.version = Number(el.dataset.version || 0); }
+          if (op === "conquest_set" || op === "conquest_progress" || op === "admin_conquest_letter") { // 領地爭奪一組：區塊、陣營、進度照欄位讀
+            const pick = (id) => document.getElementById(id) || {};
+            const block = pick("ad-cq-block"), side = pick("ad-cq-side");
+            body.id = block.value || "";
+            // 問句寫地名：照伺服器給的 name（選單的字後面接了括號，地名自己也可能有括號，不從字切）
+            body.place = ((((S.admin && S.admin.conquest) || {}).blocks || []).find((b) => b.id === body.id) || {}).name || body.id;
+            body.side = op === "conquest_set" && el.dataset.neutral === "1" ? "" : side.value || "";
+            body.sideName = (side.options && side.options[side.selectedIndex]) ? side.options[side.selectedIndex].text : body.side;
+            if (op === "conquest_progress") body.value = Math.max(0, Math.min(100, Number(pick("ad-cq-value").value || 0)));
+          }
+          if (op === "conquest_cancel") body.id = (document.getElementById("ad-cq-siege") || {}).value || "";
+          if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
+            body.name = (S.adPlayer && S.adPlayer.name) || "";
+            if (op === "give_opportunity") {
+              body.id = document.getElementById("ad-opp").value;
+              body.note = ((S.adPlayer && S.adPlayer.opportunities) || []).find((x) => x.id === body.id)?.note || "";
+            }
+            if (op === "give_fragment") body.id = document.getElementById("ad-frag").value;
+          }
+          const [text, yes] = adminAsk(op, body);
+          ask(text, yes, () => adminDo(op, body, yes.replace(/^確定/, ""))); // 先問一次（G3），按了確定才送；結果條上寫做的是哪一件
+          break;
+        }
+    } // adminClick
+  } // adminClick
+  registerClicks(adminClick, ["ad-refresh", "ad-result-close", "ad-find", "ad-pick", "ad-gen", "ad-tab", "ad-hold", "admin"]);
