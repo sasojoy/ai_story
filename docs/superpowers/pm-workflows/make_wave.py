@@ -514,6 +514,122 @@ WAVES["E"] = dict(
 )
 
 
+R2F_NOTE = [
+    R2E_NOTE[0],
+    "- **E 波之後的新位置（以現行程式為準）**：單打 `core/combat.py`、推大勢 `core/pushing.py`、回體丹 `core/pills.py`、狀態列與頁面 `core/status_view.py`、`core/page_view.py`，`Game` 留一行委派。內容檢查：共用層的在各模組，單包的在 `features/<包>/checks.py`，位置固定的走 `Feature.content_slots()`、`features.check_at`，工具在 `core/content_base.py`。假人：共用的在 `bot_base`，各包在 `features/<包>/bots.py`，殼四支包不准 import。網頁：點擊、表單、change 用 `registerClicks`、`registerForms`、`registerChanges` 寫在包的 js；店面樣式 `web/shop.css`、輿圖 `web/map.css`。管理者 `features/admin`。`skillview` 是給測試用的殼（`TEST_ONLY_SHELLS`），產品碼不准 import，新位置 `art_cards`、`art_view`、`forge_view`、`leaderboard`。",
+    "- **這一波好幾條線同時開工（企劃者 11/07「加快分拆，不要卡著」）**：好幾條線都動 `tianxia/engine.py`（各搬各的段）、`tests/core/boundary_tables.py`、`tianxia/core/features.py`、`tianxia/core/registry.py`。**只動你要搬的那幾段**，不順手整理、不重排、不改別人的 import 行；拿掉的 import 只拿你造成沒人用的。總表那一節寫的「依賴」「同線」跟這張派工單不一樣時，照這張派工單。",
+    R2E_NOTE[2],
+]
+
+
+def r2f(n, title, pkg, dev, ports, body, model=None):
+    return r2(n, title, pkg, dev, ports, body + R2F_NOTE, model=model)
+
+
+def b91():
+    return r2f(91, "場景卡收接縫", "core_scene", "dev/scene", "8318", [
+        "- 範圍照那一節。**PM 開波重量，還熱，做**：`_own_scene_text` 兩週改 11 次（雲端與 Joy 3 次）、`scene_art` 3（2）、`location_text` 2（1）。**自己一條線，不接第 92 批（PM 定）**。",
+        "- `scene_art` 靠 `_own_scene_text() != location_text()` 判斷，排錯整張圖不見：開工寫一支暫存比對，把 if 鏈每一格都擺出來，比 `scene_text`、`scene_art` 舊新一樣，第二段收尾再比一次。投靠、叛投、求見同掛的髒存檔逐支照舊。`SCENE_ORDER` 照 `core/features.py` 的 `MENU_ORDER`、`STATUS_ORDER` 寫法，新開的掛鉤寫進回報，不用先問。",
+        CORE_FILE,
+    ])
+
+
+def b92():
+    return r2f(92, "choose 收尾與寄放欄位", "core_choose", "dev/choose-end", "8319", [
+        "- 範圍照那一節。**PM 開波重量，還熱，做**：`choose` 兩週改 43 次（雲端與 Joy 7 次）、`_everyday_options` 28（5）、`__init__` 15（6）、`_action_title` 32（4）。**自己一條線，不接第 91 批（PM 定）**。",
+        "- `Outcome` 多欄不准改現有欄位的預設與先後（各包都在用）。句子順序就是行為；挑擂那支不寫 `_log`；`Feature.scratch()` 要在 `_drop_stale_references` 之前跑完，`_kin`、`_admin_target`、`_load_kin` 開的 `Game` 也要走到。第 99 批總表點名的 `_action_title` 字面放 leftovers 看第 99 批要不要接，這批不動。",
+    ])
+
+
+def b98():
+    return r2f(98, "engine 對包的 import 清到零", "core_imports", "dev/engine-imports", "8320", [
+        "- 範圍照那一節，E 波留的都接進來（下面 leftovers）。`_squad_encounter` 這批收進 `core/combat.py`：`sortie.on` 換 `territory.on` 的等價寫出證明（`CLAUDE.md` 寫三個同一件事，對程式），`PROLOGUE_FIGHT` 字搬核心，engine re-export 同一物件，7 對 `GAME_DELEGATE_CALLERS`、`GAME_DIRECT`、`GAME_IMPORTS` 一起清。擲骰順序不動。",
+        "- **engine 頂端沒人用的 import**（E 波之後約 73 個，開工重數）：拿掉 `from . import` 裡的會改載入順序，每拿一組就比 `sys.modules` 先後；動到先後的查 import 當下有沒有副作用，沒有才拿，寫進 decided（第 90 批前例）。`encounter` 有 2 處 patch，先改。`wins_rules` 為了載入順序留著（第 80 批），查過再定。邊界把 `GAME_IMPORTS`、`GAME_DIRECT` 鎖成空。第 91、92 批同波別條線，它們造成沒人用的不算你的。",
+        "- **第 102 批靠這一批**：核心不 import 包要變成真的。",
+        CORE_FILE,
+    ])
+
+
+def b99():
+    return r2f(99, "有主的零碎歸位與 engine 收尾", "core_rest", "dev/engine-rest", "8321", [
+        "- 範圍照那一節，從第 98 批的結果開。「engine 讀 skillview 改讀 art_cards」第 88 批做掉了，開工確認。`_deliver_away` 在 sync 最後一句、`_renown_after` 在 `_log` 第一句：只換本體不換呼叫位置。墓碑與沒人讀的 import 分開提交好退。`_deliver_echoes` 的路徑寫死在 `test_explain2`（現在在 `tianxia/features/guide/tests/`）。第 91、92 批同波別條線：`scene_*`、`choose`、`_everyday_options` 附近的墓碑不動。",
+    ])
+
+
+def b93():
+    return r2f(93, "shopview 切五家", "shop", "dev/shops", "8322", [
+        "- 範圍照那一節，開工照現行程式重量。**PM 定寫法**：`Feature.shop_view(self, ctx, shop) -> dict | None`，一間店只有一包認（店 id → 包：`smith` smithy、`arena` bout、`donate`、`dadian` outlets、`board` bounties、`market` gear、`tavern` tavern，開工對程式，對不上以程式為準）。`core/page_view.shop_view` 改問包（第 81 批把分派搬到那裡），`_shop_open` 的先後不動。契約加一條「一間店只有一包認」。店共用進 `core/shop_base.py`。`shopview.py` 改給測試用的殼，進 `TEST_ONLY_SHELLS`，同 skillview。",
+        "- **`check_shop_lines` 這批搬（第 100 批留的）**：它是跨店的，跟 `SITUATIONS` 一起進 `core/shop_base.py`，validate 原位函式內 import、一句不動，**不開新的 `CONTENT_SLOTS` 格（PM 定）**。`ContentError` 全文比對：造幾種壞的 `shop_lines`，舊新一樣。`test_feature_boundaries.py` 的 `outside_imports` 例子原本是 shopview，要換（第 87 批留的）。",
+    ])
+
+
+def b95():
+    return r2f(95, "test_for：殼的 js 照函式挑", "tools", "dev/test-for-js", "8323", [
+        "- 範圍照那一節，第 84、85、94 批之後 `app.js` 剩的少了很多，**開工重量**，只剩幾個 case 不值得就把結論寫進 decided、只做第二條。",
+        "- **第二條（第 96 批留的）**：改共用層模組裡的 `check_*`、`validate_*` 時也挑 `tests/core/test_content.py`，模組說明裡那句「要另外跑」拿掉（14 個模組，只動那一句）。`IMPORT_CAP` 不准動。",
+    ])
+
+
+def b97():
+    return r2f(97, "共用層瘦身", "core_shared", "dev/shared-slim", "8324", [
+        "- 範圍照那一節。總表附錄甲裁定 siege 不進包，這批改了要寫一筆認定：句子放 docs。共用層不准 re-export 包，要改 import。第 96 批把 `check_siege_templates` 搬進 `siege.py` 了，開工重量。",
+    ])
+
+
+def b104():
+    return r2f(104, "網頁的零碎歸位", "shell_web", "dev/web-rest", "8325", [
+        WEB_RULE,
+        "- E 波留的、批號待 PM 分配的，這批收：① `web/mall.css` 的 look 段（最多約 125 行）切進 `web/looks.css`，`LooksFeature.web` 宣告，`scripts/css_order_check.py` 結束碼 0、先後反了又可能打架 0 對；② `sayLine` 進 `web/companions.js`、`gatherSay` 進 `web/explore.js`（第 85 批把分支搬走、函式留殼），有沒有人叫先量，沒人叫也照搬、寫進 leftovers；③ 恆真的 `typeof bpOn`（`app.js` 約 1564、`main.js` 579、1021）與 `web/admin.js` 的 `typeof adTrendNow`：只切 `main.js` 的測試真的有的話留著，寫進 decided；④ 舊註解 `web/cultivation.js:283,286`（寫 mall.js）、`web/companions.js:84`、`web/zhuan.js:58`（寫 server.…）、`web/app.js:903` 一帶寫 `style.css` 的：照第 85 批做法在 `FACADE_SHELL_LINES` 放行整行字面。",
+        "- 這批不動分派、不改名。`web/` 的檔連註解都不准寫假人那幾個字。",
+    ])
+
+
+EXTRA_LENSES_F = [
+    dict(key="seams", text="**新接縫不能掉格，也不能換先後**。第 91、92 批開了 `SCENE_ORDER`、`MENU_ORDER[\"stale\"]`、`Outcome` 新欄、`Feature.scratch()`。逐格比 base 與 head：`scene_text`、`scene_art`（`_own_scene_text() != location_text()` 那一句）、`choose` 前段 5 支被拒的先後與句子、後段 quiet、merge、fold；`_everyday_options` 事件段；`__init__` 的旗標每一個都還在、初值一樣，`_kin`、`_admin_target`、`_load_kin` 開的 `Game` 也有；`Outcome` 舊欄位預設沒變。寫腳本，不要用看的。假的包登記一格，真的問得到嗎。"),
+    dict(key="shop", text="**五家店一間都不能變**。第 93 批。`/api/main` 的 `shop` 在每間店每種情況舊新逐位元組比（行程內，不開埠）；一間店只有一包認；`core/shop_base` 沒有 import 包；`shopview` 殼的名字一個不少、都是同一物件（`is`）；`check_shop_lines` 造壞內容 `ContentError` 全文與先後一樣；`check_shop_lines` 的呼叫位置沒動。`TEST_ONLY_SHELLS` 測試真的會紅嗎（改一行試）。"),
+    dict(key="imports", text="**核心不 import 包要變成真的，載入先後不能出事**。第 98、99 批。`GAME_IMPORTS`、`GAME_DIRECT` 真的空了；`import tianxia.engine` 當下 `sys.modules` 先後 base 對 head 列差異，每個挪動的模組查 import 當下有沒有副作用（模組層登記、`aliases()`、`register_*`）；`_squad_encounter` 擲骰次數與順序、`sortie.on` 換 `territory.on` 的等價、`PROLOGUE_FIGHT` 同一物件；`Game` 的名字集合 base 對 head（方法與 `game_api` 表）；`test_the_engine_the_bot_program_and_the_bots_load_no_web_framework`；第 99 批搬的本體呼叫位置（`_deliver_away` 在 sync 最後一句、`_renown_after` 在 `_log` 第一句）沒動。"),
+]
+WEB_F = "**這一波切了 `shopview`、`mall.css`，動了幾支 js 的零碎，用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」不用做。** 都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast；改到 css 會自動跑重播）。量分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0：same=true。結束碼 1：逐列分成①工具誤報（寫進 report，不算 diffs）②這一波真的改了（寫進 diffs，same=false）。結束碼 2：工具壞了，same=true、report 開頭寫「比對沒跑完」與原因。\n3. 工具走不到的實機各走一次，主控台 0 錯誤、網路沒有 4xx／5xx：形象頁（第 104 批切樣式）、鐵匠鋪、馬市、懸賞榜、打點、軍需帳、擂台。\n**不修工具、不修程式、不跑 selftest，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+WAVES["F"] = dict(
+    round2=True,
+    extra_lenses=EXTRA_LENSES_F,
+    lines=[
+        dict(name="場景卡", batches=[b91]),
+        dict(name="choose 收尾", batches=[b92]),
+        dict(name="引擎收尾", batches=[b98, b99]),
+        dict(name="店面", batches=[b93]),
+        dict(name="挑測試", batches=[b95]),
+        dict(name="共用層", batches=[b97]),
+        dict(name="網頁零碎", batches=[b104]),
+    ],
+    merge_port=8326, fix_port=8327,
+    web_check=dict(ports="8328、8329", steps=WEB_F),
+)
+
+
+def b102():
+    return r2f(102, "過渡收口", "core_shared", "dev/transit-end", "8330", [
+        "- 範圍照那一節。**`CLAUDE.md` 這批不碰**：要改的句子放 docs，PM 改、先給企劃者看。`new_feature.py` 範本與手冊 G11 補新鈕用 `registerClicks`、CSS link 的位置（第 84、86 批留的）這批做。故意寫一行違規要紅，每一條硬規矩都試一次、印出訊息。",
+        "- 第 103 批會把殼收掉，`SHARED_LATER` 之類這批拿掉時，三個殼（`howto`、`skillview`、`shopview`）照 `TEST_ONLY_SHELLS` 走，不開別的白名單。",
+    ])
+
+
+def b103():
+    return r2f(103, "別名與測試殼收掉", "core_shared", "dev/alias-end", "8331", [
+        "- 範圍照那一節，從第 102 批的結果開，數字開工全部重量。**PM 會在開工前量開著的分支**，舊名的 PR 合進來會 `ImportError`，是認了的。用腳本改、語法樹驗（除 import 與字串全一樣），`pytest --collect-only` 條目一樣。`same_behavior` 的 `MUTATIONS` 舊名跟著改。`CLAUDE.md`、`docs/guide` 的舊名句子放 docs，文件輪做。",
+    ])
+
+
+WAVES["G"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="aliases", text="**舊名全部收掉之後什麼都不能壞**。第 102、103 批。`git grep` 每個舊名（別名表 base 上列出來）在 `tianxia/`、`tests/`、`scripts/`、`server.py`、`run_bots.py` 還有誰讀；`importlib` 把 `tianxia` 底下每個模組各開新行程 import 一次；`patch.object`、字串路徑（`monkeypatch.setattr(\"tianxia.x.y\")`）真的打到本體；`scripts/` 逐支語法檢查與 `--help`；硬規矩故意違規真的紅。主機端工具（`scripts/warm_keeper.py`、`scripts/monitor.py`、`scripts/set_password.py`、`scripts/nightly.ps1`）照舊跑得動。"),
+    ],
+    lines=[dict(name="收口", batches=[b102, b103])],
+    merge_port=8332, fix_port=8333,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
