@@ -115,7 +115,7 @@
 - `ctx._check_hints()`：做完一件事看一遍碰到才說（新手目標發獎勵、該說的排一條、輪到的上框；記在這一則紀錄的引導那幾行）
 - `ctx._hint(hint_id)`：碰到某個玩法、排一條提示（事件型的：被名將打發、玉璽碎片的秘密揭開、第一次交友或談話、操練練完）
 - `ctx._note_action(action)`：做完一個行動，引導（說書人的步驟、入伍段）看這一步完成了沒，回那幾行（交給 `ctx._guide`）——出陣包的
-  「出一次力」叫它（原本 import `tianxia.guide.note_action`：包 import 包）；本體叫 engine 模組層的 `note_action`（測試換的是那個名字）
+  「出一次力」叫它（原本 import `tianxia.guide.note_action`：包 import 包）；本體在引導包 `actions.note_action`，叫 `rules.note_action` 的模組屬性（測試換的是 `tianxia.features.guide.rules.note_action`）
 - 核心的：`ctx._preparing()`（籌備中）、`ctx._journal_guide(notes)`（引導的話記進這一則江湖紀錄的引導那幾行）、`ctx._free_text_of(event)`
   （這一則事件有沒有隨口應對：事件檢定的委派）
 - 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）

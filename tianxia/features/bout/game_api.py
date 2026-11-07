@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from . import arena_actions, duel_actions
+from . import duel_rules
 
 
 TABLE = {
@@ -30,4 +31,6 @@ TABLE = {
     "arena_crowd_request": arena_actions.arena_crowd_request,
     "apply_arena_crowd": arena_actions.apply_arena_crowd,
     "_deliver_arena": arena_actions.deliver_arena,
+    # core_imports（第二輪第 98 批：原本是 Game 的類別屬性）：頭目戰、擂台的輸入框底下那一句。不是函式，只有測試從 Game 讀（邊界名單 GAME_TABLE_TEXTS）
+    "DUEL_GAMBLE_NOTE": duel_rules.DUEL_GAMBLE_NOTE,
 }

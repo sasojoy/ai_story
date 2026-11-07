@@ -56,4 +56,6 @@ TABLE = {
     "quest_text": actions.quest_text,
     "_stamina_help": actions.stamina_help,
     "_war_help": actions.war_help,
+    # core_imports（第二輪第 98 批：原本是 Game 本體上的方法）
+    "_note_action": actions.note_action,
 }

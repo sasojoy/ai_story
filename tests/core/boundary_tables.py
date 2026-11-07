@@ -26,7 +26,15 @@ GAME_IMPORTS = {
 # 戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心自己的接縫：還沒搬的別的功能（或同一包還沒搬的那一半）叫包。
 GAME_DIRECT = {
     "_squad_encounter": "戰鬥（as_sortie 那一支）打贏之後出陣包給獎勵、約戰開著的季不推進度（那兩對記在 GAME_DELEGATE_CALLERS）：留原位（第 26 批量過：獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra；約戰開著與否是查詢；都不在懸賞那一個發布點上，原位行尾標「# 留原位：第 26 批」）。序章那一場的戰報標題寫雪恥（sortie.on、PROLOGUE_FIGHT）留在這裡（第 17 批）：戰報在這個單打服務裡建、裡面就存檔，序章裡誰打都照寫（不只 act:train），出陣包從外面改不到；要拿掉得在單打服務開一個「這一場戰報叫什麼」的位置，交 PM 定",
-    "_note_action": "引導看這一步完成了沒：測試換的是 tianxia.engine.note_action，第 98 批進引導包",
+}
+
+# core_imports（第二輪第 98 批）：各包的表上不是函式的格（字 → 包）。原本是 Game 的類別屬性，只有測試從 Game 讀。
+GAME_TABLE_TEXTS = {
+    "BATTLE_GAMBLE_NOTE": "battle",
+    "BATTLE_GAMBLE_LAST": "battle",
+    "DUEL_GAMBLE_NOTE": "bout",
+    "SELF_IN_TEAM": "companions",
+    "FOLLOWER_IN_TEAM": "companions",
 }
 
 # 核心自己的邏輯叫委派（呼叫端, 委派）；GAME_DIRECT 的方法裡叫的也列。
@@ -332,14 +340,14 @@ CROSS_PACKAGE_CALLS = {
     ("companions", "military"): {"_fs_hear_talk", "_omen_talk_options", "_opp_hear_topic"},
     ("companions", "socialize"): {"_can_meet", "_count_talk", "_socialize_figure", "_talk_idle"},
     ("companions", "travel"): {"_depart"},
-    ("cultivation", "guide"): {"_check_hints"},
+    ("cultivation", "guide"): {"_check_hints", "_note_action"},
     ("explore", "bout"): {"_boss_face", "_boss_ready", "_duel_start"},
     ("explore", "map"): {"_map_mostly_here", "_map_open_places"},
     ("explore", "sense"): {"_sense_here", "_sense_missed", "_sense_start"},
     ("explore", "sortie"): {"_sortie_host"},
     ("explore", "story"): {"_story_begin"},
     ("faction", "battle"): {"_ally_follows_battle", "_battle_now"},
-    ("faction", "guide"): {"_nearest_to", "_opening_pending"},
+    ("faction", "guide"): {"_nearest_to", "_note_action", "_opening_pending"},
     ("figure_acts", "gear"): {"_signature_arms"},
     ("figure_acts", "military"): {"_order_credit"},
     ("guide", "battle"): {"_at_battle", "_battle_status", "_watching_battle"},
@@ -353,7 +361,7 @@ CROSS_PACKAGE_CALLS = {
     ("map", "explore"): {"_practice_tier", "map_mostly"},
     ("map", "sortie"): {"_duel_squad", "_sortie_foes", "_sortie_mode", "duel_on", "sorties_left"},
     ("military", "admin"): {"_timetable_event"},
-    ("military", "guide"): {"_nearest_to"},
+    ("military", "guide"): {"_nearest_to", "_note_action"},
     ("military", "sortie"): {"_duty_option"},
     ("notify", "companions"): {"morning_mail"},
     ("peers", "bounties"): {"_raid_bounty"},
@@ -362,19 +370,20 @@ CROSS_PACKAGE_CALLS = {
     ("seal", "battle"): {"_showdown_status"},
     ("seal", "bout"): {"_duel_cut", "_duel_side"},
     ("sense", "explore"): {"_rare_boost"},
-    ("sense", "guide"): {"_check_hints"},
+    ("sense", "guide"): {"_check_hints", "_note_action"},
     ("socialize", "companions"): {"_open_dialogue"},
     ("socialize", "figure_acts"): {"_snubbed_character"},
     ("socialize", "guide"): {"_hint"},
     ("sortie", "companions"): {"_parley_backing_here"},
     ("sortie", "explore"): {"_outing_on"},
+    ("sortie", "guide"): {"_note_action"},
     ("sortie", "military"): {"_opp_after_success", "_order_credit"},
     ("stamina_plays", "bounties"): {"_raid_bounty"},
     ("tale", "battle"): {"_tale_battles", "apply_battle_tales", "battle_tale_request"},
     ("tavern", "battle"): {"_battle_now"},
     ("territory_acts", "battle"): {"_cancel_siege", "_joinable", "_sieges"},
     ("travel", "battle"): {"_sync_battle_presence"},
-    ("travel", "guide"): {"_check_hints"},
+    ("travel", "guide"): {"_check_hints", "_note_action"},
     ("travel", "military"): {"_hear_after_stamina", "_report_seat"},
     ("travel", "peers"): {"_peer", "_tell_sender"},
     ("travel", "sortie"): {"sorties_left"},

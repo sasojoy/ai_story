@@ -1109,18 +1109,25 @@ def game_api_names() -> dict[str, str]:
     return out
 
 
-GAME_DELEGATES = set(game_api_names()) | {"_note_action"}
+GAME_DELEGATES = set(game_api_names())
+
+# core_imports（第二輪第 98 批）：表上不是函式的那幾格
+from boundary_tables import GAME_TABLE_TEXTS  # noqa: E402  自己這一段另 import：上面那一串別條線也在加
 
 
 def test_every_name_on_the_game_api_tables_hangs_a_function_of_that_package():
-    """表上每一格掛在 Game 上的就是那個函式本身（不包）、住在那一包裡、第一個參數接 Game。"""
+    """表上每一格掛在 Game 上的就是那個函式本身（不包）、住在那一包裡、第一個參數接 Game。GAME_TABLE_TEXTS 那幾格是字（第 98 批）：只驗掛上去的是它、是那一包的。"""
     from tianxia.core import features as features_core
     from tianxia.engine import Game
 
     assert set(game_api_names()) == {name for table in features_core.game_api_tables().values() for name in table}
-    for package, table in features_core.game_api_tables().items():
+    tables = features_core.game_api_tables()
+    assert GAME_TABLE_TEXTS == {name: package for package, table in tables.items() for name, value in table.items() if isinstance(value, str)}
+    for package, table in tables.items():
         for name, func in table.items():
             assert vars(Game)[name] is func, name
+            if name in GAME_TABLE_TEXTS:
+                continue
             assert func.__module__.startswith(f"tianxia.features.{package}"), name
             assert next(iter(inspect.signature(func).parameters)) in ("ctx", "game"), name
 
@@ -1204,7 +1211,7 @@ def test_the_calls_between_packages_are_exactly_the_written_list():
     """包經 Game 叫別包的委派，哪一對、哪幾個名字都在 CROSS_PACKAGE_CALLS（多了少了都紅）：跨包依賴看得到、擋得住。"""
     assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "tavern") == {("tavern", "companions"): {"apply_letter"}}
     assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "companions") == {}
-    assert cross_package_calls("def f(ctx):\n    ctx._note_action('x')\n", "tavern") == {}  # Game 本體的不算，只看表
+    assert cross_package_calls("def f(ctx):\n    ctx._guide(['x'])\n", "tavern") == {}  # Game 本體的不算，只看表
     found = _every_cross_package_call()
     more = {pair: sorted(names - CROSS_PACKAGE_CALLS.get(pair, set())) for pair, names in found.items() if names - CROSS_PACKAGE_CALLS.get(pair, set())}
     less = {pair: sorted(names - found.get(pair, set())) for pair, names in CROSS_PACKAGE_CALLS.items() if names - found.get(pair, set())}

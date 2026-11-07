@@ -1441,14 +1441,6 @@ class Game:
             return []
         return rewards
 
-    # ── 新手引導的服務（全部拆包第 22 批：核心原位與出陣包碰引導的那幾處改叫這幾個一行的委派；本體在新手引導包；計畫
-    # docs/superpowers/plans/2026-11-01-新手引導包-第1批.md 1.4）──
-
-    def _note_action(self, action: str) -> list[str]:
-        """做完一個行動，引導（說書人的步驟與入伍段）看這一步完成了沒（guide.note_action），回那幾行（呼叫端交給 _guide）。
-        叫 engine 模組層的 note_action：tests/core/test_engine.py 換的是 tianxia.engine.note_action。"""
-        return note_action(self.state, self.content, self.world, action)
-
     # ── 新手目標（新手引導重做；tianxia/newbie.py）──
 
     # ── 書信與委託（大勢人物擴充第二批）：本體同上 ──
@@ -1670,10 +1662,6 @@ class Game:
 
     # ── 決戰的放手一搏（輸入框、鎖外三段式的 A、C 段）與補劇情（server.narrate_once 的 A、C 段）：本體在 tianxia/features/battle/view.py，
     # 這裡留一行委派 ──
-
-    # 放手一搏輸入框旁邊那兩句（字在 features/battle/rules.py；過渡：tests/core/test_engine.py 從 game 讀）
-    BATTLE_GAMBLE_NOTE = battle_rules.BATTLE_GAMBLE_NOTE
-    BATTLE_GAMBLE_LAST = battle_rules.BATTLE_GAMBLE_LAST
 
     def _present(self, event: Event, action: str | None = None) -> list[str]:
         return event_check.present(self, event, action)
@@ -2097,8 +2085,6 @@ class Game:
     # choose（出招不建紀錄）、打到一半的選單（_everyday_options）、場景卡、探索撞上頭目、奪璽單挑的陣營名；只有包裡叫的那幾個
     # （_duel_after、_bout_rng……）不留 ──
 
-    DUEL_GAMBLE_NOTE = bout_rules.DUEL_GAMBLE_NOTE  # 頭目戰、擂台的輸入框底下那一句（tests/server/test_server 從 game. 讀；字在單挑包）
-
     # ── 擂台（Joy 2026-10-14 選「隨時挑擂」：報名留分身，別人隨時來挑，照積分排名，只算本季）：本體在功能包
     # tianxia/features/bout/arena_actions.py（全部拆包第 12 批），這裡留一行委派——server 的看台三段式、假人、測試，與核心原位的
     # choose（灰掉的挑擂鈕、出招不建紀錄）、閉關中與路上的入口、場景卡、sync 的補送、店面那一頁。坐在擂台邊的選單、此地還能做的入口、
@@ -2131,11 +2117,6 @@ class Game:
         journal.add_entry(self.state, entry, merge=True)
         self._check_hints()  # 修練頁、煉製頁的動作做完看一遍（新手引導計畫三）：修練失敗留下熟練度、合成、熔煉改變持有，說的話接在這一則的 guide
         return []
-
-    # ── 門下與隊伍 ────────────────────────────────────────
-
-    SELF_IN_TEAM = companions_actions.SELF_IN_TEAM  # 名冊上本人、部下那兩句（搬進人物情誼包；tests/battle/test_ranks.py 讀 Game.FOLLOWER_IN_TEAM）
-    FOLLOWER_IN_TEAM = companions_actions.FOLLOWER_IN_TEAM
 
     # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/cultivation/view.py，這裡留一行委派）──────
 
