@@ -4,6 +4,7 @@ from conftest import real_content
 from conquest_kit import conquest_rules, plain_game
 from tianxia import conquest, sortie
 from tianxia.models import BlockDef, ConquestRules
+from tianxia.features.admin import routes as admin_routes
 from tianxia.state import WorldState
 from tianxia.world_state import stamp_season
 import pytest
@@ -832,14 +833,14 @@ def test_admin_choices_list_capturable_blocks_two_sides_and_open_sieges():
 def test_server_admin_choices_carry_the_conquest_group(monkeypatch):
     game = _admin_game()
     monkeypatch.setattr(server, "CONTENT", game.content)
-    assert server.admin_choices(game)["conquest"] == game.admin_conquest_choices()
+    assert admin_routes.admin_choices(server, game)["conquest"] == game.admin_conquest_choices()
 
 
 def test_the_four_routes_are_admin_actions_named_after_the_engine():
-    """網頁的四顆鈕送的路由都在 ADMIN_ACTIONS，跟 Game.admin_* 同名或照舊名（FB-609：不跟玩家的下戰書撞名）。"""
+    """網頁的四顆鈕送的路由都在 FEATURE_ADMIN_ACTIONS，跟 Game.admin_* 同名或照舊名（FB-609：不跟玩家的下戰書撞名）。"""
     for op in ("conquest_set", "conquest_progress", "admin_conquest_letter", "conquest_cancel"):
         assert op in server.FEATURE_ADMIN_ACTIONS, op  # 第 46 批：搬進地盤包的 admin_tools
-    assert "conquest_letter" not in server.FEATURE_ADMIN_ACTIONS and "conquest_letter" not in server.ADMIN_ACTIONS
+    assert "conquest_letter" not in server.FEATURE_ADMIN_ACTIONS
 
 
 def test_a_non_admin_gets_refused_and_the_map_stays():

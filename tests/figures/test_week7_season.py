@@ -12,6 +12,7 @@ from conftest import real_content
 from tianxia import calendar, checkin, figures, orders, ranks, rules, silver, timetable, treasures, world
 from tianxia.state import new_game_state
 from tianxia.world_state import fresh_season, stamp_season
+from tianxia.features.admin import routes as admin_routes
 from tianxia import calendar, duel, howto, orders, renown, rules, seats, timetable, world, yuedan
 from tianxia.state import Order, YuedanEntry, new_game_state
 import re
@@ -566,9 +567,9 @@ def test_admin_view_labels_and_lines(profile, monkeypatch):
     first, last, realign, dates = ADMIN[profile]
     game = _game(profile, opened=WED14_fb501 if profile == "week7" else MON)
     monkeypatch.setattr(server, "CONTENT", game.content)  # 伺服器整理管理者資料讀的是 server.CONTENT
-    rows = server.timetable_choices(game)["timetable"]
+    rows = admin_routes.timetable_choices(server, game)["timetable"]
     assert rows[0]["label"] == first and rows[-1]["label"].startswith(last)
-    view = server.admin_choices(game)
+    view = admin_routes.admin_choices(server, game)
     assert view["realign"] == realign and view["default_dates"] == dates
 
 
@@ -646,7 +647,7 @@ def _render(game, monkeypatch, app=None):
         rotate: H.adminAsk("rotate_seats", {})[0],
       };"""
     payload = {"m": m, "script": script, "menxia": None, "stored": {}, "responses": {},
-               "S": {"mapBase": game.map_base(), "mapState": st, "admin": server.admin_choices(game),
+               "S": {"mapBase": game.map_base(), "mapState": st, "admin": admin_routes.admin_choices(server, game),
                      "fb501": {"orders": ORDERS, "result": RESULT, "place": place}}}
     if app is not None:
         payload["app"] = str(app)
@@ -813,7 +814,7 @@ def test_the_mandate_ask_names_the_time_the_stamp_really_schedules(profile):
 def test_the_admin_mandate_ask_names_the_week7_time(profile, when, monkeypatch):
     game = _game(profile)
     monkeypatch.setattr(server, "CONTENT", game.content)
-    admin = server.admin_choices(game)
+    admin = admin_routes.admin_choices(server, game)
     assert admin["mandate_at"] == when
     payload = {"m": {**server.main_view(game), "admin": True}, "menxia": None, "stored": {}, "responses": {},
                "script": 'return H.adminAsk("seal_mandate", {when: "now"})[0];', "S": {"admin": admin}}

@@ -403,7 +403,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
   放手一搏送出、隨你出陣的同伴回江湖兩個本體搬進 `muster.py`、包裡直接叫，從這裡拿掉）
 （`ctx._four_wins()`：全部拆包第 35 批陣營成包，改列二、查詢服務 `# faction` 那一段）
 # battle（全部拆包第 6 批：管理者的決戰工具、攻城）
-- `ctx._timetable_event(event_id)`、`ctx._timetable_refusal(action)`（時刻表：這一季的那一件、時刻表類管理者動作的共同檢查；主人大勢人物與賽季）
+- `ctx._timetable_event(event_id)`、`ctx._timetable_refusal(action)`（時刻表：這一季的那一件、時刻表類管理者動作的共同檢查；主人管理者包，第二輪第 90 批）
 # battle（全部拆包第 7 批：集結、投效、挑同伴）
 - `ctx._battle_status(tick)`（測試換掉、數它被叫幾次〔test_engine、test_hints〕：第 8 批本體搬進 `features/battle/progress.py`，包裡照舊經 ctx 叫。
   同一行原本的 `_mutate_battle_now`、`battles_now` 第 8 批搬進 `progress.py`、包裡直接叫，從這裡拿掉）
@@ -503,5 +503,10 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
+
+# admin（第二輪第 90 批：季與時刻表的管理者工具搬進 features/admin；包要叫的 `ctx._log`、`ctx._write`、`ctx._save_season`、`ctx._deliver_big_events`、`ctx._flavor_sink`、
+# `ctx._reconcile_season`、`ctx._admin_refusal`、`ctx.is_admin`、`ctx.stamp`、`ctx.world`、`ctx.state`、`ctx.content`、`ctx.rng`、`ctx.now` 上面都列了；這一段只補還沒列的）
+- `ctx.advance(seconds)`（跳到下一件大事照常推進時間，核心）、`ctx._without_timetable(msgs)`（收季、繼續那一則江湖紀錄拿掉時刻表的行，核心）
+- `ctx._mandate_settle(side, by, title)`（定結果替天命之爭定天命，主人玉璽）、`ctx.cancelled_showdowns()`（時刻表那一欄寫開打後取消，主人決戰）、`ctx.admin_player_choices(name)`（玩家個人劇情那張選單，主人軍情）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。

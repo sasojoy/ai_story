@@ -190,9 +190,10 @@ def test_the_public_page_prints_the_seal_and_the_art_only_when_given():
 
 
 def test_the_server_gives_the_art_url_only_when_the_file_is_there(monkeypatch, tmp_path):
-    """伺服器（server.zhuan_art_src）：江湖頁的 main.zhuan、讀傳那一層（/api/zhuan 的 zhuan_view）、公開頁（zhuan_extras）都是
+    """伺服器（zhuan_end.art_src）：江湖頁的 main.zhuan、讀傳那一層（/api/zhuan 的 zhuan_view）、公開頁（zhuan_extras）都是
     web/img/zhuan/<鍵>.webp 真的在才給網址；雲端批 8 還沒放圖時是 None，公開頁不多插畫那一段。紀念印照票。"""
     import server
+    from tianxia.features.zhuan import routes as zhuan_routes
 
     game = _game()
     _to_week(game, 3)
@@ -205,17 +206,17 @@ def test_the_server_gives_the_art_url_only_when_the_file_is_there(monkeypatch, t
     monkeypatch.setattr(server, "CONTENT", game.content)
     monkeypatch.setattr(server, "WEB", tmp_path)
     assert server.main_view(game)["zhuan"]["illustration_src"] is None  # 圖還沒放
-    assert server.zhuan_view(game, 1, None)["illustration_src"] is None
+    assert zhuan_routes.zhuan_view(server, game, 1, None)["illustration_src"] is None
     (tmp_path / "img" / "zhuan").mkdir(parents=True)
     (tmp_path / "img" / "zhuan" / f"{key}.webp").write_bytes(b"RIFF")
     src = f"/static/img/zhuan/{key}.webp"
     assert server.main_view(game)["zhuan"]["illustration_src"] == src
-    assert server.zhuan_view(game, 1, None)["illustration_src"] == src
+    assert zhuan_routes.zhuan_view(server, game, 1, None)["illustration_src"] == src
     req = game.biography_request(1)
     assert game.write_biography(req, None, game.now + 40)
     code = game.share_biography(1, True, "artcode")
     row = game.world.biography_by_code(code)
-    extras = server.zhuan_extras(game.world, row)
+    extras = zhuan_routes.zhuan_extras(server, game.world, row)
     assert extras["art"] == src and extras["seal"].startswith("黃巾之亂・第 1 季")
 
 
@@ -223,6 +224,7 @@ def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
     """關著的季：main.zhuan 與 zhuan_view 一個鍵都不多（沒有 illustration 就不寫 illustration_src），公開頁的 extras 是空的。"""
     import server
     from tianxia import annals
+    from tianxia.features.zhuan import routes as zhuan_routes
 
     game = _game(zhuan_end=False)
     game.state.player.contrib = 120  # 開著的話是第一階、插畫白送
@@ -234,9 +236,9 @@ def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
     entry = server.main_view(game)["zhuan"]
     assert set(entry) == {"season", "title"}
     game.write_biography(game.biography_request(1), None, game.now + 40)
-    assert not {"illustration", "illustration_src", "seal", "tier", "verdicts"} & set(server.zhuan_view(game, 1, None))
+    assert not {"illustration", "illustration_src", "seal", "tier", "verdicts"} & set(zhuan_routes.zhuan_view(server, game, 1, None))
     code = game.share_biography(1, True, "offcode")
-    assert server.zhuan_extras(game.world, game.world.biography_by_code(code)) == {}
+    assert zhuan_routes.zhuan_extras(server, game.world, game.world.biography_by_code(code)) == {}
 
 
 def test_the_schema_does_not_move_and_bad_windows_are_caught():
@@ -536,6 +538,7 @@ def test_written_writers_reads_only_the_verdict_paragraphs():
 def test_the_public_page_extras_do_not_move(monkeypatch):
     """公開頁只用插畫與紀念印；名單改照正文列不動它們。"""
     import server
+    from tianxia.features.zhuan import routes as zhuan_routes
 
     game = make_game()
     add_story(game)
@@ -545,7 +548,7 @@ def test_the_public_page_extras_do_not_move(monkeypatch):
     assert game.write_biography(game.biography_request(1), None, game.now + 30)
     code = game.share_biography(1, True, "fb847")
     monkeypatch.setattr(server, "CONTENT", game.content)
-    got = server.zhuan_extras(game.world, game.world.biography_by_code(code))
+    got = zhuan_routes.zhuan_extras(server, game.world, game.world.biography_by_code(code))
     assert set(got) == {"seal"} and got["seal"].startswith("黃巾之亂・第 1 季")
 
 
@@ -698,7 +701,7 @@ def test_the_real_content_note_uses_the_slot():
 
 def test_every_faction_has_both_illustrations_on_disk():
     """六張水墨真的在 web/img/zhuan/（企劃者 2026-11-04 轉的玩家問「水墨在哪？」：功能整條都接好了，
-    只有圖沒放——server.zhuan_art_src 檔案不在就回 None，玩家花了三百元寶看到一片空白）。
+    只有圖沒放——zhuan_end.art_src 檔案不在就回 None，玩家花了三百元寶看到一片空白）。
     劇本多一方時這一條會紅：提醒那一方的兩張也要畫。"""
     from pathlib import Path
 

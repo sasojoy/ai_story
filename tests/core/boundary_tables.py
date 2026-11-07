@@ -76,16 +76,13 @@ GAME_DELEGATE_CALLERS = {
     # military
     ("_squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
     ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
-    ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
     ("choose", "_settle_plots"): "做完一個動作之後的集體密謀結算：位置在回話的最後一段，沒有對應的掛鉤",
     ("choose", "_hear_after_stamina"): "花體力的動作之後抽伏筆片段與機緣線索：位置在 choose 結尾、after_action 之前，伏筆先機緣後、共用 self.rng，擲骰順序算行為，沒有對應的掛鉤",
     ("_squad_encounter", "_fs_after_win"): "遊歷打贏之後擲官銀：留原位（第 26 批量過：夾在軍令記功前後、懸賞那一個發布點之前，只在單打服務這一處有，收進事件 win 兩個發布點的訂閱者就不一樣）",
     ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
     ("_own_scene_text", "_fs_asking_text"): "答題中的場景文字排在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前，scene 掛鉤在更前面（有所感、宴席之後、談話之前），位置不同不能接",
-    ("admin_player_choices", "_admin_omen_choices"): "管理者的玩家選單（/api/admin/player）最後兩鍵：可以給的機緣與伏筆片段，鍵的順序算行為，沒有對應的掛鉤",
     # outlets
     # seal
-    ("admin_resolve_event", "_mandate_settle"): "管理者「定結果」替天命之爭定天命：時刻表的救場工具是核心，接在 timetable.resolve 與存季之後、讀回季之前，沒有對應的掛鉤",
     # sense
     ("_insight_blocked", "_sense_missed"): "舊探索那一行（action_notes）句尾補什麼時候才悟得出：舊探索（留給序章與測試內容；總表第七節第 1 題選甲，沒有下一批要收）",
     ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
@@ -321,6 +318,10 @@ RENAMED_PARAMS = {"write_biography": ("request", "req"), "_ambush_record": ("spo
 # 包經 Game 叫別包的委派（主人是各包 game_api.py 的 TABLE）：(誰叫, 主人) → 名字。跟全包掃到的逐對比，多了少了都紅。
 # 新的跨包呼叫：這裡加一列（或加進那一列的名字），名字也要同時列在 tianxia/core/services_list.md。一對一行、名字排序。
 CROSS_PACKAGE_CALLS = {
+    ("admin", "battle"): {"cancelled_showdowns"},
+    ("admin", "military"): {"admin_player_choices"},
+    ("admin", "seal"): {"_mandate_settle"},
+    ("battle", "admin"): {"_timetable_event", "_timetable_refusal"},
     ("battle", "cultivation"): {"_seize_chance"},
     ("battle", "faction"): {"_four_wins"},
     ("battle", "looks"): {"_battle_ult", "_round_mvp"},
@@ -353,6 +354,7 @@ CROSS_PACKAGE_CALLS = {
     ("looks", "battle"): {"_battle_for_me"},
     ("map", "explore"): {"_practice_tier", "map_mostly"},
     ("map", "sortie"): {"_duel_squad", "_sortie_foes", "_sortie_mode", "duel_on", "sorties_left"},
+    ("military", "admin"): {"_timetable_event"},
     ("military", "guide"): {"_nearest_to"},
     ("military", "sortie"): {"_duty_option"},
     ("notify", "companions"): {"morning_mail"},

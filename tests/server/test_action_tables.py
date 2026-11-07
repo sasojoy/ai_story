@@ -25,10 +25,10 @@ MENXIA_OWNERS = {
     "name": "cultivation", "name_divine": "smithy", "bind_art": "smithy", "join": "companions", "leave": "companions", "release": "companions",
     "wield": "gear", "dismantle": "gear", "feed": "gear", "repair_item": "smithy", "temper_item": "smithy", "dismantle_many": "gear", "chuangong": "cultivation",
 }
-# 搬之前 ADMIN_ACTIONS 的 33 個名字，照原本的先後；None 是留在殼的
+# 搬之前 ADMIN_ACTIONS 的 33 個名字，照原本的先後（第二輪第 90 批最後 13 個進管理者包，殼的那一張拿掉了）
 ADMIN_OWNERS = {
-    "outing_erase": "explore", "open_season": None, "end_season": None, "next_season": None, "pause_clock": None, "resume_clock": None, "fast_forward": None,
-    "start_battle": "battle", "fire": None, "push_trend": None, "schedule": None, "jump_next": None, "set_trend": None, "resolve_event": None, "clear_lock": None,
+    "outing_erase": "explore", "open_season": "admin", "end_season": "admin", "next_season": "admin", "pause_clock": "admin", "resume_clock": "admin", "fast_forward": "admin",
+    "start_battle": "battle", "fire": "admin", "push_trend": "admin", "schedule": "admin", "jump_next": "admin", "set_trend": "admin", "resolve_event": "admin", "clear_lock": "admin",
     "cancel_battle": "battle", "revive_figure": "figure_acts", "issue_orders": "military", "rotate_seats": "military", "start_showdown": "battle",
     "summon": "military", "give_opportunity": "military", "give_fragment": "military", "seal_emerge": "seal", "seal_stir": "seal", "seal_assign": "seal",
     "seal_duel": "seal", "seal_fix": "seal", "seal_cancel": "seal", "seal_sink_check": "seal", "seal_mandate": "seal", "mingtie_remove": "peers", "mingtie_restore": "peers",
@@ -61,13 +61,11 @@ def test_tables_keep_the_written_order_and_each_op_lives_in_its_package(table, o
 
 def test_admin_names_kept_their_relative_order_wherever_they_went():
     names = list(ADMIN_OWNERS)
-    assert list(server.ADMIN_ACTIONS) == [n for n in names if ADMIN_OWNERS[n] is None]
     for feature in registry.FEATURES:
         mine = [op for op in feature.admin_tools(server) if op in ADMIN_OWNERS]
         assert mine == [n for n in names if ADMIN_OWNERS[n] == feature.name], feature.name
     moved = [n for n in names if ADMIN_OWNERS[n] is not None]
-    assert len(names) == 33 and len(moved) == 20
-    assert not set(moved) & set(server.ADMIN_ACTIONS)  # 同一個 op 不在兩張表
+    assert len(names) == 33 and len(moved) == 33
 
 
 def test_moved_admin_tools_stay_open_while_paused_and_have_no_gate():

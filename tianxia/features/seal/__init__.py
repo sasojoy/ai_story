@@ -160,6 +160,8 @@ class SealFeature(Feature):
             self._status_slots = (
                 # 奪璽卡（玉璽碎片設計 5.10）：全服看得到，沒有單挑是 None；持有者的碎片卡（第十節）；seal_watch 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
                 StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
+                # 管理頁的玉璽一組（碎片關著是 None，不畫；第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "seal", lambda ctx, frame: {"seal": ctx.admin_seal_choices()}),
             )
         return self._status_slots
 

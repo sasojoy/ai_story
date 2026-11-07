@@ -25,6 +25,7 @@ from tianxia import (
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
+from tianxia.features.admin import routes as admin_routes
 from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt
 from tianxia.ollama_client import OllamaClient
@@ -157,7 +158,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
     列三條戰線，不列黃巾聲勢（由戰線合成；割據 2026-10-31 拿掉）。"""
     def listed():
-        return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
+        return [t["id"] for t in server.look(game, lambda g: admin_routes.admin_choices(server, g))["trends"]]
 
     assert listed() == ["huangjin", "yuxi"]
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
@@ -170,7 +171,7 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
     beta 那場決戰、四個黃巾聲勢門檻與舊玉璽鏈不列；開關關著照舊。"""
     def listed(kind):
-        return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
+        return [x["id"] for x in server.look(game, lambda g: admin_routes.admin_choices(server, g))[kind]]
 
     assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
@@ -2301,7 +2302,7 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
     assert fresh.world.season_phase() == "preparing"
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}))
     assert fresh.world.season_phase() == "running"
 
 
@@ -2333,23 +2334,23 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     assert view["now"] == "" and "賽季開始" in view["latest"]
     assert view["status"]["calendar"] and view["status"]["next_event"] is None
     assert view["guide"] is None  # 說書人的對話框也不叫人去探索（FB-045～052 審查 I1）
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}))
     view = server.main_view(fresh)
     assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
     # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第 9 週・週四 20:44（現實約 4 小時 32 分後）」
     next_event = view["status"]["next_event"]
     assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["end_season"].run(g, {}))
     assert server.main_view(fresh)["guide"] is None  # 休季也一樣
 
 
 def test_only_admins_can_reset_a_password(client, monkeypatch):
     _player(client)
     player = server.game_for("沈青衫")
-    assert server.reset_password(player, "shen_01", "temp-pass") == "（只有管理者能重設密碼。）"
+    assert admin_routes.reset_password(server, player, "shen_01", "temp-pass") == "（只有管理者能重設密碼。）"
     monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
-    assert server.reset_password(player, "沒這個人", "temp-pass") == "找不到這個帳號或名號。"
-    assert server.reset_password(player, "shen_01", "123") == "密碼至少 6 字。"
+    assert admin_routes.reset_password(server, player, "沒這個人", "temp-pass") == "找不到這個帳號或名號。"
+    assert admin_routes.reset_password(server, player, "shen_01", "123") == "密碼至少 6 字。"
     out = client.post("/api/admin/reset_password", json={"target": "沈青衫", "temp": "temp-pass"}).json()
     assert out == {"message": "已重設 shen_01 的密碼。"}
     server.login("shen_01", "temp-pass")
@@ -3362,7 +3363,7 @@ def test_an_action_that_changes_the_phase_is_seen_by_the_view_of_the_same_poll(t
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
-    msgs, view = server.act_look(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}), server.main_view)
+    msgs, view = server.act_look(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}), server.main_view)
     assert msgs and "season:preparing" not in [o["id"] for o in view["options"]]
     assert fresh.world.season_phase() == "running"
 
@@ -4715,10 +4716,10 @@ def test_players_cannot_pause_the_season(client):
 
 
 def test_the_pause_buttons_call_what_the_server_has():
-    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
+    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 FEATURE_ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
     js = webharness.app_source()
     for op in ("pause_clock", "resume_clock"):
-        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.ADMIN_ACTIONS
+        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.FEATURE_ADMIN_ACTIONS
     assert "S.main.paused" in js
     assert "paused" in server.main_view(Game.new(server.CONTENT, "測試"))
 
@@ -4734,7 +4735,7 @@ def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off(
 
 def test_world_step_does_not_move_a_paused_season():
     """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
-    打到一半的決戰那一路見 tests/core/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
+    打到一半的決戰那一路見 tianxia/features/admin/tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
     world = open_world()
     scale = server.CONTENT.config.time_scale
     server.world_step(lambda: 1000.0)  # 記下時鐘

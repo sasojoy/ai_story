@@ -4,7 +4,7 @@
   （曹操）、情誼到 signature_affinity（70）以上的人物各一位、買了親筆評曰請的那一位；同一位只寫一條；情誼 69 沒有。
 - 怎麼寫：三段式同書信——A 開單（zhuan_end.verdict_request）、B 鎖外請模型（write_verdict：四十字以內、繁體、沒有數字與假名，
   寫壞或叫不動回空字串）、C 每一條接一段「評曰：某某云：「…」」（apply_verdict；空的照固定句 content/verdicts.json）。
-- 伺服器：server.write_zhuan 寫完正文再逐條寫評曰（verdict_text，排在真人後面）。關著的季單子上沒有評曰，傳一個字不變。"""
+- 伺服器：routes.write_zhuan（殼留一行包裝 server.write_zhuan）寫完正文再逐條寫評曰（verdict_text，排在真人後面）。關著的季單子上沒有評曰，傳一個字不變。"""
 from __future__ import annotations
 
 import random

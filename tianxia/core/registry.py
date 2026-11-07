@@ -75,6 +75,8 @@ from ..features import tale  # 戰記：全部拆包第 52 批（只接 routes �
 # notify
 from ..features import notify  # 手機通知：全部拆包第 53 批（只接 routes 與 threads，沒有選項、選單、店面；五條 /api/push 與 /sw.js 的路徑跟別的路由不重疊，順序不影響結果）
 from ..features import heroines  # 女子與隱線（Joy 2026-11-06「開工」；規則本體在共用層 heroine_rules）
+# admin
+from ..features import admin  # 管理者：第二輪第 90 批（只接 routes 與 admin_tools，沒有選項、選單、店面；路徑與別的路由不重疊，順序不影響結果）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -148,6 +150,8 @@ FEATURES: list[Feature] = [
     # notify（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
     notify.FEATURE,
     heroines.FEATURE,
+    # admin（排在最後〔照合併先後〕：只有 routes 與 admin_tools，路徑與別的路由不重疊，順序不影響結果）
+    admin.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -265,7 +269,7 @@ SHARED: dict[str, str] = {
                  "懸賞、人物、宴客、修練、有所感、出陣包與領地爭奪、人物活起來、盤算都讀",
     # persona（合回 develop 第 4 段，PM 定：人物性子留成包，純規則搬到這一層）
     "persona_rules": "人物性子的純規則（值與段、記一筆、每天結算、換段、對話提示、簡介）：人物情誼包的 companion_agent 每一輪對話都叫 ends_for、prompt_lines、hear、covers、NONE，"
-                     "手上沒有 ctx；殼的簡介 figure_intro 讀 view；人物性子包的 rules re-export 同一批物件。只 import 核心的 calendar、rules、models、state",
+                     "手上沒有 ctx；交友包的簡介 socialize/intro.py 讀 view；人物性子包的 rules re-export 同一批物件。只 import 核心的 calendar、rules、models、state",
     # heroines（女子與隱線，Joy 2026-11-06「開工」：照 persona_rules 的做法，純規則在這一層）
     "heroine_rules": "女子與隱線的純規則（出不出現、隱線端得出哪一段、給模型的角色與分寸、寫回來的過濾）：人物情誼包的 companion_agent 每一輪對話都叫 role、"
                      "prompt_lines、clean，手上沒有 ctx；女子與隱線包的 rules re-export 同一批物件。只 import 核心的 rules、models、state 與同一層的 figures",

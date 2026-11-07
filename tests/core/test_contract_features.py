@@ -401,6 +401,10 @@ def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypat
     monkeypatch.setattr(features_core, "status_run", spy)
     view = server.main_view(_game())
     assert list(view)[:5] == ["status", "quest", "scene", "art", "options"]
+    from tianxia.features.admin import routes as admin_routes  # noqa: PLC0415  管理頁那一張不在 main_view 裡（第二輪第 90 批）
+
+    admin_view = admin_routes.admin_choices(server, _game())
+    assert list(admin_view)[:2] == ["phase", "battles"]
     assert core.keys() == features_core.STATUS_ORDER.keys()
     for table, order in features_core.STATUS_ORDER.items():
         own = set(features_core.status_hooks(table))

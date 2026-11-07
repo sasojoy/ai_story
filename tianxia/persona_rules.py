@@ -12,7 +12,7 @@
 只 import 核心（models、state、rules、calendar）。玩家看得到的字都在這裡、都待 joy 潤。
 
 本體在共用規則層（registry.SHARED；合回 develop 第 4 段，PM 定）：人物情誼包的 companion_agent 每一輪對話都叫 ends_for、prompt_lines、hear、
-covers、NONE，手上沒有 ctx，包又不准 import 包；殼的 figure_intro 讀 view。人物性子包的 rules.py re-export 同一批物件。"""
+covers、NONE，手上沒有 ctx，包又不准 import 包；交友包的簡介 socialize/intro.py 的 figure_intro 讀 view（第二輪第 83 批從殼搬過去）。人物性子包的 rules.py re-export 同一批物件。"""
 from __future__ import annotations
 
 from tianxia import calendar, rules
