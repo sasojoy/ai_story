@@ -30,7 +30,8 @@ const MERGE_PORT = A.merge_port || 0
 const FIX_PORT = A.fix_port || 0
 const MERGE_INTO = A.merge_extra || '' // 合併時要多合的東西（PM 寫）
 
-const halted_word = (x) => !!x && !/^(無|沒有|none|no|n\/a)?[。.]?$/i.test(String(x).trim())  // 子代理回「無」不算停下來（A 波合併踩過）
+const halted_word = (x) => { const s = String(x || '').trim(); return !!s && !/^(無|沒有|none|no|n\/a)?[。.]?$/i.test(s) && !/^沒有?停/.test(s) }  // 子代理回「無」「沒有停，全部合完」都不算停下來（A、D 波合併踩過）
+const sha_of = (x) => (String(x || '').match(/[0-9a-f]{40}/) || [''])[0] || String(x || '').trim()  // head 欄位子代理可能帶字（D 波踩過）
 const GATE_BASE = A.gate_base || MERGE_BASE  // 閘門比對的基準；合併之後基準又有新提交時另外給
 const COMMON = `
 共通的規矩（這台機器）：
@@ -57,7 +58,7 @@ const DEV_SCHEMA = {
 }
 const MERGE_SCHEMA = {
   type: 'object',
-  properties: { head: { type: 'string' }, conflicts: { type: 'string' }, checks: { type: 'string' }, stopped: { type: 'string' }, report: { type: 'string' } },
+  properties: { head: { type: 'string', description: '只寫 40 碼 SHA' }, conflicts: { type: 'string' }, checks: { type: 'string' }, stopped: { type: 'string', description: '解不了才寫原因；否則空字串' }, report: { type: 'string' } },
   required: ['head', 'conflicts', 'checks', 'stopped', 'report'],
 }
 const GATE_SCHEMA = {
@@ -77,7 +78,7 @@ const REVIEW_SCHEMA = {
 }
 const FIX_SCHEMA = {
   type: 'object',
-  properties: { head: { type: 'string' }, fixed: { type: 'array', items: { type: 'string' } }, rejected: { type: 'array', items: { type: 'string' } }, tests: { type: 'string' }, stopped: { type: 'string' }, report: { type: 'string' } },
+  properties: { head: { type: 'string', description: '只寫 40 碼 SHA' }, fixed: { type: 'array', items: { type: 'string' } }, rejected: { type: 'array', items: { type: 'string' } }, tests: { type: 'string' }, stopped: { type: 'string', description: '只有企劃者能定的事才寫原因；否則空字串' }, report: { type: 'string' } },
   required: ['head', 'fixed', 'rejected', 'tests', 'stopped', 'report'],
 }
 
@@ -160,7 +161,7 @@ ${MERGE_INTO ? '**另外要合的（PM 寫）**：\n' + MERGE_INTO + '\n' : ''}
 推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree' })
 if (!merged || halted_word(merged.stopped)) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }
 
-let gateHead = merged.head, docsPass = null
+let gateHead = sha_of(merged.head), docsPass = null
 if (A.after_merge) {  // 合完、閘門之前的文件輪（PM 寫；閘門要驗到它）
   docsPass = await agent(`你是《天下大勢》PM 派的文件子代理，第 ${WAVE} 波合好之後、閘門之前做一輪文件。
 ${COMMON}
@@ -168,7 +169,7 @@ ${COMMON}
 ${A.after_merge}
 回報 head、做了哪些（fixed）、發現不該做或對不上的（rejected）、跑的結果（tests）。只有企劃者能定的才寫 stopped。`, { label: `docs:wave${WAVE}`, phase: 'Merge', schema: FIX_SCHEMA, isolation: 'worktree' })
   if (!docsPass || halted_word(docsPass.stopped)) return { wave: WAVE, built, merged, docsPass, stopped: docsPass ? docsPass.stopped : '文件輪沒有結果' }
-  if (docsPass.head) gateHead = docsPass.head
+  if (docsPass.head) gateHead = sha_of(docsPass.head)
 }
 
 const PM_TOOLS = A.pm_tools || 'C:/Ray/專案/天下大勢/.claude/worktrees/pm-1103/docs/superpowers/pm-workflows'  // 主要 clone 在 main 上，工具在 PM 的工作樹
@@ -223,7 +224,7 @@ ${gate ? gate.result : '閘門沒有結果：先用同樣的參數跑一次 wave
 ${JSON.stringify(findings, null, 1)}
 做法：一條一個 commit、修一條推一次。比對紅了先用那一軌（\`same_behavior compare --tracks <軌>\`）對每條線的 head 比，找到是哪一條線、哪一批；是腳本的問題（情境走的路兩邊不同）就修腳本、兩邊重比。測試紅了照「合併丟東西」「只是路徑」「真的行為變了」分類：**不要為了綠改行為，也不要改斷言的意思**。修完**只重跑修到的**：那幾條測試、那幾軌，改了 \`tianxia/\` 再跑 \`python ${TOOLS}/undef_scan.py tianxia server.py\` 與邊界、契約。不跑整套（PM 最後再跑一次）。屬實的才修，不屬實的寫進 rejected 附證據。nit 不修。只有企劃者能定的才寫 stopped。
 回報 head、修了哪些、駁回哪些、重跑的結果。`, { label: `fix:wave${WAVE}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree' })
-  if (fix && fix.head) head = fix.head
+  if (fix && fix.head) head = sha_of(fix.head)
 }
 
 return { wave: WAVE, branch: WAVE_BRANCH, merge_base: MERGE_BASE, head, merged, docsPass, gate, reviews, check, fix, nits: reviews.flatMap(r => (r.findings || []).filter(f => f.severity === 'nit')),
