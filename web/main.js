@@ -514,10 +514,17 @@
     if (part === "strip" && S.wkOpen && S.wkOpen.id === "why") S.wkOpen = null;
     wkRepaint("");
   }
+  // 已經有自己一張卡的不再列進「眼下要事」（Joy 2026-11-07 截圖「第三回 宛城城下」出現兩次）：章回在本週卡裡、軍令與懸賞各有一張
+  function wkSteps(w) {
+    const m = S.main || {}, st = m.status || {};
+    const own = { chapter: !!w.chapter, order: !!((m.orders || []).length && shown("orders")), bounty: !!((st.bounties || []).length && shown("orders")) };
+    return w.steps.filter((x) => !own[x.kind]);
+  }
   function wkStepOf(w) {
-    if (!w.steps.length) return null;
+    const steps = wkSteps(w);
+    if (!steps.length) return null;
     if (!S.wkStep || S.wkStep.key !== wkKey(w)) S.wkStep = { key: wkKey(w), i: 0 };
-    return w.steps[S.wkStep.i % w.steps.length];
+    return steps[S.wkStep.i % steps.length];
   }
   // 「態勢」那幾個字：灰線上寫短的（官 58・黃 42），攤開的三方卡裡才是全名
   function wkSidesHtml(sides) {
@@ -528,6 +535,71 @@
   function wkSplit(text) {
     const at = String(text || "").indexOf("：");
     return at > 0 ? [text.slice(0, at), text.slice(at + 1)] : [text, ""];
+  }
+  // 兩軍態勢的拔河條（Joy 2026-11-07「勢力比拼值還是滿有顯示的意義」「能知道是哪一方佔上風」）：藍是官軍、金是黃巾，白槓是現在打到哪，
+  // 兩端細線是一方壓到就收季的那一線（sides_card 的 bar）；右上一句照差距寫：差不到 10「兩軍相持」，10 以上「某軍佔上風」，30 以上「大佔上風」
+  const WK_TUG = "兩軍態勢", WK_EVEN = "兩軍相持", WK_LEAD = "{side}佔上風", WK_LEAD_BIG = "{side}大佔上風"; // 待 joy 潤
+  const WK_BAR_GAP = "{side}{verb}到 {bar} 就是「{title}」，還差 {gap}", WK_BAR_DONE = "{side}已到 {bar}，「{title}」就在眼前"; // 待 joy 潤
+  function wkTugHtml(m, w) {
+    const s = w.sides;
+    if (!s || !("guan" in s) || !("huang" in s)) return w.sides ? wkSidesHtml(w.sides) : "";
+    const g = s.guan | 0, h = s.huang | 0, at = g + h > 0 ? (g * 100) / (g + h) : 50, d = g - h;
+    const name = (k) => (STANCE_NAMES.find(([x]) => x === k) || [k, k])[1];
+    const lead = Math.abs(d) < 10 ? ["even", WK_EVEN] : [d > 0 ? "guan" : "huang", (Math.abs(d) >= 30 ? WK_LEAD_BIG : WK_LEAD).replace("{side}", name(d > 0 ? "guan" : "huang"))];
+    const cols = (m.sides_card && m.sides_card.cols) || [];
+    const col = (k) => cols.find((c) => c.id === k) || {};
+    const ticks = ["guan", "huang"].map((k) => (col(k).bar ? `<s style="left:${k === "guan" ? col(k).bar : 100 - col(k).bar}%"></s>` : "")).join("");
+    // 自己那一方（豪強看此刻幫的那一軍）離收季那一線還差多少；散人不寫（兩邊都寫在「這一季在打什麼」）
+    const sc = m.sides_card || {}, mine = (cols.find((c) => c.mine && (c.id === "guan" || c.id === "huang")) || {}).id || sc.lean;
+    const mc = mine ? col(mine) : null, now = mine === "guan" ? g : h;
+    const gap = mc && mc.bar ? (mc.bar - now > 0 ? WK_BAR_GAP : WK_BAR_DONE).replace("{side}", name(mine)).replace("{verb}", mine === "guan" ? "壓" : "推")
+      .replace("{bar}", mc.bar).replace("{title}", esc(mc.bar_title || "")).replace("{gap}", mc.bar - now) : "";
+    return `<div class="wk-tug"><div class="wk-tug-row"><span>${WK_TUG}</span><b class="wk-lead side-${lead[0]}">${lead[1]}</b></div>`
+      + `<div class="wk-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g}" aria-label="${WK_TUG}：官軍 ${g}，黃巾 ${h}">`
+      + `<b class="side-guan">官 ${g}</b><span class="wk-track"><i style="width:${at}%"></i>${ticks}<u style="left:${at}%"></u></span><b class="side-huang">${h} 黃</b></div>`
+      + `${gap ? `<p class="wk-gap">${gap}</p>` : ""}</div>`;
+  }
+  // 中間那一格：投靠了的人是這一回（章回卡的內容），沒投靠的人是兩顆投靠鈕（最近的投靠點、走多久；就在那裡直接按投靠）
+  const WK_JOIN = "先投一方", WK_JOIN_NOTE = "，才有章回、軍令和戰功", WK_JOIN_BTN = "投{side}", WK_HERE = "就在這"; // 待 joy 潤
+  function wkJoinHtml(m) {
+    const sc = m.sides_card;
+    if (!sc || sc.joined) return "";
+    const btn = (c) => {
+      const near = (c.join_at || []).slice().sort((a, b) => (a.minutes | 0) - (b.minutes | 0))[0];
+      const sub = near ? `${esc(near.name)}・${near.minutes | 0 ? `${near.minutes | 0} 分` : WK_HERE}` : esc(c.where[0] || "");
+      const here = near && !(near.minutes | 0) && (m.options || []).some((o) => o.id === `faction:${c.id}`);
+      const act = here ? `data-act="choose" data-id="faction:${esc(c.id)}"` : `data-act="tab" data-tab="map"${gotoAttrs(near && near.location)}`;
+      return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${WK_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;
+    };
+    const two = sc.cols.filter((c) => c.id === "guan" || c.id === "huang");
+    return `<div class="wk-mid"><p class="ch-next"><b>${WK_JOIN}</b>${WK_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
+  }
+  const WK_MORE = "這一季在打什麼・下一件・簽到", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
+  function wkBoxHtml(m, w, open) {
+    const bp = typeof bpOn === "function" && bpOn(m);
+    const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
+    const ch = chapterCardHtml(m, true), join = ch ? "" : wkJoinHtml(m);
+    const free = m.sides_card && !m.sides_card.joined;
+    return `<section id="week" class="card wk-box" aria-label="${esc(w.label)}${esc(w.when)}">`
+      + `<div class="wk-top"><p class="wk-head"><b class="wk-seg">${esc(w.when)}</b><span class="wk-th">${esc(w.theme || "")}</span></p>`
+      + `${bp ? "" : wkTugHtml(m, w)}${notes.length ? `<p class="wk-note">${notes.map(esc).join(" ")}</p>` : ""}</div>`
+      + `${ch}${join}<div class="wk-morebar"><button class="wk-more" data-act="wk" data-id="why" aria-expanded="${open}" aria-haspopup="dialog">${free ? WK_MORE_FREE : WK_MORE} ›</button>`
+      + `<button class="wk-x" data-act="wk-hide" data-id="strip" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button></div></section>`;
+  }
+  // 點最下面那一行拉起來的那一層：自己那一方攤開、別方收成一行（點了攤開）；投靠在哪只給還沒投靠的人。其餘照以前「為什麼」那一塊
+  const WK_SHEET = "這一季在打什麼";
+  function wkSidesSheetHtml(sc) {
+    if (!sc) return "";
+    const rows = SIDES_ROWS.filter(([k]) => sc.joined ? k !== "where" : true);
+    const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
+    return `<div class="sides">${sc.cols.map((c) => (!sc.joined || c.mine
+      ? `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>${dl(c)}</div>`
+      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc(c.now || "")}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;
+  }
+  function wkSheetHtml(m, w) {
+    return `<div class="sheet-bg" data-act="wk" data-id="why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${WK_SHEET}"><div class="grip"></div>`
+      + `<div class="top-row"><h3 style="flex:1">${WK_SHEET}</h3><button class="btn small ghost" data-act="wk" data-id="why">關閉</button></div>`
+      + `<p class="wk-sheet-th"><b>${esc(w.when)}</b>${esc(w.theme || "")}</p>${whyHtml(m, true)}</div>`;
   }
   // 決戰期間（戰場面板開著）本週條不寫兩軍態勢的兩個數字：面板底下的戰局條也是兩個數字，玩家分不清（PM 2026-11-06 看截圖）；
   // 點開「為什麼」照舊看得到大勢
@@ -541,21 +613,22 @@
     const go = step && step.kind === "newbie" ? `<button class="btn primary wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>`
       : step && shown("tab:map") ? `<button class="btn primary wk-go" data-act="tab" data-tab="map"${gotoAttrs(step.target && step.target.location, step.then && step.then.location)}>${WK_MAP} ›</button>` : "";
     const x = (part) => `<button class="wk-x" data-act="wk-hide" data-id="${part}" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button>`;
-    // 灰線（第 N 週、主題、兩軍態勢）整條是一顆鈕、點了攤開「為什麼」；右邊一顆 × 收到明天。灰線底下那一行小字跟著它收
+    // 本週與章回併成一張卡（Joy 2026-11-07 說好，設計稿 2GNxNC7…）：上一格第 N 週、主題（最多兩行）、兩軍態勢拔河條與「誰佔上風」一句；
+    // 中一格是你那一方這一回的下一步（沒投靠的人換成兩顆投靠鈕）；最下一行點了從底下拉起「這一季在打什麼」那一層，右邊 × 收到明天
+    // （收起來只剩章回卡）。決戰期間（戰場面板開著）不畫拔河條：面板底下的戰局條也是兩軍的數字，玩家分不清（PM 2026-11-06）
     const hideStrip = wkHidden(m, "strip");
-    const strip = hideStrip ? "" : `<div class="wk-stripbar"><button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
-      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides && !(typeof bpOn === "function" && bpOn(m)) ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>${x("strip")}</div>`;
-    const panel = !hideStrip && open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
+    const strip = hideStrip ? chapterCardHtml(m) : wkBoxHtml(m, w, open === "why");
+    const panel = !hideStrip && open === "why" ? `<div class="wk-layer">${wkSheetHtml(m, w)}</div>` : "";
     // 灰線底下一行小字（批 5，整合設計 6.8）：第 3 週「離贏還差多少」、第 2 週的功能剛開了那一句、45 級之後那一句；都沒有不畫
-    const notes = [w.gap, w.unlock, w.cap].filter(Boolean);
-    const note = !hideStrip && notes.length ? `<p class="wk-note">${notes.map(esc).join(" ")}</p>` : "";
+    const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean); // 投靠了的人：自己那一方還差多少寫在拔河條底下
+    const note = ""; // 那一行小字畫在合併的卡裡（wkBoxHtml）
     // 「眼下要事」（Joy 2026-10-26：以前叫「你這一步」）排在行動列底下，平常收成兩行：標題、做完拿什麼與去做；點標題才攤說明與「換一件」。
     // 沒有要做的事不畫；× 收到明天。做完的那一件伺服器下一次就不給了，這裡自然換到下一件
     const more = open === "step";
     const card = !step || wkHidden(m, "card") ? "" : `<section class="card wk-card${more ? " on" : ""}" aria-label="${WK_STEP}">
       <div class="wk-head"><button class="wk-tap" data-act="wk" data-id="step" aria-expanded="${more}"><span class="wk-lab">${WK_STEP}</span><b class="wk-title">${esc(title)}</b></button>${x("card")}</div>
       ${more && detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}
-      <div class="wk-foot">${step.reward ? `<span class="wk-gain">${esc(step.reward)}</span>` : '<span class="wk-gain"></span>'}${more && w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}${go}</div></section>`;
+      <div class="wk-foot">${step.reward ? `<span class="wk-gain">${esc(step.reward)}</span>` : '<span class="wk-gain"></span>'}${more && wkSteps(w).length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}${go}</div></section>`;
     // 幾塊是江湖頁的兄弟元素、不包一層：每塊帶 data-wk，wkRepaint 一起換掉；什麼都沒畫時留一個空的記號，收起之後原地還找得到位置
     // 兩組：灰線那一組（灰線、小字、為什麼）排在行動列上面（data-wk="top"），「眼下要事」與簽到小卡排在行動列底下（data-wk="low"）；
     // part 不給是兩組接在一起（在路上整塊排在選項底下）。一組什麼都沒畫時留一個空記號，收起之後 wkRepaint 原地還找得到位置
@@ -571,7 +644,7 @@
   const CH_DO = "去做";
   // 那一件大事的決戰已經在集結、開打了（管理者提早開，手機介面自檢 U-17）：右上角不再寫排定的時刻，改寫此刻的狀態
   const CH_LIVE = { muster: "集結中", active: "開打了" };
-  function chapterCardHtml(m) {
+  function chapterCardHtml(m, inner) {
     const c = m.week_card && m.week_card.chapter;
     if (!c || !shown("quest")) return "";
     const t = c.target;
@@ -581,19 +654,19 @@
     const at = c.beat && c.beat !== c.title ? `${esc(c.beat)}・${esc(when)}` : esc(when);
     const go = c.waiting || c.scene ? "" : c.here ? `<button class="btn primary ch-go" data-act="choose" data-id="story:${esc(c.line)}">${CH_DO} ›</button>`
       : t && shown("tab:map") ? `<button class="btn primary ch-go" data-act="tab" data-tab="map"${gotoAttrs(t.location)}>${WK_MAP} ›</button>` : "";
-    return `<section class="card ch-card side-${esc(c.side)}" aria-label="${esc(CH_NO.replace("{no}", c.no))}${esc(c.title)}">
+    return `<${inner ? "div" : "section"} class="${inner ? "wk-mid ch-in" : "card ch-card"} side-${esc(c.side)}" aria-label="${esc(CH_NO.replace("{no}", c.no))}${esc(c.title)}">
       <div class="ch-head"><span class="ch-no">${esc(CH_NO.replace("{no}", c.no))}</span><b class="ch-title">${esc(c.title)}</b>${at ? `<span class="ch-at">${at}</span>` : ""}</div>
       <p class="ch-next">${c.waiting || c.scene ? "" : CH_NEXT}${esc(c.hint)}${far}</p>
-      <div class="ch-foot"><span class="ch-sway">${esc(c.sway)}</span>${go}</div></section>`;
+      <div class="ch-foot"><span class="ch-sway">${esc(c.sway)}</span>${go}</div></${inner ? "div" : "section"}>`;
   }
   const WK_HOWTO = '<p class="wk-howto"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
   // 「為什麼」攤開的那一塊：三方卡、收季規則、下一件、主線（以前主線小標的內容）、新手目標（以前新手小標的內容）、簽到這一週七格（每天給什麼）
-  function whyHtml(m) {
+  function whyHtml(m, sheet) {
     const s = m.status || {};
     const nb = newbiePeek(m), ck = checkinPeek(m);
     const next = m.week_card && m.week_card.next ? `<p class="wk-nextev"><b>下一件</b>${esc(m.week_card.next)}</p>` : "";
     const locked = m.week_card && m.week_card.locked ? `<p class="wk-locked">${esc(m.week_card.locked)}</p>` : ""; // 第 2 週才開的功能（6.6，批 5）
-    return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
+    return `${m.sides_card ? (sheet ? wkSidesSheetHtml(m.sides_card) : sidesTableHtml(m.sides_card)) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
       + `${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`
       + `${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
       + (s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO); // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
@@ -607,9 +680,9 @@
   }
   function wkNext() {
     const w = S.main.week_card;
-    if (!w || !w.steps.length) return;
+    if (!w || !wkSteps(w).length) return;
     wkStepOf(w);
-    S.wkStep.i = (S.wkStep.i + 1) % w.steps.length;
+    S.wkStep.i = (S.wkStep.i + 1) % wkSteps(w).length;
     wkRepaint('[data-act="wk-next"]');
   }
   // 只換本週卡那幾塊（灰線、為什麼、你這一步、簽到小卡都帶 data-wk）：新的插在第一塊的位置、舊的拿掉；整頁不重畫，「剛剛」不重播
@@ -905,7 +978,10 @@
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
     // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top") + chapterCardHtml(m));
+    // 合併的本週卡（2026-11-07）裡已經有章回與投靠鈕：卡在的時候不另畫章回卡與三方卡；收起來（×）只剩章回卡、三方卡照舊
+    const box = !letterCard && m.week_card && shown("quest") && !wkHidden(m, "strip");
+    const sidesFirst = box || (m.on_road && m.week_card && shown("quest") && !wkHidden(m, "strip")) ? "" : sidesFirstHtml(m);
+    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top"));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
@@ -929,7 +1005,7 @@
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     const hints = jhHintsHtml(m);
-    if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirst}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     // 戰場面板（battle.js，Joy 2026-11-06 大決戰優化，設計稿方案甲）：開打、集結時排在最上面，出招鈕與放手一搏的輸入框緊接在面板裡；
@@ -1062,7 +1138,7 @@
       { key: "orders", name: "軍令", seal: "令", n: orders || "", html: blocks.orderCard, line: (m.orders && m.orders[0] && (m.orders[0].title || m.orders[0].text)) || "" },
       { key: "bounty", name: "懸賞", seal: "賞", n: bounties || "", html: blocks.bountyCard, line: "" },
       { key: "plan", name: "盤算", seal: "謀", n: "", html: blocks.planCard, line: "" },
-      { key: "week", name: "本週", seal: "週", n: "", html: blocks.weekCard, line: "" },
+      { key: "week", name: "本週", seal: "週", n: "", html: /class="wk-none"/.test(blocks.weekCard || "") ? "" : blocks.weekCard, line: "" }, // 只剩空記號（要做的都有自己一張卡）不算一件
       { key: "seal", name: "玉璽", seal: "璽", n: "", html: blocks.sealMine, line: "" }, // 正在打的奪璽（sealCard）有倒數、要你出招：不收，畫在行動列底下
     ].map((p, i) => ({ ...p, line: p.line || (p.html ? firstText(p.html) : ""), now: dutyNow(p.html), i }))
       .sort((a, b) => (b.now - a.now) || (a.i - b.i)); // 現在做得了的（卡上有一顆按得下去的鈕）排前面，時機未到的在後面；同一級照原本的順序

@@ -3,6 +3,7 @@
 沒有 node 就略過。（以前那一排小標的測試 test_peek_row.py 跟著小標一起拿掉了）"""
 from __future__ import annotations
 
+import json
 import random
 import re
 from pathlib import Path
@@ -43,23 +44,38 @@ def _title(step):
 
 def test_the_week_card_is_a_step_card_and_a_strip():
     """「眼下要事」（Joy 2026-10-26 改名，以前叫「你這一步」）平常收成兩行：標題（點了攤說明）、做完得什麼與去輿圖；右上一顆 ×。
-    灰線（第幾段、主題、兩軍態勢，整條是「為什麼」的鈕）右邊也一顆 ×。幾塊是江湖頁的兄弟（灰線那一組 data-wk="top"、卡那一組 "low"），不包一層。"""
+    上面那一張（Joy 2026-11-07 說好的合併卡）：第幾段、主題、兩軍態勢拔河條，最下一行是拉起那一層的鈕與 ×。
+    幾塊是江湖頁的兄弟（上面那一組 data-wk="top"、卡那一組 "low"），不包一層。"""
     m = _main()
     w = m["week_card"]
     html = run(m, "return H.weekCardHtml(H.S.main);")
-    strip = re.search(r'<button id="week" class="wk-strip"[^>]*>.*?</button>', html, re.S).group(0)
-    assert 'data-act="wk" data-id="why"' in strip and w["when"] in strip and w["theme"] in strip
-    assert "官 " in strip and "黃 " in strip and "豪強" not in strip
+    box = re.search(r'<section data-wk="top" id="week" class="card wk-box".*?</section>', html, re.S).group(0)
+    assert w["when"] in box and w["theme"] in box and 'data-act="wk" data-id="why"' in box
+    assert 'class="wk-bar"' in box and "官 " in box and " 黃" in box and "豪強" not in box
     card = re.search(r'<section data-wk="low" class="card wk-card".*?</section>', html, re.S).group(0)
     assert '<span class="wk-lab">眼下要事</span>' in card and f'<b class="wk-title">{_title(w["steps"][0])}</b>' in card
     assert "你這一步" not in html
     go = 'data-act="newbie-go"' if w["steps"][0]["kind"] == "newbie" else 'data-act="tab" data-tab="map"'  # 新手目標是「去做」，其餘「去輿圖」
     assert go in card and 'data-act="wk-next"' not in card and "wk-detail" not in card  # 說明與換一件收著
-    assert 'data-act="wk-hide" data-id="card"' in card and 'data-act="wk-hide" data-id="strip"' in html
-    assert html.index("wk-strip") < html.index("wk-card")  # 兩組接在一起時灰線那一組在前（江湖頁上分開排：灰線在行動列上面）
+    assert 'data-act="wk-hide" data-id="card"' in card and 'data-act="wk-hide" data-id="strip"' in box
+    assert html.index("wk-box") < html.index("wk-card")  # 兩組接在一起時上面那一組在前（江湖頁上分開排：合併卡在行動列上面）
     for word in ("為什麼</button>", "換一件事", "輿圖 ›</button>", "簽到", "wk-links"):
         assert word not in html
-    assert "wk-panel" not in html
+    assert "wk-sheet" not in html
+
+
+def test_the_tug_of_war_says_who_is_ahead():
+    """兩軍態勢（Joy 2026-11-07「能知道是哪一方佔上風」）：拔河條照官軍那一截畫，差不到 10 寫兩軍相持、10 以上某軍佔上風、30 以上大佔上風；
+    投靠了的人底下一行自己那一方離收季那一線還差多少；決戰期間（戰場面板開著）不畫拔河條。"""
+    m = _main(faction="guan")
+    for guan, word in ((53, "兩軍相持"), (60, "官軍佔上風"), (40, "黃巾佔上風"), (70, "官軍大佔上風")):
+        m["week_card"]["sides"] = {"guan": guan, "huang": 100 - guan}
+        html = run(m, "return H.weekCardHtml(H.S.main, 'top');")
+        assert f">{word}</b>" in html and f'<i style="width:{guan}%"></i>' in html
+    bar = next(c for c in m["sides_card"]["cols"] if c["id"] == "guan")["bar"]
+    assert bar and f"官軍壓到 {bar} 就是「" in html and f"還差 {bar - 70}" in html
+    m["battle_panel"] = {"me": None}
+    assert "wk-bar" not in run(m, "return H.weekCardHtml(H.S.main, 'top');")
 
 
 def test_tapping_the_title_opens_the_detail_and_another_thing():
@@ -117,23 +133,33 @@ def test_another_thing_steps_through_the_candidates():
 
 
 def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
+    """最下一行拉起「這一季在打什麼」那一層：還沒投靠的人三方都攤開、寫投靠在哪；投靠了的人自己那一方攤開，別方收成一行、不寫投靠在哪。"""
     m = _main()
     closed = run(m, "return H.weekCardHtml(H.S.main);")
-    assert "wk-panel" not in closed
-    panel = run(m, "return H.weekCardHtml(H.S.main);", S=_why(m))
-    assert 'class="card wk-panel why"' in panel and 'class="sides"' in panel and 'class="wk-strip on"' in panel
+    assert "wk-sheet" not in closed
+    sheet = run(m, "return H.weekCardHtml(H.S.main);", S=_why(m))
+    assert 'class="sheet wk-sheet"' in sheet and 'class="sides"' in sheet and 'class="sheet-bg" data-act="wk" data-id="why"' in sheet
     for col in m["sides_card"]["cols"]:
-        assert col["name"] in panel and col["where"][0] in panel
-    assert 'data-act="howto-open"' in panel
+        assert col["name"] in sheet and col["where"][0] in sheet
+    assert 'data-act="howto-open"' in sheet and "<details" not in sheet
+    m = _main(faction="guan")
+    sheet = run(m, "return H.weekCardHtml(H.S.main);", S=_why(m))
+    assert '<div class="side side-guan mine">' in sheet and '<details class="side side-huang">' in sheet and "投靠在哪" not in sheet
 
 
-def test_a_loner_gets_the_sides_card_first_and_a_member_does_not():
+def test_a_loner_gets_the_join_buttons_in_the_week_card_and_a_member_does_not():
+    """還沒投靠的人：合併卡的中間一格是兩顆投靠鈕（最近的投靠點、走多久），不另畫三方卡；投靠了的人沒有投靠鈕。
+    合併卡收起來（×）三方卡照舊在最上面。"""
     loner = run(_main(), "return H.pageJianghu();")
-    assert '<details class="card sides-first">' in loner and loner.index("sides-first") < loner.index("act-bar")  # 收著：不把行動列推出第一屏
-    assert "官軍在長社" in loner
-    assert '<details class="card sides-first" open>' in run(_main(), "return H.pageJianghu();", S={"sidesOpen": True})
+    assert "sides-first" not in loner and "wk-join-btn side-guan" in loner and "wk-join-btn side-huang" in loner
+    assert loner.index("wk-join") < loner.index("act-bar") and "投官軍" in loner
     member = run(_main(faction="guan"), "return H.pageJianghu();", S={"dutyOpen": True})
-    assert "sides-first" not in member and "wk-card" in member
+    assert "sides-first" not in member and "wk-join" not in member and "wk-box" in member
+    m = _main()
+    st = m["status"]
+    day = str((st.get("calendar") or {}).get("day") or st.get("day") or m["week_card"]["when"])  # 同 main.js 的 wkDay
+    hid = run(m, "return H.pageJianghu();", stored={"tianxia.wkHide": json.dumps({"day": day, "parts": ["strip"]})})
+    assert '<details class="card sides-first">' in hid and "wk-box" not in hid
 
 
 def test_the_old_peek_row_fronts_and_minimap_are_gone_from_the_jianghu_page():
