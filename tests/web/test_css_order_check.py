@@ -115,3 +115,33 @@ def test_real_sheets_keep_the_level_cells_over_the_tag_pill():
     order = re.findall(r'href="/static/([^"]+\.css)"', (ROOT / "web" / "index.html").read_text(encoding="utf-8"))
     text = "\n".join((ROOT / "web" / name).read_text(encoding="utf-8") for name in order)
     assert text.index("\n.mc-tags i {") < text.index("\n.lv i {")
+
+
+# 第 86 批切走的前綴：這些規則現在在 map.css、shop.css，排在 style.css 後面。.m-gap 不在那一批的範圍，照位置留在 style.css。
+CUT_PREFIXES = re.compile(r"\.mv-|\.m-(?!gap(?![\w-]))|\.mapx|\.map-|#map-|\.mdrawer|\.mgrab|\.mbody|\.shop-|\.ring-|\.forge-|\.ledger-")
+
+
+def _selectors(css: str) -> list[str]:
+    """每一個大括號前面的那一段（選擇器與 @media 條件）；註解與屬性值不算。"""
+    return [s.strip() for s in re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.S))]
+
+
+def test_style_css_stays_free_of_the_cut_prefixes():
+    """靜默失效（第二輪總表第九節第 3 條）：接在 style.css 尾巴覆寫同權重的輿圖、店面規則，git 不報衝突，但 map.css、shop.css 載入得比較晚，蓋不掉。"""
+    hits = [s for s in _selectors((ROOT / "web" / "style.css").read_text(encoding="utf-8")) if CUT_PREFIXES.search(s)]
+    assert not hits, f"寫進 web/map.css 或 web/shop.css：它們排在 style.css 後面，寫在 style.css 尾巴蓋不掉：{hits[:5]}"
+
+
+@pytest.mark.parametrize("css, hits", [
+    pytest.param(".shop-layer .x { color: red; }", [".shop-layer .x"], id="plain"),
+    pytest.param(":where(.shop-layer) .x { color: red; }", [":where(.shop-layer) .x"], id="where"),
+    pytest.param(".card.ring-a, .y { color: red; }", [".card.ring-a, .y"], id="compound"),
+    pytest.param("@media (min-width: 641px) {\n  #map-host .x { color: red; }\n}", ["#map-host .x"], id="in-media"),
+    pytest.param(".m-foo { color: red; }", [".m-foo"], id="m-other"),
+    pytest.param(".m-gap2 { color: red; }", [".m-gap2"], id="m-gap-longer"),
+    pytest.param(".m-gap { color: red; }", [], id="m-gap-stays"),
+    pytest.param(".xshop-a, .mapping { color: red; }", [], id="other-names"),
+    pytest.param("/* .shop-layer { } */ .x { background: url(a.shop-b.png); }", [], id="comment-and-value"),
+])
+def test_the_cut_prefix_check_bites(css, hits):
+    assert [s for s in _selectors(css) if CUT_PREFIXES.search(s)] == hits
