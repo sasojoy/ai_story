@@ -490,7 +490,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
   玩家互動包 scratch 宣告）
 
 # smithy（全部拆包第 41 批）
-- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。鐵匠鋪包 scratch 宣告）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，`features/smithy/shop_view.py` 的 `forged_card`；被拒絕是 None。鐵匠鋪包 scratch 宣告）
 - `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，features/smithy/shop_view.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
 
 # gear（全部拆包第 42 批）

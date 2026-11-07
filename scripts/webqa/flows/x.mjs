@@ -47,7 +47,7 @@ export const flows = [
   }],
   ["x_seal", async (c) => {
     await c.py(`
-from tianxia import seal
+from tianxia.features.seal import seal
 name = '沈浪'
 def _give(shared):
     reg = seal.filled(shared.seal, content)

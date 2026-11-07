@@ -75,7 +75,7 @@ from tianxia.features.sense import epiphany
 from tianxia import event_llm, fight_llm, gender
 from tianxia.features.sense import insight_llm
 from tianxia import leaderboard
-from tianxia.features.companions import letters
+from tianxia.features.companions import letters  # noqa: F401  server 本身不讀，留著是載入先後
 from tianxia import might, naming, narration, ollama_client, power_save, precise
 from tianxia.features.seal import seal
 from tianxia import server_bots, speech, team, training, treasures, weekcard
