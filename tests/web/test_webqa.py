@@ -198,6 +198,7 @@ def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
         (walk / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
     out = compare.compare(a2, b2, HOSTS)
     assert out["real"] == [] and out["noise"] == {"gutter": 1}
+    assert out["fingerprint"]["A"]["style"] == out["fingerprint"]["B"]["style"]  # 雜訊不進指紋：波末第二趟 main 的樣式指紋就是差在這裡
 
 
 def test_the_toasts_words_count_when_both_sides_still_show_them(compare, tmp_path):

@@ -102,7 +102,7 @@ def masked_style_hash(doc: dict) -> str:
         m = _masked.get(k)
         if m is None:
             if keep is None:
-                keep = [i for i, p in enumerate(doc["props"]) if not noise.is_layout_used(p)]
+                keep = [i for i, p in enumerate(doc["props"]) if not noise.used_only([p], flip=True)]  # grid tracks move with the scrollbar, and the scrollbar is not in the fingerprint
             vals = doc["dict"][k].split("\x01")
             m = hashlib.md5("\x01".join(vals[i] for i in keep if i < len(vals)).encode("utf-8", "replace")).hexdigest()[:12]
             _masked[k] = m
