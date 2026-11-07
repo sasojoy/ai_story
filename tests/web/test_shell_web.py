@@ -1,5 +1,5 @@
 """網頁的殼（全部拆包第 64 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md 第六節）：/ 的 script 由伺服器照 FEATURES 生成、
-registerPage、切出去的 web/cultivation.js、web/craft.js。
+registerPage、registerClicks（第 84 批）、切出去的 web/cultivation.js、web/craft.js。
 
 webharness.app_source() 把每支 js 接成一個 IIFE，函式全提升，**抓不到跨檔的載入順序錯**。這裡照 / 的順序把每支檔當獨立的 script 載進
 同一個 vm context（跟瀏覽器一樣：頂層的 const 下一支看得到，還沒載入的碰了就 ReferenceError）。沒有 node 的那幾條略過。"""
@@ -7,7 +7,11 @@ webharness.app_source() 把每支 js 接成一個 IIFE，函式全提升，**抓
 # 畫法在 web/notify.js、web/peers.js、web/guide.js、web/sense.js、web/seal.js、web/zhuan.js、web/sortie.js、web/travel.js、web/tale.js、web/story.js、web/companions.js、web/territory_acts.js、web/state.js、web/fit.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 # 畫法在 web/battle.js、web/explore.js、web/military.js、web/figure_acts.js、web/checkin.js、web/faction.js、web/hire.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 # 樣式在 web/battle.css、web/military.css、web/companions.css、web/figure_acts.css、web/bounties.css、web/notify.css、web/guide.css、web/checkin.css、web/explore.css、web/sortie.css、web/peers.css、web/territory_acts.css、web/cultivation.css、web/craft.css、web/tavern.css、web/seal.css、web/story.css、web/smithy.css（全部拆包第 67 批從 style.css 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 點擊框也在 web/map.js、web/mall.js、web/legacy.js（第 84 批，test_every_click_act_has_one_owner）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
+
+import json
+import re
 
 import pytest
 
@@ -63,11 +67,11 @@ def test_every_script_loads_on_its_own_in_the_order_the_page_serves():
 
 @needs_node
 def test_the_load_check_catches_a_package_loaded_before_the_shell():
-    """這條測試真的抓得到載入順序錯：包檔排在 shell.js 前面，檔尾的 registerPage 就是 ReferenceError。"""
+    """這條測試真的抓得到載入順序錯：包檔排在 shell.js 前面，檔尾的 registerClicks 就是 ReferenceError（第 84 批起第一支炸的是 map.js 檔尾）。"""
     order = [name for name in features_core.web_scripts() if name != "shell.js"]
     assert order.index("cultivation.js") < order.index("app.js")
     failed = load(order)["failed"]
-    assert failed and failed[0][1] == "ReferenceError" and "registerPage" in failed[0][2]
+    assert failed and failed[0][1] == "ReferenceError" and "registerClicks" in failed[0][2]
 
 
 @needs_node
@@ -76,6 +80,36 @@ def test_the_packages_register_their_tabs():
     out = load(features_core.web_scripts(), "[Object.keys(PAGES), PAGES.practice.render === pagePractice, PAGES.craft.render === pageCraft]")
     assert out["failed"] == []
     assert out["value"] == [["practice", "craft"], True, True]
+
+
+def test_every_click_act_has_one_owner():
+    """第 84 批：包在 <包>Click 的框裡認自己的 data-act，registerClicks 的清單跟框裡的 case 一個不多一個不少；
+    同一個 act 不准兩包都認，也不准包認了、殼的 switch 還留一份（CLICKS 先查，殼那一份會變成靜靜不跑）。"""
+    frame = re.compile(r'^  async function (\w+)Click\(act, el, ev\) \{\n    switch \(act\) \{\n(.*?)^    \} // \1Click\n  \} // \1Click\n'
+                       r'  registerClicks\(\1Click, (\[[^\n]*\])\);$', re.S | re.M)
+    case = re.compile(r'^        case "([^"]+)":', re.M)
+    owners: dict[str, list[str]] = {}
+    for name in features_core.web_scripts():
+        src = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+        calls = re.findall(r"^  registerClicks\((\w+)Click, ", src, re.M)
+        assert calls in ([], [name[:-len(".js")]]), f"{name} 登記的框要照檔名：{calls}"
+        if not calls:
+            continue
+        found = frame.findall(src)
+        assert len(found) == 1, f"{name} 的框要照字面"
+        _, body, listed = found[0]
+        acts = case.findall(body)
+        assert json.loads(listed) == acts, f"{name} 的 registerClicks 清單要等於框裡的 case，照先後"
+        for act in acts:
+            owners.setdefault(act, []).append(name)
+    shell = (webharness.WEB / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert "\n      if (clicked) return await clicked(act, el, ev);" in shell  # 一定要 await：這個 try 靠它吞 api() 丟的錯
+    lookup = shell.index("\n      if (clicked) return await clicked(act, el, ev);")
+    switch = shell[lookup:shell.index("\n    } catch (e) { /* api()", lookup)]
+    for act in case.findall(switch):
+        owners.setdefault(act, []).append("app.js")
+    assert owners["map-home"] == ["map.js"] and "logout" in owners  # 兩邊都真的找到了，不是兩張空表
+    assert {act: where for act, where in owners.items() if len(where) != 1} == {}
 
 
 @needs_node
