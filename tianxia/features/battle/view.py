@@ -22,7 +22,7 @@ from tianxia import calendar, gender, journal, team
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog, tactics  # 共用規則層
 from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
-from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
+from tianxia import conquest  # 共用規則層（地盤）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
 from tianxia import figure_life, front_lines, wins  # 共用規則層（人物活起來、戰線、三陣營四勝利）
 from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：開著沒有、天命之爭、璽動與戰功居前那一句；全部拆包第 27 批）
@@ -33,7 +33,7 @@ from tianxia.rules import can_draw_side_change, front_text, resolve_trends, seas
 from tianxia.state import BattleRecord, JournalEntry
 
 from . import generals  # 龍頭上陣（第 8 批從 tianxia/generals.py 搬進這一包）
-from . import muster, rules  # muster：集結、投效、挑同伴（第 7 批；它也 import 這一檔，都在函式裡用）
+from . import muster, rules, siege_rules  # muster：集結、投效、挑同伴（第 7 批；它也 import 這一檔，都在函式裡用）
 from . import progress  # 推進與結算（第 8 批；它 import muster、sieges，都在函式裡用）
 
 
@@ -351,8 +351,8 @@ def watch_text(ctx, battle: battle_instance.BattleInstance, definition: BattleDe
     if ctx.state.player.name in battle.participants:
         region = muster.battle_region_name(ctx, definition)
         return f"你離開了{region}，這回合不出手；人回到{region}就能再出手。"
-    if battle.siege is not None and not siege.slots(battle.siege, ctx._conquest_side()):
-        return siege.watch_line(ctx.content, battle.siege)  # 攻城戰：另一軍站不進守將那一格（裁決 8）
+    if battle.siege is not None and not siege_rules.slots(battle.siege, ctx._conquest_side()):
+        return siege_rules.watch_line(ctx.content, battle.siege)  # 攻城戰：另一軍站不進守將那一格（裁決 8）
     return f"{muster.absent_reason(ctx, definition)}。"
 
 
@@ -371,7 +371,7 @@ def battle_gauge(ctx) -> dict | None:
     battle, definition = status
     p = battle.participants.get(ctx.state.player.name)
     side = p.faction if p is not None else ctx._side()
-    if p is None and battle.siege is not None and not siege.slots(battle.siege, ctx._conquest_side()):
+    if p is None and battle.siege is not None and not siege_rules.slots(battle.siege, ctx._conquest_side()):
         # FB-693：攻城戰裡自己站不進任何一格（另一軍看單方攻中立地：守將借的是那一軍的格），兩邊都不標「我方」、第一方在左
         side = None
     g = gauge_of(ctx, battle, definition, side)
@@ -383,12 +383,12 @@ def battle_gauge(ctx) -> dict | None:
 
 
 def siege_banner(ctx) -> dict | None:
-    """場景裡畫著的這一場是攻城戰時，畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲：「攻城・地點｜守方：某某」，siege.banner）；
+    """場景裡畫著的這一場是攻城戰時，畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲：「攻城・地點｜守方：某某」，siege_rules.banner）；
     決戰、沒有戰鬥、序章裡是 None。同 battle_gauge 看同一場（_battle_for_me），只讀。"""
     status = progress.battle_for_me(ctx, tick=False)
     if status is None or status[0].siege is None:
         return None
-    return siege.banner(ctx.content, status[0])
+    return siege_rules.banner(ctx.content, status[0])
 
 
 def record_gauge(ctx, record_id: int | None) -> dict | None:
@@ -408,8 +408,8 @@ def card_gauge(ctx) -> dict | None:
 def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
     header = f"**{definition.name}**"
     # 攻城戰（領地爭奪第二批）：誰攻、守方是誰寫在畫面最上面那一條（siege_banner，第三批 A），場景不再寫一次（PM）；
-    # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege.scene_note）
-    if battle.siege is not None and (note := siege.scene_note(ctx.content, battle.siege, battle)):
+    # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege_rules.scene_note）
+    if battle.siege is not None and (note := siege_rules.scene_note(ctx.content, battle.siege, battle)):
         header += "\n\n" + note
     if front := conquest.front_scene(ctx.content, definition, battle.front_note):  # 起點照哪一條戰線（開集結那一刻的快照）
         header += "\n\n" + front
@@ -440,7 +440,7 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
             leaving = "；走出這一區就不算在場" if definition.region is not None else ""
             joined = "臨時投效" if muster.free_agent(ctx, definition) else "加入"
             if me.faction == battle_instance.neutral_guard(battle):
-                joined = siege.HELP_GUARD_TITLE  # 「你已助守【守軍】」（FB-540）
+                joined = siege_rules.HELP_GUARD_TITLE  # 「你已助守【守軍】」（FB-540）
             role = battle_instance.role_text(ctx.content.config.battle, me.role)
             role = f"你的職位：{role}。" if role else ""
             ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
@@ -451,7 +451,7 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
             who = "你是散人" if ctx.state.player.faction is None else f"你是{muster.own_side_name(ctx)}，不是交戰的兩軍"
             can = "可以臨時投效其中一方，只算這一場"
             if battle_instance.neutral_guard(battle) is not None:  # 單方攻中立地：一邊是攻方、一邊是助守（FB-540）
-                can = siege.FREE_AGENT_GUARD.format(
+                can = siege_rules.FREE_AGENT_GUARD.format(
                     who="、".join(names.get(a, a) for a in battle.siege.attackers), place=ctx.content.locations[battle.siege.loc].name)
             return f"{header}\n\n集結中，還剩現實 {left}。{who}，{can}；集結期間照常行動。"
         return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"

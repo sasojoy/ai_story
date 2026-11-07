@@ -5,6 +5,7 @@ import pytest
 
 from conquest_kit import announce, conquest_game, go, join, plain_game
 from tianxia import battle_instance, battlelog, conquest, conquest_day, rules, siege
+from tianxia.features.battle import siege_rules
 from tianxia.state import BattleRecord
 import random
 from conquest_kit import conquest_game, go, join, plain_game
@@ -20,7 +21,8 @@ from tianxia.battle_instance import GUARD
 import inspect
 import server
 from conquest_kit import announce, conquest_game, go, join, win_sortie
-from tianxia import atlas, bot_policy, conquest, conquest_day, orders, ranks, siege
+from tianxia import bot_policy, conquest, conquest_day, orders, ranks, siege
+from tianxia.features.military import order_cards
 from tianxia.engine import Game
 from tianxia.state import Order
 from tianxia import battle_instance, siege
@@ -28,7 +30,7 @@ from conquest_kit import announce, conquest_game, go, join, plain_game, press
 from tianxia import conquest, howto
 from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, press
-from tianxia import atlas, conquest, mapdata, orders, siege
+from tianxia import conquest, mapdata, orders, siege
 from fastapi.testclient import TestClient
 from conftest import real_content
 from conquest_kit import conquest_rules
@@ -790,13 +792,13 @@ def test_nobody_shows_up_is_still_void_even_with_a_guard_helper():
 def test_the_absent_army_cannot_come_late_and_the_scene_says_so():
     game = _game_melee()
     battle = _start(game, _add(game, _open_melee(game), {"甲": "guan"}))
-    assert siege.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
-    assert siege.slots(battle.siege, "guan") == ["guan"]
-    assert siege.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
+    assert siege_rules.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
+    assert siege_rules.slots(battle.siege, "guan") == ["guan"]
+    assert siege_rules.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
     assert battle.siege.absent == "huang"
-    line = siege.scene_line(game.content, battle.siege, battle)
-    assert line.startswith(siege.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
-    assert siege.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
+    line = siege_rules.scene_line(game.content, battle.siege, battle)
+    assert line.startswith(siege_rules.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
+    assert siege_rules.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
 
 
 # ── 原 test_conquest_letter.py（整檔搬進來） ──
@@ -949,7 +951,7 @@ def test_orders_list_and_credit_the_highest_block():
     _fill(game, "hilltop_wilds", "guan", 30)
     _fill(game, "runan_wilds", "guan", 10)
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
-    how = atlas.siege_how(s, c, order)
+    how = order_cards.siege_how(s, c, order)
     assert "荒丘" in how and "汝南荒野" not in how
     win_sortie(game)  # 在汝南荒野打贏：不是最高的那一塊，記不到
     assert s.player.name not in order.progress
@@ -1556,9 +1558,9 @@ def test_a_frozen_own_block_is_listed_for_defend_on_the_card_map_and_bots():
     c, w = game.content, game.state.world
     assert conquest.push_problem(w, c, "huang", "runan", "hold") == conquest.WHY_FROZEN  # 守不動進度（規則沒變）
     assert orders.defend_places(c, w, order) == ["runan"]  # 修前是空的
-    text = atlas.order_how(game.state, c, order)
-    assert text != atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(c, "yingru"))  # 修前「此刻沒有…沒有可守的」
-    assert text == atlas.DEFEND_SIEGE_CONQUEST.format(where="汝南")
+    text = order_cards.order_how(game.state, c, order)
+    assert text != order_cards.DEFEND_NONE_CONQUEST.format(front=rules.trend_name(c, "yingru"))  # 修前「此刻沒有…沒有可守的」
+    assert text == order_cards.DEFEND_SIEGE_CONQUEST.format(where="汝南")
     assert mapdata._order_marks(game.state, c, "huang").get("runan") == mapdata.ORDER_WORDS["defend"]
     assert "runan" in orders.targets(game.state, c, "huang")
 
@@ -1577,7 +1579,7 @@ def test_on_the_frozen_block_only_the_siege_guard_counts():
     assert counts(orders.SIEGE_GUARD, "runan") and not counts("duty", "runan")
     assert counts("duty", "runan_academy") and not counts(orders.SIEGE_GUARD, "runan_academy")
     assert not orders.duty_counts(game.state, c, "huang", "runan") and orders.duty_counts(game.state, c, "huang", "runan_academy")
-    text = atlas.order_how(game.state, c, order)
+    text = order_cards.order_how(game.state, c, order)
     assert "汝南學宮" in text and "汝南正等著一場攻城" in text
 
 

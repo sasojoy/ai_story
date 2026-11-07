@@ -162,7 +162,7 @@ FEATURES: list[Feature] = [
 # （讀了之後成包的擂台、伏筆、有所感……）與這一層還碰到別的舊模組的 11 條（排定收進來的、之後成包的），在邊界測試的 SHARED_LATER、SHARED_PENDING。
 # scripts/test_for.py 照語法樹讀這一份（改這一層的模組只挑自己檔名的測試＋煙霧＋邊界測試）：值只寫字面的字串（相鄰的字串可以接）。
 SHARED: dict[str, str] = {
-    "siege": "攻城的規則（攻城戰的名字、收場改季、誰贏）：決戰包的攻城與戰況、地盤都讀；總表附錄甲裁定不搬進任何一包",
+    "siege": "攻城的開集結與留守（攻城戰的名字、誰佔著、開集結、留守、範本驗證）：世界層、內容檢查、決戰包的攻城、地盤都讀；誰站哪一格、收場那一半第二輪第 97 批進了決戰包 siege_rules.py",
     # shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.2）：只登記、不搬程式。
     # 戰鬥引擎（9 個）：核心的 team 打每一場都讀，每一種打一場的包都用，放進哪一包都會變成包 import 包
     "encounter": "單次判定（威力差、勝算、四種結果）：核心的 team、content 讀，Game 的單打服務（大場面判讀、切磋、截殺、設伏、頭目戰與擂台的"
@@ -262,7 +262,7 @@ SHARED: dict[str, str] = {
                 "timetable 與底座 story_base 讀；一條線包叫",
     "rumor_view": "見聞的分層（天下、地方、個人線索）：核心的 engine〔見聞頁〕讀；個人線索讀伏筆、機緣（核心的查詢服務 omen_base）與軍令 orders",
     # map2（全部拆包第 50 批「輿圖二」：atlas 拆兩半，這一半不再 import 出陣包、讀包認領的 fs_asking、tagalong 改問核心的 omen_base、travel_base）
-    "atlas": "江湖輿圖的地點、大區、路線與走法時間、軍令卡的寫法與打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py）："
+    "atlas": "江湖輿圖的地點、大區、路線與走法時間、打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py；軍令卡的寫法第二輪第 97 批進了軍情包 order_cards.py）："
              "核心的 engine、content、rules 讀；移動、地盤、設伏、軍情、出陣、人物情誼、酒肆、決戰、引導、輿圖十包與假人都讀",
     # seal（全部拆包第 51 批「玉璽三」：seal_acts 拆兩半，包這一半是 features/seal/acts.py）
     "seal_acts": "璽效查詢（引將釘人、頒詔、承露、傳檄、收心、鎮地的此刻生效與期滿回原處）：核心的 world、rules、team 讀；"

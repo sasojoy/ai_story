@@ -18,6 +18,7 @@ import server
 import webharness
 from conquest_kit import announce, conquest_game, go, join
 from tianxia import battle_instance, siege
+from tianxia.features.battle import siege_rules
 import json
 from test_seal_web import DRIVER, _seal_admin, _sheet, m  # noqa: F401  m 是夾具
 import test_map_web
@@ -126,7 +127,7 @@ def test_server_sends_the_banner_for_a_siege_and_the_page_draws_it():
     view = server.main_view(game)
     s = view["siege"]
     assert s["title"] == "攻城・南陽官道" and s["kind"] == "neutral"
-    assert s["parts"][0].startswith(siege.BANNER_DEFENDER.format(who="")) and battle_instance.GUARD_SUFFIX in s["parts"][0]
+    assert s["parts"][0].startswith(siege_rules.BANNER_DEFENDER.format(who="")) and battle_instance.GUARD_SUFFIX in s["parts"][0]
     out = strip(view["scene"], s)
     assert out.startswith('<p class="siege-strip"') and "攻城・南陽官道" in out
 
@@ -143,15 +144,15 @@ def test_banner_words_for_melee_lone_and_held():
     siege.open_waiting(game.world, game.content, NOW)
     battle = game.world.get_sieges()[0]
     assert battle_instance.melee(battle)
-    b = siege.banner(game.content, battle)
-    assert b["kind"] == "melee" and b["parts"][0] == siege.BANNER_MELEE
+    b = siege_rules.banner(game.content, battle)
+    assert b["kind"] == "melee" and b["parts"][0] == siege_rules.BANNER_MELEE
     battle.siege.attackers, battle.siege.guard_side, battle.siege.absent = ["huang"], "guan", "guan"  # 轉回單方（lone_army 改的那幾格）
-    b = siege.banner(game.content, battle)
+    b = siege_rules.banner(game.content, battle)
     guan = game.content.scenario.faction_name("guan", "guan")
-    assert b["kind"] == "lone" and b["parts"][-1] == siege.BANNER_ABSENT.format(absent=guan)
+    assert b["kind"] == "lone" and b["parts"][-1] == siege_rules.BANNER_ABSENT.format(absent=guan)
     battle.siege.holder, battle.siege.guard_side, battle.siege.absent = "guan", None, ""  # 陣營佔著的區塊
-    b = siege.banner(game.content, battle)
-    assert b["kind"] == "held" and b["parts"] == [siege.BANNER_DEFENDER.format(who=guan)]
+    b = siege_rules.banner(game.content, battle)
+    assert b["kind"] == "held" and b["parts"] == [siege_rules.BANNER_DEFENDER.format(who=guan)]
 
 
 # ── FB-553：同一州兩場自己這一邊的攻城一起集結，兩顆加入鈕撐出橫捲 ──
@@ -201,9 +202,9 @@ def test_fb553_one_join_button_stays_beside_the_name():
 
 @pytest.mark.slow
 def test_scene_does_not_repeat_the_strip():
-    """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege.scene_note）。"""
+    """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege_rules.scene_note）。"""
     m = _sieges_view(["nanyang_road"])
-    assert m["siege"]["parts"][0].startswith(siege.BANNER_DEFENDER.format(who=""))
+    assert m["siege"]["parts"][0].startswith(siege_rules.BANNER_DEFENDER.format(who=""))
     assert "；守方：" not in m["scene"] and "官軍攻南陽官道" not in m["scene"]
 
 
@@ -219,7 +220,7 @@ def test_melee_scene_keeps_only_the_rule():
     siege.open_waiting(game.world, game.content, NOW)
     game.state.world = game.world.get_season()
     scene = server.main_view(game)["scene"]
-    assert siege.MELEE_RULE in scene and "兩頭迎戰" not in scene
+    assert siege_rules.MELEE_RULE in scene and "兩頭迎戰" not in scene
 
 
 def _rule(css: str, selector: str) -> dict[str, str]:
@@ -537,7 +538,7 @@ def test_the_map_overlay_says_which_siege_moment_each_block_is_in():
     (None, {"runan_wilds": "help", "yingchuan_wilds": "help"}),  # 散人：臨時投效或助守
 ])
 def test_today_rows_say_where_the_viewer_stands(faction, expect):
-    """conquest.today 每一場多 sides（攻方的陣營 id）、you（看的人站得進哪一格，siege.slots 同一套）、margin（打完的大勝／險勝）；muster 是開打前幾分鐘集結。"""
+    """conquest.today 每一場多 sides（攻方的陣營 id）、you（看的人站得進哪一格，siege_rules.slots 同一套）、margin（打完的大勝／險勝）；muster 是開打前幾分鐘集結。"""
     game = _sgame(profile="season21", faction=faction)
     _moments(game)
     view = game.conquest_view()

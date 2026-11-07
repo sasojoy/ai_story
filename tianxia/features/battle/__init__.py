@@ -6,7 +6,8 @@
   補回被洗掉的戰報、放手一搏的輸入框與三段式、補劇情（Game 留 22 個一行委派）
 - admin.py：全部拆包第 6 批，管理者的決戰工具 7 個方法——立刻開戰的選單、立刻開戰、取消決戰、三場大戲那三顆鈕（Game 留 6 個一行委派）
 - sieges.py：全部拆包第 6 批，攻城 7 個方法——還沒收場的那一串、這一場的定義、推一場、收兵、取消、收場與守城軍令（Game 留 6 個一行委派；
-  攻城的規則本身在 tianxia/siege.py，共用規則層）
+  攻城的規則在 siege_rules.py 與共用規則層 tianxia/siege.py）
+- siege_rules.py：第二輪第 97 批從 tianxia/siege.py 切過來，只有決戰讀的那一半（誰站哪一格、開打那一下、收場、場景字）；開集結、留守、名字、內容驗證留在共用規則層
 - muster.py：全部拆包第 7 批，集結、加入、晚到、臨時投效、改投、挑同伴、在不在場、假人趕路、出招的分派 29 個方法（Game 留 13 個一行委派）
 - escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖；舊名是別名）
 - bots.py：全部拆包第 7 批，假人看到 battle: 的選項怎麼按（原本 bot_policy.score 的 battle 那一段）
@@ -33,7 +34,7 @@ class BattleFeature(Feature):
     # 江湖頁最上面的戰場面板與關鍵時刻的覆蓋（battle.js 的後半、battle_panel.css；panel.py 給資料；Joy 2026-11-06 大決戰優化）
     # battle_panel.css 排在 legacy.css 後面（web/index.html），同權重的它說了算；battle.css 排在 style.css 緊接著
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
-    content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege.py，共用規則層）
+    content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege_rules.py 與共用規則層 siege.py）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
     # 對它不成立，不放進來（README 照列）

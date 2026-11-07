@@ -32,10 +32,11 @@ from tianxia import conquest, howto
 from conquest_kit import conquest_game, go, join, win_sortie
 from tianxia import conquest, orders
 from tianxia.state import Order
-from tianxia import atlas, conquest, orders
+from tianxia import conquest, orders
+from tianxia.features.military import order_cards
 from conquest_kit import conquest_game, go, join, plain_game, win_sortie
 from conquest_kit import conquest_game, join, plain_game, press
-from tianxia import atlas, conquest, mapdata, orders
+from tianxia import conquest, mapdata, orders
 
 
 def _game():
@@ -1122,7 +1123,7 @@ def test_the_top_neutral_target_is_listed_and_credited():
     order = _siege(game)
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
     assert orders.win_counts(s, c, "guan", "hilltop_wilds") and "hilltop_wilds" in orders.targets(s, c, "guan")
-    how = atlas.siege_how(s, c, order)
+    how = order_cards.siege_how(s, c, order)
     assert "荒丘" in how and "黃巾" not in how
     win_sortie(game)
     assert order.progress.get(s.player.name) == 1
@@ -1170,7 +1171,7 @@ def test_card_without_a_pushable_place_does_not_point_anywhere():
         conquest._fight(s.world, c, loc).flipped_at = s.world.time
     order = _siege(game)
     assert orders.siege_places(c, "guan", "yingru", s.world) == []
-    how = atlas.siege_how(s, c, order)
+    how = order_cards.siege_how(s, c, order)
     assert "地盤出陣" not in how and "推得動" in how
 
 
@@ -1206,7 +1207,7 @@ def test_the_card_names_only_where_a_win_counts():
     game = join(conquest_game("season21"), "guan")
     _hilltop_to_huang(game)
     order = _siege(game)
-    how = atlas.siege_how(game.state, game.content, order)
+    how = order_cards.siege_how(game.state, game.content, order)
     assert "汝南荒野" in how and "荒丘" in how and "嵩山深處" not in how
 
 
@@ -1240,7 +1241,7 @@ def test_a_siege_is_issued_where_only_captured_neutral_blocks_are_enemy_held():
 
 
 # ── 原 test_conquest_fb565_defend.py（整檔搬進來） ──
-# FB-565（PM 2026-10-20，dev/conquest-fix2 開發回報）：領地爭奪開著時，守城軍令卡的做法（atlas.order_how）與輿圖的守城標記
+# FB-565（PM 2026-10-20，dev/conquest-fix2 開發回報）：領地爭奪開著時，守城軍令卡的做法（order_cards.order_how）與輿圖的守城標記
 # （mapdata._order_marks）要跟實際記得到的一致——只寫、只標「自家今天被公告要攻的那一塊」（裁決 11、24）；今天沒有公告自家的區塊時，
 # 卡上照實說今天沒有可守的，輿圖不標。同 FB-531 的教訓：列與記同一個判斷（orders.defend_places，記功、假人往哪走、卡、輿圖都讀它）。
 # 關著的季（週末、14 天、21 天）一個字都不變。
@@ -1292,8 +1293,8 @@ def test_no_block_announced_the_card_says_so_and_the_map_marks_nothing():
     game = _game_fb565defend()
     order = _defend(game)
     assert _agree(game, order) == set()  # 修前輿圖標長社（自家大本營，記不到）
-    text = atlas.order_how(game.state, game.content, order)
-    assert text == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"))
+    text = order_cards.order_how(game.state, game.content, order)
+    assert text == order_cards.DEFEND_NONE_CONQUEST.format(front=rules.trend_name(game.content, "yingru"))
     assert "此刻沒有" in text and "自家的地盤出陣" not in text  # 修前寫「在潁川汝南一帶自家的地盤出陣守一回…做一次記一次」
 
 
@@ -1302,7 +1303,7 @@ def test_one_announced_block_is_named_and_marked():
     order = _defend(game)
     press(game, "yingchuan_wilds", "huang")
     assert _agree(game, order) == {"yingchuan_wilds"}
-    text = atlas.order_how(game.state, game.content, order)
+    text = order_cards.order_how(game.state, game.content, order)
     assert "潁川郊野" in text and "做一次記一次" in text and "此刻沒有" not in text
     assert "巡哨" in text and "出陣" in text
     assert mapdata._order_marks(game.state, game.content, "guan")["yingchuan_wilds"] == "守城"
@@ -1314,7 +1315,7 @@ def test_two_announced_blocks_are_both_named():
     press(game, "yingchuan_wilds", "huang")
     press(game, "yingshui", "huang")
     assert _agree(game, order) == {"yingchuan_wilds", "yingshui"}
-    text = atlas.order_how(game.state, game.content, order)
+    text = order_cards.order_how(game.state, game.content, order)
     assert "潁川郊野" in text and "潁水河畔" in text
 
 
@@ -1324,9 +1325,9 @@ def test_many_announced_blocks_say_the_area():
     for i, loc in enumerate(GUAN_BLOCKS[:3]):
         press(game, loc, "huang")
     assert _agree(game, order) == set(GUAN_BLOCKS[:3])
-    text = atlas.order_how(game.state, game.content, order)
-    assert text == atlas.DEFEND_AREA_CONQUEST.format(
-        front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
+    text = order_cards.order_how(game.state, game.content, order)
+    assert text == order_cards.DEFEND_AREA_CONQUEST.format(
+        front=rules.trend_name(game.content, "yingru"), act=order_cards.DEFEND_ACT_SORTIE.format(duty="巡哨"))
     assert "對面推得最高" in text
 
 
@@ -1337,7 +1338,7 @@ def test_a_siege_that_is_over_or_called_off_no_longer_counts():
     assert _agree(game, order) == {"yingchuan_wilds"}
     conquest.push(game.state.world, game.content, "yingchuan_wilds", "guan", "守將", 100, "hold")  # 拉回零
     assert _agree(game, order) == set()
-    assert "此刻沒有" in atlas.order_how(game.state, game.content, order)
+    assert "此刻沒有" in order_cards.order_how(game.state, game.content, order)
 
 
 def test_a_block_my_own_side_is_attacking_is_not_one_to_defend():
@@ -1373,15 +1374,15 @@ def test_the_card_never_talks_about_announcements():
     照翻地寫：對面此刻在推的自家地方，沒有就說此刻沒有對面在推的自家地方。"""
     game = _game_fb565defend()
     order = _defend(game)
-    texts = [atlas.order_how(game.state, game.content, order)]  # 沒人在推
+    texts = [order_cards.order_how(game.state, game.content, order)]  # 沒人在推
     for loc in GUAN_BLOCKS[:3]:
         press(game, loc, "huang")
-        texts.append(atlas.order_how(game.state, game.content, order))  # 一處、兩處（寫地名）、三處（寫一帶）
+        texts.append(order_cards.order_how(game.state, game.content, order))  # 一處、兩處（寫地名）、三處（寫一帶）
     for text in texts:
         assert "公告" not in text and "今天" not in text, text  # 修前「今天沒有自家的地方被公告要攻…每天 22:00 公告下一天的」
-    assert texts[0] == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"))
-    assert texts[-1] == atlas.DEFEND_AREA_CONQUEST.format(
-        front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
+    assert texts[0] == order_cards.DEFEND_NONE_CONQUEST.format(front=rules.trend_name(game.content, "yingru"))
+    assert texts[-1] == order_cards.DEFEND_AREA_CONQUEST.format(
+        front=rules.trend_name(game.content, "yingru"), act=order_cards.DEFEND_ACT_SORTIE.format(duty="巡哨"))
 
 
 # ── 原 test_conquest_fb608_edge_credit.py（整檔搬進來） ──
