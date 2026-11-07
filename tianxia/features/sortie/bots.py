@@ -13,10 +13,9 @@ from typing import TYPE_CHECKING
 from tianxia import bot_base, orders, precise, tactics  # 共用規則層（照模組屬性叫，tally 軌換掉 orders.win_counts、duty_counts、precise.on）
 from tianxia.models import MOVES
 
-from . import actions, duel_actions, duel_rules, rules
+from . import duel_actions, duel_rules, rules
 
 if TYPE_CHECKING:
-    from tianxia.models import Location
     from tianxia.state import BotProfile
 
 # ── 出陣約戰（減法季批 3b-3；整合設計 4.3、5.7「假人可以應約戰、封招，不可以寫字」）──
@@ -64,11 +63,6 @@ def duel_play(game, profile: BotProfile, rng: random.Random) -> list[str] | None
                 continue
             return game.choose(f"{duel_rules.PREFIX}join:{duel.id}")
     return None
-
-
-def foes(game, loc: Location) -> list[str]:
-    """那裡出陣會打的每一路（bot_policy._sortie_win 照勝算平均）。"""
-    return actions.sortie_foes(game, loc)
 
 
 def train(game, profile: BotProfile) -> float | None:

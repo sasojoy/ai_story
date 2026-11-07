@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, rules, sensing, server_bots, stances, team
+from . import allied, arena, atlas, bot, cultivation, duel, epiphany, forge_secrets, library, naming, outing, rules, sensing, server_bots, stances, team
 from .bot import allocate_points, can_practise, wants_heal
 from .core import battle_base as battle_instance
 from .core import features as features_core
@@ -19,8 +19,7 @@ from .engine import FREE_TEXT_OPTION, Game, Option
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
 from .features.bounties.bots import takeable as _takeable  # noqa: F401  懸賞榜上有沒有揭得下的：全部拆包第 60 批搬進懸賞榜包（tests 讀 bot_policy._takeable，同一個函式）
 from .features.smithy import bots as smithy_bots  # 過渡：_smith_want 的一行委派（全部拆包第 41 批）
-from .features.sortie import bots as sortie_bots  # 舊模組 → 包：_sortie_win 問出陣會打的那幾路（全部拆包第 60 批）
-from .features.sortie.bots import duel_play  # 約戰卡上的事：全部拆包第 60 批搬進出陣包（take_turn 與 tests 讀這個名字）
+from .features.sortie.bots import DUTY_SCORE, TRAIN_SCORE, duel_play  # noqa: F401  約戰卡上的事：全部拆包第 60 批搬進出陣包（take_turn 與 tests 讀這個名字）；兩個分數第二輪第 89 批
 from .features.tavern import bots as tavern_bots  # 舊模組 → 包：_tavern 的本體（全部拆包第 60 批）
 from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）  # 過渡：掛鉤沒有 profile（第 47 批 PM 認定第 2 條）
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
@@ -28,34 +27,25 @@ from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與
     TRAVEL_ACCEPT_SHARE, TRAVEL_REJECT_SHARE, _hand_card, _make_card, _roll, answer_call,
     INVITE_YES, RAID_CHANCE, RAID_ODDS, _answer_invite, _raid, answer_discuss,  # 切磋、論武、截殺：全部拆包第 38 批搬進玩家互動包（測試讀 bot_policy._answer_invite、_raid；_answer_discuss 的薄層叫 answer_discuss）
 )
-from .models import MOVES, Content, Effect, SkillDef
+# 別包也讀的、包自己讀的第二輪第 89 批搬走了（bot_base 與各包的 bots.py；包不再跳回這個檔）。舊名留著，同一批物件：這個檔自己照舊叫（score、_stamina_play、_toward_*……），測試與腳本讀；
+# 要換掉那幾個函式的換新位置那一份，換這裡打不到。_TURN 不留這個名字（只有 bot_base 那一份）
+from . import bot_base
+from .bot_base import (  # noqa: F401
+    BOUNTY_SCORE, ORDER_SCORE, PRACTICE_SCORE, SORTIE_WIN, SORTIE_WIN_FLOOR, TREND_WEIGHT,
+    _bounty_here, _cannot_push, _crippled, _duel_value, _goals, _outmatched, _side, _sortie_win, _train_value, _turn_cached,
+)
+from .features.explore.bots import ACT_SCORES, NEED_MATERIAL_SCORE, OUTING_SCORE  # noqa: F401
+from .features.figure_acts.bots import CHALLENGE_ODDS, CHALLENGE_SCORE, STRIKE_ODDS  # noqa: F401
+from .features.travel.bots import (  # noqa: F401
+    AWAY_MOVE_SCORE, BOUNTY_MOVE_SCORE, CLINIC_MOVE_SCORE, CLINIC_URGENT_SCORE, FOCUS_MOVE_SCORE, HOME_MOVE_SCORE, ORDER_MOVE_SCORE, SUMMONS_MOVE_SCORE, TRAIN_MOVE_SCORE,
+    _bounty_hop, _clinic_score, _focus_hop, _front_hop, _front_locations, _home, _losing_front, _order_hop, _order_hop_now, _summons_hop, next_hop,
+)
+from .models import MOVES, Effect, SkillDef
 from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
-TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
-ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
-TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
-HOME_MOVE_SCORE = 0.3  # 往自己陣營的地盤走（投靠點一帶；第一季濃縮版是輸得最多的那條戰線，離得還遠時是往那邊的下一站）
-AWAY_MOVE_SCORE = 0.1
-TRAIN_MOVE_SCORE = 0.5  # 往「遊歷對自己陣營有利」的地點走，額外加分
-# 挑戰打得贏的大勢人物本人（T4）：比探索、交友高，比推大勢的遊歷低（一點大勢抵十分）——前線上照舊遊歷，
-# 前線以外遇上了才打；「打擊大勢人物」軍令讓假人專程去找人是 T6 的事
-CHALLENGE_SCORE = 1.5
-CHALLENGE_ODDS = bot.CHALLENGE_ODDS  # 假人只挑這兩種勝算的人物（輸了要賠銀兩、扣氣血）；整季機器人同一份（bot.py，bot_policy import bot、反過來會成環）
-# 軍令（計畫 T6）：替這週的軍令記一次，比推三點大勢還值得；往軍令要去的地方走，比就地推一點大勢值得——
-# 不然假人永遠就地遊歷推大勢，軍令湊不滿（整季模擬 T11 照實回報）
-ORDER_SCORE = 30.0
-ORDER_MOVE_SCORE = 12.0
-DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
-# 一類一顆（正式季整合 9.2）：出陣照舊排在閒著的探索前面（出陣的分數另加 PRACTICE_SCORE）；出門一趟也是這個底分（OUTING_SCORE）
-PRACTICE_SCORE = 1.0
-# 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：多半給素材的那一趟再加這一份。計畫寫 0.5，那樣缺素材的探索（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
-# 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
-NEED_MATERIAL_SCORE = 0.3  # （NEED_MATERIAL_BELOW 搬進探索包 features/explore/bots.py，全部拆包第 60 批）
 # 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
 SUMMONS_SCORE = 50.0
-SUMMONS_MOVE_SCORE = 15.0
-STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
@@ -64,34 +54,11 @@ CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVA
 # 照名號＋這一輪的雜湊挑，不動 rng 的序列以外的東西）。內傷重的不設伏（伏兵也要打）。
 PLAY_CHANCE = 0.05
 PLAY_STAMINA = 0.8
-# 懸賞榜（bounties.py）：城裡看得到還接得了的懸賞就去揭（不花體力），手上有就往要去的地方走、到了照做；
-# 比推大勢的遊歷值得，比軍令低（陣營的事先做）【預設】
-BOUNTY_SCORE = 8.0
-BOUNTY_MOVE_SCORE = 6.0
 SMITH_SCORE = BOUNTY_SCORE  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白白少一截威力
 # 人在城鎮、身上湊得出一爐又付得起（bot.forge_ready）時「進鐵匠鋪」再多這麼多（FB-144，PM 2026-10-13）：不加的話假人路過城鎮那幾輪
 # 多半挑了遊歷、趕路，一整季一爐都沒打。照 SMITH_SCORE 再加一份（合起來 16）：高過一般的遊歷、往軍令與懸賞走的那一步，
 # 低過軍令本身（ORDER_SCORE 30：替軍令遊歷、接糧車）——不然手上帶著糧草的假人會先把糧草下爐，不去接糧車
 FORGE_SCORE = SMITH_SCORE
-CLINIC_MOVE_SCORE = 20.0  # 內傷重了往醫館走（bot.clinic_hop）：高過軍令、召見、懸賞的那一步，傷好了才有力氣做事
-# 內傷到 bot.CLINIC_URGENT 以上：往醫館走、在醫館療傷都排在軍令（ORDER_SCORE 30＋遊歷的大勢分）與召見（SUMMONS_SCORE 50）前面
-# （PM 2026-10-12：只給 CLINIC_MOVE_SCORE 時被軍令拉走的假人一季平均帶著三四成內傷）
-CLINIC_URGENT_SCORE = 100.0
-
-
-def _side(game: Game) -> str | None:
-    """敵我的一個讀法（同 Game._side 的本體 allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
-    return allied.side_of(game.state, game.content)
-
-
-def _crippled(game: Game) -> bool:
-    """內傷到 bot.CLINIC_URGENT 以上、卻湊不出錢去醫館：不遊歷、不挑戰本人（氣血只剩一成上下，打一場輸一場、
-    輸了又掉銀兩，越打越窮；PM 2026-10-12 量到的那個一季都治不了的假人），改去探索、做事件攢錢。"""
-    return bot.injury_share(game) >= bot.CLINIC_URGENT and not bot.can_pay_clinic(game)
-
-
-def _clinic_score(game: Game) -> float:
-    return CLINIC_URGENT_SCORE if bot.injury_share(game) >= bot.CLINIC_URGENT else CLINIC_MOVE_SCORE
 MARKET_SCORE = SMITH_SCORE  # （同 features/gear/bots.py 的 MARKET_SCORE，8.0）馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
@@ -251,17 +218,6 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
 
 
 # 出陣約戰（減法季批 3b-3）：應對面的約戰、同袍的同去（duel_play、ANSWER_AFTER、ANSWER_POWER_FLOOR、JOIN_CHANCE）搬進出陣包 features/sortie/bots.py，全部拆包第 60 批；上面 import 回來
-
-
-def _duel_value(game: Game, loc_id: str) -> float:
-    """約戰開著的季在這一塊貼約戰對自己陣營的分（同 effect_score 的一點抵十分）：推得動（conquest.push_problem 的攻）、打得贏守軍（不是 _outmatched）、
-    今天還有出陣次數才有，量照名目量。"""
-    s, c, side = game.state, game.content, _side(game)
-    if side not in conquest.SIDES or loc_id not in conquest.blocks(c) or game.sorties_left() <= 0:  # 散人、不是兩軍的不推
-        return 0.0
-    if conquest.push_problem(s.world, c, side, loc_id, "attack") is not None or _outmatched(game, loc_id):
-        return 0.0
-    return TREND_WEIGHT * conquest.sortie_nominal(c, loc_id, "attack")
 
 
 ORDER_FOLLOW = 0.6  # 決戰有將令時照令出招的機會（真人也不見得都聽）
@@ -574,29 +530,13 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob | Ep
     return []
 
 
-_TURN: dict | None = None  # 這一次 pick 打分時記住的查詢（每個前往鈕都要問一次的軍令地點、出陣勝算）；pick 以外是 None，照舊每次算
-
-
-def _turn_cached(key: tuple, compute):
-    """pick 打分那一輪裡同一個查詢只算一次（同一輪的選單、同一個時刻，答案不會變）；不在 pick 裡（測試直接叫 score）照舊每次算。"""
-    if _TURN is None:
-        return compute()
-    if key not in _TURN:
-        _TURN[key] = compute()
-    return _TURN[key]
-
-
 def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Random) -> str | None:
     """以強度旋鈕的機率挑最高分的選項（同分隨機），否則從假人會選的選項裡隨便挑。選邊鈕（豪強分屬兩軍）照 allied.pick_side、不打分數。"""
-    global _TURN
     side = allied.pick_side(game.state.player.name, [o.id for o in options if o.enabled], game.world.roll_counts())
     if side is not None:
         return side
-    _TURN = {}
-    try:
+    with bot_base.turn_cache():
         scored = [(score(game, o, profile), o.id) for o in options]
-    finally:
-        _TURN = None
     scored = [(value, option_id) for value, option_id in scored if value is not None]
     if not scored:
         return None
@@ -654,9 +594,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     return None
 
 
-OUTING_SCORE = PRACTICE_SCORE  # 減法季探索一顆（整合設計 4.1）：出門一趟是經驗與素材的大宗，同以前的練功；出陣照舊排在它前面（出陣另加 PRACTICE_SCORE）
-
-
 def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | None = None) -> float:
     """選項效果的分數：把大勢往陣營想要的方向推，一點抵十分；能力、心得、銀兩、名望等獎勵每點 0.1 分。
     trend 是照 rules.resolve_trends 換過鍵的推動（front 換成所在戰線）；不給就照效果原本寫的。"""
@@ -664,19 +601,6 @@ def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | 
     push = sum(goals.get(trend_id, 0) * delta for trend_id, delta in pushes.items())
     reward = sum(max(0, effect.stats.get(key, 0)) for key in REWARD_STATS)
     return TREND_WEIGHT * push + reward / 10
-
-
-def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> float:
-    """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
-    不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
-    goals = _goals(game, profile)
-    if game.duel_on():  # 約戰開著（減法季批 3b）：只有貼約戰推得動（沒有守）
-        return _duel_value(game, loc_id or game.state.player.location)
-    if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
-        if game.sorties_left() <= 0 or _outmatched(game, loc_id or game.state.player.location):  # 贏面太低的地方攻了也推不動
-            return 0.0
-        return TREND_WEIGHT * game.sortie_progress(loc_id)
-    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
 
 
 def _toward_battle(game: Game) -> list[str] | None:
@@ -714,19 +638,6 @@ def _staying_for_the_battle(game: Game, battle_id: str, options: list[Option]) -
     return [o for o in options if not leaves(o.id)]
 
 
-def next_hop(game: Game, targets: list[str]) -> str | None:
-    """從所在地往路程最近的目標走的下一站：照地圖連線走路程最短的路（地圖擴充設計 3.2）、跳過還沒開放的地點
-    （不管摸清了沒）；已經在目標上或走不到時回傳 None。"""
-    if game.state.player.location in targets:
-        return None
-    found = atlas.shortest_routes(game.state, game.content)
-    reachable = [found[t] for t in targets if t in found and found[t].path]
-    if not reachable:
-        return None
-    best = min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
-    return best.path[0]
-
-
 def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
     """還沒投靠這一季效力的陣營：確認畫面就確認（不是自己的陣營就作罷）；在投靠點就投靠；
     不然往最近的投靠點走一站（走不過去就回傳 None）。"""
@@ -739,171 +650,6 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
     return f"move:{hop}" if hop is not None and f"move:{hop}" in ids else None
 
 
-def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
-    faction_id = _side(game) or profile.faction  # 豪強分屬兩軍：依附那一軍的目標
-    if faction_id is None:
-        return {}
-    return rules.resolve_goals(game.content, game.state.world, game.content.scenario.faction(faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
-
-
-def _home(game: Game, profile: BotProfile) -> set[str]:
-    """陣營的地盤（假人往這一帶走）。第一季濃縮版（開關開著）：己方輸得最多的那條戰線上的所有地點（第一季設計
-    第七節：假人照陣營目標往前線去）；陣營對戰線沒有目標（豪強）或開關關著時：投靠點與相鄰的地點。
-    豪強分屬兩軍的季，豪強照依附那一軍的目標往前線去（設計第十三節）；回家仍是自己的投靠點。"""
-    faction_id = game.state.player.faction or profile.faction
-    if faction_id is None:
-        return set()
-    front = _losing_front(game, _side(game) or faction_id)
-    if front is not None:
-        return set(_front_locations(game.content, front))
-    join_at = game.content.scenario.faction(faction_id).join_at
-    return set(join_at) | {n for loc_id in join_at for n in game.content.locations[loc_id].connections}
-
-
-def _front_locations(content: Content, front: str) -> list[str]:
-    """這條戰線上的所有地點（照內容檔的順序）。"""
-    return [loc_id for loc_id in content.locations if rules.front_of(content, loc_id) == front]
-
-
-def _front_hop(game: Game, profile: BotProfile) -> str | None:
-    """第一季濃縮版：假人還沒到己方輸得最多的那條戰線上，往那條戰線路程最近的地點走的下一站（鄰居裡沒有戰線上的地點時，
-    光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
-    faction_id = _side(game) or profile.faction  # 豪強分屬兩軍：依附那一軍輸得最多的戰線
-    front = _losing_front(game, faction_id) if faction_id is not None else None
-    return None if front is None else next_hop(game, _front_locations(game.content, front))
-
-
-def _losing_front(game: Game, faction_id: str) -> str | None:
-    """己方輸得最多的戰線：目標是壓低（官軍）就挑戰況最高的、推高（黃巾）就挑最低的，同分取劇本排前面的。
-    開關關著、或這個陣營對戰線沒有目標時是 None。"""
-    content = game.content
-    if not rules.season_one(content, game.state.world):
-        return None
-    goals = game.content.scenario.faction(faction_id).goals
-    fronts = [front for front in rules.front_ids(content) if goals.get(front)]
-    if not fronts:
-        return None
-    return max(fronts, key=lambda front: -goals[front] * rules.trend_value(game.state, content, front))
-
-
-def _summons_hop(game: Game) -> str | None:
-    """往召見的地點，路程最近的那一站；沒有召見、已經在、走不到時是 None（計畫 T5）。"""
-    summons = game.state.player.summons
-    return next_hop(game, [summons.location]) if summons is not None else None
-
-
 def _smith_want(game: Game) -> str | None:
     """此刻在鐵匠鋪最該按的那一顆（本體在鐵匠鋪包的 bots.want；tests 讀這個名字）。"""
     return smithy_bots.want(game)
-
-
-def _bounty_here(game: Game, kind: str) -> bool:
-    """手上有一張要在這裡做的（討伐、打探）。"""
-    s = game.state
-    return any(b.kind == kind and b.location == s.player.location for b in bounties.mine(s, game.content))
-
-
-def _bounty_hop(game: Game) -> str | None:
-    """往手上的懸賞要去的地方，路程最近的那一站；沒有、已經在、走不到時是 None。"""
-    places = bounties.targets(game.state, game.content)
-    return next_hop(game, places) if places else None
-
-
-def _order_hop(game: Game) -> str | None:
-    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。
-    領地爭奪：只為了截糧才去、去了出陣推不動的地方不去（翻地 QA 順帶：開季的截糧軍令把假人拉到碰不到的中立地，一直在那裡出陣、連輸中立駐軍）；
-    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）；攻城、截糧的地方贏面太低的不去
-    （_outmatched，2026-10-22 7 天季）。"""
-    return _turn_cached(("order_hop",), lambda: _order_hop_now(game))
-
-
-def _order_hop_now(game: Game) -> str | None:
-    s, c, side = game.state, game.content, _side(game)
-    places = orders.targets(s, c, side)
-    if places and conquest.on(c, s.world):
-        others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
-        places = [loc for loc in places if loc in others or not _cannot_push(game, loc)]
-        # 攻城的地方要出陣攻打贏才記得到：贏面太低的不去（守城、護糧、打擊人物不靠出陣攻打，照走）
-        keep = set(orders.targets(s, c, side, skip=frozenset({"intercept", "siege"})))
-        places = [loc for loc in places if loc in keep or not _outmatched(game, loc)]
-    return next_hop(game, places) if places else None
-
-
-def _cannot_push(game: Game, loc_id: str | None) -> bool:
-    """領地爭奪的季，在這一塊出陣（自家的守、別人的與中立地的攻）推不動進度（conquest.push_problem）。不是區塊、開關關著、散人都是假（照舊）。"""
-    s, c = game.state, game.content
-    side = _side(game)
-    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
-        return False
-    # 約戰開著（減法季批 3b）：出陣只有貼約戰（攻），自家的地方等對面來約、推不動
-    how = "hold" if conquest.holder(s.world, c, loc_id) == side and not game.duel_on() else "attack"
-    return conquest.push_problem(s.world, c, side, loc_id, how) is not None
-
-
-# 領地爭奪：出陣攻打只有打贏才推進度，打輸扣氣血、掉銀兩、往醫館跑（2026-10-22 量 7 天季：十級以下的假人對上中立駐軍〔難度 58～82〕
-# 幾乎全輸，被軍令帶去一直輸、一直療傷，練功的次數少一大截）。真人看得到鈕上的勝算，假人也照勝算挑：那裡出陣會打的幾路平均起來
-# 贏面不到 SORTIE_WIN_FLOOR 的地方不去攻（不出陣、不往那裡走），去練功、去贏得了的地方。勝算的字換成機會照 team.ODDS 的門檻取中間。
-SORTIE_WIN = {"穩勝": 0.95, "有把握": 0.75, "五五波": 0.5, "難分勝負": 0.25, "凶險": 0.2, "必敗": 0.03}
-SORTIE_WIN_FLOOR = 0.4
-
-
-def _sortie_win(game: Game, loc_id: str) -> float:
-    """在這一塊出陣攻打贏的機會（領地爭奪）：那裡出陣會打的每一路（sortie_bots.foes，出陣照 Game.rng 挑一路）照勝算的字（Game.odds，
-    照那一處的地利）換成機會再平均。沒有對手是 0。"""
-    def compute() -> float:
-        loc = game.content.locations[loc_id]
-        foes = sortie_bots.foes(game, loc)
-        if not foes:
-            return 0.0
-        at = None if loc_id == game.state.player.location else loc_id
-        return sum(SORTIE_WIN.get(game.odds(sid, at=at), 0.0) for sid in foes) / len(foes)
-
-    return _turn_cached(("sortie_win", loc_id), compute)
-
-
-def _outmatched(game: Game, loc_id: str | None) -> bool:
-    """領地爭奪的季，這一塊要出陣攻打（不是自家的、搶得下來的區塊）而且贏面不到 SORTIE_WIN_FLOOR。開關關著、不是區塊、自家的（守不必打）、
-    散人都是假（照舊）。"""
-    s, c = game.state, game.content
-    side = _side(game)
-    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
-        return False
-    if conquest.holder(s.world, c, loc_id) == side or not conquest.capturable(c, loc_id):
-        return False
-    return _sortie_win(game, loc_id) < SORTIE_WIN_FLOOR
-
-
-# 領地爭奪：今天還有出陣次數時往這一邊最該推的那一塊走（推得動、打得贏的目標裡，這一邊的條最高的那幾塊；全是 0 時是最近的那一塊）。
-# 一塊要推到 100 才易手，各推各的推不滿（2026-10-22 量 7 天季：一邊一季推的量散在五、六塊上，每一塊都停在一二十）；
-# 真人看得到卡上誰推到幾成，會往同一塊湊。跟往懸賞走一樣急，比往軍令走低（軍令的攻城本來就照最高的那一塊）。
-FOCUS_MOVE_SCORE = 6.0
-
-
-def _focus_hop(game: Game) -> str | None:
-    """往這一邊最該推的那一塊路程最近的那一站（領地爭奪）：推得動（conquest.push_problem 是 None）、打得贏（不是 _outmatched）的目標裡，
-    這一邊的條最高的那幾塊（並列都算）。今天的出陣次數用完、已經在那裡、開關關著、散人都是 None。"""
-    s, c, side = game.state, game.content, _side(game)
-    if side is None or not conquest.on(c, s.world) or game.sorties_left() <= 0:
-        return None
-
-    def compute() -> str | None:
-        # 勝算貴（每一路模擬四十場）：照「條高的先、近的先」一塊一塊問，問到第一塊打得贏的就是它——同「打得贏的裡面條最高、一樣高挑最近」
-        # （近照 next_hop 的排法：路程、站數、路），不必每一塊都算勝算
-        here = s.player.location
-        routes = atlas.shortest_routes(s, c)
-        ready = [
-            loc for loc in conquest.blocks(c)
-            if (loc == here or (loc in routes and routes[loc].path)) and conquest.push_problem(s.world, c, side, loc, "attack") is None
-        ]
-
-        def order(loc: str) -> tuple:
-            route = routes.get(loc)
-            near = (0.0, 0, []) if loc == here or route is None else (round(route.minutes, 6), len(route.path), route.path)
-            return (-conquest.bar(s.world, loc, side), *near)
-
-        for loc in sorted(ready, key=order):
-            if not _outmatched(game, loc):
-                return next_hop(game, [loc])  # 已經在那裡是 None
-        return None
-
-    return _turn_cached(("focus_hop",), compute)

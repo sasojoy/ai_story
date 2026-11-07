@@ -14,21 +14,27 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, attrset, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
-from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
+from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from . import outing  # 走一趟：假人挑段數（outing_segments）
 from .engine import FREE_TEXT_OPTION, GROWTH_PREFIX, Game, Option
 from .rules import jianfa
 from .core import features as features_core
 from .martial_arts import MartialArt, next_quality
-from .models import MOVES, Content
+from .models import Content
 from .models import Outcome  # 減法季批 4：pick_outcome 的位子
-from .state import PLAYER
 from .sqlite_world import open_world
 from .world_state import WorldStateStore
+# 別包也讀的、包自己讀的第二輪第 89 批搬走了（bot_base 與各包的 bots.py；包不再跳回這個檔）。舊名留著，同一批物件：這個檔自己照舊叫（visit_smith、visit_market、duel_go……），測試與腳本讀；
+# 要換掉那幾個函式的換新位置那一份，換這裡打不到
+from .bot_base import CLINIC_MIN_SILVER, CLINIC_URGENT, can_pay_clinic, injury_share  # noqa: F401
+from .features.figure_acts.bots import CHALLENGE_ODDS  # noqa: F401
+from .features.gear.bots import MOUNT_SILVER_RESERVE, market_want  # noqa: F401
+from .features.smithy.bots import FORGE_SILVER_RESERVE, _forge_plans, forge_ready, forge_step, smith_want  # noqa: F401
+from .features.sortie.bots import duel_moves  # noqa: F401
+from .features.travel.bots import CLINIC_AT, clinic_hop  # noqa: F401
 
 HALF_HOUR = 1800
-CHALLENGE_ODDS = ("穩勝", "有把握")  # 挑戰本人只挑這兩種勝算（整季機器人與伺服器假人共用；bot_policy 從這裡拿，挑戰每季都有設計第九節）
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 
 FORGE_TRIES = 4  # 意境＋意境試幾組（被擋下就換一組）
@@ -37,7 +43,6 @@ SENSE_DRAW = 0.8  # 進了感悟狀態之後真的畫一筆（其餘順其自然
 MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會開一爐（煉製只剩意境＋意境）
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
-MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 # 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
 TRADE_KEEP = {1: 12, 2: 10, 3: 5}  # 三階只在素材四階開著時算（trade_keep）：留夠一次三換四
 TIER3_WANT = 2  # 素材四階關著（舊規則）：那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
@@ -47,39 +52,10 @@ TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
 
 
-CLINIC_AT = 0.15  # 內傷到氣血上限的這麼多（約兩三場落敗）就繞去醫館（企劃者 2026-10-12 療傷只在醫館）；整季機器人與假人共用
-CLINIC_MIN_SILVER = 20  # 付不起全治時（team.heal_plan 治一部分）手上至少這麼多才去、才療：不然每賺一兩就進醫館花掉
-CLINIC_URGENT = 0.25  # 到這麼多就先去醫館、排在軍令前面（PM 2026-10-12：假人被軍令拉走、帶著三四成內傷打一整季）；整季機器人在 CLINIC_AT 就一律先去
-
-
 def wants_heal(game: Game) -> bool:
     """人在醫館、有內傷、付得起（can_pay_clinic）才療傷：療傷照內傷計價（見 team.heal_cost），付不起全治時治一部分。
     氣血低但沒有內傷時會自己回；不在醫館按了只會寫「這裡沒有醫館」。"""
     return can_pay_clinic(game) and clinic.here(game.state, game.content)
-
-
-def can_pay_clinic(game: Game) -> bool:
-    """有內傷，而且付得起全治、或手上至少 CLINIC_MIN_SILVER 兩（治一部分，team.heal_plan）。"""
-    cost = team.heal_cost(game.content, game.state.player.member, game.state)
-    return cost > 0 and game.state.player.stats.get("silver", 0) >= min(cost, CLINIC_MIN_SILVER)
-
-
-def injury_share(game: Game) -> float:
-    """本人的內傷佔氣血上限的幾成（醫館的兩道門檻 CLINIC_AT、CLINIC_URGENT 都跟它比）。"""
-    s, c = game.state, game.content
-    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER), season=s.world)
-    return s.player.member.injury / cap if cap > 0 else 0.0
-
-
-def clinic_hop(game: Game) -> str | None:
-    """內傷到 CLINIC_AT、付得起（can_pay_clinic）、人不在醫館也不在路上：往最近的醫館走的下一站（clinic.nearest）；不必去、走不到是 None。"""
-    s, c = game.state, game.content
-    if not clinic.on(c) or s.player.journey is not None or clinic.here(s, c):
-        return None
-    if not can_pay_clinic(game) or injury_share(game) < CLINIC_AT:
-        return None
-    route = clinic.nearest(s, c)
-    return None if route is None else route.path[0]
 
 
 def can_practise(game: Game, kind: str) -> bool:
@@ -417,17 +393,6 @@ def explore_choice(ids, want: str = "material") -> str | None:
     return "act:explore" if "act:explore" in ids else None
 
 
-def duel_moves(rng: random.Random) -> list[str]:
-    """約戰封的三招（減法季批 3b；設計 5.7「假人可以應約戰、封招」，計畫 Task 3b-3）：對面封的招看不到，每一回合先猜一招，出剋它的那一招
-    （tactics.best_against），其中隨機一回合換成隨便一招；不撤退（撤退是真人看形勢用的）。整季機器人與伺服器假人共用。"""
-    random_round = rng.randrange(3)
-    moves = []
-    for i in range(3):
-        guess = rng.choice(MOVES)
-        moves.append(rng.choice(MOVES) if i == random_round else tactics.best_against([guess], list(MOVES)))
-    return moves
-
-
 def duel_go(game: Game, option_id: str, rng: random.Random) -> str:
     """出陣那一格（act:train）在約戰開著、不是截糧時只是打開出陣前那張卡（按了什麼都不做）：換成 sortie:go:<三招>，真的貼一張。其餘照原樣。"""
     if option_id == "act:train" and game.duel_on() and not game.duel_convoy_here():
@@ -549,98 +514,10 @@ def take_bounties(game: Game) -> None:
         game.choose("bounty:back")
 
 
-def smith_want(game: Game) -> str | None:
-    """在鐵匠鋪最該按的那一顆（整季機器人與伺服器假人共用；兵器設計第六節、裝備四欄設計第九節）：兵器頁照 weapons.wanted（換、買、修），
-    防具頁照 armor.wanted（換、買、修）。停在的那一頁有事先做；這一頁沒事、另一頁有事才回切頁那一顆（smith:page:<頁>），
-    下一輪再回真正的動作——不會來回切。還沒進門時照進門會停的那一頁算（equipment.first_page）。打造、淬煉、拆解不在這裡
-    （伺服器假人的打造與換上打出來的那把在 forge_step，bot_policy._smith_want 接在這之後；整季機器人的打造與淬煉在 visit_smith
-    另外做；淬煉、拆解假人都不做）。都沒事是 None。"""
-    s, c, w = game.state, game.content, game.world
-    member = s.player.member
-    moves = {
-        "weapon": weapons.wanted(s, c, w, team.player_art(s, c, w, member.wugong_id)),
-        "armor": armor.wanted(s, c, team.player_art(s, c, w, member.neigong_id)),
-    }
-    here = equipment.page(s.player, c) if s.player.picking_smith else equipment.first_page(c)
-    if moves.get(here) is not None:
-        return moves[here]
-    other = next((slot for slot, move in moves.items() if move is not None), None)
-    return None if other is None else f"smith:page:{other}"
-
-
-# 伺服器假人打一爐之後至少留幾兩（療傷、修）。PM 2026-10-13（FB-144）從 30 降到 10：假人到鐵匠鋪時身上多半只有幾十兩，留 30 兩
-# 一整季一爐都打不成
-FORGE_SILVER_RESERVE = 10
-
-
-def forge_step(game: Game) -> str | None:
-    """伺服器假人在鐵匠鋪打造的下一顆（打造第二批，PM 2026-10-12 決定第 3 條）：照整季機器人的 forge_plan／armor_plan 挑這一爐
-    （一般組合、名器、偶然碰上的神器配方都照打；不讀口訣），回單子的下一步——打開 → 種類 → 主料 → 輔料 → 開爐（防具沒有種類）；
-    單子跟這一爐對不上（存檔留下的、計畫變了）回「不打了」。沒有要打的時候，兵器頁上裝備庫裡有比手上更好的那把就換上
-    （smithing.better_in_rack；防具的換上 armor.wanted 本來就會）；這一頁沒事、另一頁有一爐要打回切頁那一顆（同 smith_want）。
-    工錢付了之後剩不到 FORGE_SILVER_RESERVE 兩的那一爐不打。不淬煉、不拆。沒事是 None。"""
-    s, c, w = game.state, game.content, game.world
-    p = s.player
-    art = team.player_art(s, c, w, p.member.wugong_id)
-    plans = _forge_plans(game)
-    d = p.smith_draft
-    if d is not None:
-        plan = plans.get(smithing.slot_of(d.kind))
-        if plan is None:
-            return smithing.CANCEL
-        kind, main, aux = plan
-        if d.kind not in (None, kind) or d.main not in (None, main) or d.aux not in (None, aux):
-            return smithing.CANCEL
-        if d.kind is None:
-            return f"{smithing.KIND}{kind}"
-        if d.main is None:
-            return f"{smithing.MAIN}{main}"
-        if d.aux is None:
-            return f"{smithing.AUX}{aux}"
-        return f"{smithing.GO}{kind}:{main}:{aux}"
-    here = equipment.page(p, c) if p.picking_smith else equipment.first_page(c)
-    if plans.get(here) is not None:
-        return smithing.OPEN
-    better = smithing.better_in_rack(s, c, w, art) if here == "weapon" else None
-    if better is not None:
-        return f"smith:wield:{better.id}"
-    other = next((slot for slot, plan in plans.items() if plan is not None and slot != here), None)
-    return None if other is None else f"smith:page:{other}"
-
-
-def _forge_plans(game: Game) -> dict[str, tuple[str, str, str] | None]:
-    """這一刻兵器、防具各要打的那一爐（smithing.forge_plan／armor_plan），工錢付了之後剩不到 FORGE_SILVER_RESERVE 兩的當沒有。
-    兩樣都要人在有鐵匠鋪的城鎮（forge_plan、armor_plan 自己會問）。"""
-    s, c, w = game.state, game.content, game.world
-    p = s.player
-
-    def affordable(plan):
-        if plan is None:
-            return None
-        cost = smithing.price(c, smithing.tier_of(c, plan[1]), smithing.slot_of(plan[0]), s)
-        return plan if p.stats.get("silver", 0) - cost >= FORGE_SILVER_RESERVE else None
-
-    return {
-        "weapon": affordable(smithing.forge_plan(s, c, w, team.player_art(s, c, w, p.member.wugong_id))),
-        "armor": affordable(smithing.armor_plan(s, c, w, team.player_art(s, c, w, p.member.neigong_id))),
-    }
-
-
-def forge_ready(game: Game) -> bool:
-    """人在城鎮的鐵匠鋪、身上湊得出一爐又付得起（留得下 FORGE_SILVER_RESERVE）：bot_policy 給「進鐵匠鋪」多加 FORGE_SCORE（FB-144）。"""
-    return any(plan is not None for plan in _forge_plans(game).values())
-
-
 def keep_book_names(game: Game) -> None:
     """整季機器人打出神器原品：一律按「沿用譜名」（Game.name_divine(keep=True)；設計第十一節：整季機器人不上線，不用擔心看得出來）。"""
     for item_id in forge_secrets.unnamed_originals(game.state, game.world):
         game.name_divine(item_id, keep=True)
-
-
-def market_want(game: Game) -> str | None:
-    """在馬市最該按的那一顆（整季機器人與伺服器假人共用；裝備四欄設計第九節）：換上更快的、沒馬就買（留 MOUNT_SILVER_RESERVE）、
-    飽足低於 mounts.FEED_AT 就餵。沒事是 None。"""
-    return mounts.wanted(game.state, game.content, reserve=MOUNT_SILVER_RESERVE)
 
 
 def visit_market(game: Game) -> None:
