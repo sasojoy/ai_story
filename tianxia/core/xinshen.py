@@ -13,7 +13,7 @@ Game 上留 xinshen_purse、xinshen_spend、xinshen_view 三個一行委派（st
   資料庫結構不動（第 9 版）：mall_entitlements 的 kind 有 CHECK，所以不記在那裡。
 扣的順序：一般交談先扣月卡（今天不用就沒了）、再扣免費、最後動存著的；免費限定只扣免費那一份。
 
-問酒家不扣心神，另外一天最多 ask_per_day 次（tavern_asks）。
+問酒家不扣心神，另外一天最多 ask_per_day 次：規則與存檔那一格（tavern_asks）在酒肆包（features/tavern/rules.py，架構收尾第 105 批搬回），這裡只留數字（Config.xinshen）與次數用完那一句（ASKS_DONE）。
 
 只 import models、state、wallet（月卡那一格的鍵抄一份，見 CARD_KEY）；不讀時鐘，第幾天由呼叫端給：純規則那幾個函式收 day，檔尾的本體問 ctx._pill_day()。
 """
@@ -128,27 +128,6 @@ def spend(state: GameState, content: Content, day: int, card: bool, banked: int,
     if card:
         p.xinshen_card, p.xinshen_card_day = have.card - from_card, day
     return from_bank
-
-
-# ── 問酒家（另算） ─────────────────────────────
-
-
-def asks_left(state: GameState, content: Content, day: int) -> int | None:
-    """今天還能問酒家幾次；心神關著或不限（ask_per_day 0）是 None。"""
-    cap = content.config.xinshen.ask_per_day
-    if not on(content) or cap <= 0:
-        return None
-    rec = state.player.tavern_asks
-    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
-    return max(0, cap - used)
-
-
-def note_ask(state: GameState, content: Content, day: int) -> None:
-    if asks_left(state, content, day) is None:
-        return
-    rec = state.player.tavern_asks
-    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
-    state.player.tavern_asks = [day, used + 1]
 
 
 # ── 寫給玩家看的字（待 joy 潤） ─────────────────

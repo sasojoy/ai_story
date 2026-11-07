@@ -551,12 +551,12 @@ def test_the_push_and_pill_services_call_the_patched_game_methods_through_ctx(mo
 # core_xinshen（架構收尾第 105 批）
 def test_the_game_reaches_xinshen_only_through_its_one_line_delegates():
     """Game 上碰 xinshen 這個名字的只有 CORE_XINSHEN_DELEGATES 那幾個一行的委派（回傳型別註解也算碰；多一處就是把心神的邏輯寫回 Game、或委派加了邏輯）。
-    engine 模組層那一行 import 不算碰。xinshen_asks_left、xinshen_note_ask 下一項搬回酒肆包。"""
+    engine 模組層那一行 import 不算碰。"""
     game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
     users = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
              and any(isinstance(n, ast.Name) and n.id == "xinshen" for n in ast.walk(f))}
     assert _service_delegates("xinshen") == CORE_XINSHEN_DELEGATES
-    assert users == CORE_XINSHEN_DELEGATES | {"xinshen_asks_left", "xinshen_note_ask"}
+    assert users == CORE_XINSHEN_DELEGATES
 
 
 # core_views（第二輪第 81 批）

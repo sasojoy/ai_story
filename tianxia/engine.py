@@ -744,13 +744,6 @@ class Game:
     def xinshen_view(self) -> dict | None:
         return xinshen.xinshen_view(self)
 
-    def xinshen_asks_left(self) -> int | None:
-        """今天還能問酒家幾次（心神開著才限）；不限是 None。"""
-        return xinshen.asks_left(self.state, self.content, self._pill_day())
-
-    def xinshen_note_ask(self) -> None:
-        xinshen.note_ask(self.state, self.content, self._pill_day())
-
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力／氣血回復、閉關出關、新立門戶福緣——
         這些是「我」的進度，不是共用賽季的一部分，照自己經過的時間算，不受共用賽季時鐘怎麼走影響。"""
