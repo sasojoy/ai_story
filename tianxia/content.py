@@ -12,20 +12,17 @@ import functools
 import json
 import math
 import re
-import string
 from pathlib import Path
 from typing import get_args
 
 from pydantic import BaseModel, ValidationError
 
 from . import encounter
-from . import forge_secrets as forge_rules
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     ArtBook,
-    Attribute,
     BEST_OF,
     BattleDef,
     CharacterDef,
@@ -100,10 +97,9 @@ from .models import (
     WEAPON_KINDS,
     allow_known,
 )
-from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
-from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
-from .tactics import figure_arts
-from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
+from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES
+from .naming import GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
+from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
 from .core.content_base import NUMBER_IN_TEXT, TIMETABLE_SIDES, check_traditional as _check_traditional, week7 as _week7
@@ -1833,6 +1829,7 @@ def validate(c: Content) -> None:
     from .timetable import check_timetable  # noqa: PLC0415
     from .territory import check_territory  # noqa: PLC0415
     from .conquest import check_conquest_blocks  # noqa: PLC0415
+    from .forge_secrets import validate_forge_secrets, validate_named_clash, validate_tier4_named  # noqa: PLC0415
 
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
@@ -2754,9 +2751,9 @@ def validate(c: Content) -> None:
                  f"{where}：合出來屬{attribute}，跟開局送的【{other.name}】（屬{other.attribute}）相剋；師門配方寫 attribute 改掉")
 
     validate_secrets(c, need)
-    _validate_forge_secrets(c, need)
-    _validate_tier4_named(c, need)
-    _validate_named_clash(c, need)
+    validate_forge_secrets(c, need)
+    validate_tier4_named(c, need)
+    validate_named_clash(c, need)
     _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
@@ -2912,121 +2909,6 @@ def validate(c: Content) -> None:
 
     if errors:
         raise ContentError("內容檔有誤：\n" + "\n".join(errors))
-
-
-def _validate_tier4_named(c: Content, need) -> None:
-    """四階名器名字表（content/tier4_named.json，正式季整合 5.2）：兵器的種類合法、防具不寫種類；每一條的名字過命名過濾、兵器名對得上
-    種類（weapons.kind_problem）、防具名帶防具的字（armor.word_problem），不跟一般組合字表組得出的名字、隱藏配方、別的條目同名；
-    每一個欄位（兵器照種類）× 每一種屬性至少一條（不然那一爐擲中名器卻挑不到名字）。沒有這個檔（測試內容）不檢查。"""
-    if not c.tier4_named:
-        return
-    table = forge_rules.table_names(c)
-    names: set[str] = set()
-    for entry in c.tier4_named.values():
-        where = f"四階名器 {entry.id}"
-        if entry.slot == "weapon":
-            need(entry.kind in WEAPON_KINDS, f"{where}：兵器要寫種類（{'、'.join(WEAPON_KINDS)}）")
-            shape = weapon_kind_problem(entry.kind, entry.name) if entry.kind in WEAPON_KINDS else None
-        else:
-            need(entry.kind is None, f"{where}：防具不寫種類")
-            shape = armor_word_problem(entry.name)
-        problem = name_problem(entry.name, c)
-        need(problem is None, f"{where}：名字 {entry.name} 過不了命名過濾（{problem}）")
-        need(shape is None, f"{where}：名字 {entry.name} 過不了（{shape}）")
-        need(entry.name not in table, f"{where}：名字 {entry.name} 跟鐵匠鋪一般組合的名字同名")
-        need(entry.name not in names, f"{where}：名字 {entry.name} 重複")
-        names.add(entry.name)
-        need(0 < len(entry.note) <= 30, f"{where}：說明要 1～30 字")
-    for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
-        for attribute in ATTRIBUTES:
-            need(any(e.slot == slot and e.kind == kind and e.attribute == attribute for e in c.tier4_named.values()),
-                 f"四階名器名字表少了 {kind or '防具'}・{attribute}")
-
-
-def _named_stem(name: str, slot: str, kind: str | None) -> str:
-    """名器名字拿掉最後的兵器字（劍、拳套）或防具字（甲鎧袍衫），剩下的是取名的那幾個字（_validate_named_clash 比這一段）。"""
-    tail = WEAPON_NOUNS.get(kind or "", kind or "") if slot == "weapon" else next((w for w in ARMOR_FORGE_WORDS if name.endswith(w)), "")
-    return name[: -len(tail)] if tail and name.endswith(tail) else name
-
-
-def _validate_named_clash(c: Content, need) -> None:
-    """名器（隱藏配方的名器、四階名器名字表）的名字不跟神器、名將本命兵器的名字，與任何戰法、特技的名字共用連著的兩個字（FB-431：
-    三階名器【隕星鎧】跟神器【隕星刀】、【墜星劍】跟特技〔墜星〕）。名器那一邊先拿掉最後的兵器字、防具字（拳套、長刀的刀不算撞字）。"""
-    great = [r.name for r in c.forge_secrets.values() if r.divine] + [a.name for a in c.gear.signature_arms]
-    tactics = [s.tactic.name for s in c.skills.values() if s.tactic is not None]
-    tactics += [r.tactic.name for r in c.forge_secrets.values() if r.tactic is not None]
-    tactics += [a.tactic.name for a in c.gear.signature_arms if a.tactic is not None]
-
-    def pairs(text: str) -> set[str]:
-        return {text[i:i + 2] for i in range(len(text) - 1)}
-
-    named = [(f"名器 {r.id}", r.name, r.slot, r.kind) for r in c.forge_secrets.values() if not r.divine]
-    named += [(f"四階名器 {e.id}", e.name, e.slot, e.kind) for e in c.tier4_named.values()]
-    for where, name, slot, kind in named:
-        stem = pairs(_named_stem(name, slot, kind))
-        for other in great + tactics:
-            shared = sorted(stem & pairs(other))
-            need(not shared, f"{where}：名字 {name} 跟【{other}】共用「{'、'.join(shared)}」（FB-431：名器不跟神器、特技撞字）")
-
-
-def _validate_forge_secrets(c: Content, need) -> None:
-    """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑（神器組從打造第二批起照挑）；
-    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣四階、名字（命名過濾、
-    種類字或防具字、不重複、不跟武學秘方同名；跟寶物名駒、對照表同名由 name_problem 與字表那一圈擋）、口訣（1～20 字、不寫數字、
-    不寫「配方」「秘方」），同一個組合只能有一條（min_tier 算它涵蓋的每一階）。"""
-    cfg = c.config.forge_secrets
-    unknown = sorted(set(cfg.per_season) - set(forge_rules.GROUPS))
-    need(not unknown, f"Config.forge_secrets.per_season 只能有 {'、'.join(forge_rules.GROUPS)}：{unknown}")
-    for group, count in cfg.per_season.items():
-        need(count >= 0, f"Config.forge_secrets.per_season：{group} 不能是負的")
-        pool = sum(1 for r in c.forge_secrets.values() if forge_rules.group_of(r) == group)
-        need(pool >= count, f"Config.forge_secrets.per_season：{group} 只有 {pool} 條，不夠挑 {count} 條")
-    attributes = {m.attribute for m in c.materials.values()}
-    secret_names = {r.name for r in c.secret_recipes}
-    names: set[str] = set()
-    combos: dict[tuple, str] = {}
-    for r in c.forge_secrets.values():
-        where = f"隱藏配方 {r.id}"
-        if r.slot == "weapon":
-            need(r.kind in WEAPON_KINDS, f"{where}：兵器要寫種類（{'、'.join(WEAPON_KINDS)}）")
-        else:
-            need(r.kind is None, f"{where}：防具不寫種類")
-        need(r.main.tier is not None and r.main.min_tier is None, f"{where}：主料要寫死階（tier），它定這一件的階與工錢")
-        need((r.aux.tier is None) != (r.aux.min_tier is None), f"{where}：輔料寫 tier 或 min_tier 其中一個")
-        for label, side in (("主料", r.main), ("輔料", r.aux)):
-            need(side.attribute in attributes, f"{where}：{label}的屬性 {side.attribute} 不是素材有的屬性")
-            need(any(forge_rules.fits(side, m) for m in c.materials.values()), f"{where}：素材表裡找不到合得上的{label}")
-        need({r.main.attribute, r.aux.attribute} not in forge_rules.SEED_PAIRS,
-             f"{where}：剛柔、快慢合出來的屬性每季不同，名器的說明會對不上")
-        if r.divine:  # 正式季整合 5.5：九件神器改用四階（四階才是神器的料）
-            need(r.main.tier == 4 and r.aux.tier == 4, f"{where}：神器配方的主料、輔料都要四階")
-        need(r.name not in names, f"{where}：名字 {r.name} 重複")
-        names.add(r.name)
-        problem = name_problem(r.name, c)
-        need(problem in (None, FORGE_CLASH), f"{where}：名字 {r.name} 過不了命名過濾（{problem}）")
-        need(r.name not in secret_names, f"{where}：名字 {r.name} 跟武學秘方同名")
-        if r.slot == "weapon" and r.kind in WEAPON_KINDS:
-            shape = weapon_kind_problem(r.kind, r.name)
-        else:
-            shape = armor_word_problem(r.name) if r.slot == "armor" else None
-        need(shape is None, f"{where}：名字 {r.name} 過不了（{shape}）")
-        for i, clue in enumerate(r.clues):
-            need(0 < len(clue) <= 20, f"{where}：第 {i + 1} 句口訣要 1～20 字")
-            need(not re.search(r"[0-9０-９]", clue), f"{where}：第 {i + 1} 句口訣不寫數字")
-            need("配方" not in clue and "秘方" not in clue, f"{where}：第 {i + 1} 句口訣不寫「配方」「秘方」")
-        for tier in forge_rules.covers(r.aux):
-            combo = (r.slot, r.kind, r.main.attribute, r.main.tier, r.aux.attribute, tier)
-            other = combos.setdefault(combo, r.id)
-            need(other == r.id, f"{where}：跟隱藏配方 {other} 認同一個組合")
-    # 神器（正式季整合 5.6、5.9）：每件的特色（特技的做法）不重複；要有 wave 1 的（這個伺服器第一季全開的那幾件）。
-    # 同一種兵器（防具算一種）兩件神器不能是同一對料，上面「認同一個組合」已經擋（神器兩樣都寫死四階）
-    divine = [r for r in c.forge_secrets.values() if r.divine]
-    kinds: dict[str, str] = {}
-    for r in divine:
-        if r.tactic is not None:
-            other = kinds.setdefault(r.tactic.kind, r.id)
-            need(other == r.id, f"神器 {r.id}：特技的做法 {r.tactic.kind} 跟神器 {other} 一樣（5.9：每件神器的特色不重複）")
-    need(not divine or any(r.wave == 1 for r in divine), "神器配方：要有 wave 1 的（這個伺服器第一季全開的那幾件）")
 
 
 def _validate_seal(c: Content, need) -> None:
