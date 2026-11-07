@@ -868,8 +868,7 @@ def bus_bypasses(source: str) -> list[int]:
 def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     """engine.py、核心（core/ 與 MODULES，搬進核心的函式也要守，第二輪第 102 批）與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
     原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
-    files = ([TIANXIA / "engine.py"] + sorted((TIANXIA / "core").glob("*.py")) + [TIANXIA / f"{name}.py" for name in sorted(CORE)]
-             + [path for name in _packages() for path in _package_files(name)])
+    files = _core_files() + [path for name in _packages() for path in _package_files(name)]
     found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
     hits = {path: lines for path, lines in found.items() if lines}
     assert not hits, f"不准直接叫事件的訂閱者，走 ctx.publish：{hits}"
@@ -1232,8 +1231,8 @@ def test_the_shell_scanner_catches_a_fake_import():
 
 # core_shared（第二輪第 102 批：過渡收口。規矩從「註了就准」變成不准，防止第二輪做完又長回來）
 def _core_files() -> list[Path]:
-    """核心：tianxia/core/ 底下、MODULES、engine.py。"""
-    return sorted((TIANXIA / "core").glob("*.py")) + [TIANXIA / f"{name}.py" for name in sorted(CORE)] + [TIANXIA / "engine.py"]
+    """核心：tianxia/core/ 底下（含 tuning/）、MODULES、engine.py。"""
+    return sorted((TIANXIA / "core").rglob("*.py")) + [TIANXIA / f"{name}.py" for name in sorted(CORE)] + [TIANXIA / "engine.py"]
 
 
 def test_the_core_only_imports_the_core_and_the_shared_layer():
