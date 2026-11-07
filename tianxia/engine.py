@@ -16,21 +16,19 @@ from . import arts as arts_mod
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, atlas, battlelog, calendar, clinic, conquest, economy,
+    allied, atlas, battlelog, calendar, clinic, conquest,
     fight_llm, figures, forge_secrets, gender, insights, journal, library, place_state, plans,
     mounts, precise, ranks, renown, roster, seal_acts, secret_recipes, sensing,
-    shopview, signature, art_cards,
+    signature, art_cards,
     sortie, team, territory, treasures, week_unlock,
 )
 from . import flavor
 from .flavor import FlavorJob
-from . import speech
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
 from . import outcomes as outcome_rules
-from . import wins as wins_rules
 from .models import FreeTextChoice, Outcome
 from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
@@ -39,7 +37,6 @@ from .characters import CharacterStore, name_key
 from .events import (
     free_text_note, visible_choices,
 )
-from . import training
 # guide（全部拆包第 22 批）：新手引導的本體在 tianxia/features/guide/；Game._note_action 叫的是這裡的 note_action（別名 tianxia.guide，
 # tests/core/test_engine.py 換的是 tianxia.engine.note_action），其餘的委派叫包的 actions
 from .guide import note_action
@@ -134,7 +131,6 @@ from .core.combat import FIGHT_GONE_LINES, LOW_HP_RATIO  # noqa: F401  server、
 from .core import pushing  # 推大勢的本體（第二輪第 80 批；Game 上留一行委派）。排在這裡：它 import 的模組這時都已經載入，載入的先後一個都不變
 from .core import pills  # 回體丹的本體（第二輪第 80 批；Game 上留一行委派）。同上
 from .core.pills import PILL_DAY_FULL, REFILL_FULL, REFILL_HUT, REFILL_LINE, REFILL_TITLE, _cn_count  # noqa: F401  tests/bots/test_pill_per_day.py、test_stamina_refill.py 從 engine 拿
-from .core import presence  # 「此地還有」的判斷與身分字（全部拆包第 37 批：從 social 拆進核心）
 from .core import signature_base  # 本命兵器的名字照內容讀（core_seams，全部拆包第 55 批：清失效參照 signature 那一格；原本經舊名 signature_arms 讀）
 from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
 # peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
