@@ -133,6 +133,8 @@ class Verb:
     tail_bot: Callable[[Any, Any, str], float | None] | None = None
     bot_skip: bool = False
     tail_bot_skip: bool = False
+    # core_rest（第二輪第 99 批）：標題只在 kind == "act" 才問主人（銀兩那四樣；別的 kind 帶同一個字照舊是「提前出關」，同帶後綴的）
+    act_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -780,10 +782,12 @@ def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
     return None
 
 
-def act_title(ctx: Game, verb: str) -> str | None:
-    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣，kind 的門在呼叫端：帶後綴的與銀兩那四樣要 kind == "act"）。帶後綴的（第 57 批）問 tail_title。"""
+def act_title(ctx: Game, verb: str, kind: str = "act") -> str | None:
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣，只有帶後綴的與 Verb.act_only 那幾樣要 kind == "act"）。帶後綴的（第 57 批）問 tail_title。"""
     head, sep, tail = verb.partition(":")
     for v in _verbs(None, head):
+        if kind != "act" and (sep or v.act_only):
+            continue
         if sep:
             got = v.tail_title(ctx, tail) if v.tail_title is not None else None
         else:
@@ -1771,7 +1775,7 @@ def outlock_jobs(shell: Any) -> tuple[OutlockJob, ...]:
 
 # core_api（第二輪第 72 批「一行委派進各包的表」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第72批.md）：
 # Game 上包的一行委派搬進 features/<包>/game_api.py 的 TABLE（名字 → 函式本身），engine.py 檔尾掛一次，`g.xxx` 照舊。
-def game_api_tables() -> dict[str, dict[str, Callable]]:
+def game_api_tables() -> dict[str, dict[str, Callable | str]]:
     """各包的 TABLE：照資料夾名排序、檔在才收。不經 registry：`import tianxia.engine` 這一刻 registry 還沒載，它一載就多載一串包，
     sys.modules 的先後會變；用 import_module，因為這裡只讀表、不用包的東西。"""
     import importlib  # noqa: PLC0415
@@ -1782,8 +1786,9 @@ def game_api_tables() -> dict[str, dict[str, Callable]]:
             for path in sorted(root.glob("*/game_api.py"))}
 
 
-def attach_game_api(cls: type, tables: dict[str, dict[str, Callable]] | None = None) -> None:
-    """把 TABLE 掛上類別（setattr 函式本身，不包）。同名丟例外：類別本體已經有、或兩包都掛同一個名字；先全部查完才掛。"""
+def attach_game_api(cls: type, tables: dict[str, dict[str, Callable | str]] | None = None) -> None:
+    """把 TABLE 掛上類別（setattr 函式本身，不包；第 98 批起另有幾格是字，原本是 Game 的類別屬性）。同名丟例外：類別本體已經有、或兩包都掛同一個名字；
+    先全部查完才掛。"""
     tables = game_api_tables() if tables is None else tables
     owners: dict[str, str] = {}
     for package, table in tables.items():
@@ -1794,5 +1799,5 @@ def attach_game_api(cls: type, tables: dict[str, dict[str, Callable]] | None = N
                 raise ValueError(f"{package}/game_api.py 的 {name}：{owners[name]} 也掛了這個名字")
             owners[name] = package
     for table in tables.values():
-        for name, func in table.items():
-            setattr(cls, name, func)
+        for name, value in table.items():
+            setattr(cls, name, value)

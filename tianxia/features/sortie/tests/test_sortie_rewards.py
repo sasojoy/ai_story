@@ -9,7 +9,8 @@ from conquest_kit import conquest_rules
 
 from tianxia import battle_instance, forge_secrets, four_tiers, team
 from tianxia.encounter import EncounterResult
-from tianxia.engine import Game, drill_share
+from tianxia.core.services import drill_share
+from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 

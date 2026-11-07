@@ -38,7 +38,7 @@ class RaidSpoils:
     evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
 
 
-# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單與結伴分收穫要讀、核心的換季重設與讀檔清舊〔_drop_stale_references〕也讀，**留在核心**〔第 48 批 PM 認定〕，engine 照舊叫得到）
+# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單與結伴分收穫要讀、核心的換季重設與讀檔清舊〔_drop_stale_references〕也讀，**留在核心**〔第 48 批 PM 認定〕）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
 ROAD_TASKS: dict[str, tuple[str, str]] = {  # 留核心：讀檔清舊與換季重設還讀（第 47 批 PM 認定第 4 條）
     "think": ("邊走邊想", "想過了"),
@@ -50,6 +50,7 @@ ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管�
 
 # sortie（全部拆包第 17 批：原本寫在 engine.py；出陣包的遊歷鈕要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
+PROLOGUE_FIGHT = "雪恥"  # 待 joy 潤：序章那一場寫好的仗（不算出陣次數，鈕上與紀錄標題寫它；單打服務 core/combat.py、出陣包都讀，第二輪第 98 批搬進來）
 
 
 # guide（全部拆包第 22 批）：原本寫在 tianxia/guide.py；核心的 Game._guide、_menxia_entry 照它把序章步驟的獎勵（這一下的結果）跟對話框
@@ -61,7 +62,7 @@ class HutReward(str):
 def drill_share(amount: int, share: float) -> int:
     """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
     操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
-    （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
+    （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡。測試從這裡拿，engine 第 98 批起不留這個名字。）"""
     return int(amount * share + 0.5)
 
 

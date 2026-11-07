@@ -12,7 +12,8 @@ import pytest
 from conftest import install_season_one
 from tianxia import calendar, encounter, roster, rules, social, team
 from tianxia.characters import CharacterStore
-from tianxia.engine import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON, Game
+from tianxia.engine import Game
+from tianxia.features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON
 from tianxia.models import FactionDef
 from tianxia.state import BotProfile
 

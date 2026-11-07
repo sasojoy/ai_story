@@ -32,6 +32,7 @@ from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
 from tianxia import story_base  # 共用規則層（一條線的底座：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
+from tianxia.core.services import PILL_FOUND, checkin_on  # 核心（回體丹那一句、簽到開著沒）
 from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
 from tianxia.events import event_candidates, pick_event  # 共用規則層（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
@@ -173,13 +174,23 @@ def outing_option(ctx, loc: Location) -> Option:
     return ctx._cost_option("act:explore", "探索", ctx.content.config.jianfa.explore_stamina, note=ctx._outing_plan(loc).hint)
 
 
+def insight_blocked(ctx, loc: Location) -> bool:
+    """探索那一行的悟意境那一支，是不是只因為這個遊戲日在這裡選錯過做法才拿掉（這裡本來悟得到、比重不是 0）：是的話那一行
+    句尾補一句什麼時候才悟得出（howto.explore_line）。"""
+    c = ctx.content
+    return (
+        ctx._sense_missed(loc)
+        and c.config.explore_mix_of(loc.tags).weights.get("insight", 0) > 0 and bool(insights.explore_gives(loc, c))
+    )
+
+
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
     （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 ctx._insight_blocked）。"""
     if not outing_on(ctx):
         c = ctx.content
         legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
-        blocked = ctx._insight_blocked(loc)
+        blocked = insight_blocked(ctx, loc)
         kind, until = day_turn(c, ctx.state.world) if blocked else ("at", None)
         return howto.explore_line(ctx._explore_weights(loc), legend, blocked, until, later=kind == "later")
     plan = ctx._outing_plan(loc)
@@ -201,6 +212,18 @@ def home_gather(ctx, loc: Location, mids: list[str]) -> list[str]:
     mid = explore_rules.one_of(c, {attribute} if attribute else set(), 1, rng)
     line = materials.grant(s, c, mid) if mid is not None else None
     return [conquest.HOME_GATHER_LINE, line] if line else []
+
+
+def pill_find(ctx, rng: random.Random) -> list[str]:
+    """素材那一拍掉一顆回體丹（21 天季，正式季整合 6.4；Config.checkin.pill_drop）：用探索自己的亂數（用途「回體丹」），
+    不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
+    c = ctx.content
+    chance = c.config.checkin.pill_drop
+    if chance <= 0 or not checkin_on(c, ctx.state.world) or rng.random() >= chance:
+        return []
+    ctx.state.player.stamina_pills += 1
+    name = c.config.stamina_pill_name
+    return [PILL_FOUND.format(name=name), f"{name} +1"]
 
 
 def explore_one(ctx) -> list[str]:
@@ -288,7 +311,7 @@ def explore_one(ctx) -> list[str]:
                                           item=explore_rules.items_of([granted], materials.GRANT_PREFIX)))
             out.append(granted)
     # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
-    extras = ctx._pill_find(roll("回體丹")) + ctx._scrap_find() + ctx._legend_find(roll("破境丹"))
+    extras = pill_find(ctx, roll("回體丹")) + ctx._scrap_find() + ctx._legend_find(roll("破境丹"))
     extras += ctx.publish("outing", loc.id)  # 事件 outing（第 26 批）：打探懸賞（出門一趟就算）→撿玉璽碎片
     if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
         ctx._outing_close.add("capped")

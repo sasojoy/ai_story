@@ -485,7 +485,7 @@ def test_revisiting_a_location_does_not_call_the_model(game):
 def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.stats["xinde"] = 0
-    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+    with mock.patch("tianxia.features.guide.rules.note_action", return_value=[]) as noted:
         game.practice("武學")
     noted.assert_not_called()
 
@@ -493,7 +493,7 @@ def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
 def test_a_real_practice_still_reaches_the_tutorial_hook(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.stats["xinde"] = 5
-    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+    with mock.patch("tianxia.features.guide.rules.note_action", return_value=[]) as noted:
         game.practice("武學")
     noted.assert_called_once()
     assert noted.call_args.args[-1] == "practice"

@@ -189,13 +189,14 @@ def _showdown(content, game):
 
 def test_owners_pick_an_escort_before_joining(content, game):
     from conftest import at
-    from tianxia import engine, team
+    from tianxia import team
+    from tianxia.features.battle import rules as battle_rules
 
     definition = _showdown(content, game)
     p = game.state.player
     assert game.world.try_recruit("mate", p.name, cap=3)
     with at(game, 0.0):
-        assert game.choose("battle:join:guan") == [engine.ESCORT_PICK]
+        assert game.choose("battle:join:guan") == [battle_rules.ESCORT_PICK]
         assert p.name not in game.world.get_battle().participants  # 挑了才加入
         assert [o.id for o in game.options()][:3] == ["battle:escort:mate", "battle:escort:none", "battle:escort:back"]
         game.choose("battle:escort:mate")
@@ -206,7 +207,7 @@ def test_owners_pick_an_escort_before_joining(content, game):
     assert me.faction == "guan" and me.escort.cid == "mate" and me.escort.name == "韓鐵"
     assert me.escort.score == round(bi.strength(content.config.battle, power) * gen.escort_share, 1)
     assert me.escort.neili == me.escort.neili_cap == team.mate_pool(game.state, content, game.world, "mate") > 0
-    assert engine.ESCORT_MUSTER.format(name="韓鐵") in game._battle_scene_text(battle, definition)
+    assert battle_rules.ESCORT_MUSTER.format(name="韓鐵") in game._battle_scene_text(battle, definition)
     game._battle_choose("join:guan")  # 集結時再加入一次（改選、依附那一軍重新快照）：同伴照舊跟著
     assert game.world.get_battle().participants[p.name].escort.cid == "mate"
 
@@ -231,7 +232,7 @@ def test_declining_joins_alone_and_no_companions_means_no_step(content, game):
 def test_the_scene_shows_only_my_escort(content, game):
     from conftest import at
     from test_engine import _fighter
-    from tianxia import engine
+    from tianxia.features.battle import rules as battle_rules
 
     definition = _showdown(content, game)
     assert game.world.try_recruit("mate", game.state.player.name, cap=3)
@@ -247,7 +248,7 @@ def test_the_scene_shows_only_my_escort(content, game):
     battle_instance_close = bi.close_muster
     battle_instance_close(battle, definition, random.Random(0), 0.0, content.config.battle)
     text = game._battle_scene_text(battle, definition)
-    assert engine.ESCORT_SCENE.format(name="韓鐵", hp=round(battle.participants[game.state.player.name].escort.neili),
+    assert battle_rules.ESCORT_SCENE.format(name="韓鐵", hp=round(battle.participants[game.state.player.name].escort.neili),
                                       cap=round(battle.participants[game.state.player.name].escort.neili_cap)) in text
     assert "小六" not in text  # 別人的同伴不列
 

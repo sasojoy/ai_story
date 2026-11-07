@@ -114,7 +114,7 @@ class OutletsFeature(Feature):
                 return msgs
 
             def silver_verb(what: str, sign: str) -> Verb:
-                return Verb(what, run=lambda ctx, prepared: press(ctx, what), title=lambda ctx: f"{sign}・{here(ctx)}")
+                return Verb(what, act_only=True, run=lambda ctx, prepared: press(ctx, what), title=lambda ctx: f"{sign}・{here(ctx)}")
 
             self._verbs = (
                 Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}", bot=lambda ctx, profile: None, bot_skip=True),  # 假人只是打開一串，捐由 bot.donate_spare 直接捐

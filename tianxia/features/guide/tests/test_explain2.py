@@ -273,7 +273,6 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
                 gains.append((label(path), line.strip().split("#")[0].strip()))
     assert gains == [
-        ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("core/combat.py", 'return renown.gain(ctx.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
         # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
         ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
@@ -284,6 +283,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("features/bout/arena_actions.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（deliver_arena）
         ("features/bout/arena_actions.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（deliver_arena）
         ("features/bout/duel_actions.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json；duel_finish）
+        # craft：首創回饋搬進煉製包（第二輪第 99 批；這一行原本在 engine.py 的 Game._deliver_echoes，self 換成 ctx，路徑換成煉製包、照路徑排在單挑包後面、宴客前面）
+        ("features/craft/actions.py", 'ctx._write(journal.ECHO, lines + renown.gain(ctx.state, ctx.content, "fame", gained))'),  # 首創回饋
         ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
         # figure_acts：同步補護衛名望搬進大勢人物包（全部拆包第 31 批）：路徑從 engine.py 換成 features/figure_acts/aid_actions.py（照路徑排在宴客後面、酒肆前面）
         ("features/figure_acts/aid_actions.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，aid_actions.deliver_guard_credits）

@@ -36,6 +36,12 @@ def hire_here(ctx) -> bool:
         return False
     return any(ch.hire_at == s.player.location and roster.owned_by(ctx.world, cid) is None for cid, ch in c.characters.items())
 
+def note_action(ctx: Game, action: str) -> list[str]:
+    """做完一個行動，引導（說書人的步驟與入伍段）看這一步完成了沒（rules.note_action），回那幾行（呼叫端交給 _guide）。
+    叫模組屬性：tests/core/test_engine.py 換的是 tianxia.features.guide.rules.note_action。第二輪第 98 批從 Game 本體搬進來。"""
+    return rules.note_action(ctx.state, ctx.content, ctx.world, action)
+
+
 def note_gift(ctx: Game) -> None:
     """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：
     「剛剛」不換（序章第一屏照舊什麼都不放），江湖紀錄裡看得到。只寫字，不擲骰、不動數值（假人、整季機器人照樣有這一行）。"""

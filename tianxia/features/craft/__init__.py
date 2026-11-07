@@ -11,7 +11,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, StatusHook
+from tianxia.core.features import Feature, SeamHook, StatusHook
 
 
 class CraftFeature(Feature):
@@ -53,6 +53,17 @@ class CraftFeature(Feature):
                 StatusHook("status", "create", lambda ctx, frame: {"create": actions.view(ctx)}),
             )
         return self._status_slots
+
+    # core_rest（第二輪第 99 批）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 echoes 那一格（順序在 SEAM_ORDER；不問 enabled）：別人照著你首創的配方合了出來，補名望（首創名望回饋）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "echoes", lambda ctx: actions.deliver_echoes(ctx)),)
+        return self._seams
 
     def menxia_actions(self, shell) -> dict:
         from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）

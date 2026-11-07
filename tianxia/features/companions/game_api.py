@@ -48,4 +48,9 @@ TABLE = {
     "remove_from_team": not_while_preparing(actions.remove_from_team),
     "release_companion": not_while_preparing(actions.release_companion),
     "release_view": actions.release_view,
+    # core_imports（第二輪第 98 批：原本是 Game 的類別屬性）：名冊上本人、部下那兩句。不是函式，只有測試從 Game 讀（邊界名單 GAME_TABLE_TEXTS）
+    "SELF_IN_TEAM": actions.SELF_IN_TEAM,
+    "FOLLOWER_IN_TEAM": actions.FOLLOWER_IN_TEAM,
+    # core_rest
+    "_overhear": talk_actions.overhear,
 }

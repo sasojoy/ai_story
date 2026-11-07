@@ -1332,7 +1332,7 @@ def test_a_masters_recipe_that_clashes_with_the_starting_art_is_refused(prologue
 
 def test_the_hut_has_no_batch_melt(fresh):
     """批量熔煉：序章裡照師父說的一門一門熔（熔煉是教學的一步），批量那一條直接回一句、什麼都不動。"""
-    from tianxia.engine import MELT_MANY_PROLOGUE
+    from tianxia.features.cultivation.actions import MELT_MANY_PROLOGUE
 
     _to_step(fresh, 3)
     p = fresh.state.player

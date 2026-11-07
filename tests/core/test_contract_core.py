@@ -1553,6 +1553,7 @@ def test_the_core_and_the_packages_take_every_seam_slot_exactly_once():
         "outlets": [("season.carry", "outlets")],
         "peers": [("season.carry", "peers")],
         "legacy": [("season.carry", "legacy")],
+        "craft": [("sync.deliver", "echoes")],  # core_rest
     }
 
 
@@ -2004,6 +2005,16 @@ def test_a_verb_with_a_tail_gets_the_tail_and_a_verb_without_one_falls_to_the_co
         g._act("plainverb:乙")
     assert g._action_title("act", "plainverb:乙") == "提前出關"
     assert g._fight_squad("act:plainverb:乙") is None and g._fight_squad("act:plainverb") is thug
+
+
+def test_the_silver_verbs_answer_the_title_only_for_kind_act(world):
+    """銀兩那四樣（Verb.act_only；第二輪第 99 批從 Game._action_title 的字面換來）：kind 要是 "act" 才問主人，別的 kind 帶同一個字照舊是「提前出關」。"""
+    from conftest import real_content
+
+    g = Game.new(real_content("season21"), "甲", rng=random.Random(0), world=world)
+    for verb in ("silver_donate", "mentor", "furnace", "buy_legend"):
+        assert g._action_title("sect", verb) == "提前出關"
+        assert g._action_title("act", verb) != "提前出關"
 
 
 def test_every_act_verb_has_the_owner_in_the_plan():

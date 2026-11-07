@@ -1,6 +1,6 @@
 """單打服務（核心本體；第二輪第 79 批，計畫 docs/superpowers/plans/2026-11-07-第二輪-第79批.md，導覽 docs/guide/戰鬥.md）：
 打一場的每一包都用的那幾段。原本是 Game 上的 40 個方法，本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3），函式名拿掉開頭的底線
-（is_big、fight_request 照舊），Game 留 35 個一行委派（server、假人、事件檢定、各包、測試與 Game 原位在叫；只有這裡叫的 exp_changes、trait_say、
+（is_big、fight_request 照舊），Game 留 36 個一行委派（第 98 批收進 squad_encounter 多一個；server、假人、事件檢定、各包、測試與 Game 原位在叫；只有這裡叫的 exp_changes、trait_say、
 trait_lines、thin_drops、battle_mount 不留）。_narrate、_spar_power、_spar_mirror 在 Game 上照舊是 staticmethod（懸賞、玉璽的測試用 staticmethod 換 _spar_power）。
 
 - 大場面：is_big、fight_squad、fight_request（A 段，鎖內只讀）、checked_fight（C 段重驗）、fight_gone、judged、fight_with、style_note、terrain_note、narrate
@@ -8,20 +8,24 @@ trait_lines、thin_drops、battle_mount 不留）。_narrate、_spar_power、_sp
 - 操練的帳與立功：drill_gains、exp_changes、famed_news、deed_fame、record_exp
 - 收場：lose_silver、player_hp_and_cap、player_hp、hp_facts、take_toll、play_rounds、trait_say、trait_lines、story_squad、tier3、battle_rewards、thin_drops、seize、file_battle
 - 本人對本人：spar_power、spar_mirror
+- 打一場的主流程：squad_encounter（第二輪第 98 批）
 - 模組層的名字：TollFacts、LOW_HP_RATIO、FIGHT_LEFT、FIGHT_CHANGED、FIGHT_GONE_LINES（engine 照名字 import 回 FIGHT_GONE_LINES、LOW_HP_RATIO）
 
 哪些經 ctx（手冊第十五節「換掉的才打得到」；tests/core/boundary_tables.py 的 COMBAT_VIA_CTX 守）：
-- 被測試、腳本換掉的 8 個 Game 方法（judged、lose_silver、battle_rewards、seize、battle_power、battle_scores、spar_power、fight_request），模組裡只有兩處
-  互叫碰到它們：battle_scores → ctx._battle_power、checked_fight → ctx.fight_request。其餘 6 個模組裡沒有人互叫，都經 _squad_encounter 的 self._x 或包的 ctx._x，
-  打得到。模組裡其他互叫直接叫函式（不多跳一層）。
-- 包的委派（CORE_DELEGATE_CALLERS）：battle_marks → _escort_carry、_seal_bare；battle_gear → _duel_cut；seize → _seize_chance。
-- 留在 Game 上的：state、content、world、rng、client、options、_draft、_fight、_last_wear、_loot_scale、_gate_scale、_drop_scale。
+- 被測試、腳本換掉的 8 個 Game 方法（judged、lose_silver、battle_rewards、seize、battle_power、battle_scores、spar_power、fight_request），模組裡互叫碰到它們的都寫 ctx._x：
+  battle_scores → ctx._battle_power、checked_fight → ctx.fight_request、squad_encounter → ctx._judged、ctx._lose_silver、ctx._battle_rewards、ctx._seize。
+  其餘 2 個（battle_scores、spar_power）模組裡沒有人互叫，都經包的 ctx._x，打得到。模組裡其他互叫直接叫函式（不多跳一層）。
+- 包的委派（CORE_DELEGATE_CALLERS）：battle_marks → _escort_carry、_seal_bare；battle_gear → _duel_cut；seize → _seize_chance；
+  squad_encounter → _drill、_sortie_rewards、train_trend_push、duel_on、_order_credit、_fs_after_win、_opp_on_win。
+- 留在 Game 上的：state、content、world、rng、client、options、_draft、_fight、_last_wear、_loot_scale、_gate_scale、_drop_scale、_drills_with；
+  別的核心檔經 ctx：push_trend、_push_progress（pushing）、publish（事件）。
   judged、file_battle 會寫 ctx._fight、ctx._last_wear：那是 Game 的欄位，不是這裡的模組變數。
 
-_squad_encounter（打一場的主流程）的本體第 79 批還在 Game（engine.py，照舊在 GAME_DIRECT）：它留著，sortie.on、sortie.PROLOGUE_FIGHT 就不必換、字不必搬核心，
-擲骰順序碰都不碰；收它的事交第 98 批。它照舊叫 self._x（都有委派）。
+squad_encounter（打一場的主流程，第二輪第 98 批從 Game 收進來，Game 留 _squad_encounter 一行委派）逐行照抄，擲骰與呼叫的先後一行都沒動，只換兩個名字：
+sortie.on → territory.on（features/sortie/rules.py 的 on 整個函式就是 return territory.on(content)，tests、tianxia、scripts 沒有人換掉這兩個，是同一件事）；
+sortie.PROLOGUE_FIGHT → PROLOGUE_FIGHT（字搬進 core/services.py，出陣包與 engine 留的名字是同一個物件）。事件 win 的發布點跟著搬，位置不動。
 
-名字的綁法照 engine：engine 拿名字的（add_rumor、game_day、season_one、PLAYER、drill_share）這裡也拿名字，engine 叫模組屬性的（team、encounter、materials、
+名字的綁法照搬之前的 engine：engine 拿名字的（add_rumor、front_of、game_day、season_one、PLAYER、drill_share）這裡也拿名字，engine 叫模組屬性的（team、encounter、materials、
 treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。各有自己一份亂數的（lose_silver、tier3、thin_drops、play_rounds）種子字串一個字不動，
 不碰 Game.rng；battle_rewards、fight_with 的 ctx.rng 是 Game 上那一顆。engine 在 `from .core import event_check` 之後才 import 這一份
 （這裡 import 的模組那時都已經載入，載入順序不變）。同 event_check 不進 MODULES、不進 FEATURES；這裡不 import 包。
@@ -30,10 +34,11 @@ treasures……）這裡也叫模組屬性——測試換掉的東西兩邊打�
 - scripts/test_for.py：這個檔在 CORE_SERVICES。hunk 落在函式、類別、常數上 → 名字的功能群＋這個檔的底（檔名有 battle、encounter、fight、rounds、tactics、team、engine 的，
   量到 36 個檔）＋邊界測試；函式以外（import、這段說明、模組層）或指名了卻沒有差 → 核心測試＋煙霧。互叫經 ctx 的（battle_scores → ctx._battle_power、checked_fight →
   ctx.fight_request）不會往上算（_core_refs 只看 ast.Name），那兩個都有底蓋著。
-- 寫到這些名字、可是檔名不在底裡的只拿它當準備動作，留給閘門（why 寫幾個檔），要當場驗直接給檔名。tests/season、tests/core/test_engine.py 的 slow 留閘門（要看加 --slow）。
+- 寫到這些名字、可是檔名不在底裡的只拿它當準備動作，留給閘門（why 寫幾個檔），要當場驗直接給檔名（寫到 _squad_encounter 的 test_fronts、test_characters、test_contract_core、test_journal、test_front_lines、test_push、test_opportunities_two 也是）。tests/season、tests/core/test_engine.py 的 slow 留閘門（要看加 --slow）。
 - same_behavior：compare --tracks aftermath（這一批開的一軌：等判讀時選項沒了、經驗換心得、落敗保銀兩、掉落打折、寶物多掉、戰力快照），其餘經 events、sortie、train、story、
-  roam、strip、tavern、battle、muster、progress、ring、bout、crossblade、figact、stamina。走不到的 4 行（序章雪恥、沒滿級卻換心得、三階發素材失敗）寫在那一軌的說明。
-- 反方向（第 36 批認定第 1 條）：這裡 import 的 22 個模組都是核心或共用層，test_for.pick 在搬之前、之後挑的一樣，沒有少挑到的，不必另外跑。
+  roam、strip、tavern、battle、muster、progress、ring、bout、crossblade、figact、stamina。走不到的 4 行（fight_request 的序章雪恥、沒滿級卻換心得、三階發素材失敗）寫在那一軌的說明。
+  squad_encounter 的序章標題那一行經 redress 一軌（第 98 批開的；其餘經 aftermath、train、roam、strip）。
+- 反方向（第 36 批認定第 1 條）：這裡 import 的 24 個模組（第 98 批多 atlas、territory）都是核心或共用層，test_for.pick 在搬之前、之後挑的一樣，沒有少挑到的，不必另外跑。
 """
 from __future__ import annotations
 
@@ -43,14 +48,14 @@ from typing import TYPE_CHECKING
 
 from . import battle_base as battle_instance
 from . import features as features_core
-from .services import drill_share
+from .services import PROLOGUE_FIGHT, drill_share
 from .. import (
-    armor, attrset, battlelog, conquest, encounter, fight_llm, gender, materials, mounts, ranger, renown, rise, roster, rounds, styles, tactics,
-    team, terrain, traits, treasures, weapons,
+    armor, atlas, attrset, battlelog, conquest, encounter, fight_llm, gender, materials, mounts, ranger, renown, rise, roster, rounds, styles, tactics,
+    team, terrain, territory, traits, treasures, weapons,
 )
 from .. import prologue as prologue_rules
 from ..models import Squad
-from ..rules import add_rumor, game_day, season_one
+from ..rules import add_rumor, front_of, game_day, season_one
 from ..state import PLAYER
 
 if TYPE_CHECKING:
@@ -632,6 +637,76 @@ def file_battle(ctx, record, wear: bool | None = None, armor_wear: bool | None =
             ctx._draft.changes.append(f"經驗 +{record.exp}（每人）")
     return line
 
+
+# ── 打一場的主流程（第二輪第 98 批從 Game 收進來：逐行照抄，擲骰與呼叫的先後一行都沒動） ──
+
+def squad_encounter(ctx, squad_id: str, wild: bool = False, as_sortie: bool = False) -> list[str]:
+    """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
+
+    wild：探索時撞上的野怪（探索三選一設計 4.2）——扣氣血打折（`wild_neili_loss_factor`，內傷照比例）、
+    打贏**不推大勢**（遊歷推大勢的量已經讓黃巾早早稱霸，探索不能再加碼）；獎勵、掉落、落敗的
+    一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。
+    野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。
+    as_sortie：出陣的攻（出陣探索與地盤設計 2.2、2.4）——戰報類型 sortie、給自己的照 _sortie_rewards（三成、不給銀兩掉落）、
+    不推線，推那一塊的進度（_push_progress）。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    loc = c.locations[p.location]
+    squad = c.squads[squad_id]
+    if ctx._drills_with(squad):
+        return ctx._drill(squad)  # 遇上自家隊伍改操練：操練是出陣包的（第 17 批），打不打在這個單打服務裡定
+    scripted = prologue_rules.fight_tier(s, c)  # 序章雪恥那一場：結果照寫好的，不吃模型的判讀
+    judged = None if wild or scripted is not None else ctx._judged(squad)
+    result = fight_with(ctx, squad, judged, tier=scripted)
+    record = battlelog.new_record(s, c, ctx.world, squad, result, "wild" if wild else "sortie" if as_sortie else "train")
+    if prologue_rules.active(s, c) and territory.on(c):  # 戰報不寫舊名「遊歷」（新手引導重做）
+        record.label = PROLOGUE_FIGHT
+    if scripted is None:
+        record.notes += style_note(ctx, squad, result) + terrain_note(ctx)
+    narrate(record, result, judged)
+    msgs: list[str] = []
+    if result.tier in team.WIN_TIERS:
+        rewards = ctx._sortie_rewards(squad, record) if as_sortie else ctx._battle_rewards(squad, record)  # 留原位：第 26 批（打贏的獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）
+        msgs += rewards
+        extra: list[str] = []
+        if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
+            if not as_sortie:  # 出陣不推線（領地爭奪：推那一塊的進度，下面 _push_progress）
+                for trend_id, delta in ctx.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend  # 留原位：第 26 批（推大勢夾在記功、地盤進度之前，結果交給 push_trend，不在發布點上）
+                    extra += ctx.push_trend(trend_id, delta, source="train")
+            credit: list[str] | None = None
+            # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
+            if as_sortie and not ctx.duel_on():  # 留原位：第 26 批（約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件）
+                # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
+                credit = ctx._order_credit(
+                    kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+                )
+                extra += ctx._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie", "attack")
+            region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
+            extra += ctx._fs_after_win(squad, region.id if region is not None else None)
+            extra += credit if credit is not None else ctx._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
+                kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+            )
+            extra += ctx._opp_on_win(front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
+            extra += ctx.publish("win", loc.id, squad.id)  # 懸賞榜的討伐（事件 win，第 26 批）
+            if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
+                extra += deed_fame(ctx, "sortie")
+        changes, notes = battlelog.split_changes(extra, for_record=True)
+        record.changes += changes
+        record.notes += notes
+        msgs += extra
+    elif result.tier == "落敗":
+        msgs += ctx._lose_silver(record)
+    toll, hp_lost, facts = take_toll(ctx, result.tier, wild=wild, clash=result.clash, squad=squad)
+    record.changes += toll
+    msgs += toll
+    play_rounds(ctx, record, squad, result.tier, hp_lost, facts, clash=result.clash)
+    msgs += ctx._seize(record)
+    msgs.insert(0, file_battle(ctx, record))
+    if squad.desc:  # 有來歷的對手（運糧隊）多一句描述，接在戰鬥那一行後面
+        msgs.insert(1, f"（{squad.name}：{squad.desc}）")
+    if not wild and is_big(ctx, squad):  # 名聲 4.5：天下聞名打大場面點名
+        famed_news(ctx, loc.name, squad.name, result.tier)
+    return msgs
 
 # ── 本人對本人（切磋、截殺、買兇的殺手） ──
 

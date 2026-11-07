@@ -7,9 +7,20 @@ from __future__ import annotations
 
 from tianxia import calendar, economy, equipment, journal, materials, wins
 from tianxia import shopview  # 過渡：待搬（店面：素材屬性的排序）
+from tianxia import territory  # 共用規則層（大本營在哪）
 from tianxia.core.option import Option
 from tianxia.journal import Draft
 from tianxia.rules import season_one
+
+
+def at_own_base(ctx) -> bool:
+    """人在自家陣營的大本營（territory.bases：投靠點，含不在戰線上的），開關（Config.economy.donate）開著、不在路上；散人沒有。
+    豪強分屬兩軍的季，豪強自己的投靠點與依附那一軍的投靠點都算（設計第六節）。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    if not c.config.economy.donate or p.faction is None or p.journey is not None:
+        return False
+    return territory.bases(c).get(p.location) in {p.faction, ctx._side()}
 
 
 def can_donate_here(ctx) -> bool:

@@ -359,11 +359,12 @@ def test_the_game_reaches_the_packages_only_through_the_listed_methods():
     imports, direct, callers = game_links()
     assert imports == GAME_IMPORTS
     assert direct == set(GAME_DIRECT)
+    assert not GAME_IMPORTS and not GAME_DIRECT  # 第 98 批鎖成空：核心不 import 包是真的（要加先過 PM）
     assert {(caller, callee) for caller, callee in callers if callee in GAME_DELEGATES} == set(GAME_DELEGATE_CALLERS)
 
 
 def reverse_imports() -> list[str]:
-    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名、Game 的委派那兩行）。
+    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名）。
     PM 每搬一包在交接記還剩幾處，跟 transitional_imports()（包 import 舊模組）兩個方向都記；核心的 registry.py 不算。"""
     files = [p for p in sorted(TIANXIA.glob("*.py"))] + [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
     out = []
@@ -374,9 +375,9 @@ def reverse_imports() -> list[str]:
 
 
 def test_the_reverse_transitional_imports_come_from_old_modules():
-    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的只有 engine.py 准的那兩行），而且數得到（不然交接記的數是空的）。"""
+    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的一筆都不准：第 98 批起 GAME_IMPORTS 是空的），而且數得到（不然交接記的數是空的）。"""
     found = reverse_imports()
-    assert any(e.startswith("tianxia/engine.py:") for e in found) and any(e.startswith("server.py:") for e in found)
+    assert any(e.startswith("server.py:") for e in found)
     for entry in found:
         stem = entry.split(":", 1)[0].removeprefix("tianxia/").removesuffix(".py")
         assert stem not in CORE or entry.rsplit(" ", 1)[1] in GAME_IMPORTS, entry
@@ -570,8 +571,8 @@ def test_the_game_reaches_the_combat_service_only_through_its_one_line_delegates
 
 
 def test_the_combat_service_calls_the_patched_game_methods_through_ctx():
-    """被換掉的 8 個，combat 裡一處都不直接叫本體；真的有人互叫的兩個（COMBAT_CALLED_THROUGH_CTX）寫成 ctx.<委派>。
-    另外 6 個模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
+    """被換掉的 8 個，combat 裡一處都不直接叫本體；真的有人互叫的 6 個（COMBAT_CALLED_THROUGH_CTX）寫成 ctx.<委派>。
+    另外 2 個模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
     tree = ast.parse((TIANXIA / "core" / "combat.py").read_text(encoding="utf-8"))
     direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in COMBAT_VIA_CTX)
@@ -942,7 +943,7 @@ def bus_bypasses(source: str) -> list[int]:
 def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     """engine.py 與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
     原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
-    files = [TIANXIA / "engine.py"] + [path for name in _packages() for path in _package_files(name)]
+    files = [TIANXIA / "engine.py", TIANXIA / "core" / "combat.py"] + [path for name in _packages() for path in _package_files(name)]  # combat：win 的發布點第 98 批搬過去
     found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
     assert {path: lines for path, lines in found.items() if lines} == {}
     old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
@@ -1109,18 +1110,34 @@ def game_api_names() -> dict[str, str]:
     return out
 
 
-GAME_DELEGATES = set(game_api_names()) | {"_note_action"}
+GAME_DELEGATES = set(game_api_names())
+
+# core_imports（第二輪第 98 批）：表上不是函式的那幾格
+from boundary_tables import GAME_TABLE_TEXTS  # noqa: E402  自己這一段另 import：上面那一串別條線也在加
+
+
+def test_the_prologue_fight_label_is_one_object_in_the_core():
+    """序章那一場的字搬進核心（第 98 批）：單打服務、出陣包是同一個物件（engine 留的名字沒人讀，第 99 批拿掉）。"""
+    from tianxia.core import combat, services
+    from tianxia.features.sortie import rules
+
+    assert services.PROLOGUE_FIGHT is rules.PROLOGUE_FIGHT is combat.PROLOGUE_FIGHT
+
 
 
 def test_every_name_on_the_game_api_tables_hangs_a_function_of_that_package():
-    """表上每一格掛在 Game 上的就是那個函式本身（不包）、住在那一包裡、第一個參數接 Game。"""
+    """表上每一格掛在 Game 上的就是那個函式本身（不包）、住在那一包裡、第一個參數接 Game。GAME_TABLE_TEXTS 那幾格是字（第 98 批）：只驗掛上去的是它、是那一包的。"""
     from tianxia.core import features as features_core
     from tianxia.engine import Game
 
     assert set(game_api_names()) == {name for table in features_core.game_api_tables().values() for name in table}
-    for package, table in features_core.game_api_tables().items():
+    tables = features_core.game_api_tables()
+    assert GAME_TABLE_TEXTS == {name: package for package, table in tables.items() for name, value in table.items() if isinstance(value, str)}
+    for package, table in tables.items():
         for name, func in table.items():
             assert vars(Game)[name] is func, name
+            if name in GAME_TABLE_TEXTS:
+                continue
             assert func.__module__.startswith(f"tianxia.features.{package}"), name
             assert next(iter(inspect.signature(func).parameters)) in ("ctx", "game"), name
 
@@ -1204,7 +1221,7 @@ def test_the_calls_between_packages_are_exactly_the_written_list():
     """包經 Game 叫別包的委派，哪一對、哪幾個名字都在 CROSS_PACKAGE_CALLS（多了少了都紅）：跨包依賴看得到、擋得住。"""
     assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "tavern") == {("tavern", "companions"): {"apply_letter"}}
     assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "companions") == {}
-    assert cross_package_calls("def f(ctx):\n    ctx._note_action('x')\n", "tavern") == {}  # Game 本體的不算，只看表
+    assert cross_package_calls("def f(ctx):\n    ctx._guide(['x'])\n", "tavern") == {}  # Game 本體的不算，只看表
     found = _every_cross_package_call()
     more = {pair: sorted(names - CROSS_PACKAGE_CALLS.get(pair, set())) for pair, names in found.items() if names - CROSS_PACKAGE_CALLS.get(pair, set())}
     less = {pair: sorted(names - found.get(pair, set())) for pair, names in CROSS_PACKAGE_CALLS.items() if names - found.get(pair, set())}

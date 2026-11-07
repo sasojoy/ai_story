@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from . import admin, muster, progress, sieges, view
+from . import rules
 
 
 TABLE = {
@@ -72,4 +73,7 @@ TABLE = {
     "cancelled_showdowns": admin.cancelled_showdowns,
     "admin_start_showdown": admin.admin_start_showdown,
     "battle_on_screen": view.battle_on_screen,
+    # core_imports（第二輪第 98 批：原本是 Game 的類別屬性）：放手一搏輸入框旁邊那兩句。不是函式，只有測試從 Game 讀（邊界名單 GAME_TABLE_TEXTS）
+    "BATTLE_GAMBLE_NOTE": rules.BATTLE_GAMBLE_NOTE,
+    "BATTLE_GAMBLE_LAST": rules.BATTLE_GAMBLE_LAST,
 }
