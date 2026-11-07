@@ -14,14 +14,13 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import attrset  # 核心（五項屬性）
 from tianxia import growth, journal, library, naming, team
 from tianxia import prologue as prologue_rules  # 序章（共用規則層；Game.new 有個參數也叫 prologue，照 engine 叫 prologue_rules）
-from tianxia import skillview  # 過渡：待搬（修練頁的說明：熔了還能重學、配點那一句；共用規則層 SHARED_LATER）
 from tianxia.core.option import Option
 from tianxia.core.services import not_while_preparing
 from tianxia.martial_arts import is_renamed
 from tianxia.rules import jianfa
 from tianxia.state import JournalEntry
 
-from . import ascend, cultivation
+from . import art_view, ascend, cultivation
 from . import chuangong as chuangong_rules  # 這一份有個函式也叫 chuangong（Game.chuangong 的本體）
 
 MELT_MANY_PROLOGUE = "這裡照師父說的，一門一門熔。"  # 序章裡不給批量熔煉（序章的熔煉是教學的一步）
@@ -217,7 +216,7 @@ def melt_art(ctx, art_id: str) -> list[str]:
         line = prologue_rules.after_line(ctx.state, ctx.content, 心得=ctx._xinde() - xinde)  # 草廬這一步寫了結果那一句（設計 10.3「熔了之後」）就用它（T7 審查 M1）
         if line is not None:
             msgs[0] = line
-        relearn = skillview.relearn_note(ctx.state, ctx.content, art_id)  # 基礎武學熔了還能重學：結果最後一句指路（FB-081）
+        relearn = art_view.relearn_note(ctx.state, ctx.content, art_id)  # 基礎武學熔了還能重學：結果最後一句指路（FB-081）
         msgs = ctx._log(msgs + [relearn] if relearn else msgs)
         ctx._menxia_entry(msgs[0], xinde, guide=True, action="melt")  # 序章第 10 步（新手引導計畫一）
         return msgs
@@ -354,7 +353,7 @@ def allocate_line(ctx, stat: str, was: float, power: float) -> str:
     name = c.config.stat_names.get(stat, stat)
     after = team.fresh_power(s, c, ctx.world)
     tail = f"，此刻全隊 {power:.0f} → {after:.0f}" if round(after) != round(power) else ""
-    return f"{name} {was:.0f} → {was + 1:.0f}：{skillview.stat_step(s, c, stat, was)}{tail}"
+    return f"{name} {was:.0f} → {was + 1:.0f}：{art_view.stat_step(s, c, stat, was)}{tail}"
 
 
 def milestone_card(ctx) -> dict | None:
