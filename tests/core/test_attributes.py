@@ -119,7 +119,7 @@ def test_check_rules_are_todays_odds(content):
 DIRECT = re.compile(r"""(?:get\(|\[)["'](?:str|agi|con|wis|lore)["']""")
 # 第 ① 階段留著的（多半是正在搬包的修練、有所感兩包，或只是拿顯示名）：之後改走 attr_effect，改完把數字調低
 ALLOWED = {  # 第 ② 階段第 1 批把本人的舊讀點都改走 team.v1_stat／attrset.legacy；剩下的是顯示名、部下與同伴的模板、設定表
-    "tianxia/features/cultivation/chuangong.py": 3, "tianxia/skillview.py": 1, "tianxia/team.py": 4, "tianxia/models.py": 3,
+    "tianxia/features/cultivation/chuangong.py": 3, "tianxia/features/cultivation/art_view.py": 1, "tianxia/team.py": 4, "tianxia/models.py": 3,
 }
 
 

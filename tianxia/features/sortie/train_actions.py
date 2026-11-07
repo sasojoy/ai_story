@@ -23,7 +23,7 @@ from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪
 from tianxia import territory  # 共用規則層（地盤：站的照控制方）
 from tianxia.core.option import Option
 from tianxia.core.services import BACKED_LINE, BIG_FIGHT_WAIT, PLAN_MISS, drill_share  # 並肩出陣的兩句（第 20 批：原本 import parley）
-from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
+from tianxia.events import pick_event  # 共用規則層（遊歷打完的戰後事件）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
 

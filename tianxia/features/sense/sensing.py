@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from tianxia import attrset, gender, insight_fx, insights, naming, precise, treasures  # 核心、共用規則層
+from tianxia import attrset, gender, insight_fx, insights, precise, treasures  # 核心、共用規則層
 from tianxia.core.explore_base import terrain_tags  # noqa: F401  地形標籤：輿圖包也要讀，全部拆包第 49 批搬到 core/services.py、第 50 批移到核心的 core/explore_base.py，這裡 re-export
 from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia.martial_arts import Insight
@@ -28,6 +28,7 @@ from tianxia.ollama_client import OllamaClient
 from tianxia.rules import day_turn, game_day
 from tianxia.state import GameState, Sensing
 from tianxia.world_state import WorldStateStore
+from tianxia.insights import add_own, own_name  # noqa: F401  私有意境的取名與收進存檔：第 87 批搬進共用層 insights，這裡 re-export 同一批物件
 
 from . import glyph, insight_llm
 
@@ -35,7 +36,6 @@ MARK = "悟"  # 地方痕跡的名字：「地點 id:悟」，這一處悟成過
 DRAW = "sense:draw"  # 感悟狀態的「畫下來」：按下去只叫出畫布，真正送出走 request／finish
 LET_GO = "sense:let"  # 「順其自然」：不畫了，落回做法那個基本意境
 PREFIX = "sense:"
-FALLBACK_TRIES = 8  # 退路字表換名字最多試幾次（跟自己手上的意境、江湖上的名號撞名就換）
 STALE = "（那一刻已經過去了，心中的形也散了。）"
 # 選做法之前卡上先說選錯的代價（explain-1；待 joy 潤）：跟 choose 的規則一樣——選錯了這一處到換日之前不再悟（missed_today）。
 # 換日照遊戲日（rules.game_day，跟著季長縮，企劃者 2026-10-08）：週末那一季一天不是 24 小時，所以不寫「今天」，寫換日的那一刻
@@ -313,38 +313,6 @@ def request(
         serial=s.serial, location=loc.id, method=s.method or "", drawn=drawn, attribute=attribute, base=base, mood=mood,
         points=box, raw=points, png=png if base is None else "", facts=facts,
     )
-
-
-def _own_names(state: GameState) -> set[str]:
-    return {i.name for i in state.player.own_insights.values()}
-
-
-def own_name(
-    state: GameState, content: Content, world: WorldStateStore, key: str, proposed: tuple[str | None, str] | None,
-) -> tuple[str, str, bool]:
-    """私有意境的名字（悟意境設計 0.2b 第 3 點）：（名字, 說明, 是不是模型取的）。模型取的再過一次完整的過濾
-    （naming.recheck，含江湖上的名號），也不能跟自己手上已有的意境同名；過不了走退路字表（種子是 key，換鹽再試）。
-    不跟別人比：私有的名字不要求全服唯一。"""
-    taken = _own_names(state)
-    name, note = naming.recheck(content, proposed or (None, ""), person=world.is_character_name)
-    if name is not None and name not in taken:
-        return name, note, True
-    tianji = world.tianji()
-    for salt in range(FALLBACK_TRIES):
-        fallback = naming.fallback_name(content, key, "意境", salt=salt, tianji=tianji)
-        if fallback not in taken and not world.is_character_name(fallback):
-            return fallback, "", False
-    return fallback, "", False  # 八次都撞到（自己手上意境極多）：照最後一個用，私有的名字本來就不要求唯一
-
-
-def add_own(state: GameState, insight: Insight) -> Insight:
-    """把一個私有意境收進自己的存檔（id 照自己的流水號），回收好的那一個。"""
-    p = state.player
-    p.own_serial += 1
-    own = insight.model_copy(update={"id": f"{insights.OWN_PREFIX}{p.own_serial}"})
-    p.own_insights[own.id] = own
-    p.insights.append(own.id)
-    return own
 
 
 def finish(

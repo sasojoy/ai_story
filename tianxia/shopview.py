@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, silver, skillview, smithing, tactics, team, territory, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, silver, art_cards, smithing, tactics, team, territory, weapons
 from .core import duel_base as duel_rules  # 單挑底層（全部拆包第 12 批進核心）：氣勢的一句話、選單上的一招
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -238,14 +238,14 @@ def _temper_use(state: GameState, content: Content, slot: str, item_id: str | No
 
 
 def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str, art, neigong) -> dict:
-    """裝備庫那一頁（2.5）：這一欄裝備庫裡的每一件，列的寫法同修練頁（skillview.gear_rows 那一欄：keep、confirm、divine）。
+    """裝備庫那一頁（2.5）：這一欄裝備庫裡的每一件，列的寫法同修練頁（art_cards.gear_rows 那一欄：keep、confirm、divine）。
     排法：等著定名的原品最前面，再照修好之後好的在前（防具 armor.fresh_cut；兵器照刀口磨利之後的加成，配不上的是 0）。
     每一列多四樣（鐵匠鋪與合成流程 3.4，裝備庫併頁；網頁不自己判斷規則）：
     repair／temper：{ok, why, use}，這一件現在修、淬煉得了嗎（照 weapons／armor.repair_problem、smithing.temper_problem 的 item_id 版，
     原因同身上那張卡：錢不夠、沒有一階的料、淬滿、還不用修）、鈕上小字 use（「精鐵砂×1＋5 兩」「精鐵砂×1＋80 兩」；淬煉的料固定一階、工錢照裝備的階，一階的裝備淬煉不收錢就沒有「＋」）；
     into：{name, count}，拆了得什麼（equipment.dismantle_material，一件一個；拆不得的原品、本命兵器是 None），批量拆解確認單每一行用；
     tempers 本來就在列上（淬過幾次，確認單寫「淬過 N 次一起沒了」）。"""
-    gear = skillview.gear_rows(state, content, world)
+    gear = art_cards.gear_rows(state, content, world)
     block = next((b for b in gear["slots"] if b["slot"] == slot), None)
     items = {item.id: item for item in equipment.in_slot(state.player, slot)}
     gear_rules = armor if slot == "armor" else weapons

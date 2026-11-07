@@ -4,11 +4,14 @@
 
 反方向（第 36 批認定第 1 條）：解 base、head 比過 test_for.pick（features/gear/signature_arms.py、seats、treasures、forge_secrets、plans、ranks、equipment、mounts），
 一個都沒少挑；改這一檔 test_for 照舊挑到 tianxia/features/gear/tests/test_signature_arms.py 與核心測試。
+REF（第二輪第 88 批）：榜單 leaderboard.gear_card 認本命兵器那一筆的鍵，共用層不能讀包，所以搬來，包 re-export 同一個。
 """
 from __future__ import annotations
 
 from ..models import Content
 from ..state import Equipment, PlayerState
+
+REF = "本命|"  # 榜單神器譜裡本命兵器那一筆的鍵：「本命|人物 id」（leaderboard.gear_card 照它找）
 
 
 def owned(p: PlayerState) -> list[Equipment]:

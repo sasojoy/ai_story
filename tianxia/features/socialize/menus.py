@@ -8,7 +8,7 @@ from tianxia import figures, precise, prologue as prologue_rules, ranks, roster
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
-from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
+from tianxia.events import has_events_here  # 共用規則層（事件：這個地點有沒有）
 
 from . import howto, view
 from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK

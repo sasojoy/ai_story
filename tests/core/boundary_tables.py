@@ -228,14 +228,11 @@ SHARED_PENDING: dict[tuple[str, str], str] = {}
 
 # 還不收進共用規則層的舊模組：讀的都是還沒成包的舊模組，還沒有包可以回答查詢。模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
 SHARED_LATER = {
-    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）（第 24 批 PM 認定第 3 條；行狀 annals.note 那一半第 29 批之二收進核心 core/annal_base.py，fusion 改 import 它，不算了）",
-    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批已成包，經舊名別名）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）；那幾包成包、改成查詢服務之後再收（輿圖 atlas 第 50 批收進了共用規則層）",
     "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批已成包，經舊名別名）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、單挑 duel 的底層；那幾包成包之後再收",
-    "events": "事件抽選：只剩讀事件分級 tiers（tiers 讀舊名 arena，也在這一份名單）；伏筆在不在跑、伏筆的事件第 40 批改問核心的 omen_base（心意第 19 批換成共用規則層 stance_world）",
-    "tiers": "事件分級：讀擂台的名次 arena.entry_of，經舊名 arena（單挑包的別名）：名次已經是核心的查詢服務 arena_ranks（第 12 批），可是 tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到；那一條改成換掉核心那一份（改核心測試，PM 定）之後再收",
-    "narration": "事件旁白每週改寫：只剩讀事件抽選 events（也在這一份名單）；伏筆的事件第 40 批改問核心的 omen_base",
-    "leaderboard": "賽季榜單：讀本命兵器 signature_arms（裝備第 42 批已搬進 features/gear/signature_arms.py，函式裡經舊名別名讀）與門下頁的說明 skillview（函式裡）；擂台榜第 12 批審查修正改讀核心的查詢服務 arena_ranks；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收",
 }
+
+# core_shared（第二輪第 88 批）：只留給測試的殼。產品程式一律讀真正的位置，最外層與函式裡都不准 import（test_product_code_does_not_import_a_test_only_shell）。
+TEST_ONLY_SHELLS = ("skillview",)
 
 # 收進共用規則層之後函式裡也不准 import 包的那七個（test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function）。
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
@@ -302,9 +299,8 @@ ATLAS_PACKAGE_FIELDS = {
     "tagalong",
 }
 
-# 只讀擂台名次與稱號的舊模組讀核心的 arena_ranks，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」）。tiers 照舊經別名：
-# tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到（SHARED_LATER 的 tiers）。
-ARENA_RANK_READERS = ("features/peers/mingtie", "leaderboard")
+# 只讀擂台名次與稱號的舊模組讀核心的 arena_ranks，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」）。
+ARENA_RANK_READERS = ("features/peers/mingtie", "leaderboard", "tiers")
 
 # ── 各包 game_api.py 的表 ──
 

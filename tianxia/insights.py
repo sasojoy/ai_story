@@ -1,13 +1,18 @@
 """意境（武學與成長設計 3.2）：基本意境（風火水山、浩然、血煞）在 content/insights.json，
 合併出來的存在全服（world.get_insight）。玩家悟得的記在 PlayerState.insights——只記 id、永久學會，
-合成、修練、合併都不會用掉。這個模組管查、悟、探索悟哪一個、合併的屬性與正邪；合併本身在 fusion.py。
+合成、修練、合併都不會用掉。這個模組管查、悟、探索悟哪一個、合併的屬性與正邪、私有意境的取名與收進存檔（own_name、add_own，第二輪第 87 批從有所感包搬來，
+有所感包 re-export 同一批物件）；合併本身在 fusion.py。
+
+另外跑：改 own_name、add_own 另外跑 tianxia/features/sense/tests/test_sensing.py、tianxia/features/sense/tests/test_insight_strong.py、
+tianxia/features/sense/tests/test_epiphany.py、tianxia/features/peers/tests/test_discuss.py、tests/arts/test_secret_recipes.py
+（共用層 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界，這幾個挑不到；第二輪第 87 批量的）。
 """
 from __future__ import annotations
 
 import hashlib
 import random
 
-from . import insight_fx
+from . import insight_fx, naming
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .state import GameState
@@ -15,6 +20,7 @@ from .world_state import WorldStateStore
 
 SENSE_ATTRIBUTES = ("剛", "柔", "快", "慢")  # 有所感的做法與畫出來的那一筆只分這四種（基本意境風火水山的屬性）
 OWN_PREFIX = "悟:"  # 私有意境的 id 開頭（悟意境設計 0.2b）：「悟:3」是這個人自己第 3 個；內容與全服的意境 id 都不會這樣開頭
+FALLBACK_TRIES = 8  # 退路字表換名字最多試幾次（跟自己手上的意境、江湖上的名號撞名就換）
 
 
 def is_own(insight_id: str | None) -> bool:
@@ -202,3 +208,35 @@ def merged_lean(a, b) -> str:
     """正邪跟著傳（設計 7.3）：正＋無＝正、邪＋無＝邪、同向不變；正＋邪互相抵銷成無。意境與武學共用（12.3）。"""
     leans = {a.lean, b.lean} - {"無"}
     return leans.pop() if len(leans) == 1 else "無"
+
+
+def _own_names(state: GameState) -> set[str]:
+    return {i.name for i in state.player.own_insights.values()}
+
+
+def own_name(
+    state: GameState, content: Content, world: WorldStateStore, key: str, proposed: tuple[str | None, str] | None,
+) -> tuple[str, str, bool]:
+    """私有意境的名字（悟意境設計 0.2b 第 3 點）：（名字, 說明, 是不是模型取的）。模型取的再過一次完整的過濾
+    （naming.recheck，含江湖上的名號），也不能跟自己手上已有的意境同名；過不了走退路字表（種子是 key，換鹽再試）。
+    不跟別人比：私有的名字不要求全服唯一。"""
+    taken = _own_names(state)
+    name, note = naming.recheck(content, proposed or (None, ""), person=world.is_character_name)
+    if name is not None and name not in taken:
+        return name, note, True
+    tianji = world.tianji()
+    for salt in range(FALLBACK_TRIES):
+        fallback = naming.fallback_name(content, key, "意境", salt=salt, tianji=tianji)
+        if fallback not in taken and not world.is_character_name(fallback):
+            return fallback, "", False
+    return fallback, "", False  # 八次都撞到（自己手上意境極多）：照最後一個用，私有的名字本來就不要求唯一
+
+
+def add_own(state: GameState, insight: Insight) -> Insight:
+    """把一個私有意境收進自己的存檔（id 照自己的流水號），回收好的那一個。"""
+    p = state.player
+    p.own_serial += 1
+    own = insight.model_copy(update={"id": f"{OWN_PREFIX}{p.own_serial}"})
+    p.own_insights[own.id] = own
+    p.insights.append(own.id)
+    return own

@@ -11,7 +11,7 @@ import hashlib
 import random
 from typing import TYPE_CHECKING
 
-from tianxia import leaderboard  # 過渡：待搬（賽季榜單：名帖頭銜的榜單名次）
+from tianxia import leaderboard  # 共用規則層（賽季榜單：名帖頭銜的榜單名次）
 from tianxia.state import BotProfile, Invite
 
 from . import actions, invites, mingtie_actions, raid_actions, social

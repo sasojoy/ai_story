@@ -19,7 +19,7 @@ from . import (
     allied, armor, atlas, battlelog, calendar, clinic, conquest, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
-    shopview, signature, skillview,
+    shopview, signature, art_cards,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
 from . import flavor
@@ -1005,7 +1005,7 @@ class Game:
         if not clinic.on(c) or not clinic.here(s, c) or int(member.injury) < 1:
             return None
         problem = team.heal_problem(s, c, member)
-        note = skillview.heal_note(s, c)
+        note = art_cards.heal_note(s, c)
         return Option(id="act:heal", label=f"{clinic.HEAL}（{note if problem is None else problem.rstrip('。')}）",
                       enabled=problem is None)
 
@@ -2140,8 +2140,8 @@ class Game:
     # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/cultivation/view.py，這裡留一行委派）──────
 
     def heal_button(self) -> dict:
-        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
-        return skillview.heal_button(self.state, self.content)
+        """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 art_cards.heal_button）。"""
+        return art_cards.heal_button(self.state, self.content)
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 

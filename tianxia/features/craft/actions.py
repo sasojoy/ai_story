@@ -13,13 +13,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import fusion  # 過渡：待搬（合成與揣摩：fusion 留共用層，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia import insight_fx, journal  # 共用規則層、核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章只准照劇本合成）
-from tianxia import skillview  # 過渡：待搬（煉製頁的預覽與提示；共用規則層 SHARED_LATER）
 from tianxia.core.services import PREPARING_REFUSAL, not_while_preparing
 
-from . import create
+from . import create, forge_view
 
 if TYPE_CHECKING:
     from tianxia import naming
@@ -90,17 +89,17 @@ def forge(
 
 
 def forge_line(ctx: Game, insight_ids: list[str]) -> str:
-    return skillview.forge_line(ctx.state, ctx.content, ctx.world, insight_ids)
+    return forge_view.forge_line(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 def forge_preview(ctx: Game, insight_ids: list[str]) -> dict | None:
-    """兩格都放好時煉製頁的預覽卡（skillview.forge_preview）。只讀。"""
-    return skillview.forge_preview(ctx.state, ctx.content, ctx.world, insight_ids)
+    """兩格都放好時煉製頁的預覽卡（forge_view.forge_preview）。只讀。"""
+    return forge_view.forge_preview(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 def forge_picks(ctx: Game, insight_ids: list[str]) -> dict | None:
-    """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（skillview.forge_picks）。只讀。"""
-    return skillview.forge_picks(ctx.state, ctx.content, ctx.world, insight_ids)
+    """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（forge_view.forge_picks）。只讀。"""
+    return forge_view.forge_picks(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 # ── 自創武學（五步：執器、擺式、立意、成形、立名；規則在 create.py）──

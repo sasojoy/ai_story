@@ -75,7 +75,7 @@ def tick(state: GameState, content: Content, world) -> None:
     week = calendar.point(w.time, content, w).week
     tuning = content.config.figure_life
     if week >= tuning.yuedan_from_week and week > w.yuedan_week:
-        from tianxia import leaderboard  # noqa: PLC0415  過渡：待搬（榜單 leaderboard）  leaderboard → team → …：延後載入
+        from tianxia import leaderboard  # noqa: PLC0415  共用規則層（榜單）；leaderboard → team → …：延後載入
 
         w.yuedan_week = week
         board = leaderboard.compute_boards(content, world)
