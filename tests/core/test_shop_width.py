@@ -73,7 +73,7 @@ def test_the_shop_draws_its_colors_only_in_the_game_column():
 
 
 def test_a_package_stylesheet_paints_its_shop_color_in_the_game_column_again():
-    """功能包切出去的樣式（FEATURES 的 web 裡的 .css，現在是商城的 web/mall.css；開發規範手冊 3.7）在 index.html 排在 style.css 後面：
+    """功能包切出去的樣式（FEATURES 的 web 裡的 .css，現在是商城的 web/mall.css、形象的 web/looks.css；開發規範手冊 3.7）在 index.html 排在 style.css 後面：
     它替自己那一層寫的 background 簡寫會把上面那一條欄寬的底色蓋回整片寬（2026-10-31 商城切出來時實機 1280 寬量到的退步）。
     所以上面那一條列到的那一層，只要在功能包的檔裡寫了 background 簡寫，同一個檔在它後面的電腦寬那一段就要照上面那一條再寫一次。"""
     col = _column()
