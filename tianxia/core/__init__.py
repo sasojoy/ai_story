@@ -68,6 +68,9 @@
 # guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md）
 - howto_base.py：玩法說明兩包以上要用的那幾樣——一節的寫法 section、一成兩成 tenth、會推戰況的陣營 order_pushers、SOME_PLACES；各節在各包的 howto.py，
   順序在 features.py 的 HOWTO_ORDER。同 event_check 不進 MODULES。
+# core_views（第二輪第 81 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第81批.md）
+- status_view.py：狀態列的資料與文字版（status_data、status_text）；Game 留 2 個一行委派。同 event_check 不進 MODULES。
+- page_view.py：江湖頁、公告、見聞、江湖紀錄的查詢、店面的分派、行動列底下那幾行；Game 留 21 個一行委派，engine._MENU_CORE["open"] 指到這裡的 OPEN_CORE。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
