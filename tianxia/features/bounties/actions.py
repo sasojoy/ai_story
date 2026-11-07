@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import bounty_base  # 核心（榜的入口與收店：清失效參照那一格讀，core_seams）
 
 from . import rules
+from . import shop_view
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -64,7 +64,7 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         return ["你離開了懸賞榜。"]
     if verb == "take":
         b = next((x for x in rules.open_bounties(s, c) if x.id == rest), None)
-        ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shopview.board_key)  # 1.4
+        ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shop_view.board_key)  # 1.4
         return rules.take(s, c, rest)
     if verb == "drop":
         msgs = rules.drop(s, c, rest)

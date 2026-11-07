@@ -84,7 +84,7 @@ PRIZE_GATE = "這張重賞的單，名動一方以上的人才揭得到。"  # �
 OFFICIAL_GATE = "要{title}才揭得了官府的海捕文書"  # 待 joy 潤（名聲 5.4：俠一路一方豪俠以上才揭得了）
 POSTED_FACTION = "{faction}貼出了通緝你的告示（{title}）。"  # 待 joy 潤（名聲 4.6：被掛的人收到）
 POSTED_OFFICIAL = "官府貼出了海捕文書，畫的是你（{title}）。"  # 待 joy 潤（名聲 5.4）
-UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（shopview.BACKS）
+UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（core/shop_base.BACKS）
 
 
 def week_seconds(state: GameState, content: Content) -> float:

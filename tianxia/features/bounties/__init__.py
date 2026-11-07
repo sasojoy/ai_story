@@ -61,6 +61,14 @@ class BountiesFeature(Feature):
 
     # ── 接縫掛鉤（不問 enabled，原位本來就不看開關；判斷都在被叫的函式裡）──
 
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：懸賞榜。組法在 shop_view.page。"""
+        if shop != "board":
+            return None
+        from . import shop_view as page  # noqa: PLC0415
+
+        return page.page(ctx)
+
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:
