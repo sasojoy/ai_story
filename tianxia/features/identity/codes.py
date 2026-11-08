@@ -105,11 +105,13 @@ def sent_reply(cfg) -> dict:
 
 def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, hostname: str | None,
          dev_hash: str | None, is_bound, now: float, make_id=None, make_code=None, purpose: str = PURPOSE,
-         account_id: int | None = None, subject_ok=None) -> tuple[int, dict, str | None]:
+         account_id: int | None = None, subject_ok=None, seal=None, on_full=None) -> tuple[int, dict, str | None]:
     """寄一張驗證碼（purpose：login、bind、reauth；第 204 批起 bind、reauth 的單記 account_id）。回 (狀態碼, 回應, 新單的 id 或 None)。
     subject_ok(subject) 給了就在 Turnstile 之後問一次（reauth：要是這個帳號綁的那一個），回假的回 (400, {error: NOT_THIS}, None)。
     正規化 → Turnstile（失敗不碰計數）→ 查有沒有綁（決定池）→ 每一格一起記（滿了回 SENT、不寄、舊單不動）→ 產碼、寄
-    （SendFailed 回 CANNOT_SEND，計數不退）→ 開單（同一個身分的舊單作廢）。"""
+    （SendFailed 回 CANNOT_SEND，計數不退）→ 開單（同一個身分的舊單作廢）。
+    第 208 批：on_full(桶名) 給了就在有一格滿了的那一下叫一次（回應位元組不變；全服池上限通知管理者，alerts.pool_full）；
+    seal(值) 給了、用途是 bind 就把封好的號碼記在單上（contacts.sealer；綁成功才存進 contacts）。"""
     from .senders import SendFailed  # noqa: PLC0415  同一包；放這裡讓純規則的 import 不拖 urllib
 
     norm = normalize(channel, to)
@@ -123,7 +125,10 @@ def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, h
         return 400, {"error": NOT_THIS}, None
     pool = pool_of(purpose, bool(is_bound(subject)))
     trusted = bool(dev_hash) and store.is_trusted(dev_hash, subject)
-    if store.check_all_and_record(buckets_for(cfg, channel, subject, pool, ip_buckets(ip), dev_hash, trusted), now) is not None:
+    full = store.check_all_and_record(buckets_for(cfg, channel, subject, pool, ip_buckets(ip), dev_hash, trusted), now)
+    if full is not None:
+        if on_full is not None:
+            on_full(full)
         return 200, sent_reply(cfg), None
     cid = (make_id or (lambda: secrets.token_urlsafe(24)))()
     code = (make_code or new_code)()
@@ -135,8 +140,9 @@ def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, h
             senders.mail.send(value, title, text)
     except SendFailed:
         return 400, {"error": CANNOT_SEND}, None
+    contact = seal(value) if seal is not None and purpose == "bind" else None
     store.put_challenge(cid, purpose, channel, subject, display, code_hmac(key, cid, code), now + cfg.code_ttl, now,
-                        account_id=account_id)
+                        account_id=account_id, contact=contact)
     return 200, sent_reply(cfg), cid
 
 

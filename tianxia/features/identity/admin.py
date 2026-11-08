@@ -87,6 +87,7 @@ def unbind(shell, game, body: dict, now: float) -> list[str]:
     side = _side()
     side.record_unbound(binding.subject_hash(identity_base.read_key() or b"", provider, rows[provider]["subject"]), provider, account.id, now)
     side.drop_meta(account.id, provider)
+    side.drop_contacts(account.id, provider)  # 第 208 批：通知用的加密號碼一起刪（管理者做的不寄）
     notes.add(side, account.id, binding.NOTE_ADMIN_UNBOUND.format(kind=binding.kind_name(provider)), now)
     return [ADMIN_UNBOUND.format(who=account.login, kind=binding.kind_name(provider))]
 
@@ -106,4 +107,5 @@ def delete(shell, game, body: dict, now: float) -> list[str]:
         if row["provider"] in binding.WAYS:
             side.record_unbound(binding.subject_hash(secret, row["provider"], row["subject"]), row["provider"], account.id, now)
     side.drop_meta(account.id)
+    side.drop_contacts(account.id)  # 第 208 批
     return [ADMIN_DELETED.format(who=account.login)]

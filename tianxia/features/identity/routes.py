@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from tianxia.core import identity_base
 from tianxia.database import open_database
 
-from . import binding, codes, notes, oauth, senders, store
+from . import binding, codes, contacts, notes, oauth, senders, store
 
 CODE_COOKIE = "tx_code"  # 這張驗證碼的單（challenge id）；max_age＝code_ttl
 RESET_COOKIE = "tx_reset"  # 第 204 批：用綁定的方式登入、帳號有密碼時發（忘記密碼的證明）；path PENDING_PATH，max_age＝reset_seconds
@@ -176,6 +176,11 @@ def router(shell) -> APIRouter:
     def note(side, account_id: int, text: str, now: float) -> None:
         notes.add(side, account_id, text, now)
 
+    def not_reset_held(account, now: float) -> None:
+        """管理者重設密碼之後 reset_hold_hours 內不能綁新的方式（第 208 批；設計 6.4）：寄碼、開單之前擋（省一則簡訊）。"""
+        if identity_base.reset_held(account.id, now):
+            raise shell.GameError(binding.RESET_NO_BIND.format(hours=shell.CONTENT.config.identity.reset_hold_hours))
+
     def bound_back(request: Request, ticket: dict, provider: str, sub: str, hashed: str, now: float, side) -> RedirectResponse:
         """第三方回呼的綁定與重驗（第 204 批）：瀏覽器現在登入的帳號要是開單的那一個；回 auth=bound／taken／wait／reauth／fail。"""
         accounts = shell.account_store()
@@ -199,6 +204,7 @@ def router(shell) -> APIRouter:
             return back(request, "taken")
         side.mark_bound(account.id, provider, hashed, now)
         note(side, account.id, binding.NOTE_BOUND.format(kind=binding.kind_name(provider)), now)
+        contacts.send_all(shell, side, account.id, binding.NOTE_BOUND.format(kind=binding.kind_name(provider)))  # 第 208 批：第三方沒有號碼可存
         return back(request, "bound")
 
     @r.get("/api/identity/gate")
@@ -235,6 +241,7 @@ def router(shell) -> APIRouter:
                 need_recent(token, now)
                 if provider in have_of(account):
                     raise shell.GameError(binding.ALREADY_KIND)
+                not_reset_held(account, now)
             elif provider not in have_of(account):
                 raise shell.GameError(binding.NO_SUCH_WAY)
         side = store.IdentityStore()
@@ -370,6 +377,7 @@ def router(shell) -> APIRouter:
                 need_recent(token, now)
                 if channel in have:
                     raise shell.GameError(binding.ALREADY_KIND)
+                not_reset_held(account, now)
             elif channel not in have:
                 raise shell.GameError(binding.NO_SUCH_WAY)
             else:
@@ -382,6 +390,7 @@ def router(shell) -> APIRouter:
             hostname=request.url.hostname, dev_hash=_hash(dev) if dev else None,
             is_bound=lambda subject: identity_base.account_key_for(db, channel, subject) is not None, now=now,
             purpose=purpose, account_id=account.id if account is not None else None, subject_ok=subject_ok,
+            seal=contacts.sealer(channel) if purpose == "bind" else None,  # 第 208 批：綁定的單封號碼，綁成功才存（通知用）
         )
         if status != 200:
             raise shell.GameError(reply["error"])
@@ -472,7 +481,9 @@ def router(shell) -> APIRouter:
         except ValueError:
             raise shell.GameError(binding.ALREADY_KIND) from None
         side.mark_bound(account.id, channel, subject, now)
+        contacts.keep(side, account.id, channel, row.get("contact"), row["display"])  # 第 208 批：通知用的加密號碼（沒有金鑰不存）
         note(side, account.id, binding.NOTE_BOUND.format(kind=binding.kind_name(channel)), now)
+        contacts.send_all(shell, side, account.id, binding.NOTE_BOUND.format(kind=binding.kind_name(channel)))
         return {"message": binding.BOUND}
 
     # ── 第 204 批：設定抽屜的「帳號綁定」（全部要登入：先 401 再 gate，關著登入了也 404；不拿行動鎖）──
@@ -560,7 +571,10 @@ def router(shell) -> APIRouter:
         side.record_unbound(binding.subject_hash(identity_base.read_key() or b"", provider, have[provider]["subject"]),
                             provider, account.id, now)
         side.drop_meta(account.id, provider)
+        gone = [c for c in side.contacts(account.id) if c["provider"] == provider]  # 第 208 批：被拿掉的那一支也寄一則，寄完不留
+        side.drop_contacts(account.id, provider)
         note(side, account.id, binding.NOTE_UNBOUND.format(kind=binding.kind_name(provider)), now)
+        contacts.send_all(shell, side, account.id, binding.NOTE_UNBOUND.format(kind=binding.kind_name(provider)), extra=gone)
         return {"message": binding.UNBOUND}
 
     @r.post("/api/identity/password/set")
@@ -590,6 +604,7 @@ def router(shell) -> APIRouter:
         except ValueError:
             raise shell.GameError(binding.HAS_PASSWORD) from None
         note(side, account.id, binding.NOTE_PASSWORD_SET.format(login=str(body.get("login") or "").strip()), now)
+        contacts.send_all(shell, side, account.id, binding.NOTE_PASSWORD_SET.format(login=str(body.get("login") or "").strip()))  # 第 208 批
         return {"message": binding.PASSWORD_SET}
 
     @r.post("/api/identity/password/reset")
@@ -623,6 +638,8 @@ def router(shell) -> APIRouter:
         side.drop_reset(_hash(proof))
         response.delete_cookie(RESET_COOKIE, path=PENDING_PATH, httponly=True, samesite="lax", secure=shell.cookie_secure(request))
         note(side, account.id, binding.NOTE_PASSWORD_RESET.format(kind=binding.kind_name(row["provider"])), now)
+        contacts.send_all(shell, side, account.id, binding.NOTE_PASSWORD_RESET.format(kind=binding.kind_name(row["provider"])),
+                          skip=(row["provider"],))  # 第 208 批：通知其他綁定（設計 4.4），登入用的那一種不寄
         return {"message": binding.PASSWORD_RESET}
 
     @r.post("/api/identity/code/release")
@@ -652,6 +669,7 @@ def router(shell) -> APIRouter:
                 raise shell.GameError(codes.BAD_CODE) from None
             side.record_unbound(row["subject_hmac"], row["provider"], row["account_id"], now)
             side.drop_meta(row["account_id"], row["provider"])
+            side.drop_contacts(row["account_id"], row["provider"])  # 第 208 批：號碼已經不是舊帳號的了，不寄
             note(side, row["account_id"], binding.NOTE_RELEASED.format(kind=binding.kind_name(row["provider"])), now)
         elif old_key is not None:
             raise shell.GameError(codes.BAD_CODE)

@@ -7,6 +7,8 @@ SQLite WAL、isolation_level=None，寫一律 BEGIN IMMEDIATE；計數是「檢�
 第 203 批：challenges 多 channel、subject_hmac、display 三欄（舊旁檔開檔時補）；多 trusted_devices、pending 兩表；check_all_and_record 多格全記或全不記。
 第 204 批：建表一個路徑只跑一次（identity_base.ensure_schema）；session_auth 的 DDL 在核心一份；bindings_meta 多 bound_at、reminded_at，
 oauth_tickets 多 account_id；多 resets、holds、account_notes、rechecks 四表。
+第 208 批：bindings_meta、holds、account_notes 的 DDL 搬到核心 identity_base（字面不變；扣押期 hold_reason 也讀）；多 reset_holds（DDL 在核心）、
+contacts（綁定通知用的加密號碼，contacts.py）、cap_alerts（全服池上限通知管理者，alerts.py）三表，challenges 多 contact 一欄。
 """
 from __future__ import annotations
 
@@ -210,14 +212,14 @@ class IdentityStore:
     # ── 驗證碼的單（第 203 批）─────────────────────
 
     def put_challenge(self, cid: str, purpose: str, channel: str, subject: str, display: str, code_hmac: str,
-                      expires: float, now: float, account_id: int | None = None) -> None:
-        """開一張單；同一個身分（subject_hmac）同一種用途的舊單先刪（新碼作廢舊碼）。"""
+                      expires: float, now: float, account_id: int | None = None, contact: bytes | None = None) -> None:
+        """開一張單；同一個身分（subject_hmac）同一種用途的舊單先刪（新碼作廢舊碼）。contact：綁定的單封好的號碼（第 208 批；contacts.sealer）。"""
         with self._write() as conn:
             conn.execute("DELETE FROM challenges WHERE subject_hmac = ? AND purpose = ?", (subject, purpose))
             conn.execute(
-                "INSERT INTO challenges (id, purpose, account_id, code_hmac, tries, expires, created, channel, subject_hmac, display) "
-                "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
-                (cid, purpose, account_id, code_hmac, expires, now, channel, subject, display),
+                "INSERT INTO challenges (id, purpose, account_id, code_hmac, tries, expires, created, channel, subject_hmac, display, contact) "
+                "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)",
+                (cid, purpose, account_id, code_hmac, expires, now, channel, subject, display, contact),
             )
 
     def challenge(self, cid: str) -> dict | None:
@@ -383,3 +385,43 @@ class IdentityStore:
             return
         with self._write() as conn:
             conn.executemany("UPDATE account_notes SET state = ?, jtime = ? WHERE id = ?", [(state, jtime, i) for i in ids])
+
+    # ── 綁定通知用的加密號碼、全服池上限通知（第 208 批）──────
+
+    def put_contact(self, account_id: int, provider: str, sealed: bytes, display: str) -> None:
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO contacts (account_id, provider, sealed, display) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (account_id, provider) DO UPDATE SET sealed = excluded.sealed, display = excluded.display",
+                (account_id, provider, sealed, display),
+            )
+
+    def contacts(self, account_id: int) -> list[dict]:
+        """這個帳號存的每一個號碼 {provider, sealed, display}（照 provider 排）。"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT provider, sealed, display FROM contacts WHERE account_id = ? ORDER BY provider", (account_id,),
+            ).fetchall()
+        return [{"provider": r[0], "sealed": r[1], "display": r[2]} for r in rows]
+
+    def drop_contacts(self, account_id: int, provider: str | None = None) -> None:
+        with self._write() as conn:
+            if provider is None:
+                conn.execute("DELETE FROM contacts WHERE account_id = ?", (account_id,))
+            else:
+                conn.execute("DELETE FROM contacts WHERE account_id = ? AND provider = ?", (account_id, provider))
+
+    def alert_due(self, bucket: str, now: float, every: float) -> bool:
+        """這一格上次通知超過 every 秒（或沒通知過）就記這一下、回真；不然回假。檢查與記同一筆交易。"""
+        with self._write() as conn:
+            row = conn.execute("SELECT at FROM cap_alerts WHERE bucket = ?", (bucket,)).fetchone()
+            if row is not None and now - row[0] < every:
+                return False
+            conn.execute("INSERT INTO cap_alerts (bucket, at) VALUES (?, ?) ON CONFLICT (bucket) DO UPDATE SET at = excluded.at",
+                         (bucket, now))
+        return True
+
+    def alerts_since(self, t: float) -> list[tuple[str, float]]:
+        """t 之後通知過的每一格 (桶名, 時間)，照時間排。"""
+        with self._conn() as conn:
+            return [(r[0], r[1]) for r in conn.execute("SELECT bucket, at FROM cap_alerts WHERE at >= ? ORDER BY at, bucket", (t,))]
