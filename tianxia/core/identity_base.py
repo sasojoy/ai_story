@@ -8,6 +8,9 @@ account_key_for（第 203 批）只讀 logins（第 204 批起就是 AccountStor
 session_auth 一張表（核心讀包的旁檔只碰這一張；DDL 在這裡一份、包的 store.py import），時間由呼叫端傳入。
 客服名單也在這（第 212 批從 support 包搬來：商城的易名帖要問「這個名號是不是客服」；support_staff_name 只讀 accounts、logins，
 名單的 .local/support.txt 只讀不寫）。
+第 208 批：扣押期（hold_reason：花元寶、贈物、上架市集三個入口在 phone_ok 那一行之後問；只讀旁檔的 bindings_meta、holds、reset_holds，
+旁檔不在不建）；「不寫東西」多一個例外 record_admin_reset（admin 包重設密碼成功之後寫 reset_holds 與一則「帳號」紀錄）。
+那四張表的 DDL 也在這裡一份（identity 包的 store.py import）。
 金鑰在 .local/identity.json（不進版控）：讀不到、格式不對都當功能關著（on 回假）。
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。identity 包、server.py 的 name_taken、商城包的易名帖讀它。
 """
@@ -339,3 +342,108 @@ def support_staff_name(db, config, name: str | None) -> bool:
             "WHERE a.character_key = ?", (name_key(name),),
         ).fetchone()
     return row is not None and support_staff(config, int(row["id"]), row["display"] or "")
+
+
+# ── 扣押期（帳號與客服第 208 批；設計 4.3「新綁 72 小時」、4.4「只剩過期一種 7 天」、6.4「管理者重設後 72 小時」）──
+# 花元寶（mall_buy）、贈物（gift）、上架市集（looks_market）三個入口緊接在 phone_ok 那一行之後問 hold_reason。
+# 資料在旁檔：bindings_meta.bound_at（第 204 批）、holds（第 204 批，只剩過期一種）、reset_holds（第 208 批，管理者重設）。
+# 這幾張的 DDL 只有這一份（identity 包的 store.py import；兩邊誰先建表都一樣）。admin 包不能 import identity 包，重設後的扣押經 record_admin_reset 寫。
+HOLD_DDL = "CREATE TABLE IF NOT EXISTS holds (account_id INTEGER PRIMARY KEY, until REAL NOT NULL)"
+NOTES_DDL = ("CREATE TABLE IF NOT EXISTS account_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, text TEXT NOT NULL, "
+             "at REAL NOT NULL, state INTEGER NOT NULL DEFAULT 0, jtime REAL)")
+NOTES_INDEX_DDL = "CREATE INDEX IF NOT EXISTS account_notes_account ON account_notes (account_id, state)"
+META_DDL = ("CREATE TABLE IF NOT EXISTS bindings_meta (account_id INTEGER NOT NULL, provider TEXT NOT NULL, subject_hmac TEXT NOT NULL, "
+            "verified_at REAL NOT NULL, PRIMARY KEY (account_id, provider))")
+META_COLUMNS = (("bindings_meta", "bound_at", "REAL"), ("bindings_meta", "reminded_at", "REAL"))  # 第 201～203 批開的旁檔沒有這兩欄
+RESET_HOLD_DDL = "CREATE TABLE IF NOT EXISTS reset_holds (account_id INTEGER PRIMARY KEY, until REAL NOT NULL)"
+HOLD_TABLES = (META_DDL, HOLD_DDL, NOTES_DDL, NOTES_INDEX_DDL, RESET_HOLD_DDL)
+
+HOLD_KEYS = ("mall_buy", "gift", "looks_market")
+HOLD_NEW = "這個帳號剛綁了新的登入方式，{hours} 小時內不能花元寶、贈物或上架市集。"  # 待 joy 潤
+HOLD_STALE = "這個帳號在保護期中（{days} 天），暫時不能花元寶、贈物或上架市集。"  # 待 joy 潤
+HOLD_RESET = "管理者剛幫這個帳號重設了密碼，{hours} 小時內不能花元寶、贈物或上架市集。"  # 待 joy 潤
+NOTE_ADMIN_RESET = ("管理者幫這個帳號重設了密碼，{hours} 小時內不能花元寶、贈物、上架市集或綁定新的登入方式。"
+                    "不是你要求的話，請馬上寫信給客服。")  # 待 joy 潤（「帳號」紀錄；admin 包經這裡拿）
+
+
+def _hold_conn(path: Path | None, create: bool):
+    """扣押那幾張表的連線；create 假時旁檔不在就回 None（不建檔：貨架每畫一次都問）。"""
+    path = Path(path) if path is not None else side_file()
+    if not create and not path.exists():
+        return None
+    ensure_schema(path, "hold", HOLD_TABLES, META_COLUMNS)
+    return sqlite3.connect(path, isolation_level=None, timeout=10)
+
+
+def _until(conn, table: str, account_id: int) -> float | None:
+    row = conn.execute(f"SELECT until FROM {table} WHERE account_id = ?", (account_id,)).fetchone()  # 表名只有本檔兩個字面
+    return None if row is None else row[0]
+
+
+def hold_reason(ctx, key: str, path: Path | None = None) -> str | None:
+    """這個角色此刻被扣押、不能做 key 這件事時回那一句，不然 None（只讀）。identity 關、key 不在 HOLD_KEYS、假人、名號沒綁帳號、
+    旁檔不在都回 None（假人與沒帳號同一個樣子；扣押是帳號的狀態，沒帳號不擋，跟 phone_ok 不同）。依序：管理者重設（reset_holds）、
+    只剩過期一種（holds）、任一種新綁不滿 new_binding_hours（bindings_meta.bound_at；NULL 不算）。現在時間是 ctx.now（Game.sync 給的現實秒）。"""
+    if not on(ctx.content) or key not in HOLD_KEYS:
+        return None
+    player = ctx.state.player
+    if player.bot is not None:
+        return None
+    with ctx.world.db.snapshot() as conn:
+        row = conn.execute("SELECT id FROM accounts WHERE character_key = ?", (name_key(player.name),)).fetchone()
+    now = ctx.now
+    if row is None or not now:
+        return None
+    side = _hold_conn(path, create=False)
+    if side is None:
+        return None
+    cfg = ctx.content.config.identity
+    account_id = row["id"]
+    try:
+        reset = _until(side, "reset_holds", account_id)
+        stale = _until(side, "holds", account_id)
+        bound = side.execute(
+            "SELECT MAX(bound_at) FROM bindings_meta WHERE account_id = ? AND bound_at IS NOT NULL", (account_id,),
+        ).fetchone()[0]
+    finally:
+        side.close()
+    if reset is not None and now < reset:
+        return HOLD_RESET.format(hours=cfg.reset_hold_hours)
+    if stale is not None and now < stale:
+        return HOLD_STALE.format(days=cfg.stale_hold_days)
+    if bound is not None and now - bound < cfg.new_binding_hours * 3600:
+        return HOLD_NEW.format(hours=cfg.new_binding_hours)
+    return None
+
+
+def record_admin_reset(account_id: int, at: float, hours: int, text: str, path: Path | None = None) -> None:
+    """管理者重設密碼成功之後（admin 包叫；設計 6.4）：一筆交易寫 reset_holds（取晚的）與一則「帳號」紀錄（account_notes，
+    之後由 identity 包的 notes.journal_notes 照兩段式寫進存檔）。時間由呼叫端傳入。"""
+    conn = _hold_conn(path, create=True)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                "INSERT INTO reset_holds (account_id, until) VALUES (?, ?) "
+                "ON CONFLICT (account_id) DO UPDATE SET until = MAX(until, excluded.until)",
+                (account_id, at + hours * 3600),
+            )
+            conn.execute("INSERT INTO account_notes (account_id, text, at) VALUES (?, ?, ?)", (account_id, text, at))
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+
+
+def reset_held(account_id: int, now: float, path: Path | None = None) -> bool:
+    """管理者重設之後的扣押還在不在（identity 包擋綁新方式用）；旁檔不在回假、不建檔。"""
+    conn = _hold_conn(path, create=False)
+    if conn is None:
+        return False
+    try:
+        until = _until(conn, "reset_holds", account_id)
+    finally:
+        conn.close()
+    return until is not None and now < until

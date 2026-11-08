@@ -72,6 +72,9 @@ def purchase(ctx: Game, item_id: str, ref: str, qty: int = 1) -> Receipt:
         return Receipt(ctx._log([mall.OFF]))
     if not identity_base.phone_ok(ctx, "mall_buy"):  # 只問買的人（第 205 批）
         return Receipt(ctx._log([identity_base.PHONE_NEEDED]))
+    held = identity_base.hold_reason(ctx, "mall_buy")  # 扣押期（第 208 批）：新綁 72 小時、只剩過期一種、管理者重設之後
+    if held:
+        return Receipt(ctx._log([held]))
     result = mall.buy(
         ctx.state, ctx.content, wallet, item_id, ref,
         now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), qty=qty, moment=moment(ctx),
@@ -198,6 +201,9 @@ def view(ctx: Game) -> dict | None:
     if not identity_base.phone_ok(ctx, "mall_buy"):  # 沒綁手機：每一件都灰、寫同一句（第 205 批；web/mall.js 照 can、why 畫）
         for row in data["items"]:
             row.update(can=False, why=identity_base.PHONE_NEEDED, max=0)
+    elif held := identity_base.hold_reason(ctx, "mall_buy"):  # 扣押期（第 208 批）：沒被手機那一句灰掉的才換這一句
+        for row in data["items"]:
+            row.update(can=False, why=held, max=0)
     cfg = ctx.content.config
     data["pills"] = {
         "name": cfg.stamina_pill_name, "count": ctx.state.player.stamina_pills, "today": ctx.pills_left_today(),

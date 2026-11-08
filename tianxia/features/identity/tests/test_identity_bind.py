@@ -209,3 +209,32 @@ def test_every_change_writes_one_account_note(clock):
     assert side_rows("SELECT state FROM account_notes") == [(idstore.NOTE_DONE,)]
     c.post("/api/identity/unbind", json={"provider": "phone"})
     assert [r[0] for r in side_rows("SELECT text FROM account_notes ORDER BY id")][-1] == binding.NOTE_UNBOUND.format(kind="手機")
+
+
+def test_bind_refused_while_admin_reset_hold(clock):
+    """第 208 批（設計 6.4）：管理者重設密碼之後 reset_hold_hours 內，bind 用途的 code/send 與 start 回 RESET_NO_BIND、不寄、不開單。"""
+    from tianxia.core import identity_base
+
+    c = TestClient(server.app)
+    aid = _pw(c)
+    identity_base.record_admin_reset(aid, clock.now, 72, "x")
+    told = binding.RESET_NO_BIND.format(hours=server.CONTENT.config.identity.reset_hold_hours)
+    assert error(send(c, purpose="bind")) == told
+    assert senders.FAKES.sms.outbox == [] and side_rows("SELECT id FROM challenges") == []
+    assert error(c.post("/api/identity/start", json={"provider": "line", "purpose": "bind"})) == told
+    assert side_rows("SELECT state_hash FROM oauth_tickets") == []
+    clock.now += 72 * HOUR
+    _reauth(c, clock)
+    assert send(c, purpose="bind").status_code == 200
+
+
+def test_me_has_phone_missing(clock, monkeypatch):
+    """第 208 批：/api/identity/me 多 phone_missing（同 /api/main 的 identity 格），網頁綁、解綁之後照它更新紅點。"""
+    c = TestClient(server.app)
+    _pw(c)
+    assert c.get("/api/identity/me").json()["phone_missing"] is False  # phone_gate 關
+    monkeypatch.setattr(server.CONTENT.config.identity, "phone_gate", True)
+    assert c.get("/api/identity/me").json()["phone_missing"] is True
+    bind(c)
+    assert c.get("/api/identity/me").json()["phone_missing"] is False
+    assert c.get("/api/main").json()["identity"]["phone_missing"] is False

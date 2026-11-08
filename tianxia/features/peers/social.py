@@ -216,7 +216,8 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
         action="gift", label="贈素材", arg="material", amount=max(n for _, n in held),
         choices=[{"id": m, "label": game.content.materials[m].name, "max": n} for m, n in held],
     )
-    full = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, "gift") else gift_refusal(game, other)
+    full = (identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, "gift")
+            else (identity_base.hold_reason(game, "gift") or gift_refusal(game, other)))  # 扣押期（第 208 批）只問送的人
     return [replace(button, enabled=False, note=full) if full else button]
 
 
@@ -235,6 +236,9 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
     一個人一天總共最多 Config.gift_per_day 次（PlayerState.gift_day／gifts_today）。"""
     if not identity_base.phone_ok(game, "gift"):  # 只問送的人（第 205 批）
         return [identity_base.PHONE_NEEDED]
+    held = identity_base.hold_reason(game, "gift")  # 扣押期（第 208 批）：只問送的人
+    if held:
+        return [held]
     from tianxia import materials
 
     p, them, c = game.state.player, other.state.player, game.content

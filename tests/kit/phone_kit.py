@@ -42,3 +42,16 @@ def bind(db, login: str, phone: str) -> None:
 def unbind(db, login: str) -> None:
     """解綁手機（remove_login）：帳本不動，封測的手機編號照舊占著。"""
     AccountStore(db).remove_login(login, "phone")
+
+
+def hold(db, login: str, until: float) -> int:
+    """第 208 批：這個帳號在旁檔記一筆「只剩過期一種」的扣押（holds，到 until 為止）；回 accounts.id。旁檔跟著 TIANXIA_DB（identity_base.side_file）。"""
+    import sqlite3
+
+    account_id = AccountStore(db).account_id(login)
+    path = identity_base.side_file()
+    identity_base.ensure_schema(path, "hold", identity_base.HOLD_TABLES, identity_base.META_COLUMNS)
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO holds (account_id, until) VALUES (?, ?) ON CONFLICT (account_id) DO UPDATE SET until = excluded.until",
+                     (account_id, until))
+    return account_id

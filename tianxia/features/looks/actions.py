@@ -489,6 +489,9 @@ def market_list(ctx: Game, look: str, price: int) -> list[str]:
         return ctx._log([market.NOT_OPEN])
     if not identity_base.phone_ok(ctx, "looks_market"):  # 只問上架的人（第 205 批）
         return ctx._log([identity_base.PHONE_NEEDED])
+    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（第 208 批）：只擋上架；買與下架不擋
+    if held:
+        return ctx._log([held])
     done, line = market.list_look(wallet, ctx._mall_owner(), look, price)
     if done:
         journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))

@@ -42,6 +42,7 @@ REAUTH_OK = "驗證好了，接下來 {minutes} 分鐘內可以改綁定與密�
 REAUTH_WAYS = "這個帳號沒有密碼，請用下面其中一種重新驗證。"  # 待 joy 潤
 UNBOUND = "已解綁。"  # 待 joy 潤
 NO_SUCH_WAY = "這個帳號沒有綁這一種。"  # 待 joy 潤
+RESET_NO_BIND = "管理者剛幫這個帳號重設了密碼，{hours} 小時內不能綁定新的登入方式。"  # 待 joy 潤（第 208 批；設計 6.4）
 
 # ── 「帳號」紀錄（每一句都待 joy 潤）──
 NOTE_BOUND = "這個帳號綁定了{kind}。不是你做的話，請馬上寫信給客服。"  # 待 joy 潤

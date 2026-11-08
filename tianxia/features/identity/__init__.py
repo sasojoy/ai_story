@@ -8,6 +8,8 @@
 - codes.py（第 203 批）：驗證碼的純規則（分格、分池、產碼與 HMAC、寄與驗、玩家看的字）；senders.py：寄送與 Turnstile 的介面與假的實作。
 - 第 204 批：binding.py（綁定、解綁、72 小時、30 天、180 天、扣押的純規則與玩家看的字）、notes.py（「帳號」紀錄兩段式、180 天提醒、
   /api/main 的 identity 格）、admin.py（管理者工具的本體；routes.admin_tools 給 gate 與時間）；routes.py 多七條路由與 bind、reauth 兩種用途。
+- 第 208 批：contacts.py（綁定通知用的加密號碼與寄通知）、alerts.py（全服池上限通知管理者、管理頁的表外格 identity_alerts）；
+  扣押期的判斷 hold_reason 在核心 identity_base（入口在 mall、peers、looks 三包）。
 - 純規則與 phone_ok 在核心 tianxia/core/identity_base.py（第 204 批起也管這次登入的方式 session_auth）；沒有密碼的帳號在核心 tianxia/accounts.py。
 沒有選項前綴、沒有 PlayerState 欄位、沒有內容檔。開關 Config.identity.enabled（預設關），開著還要讀得到 .local/identity.json 的金鑰。
 不在最上層 import routes：FEATURES 登記不拖進 fastapi。新寫給玩家看的字標「待 joy 潤」。
@@ -63,11 +65,13 @@ class IdentityFeature(Feature):
     _status_slots: tuple[StatusHook, ...] | None = None
 
     def status_slots(self) -> tuple[StatusHook, ...]:
-        """main 表的表外格（第 204 批）：關著、沒有帳號回 {}；開著回本人的 identity 格（設定抽屜的「帳號綁定」與紅點）。"""
+        """main 表的表外格（第 204 批）：關著、沒有帳號回 {}；開著回本人的 identity 格（設定抽屜的「帳號綁定」與紅點）。
+        第 208 批：admin 表的表外格 identity_alerts（全服池上限的通知，接在表尾；不改 STATUS_ORDER）：關著、沒有通知回 {}。"""
         if self._status_slots is None:
-            from . import notes  # noqa: PLC0415
+            from . import alerts, notes  # noqa: PLC0415
 
-            self._status_slots = (StatusHook("main", "identity", lambda ctx, frame: notes.main_slot(ctx)),)
+            self._status_slots = (StatusHook("main", "identity", lambda ctx, frame: notes.main_slot(ctx)),
+                                  StatusHook("admin", "identity_alerts", lambda ctx, frame: alerts.admin_slot(ctx)))
         return self._status_slots
 
     def admin_tools(self, shell) -> dict:
