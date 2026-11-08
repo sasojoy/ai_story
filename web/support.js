@@ -3,7 +3,7 @@
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  * 開關關著時伺服器的 /api/main 沒有 support_unread、support_staff：這裡每一個畫法都回空字串，設定抽屜與管理頁一個位元組都不變。
  * 畫面照企劃者 2026-11-08 挑的：抽屜 C（一行「客服 ›」，點了自己一頁，分段「我的單／寫新單」），管理頁 B（寬版左清單、右單＋帳號卡；窄版照清單頁）。
- * 換版只換 supportPageHtml、supportDeskHtml 兩個函式。玩家與客服寫的字一律只過 esc，不經 markdown。字待 joy 潤。
+ * 換版只換 supportPageHtml、supportDeskHtml 兩個函式；帳號卡（第 212 批：點開單直接帶出、查別的帳號查到的）只換 supportCardHtml。玩家與客服寫的字一律只過 esc，不經 markdown。字待 joy 潤。
  */
 "use strict";
 
@@ -92,6 +92,50 @@
   }
 
   // ── 管理頁（客服身分；admin.js 的 renderAdmin 開頭分流過來，不叫 /api/admin）──
+  const SUPPORT_LOOKUP_KINDS = [["login", "帳號"], ["email", "Email"], ["phone", "手機"]]; // 待 joy 潤
+  const SUPPORT_LOOKUP_NOTE = "只收完整帳號、Email、手機（不收名號）。每小時 20 次，每次都留紀錄（查無也算），客服改不到。"; // 待 joy 潤
+
+  function supportDay(ts) { // 秒 → 「11/08」
+    const d = new Date(Number(ts) * 1000);
+    return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function supportAmount(n) { // +3000／−300（減號用 U+2212）
+    const v = Number(n) || 0;
+    return v > 0 ? `+${v}` : v < 0 ? `−${-v}` : "0";
+  }
+
+  // 帳號卡（第 212 批；換版只換這一個函式）：看單時伺服器帶的 card，或「查別的帳號」查到的。沒有 binds 的（舊的回應）只畫單上已有的三樣
+  function supportCardHtml(card) {
+    if (!card) return "";
+    if (card.gone) return `<section class="card sup-acct"><p class="muted">單上的帳號已經不在了。</p></section>`; // 待 joy 潤
+    const rows = [`<dt>名號</dt><dd>${card.character ? esc(card.character) : "還沒建角色。"}</dd>`]; // 待 joy 潤
+    let ledger = "";
+    if (Array.isArray(card.binds)) {
+      const binds = card.binds.map((b) => esc(b.name) + (b.shown ? ` ${esc(b.shown)}` : "")).join("、") || "—";
+      rows.push(`<dt>綁了</dt><dd>${binds}</dd>`, `<dt>餘額</dt><dd>${Number(card.balance) || 0} 元寶</dd>`); // 待 joy 潤
+      const lines = (card.ledger || []).map((e) => `<tr><td>${supportDay(e.time)}</td><td>${esc(e.reason)}</td><td class="sup-amt">${supportAmount(e.delta)}</td><td>${esc(e.note)}</td></tr>`).join("");
+      ledger = `<div class="sup-ledger-h">元寶帳本</div>${lines ? `<table class="sup-ledger">${lines}</table>` : `<p class="muted">還沒有帳。</p>`}`; // 待 joy 潤
+    }
+    return `<section class="card sup-acct"><div class="sup-title">帳號 ${esc(card.login)}<span class="muted">建帳號 ${supportWhen(card.created)}</span></div>
+        <dl>${rows.join("")}</dl>${ledger}</section>`; // 待 joy 潤
+  }
+
+  // 「查別的帳號」：種類、完整的字、單號（預設目前選的那張）；查到的卡畫在表單底下
+  function supportLookupHtml() {
+    const q = S.supportLookupQ || {};
+    const kind = SUPPORT_LOOKUP_KINDS.some(([k]) => k === q.kind) ? q.kind : "login";
+    const id = q.id != null && q.id !== "" ? q.id : (S.supportDeskPick != null ? S.supportDeskPick : "");
+    return `<section class="card"><div class="sup-title">查別的帳號</div>
+        <form id="support-lookup-form" class="sup-lookup">
+          <select name="kind">${SUPPORT_LOOKUP_KINDS.map(([k, name]) => `<option value="${k}"${k === kind ? " selected" : ""}>${name}</option>`).join("")}</select>
+          <input class="input" name="text" value="${esc(q.text || "")}" placeholder="完整帳號、Email 或手機">
+          <input class="input sup-lookup-id" name="id" inputmode="numeric" value="${esc(id)}" placeholder="單號">
+          <button class="btn small" type="submit">查</button>
+          <p class="form-msg">${esc(S.supportLookupMsg || "")}</p>
+        </form>
+        <p class="muted sup-fine">${SUPPORT_LOOKUP_NOTE}</p></section>${supportCardHtml(S.supportDeskCard)}`; // 待 joy 潤
+  }
+
   function supportDeskTicketHtml(t) {
     const acct = t.account || {};
     const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">玩家 ${esc(acct.character)}・${supportWhen(t.created)}</span>${esc(t.body)}</div>`]
@@ -102,19 +146,18 @@
         <div class="row"><button class="btn small" data-act="support-answer" data-id="${id}" data-then="wait">回覆並等玩家</button><button class="btn small" data-act="support-answer" data-id="${id}" data-then="close">回覆並結單</button><button class="btn small ghost" data-act="support-answer" data-id="${id}" data-then="admin">請管理者處理</button></div>
         <p class="muted sup-fine">${SUPPORT_ADMIN_NOTE}</p></div>`; // 待 joy 潤
     return `<section class="card"><div class="sup-title">#${Number(t.id)}・${supportCat(t)}<span class="muted">${supportWhen(t.created)}・${esc(t.version)}</span></div>${msgs.join("")}${form}</section>
-      <section class="card sup-acct"><div class="sup-title">帳號 ${esc(acct.login)}<span class="muted">建帳號 ${supportWhen(acct.created)}</span></div>
-        <dl><dt>名號</dt><dd>${acct.character ? esc(acct.character) : "還沒建角色。"}</dd></dl></section>`; // 待 joy 潤
+      ${supportCardHtml(t.card || { login: acct.login, created: acct.created, character: acct.character })}`;
   }
   function supportDeskHtml() {
     const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2><button class="btn small" data-act="support-desk-refresh">重新整理</button></header>`; // 待 joy 潤
     const q = S.supportDesk;
     if (!q) return `${head}<p class="muted">讀取中…</p>`; // 待 joy 潤
     const tile = (k, v, sub) => `<div class="sup-tile"><small>${k}</small><b>${Number(v) || 0}</b><span>${sub}</span></div>`;
-    const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}</div>`; // 待 joy 潤
+    const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤
     const rows = (q.tickets || []).map((t) => `<button class="sup-row-tk${S.supportDeskPick === t.id ? " sel" : ""}" data-act="support-desk-pick" data-id="${Number(t.id)}">
         <span class="sup-n">#${Number(t.id)}</span><span class="sup-s">${supportStatus(t.status)}<span class="sup-cat">${supportCat(t)}</span> ${esc(t.body)}</span>
         <span class="sup-p">${esc(t.character)}（帳號 ${esc(t.login)}）${t.admin_flag ? "・請管理者處理" : ""}</span></button>`).join("") || `<p class="muted">沒有沒結的單。</p>`; // 待 joy 潤
-    const list = `<div>${tiles}<section class="card"><div class="sup-title">客服單</div>${rows}</section></div>`; // 待 joy 潤
+    const list = `<div>${tiles}<section class="card"><div class="sup-title">客服單</div>${rows}</section>${supportLookupHtml()}</div>`; // 待 joy 潤
     const one = S.supportDeskTicket ? `<div>${supportDeskTicketHtml(S.supportDeskTicket)}</div>` : "";
     return `${head}<div class="sup-split${one ? " sup-has-one" : ""}">${list}${one}</div>`;
   }
@@ -149,7 +192,9 @@
           break;
         case "support-answer": { // 客服回一則：回覆並等玩家／回覆並結單／請管理者處理
           const box = document.getElementById("support-answer-body");
+          const was = S.supportDeskTicket;
           S.supportDeskTicket = await api("/api/support/answer", { id: Number(el.dataset.id), body: box ? box.value : "", then: el.dataset.then });
+          if (was && was.card && S.supportDeskTicket && S.supportDeskTicket.id === was.id) S.supportDeskTicket.card = was.card; // 回單的回應不帶卡：沿用看單時的
           S.supportDesk = null; // 清單跟著重讀（數字會變）
           renderKeepingSheet();
           break;
@@ -169,6 +214,13 @@
         const r = await api("/api/support/reply", { id: Number(form.dataset.id), body: data.body || "" });
         S.supportMine = r.mine;
         renderKeepingSheet();
+      } else if (form.id === "support-lookup-form") { // 查別的帳號（第 212 批）：查到的卡留著，回單後也還在
+        S.supportLookupQ = { kind: data.kind, text: data.text || "", id: data.id };
+        const r = await api("/api/support/lookup", { id: Number(data.id), kind: data.kind, text: data.text || "" });
+        S.supportDeskCard = r.card;
+        if (S.supportDesk) S.supportDesk.lookups_left = r.left;
+        S.supportLookupMsg = r.found ? `已查到 ${r.card.login}（這一小時還剩 ${r.left} 次）。` : `${r.message}這一小時還剩 ${r.left} 次。`; // 待 joy 潤
+        renderKeepingSheet();
       } // supportForm
   } // supportForm
-  registerForms(supportForm, ["support-new-form", "support-reply-form"]);
+  registerForms(supportForm, ["support-new-form", "support-reply-form", "support-lookup-form"]);

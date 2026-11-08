@@ -102,6 +102,19 @@ def test_phone_ok_true_once_the_phone_is_bound(game, keyed):
     assert ib.phone_ok(game, "raid") is True
 
 
+def test_account_key_for_reads_logins(game):
+    """第 203 批：身分綁在哪個帳號——有密碼的回小寫帳號，沒有的回 id:<n>，查無回 None。"""
+    from tianxia.accounts import AccountStore
+
+    db = game.world.db
+    assert ib.account_key_for(db, "phone", "h" * 64) is None
+    _bind(game, "phone")
+    assert ib.account_key_for(db, "phone", "h" * 64) == "ray1"
+    key = AccountStore(db).create_without_password("email", "e" * 64, "r*@gmail.com")
+    assert ib.account_key_for(db, "email", "e" * 64) == key and key.startswith("id:")
+    assert ib.account_key_for(db, "email", "h" * 64) is None
+
+
 def test_blocked_name_only_when_on(content, keyed):
     names = ("客服", "GM", "gm", "id:3", "ID:3", "官方", "管理員")
     assert not any(ib.blocked_name(n, content) for n in names)

@@ -115,10 +115,12 @@ def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
     c = TestClient(server.app)
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     c.post("/api/character", json={"name": "沈青衫"})
-    paths = [p for p in server.app.openapi()["paths"] if p.startswith(("/api/identity", "/auth/"))]
-    assert sorted(paths) == ["/api/identity/character", "/api/identity/gate", "/api/identity/start", "/auth/{provider}/callback"]
+    routes = sorted((m, p) for p, ms in server.app.openapi()["paths"].items() if p.startswith(("/api/identity", "/auth/")) for m in ms)
+    assert routes == [("get", "/api/identity/gate"), ("get", "/auth/{provider}/callback"), ("post", "/api/identity/character"),
+                      ("post", "/api/identity/code/send"), ("post", "/api/identity/code/verify"), ("post", "/api/identity/start")]
     off = [c.get(p) for p in ("/", "/api/me", "/api/main")]
-    assert c.get("/api/identity/gate").status_code == 404
+    c.cookies.set("tx_code", "forged")  # 第 203 批：帶著偽造的單也一樣 404
+    assert all((c.get(p.replace("{provider}", "line")) if m == "get" else c.post(p, json={})).status_code == 404 for m, p in routes)
     _turn_on(monkeypatch)
     on = [c.get(p) for p in ("/", "/api/me", "/api/main")]
     assert [on[0].content, on[2].content] == [off[0].content, off[2].content] and all(r.status_code == 200 for r in off)

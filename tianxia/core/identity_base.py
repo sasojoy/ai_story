@@ -1,7 +1,10 @@
 """帳號綁定「別人也要讀」的那一半（帳號與客服第 201 批；設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md 4.1、4.5、第七節）：
 Email、手機的正規化與遮罩、加金鑰的雜湊、讀金鑰、開關（on）、綁手機才能用的功能問這裡（phone_ok）、名號擋不擋（blocked_name）。
 
-純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db）。
+純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
+account_key_for（第 203 批）只讀 logins。
+客服名單也在這（第 212 批從 support 包搬來：商城的易名帖要問「這個名號是不是客服」；support_staff_name 只讀 accounts、logins，
+名單的 .local/support.txt 只讀不寫）。
 金鑰在 .local/identity.json（不進版控）：讀不到、格式不對都當功能關著（on 回假）。
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。identity 包、server.py 的 name_taken、商城包的易名帖讀它。
 """
@@ -10,10 +13,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
 
+from ..accounts import normalize
 from ..characters import name_key
 from .name_base import STAFF_NAMES
 
@@ -105,9 +110,83 @@ def phone_ok(ctx, feature_key: str) -> bool:
     return phone is not None
 
 
+def account_key_for(db, provider: str, subject: str) -> str | None:
+    """這個身分（logins 的 provider、subject）綁在哪個帳號：有 password 列回小寫帳號（鍵終身不變），沒有回 id:<n>；查無回 None。
+    只讀（第 203 批驗證碼登入用；設計第七節「查 logins」）。"""
+    with db.snapshot() as conn:
+        row = conn.execute("SELECT account_id FROM logins WHERE provider = ? AND subject = ?", (provider, subject)).fetchone()
+        if row is None:
+            return None
+        pw = conn.execute(
+            "SELECT subject FROM logins WHERE account_id = ? AND provider = 'password'", (row["account_id"],),
+        ).fetchone()
+    return pw["subject"] if pw is not None else f"{ID_PREFIX}{row['account_id']}"
+
+
 def blocked_name(name: str | None, content) -> bool:
     """開著時不准拿來當名號的：id: 開頭（跟帳號鍵撞）、客服與官方的字（name_base.STAFF_NAMES）。關著一律回假（行為不變）。"""
     if not on(content):
         return False
     text = (name or "").strip().casefold()
     return text.startswith(ID_PREFIX) or text in {n.casefold() for n in STAFF_NAMES}
+
+
+# ── 客服名單（帳號與客服第 212 批從 features/support/staff.py 搬來：商城的易名帖也要問，包不能 import 別包）──
+# 認帳號，不認名號（設計 6.2）。三個來源合起來：Config.support.staff、.local/support.txt（一行一個，# 開頭是註解；照檔的修改時間重讀）、
+# 環境變數 TIANXIA_SUPPORT（逗號分開）。每一筆是 accounts.id 的數字，或登入名（accounts.normalize：不分大小寫）。
+SUPPORT_ENV = "TIANXIA_SUPPORT"
+SUPPORT_FILE = "support.txt"
+
+_support_cache: dict = {"path": None, "mtime": None, "names": frozenset()}  # support/staff.py 的 _cache 是同一個 dict
+
+
+def support_file() -> Path:
+    from tianxia import content as content_module  # noqa: PLC0415  content 在 import 時讀設定檔：放函式裡免循環（測試換 LOCAL_DIR 當下看得到）
+
+    return content_module.LOCAL_DIR / SUPPORT_FILE
+
+
+def _support_file_names(path: Path) -> frozenset[str]:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return frozenset()
+    if _support_cache["path"] == path and _support_cache["mtime"] == mtime:
+        return _support_cache["names"]
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return frozenset()
+    names = frozenset(normalize(line) for line in lines if line.strip() and not line.strip().startswith("#"))
+    _support_cache.update(path=path, mtime=mtime, names=names)
+    return names
+
+
+def support_names(config) -> frozenset[str]:
+    """名單上每一筆（小寫、去空白）。"""
+    listed = {normalize(x) for x in config.support.staff}
+    listed |= {normalize(x) for x in os.environ.get(SUPPORT_ENV, "").split(",")}
+    listed |= _support_file_names(support_file())
+    listed.discard("")
+    return frozenset(listed)
+
+
+def support_staff(config, account_id: int, login: str) -> bool:
+    """這個帳號（accounts.id、密碼列的登入名，沒有是空字串）在不在名單上。名單上全是數字的一筆只當 id：
+    登入名可以全是數字、註冊又是開放的，不然搶註冊登入名 777 就頂了 id 777 的客服（第 J 波審查）。"""
+    listed = support_names(config)
+    key = normalize(login) if login else ""
+    return str(account_id) in listed or (bool(key) and not key.isdigit() and key in listed)
+
+
+def support_staff_name(db, config, name: str | None) -> bool:
+    """這個名號綁著的帳號是不是客服（商城的易名帖問：客服也不能改名，同管理者）。客服開關關著、名號沒綁帳號（假人、還沒綁的）都回假。
+    只讀主資料庫的 accounts、logins。"""
+    if not config.support.enabled or not name:
+        return False
+    with db.snapshot() as conn:
+        row = conn.execute(
+            "SELECT a.id, l.display FROM accounts a LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
+            "WHERE a.character_key = ?", (name_key(name),),
+        ).fetchone()
+    return row is not None and support_staff(config, int(row["id"]), row["display"] or "")

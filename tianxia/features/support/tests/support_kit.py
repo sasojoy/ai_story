@@ -55,6 +55,7 @@ ROUTES = (
     ("GET", "/api/support/ticket/1", None),
     ("POST", "/api/support/answer", {"id": 1, "body": "x", "then": "wait"}),
     ("POST", "/api/support/close", {"id": 1}),
+    ("POST", "/api/support/lookup", {"id": 1, "kind": "login", "text": "x"}),  # 第 212 批
 )
 
 

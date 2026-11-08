@@ -3,25 +3,34 @@
 - GET /api/identity/gate（第 201 批）：登入頁問哪幾條路開著。
 - POST /api/identity/start、GET /auth/{provider}/callback、POST /api/identity/character（第 202 批，設計 4.2）：LINE、Google 登入；
   驗過、查無對應的身分不開帳號，只留 pending（旁檔，綁 tx_pending cookie），建角色成功那一筆交易才開帳號、寫 logins。
-都不拿行動鎖、不叫模型。殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；現在時間照 shell.time.time()（路由是殼，oauth.py 不讀時鐘）。
-新寫給玩家看的字標「待 joy 潤」。
+- POST /api/identity/code/send、/api/identity/code/verify（第 203 批）：驗證碼登入；查無帳號一樣只留 pending，建角色走上面的 character。
+  寄送與 Turnstile 是網路呼叫。
+都不拿行動鎖、不叫模型；全部不用登入（tests/core/shell_tables.NO_LOGIN_ROUTES 寫了理由）。
+殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；第三方登入的現在時間照 shell.time.time()（路由是殼，oauth.py 不讀時鐘），
+驗證碼兩條在這裡讀 time.time()、傳進 codes。新寫給玩家看的字標「待 joy 潤」。
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
 import secrets as _rand
+import time
 
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from tianxia.accounts import _token_hash
 from tianxia.core import identity_base
+from tianxia.database import open_database
 
-from . import oauth, store
+from . import codes, oauth, senders, store
 
+CODE_COOKIE = "tx_code"  # 這張驗證碼的單（challenge id）；max_age＝code_ttl
+DEV_COOKIE = "tx_dev"  # 曾用這個身分成功登入的瀏覽器（只存 sha256）；成功登入才發
+DEV_SECONDS = 365 * 86400
 TICKET_COOKIE = "tx_oauth"  # start 發、回呼比對（票上存它的雜湊）：擋登入 CSRF
 TICKET_PATH = "/auth/"
-PENDING_COOKIE = "tx_pending"  # 回呼發、建角色那一步讀
+PENDING_COOKIE = "tx_pending"  # 第三方回呼與驗證碼查無帳號時發、建角色那一步讀
 PENDING_PATH = "/api/identity/"
 ALREADY_IN = "你已經登入了，要換帳號請先登出"  # 待 joy 潤
 TOO_OFTEN = "太頻繁了，請稍後再試"  # 待 joy 潤
@@ -39,6 +48,39 @@ def gate_info(content) -> dict:
 
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _code_gate(shell, channel: str | None = None) -> bytes:
+    """驗證碼兩條的 gate：關著、金鑰讀不到、這條路不在 ways（verify 是 email、phone 都不在）一律 404。回金鑰。"""
+    key = identity_base.read_key() if identity_base.on(shell.CONTENT) else None
+    if key is None:
+        raise HTTPException(404)
+    ways = shell.CONTENT.config.identity.ways
+    if channel is None:
+        if not any(ch in ways for ch in codes.CHANNELS):
+            raise HTTPException(404)
+    elif channel not in codes.CHANNELS or channel not in ways:
+        raise HTTPException(404)
+    return key
+
+
+def _hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _cookie(shell, request: Request, response: Response, name: str, value: str, max_age: int, path: str = "/") -> None:
+    response.set_cookie(name, value, httponly=True, samesite="lax", max_age=max_age, path=path, secure=shell.cookie_secure(request))
+
+
+def _session_token(shell, response: Response) -> str | None:
+    """shell._start_session 不回 token：從回應的 set-cookie 找 <COOKIE>= 那一條。"""
+    prefix = f"{shell.COOKIE}="
+    for name, value in response.raw_headers:
+        if name.lower() == b"set-cookie":
+            text = value.decode("latin-1")
+            if text.startswith(prefix):
+                return text[len(prefix):].split(";", 1)[0]
+    return None
 
 
 def router(shell) -> APIRouter:
@@ -150,17 +192,79 @@ def router(shell) -> APIRouter:
             with shell.open_database().transaction():  # create_without_password 與 create_character 的交易併進這一筆
                 key = accounts.login_key(provider, sub)  # 連按兩次：前一下在這筆交易開始前已經開好
                 if key is None:
-                    key = accounts.create_without_password(provider, sub, oauth.DISPLAY[provider])
+                    # 驗證碼那條（第 203 批）的 pending：provider 是 email／phone、subject 已是加金鑰的雜湊、display 是遮罩過的號碼
+                    display = oauth.DISPLAY.get(provider) or side.pending_display(_digest(token)) or provider
+                    key = accounts.create_without_password(provider, sub, display)
                     shell.create_character(key, body.get("name", ""), body.get("gender"))
                     made = True
             if made:
                 shell._registered(ip, now)
                 secret = identity_base.read_key()
                 if secret is not None:
-                    side.record_verified(accounts.account_id(key), provider, identity_base.subject_hmac(secret, provider, sub), now)
+                    hashed = identity_base.subject_hmac(secret, provider, sub) if provider in oauth.PROVIDERS else sub
+                    side.record_verified(accounts.account_id(key), provider, hashed, now)
         side.drop_pending(_digest(token))
         response.delete_cookie(PENDING_COOKIE, path=PENDING_PATH, httponly=True, samesite="lax", secure=shell.cookie_secure(request))
         shell._start_session(request, response, key)
         return shell._entry(key)
+
+    @r.post("/api/identity/code/send")
+    def api_code_send(request: Request, response: Response, body: dict = Body(default={})):
+        """{channel: "phone"/"email", to, turnstile}。寄出與額度滿了回同一份 {message, notice, privacy}（不透露有沒有帳號）；
+        寄出才設 tx_code。打錯的、沒過 Turnstile、寄送服務壞了回各自那一句（400）。"""
+        channel = str(body.get("channel") or "")
+        key = _code_gate(shell, channel)
+        now = time.time()
+        db = open_database()
+        dev = request.cookies.get(DEV_COOKIE)
+        status, reply, cid = codes.send(
+            cfg=shell.CONTENT.config.identity, key=key, store=store.IdentityStore(), senders=senders.pick(shell.CONTENT),
+            channel=channel, to=body.get("to"), token=body.get("turnstile"), ip=shell.client_ip(request),
+            hostname=request.url.hostname, dev_hash=_hash(dev) if dev else None,
+            is_bound=lambda subject: identity_base.account_key_for(db, channel, subject) is not None, now=now,
+        )
+        if status != 200:
+            raise shell.GameError(reply["error"])
+        if cid is not None:
+            _cookie(shell, request, response, CODE_COOKIE, cid, shell.CONTENT.config.identity.code_ttl)
+        return reply
+
+    @r.post("/api/identity/code/verify")
+    def api_code_verify(request: Request, response: Response, body: dict = Body(default={})):
+        """{code}；單從 tx_code 取。沒單、過期、錯碼回 BAD_CODE（錯碼算在單上）。對了：有帳號就開 session、記這次用哪一種登入、
+        回 _entry；查無帳號只寫待處理（建角色之前不開帳號，設計 4.2）、設 tx_pending、回 {stage: create, pending: true}。"""
+        key = _code_gate(shell)
+        cfg = shell.CONTENT.config.identity
+        side = store.IdentityStore()
+        cid = request.cookies.get(CODE_COOKIE)
+        peek = side.challenge(cid) if cid else None
+        if peek is not None and peek.get("channel") and peek["channel"] not in cfg.ways:
+            raise HTTPException(404)  # 這條路被拿掉了：同關著
+        now = time.time()
+        row = codes.verify(cfg=cfg, key=key, store=side, cid=cid, code=body.get("code"), now=now)
+        if row is None:
+            raise shell.GameError(codes.BAD_CODE)
+        channel, subject = row["channel"], row["subject_hmac"]
+        account_key = identity_base.account_key_for(open_database(), channel, subject)
+        if account_key is None:
+            token = _rand.token_urlsafe(32)
+            side.put_pending(_hash(token), channel, subject, expires=now + cfg.pending_seconds, now=now, display=row["display"])
+            _cookie(shell, request, response, PENDING_COOKIE, token, cfg.pending_seconds, path=PENDING_PATH)
+            response.delete_cookie(CODE_COOKIE)
+            return {"stage": "create", "pending": True}
+        dev = request.cookies.get(DEV_COOKIE) or ""
+        if not 20 <= len(dev) <= 100:
+            dev = _rand.token_urlsafe(32)
+        side.trust_device(_hash(dev), subject, now)
+        _cookie(shell, request, response, DEV_COOKIE, dev, DEV_SECONDS)
+        response.delete_cookie(CODE_COOKIE)
+        shell._start_session(request, response, account_key)
+        token = _session_token(shell, response)
+        if token is not None:
+            side.set_session_auth(_token_hash(token), channel, now)
+        account = shell.account_store().get(account_key)
+        if account is not None and account.id is not None:
+            side.record_verified(account.id, channel, subject, now)
+        return shell._entry(account_key)
 
     return r

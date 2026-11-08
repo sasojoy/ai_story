@@ -1,10 +1,9 @@
-"""客服包（帳號與客服第 211 批）：開關關著（預設）一個字都不變——七條路由登入後 404、沒登入 401（開著關著一樣）、/api/main 不多鍵、不建旁檔、
+"""客服包（帳號與客服第 211 批）：開關關著（預設）一個字都不變——每一條路由登入後 404（關著時沒登入、壞參數也 404：第 212 批 test_support_gate.py）、/api/main 不多鍵、不建旁檔、
 on_own_turn 對假人與關著什麼都不做。"""
 from __future__ import annotations
 
 import pytest
 import server
-from fastapi.testclient import TestClient
 # autouse 的 fixture 要明列（第 61 批）
 from server_kit import (  # noqa: F401
     _no_landing, _no_preset_recipes, cheap_password_hashing, fresh_server_memory, game, model_breaker_closed, save_dir, scheduler_off,
@@ -28,13 +27,6 @@ def test_routes_404_while_closed():
     c = player()
     replies = {path: hit(c, method, path, body).status_code for method, path, body in ROUTES}
     assert replies == {path: 404 for _, path, _ in ROUTES}
-
-
-@pytest.mark.parametrize("on", [False, True])
-def test_routes_401_without_login_either_way(on, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config.support, "enabled", on)
-    anon = TestClient(server.app, raise_server_exceptions=False)
-    assert {path: hit(anon, method, path, body).status_code for method, path, body in ROUTES} == {path: 401 for _, path, _ in ROUTES}
 
 
 def test_main_has_no_support_keys_while_closed():
