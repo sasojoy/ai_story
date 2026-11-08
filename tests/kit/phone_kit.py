@@ -34,6 +34,11 @@ def account(db, name: str, login: str, phone: str | None = None) -> None:
         store.add_login(login, "phone", phone, "09*****678")
 
 
+def bind(db, login: str, phone: str) -> None:
+    """已經有的帳號再綁一支手機（add_login）。"""
+    AccountStore(db).add_login(login, "phone", phone, "09*****678")
+
+
 def unbind(db, login: str) -> None:
     """解綁手機（remove_login）：帳本不動，封測的手機編號照舊占著。"""
     AccountStore(db).remove_login(login, "phone")
