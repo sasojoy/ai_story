@@ -147,5 +147,6 @@ def verify(*, cfg, key: bytes, store, cid: str | None, code, now: float) -> dict
     if not hmac.compare_digest(code_hmac(key, cid, given), row["code_hmac"]):
         store.bump_tries(cid, cfg.code_tries)
         return None
-    store.drop_challenge(cid)
+    if not store.drop_challenge(cid):  # 同時在途的另一個請求先刪了（用過、或錯到作廢）：這一下不算對（K 波修）
+        return None
     return row

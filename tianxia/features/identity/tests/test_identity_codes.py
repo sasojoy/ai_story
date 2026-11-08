@@ -213,6 +213,30 @@ def test_code_expires_after_ttl(kit):
     assert codes.verify(cfg=kit.cfg, key=KEY, store=kit.store, cid="", code="1", now=T0) is None
 
 
+def test_same_code_in_flight_twice_only_one_wins(kit):
+    """兩個請求同時送同一張對的碼：都讀到單、只有刪得到單的那一個算對（K 波修；以前兩個都開 session）。"""
+    cid = kit.send()[2]
+    code = _last_code(kit)
+    seen = kit.store.challenge(cid)
+
+    class Late:  # 第二個請求：讀單時單還在（讀到的是先前那一份），刪單時已經被第一個刪了
+        def challenge(self, _cid):
+            return dict(seen)
+
+        def __getattr__(self, name):
+            return getattr(kit.store, name)
+
+    assert codes.verify(cfg=kit.cfg, key=KEY, store=kit.store, cid=cid, code=code, now=T0 + 1)["id"] == cid
+    assert codes.verify(cfg=kit.cfg, key=KEY, store=Late(), cid=cid, code=code, now=T0 + 1) is None
+
+
+def test_challenge_of_another_purpose_is_refused(kit):
+    """單綁用途：這一批只認 login，別種用途的單（例：之後的 bind）碼對了也回 None（路由回 BAD_CODE）。"""
+    cid = "bind-cid-0001"
+    kit.store.put_challenge(cid, "bind", "phone", kit.subj(), "09*****678", codes.code_hmac(KEY, cid, "123456"), T0 + 300, T0)
+    assert codes.verify(cfg=kit.cfg, key=KEY, store=kit.store, cid=cid, code="123456", now=T0 + 1) is None
+
+
 def test_only_hmac_stored(kit):
     kit.send()
     kit.send("email", MAIL)

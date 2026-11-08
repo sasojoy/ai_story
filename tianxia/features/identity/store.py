@@ -226,9 +226,10 @@ class IdentityStore:
                 conn.execute("UPDATE challenges SET tries = ? WHERE id = ?", (tries, cid))
         return tries
 
-    def drop_challenge(self, cid: str) -> None:
+    def drop_challenge(self, cid: str) -> bool:
+        """刪掉那張單；這一下真的刪到才回真（驗碼對了靠它判誰贏：同一張單同時兩個請求只有一個刪得到）。"""
         with self._write() as conn:
-            conn.execute("DELETE FROM challenges WHERE id = ?", (cid,))
+            return conn.execute("DELETE FROM challenges WHERE id = ?", (cid,)).rowcount == 1
 
     # ── 信任的瀏覽器與待處理的身分（第 203 批）──────
 
