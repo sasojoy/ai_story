@@ -167,12 +167,22 @@
     return `<div class="gauge" role="img" aria-label="${esc(`戰局：${g.left.name} ${g.lean} 比 ${100 - g.lean} ${g.right.name}，${g.caption}`)}">`
       + `<div class="g-head">${end(g.left, g.lean, false)}${end(g.right, 100 - g.lean, true)}</div>`
       + `<div class="g-bar">${zones}${ticks}<i class="g-mid"></i>${trail}<b class="g-flag" style="left:${x(g.lean)}%"></b></div>`
-      + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${meritHtml(g, tint)}</div>`;
+      + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${flagsHtml(g)}${meritHtml(g, tint)}</div>`;
   }
   // 本場戰功的名字（名聲 4B）：加入決戰時快照的稱號（善惡第 1 段起、名望名動一方起，r.renown）寫在名字底下第二行；
   // 第一屏放不下時 FIT_STEPS 的 merit 把第二行收掉（.fit-hide）
-  const meritName = (r) => (r.renown && r.renown.length
+  // 稱號與官職開著：第二行改寫加入時戴的那一個（r.title，名號金字、官職墨字），沒戴才退回名聲
+  const meritName = (r) => (r.title && r.title.name && typeof titleSeal === "function"
+    ? `<span class="rn-two">${esc(r.name)}<small>${titleSeal(r.title)}</small></span>`
+    : r.renown && r.renown.length
     ? `<span class="rn-two">${esc(r.name)}<small>${esc(r.renown.join("・"))}</small></span>` : `<span>${esc(r.name)}</span>`);
+  // 將旗（稱號與官職，g.flags）：兩軍各一排戴頭銜的人，戰局條底下；沒有人戴不畫
+  function flagsHtml(g) {
+    const f = g.flags;
+    if (!f || typeof titleSeal !== "function") return "";
+    const row = (w, list) => (list && list.length ? `<div class="ttl-flags"><b>${esc(w.name)}將旗</b>${list.map((x) => `<span>${titleSeal(x.title)} ${esc(x.name)}</span>`).join("")}</div>` : "");
+    return row(g.left, f.left) + row(g.right, f.right);
+  }
   // 戰局條底下的「本場戰功」（Joy 2026-10-10 個人戰功，battle_instance.merit_board）：兩軍各列前幾名，最後一行是自己排第幾、戰功怎麼來的。
   // 集結中、還沒有人出手時不畫
   function meritHtml(g, tint) {
@@ -327,14 +337,15 @@
       + `<div class="bp-top"><div class="bp-t"><h3>${esc(p.name)}</h3><p>${head}</p></div>${bpClockHtml(p)}</div>`
       + (p.chiefs.left.length || p.chiefs.right.length ? `<div class="bp-gens">${bpSide(p.left, p.chiefs.left, "left")}${bpSide(p.right, p.chiefs.right, "right")}</div>` : "")
       + `${order}</section>`;
-    const gauge = g && p.me ? `<div class="bp-gauge">${gaugeHtml({ ...g, merit: null })}</div>` : "";
+    const gauge = g && p.me ? `<div class="bp-gauge">${gaugeHtml({ ...g, merit: null, flags: null })}</div>` : "";
+    const flags = g ? flagsHtml(g) : ""; // 將旗（稱號與官職）：集結時就畫，在面板底下
     const me = p.me;
     let act = bpMovesHtml(m);
     if (!act && me && me.out) act = `<p class="bp-sent out">${BP_WORDS.out}</p>`;
     else if (!act && me && me.sent) act = `<p class="bp-sent"><b>${BP_WORDS.sent}：${esc(me.sent)}</b><small>${BP_WORDS.wait(p.present - p.sent)}</small></p>`;
     const merit = g && g.merit && p.phase === "active" ? meritHtml(g, (w) => `side-${esc(w.id)}${w.mine ? " mine" : ""}`) : "";
     const fold = merit ? `<details class="bp-merit"${S.bpMeritOpen ? " open" : ""}><summary>${BP_WORDS.merit}${g.merit.me ? `<span>你排第 ${g.merit.me.rank}／${g.merit.me.of} ▸</span>` : ""}</summary>${merit}</details>` : "";
-    return `<div class="bp-wrap">${panel}${gauge}${act}${act && !act.includes("bp-sent") ? free : ""}${bpFeedHtml(p, g || p)}${fold}</div>`;
+    return `<div class="bp-wrap">${panel}${flags}${gauge}${act}${act && !act.includes("bp-sent") ? free : ""}${bpFeedHtml(p, g || p)}${fold}</div>`;
   }
 
   // 場景卡裡跟面板重複的字（engine 的 battle_scene_text 寫的；寫法變了 tests/web/test_battle_panel_web.py 會紅）

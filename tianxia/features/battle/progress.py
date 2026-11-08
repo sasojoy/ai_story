@@ -342,7 +342,7 @@ def merit_line(ctx, battle: battle_instance.BattleInstance, definition: BattleDe
     if not heads:
         return ""
     return f"{definition.name}論功：" + "，".join(
-        f"{side}首功{p.name}" + (f"（{'・'.join(p.renown)}）" if p.renown else "") for side, p in heads) + "。"  # 名聲 4.5
+        f"{side}首功{p.name}" + (f"（{p.title['name']}）" if p.title.get("name") else f"（{'・'.join(p.renown)}）" if p.renown else "") for side, p in heads) + "。"  # 名聲 4.5
 
 
 def highlight_line(battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:

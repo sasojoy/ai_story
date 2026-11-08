@@ -57,6 +57,7 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
     "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
     "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
+    "web/titles.js": "the titles package (Config.titles) is off in every profile the walk runs: no main.titles, so nothing calls into it",
 }
 
 

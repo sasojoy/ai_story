@@ -79,6 +79,8 @@ def card(game: Game, other: Game) -> dict:
         "arts": arts(other),
         "mingtie": mingtie_actions.face(game, other.state),  # 他的名帖（看不到的那一張只剩頭銜；還沒做是 None）
         "actions": buttons,
+        # 稱號與官職（features/titles）開著：他此刻戴的那一個（{"id","name","grade"}，沒戴是 {}）；關著沒有這個鍵
+        **({"title": dict(o.player.titles_worn)} if other.content.config.titles.enabled else {}),
     }
 
 

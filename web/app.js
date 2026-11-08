@@ -284,7 +284,7 @@
         <main class="page" id="page"></main>
       </div>
       ${tabsHtml()}
-      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : S.boardCard ? boardCardHtml() : ""}
+      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : S.boardCard ? boardCardHtml() : S.titlesOpen && typeof titlesSheetHtml === "function" && S.main && S.main.titles ? titlesSheetHtml(S.main.titles) : ""}
       ${S.main && S.main.shop ? shopHtml(S.main.shop) : S.mallOpen ? shopHtml(mallShop()) : ""}
       ${S.sealAct && sealActNow() ? sealActHtml(sealActNow()) : ""}
       ${S.book ? bookHtml() : ""}
@@ -512,12 +512,12 @@
     if (!S.showMore) {
       const tight = S.renownTight && S.tab === "jianghu"; // 只有江湖頁量第一屏：別的分頁照整行畫
       const inline = tight && spans.length ? `・${spans[spans.length - 1]}` : "";
-      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}${rv ? "" : `・第${s.level}級`}</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
+      return `<div class="who-name"><span>${esc(s.name)}${typeof titlesChipHtml === "function" ? titlesChipHtml() : ""}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}${rv ? "" : `・第${s.level}級`}</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
         + (spans.length && !tight ? `<div class="who-renown-line">${spans.join("・")}</div>` : "");
     }
     const segs = [...s.affiliation.split("・"), ...(s.anonymous ? ["匿名"] : []), `第${s.level}級`].filter(Boolean);
     const renownLine = r ? `<div class="who-renown" data-act="renown-toggle" role="button" tabindex="0" aria-expanded="${!!S.renownOpen}"><em>名聲</em><b>${spans.length ? spans.join("・") : "還沒有稱號"}</b><i aria-hidden="true">${S.renownOpen ? "▴" : "▾"}</i></div>` : "";
-    return `<div class="who-name"><span>${esc(s.name)}</span><i class="more-ico" aria-hidden="true">▴</i></div>
+    return `<div class="who-name"><span>${esc(s.name)}${typeof titlesChipHtml === "function" ? titlesChipHtml() : ""}</span><i class="more-ico" aria-hidden="true">▴</i></div>
           <div class="who-title">${segs.map((t) => `<span class="who-seg">${esc(t)}</span>`).join("・")}</div>${expHtml(s)}${r ? renownLine : rangerHtml(s.ranger)}`;
   }
 
@@ -1079,7 +1079,7 @@
     const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
     // 武學榜、內功榜的一列點得開主人那一門的唯讀功法卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡」），列尾一個 ›
     const open = BOARD_CARDS.includes(cur.id);
-    const cells = (r) => `<span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>`;
+    const cells = (r) => `<span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}${r.title && typeof titleSeal === "function" ? ` ${titleSeal(r.title)}` : ""}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>`;
     const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}">${open
       ? `<button class="board-open" data-act="board-card" data-board="${esc(cur.id)}" data-name="${esc(r.name)}" aria-label="看${esc(r.name)}的${esc(r.text)}">${cells(r)}<span class="board-go" aria-hidden="true">›</span></button>`
       : cells(r)}</li>`;
