@@ -1280,7 +1280,7 @@ def _fx_join_sect(r: EffectRun) -> list[str]:
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        owner = content.scenario.sect_owner(sect.id)
+        owner = content.sect_faction(sect.id)
         if owner is not None and p.faction is None:
             p.faction = owner.id
             msgs.append(f"你從此是{owner.name}的人了。")

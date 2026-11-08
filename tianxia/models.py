@@ -9,6 +9,7 @@ from pydantic_core import core_schema
 from .jianfa_numbers import ExploreMix, JianfaNumbers
 from .core.tuning.identity import IdentityTuning  # 帳號綁定
 from .core.tuning.support import SupportTuning  # 客服
+from .core.tuning.zongmen import ZongmenTuning  # 門派
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -1092,6 +1093,9 @@ class Sect(_Strict):
     location: str
     alignment: Literal["正", "邪", "中"]
     desc: str = ""
+    # 掛在哪個功能包的開關後面（Config.<switch>.enabled）：關著時這一門不存在於玩家看得到的任何地方（拜不了、問路不提、不教它的武學；
+    # Content.sect_open）。空的＝一直都在（潁川書院、曹氏莊院）。門派包（features/zongmen，設計稿 v6，Joy 2026-11-08「按照設計稿動工」）
+    switch: str | None = None
 
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，不信任 LLM 自報數字）。目前是全部人物共用同一張表，
@@ -4412,6 +4416,7 @@ class Config(_Strict):
     world_tick_seconds: float = Field(default=0, ge=0)
     identity: IdentityTuning = Field(default_factory=IdentityTuning)  # 帳號綁定（tianxia/core/tuning/identity.py）
     support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
+    zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
@@ -5746,6 +5751,20 @@ class Content(_Strict):
     # core_content（全部拆包第 63 批）：這一份只載了哪一包（load_content(only=)，只有測試內容、只有測試用；validate 看它）。不是欄位：不進 model_fields、
     # 不進序列化；pickle、deepcopy、model_copy 都帶著（測試的複本也擋得住）
     _only_pack: str | None = PrivateAttr(default=None)
+
+    def sect_open(self, sect_id: str | None) -> bool:
+        """這一門此刻在不在（Sect.switch 那個開關關著的不在）；不認得的 id 也不在。"""
+        sect = self.sects.get(sect_id) if sect_id else None
+        if sect is None:
+            return False
+        return sect.switch is None or bool(getattr(getattr(self.config, sect.switch, None), "enabled", False))
+
+    def sect_faction(self, sect_id: str | None) -> FactionDef | None:
+        """拜入這一門算不算投靠哪個陣營（rules 的 join_sect、bounty_base.join_note、叛投帶走門派共用）：門派包開著時門派不綁勢力
+        （設計稿 v6「門派不綁勢力」），一律 None；關著照劇本的 FactionDef.sects。"""
+        if not sect_id or self.config.zongmen.enabled:
+            return None
+        return self.scenario.sect_owner(sect_id)
 
     def banned_name_list(self) -> list[str]:
         """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""

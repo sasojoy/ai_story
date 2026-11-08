@@ -80,6 +80,7 @@ from ..features import admin  # 管理者：第二輪第 90 批（只接 routes 
 from ..features import identity  # 帳號綁定
 # support
 from ..features import support  # 客服（帳號與客服第 211 批；開關 Config.support.enabled 預設關。只接 routes、on_own_turn、status_slots，路徑 /api/support/* 不跟別的重疊，順序不影響結果）
+from ..features import zongmen  # 門派
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -158,6 +159,7 @@ FEATURES: list[Feature] = [
     identity.FEATURE,
     # support（帳號與客服第 211 批；排在最後〔照合併先後〕）
     support.FEATURE,
+    zongmen.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

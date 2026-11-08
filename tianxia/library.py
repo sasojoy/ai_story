@@ -94,7 +94,8 @@ def _taught_here(state: GameState, content: Content) -> list[SkillDef]:
     lessons = renown.on(content, "lessons")
     return [
         skill for skill in content.skills.values()
-        if (skill.learn is not None and skill.learn.at == here.id and (lessons or skill.learn.title is None)) or skill.id in starters
+        if (skill.learn is not None and skill.learn.at == here.id and (lessons or skill.learn.title is None)
+            and (skill.learn.sect is None or content.sect_open(skill.learn.sect))) or skill.id in starters
     ]
 
 

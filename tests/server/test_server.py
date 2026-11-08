@@ -4707,6 +4707,7 @@ NOT_IN_THE_FINGERPRINT = {
         "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
         # 3b-2 接線了（main.sortie_card、main.sorties）；搬進指紋要在 server_push.world_fingerprint 加一格、server.current_fingerprint 傳
         # shared.sorties——server_push 是雲端側的檔，交雲端側改（計畫 4.0 之三第 5 條）
+        "sect_books": "師門武譜：只在同門自己的畫面，獻式、試練、入譜都寫各人的江湖紀錄（自己的動作走 self 通知），別的同門下次輪詢才補也不礙事",
         "sorties": "出陣約戰（減法季批 3b）：接線了，但推送指紋的那一格在雲端側的 server_push，等他們改；之前開著的分頁照輪詢看到別人貼的約戰",
     },
     "WorldState": {

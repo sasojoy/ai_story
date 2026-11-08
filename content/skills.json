@@ -1407,6 +1407,134 @@
     }
   },
   {
+    "id": "fumo_gun",
+    "name": "伏魔棍",
+    "kind": "武學",
+    "attribute": "慢",
+    "quality": "下品",
+    "learn": {
+      "at": "baima_temple",
+      "sect": "baima"
+    },
+    "desc": "白馬寺武僧守山門的棍法，不求傷人，只求把來勢原原本本送回去。",
+    "weapon": "棍",
+    "tactic": {
+      "name": "迴向",
+      "timing": "心法",
+      "kind": "rebound_guard",
+      "params": {
+        "share_pct": 0.2
+      },
+      "desc": "出固守時借力：對手強攻你，他吃自己那一下的 {share_pct}。",
+      "say": "棍身一橫，{foe}那一下的力道原路送了回去",
+      "minor": true
+    }
+  },
+  {
+    "id": "buxu_zhang",
+    "name": "步虛掌",
+    "kind": "武學",
+    "attribute": "虛",
+    "quality": "下品",
+    "learn": {
+      "at": "jade_cave",
+      "sect": "nanhua"
+    },
+    "desc": "南華觀道人踏罡步斗的掌法，步子一亂，眼前就起了霧。",
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "步罡起霧",
+      "timing": "起手",
+      "kind": "fog",
+      "rate": 0.5,
+      "rounds": 1,
+      "params": {
+        "turns": 1,
+        "miss_pct": 0.15
+      },
+      "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。",
+      "say": "腳踏罡步，四下起了一層薄霧",
+      "minor": true
+    }
+  },
+  {
+    "id": "songyang_jian",
+    "name": "嵩陽劍",
+    "kind": "武學",
+    "attribute": "實",
+    "quality": "下品",
+    "learn": {
+      "at": "deep_mountain",
+      "sect": "songyang"
+    },
+    "desc": "嵩陽劍廬入門的劍，一劍一劍都是實的，先封住對手再說。",
+    "weapon": "劍",
+    "tactic": {
+      "name": "封門",
+      "timing": "起手",
+      "kind": "gatekeep",
+      "rate": 1.0,
+      "rounds": 2,
+      "params": {
+        "chance_pct": 0.25,
+        "turf_pct": 0.4
+      },
+      "desc": "對手 {chance_pct} 卸勁（在自家陣營的地盤 {turf_pct}）。",
+      "say": "劍尖一點封住來路，{foe}這一回合卸勁",
+      "minor": true
+    }
+  },
+  {
+    "id": "kaishan_dao",
+    "name": "開山刀",
+    "kind": "武學",
+    "attribute": "剛",
+    "quality": "下品",
+    "learn": {
+      "at": "lulin_zhai",
+      "sect": "lulin"
+    },
+    "desc": "綠林山寨裡人人都會的刀，劈柴開路用它，劫道砍人也用它。",
+    "weapon": "刀",
+    "tactic": {
+      "name": "劈嶺",
+      "timing": "乘勢",
+      "kind": "butcher",
+      "rate": 0.35,
+      "params": {
+        "turns": 2,
+        "dot_pct": 0.015,
+        "stacks": 2
+      },
+      "desc": "對手血創 {turns} 回合：每回合扣氣血 {dot_pct}，可疊 {stacks} 層。",
+      "say": "一刀劈開了口子，{foe}血流不止",
+      "minor": true
+    }
+  },
+  {
+    "id": "chuanyang_gong",
+    "name": "穿楊弓",
+    "kind": "武學",
+    "attribute": "快",
+    "quality": "下品",
+    "learn": {
+      "at": "zhuo_militia_hall",
+      "sect": "xiangshe"
+    },
+    "desc": "鄉里結社農閒時在村口練的弓，射得準，也射得快。",
+    "weapon": "弓弩",
+    "tactic": {
+      "name": "追星",
+      "timing": "乘勢",
+      "kind": "surge",
+      "rate": 0.2,
+      "params": {},
+      "desc": "追加一擊：這一回合連環。",
+      "say": "一箭剛到，第二箭又追了上來",
+      "minor": true
+    }
+  },
+  {
     "id": "manniu_quan",
     "name": "蠻牛拳",
     "kind": "武學",

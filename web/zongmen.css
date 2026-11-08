@@ -1,0 +1,17 @@
+/* 師門武譜（俠客頁門下那一段；web/zongmen.js） */
+.zongmen .zm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.zongmen .zm-entry { border: 1px solid var(--line, #d8d2c4); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.zongmen .zm-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.zongmen .zm-num { color: var(--accent, #8a3324); font-weight: 700; font-size: .9em; }
+.zongmen .zm-fx { font-size: .92em; }
+.zongmen .zm-note { font-size: .86em; }
+.zongmen .zm-desc { font-size: .84em; }
+.zongmen .zm-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zongmen .zm-carve { font-family: var(--serif, serif); color: var(--muted, #776f60); }
+.zongmen .zm-tag { font-size: .85em; color: var(--muted, #776f60); }
+.zongmen .zm-sub { margin-top: 10px; font-weight: 700; font-size: .92em; }
+.zongmen .zm-waits { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.zongmen .zm-wait { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .92em; }
+.zongmen .zm-small { font-size: .86em; margin: 2px 0 6px; }
+.zongmen .zm-offer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.zongmen .zm-offer select { min-width: 0; max-width: 100%; flex: 1 1 140px; }

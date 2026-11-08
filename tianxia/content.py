@@ -1214,6 +1214,8 @@ def validate(c: Content) -> None:
 
     for sect in c.sects.values():
         known(f"門派 {sect.id}", [sect.location], c.locations, "地點")
+        if sect.switch is not None:
+            need(hasattr(getattr(c.config, sect.switch, None), "enabled"), f"門派 {sect.id}：開關 {sect.switch} 不是 Config 裡有 enabled 的一格")
 
     for squad in c.squads.values():
         known(f"敵方隊伍 {squad.id}", [drop.material for drop in squad.drops], c.materials, "素材")
