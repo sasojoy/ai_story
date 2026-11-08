@@ -611,9 +611,14 @@
     const max = g.custom_max || g.per_level;
     const bars = (split) => `<span class="prep-split">${split.map(([k, v]) =>
       `<span><i style="--w:${Math.round((v / max) * 100)}%"></i>${esc(k)} ${v}</span>`).join("")}</span>`;
+    // 每一套配一張人物剪影（Joy 2026-11-08「選發展方向要有人物剪影，俠客頁也用同一張」）：遊俠就是俠客頁原本那張，其餘在 web/img/growth/；
+    // 自己配沒有自己的一張，用遊俠那張淡著
+    const female = (S.main.status || {}).gender === "女";
+    const figSrc = (k) => (HERO_FIGURES.growth[k] ? `/static/img/growth/${k}-${female ? "f" : "m"}.webp` : HERO_FIGURES[female ? "女" : "男"].src);
+    const figImg = (k) => `<img src="${figSrc(k)}" alt="" loading="lazy" draggable="false">`;
     const cards = g.presets.map((x) => `<button class="prep-opt${pick === x.key ? " on" : ""}" data-act="prep-pick" data-preset="${esc(x.key)}" aria-pressed="${pick === x.key}">
-        <b>${esc(x.name)}</b><small>${esc(PREP_TAGS[x.key] || "")}</small>${bars(x.split)}</button>`).join("") +
-      `<button class="prep-opt${pick === "custom" ? " on" : ""}" data-act="prep-pick" data-preset="custom" aria-pressed="${pick === "custom"}"><b>自己配</b><small>五項各 ${g.custom_min}～${max} 點，合計 ${g.per_level}</small></button>`;
+        ${figImg(x.key)}<b>${esc(x.name)}</b><small>${esc(PREP_TAGS[x.key] || "")}</small>${bars(x.split)}</button>`).join("") +
+      `<button class="prep-opt${pick === "custom" ? " on" : ""}" data-act="prep-pick" data-preset="custom" aria-pressed="${pick === "custom"}">${figImg("custom")}<b>自己配</b><small>五項各 ${g.custom_min}～${max} 點，合計 ${g.per_level}</small></button>`;
     const edit = pick === "custom" && S.growthDraft ? growthEditHtml(g, S.growthDraft) : "";
     const go = pick && pick !== "custom" ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>` : "";
     return `<p class="prep-lead">每升一級五項合計長 ${g.per_level} 點，照你挑的這一套分。<b>這一季只挑一次</b>，挑了就定了；每 10 級另外送的點，隨時自己配。</p>
@@ -869,6 +874,14 @@
       { key: "treasure", kind: "gear", x: 35.8, y: 45.3, side: "r" },
       { key: "mount", kind: "gear", x: 50.1, y: 96.9, side: "l" },
     ] },
+  };
+  // 照這一季挑的成長換剪影（Joy 2026-11-08）：遊俠與自己配用上面那兩張；其餘四套各男女一張（web/img/growth/<key>-<m|f>.webp），
+  // 身上只畫兩門的光點（內功在腰、武學在拿東西的那隻手或兵器上），座標照各自的圖量
+  HERO_FIGURES.growth = {
+    warrior: { 男: { ratio: "582 / 900", nodes: [["內功", 38, 47, "r"], ["武學", 8, 39, "l"]] }, 女: { ratio: "678 / 900", nodes: [["內功", 40, 45, "r"], ["武學", 17, 34, "l"]] } },
+    strategist: { 男: { ratio: "697 / 900", nodes: [["內功", 52, 47, "r"], ["武學", 22, 28, "r"]] }, 女: { ratio: "650 / 900", nodes: [["內功", 52, 42, "r"], ["武學", 22, 35, "l"]] } },
+    envoy: { 男: { ratio: "628 / 900", nodes: [["內功", 48, 38, "l"], ["武學", 66, 56, "r"]] }, 女: { ratio: "568 / 900", nodes: [["內功", 50, 42, "r"], ["武學", 21, 27, "r"]] } },
+    balanced: { 男: { ratio: "500 / 900", nodes: [["內功", 40, 38, "l"], ["武學", 62, 55, "r"]] }, 女: { ratio: "636 / 900", nodes: [["內功", 44, 40, "l"], ["武學", 68, 54, "r"]] } },
   };
   const HERO_GEAR_NAMES = { weapon: "武器", armor: "防具", mount: "坐騎", treasure: "寶物" };
   const GEAR_ICONS = {

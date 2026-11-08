@@ -1638,6 +1638,13 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .prep-opt b { font-size: 16px; }
 .prep-opt small { font-size: 12px; color: var(--ink-2); }
 .prep-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--card); }
+/* 每一套左邊一張人物剪影（Joy 2026-11-08）：圖佔左欄、跨三列；自己配那張淡著 */
+.prep-opt:has(> img) { grid-template-columns: 58px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 6px 12px 6px 8px; }
+.prep-opt > img { grid-row: 1 / span 3; width: 58px; height: 78px; object-fit: contain; object-position: center bottom; pointer-events: none;
+  padding: 4px 2px 0; box-sizing: border-box; border-radius: 8px; background: radial-gradient(circle at 50% 35%, #f4eee2 0%, #e4d6bc 100%); } /* 襯一塊紙色：暗色模式也看得到墨 */
+.prep-opt > :not(img) { grid-column: 2; }
+.prep-opt[data-preset="custom"] > img { opacity: 0.3; }
+.prep-opt.on > img { filter: drop-shadow(0 0 6px var(--accent-soft)); }
 .prep-split { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 2px; }
 .prep-split span { position: relative; font-size: 11px; color: var(--ink-2); padding-top: 6px; white-space: nowrap; }
 .prep-split i { position: absolute; top: 0; left: 0; height: 3px; width: var(--w); border-radius: 2px; background: var(--accent); }
