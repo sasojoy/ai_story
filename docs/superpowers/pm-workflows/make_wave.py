@@ -902,6 +902,35 @@ WAVES["N"] = dict(
 )
 
 
+N_COV_REPORT = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveN\cov\report.txt"
+
+
+def b111():
+    return ib(111, "網頁比對的 flow 跟上 Joy 的 UI 手感批與見聞頁改版、對照表重建、`news` 包進 covers", "dev/webqa-111", "8385", [
+        "- 範圍：只動 `scripts/webqa/**`（flows、snippets、must_reach.txt、coverage.json）與 `tests/web/test_webqa.py`；第 3 項另准 `scripts/sb/covers_measure.py write` 改各軌的 `covers=`（只那一個關鍵字）。**不動 `web/`、`tianxia/`、`content/`、`docs/superpowers/pm-workflows/wave_gate.py`、`scripts/sb/` 其他檔**。flow 真的點不到（新 UI 沒有那個控制了）就寫 leftovers 給那個包或 Joy，不改頁面。",
+        "- 起因：Joy 11/09 02:10～02:22 合了 #197～#205 進 develop（見聞頁改版〔新包 `news`、`web/news.js`〕、UI 手感甲～戊批：店面蓋住底下選單、決戰陣容不寫兩次、灰的懸賞寫原因、交友先挑人、名帖、擂台榜、成長剪影與決戰回合格的圖）。PM 在 N 波落地那一筆上用 `scripts/webqa/gate.py --base X --head X --jobs 4` 重走八回合，**14 個必到場景沒到**：main 的 `sm_repair`、`sm_temper`、`sm_material`、`mk_wield`、`mk_buy`、`market_left`、`bd_take`、`bd_drop`、`mt_edit`、`mt_shuffle`、`mt_close`、`call_list`、`call_zhujun`；x 的 `x_news_xingshi`。報告在 `" + N_COV_REPORT + "`（「not reached」那一段列了每一景點不到的 selector，例：`.shop-layer .shop-back`、`[data-act=\"news\"][data-news=\"mingtie\"]`、`[data-act=\"mt-edit\"]`、`[data-act=\"choose\"][data-id^=\"bounty:\"]`、`[data-act=\"tav-do\"]`）。先讀 Joy 那幾筆的 diff（`git diff 0b5a4864e d3befbb21 -- web/`）再改 flow。下一波的網頁閘門會因為這些必到場景結束碼 2，所以這一批要快。",
+        "- **第 1 項 flow 跟上新 UI**：每一個沒到的場景照新 UI 的 DOM 改 flow 的走法（selector、先開哪一層、店面的返回鈕在哪），讓它在 season21 的 base＝head 走法下到得了；`must_reach.txt` 一景都不拿掉（新 UI 真的沒有那個控制了才拿掉，理由寫進 decided 與 leftovers）。證明：`gate.py --base <develop 那一筆> --head <同一筆> --out <暫存> --jobs 4` 整趟 exit 0、tool 0、`missing_must_reach` 空，量分鐘數寫進回報。",
+        "- **第 2 項對照表重建**：第 1 項那一趟走完用 `coverage.py build <summary.json>` 重建 `coverage.json`；看 cs 回合這次有沒有自己量到 `figure_acts.js`、`sortie.js`（有就不用跟舊表聯集；沒有照第 110 批的做法聯集，寫進 decided）；`coverage.py check` 過；`web/news.js` 要在表上。",
+        "- **第 3 項 `news` 包進 covers**：`python scripts/sb/covers_measure.py measure --out <夾>`（三設定全軌約 16 分）→ `analyze <夾>`（門檻 90%，ALWAYS 不變量破了結束碼 1）→ `write <夾>`，讓 `news` 有軌（`tests/core/test_same_behavior_covers.py` 的「沒有一軌走到的包」警告消失）；反向驗一對：改 `tianxia/features/news/` 一處一定跑到的字（在暫存複本改，不提交），`same_behavior pick --covers news` 挑到的軌至少一軌紅、沒挑到的軌一軌都不紅。量出來沒有軌進得了見聞頁的後端就寫 decided、留警告、不硬加軌。",
+        "- **第 4 項證明工具還活著**：`selftest.py` 至少跑 c 回合版（同對同綠、兩個正控制紅；一個回合約 500 秒，別跟第 1 項那一趟同時跑）。`tests/web/test_webqa.py` 既有的全過，改了 selector 的地方若有 snippet 測試就補。",
+        "- 要寫進 docs 的（放回報，文件輪寫）：手冊 4.2 或 tianxia-flow「網頁閘門」加一句「UI 改了（Joy 的 PR 合進 develop 之後尤其）要跑一次 `gate.py --base X --head X --jobs 4` 看 `must_reach`，點不到的 flow 要跟著改，不然下一波網頁閘門結束碼 2」。",
+    ])
+
+
+WEB_O = "**這一波沒動 `web/`，改的是網頁比對的 flow。這一關不比畫面，驗工具**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 用 head 的 `scripts/webqa/`：`gate.py --base <head> --head <head> --out <暫存>\\\\web1 --jobs 4` 整趟（約 35 分）：要 exit 0、tool 0、`missing_must_reach` 空（14 個必到場景全到，含 `x:x_news_xingshi`）；量分鐘數。\n2. `coverage.py check` 過；`coverage.json` 裡 `web/news.js` 在表上；`scripts/same_behavior.py pick --covers news` 印出的軌（沒有就看開發 decided 寫的理由）。\n3. `gate.py --dry-run --changed-files` 三種清單各一次：空、`web/news.js`、`web/app.js`，結果要是不跑、挑到表上那幾回合、全走。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["O"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 111 批。flow 改了 selector 之後那 14 個必到場景是真的走到新 UI 的那一層（看 summary 的 scenes 與 facts，不是只看 must_reach 沒缺）；`must_reach.txt` 沒有被拿掉任何一景（拿掉的要有 decided 與 leftovers）；`coverage.json` 是從這一趟 summary 的 `round_files` 建的（抽兩個回合對一次）；`news` 的 covers 反向驗一對跟開發抽的不同的突變；`tests/web/test_webqa.py` 全綠。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="網頁工具", batches=[b111])],
+    merge_port=8386, fix_port=8387,
+    web_check=dict(ports="8388、8389", steps=WEB_O),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
