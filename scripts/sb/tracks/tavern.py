@@ -602,6 +602,6 @@ class TavernScenario(Scenario):
 
 register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py",), ("滿堂叫好。", "滿堂叫好！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan"))

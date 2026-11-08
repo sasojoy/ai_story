@@ -407,6 +407,6 @@ class AllegianceScenario(EffectsScenario):
 # 改一個字（selftest）：按了投靠走開再確定那一句（原 Game._faction_step 確定那一支，第 35 批搬進 features/faction/join_actions.py；舊名的檔與包裡的檔兩處找）
 register_track("allegiance", AllegianceScenario, (("tianxia/engine.py", "tianxia/features/faction/join_actions.py"), ("（你已經不在投靠的地方了。）", "（你已經不在投靠的地方了！）")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

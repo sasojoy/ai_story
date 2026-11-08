@@ -212,6 +212,5 @@ class VistaScenario(StackScenario):
 register_track("vista", VistaScenario, (("tianxia/engine.py", "tianxia/features/companions/talk_actions.py"),
                                         ('"kind": "figure"', '"kind": "figurf"')), "season21",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "looks", "map", "military", "outlets", "peers", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

@@ -522,6 +522,6 @@ class ScribeScenario(BattleScenario):
 register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py",),
                                           ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern",
+                       "territory_acts", "travel", "zhuan"))

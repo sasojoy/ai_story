@@ -670,9 +670,9 @@ class SmithyScenario(Scenario):
 register_track("smithy", SmithyScenario, (("tianxia/features/smithy/smithing.py",),
                                           ('UNDONE = "退回一步。"', 'UNDONE = "退回一步！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))
 
 
 # 鐵匠鋪那一軌改一個字的那一句（UNDONE，# smithy 那一段登記的）這一批跟著鐵匠鋪的常數搬進了 tianxia/core/smith_base.py：檔清單前面補上
