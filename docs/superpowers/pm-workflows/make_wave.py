@@ -674,6 +674,44 @@ WAVES["H"] = dict(
 )
 
 
+I_PLAN = "docs/superpowers/plans/2026-11-08-測試流程優化.md"
+I_NOTE = [
+    "- **測試流程優化這一波**：範圍照 `" + I_PLAN + "` 這一批那一節整節（只讀開頭與那一節；第二輪總表不適用）。數字量在 G 波閘門 `e8e50945`，**開工照現行程式重量，對不上以程式為準**，寫進 decided。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。",
+    "- **各包 README、`docs/guide`、手冊、`CLAUDE.md` 線上不動**：要寫的句子放回報的 `docs`（一條一句，寫明哪個檔、改哪裡），波末一位文件代理統一寫。**不動 `tianxia/`、`web/`、`content/`**（第 108 批准動 `scripts/measure_*.py`、`scripts/sim_server_bots.py` 的參數）。每一項先注入一處壞法證明會紅、再還原，寫進回報。",
+]
+
+
+def ib(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-08-測試流程優化-第{n}批.md"
+    return batch(n, f"測試流程優化第 {n} 批：{title}", "core_shared", dev, plan, ports, body + I_NOTE, custom=True)
+
+
+def b107():
+    return ib(107, "閘門與比對只跑改到的", "dev/gate-slim", "8346", [
+        "- 範圍照那一節的 1～4。`wave_gate.py` 的 `--changed` 與 `--full`、`scripts/sb/` 的 `covers`、`--covers`、`--crossover`、拿掉 base 前半、`scripts/webqa/` 的對照表與 `--changed-files`。每一樣都要有測試或 selftest；`covers` 用突變法量、寫死進各軌。拿 D～H 五波實際的 diff 跑 `--changed --dry-run` 對照當時的差異，寫進回報。這批不改手冊、不改 `CLAUDE.md`，句子放 docs。",
+    ])
+
+
+def b108():
+    return ib(108, "pytest 瘦身", "dev/pytest-slim", "8347", [
+        "- 範圍照那一節的 1～5。每一項先單獨量秒數、改完再量、寫進回報；每一項先把被測的東西改壞一次證明斷言還抓得到，再還原。`exp_pace` 那條先 `cProfile` 查原因再決定改哪裡，原因在遊戲規則就不改、寫 leftovers。不刪任何斷言、不標 slow 來藏。",
+    ])
+
+
+WEB_I = "**這一波沒動 `web/`，但改了網頁比對工具本身（`scripts/webqa/gate.py` 的 `--changed-files` 與對照表）。這一關不比畫面，驗工具**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 用 head 的 `scripts/webqa/gate.py`：`--mutate` 的每一種 selftest 各跑一次（照它的說明），要全部抓得到。\n2. `coverage.py check` 過；`gate.py --changed-files` 給三種清單各跑一次 dry-run（只列回合不走）：空清單、只有 `web/checkin.js`、含 `web/app.js`，結果要分別是「不跑」「只走命中的回合」「全走」，寫進回報。\n3. 真跑一次 `gate.py --base <base> --head <head> --changed-files web/checkin.js --out <暫存>\\\\web1 --jobs 4`（只為了量時間與確定走得完），量分鐘數；結束碼 0 或 1 都照舊分類，結束碼 2 是工具壞了。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["I"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 107、108 批。第 107 批：`same_behavior selftest` 全軌三設定要全部一樣、改一個字抓得到；快照版的「前半＋後半＝整段」要真的證明（拿一軌故意在切點之後改行為，前半＋後半要紅）；`covers` 用突變法抽三包驗：改那一包的規則，`--covers <包>` 挑到的軌至少一軌紅、沒挑到的軌裡有沒有也會紅的（有就是 covers 漏了）；`--changed` 對 D～H 的 diff 選的軌要涵蓋當時真正差異過的軌；`webqa` 的對照表突變測試真的紅。第 108 批：每一項改前改後的秒數要重量一次（`--durations=0 -p no:xdist`），斷言還抓得到突變（把量表腳本少印一行、整季拿掉一個事件），`--collect-only` 條數的變化逐條對得上回報。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="閘門", batches=[b107]), dict(name="瘦身", batches=[b108])],
+    merge_port=8342, fix_port=8343,
+    web_check=dict(ports="8344、8345", steps=WEB_I),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
