@@ -25,7 +25,7 @@
 
 - `player_fields`：`talks_today`（`{人物: [第幾個遊戲日, 當天已聊幾輪]}`，遊戲日跟著季長縮）、`picking_audience`（求見名單開著）；`carried = ()`，換季全部跟著新角色重來。
   （第 20 批審查把這兩個留給這一批。）
-- 內容：這一包的 `content/events/recruit.json`、`social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照它到這一包的 `content/` 載）。`figure_intros.json`（人物簡介）留在 `content/`：只有殼的 `server.py` 讀，`Content` 不讀、這一包不宣告。
+- 內容：這一包的 `content/events/recruit.json`、`social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照它到這一包的 `content/` 載）。`figure_intros.json`（人物簡介）留在 `content/`，還沒搬（讀檔的程式第 83 批已經進這一包的 `intro.py`；`Content` 不讀、這一包不宣告）。
   `recruit.json` 第 63 批歸這一包：7 則的 `actions` 都是 `socialize`、沒有 `recruit` 效果（跟附錄甲裁給人物情誼的招募 `_recruit*` 無關）。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
   `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 也在 `view.py`（第二輪第 91 批，不再留在 `engine.py`）。

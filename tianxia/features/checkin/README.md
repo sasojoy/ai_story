@@ -46,7 +46,7 @@ python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `checkin`（None 沒有鍵）。
-- 畫面：`web/checkin.js`（`checkinPeek`、`checkinPickHtml`）、`web/checkin.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`web/main.js` 的本週卡叫它們。
+- 畫面：`web/checkin.js`（`checkinPeek`、`checkinPickHtml`）、`web/checkin.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改；簽到小窗 `.ck-pop` 三行架構收尾第 105 批從 `style.css` 搬進 `checkin.css` 檔尾）；`web/main.js` 的本週卡叫它們。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`checkin`。 `checkin` 的 `game_api.py` 那一格掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 

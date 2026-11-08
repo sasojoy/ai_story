@@ -16,7 +16,7 @@
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
-- `PlayerState`：`picking_tavern`、`tavern_notes`、`tavern_heard`、`tavern_known`、`tavern_treat_day`、`whispers`、`hidden_until`、`tavern_watches`、`tavern_guard_until`、`tavern_shield_until`（換季全部跟著新角色重來，`carried` 是空的）。
+- `PlayerState`：`picking_tavern`、`tavern_notes`、`tavern_heard`、`tavern_known`、`tavern_treat_day`、`whispers`、`hidden_until`、`tavern_watches`、`tavern_guard_until`、`tavern_shield_until`、`tavern_asks`（換季全部跟著新角色重來，`carried` 是空的）。問酒家一天幾次的規則在 `rules.asks_left`、`rules.note_ask`（架構收尾第 105 批從 `Game` 搬來；不放 `ask.py`：那個檔只讀只組字），一天幾次 `ask_per_day` 在核心的 `Config.xinshen`，問完的那句 `ASKS_DONE` 留在核心 `core/xinshen.py`。
 - `WorldState`：`tavern_walls`、`tavern_whispers`、`tavern_treats`、`tavern_hits`、`tavern_hit_seq`、`tavern_chatter`（照季存）。
 - `state.py` 的 `TavernNote`、`Whisper`、`WallNote`、`TavernWatch`、`TavernHit`；`models.py` 的 `Config.tavern`（`TavernTuning`）。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_tavern` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
