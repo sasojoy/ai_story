@@ -18,6 +18,8 @@ const SP = need('scratch')
 const PY = 'C:/Ray/專案/天下大勢/.venv/Scripts/python.exe'
 const BOOK = 'docs/superpowers/specs/2026-10-30-開發模式-design.md'
 const BATCH = 'docs/superpowers/plans/2026-10-31-主動搬六包-批次.md'
+const FEATURE = !!A.feature  // 新功能模式（11/08 起）：做新功能包，不是搬；提示換 P1F／P2F
+const DESIGN = A.design || ''        // 新功能模式：設計文件路徑
 const ROUND2 = !!A.round2  // 第二輪：總表換一份、各包 README 與 docs/guide 線上不動（PM 11/07）
 const MASTER = A.master || 'docs/superpowers/plans/2026-10-31-全部拆包-總表.md'
 const SURVEYDIR = 'docs/superpowers/plans/2026-10-31-全部拆包-調查'
@@ -39,7 +41,7 @@ const COMMON = `
 - 不准改共用 clone 的 git 設定；中文路徑用單次的 \`git -c core.quotepath=off ...\`。在 Git Bash 裡給 git 的路徑寫 Windows 格式。python 用 PowerShell 跑 ${PY}（含中文路徑的指令直接寫在指令裡）。改檔用 Edit，或用 Write 寫成 .py 再跑；Write 寫出 LF，工作樹是 CRLF，寫完自己轉，提交前 \`git ls-files --eol <檔>\` 確認 \`i/lf\`。commit 訊息英文、寫成檔案用 \`git commit -F\`，結尾一行 \`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\`。
 - 暫存放 ${SP}\\wave${WAVE}\\ 底下，TIANXIA_DB 也指到那裡；不碰這份 clone 的 saves/；做完把解出來的 base／head、資料庫這些大檔刪掉（企劃者 11/01：磁碟被用光過）。
 - 伺服器：只用給你的埠、\`-u\` 分離啟動、記 PID；模型網址指到 127.0.0.1:9，絕不打 11434；跑模擬前 patch \`ollama_client.from_config\`；收的時候 \`taskkill /PID <pid> /T /F\`。
-- 不下載、不安裝任何東西。絕不碰 7861、C:\\Ray\\tianxia-play、線上資料庫、Tunnel；資料庫結構（第 9 版）不改。任何畫面、輸出不能透露誰是假人；這一波不該有新字。不開子代理、不開工作流程。回報用繁體中文。
+- 不下載、不安裝任何東西。絕不碰 7861、C:\\Ray\\tianxia-play、線上資料庫、Tunnel；資料庫結構（第 9 版）不改。任何畫面、輸出不能透露誰是假人；${FEATURE ? '新寫給玩家看的字每一句旁註 `# 待 joy 潤`／`// 待 joy 潤`，全部列進回報的 new_strings' : '這一波不該有新字'}。不開子代理、不開工作流程。回報用繁體中文。
 - **context 就是額度**：大檔用 grep 加行號範圍讀，不整份讀、不重讀同一段；指令輸出先截短。
 `
 
@@ -52,6 +54,9 @@ const DEV_SCHEMA = {
     decided: { type: 'array', items: { type: 'string' }, description: '你選了保守做法的判斷，一條一句' },
     leftovers: { type: 'array', items: { type: 'string' }, description: '留給後面哪一批的東西' },
     docs: { type: 'array', items: { type: 'string' }, description: '第二輪：要寫進各包 README、docs/guide 的句子，一條一句，寫明哪個檔、改哪裡；波末文件代理統一寫' },
+    new_strings: { type: 'array', items: { type: 'string' }, description: '新功能模式：新寫給玩家看的字，一句一條，寫明檔與位置' },
+    rollback: { type: 'string', description: '新功能模式：退版風險逐欄（資料庫版本、新存檔欄位、旁檔、季中能不能換、緊急開關）' },
+    core_changes: { type: 'array', items: { type: 'string' }, description: '新功能模式：動到核心與殼的每一處（檔:行 改什麼），只准設計文件列的' },
     report: { type: 'string' },
   },
   required: ['branch', 'head', 'stopped', 'commits', 'tests', 'decided', 'leftovers', 'report'],
@@ -121,19 +126,52 @@ ${ROUND2 ? `一個 Task 一個 commit，照第二輪總表那一節與你的計�
 **只跑這些，各一次**（跑在最後的程式上）：\`python ${TOOLS}/undef_scan.py tianxia server.py\`；\`python -m pytest -q -n 4 tianxia/features/${b.pkg}/tests\`（有這個資料夾才跑）加計畫列的幾個最直接的檔；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\`。base 上就紅的（這條分支可能還在修合併的紅）在 base 上跑同一條確認，寫進回報、不用修。
 回報 head、commits、tests、decided（你選保守做法的判斷）、leftovers（留給哪一批）${ROUND2 ? '、docs（要寫進 README、導覽的句子）' : ''}。`
 
+
+const FEATURE_RULE = `**新功能模式**（企劃者 11/08「整理好規格跟開發方式就指派opus5.5開發, sonnet測試」）：你做的是一個**掛開關、預設關**的新功能包。承諾：**開關關著時行為一個字不變**（波末閘門用 \`same_behavior compare --new <包>\` 比：新包帶來的 js、css、帶包名前綴的表、op 與管理者動作扣掉，其餘逐位元組一樣）；開著的行為由你寫的測試守。所以：
+- **你不跑** 整套、slow、全軌比對、別包的測試；最後只跑指定的那幾串與一次 \`compare --new\` 的小範圍。
+- **測試先行**：每一個行為先寫一條會紅的測試，再寫程式讓它綠，測試與程式同一個 commit；沒有測試的行為不准合。
+- **只准動設計文件第七節列的核心與殼的檔**（企劃者 2026-11-08 點頭設計第 2 版，PR 與回報寫這一句）；要動別的核心檔就停下來寫 stopped。殼的名單（\`tests/core/shell_tables.py\`）只加設計列的那幾筆，每一筆寫理由。
+- 規矩照手冊第十五節 G7～G11 與 CLAUDE.md「新位置」：\`scripts/new_feature.py <包>\` 生包；新欄位空的不寫鍵標 QUIET；設定在 \`tianxia/core/tuning/<包>.py\`；路由第一行 gate、關著回 404；不用登入的路由列 \`NO_LOGIN_ROUTES\` 並寫理由；新按鈕 \`web/<包>.js\` 用 \`registerClicks\`／\`registerForms\`／\`registerChanges\`（照框的字面寫）；樣式 \`web/<包>.css\`；管理者工具走包的 \`admin_tools\`；規則層不讀時鐘（時間由 routes 傳入）；包只 import 核心、共用層、自己；旁檔跟著 \`TIANXIA_DB\`、加進 \`scripts/sb/harness.py\` 的 \`_wipe_db\`。
+- 任何畫面、回話、拒絕訊息都不能讓人看出誰是假人（假人沒有帳號）：有帳號才有的狀態只給本人看，對外一律同一句。
+- 拿不準的判斷選最保守的（不多做、不改既有行為），寫進 decided；只有企劃者才能定的事才停。
+- 不碰的：\`develop\`、\`main\`、技能檔、CLAUDE.md、手冊、設計文件（學到的寫回報）。`
+
+const P1F = (b, base) => `${devHead(b)}
+${FEATURE_RULE}
+
+**這一批分兩段，每段一個新的子代理。你只做第一段：讀設計、量現況、寫計畫，做完推上去、回報、就停。**
+分支：\`git switch -c ${b.dev} ${base}\`（先明確 fetch 拿到這一筆；同名已存在就加 -work），推 \`git push origin HEAD:${b.dev}\`。暫存 ${SP}\\wave${WAVE}\\b${b.n}\\，埠 ${b.ports}。
+先讀設計 \`${DESIGN}\` 派工單點名的那幾節與第七節（要動的檔）；再讀 \`scripts/new_feature.py\` 生出來的範本長什麼樣（看一個最近的包，例 \`tianxia/features/notify/\`）。
+1. 寫計畫 ${b.plan}，**短，不超過 120 行**，只寫下一段要用的：包名與每個檔放什麼；要動的核心與殼每一處（檔、現在的行號、改什麼，只准第七節列的）；資料（旁檔的表與鍵、存檔欄位與 QUIET）；路由（路徑、方法、gate、要不要登入、節流）；畫面（殼的哪一格、act 名、\`Feature.status\` 給什麼、css 放哪）；新字的清單（位置）；**測試清單**（每個行為一條，寫測試名與它要證明什麼；含「關著 404」「假人看不出來」「舊存檔照讀」）；\`compare --new\` 的預期差異清單；退版欄位；順序與坑。不要寫逐行程式碼。
+2. 量現況：設計寫的行號對不上就照現行程式，寫進 decided。
+commit、推。回報 head、計畫重點、decided、stopped（只有企劃者能定的才寫）。`
+
+const P2F = (b, prev) => `${devHead(b)}
+${FEATURE_RULE}
+
+**這一批分兩段，第一段做完了，你做第二段：測試先行把它做出來。做完推上去、回報、就停。**
+先讀計畫 \`${b.plan}\`（在 \`origin/${b.dev}\` 上）與設計 \`${DESIGN}\` 相關那幾節。分支：明確 fetch ${b.dev}；\`git switch -c ${b.dev}-build origin/${b.dev}\`（同名已存在就加 -work），做完快轉推回 \`${b.dev}\`。暫存 ${SP}\\wave${WAVE}\\b${b.n}\\，埠 ${b.ports}。
+上一段的回報：
+${String(prev.report || '').slice(0, 3000)}
+
+一個 Task 一個 commit，照計畫分；第一個 commit 是 \`scripts/new_feature.py <包>\` 生出來的包（包還不存在時）。每個 Task：先寫會紅的測試、跑它看紅、再寫程式、跑它看綠。**各包 README 照範本填**（這一包的 README 是你的）；\`docs/guide\`、手冊不動，句子放回報的 docs。
+**交出去之前自己對一次**：開關關著時每條路由 404、\`/api/me\`、\`/api/main\`、登入頁輸出一個位元組不變（寫一條測試）；新欄位標 QUIET、旁檔在 \`_wipe_db\`；每一句新字旁有 \`待 joy 潤\`；對外的拒絕與回話同一句、沒有假人字樣（\`tests/bots/test_server_bots.py\` 的掃描要掃到你的路由）；殼的名單只加計畫列的；規則層沒有讀時鐘；包沒有 import 別包；README 的「另外要跑的」寫了。
+**只跑這些，各一次**（跑在最後的程式上）：\`python ${TOOLS}/undef_scan.py tianxia server.py\`；\`python -m pytest -q -n 4 tianxia/features/<包>/tests\`；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_shell_stays_thin.py tests/web/test_shell_web.py tests/bots/test_server_bots.py\`；\`python scripts/test_for.py --list\` 看它挑什麼、再 \`python scripts/test_for.py\` 跑一次（不帶 --slow）；\`python scripts/same_behavior.py compare --new <包> --tracks facade,drape,switchboard,talk --profiles season21\`（幾分鐘；要全部一樣，印出的清單抄進回報）。base 上就紅的在 base 上跑同一條確認，寫進回報、不用修。
+回報 head、commits、tests、decided、leftovers、docs、**new_strings**（每一句新字與位置）、**rollback**（退版逐欄）、**core_changes**（動到核心與殼的每一處）。`
+
 const devOpts = (b, key) => ({ label: `dev:b${b.n}-${key}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', model: b.model || 'opus' })  // 企劃者 11/08：開發派 Opus
 
 async function buildLine(line) {
   let base = line.base
   const done = []
   for (const b of line.batches) {
-    const p1 = await agent(P1(b, base), devOpts(b, 'plan'))
+    const p1 = await agent((FEATURE ? P1F : P1)(b, base), devOpts(b, 'plan'))
     if (!p1) return { line: line.name, done, stopped: `第 ${b.n} 批第一段沒有結果` }
     if (halted_word(p1.stopped)) return { line: line.name, done, stopped: `第 ${b.n} 批：${p1.stopped}`, partial: p1 }
-    const p2 = await agent(P2(b, p1), devOpts(b, 'move'))
+    const p2 = await agent((FEATURE ? P2F : P2)(b, p1), devOpts(b, 'move'))
     if (!p2) return { line: line.name, done, stopped: `第 ${b.n} 批第二段沒有結果`, partial: p1 }
     if (halted_word(p2.stopped)) return { line: line.name, done, stopped: `第 ${b.n} 批：${p2.stopped}`, partial: p2 }
-    done.push({ n: b.n, title: b.title, dev: b.dev, head: p2.head, base, tests: p2.tests, decided: [...(p1.decided || []), ...(p2.decided || [])], leftovers: [...(p1.leftovers || []), ...(p2.leftovers || [])], docs: [...(p1.docs || []), ...(p2.docs || [])], report: p2.report })
+    done.push({ n: b.n, title: b.title, dev: b.dev, head: p2.head, base, tests: p2.tests, decided: [...(p1.decided || []), ...(p2.decided || [])], leftovers: [...(p1.leftovers || []), ...(p2.leftovers || [])], docs: [...(p1.docs || []), ...(p2.docs || [])], new_strings: p2.new_strings || [], rollback: p2.rollback || '', core_changes: p2.core_changes || [], report: p2.report })
     base = p2.head
   }
   return { line: line.name, base: line.base, head: base, branch: line.batches[line.batches.length - 1].dev, done, stopped: '' }

@@ -712,6 +712,45 @@ WAVES["I"] = dict(
 )
 
 
+J_DESIGN = "docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md"
+J_PLAN = "docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md"
+J_NOTE = [
+    "- **帳號與客服這一波**：規格是設計 `" + J_DESIGN + "`（企劃者 11/08 點頭第 2 版），每一批的範圍與不做的照 `" + J_PLAN + "` 這一批那一節。這一批**不做**設計裡別批的事，碰到了寫 leftovers。",
+    "- **各包 README 自己填**（新包的 README 是你的）；`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 docs。畫面照 `C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\mock\\pick.txt` 企劃者挑的版本；檔案不存在就照對比圖裡 PM 建議的那一版做，畫法集中在一個函式好換。",
+]
+
+
+def jb(n, title, pkg, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-08-帳號與客服-第{n}批.md"
+    return batch(n, f"帳號與客服第 {n} 批：{title}", pkg, dev, plan, ports, body + J_NOTE, custom=True)
+
+
+def b201():
+    return jb(201, "帳號一：沒有密碼的帳號、登入頁的格、旁檔與備份", "identity", "dev/acct-1", "8348", [
+        "- 範圍照計畫第 201 批那一節：`identity` 包生出來（開關預設關）、`accounts.py` 認得沒有密碼的帳號與 `id:<n>` 鍵、`registerGateSlot` 與 `/api/identity/gate`、兩個旁檔與 `_wipe_db`、備份與還原旁檔、`shell_tables.py` 加設計列的路由。**這一批沒有第三方、沒有驗證碼、沒有綁定頁**：那是後面幾批。",
+    ])
+
+
+def b211():
+    return jb(211, "客服一：客服單、客服身分、管理頁分流、通知", "support", "dev/support-1", "8349", [
+        "- 範圍照計畫第 211 批那一節：`support` 包生出來（開關預設關）、客服單旁檔、玩家送單與看單、客服身分名單與 `/api/support/*`、管理頁分流、通知、契約測試（客服身分打全部管理者 API 被拒）、XSS 測試。**查帳號不做**（客服二）。跟帳號一平行，不要碰 `accounts.py`、`web/shell.js` 的登入頁（客服信箱那一行由帳號一的 `registerGateSlot` 掛，你先在包裡備好 `Feature` 的字，帳號一合進來後再接）。",
+    ])
+
+
+WEB_J = "**這一波加了兩個新包的畫面（開關預設關）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：`gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled` 打開，只開 head）：實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話；主控台 0 錯誤、網路沒有 4xx／5xx（刻意的 404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["J"] = dict(
+    round2=True, feature=True, design=J_DESIGN,
+    extra_lenses=[
+        dict(key="feature", text="**新功能掛開關、關著一個字不變、開著照設計、看不出假人**。第 201、211 批。親自驗：①開關關著：兩包的每條路由 404、`/api/me`、`/api/main`、登入頁輸出位元組一樣（對 base）；`compare --new identity,support` 四軌 season21 一樣（跑一次，幾分鐘）。②開著：照設計 4.1、4.2、6.1、6.2 逐條對程式與測試，少做的、做錯的、做多的都列；每個行為有沒有測試先紅後綠（看 commit 裡測試與程式同一筆、測試斷言真的會紅：挑三條把程式改壞跑看）。③假人：假人沒有帳號，所有對外回話、拒絕、狀態只給本人；用一個假人名號打新路由，回話要跟不存在的人同一句。④殼：`shell_tables.py` 多的每一筆都在設計第七節；`core_changes` 列的每一處都在第七節；沒有讀時鐘；包沒有 import 別包。⑤新字每一句旁有 `待 joy 潤`。⑥旁檔在 `_wipe_db`、備份與還原都接到。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="帳號", batches=[b201]), dict(name="客服", batches=[b211])],
+    merge_port=8350, fix_port=8351,
+    web_check=dict(ports="8352、8353", steps=WEB_J),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
@@ -750,6 +789,9 @@ def main():
     if w.get("round2"):
         args["round2"] = True
         args["master"] = R2
+    if w.get("feature"):
+        args["feature"] = True
+        args["design"] = w["design"]
     if a.finish:
         args["built"] = json.loads(Path(a.finish).read_text(encoding="utf-8"))
         args["merge_base"] = a.merge_base
