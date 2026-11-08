@@ -381,4 +381,8 @@ class SocializeScenario(CompanionsScenario):
 
 # 改一個字（selftest）：談滿了的鈕括號裡那一句（「已經談滿 N 輪，…」；搬之前在 engine.py 的 Game._talked_out_note，搬之後在包裡），week7 次數用完那一段抓到
 register_track("socialize", SocializeScenario, (("tianxia/engine.py", "tianxia/features/socialize/actions.py", "tianxia/features/socialize/view.py"),
-                                               ('輪，{when}"', '輪！{when}"')), "week7")  # 只改「輪，」那一小段：搬之前是 self._talk_cap()、搬之後是 talk_cap(ctx)，前面的字不同、這一段一樣
+                                               ('輪，{when}"', '輪！{when}"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))  # 只改「輪，」那一小段：搬之前是 self._talk_cap()、搬之後是 talk_cap(ctx)，前面的字不同、這一段一樣

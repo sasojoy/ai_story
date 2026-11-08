@@ -428,4 +428,8 @@ class SwitchboardScenario(Scenario):
 
 # 改一個字（selftest）：閉關的預設時數（MAIN_ACTIONS["seclude"]：第 68 批搬進閉關包，搬進包的檔、殼兩處找）
 register_track("switchboard", SwitchboardScenario, (("tianxia/features/seclusion/routes.py", "server.py"),
-                                                    ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7")
+                                                    ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

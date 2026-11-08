@@ -453,4 +453,8 @@ class LandTurnScenario(Scenario):
 # 第 2 項是之後的檔名，搬的人照實際的檔名改這一個字串）
 register_track("landturn", LandTurnScenario, (("tianxia/features/territory_acts/conquest_day.py",),
                                               ('VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷。"',
-                                               'VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷！"')), "week7")
+                                               'VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

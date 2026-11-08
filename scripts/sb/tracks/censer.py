@@ -268,4 +268,8 @@ class CenserScenario(TalkScenario):
 
 
 # 改一個字（selftest）：次數用完那一句（xinshen.ASKS_DONE，第 105 批留在核心）；week7 問酒人第四次、C 段重驗都抓得到
-register_track("censer", CenserScenario, (("tianxia/core/xinshen.py",), ("今天問得夠多了，明天再來吧。", "今天問得夠多了，明日再來吧。")), "week7")
+register_track("censer", CenserScenario, (("tianxia/core/xinshen.py",), ("今天問得夠多了，明天再來吧。", "今天問得夠多了，明日再來吧。")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

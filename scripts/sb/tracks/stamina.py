@@ -404,4 +404,8 @@ class StaminaScenario(WorldScenario):
 
 # 改一個字（selftest）：收伏那一句（ambush.LIFTED；第 39 批設伏搬進包時規則檔換位置，這裡要多寫包裡的檔）
 register_track("stamina", StaminaScenario, (("tianxia/features/stamina_plays/ambush_rules.py",),
-                                             ("你收起埋伏，從路邊撤了回來。", "你收起埋伏，從路邊撤了回來！")), "week7")
+                                             ("你收起埋伏，從路邊撤了回來。", "你收起埋伏，從路邊撤了回來！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

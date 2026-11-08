@@ -222,4 +222,8 @@ class PrimerScenario(StripScenario):
 
 # 改一個字（selftest）：玩法說明體力那一節最後一句（第 59 批搬進包，舊名的檔、搬進包的檔兩處找）
 register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py",),
-                                          ("點狀態列的體力條，也看得到這幾句。", "點狀態列的體力條，也看得到這幾句！")), "week7")
+                                          ("點狀態列的體力條，也看得到這幾句。", "點狀態列的體力條，也看得到這幾句！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

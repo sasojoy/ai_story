@@ -432,4 +432,8 @@ class ZhuanScenario(Scenario):
 
 # 改一個字（selftest）：蓋紀念印那一句（搬之前在 tianxia/zhuan_end.py、之後在 tianxia/features/zhuan/zhuan_end.py）
 register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py",),
-                                        ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21")
+                                        ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

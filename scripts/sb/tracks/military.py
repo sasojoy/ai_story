@@ -447,4 +447,8 @@ class MilitaryScenario(Scenario):
 # 改一個字（selftest）：糧車被劫那一句（搬之前在 engine.py 的 _convoy_arrives、之後在 tianxia/features/military/convoy_actions.py；第 2 項是之後的檔名，
 # 搬的人照實際的檔名改這一個字串）
 register_track("military", MilitaryScenario, (("tianxia/features/military/convoy_actions.py", "tianxia/engine.py"),
-                                              ('"糧車被劫走了，這一趟不算數。"', '"糧車被劫走了，這一趟不算數！"')), "week7")
+                                              ('"糧車被劫走了，這一趟不算數。"', '"糧車被劫走了，這一趟不算數！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

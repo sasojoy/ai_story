@@ -611,4 +611,8 @@ class MapScenario(Scenario):
 
 # 改一個字（selftest）：局勢圖層圖例那一句（mapview.LEGEND_LAYERS["situation"]；舊名的檔與搬進包的檔兩處找，哪一處有就改哪一處）
 register_track("map", MapScenario, (("tianxia/features/map/mapview.py",),
-                                    ("常出沒　大區越紅，大勢越凶", "常出沒　大區越紅，大勢越凶！")), "week7")
+                                    ("常出沒　大區越紅，大勢越凶", "常出沒　大區越紅，大勢越凶！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

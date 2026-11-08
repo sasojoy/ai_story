@@ -9,6 +9,7 @@ import random
 import time
 from pathlib import Path
 
+from sb import harness
 from sb.harness import (
     ADMIN, BUF, CLOCK, CLOCK0, MODEL, STEP, STEP_SECONDS, _fake_monotonic, _setup_child, db_text, emit, register_bots, register_track,
 )
@@ -89,6 +90,13 @@ class Scenario:
         return r.status_code, data
 
     def call(self, who: str, method: str, url: str, body: dict | None = None):
+        harness.IN_CALL[0] += 1  # 第 107 批：切點（前半寫完、快照）要不在請求中間，run 斷言是 0
+        try:
+            return self._call(who, method, url, body)
+        finally:
+            harness.IN_CALL[0] -= 1
+
+    def _call(self, who: str, method: str, url: str, body: dict | None = None):
         status, data = self.request(who, method, url, body)
         if not self.auto_prep or self.prep_of(data) is None or {"season:preparing", "season:resting"} & set(self.ids(data)):
             return status, data  # 籌備中、休季也寫著 main.prep，但選單不是那張卡（挑配比在籌備中只回一句）：開季之後的第一下才按
@@ -583,7 +591,16 @@ class Scenario:
         finally:
             cfg.season_one = before
 
-    def run(self, part: str, out: Path) -> None:
+    def cut(self, state_file: Path) -> None:
+        """切點：前半跑完那一刻。不在請求中間（harness.IN_CALL 是 0），寫下步數、密碼、登入過的人（後半接著用）。"""
+        if harness.IN_CALL[0]:
+            raise RuntimeError(f"切點在請求中間（深度 {harness.IN_CALL[0]}）：前半＋後半接不起來")
+        state_file.write_text(json.dumps({"step": STEP[0], "passwords": self.passwords, "clients": list(self.clients)},
+                                         ensure_ascii=False), encoding="utf-8")
+
+    def run(self, part: str, out: Path, snapshot: Path | None = None, snapshot_out: Path | None = None) -> None:
+        """snapshot（第 107 批，只配 part == "all"）：PHASES_FIRST 跑完那一刻把資料庫抄到 snapshot 的名字、寫它的 .state.json、
+        當時的輸出寫進 snapshot_out（＝ --part first 會寫的那一份），再接著跑完整段；compare --crossover 的 head 後半從快照接。"""
         state_file = Path(str(self.db) + ".state.json")
         if part == "second":
             saved = json.loads(state_file.read_text(encoding="utf-8"))
@@ -594,12 +611,16 @@ class Scenario:
             phases = self.PHASES_FIRST + (self.PHASES_SECOND if part == "all" else [])
         if part != "second":
             emit(f"設定 {self.profile}", None)  # 後半不寫：前半＋後半要跟整段一個位元組都不差
-        for name in phases:
+        cut_at = len(self.PHASES_FIRST) - 1 if snapshot is not None and part == "all" else None
+        for i, name in enumerate(phases):
             getattr(self, name)()
             self.phase_end(name)
+            if i == cut_at:
+                harness.snapshot_db(self.db, snapshot)
+                self.cut(Path(str(snapshot) + ".state.json"))
+                snapshot_out.write_text(BUF.getvalue(), encoding="utf-8", newline="\n")
         if part == "first":
-            state_file.write_text(json.dumps({"step": STEP[0], "passwords": self.passwords, "clients": list(self.clients)},
-                                             ensure_ascii=False), encoding="utf-8")
+            self.cut(state_file)
         else:
             BUF.write("## 資料庫\n" + db_text(self.db))
         out.write_text(BUF.getvalue(), encoding="utf-8", newline="\n")
@@ -1193,9 +1214,17 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # ═══════════════════════════ 登記：第 1 批的一軌（出陣）、第 2 批的一軌（約戰），各自一個資料庫、各自切一半 ═══════════════════════════
 
 # 改一個字（selftest）：出陣回報打輸那一句
-register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7")
+register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
 # 改一個字（selftest）：同去按第二次那一句
 register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
-                                      ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7")
+                                      ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
 register_bots("sortie", BOT_PROFILES, bots_run)  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run)  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

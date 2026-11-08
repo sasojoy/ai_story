@@ -564,4 +564,8 @@ class EventScenario(ExploreScenario):
 
 # 改一個字（selftest）：事件選項按下去那一行（_choose；搬之前在 engine.py、之後在 tianxia/core/event_check.py）
 register_track("events", EventScenario, (("tianxia/core/event_check.py", "tianxia/engine.py"),
-                                          ('msgs = [f"▸ {choice.text}"]', 'msgs = [f"▸ {choice.text}！"]')), "week7")
+                                          ('msgs = [f"▸ {choice.text}"]', 'msgs = [f"▸ {choice.text}！"]')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

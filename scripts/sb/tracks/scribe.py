@@ -520,4 +520,8 @@ class ScribeScenario(BattleScenario):
 
 # 改一個字（selftest）：開篇那一拍（戰記本體，第 52 批搬進包；舊名的檔、搬進包的檔兩處找）
 register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py",),
-                                          ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7")
+                                          ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
