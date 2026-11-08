@@ -1003,7 +1003,7 @@ def test_an_anonymous_player_is_named_in_the_promotion_summary(on):
 def test_the_settings_say_where_walking_anonymously_applies():
     """設定頁的匿名開關寫清楚只在地方傳聞裡有用（網頁沒有測試框架，讀 app.js）。"""
     js = webharness.app_source()
-    assert "匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）" in js
+    assert "<b>匿名行走</b><small>只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫</small>" in js  # 戊批：名字一行、說明一小行
     assert "江湖傳聞中不顯示名號" not in js
 
 

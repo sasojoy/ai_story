@@ -1154,6 +1154,21 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .push-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin: 2px 0 8px; }
 .push-kinds .toggle { margin: 0; padding: 8px 10px; font-size: 14px; }
 .push-kinds .toggle input { flex: none; }
+/* 勾選框統一畫成右邊一個開關（UI 手感戊批，Joy 2026-11-08 看畫稿說可以）：開著朱紅底寫「開」，關著紙色底寫「關」；名字一行、說明一小行 */
+.toggle input[type="checkbox"] { -webkit-appearance: none; appearance: none; order: 2; flex: none; position: relative; width: 54px; height: 30px; margin: 0 0 0 auto; border-radius: 15px; cursor: pointer;
+  background: #e4d9c5; box-shadow: inset 0 1px 3px rgba(60, 40, 20, 0.25), inset 0 0 0 1px #cdbfa5; transition: background 0.18s; }
+.toggle input[type="checkbox"]::before { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; transition: left 0.18s;
+  background: radial-gradient(circle at 40% 35%, #fffdf8, #eadfca); box-shadow: 0 1px 3px rgba(40, 25, 10, 0.35), inset 0 0 0 1px #c9b994; }
+.toggle input[type="checkbox"]::after { content: "關"; position: absolute; right: 8px; top: 0; font: 700 12px/30px var(--kai); color: #9a8b72; }
+.toggle input[type="checkbox"]:checked { background: linear-gradient(#b83a30, #962b23); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3); }
+.toggle input[type="checkbox"]:checked::before { left: 27px; }
+.toggle input[type="checkbox"]:checked::after { content: "開"; right: auto; left: 8px; color: #f6e7cf; }
+.toggle input[type="checkbox"]:disabled { opacity: 0.45; cursor: default; }
+.toggle > span { flex: 1; min-width: 0; }
+.toggle > span > b { display: block; font: 600 15px var(--serif); }
+.toggle > span > small { display: block; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.push-kinds .toggle input[type="checkbox"] { width: 46px; height: 26px; } .push-kinds .toggle input[type="checkbox"]::before { width: 20px; height: 20px; }
+.push-kinds .toggle input[type="checkbox"]:checked::before { left: 23px; } .push-kinds .toggle input[type="checkbox"]::after { line-height: 26px; }
 /* 管理頁（/admin，admin.js；Joy 2026-11-01 管理者工具獨立一個網址）：頂上一列、「現在」卡、照用途分的幾塊摺疊、底下釘著的結果條 */
 .ad-shell {
   max-width: 640px; margin: 0 auto; min-height: 100vh;
