@@ -9,6 +9,7 @@ import io
 import json
 import os
 import random
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -507,6 +508,16 @@ def _wipe_db(db: Path) -> None:
 def emit(tag: str, value) -> None:
     BUF.write(f"## {STEP[0]:04d} {tag}\n")
     BUF.write(json.dumps(value, ensure_ascii=False) + "\n")
+
+
+# 公開頁（/zhuan/<代碼>、/zhanji/<代碼>）頁上的程式：第 213 批（CSP）把 inline 的 <script>…</script> 原樣搬成 web/zhuan_page.js、
+# web/tale_page.js，頁裡改寫 <script src>。印整頁的軌（scribe、zhuan、zhuanframe、portrait）兩邊都換成同一個記號，其餘 HTML 照比；
+# 搬出去的內容跟原本 inline 的一字不差（L 波合併時核對過），script 本身由那兩包的網頁測試與 tests/web/test_csp_web.py 守。
+PAGE_SCRIPT = re.compile(r'<script src="/static/(?:zhuan|tale)_page\.js(?:\?v=[0-9a-f]+)?"></script>|<script>.*?</script>', re.S)
+
+
+def page_script(html: str) -> str:
+    return PAGE_SCRIPT.sub("<script>[page-script]</script>", html)
 
 
 # compare --new：head 的子行程才有值（same_behavior 的 run、bots 叫 set_new）；base 的子行程這裡全是空的，走原路、輸出一個位元組不變。
