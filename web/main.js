@@ -1009,10 +1009,11 @@
       const inner = battleInner(m);
       const clamp = !S.sceneRvOpen && !/<button|<form/.test(inner);
       const social = m.party || (m.calls && m.calls.length) ? socialHtml(m) : "";
+      // 行動列排在「要事」上面（UI 手感甲批 1-2；Joy 2026-10-26「四顆行動鈕一定在第一屏」）
       const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
       const extras = S.hereExtras || [];
       const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
-      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${bp ? bpDropMoves(menu) : menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${bp ? bpDropMoves(menu) : menu}${dutyCardHtml(m, parts)}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
     return `${hints}${resultCard}${bp}${peek}${letter}${now}${scene}${links}${guideUp}${free}${bp ? bpDropMoves(menu) : menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;

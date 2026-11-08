@@ -202,6 +202,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   font-weight: 700; cursor: pointer;
 }
 .bar.stam > .pill-btn:disabled { opacity: 0.45; cursor: default; }
+.bar.stam > .pill-btn::after { content: ""; position: absolute; inset: -14px -8px; } /* 點得到的範圍放大到手指大小，外觀不變（UI 手感甲批 全站-2） */
 /* 一天的上限（企劃者 2026-10-12）：「丹28」後面小一號寫今天還能服幾顆（今2），服滿了寫「明日」 */
 .bar.stam > .pill-btn small { font-size: 9px; font-weight: 600; margin-left: 2px; }
 /* 點體力條攤開體力怎麼回（explain-1）：整條是按鈕（丹的鈕自己另外一顆，點它照樣是服丹／補滿）；說明排在數字那一列底下，小字一行一句 */
@@ -282,6 +283,9 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
   transition: transform 0.08s ease, background 0.15s ease;
 }
 .btn:active:not(:disabled) { transform: scale(0.98); }
+/* 按下去要看得到（UI 手感甲批 全站-1）：整站關了手機的點擊高亮，以前只有幾種鈕有按下的樣子；能點的東西按住時一律淡一點 */
+button:not(:disabled):active, a[href]:active, summary:active, [data-act]:not(button):not(.sheet-bg):active { opacity: 0.68; transition: opacity 0s; }
+button, a[href], summary, [data-act] { transition: opacity 0.12s; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn.ghost { background: transparent; }
 .btn.small { min-height: 38px; padding: 6px 12px; font-size: 14px; width: auto; }
@@ -880,7 +884,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .result-rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result-rank li i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .result-rank p { margin: 4px 0 0; color: var(--ink-2); }
-.linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
+.linkish { position: relative; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
+.linkish::after { content: ""; position: absolute; inset: -6px -8px; }
 
 /* ── 修練 ── */
 /* 卷軸卡（企劃者 2026-10-06「先用捲軸卡」）：一門一張卡，左邊一條品質色、左上一方品質印。品質色是 --q（q1～q4 四階） */
@@ -1140,7 +1145,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 .sheet.still, .sheet-bg.still { animation: none; } /* 玩家卡跟著輪詢換一張（FB-117）：不再滑上來一次 */
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
-.toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.toggle input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); } /* 字長的那一格不再把勾選框擠成 13 寬 */
 .push-help { margin: -4px 0 12px; }
 .push-err { margin: 4px 0 8px; padding: 8px 12px; border-left: 3px solid var(--bad); color: var(--bad); background: var(--card); border-radius: var(--radius); font-size: 14px; line-height: 1.6; }
 .push-test-note { margin: 4px 0 8px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
@@ -1643,7 +1648,9 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .prep-split i { position: absolute; top: 0; left: 0; height: 3px; width: var(--w); border-radius: 2px; background: var(--accent); }
 .prep-card .growth-edit { margin-top: 10px; }
 .prep-note { margin: 10px 0 0; font-size: 12px; color: var(--ink-2); text-align: center; }
-.prep-go { display: block; width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; }
+.prep-go { display: block; width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; position: sticky; bottom: 0; z-index: 1;
+  box-shadow: 0 -10px 16px var(--card), 0 2px 8px rgba(0, 0, 0, 0.2); }
+.prep-go:disabled { opacity: 1; background: var(--line); color: var(--ink-2); border-color: var(--line); }
 .prep-keep { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line);
   border-radius: 10px; background: var(--paper); }
 .prep-keep b { display: block; font-size: 16px; color: var(--ink); }
@@ -1675,7 +1682,11 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .act-ink .ink-img + .ink-icon { display: none; }
 /* 場景卡：圖、「剛剛」疊在圖底下、地點描寫兩行（點了攤開） */
 .card.scene.rv { padding-bottom: 10px; }
-.card.scene.rv.has-art > .scene-art { margin-bottom: 0; height: clamp(150px, 28vh, 240px); }
+.card.scene.rv.has-art > .scene-art { margin-bottom: 0; height: clamp(104px, 15vh, 150px); } /* UI 手感甲批 1-2：圖收成一條，第一屏留給行動 */
+@media (max-height: 700px) { /* 矮的手機（375×667）：圖再矮一點、地點描寫只露一行 */
+  .card.scene.rv.has-art > .scene-art { height: 84px; }
+  .rv-scene.clamp { -webkit-line-clamp: 1; line-clamp: 1; }
+}
 .card.scene.rv .rv-now { position: relative; margin: -26px 0 8px; z-index: 1; }
 .card.scene.rv:not(.has-art) .rv-now { margin-top: 0; }
 .card.scene.rv .rv-now > .now { margin: 0; background: color-mix(in srgb, var(--card) 94%, transparent); border: 1px solid var(--line); border-radius: 10px;
