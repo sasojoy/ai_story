@@ -156,7 +156,7 @@
     const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤
     const rows = (q.tickets || []).map((t) => `<button class="sup-row-tk${S.supportDeskPick === t.id ? " sel" : ""}" data-act="support-desk-pick" data-id="${Number(t.id)}">
         <span class="sup-n">#${Number(t.id)}</span><span class="sup-s">${supportStatus(t.status)}<span class="sup-cat">${supportCat(t)}</span> ${esc(t.body)}</span>
-        <span class="sup-p">${esc(t.character)}（帳號 ${esc(t.login)}）${t.admin_flag ? "・請管理者處理" : ""}</span></button>`).join("") || `<p class="muted">沒有沒結的單。</p>`; // 待 joy 潤
+        <span class="sup-p">${esc(t.character)}${t.login ? `（帳號 ${esc(t.login)}）` : ""}${t.admin_flag ? "・請管理者處理" : ""}</span></button>`).join("") || `<p class="muted">沒有沒結的單。</p>`; // 待 joy 潤
     const list = `<div>${tiles}<section class="card"><div class="sup-title">客服單</div>${rows}</section>${supportLookupHtml()}</div>`; // 待 joy 潤
     const one = S.supportDeskTicket ? `<div>${supportDeskTicketHtml(S.supportDeskTicket)}</div>` : "";
     return `${head}<div class="sup-split${one ? " sup-has-one" : ""}">${list}${one}</div>`;
