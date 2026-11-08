@@ -420,7 +420,7 @@ def main() -> int:
         extra = compare_extra(decision, a.jobs, a.new)
         cached = ["--cache", str(repo / ".local" / "wave_gate" / "cache")] if a.cache else []  # 只給 compare；explore-compare 不快取
         running["compare"] = start([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *extra, *cached], root, env, out / "compare.txt")
-        if not a.tracks and (decision["mode"] == "full" or "explore" in (decision["packages"] or ())):
+        if not a.tracks:  # compare 有跑就跟著跑，不照包挑
             running["explore"] = start([py, script, "explore-compare", *both, "--tmp", str(work / "tmp" / "exp")], root, env, out / "explore.txt")
     elif decision["mode"] == "none":
         print("比對：沒跑，改到的都不必比", flush=True)
