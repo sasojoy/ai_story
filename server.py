@@ -324,6 +324,10 @@ def _reload(game: Game) -> None:
 # 同一個角色開兩個分頁也各走各的、不會互相蓋掉——GAMES 裡一個角色只有一份 Game，走法只記在那份物件上就做不到。
 # FastAPI 的同步端點各自在複製出來的 context 裡跑，設了只在這次請求裡有效；不經過 _game 的（登入、/api/me）就是步行。
 MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", default="walk")
+# 這次請求的登入 token（帳號與客服第 207 批）：main_view 的 admin 格拿不到 request，照它問 identity_base.admin_session_ok。
+# _server_timing 每個請求一開始設（端點、執行緒池裡的都看得到），_start_session 開了新 token 再設一次（登入回應的 _entry 不另經 _game）。
+# identity 關著時 admin_session_ok 一律回真、不讀它。
+SESSION_TOKEN: contextvars.ContextVar[str | None] = contextvars.ContextVar("session_token", default=None)
 
 
 # ── 鎖內模型呼叫的全服斷路器（PM 2026-10-05）──
@@ -1428,7 +1432,8 @@ def _main_view_body(game: Game) -> dict:
             "chronicle": md(game.chronicle_text()),
         },
         "admin": lambda ctx, frame: {
-            "admin": game.is_admin(),
+            # 第 207 批：identity 開著時名單上的人還要這次是密碼登入、staff_hours 內驗過（關著 admin_session_ok 一律回真，原樣）
+            "admin": game.is_admin() and identity_base.admin_session_ok(CONTENT, SESSION_TOKEN.get(), time.time),
             "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         },
         "horse_art": lambda ctx, frame: {"horse_art": horse_art()},  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
@@ -1600,7 +1605,9 @@ def register(login_name: str, password: str, again: str) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
     try:
-        account_store().register(login_name, password)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
+        # 第 207 批：identity 開著時名單上的帳號名（identity_base.listed）密碼至少 12 字；關著 staff 一律假
+        staff = identity_base.on(CONTENT) and identity_base.listed(CONTENT, login=login_name)
+        account_store().register(login_name, password, staff=staff)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
     return normalize(login_name)
@@ -1635,7 +1642,12 @@ def change_password(account_key: str, old: str, new: str, again: str, keep: str 
     if (new or "") != (again or ""):
         return PASSWORDS_DIFFER
     try:
-        account_store().change_password(account_key, old, new, keep)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        store = account_store()
+        staff = False  # 第 207 批：identity 開著時名單上的帳號（名號、帳號名、客服名單）新密碼至少 12 字；關著一律假、不多查
+        if identity_base.on(CONTENT):
+            account = store.get(account_key)
+            staff = account is not None and identity_base.listed(CONTENT, login=account.login, character=account.character, account_id=account.id)
+        store.change_password(account_key, old, new, keep, staff=staff)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -1649,6 +1661,7 @@ app = FastAPI(title="天下大勢", docs_url=None, redoc_url=None, openapi_url=N
 @app.middleware("http")
 async def _server_timing(request: Request, call_next):
     """/api/ 的回應帶 Server-Timing（見 TIMING）。推送的長連線（/api/events）不包：那是串流，量總時間沒有意義。"""
+    SESSION_TOKEN.set(request.cookies.get(COOKIE))  # 第 207 批：main_view 的 admin 格照它問（見 SESSION_TOKEN）
     path = request.url.path
     if not path.startswith("/api/") or path == "/api/events":
         return await call_next(request)
@@ -1768,6 +1781,7 @@ def _start_session(request: Request, response: Response, account_key: str, metho
         account = account_store().get(account_key)
         account_key = account.key if account is not None else account_key
     token = SESSIONS.create(account_key)
+    SESSION_TOKEN.set(token)  # 第 207 批：登入回應的 _entry 照這個新 token 算 admin 格（見 SESSION_TOKEN）
     _warm_model()
     response.set_cookie(
         COOKIE, token, httponly=True, samesite="lax", max_age=SESSION_SECONDS, secure=cookie_secure(request),
@@ -1980,7 +1994,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         tool.gate()  # 那一包關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
     if tool is not None:
-        if not game.is_admin():
+        # 第 207 批：identity 開著時還要這次是密碼登入、staff_hours 內驗過；不夠的跟不是管理者同一句（關著 admin_session_ok 一律回真）
+        if not game.is_admin() or not identity_base.admin_session_ok(CONTENT, request.cookies.get(COOKIE), time.time):
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)  # 商城：帳跟季無關，暫停中也做得了
     elif op in OUTLOCK_OPS:  # 鎖外的三段式（各包 routes.py 的 outlock 掛鉤）：A、C 段自己拿鎖，B 段叫模型不握鎖，所以不包在 act 裡

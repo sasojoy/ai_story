@@ -14,7 +14,8 @@
 ## 留在別處的
 
 - `Game` 留 `is_admin`、`_admin_refusal`、`_admin_target`、`_save_target`（管理者外殼，手冊第十五節波次 B、C 第 14 條）；`paused_minutes` 留（`main` 表 `admin` 那一格每個人都讀）。
-- 殼留 `/`、`main` 表的 `admin` 格、`api_do` 的先後（管理者工具 gate → 登入 → `is_admin` → `act`）、`PLAYER_ADMIN_ACTIONS`。
+- 殼留 `/`、`main` 表的 `admin` 格、`api_do` 的先後（管理者工具 gate → 登入 → `is_admin` → `identity_base.admin_session_ok` → `act`）、`PLAYER_ADMIN_ACTIONS`。`admin` 格與 `api_do` 在 `is_admin` 之後多問 `admin_session_ok`（帳號與客服第 207 批；identity 關著一律回真）。
+- `routes.admin_ok(shell, request, game)`（第 207 批）：`is_admin` 加 `identity_base.admin_session_ok`（identity 開著時名單上的人要這次是密碼登入、`staff_hours` 內驗過）；四條 `/api/admin*` 都走它，不夠的回 403／「（只有管理者能重設密碼。）」跟不是管理者一樣。`reset_password` 多一個 `request`（直接叫的不帶，只看名號）；identity 開著時目標是名單上的帳號（`identity_base.listed`），臨時密碼也要 12 字。另外要跑：`tianxia/features/identity/tests/test_identity_admin_session.py`。
 - 玩家個人劇情那張選單 `admin_player_choices` 在軍情包（`features/military/admin_actions.py` 的 `player_choices`）。
 - `PAUSED_REFUSAL` 在 `core/services.py`（`Game._admin_refusal` 也用）。
 
