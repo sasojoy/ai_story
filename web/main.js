@@ -297,6 +297,17 @@
     // 四格（減法季批 1，整合設計 6.3）：探索、出陣、交友、移動。尋敵、操練那一格只在新手引導（序章、初入江湖）時還在——引導的話叫你按它
     // （content/tutorial.json）；平常收進「此地還能做」（不加進 used），批 2 的探索一顆接手之前照樣按得到
     const guiding = !!(pro() || onb());
+    // 交友先挑人（Joy 2026-11-08 UI 手感乙批 6-1 選「先跳出名單挑人」）：此地有兩個人以上（大勢人物＋江湖人）時，交友那一格是展開鈕，
+    // 點了在底下列出此地的人：人物說得上話的直接開口（fig-talk，照伺服器的 talk.via），說不上的打開人物卡寫原因；江湖人打開他的玩家卡。
+    // 只有一個人時照舊一按就交友。交友這一下本來會走別的（福緣的同伴、一次性事件、結識事件：沒有哪一位的 talk.via 是交友本身）時，
+    // 名單最上面多一顆照舊的「交友」
+    const figsHere = (m.figures_here || []), peersHere = (m.here || []);
+    const socialPick = !guiding && figsHere.length + peersHere.length >= 2 && !!(byId["act:socialize"] || byId["act:call"]);
+    const socialAsIs = !figsHere.some((f) => f.talk.via && /^act:(socialize|call)$/.test(f.talk.via[0]));
+    const socialCard = !(socialPick && S.wheelSel === "social") ? "" : `<div class="card act-move"><div class="options">${socialAsIs
+      ? `<button class="btn go" data-act="choose" data-id="${esc((byId["act:socialize"] || byId["act:call"]).id)}"><span class="k">→</span><span>四處結交，看會遇上誰</span></button>` : ""}${figsHere.map((f) => `
+          <button class="btn go" data-act="${f.talk.via ? "fig-talk" : "fig-open"}" data-id="${esc(f.id)}"><span class="k">→</span><span>${esc(f.name)}<small class="opt-note">${esc(f.intro && f.intro.role ? f.intro.role : f.side || "")}${f.talk.via ? "" : `・${esc(f.talk.why || "")}`}</small></span></button>`).join("")}${peersHere.map((p) => `
+          <button class="btn go" data-act="peer" data-name="${esc(p.name)}"><span class="k">→</span><span>${esc(p.name)}<small class="opt-note">江湖人・${esc(p.side || "")}</small></span></button>`).join("")}</div></div>`; // 待 joy 潤：四處結交，看會遇上誰
     const cells = ACT_CELLS.map((d0) => {
       const d = d0.key === "train" && m.sortie ? { ...d0, ...SORTIE_CELL } : d0;
       if (d.key === "practice" && !guiding) return "";
@@ -351,12 +362,14 @@
       // （卡底那顆鈕寫為什麼）。截糧的運糧隊經過（照舊直接打）、散人與不在爭奪之列（照舊點了說整句）不算
       const duelCell = d.key === "train" && sortieCardOn(m) && !SORTIE_LONG_SUB[detail];
       const duelOpen = duelCell && S.wheelSel === SX_OPEN;
+      const pickOpen = d.key === "social" && socialPick && S.wheelSel === "social";
       const attrs = duelCell ? `data-act="sortie-open" aria-expanded="${duelOpen}"`
+        : d.key === "social" && socialPick && o.enabled ? `data-act="wheel" data-key="social" aria-expanded="${pickOpen}"`
         : wheel ? `data-act="wheel" data-key="explore" aria-expanded="${exploreOpen}"`
         : drillFull ? `data-act="drill-full" aria-expanded="${S.wheelSel === "move"}"` // 格子自己的 data-key 是 practice，不能再寫一個
         : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"`
         : why ? `data-act="opt-why" data-why="${esc(why)}" aria-disabled="true"` : "disabled";
-      return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled || duelOpen ? "" : " off") + ((wheel && exploreOpen) || duelOpen ? " on" : ""), note);
+      return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled || duelOpen ? "" : " off") + ((wheel && exploreOpen) || duelOpen || pickOpen ? " on" : ""), note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
@@ -394,7 +407,7 @@
     // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
     const peers = callPeers(m);
     S.hereExtras = extras;
-    if (typeof revampOn === "function" && revampOn(m) && !hotHere && !guiding) return `${sealRow}${summonsRow}${drawn0(cells)}${moveCard}${exploreCard}${sortiePanelHtml(m)}${sortieAnswering(m) ? "" : sortieDuelsHtml(m)}`; // 介面重整：摺疊換成此地可為那一排
+    if (typeof revampOn === "function" && revampOn(m) && !hotHere && !guiding) return `${sealRow}${summonsRow}${drawn0(cells)}${moveCard}${socialCard}${exploreCard}${sortiePanelHtml(m)}${sortieAnswering(m) ? "" : sortieDuelsHtml(m)}`; // 介面重整：摺疊換成此地可為那一排
     const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id] ? `
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
@@ -404,7 +417,7 @@
     const duelPanel = sortiePanelHtml(m);
     const duelList = sortieAnswering(m) ? "" : sortieDuelsHtml(m);
     // 以前行動列底下還有每一格的說明三行與「玩法說明 ›」（explain-1、2）：減法季批 1 拿掉了（整合設計 6.3；說明在本週卡的「為什麼」與設定裡）
-    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${moveCard}${exploreCard}${duelPanel}${duelList}${here}`;
+    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${moveCard}${socialCard}${exploreCard}${duelPanel}${duelList}${here}`;
   }
 
 
