@@ -3,7 +3,7 @@
 {"detail":"Not Found"}，先於登入、先於參數解析（沒登入、壞 JSON、單號不是數字都一樣，跟沒有這條路同一個回應）。之後才自己解 JSON
 （壞的或不是物件 422）、單號在 gate 之後轉數字（不是數字 404「找不到這張單。」），再把同步的本體丟進執行緒池（sqlite 與 shell._account
 都在那裡，不卡事件迴圈；server.api_events 的前例）。本體第一步 _gate 認登入（沒登入 401）。客服那幾條再過 _staff：不是名單上的帳號一律 404
-（跟沒有這條路同一句，不透露有客服頁）。不走 AdminTool、不放寬 /api/admin、is_admin 不動。
+（跟沒有這條路同一句，不透露有客服頁）。例外是 GET /api/support/mailbox（第 214 批）：gate 之後直接回設定裡的信箱與那一行字，不認登入、不開旁檔。不走 AdminTool、不放寬 /api/admin、is_admin 不動。
 
 殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；現在時間照 shell.time.time()（路由是殼，規則層 rules.py 不讀時鐘）。
 玩家寫的字原樣存、原樣回（畫面只過 esc，不經 markdown）；單上的帳號、名號、時間、版本由伺服器填，不收客戶端的。
@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from tianxia.database import default_path, open_database
 
-from . import accounts_view, lookup, rules, staff, store
+from . import FEATURE, accounts_view, lookup, rules, staff, store
 from .store import Refused
 
 # 推播的內文（標題照殼的 NOTICE_TITLE）；notify 包的「客服」種類關掉就不送
@@ -49,7 +49,7 @@ async def _json(request: Request) -> dict:
 
 
 def _gate(shell, request: Request) -> str:
-    return shell._account(request)  # 沒登入 401（開關在 _gate_off 已經看過；不用登入的路由清單不加這一包）
+    return shell._account(request)  # 沒登入 401（開關在 _gate_off 已經看過；不用登入的只有 /api/support/mailbox，它不叫這一支）
 
 
 def _me(shell, key: str) -> accounts_view.Who:
@@ -327,5 +327,12 @@ def router(shell) -> APIRouter:
         _gate_off(shell)
         body = await _json(request)
         return await run_in_threadpool(_lookup, shell, request, body)
+
+    @r.get("/api/support/mailbox")
+    async def api_support_mailbox():
+        """登入頁的客服信箱那一行（第 214 批；web/support.js 畫）：不用登入、不看 cookie、不開旁檔，回應不因人而異（只回設定裡公開的信箱）。"""
+        _gate_off(shell)
+        config = shell.CONTENT.config
+        return {"mailbox": config.support.mailbox, "line": FEATURE.gate_slot(config)}
 
     return r
