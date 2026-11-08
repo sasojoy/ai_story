@@ -737,11 +737,11 @@ def b211():
     ])
 
 
-WEB_J = "**這一波加了兩個新包的畫面（開關預設關）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：`gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled` 打開，只開 head）：實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話；主控台 0 錯誤、網路沒有 4xx／5xx（刻意的 404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+WEB_J = "**這一波加了兩個新包的畫面（開關預設關）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：`gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4`（fast）。要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled` 打開，只開 head；identity 還要在 head 複本的 `.local/identity.json` 放一把測試金鑰，格式看 `tianxia/core/identity_base.py` 的 `KEY_FILE`，沒有金鑰等於關著；客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給）：實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話；主控台 0 錯誤、網路沒有 4xx／5xx（刻意的 404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
 
 
 WAVES["J"] = dict(
-    round2=True, feature=True, design=J_DESIGN,
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support",
     extra_lenses=[
         dict(key="feature", text="**新功能掛開關、關著一個字不變、開著照設計、看不出假人**。第 201、211 批。親自驗：①開關關著：兩包的每條路由 404、`/api/me`、`/api/main`、登入頁輸出位元組一樣（對 base）；`compare --new identity,support` 四軌 season21 一樣（跑一次，幾分鐘）。②開著：照設計 4.1、4.2、6.1、6.2 逐條對程式與測試，少做的、做錯的、做多的都列；每個行為有沒有測試先紅後綠（看 commit 裡測試與程式同一筆、測試斷言真的會紅：挑三條把程式改壞跑看）。③假人：假人沒有帳號，所有對外回話、拒絕、狀態只給本人；用一個假人名號打新路由，回話要跟不存在的人同一句。④殼：`shell_tables.py` 多的每一筆都在設計第七節；`core_changes` 列的每一處都在第七節；沒有讀時鐘；包沒有 import 別包。⑤新字每一句旁有 `待 joy 潤`。⑥旁檔在 `_wipe_db`、備份與還原都接到。**全程只讀 repo，實驗在暫存複本做。**"),
     ],
@@ -792,6 +792,8 @@ def main():
     if w.get("feature"):
         args["feature"] = True
         args["design"] = w["design"]
+    if w.get("new_packages"):
+        args["new_packages"] = w["new_packages"]
     if a.finish:
         args["built"] = json.loads(Path(a.finish).read_text(encoding="utf-8"))
         args["merge_base"] = a.merge_base

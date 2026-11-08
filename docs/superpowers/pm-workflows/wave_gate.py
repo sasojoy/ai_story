@@ -106,6 +106,7 @@ def main() -> int:
     ap.add_argument("--head", required=True)
     ap.add_argument("--name", default="")
     ap.add_argument("--tracks", default="", help="只比這幾軌（修正之後重驗用）")
+    ap.add_argument("--new", default="", help="新功能波：新包的名字（逗號分開），compare 扣掉它們帶來的 js、css、表、op（企劃者 11/08「新東西列出來，其餘一樣」）")
     ap.add_argument("--no-suite", action="store_true")
     ap.add_argument("--no-compare", action="store_true")
     ap.add_argument("--jobs", default="")
@@ -146,7 +147,7 @@ def main() -> int:
     if not a.no_compare:
         unpack(repo, base, work / "base")
         both = ["--base", str(work / "base"), "--head", str(root)]
-        extra = (["--tracks", a.tracks] if a.tracks else []) + (["--jobs", a.jobs] if a.jobs else [])
+        extra = (["--tracks", a.tracks] if a.tracks else []) + (["--jobs", a.jobs] if a.jobs else []) + (["--new", a.new] if a.new else [])
         cached = ["--cache", str(repo / ".local" / "wave_gate" / "cache")] if a.cache else []  # 只給 compare；explore-compare 不快取
         running["compare"] = start([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *extra, *cached], root, env, out / "compare.txt")
         if not a.tracks:
