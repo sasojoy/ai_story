@@ -105,6 +105,38 @@ def test_old_password_flows_are_byte_identical(monkeypatch, key_file, tmp_path):
     assert json.loads(off[3][1])["message"] == "舊密碼不對。"
 
 
+def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
+    """關著：這一包的路由 404；/、/api/me、/api/main 跟開著時逐位元組一樣（開關只管 /api/identity/*）。/ 上這一包只多 script 與 link 兩行。"""
+    import time
+
+    monkeypatch.setattr(time, "time", lambda: 1_800_000_000.0)
+    c = TestClient(server.app)
+    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    c.post("/api/character", json={"name": "沈青衫"})
+    paths = [p for p in server.app.openapi()["paths"] if p.startswith("/api/identity")]
+    assert paths == ["/api/identity/gate"]
+    off = [c.get(p) for p in ("/", "/api/me", "/api/main")]
+    assert all(c.get(p).status_code == 404 for p in paths)
+    _turn_on(monkeypatch)
+    on = [c.get(p) for p in ("/", "/api/me", "/api/main")]
+    assert [r.content for r in on] == [r.content for r in off] and all(r.status_code == 200 for r in off)
+    page = off[0].text
+    assert [ln.strip() for ln in page.splitlines() if "identity" in ln] == [
+        '<link rel="stylesheet" href="/static/identity.css?v=' + server.asset_version("/static/identity.css") + '">',
+        '<script src="/static/identity.js?v=' + server.asset_version("/static/identity.js") + '"></script>',
+    ]
+
+
+def test_old_saves_load_and_the_package_claims_no_fields(game):
+    from tianxia.characters import CharacterStore
+    from tianxia.features.identity import FEATURE
+
+    assert FEATURE.player_fields == () and FEATURE.carried == () and FEATURE.prefix is None
+    store = CharacterStore(game.world.db)
+    store.save(game.state)
+    assert store.load(game.state.player.name).model_dump() == game.state.model_dump()
+
+
 def _passwordless_client() -> tuple[TestClient, str]:
     key = AccountStore(database.open_database()).create_without_password("line", "U-test-1", "LINE")
     c = TestClient(server.app)
