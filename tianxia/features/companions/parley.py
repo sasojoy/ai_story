@@ -129,7 +129,7 @@ def region_of(state: GameState, content: Content, cid: str) -> str | None:
 
 def enemy(state: GameState, content: Content, cid: str, side: str | None) -> bool:
     """你跟他是不是敵對的兩方：交戰兩軍、各站一邊才算（散人、豪強、站中立的人物都不算）。"""
-    his = figure_life.side_of(content, cid)
+    his = figure_life.side_of(content, cid, state.world)
     return side is not None and his is not None and bounty_base.ENEMY.get(side) == his
 
 
@@ -174,7 +174,7 @@ def _escort_places(state: GameState, content: Content, cid: str) -> list[Item]:
 def intel_facts(state: GameState, content: Content, cid: str) -> list[str]:
     """給情報講的事：跟他敵對的大勢人物（他沒站邊就是全部）此刻在哪、心事如何，他那一區的先、最多 intel_count 件。
     只講公開得到的事實（人物在哪、心事）；誰在哪裡設伏永遠不講。"""
-    side = figure_life.side_of(content, cid)
+    side = figure_life.side_of(content, cid, state.world)
     foe = bounty_base.ENEMY.get(side or "")
     region = region_of(state, content, cid)
     rows: list[tuple[int, str]] = []
@@ -198,7 +198,7 @@ def ask_items(state: GameState, content: Content, cid: str, side: str | None, ca
     record = day_of(state, content, cid)
     name = _name(content, cid)
     items = list(_escort_places(state, content, cid))
-    his = figure_life.side_of(content, cid)
+    his = figure_life.side_of(content, cid, state.world)
     region = region_of(state, content, cid)
     backing = state.player.parley_backing
     backed = backing is not None and backing.day == game_day(content, state.world)
@@ -303,7 +303,7 @@ def condition_items(state: GameState, content: Content, cid: str, rng: random.Ra
     if scouts:
         loc = rng.choice(sorted(scouts))
         items.append(Item(f"scout:{loc}", f"替他打探{_place(content, loc)}", detail=f"玩家先去{_place(content, loc)}探索一回"))
-    side = figure_life.side_of(content, cid)
+    side = figure_life.side_of(content, cid, state.world)
     if side in bounty_base.ENEMY:
         strikes = sorted(x for x in bounty_base._strike_spots(content, w, side, set()) if near(x[0]))
         if strikes:
@@ -432,7 +432,7 @@ def commission(state: GameState, content: Content, cid: str, condition: Item, as
     kind, _, rest = condition.id.partition(":")
     w = state.world
     tuning = content.config.figure_life
-    side = figure_life.side_of(content, cid)
+    side = figure_life.side_of(content, cid, state.world)
     spec: dict
     if kind == "scout":
         spec = {"kind": "scout", "location": rest}

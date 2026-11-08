@@ -8,7 +8,7 @@ import pytest
 
 from conquest_kit import announce, conquest_game, go, join
 from tianxia.features.battle import instance as battle_instance
-from tianxia import bot_policy, conquest, siege
+from tianxia import allied, bot_policy, conquest, siege
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.state import BotProfile
@@ -90,7 +90,7 @@ def test_switch_off_showdown_rally_unchanged():
     assert game.rally_region() == definition.region
     runner = BotRunner(game.content, game.world, open_characters(game.world.db.path), random.Random(1), clock=lambda: NOW)
     rows = runner._battle_sides()
-    assert rows == [(NOW + definition.muster_seconds, {f.id for f in game.content.scenario.factions}, set())]
+    assert rows == [(NOW + definition.muster_seconds, {f.id for f in allied.factions_of(game.content, game.state.world)}, set())]
 
 
 def test_no_bot_hint_in_siege_views():

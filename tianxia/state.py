@@ -2040,6 +2040,8 @@ class WorldState(BaseModel):
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
+    # 這一季開季時地方豪強已經拿掉了（Config.gentry 關著；allied.gentry_on）：只剩官軍、黃巾、散人。舊季讀檔是 False（豪強照舊），False 不寫進存檔
+    no_gentry: bool = Field(False, json_schema_extra=QUIET)
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
     # 上一篇讀到哪裡（None＝這一季還沒記過起點）
