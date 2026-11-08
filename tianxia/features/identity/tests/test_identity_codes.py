@@ -74,6 +74,7 @@ def test_send_normalizes_and_rejects_non_taiwan(kit):
 
 
 def test_turnstile_checked_server_side(kit):
+    kit.fakes.turnstile.fail = True  # 假的一律過（L 波）；量「沒過」那一條
     status, body, cid = kit.send(token="nope")
     assert (status, body, cid) == (400, {"error": codes.NEED_HUMAN}, None)
     assert kit.fakes.sms.outbox == []
@@ -99,7 +100,7 @@ def test_turnstile_checked_server_side(kit):
         raise OSError("down")
     assert senders.CloudflareTurnstile("sec", "identity_code", urlopen=broken).verify("tok", "", "example.com") is False
     assert senders.CloudflareTurnstile("", "identity_code", urlopen=fake_urlopen(good)).verify("tok", "", "example.com") is False
-    assert senders.FakeTurnstile().verify("ok", "", "") and not senders.FakeTurnstile().verify("", "", "")
+    assert senders.FakeTurnstile().verify("ok", "", "") and senders.FakeTurnstile().verify("", "", None)  # 假的不看 token
 
 
 def test_send_reply_identical_bound_unbound_and_capped(kit):

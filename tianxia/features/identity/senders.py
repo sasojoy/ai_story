@@ -1,6 +1,6 @@
 """寄送與真人驗證的介面（帳號與客服第 203 批；設計 4.6、4.7）：程式只認 SmsSender、MailSender、TurnstileVerifier 三個介面。
 
-- 測試、開發與 QA 一律用假的（Config.identity.fake_services 開著：FakeSms、FakeMail 只記進 outbox，FakeTurnstile 只認 token "ok"）。
+- 測試、開發與 QA 一律用假的（Config.identity.fake_services 開著：FakeSms、FakeMail 只記進 outbox，FakeTurnstile 不看 token 一律過）。
 - 正式機在服務商接上之前用 NoSender（一寄就丟 SendFailed，路由回「現在無法寄送」）；Turnstile 走 CloudflareTurnstile（伺服器端 siteverify，
   驗 success、hostname、action，逾時 5 秒；網路出錯、沒有 secret 都當沒過）。
 - Turnstile 的 secret 在 .local/identity.json 的 turnstile_secret（同金鑰那一份，路徑 identity_base.KEY_FILE；不進版控）。
@@ -61,8 +61,13 @@ class FakeMail:
 
 
 class FakeTurnstile:
+    """假的就是假的（L 波 PM 定）：不看 token 一律過，QA 不設網站金鑰也走得完驗證碼畫面；fail 給測試量「沒過」那一條。"""
+
+    def __init__(self):
+        self.fail = False
+
     def verify(self, token: str, ip: str, hostname: str | None) -> bool:
-        return token == "ok"
+        return not self.fail
 
 
 class NoSender:
