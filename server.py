@@ -1747,12 +1747,21 @@ def _registered(ip: str, now: float) -> None:
         REGISTRATIONS.setdefault(ip, []).append(now)
 
 
-def _start_session(request: Request, response: Response, account_key: str) -> None:
+def _start_session(request: Request, response: Response, account_key: str, method: str = "password") -> str:
+    """開登入狀態、回 token。identity 開著（帳號與客服第 204 批；設計第七節 server.py 那一列）：帳號鍵換成帳號自己的鍵（補設過密碼的帳號
+    用帳號名登入也是 id:<n>），這次用哪一種登入（method：password、line、google、email、phone）與時間記進旁檔；關著一個字不變。"""
+    identity_on = identity_base.on(CONTENT)
+    if identity_on:
+        account = account_store().get(account_key)
+        account_key = account.key if account is not None else account_key
     token = SESSIONS.create(account_key)
     _warm_model()
     response.set_cookie(
         COOKIE, token, httponly=True, samesite="lax", max_age=SESSION_SECONDS, secure=cookie_secure(request),
     )
+    if identity_on:
+        identity_base.record_session(token, method, time.time())
+    return token
 
 
 def _entry(account_key: str) -> dict:

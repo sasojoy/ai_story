@@ -47,10 +47,56 @@ class Clock:
         return getattr(real_time, name)
 
 
-def register(c, login="shen_01", password="secret-pw"):
+@pytest.fixture
+def clock(on, monkeypatch):
+    """shell 的時間（server.time）換成可以撥的鐘；起點是真的現在（登入狀態的 30 天照真的時鐘算，不會過期）。"""
+    tick = Clock(real_time.time())
+    monkeypatch.setattr(server, "time", tick)
+    return tick
+
+
+def register(c, login="shen_01", password="secret-pw", name=None):
     r = c.post("/api/register", json={"login": login, "password": password, "again": password})
     assert r.status_code == 200, r.text
+    if name is not None:
+        assert c.post("/api/character", json={"name": name}).status_code == 200
     return r
+
+
+def send(c, to="0912345678", channel="phone", purpose=None, **extra):
+    body = {"channel": channel, "to": to, "turnstile": "ok", **extra}
+    if purpose is not None:
+        body["purpose"] = purpose
+    return c.post("/api/identity/code/send", json=body)
+
+
+def verify(c, channel="phone"):
+    return c.post("/api/identity/code/verify", json={"code": code_of(channel)})
+
+
+def bind(c, to="0912345678", channel="phone"):
+    """綁一種（要近期驗證）：寄碼、驗碼，回驗碼那一下的回應。"""
+    r = send(c, to, channel, purpose="bind")
+    assert r.status_code == 200, r.text
+    return verify(c, channel)
+
+
+def side_rows(sql: str, args=()) -> list:
+    with sqlite3.connect(idstore.default_side_path()) as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+def error(r) -> str:
+    assert r.status_code == 400, (r.status_code, r.text)
+    return r.json()["error"]
+
+
+def subj(channel, value):
+    return identity_base.subject_hmac(KEY, channel, value)
+
+
+def account_id(key: str) -> int:
+    return AccountStore(database.open_database()).account_id(key)
 
 
 def token_of(c) -> str:
@@ -137,6 +183,107 @@ def test_fake_services_refused_on_serving_profiles():
         content = SimpleNamespace(config=SimpleNamespace(season_one=season_one, identity=SimpleNamespace(fake_services=fake)))
         FEATURE.check_content(content, lambda ok, message: None if ok else found.append(message))
         assert found == want
+
+
+def test_password_login_records_session_auth(clock):
+    c = TestClient(server.app)
+    register(c)
+    assert identity_base.session_auth(token_of(c)) == {"method": "password", "at": clock.now, "verified": None, "verified_by": None}
+    clock.now += 5
+    c.post("/api/logout")
+    assert c.post("/api/login", json={"login": "SHEN_01", "password": "secret-pw"}).status_code == 200
+    assert identity_base.session_auth(token_of(c))["at"] == clock.now and server.SESSIONS.get(token_of(c)) == "shen_01"
+
+
+def test_oauth_and_code_login_record_their_method(clock):
+    from tianxia.features.identity import routes
+
+    assert not hasattr(routes, "_session_token")  # 不再從回應的 set-cookie 撈 token：殼的 _start_session 回 token、自己記
+    c = TestClient(server.app)
+    key = phone_account(c)
+    assert key.startswith("id:") and identity_base.session_auth(token_of(c))["method"] == "phone"  # 建角色那一步
+    c.post("/api/logout")
+    clock.now += 61  # 同一個號碼 60 秒才能再寄
+    assert send(c).status_code == 200 and verify(c).json()["stage"] == "game"
+    assert identity_base.session_auth(token_of(c)) == {"method": "phone", "at": clock.now, "verified": None, "verified_by": None}
+
+
+def test_session_auth_not_written_when_off(monkeypatch, key_file, tmp_path):  # noqa: F811
+    monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "g.db")
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "g.db"))
+    c = TestClient(server.app)
+    register(c)
+    assert not idstore.default_side_path().exists()
+
+
+def test_unknown_session_is_not_recent(clock):
+    from tianxia.features.identity import binding
+
+    cfg = server.CONTENT.config.identity
+    assert binding.recent(None, clock.now, cfg) is False
+    c = TestClient(server.app)
+    register(c, name="沈青衫")
+    assert send(c, purpose="bind").status_code == 200  # 剛登入的 10 分鐘內算
+    side_rows("DELETE FROM session_auth")
+    assert error(send(c, purpose="bind")) == binding.NEED_RECENT  # 查不到就當沒驗過
+
+
+def test_reauth_with_password_extends_recent(clock):
+    from tianxia.features.identity import binding
+
+    c = TestClient(server.app)
+    register(c, name="沈青衫")
+    clock.now += server.CONTENT.config.identity.recent_seconds + 1
+    assert error(send(c, purpose="bind")) == binding.NEED_RECENT
+    r = c.post("/api/identity/reauth", json={"password": "secret-pw"})
+    assert r.status_code == 200 and "驗證好了" in r.json()["message"]
+    auth = identity_base.session_auth(token_of(c))
+    assert auth["method"] == "password" and auth["verified"] == clock.now and auth["verified_by"] == "password"
+    assert send(c, purpose="bind").status_code == 200
+
+
+def test_reauth_wrong_password_counts_toward_lockout(clock):
+    c = TestClient(server.app)
+    register(c, name="沈青衫")
+    for _ in range(accounts.MAX_FAILURES):
+        assert error(c.post("/api/identity/reauth", json={"password": "wrong-pw"})) == accounts.LOGIN_FAILED
+    assert error(c.post("/api/identity/reauth", json={"password": "secret-pw"})) == accounts.TOO_MANY_TRIES  # 同一套擋猜
+    assert identity_base.session_auth(token_of(c))["verified"] is None
+
+
+def test_reauth_without_password_uses_a_bound_way(clock):
+    from tianxia.features.identity import binding, codes
+
+    c = TestClient(server.app)
+    phone_account(c)
+    clock.now += server.CONTENT.config.identity.recent_seconds + 1
+    r = c.post("/api/identity/reauth", json={})
+    assert r.json() == {"message": binding.REAUTH_WAYS, "ways": ["phone"]}
+    assert error(send(c, to="0987654321", purpose="reauth")) == codes.NOT_THIS  # 不是這個帳號綁的那一支
+    assert error(send(c, channel="email", to="a@b.co", purpose="reauth")) == binding.NO_SUCH_WAY
+    assert send(c, purpose="reauth").status_code == 200
+    assert "登入驗證碼" in senders.FAKES.sms.outbox[-1][1]  # 重驗用登入那一份字
+    assert verify(c).status_code == 200
+    auth = identity_base.session_auth(token_of(c))
+    assert auth["verified"] == clock.now and auth["verified_by"] == "phone"
+    assert binding.recent(auth, clock.now, server.CONTENT.config.identity)
+
+
+def test_switch_account_asks_once(clock):
+    from tianxia.features.identity import binding
+
+    other = TestClient(server.app)
+    key = phone_account(other)
+    c = TestClient(server.app)
+    register(c, name="李白衣")
+    old = token_of(c)
+    clock.now += 61  # 同一個號碼 60 秒才能再寄
+    sent = len(senders.FAKES.sms.outbox)
+    assert send(c).json() == {"ask": binding.SWITCH_ASK}  # 已登入：先問
+    assert len(senders.FAKES.sms.outbox) == sent  # 問的那一下沒寄
+    assert send(c, switch=True).status_code == 200
+    assert verify(c).json()["stage"] == "game"
+    assert server.SESSIONS.get(token_of(c)) == key and server.SESSIONS.get(old) is None  # 換過去、原本的登出
 
 
 def test_fake_services_warns_at_start(monkeypatch, capsys):

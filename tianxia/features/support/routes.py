@@ -15,6 +15,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from tianxia.core import identity_base
 from tianxia.database import default_path, open_database
 
 from . import accounts_view, lookup, rules, staff, store
@@ -63,6 +64,10 @@ def _staff(shell, request: Request) -> accounts_view.Who:
     who = _me(shell, _gate(shell, request))
     if not staff.is_staff(shell.CONTENT.config, who):
         raise HTTPException(404)  # 跟沒有這條路同一句
+    # 帳號與客服第 204 批（設計 4.4、6.2）：客服權限要這次是密碼登入、而且 6 小時內登入或重驗過（identity 關著看 session 建立的時間）；
+    # 不夠的跟不是客服同一句
+    if not identity_base.staff_session_ok(open_database(), shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time()):
+        raise HTTPException(404)
     return who
 
 

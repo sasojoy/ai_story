@@ -35,7 +35,9 @@ def card(db: Database, account_id: int, *, ledger_rows: int, created_must: float
         a = conn.execute("SELECT id, created, character FROM accounts WHERE id = ?", (account_id,)).fetchone()
         if a is None or (created_must is not None and float(a["created"]) != float(created_must)):
             return {"gone": True}
-        rows = conn.execute("SELECT provider, display FROM logins WHERE account_id = ?", (account_id,)).fetchall()
+        rows = conn.execute(  # provider='id' 是補設密碼的記號列（帳號與客服第 204 批），不算一種登入方式
+            "SELECT provider, display FROM logins WHERE account_id = ? AND provider != 'id'", (account_id,),
+        ).fetchall()
     order = list(rules.PROVIDER_NAMES)
     rows = sorted(rows, key=lambda r: (order.index(r["provider"]) if r["provider"] in order else len(order), r["provider"]))
     login = next((r["display"] for r in rows if r["provider"] == "password"), None) or f"{identity_base.ID_PREFIX}{a['id']}"

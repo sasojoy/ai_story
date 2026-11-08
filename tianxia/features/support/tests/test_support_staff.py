@@ -173,8 +173,11 @@ def test_support_staff_only_for_staff(monkeypatch):
     assert main["admin"] is False
 
 
-@pytest.mark.xfail(reason="設計 6.2／4.4：客服權限要密碼登入且 6 小時內驗過；session 記登入方式是帳號一的事，這一批還沒有（leftovers）", strict=True)
 def test_staff_needs_password_session(monkeypatch):
+    """設計 6.2／4.4（第 204 批拿掉 xfail）：客服權限要這次 session 6 小時內登入或驗過；identity 關著看 session 建立的時間。
+    原本 patch 不存在的 SESSIONS.clock，改 patch server.time.time 往後 7 小時（shell.time.time 讀它）。"""
     s = staffer(monkeypatch)
-    monkeypatch.setattr(server.SESSIONS, "clock", lambda real=server.time.time: real() + 7 * 3600)  # 7 小時前登入的 session
+    assert s.get("/api/support/queue").status_code == 200
+    real = server.time.time
+    monkeypatch.setattr(server.time, "time", lambda: real() + 7 * 3600)  # 7 小時前登入的 session
     assert s.get("/api/support/queue").status_code == 404

@@ -46,7 +46,11 @@ NO_PASSWORD = "這個帳號沒有密碼，請他用綁定的方式登入。"  # 
 
 # identity（帳號與客服第 201 批；設計 4.1）：沒有 password 列的帳號鍵是 id:<accounts.id>（終身不變）。帳號格式不收冒號，兩種鍵不會撞
 ID_KEY = re.compile(r"id:([1-9][0-9]*)")
-
+# 補設密碼（帳號與客服第 204 批；設計 4.4「鍵不變」）：沒密碼的帳號補設密碼時，logins 多一列 provider='id'、subject='id:<n>'、display=''
+# 當記號，有這一列的帳號鍵一律是 id:<n>（用帳號名登入、owner_of、login_key 都回它）；沒有記號照舊。記號列不算一種登入方式。
+# SQL 片段裡 a 是 accounts 的別名。沒有記號列的庫（identity 關著不會有）每一支的結果跟第 203 批一樣。
+MARKER = "id"
+_MARKED = f"EXISTS (SELECT 1 FROM logins m WHERE m.account_id = a.id AND m.provider = '{MARKER}')"
 
 class AccountError(ValueError):
     """玩家看得到的錯誤：訊息就是畫面上要顯示的字。"""
@@ -123,19 +127,21 @@ class AccountStore:
 
     def _get(self, conn, key: str) -> Account | None:
         found = ID_KEY.fullmatch(key)
-        if found is not None:  # id:<n> 只認沒有 password 列的帳號（有密碼的帳號鍵是小寫帳號，終身不變）
+        if found is not None:  # id:<n> 只認沒有 password 列的帳號（有密碼的帳號鍵是小寫帳號，終身不變），或補設過密碼的（有記號列，第 204 批）
             row = conn.execute(
-                "SELECT a.id, a.character, a.created FROM accounts a WHERE a.id = ? AND NOT EXISTS "
-                "(SELECT 1 FROM logins l WHERE l.account_id = a.id AND l.provider = 'password')",
+                "SELECT a.id, a.character, a.created, p.display, p.salt, p.hash FROM accounts a "
+                "LEFT JOIN logins p ON p.account_id = a.id AND p.provider = 'password' "
+                f"WHERE a.id = ? AND (p.subject IS NULL OR {_MARKED})",
                 (int(found.group(1)),),
             ).fetchone()
             if row is None:
                 return None
             return Account(
-                login=key, salt=None, hash=None, character=row["character"], created=row["created"], key=key, id=row["id"],
+                login=row["display"] or key, salt=row["salt"], hash=row["hash"], character=row["character"], created=row["created"],
+                key=key, id=row["id"],
             )
         row = conn.execute(
-            "SELECT l.display, l.salt, l.hash, a.character, a.created, a.id FROM logins l "
+            f"SELECT l.display, l.salt, l.hash, a.character, a.created, a.id, {_MARKED} AS marked FROM logins l "
             "JOIN accounts a ON a.id = l.account_id WHERE l.provider = 'password' AND l.subject = ?",
             (key,),
         ).fetchone()
@@ -143,18 +149,18 @@ class AccountStore:
             return None
         return Account(
             login=row["display"], salt=row["salt"], hash=row["hash"], character=row["character"], created=row["created"],
-            key=key, id=row["id"],
+            key=f"id:{row['id']}" if row["marked"] else key, id=row["id"],
         )
 
     def _owner(self, conn, name: str) -> str | None:
         row = conn.execute(
-            "SELECT a.id, l.subject FROM accounts a LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
-            "WHERE a.character_key = ?",
+            f"SELECT a.id, l.subject, {_MARKED} AS marked FROM accounts a "
+            "LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' WHERE a.character_key = ?",
             (name_key(name),),
         ).fetchone()
         if row is None:
             return None
-        return row["subject"] if row["subject"] is not None else f"id:{row['id']}"
+        return row["subject"] if row["subject"] is not None and not row["marked"] else f"id:{row['id']}"
 
     def get(self, login: str | None) -> Account | None:
         with self.db.snapshot() as conn:
@@ -175,26 +181,31 @@ class AccountStore:
         text = (login_or_name or "").strip()
         if not text:
             return None
-        if self.get(text) is not None:
-            return _key(text)
+        account = self.get(text)
+        if account is not None:
+            return account.key  # 沒有記號列時就是 _key(text)；補設過密碼的是 id:<n>（第 204 批）
         return self.owner_of(text)
 
-    def search(self, text: str | None, limit: int = 10) -> list[dict]:
+    def search(self, text: str | None, limit: int = 10, keys: bool = False) -> list[dict]:
         """管理頁重設密碼的搜尋：帳號或名號含這幾個字的（不分大小寫），最多 limit 筆 {login, character}；空字串回空的。
         以 accounts 為主、一個帳號一列（多綁幾種登入方式也一列）；沒有密碼的帳號 login 寫 id:<n>（find 認得）。
-        只有密碼帳號的庫，結果跟第 201 批以前的查詢逐位元組一樣（排序鍵就是小寫帳號）。"""
+        只有密碼帳號的庫，結果跟第 201 批以前的查詢逐位元組一樣（排序鍵就是小寫帳號）。
+        keys（第 204 批，identity 包的管理頁路由用）：每列多帶 key（帳號鍵）與 id（accounts.id）；預設不帶，輸出不變。"""
         q = (text or "").strip().lower()
         if not q:
             return []
         like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         with self.db.snapshot() as conn:
             rows = conn.execute(
-                "SELECT COALESCE(l.display, 'id:' || a.id) AS shown, a.character FROM accounts a "
+                "SELECT COALESCE(l.display, 'id:' || a.id) AS shown, a.character, a.id, "
+                f"CASE WHEN l.subject IS NULL OR {_MARKED} THEN 'id:' || a.id ELSE l.subject END AS account_key FROM accounts a "
                 "LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
                 "WHERE (COALESCE(l.subject, 'id:' || a.id) LIKE ? ESCAPE '\\' OR lower(COALESCE(a.character, '')) LIKE ? ESCAPE '\\') "
                 "ORDER BY COALESCE(l.subject, 'id:' || a.id) LIMIT ?",
                 (like, like, limit),
             ).fetchall()
+        if keys:
+            return [{"key": r["account_key"], "id": r["id"], "login": r["shown"], "character": r["character"] or ""} for r in rows]
         return [{"login": r["shown"], "character": r["character"] or ""} for r in rows]
 
     # ── 註冊、登入、角色 ──────────────────────────
@@ -239,19 +250,22 @@ class AccountStore:
             return None
         with self.db.snapshot() as conn:
             row = conn.execute(
-                "SELECT l.account_id, p.subject AS pw FROM logins l LEFT JOIN logins p ON p.account_id = l.account_id "
+                "SELECT l.account_id, p.subject AS pw, EXISTS (SELECT 1 FROM logins m WHERE m.account_id = l.account_id "
+                f"AND m.provider = '{MARKER}') AS marked FROM logins l LEFT JOIN logins p ON p.account_id = l.account_id "
                 "AND p.provider = 'password' WHERE l.provider = ? AND l.subject = ?",
                 (provider, subject),
             ).fetchone()
         if row is None:
             return None
-        return row["pw"] if row["pw"] is not None else f"id:{row['account_id']}"
+        return row["pw"] if row["pw"] is not None and not row["marked"] else f"id:{row['account_id']}"
 
     def add_login(self, login: str | None, provider: str, subject: str, display: str) -> None:
         """綁一種登入方式到這個帳號（帳號鍵不變）：一個帳號每種只留一列、別人占著的不行、password 不走這裡，都丟 ValueError；
         帳號不在丟 KeyError。"""
         if provider == "password":
             raise ValueError("密碼不走 add_login")
+        if provider == MARKER:
+            raise ValueError("記號列不走 add_login")
         with self.db.transaction() as conn:
             account = self._get(conn, _key(login))
             if account is None:
@@ -273,7 +287,8 @@ class AccountStore:
             account = self._get(conn, _key(login))
             if account is None:
                 raise KeyError(login)
-            kinds = [r["provider"] for r in conn.execute("SELECT provider FROM logins WHERE account_id = ?", (account.id,))]
+            kinds = [r["provider"] for r in conn.execute("SELECT provider FROM logins WHERE account_id = ?", (account.id,))
+                     if r["provider"] != MARKER]  # 補設密碼的記號列不算一種（第 204 批）
             if provider not in kinds:
                 raise ValueError("這個帳號沒有這一種")
             if len(kinds) <= 1:
@@ -328,11 +343,18 @@ class AccountStore:
         keep 是自己改密碼時正在用的那個 cookie，留著，不把改密碼的人自己踢出去。"""
         salt, digest = _new_secret(new)
         with self.db.transaction() as conn:
+            # 第 204 批：照 account_id 改 password 列（補設過密碼的帳號鍵是 id:<n>，不等於 password 列的 subject）；
+            # 登入狀態兩種鍵都清（管理者照帳號名找到的與 session 用的可能是同一個帳號的兩種寫法）。沒有記號列時跟以前同一個結果。
+            account = self._get(conn, key)
+            account_id = account.id if account is not None else -1
             conn.execute(
-                "UPDATE logins SET salt = ?, hash = ? WHERE provider = 'password' AND subject = ?", (salt, digest, key),
+                "UPDATE logins SET salt = ?, hash = ? WHERE provider = 'password' AND account_id = ?", (salt, digest, account_id),
             )
+            row = conn.execute("SELECT subject FROM logins WHERE provider = 'password' AND account_id = ?", (account_id,)).fetchone()
             conn.execute(
-                "DELETE FROM sessions WHERE account = ? AND token_hash != ?", (key, _token_hash(keep) if keep else ""),
+                "DELETE FROM sessions WHERE account IN (?, ?, ?) AND token_hash != ?",
+                (key, account.key if account is not None else key, row["subject"] if row is not None else key,
+                 _token_hash(keep) if keep else ""),
             )
 
     def change_password(self, login: str | None, old: str | None, new: str | None, keep: str | None = None) -> None:
@@ -358,6 +380,72 @@ class AccountStore:
         self._replace_secret(key, new)
         with _THROTTLE_LOCK:
             self.failures.pop(key, None)
+
+    # ── 補設密碼、忘記密碼、刪帳號（帳號與客服第 204 批；設計 4.4、6.4）──
+
+    def add_password(self, key: str | None, login: str | None, password: str | None) -> str:
+        """沒密碼的帳號補設密碼：帳號名過 check_login、別人用了丟 LOGIN_TAKEN；同一筆交易寫 password 列與記號列，鍵不變（回 id:<n>）。
+        已經有密碼丟 ValueError（包先擋好，這裡不是玩家看的字）；帳號不在丟 KeyError。scrypt 在交易外算。"""
+        shown = check_login(login)
+        check_password(password)
+        lower = normalize(shown)
+        salt, digest = _new_secret(password)
+        with self.db.transaction() as conn:
+            account = self._get(conn, _key(key))
+            if account is None:
+                raise KeyError(key)
+            if account.hash is not None or account.salt is not None:
+                raise ValueError("這個帳號已經有密碼")
+            if self._get(conn, lower) is not None:
+                raise AccountError(LOGIN_TAKEN)
+            conn.execute(
+                "INSERT INTO logins (provider, subject, account_id, display, salt, hash) VALUES ('password', ?, ?, ?, ?, ?)",
+                (lower, account.id, shown, salt, digest),
+            )
+            conn.execute(
+                "INSERT INTO logins (provider, subject, account_id, display) VALUES (?, ?, ?, '')",
+                (MARKER, f"id:{account.id}", account.id),
+            )
+        return f"id:{account.id}"
+
+    def reset_password(self, key: str | None, new: str | None, keep: str | None = None) -> None:
+        """忘記密碼（用綁定的方式登入後設新密碼）：不必知道舊密碼；其他裝置登出，keep（這個裝置的 cookie）留著；解除擋猜密碼。
+        沒有密碼丟 AccountError(NO_PASSWORD)；帳號不在丟 KeyError。"""
+        account = self.get(key)
+        if account is None:
+            raise KeyError(key)
+        if account.hash is None:
+            raise AccountError(NO_PASSWORD)
+        check_password(new)
+        self._replace_secret(account.key, new, keep)
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT subject FROM logins WHERE provider = 'password' AND account_id = ?", (account.id,)).fetchone()
+        with _THROTTLE_LOCK:
+            self.failures.pop(row["subject"] if row is not None else account.key, None)
+
+    def logins_of(self, key: str | None) -> list[dict]:
+        """這個帳號的每一列登入方式 {provider, subject, display}（記號列也在，呼叫端自己濾）；帳號不在回空的。"""
+        with self.db.snapshot() as conn:
+            account = self._get(conn, _key(key))
+            if account is None:
+                return []
+            rows = conn.execute("SELECT provider, subject, display FROM logins WHERE account_id = ?", (account.id,)).fetchall()
+        return [{"provider": r["provider"], "subject": r["subject"], "display": r["display"]} for r in rows]
+
+    def delete_account(self, key: str | None) -> list[dict]:
+        """管理者刪帳號（設計 6.4）：同一筆交易刪 logins、sessions、accounts 列；角色名號由存檔占住、錢包不動。回刪掉的登入列（包記解綁的雜湊）。
+        帳號不在丟 KeyError。"""
+        with self.db.transaction() as conn:
+            account = self._get(conn, _key(key))
+            if account is None:
+                raise KeyError(key)
+            rows = conn.execute("SELECT provider, subject, display FROM logins WHERE account_id = ?", (account.id,)).fetchall()
+            gone = [{"provider": r["provider"], "subject": r["subject"], "display": r["display"]} for r in rows]
+            keys = {account.key, _key(key)} | {r["subject"] for r in rows if r["provider"] == "password"}
+            conn.executemany("DELETE FROM sessions WHERE account = ?", [(k,) for k in sorted(keys)])
+            conn.execute("DELETE FROM logins WHERE account_id = ?", (account.id,))
+            conn.execute("DELETE FROM accounts WHERE id = ?", (account.id,))
+        return gone
 
 
 # ── 登入狀態（審查 S-10）────────────────────────
