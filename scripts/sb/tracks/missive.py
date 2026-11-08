@@ -62,4 +62,9 @@ class MissiveScenario(Scenario):
 register_track("missive", MissiveScenario, (("tianxia/features/identity/routes.py",), (
     "def _code_gate(shell, channel: str | None = None) -> bytes:",
     'def _code_gate(shell, channel: str | None = None) -> bytes:\n    return b"k" * 32',
-)), "season21")
+)), "season21",
+               # 合 K 波時補（第 107 批要每軌寫 covers；這一軌是第 203 批新加的，沒量過）：照 petition 的寫法，登入的人叫到每一包的掛鉤，再加帳號綁定的路由
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "support", "tale", "tavern", "territory_acts", "travel", "zhuan"))
