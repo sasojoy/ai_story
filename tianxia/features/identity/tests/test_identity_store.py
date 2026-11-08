@@ -1,4 +1,5 @@
-"""帳號綁定的旁檔（features/identity/store.py；帳號與客服第 201 批）：五張表、檢查並記一筆、跟著 TIANXIA_DB。"""
+"""帳號綁定的旁檔（features/identity/store.py；帳號與客服第 201 批）：五張表、檢查並記一筆、跟著 TIANXIA_DB。
+第 202 批多兩張：第三方登入的一次性單（讀完就刪、過期當沒有）、還沒開帳號的身分（過期當沒有）；舊旁檔照開、補建。"""
 import sqlite3
 
 from tianxia.features.identity import store as idstore
@@ -40,3 +41,44 @@ def test_store_follows_tianxia_db(tmp_path, monkeypatch):
     assert idstore.default_side_path() == tmp_path / "game-identity.sqlite"
     assert idstore.side_path(tmp_path / "a" / "b.db") == tmp_path / "a" / "b-identity.sqlite"
     assert not (tmp_path / "game-identity.sqlite").exists()  # 沒人叫到 IdentityStore 不建
+
+
+def test_ticket_is_one_time_and_expires(tmp_path):
+    s = idstore.IdentityStore(tmp_path / "x-identity.sqlite")
+    s.put_ticket("h1", "line", "login", "b1", "no-1", "ver-1", expires=200.0, now=100.0)
+    s.put_ticket("h2", "google", "login", "b2", "no-2", "ver-2", expires=150.0, now=100.0)
+    assert s.take_ticket("h1", 199.0) == {"provider": "line", "purpose": "login", "browser_hash": "b1", "nonce": "no-1", "verifier": "ver-1"}
+    assert s.take_ticket("h1", 199.0) is None  # 讀完就刪：不能重放
+    assert s.take_ticket("h2", 150.0) is None  # 到期那一刻就不算
+    assert s.take_ticket("nope", 1.0) is None
+    s.put_ticket("h3", "line", "login", "b3", "n", "v", expires=120.0, now=100.0)
+    s.take_ticket("other", 130.0)  # 順手清掉過期的
+    with sqlite3.connect(s.path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM oauth_tickets").fetchone()[0] == 0
+
+
+def test_pending_expires_and_drops(tmp_path):
+    s = idstore.IdentityStore(tmp_path / "x-identity.sqlite")
+    s.put_pending("t1", "line", "U1", expires=200.0, now=100.0)
+    assert s.get_pending("t1", 150.0) == ("line", "U1")
+    assert s.get_pending("t1", 150.0) == ("line", "U1")  # 讀不刪：建角色失敗可以再試
+    assert s.get_pending("t1", 200.0) is None
+    s.put_pending("t2", "google", "G2", expires=300.0, now=100.0)
+    s.drop_pending("t2")
+    assert s.get_pending("t2", 150.0) is None
+    s.drop_pending("t2")  # 沒有也不出錯
+
+
+def test_old_side_file_gets_the_new_tables(tmp_path):
+    path = tmp_path / "old-identity.sqlite"
+    with sqlite3.connect(path) as conn:  # 第 201 批的旁檔：只有五張表，裡面有東西
+        for sql in idstore.TABLES[:7]:
+            conn.execute(sql)
+        conn.execute("INSERT INTO counters (bucket, at) VALUES ('x', 1.0)")
+    s = idstore.IdentityStore(path)
+    with sqlite3.connect(path) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        kept = conn.execute("SELECT COUNT(*) FROM counters").fetchone()[0]
+    assert {"oauth_tickets", "pending"} <= tables and kept == 1
+    s.put_pending("t", "line", "U", expires=9.0, now=1.0)
+    assert s.get_pending("t", 2.0) == ("line", "U")

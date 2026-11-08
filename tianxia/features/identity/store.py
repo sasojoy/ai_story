@@ -2,6 +2,7 @@
 同手機通知的 -push.sqlite）。只有開關開著、有人叫到 IdentityStore 才建；scripts/sb/harness.py 的 _wipe_db 與每日備份都帶它。
 
 主資料庫第 9 版不動：驗證紀錄、解綁留的雜湊、驗證碼、限制計數、這次登入的方式都放這裡，認 accounts.id（整數）。
+第 202 批多兩張：oauth_tickets（第三方登入的一次性單）、pending（驗過、還沒建角色的身分）；都是 CREATE TABLE IF NOT EXISTS，舊旁檔開的時候補建。
 SQLite WAL、isolation_level=None，寫一律 BEGIN IMMEDIATE；計數是「檢查並記一筆」同一筆交易。時間一律由呼叫端傳入（不讀時鐘）。
 """
 from __future__ import annotations
@@ -23,6 +24,11 @@ TABLES = (
     "CREATE TABLE IF NOT EXISTS counters (bucket TEXT NOT NULL, at REAL NOT NULL)",
     "CREATE INDEX IF NOT EXISTS counters_bucket ON counters (bucket, at)",
     "CREATE TABLE IF NOT EXISTS session_auth (token_hash TEXT PRIMARY KEY, method TEXT NOT NULL, at REAL NOT NULL)",
+    # 第 202 批：第三方登入的一次性單（state 的雜湊；browser_hash 是 tx_oauth cookie 的雜湊，擋登入 CSRF）、還沒開帳號的身分
+    "CREATE TABLE IF NOT EXISTS oauth_tickets (state_hash TEXT PRIMARY KEY, provider TEXT NOT NULL, purpose TEXT NOT NULL, "
+    "browser_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL, expires REAL NOT NULL, created REAL NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS pending (token_hash TEXT PRIMARY KEY, provider TEXT NOT NULL, subject TEXT NOT NULL, "
+    "expires REAL NOT NULL, created REAL NOT NULL)",
 )
 
 
@@ -108,6 +114,53 @@ class IdentityStore:
                 return False
             conn.execute("INSERT INTO counters (bucket, at) VALUES (?, ?)", (bucket, now))
         return True
+
+    # ── 第三方登入的一次性單（第 202 批）──────────────
+
+    def put_ticket(self, state_hash: str, provider: str, purpose: str, browser_hash: str, nonce: str, verifier: str,
+                   expires: float, now: float) -> None:
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO oauth_tickets (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, created) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, now),
+            )
+
+    def take_ticket(self, state_hash: str, now: float) -> dict | None:
+        """拿走這張單（讀完就刪，不能重放）；過期的當沒有。順手清掉所有過期的單。"""
+        with self._write() as conn:
+            row = conn.execute(
+                "SELECT provider, purpose, browser_hash, nonce, verifier, expires FROM oauth_tickets WHERE state_hash = ?",
+                (state_hash,),
+            ).fetchone()
+            conn.execute("DELETE FROM oauth_tickets WHERE state_hash = ? OR expires <= ?", (state_hash, now))
+        if row is None or row[5] <= now:
+            return None
+        return {"provider": row[0], "purpose": row[1], "browser_hash": row[2], "nonce": row[3], "verifier": row[4]}
+
+    # ── 還沒開帳號的身分（第 202 批；建角色前不開帳號，設計 4.2）──
+
+    def put_pending(self, token_hash: str, provider: str, subject: str, expires: float, now: float) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM pending WHERE expires <= ?", (now,))
+            conn.execute(
+                "INSERT INTO pending (token_hash, provider, subject, expires, created) VALUES (?, ?, ?, ?, ?)",
+                (token_hash, provider, subject, expires, now),
+            )
+
+    def get_pending(self, token_hash: str, now: float) -> tuple[str, str] | None:
+        """(provider, subject)；過期或沒有回 None。讀不刪（建角色名號不合格可以再試）。"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT provider, subject, expires FROM pending WHERE token_hash = ?", (token_hash,),
+            ).fetchone()
+        if row is None or row[2] <= now:
+            return None
+        return (row[0], row[1])
+
+    def drop_pending(self, token_hash: str) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM pending WHERE token_hash = ?", (token_hash,))
 
     # ── 這次登入的方式 ─────────────────────────────
 
