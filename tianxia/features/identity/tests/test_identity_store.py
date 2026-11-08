@@ -35,6 +35,68 @@ def test_store_verified_unbound_and_session_auth(tmp_path):
     assert s.session_auth("tok") == ("phone", 6.0)
 
 
+B = 1000.0  # 第 203 批的測試時間起點
+
+
+def _count(path, bucket):
+    with sqlite3.connect(path) as conn:
+        return conn.execute("SELECT COUNT(*) FROM counters WHERE bucket = ?", (bucket,)).fetchone()[0]
+
+
+def test_check_all_and_record_is_all_or_nothing(tmp_path):
+    """第 203 批：多格一次記；有一格滿了一筆都不記、回那一格的名字（旁檔直接數）。"""
+    path = tmp_path / "x-identity.sqlite"
+    s = idstore.IdentityStore(path)
+    buckets = [("a", 60, 2), ("b", 3600, 1), ("c", 86400, 5)]
+    assert s.check_all_and_record(buckets, B) is None
+    assert [_count(path, n) for n in "abc"] == [1, 1, 1]
+    assert s.check_all_and_record(buckets, B + 1) == "b"
+    assert [_count(path, n) for n in "abc"] == [1, 1, 1]  # a、c 也沒記
+    assert s.check_all_and_record([("a", 60, 2), ("c", 86400, 5)], B + 2) is None
+    assert s.check_all_and_record([("a", 60, 2)], B + 3) == "a"
+    assert s.check_all_and_record([("a", 60, 2)], B + 61) is None  # 第一筆出了窗
+    assert s.check_all_and_record([], B) is None
+
+
+def test_challenges_new_voids_old_tries_and_trusted_devices(tmp_path):
+    s = idstore.IdentityStore(tmp_path / "x-identity.sqlite")
+    s.put_challenge("c1", "login", "phone", "subj", "09*****678", "h1", B + 300, B)
+    s.put_challenge("other", "login", "phone", "subj2", "09*****111", "h9", B + 300, B)
+    assert s.challenge("c1")["code_hmac"] == "h1" and s.challenge("c1")["channel"] == "phone"
+    s.put_challenge("c2", "login", "phone", "subj", "09*****678", "h2", B + 400, B + 10)
+    assert s.challenge("c1") is None and s.challenge("c2")["display"] == "09*****678"  # 新碼作廢舊碼
+    assert s.challenge("other") is not None  # 別人的單不動
+    assert [s.bump_tries("c2", 3) for _ in range(3)] == [1, 2, 3]
+    assert s.challenge("c2") is None  # 到 cap 刪單
+    assert s.bump_tries("c2", 3) is None
+    s.drop_challenge("other")
+    assert s.challenge("other") is None
+    assert not s.is_trusted("dev1", "subj")
+    s.trust_device("dev1", "subj", B)
+    s.trust_device("dev1", "subj", B + 5)
+    assert s.is_trusted("dev1", "subj") and not s.is_trusted("dev1", "subj2") and not s.is_trusted("dev2", "subj")
+    s.put_pending("tok", "email", "subj", "r*@gmail.com", B + 600)
+    with sqlite3.connect(s.path) as conn:
+        assert conn.execute("SELECT provider, subject_hmac, display, expires FROM pending").fetchall() == [
+            ("email", "subj", "r*@gmail.com", B + 600)]
+
+
+def test_old_side_file_gets_the_new_columns(tmp_path):
+    """第 201 批開的旁檔（challenges 只有七欄）：開檔補 channel、subject_hmac、display，舊列留著。"""
+    path = tmp_path / "old-identity.sqlite"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE challenges (id TEXT PRIMARY KEY, purpose TEXT NOT NULL, account_id INTEGER, code_hmac TEXT NOT NULL, "
+            "tries INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL, created REAL NOT NULL)")
+        conn.execute("INSERT INTO challenges VALUES ('old', 'login', NULL, 'h', 0, 9e9, 1)")
+    s = idstore.IdentityStore(path)
+    with sqlite3.connect(path) as conn:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(challenges)")]
+    assert cols[-3:] == ["channel", "subject_hmac", "display"]
+    assert s.challenge("old")["code_hmac"] == "h"
+    idstore.IdentityStore(path)  # 再開一次不重複補
+
+
 def test_store_follows_tianxia_db(tmp_path, monkeypatch):
     monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "game.db"))
     assert idstore.default_side_path() == tmp_path / "game-identity.sqlite"
