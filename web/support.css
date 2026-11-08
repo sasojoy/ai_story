@@ -53,3 +53,6 @@
 @media (min-width: 900px) {
   .sup-split.sup-has-one { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
 }
+/* 登入頁的客服信箱那一行（第 214 批）：改版資訊前面、小字置中；信箱整段可選取 */
+.sup-gate { margin: 16px 2px 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); text-align: center; }
+.sup-mail { user-select: all; -webkit-user-select: all; color: var(--ink); font-weight: 600; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
