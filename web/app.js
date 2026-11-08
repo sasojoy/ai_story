@@ -270,7 +270,7 @@
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
     if (S.adminPage) { // 管理頁（admin.js）：只有管理者畫得出來；不是的話照常回江湖、網址換回 /
-      if (S.main && S.main.admin) return renderAdmin();
+      if (S.main && (S.main.admin || S.main.support_staff)) return renderAdmin();
       S.adminPage = false;
       try { history.replaceState(null, "", "/"); } catch (e) { /* 換不了網址也照常畫江湖 */ }
     }
@@ -1197,17 +1197,18 @@
 
   function sheetHtml() {
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
+    if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）
     const s = S.main.status;
     // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/figures/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
-        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
+        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : supportDeskLink()}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
         ${renameRow()}
         ${adultRow()}
-        ${pushRow()}
+        ${pushRow()}${supportRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>

@@ -29,7 +29,7 @@
     return navigator.serviceWorker.ready;
   }
   // 五種通知各一個開關（設定頁，預設全開；存在伺服器、這個帳號每一台一樣，/api/push 的 kinds）。字待 joy 潤
-  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"]];
+  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"], ["support", "客服"]]; // 客服（帳號與客服第 211 批）：伺服器的 kinds 有這個鍵才畫（客服關著沒有）。待 joy 潤
   const PUSH_TEST_OK = "送出去了：這一台應該馬上跳一則「通知設定好了」。沒跳的話看看手機有沒有開勿擾、專注模式。";
   function pushErrorText(e) { // 開不了的原因照實寫給玩家看（以前有錯就靜靜地沒勾起來）
     const name = (e && e.name) || "";
@@ -130,7 +130,7 @@
     const off = !!note || S.pushBusy;
     const on = S.pushOn && !note;
     const kinds = S.pushKinds || {};
-    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.map(([k, name]) =>
+    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.filter(([k]) => k !== "support" || k in kinds).map(([k, name]) =>
       `<label class="toggle"><input type="checkbox" class="push-kind" data-kind="${k}" ${kinds[k] !== false ? "checked" : ""} ${S.pushBusy ? "disabled" : ""}> ${name}</label>`).join("")}</div>
       <div class="row"><button class="btn small" data-act="push-test" ${S.pushBusy ? "disabled" : ""}>傳一則測試通知</button></div>` : "";
     return `<label class="toggle"><input type="checkbox" id="push-on" ${on ? "checked" : ""} ${off ? "disabled" : ""}> 手機通知${S.pushBusy ? "（處理中…）" : ""}</label>

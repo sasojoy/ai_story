@@ -1,0 +1,55 @@
+"""same_behavior 一軌一檔：petition（這一檔登記 petition）。"""
+from __future__ import annotations
+
+from sb.base import Scenario
+from sb.harness import emit, register_track
+
+# ── support（帳號與客服第 211 批：客服一，新包、開關預設關）──────────────────────
+
+SUPPORT_ROUTES = (
+    ("POST", "/api/support/ticket", {"category": "account", "body": "登不進去"}),
+    ("GET", "/api/support/mine", None),
+    ("POST", "/api/support/reply", {"id": 1, "body": "還是不行"}),
+    ("GET", "/api/support/queue", None),
+    ("GET", "/api/support/ticket/1", None),
+    ("POST", "/api/support/answer", {"id": 1, "body": "好了", "then": "wait"}),
+    ("POST", "/api/support/close", {"id": 1}),
+)
+
+
+class PetitionScenario(Scenario):
+    """客服的一軌（帳號與客服第 211 批；--track petition，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    三種設定的客服開關都關著（Config.support.enabled 預設 False）：登入的人（按過略過教學的祝無涯、沒按的練晚舟各一位）打七條 /api/support/*，
+    再讀 /api/main（列出 support 開頭的鍵）與 /api/push。base 沒有這幾條路由、head 有但關著：登入的人兩邊都是 404 {"detail": "Not Found"}。
+    半舊半新：客服關著時不寫任何東西，切在前半打完之後；後半第一件事無條件重新登入，再打一輪。
+    這一軌走不到的：沒登入的人（head 先認登入、回 401，base 沒有這條路、回 404：新包的路由本來就不同，由包的 test_routes_401_without_login_either_way 守）；
+    首頁 index.html（多一支 support.js、一條 support.css：facade、drape 兩軌照 --new 扣）；開著的路由（開著的行為由 tianxia/features/support/tests/ 守）；
+    旁檔 <db>-support.sqlite 不會出現（段落雜湊照比）。假人：碰不到（假人沒有帳號，打不了 /api/support/*），所以沒有假人段。"""
+
+    PLAYERS = {"祝無涯": None, "秋聽松": None}
+    NEWBIE = "練晚舟"
+    PHASES_FIRST = ["setup", "closed", "pages"]
+    PHASES_SECOND = ["resume", "closed_again"]
+    GUEST = "祝無涯"
+
+    def closed(self) -> None:
+        for who in (self.GUEST, self.NEWBIE):
+            for method, url, body in SUPPORT_ROUTES:
+                self.request(who, method, url, body)
+
+    def pages(self) -> None:
+        main = self.main(self.GUEST)
+        emit("support 的鍵", sorted(k for k in main if k.startswith("support")))
+        self.request(self.GUEST, "GET", "/api/push")
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def closed_again(self) -> None:
+        for method, url, body in SUPPORT_ROUTES:
+            self.request(self.GUEST, method, url, body)
+        self.main(self.GUEST)
+
+
+# 改一個字（selftest）：開關的那一道 gate 反過來，關著的季每條路由都不再 404
+register_track("petition", PetitionScenario, (("tianxia/features/support/routes.py",), ("if not shell.CONTENT.config.support.enabled:", "if shell.CONTENT.config.support.enabled:")), "season21")

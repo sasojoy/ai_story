@@ -8,6 +8,7 @@ from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
 from .core.tuning.identity import IdentityTuning  # 帳號綁定
+from .core.tuning.support import SupportTuning  # 客服
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4410,6 +4411,7 @@ class Config(_Strict):
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
     world_tick_seconds: float = Field(default=0, ge=0)
     identity: IdentityTuning = Field(default_factory=IdentityTuning)  # 帳號綁定（tianxia/core/tuning/identity.py）
+    support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")

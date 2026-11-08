@@ -20,6 +20,7 @@
 
   // 整頁：頂上一列（回江湖、標題、重新整理）、「現在」卡、各塊、底下的結果條
   function renderAdmin() {
+    if (!S.main.admin && S.main.support_staff) return renderSupportDesk(); // 客服身分（support.js）：畫客服頁，不叫 /api/admin
     if (typeof hideMapHost === "function") hideMapHost();
     $app.innerHTML = `<div class="ad-shell">${adminHtml()}</div>`;
     if (!S.admin && !S.adLoading) adminReload();

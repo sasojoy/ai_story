@@ -65,6 +65,23 @@ FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pa
                                 + r'|^  const GATE_SLOTS = \[\]; //|^  function registerGateSlot\(fn\) \{ GATE_SLOTS\.push\(fn\); \} //'
                                 + r'|^  function drawGateSlots\(gate\) \{ for \(const fn of GATE_SLOTS\) fn\(gate, S\); \} //'
                                 + r'|^    drawGateSlots\(\$app\.querySelector\("\.gate"\)\);$')
+# support（帳號與客服第 211 批；設計第七節「殼多的行寫進 FACADE_SHELL_LINES」，企劃者 2026-11-08 點頭第 2 版）：客服在殼上接的那幾行。
+# 改過的行原樣與改過的都放行（base、head 各去掉自己那一份），head 才有的兩行接縫只放行 head 那一行；開關關著時畫出來的不變，由 page 段與包的網頁測試比。
+SUPPORT_SHELL_TOUCHED = (
+    '    if (!S.main.admin && S.main.support_staff) return renderSupportDesk(); // 客服身分（support.js）：畫客服頁，不叫 /api/admin',
+    '      if (S.main && S.main.admin) return renderAdmin();',
+    '      if (S.main && (S.main.admin || S.main.support_staff)) return renderAdmin();',
+    '    if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）',
+    '        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>',
+    '        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : supportDeskLink()}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>',
+    '        ${pushRow()}',
+    '        ${pushRow()}${supportRow()}',
+    '  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"]];',
+    '  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"], ["support", "客服"]]; // 客服（帳號與客服第 211 批）：伺服器的 kinds 有這個鍵才畫（客服關著沒有）。待 joy 潤',
+    '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.map(([k, name]) =>',
+    '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.filter(([k]) => k !== "support" || k in kinds).map(([k, name]) =>',
+)
+FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in SUPPORT_SHELL_TOUCHED))
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 

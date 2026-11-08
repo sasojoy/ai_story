@@ -78,6 +78,8 @@ from ..features import heroines  # 女子與隱線（Joy 2026-11-06「開工」�
 # admin
 from ..features import admin  # 管理者：第二輪第 90 批（只接 routes 與 admin_tools，沒有選項、選單、店面；路徑與別的路由不重疊，順序不影響結果）
 from ..features import identity  # 帳號綁定
+# support
+from ..features import support  # 客服（帳號與客服第 211 批；開關 Config.support.enabled 預設關。只接 routes、on_own_turn、status_slots，路徑 /api/support/* 不跟別的重疊，順序不影響結果）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -154,6 +156,8 @@ FEATURES: list[Feature] = [
     # admin（排在最後〔照合併先後〕：只有 routes 與 admin_tools，路徑與別的路由不重疊，順序不影響結果）
     admin.FEATURE,
     identity.FEATURE,
+    # support（帳號與客服第 211 批；排在最後〔照合併先後〕）
+    support.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

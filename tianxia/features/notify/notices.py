@@ -24,8 +24,16 @@ from tianxia.models import Content
 from tianxia.state import GameState
 from tianxia.world_state import SortieDuel
 
-Kind = Literal["letter", "duel", "rally", "raid", "xingshi"]
+Kind = Literal["letter", "duel", "rally", "raid", "xingshi", "support"]
 KINDS: tuple[Kind, ...] = ("letter", "duel", "rally", "raid", "xingshi")  # 設定頁一種一個開關（PushStore.kinds_off），照這個順序排
+
+# support（帳號與客服第 211 批；設計 6.6）：「客服回覆了」的推播由客服包 routes.py 自己經 WEB_PUSH 送（不經看守；字在那裡：包不 import 別包），
+# 這裡只多一種讓玩家能關。客服開關關著時 kinds() 等於 KINDS（/api/push 的 kinds 逐字不變）；KINDS 本身不動。
+
+
+def kinds(config) -> tuple[str, ...]:
+    """設定頁畫的、/api/push/prefs 認的種類：KINDS，客服開著再接一種 support。"""
+    return KINDS + (("support",) if config.support.enabled else ())
 
 # 待 joy 潤：通知的字（標題一律「天下大勢」，這裡是內文）
 LETTER = "{who}派人送來一封信。"
