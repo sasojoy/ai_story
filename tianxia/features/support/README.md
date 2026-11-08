@@ -27,7 +27,7 @@
 ## 掛鉤與檔
 
 - `routes`：`routes.py`，七條 `/api/support/*`；第一行 `_gate`（先登入、再看開關）。客服回覆（不是內部註記）經 `shell.WEB_PUSH` 推一則，`WEB_PUSH` 是 None、帳號關掉「客服」那一種都不送。
-- `on_own_turn`：第一行先看假人（假人沒有帳號、不開旁檔），再看開關、旁檔在不在；有還沒寫過的客服回覆就一張單寫一則「客服」紀錄。
+- `on_own_turn`：第一行先看假人（假人沒有帳號、不開旁檔），再看開關、旁檔在不在；有還沒寫過的客服回覆就一張單寫一則「客服」紀錄。**已知**：旁檔先把 `journaled` 標成 1、紀錄才寫進存檔，兩邊不是同一筆交易；那一輪存檔沒成功（例外、Game 物件被丟掉），那一則「客服」紀錄就不會再寫（未讀紅點照舊在）。要補就改成存檔成功後再標（留給下一波，第 J 波審查）。
 - `status_slots`：main 表的表外格 `support`（接在 `STATUS_ORDER` 尾）：開著回 `support_unread`（沒有帳號是 0：真人假人同一個樣子），客服再加 `support_staff: true`。
 - `rules.py` 純規則（不讀時鐘）；`store.py` 旁檔；`staff.py` 名單；`accounts_view.py` 唯讀查主檔的 `accounts`、`logins`（帳號一的 `accounts.account_id` 合進來後換過去）；`notes.py` 紀錄與 main 那一格。
 - `gate_slot(config)` 與 `GATE_LINE`：登入頁客服信箱那一行的字（`Config.support.mailbox`），帳號一的 `registerGateSlot` 合進來後由 PM 接，這一批沒人叫。
