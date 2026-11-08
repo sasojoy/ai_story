@@ -264,6 +264,8 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/push/unsubscribe"): "_web_push：同上",
     ("POST", "/api/menxia/{op}"): "不認得的 op 404，認得的要登入",
     ("GET", "/api/events"): "HUB 是 None（沒開推送）就 404，連登入都不問",
+    # identity（帳號與客服第 201 批；設計第七節）
+    ("GET", "/api/identity/gate"): "登入頁要先知道哪幾條路開著；關著 404，只回設定裡公開的字（哪幾條路、客服信箱、Turnstile 網站金鑰），不看 cookie",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──

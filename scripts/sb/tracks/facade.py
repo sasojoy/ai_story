@@ -60,7 +60,11 @@ FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pa
                                 r"|^  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（(?:mall|looks)\.js 的 openMallMoves）。$"
                                 r"|^  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；(?:server\.figure_intro|socialize 包 intro\.py 的 figure_intro)）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，$"
                                 r"|^  // 電腦上整片寬的 \.shop-body 照舊捲，內容照遊戲那一欄排（(?:style|shop)\.css 的 FB-225 那一段；手機上 \.shop-col 沒有樣式）$"
-                                + "".join(f"|^{re.escape(line)}$" for line in FACTION_RENAMED_LINES))
+                                + "".join(f"|^{re.escape(line)}$" for line in FACTION_RENAMED_LINES)
+                                # identity（帳號與客服第 201 批）：殼的登入頁掛格（shell.js 三行）與 renderGate 畫完叫格的那一行，只認字面
+                                + r'|^  const GATE_SLOTS = \[\]; //|^  function registerGateSlot\(fn\) \{ GATE_SLOTS\.push\(fn\); \} //'
+                                + r'|^  function drawGateSlots\(gate\) \{ for \(const fn of GATE_SLOTS\) fn\(gate, S\); \} //'
+                                + r'|^    drawGateSlots\(\$app\.querySelector\("\.gate"\)\);$')
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 

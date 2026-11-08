@@ -784,6 +784,7 @@
         </form>
         <section class="gate-patch" id="gate-patch" aria-label="近期改版">${gatePatchHtml(S.patchNotes)}</section>
       </div>`;
+    drawGateSlots($app.querySelector(".gate"));
     if (playing) $app.querySelector(".gate .promo").replaceWith(playing);
     if (S.patchNotes === undefined) loadPatchNotes();
   }

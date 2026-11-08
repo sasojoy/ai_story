@@ -12,6 +12,7 @@ from tianxia import calendar
 from tianxia import journal  # 核心（江湖紀錄，PM 10/31）：帶 changes 的那一則 ctx._write 寫不了
 from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore
 from tianxia.characters import CharacterStore, name_key
+from tianxia.core import identity_base  # identity（帳號與客服第 201 批）：易名帖撞客服與 id: 開頭的名號（開著才擋，核心）
 from tianxia.core.name_base import reserved_names  # 保留的名號：易名帖撞名照建角色（全部拆包第 58 批）
 from tianxia.core.services import ART as ZHUAN_ART, NO_SUCH_PLAYER, art_problem  # 這一季用不上的列傳插畫票不賣（FB-845；全部拆包第 29 批進核心服務）
 from tianxia.core import xinshen  # 心神（核心的資源）：凝神香跟著心神的開關上架
@@ -133,7 +134,7 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
     if taken is None:
         store = CharacterStore(ctx.world.db)
         reserved = {n.casefold() for n in reserved_names(ctx.content)}
-        taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
+        taken = lambda n: store.exists(n) or n.casefold() in reserved or identity_base.blocked_name(n, ctx.content)  # noqa: E731  identity：開著才擋
     if name_key(new) != name_key(old) and taken(new):
         return [NAME_IN_USE]
     if rename.clash(old, name_key(old), ctx.content) or rename.clash(new, name_key(new), ctx.content):

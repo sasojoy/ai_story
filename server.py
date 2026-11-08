@@ -87,6 +87,7 @@ from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.core import identity_base  # identity（帳號與客服第 201 批）：開著時擋客服與 id: 開頭的名號（name_taken）
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
@@ -297,7 +298,8 @@ def name_taken(name: str) -> bool:
     管理者，見 server_bots.reserved_names，FB-004）。全部回同一句話，就沒辦法用名號試出誰是假人、名單裡有誰
     （帳號密碼登入設計第三節）。"""
     reserved = {n.casefold() for n in server_bots.reserved_names(CONTENT)}
-    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved
+    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved \
+        or identity_base.blocked_name(name, CONTENT)  # identity：帳號綁定開著才擋（關著回假，行為不變）
 
 
 def _reload(game: Game) -> None:
