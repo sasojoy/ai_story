@@ -42,12 +42,21 @@ summary.nw-title::-webkit-details-marker { display: none; }
 /* 傳聞、江湖史：一則一段 */
 .nw-rm p, .nw-hist p { margin: 4px 0; font-size: 14px; line-height: 1.6; }
 
-/* 江湖史頂上那一行：傳國玉璽七格 */
+/* 江湖史頂上那一行：傳國玉璽裂成七片，現世的是玉色 */
 .nw-row > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
 .nw-row > summary::-webkit-details-marker { display: none; }
-.nw-pips { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; }
-.nw-pips i { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--ink-2); }
-.nw-pips i.on { background: var(--accent); border-color: var(--accent); }
+.nw-seal-row > summary { justify-content: flex-start; gap: 14px; }
+.nw-seal-row[open] .nw-go { transform: rotate(90deg); }
+.nw-seal-row .nw-go { margin-left: auto; transition: transform .2s; }
+.nw-seal-name { display: grid; gap: 2px; font: 700 16px var(--serif); letter-spacing: .08em; }
+.nw-seal-name small { font: 400 12px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.nw-seal-svg { width: 52px; height: 63px; flex: none; overflow: visible; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .25)); }
+.nw-seal-svg polygon { fill: var(--line); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 4 4; stroke-linejoin: round; stroke-opacity: .6; }
+.nw-seal-svg polygon.on { fill: url(#nwJade); fill-opacity: 1; stroke: #e8f3ec; stroke-width: 2.4; stroke-dasharray: none; stroke-opacity: .9; }
+.nw-seal-svg .carve text { font: 700 34px var(--serif); fill: #f4fbf6; fill-opacity: .7; text-anchor: middle; }
+.nw-seal-svg .rim { fill: none; stroke: #e8f3ec; stroke-opacity: .35; stroke-width: 2; pointer-events: none; }
+.nw-seal-svg .knob { fill: var(--line); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 4 4; stroke-opacity: .6; }
+.nw-seal-svg .knob.on { fill: url(#nwJade); fill-opacity: 1; stroke: #e8f3ec; stroke-dasharray: none; }
 
 /* 紀錄：「剛剛」那一則在卡外最上面，底下照日子分段 */
 .nw-just { margin-bottom: 12px; }

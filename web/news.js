@@ -84,6 +84,19 @@
     }).join("");
   }
 
+  // 傳國玉璽裂成七塊（Joy 11/08 嫌七個小方格陽春）：一方印面照裂紋分成七片，現世的那幾片是玉色、看得到刻的字，還沒現世的只留裂紋的虛線
+  const NEWS_SEAL_SHARDS = ["0,0 45,0 38,35 0,42", "45,0 100,0 100,30 62,40 38,35", "0,42 38,35 50,62 0,70", "38,35 62,40 70,65 50,62",
+    "62,40 100,30 100,72 70,65", "0,70 50,62 42,100 0,100", "50,62 70,65 100,72 100,100 42,100"];
+  function newsSealSvg(lit) {
+    const all = lit.every(Boolean);
+    const shards = NEWS_SEAL_SHARDS.map((pts, i) => `<polygon points="${pts}" class="${lit[i] ? "on" : ""}"/>`).join("");
+    return `<svg class="nw-seal-svg" viewBox="-8 -30 116 140" aria-hidden="true"><defs>`
+      + `<linearGradient id="nwJade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9fd3b8"/><stop offset=".45" stop-color="#4f9a7a"/><stop offset="1" stop-color="#245c47"/></linearGradient>`
+      + `<clipPath id="nwLit">${NEWS_SEAL_SHARDS.filter((_, i) => lit[i]).map((pts) => `<polygon points="${pts}"/>`).join("")}</clipPath></defs>`
+      + `<path class="knob${all ? " on" : ""}" d="M18 -2 C16 -14 26 -24 36 -20 C40 -28 60 -28 64 -20 C74 -24 84 -14 82 -2 Z"/>`
+      + `<g class="face">${shards}</g><g class="carve" clip-path="url(#nwLit)"><text x="72" y="44">受</text><text x="72" y="84">命</text><text x="28" y="44">於</text><text x="28" y="84">天</text></g><rect class="rim" x="9" y="9" width="82" height="82" rx="2"/></svg>`;
+  }
+
   // 江湖史（伺服器的 chronicle，Markdown 轉好的 HTML）：最上面的傳國玉璽那一段收成一行七格（點開照舊是那一段）；這一季照日子分段
   // （伺服器寫好的 <h4>），只攤開最近兩天；往季（<h3>第 N 季）、歷屆擂主照舊排在後面
   function newsChronicleHtml(html) {
@@ -91,10 +104,10 @@
     let seal = "";
     if (/傳國玉璽/.test(parts[0]) && parts.length > 1) {
       const block = parts.shift();
-      const all = (block.match(/<li>/g) || []).length || 7;
-      const out = all - (block.match(/未現世/g) || []).length;
-      const pips = Array.from({ length: all }, (_, i) => `<i${i < out ? ' class="on"' : ""}></i>`).join("");
-      seal = `<details class="nw-row nw-seal-row"><summary><span>傳國玉璽<span class="nw-pips" aria-hidden="true">${pips}</span></span><span class="muted">${out}／${all} 現世</span></summary>${block}</details>`;
+      const items = block.match(/<li>[\s\S]*?<\/li>/g) || [];
+      const lit = items.length ? items.map((li) => !/未現世/.test(li)) : Array(7).fill(false);
+      const out = lit.filter(Boolean).length;
+      seal = `<details class="nw-row nw-seal-row"><summary>${newsSealSvg(lit)}<span class="nw-seal-name">傳國玉璽<small>${out === lit.length ? "七片都已現世" : out ? `${out} 片已現世，還有 ${lit.length - out} 片下落不明` : "七片碎片都還沒現世"}</small></span><span class="nw-go" aria-hidden="true">›</span></summary>${block}</details>`; // 待 joy 潤
     }
     // 這一季（沒有往季時沒有標題；有往季時標「第 N 季（本季）」）攤開，往季那幾段（<h3>第 N 季）與歷屆擂主收進「往季的江湖史」
     let now = "", past = "";
