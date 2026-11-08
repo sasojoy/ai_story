@@ -357,3 +357,154 @@ def test_an_admin_reset_logs_out_every_device_of_that_account(store, clock):
     phone, pc = sessions.create("alpha"), sessions.create("alpha")
     store.set_password("alpha", "temp-pass")
     assert sessions.get(phone) is None and sessions.get(pc) is None
+
+
+# ── 沒有密碼的帳號（帳號與客服第 201 批；設計 4.1）────────────────────────────
+
+
+def _old_search(store, text, limit=10):
+    """第 201 批以前的搜尋查詢原文：純密碼庫的結果要跟它逐位元組一樣。"""
+    q = text.strip().lower()
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    with store.db.snapshot() as conn:
+        rows = conn.execute(
+            "SELECT l.display, a.character FROM logins l JOIN accounts a ON a.id = l.account_id "
+            "WHERE l.provider = 'password' AND (l.subject LIKE ? ESCAPE '\\' OR lower(COALESCE(a.character, '')) LIKE ? ESCAPE '\\') "
+            "ORDER BY l.subject LIMIT ?",
+            (like, like, limit),
+        ).fetchall()
+    return [{"login": r["display"], "character": r["character"] or ""} for r in rows]
+
+
+def test_create_without_password_gives_an_id_key(store):
+    key = store.create_without_password("line", "U123abc", "LINE")
+    assert key.startswith("id:") and key[3:].isdigit()
+    account = store.get(key)
+    assert account.login == key and account.key == key and account.id == int(key[3:])
+    assert account.salt is None and account.hash is None and account.character is None
+    with pytest.raises(ValueError):
+        store.create_without_password("line", "U123abc", "LINE")  # 同一個身分只有一個帳號
+    with pytest.raises(ValueError):
+        store.create_without_password("password", "alpha", "alpha")
+
+
+def test_id_key_never_returns_a_password_account(store):
+    store.register("alpha", "secret-pw")
+    pw_id = store.account_id("alpha")
+    assert store.get(f"id:{pw_id}") is None
+    key = store.create_without_password("google", "sub-1", "Google")
+    n = key[3:]
+    for bad in ("id:abc", f"ID:{n}", f"id:0{n}", "id:", "id:-1", f"id: {n}", "id:99999"):
+        assert store.get(bad) is None, bad
+    assert store.get(key) is not None
+
+
+def test_password_accounts_carry_key_and_id(store):
+    shown = store.register("Alpha", "secret-pw")
+    account = store.get("ALPHA")
+    assert account.login == "Alpha" and account.key == "alpha" and account.id == store.account_id("alpha")
+    assert shown.login == "Alpha"
+
+
+def test_account_id_of_both_key_kinds(store):
+    store.register("alpha", "secret-pw")
+    key = store.create_without_password("line", "U1", "LINE")
+    assert store.account_id("Alpha") == 1
+    assert store.account_id(key) == int(key[3:])
+    assert store.account_id("nobody") is None and store.account_id("id:77") is None
+
+
+def test_owner_of_gives_id_key_for_passwordless(store):
+    store.register("alpha", "secret-pw")
+    store.bind_character("alpha", "沈青衫")
+    key = store.create_without_password("line", "U1", "LINE")
+    store.bind_character(key, "柳如煙")
+    assert store.owner_of("沈青衫") == "alpha"
+    assert store.owner_of("柳如煙") == key
+    assert store.find("柳如煙") == key and store.find(key) == key
+
+
+def test_bind_character_by_account_id(store):
+    key = store.create_without_password("line", "U1", "LINE")
+    other = store.create_without_password("line", "U2", "LINE")
+    store.bind_character(key, "柳如煙")
+    store.bind_character(key, "柳如煙")
+    assert store.get(key).character == "柳如煙"
+    with pytest.raises(AccountError, match="這個名號已有人使用。"):
+        store.bind_character(other, "柳如煙")
+    with pytest.raises(AccountError, match="這個帳號已經有角色了。"):
+        store.bind_character(key, "沈青衫")
+    with pytest.raises(KeyError):
+        store.bind_character("id:999", "誰")
+    with store.db.snapshot() as conn:
+        rows = [tuple(r) for r in conn.execute("SELECT id, character FROM accounts ORDER BY id")]
+    assert rows == [(int(key[3:]), "柳如煙"), (int(other[3:]), None)]
+
+
+def test_matches_with_no_secret_is_false_not_500(store, clock):
+    from tianxia.accounts import NO_PASSWORD
+
+    key = store.create_without_password("line", "U1", "LINE")
+    sessions = SessionStore(store.db, clock=clock)
+    token = sessions.create(key)
+    with pytest.raises(AccountError, match="舊密碼不對。"):
+        store.change_password(key, "", "new-secret")
+    with pytest.raises(AccountError, match="舊密碼不對。"):
+        store.change_password(key, "whatever", "new-secret")
+    with pytest.raises(AccountError) as err:
+        store.set_password(key, "temp-pass")
+    assert str(err.value) == NO_PASSWORD
+    assert sessions.get(token) == key  # 沒清 sessions
+    with pytest.raises(AccountError, match="帳號或密碼不對。"):
+        store.authenticate(key, "temp-pass")  # 冒號不是帳號的字
+
+
+def test_search_one_row_per_account(store):
+    store.register("alpha", "secret-pw")
+    store.register("Beta_1", "secret-pw")
+    store.bind_character("beta_1", "沈青衫")
+    store.register("al_x", "secret-pw")
+    for q in ("a", "al", "_", "沈", "%", "beta", "zzz"):
+        assert store.search(q) == _old_search(store, q), q
+    assert store.search("a", limit=2) == _old_search(store, "a", limit=2)
+    store.add_login("alpha", "line", "U1", "LINE")
+    assert [r["login"] for r in store.search("alpha")] == ["alpha"]  # 多一列 line 也只出一列
+    key = store.create_without_password("google", "sub-1", "Google")
+    store.bind_character(key, "柳如煙")
+    assert store.search("柳") == [{"login": key, "character": "柳如煙"}]
+    assert store.search(key) == [{"login": key, "character": "柳如煙"}]
+
+
+def test_add_login_one_per_provider(store):
+    store.register("alpha", "secret-pw")
+    store.register("beta", "secret-pw")
+    store.add_login("alpha", "phone", "h1", "09*****678")
+    with pytest.raises(ValueError):
+        store.add_login("alpha", "phone", "h2", "09*****111")  # 一個帳號每種只留一列
+    with pytest.raises(ValueError):
+        store.add_login("beta", "phone", "h1", "09*****678")  # 別人占著
+    with pytest.raises(ValueError):
+        store.add_login("beta", "password", "beta2", "beta2")
+    with pytest.raises(KeyError):
+        store.add_login("nobody", "line", "U9", "LINE")
+    store.add_login("beta", "line", "U9", "LINE")
+    assert store.get("alpha").key == "alpha"  # 帳號鍵不變
+
+
+def test_remove_login_keeps_the_last_way(store):
+    key = store.create_without_password("line", "U1", "LINE")
+    with pytest.raises(ValueError):
+        store.remove_login(key, "line")  # 最後一種不准拿
+    store.add_login(key, "google", "sub-1", "Google")
+    store.remove_login(key, "line")
+    assert store.get(key) is not None
+    with pytest.raises(ValueError):
+        store.remove_login(key, "line")  # 已經沒有了
+    with pytest.raises(ValueError):
+        store.create_without_password("google", "sub-1", "Google")
+    store.register("alpha", "secret-pw")
+    store.add_login("alpha", "line", "U2", "LINE")
+    with pytest.raises(ValueError):
+        store.remove_login("alpha", "password")  # 密碼列這一批不准拿（鍵終身不變）
+    store.remove_login("alpha", "line")
+    assert store.authenticate("alpha", "secret-pw").key == "alpha"

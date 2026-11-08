@@ -112,3 +112,13 @@ def test_refuses_a_bad_login(tmp_path, capsys):
     assert _run(tmp_path, "有中文") == 1
     assert "帳號只能用英文字母、數字、底線，3～20 字。" in capsys.readouterr().out
     assert not (tmp_path / "local").exists()
+
+
+def test_set_password_script_refuses_id_keys(tmp_path, capsys):
+    """沒有密碼的帳號鍵 id:<n>（帳號與客服第 201 批）：帳號格式不收冒號，這支碰不到、也不另建帳號。"""
+    key = _store(tmp_path).create_without_password("line", "U1", "LINE")
+    assert _run(tmp_path, key) == 1
+    assert capsys.readouterr().out.strip() == "帳號只能用英文字母、數字、底線，3～20 字。"
+    with _db(tmp_path).snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+    assert not (tmp_path / "local").exists()

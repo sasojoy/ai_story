@@ -42,6 +42,10 @@ SHORT_PASSWORD = f"密碼至少 {PASSWORD_MIN} 字。"
 LONG_PASSWORD = f"密碼最多 {PASSWORD_MAX} 字。"
 WRONG_OLD_PASSWORD = "舊密碼不對。"
 HAS_CHARACTER = "這個帳號已經有角色了。"
+NO_PASSWORD = "這個帳號沒有密碼，請他用綁定的方式登入。"  # 待 joy 潤（管理者重設密碼碰到沒有密碼的帳號；帳號與客服第 201 批）
+
+# identity（帳號與客服第 201 批；設計 4.1）：沒有 password 列的帳號鍵是 id:<accounts.id>（終身不變）。帳號格式不收冒號，兩種鍵不會撞
+ID_KEY = re.compile(r"id:([1-9][0-9]*)")
 
 
 class AccountError(ValueError):
@@ -50,16 +54,24 @@ class AccountError(ValueError):
 
 @dataclass
 class Account:
-    login: str  # 註冊時打的寫法（顯示用）；資料庫裡的鍵是小寫
-    salt: str  # hex
-    hash: str  # hex
+    login: str  # 註冊時打的寫法（顯示用）；資料庫裡的鍵是小寫。沒有密碼的帳號是 id:<n>
+    salt: str | None  # hex；沒有密碼的帳號是 None
+    hash: str | None  # hex；沒有密碼的帳號是 None
     character: str | None = None  # 綁定的角色名號；還沒建角色時是 None
     created: float = 0.0
+    key: str = ""  # 帳號鍵（sessions、owner_of 用的那個）：有密碼是小寫帳號，沒有是 id:<n>
+    id: int | None = None  # accounts.id
 
 
 def normalize(login: str | None) -> str:
     """帳號不分大小寫：資料庫裡的鍵一律用小寫。"""
     return (login or "").strip().lower()
+
+
+def _key(login: str | None) -> str:
+    """AccountStore 認的鍵：照 normalize；只有 id: 開頭的照原樣（ID:1 不是 id:1，查不到）。"""
+    key = normalize(login)
+    return (login or "").strip() if key.startswith("id:") else key
 
 
 def check_login(login: str | None) -> str:
@@ -88,6 +100,9 @@ def _new_secret(password: str) -> tuple[str, str]:
 
 
 def _matches(account: Account, password: str) -> bool:
+    if not account.salt or not account.hash:  # 沒有密碼的帳號：照樣花一次雜湊的時間，回假（不 500）
+        hash_password(password, _DUMMY_SALT)
+        return False
     actual = hash_password(password, bytes.fromhex(account.salt))
     return hmac.compare_digest(bytes.fromhex(account.hash), bytes.fromhex(actual))
 
@@ -107,8 +122,20 @@ class AccountStore:
     # ── 查詢 ──────────────────────────────────────
 
     def _get(self, conn, key: str) -> Account | None:
+        found = ID_KEY.fullmatch(key)
+        if found is not None:  # id:<n> 只認沒有 password 列的帳號（有密碼的帳號鍵是小寫帳號，終身不變）
+            row = conn.execute(
+                "SELECT a.id, a.character, a.created FROM accounts a WHERE a.id = ? AND NOT EXISTS "
+                "(SELECT 1 FROM logins l WHERE l.account_id = a.id AND l.provider = 'password')",
+                (int(found.group(1)),),
+            ).fetchone()
+            if row is None:
+                return None
+            return Account(
+                login=key, salt=None, hash=None, character=row["character"], created=row["created"], key=key, id=row["id"],
+            )
         row = conn.execute(
-            "SELECT l.display, l.salt, l.hash, a.character, a.created FROM logins l "
+            "SELECT l.display, l.salt, l.hash, a.character, a.created, a.id FROM logins l "
             "JOIN accounts a ON a.id = l.account_id WHERE l.provider = 'password' AND l.subject = ?",
             (key,),
         ).fetchone()
@@ -116,22 +143,30 @@ class AccountStore:
             return None
         return Account(
             login=row["display"], salt=row["salt"], hash=row["hash"], character=row["character"], created=row["created"],
+            key=key, id=row["id"],
         )
 
     def _owner(self, conn, name: str) -> str | None:
         row = conn.execute(
-            "SELECT l.subject FROM accounts a JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
+            "SELECT a.id, l.subject FROM accounts a LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
             "WHERE a.character_key = ?",
             (name_key(name),),
         ).fetchone()
-        return None if row is None else row["subject"]
+        if row is None:
+            return None
+        return row["subject"] if row["subject"] is not None else f"id:{row['id']}"
 
     def get(self, login: str | None) -> Account | None:
         with self.db.snapshot() as conn:
-            return self._get(conn, normalize(login))
+            return self._get(conn, _key(login))
+
+    def account_id(self, login: str | None) -> int | None:
+        """這個帳號鍵（小寫帳號或 id:<n>）的 accounts.id；沒有就是 None。帳號層的新資料認這個（設計 4.1）。"""
+        account = self.get(login)
+        return None if account is None else account.id
 
     def owner_of(self, name: str) -> str | None:
-        """綁定這個名號的帳號（小寫鍵）；名號比對不分大小寫。沒有就是 None。"""
+        """綁定這個名號的帳號鍵（有密碼是小寫帳號，沒有是 id:<n>）；名號比對不分大小寫。沒有就是 None。"""
         with self.db.snapshot() as conn:
             return self._owner(conn, name)
 
@@ -141,23 +176,26 @@ class AccountStore:
         if not text:
             return None
         if self.get(text) is not None:
-            return normalize(text)
+            return _key(text)
         return self.owner_of(text)
 
     def search(self, text: str | None, limit: int = 10) -> list[dict]:
-        """管理頁重設密碼的搜尋：帳號或名號含這幾個字的（不分大小寫），最多 limit 筆 {login, character}；空字串回空的。"""
+        """管理頁重設密碼的搜尋：帳號或名號含這幾個字的（不分大小寫），最多 limit 筆 {login, character}；空字串回空的。
+        以 accounts 為主、一個帳號一列（多綁幾種登入方式也一列）；沒有密碼的帳號 login 寫 id:<n>（find 認得）。
+        只有密碼帳號的庫，結果跟第 201 批以前的查詢逐位元組一樣（排序鍵就是小寫帳號）。"""
         q = (text or "").strip().lower()
         if not q:
             return []
         like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         with self.db.snapshot() as conn:
             rows = conn.execute(
-                "SELECT l.display, a.character FROM logins l JOIN accounts a ON a.id = l.account_id "
-                "WHERE l.provider = 'password' AND (l.subject LIKE ? ESCAPE '\\' OR lower(COALESCE(a.character, '')) LIKE ? ESCAPE '\\') "
-                "ORDER BY l.subject LIMIT ?",
+                "SELECT COALESCE(l.display, 'id:' || a.id) AS shown, a.character FROM accounts a "
+                "LEFT JOIN logins l ON l.account_id = a.id AND l.provider = 'password' "
+                "WHERE (COALESCE(l.subject, 'id:' || a.id) LIKE ? ESCAPE '\\' OR lower(COALESCE(a.character, '')) LIKE ? ESCAPE '\\') "
+                "ORDER BY COALESCE(l.subject, 'id:' || a.id) LIMIT ?",
                 (like, like, limit),
             ).fetchall()
-        return [{"login": r["display"], "character": r["character"] or ""} for r in rows]
+        return [{"login": r["shown"], "character": r["character"] or ""} for r in rows]
 
     # ── 註冊、登入、角色 ──────────────────────────
 
@@ -176,7 +214,56 @@ class AccountStore:
                 "VALUES ('password', ?, ?, ?, ?, ?)",
                 (key, account_id, shown, salt, digest),
             )
-        return Account(login=shown, salt=salt, hash=digest, created=created)
+        return Account(login=shown, salt=salt, hash=digest, created=created, key=key, id=account_id)
+
+    def create_without_password(self, provider: str, subject: str, display: str) -> str:
+        """第三方或驗證碼開的帳號（設計 4.1、4.2）：同一筆交易建 accounts 與 logins 一列，回帳號鍵 id:<n>。
+        這個身分已經有帳號、或 provider 是 password，丟 ValueError（不是玩家看的字：第 202 批起由包翻成話）。"""
+        if provider == "password":
+            raise ValueError("password 帳號走 register")
+        created = self.clock()
+        with self.db.transaction() as conn:
+            if conn.execute("SELECT 1 FROM logins WHERE provider = ? AND subject = ?", (provider, subject)).fetchone():
+                raise ValueError("這個身分已經有帳號")
+            account_id = conn.execute("INSERT INTO accounts (created) VALUES (?)", (created,)).lastrowid
+            conn.execute(
+                "INSERT INTO logins (provider, subject, account_id, display) VALUES (?, ?, ?, ?)",
+                (provider, subject, account_id, display),
+            )
+        return f"id:{account_id}"
+
+    def add_login(self, login: str | None, provider: str, subject: str, display: str) -> None:
+        """綁一種登入方式到這個帳號（帳號鍵不變）：一個帳號每種只留一列、別人占著的不行、password 不走這裡，都丟 ValueError；
+        帳號不在丟 KeyError。"""
+        if provider == "password":
+            raise ValueError("密碼不走 add_login")
+        with self.db.transaction() as conn:
+            account = self._get(conn, _key(login))
+            if account is None:
+                raise KeyError(login)
+            if conn.execute("SELECT 1 FROM logins WHERE provider = ? AND subject = ?", (provider, subject)).fetchone():
+                raise ValueError("這個身分已經綁在別的帳號")
+            if conn.execute("SELECT 1 FROM logins WHERE account_id = ? AND provider = ?", (account.id, provider)).fetchone():
+                raise ValueError("這個帳號已經有這一種")
+            conn.execute(
+                "INSERT INTO logins (provider, subject, account_id, display) VALUES (?, ?, ?, ?)",
+                (provider, subject, account.id, display),
+            )
+
+    def remove_login(self, login: str | None, provider: str) -> None:
+        """拿掉這個帳號的一種登入方式：最後一種不准拿、沒有這一種、password（鍵終身不變，這一批不拿）都丟 ValueError；帳號不在丟 KeyError。"""
+        if provider == "password":
+            raise ValueError("密碼列不拿")
+        with self.db.transaction() as conn:
+            account = self._get(conn, _key(login))
+            if account is None:
+                raise KeyError(login)
+            kinds = [r["provider"] for r in conn.execute("SELECT provider FROM logins WHERE account_id = ?", (account.id,))]
+            if provider not in kinds:
+                raise ValueError("這個帳號沒有這一種")
+            if len(kinds) <= 1:
+                raise ValueError("最後一種登入方式不能拿掉")
+            conn.execute("DELETE FROM logins WHERE account_id = ? AND provider = ?", (account.id, provider))
 
     def authenticate(self, login: str | None, password: str | None) -> Account:
         """帳號不存在和密碼錯是同一句話、花一樣的時間；10 分鐘內錯 5 次就先不收（不存在的帳號也照算）。
@@ -206,7 +293,7 @@ class AccountStore:
         return account
 
     def bind_character(self, login: str, name: str) -> None:
-        key = normalize(login)
+        key = _key(login)
         with self.db.transaction() as conn:
             account = self._get(conn, key)
             if account is None:
@@ -216,9 +303,7 @@ class AccountStore:
             if account.character not in (None, name):
                 raise AccountError(HAS_CHARACTER)
             conn.execute(
-                "UPDATE accounts SET character = ?, character_key = ? WHERE id = "
-                "(SELECT account_id FROM logins WHERE provider = 'password' AND subject = ?)",
-                (name, name_key(name), key),
+                "UPDATE accounts SET character = ?, character_key = ? WHERE id = ?", (name, name_key(name), account.id),
             )
 
     # ── 密碼 ──────────────────────────────────────
@@ -237,7 +322,7 @@ class AccountStore:
 
     def change_password(self, login: str | None, old: str | None, new: str | None, keep: str | None = None) -> None:
         """自己改密碼：舊密碼要對；其他裝置的登入狀態清掉，keep（這個裝置的 cookie）留著。"""
-        key = normalize(login)
+        key = _key(login)
         account = self.get(key)
         if account is None or not _matches(account, old or ""):
             raise AccountError(WRONG_OLD_PASSWORD)
@@ -248,9 +333,12 @@ class AccountStore:
         """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼，這個帳號所有裝置都登出。
 
         擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
-        key = normalize(login)
-        if self.get(key) is None:
+        key = _key(login)
+        account = self.get(key)
+        if account is None:
             raise KeyError(login)
+        if account.hash is None:  # 沒有密碼的帳號：不補設（第 204 批才有補設密碼），sessions 不清
+            raise AccountError(NO_PASSWORD)
         check_password(new)
         self._replace_secret(key, new)
         with _THROTTLE_LOCK:
