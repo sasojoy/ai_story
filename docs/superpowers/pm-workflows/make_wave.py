@@ -832,6 +832,37 @@ WAVES["L"] = dict(
 )
 
 
+def b207():
+    return jb(207, "帳號七：名單上的帳號非密碼 session 不給管理者權限、密碼至少 12 字", "identity", "dev/acct-7", "8369", [
+        "- 範圍（企劃者 2026-11-08 答 PM「做，排第 207 批」兩題；設計 4.4、第七節 PM 11/08 補的兩列）：①**名單上的帳號（`config.admins`、`.local/admins.txt`、`TIANXIA_ADMINS`，與客服名單）用驗證碼或第三方進來的 session 不給管理者權限**：殼的 `/api/main` 的 `admin` 欄、`/api/do` 走到管理者動作（`admin:` 前綴、`admin_tools`）那一段、admin 包的 `/api/admin*` 守門、identity 包的 `/api/identity/admin/accounts` 與三個管理者工具，都接上核心 `identity_base.staff_session_ok`（第 204 批寫好的：這次 session 是密碼登入、而且 `staff_hours` 6 小時內登入或重驗過）。**identity 關著時管理者行為位元組一樣**：這一層只在 `identity_base.on()` 真時判（客服那一半 identity 關著看 `SessionStore.created`，管理者這一半照同樣寫法），退版寫清楚。`engine.Game.is_admin` 留名號判斷（遊戲規則到處用它），殼在呼叫前多一層 session 判斷；不夠的回話跟不是管理者同一句、管理頁的分流跟不是管理者一樣。②**名單上的帳號密碼至少 12 字**：`accounts.check_password` 分出「名單上的帳號」那一條，`/api/register`（取到名單上的帳號名）、`/api/password`、管理者重設、`scripts/set_password.py` 都走；現有的短密碼下次改才要求、登入不擋；新字一句（待 joy 潤）。測試：名單上的角色用手機驗證碼登入（假寄送）後 `/api/main` 的 `admin` 是 False、`/api/admin/reset_password`、`/api/do` 的管理者動作、identity 的管理者工具都被拒，密碼登入 7 小時前的也被拒、重驗後回來；identity 關著時全部照舊（對 base 位元組一樣）；12 字四條路都有先紅後綠。殼只改設計第七節那兩列點名的地方，`shell_tables` 不加。",
+        "- **不做**扣押期的入口、通知、池上限、紅點（第 208 批，平行線：不要碰 `tianxia/features/identity/binding.py`、`notes.py`、`web/identity.js`、mall／peers／looks；identity 的 `routes.py` 只動管理者那三條與 `admin/accounts`）。",
+    ])
+
+
+def b208():
+    return jb(208, "帳號八：扣押期的入口、綁定通知寄到加密存的號碼、池上限通知管理者、紅點即時更新", "identity", "dev/acct-8", "8370", [
+        "- 範圍照計畫第 207 批那一節的前四條與企劃者 2026-11-08 的答案：①**扣押期的入口**（設計 4.3、4.4、6.4）：新綁 72 小時內的那一種、只剩過期一種時的 7 天扣押、管理者重設密碼後 72 小時，都不能花元寶、贈物、上架市集：核心 `identity_base` 加 `hold_reason(ctx, key)`（照 `phone_ok` 的樣子：假人、沒帳號、identity 關著一律沒有扣押），資料用第 204 批旁檔的 `bindings_meta.bound_at`、`holds`；入口在第 205 批接 `phone_ok` 的同一批函式旁邊多問一次（`mall/actions.purchase` 與貨架、`peers/social._gift`、`looks/actions` 的 list），被擋時灰鈕與那一句（待 joy 潤；`phone_ok` 的那一套照抄）；管理者重設密碼（admin 包 `reset_password`）之後寫一則「帳號」紀錄並記 72 小時的 hold（admin 包不能 import identity 包，經核心 `identity_base` 寫）。②**綁、解綁、設密碼的通知**（企劃者 11/08 選「另存加密的號碼給通知用」；設計 4.3 補了做法）：`.local/identity.json` 第二把金鑰 `notify_key`（讀不到就只寫紀錄、不寄、不 500），綁 Email、手機成功時把號碼用它加密存旁檔新表（跟 HMAC 分開、不進任何查詢與比對），只在寄通知那一刻解開，解綁、刪帳號就刪那一列；每次綁、解綁、補設密碼、忘記密碼都經 `senders` 寄一則給現有的 Email、手機（假寄送測，`outbox` 之外也印一行到 log 讓 QA 看得到；正式機 `NoSender` 就是不寄）。③**全服池上限到了通知管理者**（第 203 批留下）：`check_all_and_record` 回滿的那一格桶名，寫一行進管理頁（admin 包現成的訊息欄；admin 包經核心讀）並經 `shell.WEB_PUSH` 推給管理者名單上開著推播的人（None 就跳過），同一格一小時最多通知一次。④綁、解綁手機之後 ⚙ 紅點與摺疊列標題不重新載入就更新（`web/identity.js`，L 波實機點到的）；管理頁解綁、刪帳號做完自己重找一次（`web/admin.js` 那幾行，facade 軌 `IDENTITY_ADMIN_TOUCHED` 跟著改並逐行列進回報）。",
+        "- **不做**管理者權限那一半、12 字（第 207 批，平行線：不要碰 `server.py`、`engine.py`、`accounts.check_password`、identity 的 `routes.py` 管理者那三條與 `admin/accounts`、`admin.py`）；`scripts/maintenance.py` 的 inline script 與其他標頭另開。資料庫第 9 版不動；旁檔新表 `CREATE TABLE IF NOT EXISTS`。",
+    ])
+
+
+WEB_M = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關）**", "**這一波：名單上的帳號非密碼 session 不給管理者權限、密碼 12 字、扣押期的灰鈕、綁定通知、紅點即時更新（開關預設關）**").replace(
+    "實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話",
+    "實機走：名單上的角色用 Email 驗證碼登入（假寄送把碼印在 log）後進不了管理頁、`/api/main` 的 admin 是 False，用密碼登入就回來；名單上的帳號改密碼 11 字被拒、12 字過；新綁手機後商城購買鈕灰掉寫原因（把時鐘撥過 72 小時後回來）；綁 Email 時 log 裡有一則寄給它的通知；綁、解綁手機後 ⚙ 紅點與摺疊列標題不重新載入就變").replace(
+    "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給）", "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給；`fake_services: true`；`.local/identity.json` 多放 `notify_key`）")
+
+
+WAVES["M"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 207、208 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.3、4.4、6.4 與計畫第 207 批那一節加企劃者 11/08 的四個答案") + " **另外**：名單上的角色用驗證碼登入後管理者 API 全部被拒（`/api/do` 的管理者動作、admin 包、identity 的管理者工具、`/api/main` 的 admin 欄），identity 關著時管理者行為對 base 位元組一樣；扣押期三種各有一條先紅後綠；加密存的號碼不進任何查詢（grep 旁檔的 SELECT 只用 HMAC 欄）；`notify_key` 讀不到不寄也不 500；池上限的通知一小時最多一次。"),
+    ],
+    lines=[dict(name="帳號七", batches=[b207]), dict(name="帳號八", batches=[b208])],
+    merge_port=8371, fix_port=8372,
+    web_check=dict(ports="8373、8374", steps=WEB_M),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
