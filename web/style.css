@@ -1592,8 +1592,6 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .patch-card li::before { content: "・"; }
 .patch-old { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; }
 .patch-old summary { cursor: pointer; color: var(--ink-2); }
-.patch-pop .patch-card h3 { font-size: 17px; margin-bottom: 6px; }
-.patch-pop .patch-ok { display: block; width: 100%; min-height: 44px; margin-top: 14px; }
 .promo { position: relative; margin: 0 -20px; aspect-ratio: 864 / 496; max-width: calc(100% + 40px); background: #e9e2d3; overflow: hidden; }
 .promo video, .promo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .promo::after { content: ""; position: absolute; inset: auto 0 0; height: 28%; pointer-events: none;
