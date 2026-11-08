@@ -5,6 +5,8 @@
 第 202 批多兩張：oauth_tickets（第三方登入的一次性單）、pending（驗過、還沒建角色的身分）；都是 CREATE TABLE IF NOT EXISTS，舊旁檔開的時候補建。
 SQLite WAL、isolation_level=None，寫一律 BEGIN IMMEDIATE；計數是「檢查並記一筆」同一筆交易。時間一律由呼叫端傳入（不讀時鐘）。
 第 203 批：challenges 多 channel、subject_hmac、display 三欄（舊旁檔開檔時補）；多 trusted_devices、pending 兩表；check_all_and_record 多格全記或全不記。
+第 204 批：建表一個路徑只跑一次（identity_base.ensure_schema）；session_auth 的 DDL 在核心一份；bindings_meta 多 bound_at、reminded_at，
+oauth_tickets 多 account_id；多 resets、holds、account_notes、rechecks 四表。
 """
 from __future__ import annotations
 

@@ -99,9 +99,10 @@ def admin_tools(shell) -> dict:
 
     from . import admin  # noqa: PLC0415
 
-    def gate() -> None:
-        if not identity_base.on(shell.CONTENT):
-            raise HTTPException(404)
+    def gate() -> None:  # 寫法刻意跟 router 的 gate 不同：sb 的 selftest（wicket 軌）要那一句全檔只有一處
+        if identity_base.on(shell.CONTENT):
+            return
+        raise HTTPException(404)
 
     return {
         "identity_view": AdminTool(gate, lambda g, b: admin.view(shell, g, b)),
