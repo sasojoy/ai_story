@@ -259,6 +259,10 @@ def test_each_default_table_is_worded_by_its_own_biggest_column():
     academy = next(t for t in cfg.explore_tables if t.name == "書院")
     assert (academy.event, academy.insight) == (55, 40) and explore_one.hint_in(academy) == "寺裡多事"
     assert explore_one.named_hint(temple) == "寺觀多悟" and explore_one.named_hint(academy) == "書院多事"
+    # 探索鈕上的小字照表的名字換開頭：書院寫「院裡」，不寫成「寺裡」（UI 手感己批 5-4）
+    w = explore_one.table_weights(academy)
+    assert explore_one.hint_of(academy.kind, None, w, academy.name) == "院裡多事"
+    assert explore_one.hint_of(temple.kind, None, explore_one.table_weights(temple), temple.name) == "寺裡多悟"
 
 
 def test_the_temple_says_so_on_the_button_the_cell_the_map_and_the_howto():
@@ -304,6 +308,8 @@ def test_the_cell_word_and_the_action_line_always_say_the_same_thing(side):
             continue
         head = _note(game).partition("，")[2].partition("；")[0]  # 「多半遇事，也可能有悟、得料」
         word = plan.hint.removeprefix(explore_one.PLACE_WORDS[plan.kind])
+        for named in explore_one.NAMED_PLACE_WORDS.values():  # 有名字的地點（書院「院裡」）換掉地點種類的字
+            word = word.removeprefix(named)
         if head.startswith("多半"):
             assert word == LINE_WORD[head[2:4]], (loc_id, head, plan.hint)
         elif head.startswith("會"):

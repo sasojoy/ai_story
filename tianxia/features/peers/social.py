@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import four_tiers, gender, renown, team
 from tianxia.characters import name_key
+from tianxia.core import identity_base  # 綁手機才能贈物（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core.cards import ACTIONS, CardAction, CardButton, register  # noqa: F401  玩家卡的登記表搬進核心（第 45 批）：舊名照舊拿得到同一批物件
 from tianxia.core.presence import GONE, affiliation, here, side, visible  # noqa: F401  「此地還有」的判斷與身分字搬進核心（第 37 批）：舊名照舊拿得到同一批函式物件
 from tianxia.rules import day_turn
@@ -217,7 +218,8 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
         action="gift", label="贈素材", arg="material", amount=max(n for _, n in held),
         choices=[{"id": m, "label": game.content.materials[m].name, "max": n} for m, n in held],
     )
-    full = gift_refusal(game, other)
+    full = (identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, "gift")
+            else (identity_base.hold_reason(game, "gift") or gift_refusal(game, other)))  # 扣押期（第 208 批）只問送的人
     return [replace(button, enabled=False, note=full) if full else button]
 
 
@@ -234,6 +236,11 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
     """贈素材：不必對方同意，給了就是他的；兩邊的江湖紀錄各記一則，連著送同一個人併進同一則（FB-116）。數量照自己身上有的驗；
     只送得出 gift_max_tier 階以下的；同一對人每個遊戲日最多 Config.gift_per_pair_day 次（不分誰送誰，帳在 WorldState.gift_tally），
     一個人一天總共最多 Config.gift_per_day 次（PlayerState.gift_day／gifts_today）。"""
+    if not identity_base.phone_ok(game, "gift"):  # 只問送的人（第 205 批）
+        return [identity_base.PHONE_NEEDED]
+    held = identity_base.hold_reason(game, "gift")  # 扣押期（第 208 批）：只問送的人
+    if held:
+        return [held]
     from tianxia import materials
 
     p, them, c = game.state.player, other.state.player, game.content

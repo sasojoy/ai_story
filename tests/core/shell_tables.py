@@ -265,7 +265,22 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/menxia/{op}"): "不認得的 op 404，認得的要登入",
     ("GET", "/api/events"): "HUB 是 None（沒開推送）就 404，連登入都不問",
     # identity（帳號與客服第 201 批；設計第七節）
-    ("GET", "/api/identity/gate"): "登入頁要先知道哪幾條路開著；關著 404，只回設定裡公開的字（哪幾條路、客服信箱、Turnstile 網站金鑰），不看 cookie",
+    ("GET", "/api/identity/gate"): "登入頁要先知道哪幾條路開著；關著 404，只回設定裡公開的字（哪幾條路、Turnstile 網站金鑰），不看 cookie",
+    ("POST", "/api/identity/start"): "第 202 批：LINE、Google 登入的第一步就是還沒登入的人按的；關著 404，已登入反而擋（400），按來源 IP 節流，只回對方的授權網址",
+    ("GET", "/auth/{provider}/callback"): "第 202 批：LINE、Google 登完轉回來的網址，瀏覽器這時還沒有 session；關著 404，靠一次性票與 tx_oauth cookie 比對，只回 302 到 /?auth=<代碼>",
+    # identity（帳號與客服第 203 批；設計 4.2、4.6）
+    ("POST", "/api/identity/code/send"): "還沒登入才要用驗證碼登入；關著或這條路不在 ways 404；先過伺服器端 Turnstile，再過旁檔的一號、每日、來源、全服池節流，回應不透露有沒有帳號",
+    ("POST", "/api/identity/code/verify"): "同上：驗碼本身就是登入；關著 404；單綁 tx_code cookie、錯 5 次作廢、5 分鐘過期，查無帳號只寫待處理不開帳號",
+    # support（帳號與客服第 212 批；計畫「J 波落地時 PM 加的」第 1 條：關著一律 404、gate 先於登入與參數解析）
+    ("POST", "/api/support/ticket"): "Config.support.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401（test_support_gate.py 守）",
+    ("GET", "/api/support/mine"): "support：同上",
+    ("POST", "/api/support/reply"): "support：同上",
+    ("GET", "/api/support/queue"): "support：同上（開著還要是客服名單上的帳號，不是 404）",
+    ("GET", "/api/support/ticket/{tid}"): "support：同上",
+    ("POST", "/api/support/answer"): "support：同上",
+    ("POST", "/api/support/close"): "support：同上",
+    ("POST", "/api/support/lookup"): "support：同上",
+    ("GET", "/api/support/mailbox"): "登入頁的客服信箱（第 214 批）：登不進去的人才看這一行，本來就沒登入；關著 404（gate 先於一切），只回設定裡公開的信箱字串，不看 cookie、不開旁檔、回應不因人而異（設計第七節給信箱的那一條，J 波 PM 認定②改歸 support）",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──

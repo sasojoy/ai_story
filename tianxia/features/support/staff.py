@@ -2,55 +2,22 @@
 - Config.support.staff（tianxia/core/tuning/support.py；設定檔寫）；
 - .local/support.txt（一行一個，# 開頭是註解；照檔的修改時間重讀，不必重開伺服器）；
 - 環境變數 TIANXIA_SUPPORT（逗號分開）。
-每一筆是 accounts.id 的數字，或登入名（accounts.normalize：不分大小寫）。名號寫進來也不認。由這一包自己讀，不動 content.py、is_admin。"""
+每一筆是 accounts.id 的數字，或登入名（accounts.normalize：不分大小寫）。名號寫進來也不認。不動 content.py、is_admin。
+
+第 212 批起本體在核心 tianxia/core/identity_base.py（商城的易名帖也要問：客服也不能改名，包不能 import 別包）；這裡留同名的轉手，
+_cache 是同一個 dict（測試的 staff._cache.update 照用）。"""
 from __future__ import annotations
 
-import os
-from pathlib import Path
+from tianxia.core import identity_base
 
-from tianxia import content as content_module
-from tianxia.accounts import normalize
+ENV_VAR = identity_base.SUPPORT_ENV
+FILE_NAME = identity_base.SUPPORT_FILE
 
-ENV_VAR = "TIANXIA_SUPPORT"
-FILE_NAME = "support.txt"
-
-_cache: dict = {"path": None, "mtime": None, "names": frozenset()}
-
-
-def staff_file() -> Path:
-    return content_module.LOCAL_DIR / FILE_NAME
-
-
-def _file_names(path: Path) -> frozenset[str]:
-    try:
-        mtime = path.stat().st_mtime
-    except OSError:
-        return frozenset()
-    if _cache["path"] == path and _cache["mtime"] == mtime:
-        return _cache["names"]
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return frozenset()
-    names = frozenset(normalize(line) for line in lines if line.strip() and not line.strip().startswith("#"))
-    _cache.update(path=path, mtime=mtime, names=names)
-    return names
-
-
-def names(config) -> frozenset[str]:
-    """名單上每一筆（小寫、去空白）。"""
-    listed = {normalize(x) for x in config.support.staff}
-    listed |= {normalize(x) for x in os.environ.get(ENV_VAR, "").split(",")}
-    listed |= _file_names(staff_file())
-    listed.discard("")
-    return frozenset(listed)
+_cache: dict = identity_base._support_cache
+staff_file = identity_base.support_file
+names = identity_base.support_names
 
 
 def is_staff(config, who) -> bool:
-    """who 是 accounts_view.Who（沒有帳號是 None：假人、還沒登入的都不是）。比 id 的數字或登入名。
-    名單上全是數字的一筆只當 id：登入名可以全是數字、註冊又是開放的，不然搶註冊登入名 777 就頂了 id 777 的客服（第 J 波審查）。"""
-    if who is None:
-        return False
-    listed = names(config)
-    login = normalize(who.login) if who.login else ""
-    return str(who.id) in listed or (bool(login) and not login.isdigit() and login in listed)
+    """who 是 accounts_view.Who（沒有帳號是 None：假人、還沒登入的都不是）。比 id 的數字或登入名（全是數字的一筆只當 id）。"""
+    return who is not None and identity_base.support_staff(config, who.id, who.login)

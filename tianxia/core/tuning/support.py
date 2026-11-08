@@ -14,3 +14,5 @@ class SupportTuning(BaseModel):
     open_max: int = Field(default=3, ge=1)  # 同時最多幾張沒結的單
     daily_max: int = Field(default=5, ge=1)  # 24 小時內最多送幾張
     mailbox: str = "support@tianxiadashi.com"  # 登入頁寫給登不進去的人的信箱（暫定；人工收信，不進客服單）
+    lookup_hourly: int = Field(default=20, ge=1)  # 每位客服每小時查帳號幾次（設計 6.3；看單帶出的帳號卡不算）
+    ledger_rows: int = Field(default=50, ge=1)  # 帳號卡的元寶帳本最多列幾筆（新的在前）

@@ -26,13 +26,22 @@ from . import rules as mall
 if TYPE_CHECKING:
     from tianxia.engine import Game
 
+# 客服本人拿易名帖改名（帳號與客服第 212 批；字放這裡：mall/rules.py 不在設計第七節的名單上）
+RENAME_STAFF = "客服的名號不能用易名帖改。"  # 待 joy 潤
+
 
 def grant(ctx: Game) -> None:
     """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。本人這一輪（Game.own_turn_checks 的 on_own_turn 掛鉤）叫。"""
     wallet = ctx._wallet()
     if wallet is None:
         return
-    amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    if not identity_base.phone_ok(ctx, "mall_grant"):  # 綁了手機那一輪才發（帳號與客服第 205 批）
+        return
+    phone = identity_base.phone_subject(ctx, "mall_grant")  # 閘關、不在名單、假人是 None：照舊只看錢包
+    if phone is None:
+        amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    else:
+        amount = mall.grant_beta_phone(ctx.content, wallet, ctx._mall_owner(), phone, ctx.now)
     if amount:
         journal.add_entry(ctx.state, JournalEntry(
             time=ctx.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
@@ -61,6 +70,11 @@ def purchase(ctx: Game, item_id: str, ref: str, qty: int = 1) -> Receipt:
     wallet = ctx._wallet()
     if wallet is None:
         return Receipt(ctx._log([mall.OFF]))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 只問買的人（第 205 批）
+        return Receipt(ctx._log([identity_base.PHONE_NEEDED]))
+    held = identity_base.hold_reason(ctx, "mall_buy")  # 扣押期（第 208 批）：新綁 72 小時、只剩過期一種、管理者重設之後
+    if held:
+        return Receipt(ctx._log([held]))
     result = mall.buy(
         ctx.state, ctx.content, wallet, item_id, ref,
         now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), qty=qty, moment=moment(ctx),
@@ -129,6 +143,8 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
         return [mall.NO_RENAME]
     if p.bot is not None or ctx.is_admin():
         return [mall.RENAME_ADMIN]
+    if identity_base.support_staff_name(ctx.world.db, ctx.content.config, old):  # 客服也不能改名（帳號與客服第 212 批；客服開關關著不擋）
+        return [RENAME_STAFF]
     if new == old:
         return [mall.RENAME_SAME]
     if taken is None:
@@ -182,6 +198,12 @@ def view(ctx: Game) -> dict | None:
     if wallet is None:
         return None
     data = mall.view(ctx.content, wallet, ctx._mall_owner(), ctx._pill_day(), ctx.world.get_season_number(), moment(ctx))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 沒綁手機：每一件都灰、寫同一句（第 205 批；web/mall.js 照 can、why 畫）
+        for row in data["items"]:
+            row.update(can=False, why=identity_base.PHONE_NEEDED, max=0)
+    elif held := identity_base.hold_reason(ctx, "mall_buy"):  # 扣押期（第 208 批）：沒被手機那一句灰掉的才換這一句
+        for row in data["items"]:
+            row.update(can=False, why=held, max=0)
     cfg = ctx.content.config
     data["pills"] = {
         "name": cfg.stamina_pill_name, "count": ctx.state.player.stamina_pills, "today": ctx.pills_left_today(),

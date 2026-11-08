@@ -10,7 +10,10 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
   python scripts/same_behavior.py compare --base <根> --head <根> --tmp <暫存資料夾> [--profiles none,weekend,...] [--tracks sortie,duel]
       [--jobs 4] [--no-bots] [--cache <資料夾>] [--new <包>[,<包>]]
   python scripts/same_behavior.py selftest --base <根> --tmp <暫存資料夾> [--tracks ...] [--cache <資料夾>]   同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到
+      [--covers <包>[,<包>]] [--crossover]
+  python scripts/same_behavior.py pick --covers <包>[,<包>] [--tracks ...]   只印會挑到的軌（wave_gate --dry-run 用）
   python scripts/same_behavior.py run <根> <設定> <輸出檔> --tmp <暫存資料夾> [--track sortie|duel] [--part all|first|second] [--db <資料庫檔>]
+      [--snapshot <前半資料庫> --snapshot-out <前半輸出檔>]
   python scripts/same_behavior.py bots <根> <設定> <輸出檔> --tmp <暫存資料夾> [--seats sortie|duel]
 
 設定：none（不帶）、weekend、season21、week7，與 test（tests/fixtures/content，測試內容）。
@@ -19,7 +22,7 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 selftest --cache 多驗快取本身（每一軌四次 compare，只帶幾軌）。
 
 --new <包>（第 106 批）：新包進來時用。新包帶來的差異（包 web 宣告的 js、css 的行，帶包名前綴的表〔<包> 或 <包>_*，不帶前綴的照紅〕，新 op 與管理者動作）只在 head 的子行程扣掉，
-比完印一行清單，其餘照比；base 已經有那一包、head 沒有那一包都拒絕。不帶就跟以前一個位元組都不差。規矩（新包進 develop 的比對怎麼寫）等企劃者點頭，寫在手冊。
+比完印一行清單，其餘照比；base 已經有那一包、head 沒有那一包都拒絕。--also-existing（K 波）：同一包的後續批，base 已經有也收、扣法一樣（head 沒有照舊拒絕）。不帶就跟以前一個位元組都不差。規矩（新包進 develop 的比對怎麼寫）等企劃者點頭，寫在手冊。
 
 固定的那幾層（不固定的話同一份程式跑兩次就不一樣，比對本身不穩）：
 - 亂數：伺服器每個請求都 Game(CONTENT, state) 不傳 rng（engine 的 `self.rng = rng or random.Random()`）——這裡把
@@ -37,6 +40,10 @@ main.prep 就照預設配比按 growth:、識海按 legacy:skip（clear_prep，�
 
 半舊半新（批次表「舊程式寫到一半、新程式接手」）：--part first 跑完那一軌的 PHASES_FIRST 停（存下步數），--part second 開同一個
 資料庫接著跑 PHASES_SECOND。compare 比「base 整段」＝「base 前半＋head 後半」；selftest 比「base 整段」＝「base 前半＋base 後半」。
+第 107 批：compare 只有帶 --crossover 才比半舊半新（PM 定改預設；wave_gate 不帶 --changed 時一律帶）；base 前半不再另開：base 整段帶 --snapshot，
+跑到切點時寫 .state.json、前半輸出與資料庫快照（harness.snapshot_db），head 後半從快照接；整段同一軌的（full_same_as）照舊另開 base 前半。
+切點要不在請求中間（Scenario.call 進出記深度，不是 0 就丟例外）。selftest：a 那一趟帶快照、後半從快照接，b 不帶，a＝b 證明快照不擾動。
+--covers（第 107 批）：只比 covers（各軌 register_track 寫死的、走到的包）跟這幾包有交集的軌加上 harness.ALWAYS_TRACKS。
 
 檔案（第二輪第 70 批）：這支只留入口，路徑與指令不變。調度與固定層在 scripts/sb/harness.py；Scenario、DuelScenario、它們的假人在 scripts/sb/base.py；
 其餘每段軌一檔 scripts/sb/tracks/<軌>.py。新軌只加檔：檔尾 register_track(...)（有假人再 register_bots，新子命令登記 SUBCOMMANDS）；軌名重複載入時就擋。
@@ -87,6 +94,11 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--part", choices=("all", "first", "second"), default="all")
     r.add_argument("--track", choices=tuple(TRACKS), default="sortie")
     r.add_argument("--new", default="", help="這幾包是新包，帶來的差異扣掉（compare --new 只給 head 的子行程帶）")
+    r.add_argument("--snapshot", help="只配 --part all：前半跑完那一刻資料庫抄到這個名字（同 --part first 留下的），後半可以從它接")
+    r.add_argument("--snapshot-out", help="配 --snapshot：那一刻的輸出（＝ --part first 的輸出檔）")
+    k = sub.add_parser("pick")
+    k.add_argument("--covers", required=True, help="改到的包（逗號隔開）：印 covers 有交集的軌加上 ALWAYS_TRACKS")
+    k.add_argument("--tracks", default="")
     b = sub.add_parser("bots")
     b.add_argument("root")
     b.add_argument("profile", choices=PROFILES)
@@ -101,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
             x.add_argument("--head", required=True)
             x.add_argument("--no-bots", action="store_true")
             x.add_argument("--new", default="", help="新包（逗號隔開）：帶來的差異扣掉、印成清單，其餘照比")
+            x.add_argument("--also-existing", action="store_true",
+                           help="跟 --new 一起用：base 已經有這一包（同一包的後續批）也收，扣法一樣；不帶照舊拒絕")
+            x.add_argument("--covers", default="", help="改到的包（逗號隔開）：只比 covers 有交集的軌加上 ALWAYS_TRACKS；--tracks 同時給取交集")
+            x.add_argument("--crossover", action="store_true", help="比半舊半新（base 前半＋head 後半）；不帶就不跑那一串")
         x.add_argument("--tmp", required=True)
         x.add_argument("--profiles", default=",".join(PROFILES))
         x.add_argument("--tracks", default=",".join(harness.TRACK_NAMES))
@@ -115,7 +131,10 @@ def main(argv: list[str] | None = None) -> int:
             _wipe_db(db)
         _setup_child(Path(a.root).resolve(), a.profile, db)
         harness.set_new(n for n in a.new.split(",") if n)
-        TRACKS[a.track](Path(a.root).resolve(), a.profile, db).run(a.part, Path(a.out))
+        if a.snapshot and (a.part != "all" or not a.snapshot_out):
+            raise SystemExit("--snapshot 只配 --part all，而且要帶 --snapshot-out")
+        snap = (Path(a.snapshot), Path(a.snapshot_out)) if a.snapshot else ()
+        TRACKS[a.track](Path(a.root).resolve(), a.profile, db).run(a.part, Path(a.out), *snap)
         harness.write_new(Path(a.out))
         sys.stdout.flush()
         os._exit(0)  # TestClient 留下的執行緒不等
@@ -126,15 +145,22 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.flush()
         os._exit(0)
     sys.stdout.reconfigure(encoding="utf-8")
+    if a.cmd == "pick":  # wave_gate --dry-run 用：只印軌名，不碰任何根
+        print(",".join(harness.pick_tracks([c for c in a.covers.split(",") if c], [t for t in a.tracks.split(",") if t] or None)))
+        return 0
     profiles = [p for p in a.profiles.split(",") if p]
-    tracks = _tracks_on([t for t in a.tracks.split(",") if t], Path(a.base))
+    asked = [t for t in a.tracks.split(",") if t]
+    if a.cmd == "compare" and a.covers:
+        asked = harness.pick_tracks([c for c in a.covers.split(",") if c], asked)
+        print(f"挑到 {len(asked)} 軌：{'、'.join(asked)}")
+    tracks = _tracks_on(asked, Path(a.base))
     if not tracks:  # compare、selftest 拿到空清單會跑全部
         print("這個根沒有要跑的軌")
         return 0
     cache_dir = Path(a.cache).resolve() if a.cache else None
     if a.cmd == "compare":
         ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir,
-                     new=tuple(n for n in a.new.split(",") if n))
+                     new=tuple(n for n in a.new.split(",") if n), crossover=a.crossover, also_existing=a.also_existing)
     else:
         ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks, cache_dir=cache_dir)
     print("全部一樣" if ok else "有不一樣的")

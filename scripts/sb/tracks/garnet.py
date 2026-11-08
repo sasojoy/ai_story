@@ -148,4 +148,7 @@ class GarnetScenario(CarveScenario):
 
 
 # 改一個字（selftest）：引將期滿回原處那一句天下大事（seal_acts 的 BACK，進共用規則層之後還在 tianxia/seal_acts.py），advance 那幾段抓到
-register_track("garnet", GarnetScenario, (("tianxia/seal_acts.py",), ("坐鎮期滿，回到了{place}。", "坐鎮期滿，回到了{place}！")), "week7")
+register_track("garnet", GarnetScenario, (("tianxia/seal_acts.py",), ("坐鎮期滿，回到了{place}。", "坐鎮期滿，回到了{place}！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "identity", "looks", "military", "outlets", "peers", "seal", "sense",
+                       "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan"))

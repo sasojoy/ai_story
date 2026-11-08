@@ -11,7 +11,7 @@
 
 - `actions.py`：原本 `Game` 上的 20 個方法的本體（換季補論功 `past`、同步記行狀 `tick`、行狀頁 `annals_view`、休季入口 `entry`、休季三顆 `options`／`act`、寫傳 A `request`、C `write`、讀傳 `view`、分享 `share`……），加上 `choose_unlisted`（休季用票的 choose）與 `profile`（第 29 批之二：換季存行狀時的身家，轉 `standing.profile`）。
 - `standing.py`（第 29 批之二，原 `tianxia/annals.py` 的查詢與行狀頁那一半）：`profile`、`standing`、`tier_text`／`tier_note`、`xingshi_notes`、`rows`；用 `import *` 加 `_gear`、`_notable` re-export 核心 `annal_base` 的名字。
-- `biography.py`（原 `tianxia/biography.py`）、`zhuan_end.py`（原 `tianxia/zhuan_end.py`）、`zhuan_html.py`（原根目錄 `zhuan_html.py`；根目錄那個名字還是別名，第 103 批沒收）。
+- `biography.py`（原 `tianxia/biography.py`）、`zhuan_end.py`（原 `tianxia/zhuan_end.py`）、`zhuan_html.py`（原根目錄 `zhuan_html.py`；根目錄那個名字還是別名，第 103 批沒收）。公開頁上的程式（直書切換、分享）在 `web/zhuan_page.js`，頁裡只寫 `<script src>`（CSP 不准 inline 的程式，第 213 批從 `zhuan_html.SCRIPT` 原樣搬出；不宣告進 `web`，`/` 不載）。
 - `routes.py`：`/api/annals`、`/api/zhuan`、`/api/zhuan/write`、`/api/zhuan/share`、`/zhuan/{code}`；殼（`server.py`）照 `FEATURES` 掛，殼的東西一律照 `shell.<名字>` 當下讀。
 - 掛鉤：`choose_unlisted`（`zhuan:` 前綴，先看前綴再叫選單，原本在 `Game.choose` 的 `choose_unlisted` 之後、查選單之前）、`routes`、`check_content`、`enabled`（沒有任何掛鉤吃它）。沒有 `options`／`menu`：休季用票的鈕是 `Game._everyday_options` 休季那一支叫 `_zhuan_options`（`game_api.py` 的表）。
 - 前綴 `zhuan:`（`zhuan:pick_art`、`zhuan:seal`、`zhuan:quote:<人物 id>`）。沒有假人分數、沒有 `bots.py`：假人在休季整個不動，碰不到 `zhuan:`（`bot_policy`、`bot.py`、`bot_runner` 都沒有寫 `zhuan`）。

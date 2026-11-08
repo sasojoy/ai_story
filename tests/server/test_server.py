@@ -786,6 +786,27 @@ def test_server_timing_lists_only_what_was_measured():
     assert server.server_timing({"lock": 0.5, "lock_n": 3, "view": 0.02}, 1.0) == 'lock;desc="n=3";dur=500.0, view;dur=20.0, total;dur=1000.0'
 
 
+def test_every_response_carries_the_csp(client):
+    """CSP（帳號與客服第 213 批，設計第三節「CSP 標頭另開小批」）：每個回應都帶同一條 Content-Security-Policy——頁、API、靜態檔、404、
+    GameError 的 400、沒登入的 401 都是；Turnstile 要 challenges.cloudflare.com。字面寫死在這裡，防有人悄悄改寬。
+    （500 由 Starlette 最外層回、不經 middleware，不帶；那是純文字頁，這裡不打。）"""
+    from fastapi.routing import APIRoute
+
+    assert server.CSP == "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+    gets = sorted(r.path for r in server.app.routes if isinstance(r, APIRoute) and "GET" in r.methods and "{" not in r.path)
+    gets += ["/zhuan/nope", "/zhanji/nope", "/static/app.js", "/static/zhuan_page.js", "/static/tale_page.js", "/no/such/page"]
+    seen = {}
+    for path in gets:
+        r = client.get(path)
+        seen[path] = r.headers.get("content-security-policy")
+    r = client.post("/api/login", json={"login": "nobody_here", "password": "wrong-pw"})
+    seen["POST /api/login"] = r.headers.get("content-security-policy")
+    _player(client)
+    for path in ("/api/main", "/admin", "/"):
+        seen[f"{path} (登入後)"] = client.get(path).headers.get("content-security-policy")
+    assert {path: got for path, got in seen.items() if got != server.CSP} == {}
+    assert client.get("/static/zhuan_page.js").status_code == 200 and client.get("/static/tale_page.js").status_code == 200
+
 def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     _player(client)
     before = client.get("/api/main").json()["status"]["stamina"]

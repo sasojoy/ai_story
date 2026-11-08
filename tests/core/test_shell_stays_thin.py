@@ -518,3 +518,17 @@ def test_compare_new_refuses_a_package_that_is_not_new(harness, tmp_path):
         harness.compare(ROOT, ROOT, tmp_path, ["week7"], 1, False, tracks=["facade"], new=("mall",))
     with pytest.raises(SystemExit, match="head 沒有這一包"):
         harness.compare(ROOT, ROOT, tmp_path, ["week7"], 1, False, tracks=["facade"], new=("zz_no_such_pack",))
+
+
+def test_compare_new_also_existing_takes_a_package_base_already_has(harness, tmp_path):
+    """K 波 --also-existing：同一包的後續批（base 已經有）不帶旗標照舊拒，帶了放行；head 沒有那一包帶了也拒。"""
+    with pytest.raises(SystemExit, match="不是新包"):
+        harness.compare(ROOT, ROOT, tmp_path, ["week7"], 1, False, tracks=["facade"], new=("identity",))
+    harness.check_new(ROOT, ROOT, ("identity", "support"), also_existing=True)
+    with pytest.raises(SystemExit, match="head 沒有這一包"):
+        harness.check_new(ROOT, ROOT, ("zz_no_such_pack",), also_existing=True)
+    cli = (ROOT / "scripts" / "same_behavior.py").read_text(encoding="utf-8")
+    assert "also_existing=a.also_existing" in cli and '"--also-existing"' in cli  # compare 子命令收得到、傳得進去
+    import inspect  # noqa: PLC0415
+
+    assert "*base_new" in inspect.getsource(harness.compare)  # base 也有這一包：base 的子行程同樣扣，不然 base 多出包自己的行

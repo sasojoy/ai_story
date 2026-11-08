@@ -98,4 +98,7 @@ class DrapeScenario(FacadeScenario):
 
 
 # 改一個字（selftest）：簽到第四階小字的字級（第 67 批從 style.css 切到 checkin.css，兩處找）
-register_track("drape", DrapeScenario, (("web/checkin.css", "web/style.css"), (".ck-p4 small { font: 10.5px", ".ck-p4 small { font: 10.6px")), "week7")
+register_track("drape", DrapeScenario, (("web/checkin.css", "web/style.css"), (".ck-p4 small { font: 10.5px", ".ck-p4 small { font: 10.6px")), "week7",
+               covers=("battle", "bounties", "checkin", "companions", "craft", "cultivation", "explore", "figure_acts", "guide", "identity",
+                       "legacy", "looks", "mall", "map", "military", "notify", "peers", "seal", "smithy", "sortie",
+                       "story", "support", "tavern", "territory_acts", "zhuan"))

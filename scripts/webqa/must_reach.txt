@@ -230,6 +230,7 @@ x:x_guide_next
 x:x_guide_shut
 x:x_guide_open
 x:x_news
+x:x_news_xingshi
 x:x_self_news
 x:x_seal_card
 x:x_seal_duel

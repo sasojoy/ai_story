@@ -421,4 +421,8 @@ class BeaconScenario(Scenario):
 
 # 改一個字（selftest）：來信那一句通知（notices.LETTER；第 53 批搬進包，舊名的檔、搬進包的檔兩處找）
 register_track("beacon", BeaconScenario, (("tianxia/features/notify/notices.py",),
-                                          ('LETTER = "{who}派人送來一封信。"', 'LETTER = "{who}派人送來一封信！"')), "week7")
+                                          ('LETTER = "{who}派人送來一封信。"', 'LETTER = "{who}派人送來一封信！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "notify", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

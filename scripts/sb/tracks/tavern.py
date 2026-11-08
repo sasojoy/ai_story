@@ -600,4 +600,8 @@ class TavernScenario(Scenario):
                                    "seq": s.tavern_hit_seq, "chatter": dict(sorted(s.tavern_chatter.items()))})
 
 
-register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py",), ("滿堂叫好。", "滿堂叫好！")), "week7")
+register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py",), ("滿堂叫好。", "滿堂叫好！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan"))

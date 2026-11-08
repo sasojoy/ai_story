@@ -1,7 +1,22 @@
-/* 登入頁的格（帳號綁定，features/identity；帳號與客服第 201 批）：快速登入那一格的幾條路與客服信箱那一行。
-   選擇器全帶 .gate 前綴，不蓋殼的樣式；開關關著時這幾個 class 不會出現在頁面上。 */
+/* 登入頁的格（帳號綁定，features/identity；帳號與客服第 201、202 批）：快速登入那一格的幾條路、隱私權與提示那幾行、建角色頁「已經有帳號？」那一行。
+   選擇器全帶 .gate 前綴、class 都是 idp 開頭，不蓋殼的樣式；開關關著時這幾個 class 不會出現在頁面上。 */
 .gate .idp { display: flex; flex-direction: column; gap: 10px; }
 .gate .idp .btn { width: 100%; }
-.gate .support-mail { margin: 12px 0 0; text-align: center; }
-.gate .support-mail a { color: inherit; text-decoration: underline; word-break: break-all; }
-.gate .fine { font-size: 13px; color: var(--ink-2); }
+.gate .idp-fine { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); text-align: center; }
+.gate .idp-fine a { color: inherit; text-decoration: underline; margin-left: 4px; }
+.gate .idp-hint { text-align: left; }
+.gate .idp-have { margin-top: 16px; }
+/* 第 204 批：驗證碼那一頁（登入頁與抽屜共用）、設定抽屜的「帳號綁定」摺疊、紅點（⚙ 與摺疊列）、管理頁的登入方式那一塊。class 都是 idp 開頭 */
+.idp-code { display: flex; flex-direction: column; gap: 8px; }
+.idp-code .btn { width: 100%; }
+.idp-code-title { margin: 0; font-weight: 600; }
+.idp-code .idp-fine, .idp-fold .idp-fine { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+.idp-fold summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.idp-fold .idp-line { flex: 1 1 100%; font-size: 13px; color: var(--ink-2); font-weight: normal; }
+.idp-fold .idp-row, .idp-admin .idp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.idp-fold .idp-kind { min-width: 4em; font-weight: 600; }
+.idp-fold .idp-shown { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--ink-2); }
+.idp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red, #c0392b); vertical-align: top; margin-left: 2px; }
+.idp-admin { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+/* 第 208 批：管理頁「現在」那幾格後面的全服池上限通知（/api/admin 的 identity_alerts） */
+.idp-alert { margin: 8px 0 0; color: var(--red, #c0392b); overflow-wrap: anywhere; }

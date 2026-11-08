@@ -544,4 +544,8 @@ class OmenScenario(MilitaryScenario):
 
 
 # 改一個字（selftest）：機緣完成那一句（搬之前在 tianxia/opportunities.py、搬之後在 tianxia/features/military/ 的機緣檔；搬的人照實際的檔名多寫一個）
-register_track("omen", OmenScenario, (("tianxia/features/military/opp_rules.py",), ('DONE = "（機緣「{name}」完成。）"', 'DONE = "（機緣「{name}」完成！）"')), "week7")
+register_track("omen", OmenScenario, (("tianxia/features/military/opp_rules.py",), ('DONE = "（機緣「{name}」完成。）"', 'DONE = "（機緣「{name}」完成！）"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

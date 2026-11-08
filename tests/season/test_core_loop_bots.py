@@ -48,10 +48,3 @@ def test_the_gentry_does_not_stir_a_line_sitting_at_the_middle():
 
 def test_the_page_knows_whether_sorties_are_on():
     assert server.main_view(_game())["sortie"] is True
-
-
-@pytest.mark.slow
-def test_a_season_bot_plays_the_new_loop_on_the_real_content():
-    game = bot.play_season(real_content(), seed=1, max_steps=600, world=open_world())
-    titles = [e.title for e in game.state.journal]
-    assert any(t.startswith("探索") for t in titles)

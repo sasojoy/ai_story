@@ -232,7 +232,9 @@
   // 場景卡裡的戰場那一塊。戰場面板開著（main.battle_panel，battle.js；Joy 2026-11-06 大決戰優化）時戰局條畫在面板裡，
   // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）
   function battleInner(m) {
-    const base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    let base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    // 面板上已經畫了兩邊主將、副將的氣血（UI 手感乙批 1-3）：場景卡裡「官軍：主將皇甫嵩（氣血 1500/1500）…」那幾行不再寫一次
+    if (bpOn(m)) base = base.replace(/(<p[^>]*>|<br\s*\/?>)\s*[^<：]{1,8}：(?:主將|副將)[^<]*?（(?:氣血|敗走)[^<]*?(?=<\/p>|<br)/g, "$1").replace(/<p[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/g, "");
     // 自己在場上：戰局條、陣容、主將令、回合數都在面板上，場景卡只留戰報；還沒加入（要按加入、投效）的照舊整段（面板不畫戰局條）
     if (bpOn(m) && m.battle_panel.me && !base.startsWith('<p class="battle-fold"')) return bpTrim(siegeStrip(battleMvpHtml(m) + base, m.siege), m);
     return siegeStrip(withGauge(base, m.battle_gauge, battleMvpHtml(m)), m.siege);
@@ -277,8 +279,15 @@
       + `<small class="bp-w">${word}</small><i class="bp-ring"><i style="width:${bpPct(left, p.span)}%"></i></i></div>`;
   }
   function bpFace(c, cls = "") {
-    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy" onerror="this.remove()"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
+    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
   }
+  // 頭像抓不到就拿掉那張圖、露出底下的字（bpFace 的 em）。以前寫在 img 的 inline 屬性上，CSP（第 213 批）不准 inline 的程式，
+  // 改成頂層一個監聽：error 不冒泡，要 capture；只認決戰頭像那三種框裡的 img
+  function bpFaceGone(ev) {
+    const img = ev.target;
+    if (img && img.tagName === "IMG" && img.closest(".bp-face, .bp-duo, .bp-solo")) img.remove();
+  }
+  document.addEventListener("error", bpFaceGone, true);
   function bpChief(c) {
     const pct = bpPct(c.hp, c.cap);
     return `<div class="bp-gen${c.rank === "主將" ? " main" : ""}${c.fallen ? " down" : ""}${!c.fallen && pct <= 30 ? " low" : ""}">${bpFace(c)}`
@@ -398,15 +407,15 @@
   function bpOverlayHtml(b, p) {
     const say = (who, text) => (text ? `<p class="bp-say"><b>${esc(who)}</b>「${esc(text)}」</p>` : "");
     if (b.kind === "open") {
-      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="" onerror="this.remove()">` : ""}</div>`;
+      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="">` : ""}</div>`;
       return `${duo}<p class="bp-big">${esc(p.name)}　開打</p>${say(b.name || "", b.say)}`;
     }
     if (b.kind === "hurt") {
-      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"><i class="bp-slash"></i></div>`
+      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt=""><i class="bp-slash"></i></div>`
         + `<p class="bp-big">${esc(BP_WORDS.hurt(b))}</p><i class="bp-hpbig"><i style="width:${b.pct | 0}%"></i></i><p class="bp-sub">${esc(BP_WORDS.hurtSub(b))}</p>`;
     }
     if (b.kind === "fall") {
-      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
+      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt=""></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
         + `${say(b.name, b.say)}<p class="bp-sub${b.mine ? " mine" : ""}">${esc(BP_WORDS.fallBy(b))}</p>`;
     }
     if (b.kind === "end") {

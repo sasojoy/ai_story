@@ -650,6 +650,14 @@ class RingScenario(BoutScenario):
 # 改一個字（selftest）：bout 改擂台報名那一句（搬之前在 tianxia/arena.py、之後在包裡的 arena_rules.py），ring 改撞上頭目那一句
 # （搬之前在 engine.py 的 _duel_start、之後在包裡的 duel_actions.py）
 register_track("bout", BoutScenario, (("tianxia/features/bout/arena_rules.py",),
-                                       ("別人隨時可以來挑。", "別人隨時可以來挑！")), "week7")
+                                       ("別人隨時可以來挑。", "別人隨時可以來挑！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))
 register_track("ring", RingScenario, (("tianxia/features/bout/duel_actions.py", "tianxia/engine.py"),
-                                       ("攔住了去路！", "攔住了去路。")), "week7")
+                                       ("攔住了去路！", "攔住了去路。")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

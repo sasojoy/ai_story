@@ -785,6 +785,152 @@ WAVES["K"] = dict(
 )
 
 
+def b204():
+    return jb(204, "帳號四：綁定頁、近期驗證、解綁、補設密碼、忘記密碼、門號回收、管理者工具、驗證碼登入的畫面", "identity", "dev/acct-4", "8361", [
+        "- 範圍照計畫第 204 批那一節全部（含「J 波留下來的」、「K 波留下來的」、「K 波審查與修正輪留下」三段）與設計 4.3、4.4、6.4、6.5；畫面照 `pick.txt`：設定抽屜「帳號綁定」B 版（摺起來、跟修改密碼放一起、摺著時一行寫現況、紅點在摺疊列與 ⚙），驗證碼登入那一頁照登入頁 C 版的手機驗證碼流程。拆成這幾步、每步一筆 commit：①這次 session 的登入方式與時間（`session_auth`）：`server._start_session` 回 token（設計第七節 `server.py` 那一列，PM 11/08 加），密碼、LINE、Google、驗證碼四種登入都記；近期驗證（有密碼打密碼、沒密碼對現有一種重驗一次，查不到就當沒驗過）。②綁：四種都走登入那一套、`purpose=bind`、bind 池；`verified_at`；72 小時新綁限制 `new_binding_hours`；解綁至少留一種（密碼算一種）、解綁後 30 天 `rebind_days`（解綁與刪帳號的雜湊永久留著）；每次綁、解綁、設密碼寫一則「帳號」遊戲紀錄並通知現有 Email、手機（假寄送）。③補設密碼（取帳號名過 `check_login`、同一筆交易寫 `password` 列、鍵不變）；忘記密碼（用綁定方式登入後 10 分鐘內、短效 HttpOnly cookie 證明、`/api/password` 不動、其他裝置登出、通知其他綁定；新綁不滿 72 小時的不能用）。④門號回收：`fresh_days` 180、過期的三種處理、用密碼或第三方的玩家 180 天提醒一次不擋遊戲。⑤管理者工具（identity 包 `admin_tools`：解綁某一種、刪帳號〔刪 `accounts` 與 `logins` 列、名號占住、錢包留著〕、看綁定與時間）；管理者重設密碼畫面列綁定、對沒密碼的回「這個帳號沒有密碼，請他用綁定的方式登入」；名單上的帳號用驗證碼或第三方進來的 session 不給管理與客服權限、權限動作要密碼登入且 6 小時內驗過（接客服一的 strict xfail `test_staff_needs_password_session`，拿掉 xfail）。⑥畫面：綁定頁 B 版；驗證碼登入那一頁（填號碼、Turnstile、收碼、重寄倒數、錯 5 次作廢的提示；K 波的鈕寫「尚未開放」，路由都在）；已登入的瀏覽器再走登入先問一次要不要換帳號；`phone_gate` 開著、沒綁手機時 `Feature.status` 給本人 `phone_missing`、摺疊列與 ⚙ 紅點（第 205 批不碰 identity 包與 `web/identity.*`，紅點歸你）。",
+        "- **K 波審查與修正輪留下、這一批順手收**（計畫 204 那一節的「K 波審查與修正輪留下」一段，PM 11/08 加；開工時計畫裡可能還沒有這一段，照這裡）：`routes.py` 的 `api_code_send`、`api_code_verify` 改走 `shell.time.time()`（現在自己 `import time`）；`IdentityStore` 每次請求都建構並跑 DDL 與 `PRAGMA journal_mode=WAL`，改成開一次（新檔併發會 database is locked）；Turnstile `hostname` 為 None 時不要跳過比對；`fake_services` 開著時啟動印警告、正式設定（`season21`、`week7`）載入時擋掉；`AccountStore.login_key` 與 `identity_base.account_key_for` 併成一份。",
+        "- **不做**九個入口與灰鈕（第 205 批）、CSP（213）、登入頁客服信箱那一行（214，support 包）、註冊勾選（206）。`web/admin.js` 只改計畫列的那幾行（`:22` 分流、`data-login` 改放 `key`、重設畫面列綁定）；`server.py` 只改 `_start_session` 回 token；`web/shell.js`、`web/app.js` 不碰（設定抽屜那一格走 identity 包已有的掛法）。新字每句 `待 joy 潤`，`rollback` 逐欄寫（旁檔新欄、`session_auth`、`verified_at`）。",
+    ])
+
+
+def b205():
+    return jb(205, "帳號五：`phone_ok` 的九個入口、灰鈕、封測發放的手機編號", "identity", "dev/acct-5", "8362", [
+        "- 範圍照計畫第 205 批那一節與設計 4.5：`identity_base.phone_ok(ctx, key)` 照判斷順序補完（`identity.enabled` 或 `phone_gate` 關 → 真；鍵不在 `phone_required` 表上 → 真；假人 `state.player.bot` 不是 None → 真；不是假人又查不到帳號 → 假；其餘看 `logins` 有沒有 `provider='phone'`；**開工前先看第 203 批手機驗證碼登入建出來的 `logins` 列長什麼樣，照那一份查**）；九個入口照 4.5「問的位置」那張表逐個接（截殺 `peers/raid_actions.raid`；掛通緝 `bounties/actions` 的 wanted；玩家單 `take`、`give` 只看發單的是不是玩家；贈物 `peers/social._gift`；切磋、論武的發起 `spar_actions.spar`、`discuss_actions.request` 叫模型之前；接受一律在 `invite_actions.answer_invite` 最前面、`invites.drop` 之前，被擋時邀請留著、發起人看到的跟被不理一樣；市集 `looks/actions` 的 list 與 buy，unlist 不擋；商城 `mall/actions.purchase`；封測發放 `mall/actions.grant` 開頭）；被擋時卡與店面的鈕預先灰掉寫原因（`CardButton(enabled=False, note=…)`，只問自己）、回話一句（待 joy 潤）；封測元寶綁了手機那一輪才發、再記一筆 `grant:beta:phone:<HMAC>`（`mall_ledger.ref` UNIQUE）、同一支手機一輩子一次、解綁刪帳號都不放掉；`phone_gate` 開與關各跑一次的測試；**對手三種（沒綁的真人、綁了的真人、假人）發起人看到的逐字相同**（逐字測試；照「只問動手的人」暫定，企劃者問完別人要改再開一批）。",
+        "- **不碰** `tianxia/features/identity/`、`web/identity.*`、`web/shell.js`、`web/app.js`（紅點與 `phone_missing` 歸第 204 批）；`identity_base.py` 只改 `phone_ok` 與它要的查詢；別的包只在 4.5 列的那幾個函式開頭加一次判斷、不重排、不改別的字；包不准 import identity 包（問核心 `identity_base`）。`phone_gate` 預設關、關著一個字不變（compare 要一樣）。",
+    ])
+
+
+def b213():
+    return jb(213, "CSP 標頭、`battle.js` 的 `onerror`", "server", "dev/csp", "8363", [
+        "- 範圍照計畫第 213 批那一節：`server.py` 每個回應加 `Content-Security-Policy: script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'`（Turnstile 要 `challenges.cloudflare.com`；設計第三節點名「CSP 標頭另開小批」，這就是那一批）；先把 `web/battle.js` 四處 `onerror=` 改成事件註冊；全 repo 掃 `web/`、`index.html`、伺服器生成的頁有沒有 inline `<script>`、`on*=` 屬性、`javascript:` 連結、`eval`／`new Function`，有就改走事件註冊或拿掉，一個都不能留；`tests/server/test_server.py` 加一條每個頁與 API 回應都帶這個標頭、`tests/web/` 加一條 `web/*.js` 與 `index.html` 沒有 inline handler（守住以後不長回來）；用 head 開伺服器實機走江湖、輿圖、店面、決戰、管理頁、登入頁各一次，主控台不能有 `Refused to`。",
+        "- **CSP 不是開關**：加了就是整站都有，網頁比對（全回合）要跟 base 一樣、壞一頁就是整站壞。**不做**其他標頭（HSTS、frame-ancestors、Referrer-Policy 另開）。`server.py` 只加這個 middleware 一處（設計第七節 `server.py` 那一列：PM 11/08 加「CSP 標頭」）。",
+    ])
+
+
+def b214():
+    return jb(214, "客服三：登入頁的客服信箱那一行（support 包畫）", "support", "dev/support-3", "8364", [
+        "- 範圍：登入頁的客服信箱那一行歸 support 包（計畫第 204 批「K 波留下來的」第 202 批那一條，PM 拆成這一批；企劃者 11/08 挑「遊戲內客服單＋登入頁放聯絡方式（客服信箱）」）：`web/support.js` 用 `registerGateSlot` 畫一行「登不進去？寫信到 <信箱>」（字照 `Config.support.mailbox`；待 joy 潤；support 包自己的 `gate_slot()` 與 `GATE_LINE` 接上），開一條不用登入的 `GET /api/support/mailbox`（第一行 gate、關著 404、進 `NO_LOGIN_ROUTES` 寫理由；設計第七節有列）；關著時登入頁輸出位元組一樣（對 base）；`web/support.js` 的 node 測試補這一格；375 與 1280 各看一次。",
+        "- **不碰** `web/shell.js`、`web/app.js`、identity 包、`server.py`。接在第 213 批之後同一條線做（同一個工作樹，等 213 commit 完再開；213 動了 `server.py` 的標頭，你開的新路由自然帶到）。",
+    ])
+
+
+WEB_L = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關）**", "**這一波：設定抽屜的帳號綁定（B 版）、驗證碼登入那一頁、忘記密碼與補設密碼、綁手機才能用的九個入口（`phone_gate`）、登入頁的客服信箱那一行（開關預設關）；CSP 標頭沒有開關、整站都有**").replace(
+    "實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話",
+    "實機走：登入頁按 Email 進驗證碼那一頁（假寄送把碼印在 log）登入、設定抽屜「帳號綁定」摺疊列展開、綁一個 Email（走驗證碼）、解綁、補設密碼並取帳號名、忘記密碼（用綁定登入後設新密碼）、管理者重設畫面列綁定；再開 `phone_gate`：沒綁手機時贈物或切磋的鈕灰掉寫原因、⚙ 與摺疊列紅點、用手機驗證碼綁上之後鈕回來；登入頁底下客服信箱那一行；**每一頁主控台沒有 CSP 違規（`Refused to`）**，江湖、輿圖、店面、管理頁也各開一次看").replace(
+    "要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）", "要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）。CSP 關不掉，所以這一關同時在驗 CSP 沒有弄壞任何一頁").replace(
+    "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給）", "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給；`fake_services: true` 要一起開——合併時 PM 定過只有公開網址是正式網域才擋，head 要是還擋 `season_one`，覆寫檔多寫 `\"season_one\": false`；`fake_services` 開著 Turnstile 一律過、不必設網站金鑰，head 要是還要 `\"ok\"`，直接打 API 補那一步並寫進回報）")
+
+
+WAVES["L"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 204、205、213、214 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.3、4.4、4.5、6.4、6.5 與計畫 204、205、213 三節") + " **另外**：對手三種（沒綁的真人、綁了的真人、假人）發起人看到的逐字相同（拿三個對手各跑一次截殺、贈物、切磋，把回話與數字 diff）；`phone_gate` 開著假人一律回真、identity 關著一律回真；72 小時、30 天、180 天各挑一條把數字改壞看測試會紅；忘記密碼的 cookie 過期或新綁不滿 72 小時就不能設；名單上的帳號用驗證碼進來打管理者 API 與客服 API 都要被拒；解綁至少留一種；CSP 標頭每個回應都有、`web/` 與 `index.html` 沒有 inline handler；登入頁關著時位元組一樣。"),
+    ],
+    lines=[dict(name="帳號四", batches=[b204]), dict(name="帳號五", batches=[b205]), dict(name="CSP 與客服三", batches=[b213, b214])],
+    merge_port=8365, fix_port=8366,
+    web_check=dict(ports="8367、8368", steps=WEB_L),
+)
+
+
+def b207():
+    return jb(207, "帳號七：名單上的帳號非密碼 session 不給管理者權限、密碼至少 12 字", "identity", "dev/acct-7", "8369", [
+        "- 範圍（企劃者 2026-11-08 答 PM「做，排第 207 批」兩題；設計 4.4、第七節 PM 11/08 補的兩列）：①**名單上的帳號（`config.admins`、`.local/admins.txt`、`TIANXIA_ADMINS`，與客服名單）用驗證碼或第三方進來的 session 不給管理者權限**：殼的 `/api/main` 的 `admin` 欄、`/api/do` 走到管理者動作（`admin:` 前綴、`admin_tools`）那一段、admin 包的 `/api/admin*` 守門、identity 包的 `/api/identity/admin/accounts` 與三個管理者工具，都接上核心 `identity_base.staff_session_ok`（第 204 批寫好的：這次 session 是密碼登入、而且 `staff_hours` 6 小時內登入或重驗過）。**identity 關著時管理者行為位元組一樣**：這一層只在 `identity_base.on()` 真時判（客服那一半 identity 關著看 `SessionStore.created`，管理者這一半照同樣寫法），退版寫清楚。`engine.Game.is_admin` 留名號判斷（遊戲規則到處用它），殼在呼叫前多一層 session 判斷；不夠的回話跟不是管理者同一句、管理頁的分流跟不是管理者一樣。②**名單上的帳號密碼至少 12 字**：`accounts.check_password` 分出「名單上的帳號」那一條，`/api/register`（取到名單上的帳號名）、`/api/password`、管理者重設、`scripts/set_password.py` 都走；現有的短密碼下次改才要求、登入不擋；新字一句（待 joy 潤）。測試：名單上的角色用手機驗證碼登入（假寄送）後 `/api/main` 的 `admin` 是 False、`/api/admin/reset_password`、`/api/do` 的管理者動作、identity 的管理者工具都被拒，密碼登入 7 小時前的也被拒、重驗後回來；identity 關著時全部照舊（對 base 位元組一樣）；12 字四條路都有先紅後綠。殼只改設計第七節那兩列點名的地方，`shell_tables` 不加。",
+        "- **不做**扣押期的入口、通知、池上限、紅點（第 208 批，平行線：不要碰 `tianxia/features/identity/binding.py`、`notes.py`、`web/identity.js`、mall／peers／looks；identity 的 `routes.py` 只動管理者那三條與 `admin/accounts`）。",
+    ])
+
+
+def b208():
+    return jb(208, "帳號八：扣押期的入口、綁定通知寄到加密存的號碼、池上限通知管理者、紅點即時更新", "identity", "dev/acct-8", "8370", [
+        "- 範圍照計畫第 207 批那一節的前四條與企劃者 2026-11-08 的答案：①**扣押期的入口**（設計 4.3、4.4、6.4）：新綁 72 小時內的那一種、只剩過期一種時的 7 天扣押、管理者重設密碼後 72 小時，都不能花元寶、贈物、上架市集：核心 `identity_base` 加 `hold_reason(ctx, key)`（照 `phone_ok` 的樣子：假人、沒帳號、identity 關著一律沒有扣押），資料用第 204 批旁檔的 `bindings_meta.bound_at`、`holds`；入口在第 205 批接 `phone_ok` 的同一批函式旁邊多問一次（`mall/actions.purchase` 與貨架、`peers/social._gift`、`looks/actions` 的 list），被擋時灰鈕與那一句（待 joy 潤；`phone_ok` 的那一套照抄）；管理者重設密碼（admin 包 `reset_password`）之後寫一則「帳號」紀錄並記 72 小時的 hold（admin 包不能 import identity 包，經核心 `identity_base` 寫）。②**綁、解綁、設密碼的通知**（企劃者 11/08 選「另存加密的號碼給通知用」；設計 4.3 補了做法）：`.local/identity.json` 第二把金鑰 `notify_key`（讀不到就只寫紀錄、不寄、不 500），綁 Email、手機成功時把號碼用它加密存旁檔新表（跟 HMAC 分開、不進任何查詢與比對），只在寄通知那一刻解開，解綁、刪帳號就刪那一列；每次綁、解綁、補設密碼、忘記密碼都經 `senders` 寄一則給現有的 Email、手機（假寄送測，`outbox` 之外也印一行到 log 讓 QA 看得到；正式機 `NoSender` 就是不寄）。③**全服池上限到了通知管理者**（第 203 批留下）：`check_all_and_record` 回滿的那一格桶名，寫一行進管理頁（admin 包現成的訊息欄；admin 包經核心讀）並經 `shell.WEB_PUSH` 推給管理者名單上開著推播的人（None 就跳過），同一格一小時最多通知一次。④綁、解綁手機之後 ⚙ 紅點與摺疊列標題不重新載入就更新（`web/identity.js`，L 波實機點到的）；管理頁解綁、刪帳號做完自己重找一次（`web/admin.js` 那幾行，facade 軌 `IDENTITY_ADMIN_TOUCHED` 跟著改並逐行列進回報）。",
+        "- **不做**管理者權限那一半、12 字（第 207 批，平行線：不要碰 `server.py`、`engine.py`、`accounts.check_password`、identity 的 `routes.py` 管理者那三條與 `admin/accounts`、`admin.py`）；`scripts/maintenance.py` 的 inline script 與其他標頭另開。資料庫第 9 版不動；旁檔新表 `CREATE TABLE IF NOT EXISTS`。",
+    ])
+
+
+WEB_M = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關）**", "**這一波：名單上的帳號非密碼 session 不給管理者權限、密碼 12 字、扣押期的灰鈕、綁定通知、紅點即時更新（開關預設關）**").replace(
+    "實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話",
+    "實機走：名單上的角色用 Email 驗證碼登入（假寄送把碼印在 log）後進不了管理頁、`/api/main` 的 admin 是 False，用密碼登入就回來；名單上的帳號改密碼 11 字被拒、12 字過；新綁手機後商城購買鈕灰掉寫原因（把時鐘撥過 72 小時後回來）；綁 Email 時 log 裡有一則寄給它的通知；綁、解綁手機後 ⚙ 紅點與摺疊列標題不重新載入就變").replace(
+    "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給）", "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給；`fake_services: true`；`.local/identity.json` 多放 `notify_key`）")
+
+
+WAVES["M"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 207、208 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.3、4.4、6.4 與計畫第 207 批那一節加企劃者 11/08 的四個答案") + " **另外**：名單上的角色用驗證碼登入後管理者 API 全部被拒（`/api/do` 的管理者動作、admin 包、identity 的管理者工具、`/api/main` 的 admin 欄），identity 關著時管理者行為對 base 位元組一樣；扣押期三種各有一條先紅後綠；加密存的號碼不進任何查詢（grep 旁檔的 SELECT 只用 HMAC 欄）；`notify_key` 讀不到不寄也不 500；池上限的通知一小時最多一次。"),
+    ],
+    lines=[dict(name="帳號七", batches=[b207]), dict(name="帳號八", batches=[b208])],
+    merge_port=8371, fix_port=8372,
+    web_check=dict(ports="8373、8374", steps=WEB_M),
+)
+
+
+B107_SCRATCH = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveI\b107"
+
+
+def b109():
+    return ib(109, "covers 重量、decide 收窄、網頁回合不再跟著退回全軌", "dev/covers-109", "8375", [
+        "- 範圍：計畫第 109 批那一節的第 1、2、4、5、6 項，加第 11 項裡 `docs/superpowers/pm-workflows/wave_gate.py` 那一半（PM 11/08 深夜落地 M 波時把第 3、7～10 項與第 11 項 `scripts/webqa/gate.py` 那一半拆成第 110 批，平行線；計畫檔上那一節頭一段寫了怎麼分，照這裡）。`wave_gate.py` 只有這一批動；**不碰 `scripts/webqa/`、`tests/web/`**（第 110 批的）。",
+        "- **第 1 項 covers 重量**：第 107 批的一次性腳本在 `" + B107_SCRATCH + "`（`measure.py`、`measure_all.py`、`analyze.py`、`write_covers.py`、`covers_measured.json`），拿來改成一支可重跑的工具放 `scripts/sb/`（例 `scripts/sb/covers_measure.py`；量一次全軌 season21 多久寫進回報），不是再寫一次性腳本。量到函式層級（`sys.monitoring` 照舊）；先算「每一軌都叫到的共同那一組」（被 ≥ 90% 的軌碰到的函式；門檻寫進 decided，試過別的門檻也寫），扣掉之後只算超出的函式屬於哪一包，各軌 `register_track(covers=…)` 改成量出來的；`wicket`、`missive`（K 波開的）實際量。**反向驗**：抽 5 對（包, 軌）改字突變——改 A 包的規則，`--covers A` 挑到的軌至少一軌紅、沒挑到的軌一軌都不能紅；紅在沒挑到的軌就是 covers 漏了，補上再驗，5 對的結果逐對寫進回報。量不出合理的結果（例：扣掉共同組之後大半軌還是碰到全部包）就把分佈數字與原因寫進回報、`ALWAYS_TRACKS` 的過渡維持，不硬改。",
+        "- **第 2 項 decide 收窄**（`wave_gate.decide`）：只改一軌的 `scripts/sb/tracks/<軌>.py` 只跑那一軌（改到 `scripts/sb/` 其他檔照舊退回全軌）；`tianxia/core/*.md`（例 `services_list.md`）不退；`.gitattributes` 不退。每一條在 `tests/core/test_same_behavior_gate.py` 先紅後綠。拿 D～M 各波的真 diff（tag 與 `develop` 上各波落地的 SHA，交接第一節有）`--dry-run --changed` 各跑一次，改前改後對照（軌數、設定、半舊半新、網頁）列成表寫進回報。",
+        "- **第 11 項 gate 那一半**：`decide` 的 `web_all_rounds` 現在是 `web_other or full`，所以動到核心退回全軌時網頁也全回合（M 波只改 `web/identity.js`、`web/identity.css`，卻因 `server.py`、核心 identity_base 退回全軌，網頁全回合跑了 70 分）。改成只看 `web_other`：核心退回全軌只管比對的軌，網頁回合照改到的 `web/` 檔挑；`server.py` 回頁面的行、css、html、`scripts/webqa/` 照舊全走。`--changed-files` 給的檔在對照表上對不到時怎麼辦由第 110 批在 `gate.py` 裡定，你只把檔名原樣交過去。先紅後綠一條。",
+        "- **第 4 項**只做決定：拿第 107 批量到的秒數（到 0.67、3.44、3.51、16.57）決定要不要一個子行程連跑多軌，決定與理由寫進回報，**這一批不實作**。**第 6 項**不另跑整波：用 `C:\\Ray\\專案\\天下大勢\\.local\\wave_gate\\<head8>\\result.json` 裡 K、L、M 三波的分鐘數（`cb411b94`、`63909841`、`a86686c7`、`96862401` 有哪個用哪個）列表寫進回報。**第 5 項**兩個檔的快取：先量再改、各省多少秒寫回報；超過 30 分鐘就寫 leftovers。",
+    ])
+
+
+def b110():
+    return ib(110, "網頁比對工具：對照表重建、`--new` 扣新包的 css、c 回合 overlay、`--jobs` 各自複本、outbox、對不到回合的檔", "dev/webqa-110", "8376", [
+        "- 範圍：計畫第 109 批那一節的第 3、7、8、9、10 項與第 11 項 `scripts/webqa/gate.py` 那一半（PM 11/08 深夜從第 109 批拆出來的第 110 批，平行線；計畫檔上那一節頭一段寫了怎麼分）。只動 `scripts/webqa/**`、`tests/web/test_webqa.py`（`tests/kit/webharness.py` 非動不可寫理由）；**不碰 `docs/superpowers/pm-workflows/wave_gate.py`、`scripts/sb/`**（第 109 批的）。你的計畫檔照 `ib` 的路徑寫（`…-第110批.md`）。",
+        "- **第 9 項先做**（其他項要跑比對都靠它）：`--jobs N` 時每個 job 自己一份 head、base 複本，或起伺服器前先把 `.local/webpush_vapid.pem` 放好（兩邊同一把測試金鑰，不讀 repo 的 `.local/`）；證明：`--jobs 4` 跑一次沒有 MalformedFraming、沒有一軌中途停。",
+        "- **第 3 項對照表重建**：`coverage.json` 用不帶 `--quick` 的走法重建（4 個 `zh_` 必到場景要走到；`must_reach.txt`），埠用 OS 給的空埠（拒絕 7861）或明說 4 個；`explore.js`、`territory_acts.js`、`state.js`、`sw.js` 要在表上，或 `coverage.py check` 說得出為什麼不在（例 `sw.js` 不是頁面 script）。重建一次多久寫進回報。",
+        "- **第 7 項 `--new <包>` 扣 css**：`css-rules` 的差異扣掉那些包自己的 css（`web/<包>.css`）的規則，扣掉的印成清單進 report（跟 compare 一樣「新東西列出來，其餘一樣」）；別的 css 照樣 real。突變兩條：改 `identity.css` 一條規則 → 列進扣掉清單、不算 real；改 `style.css` 一條 → real。",
+        "- **第 8 項 `c` 回合 `bt_open_overlay`**：那一景靠 `web/battle.js` 開場 overlay 4.2 秒自動關，base、head 哪邊慢一點就拍到關了的。改成確定的：拍之前把自動關閉停掉（driver 給 `window.__qaHold` 那一類鉤子）或比 `facts.overlay` 不等截圖；**`web/battle.js` 不是你的檔**，鉤子要是非得頁面配合，寫成 leftovers 給 battle 包、這一批用等待條件的做法。證明：同一筆 base＝head 跑 c 回合兩次都 0 real。",
+        "- **第 10 項 outbox**：第 208 批定了驗證碼不進 log，只有通知那一行 `LOG_LINE`。webqa 的回合要是走到驗證碼（現在沒有，identity 關著）就讀 `fake_services` 的 outbox：`serve.py` 加一個選項把 outbox 傾進檔（M 波實機驗收用包住 `server.main` 的啟動檔做的），只在 identity 開著時用；寫進 gate.py 的說明。沒有流程走到就寫清楚「備好、沒驗過」。",
+        "- **第 11 項 gate.py 那一半**：`--changed-files` 給的檔在對照表上對不到時：包的檔（`web/<包>.js`、`web/<包>.css`，`tianxia/features/<包>/` 存在）→ 不走，report 寫「關著時沒有回合走到」；殼的檔（其他 `web/`、`index.html`）→ 全走。dry-run（只列回合不走）三種清單各印一次：空、`web/identity.js`、`web/app.js`，結果要分別是不跑、不走（寫原因）、全走，寫進回報。`wave_gate.py` 那一半（`web_all_rounds` 不再因 full 而真）是第 109 批的。",
+    ])
+
+
+WEB_N = "**這一波沒動 `web/`，改的是網頁比對工具本身。這一關不比畫面，驗工具**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 用 head 的 `scripts/webqa/`：`selftest.py`／`gate.py --mutate` 每一種各跑一次，要全部抓得到；`coverage.py check` 過。\n2. `gate.py --changed-files` 三種清單各 dry-run 一次（只列回合不走）：空、`web/identity.js`、`web/app.js`，結果要分別是「不跑」「不走（寫原因）」「全走」，寫進回報。\n3. 真跑一次 `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --jobs 4 --new identity,support`（工具改了、頁面沒改：要 0 real；c 回合不能紅；沒有 MalformedFraming），量分鐘數；結束碼 0 或 1 都照舊分類，結束碼 2 是工具壞了。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["N"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 109、110 批。第 109 批：covers 用突變法再抽 3 對（跟開發抽的不同）驗——改那一包的規則，`--covers <包>` 挑到的軌至少一軌紅、沒挑到的軌一軌都不紅；共同組的門檻合理（看量出來的分佈：扣掉共同組之後每軌平均碰幾包、最多幾包；`--covers` 對 D～M 真 diff 各挑幾軌，跟那幾波閘門真正差異過的軌對得上）；decide 收窄的每一條有先紅後綠的測試；`web_all_rounds` 不再因 full 而真、但殼的檔（`server.py` 回頁面的行、css、html、`scripts/webqa/`）仍全走。第 110 批：對照表是不帶 `--quick` 重建的、4 個 `zh_` 必到場景在；`--new` 扣 css 的兩條突變（identity.css 扣掉、style.css 仍 real）真的一邊紅一邊不紅；`c` 回合 base＝head 跑兩次 0 real；`--jobs 4` 沒有 MalformedFraming；`--changed-files` 三種清單的結果對。兩批合起來 `same_behavior selftest` 全軌三設定仍全部一樣、改一字抓得到。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="比對", batches=[b109]), dict(name="網頁工具", batches=[b110])],
+    merge_port=8377, fix_port=8378,
+    web_check=dict(ports="8379、8380", steps=WEB_N),
+)
+
+
+N_COV_REPORT = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveN\cov\report.txt"
+
+
+def b111():
+    return ib(111, "網頁比對的 flow 跟上 Joy 的 UI 手感批與見聞頁改版、對照表重建、`news` 包進 covers", "dev/webqa-111", "8385", [
+        "- 範圍：只動 `scripts/webqa/**`（flows、snippets、must_reach.txt、coverage.json）與 `tests/web/test_webqa.py`；第 3 項另准 `scripts/sb/covers_measure.py write` 改各軌的 `covers=`（只那一個關鍵字）。**不動 `web/`、`tianxia/`、`content/`、`docs/superpowers/pm-workflows/wave_gate.py`、`scripts/sb/` 其他檔**。flow 真的點不到（新 UI 沒有那個控制了）就寫 leftovers 給那個包或 Joy，不改頁面。",
+        "- 起因：Joy 11/09 02:10～02:22 合了 #197～#205 進 develop（見聞頁改版〔新包 `news`、`web/news.js`〕、UI 手感甲～戊批：店面蓋住底下選單、決戰陣容不寫兩次、灰的懸賞寫原因、交友先挑人、名帖、擂台榜、成長剪影與決戰回合格的圖）。PM 在 N 波落地那一筆上用 `scripts/webqa/gate.py --base X --head X --jobs 4` 重走八回合，**14 個必到場景沒到**：main 的 `sm_repair`、`sm_temper`、`sm_material`、`mk_wield`、`mk_buy`、`market_left`、`bd_take`、`bd_drop`、`mt_edit`、`mt_shuffle`、`mt_close`、`call_list`、`call_zhujun`；x 的 `x_news_xingshi`。報告在 `" + N_COV_REPORT + "`（「not reached」那一段列了每一景點不到的 selector，例：`.shop-layer .shop-back`、`[data-act=\"news\"][data-news=\"mingtie\"]`、`[data-act=\"mt-edit\"]`、`[data-act=\"choose\"][data-id^=\"bounty:\"]`、`[data-act=\"tav-do\"]`）。先讀 Joy 那幾筆的 diff（`git diff 0b5a4864e d3befbb21 -- web/`）再改 flow。下一波的網頁閘門會因為這些必到場景結束碼 2，所以這一批要快。",
+        "- **第 1 項 flow 跟上新 UI**：每一個沒到的場景照新 UI 的 DOM 改 flow 的走法（selector、先開哪一層、店面的返回鈕在哪），讓它在 season21 的 base＝head 走法下到得了；`must_reach.txt` 一景都不拿掉（新 UI 真的沒有那個控制了才拿掉，理由寫進 decided 與 leftovers）。證明：`gate.py --base <develop 那一筆> --head <同一筆> --out <暫存> --jobs 4` 整趟 exit 0、tool 0、`missing_must_reach` 空，量分鐘數寫進回報。",
+        "- **第 2 項對照表重建**：第 1 項那一趟走完用 `coverage.py build <summary.json>` 重建 `coverage.json`；看 cs 回合這次有沒有自己量到 `figure_acts.js`、`sortie.js`（有就不用跟舊表聯集；沒有照第 110 批的做法聯集，寫進 decided）；`coverage.py check` 過；`web/news.js` 要在表上。",
+        "- **第 3 項 `news` 包進 covers**：`python scripts/sb/covers_measure.py measure --out <夾>`（三設定全軌約 16 分）→ `analyze <夾>`（門檻 90%，ALWAYS 不變量破了結束碼 1）→ `write <夾>`，讓 `news` 有軌（`tests/core/test_same_behavior_covers.py` 的「沒有一軌走到的包」警告消失）；反向驗一對：改 `tianxia/features/news/` 一處一定跑到的字（在暫存複本改，不提交），`same_behavior pick --covers news` 挑到的軌至少一軌紅、沒挑到的軌一軌都不紅。量出來沒有軌進得了見聞頁的後端就寫 decided、留警告、不硬加軌。",
+        "- **第 4 項證明工具還活著**：`selftest.py` 至少跑 c 回合版（同對同綠、兩個正控制紅；一個回合約 500 秒，別跟第 1 項那一趟同時跑）。`tests/web/test_webqa.py` 既有的全過，改了 selector 的地方若有 snippet 測試就補。",
+        "- 要寫進 docs 的（放回報，文件輪寫）：手冊 4.2 或 tianxia-flow「網頁閘門」加一句「UI 改了（Joy 的 PR 合進 develop 之後尤其）要跑一次 `gate.py --base X --head X --jobs 4` 看 `must_reach`，點不到的 flow 要跟著改，不然下一波網頁閘門結束碼 2」。",
+    ])
+
+
+WEB_O = "**這一波沒動 `web/`，改的是網頁比對的 flow。這一關不比畫面，驗工具**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 用 head 的 `scripts/webqa/`：`gate.py --base <head> --head <head> --out <暫存>\\\\web1 --jobs 4` 整趟（約 35 分）：要 exit 0、tool 0、`missing_must_reach` 空（14 個必到場景全到，含 `x:x_news_xingshi`）；量分鐘數。\n2. `coverage.py check` 過；`coverage.json` 裡 `web/news.js` 在表上；`scripts/same_behavior.py pick --covers news` 印出的軌（沒有就看開發 decided 寫的理由）。\n3. `gate.py --dry-run --changed-files` 三種清單各一次：空、`web/news.js`、`web/app.js`，結果要是不跑、挑到表上那幾回合、全走。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["O"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 111 批。flow 改了 selector 之後那 14 個必到場景是真的走到新 UI 的那一層（看 summary 的 scenes 與 facts，不是只看 must_reach 沒缺）；`must_reach.txt` 沒有被拿掉任何一景（拿掉的要有 decided 與 leftovers）；`coverage.json` 是從這一趟 summary 的 `round_files` 建的（抽兩個回合對一次）；`news` 的 covers 反向驗一對跟開發抽的不同的突變；`tests/web/test_webqa.py` 全綠。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="網頁工具", batches=[b111])],
+    merge_port=8386, fix_port=8387,
+    web_check=dict(ports="8388、8389", steps=WEB_O),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
