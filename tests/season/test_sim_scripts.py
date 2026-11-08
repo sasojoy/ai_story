@@ -92,6 +92,7 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.3)
     content = load_content(ROOT / "content")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）：這條只驗量測接線，照舊的陣營數跑，種子 1 在 0.3 天內才有首創
     try:
         result = sim.run_season(content, tmp_path, seed=1, tick=60.0)
     finally:
