@@ -591,8 +591,8 @@ class Scenario:
         finally:
             cfg.season_one = before
 
-    def cut(self, state_file: Path) -> None:
-        """切點：前半跑完那一刻。不在請求中間（harness.IN_CALL 是 0），寫下步數、密碼、登入過的人（後半接著用）。"""
+    def save_cut(self, state_file: Path) -> None:
+        """切點：前半跑完那一刻（叫 save_cut 不叫 cut：map 軌有一個叫 cut 的段，同名會蓋掉這一支）。不在請求中間（harness.IN_CALL 是 0），寫下步數、密碼、登入過的人（後半接著用）。"""
         if harness.IN_CALL[0]:
             raise RuntimeError(f"切點在請求中間（深度 {harness.IN_CALL[0]}）：前半＋後半接不起來")
         state_file.write_text(json.dumps({"step": STEP[0], "passwords": self.passwords, "clients": list(self.clients)},
@@ -617,10 +617,10 @@ class Scenario:
             self.phase_end(name)
             if i == cut_at:
                 harness.snapshot_db(self.db, snapshot)
-                self.cut(Path(str(snapshot) + ".state.json"))
+                self.save_cut(Path(str(snapshot) + ".state.json"))
                 snapshot_out.write_text(BUF.getvalue(), encoding="utf-8", newline="\n")
         if part == "first":
-            self.cut(state_file)
+            self.save_cut(state_file)
         else:
             BUF.write("## 資料庫\n" + db_text(self.db))
         out.write_text(BUF.getvalue(), encoding="utf-8", newline="\n")
