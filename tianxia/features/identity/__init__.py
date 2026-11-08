@@ -15,7 +15,7 @@ from tianxia.core.features import Feature
 class IdentityFeature(Feature):
     name = "identity"
     prefix = None  # 沒有選項：登入頁的格與 /api/identity/*
-    web: tuple[str, ...] = ()
+    web = ("identity.js", "identity.css")  # 登入頁的格（registerGateSlot）；css 的 link 手寫在 index.html 最後一行 link 之後
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()

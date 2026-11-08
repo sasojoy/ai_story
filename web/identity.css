@@ -1,0 +1,7 @@
+/* 登入頁的格（帳號綁定，features/identity；帳號與客服第 201 批）：快速登入那一格的幾條路與客服信箱那一行。
+   選擇器全帶 .gate 前綴，不蓋殼的樣式；開關關著時這幾個 class 不會出現在頁面上。 */
+.gate .idp { display: flex; flex-direction: column; gap: 10px; }
+.gate .idp .btn { width: 100%; }
+.gate .support-mail { margin: 12px 0 0; text-align: center; }
+.gate .support-mail a { color: inherit; text-decoration: underline; word-break: break-all; }
+.gate .fine { font-size: 13px; color: var(--ink-2); }
