@@ -151,7 +151,7 @@ def admin_ok(shell, request, game) -> bool:
     if not game.is_admin():
         return False
     token = request.cookies.get(shell.COOKIE) if request is not None else None
-    return request is None or identity_base.admin_session_ok(shell.CONTENT, token, shell.time.time())
+    return request is None or identity_base.admin_session_ok(shell.CONTENT, token, shell.time.time)
 
 
 def reset_password(shell, game, target: str, temp: str, request=None) -> str:

@@ -205,8 +205,12 @@ def test_admin_session_ok_off_is_always_true(game, content, tmp_path, monkeypatc
     AccountStore(db).register("boss_01", "secret-pw")
     token = SessionStore(db, clock=lambda: 1000.0).create("boss_01")
     assert content.config.identity.enabled is False
+
+    def never():
+        raise AssertionError("關著不讀時鐘")
+
     for t in (None, "nope", token):
-        assert ib.admin_session_ok(content, t, 1000.0 + 7 * 3600) is True
+        assert ib.admin_session_ok(content, t, never) is True
     assert not ib.side_file().exists()
 
 
@@ -216,15 +220,15 @@ def test_admin_session_ok_on_needs_password_within_hours(game, content, keyed, t
     db = game.world.db
     hours = content.config.identity.staff_hours * 3600
     ib.record_session("pw", "password", 1000.0)
-    assert ib.admin_session_ok(content, "pw", 1000.0 + hours) is True
-    assert ib.admin_session_ok(content, "pw", 1000.0 + hours + 1) is False
+    assert ib.admin_session_ok(content, "pw", lambda: 1000.0 + hours) is True
+    assert ib.admin_session_ok(content, "pw", lambda: 1000.0 + hours + 1) is False
     ib.record_reauth("pw", "password", 1000.0 + hours + 1)
-    assert ib.admin_session_ok(content, "pw", 1000.0 + hours + 2) is True  # 重驗過回來
+    assert ib.admin_session_ok(content, "pw", lambda: 1000.0 + hours + 2) is True  # 重驗過回來
     for method in ("phone", "email", "line", "google"):
         ib.record_session(method, method, 1000.0)
-        assert ib.admin_session_ok(content, method, 1000.0) is False
-    assert ib.admin_session_ok(content, None, 1000.0) is False
-    assert ib.admin_session_ok(content, "nope", 1000.0) is False
+        assert ib.admin_session_ok(content, method, lambda: 1000.0) is False
+    assert ib.admin_session_ok(content, None, lambda: 1000.0) is False
+    assert ib.admin_session_ok(content, "nope", lambda: 1000.0) is False
 
 
 def test_listed_matches_admins_and_support(content, monkeypatch):

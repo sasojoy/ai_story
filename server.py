@@ -1433,7 +1433,7 @@ def _main_view_body(game: Game) -> dict:
         },
         "admin": lambda ctx, frame: {
             # 第 207 批：identity 開著時名單上的人還要這次是密碼登入、staff_hours 內驗過（關著 admin_session_ok 一律回真，原樣）
-            "admin": game.is_admin() and identity_base.admin_session_ok(CONTENT, SESSION_TOKEN.get(), time.time()),
+            "admin": game.is_admin() and identity_base.admin_session_ok(CONTENT, SESSION_TOKEN.get(), time.time),
             "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         },
         "horse_art": lambda ctx, frame: {"horse_art": horse_art()},  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
@@ -1995,7 +1995,7 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     game = _game(request)
     if tool is not None:
         # 第 207 批：identity 開著時還要這次是密碼登入、staff_hours 內驗過；不夠的跟不是管理者同一句（關著 admin_session_ok 一律回真）
-        if not game.is_admin() or not identity_base.admin_session_ok(CONTENT, request.cookies.get(COOKIE), time.time()):
+        if not game.is_admin() or not identity_base.admin_session_ok(CONTENT, request.cookies.get(COOKIE), time.time):
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)  # 商城：帳跟季無關，暫停中也做得了
     elif op in OUTLOCK_OPS:  # 鎖外的三段式（各包 routes.py 的 outlock 掛鉤）：A、C 段自己拿鎖，B 段叫模型不握鎖，所以不包在 act 裡

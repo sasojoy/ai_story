@@ -674,7 +674,7 @@ def router(shell) -> APIRouter:
 
         game = shell._game(request)
         # 第 207 批：identity 開著時名單上的人還要這次是密碼登入、staff_hours 內驗過（同殼的 /api/do 與 admin 包）
-        if not game.is_admin() or not identity_base.admin_session_ok(shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time()):
+        if not game.is_admin() or not identity_base.admin_session_ok(shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time):
             raise HTTPException(403)
         return {"rows": admin.search_rows(shell, str(body.get("q", "")))}
 

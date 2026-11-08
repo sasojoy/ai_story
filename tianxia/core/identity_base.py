@@ -249,13 +249,13 @@ def staff_session_ok(db, content, token: str | None, now: float) -> bool:
     return created is not None and now - created <= hours
 
 
-def admin_session_ok(content, token: str | None, now: float) -> bool:
+def admin_session_ok(content, token: str | None, clock) -> bool:
     """管理者權限要的 session（設計 4.4 最後一條；第 207 批）：關著一律回真（管理者行為位元組一樣：不走 staff_session_ok 關著那一支，
     那一支看 session 建立的時間，會讓關著時登入超過 staff_hours 的管理者掉權限；也不碰旁檔）；開著時同 staff_session_ok 開著那一支：
-    這次是密碼登入、而且 staff_hours 內登入或重驗過，查不到回假。名號是不是管理者照舊由 Game.is_admin 判，殼先問它、再問這一支。"""
+    這次是密碼登入、而且 staff_hours 內登入或重驗過，查不到回假。clock 是呼叫端給的「現在」（零參數函式）：開著才叫，關著不讀時鐘（same_behavior 的假時鐘每讀一次走一格）。名號是不是管理者照舊由 Game.is_admin 判，殼先問它、再問這一支。"""
     if not on(content):
         return True
-    return staff_session_ok(None, content, token, now)  # 開著那一支不讀主資料庫
+    return staff_session_ok(None, content, token, clock())  # 開著那一支不讀主資料庫
 
 
 def listed(content, login: str | None = None, character: str | None = None, account_id: int | None = None) -> bool:
