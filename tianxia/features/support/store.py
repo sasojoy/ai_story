@@ -129,15 +129,34 @@ class SupportStore:
                 "SELECT COUNT(*) FROM replies r JOIN tickets t ON t.id = r.ticket_id WHERE t.account_id = ? AND t.account_created = ? "
                 "AND r.staff = 1 AND r.internal = 0 AND r.seen = 0", (account_id, account_created)).fetchone()[0])
 
-    def take_unjournaled(self, account_id: int, account_created: float) -> list[dict]:
-        """還沒寫過「客服」紀錄的客服回覆（玩家看得到的那種），取出來就記成寫過（同一筆交易：同一則只寫一次）。"""
+    def take_unjournaled(self, account_id: int, account_created: float, at: float) -> list[dict]:
+        """還沒寫過「客服」紀錄、也不在 pending 的客服回覆（玩家看得到的那種），取出來就記進 pending（at＝這一下寫進存檔的遊戲時間；
+        同一筆交易）。第 212 批起不在這裡標 journaled：要等下一輪 settle 在存檔裡看到那一則才標（先存檔成功再標）。"""
         with self._write() as conn:
             rows = [dict(r) for r in conn.execute(
                 "SELECT r.id, r.ticket_id FROM replies r JOIN tickets t ON t.id = r.ticket_id WHERE t.account_id = ? AND t.account_created = ? "
-                "AND r.staff = 1 AND r.internal = 0 AND r.journaled = 0 ORDER BY r.id", (account_id, account_created))]
+                "AND r.staff = 1 AND r.internal = 0 AND r.journaled = 0 AND r.id NOT IN (SELECT reply_id FROM pending_notes) ORDER BY r.id",
+                (account_id, account_created))]
             for r in rows:
-                conn.execute("UPDATE replies SET journaled = 1 WHERE id = ?", (r["id"],))
+                conn.execute("INSERT INTO pending_notes (reply_id, ticket_id, at) VALUES (?, ?, ?)", (r["id"], r["ticket_id"], at))
         return rows
+
+    def pending(self, account_id: int, account_created: float) -> list[dict]:
+        """這個帳號寫進存檔、還沒確定存成的紀錄（reply_id、ticket_id、at）。"""
+        with contextlib.closing(self._conn()) as conn:
+            return [dict(r) for r in conn.execute(
+                "SELECT p.reply_id, p.ticket_id, p.at FROM pending_notes p JOIN tickets t ON t.id = p.ticket_id "
+                "WHERE t.account_id = ? AND t.account_created = ? ORDER BY p.reply_id", (account_id, account_created))]
+
+    def settle(self, saved: list[int], lost: list[int]) -> None:
+        """saved：存檔裡看到了 → journaled=1、拿掉 pending；lost：存檔裡沒有（那一輪沒存成）→ 只拿掉 pending，回到沒寫（這一輪補寫）。"""
+        if not saved and not lost:
+            return
+        with self._write() as conn:
+            for rid in saved:
+                conn.execute("UPDATE replies SET journaled = 1 WHERE id = ?", (rid,))
+            for rid in saved + lost:
+                conn.execute("DELETE FROM pending_notes WHERE reply_id = ?", (rid,))
 
     def player_reply(self, ticket_id: int, account_id: int, account_created: float, body: str, now: float) -> None:
         """玩家再回一句：單號加帳號（id 與建帳號時間）都對才行，不然丟 Refused(NOT_FOUND)；結了的丟 Refused(CLOSED_ALREADY)。"""
