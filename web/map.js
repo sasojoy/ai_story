@@ -600,7 +600,7 @@
   const deskMap = () => !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
   // 抽屜的高度：半開（量到內容裡 .m-peek-end 那一點：附近那一排卡片底下、卡的動作那一排底下）、拉高六成、全開九成四、版圖變化 320；
   // 量不到（還沒排版）照預設。桌機是右欄（CSS 蓋掉高度）
-  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200;
+  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200, MV_SHORT = 520; // MV_SHORT：地圖框矮於這個就是矮螢幕（375×667 量到 499）
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
@@ -610,6 +610,9 @@
   function peekPx(avail) {
     const end = document.querySelector("#mbody .m-peek-end");
     const at = end && end.offsetTop ? end.offsetTop + 10 : 0;
+    // 矮螢幕（UI 手感丁批 4-1）：附近那一排預設只露標題一行，地圖多一截；點標題或把手拉開
+    const head = avail < MV_SHORT && S.mapMode !== "place" ? document.querySelector("#mbody .m-nhead") : null;
+    if (head && head.offsetHeight) return Math.max(64, head.offsetTop + head.offsetHeight + 14);
     const fall = S.mapMode === "place" ? Math.max(MV_PEEK_PLACE, Math.round(avail / 3)) : MV_PEEK_NEAR;
     return Math.round(Math.min(avail * 0.6, Math.max(MV_PEEK_MIN, at || fall)));
   }
@@ -859,7 +862,7 @@
     const label = f === "all" ? from : `${chipName(base, st, f)}・${list.length} 處`;
     // 本週那一處排在第一張（不管多遠）：小字照實說，不寫成「由近到遠」（全面自檢 U-16）
     const wk = nearWeek(st), wkFirst = !!wk && list.length > 1 && list[0].id === wk.id;
-    const head = `<div class="m-nhead"><b>${esc(label)}</b><small>${wkFirst ? MV_WORDS.swipeWk : MV_WORDS.swipe}</small></div>`;
+    const head = `<div class="m-nhead" data-act="map-open" role="button"><b>${esc(label)}</b><small>${wkFirst ? MV_WORDS.swipeWk : MV_WORDS.swipe}</small></div>`;
     const cards = list.length ? `<div class="m-cards">${list.map((b) => nearCard(base, st, b)).join("")}</div>` : `<p class="m-sub m-none">${MV_WORDS.none}</p>`;
     // 第 3 週「離贏還差多少」（減法季整合設計 6.8）
     const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";

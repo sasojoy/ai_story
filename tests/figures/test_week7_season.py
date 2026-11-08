@@ -640,7 +640,7 @@ def _render(game, monkeypatch, app=None):
       H.S.mapMode = "timeline"; H.S.mapWeek = 1;
       return {
         orders: H.ordersHtml(fb.orders, 1, null),
-        board: (/<h3>(.*?)<\\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
+        board: (/<summary class="nw-title">(.*?)<\\/summary>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（見聞改版：戰況那一頁收成一行）
         result: H.resultHtml(fb.result),
         timeline: H.timelineHtml(base, st, 1),
         overview: H.cardExtras(base, st),

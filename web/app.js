@@ -26,24 +26,20 @@
   // 見聞 9 籤改 5（6.5 寫四籤；Joy 2026-10-24「榜單放俠客頁很奇怪」）：大事（戰報＋大勢＋形勢，底下再分）、傳聞、榜單、江湖史、
   // 紀錄（自己的紀錄＋名帖匣，底下再分）。行狀是自己的傳，從「俠客」頁人像那張卡進（SELF_NEWS），頁面照舊是見聞那一頁的同一段
   // （S.news 認得它），只是籤不排在見聞上
+  // 見聞改版（Joy 2026-11-08 對設計稿說「好」）：五顆籤一排、沒有第二層。戰況＝戰報＋三路戰況＋天下形勢（舊的 trends、xingshi 也認成戰況）；
+  // 名帖匣搬去俠客頁（SELF_NEWS，跟行狀一起）。畫法的小工具在 news 包的 web/news.js
   const NEWS = [
-    { id: "reports", name: "大事", parts: ["reports", "trends", "xingshi"] },
+    { id: "reports", name: "戰況", parts: ["reports", "trends", "xingshi"] },
     { id: "rumors", name: "傳聞" },
-    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14，/api/boards
     { id: "chronicle", name: "江湖史" },
-    { id: "journal", name: "紀錄", parts: ["journal", "mingtie"] },
-  ];
-  // 籤底下再分的一排小的（newsSegHtml）：大事分戰報、大勢、形勢（形勢只有開著的季〔main.xingshi〕才畫）；紀錄分紀錄、名帖匣（Joy 2026-10-19，/api/mingtie）
-  const NEWS_PARTS = [
-    { id: "reports", name: "戰報" },
-    { id: "trends", name: "大勢" },
-    { id: "xingshi", name: "形勢" }, // 領地爭奪第三批 A：每天一篇〈天下形勢〉（/api/xingshi）
+    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14，/api/boards
     { id: "journal", name: "紀錄" },
-    { id: "mingtie", name: "名帖匣" },
   ];
+
   // 從「俠客」頁進去的那一段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）
   const SELF_NEWS = [
     { id: "annals", name: "行狀" },
+    { id: "mingtie", name: "名帖匣" }, // 見聞改版（Joy 2026-11-08）：名帖是自己的東西，從見聞・紀錄搬來
   ];
   const POLL_MS = 10000;
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
@@ -479,7 +475,7 @@
     return `
       <div class="top-row">
         ${who}${rv ? '<div class="who-col">' : ""}
-          ${whoNameHtml(s)}
+          ${whoNameHtml(s, rv)}
           <div class="where">${where}</div>
         ${rv ? "</div>" : ""}</div>
         ${mallShown() ? mallBtnHtml(S.main.mall) : ""}
@@ -508,14 +504,15 @@
   // 只會在段與段之間換行，不會把一個詞從中間折斷；
   // 「可配 N 點」改放在＋鈕上面當那一排的標題（見 topHtml 的 pts-label）
   // 名聲（名聲設計十一之二）：收起時名號底下一行稱號（1B），第一屏放不下（FIT_STEPS 的 renown，S.renownTight）時這一行不畫、
+  // 介面重整的頭像角上已經寫了等級（rv）：名號旁不再寫「・第 N 級」，長頭銜才不會把等級擠成「…」（UI 手感丙批 1-5）
   // 善惡稱號（沒有就名望稱號）接在頭銜後面（放不下先收名望稱號，同草圖 1A）；展開時經驗底下「名聲」那一行，點了攤開段落條（2C）
-  function whoNameHtml(s) {
+  function whoNameHtml(s, rv) {
     const r = s.renown;
     const spans = r ? rnTitleSpans(r) : [];
     if (!S.showMore) {
       const tight = S.renownTight && S.tab === "jianghu"; // 只有江湖頁量第一屏：別的分頁照整行畫
       const inline = tight && spans.length ? `・${spans[spans.length - 1]}` : "";
-      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
+      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}${rv ? "" : `・第${s.level}級`}</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
         + (spans.length && !tight ? `<div class="who-renown-line">${spans.join("・")}</div>` : "");
     }
     const segs = [...s.affiliation.split("・"), ...(s.anonymous ? ["匿名"] : []), `第${s.level}級`].filter(Boolean);
@@ -620,7 +617,9 @@
         ${figImg(x.key)}<b>${esc(x.name)}</b><small>${esc(PREP_TAGS[x.key] || "")}</small>${bars(x.split)}</button>`).join("") +
       `<button class="prep-opt${pick === "custom" ? " on" : ""}" data-act="prep-pick" data-preset="custom" aria-pressed="${pick === "custom"}">${figImg("custom")}<b>自己配</b><small>五項各 ${g.custom_min}～${max} 點，合計 ${g.per_level}</small></button>`;
     const edit = pick === "custom" && S.growthDraft ? growthEditHtml(g, S.growthDraft) : "";
-    const go = pick && pick !== "custom" ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>` : "";
+    // 「定下來」一直釘在畫面底下（UI 手感甲批 1-1：以前挑了之後鈕在畫面外，小手機看不到）；還沒挑是灰的
+    const go = pick === "custom" ? "" : pick ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>`
+      : `<button class="btn primary prep-go" disabled>先挑一種長法</button>`; // 待 joy 潤
     return `<p class="prep-lead">每升一級五項合計長 ${g.per_level} 點，照你挑的這一套分。<b>這一季只挑一次</b>，挑了就定了；每 10 級另外送的點，隨時自己配。</p>
       <div class="prep-opts">${cards}</div>${edit}${go}${g.event_cap ? `<p class="prep-note">江湖歷練每一季最多長 ${g.event_cap | 0} 點，滿了化為心得。</p>` : ""}`;
   }
@@ -1150,21 +1149,17 @@
     const self = selfNews(S.news);
     if (self) return `<div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 俠客</button><h3>${esc(self.name)}</h3></div>`;
     const at = newsPart(S.news);
-    const top = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
-    if (!at || !at.parts) return top;
-    const parts = NEWS_PARTS.filter((n) => at.parts.includes(n.id) && (n.id !== "xingshi" || (m && m.xingshi)));
-    return top + `<div class="seg news-sub">${parts.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+    return `<div class="seg news-seg nw-tabs" role="tablist">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" role="tab" aria-selected="${at === n}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
   }
 
 
   // 見聞・大事的「大勢」那一段最上面（減法季批 1）：三方卡（以前本週卡的「為什麼」也有）、本週江湖大事（以前江湖頁「大事」小標的面板）、
   // 三條戰況與軍備（以前在江湖頁行動列底下，6.3 拿掉）。都沒有就是空字串
   function trendsTopHtml(m) {
-    const sides = m.sides_card ? `<details class="card sides-card"><summary>三方</summary>${sidesTableHtml(m.sides_card)}</details>` : "";
+    // 見聞改版：三方卡拿掉（兩軍誰佔上風在江湖頁頂端、點開那一層）；三路戰況與軍備一張（newsFrontsHtml），本週江湖大事收成一行
     const bulletin = m.bulletin && m.bulletin.length && shown("board")
-      ? `<section class="card bulletin"><h3>${esc(wkWord("this", "本週"))}江湖大事</h3>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}${warHelp(m, "board")}</section>` : "";
-    const fronts = (m.fronts && shown("fronts") ? frontsBlock(m) : "") + armsLine(m);
-    return sides + bulletin + fronts;
+      ? `<details class="card nw-card bulletin"><summary class="nw-title">${esc(wkWord("this", "本週"))}江湖大事</summary>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}${warHelp(m, "board")}</details>` : "";
+    return newsFrontsHtml(m) + bulletin;
   }
 
 
@@ -1172,27 +1167,22 @@
     const seg = newsSegHtml(S.main);
     const m = S.main;
     let body = "";
-    if (S.news === "reports") {
+    if (newsPart(S.news) === NEWS[0]) {
+      // 戰況（見聞改版）：戰報（點得開，排最上面；大戰固定在頂、其餘照日子分段）、三路戰況（說明收進「？」）、天下形勢（最新一篇兩行）
       const r = S.reports;
-      if (!r) body = '<p class="muted">載入中…</p>';
-      else if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
-      else if (S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
-      else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
-      else {
-        // 決戰與奪璽單挑另外一組排在最上面，不跟遊歷野怪混在一起（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）
-        const item = (x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`;
-        const big = r.list.filter((x) => x.big), rest = r.list.filter((x) => !x.big);
-        body = (big.length ? `<p class="report-group">大戰</p><div class="list report-big">${big.map(item).join("")}</div>` : "")
-          + (rest.length ? `${big.length ? '<p class="report-group">最近的仗</p>' : ""}<div class="list">${rest.map(item).join("")}</div>` : "");
-      }
-    } else if (S.news === "trends") body = `${trendsTopHtml(m)}<div class="card">${m.trends}</div>`;
-    else if (S.news === "xingshi") body = xingshiHtml(S.xingshi);
-    else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
-    else if (S.news === "chronicle") body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}<div class="card">${m.chronicle}</div>`;
+      if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
+      else if (r && S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
+      else body = newsReportsHtml(r) + trendsTopHtml(m) + (m.xingshi ? newsXingshiHtml(S.xingshi) : "");
+    } else if (S.news === "rumors") body = m.rumor_layers ? newsRumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
+    else if (S.news === "chronicle") {
+      // 江湖史（見聞改版）：點得開的戰記與玉璽排最上面，下面照日子分段（天下大事併進來了，伺服器 chronicle_text）
+      const c = newsChronicleHtml(m.chronicle);
+      body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}${c.seal ? `<div class="card nw-card">${c.seal}</div>` : ""}${c.body}`;
+    }
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
-    else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
+    else body = `${m.latest ? `<div class="nw-just">${m.latest}</div>` : ""}<div class="card nw-card">${newsJournalHtml((m.journal || "") + (m.older || ""))}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
 
@@ -1213,27 +1203,32 @@
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）
     const s = S.main.status;
+    // 分成「通知與隱私」「新手與說明」「帳號」三段（UI 手感丙批 7-2、7-3）：性別只能選一次，排進帳號那一段，不跟管理者工具、關閉擠在頂上
     // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/figures/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : supportDeskLink()}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
-        ${genderRow(s)}
-        ${renameRow()}
+        <div class="label">通知與隱私</div>
         ${adultRow()}
-        ${pushRow()}${supportRow()}
-        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
+        ${pushRow()}
+        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}><span><b>匿名行走</b><small>只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫</small></span></label>
+        <div class="label">新手與說明</div>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
-          <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
+          <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}><span><b>不再提示</b><small>碰到新玩法時的小提醒</small></span></label>
         </div>
         ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howtoFailed
           ? '<p class="muted">說明沒拿到，連不上伺服器。</p><button class="btn small" data-act="howto-retry">再試一次</button>'
           : S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
+        <div class="label">帳號</div>
+        ${genderRow(s)}
+        ${renameRow()}
+        ${supportRow()}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
           <label class="field"><span>新密碼</span><input class="input" type="password" name="new" autocomplete="new-password"></label>
@@ -1241,7 +1236,6 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn" type="submit">修改密碼</button>
         </form></details>
-        <div class="label">帳號</div>
         <button class="btn ghost" data-act="logout">登出</button>
       </div>`;
   }
@@ -1347,9 +1341,9 @@
         renderTop();
         await loadMap();
       }
-      if (tab === "news" && S.news === "reports") await loadReports(null);
+      if (tab === "news" && newsPart(S.news) === NEWS[0]) await loadReports(null);
       if (tab === "news" && S.news === "annals") await loadAnnals();
-      if (tab === "news" && S.news === "xingshi") await loadXingshi();
+      if (tab === "news" && newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
       if (tab === "news" && S.news === "boards") await loadBoards();
       if (tab === "news" && S.news === "mingtie") await loadMingtie();
     } catch (e) { /* api() 已經提示過 */ }
@@ -1541,7 +1535,9 @@
         // 只有決戰選項這樣（FB-162：懸賞選項的拒絕句是一句話，場景裡沒有它，不截、不指去場景）
         // 戰場面板開著時出招不跳提示：面板上已經寫「你這一回合：…」，結算了的那一回合在面板的戰報裡（PM 2026-11-06 看截圖）
         const panelSays = id.startsWith("battle:act:") && typeof bpOn === "function" && bpOn(S.main);
-        if (text && !panelSays) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+        // 「剛剛」那一格已經寫了同一句時不再跳黑底提示（UI 手感丙批 1-6：同一句話同時出現兩次）
+        const nowSays = !!text && String((S.main && S.main.now) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").includes(text.slice(0, 24));
+        if (text && !panelSays && !nowSays) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
     }, waitLineFor(id));
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
@@ -1856,9 +1852,9 @@
           S.reportOpen = false;
           if (S.tab !== "news") { await goTab("news"); break; }
           renderPage();
-          if (S.news === "reports") await loadReports(null);
+          if (newsPart(S.news) === NEWS[0]) await loadReports(null);
           if (S.news === "annals") await loadAnnals();
-          if (S.news === "xingshi") await loadXingshi();
+          if (newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
           if (S.news === "boards") await loadBoards();
           if (S.news === "mingtie") await loadMingtie();
           break;

@@ -19,7 +19,6 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 GUIDE_CARD = 'class="card guide"'
-ACK = 'data-act="guide-ack"'
 
 
 @pytest.fixture
@@ -33,14 +32,15 @@ def views(game):
     return server.main_view(game), server.menxia_view(game)
 
 
-def test_a_hint_is_drawn_at_the_top_of_the_practice_and_craft_pages(game):
+def test_a_hint_is_drawn_on_the_jianghu_page_only(game):
+    """碰到才說的提示（「想起師父說過」）只畫在江湖頁，俠客頁的修練、煉製不再各掛一次（Joy 2026-11-08 UI 手感乙批 1-4 選「只留江湖頁」）。"""
     game._hint("h_merge")
     m, x = views(game)
     assert m["guide"]["hint"] is True
     for call in ("H.pagePractice()", "H.pageCraft()"):
-        page = run(m, f"return {call};", menxia=x)
-        assert GUIDE_CARD in page and ACK in page and "意境可以合。" in page, call
-        assert page.index(GUIDE_CARD) < page.index('id="mx-msg"'), call  # 在頁面最上面
+        assert GUIDE_CARD not in run(m, f"return {call};", menxia=x), call
+    page = run(m, "return H.pageJianghu();", menxia=x)
+    assert ("意境可以合。" in page or "data-act=\"guide-open\"" in page), page[:400]
 
 
 def test_no_hint_no_box_on_those_pages(game):
@@ -64,86 +64,3 @@ def test_the_other_boxes_stay_on_the_jianghu_page_only(hints_content, world):
         assert GUIDE_CARD in run(m, "return H.pageJianghu();", menxia=x), key
 
 
-def test_got_it_on_the_practice_page_clears_the_box(game):
-    """修練頁上按「知道了」：送 guide_ack、換上伺服器回的新畫面，框就沒了（點的是頁面上真的那顆鈕的 data-act）。"""
-    game._hint("h_merge")
-    m, x = views(game)
-    game.guide_ack()
-    after = server.main_view(game)
-    assert after["guide"] is None
-    script = """return (async () => {
-      H.S.tab = "practice";
-      const before = H.pagePractice();
-      const act = (before.match(/data-act="(guide-ack)"/) || [])[1];
-      const el = { dataset: { act }, classList: { contains: () => false } };
-      await T.docListeners.click[0]({ target: { closest: () => el } });
-      return { before: before.includes('class="card guide"'), act, guide: H.S.main.guide, after: H.pagePractice(),
-               calls: T.calls.map((c) => c[0]) };
-    })();"""
-    out = run(m, script, menxia=x, responses={"/api/do/guide_ack": {"main": after}})
-    assert out["before"] is True and out["act"] == "guide-ack"
-    assert out["calls"] == ["/api/do/guide_ack"] and out["guide"] is None
-    assert GUIDE_CARD not in out["after"]
-
-
-POLL = """return (async () => {
-  H.S.tab = TAB; H.renderPage();
-  const page = T.els.page;
-  const drawn = () => page.innerHTML.includes('class="card guide"');
-  const first = drawn();
-  // 一次輪詢：拿到有提示的新畫面（setMain 之後 refreshPage，跟 poll() 一樣）；上一次畫的頁面清掉，看重畫了沒有
-  const was = H.S.main;
-  H.setMain(H.S.next);
-  await H.refreshPage(was);
-  const arrived = drawn();
-  // 再一次輪詢，畫面沒有變：不重畫（輪詢每十秒一次，不能每次都整頁重畫）
-  page.innerHTML = "";
-  const again = H.S.main;
-  H.setMain(JSON.parse(JSON.stringify(H.S.main)));
-  await H.refreshPage(again);
-  const untouched = page.innerHTML === "";
-  return { first, arrived, untouched, calls: T.calls.map((c) => c[0]) };
-})();"""
-
-
-@pytest.mark.parametrize("tab", ["practice", "craft"])
-def test_a_hint_that_arrives_with_a_poll_is_drawn_on_the_practice_and_craft_pages(game, tab):
-    """輪詢（同步）才排進來的提示（大事揭曉、決戰集結、抵達……）也要畫：伺服器在輪詢裡就把它記成說過、寫進江湖紀錄了，
-    頁面卻只在修練、煉製的資料變了才重畫，框就不出現，直到下一次動作或切分頁（Task 2 審查 I-1）。沒變的輪詢不重畫。"""
-    before, x = views(game)
-    game._hint("h_merge")
-    after = server.main_view(game)
-    assert before["guide"] is None and after["guide"]["hint"] is True
-    out = run(before, POLL.replace("TAB", repr(tab)), menxia=x, S={"next": after}, responses={"/api/menxia": x})
-    assert out["first"] is False  # 一開始沒有提示
-    assert out["arrived"] is True  # 輪詢帶來提示：頁面重畫、框出現
-    assert out["untouched"] is True  # 同一份畫面再輪詢一次：不重畫
-    assert out["calls"] == ["/api/menxia", "/api/menxia"]
-
-
-def test_a_poll_that_takes_the_hint_away_redraws_too(game):
-    """另一個分頁按了「知道了」之後，這一頁的輪詢拿到沒有提示的畫面：框要收掉。"""
-    game._hint("h_merge")
-    with_hint, x = views(game)
-    game.guide_ack()
-    gone = server.main_view(game)
-    script = """return (async () => {
-      H.S.tab = "practice"; H.renderPage();
-      const had = T.els.page.innerHTML.includes('class="card guide"');
-      const was = H.S.main;
-      H.setMain(H.S.next);
-      await H.refreshPage(was);
-      return { had, has: T.els.page.innerHTML.includes('class="card guide"') };
-    })();"""
-    out = run(with_hint, script, menxia=x, S={"next": gone}, responses={"/api/menxia": x})
-    assert out == {"had": True, "has": False}
-
-
-def test_a_second_hint_takes_the_place_of_the_first_on_the_craft_page(game):
-    game._hint("h_merge")
-    game._hint("h_lose")
-    game.guide_ack()
-    m, x = views(game)
-    assert m["guide"]["key"] == "h_lose"
-    page = run(m, "return H.pageCraft();", menxia=x)
-    assert "打不過就回去練。" in page and "意境可以合。" not in page

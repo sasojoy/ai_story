@@ -454,7 +454,7 @@ def test_status_data_carries_the_switch(game):
 def test_the_settings_sheet_has_the_switch_and_sends_hints_off():
     """設定抽屜的「不再提示」（網頁沒有建置步驟、沒有前端測試：這裡只看原始碼有接上，node --check 另外擋語法）。"""
     src = webharness.app_source().replace("\r\n", "\n")
-    assert 'id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）' in src
+    assert 'id="hints-off" ${s.hints_off ? "checked" : ""}><span><b>不再提示</b><small>碰到新玩法時的小提醒</small></span>' in src
     assert 'ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked })' in src
     assert src.index("略過新手引導</button>") < src.index('id="hints-off"')  # 在「略過新手引導」下面
 
