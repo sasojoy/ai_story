@@ -413,14 +413,14 @@ def test_a_missing_file_in_the_table_is_caught(tmp_path):
 
 
 def test_every_package_script_picks_some_round():
-    """包的網頁檔改到，挑到的回合非空（對照表沒有它就全走，也算）；殼的檔一律全走。"""
+    """包的網頁檔改到，挑到的回合非空（對照表沒有它就全走，也算），或 NOT_ON_TABLE 寫了為什麼沒有回合走到（第 110 批）；殼的檔一律全走。"""
     gate = _load("gate")
     table = gate.load_coverage()
     packages = {p.name for p in (ROOT / "tianxia" / "features").iterdir() if p.is_dir()}
     for js in sorted((ROOT / "web").glob("*.js")):
         if js.stem in packages:
             rounds, why = gate.rounds_for([f"web/{js.name}"], table)
-            assert rounds, (js.name, why)
+            assert rounds or f"web/{js.name}" in gate.NOT_ON_TABLE, (js.name, why)
     for shell in sorted(gate.SHELL_FILES):
         assert gate.rounds_for([shell], table)[0] == list(gate.ROUNDS), shell
     assert gate.rounds_for(["scripts/webqa/driver.mjs"], table)[0] == list(gate.ROUNDS)
@@ -436,3 +436,31 @@ def test_changed_files_follow_the_table():
     assert gate.rounds_for(["web/seal.js", "web/yyy.js"], table, rounds)[0] == ["main", "x"]
     assert gate.rounds_for(["web/zzz.js"], table, rounds)[0] == ["main", "x"], "對不到任何回合就全走"
     assert gate.rounds_for(["web/seal.js"], {}, rounds)[0] == ["main", "x"], "沒有對照表就全走"
+    # 第 110 批：空清單不走；包的檔不在表上、NOT_ON_TABLE 有理由就不走並寫原因；沒理由照舊全走（保守）
+    assert gate.rounds_for([], table, rounds)[0] == [] and gate.rounds_for([" "], table, rounds)[0] == []
+    got, why, not_walked = gate.rounds_detail(["web/identity.js"], table, rounds, {"web/identity.js": "off"})
+    assert got == [] and not_walked and "web/identity.js" in not_walked[0] and "off" in not_walked[0], why
+    assert gate.rounds_for(["web/identity.css"], table, rounds, {"web/identity.js": "off"})[0] == [], "包的 css 照同名 js"
+    assert gate.rounds_for(["web/identity.js"], table, rounds, {})[0] == ["main", "x"], "沒寫理由就全走"
+    assert gate.rounds_for(["web/identity.js", "web/seal.js"], table, rounds, {"web/identity.js": "off"})[0] == ["main"]
+    assert gate.rounds_for(["web/shop.css"], table, rounds)[0] == ["main", "x"], "沒有同名的包就是殼"
+
+
+def test_dry_run_prints_the_pick_and_walks_nothing():
+    def dry(files):
+        r = subprocess.run([sys.executable, str(TOOL / "gate.py"), "--dry-run", f"--changed-files={files}"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+    assert "rounds: (none)" in dry("")
+    out = dry("web/identity.js")
+    assert "rounds: (none)" in out and "not walked: web/identity.js" in out
+    gate = _load("gate")
+    assert f"rounds: {','.join(gate.ROUNDS)}" in dry("web/app.js")
+
+
+def test_nothing_to_walk_is_green_before_anything_is_looked_for(tmp_path):
+    r = _gate(tmp_path, "--changed-files=", "--chrome", str(tmp_path / "no-such-chrome.exe"))
+    assert r.returncode == 0, r.stdout
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
+    assert summary["green"] and summary["rounds"] == [] and not summary["tool"]
+    assert "NOTHING TO WALK" in (tmp_path / "out" / "report.txt").read_text(encoding="utf-8").splitlines()[0]
