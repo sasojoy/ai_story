@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import journal  # 核心（江湖紀錄）
 from tianxia.characters import name_key
+from tianxia.core import identity_base  # 綁手機才能上架與買市集形象（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.state import JournalEntry
 
 from . import market, moves, mvp, orders, rules, scenes, studio
@@ -486,6 +487,8 @@ def market_list(ctx: Game, look: str, price: int) -> list[str]:
     wallet = ctx._wallet()
     if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content):
         return ctx._log([market.NOT_OPEN])
+    if not identity_base.phone_ok(ctx, "looks_market"):  # 只問上架的人（第 205 批）
+        return ctx._log([identity_base.PHONE_NEEDED])
     done, line = market.list_look(wallet, ctx._mall_owner(), look, price)
     if done:
         journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
@@ -504,6 +507,8 @@ def market_buy(ctx: Game, look: str, ref: str) -> list[str]:
     wallet = ctx._wallet()
     if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content) or ctx.state.player.bot:
         return ctx._log([market.NOT_OPEN])
+    if not identity_base.phone_ok(ctx, "looks_market"):  # 只問買的人（第 205 批）
+        return ctx._log([identity_base.PHONE_NEEDED])
     found = market.listing(wallet, look)
     seller = (wallet.character_name(found["seller"]) or found["seller"]) if found else ""
     pid, line = market.buy(ctx.content, wallet, ctx._mall_owner(), look, ref, names=_made_names(ctx, wallet), seller_name=seller,
