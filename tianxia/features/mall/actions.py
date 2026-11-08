@@ -35,7 +35,13 @@ def grant(ctx: Game) -> None:
     wallet = ctx._wallet()
     if wallet is None:
         return
-    amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    if not identity_base.phone_ok(ctx, "mall_grant"):  # 綁了手機那一輪才發（帳號與客服第 205 批）
+        return
+    phone = identity_base.phone_subject(ctx, "mall_grant")  # 閘關、不在名單、假人是 None：照舊只看錢包
+    if phone is None:
+        amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    else:
+        amount = mall.grant_beta_phone(ctx.content, wallet, ctx._mall_owner(), phone, ctx.now)
     if amount:
         journal.add_entry(ctx.state, JournalEntry(
             time=ctx.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
@@ -64,6 +70,8 @@ def purchase(ctx: Game, item_id: str, ref: str, qty: int = 1) -> Receipt:
     wallet = ctx._wallet()
     if wallet is None:
         return Receipt(ctx._log([mall.OFF]))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 只問買的人（第 205 批）
+        return Receipt(ctx._log([identity_base.PHONE_NEEDED]))
     result = mall.buy(
         ctx.state, ctx.content, wallet, item_id, ref,
         now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), qty=qty, moment=moment(ctx),
@@ -187,6 +195,9 @@ def view(ctx: Game) -> dict | None:
     if wallet is None:
         return None
     data = mall.view(ctx.content, wallet, ctx._mall_owner(), ctx._pill_day(), ctx.world.get_season_number(), moment(ctx))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 沒綁手機：每一件都灰、寫同一句（第 205 批；web/mall.js 照 can、why 畫）
+        for row in data["items"]:
+            row.update(can=False, why=identity_base.PHONE_NEEDED, max=0)
     cfg = ctx.content.config
     data["pills"] = {
         "name": cfg.stamina_pill_name, "count": ctx.state.player.stamina_pills, "today": ctx.pills_left_today(),

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import battlelog, encounter, gender, prologue as prologue_rules, team
+from tianxia.core import identity_base  # 綁手機才能發起切磋（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import presence
 from tianxia.models import Squad
 from tianxia.rules import season_one
@@ -73,6 +74,8 @@ def refusal(ctx, other: Game) -> str | None:
 
 def send(ctx, other: Game) -> list[str]:
     """玩家卡上的「切磋」：向這個人發一張邀請，他在 invite_ttl_seconds 內答應才打。被拒絕只回一句話。"""
+    if not identity_base.phone_ok(ctx, "spar"):  # 只問發起的人（第 205 批）；答應的那一方由 answer_invite 擋
+        return [identity_base.PHONE_NEEDED]
     s = ctx.state
     problem = refusal(ctx, other)
     if problem is not None:

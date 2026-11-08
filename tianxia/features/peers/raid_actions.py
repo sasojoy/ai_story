@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
 from tianxia.core import bounty_base
+from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.characters import name_key
 from tianxia.core import annal_base as annals
 from tianxia.core import presence
@@ -102,6 +103,8 @@ def raid(ctx, other: Game) -> list[str]:
     """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
     與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
     雙方各一份戰報與一則江湖紀錄。被截殺的人騎的馬比較快時，開打之前先擲策馬脫身（raid_flee_odds、_raid_fled）。"""
+    if not identity_base.phone_ok(ctx, "raid"):  # 只問動手的人（第 205 批）
+        return [identity_base.PHONE_NEEDED]
     problem = refusal(ctx, other)
     if problem is not None:
         return [problem]

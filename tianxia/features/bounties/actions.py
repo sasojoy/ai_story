@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import bounty_base  # 核心（榜的入口與收店：清失效參照那一格讀，core_seams）
+from tianxia.core import identity_base  # 綁手機才能掛通緝、揭與交玩家掛的單（帳號與客服第 205 批；核心，phone_gate 預設關）
 
 from . import rules
 from . import shop_view
@@ -43,7 +44,7 @@ def options(ctx: Game) -> list[Option]:
         if b.id in mine:
             opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
             continue
-        problem = rules.take_problem(s, c, b)
+        problem = identity_base.PHONE_NEEDED if b.poster and not identity_base.phone_ok(ctx, "bounty_post") else rules.take_problem(s, c, b)
         opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                            enabled=problem is None))
     if stuck:
@@ -64,6 +65,9 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         return ["你離開了懸賞榜。"]
     if verb == "take":
         b = next((x for x in rules.open_bounties(s, c) if x.id == rest), None)
+        if b is not None and b.poster and not identity_base.phone_ok(ctx, "bounty_post"):  # 玩家掛的單（第 205 批）
+            ctx._shop_after(identity_base.PHONE_NEEDED, "take", shop_view.board_key)
+            return [identity_base.PHONE_NEEDED]
         ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shop_view.board_key)  # 1.4
         return rules.take(s, c, rest)
     if verb == "drop":
@@ -83,6 +87,10 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         return [rules.UNPICKED]
     if verb == "give":
         bounty_id, _, item = rest.partition(":")
+        posted = next((x for x in s.world.bounties if x.id == bounty_id), None)
+        if posted is not None and posted.poster and not identity_base.phone_ok(ctx, "bounty_post"):  # 玩家掛的單（第 205 批）
+            ctx._shop_say("refused")
+            return [identity_base.PHONE_NEEDED]
         msgs = rules.give(s, c, ctx.world, bounty_id, item)
         if msgs[0].startswith(rules.GIVEN_PREFIX):
             s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
@@ -103,6 +111,8 @@ def enter(ctx: Game) -> list[str]:
 
 def post_wanted(ctx: Game, other: Game, amount: int) -> list[str]:
     """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（rules.post）；成了寫一則江湖紀錄、存季。"""
+    if not identity_base.phone_ok(ctx, "wanted"):  # 只問掛單的人（第 205 批）
+        return [identity_base.PHONE_NEEDED]
     msgs = rules.post(ctx.state, ctx.content, other.state, amount)
     if msgs and msgs[0].startswith("你押了"):
         ctx._write(rules.BOARD, msgs)

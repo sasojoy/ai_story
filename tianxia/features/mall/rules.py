@@ -161,6 +161,23 @@ def grant_beta(content: Content, wallet: Wallet, owner: str, now: float) -> int:
     return amount if wallet.post(owner, amount, "grant", grant_ref(owner), time=now) else 0
 
 
+def grant_phone_ref(subject: str) -> str:
+    """封測發放的手機編號（帳號與客服第 205 批）：subject 是 logins 那一列 phone 的加金鑰雜湊。"""
+    return f"grant:beta:phone:{subject}"
+
+
+def grant_beta_phone(content: Content, wallet: Wallet, owner: str, subject: str, now: float) -> int:
+    """phone_gate 開著、綁了手機的封測發放：同一支手機一輩子一次（手機編號在 mall_ledger，ref UNIQUE；解綁、刪帳號都不刪帳本）。
+    手機編號有了回 0；否則照 grant_beta 發（這個錢包發過了也回 0），發成了再記一筆 0 元寶的手機編號，同一筆交易。"""
+    with wallet.db.transaction():
+        if wallet.has_ref(grant_phone_ref(subject)):
+            return 0
+        amount = grant_beta(content, wallet, owner, now)
+        if amount:
+            wallet.post(owner, 0, "grant", grant_phone_ref(subject), time=now)
+        return amount
+
+
 def date_day(text: str) -> int:
     """台灣日期 YYYY-MM-DD → 回體丹那一套的日數（Game._pill_day：照台灣日期、從 1970-01-01 起算）。格式不對丟 ValueError。"""
     if not _DATE.fullmatch(text or ""):

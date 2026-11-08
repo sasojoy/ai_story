@@ -76,7 +76,8 @@ def _bind(game, provider=None):
             )
 
 
-def test_phone_ok_true_for_bots_and_no_account(game, keyed):
+def test_phone_ok_order(game, keyed):
+    """第 205 批照設計 4.5 的順序：關著、phone_gate 關、不在名單、假人回真；不是假人又查不到帳號回假；其餘看有沒有 phone 列。"""
     from tianxia.state import BotProfile
 
     cfg = game.content.config.identity
@@ -84,10 +85,10 @@ def test_phone_ok_true_for_bots_and_no_account(game, keyed):
     cfg.enabled = True
     assert ib.phone_ok(game, "raid") is True  # phone_gate 關
     cfg.phone_gate = True
-    assert ib.phone_ok(game, "raid") is True  # 沒帳號
+    assert ib.phone_ok(game, "raid") is False  # 不是假人、查不到帳號
     assert ib.phone_ok(game, "not_listed") is True  # 不在名單
     game.state.player.bot = BotProfile(personality="普通", seed=1)
-    assert ib.phone_ok(game, "raid") is True  # 假人跟沒帳號同值
+    assert ib.phone_ok(game, "raid") is True  # 假人一律過（假人沒有帳號）
     game.state.player.bot = None
     _bind(game)
     assert ib.phone_ok(game, "raid") is False  # 有帳號、沒綁手機
@@ -100,6 +101,26 @@ def test_phone_ok_true_once_the_phone_is_bound(game, keyed):
     cfg.phone_gate = True
     _bind(game, "phone")
     assert ib.phone_ok(game, "raid") is True
+
+
+def test_phone_subject_only_when_gated_and_bound(game, keyed):
+    """phone_subject：走到「有 phone 列」才回那一列的 subject；閘關、不在名單、假人、沒綁都 None。"""
+    from tianxia.state import BotProfile
+
+    cfg = game.content.config.identity
+    cfg.enabled = True
+    _bind(game, "phone")
+    assert ib.phone_subject(game, "mall_grant") is None  # phone_gate 關
+    cfg.phone_gate = True
+    assert ib.phone_subject(game, "mall_grant") == "h" * 64
+    assert ib.phone_subject(game, "not_listed") is None
+    game.state.player.bot = BotProfile(personality="普通", seed=1)
+    assert ib.phone_subject(game, "mall_grant") is None
+    game.state.player.bot = None
+    with game.world.db.transaction() as conn:
+        conn.execute("DELETE FROM logins WHERE provider = 'phone'")
+    assert ib.phone_subject(game, "mall_grant") is None  # 沒綁
+    assert isinstance(ib.PHONE_NEEDED, str) and ib.PHONE_NEEDED
 
 
 def test_account_key_for_reads_logins(game):
