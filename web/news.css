@@ -1,0 +1,55 @@
+/* 見聞頁（news 包；見聞改版，Joy 2026-11-08 說好）：五顆籤一排、一張張卡、照日子分段收合。顏色都讀 style.css 的變數，亮色暗色跟著走 */
+
+/* 籤：一排五顆，選中的那一顆底下一筆朱紅的墨 */
+.nw-tabs { background: none; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; gap: 0; }
+.nw-tabs button { flex: 1 1 0; position: relative; border-radius: 0; padding: 8px 0 10px; font: 600 15px var(--serif); background: none; }
+.nw-tabs button.on { background: none; box-shadow: none; color: var(--ink); }
+.nw-tabs button.on::after { content: ""; position: absolute; left: 24%; right: 24%; bottom: -2px; height: 4px; border-radius: 3px 1px 4px 1px;
+  background: var(--accent); transform: skewX(-12deg); }
+
+.nw-card { display: grid; gap: 6px; margin-bottom: 12px; }
+.nw-title { display: flex; align-items: baseline; gap: 8px; margin: 0; font: 700 16px var(--serif); }
+.nw-title small { margin-left: auto; font: 400 12px var(--sans); color: var(--ink-2); }
+summary.nw-title { cursor: pointer; list-style: none; }
+summary.nw-title::-webkit-details-marker { display: none; }
+
+/* 照日子分段：日子一小行；更早的收成一行 */
+.nw-day { margin: 6px 0 0; font: 600 12px var(--serif); color: var(--ink-2); letter-spacing: .06em; }
+.nw-more > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px;
+  border-top: 1px dashed var(--line); font-size: 13px; color: var(--accent); }
+.nw-more > summary::-webkit-details-marker { display: none; }
+.nw-more > summary::after { content: "▾"; color: var(--ink-2); }
+.nw-more[open] > summary::after { content: "▴"; }
+
+/* 戰報：一列一場，結果是一顆小印 */
+.nw-rep { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 8px 2px; border: 0;
+  border-top: 1px solid var(--line); background: none; text-align: left; font: 15px var(--sans); color: var(--ink); cursor: pointer; }
+.nw-day + .nw-rep, .nw-big .nw-rep:first-child { border-top: 0; }
+.nw-big { border-left: 3px solid var(--accent); padding-left: 8px; }
+.nw-seal { font: 700 12px var(--serif); color: var(--paper); border-radius: 4px; padding: 1px 6px; background: var(--ink-2); white-space: nowrap; }
+.nw-seal.win { background: var(--ok); }
+.nw-seal.lose { background: var(--bad); }
+.nw-who { min-width: 0; overflow-wrap: anywhere; }
+.nw-who small { display: block; font-size: 12px; color: var(--ink-2); }
+.nw-go { color: var(--ink-2); }
+
+/* 天下形勢：最新一篇只攤兩行 */
+.nw-xs-top > summary { list-style: none; cursor: pointer; }
+.nw-xs-top > summary::-webkit-details-marker { display: none; }
+.nw-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; line-height: 1.6; }
+.nw-xs-top[open] > summary { display: none; }
+
+/* 傳聞、江湖史：一則一段 */
+.nw-rm p, .nw-hist p { margin: 4px 0; font-size: 14px; line-height: 1.6; }
+
+/* 江湖史頂上那一行：傳國玉璽七格 */
+.nw-row > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.nw-row > summary::-webkit-details-marker { display: none; }
+.nw-pips { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; }
+.nw-pips i { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--ink-2); }
+.nw-pips i.on { background: var(--accent); border-color: var(--accent); }
+
+/* 紀錄：「剛剛」那一則在卡外最上面，底下照日子分段 */
+.nw-just { margin-bottom: 12px; }
+.nw-journal .tx-journal { margin: 0; }
+.nw-journal .tx-time { flex-basis: 3.2em; }

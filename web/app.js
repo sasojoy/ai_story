@@ -26,24 +26,20 @@
   // 見聞 9 籤改 5（6.5 寫四籤；Joy 2026-10-24「榜單放俠客頁很奇怪」）：大事（戰報＋大勢＋形勢，底下再分）、傳聞、榜單、江湖史、
   // 紀錄（自己的紀錄＋名帖匣，底下再分）。行狀是自己的傳，從「俠客」頁人像那張卡進（SELF_NEWS），頁面照舊是見聞那一頁的同一段
   // （S.news 認得它），只是籤不排在見聞上
+  // 見聞改版（Joy 2026-11-08 對設計稿說「好」）：五顆籤一排、沒有第二層。戰況＝戰報＋三路戰況＋天下形勢（舊的 trends、xingshi 也認成戰況）；
+  // 名帖匣搬去俠客頁（SELF_NEWS，跟行狀一起）。畫法的小工具在 news 包的 web/news.js
   const NEWS = [
-    { id: "reports", name: "大事", parts: ["reports", "trends", "xingshi"] },
+    { id: "reports", name: "戰況", parts: ["reports", "trends", "xingshi"] },
     { id: "rumors", name: "傳聞" },
-    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14，/api/boards
     { id: "chronicle", name: "江湖史" },
-    { id: "journal", name: "紀錄", parts: ["journal", "mingtie"] },
-  ];
-  // 籤底下再分的一排小的（newsSegHtml）：大事分戰報、大勢、形勢（形勢只有開著的季〔main.xingshi〕才畫）；紀錄分紀錄、名帖匣（Joy 2026-10-19，/api/mingtie）
-  const NEWS_PARTS = [
-    { id: "reports", name: "戰報" },
-    { id: "trends", name: "大勢" },
-    { id: "xingshi", name: "形勢" }, // 領地爭奪第三批 A：每天一篇〈天下形勢〉（/api/xingshi）
+    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14，/api/boards
     { id: "journal", name: "紀錄" },
-    { id: "mingtie", name: "名帖匣" },
   ];
+
   // 從「俠客」頁進去的那一段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）
   const SELF_NEWS = [
     { id: "annals", name: "行狀" },
+    { id: "mingtie", name: "名帖匣" }, // 見聞改版（Joy 2026-11-08）：名帖是自己的東西，從見聞・紀錄搬來
   ];
   const POLL_MS = 10000;
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
@@ -1136,21 +1132,17 @@
     const self = selfNews(S.news);
     if (self) return `<div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 俠客</button><h3>${esc(self.name)}</h3></div>`;
     const at = newsPart(S.news);
-    const top = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
-    if (!at || !at.parts) return top;
-    const parts = NEWS_PARTS.filter((n) => at.parts.includes(n.id) && (n.id !== "xingshi" || (m && m.xingshi)));
-    return top + `<div class="seg news-sub">${parts.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+    return `<div class="seg news-seg nw-tabs" role="tablist">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" role="tab" aria-selected="${at === n}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
   }
 
 
   // 見聞・大事的「大勢」那一段最上面（減法季批 1）：三方卡（以前本週卡的「為什麼」也有）、本週江湖大事（以前江湖頁「大事」小標的面板）、
   // 三條戰況與軍備（以前在江湖頁行動列底下，6.3 拿掉）。都沒有就是空字串
   function trendsTopHtml(m) {
-    const sides = m.sides_card ? `<details class="card sides-card"><summary>三方</summary>${sidesTableHtml(m.sides_card)}</details>` : "";
+    // 見聞改版：三方卡拿掉（兩軍誰佔上風在江湖頁頂端、點開那一層）；三路戰況與軍備一張（newsFrontsHtml），本週江湖大事收成一行
     const bulletin = m.bulletin && m.bulletin.length && shown("board")
-      ? `<section class="card bulletin"><h3>${esc(wkWord("this", "本週"))}江湖大事</h3>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}${warHelp(m, "board")}</section>` : "";
-    const fronts = (m.fronts && shown("fronts") ? frontsBlock(m) : "") + armsLine(m);
-    return sides + bulletin + fronts;
+      ? `<details class="card nw-card bulletin"><summary class="nw-title">${esc(wkWord("this", "本週"))}江湖大事</summary>${m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("")}${warHelp(m, "board")}</details>` : "";
+    return newsFrontsHtml(m) + bulletin;
   }
 
 
@@ -1158,27 +1150,22 @@
     const seg = newsSegHtml(S.main);
     const m = S.main;
     let body = "";
-    if (S.news === "reports") {
+    if (newsPart(S.news) === NEWS[0]) {
+      // 戰況（見聞改版）：戰報（點得開，排最上面；大戰固定在頂、其餘照日子分段）、三路戰況（說明收進「？」）、天下形勢（最新一篇兩行）
       const r = S.reports;
-      if (!r) body = '<p class="muted">載入中…</p>';
-      else if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
-      else if (S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
-      else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
-      else {
-        // 決戰與奪璽單挑另外一組排在最上面，不跟遊歷野怪混在一起（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）
-        const item = (x) => `<button data-act="report" data-id="${x.id}">${esc(x.label)}</button>`;
-        const big = r.list.filter((x) => x.big), rest = r.list.filter((x) => !x.big);
-        body = (big.length ? `<p class="report-group">大戰</p><div class="list report-big">${big.map(item).join("")}</div>` : "")
-          + (rest.length ? `${big.length ? '<p class="report-group">最近的仗</p>' : ""}<div class="list">${rest.map(item).join("")}</div>` : "");
-      }
-    } else if (S.news === "trends") body = `${trendsTopHtml(m)}<div class="card">${m.trends}</div>`;
-    else if (S.news === "xingshi") body = xingshiHtml(S.xingshi);
-    else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
-    else if (S.news === "chronicle") body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}<div class="card">${m.chronicle}</div>`;
+      if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
+      else if (r && S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
+      else body = newsReportsHtml(r) + trendsTopHtml(m) + (m.xingshi ? newsXingshiHtml(S.xingshi) : "");
+    } else if (S.news === "rumors") body = m.rumor_layers ? newsRumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
+    else if (S.news === "chronicle") {
+      // 江湖史（見聞改版）：點得開的戰記與玉璽排最上面，下面照日子分段（天下大事併進來了，伺服器 chronicle_text）
+      const c = newsChronicleHtml(m.chronicle);
+      body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}${c.seal ? `<div class="card nw-card">${c.seal}</div>` : ""}${c.body}`;
+    }
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
-    else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
+    else body = `${m.latest ? `<div class="nw-just">${m.latest}</div>` : ""}<div class="card nw-card">${newsJournalHtml((m.journal || "") + (m.older || ""))}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
 
@@ -1333,9 +1320,9 @@
         renderTop();
         await loadMap();
       }
-      if (tab === "news" && S.news === "reports") await loadReports(null);
+      if (tab === "news" && newsPart(S.news) === NEWS[0]) await loadReports(null);
       if (tab === "news" && S.news === "annals") await loadAnnals();
-      if (tab === "news" && S.news === "xingshi") await loadXingshi();
+      if (tab === "news" && newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
       if (tab === "news" && S.news === "boards") await loadBoards();
       if (tab === "news" && S.news === "mingtie") await loadMingtie();
     } catch (e) { /* api() 已經提示過 */ }
@@ -1842,9 +1829,9 @@
           S.reportOpen = false;
           if (S.tab !== "news") { await goTab("news"); break; }
           renderPage();
-          if (S.news === "reports") await loadReports(null);
+          if (newsPart(S.news) === NEWS[0]) await loadReports(null);
           if (S.news === "annals") await loadAnnals();
-          if (S.news === "xingshi") await loadXingshi();
+          if (newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
           if (S.news === "boards") await loadBoards();
           if (S.news === "mingtie") await loadMingtie();
           break;
