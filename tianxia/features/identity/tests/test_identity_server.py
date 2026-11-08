@@ -113,10 +113,11 @@ def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
     c = TestClient(server.app)
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     c.post("/api/character", json={"name": "沈青衫"})
-    paths = [p for p in server.app.openapi()["paths"] if p.startswith("/api/identity")]
-    assert paths == ["/api/identity/gate"]
+    routes = sorted((m, p) for p, ms in server.app.openapi()["paths"].items() if p.startswith("/api/identity") for m in ms)
+    assert routes == [("get", "/api/identity/gate"), ("post", "/api/identity/code/send"), ("post", "/api/identity/code/verify")]
     off = [c.get(p) for p in ("/", "/api/me", "/api/main")]
-    assert all(c.get(p).status_code == 404 for p in paths)
+    c.cookies.set("tx_code", "forged")  # 第 203 批：帶著偽造的單也一樣 404
+    assert all((c.get(p) if m == "get" else c.post(p, json={})).status_code == 404 for m, p in routes)
     _turn_on(monkeypatch)
     on = [c.get(p) for p in ("/", "/api/me", "/api/main")]
     assert [r.content for r in on] == [r.content for r in off] and all(r.status_code == 200 for r in off)

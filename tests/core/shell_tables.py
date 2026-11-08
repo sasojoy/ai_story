@@ -266,6 +266,9 @@ NO_LOGIN_ROUTES = {
     ("GET", "/api/events"): "HUB 是 None（沒開推送）就 404，連登入都不問",
     # identity（帳號與客服第 201 批；設計第七節）
     ("GET", "/api/identity/gate"): "登入頁要先知道哪幾條路開著；關著 404，只回設定裡公開的字（哪幾條路、客服信箱、Turnstile 網站金鑰），不看 cookie",
+    # identity（帳號與客服第 203 批；設計 4.2、4.6）
+    ("POST", "/api/identity/code/send"): "還沒登入才要用驗證碼登入；關著或這條路不在 ways 404；先過伺服器端 Turnstile，再過旁檔的一號、每日、來源、全服池節流，回應不透露有沒有帳號",
+    ("POST", "/api/identity/code/verify"): "同上：驗碼本身就是登入；關著 404；單綁 tx_code cookie、錯 5 次作廢、5 分鐘過期，查無帳號只寫待處理不開帳號",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──

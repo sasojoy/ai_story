@@ -1,7 +1,8 @@
 """帳號綁定「別人也要讀」的那一半（帳號與客服第 201 批；設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md 4.1、4.5、第七節）：
 Email、手機的正規化與遮罩、加金鑰的雜湊、讀金鑰、開關（on）、綁手機才能用的功能問這裡（phone_ok）、名號擋不擋（blocked_name）。
 
-純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db）。
+純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
+account_key_for（第 203 批）只讀 logins。
 金鑰在 .local/identity.json（不進版控）：讀不到、格式不對都當功能關著（on 回假）。
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。identity 包、server.py 的 name_taken、商城包的易名帖讀它。
 """
@@ -103,6 +104,19 @@ def phone_ok(ctx, feature_key: str) -> bool:
             "SELECT 1 FROM logins WHERE account_id = ? AND provider = 'phone'", (row["id"],),
         ).fetchone()
     return phone is not None
+
+
+def account_key_for(db, provider: str, subject: str) -> str | None:
+    """這個身分（logins 的 provider、subject）綁在哪個帳號：有 password 列回小寫帳號（鍵終身不變），沒有回 id:<n>；查無回 None。
+    只讀（第 203 批驗證碼登入用；設計第七節「查 logins」）。"""
+    with db.snapshot() as conn:
+        row = conn.execute("SELECT account_id FROM logins WHERE provider = ? AND subject = ?", (provider, subject)).fetchone()
+        if row is None:
+            return None
+        pw = conn.execute(
+            "SELECT subject FROM logins WHERE account_id = ? AND provider = 'password'", (row["account_id"],),
+        ).fetchone()
+    return pw["subject"] if pw is not None else f"{ID_PREFIX}{row['account_id']}"
 
 
 def blocked_name(name: str | None, content) -> bool:
