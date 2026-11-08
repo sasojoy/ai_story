@@ -19,7 +19,19 @@ from tianxia.core.features import Feature, StatusHook
 
 # 主機看的字（不是玩家看的）：fake_services 是開發與測試用的假寄送與假 Turnstile
 FAKE_WARNING = "警告：identity.fake_services 開著（假的簡訊、Email 與 Turnstile），正式機必須關。"
-FAKE_REFUSED = "identity.fake_services 只給開發與測試用：正式設定（season_one 開著）不准開"
+FAKE_REFUSED = "identity.fake_services 只給開發與測試用：公開網址是正式網域（tianxiadashi.com）時不准開，伺服器不啟動。"
+LIVE_HOSTS = ("tianxiadashi.com", "www.tianxiadashi.com")  # 正式網域（CLAUDE.md：主機端開正式伺服器一定設 TIANXIA_PUBLIC_URL）
+
+
+def live_public_url(url: str | None) -> bool:
+    """公開網址的 host 是不是正式網域（大小寫不分；沒設、格式不對都當不是）。"""
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    try:
+        host = (urlsplit(url or "").hostname or "").lower()
+    except ValueError:
+        return False
+    return host in LIVE_HOSTS
 
 
 class IdentityFeature(Feature):
@@ -65,14 +77,16 @@ class IdentityFeature(Feature):
         return routes.admin_tools(shell)
 
     def threads(self, shell) -> None:
-        """不開執行緒：伺服器啟動時（start_threads 只在 server.main 叫）fake_services 開著印一行警告給主機看（第 204 批，K 波審查）。"""
-        if shell.CONTENT.config.identity.fake_services:
-            print(FAKE_WARNING, flush=True)
+        """不開執行緒：伺服器啟動時（start_threads 只在 server.main 叫）fake_services 開著一律印一行警告給主機看；
+        公開網址（TIANXIA_PUBLIC_URL）是正式網域才拒絕啟動（L 波 PM 定：season21 的測試環境要能用假寄送驗驗證碼登入，
+        所以不在 check_content 照 season_one 擋）。"""
+        import os  # noqa: PLC0415
 
-    def check_content(self, content, need) -> None:
-        """正式設定（season21、week7 都開 season_one）不准開 fake_services：載入就擋（第 204 批，K 波審查）。"""
-        cfg = content.config
-        need(not (cfg.identity.fake_services and cfg.season_one), FAKE_REFUSED)
+        if not shell.CONTENT.config.identity.fake_services:
+            return
+        print(FAKE_WARNING, flush=True)
+        if live_public_url(os.environ.get(shell.PUBLIC_URL_ENV)):
+            raise SystemExit(FAKE_REFUSED)
 
 
 FEATURE = IdentityFeature()

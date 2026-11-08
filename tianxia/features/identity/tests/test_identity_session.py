@@ -1,5 +1,5 @@
 """這次登入的方式與時間、近期驗證、重驗、換帳號先問一次（帳號與客服第 204 批；設計 4.3、4.4）；K 波修正輪留下的：
-旁檔一個路徑只建一次表、驗證碼兩條照 shell.time、Turnstile 拿不到網域不過、fake_services 正式設定擋。"""
+旁檔一個路徑只建一次表、驗證碼兩條照 shell.time、Turnstile 拿不到網域不過、fake_services 開著印警告、公開網址是正式網域才拒絕啟動（L 波）。"""
 from __future__ import annotations
 
 import io
@@ -170,19 +170,15 @@ def test_turnstile_none_hostname_fails():
     assert v.verify("tok", "", None) is False  # 拿不到自己的網域不再跳過比對
 
 
-def test_fake_services_refused_on_serving_profiles():
-    """正式設定兩種都開 season_one（讀覆寫檔，不整份載入：省時間）；season_one 開著又開 fake_services 就擋。"""
+def test_fake_services_not_refused_by_content():
+    """L 波 PM 定：season_one 開著（season21 的測試環境）也准開 fake_services，載入不擋（擋在啟動、看公開網址）。"""
     from types import SimpleNamespace
 
-    from tianxia.content import REAL_ROOT
-
-    for profile in ("season21", "week7"):
-        assert json.loads((REAL_ROOT / "profiles" / f"{profile}.json").read_text(encoding="utf-8"))["season_one"] is True
-    for season_one, fake, want in ((True, True, [FAKE_REFUSED]), (True, False, []), (False, True, [])):
+    for season_one in (True, False):
         found: list[str] = []
-        content = SimpleNamespace(config=SimpleNamespace(season_one=season_one, identity=SimpleNamespace(fake_services=fake)))
+        content = SimpleNamespace(config=SimpleNamespace(season_one=season_one, identity=SimpleNamespace(fake_services=True)))
         FEATURE.check_content(content, lambda ok, message: None if ok else found.append(message))
-        assert found == want
+        assert found == []
 
 
 def test_password_login_records_session_auth(clock):
@@ -287,9 +283,26 @@ def test_switch_account_asks_once(clock):
 
 
 def test_fake_services_warns_at_start(monkeypatch, capsys):
+    monkeypatch.delenv(server.PUBLIC_URL_ENV, raising=False)
     monkeypatch.setattr(server.CONTENT.config.identity, "fake_services", False)
     FEATURE.threads(server)
     assert capsys.readouterr().out == ""
     monkeypatch.setattr(server.CONTENT.config.identity, "fake_services", True)
-    FEATURE.threads(server)
+    FEATURE.threads(server)  # 沒設公開網址：印警告、照常起
     assert "fake_services" in capsys.readouterr().out
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://staging.example.test")
+    FEATURE.threads(server)  # 不是正式網域：照常起
+    assert "fake_services" in capsys.readouterr().out
+
+
+def test_fake_services_refused_on_the_live_domain(monkeypatch, capsys):
+    """公開網址是正式網域（tianxiadashi.com）又開 fake_services：印警告、拒絕啟動；關著照常起。"""
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://TianxiaDashi.com")
+    monkeypatch.setattr(server.CONTENT.config.identity, "fake_services", True)
+    with pytest.raises(SystemExit) as stop:
+        FEATURE.threads(server)
+    assert str(stop.value) == FAKE_REFUSED
+    assert "fake_services" in capsys.readouterr().out
+    monkeypatch.setattr(server.CONTENT.config.identity, "fake_services", False)
+    FEATURE.threads(server)
+    assert capsys.readouterr().out == ""
