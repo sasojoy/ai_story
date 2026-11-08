@@ -322,3 +322,27 @@ def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(batt
     free, scene, box = page.index('<form class="free"'), page.index('<section class="card scene">'), page.index('<section class="card guide"')
     assert panel < moves < free < scene < box
     assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（面板裡）
+
+
+@node
+def test_a_broken_face_is_removed():
+    """CSP（帳號與客服第 213 批）擋 inline 的 onerror：決戰的頭像抓不到時改由頂層一個 capture 的 error 監聽（bpFaceGone）把那張圖拿掉，
+    只認 .bp-face、.bp-duo、.bp-solo 裡的 img；別處的 img、不是 img 的不動。畫出來的標記少了 onerror 屬性，其餘一樣。"""
+    import webharness
+
+    driver = r"""
+const src2 = src;
+eval(fn("bpFaceGone"));
+const hit = (tag, inside) => { const t = { tagName: tag, gone: false, closest: (sel) => (inside && sel === ".bp-face, .bp-duo, .bp-solo" ? {} : null), remove() { t.gone = true; } }; return t; };
+const out = {};
+for (const [name, tag, inside] of [["face", "IMG", true], ["other", "IMG", false], ["span", "SPAN", true]]) {
+  const t = hit(tag, inside); bpFaceGone({ target: t }); out[name] = t.gone;
+}
+out.nullTarget = (() => { try { bpFaceGone({ target: null }); return "ok"; } catch (e) { return String(e); } })();
+out.registered = /\n  document\.addEventListener\("error", bpFaceGone, true\);/.test(src2);
+finish(out);
+"""
+    out = webharness.run(driver, {})
+    assert out == {"face": True, "other": False, "span": False, "nullTarget": "ok", "registered": True}
+    battle = (webharness.WEB / "battle.js").read_text(encoding="utf-8")
+    assert 'onerror="' not in battle  # 五個 inline 的都拿掉了
