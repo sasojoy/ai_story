@@ -1663,6 +1663,19 @@ async def _server_timing(request: Request, call_next):
     return response
 
 
+# 帳號與客服第 213 批（設計第三節「CSP 標頭另開小批」）：只准從自己這裡與 Turnstile（challenges.cloudflare.com）載程式，
+# 不准 inline 的程式（<script> 不帶 src、on*= 屬性、javascript:）、不准 <object>、不准 <base>。不是開關：整站都有
+CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+
+
+@app.middleware("http")
+async def _content_security_policy(request: Request, call_next):
+    """每個回應帶 CSP（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = CSP
+    return response
+
+
 @app.exception_handler(GameError)
 def _game_error(request: Request, exc: GameError):
     return JSONResponse({"error": str(exc)}, status_code=400)

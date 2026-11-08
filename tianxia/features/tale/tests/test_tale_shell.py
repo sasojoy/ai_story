@@ -49,6 +49,9 @@ def test_a_written_tale_gets_a_share_page_anyone_can_open(client, tmp_path, monk
     assert "黃巾大勝" in html.text and "官軍" in html.text and "黃巾軍" in html.text
     inside = anyone.get(f"/zhanji/{code}?in=1").text
     assert 'id="zj-back"' in inside and '<section class="zj-cta">' not in inside
+    for got in (html.text, inside):  # CSP（第 213 批）：頁上的程式一律從 /static 載，沒有 inline 的 <script>
+        assert re.findall(r"<script\b[^>]*>", got) == ['<script src="/static/tale_page.js">']
+    assert anyone.get("/static/tale_page.js").status_code == 200
     assert anyone.get("/zhanji/nope").status_code == 404
     assert anyone.get(f"/zhanji/{record_id}").status_code == 404  # 流水號猜不到
 

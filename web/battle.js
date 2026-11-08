@@ -267,8 +267,15 @@
       + `<small class="bp-w">${word}</small><i class="bp-ring"><i style="width:${bpPct(left, p.span)}%"></i></i></div>`;
   }
   function bpFace(c, cls = "") {
-    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy" onerror="this.remove()"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
+    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
   }
+  // 頭像抓不到就拿掉那張圖、露出底下的字（bpFace 的 em）。以前寫在 img 的 inline 屬性上，CSP（第 213 批）不准 inline 的程式，
+  // 改成頂層一個監聽：error 不冒泡，要 capture；只認決戰頭像那三種框裡的 img
+  function bpFaceGone(ev) {
+    const img = ev.target;
+    if (img && img.tagName === "IMG" && img.closest(".bp-face, .bp-duo, .bp-solo")) img.remove();
+  }
+  document.addEventListener("error", bpFaceGone, true);
   function bpChief(c) {
     const pct = bpPct(c.hp, c.cap);
     return `<div class="bp-gen${c.rank === "主將" ? " main" : ""}${c.fallen ? " down" : ""}${!c.fallen && pct <= 30 ? " low" : ""}">${bpFace(c)}`
@@ -387,15 +394,15 @@
   function bpOverlayHtml(b, p) {
     const say = (who, text) => (text ? `<p class="bp-say"><b>${esc(who)}</b>「${esc(text)}」</p>` : "");
     if (b.kind === "open") {
-      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="" onerror="this.remove()">` : ""}</div>`;
+      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="">` : ""}</div>`;
       return `${duo}<p class="bp-big">${esc(p.name)}　開打</p>${say(b.name || "", b.say)}`;
     }
     if (b.kind === "hurt") {
-      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"><i class="bp-slash"></i></div>`
+      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt=""><i class="bp-slash"></i></div>`
         + `<p class="bp-big">${esc(BP_WORDS.hurt(b))}</p><i class="bp-hpbig"><i style="width:${b.pct | 0}%"></i></i><p class="bp-sub">${esc(BP_WORDS.hurtSub(b))}</p>`;
     }
     if (b.kind === "fall") {
-      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
+      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt=""></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
         + `${say(b.name, b.say)}<p class="bp-sub${b.mine ? " mine" : ""}">${esc(BP_WORDS.fallBy(b))}</p>`;
     }
     if (b.kind === "end") {
