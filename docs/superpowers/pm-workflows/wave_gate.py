@@ -11,6 +11,7 @@
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
    --changed 時把 decide 的 web_files 原樣交給 --changed-files（只走對照表上碰得到的回合；對不到的檔怎麼辦由 gate.py 定）；網頁要開的原因不只 web/ 的檔
    （server.py 回頁面的行、別處的 css／html、scripts/webqa）就不交、全回合；核心退回全軌只管比對的軌，不拉網頁全回合（第 109 批）；--full 全回合。帶 --new 時原樣轉給 gate.py --new（N 波）。
+   --web-jobs N 轉成 gate.py --jobs N（O 波起工作流程的閘門帶 --changed --web-jobs 4：八回合並行約 35 分，不帶要一回合接一回合跑）。
 
 用法（Windows 上用 venv 的 python）：
   python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--changed | --full] [--dry-run]
@@ -405,6 +406,7 @@ def main() -> int:
     ap.add_argument("--no-compare", action="store_true")
     ap.add_argument("--jobs", default="")
     ap.add_argument("--web", action="store_true", help="前面都跑完之後跑網頁比對（scripts/webqa/gate.py）")
+    ap.add_argument("--web-jobs", default="", help="網頁比對轉給 gate.py 的 --jobs（第 110 批起 --jobs 4 八回合約 35 分；不給就一回合接一回合跑，約兩倍長）；O 波起閘門帶 --changed --web-jobs 4")
     ap.add_argument("--cache", action="store_true", help="同一波修正後重跑才開；進 develop、上 main 的那一次不開")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--changed", action="store_true", help="照 base..head 改到的決定比哪幾軌、設定、半舊半新、網頁（decide）")
@@ -521,7 +523,8 @@ def main() -> int:
     want_web = a.web or a.full or (a.changed and decision["web"])
     if want_web and web.exists():  # 上面全部等完才跑，不跟整套同時跑：同時跑的話畫面比對的雜訊多
         started = time.monotonic()
-        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *web_args(decision, a.changed, a.new)], root,
+        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *web_args(decision, a.changed, a.new),
+                         *(["--jobs", a.web_jobs] if a.web_jobs else [])], root,
                         {**env, "TIANXIA_DB": str(work / "tmp" / "web.db")}, out / "web.txt")
         code = proc.wait()
         f.close()

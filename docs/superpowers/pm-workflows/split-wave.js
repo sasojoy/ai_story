@@ -4,7 +4,7 @@ export const meta = {
   phases: [
     { title: 'Build', detail: 'each line builds its batches in order, two fresh agents per batch' },
     { title: 'Merge', detail: 'all lines merged into the wave branch' },
-    { title: 'Gate', detail: 'wave_gate.py once, no tokens: all tracks, explore, full suite with slow, three boots' },
+    { title: 'Gate', detail: 'wave_gate.py --changed once, no tokens: picked tracks, suite without slow plus one smoke season, web rounds when web or webqa moved, three boots' },
     { title: 'Review', detail: 'one read-only review per line, working from the mechanical moved report' },
     { title: 'Check', detail: 'real-browser QA once, only when the wave touched web/' },
     { title: 'Fix', detail: 'one round on red and findings; only what was fixed is rerun' },
@@ -216,7 +216,7 @@ if (A.after_merge && !A.docs_alongside) {  // 合完、閘門之前的文件輪�
 const PM_TOOLS = A.pm_tools || 'C:/Ray/專案/天下大勢/.claude/worktrees/pm-1103/docs/superpowers/pm-workflows'  // 主要 clone 在 main 上，工具在 PM 的工作樹
 const runGate = (head, label) => agent(`你只做一件事：跑一次閘門腳本，等它跑完，回報結果。不改任何檔、不推任何東西、不修任何東西。
 1. 用 PowerShell 分離啟動（不要 tee、不要前景跑，它要 15～30 分鐘；先建 ${SP}\\wave${WAVE}\\ 這個資料夾）：
-\`Start-Process -WindowStyle Hidden -FilePath "${PY}" -ArgumentList '${PM_TOOLS}/wave_gate.py','--base','${GATE_BASE}','--head','${head}','--name','wave${WAVE}'${A.new_packages ? `,'--new','${A.new_packages}'` : ''}${A.new_existing ? `,'--also-existing'` : ''} -WorkingDirectory "${ROOT}" -RedirectStandardOutput "${SP}\\wave${WAVE}\\gate.out" -RedirectStandardError "${SP}\\wave${WAVE}\\gate.err"\`
+\`Start-Process -WindowStyle Hidden -FilePath "${PY}" -ArgumentList '${PM_TOOLS}/wave_gate.py','--base','${GATE_BASE}','--head','${head}','--name','wave${WAVE}','--changed','--web-jobs','4'${A.new_packages ? `,'--new','${A.new_packages}'` : ''}${A.new_existing ? `,'--also-existing'` : ''} -WorkingDirectory "${ROOT}" -RedirectStandardOutput "${SP}\\wave${WAVE}\\gate.out" -RedirectStandardError "${SP}\\wave${WAVE}\\gate.err"\`
 2. 重複跑 \`& "${PY}" "${PM_TOOLS}/wait_file.py" "${ROOT}\\.local\\wave_gate\\${head.slice(0, 8)}\\done" 570\`（工具逾時設 600000），直到印出 done。不要做別的事，也不要讀別的檔。超過 90 分鐘還沒好，看 gate.out 與 gate.err 的最後 20 行，當成紅回報。
 3. 讀 \`${ROOT}\\.local\\wave_gate\\${head.slice(0, 8)}\\result.json\`，全文放進 result，green 照裡面的 green。`, { label, phase: 'Gate', schema: GATE_SCHEMA, model: 'sonnet' })
 
