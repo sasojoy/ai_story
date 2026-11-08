@@ -395,6 +395,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .now-one .tx-when { display: block; font-size: 13px; color: var(--ink-2); }
 .now-one .now-line { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
 .now-one .now-text-one { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 螢幕夠高時收著的「剛剛」放兩行（UI 手感丙批 1-6：一行常常只剩前半句）；矮螢幕照舊一行，行動鈕才留在第一屏 */
+@media (min-height: 740px) { .now-one .now-text-one { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
 /* 結果的小章（Joy 2026-10-27）：排在那一行最右邊、不被「…」切掉；成功綠、失敗紅 */
 .now-one .now-stamp { flex: none; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; line-height: 20px; color: var(--ink-2); }
 .now-one .now-stamp.ok { color: var(--ok); border-color: currentColor; }
@@ -1723,6 +1725,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   margin: 0 -2px; padding: 4px 2px 6px; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
 .hr-seals::-webkit-scrollbar, .pr-chips::-webkit-scrollbar { display: none; }
 .hr-seals { gap: 10px; }
+/* 超過五個時（UI 手感丙批 1-7）：間距收緊，第六個露出一截、右邊淡出，看得出還能往右滑 */
+.hr-seals:has(> :nth-child(6)) { gap: 2px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
 .hr-seals > *, .pr-chips > * { flex: none; scroll-snap-align: start; }
 .here-seal { width: 62px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; }
 .hs-tile { position: relative; width: 56px; height: 56px; border-radius: 50%; overflow: visible; display: grid; place-items: center;

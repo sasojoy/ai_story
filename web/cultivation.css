@@ -478,6 +478,7 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .self-xinde.one { flex-wrap: nowrap; align-items: center; min-width: 0; }
 .self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; min-height: 36px; }
 .self-xinde .xinde-tip.open { white-space: normal; }
+.self-xinde .xinde-tip:not(.open) { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } /* 心得提示放兩行（UI 手感丙批 2-5：一行只剩「💡 你已攢下 20 點心得…」） */
 .hm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hm-meters > :only-child { grid-column: 1 / -1; }
 .hm-meter, .hm-meters .lilian { margin: 0; font: 500 12px/1.5 var(--sans); color: var(--ink-2); min-width: 0; }
@@ -493,4 +494,4 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .hm-fame .hm-renown { margin-top: 8px; }
 .hm-tail .lg-entry { margin: 0; }
 .hm-tail .stances-line { margin: 8px 0 0; }
-.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到一行，點進抽屜看全文 */
+.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到放到三行（UI 手感丙批 2-2：一行只剩「城鎮裡的鐵匠鋪買得到…」），點進抽屜看全文 */

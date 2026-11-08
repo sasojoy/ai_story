@@ -38,10 +38,16 @@
     return `<div class="wk-mid"><p class="ch-next"><b>${FACTION_JOIN}</b>${FACTION_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
   }
   const FACTION_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤
+  const SIDES_DETAIL = "細節"; // 待 joy 潤
   function factionSidesSheetHtml(sc) {
     if (!sc) return "";
     const rows = SIDES_ROWS.filter(([k]) => sc.joined ? k !== "where" : true);
-    const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
+    // 「贏了給」原本一整段長句（UI 手感丙批 7-4）：只寫拿得到哪幾個名號，整句收進「細節」
+    const gives = (t) => {
+      const titles = [...new Set([...String(t).matchAll(/「([^」]+)」/g)].map((x) => x[1]))];
+      return titles.length ? `${titles.map((x) => `「${esc(x)}」`).join("")}<details><summary class="linkish">${SIDES_DETAIL}</summary>${esc(t)}</details>` : esc(t);
+    };
+    const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${k === "gives" ? gives(c[k]) : esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
     return `<div class="sides">${sc.cols.map((c) => (!sc.joined || c.mine
       ? `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>${dl(c)}</div>`
       : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? FACTION_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;

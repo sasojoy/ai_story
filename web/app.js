@@ -475,7 +475,7 @@
     return `
       <div class="top-row">
         ${who}${rv ? '<div class="who-col">' : ""}
-          ${whoNameHtml(s)}
+          ${whoNameHtml(s, rv)}
           <div class="where">${where}</div>
         ${rv ? "</div>" : ""}</div>
         ${mallShown() ? mallBtnHtml(S.main.mall) : ""}
@@ -504,14 +504,15 @@
   // 只會在段與段之間換行，不會把一個詞從中間折斷；
   // 「可配 N 點」改放在＋鈕上面當那一排的標題（見 topHtml 的 pts-label）
   // 名聲（名聲設計十一之二）：收起時名號底下一行稱號（1B），第一屏放不下（FIT_STEPS 的 renown，S.renownTight）時這一行不畫、
+  // 介面重整的頭像角上已經寫了等級（rv）：名號旁不再寫「・第 N 級」，長頭銜才不會把等級擠成「…」（UI 手感丙批 1-5）
   // 善惡稱號（沒有就名望稱號）接在頭銜後面（放不下先收名望稱號，同草圖 1A）；展開時經驗底下「名聲」那一行，點了攤開段落條（2C）
-  function whoNameHtml(s) {
+  function whoNameHtml(s, rv) {
     const r = s.renown;
     const spans = r ? rnTitleSpans(r) : [];
     if (!S.showMore) {
       const tight = S.renownTight && S.tab === "jianghu"; // 只有江湖頁量第一屏：別的分頁照整行畫
       const inline = tight && spans.length ? `・${spans[spans.length - 1]}` : "";
-      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}・第${s.level}級</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
+      return `<div class="who-name"><span>${esc(s.name)}<small>${esc(s.affiliation)}${s.anonymous ? "・匿名" : ""}${inline}${rv ? "" : `・第${s.level}級`}</small></span>${s.stat_points ? `<b class="pts">可配 ${s.stat_points} 點</b>` : ""}<i class="more-ico" aria-hidden="true">▾</i></div>`
         + (spans.length && !tight ? `<div class="who-renown-line">${spans.join("・")}</div>` : "");
     }
     const segs = [...s.affiliation.split("・"), ...(s.anonymous ? ["匿名"] : []), `第${s.level}級`].filter(Boolean);
@@ -1202,17 +1203,18 @@
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）
     const s = S.main.status;
+    // 分成「通知與隱私」「新手與說明」「帳號」三段（UI 手感丙批 7-2、7-3）：性別只能選一次，排進帳號那一段，不跟管理者工具、關閉擠在頂上
     // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/figures/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : supportDeskLink()}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
-        ${genderRow(s)}
-        ${renameRow()}
+        <div class="label">通知與隱私</div>
         ${adultRow()}
-        ${pushRow()}${supportRow()}
+        ${pushRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
+        <div class="label">新手與說明</div>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
@@ -1223,6 +1225,10 @@
           ? '<p class="muted">說明沒拿到，連不上伺服器。</p><button class="btn small" data-act="howto-retry">再試一次</button>'
           : S.howto || '<p class="muted">正在翻書……</p>'}</div>` : ""}
         ${S.recap && S.recapOpen ? `<div class="recap card">${S.recap}</div>` : ""}
+        <div class="label">帳號</div>
+        ${genderRow(s)}
+        ${renameRow()}
+        ${supportRow()}
         <details class="fold"><summary>修改密碼</summary><form class="fold-body" id="pw-form">
           <label class="field"><span>舊密碼</span><input class="input" type="password" name="old" autocomplete="current-password"></label>
           <label class="field"><span>新密碼</span><input class="input" type="password" name="new" autocomplete="new-password"></label>
@@ -1230,7 +1236,6 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn" type="submit">修改密碼</button>
         </form></details>
-        <div class="label">帳號</div>
         <button class="btn ghost" data-act="logout">登出</button>
       </div>`;
   }
@@ -1530,7 +1535,9 @@
         // 只有決戰選項這樣（FB-162：懸賞選項的拒絕句是一句話，場景裡沒有它，不截、不指去場景）
         // 戰場面板開著時出招不跳提示：面板上已經寫「你這一回合：…」，結算了的那一回合在面板的戰報裡（PM 2026-11-06 看截圖）
         const panelSays = id.startsWith("battle:act:") && typeof bpOn === "function" && bpOn(S.main);
-        if (text && !panelSays) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
+        // 「剛剛」那一格已經寫了同一句時不再跳黑底提示（UI 手感丙批 1-6：同一句話同時出現兩次）
+        const nowSays = !!text && String((S.main && S.main.now) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").includes(text.slice(0, 24));
+        if (text && !panelSays && !nowSays) toast(text.length > 40 && id.startsWith("battle:") ? `${text.slice(0, 40)}……（戰況見場景）` : text);
       } finally { stop(); }
     }, waitLineFor(id));
     // 失敗了（伺服器擋下來、連不上）：把按鈕還原。選單上的按鈕與閒著時行動列的格子（.act-ink：交友、求見、遊歷）都會標 busy、
