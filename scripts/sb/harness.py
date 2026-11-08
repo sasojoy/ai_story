@@ -424,7 +424,7 @@ def _setup_child(root: Path, profile: str, db: Path) -> None:
 def _wipe_db(db: Path) -> None:
     """同一個暫存資料夾跑第二次之前清掉上一次的資料庫與旁邊的小檔（小檔的名字是 <主檔名去掉副檔名>-xxx.sqlite，不接在主檔名後面）：
     留著的話舊的往來紀錄、戰記、封存會被讀到，「同一份跑兩次一樣」就不穩。"""
-    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push")
+    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push", "support")  # support：客服單（帳號與客服第 211 批；開關關著不建）
     names = [db.name, f"{db.name}.state.json"] + [f"{db.stem}-{side}.sqlite" for side in sides]
     for name in names:
         for suffix in ("", "-wal", "-shm"):
