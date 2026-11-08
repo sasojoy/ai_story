@@ -44,7 +44,7 @@ def _without_support(tmp_path):
             continue
         text = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
         if name == "app.js":
-            for new, old in (("${pushRow()}${supportRow()}", "${pushRow()}"), (': supportDeskLink()}<button', ': ""}<button'),
+            for new, old in (("        ${supportRow()}\n", "        \n"), (': supportDeskLink()}<button', ': ""}<button'),
                              ('    if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）\n', "")):
                 assert text.count(new) == 1, new
                 text = text.replace(new, old)
