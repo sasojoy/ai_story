@@ -22,7 +22,7 @@
 .sup-who { display: block; margin-bottom: 2px; font-size: 12px; opacity: 0.75; white-space: normal; }
 .sup-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; font-weight: 600; }
 .sup-title .muted { font-weight: 400; font-size: 12px; }
-.sup-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.sup-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
 .sup-tile { padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); text-align: center; }
 .sup-tile small, .sup-tile span { display: block; font-size: 12px; opacity: 0.75; }
 .sup-tile b { font-size: 20px; }
@@ -35,6 +35,16 @@
 .sup-acct dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
 .sup-acct dt { opacity: 0.7; }
 .sup-acct dd { margin: 0; }
+/* 帳號卡的帳本與「查別的帳號」（第 212 批） */
+.sup-ledger-h { margin: 10px 0 4px; font-size: 12px; opacity: 0.75; }
+.sup-ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sup-ledger td { padding: 3px 4px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.sup-ledger .sup-amt { text-align: right; white-space: nowrap; }
+.sup-lookup { display: grid; grid-template-columns: auto minmax(0, 1fr) 5em auto; gap: 6px; align-items: center; }
+.sup-lookup .form-msg { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 480px) {
+  .sup-lookup { grid-template-columns: auto minmax(0, 1fr); }
+}
 /* 寬版（只給客服頁）：桌面左清單、右單＋帳號卡；手機照清單頁 */
 .ad-shell.sup-wide { max-width: 1024px; }
 @media (min-width: 900px) {

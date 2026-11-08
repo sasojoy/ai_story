@@ -3,9 +3,10 @@
 
 - rules.py：純規則（類別白名單、長度、上限、狀態轉換、字）；不讀時鐘。
 - store.py：旁檔 <db>-support.sqlite（tickets、replies）；關著不建檔。
-- staff.py：客服名單（認帳號，不認名號）。
-- accounts_view.py：唯讀查主檔的 accounts、logins（帳號一的 accounts.account_id 合進來之後換過去）。
-- routes.py：/api/support/* 七條（第一行 _gate：先登入、再看開關）。
+- staff.py：客服名單（認帳號，不認名號；第 212 批起本體在核心 identity_base，這裡轉手）。
+- accounts_view.py：唯讀查主檔的 accounts、logins（帳號鍵照 AccountStore.account_id）。
+- lookup.py：客服查帳號與帳號卡（第 212 批；唯讀，帳本讀 Wallet.ledger）。
+- routes.py：/api/support/* 八條（async；第一行 _gate_off：關著 404，先於登入與參數解析）。
 
 沒有選項前綴、沒有 PlayerState 欄位（不必 QUIET）、沒有內容檔。掛鉤：routes、on_own_turn（有客服回覆就寫一則「客服」紀錄）、status_slots（/api/main 的
 support_unread、support_staff；關著不多鍵）。不在最上層 import routes：FEATURES 登記不拖進 fastapi。

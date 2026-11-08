@@ -16,7 +16,7 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES = '"bookHtml", "peerHtml"]'
-SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick"]')
+SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml"]')
 assert SUPPORT_DRIVER != DRIVER
 
 XSS = ('<img src=x onerror="globalThis.__pwned=1">', "<script>globalThis.__pwned=1</script>", '"><svg onload=alert(1)>')
@@ -156,4 +156,71 @@ def test_ticket_body_xss(main):
             for tag in ("<img", "<script", "<svg"):
                 assert tag not in html, (payload, tag)
             assert "onerror=\"" not in html and "&lt;" in html
+    assert run(m, "return globalThis.__pwned || null;") is None
+
+
+# ── 第 212 批：帳號卡與查帳號 ──
+
+def _card(**over):
+    c = {"id": 5, "login": "shen_01", "character": "沈青衫", "created": 1762000000, "balance": 2700,
+         "binds": [{"provider": "password", "name": "密碼", "shown": ""}, {"provider": "phone", "name": "手機", "shown": "09*****678"}],
+         "ledger": [{"time": 1762100000, "delta": -300, "reason": "購買", "note": ""}, {"time": 1762000000, "delta": 3000, "reason": "封測發放", "note": "封測"}]}
+    c.update(over)
+    return c
+
+
+def _desk_state(card, **over):
+    q = {"open": 1, "waiting": 0, "fresh": 1, "lookups_left": 18, "tickets": [
+        {"id": 3, "category": "mall", "category_name": "商城", "body": "月卡沒到", "status": "open", "admin_flag": False, "character": "沈青衫",
+         "login": "shen_01", "created": 1762581600, "updated": 1762581600}]}
+    t = {**_ticket(id=3, status="open"), "version": "11/08", "admin_flag": False,
+         "account": {"id": 5, "login": "shen_01", "character": "沈青衫", "created": 1762000000}, "card": card}
+    return {"supportDesk": q, "supportDeskTicket": t, "supportDeskPick": 3, **over}
+
+
+def test_desk_card_and_lookup_form(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    desk = run(m, "return H.supportDeskHtml();", S=_desk_state(_card()))
+    assert "查帳剩" in desk and "<b>18</b>" in desk and "這一小時" in desk
+    assert 'id="support-lookup-form"' in desk and 'name="kind"' in desk and 'name="text"' in desk and 'name="id"' in desk and 'value="3"' in desk
+    assert "查別的帳號" in desk and "不收名號" in desk and "每小時 20 次" in desk
+    assert "帳號 shen_01" in desk and "密碼、手機 09*****678" in desk and "2700 元寶" in desk and "元寶帳本" in desk
+    assert "−300" in desk and "+3000" in desk and "封測發放" in desk and "購買" in desk
+    nochar = run(m, 'return H.supportCardHtml({"login": "id:9", "created": 1, "character": null, "binds": [], "balance": 0, "ledger": []});')
+    assert "還沒建角色。" in nochar and "id:9" in nochar
+    gone = run(m, "return H.supportDeskHtml();", S=_desk_state({"gone": True}))
+    assert "單上的帳號已經不在了。" in gone and "元寶帳本" not in gone
+    out = run(m, """return (async () => {
+        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "email", text: "a@b.com", id: "3" });
+        return { calls: T.calls, msg: H.S.supportLookupMsg, left: H.S.supportDesk.lookups_left, card: H.S.supportDeskCard.login, html: H.supportDeskHtml() };
+      })();""", S=_desk_state(_card()), responses={"/api/support/lookup": {"found": True, "card": _card(login="li_02"), "left": 17, "message": ""}})
+    assert out["calls"] == [["/api/support/lookup", {"id": 3, "kind": "email", "text": "a@b.com"}]]
+    assert out["msg"] == "已查到 li_02（這一小時還剩 17 次）。" and out["left"] == 17 and out["card"] == "li_02"
+    assert "帳號 li_02" in out["html"] and "已查到 li_02" in out["html"] and 'value="a@b.com"' in out["html"]
+    none = run(m, """return (async () => {
+        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "login", text: "nobody", id: "3" });
+        return [H.S.supportLookupMsg, H.S.supportDeskCard];
+      })();""", S=_desk_state(_card()), responses={"/api/support/lookup": {"found": False, "card": None, "left": 16, "message": "查無此帳號。"}})
+    assert none == ["查無此帳號。這一小時還剩 16 次。", None]
+    answered = {**_desk_state(_card())["supportDeskTicket"], "status": "answered"}
+    answered.pop("card")
+    kept = run(m, """return (async () => {
+        await H.supportClick("support-answer", { dataset: { id: "3", then: "wait" } });
+        return H.S.supportDeskTicket.card.login;
+      })();""", S=_desk_state(_card()), responses={"/api/support/answer": answered, "/api/support/queue": _desk_state(None)["supportDesk"]})
+    assert kept == "shen_01"  # 回單的回應不帶卡：沿用看單時的
+
+
+def test_card_escapes_payload(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    for payload in XSS:
+        card = _card(login=payload, character=payload, binds=[{"provider": payload, "name": payload, "shown": payload}],
+                     ledger=[{"time": 1, "delta": 1, "reason": payload, "note": payload}])
+        pages = [run(m, "return H.supportDeskHtml();", S=_desk_state(card)),
+                 run(m, "return H.supportDeskHtml();", S=_desk_state(None, supportDeskCard=card, supportLookupMsg=payload,
+                                                                     supportLookupQ={"kind": payload, "text": payload, "id": payload}))]
+        for html in pages:
+            for tag in ("<img", "<script", "<svg"):
+                assert tag not in html, (payload, tag)
+            assert "&lt;" in html
     assert run(m, "return globalThis.__pwned || null;") is None
