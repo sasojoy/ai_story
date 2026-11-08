@@ -4422,6 +4422,18 @@ class Config(_Strict):
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
 
+    @model_serializer(mode="wrap")
+    def _drop_default_tuning(self, handler):
+        """新包的子模型（tianxia/core/tuning/<包>.py）整格還是預設值時不寫進序列化：開關關著，內容的鍵一個都不多（同 _drop_unset）。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for name, field in type(self).model_fields.items():
+                kind = field.annotation
+                if (name in data and isinstance(kind, type) and kind.__module__.startswith("tianxia.core.tuning.")
+                        and getattr(self, name) == kind()):
+                    del data[name]
+        return data
+
     # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
     # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
     # 世界指紋」，兩次「世界變了」的通知至少隔 push_world_min_seconds 秒（也是各分頁收到之後重抓畫面要攤開的秒數）
