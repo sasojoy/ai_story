@@ -1,16 +1,17 @@
 """懸賞榜的動作（原本 Game 上的 _bounty_options、_bounty、post_wanted、_raid_bounty 四個方法，與 _act 的 act:bounties、sync 的退押金與作廢、own_turn_checks 的系統通緝、
-choose 的 FB-162、status_data 的懸賞卡；全部拆包第 45 批）。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的。
+choose 的 FB-162、status_data 的懸賞卡；全部拆包第 45 批）。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的。
 規則照模組屬性叫（rules.take、rules.give……：測試與量表腳本換掉模組上的，這裡照樣打得到）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import bounty_base  # 核心（榜的入口與收店：清失效參照那一格讀，core_seams）
+from tianxia.core import identity_base  # 綁手機才能掛通緝、揭與交玩家掛的單（帳號與客服第 205 批；核心，phone_gate 預設關）
 
 from . import rules
+from . import shop_view
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -43,7 +44,7 @@ def options(ctx: Game) -> list[Option]:
         if b.id in mine:
             opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
             continue
-        problem = rules.take_problem(s, c, b)
+        problem = identity_base.PHONE_NEEDED if b.poster and not identity_base.phone_ok(ctx, "bounty_post") else rules.take_problem(s, c, b)
         opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                            enabled=problem is None))
     if stuck:
@@ -64,7 +65,10 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         return ["你離開了懸賞榜。"]
     if verb == "take":
         b = next((x for x in rules.open_bounties(s, c) if x.id == rest), None)
-        ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shopview.board_key)  # 1.4
+        if b is not None and b.poster and not identity_base.phone_ok(ctx, "bounty_post"):  # 玩家掛的單（第 205 批）
+            ctx._shop_after(identity_base.PHONE_NEEDED, "take", shop_view.board_key)
+            return [identity_base.PHONE_NEEDED]
+        ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shop_view.board_key)  # 1.4
         return rules.take(s, c, rest)
     if verb == "drop":
         msgs = rules.drop(s, c, rest)
@@ -83,6 +87,10 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         return [rules.UNPICKED]
     if verb == "give":
         bounty_id, _, item = rest.partition(":")
+        posted = next((x for x in s.world.bounties if x.id == bounty_id), None)
+        if posted is not None and posted.poster and not identity_base.phone_ok(ctx, "bounty_post"):  # 玩家掛的單（第 205 批）
+            ctx._shop_say("refused")
+            return [identity_base.PHONE_NEEDED]
         msgs = rules.give(s, c, ctx.world, bounty_id, item)
         if msgs[0].startswith(rules.GIVEN_PREFIX):
             s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
@@ -103,6 +111,8 @@ def enter(ctx: Game) -> list[str]:
 
 def post_wanted(ctx: Game, other: Game, amount: int) -> list[str]:
     """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（rules.post）；成了寫一則江湖紀錄、存季。"""
+    if not identity_base.phone_ok(ctx, "wanted"):  # 只問掛單的人（第 205 批）
+        return [identity_base.PHONE_NEEDED]
     msgs = rules.post(ctx.state, ctx.content, other.state, amount)
     if msgs and msgs[0].startswith("你押了"):
         ctx._write(rules.BOARD, msgs)
@@ -138,9 +148,24 @@ def post_auto(ctx: Game) -> None:
         ctx._save_season()
 
 
+def browse_quiet(arg: str, entry) -> bool:
+    """Outcome.quiet（第二輪第 92 批；原本在 Game.choose 後半）：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
+    只有那一句回話時不寫紀錄（bounty_base.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，連交幾張時各寫各的得失）。"""
+    return (arg.partition(":")[0] in bounty_base.BROWSE_VERBS and not (entry.changes or entry.guide)
+            and all(bounty_base.is_browse_line(line) for line in entry.lines))
+
+
 def stale(ctx: Game, arg: str) -> list[str]:
-    """FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）時回的那一句；Game.choose 原位包成 Refused（只讀，不改狀態、不寫紀錄）。"""
+    """FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）時回的那一句；stale_cell 包成 Refused（只讀，不改狀態、不寫紀錄）。"""
     return [rules.stale_line(ctx.state, ctx.content, ctx.world, arg)]
+
+
+def stale_cell(ctx: Game, option: Option | None, option_id: str) -> Refused | None:
+    """stale/bounties 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：
+    回這一步為什麼不成的那一句，不寫江湖紀錄；回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）。"""
+    if option is None and option_id.startswith("bounty:"):
+        return Refused(ctx._log(stale(ctx, option_id.partition(":")[2])))
+    return None
 
 
 def status(ctx: Game) -> list[dict]:

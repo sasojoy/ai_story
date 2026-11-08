@@ -72,7 +72,7 @@ def test_the_six_slots_keep_the_written_order_and_each_lives_in_its_package():
 
 def test_the_eleven_ops_live_in_their_packages_and_collide_with_no_other_table():
     assert {op: fn.__module__ for op, fn in server.OUTLOCK_OPS.items()} == {op: _routes_of(pack) for op, pack in OP_OWNERS.items()}
-    others = set(server.MAIN_ACTIONS) | set(server.ADMIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS)
+    others = set(server.MAIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS)
     assert not set(server.OUTLOCK_OPS) & others  # 同名的話 api_do 的先後會把其中一條整個蓋掉（FB-609 那一類）
 
 

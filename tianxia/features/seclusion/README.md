@@ -7,12 +7,12 @@
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`SeclusionFeature`）：沒有前綴、沒有選項；`verbs()`＝`Verb("break")`（按下去回 `actions.finish` 的句子；標題不給，`Game._action_title` 走預設的「提前出關」；不問 `enabled`） |
-| `actions.py` | 原本 `Game` 上的 `seclusion_refusal`、`seclude`、`_finish_seclusion`；`Game` 留三個一行委派（server 的修練頁、`_advance_player_local` 的自然出關、測試叫） |
+| `actions.py` | 原本 `Game` 上的 `seclusion_refusal`、`seclude`、`_finish_seclusion`；`Game` 上的名字掛在 `game_api.py` 的表（server 的修練頁、`_advance_player_local` 的自然出關、測試叫） |
 | `tests/` | `test_seclusion_smoke.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.seclusion_start`、`seclusion_done`（換季照 `_reset_player_for_new_season` 重來）；`Config.seclusion_xinde_per_hour`。`busy_until` 是核心的（遊歷、出陣也用），不認領。`fusion.py` 讀 `seclusion_done`（只讀狀態）。
 **接縫**：`local` 的 `seclusion` 那一格（第 55 批；體力回復之後、福緣之前，位置就是行為）；閉關中的選單第 56 批是 `MENU_ORDER["busy"]` 的 `seclusion`、`arena` 兩格。假人不閉關，沒有 `bots.py`。
-**另外要跑的混合檔**（閉關散在這些檔裡，這一輪不拆；數字是 `seclude`／`_finish_seclusion`／`seclusion_refusal` 出現的次數）：`tests/core/test_engine.py`（7）、`tianxia/features/guide/tests/test_prologue.py`（5）、`tests/core/test_journal.py`（3）、`tianxia/features/bounties/tests/test_bounties.py`（3）、`tianxia/features/gear/tests/test_treasures.py`（2）、`tests/figures/test_foreshadow.py`（2）、`tests/gear/test_mounts.py`（1）、`tests/bots/test_stamina_refill.py`（1）；網頁那一頭 `tests/web/test_prologue_web.py` 等（打 `/api/do/seclude`，這一批沒動 `web/`）。改閉關任一檔時另外跑它們。
+**另外要跑的混合檔**（閉關散在這些檔裡，這一輪不拆；數字是 `seclude`／`_finish_seclusion`／`seclusion_refusal` 出現的次數）：`tests/core/test_engine.py`（7）、`tianxia/features/guide/tests/test_prologue.py`（5）、`tests/core/test_journal.py`（3）、`tianxia/features/bounties/tests/test_bounties.py`（3）、`tianxia/features/gear/tests/test_treasures.py`（2）、`tianxia/features/military/tests/test_foreshadow.py`（2）、`tests/gear/test_mounts.py`（1）、`tests/bots/test_stamina_refill.py`（1）；網頁那一頭 `tests/web/test_prologue_web.py` 等（打 `/api/do/seclude`，這一批沒動 `web/`）。改閉關任一檔時另外跑它們。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `seclusion`（`actions.finish_due`，原位的判斷搬過來；`Game._finish_seclusion` 留給測試）。
 

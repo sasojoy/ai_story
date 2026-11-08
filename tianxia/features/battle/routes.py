@@ -1,6 +1,6 @@
 """決戰的管理者工具（功能包 tianxia/features/battle/；原本寫在 server.py 的 ADMIN_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（admin_tools 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-現實時間由殼給（shell.time，引擎不讀時鐘）。下拉選單（admin_choices、timetable_choices）與 /api/admin 留在殼。
+現實時間由殼給（shell.time，引擎不讀時鐘）。下拉選單（admin_choices、timetable_choices）與 /api/admin 在管理者包（第二輪第 90 批）。
 放手一搏（/api/do/battle_text）是鎖外三段式，第 69 批搬進這個檔（outlock 掛鉤；殼留一行包裝）。"""
 from tianxia.core.features import AdminTool, Outlock, no_gate
 

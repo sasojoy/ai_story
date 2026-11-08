@@ -13,7 +13,9 @@ from test_prologue_web import DRIVER as BASE_DRIVER
 
 import server
 import webharness
-from tianxia import epiphany, storyline, team
+from tianxia.features.sense import epiphany
+from tianxia.features.story import storyline
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.rules import day_seconds
 

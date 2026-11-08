@@ -12,10 +12,11 @@ import random
 import pytest
 
 from conquest_kit import conquest_game, go, join, plain_game, press
-from tianxia import bot_policy, conquest, figures, orders
+from tianxia import bot_base, bot_policy, conquest, figures, orders
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
+from tianxia.features.travel import bots as travel_bots
 from tianxia.state import BotProfile, Order
 
 pytestmark = [pytest.mark.slow, pytest.mark.whole_content]  # 建 Game、載正式內容
@@ -125,11 +126,11 @@ def test_pick_remembers_the_order_hop_only_inside_one_pick(monkeypatch):
     game = _bot(go(join(conquest_game("week7", name="假官"), "guan"), "changshe"), "guan")
     calls = []
     real = bot_policy._order_hop_now
-    monkeypatch.setattr(bot_policy, "_order_hop_now", lambda g: calls.append(1) or real(g))
+    monkeypatch.setattr(travel_bots, "_order_hop_now", lambda g: calls.append(1) or real(g))
     options = [o for o in game.options(odds=False) if o.enabled and o.id.startswith("move:")]
     assert len(options) >= 2
     bot_policy.pick(game, options, game.state.player.bot, random.Random(0))
-    assert len(calls) == 1 and bot_policy._TURN is None
+    assert len(calls) == 1 and bot_base._TURN is None
     bot_policy._order_hop(game)
     bot_policy._order_hop(game)
     assert len(calls) == 3

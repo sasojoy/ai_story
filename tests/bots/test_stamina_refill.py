@@ -18,7 +18,8 @@ from test_prologue_web import run
 import server
 import webharness
 from conftest import real_content
-from tianxia import bot, bot_policy, engine, journal, skillview
+from tianxia import bot, bot_policy, engine, journal
+from tianxia.features.cultivation import art_view
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.models import Config
@@ -255,9 +256,9 @@ def test_the_status_bar_offers_the_refill_even_with_no_pills(game):
 
 def test_the_bag_still_lists_the_pills_but_stops_calling_them_the_button(game):
     """背包照列丹（數量沒動）；開關打開時狀態列那顆鈕叫「補滿」、不花丹，背包不能還叫人按「服丹」。"""
-    assert "服丹" in skillview.bag_text(game.state, game.content)  # 關著：照舊
+    assert "服丹" in art_view.bag_text(game.state, game.content)  # 關著：照舊
     refill_on(game)
-    text = skillview.bag_text(game.state, game.content)
+    text = art_view.bag_text(game.state, game.content)
     assert "回體丹 ×20" in text and "服丹" not in text and f"「{LABEL}」" in text
 
 

@@ -25,7 +25,7 @@
     const c = card || { strokes: [], titles: [], motto: "" };
     return `<div class="mt-card ${cls}">
       <svg class="mt-ink${pad ? " mt-pad" : ""}" ${pad ? 'id="mt-pad" ' : ""}viewBox="0 0 300 400" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${mtStrokesSvg(c.strokes)}</svg>
-      <div class="mt-name">${esc(name)}</div>${mtSeal(name)}
+      <div class="mt-name">${esc(name)}</div>${mtSeal(name)}${c.seal && typeof titleSeal === "function" ? `<div class="ttl-mt">${titleSeal(c.seal, true)}</div>` : ""}
       <div class="mt-foot">${c.titles && c.titles.length ? `<div class="mt-titles">${c.titles.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}<p class="mt-motto">${c.motto ? `「${esc(c.motto)}」` : ""}</p></div>
       ${c.hidden ? '<p class="mt-hidden">這一張的畫與題字看不到了。</p>' : ""}
     </div>`;
@@ -254,7 +254,7 @@
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
       : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
-      : `<div class="peer-head">${c.mingtie ? `<button class="peer-mt" data-act="mt-zoom-peer" aria-label="看${esc(c.name)}的名帖">${mtCardHtml(c.mingtie, c.name, "thumb")}</button>` : ""}<h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}${c.yuedan ? `<p class="peer-record peer-yuedan">${esc(c.yuedan)}</p>` : ""}</div>
+      : `<div class="peer-head">${c.mingtie ? `<button class="peer-mt" data-act="mt-zoom-peer" aria-label="看${esc(c.name)}的名帖">${mtCardHtml(c.mingtie, c.name, "thumb")}</button>` : ""}<h3>${esc(c.name)}${c.title && c.title.name && typeof titleSeal === "function" ? ` ${titleSeal(c.title)}` : ""}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}${c.yuedan ? `<p class="peer-record peer-yuedan">${esc(c.yuedan)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${P.textFor != null && c.actions[P.textFor] ? `<form class="free peer-amount peer-text" id="peer-text"><input class="input" name="text" maxlength="${c.actions[P.textFor].text}" value="${esc(P.textDraft || "")}" placeholder="附一句話（可以不寫，${c.actions[P.textFor].text} 字內）" aria-label="附一句話"><button class="btn primary small" type="submit">${esc(c.actions[P.textFor].label)}</button></form>` : ""}
@@ -403,3 +403,66 @@
       render();
     }, line);
   }
+  async function peersClick(act, el, ev) {
+    switch (act) {
+        case "peer": await openPeer(el.dataset.name); break;
+        case "peer-close": S.peer = null; render(); break;
+        case "peer-answer": await openPeer(el.dataset.name, "discuss"); break; // 場景底下論武的「挑一樣答應」（FB-117）
+        case "peer-act": await peerAct(Number(el.dataset.i)); break;
+        case "peer-pick": await peerAct(Number(el.parentElement.querySelector("select").value)); break;
+        case "here-more": S.hereOpen = true; renderPage(); break;
+        case "calls-more": openCalls(); break; // 場景底下收起來的邀請（FB-117、FB-241）
+        case "party-leave": await leaveParty(); break;
+        case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
+        case "mt-edit": if (!S.mingtie) await loadMingtie(); mtEditOpen(); break;
+        case "mt-close": S.mtEdit = null; render(); break;
+        case "mt-ink": S.mtEdit.ink = Number(el.dataset.i); mtEditRedraw(); break;
+        case "mt-pen": S.mtEdit.pen = Number(el.dataset.i); mtEditRedraw(); break;
+        case "mt-undo": S.mtEdit.strokes.pop(); S.mtEdit.note = ""; mtEditRedraw(); break;
+        case "mt-clear": S.mtEdit.strokes = []; S.mtEdit.note = ""; mtEditRedraw(); break;
+        case "mt-title": {
+          const E = S.mtEdit, t = el.dataset.t, cap = S.mingtie.limits.titles;
+          if (E.titles.includes(t)) E.titles = E.titles.filter((x) => x !== t);
+          else if (E.titles.length < cap) E.titles = [...E.titles, t];
+          else { E.note = `頭銜最多 ${cap} 個：先點掉一個。`; }
+          mtEditRedraw();
+          break;
+        }
+        case "mt-shuffle": { // 刷新：從掙到的頭銜裡隨機換一批（只在這台裝置挑，定稿時伺服器再驗是不是你掙到的）
+          const pool = S.mingtie.pool.slice();
+          for (let k = pool.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [pool[k], pool[j]] = [pool[j], pool[k]]; }
+          S.mtEdit.titles = pool.slice(0, S.mingtie.limits.titles);
+          mtEditRedraw();
+          break;
+        }
+        case "mt-save": await mtSave(); break;
+        case "mt-zoom-peer": if (S.peer && S.peer.card && S.peer.card.mingtie) { S.mtZoom = { name: S.peer.card.name, card: S.peer.card.mingtie }; render(); } break;
+        case "mt-zoom-mine": if (S.mingtie && S.mingtie.mine) { S.mtZoom = { name: S.main.status.name, card: S.mingtie.mine }; render(); } break;
+        case "mt-zoom-box": { const x = S.mingtie && S.mingtie.box[Number(el.dataset.i)]; if (x) { S.mtZoom = { name: x.name, card: x.card, when: [x.when, x.place].filter(Boolean).join("・") }; render(); } break; }
+        case "mt-unzoom": if (ev.target.closest(".mt-zoom-box") && el.classList.contains("mt-zoom-layer")) break; S.mtZoom = null; render(); break;
+        case "mt-report": await mtReport(); break;
+    } // peersClick
+  } // peersClick
+  registerClicks(peersClick, ["peer", "peer-close", "peer-answer", "peer-act", "peer-pick", "here-more", "calls-more", "party-leave", "renown-peer", "mt-edit", "mt-close", "mt-ink", "mt-pen", "mt-undo", "mt-clear", "mt-title", "mt-shuffle", "mt-save", "mt-zoom-peer", "mt-zoom-mine", "mt-zoom-box", "mt-unzoom", "mt-report"]);
+  async function peersForm(form, data) {
+      if (form.id === "peer-amount") {
+        const i = S.peer ? S.peer.amountFor : null;
+        const n = Math.floor(Number(data.amount));
+        if (i == null || !(n >= 1)) return;
+        S.peer.amountFor = null;
+        await peerAct(i, false, n, data.choice || "");
+      } else if (form.id === "peer-text") {
+        const i = S.peer ? S.peer.textFor : null;
+        if (i == null) return;
+        S.peer.textFor = null;
+        await peerAct(i, false, 0, "", (data.text || "").trim());
+      } // peersForm
+  } // peersForm
+  registerForms(peersForm, ["peer-amount", "peer-text"]);
+  async function peersChange(ev) {
+    if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
+      const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
+      if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }
+    }
+  } // peersChange
+  registerChanges(peersChange);

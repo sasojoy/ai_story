@@ -5,7 +5,7 @@ hint_names、merit_hint）、璽動那一句（stir_text）、天命之爭的起
 江湖史七格（chronicle_block、sink_text 與 BOOK_*）。原本在 tianxia/seal.py，逐字搬來；玉璽包的 seal.py re-export 同一批函式物件與字句（名字一個不改），
 所以經舊名 seal 讀的照舊拿得到。
 
-誰讀：核心的 world.evaluate_ending（mandate_event）、world.end_season（MANDATE_UNSETTLED_END）、engine 的 admin_resolve_event（mandate_event、
+誰讀：核心的 world.evaluate_ending（mandate_event）、world.end_season（MANDATE_UNSETTLED_END）、管理者包的 admin_resolve_event（mandate_event、
 mandate_battle）與 chronicle_text（on、chronicle_block、mandate_now）、決戰包的 view.py 與 progress.py。只讀，不寫（chronicle_block 先深拷貝再補齊）。
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。
 

@@ -4,11 +4,13 @@
 - **導覽**：`docs/guide/商城.md` 的「擂台形象」那一節
 - **設計稿**：擂台動畫＋付費自建形象 v3（https://claude.ai/artifact/5NMJiMhXFPYwdnMA2TQi3U；Joy 2026-10-31「都按照建議」），第二期的基礎版
 
+`Game` 上的名字掛在 `game_api.py` 的表；`_battle_ult` 在表上留小 def，因為 `test_looks_mvp` 與 `same_behavior` 換的是 `looks.actions.battle_ult`，要晚綁定。
+
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`LooksFeature`）：`enabled`＝商城開著＋這一包的 `content/looks.json` 有東西、`routes`、`check_content`（id 當資料夾名、名字過命名過濾） |
+| `__init__.py` | 登記（`LooksFeature`）：`enabled`＝商城開著＋這一包的 `content/looks.json` 有東西、`web`＝`looks.js`、`looks.css`、`routes`、`check_content`（id 當資料夾名、名字過命名過濾） |
 | `rules.py` | 純規則：買到哪幾套（`owned`，照核心 `core.services.look_ids`）、穿哪一套（`worn`／`wear`，記在 `mall_entitlements` 的 `look`／`wear`）、假人挑哪一套（`bot_look`）、畫面資料（`view`） |
-| `actions.py` | `look_of`（`Game.arena_look` 的一行委派叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
+| `actions.py` | `look_of`（`Game.arena_look` 經 `game_api.py` 的表叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
 | `orders.py` | 自建形象的訂單（第二批）：下單、狀態、圖的檔頭驗證與存放（資料庫旁邊的 `looks/u<id>/`）、假的生圖器、上架與退回、給生圖工具的提示詞 |
 | `routes.py` | `GET /api/looks`、`POST /api/looks/wear {look}`、`POST /api/looks/order`、`GET /api/looks/img/<u數字>/<張>`、`GET /api/admin/looks`、管理者工具 `looks_upload`／`looks_release`／`looks_reject`；關著 404 |
 | `moves.py` | 招式動畫（第三批）：替自己的武功下單、招式庫、每季綁到一門武功（同打法免費）、擂台記哪一招；2026-11-01 起下單是一句話自創（`scenes.py`） |
@@ -30,3 +32,15 @@
 
 **賣是商城包的事**：商品 `kind` 寫 `look`、`look` 寫哪一套、效果只寫 `{"look": 1}`（`mall.item_problems` 驗）；購買那一列 `data` 多記 `look_id`（商品下架了也認得）；同一套買過了不再賣（`LOOK_OWNED`）。
 **認領的欄位**：沒有角色上的欄位；`ArenaEntry.look`、`ArenaFight.skins`、`ArenaResult.skins` 是擂台的（`tianxia/state.py`），網頁的 `looks.me_look`／`foe_look`。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- 畫面 `web/looks.js`（第 94 批從 `mall.js` 切出來，615 行）：形象頁、自建形象、市集、絕招、管理者區自建形象與成品牆，`looksClick` 26 個 act；`LooksFeature.web = ("looks.js", "looks.css")`。樣式沒寫字級的 84 行第 104 批搬到 `web/looks.css`（排在 `mall.css` 前面），手機字級與電腦寬共 60 行還在 `web/mall.css`。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時，形象市集的上架 `actions.market_list` 與買 `actions.market_buy`（鍵 `looks_market`）在既有「市集沒開」那一行之後問核心 `core/identity_base.phone_ok`，只問動手的人，被擋回 `identity_base.PHONE_NEEDED`；下架 `market_unlist` 不擋。市集的鈕在 `web/looks.js`、沒有可用的欄位，這一批不碰網頁、不灰鈕（按下去回那一句）。沒有新路由、新欄位、新表。測試 `tests/test_looks_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。
+
+## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
+
+identity 開著時，被扣押的帳號不能上架形象市集：`actions.market_list` 緊接在 `phone_ok` 那兩行之後問核心 `identity_base.hold_reason(ctx, "looks_market")`，有就回那一句（不灰鈕，`web/looks.js` 沒動）。
+下架 `market_unlist` 不擋（第 208 批計畫）；買 `market_buy` 也在花元寶，M 波起買的人被扣押也擋（同一個鍵、同一句，在它的 `phone_ok` 之後）。沒有新路由、新欄位、新表。測試 `tests/test_looks_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

@@ -11,7 +11,9 @@ import pytest
 from pydantic import ValidationError
 
 from conftest import real_content
-from tianxia import calendar, figures, foreshadow, materials, ranks, rules
+from tianxia import calendar, figures
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import materials, ranks, rules
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, Effect
@@ -690,7 +692,7 @@ def test_a_new_season_resets_the_runic_pieces_and_the_fragments(on):
 def test_defecting_keeps_the_runic_pieces_for_now(on):
     """審查 Minor 1：叛投清掉貢獻、捐獻、階與部下，可是符文殘片（跟聽過的片段一樣是知道的事）留著。這是現在的做法，
     計畫沒寫、待企劃者確認（見 defection.clear_progress 的說明）；改了就改這個測試。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     game = _game(on, at="nanyang_huangjin_camp")
     p = game.state.player

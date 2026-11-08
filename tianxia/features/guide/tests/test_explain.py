@@ -1,6 +1,6 @@
 """玩法說明（explain-1，試玩回饋 Gary：「很多東西要一句說明，不然體力用完了還不知道在玩什麼」）。
 
-一、行動列底下那幾行：探索、遊歷、交友這一下會怎樣（Game.action_notes，句子在 tianxia/howto.py）；有所感選做法之前先說選錯的代價。
+一、行動列底下那幾行：探索、遊歷、交友這一下會怎樣（Game.action_notes，句子在各包的 howto.py）；有所感選做法之前先說選錯的代價。
 二、情誼：看得到（談話畫面、求見名單、輿圖的人物），玩家看到的一律叫「情誼」，第一次交友或談話時師父說它有什麼用（h_bond）。
 句子待 joy 潤；這裡驗的是「說的跟規則一樣」：探索照探索真的擲骰用的那一份比重、遊歷照對手與操練的規則、數字照設定。"""
 from __future__ import annotations
@@ -15,7 +15,13 @@ import pytest
 from conftest import classic_rules, real_content
 from test_explore import _lake
 
-from tianxia import companion_agent, hints, howto, rules, sensing
+from tianxia.features.companions import companion_agent
+from tianxia.features.guide import hints
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.explore import howto as explore_howto
+from tianxia.features.socialize import howto as socialize_howto
+from tianxia import rules
+from tianxia.features.sense import sensing
 from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.models import ExploreMix, HintDef, InsightScene, SenseMethod
@@ -87,9 +93,9 @@ def test_the_explore_line_mentions_the_breakthrough_pill_only_when_it_can_drop(g
 
 
 def test_explore_line_words():
-    assert howto.explore_line([]) == "這裡多半一無所獲"
-    assert howto.explore_line([("insight", 0.0), ("event", 3.0)]) == "這裡會碰上事件"  # 比重 0 的不提；只剩一支寫「會」（FB-101）
-    assert howto.explore_line([("insight", 2.0), ("wild", 2.0), ("event", 1.0)], "破境丹") == "這裡可能悟意境、遇野怪、碰上事件；偶得破境丹"
+    assert explore_howto.explore_line([]) == "這裡多半一無所獲"
+    assert explore_howto.explore_line([("insight", 0.0), ("event", 3.0)]) == "這裡會碰上事件"  # 比重 0 的不提；只剩一支寫「會」（FB-101）
+    assert explore_howto.explore_line([("insight", 2.0), ("wild", 2.0), ("event", 1.0)], "破境丹") == "這裡可能悟意境、遇野怪、碰上事件；偶得破境丹"
 
 
 # ── 遊歷：打贏得什麼；自己人的地盤是操練 ─────────────────────────────────
@@ -312,7 +318,7 @@ def test_no_player_visible_old_words_in_code():
     """玩家看得到的一律叫「情誼」（explain-1）：tianxia/、server.py 的字串（說明字串與交給模型的提示不算）、web/ 的字串（註解不算）
     都不再寫「好感度」「交情」。content/ 不在這裡（事件文字歸 joy，見下一條）。
     功能包（tianxia/features/<包>/*.py）一起掃：搬進包的字（出陣的混戰、出陣回報……）原本在 engine.py、sortie.py 裡被這一條守著
-    （dev/sortie-1 審查；同 tests/arts/test_explain2.py 的路徑例外）。核心本體 tianxia/core/*.py 也一起掃：事件檢定搬進
+    （dev/sortie-1 審查；同 tianxia/features/guide/tests/test_explain2.py 的路徑例外）。核心本體 tianxia/core/*.py 也一起掃：事件檢定搬進
     tianxia/core/event_check.py 的字（事件卡、隨口應對、行狀）原本在 engine.py 裡被這一條守著（dev/core-events-1 審查）。"""
     code = [*sorted((ROOT / "tianxia").glob("*.py")), *sorted((ROOT / "tianxia" / "core").glob("*.py")),
             *sorted((ROOT / "tianxia" / "features").glob("*/*.py")), ROOT / "server.py"]
@@ -517,7 +523,7 @@ def test_the_stamina_help_leaves_out_the_pill_button_when_there_is_none(prologue
 def test_a_new_character_gets_a_journal_line_for_the_gift(content):
     game = Game.new(content, "沈浪", rng=random.Random(0))
     head = game.state.journal[0]
-    assert head.tag == "賽季開始" and head.lines[-1] == howto.gift_line(content)
+    assert head.tag == "賽季開始" and head.lines[-1] == guide_howto.gift_line(content)
     assert head.lines[-1] == f"新手福利：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。"
     assert sum(1 for e in game.state.journal if e.tag == "賽季開始") == 1  # 接在開場那一則裡，不另起一則
 
@@ -552,7 +558,7 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
     client.post("/api/register", json={"login": f"gift_{int(refill)}", "password": "secret-pw", "again": "secret-pw"})
     client.post("/api/character", json={"name": "贈禮人"})
     line = server.game_for("贈禮人").state.journal[0].lines[-1]
-    assert line == howto.gift_line(content)
+    assert line == guide_howto.gift_line(content)
     if refill:
         assert f"先收著；測試期間按體力條上的「{content.config.beta_free_refill_label}」就能免費補滿，不花丹。" in line
         assert "服下" not in line
@@ -568,13 +574,13 @@ def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_con
 
 
 def test_the_full_stamina_note_says_why():
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     assert guide.FULL_STAMINA_NOTE == "體力將滿：滿了就不再回，別讓它浪費。"
 
 
 def test_the_full_stamina_note_shows_when_nearly_full_and_not_below(game):
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.5
@@ -615,9 +621,9 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     assert "體力每 5 分鐘回 1 點，滿 222 就不再回。" in text and "回體丹一顆回 133 點，" in text
     assert "糧草" in text and "伏筆" in text  # 背包：素材是糧草與伏筆用的
     span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
-    cycle = howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
+    cycle = socialize_howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
     assert f"同一位人物{cycle}最多 9 輪" in text
-    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tests/arts/test_explain2.py 對過內容
+    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tianxia/features/guide/tests/test_explain2.py 對過內容
     fame = re.search(r"#### 名望\n(?:- .*\n)+", text).group(0)
     numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "").replace(fame, "")))
     assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
@@ -667,7 +673,7 @@ def test_the_howto_drill_sentence_follows_the_squad_not_the_place(game):
 
 
 def test_the_full_stamina_note_shows_when_nearly_full(game):
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.95

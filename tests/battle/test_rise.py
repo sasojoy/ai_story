@@ -8,7 +8,8 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import duel, encounter, figures, rise, rules, team
+from tianxia.features.bout import duel_rules as duel
+from tianxia import encounter, figures, rise, rules, team
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Check

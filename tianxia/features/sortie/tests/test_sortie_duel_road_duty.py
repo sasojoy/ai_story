@@ -7,7 +7,8 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import FAR, LOC, MOVES, NOW, do, duel_content, duel_world, game_of, load, seat
-from tianxia import conquest, sortie_duel
+from tianxia import conquest
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.calendar import DAY
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容

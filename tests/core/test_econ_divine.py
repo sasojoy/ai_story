@@ -67,44 +67,46 @@ def test_switch_off_stamps_nothing():
 
 
 def test_the_howto_follows_the_season_stamp():
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
+    from tianxia.features.smithy import howto as smithy_howto
 
     c = real_content("week7")
     season = fresh_season(c)
-    text = "\n".join(howto.forge_lines(c, season))
+    text = "\n".join(smithy_howto.forge_lines(c, season))
     assert "每一種兵器" in text and "三片" in text and "三種探索" in text
     season.forge_divine_per_kind = season.forge_split_clues = False  # 正在跑的季
-    old = "\n".join(howto.forge_lines(c, season))
+    old = "\n".join(smithy_howto.forge_lines(c, season))
     assert "每一種兵器" not in old and "三片" not in old and "口訣" in old
-    page = howto.page(c, fresh_season(c), recruitable=False)
+    page = guide_howto.page(c, fresh_season(c), recruitable=False)
     assert "#### 鐵匠鋪與神器" in page
 
 
 def test_fb268_switches_off_and_no_stamp_leave_the_howto_as_it_was():
     """FB-268（PM 定）：三個開關都關、季也沒蓋章，玩法說明一個字都不變——沒有「鐵匠鋪與神器」這一段（fa7ddace 沒有）。
     任一個用得上新規則時才畫：季蓋了每種兵器一條或線索分片的章、線索分片或殘譜三種探索的開關開著。"""
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
+    from tianxia.features.smithy import howto as smithy_howto
 
     c = real_content("week7")
     rule = c.config.forge_secrets
     rule.divine_per_kind = rule.split_clues = rule.scrap_every_mode = False
     season = fresh_season(c)
     assert not season.forge_divine_per_kind and not season.forge_split_clues
-    assert howto.forge_lines(c, season) == []
-    assert "鐵匠鋪與神器" not in howto.page(c, season, recruitable=False)
+    assert smithy_howto.forge_lines(c, season) == []
+    assert "鐵匠鋪與神器" not in guide_howto.page(c, season, recruitable=False)
     for switch in ("split_clues", "scrap_every_mode"):  # 正在跑的季（沒蓋章）、這兩個開關開著：照舊畫
         setattr(rule, switch, True)
-        assert howto.forge_lines(c, season), switch
+        assert smithy_howto.forge_lines(c, season), switch
         setattr(rule, switch, False)
     season.forge_divine_per_kind = True  # 季蓋了每種兵器一條的章（開關後來關了也一樣）
-    assert howto.forge_lines(c, season)
+    assert smithy_howto.forge_lines(c, season)
 
 
 def test_the_howto_for_other_seasons_does_not_promise_every_kind():
-    from tianxia import howto
+    from tianxia.features.smithy import howto as smithy_howto
 
     c = real_content()
-    text = "\n".join(howto.forge_lines(c, fresh_season(c)))
+    text = "\n".join(smithy_howto.forge_lines(c, fresh_season(c)))
     assert "同一種兵器最多一條" in text and "每一種兵器" not in text
 
 

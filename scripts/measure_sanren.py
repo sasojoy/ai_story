@@ -40,7 +40,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_sanren_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, bot_policy, bounties, database, encounter, naming, orders, ranger, ranks, team  # noqa: E402
+from tianxia import bot, bot_policy  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database, encounter, naming, orders, ranger, ranks, team  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.state import PLAYER  # noqa: E402
@@ -173,6 +175,7 @@ def _strip(content, bare: bool, no_give: bool) -> None:
 
 def measure(
     seed: int, profile: str | None, side: str, bare: bool = False, faction: str | None = None, no_give: bool = False,
+    max_steps: int | None = None,
 ) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     _strip(content, bare, no_give)
@@ -241,7 +244,7 @@ def measure(
             mock.patch.object(bounties, "give", tally.give(bounties.give)), \
             mock.patch.object(Game, "heal", heal), mock.patch.object(Game, "take_stamina_pill", pill), \
             mock.patch.object(Game, "choose", choose):
-        game = bot.play_season(content, seed, world=world, observe=observe)
+        game = bot.play_season(content, seed, world=world, observe=observe, **({"max_steps": max_steps} if max_steps else {}))
     s, c = game.state, game.content
     p = s.player
     mine, whole = _power(game)
@@ -271,6 +274,7 @@ def main() -> None:
     parser.add_argument("--faction", default=None, help="陣營那一邊投靠誰（劇本的陣營 id，例如 guan、huang、haoqiang）；不給就投第一個碰到的")
     parser.add_argument("--no-give", action="store_true", help="對照組：只拿掉求兵（豪強的基準）")
     parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜（含求兵）與名號的經驗加成")
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     profile = None if args.profile == "none" else args.profile
     content = load_content(ROOT / "content", profile=profile)
@@ -280,7 +284,10 @@ def main() -> None:
     rows: dict[str, list[dict]] = {"散人": [], "陣營": []}
     for seed in args.seeds:
         for side in rows:
-            row = measure(seed, profile, side, bare=args.bare, faction=args.faction, no_give=args.no_give)
+            row = measure(
+                seed, profile, side, bare=args.bare, faction=args.faction, no_give=args.no_give,
+                max_steps=args.max_steps,
+            )
             rows[side].append(row)
             extra = (f"俠名 {row['俠名']}（第 {row['名號']} 階）懸賞 {row['懸賞']}" if row["faction"] is None
                      else f"{row['faction']} 第 {row['階']} 階 貢獻 {row['貢獻']}")

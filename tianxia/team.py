@@ -659,7 +659,7 @@ def _worn_pairing(state: GameState, content: Content, world: WorldStateStore, sw
 
 
 def _signed_pct(ratio: float) -> str:
-    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 skillview 的 _pct 同一個寫法。"""
+    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 art_view 的 _pct 同一個寫法。"""
     return f"{ratio:+.1%}".replace(".0%", "%").replace("-", "−")
 
 
@@ -742,7 +742,7 @@ def practice_price(content: Content, level: int, scale: float = 1.0) -> int:
 
 def can_practise(state: GameState, content: Content, kind: str) -> bool:
     """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
-    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    機器人要不要練（bot.can_practise）與主畫面的提示（art_cards.practice_hint）共用這一個條件。"""
     member = state.player.member
     slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
     level = getattr(member, level_slot)
@@ -852,7 +852,7 @@ def heal_cost(content: Content, member, state: GameState | None = None) -> int:
 
 
 HEAL_FREE = "這一帶承露，醫館分文不取"  # 待 joy 潤：承露（玉璽碎片改版第 2 批）那一區療傷不收錢，療傷那一句的括號
-HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（skillview.heal_note）
+HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（art_cards.heal_note）
 
 
 def heal_free(state: GameState, content: Content) -> bool:
@@ -878,7 +878,7 @@ def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int
 
 
 def heal_problem(state: GameState, content: Content, member, where: str | None = None) -> str | None:
-    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
+    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（art_cards.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
     where 是呼叫端問過 clinic.problem 的那一句（不在醫館；None＝在醫館或開關關著），排在「氣血無恙」之後、銀兩之前。"""
     cost = heal_cost(content, member, state)
     if cost <= 0:
@@ -1146,13 +1146,13 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
 def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
     """本人身上的功效換成遭遇戰的數字（武學與成長設計 13.2、13.4）。沒有功效的人是空的 Mods（單次判定跟以前一模一樣）。
 
-    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，content.check_traits 擋共用）。名將本命絕學（13.5）的獨特
+    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，traits.check_traits 擋共用）。名將本命絕學（13.5）的獨特
     特別功效進來時，若要改成照 id 記，下面每一處「按掛點讀」都要跟著改——全部的清單（讀的是 lo.specials 的鍵或值）：
     - traits.py：loadout（寫入，同一個掛點只留第一個）、has（`hook in lo.specials`）。
     - team.py：trait_mods（`.get("power_from_difficulty")`、`"double_luck" in`）、fight（`"no_loss" in`）、
       take_encounter_toll（`"no_injury" in`）。
     - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
-      _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
+      _play_rounds（`.get("no_loss")`）、core/combat.py 的 trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
       `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
     - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
     # 本命戰法第三批（定案 /mnt/project-files/plan/武學與兵器戰法定案.md）：先手、破甲、險、連環、借力改成回合裡的戰法（tactics.py），

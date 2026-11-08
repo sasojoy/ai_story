@@ -431,7 +431,7 @@ def test_challenging_a_great_figure_wears_the_armor_like_training(world):
 # ── Task 4：鐵匠鋪分兵器、防具兩頁 ──
 
 def test_with_both_on_the_smith_opens_on_the_weapon_page_and_switches(content, world):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     game = _town(content, world, weapons_on=True)
     p = game.state.player
     game.choose("act:smith")
@@ -450,7 +450,7 @@ def test_with_both_on_the_smith_opens_on_the_weapon_page_and_switches(content, w
 
 
 def test_with_only_armor_on_the_smith_opens_on_the_armor_page_and_closes_away_from_town(content, world):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     game = _town(content, world)  # 武器關、防具開（測試內容的武器本來就關著）
     p = game.state.player
     assert "act:smith" in _ids(game)
@@ -533,7 +533,7 @@ def test_a_button_from_the_other_page_does_nothing(content, world):
 def test_a_forging_draft_is_dropped_when_weapons_close_and_the_armor_page_stays(content, world):
     """打造單子挑到一半時武器被關（內容改版、管理者改設定）、防具還開著：鐵匠鋪照開（只剩防具頁），單子要清掉——
     _smith_options 先看單子、後看停在哪一頁，不清的話畫出來的還是灰掉的兵器單子、沒有切頁鈕，只能按「不打了」。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     from tianxia.state import SmithDraft
     game = _town(content, world, weapons_on=True)
     p = game.state.player
@@ -595,7 +595,7 @@ def _repairable(content, world, kind, *, art="sword"):
 
 @pytest.mark.parametrize("kind,art", [("刀", "sword"), ("劍", None)])  # 配不上（種類不同）、身上沒有武學
 def test_repair_and_temper_warn_when_the_worn_weapon_does_not_fit(content, world, kind, art):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     game = _repairable(content, world, kind, art=art)
     opts = _ids(game)
     for oid in ("smith:repair", smithing.TEMPER):
@@ -605,7 +605,7 @@ def test_repair_and_temper_warn_when_the_worn_weapon_does_not_fit(content, world
 
 
 def test_repair_and_temper_say_nothing_extra_when_the_weapon_fits_or_the_button_is_off(content, world):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
     game = _repairable(content, world, "劍")  # 流雲劍配劍
     opts = _ids(game)
     assert weapons.unfit_note(game.state.player.weapon) not in opts["smith:repair"].label and weapons.unfit_note(game.state.player.weapon) not in opts[smithing.TEMPER].label
@@ -625,13 +625,13 @@ def test_repair_and_temper_say_nothing_extra_when_the_weapon_fits_or_the_button_
 # ── Task 5：修練頁「裝備」與角色卡 ──
 
 def test_gear_rows_list_each_open_slot_and_count_the_whole_rack(content, world):
-    from tianxia import skillview
+    from tianxia import art_cards
     _on(content, weapons_on=True)
     game = _game(content, world)
     p = game.state.player
     p.armor = _jacket()
     p.rack = [_jacket(aid="甲:2", name="鐵葉甲", attribute="剛"), _blade()]
-    gear = skillview.gear_rows(game.state, content, world)
+    gear = art_cards.gear_rows(game.state, content, world)
     assert gear["cap"] == 100 and gear["used"] == 2
     assert [g["slot"] for g in gear["slots"]] == ["weapon", "armor"] and [g["label"] for g in gear["slots"]] == ["武器", "防具"]
     weapon_slot, armor_slot = gear["slots"]
@@ -639,21 +639,21 @@ def test_gear_rows_list_each_open_slot_and_count_the_whole_rack(content, world):
     assert armor_slot["worn"]["id"] == "甲:1" and [r["id"] for r in armor_slot["rack"]] == ["甲:2"]
     assert weapon_slot["empty"] == weapons.EMPTY and armor_slot["empty"] == armor.EMPTY and armor_slot["note"] == armor.RACK_NOTE
     content.config.weapons.enabled = False
-    gear = skillview.gear_rows(game.state, content, world)
+    gear = art_cards.gear_rows(game.state, content, world)
     assert [g["slot"] for g in gear["slots"]] == ["armor"] and gear["used"] == 2  # 關著的欄位不列，東西照樣佔格子
 
 
 def test_player_card_has_the_armor_line_under_the_weapon_line(content, world):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
     _on(content, weapons_on=True)
     game = _game(content, world)
     p = game.state.player
-    assert "防具" not in skillview.member_card(game.state, content, world, "player")
+    assert "防具" not in art_view.member_card(game.state, content, world, "player")
     rules.learn_skill(game.state, content, "sword")
     p.member.wugong_id = "sword"
     p.weapon = Weapon(id="兵:1", name="試刃", kind="劍", attribute="柔", tier=1, quality="下品")
     p.armor = _jacket(edge=80)
-    lines = skillview.member_card(game.state, content, world, "player").splitlines()
+    lines = art_view.member_card(game.state, content, world, "player").splitlines()
     at = next(i for i, line in enumerate(lines) if line.startswith("兵器"))
     assert lines[at + 1] == "防具　【試甲】屬虛・一階下品・耐久度 80，一場少扣 8% 氣血（跟你的內功同屬性）"
 

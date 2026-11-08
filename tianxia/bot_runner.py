@@ -22,7 +22,13 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import bot_policy, epiphany, gender, insight_llm, naming, seal, server_bots, team
+from . import bot_policy
+from .features.sense import epiphany
+from . import gender
+from .features.sense import insight_llm
+from . import naming
+from .features.seal import seal
+from . import server_bots, team
 from .core import battle_base as battle_instance
 from .characters import CharacterStore, open_characters
 from .engine import Game

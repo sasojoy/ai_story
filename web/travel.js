@@ -48,3 +48,9 @@
       if (r.arrived) mapHome();
     }, WAIT_LINES.move);
   }
+  async function travelClick(act, el, ev) {
+    switch (act) {
+        case "move-mode": await setMoveMode(el.dataset.mode); break;
+    } // travelClick
+  } // travelClick
+  registerClicks(travelClick, ["move-mode"]);

@@ -1,5 +1,7 @@
 """推力規則的算式（計畫 T3、第一季設計第七節）：陣營人數緩衝、每人每曆日上限、貢獻、不足一點的推力累積。
-純函式，只看傳進來的數字與狀態，不碰引擎、不改任何東西；怎麼串起來見 engine.Game.push_trend。"""
+純函式，只看傳進來的數字與狀態，不碰引擎、不改任何東西；怎麼串起來見 engine.Game.push_trend。
+
+內容驗證 check_core_loop 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import math
@@ -132,3 +134,13 @@ def resistance(value: float, delta: float, tuning: PushResistance) -> float:
 def round_half_away(x: float) -> int:
     """四捨五入成整數，.5 往離 0 遠的方向進（軍令達成推的整點：1.6 → 2、−0.6 → −1）。"""
     return int(math.copysign(math.floor(abs(x) + 0.5), x))
+
+
+# ── 內容驗證（第二輪第 96 批）──
+def check_core_loop(c: Content, need) -> None:
+    """出陣探索與地盤的設定（Config.push_resistance、jianfa.second_tier）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
+    r = c.config.push_resistance
+    need(r.full_within <= r.half_within,
+         f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
+    need(set(c.config.jianfa.second_tier) <= {1, 2, 3},
+         f"Config.jianfa.second_tier 的鍵是危險度 1～3：{sorted(c.config.jianfa.second_tier)}")

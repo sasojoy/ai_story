@@ -6,7 +6,7 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import create
+from tianxia.features.craft import create
 from tianxia.core.registry import FEATURES
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

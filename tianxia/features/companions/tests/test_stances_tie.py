@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from stances_kit import DAY, HOUR, LUZHI, MON, at, real_game
-from tianxia import stances
+from tianxia.features.companions import stances
 from tianxia.state import StanceOn
 
 

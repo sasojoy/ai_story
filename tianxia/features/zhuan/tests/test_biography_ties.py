@@ -13,7 +13,9 @@ import random
 import pytest
 
 from wins_kit import save, wins_content, wins_game
-from tianxia import annals, biography, gender, sortie_duel
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia import gender
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 

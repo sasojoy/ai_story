@@ -68,3 +68,10 @@
     return `<div class="sheet-bg" data-act="ck-pop-close"></div><div class="sheet ck-pop" role="dialog" aria-label="簽到"><div class="grip"></div>`
       + `<h3>簽到</h3>${peek.panel}${close}</div>`;
   }
+  async function checkinClick(act, el, ev) {
+    switch (act) {
+        case "ck-pop-close": ckPopClose(); renderPage(); break; // 每天第一次登入的簽到小窗：收下或等一下再挑，同一天不再跳
+        case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
+    } // checkinClick
+  } // checkinClick
+  registerClicks(checkinClick, ["ck-pop-close", "checkin"]);

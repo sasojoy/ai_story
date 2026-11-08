@@ -8,7 +8,9 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import encounter, figure_aid, figures, team
+from tianxia import encounter
+from tianxia.features.figure_acts import figure_aid
+from tianxia import figures, team
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
 from tianxia.encounter import EncounterResult

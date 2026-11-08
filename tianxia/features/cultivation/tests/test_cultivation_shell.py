@@ -1,7 +1,8 @@
 """cultivation 這一包的測試，從 tests/server/test_server.py 拆來（全部拆包第 61 批，只搬位置、不改斷言）。"""
 import pytest
 import server
-from tianxia import cultivation, team
+from tianxia.features.cultivation import cultivation
+from tianxia import team
 from tianxia.characters import open_characters
 from tianxia.martial_arts import generate_from_name
 from tianxia.sqlite_world import open_world

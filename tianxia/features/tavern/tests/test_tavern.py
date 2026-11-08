@@ -7,7 +7,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import tavern, tavern_ask
+from tianxia.features.tavern import rules as tavern, ask as tavern_ask
 from tianxia.characters import CharacterStore
 from tianxia.core import xinshen
 from tianxia.engine import Game
@@ -318,6 +318,17 @@ def test_asking_the_keeper_three_steps():
     assert game.state.player.tavern_notes[-1].kind == "ask"
 
 
+def test_tavern_asks_count_per_day_only_when_on(content, game):
+    s = game.state
+    assert tavern.asks_left(s, content, 100) is None  # 關著不限
+    content.config.xinshen.enabled = True
+    for left in (3, 2, 1):
+        assert tavern.asks_left(s, content, 100) == left
+        tavern.note_ask(s, content, 100)
+    assert tavern.asks_left(s, content, 100) == 0
+    assert tavern.asks_left(s, content, 101) == 3
+
+
 def test_with_xinshen_on_the_keeper_answers_three_times_a_day():
     """心神開著（Joy 2026-11-06「問酒家不扣 一天最多三次 另算」）：答上來的才算一次，叫不動的不算；第四次 A 段就擋。"""
     game = _game()
@@ -476,7 +487,7 @@ def _rig(monkeypatch, tier):
         seen.append(killer / mine)
         return encounter.EncounterResult(tier=tier, margin=0.0, our_power=mine, difficulty=killer)
 
-    monkeypatch.setattr("tianxia.engine.encounter.resolve_encounter", fake)
+    monkeypatch.setattr("tianxia.encounter.resolve_encounter", fake)
     monkeypatch.setattr(tavern, "find_chance", lambda c, reach: 1.0)
     return seen
 

@@ -17,12 +17,15 @@ import pytest
 import server
 import webharness
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import battle_instance, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import siege
+from tianxia.features.battle import siege_rules
 import json
 from test_seal_web import DRIVER, _seal_admin, _sheet, m  # noqa: F401  m 是夾具
 import test_map_web
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import conquest, mapview
+from tianxia import conquest
+from tianxia.features.map import mapview
 from tianxia.features.map import layers
 from conftest import classic_rules, real_content
 import math
@@ -34,7 +37,9 @@ from tianxia.models import FactionDef, FactionInk
 from tianxia.sqlite_world import open_world
 from tianxia.state import TerritoryState
 from conquest_kit import announce
-from tianxia import conquest, conquest_day, siege
+from tianxia import conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import siege
 from tianxia.state import DayNote, SiegeSlot
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
@@ -54,7 +59,7 @@ PAGE = r"""
 const S = { main: input.m || {}, news: input.news || "reports", xingshiOpen: input.open ? new Map(input.open) : null };
 const many = (name) => src.match(new RegExp(`\\n  const ${name} = \\[[\\s\\S]*?\\n  \\];`))[0]; // 多行的 const：konst 抓不到，照原文切
 const H = new Function("S", [
-  konst("esc"), many("NEWS"), many("NEWS_PARTS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
+  konst("esc"), many("NEWS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
   fn("xingshiParas"), fn("xingshiHtml"), fn("newsSegHtml"),
   "return { xingshiHtml, newsSegHtml };",
 ].join("\n"))(S);
@@ -126,7 +131,7 @@ def test_server_sends_the_banner_for_a_siege_and_the_page_draws_it():
     view = server.main_view(game)
     s = view["siege"]
     assert s["title"] == "攻城・南陽官道" and s["kind"] == "neutral"
-    assert s["parts"][0].startswith(siege.BANNER_DEFENDER.format(who="")) and battle_instance.GUARD_SUFFIX in s["parts"][0]
+    assert s["parts"][0].startswith(siege_rules.BANNER_DEFENDER.format(who="")) and battle_instance.GUARD_SUFFIX in s["parts"][0]
     out = strip(view["scene"], s)
     assert out.startswith('<p class="siege-strip"') and "攻城・南陽官道" in out
 
@@ -143,15 +148,15 @@ def test_banner_words_for_melee_lone_and_held():
     siege.open_waiting(game.world, game.content, NOW)
     battle = game.world.get_sieges()[0]
     assert battle_instance.melee(battle)
-    b = siege.banner(game.content, battle)
-    assert b["kind"] == "melee" and b["parts"][0] == siege.BANNER_MELEE
+    b = siege_rules.banner(game.content, battle)
+    assert b["kind"] == "melee" and b["parts"][0] == siege_rules.BANNER_MELEE
     battle.siege.attackers, battle.siege.guard_side, battle.siege.absent = ["huang"], "guan", "guan"  # 轉回單方（lone_army 改的那幾格）
-    b = siege.banner(game.content, battle)
+    b = siege_rules.banner(game.content, battle)
     guan = game.content.scenario.faction_name("guan", "guan")
-    assert b["kind"] == "lone" and b["parts"][-1] == siege.BANNER_ABSENT.format(absent=guan)
+    assert b["kind"] == "lone" and b["parts"][-1] == siege_rules.BANNER_ABSENT.format(absent=guan)
     battle.siege.holder, battle.siege.guard_side, battle.siege.absent = "guan", None, ""  # 陣營佔著的區塊
-    b = siege.banner(game.content, battle)
-    assert b["kind"] == "held" and b["parts"] == [siege.BANNER_DEFENDER.format(who=guan)]
+    b = siege_rules.banner(game.content, battle)
+    assert b["kind"] == "held" and b["parts"] == [siege_rules.BANNER_DEFENDER.format(who=guan)]
 
 
 # ── FB-553：同一州兩場自己這一邊的攻城一起集結，兩顆加入鈕撐出橫捲 ──
@@ -201,9 +206,9 @@ def test_fb553_one_join_button_stays_beside_the_name():
 
 @pytest.mark.slow
 def test_scene_does_not_repeat_the_strip():
-    """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege.scene_note）。"""
+    """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege_rules.scene_note）。"""
     m = _sieges_view(["nanyang_road"])
-    assert m["siege"]["parts"][0].startswith(siege.BANNER_DEFENDER.format(who=""))
+    assert m["siege"]["parts"][0].startswith(siege_rules.BANNER_DEFENDER.format(who=""))
     assert "；守方：" not in m["scene"] and "官軍攻南陽官道" not in m["scene"]
 
 
@@ -219,7 +224,7 @@ def test_melee_scene_keeps_only_the_rule():
     siege.open_waiting(game.world, game.content, NOW)
     game.state.world = game.world.get_season()
     scene = server.main_view(game)["scene"]
-    assert siege.MELEE_RULE in scene and "兩頭迎戰" not in scene
+    assert siege_rules.MELEE_RULE in scene and "兩頭迎戰" not in scene
 
 
 def _rule(css: str, selector: str) -> dict[str, str]:
@@ -285,18 +290,16 @@ def test_empty_and_pending_and_off():
     assert page(None)["page"] == "" and "載入中" in webharness.run(PAGE, {"m": {}, "x": None})["page"]
 
 
-def test_tab_only_when_on_and_two_rows_for_nine():
-    """減法季批 1：見聞五顆籤（大事、傳聞、榜單、江湖史、紀錄；Joy 2026-10-24 榜單回見聞），大事底下一排小的：戰報、大勢，形勢只有開著的季才有、
-    排在大勢後面；紀錄底下分紀錄、名帖匣。"""
-    off = page(m={})["seg"]
-    assert 'data-news="xingshi"' not in off
-    on = page(m={"xingshi": True})["seg"]
-    assert 'data-news="xingshi"' in on and 'class="seg news-sub"' in on
-    names = re.findall(r'data-news="(\w+)"', on)
-    assert names == ["reports", "rumors", "boards", "chronicle", "journal", "reports", "trends", "xingshi"]
-    assert 'data-news="xingshi"' not in page(m={"xingshi": True}, news="rumors")["seg"]  # 別的籤底下沒有那一排
-    journal = re.findall(r'data-news="(\w+)"', page(m={"xingshi": True}, news="mingtie")["seg"])
-    assert journal == ["reports", "rumors", "boards", "chronicle", "journal", "journal", "mingtie"]
+def test_one_row_of_five_tabs():
+    """見聞改版（Joy 2026-11-08 說好）：五顆籤一排、沒有第二層（戰況、傳聞、江湖史、榜單、紀錄）；天下形勢在戰況那一頁裡，
+    名帖匣搬去俠客頁（從俠客進來的那一段，最上面是「‹ 俠客」）。"""
+    for m in ({}, {"xingshi": True}):
+        seg = page(m=m)["seg"]
+        assert re.findall(r'data-news="(\w+)"', seg) == ["reports", "rumors", "chronicle", "boards", "journal"]
+        assert "news-sub" not in seg
+    assert 'class="on"' in page(m={"xingshi": True}, news="xingshi")["seg"].split('data-news="reports"')[0].rsplit("<button", 1)[1]  # 舊的形勢認成戰況
+    mingtie = page(m={}, news="mingtie")["seg"]
+    assert "‹ 俠客" in mingtie and "名帖匣" in mingtie and 'data-news="journal"' not in mingtie
 
 
 @pytest.mark.slow
@@ -537,7 +540,7 @@ def test_the_map_overlay_says_which_siege_moment_each_block_is_in():
     (None, {"runan_wilds": "help", "yingchuan_wilds": "help"}),  # 散人：臨時投效或助守
 ])
 def test_today_rows_say_where_the_viewer_stands(faction, expect):
-    """conquest.today 每一場多 sides（攻方的陣營 id）、you（看的人站得進哪一格，siege.slots 同一套）、margin（打完的大勝／險勝）；muster 是開打前幾分鐘集結。"""
+    """conquest.today 每一場多 sides（攻方的陣營 id）、you（看的人站得進哪一格，siege_rules.slots 同一套）、margin（打完的大勝／險勝）；muster 是開打前幾分鐘集結。"""
     game = _sgame(profile="season21", faction=faction)
     _moments(game)
     view = game.conquest_view()

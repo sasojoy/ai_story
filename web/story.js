@@ -29,3 +29,11 @@
       ${cards.length > 1 ? `<p class="muted small story-count">${at + 1}／${cards.length}</p>` : ""}
       <button class="btn primary" data-act="story-ok" data-last="${last ? 1 : 0}">${btn}</button></div></div>`;
   }
+  async function storyClick(act, el, ev) {
+    switch (act) {
+        case "story-ok": // 特殊事件的跳顯框：還有下一張就翻過去，最後一張才請伺服器清掉
+          if (el.dataset.last === "1") { S.storyAt = 0; await doMain("story_seen", {}); } else { S.storyAt = (S.storyAt || 0) + 1; storyCard(); }
+          break;
+    } // storyClick
+  } // storyClick
+  registerClicks(storyClick, ["story-ok"]);

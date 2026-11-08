@@ -1,13 +1,13 @@
 """宴客（大勢人物擴充第三批：人物設宴、玩家入席敬酒、席間最佳上天下大事；功能包，開發規範手冊 3.2、3.10 第 1 階的「有按鈕的小包」）。
 README.md 寫這一包做什麼、導覽與設計稿。
 
-- rules.py：純規則（原 tianxia/feasts.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/feasts.py）
 - actions.py：原本 Game 上的 _feast_*、feast_*（Game 留一行委派給 server 的三段式與場景卡）
 - bots.py：假人的分數（原本 bot_policy.score 的那一段）
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, Outcome, SceneHook, WorldHook
 
 
 class FeastFeature(Feature):
@@ -51,12 +51,20 @@ class FeastFeature(Feature):
 
         return bots.score(option)
 
-    def scene(self, ctx):
-        """自己眼前的場景卡（接縫掛鉤，全部拆包第 11 批；原本 Game._own_scene_text 擂台之後那一行）：坐在宴席上時是主人、地方、最近三句
-        敬酒詞那一張；沒坐著是 None。不問 enabled：原位本來就不看宴客開關。"""
-        from . import actions  # noqa: PLC0415
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
 
-        return actions.scene(ctx)
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的兩格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看宴客開關）：坐在宴席上時是主人、地方、最近三句敬酒詞那一張，沒坐著（或那一場不能敬了）是 None；
+        圖看 feasting 這個欄位、不看 seat：宴席散了文字已經掉回底下那一張，圖照舊沒有，要等畫面同步收掉欄位（髒存檔照舊）。"""
+        if self._scenes is None:
+            from . import actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "feast", lambda ctx: actions.scene(ctx)),
+                SceneHook("art", "feast", lambda ctx: {} if ctx.state.player.feasting is not None else None),
+            )
+        return self._scenes
 
     # core_world（全部拆包第 25 批「世界層掛鉤」）
     _world: tuple[WorldHook, ...] | None = None

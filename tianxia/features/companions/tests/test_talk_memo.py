@@ -3,8 +3,8 @@
 
 from random import Random
 
-from tianxia import companion_agent
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.companions import companion_agent
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.state import TalkMemo
 
 DAY = 86400

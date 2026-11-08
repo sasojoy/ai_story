@@ -8,7 +8,9 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import FAR, LOC, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, text_of, tick
-from tianxia import atlas, conquest, orders, sortie_duel
+from tianxia import conquest, orders
+from tianxia.features.sortie import duel_rules as sortie_duel
+from tianxia.features.military import order_cards
 from tianxia.state import Order
 
 
@@ -69,7 +71,7 @@ def _siege_card(c, world, loc: str, push: bool) -> str:
     front = conquest.line_of(season, c, loc)
     order = Order(id="t:guan:siege", template="siege", faction="guan", week=orders.period_of(game.state, c), front=front, quota=99, text="（測試）")
     season.orders.append(order)
-    return atlas.siege_how(game.state, c, order)
+    return order_cards.siege_how(game.state, c, order)
 
 
 @pytest.mark.parametrize(("loc", "push"), CARDS)

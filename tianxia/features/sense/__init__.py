@@ -2,15 +2,17 @@
 特殊頓悟（心靈拷問、心境小試、心魔、取名）。全部拆包第 24 批搬進來。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 - sensing.py：有所感的規則（原 tianxia/sensing.py）；epiphany.py：特殊頓悟（原 tianxia/epiphany.py：import 的時候登記一條線的鉤子）；
-  glyph.py：讀筆畫（原 tianxia/glyph.py）；insight_llm.py：看圖取名的 B 段（原 tianxia/insight_llm.py）——舊名都留成別名
+  glyph.py：讀筆畫（原 tianxia/glyph.py）；insight_llm.py：看圖取名的 B 段（原 tianxia/insight_llm.py）
 - actions.py：原本 Game 上的 10 個方法（Game 留 8 個一行委派）與核心原位、探索包、引導包叫的 7 個服務的本體
 - routes.py：/api/sense、/api/sense_read、/api/sense_warm（原本寫在 server.py；殼照 FEATURES 掛）
 
-掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scene（接縫掛鉤：有所感的卡、取名那一張）、routes。
+掛鉤：choose（只吃 sense:；dunwu: 要帶自己寫的名字，留在 Game.choose 原位叫委派）、scenes（SCENE_ORDER 的 sense 格：有所感的卡、取名那一張）、routes。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook
+from tianxia.core.features import ContentSlot
 
 
 class SenseFeature(Feature):
@@ -18,11 +20,20 @@ class SenseFeature(Feature):
     web = ("sense.js",)  # 有所感的畫布、悟來的那一筆、神品意境取名（全部拆包第 66 批從 app.js 切出來）；OWN_NAME_* 第 67 批從 main.js 切進來
     # sense:<做法>、sense:draw、sense:let（有所感）；dunwu:think、dunwu:<候選>、dunwu:own（特殊頓悟取名）。Feature.prefix 收 tuple（第 11 批）
     prefix = ("sense", "dunwu")
-    content = ("insight_scenes.json",)  # content.py 照它到這一包的 content/ 載、content.check_insight_scenes 照舊驗（核心沒有 import 這一包）；檔名照舊
+    content = ("insight_scenes.json",)  # content.py 照它到這一包的 content/ 載、checks.check_insight_scenes 照舊驗（content.validate 原位經 check_at 叫，核心沒有 import 這一包）；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：有所感那一份與流水號、選錯的帳；特殊頓悟這一季的次數與保底、等著取名的那一個。
     # 換季全部跟著新角色重來（Game._reset_player_for_new_season 本來就不帶）。私有意境 own_insights／own_serial 是共用規則層 insights 的（合成也寫）
     player_fields = ("sensing", "sense_serial", "sense_misses", "epiphanies", "epiphany_dry", "god_naming")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("insight_scenes", lambda *a: checks.check_insight_scenes(*a)),
+            ContentSlot("insight_strong", lambda *a: checks.check_insight_strong(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """一直開著：有所感沒有總開關（有沒有場景看內容 content/insight_scenes.json），特殊頓悟看自己的 Config.epiphany——
@@ -43,12 +54,20 @@ class SenseFeature(Feature):
         """特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；整季機器人先按靜心思名、再從三個候選裡挑（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
         return option.id == "dunwu:own"
 
-    def scene(self, ctx):
-        """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 宴客那一行之後的兩支）：有所感的卡、特殊頓悟取名那一張；
-        都不是是 None。不問 enabled（原位本來就不看開關）。"""
-        from . import actions  # noqa: PLC0415
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
 
-        return actions.scene(ctx)
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的兩格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：有所感的卡、特殊頓悟取名那一張，都不是是 None；
+        圖只看 sensing、不看 god_naming：取名疊在談著上面時文字是取名、圖是人像。"""
+        if self._scenes is None:
+            from . import actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "sense", lambda ctx: actions.scene(ctx)),
+                SceneHook("art", "sense", lambda ctx: {} if ctx.state.player.sensing is not None else None),
+            )
+        return self._scenes
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）

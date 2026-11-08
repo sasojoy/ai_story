@@ -7,7 +7,8 @@ import pytest
 
 from conftest import FixedRandom
 from outcomes_kit import CHASE, GIVE, LEAVE, OLD, OLD_FAIL, PROMPT, TALK, answer, branch_game, fight
-from tianxia import annals, calendar, event_llm, events, outcomes, rules
+from tianxia.features.zhuan import standing as annals
+from tianxia import calendar, event_llm, events, outcomes, rules
 from tianxia.engine import EVIL_ANNAL, FREE_TEXT_OPTION
 from tianxia.models import Effect, FreeTextChoice
 

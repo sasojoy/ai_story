@@ -9,7 +9,7 @@ from test_shop_web import _click, run
 
 import server
 import webharness
-from tianxia import shopview
+from tianxia.features.smithy import shop_view as smithy_shop
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
@@ -23,7 +23,7 @@ def _smithy(bag, on=True):
 
 def test_the_forge_grid_gets_a_fourth_column_for_tier_four():
     game = _smithy({"gang_1": 2, "gang_2": 1, "gang_3": 1, "gang_4": 1})
-    assert shopview.smith_view(game.state, game.content, game.world)["four"] is True
+    assert smithy_shop.smith_view(game.state, game.content, game.world)["four"] is True
     html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;", S={"shopTab": "forge"})
     assert 'class="cells four"' in html and 'class="cell t4' in html
 
@@ -65,14 +65,14 @@ def test_the_brew_cells_fill_the_row_up_to_tier_four():
 
 def test_tier_four_off_keeps_three_columns():
     game = _smithy({"gang_1": 2, "gang_3": 1}, on=False)
-    assert shopview.smith_view(game.state, game.content, game.world)["four"] is False
+    assert smithy_shop.smith_view(game.state, game.content, game.world)["four"] is False
     html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;", S={"shopTab": "forge"})
     assert 'class="cells"' in html and "cells four" not in html
 
 
 def test_the_rule_takes_the_smiths_usual_line_in_a_gold_frame():
     game = _smithy({"gang_4": 1})
-    rule = shopview.smith_view(game.state, game.content, game.world)["rule"]
+    rule = smithy_shop.smith_view(game.state, game.content, game.world)["rule"]
     assert rule
     html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
     assert f'<p class="shop-line rule">{rule}</p>' in html
@@ -84,7 +84,7 @@ def test_the_rule_takes_the_smiths_usual_line_in_a_gold_frame():
 def test_the_new_rules_sit_in_the_shop_section():
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert ".shop-layer .cells.four .cell-row { grid-template-columns: 1.6em repeat(4, minmax(0, 1fr)); }" in css
     assert ".shop-layer .cells.four .cell-row .t4 { grid-column: 5; }" in css
     assert ".shop-layer .up-rows.four .up-row { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); }" in css

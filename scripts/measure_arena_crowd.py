@@ -23,7 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import arena, arena_crowd, bot_policy, database  # noqa: E402
+from tianxia.features.bout import arena_rules as arena, arena_crowd  # noqa: E402
+from tianxia import bot_policy, database  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402

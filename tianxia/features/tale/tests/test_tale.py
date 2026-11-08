@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from conftest import real_content
 
-from tianxia.battle_instance import BattleInstance, BattleParticipant, BattleRoundRecord, GambleMoment
+from tianxia.features.battle.instance import BattleInstance, BattleParticipant, BattleRoundRecord, GambleMoment
 from tianxia.features.tale import tale
 
 SIDES = {"guan": "官軍", "huang": "黃巾軍"}

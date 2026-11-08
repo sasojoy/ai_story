@@ -3,7 +3,7 @@
 import pytest
 
 from stances_kit import LUZHI, real_game
-from tianxia import errands
+from tianxia.features.companions import errands
 from tianxia.core.registry import FEATURES
 
 

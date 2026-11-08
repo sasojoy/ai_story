@@ -20,3 +20,9 @@
     renderPage();
     await choose(document.querySelector(`[data-id="${CSS.escape(id)}"]`) || document.body, id);
   }
+  async function hireClick(act, el, ev) {
+    switch (act) {
+        case "tav-hire": await tavHire(el.dataset.id); break;
+    } // hireClick
+  } // hireClick
+  registerClicks(hireClick, ["tav-hire"]);

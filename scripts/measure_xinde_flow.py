@@ -16,7 +16,9 @@ import measure_chuangong as mc  # noqa: E402  （它會把 stdout 包成 UTF-8�
 
 import random  # noqa: E402
 
-from tianxia import bot, sensing, team  # noqa: E402
+from tianxia import bot  # noqa: E402
+from tianxia.features.sense import sensing  # noqa: E402
+from tianxia import team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

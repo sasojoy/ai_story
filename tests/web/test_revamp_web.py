@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import pytest
 from conftest import real_content
@@ -12,6 +13,7 @@ from test_prologue_web import run as run_classic
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.admin import routes as admin_routes
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
@@ -74,6 +76,24 @@ def test_talking_to_a_figure_draws_the_overlay_with_the_same_options(wan):
     assert 'data-id="talk:0"' in page and 'data-id="talk:leave"' in page
     assert "「你來了。」" in page and "（情誼 7）" not in page  # 名字在名牌上、情誼在框底，不寫第二次
     assert "情誼 7" in page
+
+
+def test_a_long_reply_never_hides_the_leave_button(wan):
+    """Joy 2026-11-07「跟人物對話時會因為句子長被卡到沒辦法按告辭離開」：告辭釘在右上角、不跟選項擠，
+    選項自己捲、對話框有上限自己捲。"""
+    m = server.main_view(wan)
+    m["talk"] = {"id": "zhujun", "name": "朱儁", "side": "官軍", "affinity": 7, "face": None}
+    m["options"] = [{"id": f"talk:{i}", "label": "「" + "將軍所言甚是，" * 6 + "」", "enabled": True} for i in range(4)]
+    m["options"] += [{"id": "talk:say", "label": "自己說…", "enabled": True}, {"id": "talk:leave", "label": "告辭", "enabled": True}]
+    m["scene"] = "<p>「" + "黃巾賊勢正盛，宛城一線吃緊，你我須得從長計議。" * 20 + "」</p>"
+    m["art"] = None
+    page = run(m, "return H.pageJianghu();")
+    pinned = page.split('class="vn-leave"')[1].split("</div>")[0]
+    assert 'data-id="talk:leave"' in pinned
+    menu = page.split('class="vn-menu"')[1].split('class="vn-box')[0]
+    assert 'data-id="talk:leave"' not in menu and 'data-id="talk:3"' in menu
+    css = (Path(server.__file__).parent / "web" / "style.css").read_text(encoding="utf-8")
+    assert ".vn-layer.talk .vn-paper { max-height:" in css and ".vn-leave {" in css
 
 
 def test_the_log_groups_by_day_and_shows_affinity_gains(wan):
@@ -142,7 +162,7 @@ def test_the_duty_card_leads_with_what_can_be_done_now(wan):
 def test_the_admin_page_has_tiles_tabs_and_a_hold_to_confirm_danger_zone(wan):
     wan.state.player.name = "Rayal"
     m = server.main_view(wan)
-    page = run(m, "return H.adminHtml();", S={"admin": server.admin_choices(wan)})
+    page = run(m, "return H.adminHtml();", S={"admin": admin_routes.admin_choices(server, wan)})
     assert len(__import__("re").findall(r'class="ad-tile( hot)?"', page)) == 4 and 'data-act="ad-tab"' in page
     assert 'data-act="ad-hold" data-op="end_season"' in page and 'data-act="ad-hold" data-op="next_season"' in page
     assert 'data-act="admin" data-op="end_season"' not in page  # 收季只在危險區、要長按
@@ -153,8 +173,10 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     性子隨互動變了（另一串做）時多「如今」與變化紀錄。每一位大勢人物都有一份。"""
     import json
 
+    from tianxia.features.socialize import intro as socialize_intro
+
     figures = json.loads((server.ROOT / "content" / "figures.json").read_text(encoding="utf-8"))
-    assert all(server.figure_intro(f["id"]) and server.figure_intro(f["id"])["nature"] for f in figures)
+    assert all(socialize_intro.figure_intro(f["id"]) and socialize_intro.figure_intro(f["id"])["nature"] for f in figures)
     m = server.main_view(wan)
     hejin = next(f for f in m["figures_here"] if f["id"] == "hejin")
     assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []

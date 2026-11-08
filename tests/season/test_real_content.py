@@ -17,14 +17,16 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import calendar, companion_agent, insight_fx, prologue, team
+from tianxia import calendar
+from tianxia.features.companions import companion_agent
+from tianxia import insight_fx, prologue, team
 from tianxia.rules import audience_hint
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
 from tianxia.content import load_content
 from tianxia.engine import Game
-from tianxia.mapart import BANNER_BOX, FRAME_INSIDE
-from tianxia.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
+from tianxia.features.map.mapart import BANNER_BOX, FRAME_INSIDE
+from tianxia.features.map.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
 from tianxia.ollama_client import OllamaClient
 from tianxia.team import fight
 
@@ -126,7 +128,8 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
     """照正式內容把草廬走到熔蠻牛拳（剛走完前十步、還站在草廬）：遇險、拜師、看修練頁、草廬四景挑一個做法（attribute）去悟、
     把意境裝進基礎拳腳、練到第三成、揣摩到二重、調息、雪恥、配點、熔蠻牛拳（武學重構之後的序章）。每一步都要真的往前走。
     luck：戰場運氣固定成最好（0.99）或最壞（0.0）——雪恥那一場照樣要是險勝（設計 3.2「必定險勝」）。回傳裝了意境的那一門。"""
-    from tianxia import prologue, sensing
+    from tianxia import prologue
+    from tianxia.features.sense import sensing
 
     content, p = game.content, game.state.player
     game.world.open_season(content, now=0.0)
@@ -322,7 +325,7 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
     """T7 走查 W-B：目標在修練頁的步驟（5、6、10）在江湖頁、煉製頁時也有東西發光（修練分頁），裡面照舊指到那一列的鍵；
     步驟 4 在修練頁，要裝意境的那一門帶 slot；步驟 6 的煉製頁，要放進爐子的意境在挑選清單裡發光（伺服器標、網頁照亮，見 Game.art_rows）。
     真內容的修練頁與煉製頁：伺服器標的鍵跟步驟的 glow 對得上。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     steps = {step.id: step for step in content.tutorial.steps}
     for step_id in ("p5_level", "p10_melt"):
@@ -644,7 +647,7 @@ DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽�
 
 
 def test_the_real_hint_book_has_all_eighteen(content):
-    from tianxia import hints
+    from tianxia.features.guide import hints
 
     ids = [h.id for h in content.hints.hints]
     assert len(ids) == 35 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條，補新手教學多十一條）
@@ -783,7 +786,7 @@ def test_the_rejoin_greetings_live_in_the_enlistment_block_only(content):
 
 def test_every_real_hint_can_be_said_by_someone_who_can_meet_it(content):
     """每一條對某個真的角色說得出來：師父的條散人與有陣營的都說得出；陣營的條有陣營時說得出，散人只有 13、14、17 說得出。"""
-    from tianxia import hints
+    from tianxia.features.guide import hints
     from tianxia.state import new_game_state
 
     state = new_game_state(content, "甲")
@@ -828,7 +831,10 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 def season_of(content, tmp_path_factory):
     """機器人照種子玩完的一季，同一個種子在這個模組裡只跑一次（測試整併第 3 區）：種子 1 那一季以前跑兩次，
     「整季 [1]」與「學會悟、合、修」各一次，兩次一模一樣（play_season 對同一份內容、同一個種子是決定性的，也不改內容）；
-    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。"""
+    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。
+    第 108 批：「學會悟、合、修」那四句併進整季 [1]（-n 4 下兩條分到不同 worker 就各跑一季）；閒著的選單那一條
+    第一季規則關著的那一半併進種子 2 這一季（_idle_observer 只讀不改：帶不帶它，種子 2 這一季的結局、看過的事件、
+    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。"""
     from tianxia.sqlite_world import open_world
 
     games, worlds = {}, []
@@ -836,9 +842,14 @@ def season_of(content, tmp_path_factory):
     def season(seed):
         if seed not in games:
             worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
-            games[seed] = play_season(content, seed, world=worlds[-1])
+            observe = None
+            if seed == 2:
+                season.idle_seen[seed] = set()
+                observe = _idle_observer(season.idle_seen[seed])
+            games[seed] = play_season(content, seed, world=worlds[-1], observe=observe)
         return games[seed]
 
+    season.idle_seen = {}
     yield season
     for world in worlds:
         world.db.close()
@@ -851,16 +862,14 @@ def test_bot_plays_a_full_season(season_of, seed):
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 3
-
-
-@pytest.mark.slow
-def test_the_bot_learns_insights_fuses_and_cultivates(season_of):
-    game = season_of(1)
-    p = game.state.player
-    assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
-    assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
-    assert p.art_quality or p.art_mastery, "整季都沒修練過"
-    assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+    if seed == 1:  # 機器人學會悟、合、修（以前另一條測試，看的是同一季）
+        p = game.state.player
+        assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
+        assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
+        assert p.art_quality or p.art_mastery, "整季都沒修練過"
+        assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+    if seed == 2:  # 閒著的選單、第一季規則關著（以前 test_every_idle_menu_id…[False] 跑 700 步，現在看整季）
+        _assert_idle_ids_known(season_of.idle_seen[seed])
 
 
 def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
@@ -874,7 +883,8 @@ def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
 def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content, world):
     """審查裁示 F1（現在是師父的第 5 步）：合成出來的那一門一到手就有了，這一步若只看「有沒有」一開始就成立、教不到練成；
     要它真的練到第三成：先換上、練一次還不算，練到第三成才算。"""
-    from tianxia import prologue, sensing
+    from tianxia import prologue
+    from tianxia.features.sense import sensing
 
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     game.world.open_season(content, now=0.0)
@@ -1278,7 +1288,7 @@ def test_the_showdown_is_three_acts_of_three_rounds_and_ends_early_at_90_or_10(c
     戰局到 90 以上或 10 以下就提前收場。"""
     showdown = content.battles["huangjin_showdown"]
     assert (len(showdown.acts), showdown.rounds_per_act) == (3, 3)
-    from tianxia.battle_instance import CENTER
+    from tianxia.features.battle.instance import CENTER
 
     assert (CENTER + showdown.decisive_margin, CENTER - showdown.decisive_margin) == (90, 10)  # 提前收場看中線 50（戰鬥系統 5.3）
 
@@ -1978,7 +1988,7 @@ def _push_huangjin_to(game, value: int) -> None:
 def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     """開關打開、季蓋了章：黃巾聲勢推到 50／60／80／10 都不觸發（沒有 road_blocked、不開戰、不收季、沒有
     huangjin_crushed）；「主線與目標」沒有黃巾之亂；管理者的開戰選單沒有 beta 那場、也開不了。開關關著時四個門檻與主線照舊。"""
-    from tianxia.guide import quest_text
+    from tianxia.features.guide.rules import quest_text
     from tianxia.world import check_thresholds
 
     c = load_content(CONTENT_DIR, profile="week7")
@@ -2128,7 +2138,7 @@ def test_every_real_battle_is_three_moves_per_side_in_every_act(content):
 
 def test_server_bots_play_the_real_showdowns_by_move_not_at_random(tmp_path):
     """決戰改版一 Task 5 之前，真實內容的選項沒有 move，假人對每個選項都是 0 分、等於亂出；換成三招之後照自己每招的份量挑。"""
-    from tianxia import battle_instance as bi
+    from tianxia.features.battle import instance as bi
     from tianxia import bot_policy
     from tianxia.engine import Option
     from tianxia.models import MOVES
@@ -2155,7 +2165,7 @@ def test_server_bots_play_the_real_showdowns_by_move_not_at_random(tmp_path):
 ])
 def test_real_showdowns_tie_goes_to_defender(content, battle_id, winner):
     """計畫 T8：長社 50→官軍險勝；廣宗 50→黃巾險勝；宛城甲 50→黃巾、乙 50→官軍（戰鬥系統 4.2、附錄 A.5）。"""
-    from tianxia import battle_instance as bi
+    from tianxia.features.battle import instance as bi
 
     definition = content.battles[battle_id]
     instance = bi.start_muster(definition, now=0.0)
@@ -2178,7 +2188,7 @@ def test_wan_city_reads_like_its_version_from_week_three(content):
 def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
     """週末設定的真實內容：長社、宛城、廣宗照排定的時間在各自的大區開集結（起點照當時的戰況），沒人參戰也照起點判、
     交給時刻表結算（宛城帶版本前綴）；beta 那場一次也沒開。"""
-    from tianxia import battle_instance as bi
+    from tianxia.features.battle import instance as bi
     from tianxia.rules import trend_value
     from tianxia.sqlite_world import open_world
 
@@ -2219,27 +2229,38 @@ def test_real_showdowns_start_from_the_opening_fronts():
     assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize("season_one", [False, True])
-def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
-    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「探索」；
-    決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。"""
-    from tianxia.models import allow_known
-    from tianxia.sqlite_world import open_world
-
-    real = content.model_copy(deep=True)
-    real.config.season_one = season_one
-    seen: set[str] = set()
+def _idle_observer(seen: set[str]):
+    """閒著的選單（有「探索」；決戰集結時前面多的 battle: 不算）上的 id 收進 seen。只讀（tick=False），不改那一季。"""
 
     def observe(game):
         ids = [o.id for o in game.options(odds=False, tick=False)]
         if "act:explore" in ids:  # 閒著的選單（engine.IDLE_MARK；以前認打坐，2026-10-12 拿掉了）
             seen.update(oid for oid in ids if not oid.startswith("battle:"))
 
-    play_season(real, 2, max_steps=700, observe=observe, world=open_world(tmp_path / f"idle-{season_one}.db"))
+    return observe
+
+
+def _assert_idle_ids_known(seen: set[str]) -> None:
+    from tianxia.models import allow_known
+
     assert "act:explore" in seen and any(oid.startswith("move:") for oid in seen)
     stray = {oid for oid in seen if not allow_known(oid)}
     assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("season_one", [True])
+def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
+    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「探索」；
+    決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。
+    第一季規則關著的那一半併進整季 [2]（第 108 批，看整季）；這裡只剩打開的那一半。"""
+    from tianxia.sqlite_world import open_world
+
+    real = content.model_copy(deep=True)
+    real.config.season_one = season_one
+    seen: set[str] = set()
+    play_season(real, 2, max_steps=300, observe=_idle_observer(seen), world=open_world(tmp_path / f"idle-{season_one}.db"))  # 第 108 批 700 → 300
+    _assert_idle_ids_known(seen)
 
 
 # ── 意境提示：每個地點最濃的意境（意境提示設計第三節，企劃者 10/15 守「渡口是風」）──

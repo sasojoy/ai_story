@@ -9,8 +9,10 @@ from unittest import mock
 import pytest
 import requests
 
-from tianxia import companion_agent, figure_life, parley
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.companions import companion_agent
+from tianxia import figure_life
+from tianxia.features.companions import parley
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.engine import PLAN_OPTION, ROAD_SAY
 from tianxia.ollama_client import OllamaClient
 from tianxia.state import ParleyBacking

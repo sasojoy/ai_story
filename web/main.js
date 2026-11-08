@@ -297,6 +297,17 @@
     // 四格（減法季批 1，整合設計 6.3）：探索、出陣、交友、移動。尋敵、操練那一格只在新手引導（序章、初入江湖）時還在——引導的話叫你按它
     // （content/tutorial.json）；平常收進「此地還能做」（不加進 used），批 2 的探索一顆接手之前照樣按得到
     const guiding = !!(pro() || onb());
+    // 交友先挑人（Joy 2026-11-08 UI 手感乙批 6-1 選「先跳出名單挑人」）：此地有兩個人以上（大勢人物＋江湖人）時，交友那一格是展開鈕，
+    // 點了在底下列出此地的人：人物說得上話的直接開口（fig-talk，照伺服器的 talk.via），說不上的打開人物卡寫原因；江湖人打開他的玩家卡。
+    // 只有一個人時照舊一按就交友。交友這一下本來會走別的（福緣的同伴、一次性事件、結識事件：沒有哪一位的 talk.via 是交友本身）時，
+    // 名單最上面多一顆照舊的「交友」
+    const figsHere = (m.figures_here || []), peersHere = (m.here || []);
+    const socialPick = !guiding && figsHere.length + peersHere.length >= 2 && !!(byId["act:socialize"] || byId["act:call"]);
+    const socialAsIs = !figsHere.some((f) => f.talk.via && /^act:(socialize|call)$/.test(f.talk.via[0]));
+    const socialCard = !(socialPick && S.wheelSel === "social") ? "" : `<div class="card act-move"><div class="options">${socialAsIs
+      ? `<button class="btn go" data-act="choose" data-id="${esc((byId["act:socialize"] || byId["act:call"]).id)}"><span class="k">→</span><span>四處結交，看會遇上誰</span></button>` : ""}${figsHere.map((f) => `
+          <button class="btn go" data-act="${f.talk.via ? "fig-talk" : "fig-open"}" data-id="${esc(f.id)}"><span class="k">→</span><span>${esc(f.name)}<small class="opt-note">${esc(f.intro && f.intro.role ? f.intro.role : f.side || "")}${f.talk.via ? "" : `・${esc(f.talk.why || "")}`}</small></span></button>`).join("")}${peersHere.map((p) => `
+          <button class="btn go" data-act="peer" data-name="${esc(p.name)}"><span class="k">→</span><span>${esc(p.name)}<small class="opt-note">江湖人・${esc(p.side || "")}</small></span></button>`).join("")}</div></div>`; // 待 joy 潤：四處結交，看會遇上誰
     const cells = ACT_CELLS.map((d0) => {
       const d = d0.key === "train" && m.sortie ? { ...d0, ...SORTIE_CELL } : d0;
       if (d.key === "practice" && !guiding) return "";
@@ -351,12 +362,14 @@
       // （卡底那顆鈕寫為什麼）。截糧的運糧隊經過（照舊直接打）、散人與不在爭奪之列（照舊點了說整句）不算
       const duelCell = d.key === "train" && sortieCardOn(m) && !SORTIE_LONG_SUB[detail];
       const duelOpen = duelCell && S.wheelSel === SX_OPEN;
+      const pickOpen = d.key === "social" && socialPick && S.wheelSel === "social";
       const attrs = duelCell ? `data-act="sortie-open" aria-expanded="${duelOpen}"`
+        : d.key === "social" && socialPick && o.enabled ? `data-act="wheel" data-key="social" aria-expanded="${pickOpen}"`
         : wheel ? `data-act="wheel" data-key="explore" aria-expanded="${exploreOpen}"`
         : drillFull ? `data-act="drill-full" aria-expanded="${S.wheelSel === "move"}"` // 格子自己的 data-key 是 practice，不能再寫一個
         : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"`
         : why ? `data-act="opt-why" data-why="${esc(why)}" aria-disabled="true"` : "disabled";
-      return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled || duelOpen ? "" : " off") + ((wheel && exploreOpen) || duelOpen ? " on" : ""), note);
+      return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled || duelOpen ? "" : " off") + ((wheel && exploreOpen) || duelOpen || pickOpen ? " on" : ""), note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
     moves.forEach((o) => used.add(o.id));
@@ -394,7 +407,7 @@
     // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
     const peers = callPeers(m);
     S.hereExtras = extras;
-    if (typeof revampOn === "function" && revampOn(m) && !hotHere && !guiding) return `${sealRow}${summonsRow}${drawn0(cells)}${moveCard}${exploreCard}${sortiePanelHtml(m)}${sortieAnswering(m) ? "" : sortieDuelsHtml(m)}`; // 介面重整：摺疊換成此地可為那一排
+    if (typeof revampOn === "function" && revampOn(m) && !hotHere && !guiding) return `${sealRow}${summonsRow}${drawn0(cells)}${moveCard}${socialCard}${exploreCard}${sortiePanelHtml(m)}${sortieAnswering(m) ? "" : sortieDuelsHtml(m)}`; // 介面重整：摺疊換成此地可為那一排
     const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id] ? `
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
@@ -404,7 +417,7 @@
     const duelPanel = sortiePanelHtml(m);
     const duelList = sortieAnswering(m) ? "" : sortieDuelsHtml(m);
     // 以前行動列底下還有每一格的說明三行與「玩法說明 ›」（explain-1、2）：減法季批 1 拿掉了（整合設計 6.3；說明在本週卡的「為什麼」與設定裡）
-    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${moveCard}${exploreCard}${duelPanel}${duelList}${here}`;
+    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${moveCard}${socialCard}${exploreCard}${duelPanel}${duelList}${here}`;
   }
 
 
@@ -559,26 +572,11 @@
       + `<b class="side-guan">官 ${g}</b><span class="wk-track"><i style="width:${at}%"></i>${ticks}<u style="left:${at}%"></u></span><b class="side-huang">${h} 黃</b></div>`
       + `${gap ? `<p class="wk-gap">${gap}</p>` : ""}</div>`;
   }
-  // 中間那一格：投靠了的人是這一回（章回卡的內容），沒投靠的人是兩顆投靠鈕（最近的投靠點、走多久；就在那裡直接按投靠）
-  const WK_JOIN = "先投一方", WK_JOIN_NOTE = "，才有章回、軍令和戰功", WK_JOIN_BTN = "投{side}", WK_HERE = "就在這"; // 待 joy 潤
-  function wkJoinHtml(m) {
-    const sc = m.sides_card;
-    if (!sc || sc.joined) return "";
-    const btn = (c) => {
-      const near = (c.join_at || []).slice().sort((a, b) => (a.minutes | 0) - (b.minutes | 0))[0];
-      const sub = near ? `${esc(near.name)}・${near.minutes | 0 ? `${near.minutes | 0} 分` : WK_HERE}` : esc(c.where[0] || "");
-      const here = near && !(near.minutes | 0) && (m.options || []).some((o) => o.id === `faction:${c.id}`);
-      const act = here ? `data-act="choose" data-id="faction:${esc(c.id)}"` : `data-act="tab" data-tab="map"${gotoAttrs(near && near.location)}`;
-      return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${WK_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;
-    };
-    const two = sc.cols.filter((c) => c.id === "guan" || c.id === "huang");
-    return `<div class="wk-mid"><p class="ch-next"><b>${WK_JOIN}</b>${WK_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
-  }
   const WK_MORE = "這一季在打什麼・下一件", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
   function wkBoxHtml(m, w, open) {
-    const bp = typeof bpOn === "function" && bpOn(m);
+    const bp = bpOn(m);
     const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
-    const ch = chapterCardHtml(m, true), join = ch ? "" : wkJoinHtml(m);
+    const ch = chapterCardHtml(m, true), join = ch ? "" : factionJoinHtml(m);
     const free = m.sides_card && !m.sides_card.joined;
     return `<section id="week" class="card wk-box" aria-label="${esc(w.label)}${esc(w.when)}">`
       + `<div class="wk-top"><p class="wk-head"><b class="wk-seg">${esc(w.when)}</b><span class="wk-th">${esc(w.theme || "")}</span></p>`
@@ -587,15 +585,7 @@
       + `<button class="wk-x" data-act="wk-hide" data-id="strip" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button></div></section>`;
   }
   // 點最下面那一行拉起來的那一層：自己那一方攤開、別方收成一行（點了攤開）；投靠在哪只給還沒投靠的人。其餘照以前「為什麼」那一塊
-  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局", WK_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤
-  function wkSidesSheetHtml(sc) {
-    if (!sc) return "";
-    const rows = SIDES_ROWS.filter(([k]) => sc.joined ? k !== "where" : true);
-    const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
-    return `<div class="sides">${sc.cols.map((c) => (!sc.joined || c.mine
-      ? `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>${dl(c)}</div>`
-      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? WK_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;
-  }
+  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局"; // 待 joy 潤
   function wkSheetHtml(m, w) {
     return `<div class="sheet-bg" data-act="wk" data-id="why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${WK_SHEET}"><div class="grip"></div>`
       + `<div class="top-row"><h3 style="flex:1">${WK_SHEET}</h3><button class="btn small ghost" data-act="wk" data-id="why">關閉</button></div>`
@@ -669,7 +659,7 @@
     const howto = s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO; // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
     if (sheet) { // 拉起來的那一層（PM 2026-11-07：別又是一大片字）：三方、下一件、新手、簽到各一小塊；收季規則、這一季在打什麼、可能的結局收進最底「玩法說明」
       const rules = `${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${warHelp(m, "stance")}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`;
-      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複
+      return `${m.sides_card ? factionSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複
         + `<details class="wk-rules"><summary>${WK_RULES}</summary>${rules}${howto}</details>`;
     }
     return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
@@ -1020,7 +1010,7 @@
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     // 戰場面板（battle.js，Joy 2026-11-06 大決戰優化，設計稿方案甲）：開打、集結時排在最上面，出招鈕與放手一搏的輸入框緊接在面板裡；
     // 本週卡、「剛剛」與場景卡排到面板底下（第一屏是倒數、主將、出招）
-    const bp = typeof bpOn === "function" && bpOn(m) ? bpPanelHtml(m, myTurn ? free : "") : "";
+    const bp = bpOn(m) ? bpPanelHtml(m, myTurn ? free : "") : "";
     if (bp && myTurn) {
       return `${hints}${resultCard}${bp}${bpDropMoves(menu)}${scene}${peopleAfter}${guide}${letter}${peek}${now}${links}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
@@ -1034,10 +1024,11 @@
       const inner = battleInner(m);
       const clamp = !S.sceneRvOpen && !/<button|<form/.test(inner);
       const social = m.party || (m.calls && m.calls.length) ? socialHtml(m) : "";
+      // 行動列排在「要事」上面（UI 手感甲批 1-2；Joy 2026-10-26「四顆行動鈕一定在第一屏」）
       const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
       const extras = S.hereExtras || [];
       const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
-      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${bp ? bpDropMoves(menu) : menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${bp ? bpDropMoves(menu) : menu}${dutyCardHtml(m, parts)}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
     return `${hints}${resultCard}${bp}${peek}${letter}${now}${scene}${links}${guideUp}${free}${bp ? bpDropMoves(menu) : menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;

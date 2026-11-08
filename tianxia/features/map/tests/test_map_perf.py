@@ -133,7 +133,7 @@ def _map_game():
 def test_fb322_dragging_never_swaps_the_cursor():
     """FB-322：拖的時候不換游標（cursor 會一路繼承、換一次整棵重算樣式）——游標寫死 grab，沒有 grabbing 那一套。"""
     src = webharness.app_source()
-    css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
+    css = (Path(server.WEB) / "map.css").read_text(encoding="utf-8")
     assert "function mvDown(" in src and "grabbing" not in src
     assert not re.search(r"\.(mapx|map-wrap|mv-)[^{}]*\{[^}]*grabbing", css)  # 地圖那一塊沒有；自創的轉盤按著時換 grabbing 是別處
 
@@ -168,7 +168,7 @@ def test_fb323_the_pulses_live_in_the_layer_above_the_map_not_in_its_svg():
 def test_fb323_the_pulse_grows_by_transform_and_fades_by_opacity():
     """FB-323（企劃者 10/17 從對比圖選丙）：圈的跳法是整個圈放大（transform）、淡出（opacity），合成器自己跑、閒置不吃主執行緒；
     放到 2.25 倍。不改大小（那要主執行緒每一幀重排）。"""
-    css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
+    css = (Path(server.WEB) / "map.css").read_text(encoding="utf-8")
     for name in ("mk-pulse", "mv-pulse"):
         frames = css[css.index(f"@keyframes {name}"):]
         frames = frames[: frames.index("} }") + 3]
@@ -178,14 +178,14 @@ def test_fb323_the_pulse_grows_by_transform_and_fades_by_opacity():
 
 
 def _away_rules() -> dict[str, str]:
-    """style.css 裡 #map-host.away 開頭的每一條規則：選擇器 → 大括號裡那一段。"""
-    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    """map.css 裡 #map-host.away 開頭的每一條規則：選擇器 → 大括號裡那一段。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "map.css").read_text(encoding="utf-8"), flags=re.S)
     return {sel.strip(): body.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css) if sel.strip().startswith("#map-host.away")}
 
 
 def test_fb326_nothing_in_the_hidden_map_takes_a_tap():
     """藏起來的輿圖那一層（FB-324）蓋在另外四頁上：裡面不能有任何東西收點擊；pointer-events 不用不管 visibility 的那幾個值（FB-326）。"""
-    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "map.css").read_text(encoding="utf-8"), flags=re.S)
     assert not re.search(r"pointer-events:\s*(all|painted|fill|stroke)\b", css)  # 這幾個值都不管 visibility
     assert _away_rules()["#map-host.away *"] == "pointer-events: none !important;"
 

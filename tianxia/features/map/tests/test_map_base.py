@@ -7,7 +7,7 @@ import re
 import pytest
 
 from conftest import real_content
-from tianxia import mapart, mapview
+from tianxia.features.map import mapart, mapview
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

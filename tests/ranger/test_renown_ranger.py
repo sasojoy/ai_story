@@ -5,7 +5,9 @@ import pytest
 
 from conftest import real_content
 
-from tianxia import bounties, ranger, renown, rules, social
+from tianxia.features.bounties import rules as bounties
+from tianxia import ranger, renown, rules
+from tianxia.features.peers import social
 from tianxia.models import Condition
 from tianxia.state import Bounty, new_game_state
 

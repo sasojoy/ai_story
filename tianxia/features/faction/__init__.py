@@ -3,13 +3,15 @@
 - join_actions.py：投靠與拜入門派（投靠兩步確認、選邊、拜入要依附的門派之後的傾向、待確認的選單、sect: 那一顆）；「你這一步」的去投靠那一格（第 36 批）
 - lean_actions.py：豪強改幫（三陣營四勝利）
 - defect_actions.py：叛投的行動（確認、驗證、同伴回江湖、選單能叛投去的、確認畫面的場景）
-- defection.py：叛投的規則（原 tianxia/defection.py；那個名字留成指到這裡的別名）
+- defection.py：叛投的規則（原 tianxia/defection.py）
 - ending_actions.py：季末與三方卡（起手資源與稱號、結局卡、三方卡、此刻拿第幾階、四勝利開著沒）
 - bots.py：假人的分數（原本 bot_policy.score 的 defect／sect 那兩段；faction: 原本落到最後的 None）
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, slot_some
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, StepHook, slot_some
+from tianxia.core.features import ContentSlot
 
 
 class FactionFeature(Feature):
@@ -21,6 +23,14 @@ class FactionFeature(Feature):
     content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照它到這一包的 content/ 載；檔名照舊
     carried: tuple[str, ...] = ()
     _defection: tuple[DefectHook, ...] | None = None
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("faction_choices", lambda *a: checks.check_faction_choices(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """一律開著：choose 與 bot_pick 原位本來就不看任何開關（投靠要劇本有陣營、改幫要四勝利、拜入門派要一類一顆，判斷在選單與步驟裡）；
@@ -139,8 +149,24 @@ class FactionFeature(Feature):
                 MenuHook("here", "lean", lambda ctx, loc, cost, odds: lean_actions.lean_options(ctx)),
                 MenuHook("idle", "faction", lambda ctx: join_actions.picking_ally(ctx)),
                 MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
+                MenuHook("stale", "lean", lambda ctx, option, option_id: lean_actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的三格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：還沒挑依附哪一邊、投靠的確認、叛投的確認。髒存檔照舊：投靠或叛投的那一軍不在了，這裡照舊丟 LookupError。"""
+        if self._scenes is None:
+            from . import defect_actions, join_actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "ally", lambda ctx: join_actions.ally_scene(ctx)),
+                SceneHook("own", "faction", lambda ctx: join_actions.faction_scene(ctx)),
+                SceneHook("own", "defect", lambda ctx: defect_actions.scene(ctx) if ctx.state.player.pending_defect else None),
+            )
+        return self._scenes
 
     # howto（全部拆包第 59 批「引導二」）
     def howto(self) -> tuple[HowtoHook, ...]:

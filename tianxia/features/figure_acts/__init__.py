@@ -120,6 +120,8 @@ class FigureActsFeature(Feature):
                 StatusHook("main", "plan", lambda ctx, frame: slot_some("plan", plan_actions.plan_view(ctx))),
                 # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
                 StatusHook("main", "place_deeds", lambda ctx, frame: slot_some("place_deeds", plan_actions.place_deeds_view(ctx))),
+                # 管理頁救場「叫回人物」：這一季退場、重創的大勢人物（沒有就不畫那一列；第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "fallen", lambda ctx, frame: {"fallen": [{"label": ctx.content.figures[fid].name, "id": fid} for fid in ctx.admin_fallen()]}),
             )
         return self._status_slots
 

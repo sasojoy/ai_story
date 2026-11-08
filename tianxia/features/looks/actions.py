@@ -1,4 +1,4 @@
-"""擂台形象的動作（功能包 tianxia/features/looks/）。ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。"""
+"""擂台形象的動作（功能包 tianxia/features/looks/）。ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。"""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import journal  # 核心（江湖紀錄）
 from tianxia.characters import name_key
+from tianxia.core import identity_base  # 綁手機才能上架與買市集形象（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.state import JournalEntry
 
 from . import market, moves, mvp, orders, rules, scenes, studio
@@ -486,6 +487,11 @@ def market_list(ctx: Game, look: str, price: int) -> list[str]:
     wallet = ctx._wallet()
     if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content):
         return ctx._log([market.NOT_OPEN])
+    if not identity_base.phone_ok(ctx, "looks_market"):  # 只問上架的人（第 205 批）
+        return ctx._log([identity_base.PHONE_NEEDED])
+    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（第 208 批）：擋上架；M 波起買也擋（花元寶），下架不擋
+    if held:
+        return ctx._log([held])
     done, line = market.list_look(wallet, ctx._mall_owner(), look, price)
     if done:
         journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
@@ -504,6 +510,11 @@ def market_buy(ctx: Game, look: str, ref: str) -> list[str]:
     wallet = ctx._wallet()
     if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content) or ctx.state.player.bot:
         return ctx._log([market.NOT_OPEN])
+    if not identity_base.phone_ok(ctx, "looks_market"):  # 只問買的人（第 205 批）
+        return ctx._log([identity_base.PHONE_NEEDED])
+    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（M 波；設計 4.3、4.4「不能花元寶」）：只問買的人
+    if held:
+        return ctx._log([held])
     found = market.listing(wallet, look)
     seller = (wallet.character_name(found["seller"]) or found["seller"]) if found else ""
     pid, line = market.buy(ctx.content, wallet, ctx._mall_owner(), look, ref, names=_made_names(ctx, wallet), seller_name=seller,

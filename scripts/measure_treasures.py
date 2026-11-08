@@ -38,7 +38,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_treasures_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, bot_policy, bounties, database, naming, orders, treasures  # noqa: E402
+from tianxia import bot, bot_policy  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database, naming, orders, treasures  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -89,7 +91,7 @@ def _gear(state) -> dict:
     return {item.id: item for item in items if item is not None}
 
 
-def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool) -> dict:
+def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool, max_steps: int | None = None) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.treasures.enabled = on
     if season_one:
@@ -166,7 +168,7 @@ def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool)
             mock.patch.object(Game, "wield_weapon", wield), mock.patch.object(Game, "cultivate", cultivate), \
             mock.patch.object(Game, "_legend_find", legend_find), \
             mock.patch.object(bot, "pick", pick), patches[0], patches[1], patches[2], patches[3]:
-        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(on)}-{next(_RUNS)}.db"), observe=observe)
+        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(on)}-{next(_RUNS)}.db"), observe=observe, **({"max_steps": max_steps} if max_steps else {}))
     p = game.state.player
     season = game.state.world
     return {
@@ -182,13 +184,14 @@ def main() -> None:
     parser.add_argument("--profile", default=None)
     parser.add_argument("--steer", action="store_true", help="一半的時候照手上的懸賞、軍令走（週末那一組用，同 measure_gear）")
     parser.add_argument("--season-one", action="store_true", help="打開第一季開關（14 天設定量挑戰本人掉寶物用）")
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     content = load_content(ROOT / "content", profile=args.profile)
     extra = ("（照手上的事走）" if args.steer else "") + ("（第一季開關開）" if args.season_one else "")
     print(profile_line(content, args.profile) + extra, flush=True)
     for seed in args.seeds:
         for on in (False, True):
-            r = run(seed, args.profile, on, args.steer, args.season_one)
+            r = run(seed, args.profile, on, args.steer, args.season_one, args.max_steps)
             got = r["got"]
             by = "、".join(f"{label} {got[name]['treasure']}" for name, label in SOURCES.items())
             total = sum(got[name]["treasure"] for name in SOURCES)

@@ -13,12 +13,18 @@ import webharness
 from conftest import FixedRandom, real_content
 from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
-from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
+from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, art_cards
+from tianxia.features.smithy import smithing
+from tianxia import team, weapons
 from tianxia.content import validate
 from tianxia.models import Drop, ForgeSecret, ForgeSide
 from tianxia.sqlite_world import open_world
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
-from tianxia import equipment, forge_secrets, shopview, skillview, smithing, weapons
+from tianxia import equipment, forge_secrets
+from tianxia.features.smithy import shop_view as smithy_shop
+from tianxia import art_cards
+from tianxia.features.smithy import smithing
+from tianxia import weapons
 from tianxia.state import Weapon
 
 pytestmark = pytest.mark.whole_content
@@ -371,7 +377,7 @@ def test_an_armor_original_is_kept_too(divine_content, world):
 def test_gear_rows_mark_the_unnamed_original_with_its_book_name(divine_content, world):
     game = _forger(divine_content, world, name="甲")
     original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
-    worn = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["worn"]  # noqa: E731
+    worn = lambda: next(s for s in art_cards.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["worn"]  # noqa: E731
     row = worn()
     assert row["divine"] == {"pattern": "墜星劍", "unit": "把"} and row["grade"].endswith(equipment.DIVINE_MARK)
     smithing.name_divine(game.state, divine_content, world, original.id, "", keep=True)
@@ -394,7 +400,7 @@ def test_gear_rows_put_the_unnamed_original_first_in_a_long_rack(divine_content,
     """終審 I1：修練頁的裝備庫先列 8 件，原品排在最後一格就會被「再列 N 件」藏起來，定名表單找不到——還等著定名的原品排最前面，
     其餘維持原本的先後。定了名就回到原位（不再特別排）。"""
     game, original = _crowded_rack(divine_content, world)
-    rack = lambda: next(s for s in skillview.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["rack"]  # noqa: E731
+    rack = lambda: next(s for s in art_cards.gear_rows(game.state, divine_content, world)["slots"] if s["slot"] == "weapon")["rack"]  # noqa: E731
     rows = rack()
     assert rows[0]["id"] == original.id and rows[0]["divine"] == {"pattern": "墜星劍", "unit": "把"}
     assert [r["name"] for r in rows[1:]] == [f"備刃{i}" for i in range(9)]  # 其餘照原來的先後
@@ -540,12 +546,12 @@ needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def _slot_rows(game, content, world, slot):
-    block = next(b for b in skillview.gear_rows(game.state, content, world)["slots"] if b["slot"] == slot)
+    block = next(b for b in art_cards.gear_rows(game.state, content, world)["slots"] if b["slot"] == slot)
     return [block["worn"], *block["rack"]]
 
 
 def test_fb197_the_practice_rows_carry_the_unit_of_the_unnamed_original(divine_content, world):
-    """修練頁（與店面裝備庫，shopview._rack 讀同一份）那一列的 divine 多帶量詞：兵器照種類（劍一把），防具一件。"""
+    """修練頁（與店面裝備庫，smithy_shop._rack 讀同一份）那一列的 divine 多帶量詞：兵器照種類（劍一把），防具一件。"""
     game = _forger(divine_content, world, name="甲")
     blade, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
     coat, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3",
@@ -569,16 +575,16 @@ def test_fb197_a_fist_original_is_a_fu(divine_content, world, monkeypatch):
 
 
 def test_fb197_the_forged_card_carries_the_unit(divine_content, world):
-    """店面的出爐卡（shopview.forged_card）多一個 unit：防具一件、拳套一副、其他兵器一把。"""
+    """店面的出爐卡（smithy_shop.forged_card）多一個 unit：防具一件、拳套一副、其他兵器一把。"""
     game = _forger(divine_content, world, name="甲")
     coat, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3",
                              rng=smithing.own_rng(game.state, "鎧|gang_3+gang_3"))
-    card = shopview.forged_card(game.state, divine_content, world, coat, {"first": True})
+    card = smithy_shop.forged_card(game.state, divine_content, world, coat, {"first": True})
     assert card["divine"] == "鎮星甲" and card["unit"] == "件"
     fist = weapons.new_weapon(game.state, name="鐵拳", kind="拳腳", attribute="剛", tier=1, quality="下品")
-    assert shopview.forged_card(game.state, divine_content, world, fist, {})["unit"] == "副"
+    assert smithy_shop.forged_card(game.state, divine_content, world, fist, {})["unit"] == "副"
     blade = weapons.new_weapon(game.state, name="鐵劍", kind="劍", attribute="剛", tier=1, quality="下品")
-    assert shopview.forged_card(game.state, divine_content, world, blade, {})["unit"] == "把"
+    assert smithy_shop.forged_card(game.state, divine_content, world, blade, {})["unit"] == "把"
 
 
 @needs_node

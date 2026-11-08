@@ -112,7 +112,7 @@ def _real_boxes(on):
 def test_the_recruiters_box_is_never_clamped_and_the_first_step_is_paged_by_paragraph(on):
     """G2-W1（設計 6.2「話不會被切掉」）：序章之外，說書人的框長話收成三行（FB-076）；入伍段的框不收：r2 一次一段、按「下一段 ▸」，
     指示（「…在『江湖』頁行動列底下，自己挑一道」）在最後一頁；r3 與結尾整段都在。真的引擎給的框、真的 app.js 畫。"""
-    from tianxia import enlist  # noqa: F401（fixture 先把入伍段內容放好）
+    from tianxia.features.guide import enlist  # noqa: F401（fixture 先把入伍段內容放好）
 
     boxes = _real_boxes(on)
     got = run_guide_js("""

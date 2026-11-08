@@ -20,14 +20,14 @@ from __future__ import annotations
 
 import math
 
-from tianxia import allied, atlas, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、同伴、攻城）
+from tianxia import allied, atlas, roster  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、同伴）
 from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import attrset, journal, team
 from tianxia.core.option import Option
 from tianxia.models import BattleDef
 from tianxia.state import JournalEntry
 
-from . import escorts, progress, rules, sieges, view  # progress：推進與結算（第 8 批；它也 import 這一檔，都在函式裡用）
+from . import escorts, progress, rules, siege_rules, sieges, view  # progress：推進與結算（第 8 批；它也 import 這一檔，都在函式裡用）
 
 
 def ally_follows_battle(ctx) -> list[str]:
@@ -215,7 +215,7 @@ def enlist_options(ctx, battle: battle_instance.BattleInstance, definition: Batt
     for fid in battle_instance.fields(battle, definition):  # 三方混戰（裁決 22）多一顆助守【守軍】（GUARD）
         done = me is not None and me.faction == fid
         if fid == guard:
-            label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[fid])
+            label = (siege_rules.HELPED_GUARD if done else siege_rules.HELP_GUARD).format(side=names[fid])
         else:
             label = f"已臨時投效【{names[fid]}】" if done else f"臨時投效【{names[fid]}】（只算這一場）"
         out.append(Option(id=f"battle:enlist:{fid}", label=label, enabled=not done))
@@ -304,7 +304,7 @@ def rally_region(ctx) -> str | None:
 
 def rally_any(ctx) -> str | None:
     """rally_region 在有攻城戰時：自己已經在某一場的名單上就只看那一場（離開了大區、還沒倒下才回它的大區）；不然照先後找第一場
-    自己這一方打得進去、自己人又不在現場的那一場的大區。散人不為了投效趕過去（同決戰）；攻城戰另照 siege.slots。"""
+    自己這一方打得進去、自己人又不在現場的那一場的大區。散人不為了投效趕過去（同決戰）；攻城戰另照 siege_rules.slots。"""
     name = ctx.state.player.name
     showdown = ctx.world.get_battle()
     live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + sieges.sieges(ctx)
@@ -319,7 +319,7 @@ def rally_any(ctx) -> str | None:
             continue
         if ctx.state.player.faction is None and free_agent(ctx, d):
             continue  # 散人沒有自己的一方：不會為了投效趕過去
-        if b.siege is not None and not siege.slots(b.siege, ctx._conquest_side()):
+        if b.siege is not None and not siege_rules.slots(b.siege, ctx._conquest_side()):
             continue
         if not at_battle(ctx, d):
             return d.region
@@ -435,7 +435,7 @@ def battle_choose_in(ctx, arg: str) -> list[str]:
     if kind == "join":
         if ctx.content.scenario.factions and rest != ctx._side():
             return ["（你只能站在自己陣營這一邊。）"]
-        if battle.siege is not None and (problem := siege.join_problem(ctx.content, battle.siege, ctx._conquest_side(), rest)):
+        if battle.siege is not None and (problem := siege_rules.join_problem(ctx.content, battle.siege, ctx._conquest_side(), rest)):
             return [problem]
         scores = ctx._mandate_weight(definition, ctx._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
         gear, marks = ctx._battle_gear(), ctx._battle_marks()
@@ -452,7 +452,7 @@ def battle_choose_in(ctx, arg: str) -> list[str]:
         return msgs
     if kind == "join_late":
         own = ctx._side() if ctx.content.scenario.factions else None
-        if battle.siege is not None and (problem := siege.join_problem(ctx.content, battle.siege, ctx._conquest_side(), own or "")):
+        if battle.siege is not None and (problem := siege_rules.join_problem(ctx.content, battle.siege, ctx._conquest_side(), own or "")):
             return [problem]
         scores = ctx._mandate_weight(definition, ctx._battle_scores())
         gear, marks = ctx._battle_gear(), ctx._battle_marks()
@@ -476,14 +476,14 @@ def join_refusal(
     ctx, kind: str, rest: str, definition: BattleDef, battle: battle_instance.BattleInstance | None = None,
 ) -> list[str] | None:
     """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。
-    攻城戰（領地爭奪第二批）另照 siege.join_problem（另一軍站不進守將那一格）。"""
+    攻城戰（領地爭奪第二批）另照 siege_rules.join_problem（另一軍站不進守將那一格）。"""
     if kind == "join" and ctx.content.scenario.factions and rest != ctx._side():
         return ["（你只能站在自己陣營這一邊。）"]
     if kind == "enlist" and (not free_agent(ctx, definition) or rest not in enlist_sides(ctx, battle, definition)):
         return ["（此刻無法這麼做。）"]
     if battle is not None and battle.siege is not None:
         slot = rest if kind != "join_late" else (ctx._side() or "")
-        problem = siege.join_problem(ctx.content, battle.siege, ctx._conquest_side(), slot)
+        problem = siege_rules.join_problem(ctx.content, battle.siege, ctx._conquest_side(), slot)
         if problem is not None:
             return [problem]
     return None
@@ -498,7 +498,7 @@ def enlist(
     armies = enlist_sides(ctx, battle, definition)  # 三方混戰多一格助守【守軍】（裁決 22）
     if not free_agent(ctx, definition) or side not in armies:
         return ["（此刻無法這麼做。）"]
-    if battle.siege is not None and (problem := siege.join_problem(ctx.content, battle.siege, ctx._conquest_side(), side)):
+    if battle.siege is not None and (problem := siege_rules.join_problem(ctx.content, battle.siege, ctx._conquest_side(), side)):
         return [problem]
     if changing_sides and battle.phase != "muster":
         return ["（開打之後就不能改投了。）"]
@@ -526,9 +526,9 @@ def enlist(
         msgs = [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是{own_side_name(ctx)}。"]
     if side == battle_instance.neutral_guard(battle):  # 助守中立地的守將：不寫那一格的陣營（FB-540）
         place = ctx.content.locations[battle.siege.loc].name
-        line = siege.HELP_GUARD_LINE if battle.phase == "muster" else siege.HELP_GUARD_LATE
+        line = siege_rules.HELP_GUARD_LINE if battle.phase == "muster" else siege_rules.HELP_GUARD_LATE
         msgs = [line.format(place=place, own=own_side_name(ctx))]
-        ctx._write(f"{definition.name}・{siege.HELP_GUARD_SWITCH if changing_sides else siege.HELP_GUARD_TITLE}", msgs)
+        ctx._write(f"{definition.name}・{siege_rules.HELP_GUARD_SWITCH if changing_sides else siege_rules.HELP_GUARD_TITLE}", msgs)
         return msgs
     ctx._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
     return msgs

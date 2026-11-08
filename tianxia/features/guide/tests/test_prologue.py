@@ -5,11 +5,14 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import insight_fx, atlas, prologue, sensing
+from tianxia import insight_fx, atlas, prologue
+from tianxia.features.sense import sensing
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
-from tianxia import atlas, battle_instance, prologue
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import prologue
 
 pytestmark = pytest.mark.whole_content
 
@@ -58,7 +61,7 @@ def test_the_allow_lists_only_name_ids_the_code_really_makes():
     from tianxia import models
 
     package, found = Path(models.__file__).parent, set()
-    names = ["engine.py", "foreshadow.py", "opportunities.py", "plans.py"]  # 盤算在 plans.options
+    names = ["engine.py", "plans.py"]  # 盤算在 plans.options
     names += ["core/services.py"]  # 搬進核心的共用的字（第 3、4 階行動的前綴 act:rank:，全部拆包第 33 批）
     # 功能包做的選項（開發規範手冊 3.2；宴客的 feast:join: 在 features/feast/actions.py）也是原始碼
     names += [p.relative_to(package).as_posix() for p in sorted((package / "features").glob("*/*.py"))]
@@ -74,7 +77,7 @@ def test_the_allow_lists_only_name_ids_the_code_really_makes():
 
 def test_the_hut_does_not_change_the_terrain(prologue_content, content):
     """草廬只有序章裡的一個人看得到：它不能把整張地圖的山與樹換掉（mapart 的地形鍵不算它）。"""
-    from tianxia import mapart
+    from tianxia.features.map import mapart
 
     assert mapart._terrain_key(prologue_content) == mapart._terrain_key(content)
     assert [p.svg for p in mapart.terrain(prologue_content)] == [p.svg for p in mapart.terrain(content)]
@@ -83,7 +86,7 @@ def test_the_hut_does_not_change_the_terrain(prologue_content, content):
 def test_a_hut_that_sorts_after_the_start_adds_no_road_to_the_terrain(prologue_root, content):
     """mapart._obstacles 只收 a_id < b_id 的路：草廬叫 hut 時排在 town 前面，那一條路本來就被略過，擋不擋它都看不出來。
     換成排在 town 後面的 zhulu，草廬的路只靠「連到草廬的路不算」那一行擋住。"""
-    from tianxia import mapart
+    from tianxia.features.map import mapart
 
     for name in ("locations.json", "tutorial.json"):
         path = prologue_root / name
@@ -355,7 +358,7 @@ def test_each_step_can_have_its_own_speaker(fresh, prologue_content):
 
 def test_the_fused_goals_need_a_fused_art(fresh):
     """done_when 的 fused／fused_level：有一門裝了意境的武學、而且練到第幾成才算（武學重構：以前是合成出來的那一門）。"""
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     steps = fresh.content.tutorial.steps
     s, c = fresh.state, fresh.content
@@ -390,7 +393,7 @@ def test_the_prologue_slot_costs_nothing_and_rolls_nothing(fresh):
 
 
 def test_the_level_goal_needs_the_level(fresh):
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     s, c = fresh.state, fresh.content
     _slot_the_insight(fresh)
@@ -405,7 +408,7 @@ def test_the_level_goal_needs_the_level(fresh):
 
 def test_the_deepen_goal_needs_a_second_layer_not_just_the_level(fresh):
     """第 6 步（武學重構：揣摩）：成數夠了、意境也裝著，但風還是一重，不算完成；揣摩到二重才算（以前是修練升中品）。"""
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     s, c = fresh.state, fresh.content
     _slot_the_insight(fresh)
@@ -418,7 +421,8 @@ def test_the_deepen_goal_needs_a_second_layer_not_just_the_level(fresh):
 
 def test_finishing_a_step_gives_its_art(fresh):
     """序章第 8 步（雪恥一戰）做完就掉出那門雜學：第五成、收進功法庫（身上的武學欄已經有合成的那一門）。"""
-    from tianxia import guide, library
+    from tianxia.features.guide import rules as guide
+    from tianxia import library
 
     s, c = fresh.state, fresh.content
     s.pending_event, s.player.tutorial_step = None, 7
@@ -442,7 +446,7 @@ def test_the_box_and_the_next_step_line_name_the_fused_art(fresh):
 
 def test_a_step_without_words_writes_no_blank_speaker_line(fresh, prologue_content):
     """序章第一步沒有話（還沒遇到師父）：開場那一則的 guide、對話框、完成上一步時接下去的那一行，都不會有空空的「【師父】」。"""
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     assert guide.tutorial_intro(prologue_content) == []
     assert fresh.state.journal[-1].guide == []  # 開場那一則
@@ -555,7 +559,7 @@ def test_only_the_step_actions_are_on_the_menu(fresh):
 
 def test_the_hut_never_rolls_for_story_fragments_after_a_costly_action(fresh, monkeypatch):
     """伏筆與機緣的線索是真實世界的事：草廬裡花了體力也不抽（_hear_after_stamina）。"""
-    from tianxia import foreshadow, opportunities
+    from tianxia.features.military import fs_rules as foreshadow, opp_rules as opportunities
 
     heard = []
     monkeypatch.setattr(foreshadow, "active", lambda s, c: True)
@@ -623,7 +627,7 @@ def test_rest_refills_at_once(fresh):
 
 
 def test_revenge_is_a_narrow_win_with_nothing_extra(fresh, monkeypatch):
-    from tianxia import foreshadow
+    from tianxia.features.military import fs_rules as foreshadow
     from tianxia.models import Choice, Drop, Effect, Event
 
     content = fresh.content
@@ -836,7 +840,7 @@ def test_the_farewell_reward_is_a_result_of_the_walk_not_a_box_line(prologue_roo
     import json
     import re
 
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
     from tianxia.sqlite_world import open_world
 
     path = prologue_root / "tutorial.json"
@@ -1052,7 +1056,7 @@ def test_the_forge_does_not_ask_the_model_for_a_move_the_hut_refuses(fresh):
 
 
 def test_melt_and_cultivate_buttons_follow_the_script(fresh):
-    """修練頁的按鈕與動作的拒絕走同一個判斷（skillview.art_rows）：序章裡不能熔的、不能修練的，按鈕按不下去、寫原因。"""
+    """修練頁的按鈕與動作的拒絕走同一個判斷（art_view.art_rows）：序章裡不能熔的、不能修練的，按鈕按不下去、寫原因。"""
     _to_step(fresh, 9)
     rows = {row["id"]: row for row in fresh.art_rows()}
     assert rows["junk"]["melt"]["ok"] and "退回心得" in rows["junk"]["melt"]["note"]
@@ -1332,7 +1336,7 @@ def test_a_masters_recipe_that_clashes_with_the_starting_art_is_refused(prologue
 
 def test_the_hut_has_no_batch_melt(fresh):
     """批量熔煉：序章裡照師父說的一門一門熔（熔煉是教學的一步），批量那一條直接回一句、什麼都不動。"""
-    from tianxia.engine import MELT_MANY_PROLOGUE
+    from tianxia.features.cultivation.actions import MELT_MANY_PROLOGUE
 
     _to_step(fresh, 3)
     p = fresh.state.player

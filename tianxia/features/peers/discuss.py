@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender
 from tianxia.characters import name_key
+from tianxia.core import identity_base  # 綁手機才能論武（帳號與客服第 205 批）：發起與答應的鈕灰掉寫同一句
 from tianxia.rules import season_one
 
 from . import discuss_actions, invite_actions, invites, social
@@ -51,6 +52,8 @@ def _answer_buttons(game: Game, other: Game, inv, items: list[tuple[str, str]]) 
     （他正忙、論滿了……），或你身上一樣都合不成，只畫一顆灰的「答應論武」寫為什麼。"""
     theirs = dict(discuss_actions.items(other)).get(inv.payload.get("item", ""), "那一樣")
     decline = social.CardButton(action=KIND, arg="no", label="婉拒論武")
+    if not identity_base.phone_ok(game, KIND):  # 只問答應的人（第 205 批）；婉拒照舊
+        return [social.CardButton(action=KIND, arg="yes", label=ANSWER_NONE, note=identity_base.PHONE_NEEDED, enabled=False), decline]
     problem = discuss_actions.invite_problem(game, inv, other)
     rows = [] if problem is not None else [(key, label, discuss_actions.item_problem(game, inv, other, key)) for key, label in items]
     if problem is None and not any(why is None for _, _, why in rows):
@@ -76,7 +79,7 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
         return _answer_buttons(game, other, inv, items)
     if inv is not None:
         return [social.CardButton(action=KIND, arg="cancel", label="收回論武邀請", note=f"等{gender.pronoun(other.state)}回覆")]
-    problem = discuss_actions.refusal(game, other)
+    problem = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, KIND) else discuss_actions.refusal(game, other)
     if problem is not None or not items:
         return [social.CardButton(action=KIND, arg="invite", label="論武", note=problem or "你身上沒有東西可出", enabled=False)]
     note = _price_note(game)

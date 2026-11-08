@@ -174,7 +174,7 @@ ROAD_CORE = "#F1E7CF"  # 輿圖升級：官道雙線中間那一道（紙色）
 
 def road(a: Location, b: Location, kind: str, control: Point) -> str:
     """輿圖升級底圖的一條路（二次曲線，control 是 road_control）：官道畫雙線（褐色外框、紙色內芯 class="rd-core"），其他照 ROAD_STYLE。
-    區圖（輿圖第三版第 4 批）照 CSS 把三種路換成一種淡實線、藏起內芯（style.css 的 .mapx.region .tx-roads）。"""
+    區圖（輿圖第三版第 4 批）當時照 CSS 把三種路換成一種淡實線、藏起內芯；現在 web/ 的樣式已經沒有 .mapx.region .tx-roads 這條規則。"""
     color, width, dash = ROAD_STYLE[kind]
     d = f"M{a.x},{a.y} Q{fmt(control[0])},{fmt(control[1])} {b.x},{b.y}"
     if kind == "官道":

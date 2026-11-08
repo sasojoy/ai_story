@@ -63,6 +63,15 @@ def art_path(key: str) -> str:
     return f"{ART_DIR}/{key}"
 
 
+def art_src(web, key: str | None) -> str | None:
+    """列傳插畫（減法季批 7b，illustration_for 的圖庫鍵）的網址：web/img/zhuan/<鍵>.webp 真的在才給（雲端批 8 放圖；同 scene_art）。
+    web 是網頁資料夾（殼的 WEB，叫的人當下讀，測試換掉的也看得到；原本是 server.zhuan_art_src，第二輪第 83 批）。"""
+    if not key:
+        return None
+    path = art_path(key)
+    return f"/static/img/{path}.webp" if (web / "img" / f"{path}.webp").is_file() else None
+
+
 def seal_text(content: Content, season_number: int, profile: dict) -> str:
     """紀念印上的字：季名「黃巾之亂・第 N 季」，有論功時接名次與第幾階（照身家 annals.standing 的 tier_side、final_rank、tier）。"""
     from tianxia.wins import TIER_NAMES  # noqa: PLC0415
@@ -133,7 +142,7 @@ def quote_figures(state: GameState, content: Content, taken: set[str]) -> list[t
 
 # ── 人物評曰（批 7b-2；設計第九章、3.3）──
 # 三段式同書信（letters.request／write／apply）：A 鎖內 Game.biography_request 把每一位寫手開成一張 VerdictJob（verdict_request），
-# B 鎖外 server.write_zhuan 寫完正文再逐條請模型寫（write_verdict；排在真人後面），C 鎖內 Game.write_biography 每一條接一段「評曰：」
+# B 鎖外 routes.write_zhuan 寫完正文再逐條請模型寫（write_verdict；排在真人後面），C 鎖內 Game.write_biography 每一條接一段「評曰：」
 # （apply_verdict；寫不出來照固定句 content/verdicts.json）。模型只寫字：四十字以內、繁體、沒有數字、沒有假名，不給任何數字。
 
 VERDICT_HEAD = "評曰：{name}云：「"  # 人物評曰那一段的開頭（written_writers 照它認寫成的傳裡有誰）

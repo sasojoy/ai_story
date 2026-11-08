@@ -10,7 +10,10 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, plain_game, ready
 
-from tianxia import annals, explore_one, storyline, team
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.story import storyline
+from tianxia import team
 from tianxia.content import ContentError, _fill_story_lines, validate
 from tianxia.encounter import EncounterResult
 from tianxia.models import Event, StoryDef
@@ -147,7 +150,7 @@ def test_a_quiz_stage_adds_marks_per_answer_and_can_be_left_half_done():
     assert s.player.storylines["dunwu_1"].custom is not None
     msgs = game.choose("story:dunwu_1")
     assert "第一問" in msgs
-    assert game._own_scene_text() == "**劍意初萌**\n\n" + storyline.question_text(s, game.content)  # 場景卡走 story 包的 scene 掛鉤
+    assert game._own_scene_text() == "**劍意初萌**\n\n" + storyline.question_text(s, game.content)  # 場景卡走 story 包登記的 SCENE_ORDER 那一格（Feature.scenes）
     assert [o.id for o in game.options(odds=False)] == ["story:dunwu_1:a0", "story:dunwu_1:a1", "story:dunwu_1:later"]
     game.choose("story:dunwu_1:a0")
     game.choose("story:dunwu_1:later")  # 先擱著：回到平常的選單，那一顆還在

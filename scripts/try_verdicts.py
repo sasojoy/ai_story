@@ -21,7 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import zh, zhuan_end  # noqa: E402
+from tianxia import zh  # noqa: E402
+from tianxia.features.zhuan import zhuan_end  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 

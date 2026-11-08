@@ -38,7 +38,8 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_secrets_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, forge_secrets, fusion, insights, materials, naming, secret_recipes, smithing  # noqa: E402
+from tianxia import bot, database, forge_secrets, fusion, insights, materials, naming, secret_recipes  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -86,7 +87,7 @@ class Tally:
         self.forges = 0  # 真的合成了幾爐（意境＋意境）
 
 
-def measure(seed: int, profile: str | None, side: str) -> dict:
+def measure(seed: int, profile: str | None, side: str, max_steps: int | None = None) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     world = open_world(TMP / f"{side}{seed}.db")
     tally = Tally()
@@ -171,7 +172,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
             mock.patch.object(smithing, "forge_plan", steer("weapon", original_forge_plan)), \
             mock.patch.object(smithing, "armor_plan", steer("armor", original_armor_plan)), mock.patch.object(smithing, "forge", counted_forge), \
             mock.patch.object(materials, "grant", counted_grant), mock.patch.object(materials, "tier3_pick", counted_pick):
-        game = bot.play_season(content, seed, world=world)
+        game = bot.play_season(content, seed, world=world, **({"max_steps": max_steps} if max_steps else {}))
     tianji = secret_recipes.tianji_of(game.world)
     book = secret_recipes.manual(game.state, tianji)
     heard = [i for idx in book.heard.values() for i in idx]
@@ -209,13 +210,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--profile", default="week7")
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     profile = None if args.profile in ("", "none", "default") else args.profile
     rows: dict[str, list[dict]] = {side: [] for side in SIDES}
     for seed in args.seeds:
         for side in SIDES:
             random.seed(seed)
-            row = measure(seed, profile, side)
+            row = measure(seed, profile, side, args.max_steps)
             rows[side].append(row)
             print(f"種子 {seed} {side}：{_fmt(row)}", flush=True)
             print(f"種子 {seed} {side} {_fmt_forge(row)}", flush=True)

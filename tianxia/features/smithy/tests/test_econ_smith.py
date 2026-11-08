@@ -6,7 +6,8 @@ import random
 from unittest import mock
 
 from conftest import no_week_unlock, real_content
-from tianxia import economy, shopview
+from tianxia import economy
+from tianxia.features.smithy import shop_view as smithy_shop
 from tianxia import engine as engine_mod
 from tianxia.engine import Game
 from tianxia.equipment import NOT_NOW
@@ -147,10 +148,10 @@ def test_the_hint_follows_the_switches():
         game.choose("act:smith")
         return game.shop_view()["trade"]["hint"]
 
-    assert hint(upgrade=False) == shopview.SELL_ONLY_HINT and "熬" not in shopview.SELL_ONLY_HINT
-    assert hint() == shopview.UPGRADE_HINT.format(share="五成") and "得自己熬" in hint()
-    assert hint(upgrade_same_share=1.0) == shopview.TRADE_HINT
-    for text in (shopview.SELL_ONLY_HINT, shopview.UPGRADE_HINT, shopview.TRADE_HINT):
+    assert hint(upgrade=False) == smithy_shop.SELL_ONLY_HINT and "熬" not in smithy_shop.SELL_ONLY_HINT
+    assert hint() == smithy_shop.UPGRADE_HINT.format(share="五成") and "得自己熬" in hint()
+    assert hint(upgrade_same_share=1.0) == smithy_shop.TRADE_HINT
+    for text in (smithy_shop.SELL_ONLY_HINT, smithy_shop.UPGRADE_HINT, smithy_shop.TRADE_HINT):
         assert "只能" not in text
 
 

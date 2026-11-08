@@ -9,7 +9,10 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import atlas, figures, howto, mapview
+from tianxia import atlas, figures
+from tianxia.features.guide import howto as guide_howto
+from tianxia.features.map import mapview
+from tianxia.features.military import order_cards
 from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -87,7 +90,7 @@ def test_the_road_scene_lists_three_road_tasks():
 def test_the_how_to_page_lists_three_road_tasks():
     game = _game()
     c, w = game.content, game.state.world
-    assert "留意地形" not in howto.page(c, w, recruitable=False)
+    assert "留意地形" not in guide_howto.page(c, w, recruitable=False)
 
 
 def test_fame_no_longer_widens_the_map():
@@ -96,7 +99,7 @@ def test_fame_no_longer_widens_the_map():
     before = atlas.views(s, c)
     s.player.stats["fame"] = 100
     assert atlas.views(s, c) == before
-    assert not any("輿圖" in line for line in howto.fame_lines(c, s.world))
+    assert not any("輿圖" in line for line in guide_howto.fame_lines(c, s.world))
 
 
 def test_order_cards_never_say_a_place_is_unexplored():
@@ -109,7 +112,7 @@ def test_order_cards_never_say_a_place_is_unexplored():
         Order(id="o2", template="siege", faction="huang", week=week, front="yingru", quota=4, text="（測試）"),
         Order(id="o3", template="siege", faction="huang", week=week, front="jizhou", quota=4, text="（測試）"),
     ]
-    strike, *sieges = (atlas.order_how(s, c, o) for o in s.world.orders)
+    strike, *sieges = (order_cards.order_how(s, c, o) for o in s.world.orders)
     assert f"他現在在{c.locations[figures.state_of(s, c, 'luzhi').location].name}" in strike
     for how in (strike, *sieges):
         assert "摸清" not in how

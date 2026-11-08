@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tianxia.features.looks.cutting import LAYOUT, sheet  # noqa: E402  切法搬進功能包（畫坊也用）
+from tianxia.features.looks.cutting import CELL, LAYOUT, sheet  # noqa: E402  切法搬進功能包（畫坊也用）
 
 
 def main(argv: list[str]) -> int:

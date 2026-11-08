@@ -14,7 +14,7 @@ pytestmark = pytest.mark.whole_content
 def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client, monkeypatch):
     """FB-162：兩個分頁搶同一張，慢的那一頁按下去的選項已經不在選單上——跟決戰選項一樣回一句 message（網頁跳提示），
     原因是引擎的拒絕（bounties.give_problem：裝備庫裡沒有這一件）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.state import Bounty
 
     monkeypatch.setattr(server.CONTENT.config.weapons, "enabled", True)  # 兵器關著時求兵一律回「此刻無法這麼做」，看不出原因

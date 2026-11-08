@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, Verb
 
 
 class SocializeFeature(Feature):
@@ -79,6 +79,17 @@ class SocializeFeature(Feature):
             )
         return self._menus
 
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/audience 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：求見名單那一張。"""
+        if self._scenes is None:
+            from . import menus  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "audience", lambda ctx: menus.audience_scene(ctx)),)
+        return self._scenes
+
     # core_seams（全部拆包第 57 批「分派與標題收接縫」）
     _verbs: tuple[Verb, ...] | None = None
 
@@ -110,12 +121,12 @@ class SocializeFeature(Feature):
     def status_slots(self) -> tuple[StatusHook, ...]:
         """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
         if self._status_slots is None:
-            from . import menus  # noqa: PLC0415
+            from . import intro, menus  # noqa: PLC0415
 
             self._status_slots = (
-                # 介面重整（2026-11-05）：此地人物那一排；像在 web/img/figures/full/<id>.webp 才給 face（殼的 figure_face）
+                # 介面重整（2026-11-05）：此地人物那一排；像在 web/img/figures/full/<id>.webp 才給 face（殼的 figure_face）；簡介在這一包的 intro.py（第二輪第 83 批）
                 StatusHook("main", "figures_here", lambda ctx, frame: {"figures_here": [
-                    {**f, "face": frame.shell.figure_face(f["id"]), "intro": frame.shell.figure_intro(f["id"], ctx)} for f in menus.figures_here_view(ctx)]}),
+                    {**f, "face": frame.shell.figure_face(f["id"]), "intro": intro.figure_intro(f["id"], ctx)} for f in menus.figures_here_view(ctx)]}),
             )
         return self._status_slots
 

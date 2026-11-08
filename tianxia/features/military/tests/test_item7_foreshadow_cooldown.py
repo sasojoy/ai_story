@@ -10,7 +10,8 @@ import random
 
 import pytest
 
-from tianxia import foreshadow, rules
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import rules
 from tianxia.engine import Game
 from tianxia.models import FsWrong
 

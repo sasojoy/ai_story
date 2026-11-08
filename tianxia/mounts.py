@@ -2,7 +2,7 @@
 另有三個用途——決戰騎兵（5.9）、截殺追逃（5.10）、落敗策馬脫身（5.11）；飽足度與餵、馬市、馬的名字與階、修練頁每一列與角色卡那一行。
 
 數字全部乘飽足係數（edge_floor＋（1－edge_floor）×飽足度／100，5.4）；腳力＝省體力那一列（含品質）×飽足係數（5.1）。
-只 import models、state、equipment（3.4：atlas 反過來 import 這裡算步調與腳力，engine、skillview、bot 也呼叫它），
+只 import models、state、equipment（3.4：atlas 反過來 import 這裡算步調與腳力，engine、art_cards、bot 也呼叫它），
 不 import team、rules、atlas。開關是 Config.mounts.enabled（equipment.on(content, "mount")），不掛第一季開關（2.6）。
 好馬（良駒、名駒）的來源是裝備三：這裡的數字、名字、比較都照階與品質寫，容得下良駒、名駒；名駒的專名到時候照 template 從內容讀，
 所以這裡與引擎寫給玩家看的馬名都經過 name_of。例外：equipment.store（騎上、放上裝備庫）與 equipment.wield（換上）是四欄共用的，
@@ -401,7 +401,7 @@ def art_of(item: Equipment) -> str:
 
 
 def rows(state: GameState, content: Content) -> dict:
-    """修練頁的坐騎那一段（skillview.gear_rows）：身上那匹、裝備庫裡的馬。開關關著時 worn 是 None、rack 是空的。"""
+    """修練頁的坐騎那一段（art_cards.gear_rows）：身上那匹、裝備庫裡的馬。開關關著時 worn 是 None、rack 是空的。"""
     p = state.player
     if not on(content):
         return {"worn": None, "rack": []}

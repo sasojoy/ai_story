@@ -2,10 +2,19 @@
  *
  * 展開屬性裡的入口一行、傳承頁（legacyPageHtml）、識海頁、開季準備卡上的傳承入口（legacyOfferOpen）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 mall.js 之後、app.js 之前。
- * 呼叫處、四個點擊 case（legacy-open／close／view／slip）與 prepShihaiHtml 照舊在 app.js（殼）。
+ * 呼叫處與 prepShihaiHtml 照舊在 app.js（殼）；四個點擊（legacy-open／close／view／slip）用 registerClicks 登記在這支檔。
  */
 "use strict";
 
+  async function legacyClick(act, el, ev) {
+    switch (act) {
+        case "legacy-open": S.legacy = "main"; S.legacySlip = null; render(); break; // 傳承頁（features/legacy）
+        case "legacy-close": S.legacy = null; render(); break;
+        case "legacy-view": S.legacy = el.dataset.v === "shihai" ? "shihai" : "main"; render(); { const L = document.querySelector(".lg-layer"); if (L) L.scrollTop = 0; } break;
+        case "legacy-slip": S.legacySlip = S.legacySlip === el.dataset.k ? null : el.dataset.k; render(); break;
+    } // legacyClick
+  } // legacyClick
+  registerClicks(legacyClick, ["legacy-open", "legacy-close", "legacy-view", "legacy-slip"]);
   // 傳承（features/legacy；main.legacy）：展開的屬性裡一行入口，按了打開傳承頁（S.legacy = "main"）；識海頁是 S.legacy = "shihai"。
   // 兩頁的樣子在 web/legacy.css（企劃者 2026-11-04「要有真的傳承、識海的感覺」，示意 BsEscEEXvy8BVgw9hM89Si）
   const LG_AXES = [["zheng", "正氣"], ["xie", "邪氣"], ["luck", "機緣"]];

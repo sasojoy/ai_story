@@ -86,108 +86,36 @@
 .shop-layer.shop-mall .mall-item.off, .shop-layer.shop-mall .mall-card.off { opacity: 0.55; } /* 買不了的畫淡，照樣點得到：點了掌櫃講原因 */
 .shop-layer.shop-mall .mall-to-look { display: block; width: 100%; margin: 18px 0 0; min-height: 48px; border-radius: 14px; border: 1px dashed #8a6526;
   background: transparent; color: #f0cf7a; font: 700 15px var(--serif); cursor: pointer; }
-/* 擂台形象（功能包 looks；2026-11-03 改版，Joy「排版亂七八糟」「一大堆形象跟絕招會很難用」）：站著那張的第一格裁成一個人（四格一張，880×220）。
-   形象那一頁：最上面一塊台子（點了的那一套）、我的／官方／市集三頁、一排三格的小格；自建形象、絕招各自一頁，一行一件的清單 */
-.shop-layer.shop-mall .look-face { width: 56px; height: 56px; background-size: 400% 100%; background-position: 0 0; background-repeat: no-repeat; }
-.shop-layer.shop-mall .look-pad { position: relative; display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
-  background: linear-gradient(180deg, #e9dcc2, #cdb48a); }
-.shop-layer.shop-mall .look-stage { position: relative; height: 232px; margin: 2px 0 0; border-radius: 16px; overflow: hidden; border: 1px solid #8a6526;
-  background: linear-gradient(180deg, #e9dcc2 0%, #d8c39c 64%, #7a4a2a 64%, #5a3420 100%); }
-.shop-layer.shop-mall .look-stage > .look-face { position: absolute; left: 50%; top: 4px; width: 180px; height: 180px; margin-left: -90px; }
-.shop-layer.shop-mall .look-stage-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  background: linear-gradient(0deg, rgba(20, 8, 6, 0.94), rgba(20, 8, 6, 0.6)); }
-.shop-layer.shop-mall .look-stage-bar > span { flex: 1; min-width: 0; }
 .shop-layer.shop-mall .look-stage-bar small { display: block; font-size: 11px; color: #e5c98e; }
 .shop-layer.shop-mall .look-stage-bar b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 900 18px var(--serif); color: #fbefd6; }
-.shop-layer.shop-mall .look-stage-bar .btn { flex: none; }
-.shop-layer.shop-mall .look-stage-note { margin-top: 6px; }
-.shop-layer.shop-mall .look-segs { display: flex; margin: 14px 0 0; border-radius: 12px; border: 1px solid #8a6526; overflow: hidden; }
 .shop-layer.shop-mall .look-segs button { flex: 1; min-height: 44px; border: 0; background: #24140f; color: #d6c3a2; font: 14px var(--sans); cursor: pointer; }
-.shop-layer.shop-mall .look-segs button.on { background: #f0cf7a; color: #3a1d08; font-weight: 700; }
-.shop-layer.shop-mall .look-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
-.shop-layer.shop-mall .look-tile { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 0 0 8px; border-radius: 12px; overflow: hidden;
-  border: 1px solid #6b4a2e; background: #2a1812; color: #f3e6cc; text-align: center; cursor: pointer; }
-.shop-layer.shop-mall .look-tile .look-pad { height: 84px; }
-.shop-layer.shop-mall .look-tile .look-face { width: 80px; height: 80px; }
 .shop-layer.shop-mall .look-tile b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; font: 700 14px var(--serif); }
-.shop-layer.shop-mall .look-tile.on { border: 2px solid #f0cf7a; }
-.shop-layer.shop-mall .look-tile.sel { box-shadow: 0 0 0 3px rgba(240, 207, 122, 0.5); }
-.shop-layer.shop-mall .look-make { border-style: dashed; border-color: #b58a3a; background: transparent; }
-.shop-layer.shop-mall .look-make .look-pad { align-items: center; background: #24140f; }
 .shop-layer.shop-mall .look-make .plus { color: #f0cf7a; font: 700 34px var(--sans); }
 .shop-layer.shop-mall .look-tag, .shop-layer.shop-mall .look-tag2 { position: absolute; top: 5px; padding: 1px 6px; border-radius: 999px; font: 700 11px var(--sans); }
 .shop-layer.shop-mall .look-tag { left: 5px; background: #f0cf7a; color: #3a1d08; }
 .shop-layer.shop-mall .look-tag2 { right: 5px; background: rgba(20, 8, 6, 0.75); color: #f0cf7a; }
-.shop-layer.shop-mall .look-more { display: block; width: 100%; margin: 12px 0 0; }
 .shop-layer.shop-mall .look-on { align-self: center; color: #f2c46a; font: 600 13px var(--serif); letter-spacing: 0.2em; }
-.shop-layer.shop-mall .btn.buy { display: inline-flex; align-items: center; gap: 4px; border-color: #e3b55a; background: linear-gradient(180deg, #f2cf7c, #c9932f); color: #3a1d08; font-weight: 700; }
-.shop-layer.shop-mall .move-entry { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; border-radius: 14px; border: 1px solid #6b4a2e;
-  background: linear-gradient(180deg, #3a2219, #24140f); color: #d6c3a2; text-align: left; cursor: pointer; }
 .shop-layer.shop-mall .move-entry b { display: block; font: 900 16px var(--serif); color: #fbefd6; }
 .shop-layer.shop-mall .move-entry small { display: block; font-size: 12px; }
-.shop-layer.shop-mall .move-entry > span:nth-child(2) { flex: 1; min-width: 0; }
-.shop-layer.shop-mall .move-ico { flex: none; width: 48px; height: 48px; border-radius: 12px; background: radial-gradient(circle, rgba(240, 190, 90, 0.55), transparent 70%), #2b1811; }
 .shop-layer.shop-mall .move-entry .go { color: #f0cf7a; font: 700 22px var(--sans); }
-/* 自建形象、絕招那一頁：頂上回形象＋標題、四步；一行一件的清單（圖、名字與一句、狀態、鈕）、摺起來的那一行 */
-.shop-layer.shop-mall .look-subbar { display: flex; align-items: center; gap: 12px; margin: 2px 0 8px; }
 .shop-layer.shop-mall .look-subbar b { font: 900 20px var(--serif); color: #f6d77f; letter-spacing: 0.2em; }
 .shop-layer.shop-mall .look-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; padding: 0; list-style: none; text-align: center;
   font-size: 12px; color: #c9b391; }
 .shop-layer.shop-mall .look-steps span { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 auto 4px; border-radius: 50%;
   border: 1.5px solid #8a6526; color: #e5c98e; font: 900 14px var(--serif); }
-.shop-layer.shop-mall .look-steps li.on { color: #f0cf7a; }
-.shop-layer.shop-mall .look-steps li.on span { border-color: #f0cf7a; background: #f0cf7a; color: #3a1d08; }
-.shop-layer.shop-mall .look-lines { border-radius: 14px; border: 1px solid #6b4a2e; background: #24140f; overflow: hidden; }
-.shop-layer.shop-mall .look-line { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; padding: 8px 10px;
-  border-top: 1px solid #3d2618; color: #c9b391; }
-.shop-layer.shop-mall .look-line:first-child { border-top: 0; }
-.shop-layer.shop-mall .look-line.on { background: rgba(240, 207, 122, 0.1); }
-.shop-layer.shop-mall .look-line .look-pad { width: 44px; height: 44px; border-radius: 8px; }
-.shop-layer.shop-mall .look-line .look-face { width: 44px; height: 44px; }
-.shop-layer.shop-mall .look-line .lo-main { min-width: 0; }
-.shop-layer.shop-mall .look-line .lo-main b, .shop-layer.shop-mall .look-line .lo-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shop-layer.shop-mall .look-line .lo-main b { font: 700 15px var(--serif); color: #fbefd6; }
 .shop-layer.shop-mall .look-line .lo-main small { font-size: 12px; }
-.shop-layer.shop-mall .look-line .btn.play { min-width: 40px; padding: 0; }
-.shop-layer.shop-mall .look-wait, .shop-layer.shop-mall .look-no { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; }
-.shop-layer.shop-mall .look-wait { border: 3px solid #6b4a2e; border-top-color: #f0cf7a; border-radius: 50%; box-sizing: border-box; width: 36px; height: 36px; margin: 4px;
-  animation: lookspin 1.4s linear infinite; }
-@keyframes lookspin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .shop-layer.shop-mall .look-wait { animation: none; } }
 .shop-layer.shop-mall .look-no { background: #2b1811; color: #e0806a; font: 700 18px var(--sans); }
 .shop-layer.shop-mall .look-fold { display: block; width: 100%; min-height: 42px; border: 0; border-top: 1px solid #3d2618; background: transparent; color: #e5c98e; font: 14px var(--sans); cursor: pointer; }
-.shop-layer.shop-mall .look-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; text-align: center; }
-.shop-layer.shop-mall .look-stats span { padding: 8px 2px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.3); }
 .shop-layer.shop-mall .look-stats small { display: block; font-size: 11px; color: #c9b391; }
 .shop-layer.shop-mall .look-stats b { color: #f6d77f; font: 700 17px var(--sans); }
 .shop-layer.shop-mall .look-st { white-space: nowrap; color: #f2c46a; font-size: 12px; }
-.shop-layer.shop-mall .look-st.st-made { color: #9fd0a8; }
-.shop-layer.shop-mall .look-st.st-rejected { color: #e0a08a; }
-.shop-layer.shop-mall .look-order-form { display: grid; gap: 6px; padding: 14px; border-radius: 14px; border: 1px solid #6b4a2e; background: linear-gradient(180deg, #3a2219, #24140f); }
 .shop-layer.shop-mall .look-order-form label { font-size: 13px; color: #e5c98e; }
-.shop-layer.shop-mall .look-order-form .btn.buy, .shop-layer.shop-mall .move-new { justify-content: center; min-height: 46px; }
-.shop-layer.shop-mall .move-new { width: 100%; margin: 16px 0 0; }
 .shop-layer.shop-mall .look-ex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: #c9b391; }
-.shop-layer.shop-mall .look-ex .btn { border-style: dashed; }
-.shop-layer.shop-mall .look-ex .ex-more { border-style: solid; opacity: 0.85; }
-.shop-layer.shop-mall .market-set { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
-.shop-layer.shop-mall .market-set .input { width: 96px; }
-.shop-layer.shop-mall .move-now-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid #6b4a2e;
-  background: linear-gradient(180deg, #3a2219, #24140f); }
-.shop-layer.shop-mall .move-now-card > span { flex: 1; min-width: 0; }
 .shop-layer.shop-mall .move-now-card small { display: block; font-size: 12px; color: #c9b391; }
 .shop-layer.shop-mall .move-now-card b { display: block; font: 900 17px var(--serif); color: #fbefd6; }
-.shop-layer.shop-mall .move-now-card em { font-style: normal; font-weight: 500; color: #e5c98e; }
-.shop-layer.shop-mall .move-now-card + .look-lines { margin-top: 10px; }
-.shop-layer.shop-mall .move-fx { width: 44px; height: 44px; background: #2b1d14 no-repeat 60% 0 / 600% 100%; border-radius: 8px; }
-.shop-layer.shop-mall .move-form { margin: 16px 0 0; padding: 0 12px 12px; border-radius: 16px; border: 1px solid #8a6526; background: rgba(0, 0, 0, 0.18); }
-.shop-layer.shop-mall .move-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
-.shop-layer.shop-mall .move-opt { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.25); }
-.shop-layer.shop-mall .move-opt.own { border-color: #f0cf7a; }
-.shop-layer.shop-mall .move-opt.off { opacity: 0.6; }
 .shop-layer.shop-mall .move-opt b { font: 900 16px var(--serif); color: #fbefd6; }
 .shop-layer.shop-mall .move-opt small { flex: 1; font-size: 12px; line-height: 1.5; color: #d6c3a2; }
-.shop-layer.shop-mall .move-opt .btn { justify-content: center; min-height: 40px; }
 /* 月卡：一張金框大卡（圖、名字、限購；好處兩欄一格一條；最底一條價錢） */
 .shop-layer.shop-mall .mall-card { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0 0 8px; padding: 14px; border-radius: 16px;
   border: 2px solid #d9a441; background: linear-gradient(160deg, #5a1c12, #2a0f0a 70%); color: inherit; text-align: left; cursor: pointer; }
@@ -300,15 +228,3 @@
 .card.mall-today b { display: block; font-family: var(--serif); }
 .card.mall-today .mt > span { display: block; font-size: 13px; color: var(--ink-2); }
 
-/* 設定頁管理者區的「自建形象」（第二批） */
-.look-admin { display: grid; gap: 6px; margin: 6px 0; }
-.look-admin p { margin: 0; }
-.look-sheets { display: flex; flex-wrap: wrap; gap: 4px; }
-.look-sheets span { padding: 0 6px; border-radius: 6px; border: 1px solid var(--line, #ccc); opacity: 0.55; }
-.look-sheets span.ok { opacity: 1; border-color: #4f8a5b; }
-.look-gen { white-space: pre-wrap; word-break: break-word; margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); }
-.shop-layer.shop-mall .move-seal { display: grid; place-items: center; background: #b8322a; color: #fff4dc; font-weight: 900; font-size: 1.6rem; }
-.shop-layer.shop-mall .scene-preview { width: 100%; max-width: 100%; aspect-ratio: 720 / 320; border-radius: 8px; background: #000; display: block; margin-top: 8px; }
-.shop-layer.shop-mall .look-show { margin: 6px 0 10px; }
-.shop-layer.shop-mall .look-show .row { justify-content: space-between; align-items: center; margin-top: 6px; }
-.shop-layer.shop-mall .look-show .row .btn { flex: 0 0 auto; width: auto; }

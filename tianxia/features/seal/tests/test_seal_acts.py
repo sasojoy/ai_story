@@ -15,7 +15,11 @@ import server
 from conftest import no_plans, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import annals, biography, calendar, conquest, renown, seal, seal_acts, tavern
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia import calendar, conquest, renown
+from tianxia.features.seal import seal
+from tianxia import seal_acts
+from tianxia.features.tavern import rules as tavern
 from tianxia.features.seal import acts
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
@@ -367,8 +371,8 @@ def test_bots_never_use_an_act():
 
 def test_the_player_action_is_seal_use_not_an_admin_one():
     """玩家動作跟管理者動作不同名（FB-609）。"""
-    assert "seal_use" in server.MAIN_ACTIONS and "seal_use" not in server.ADMIN_ACTIONS
-    assert not set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)
+    assert "seal_use" in server.MAIN_ACTIONS and "seal_use" not in server.FEATURE_ADMIN_ACTIONS
+    assert not set(server.MAIN_ACTIONS) & set(server.FEATURE_ADMIN_ACTIONS)
 
 
 @pytest.mark.slow
@@ -544,7 +548,9 @@ def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day,
 def test_banzhao_lifts_sensing_and_the_peak_try_for_everyone_for_a_day():
     """頒詔一日：人人靜心感悟 +10 個百分點（夾上限）、衝絕學的機會 ×1.2（企劃者 2026-10-21：武學重構之後修練不再擲升品，後半句改成
     衝絕學；掛在 cultivation.peak_scale，契機與服丹共用）。旁人看的是服丹衝關那一個數（force_odds，修練頁寫的就是擲的）。"""
-    from tianxia import cultivation, sensing, team, treasures
+    from tianxia.features.cultivation import cultivation
+    from tianxia.features.sense import sensing
+    from tianxia import team, treasures
 
     c, w, g = _holder("yunzhuan")
     other = _person(c, w, "旁人", side="guan")
@@ -572,7 +578,7 @@ def test_banzhao_multiplies_the_peak_try_on_both_roads(sealed, state, world):
     頒詔之下 30%）與服丹（force_odds，15% → 18%）。期滿、改版關著（生效中的那一筆還在季上）都回到 1。"""
     from test_cultivation import Fixed, _worn, kicker_art
 
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
 
     acts_on(sealed)
     world.claim_skill_name(kicker_art())
@@ -600,10 +606,10 @@ def test_the_peak_scale_is_the_only_caller_of_the_edict():
     """頒詔的後半句只有一個掛點：cultivation.peak_scale（seize、force_odds 都經過它）。"""
     import inspect
 
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
 
     root = Path(__file__).resolve().parents[4] / "tianxia"
-    # 路徑（全部拆包第 23 批）：cultivation.py 搬進修練包 tianxia/features/cultivation/，舊名 tianxia/cultivation.py 是別名；功能包一起掃（測試不算）
+    # 路徑（全部拆包第 23 批）：cultivation.py 搬進修練包 tianxia/features/cultivation/；功能包一起掃（測試不算）
     callers = [f.relative_to(root).as_posix() for f in sorted(root.rglob("*.py")) if f.name != "seal_acts.py" and "tests" not in f.parts
                and "edict_cultivate(" in f.read_text(encoding="utf-8")]
     assert callers == ["features/cultivation/cultivation.py"]
@@ -613,14 +619,14 @@ def test_the_peak_scale_is_the_only_caller_of_the_edict():
 
 
 def _marks(game, c, loc):
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     return min(c.config.sense_marks_cap, sensing._tier(game.state.world.marks.get(sensing.mark_key(loc.id), 0)) * c.config.sense_marks_bonus)
 
 
 @pytest.mark.slow
 def test_banzhao_respects_the_sensing_cap():
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
 
     c, w, g = _holder("yunzhuan")
     other = _person(c, w, "旁人", side="guan")
@@ -661,7 +667,7 @@ def test_chenglu_speeds_stamina_in_its_region_only():
 
 @pytest.mark.slow
 def test_chenglu_makes_the_clinic_free_in_its_region():
-    from tianxia import skillview, team
+    from tianxia import art_cards, team
 
     c, w, g = _holder("chenglu", at="yingchuan_wilds")
     patient = _person(c, w, "病人", side="guan", at="yingchuan")  # 潁川郡有醫館
@@ -672,7 +678,7 @@ def test_chenglu_makes_the_clinic_free_in_its_region():
 
     def heal(game):
         plan = team.heal_plan(game.state, c, game.state.player.member)
-        note = skillview.heal_note(game.state, c)
+        note = art_cards.heal_note(game.state, c)
         return plan, note, game.heal(), game.state.player.stats["silver"], game.state.player.member.injury
 
     plan, note, msgs, silver, injury = _do(c, w, "病人", heal)
@@ -712,8 +718,10 @@ def test_chenglu_does_not_free_the_clinic_elsewhere():
 
 @pytest.mark.slow
 def test_shouxin_doubles_talk_and_toast_warmth_and_opens_the_door():
-    from tianxia import companion_agent, feasts, rules
-    from tianxia.companion_agent import CompanionTurn
+    from tianxia.features.companions import companion_agent
+    from tianxia.features.feast import rules as feasts
+    from tianxia import rules
+    from tianxia.features.companions.companion_agent import CompanionTurn
     from tianxia.state import Feast
 
     c, w, g = _holder("guixin")
@@ -738,8 +746,8 @@ def test_shouxin_doubles_talk_and_toast_warmth_and_opens_the_door():
 
 
 def _warmth(game, c, cid, tag):
-    from tianxia import companion_agent
-    from tianxia.companion_agent import CompanionTurn
+    from tianxia.features.companions import companion_agent
+    from tianxia.features.companions.companion_agent import CompanionTurn
 
     state = game.state.model_copy(deep=True)
     state.player.affinities[cid] = 0
@@ -748,7 +756,7 @@ def _warmth(game, c, cid, tag):
 
 
 def _toast(game, c, cid):
-    from tianxia import feasts
+    from tianxia.features.feast import rules as feasts
     from tianxia.state import Feast
 
     state = game.state.model_copy(deep=True)

@@ -19,7 +19,8 @@ def _into_draw(game):
     """把這個角色放進感悟狀態（選對做法、擲中了）：站到一個探索悟得到意境的地點，開一張有所感的卡。"""
     import random as _random
 
-    from tianxia import insights, sensing
+    from tianxia import insights
+    from tianxia.features.sense import sensing
 
     def setup(g):
         loc = next(l for l in g.content.locations.values() if insights.explore_gives(l, g.content) and not l.prologue_only)
@@ -35,7 +36,7 @@ def _into_draw(game):
 
 def _new_shape(game):
     """一筆會悟出自己新意境（要取名）的現成筆畫；這一處每一筆都落回基本意境時是 None。"""
-    from tianxia import glyph
+    from tianxia.features.sense import glyph
 
     for points in glyph.SAMPLES.values():
         req = game.sense_request(points)
@@ -80,14 +81,14 @@ def test_a_stroke_that_cannot_be_read_is_refused_and_keeps_the_state(client):
 
 def test_sending_a_stroke_without_sensing_is_refused(client):
     _player(client)
-    from tianxia import glyph
+    from tianxia.features.sense import glyph
 
     assert client.post("/api/sense", json={"points": glyph.SAMPLES["剛"]}).status_code == 400
 
 
 def test_the_canvas_line_reads_the_stroke_without_touching_the_game(client):
     _player(client)
-    from tianxia import glyph
+    from tianxia.features.sense import glyph
 
     assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json() == {"ok": True}
     assert client.post("/api/sense_read", json={"points": "x"}).json()["problem"]
@@ -102,7 +103,7 @@ def test_the_canvas_warms_the_model(client):
 
 def test_epiphany_think_names_outside_the_lock(monkeypatch):
     """特殊頓悟的「靜心思名」走三段式：A 鎖內開單、B 鎖外請模型（model_call：在鎖裡被叫到會丟錯）、C 鎖內交回 Game.epiphany_names；不在等著取名照一般的按鈕走。"""
-    from tianxia import epiphany
+    from tianxia.features.sense import epiphany
 
     game = _forger()
     ask = epiphany.NameAsk("頓悟1", "god_x", [])

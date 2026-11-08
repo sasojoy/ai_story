@@ -31,7 +31,10 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_insight_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到這份 clone 的 saves/tianxia.db
 
-from tianxia import bot, database, insight_llm, insights, library, naming, sensing  # noqa: E402
+from tianxia import bot, database  # noqa: E402
+from tianxia.features.sense import insight_llm  # noqa: E402
+from tianxia import insights, library, naming  # noqa: E402
+from tianxia.features.sense import sensing  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402

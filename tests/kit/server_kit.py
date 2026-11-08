@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 import llm_queue
 import server
 import server_push
-from tianxia import battle_instance, companion_agent, fusion, insights, naming, tale
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.companions import companion_agent
+from tianxia import fusion, insights, naming
+from tianxia.features.tale import tale
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.ollama_client import OllamaClient

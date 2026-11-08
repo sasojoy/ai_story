@@ -9,8 +9,8 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
-from tianxia.core.option import Option
+from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SceneHook, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.option import Option, Refused
 from tianxia.engine import Game
 
 DAY = 24 * 3600.0
@@ -242,14 +242,16 @@ def test_outlock_merges_ops_and_refuses_the_same_op_twice(monkeypatch):
 
 
 def test_outlock_jobs_follow_the_written_order_and_refuse_what_does_not_add_up(monkeypatch):
-    """背景寫字照 OUTLOCK_ORDER 排（不照 FEATURES 的先後）；格不在表上、兩包同格、表上沒人登記都丟例外。"""
+    """背景寫字照 OUTLOCK_ORDER 排（不照 FEATURES 的先後）；表外的格接在表尾、照登記的先後（第二輪第 74 批）；兩包同格、表上沒人登記都丟例外。"""
     order = features_core.OUTLOCK_ORDER
     assert order == ("tale", "crowd", "chatter", "letter", "yuedan", "xingshi")
     monkeypatch.setattr(registry, "FEATURES", [_outlock_pack(slots=order[3:]), Feature(), _outlock_pack(slots=reversed(order[:3]))])
     assert [job.slot for job in features_core.outlock_jobs(object())] == list(order)
+    monkeypatch.setattr(registry, "FEATURES", [_outlock_pack(slots=("fake_slot", "fake_later")), _outlock_pack(slots=reversed(order))])
+    assert [job.slot for job in features_core.outlock_jobs(object())] == [*order, "fake_slot", "fake_later"]
     for packs in (
-        [_outlock_pack(slots=(*order, "fake_slot"))],  # 格不在表上
         [_outlock_pack(slots=order), _outlock_pack(slots=order[:1])],  # 兩包同格
+        [_outlock_pack(slots=(*order, "fake_slot")), _outlock_pack(slots=("fake_slot",))],  # 表外的格一樣不能兩包同格
         [_outlock_pack(slots=order[1:])],  # 表上沒人登記
     ):
         monkeypatch.setattr(registry, "FEATURES", packs)
@@ -321,8 +323,8 @@ class Seams(Fake):
     def on_own_turn(self, ctx):
         self._note("on_own_turn")
 
-    def scene(self, ctx):
-        return "**假的宴席**" if self.seated else None
+    def scenes(self):  # core_scene（第二輪第 91 批）：原本的 scene 掛鉤
+        return (SceneHook("own", "feast", lambda ctx: "**假的宴席**" if self.seated else None),)
 
     def scene_over(self, ctx):
         return self.over
@@ -427,6 +429,22 @@ def test_a_closed_shop_gives_no_menu_or_entry_but_still_opens_its_page_and_close
     assert not seams.in_shop
 
 
+def test_the_shop_page_asks_the_packages_even_a_closed_one_and_takes_the_first_answer(monkeypatch):
+    """店面那一頁（第二輪第 93 批）：features.shop_page 問每一包，第一個不是 None 的回去；不問 enabled（原本的分派不看開關）；沒有包認是 None。"""
+    class Pack(Feature):
+        name = "pack"
+
+        def enabled(self, ctx) -> bool:
+            return False
+
+        def shop_view(self, ctx, shop):
+            return {"shop": shop, "ctx": ctx} if shop == "fakeshop" else None
+
+    monkeypatch.setattr(registry, "FEATURES", [Feature(), Pack()])
+    assert features_core.shop_page("這個 ctx", "fakeshop") == {"shop": "fakeshop", "ctx": "這個 ctx"}
+    assert features_core.shop_page("這個 ctx", "別間") is None
+
+
 def test_choose_takes_the_unlisted_ones_first_and_hears_the_package_after_each_action(game, seams):
     """choose_unlisted 在查選單、建紀錄之前問（不在選單上的也接得到、不寫江湖紀錄、不走做完一件事那一下）；after_action 在每個動作的
     最後（記下陣營之後、存回季之前），回的話接在動作的話後面。兩個都不問 enabled。"""
@@ -476,7 +494,7 @@ def test_a_verb_owner_names_the_squad_its_press_fights(game, seams):
 
 
 def test_the_scene_and_the_report_page_ask_the_packages(game, seams):
-    """場景卡：自己眼前的那一張問 scene（_own_scene_text 擂台之後）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
+    """場景卡：自己眼前的那一張問 scenes 登記的格（SCENE_ORDER["own"]）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
     自己眼前的事接在底下）。戰報頁那一筆問 record_detail。三個都不問 enabled。"""
     g = _made(game)
     seams.open = False
@@ -808,7 +826,7 @@ def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatc
     """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（progress：_clear_own）→ 押糧、提示 → 機緣；
     每一格拿到同一個 PlayerState。四格都是包登記的（機緣第 34 批起、progress 第 35 批起由陣營包登記），核心代叫的一格都不剩：
     假包自己登記這四格（登記的先後跟表相反），驗的是照表的先後。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     calls = []
 
@@ -830,7 +848,7 @@ def test_defecting_asks_the_leave_stranded_and_after_slots_where_the_old_lines_w
     """defection.defect：清完、改投之前問 leave（密謀），「你叛出…」那一句之後問 stranded（懸賞，回話接在最後）；陣營包 defect_actions.defect_step
     確定那一支（第 35 批前是 Game._defect_step）：defection.defect 之後問 after——同伴回江湖（leave_behind，第 35 批起陣營包登記；原本核心代叫
     Game._leave_behind）、再食言（parley，人物情誼包登記），回話照這個先後接。關著的假包照樣被問。"""
-    from tianxia import defection
+    from tianxia.features.faction import defection
     from tianxia.features.faction import defect_actions
 
     g = _sided_game()
@@ -863,7 +881,8 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
     """核心代叫的格（rules._EFFECT_CORE；叛投那邊只剩 defection._STRANDED_CORE——_CLEAR_CORE、_LEAVE_CORE 與 engine._DEFECT_AFTER_CORE
     第 35 批拿掉，那幾格改由包登記）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。
     誰登記哪一格照計畫 1.4。"""
-    from tianxia import defection, rules
+    from tianxia.features.faction import defection
+    from tianxia import rules
 
     own = features_core.effect_hooks()
     assert not own.keys() & rules._EFFECT_CORE.keys()
@@ -1046,7 +1065,7 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
 
     from jianfa_kit import jianfa_game, ready
 
-    from tianxia import explore_one
+    from tianxia.features.explore import explore_rules as explore_one
     from tianxia.features.explore import explore_actions
 
     game = ready(jianfa_game(), side="guan", loc="yingchuan_wilds", level=20)
@@ -1080,9 +1099,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
-    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，舊名是包 rules 的別名，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
+    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
     （全部拆包第 27 批：玉璽包那兩格照包的模組屬性找 actions.seal_find、actions.settle，原本是 Game 上的 _seal_find、_seal_settle）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia.features.military import convoy_actions
     from tianxia.features.seal import actions as seal_actions
 
@@ -1304,11 +1323,11 @@ def test_the_core_and_the_packages_take_every_step_slot_exactly_once():
 
 
 def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
-    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找舊名 tianxia.bounties，第 45 批成了包 rules 的別名；包的格找自己的模組）：換掉的照樣打得到，參數照傳
+    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找包的 rules；包的格找自己的模組）：換掉的照樣打得到，參數照傳
     （軍令那一格拿殼傳進來的 orders、新手目標那一格拿 status；託付、伏筆、去投靠讀 ctx 上的 state 與 content）。"""
     from wins_kit import wins_game
 
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
     from tianxia import step as step_rules
     from tianxia.features.companions import errands
     from tianxia.features.faction import join_actions
@@ -1347,7 +1366,7 @@ def test_the_life_slot_runs_only_when_a_package_takes_it_and_asks_a_closed_one_t
     """life 那一格核心不代叫（core 傳 {}）：包沒登記（契約測試換掉 FEATURES）時不跑、回空串；登記了照 registered() 問、不看 enabled
     （原位本來就不看宴客包的開關：maybe_open 自己判 on），收到 (state, content, cid, turn)。真的宴客包登記的那一格就是 rules.maybe_open
     （叫的那一下才照模組屬性找：換掉 feasts.maybe_open 照樣打得到）。"""
-    from tianxia import feasts
+    from tianxia.features.feast import rules as feasts
 
     real = registry.FEATURES
     monkeypatch.setattr(registry, "FEATURES", [])
@@ -1551,6 +1570,7 @@ def test_the_core_and_the_packages_take_every_seam_slot_exactly_once():
         "outlets": [("season.carry", "outlets")],
         "peers": [("season.carry", "peers")],
         "legacy": [("season.carry", "legacy")],
+        "craft": [("sync.deliver", "echoes")],  # core_rest
     }
 
 
@@ -1684,6 +1704,7 @@ def test_the_menu_order_is_the_table_in_the_plan():
         "depart": ("bounties", "escort", "smithy", "gear", "shops"),
         "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
         "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # 第 57 批
+        "stale": ("lean", "bounties", "market", "recruit", "arena"),  # 第二輪第 92 批
     }
     assert Feature().menus() == ()
 
@@ -1782,6 +1803,102 @@ def _menu_core_slots(at):
     return set({**engine._MENU_CORE, "block": atlas._BLOCK_CORE, "depart": departure._DEPART_CORE}.get(at, ()))
 
 
+# core_scene（第二輪第 91 批「場景卡收接縫」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第91批.md 第二節）
+
+
+class Sceney(Feature):
+    """只登記場景卡的格的假包；open 是 enabled 的答案（這些格不問它）。"""
+
+    name = "sceney"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def scenes(self):
+        return self.hooks
+
+
+def test_the_scene_order_is_the_table_in_the_plan():
+    """順序就是行為：每一個位置的格照換成掛鉤之前 if 鏈一支一支的先後（計畫第二節），連核心自己的格一起列，一格不挪。改這張表先過 PM。"""
+    assert features_core.SCENE_ORDER == {
+        "own": ("ended", "event", "duel", "arena", "feast", "sense", "story", "talk", "ally", "faction", "defect", "audience", "omen", "road", "place"),
+        "art": ("ended", "battle", "event", "bout", "feast", "sense", "talk", "place"),
+    }
+    assert Feature().scenes() == ()
+
+
+def test_a_package_can_only_take_a_scene_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一個位置都驗）、沒有的位置、兩包（或同一包兩次）登記同一格，scene_hooks 都丟 ValueError；
+    核心自己的格打錯字、沒有這個位置也丟。"""
+    run = lambda ctx: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("art", "story", run)])])  # 答題不在圖的表上是刻意的
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("nothing", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("own", "feast", run)]), Sceney([SceneHook("own", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("own", "feast", run), SceneHook("own", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("own")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.scene_hooks("nothing")
+    with pytest.raises(ValueError):
+        features_core.scene_first("own", {"plce": run}, "ctx")
+    with pytest.raises(ValueError):
+        features_core.scene_first("nothing", {}, "ctx")
+
+
+def test_the_first_scene_slot_that_answers_takes_the_card_and_an_empty_answer_counts(monkeypatch):
+    """scene_first 照表的順序叫：包的與核心的格穿插，照表、不照登記的先後；關著的包照叫（原位不看開關）；第一個不是 None 的就回它、後面的不叫。
+    "" 與 {} 也算接管：取名的意境不在了文字就是空字串，不往下掉到地點；{} 是「這個畫面是我的，沒有圖」。那一格的包沒登記就跳過（契約測試換掉 FEATURES 時）。"""
+    calls = []
+
+    def note(slot, back=None):
+        return lambda ctx: calls.append((slot, ctx)) or back
+
+    hooks = [SceneHook("own", "road", note("road", "路上")), SceneHook("own", "sense", note("sense", "")), SceneHook("own", "duel", note("duel"))]
+    monkeypatch.setattr(registry, "FEATURES", [Sceney(hooks, open_=False)])
+    assert features_core.scene_first("own", {"ended": note("ended"), "place": note("place", "地點")}, "ctx") == ""
+    assert calls == [("ended", "ctx"), ("duel", "ctx"), ("sense", "ctx")]
+    monkeypatch.setattr(registry, "FEATURES", [Sceney([SceneHook("art", "bout", lambda ctx: {})])])
+    assert features_core.scene_first("art", {"place": lambda ctx: {"kind": "place"}}, "ctx") == {}
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.scene_first("art", {"place": lambda ctx: {"kind": "place"}}, "ctx") == {"kind": "place"}
+    assert features_core.scene_first("art", {"ended": lambda ctx: None}, "ctx") is None
+
+
+def test_the_core_and_the_packages_take_every_scene_slot_exactly_once():
+    """核心自己的格與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑（scene_art 靠整條 own 鏈判斷，少一格圖會蓋錯或不見）、也沒有一格兩邊都寫。誰登記哪一格照計畫第二節鎖住。"""
+    from tianxia.core import scene_view
+
+    assert scene_view.OWN_CORE.keys() == {"ended", "event", "place"}
+    assert scene_view.ART_CORE.keys() == {"ended", "event", "place"}
+    for at, theirs in (("own", scene_view.OWN_CORE), ("art", scene_view.ART_CORE)):
+        mine = features_core.scene_hooks(at)
+        assert not mine.keys() & theirs.keys(), at
+        assert mine.keys() | theirs.keys() == set(features_core.SCENE_ORDER[at]), at
+    got = {f.name: sorted((h.at, h.slot) for h in f.scenes()) for f in features_core.registered() if f.scenes()}
+    assert got == {
+        "bout": sorted([("own", "duel"), ("own", "arena"), ("art", "bout")]),
+        "battle": [("art", "battle")],
+        "feast": sorted([("own", "feast"), ("art", "feast")]),
+        "sense": sorted([("own", "sense"), ("art", "sense")]),
+        "story": [("own", "story")],
+        "companions": sorted([("own", "talk"), ("art", "talk")]),
+        "faction": sorted([("own", "ally"), ("own", "faction"), ("own", "defect")]),
+        "socialize": [("own", "audience")],
+        "military": [("own", "omen")],
+        "travel": [("own", "road")],
+    }
+
+
 def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
     """核心代叫的格與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。誰登記哪一格照計畫第二節鎖住。"""
     from tianxia import engine
@@ -1797,15 +1914,15 @@ def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
         "seal": sorted([("tick", "seal"), ("front", "seal"), ("quick", "seal")]),
         "battle": [("quick", "battle")],
         "zhuan": [("rest", "zhuan")],
-        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena")]),
+        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena"), ("stale", "arena")]),
         "sense": sorted([("take", "sense"), ("idle", "sense"), ("quick", "canvas")]),
         "story": sorted([("take", "story"), ("here", "story")]),
-        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand")]),
-        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction")]),
+        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand"), ("stale", "recruit")]),
+        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction"), ("stale", "lean")]),
         "socialize": sorted([("take", "audience"), ("here", "social"), ("notes", "socialize"), ("idle", "audience"), ("block", "audience")]),
-        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties")]),
+        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties"), ("stale", "bounties")]),
         "smithy": sorted([("take", "smithy"), ("here", "smithy"), ("idle", "smithy"), ("open", "smithy"), ("depart", "smithy"), ("block", "smithy")]),
-        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear")]),
+        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear"), ("stale", "market")]),
         "outlets": sorted([("here", "donate"), ("here", "dadian"), ("idle", "outlets"), ("block", "outlets")]),
         "tavern": sorted([("idle", "tavern"), ("block", "tavern")]),
         "military": sorted([("take", "omen"), ("here", "order"), ("here", "rank2"), ("here", "rank"), ("here", "omen"), ("idle", "omen")]),
@@ -1957,6 +2074,147 @@ def test_the_quick_row_answers_after_the_menu_check_and_before_the_journal(game,
     assert len(g.state.journal) == journal + 1
 
 
+def test_the_stale_row_answers_after_the_menu_lookup_and_before_the_cannot_line(game, monkeypatch):
+    """Game.choose 的 stale（第二輪第 92 批）：查完選單之後、「此刻無法」之前照表的先後問，每一格拿到查到的那一顆與 id；
+    回 Refused 就直接回它、後面的不問、不再 _log（寫不寫江湖紀錄是格自己的事）；回 Option 換掉查到的那一顆、照它往下走；都回 None 照舊往下。"""
+    calls, answers = [], {}
+
+    def slot(name):
+        return lambda ctx, option, option_id: calls.append((name, option.id if option else None, option_id)) or answers.get(name)
+
+    monkeypatch.setattr(registry, "FEATURES", [Quicky([
+        MenuHook("take", "gear", lambda ctx: [Option(id="fake:go", label="假的那一顆")]),
+        *(MenuHook("stale", name, slot(name)) for name in features_core.MENU_ORDER["stale"]),
+    ])])
+    g = _made(game)
+
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]
+    assert calls == [(name, None, "fake:gone") for name in features_core.MENU_ORDER["stale"]]
+
+    calls.clear()
+    log = len(g.state.log)
+    answers["market"] = Refused(["不成。"])
+    got = g.choose("fake:gone")
+    assert isinstance(got, Refused) and got == ["不成。"] and len(g.state.log) == log
+    assert [c[0] for c in calls] == ["lean", "bounties", "market"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="假的那一顆")
+    assert "走到 choose 掛鉤。" in g.choose("fake:gone")
+    assert [c[0] for c in calls] == ["lean"]
+
+    calls.clear()
+    answers.clear()
+    answers["lean"] = Option(id="fake:go", label="灰的", enabled=False)
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]  # 換上來的灰的照舊擋
+
+    calls.clear()
+    answers.clear()
+    assert "走到 choose 掛鉤。" in g.choose("fake:go")
+    assert calls == [(name, "fake:go", "fake:go") for name in features_core.MENU_ORDER["stale"]]
+
+
+def test_the_outcome_says_how_the_journal_entry_lands(game, monkeypatch):
+    """Outcome 接在 run 後面的三格（第二輪第 92 批）：沒給就是一下一則；quiet 拿建好的這一則、真的就不寫；merge 併進同標題那一則；fold 在動作之後才叫、回的東西交給 add_entry。
+    現有兩格的先後與預設不准動（各包都用位置或名字建）。"""
+    order, made = [], {}
+
+    class Landy(Quicky):
+        def choose(self, ctx, kind, arg):
+            return made[arg] if kind == "fake" else None
+
+    def said(line):
+        return lambda: order.append("run") or [line]
+
+    monkeypatch.setattr(registry, "FEATURES", [Landy([
+        MenuHook("take", "gear", lambda ctx: [Option(id=f"fake:{name}", label=name) for name in ("plain", "quiet", "loud", "merge", "fold")]),
+    ])])
+    g = _made(game)
+    bare = Outcome("標題", said("x"))
+    assert (bare.quiet, bare.merge, bare.fold) == (None, False, None)
+
+    made["plain"] = Outcome("一樣的標題", said("第一句。"))
+    start = len(g.state.journal)
+    g.choose("fake:plain")
+    assert len(g.state.journal) == start + 1 and g.state.journal[0].lines[:1] == ["第一句。"]
+
+    seen = []
+    made["quiet"] = Outcome("一樣的標題", said("翻頁。"), quiet=lambda entry: seen.append(entry.lines) or True)
+    g.choose("fake:quiet")
+    assert len(g.state.journal) == start + 1 and seen and seen[0][:1] == ["翻頁。"]
+
+    made["loud"] = Outcome("一樣的標題", said("第二句。"), quiet=lambda entry: False)
+    g.choose("fake:loud")
+    assert len(g.state.journal) == start + 2  # quiet 是假的、沒給 merge：照舊另起一則
+
+    made["merge"] = Outcome("一樣的標題", said("第三句。"), merge=True)
+    g.choose("fake:merge")
+    assert len(g.state.journal) == start + 2 and g.state.journal[0].lines[:2] == ["第二句。", "第三句。"]
+
+    order.clear()
+    made["fold"] = Outcome("一樣的標題", said("結果。"), merge=True, fold=lambda: order.append("fold") or (lambda line: line == "第二句。"))
+    g.choose("fake:fold")
+    assert order == ["run", "fold"]  # fold 在動作之後才叫（判斷要讀動作之後的狀態）
+    assert len(g.state.journal) == start + 2
+    assert g.state.journal[0].lines[:2] == ["結果。", "第三句。"]  # 收掉 fold 說是的那一行、其餘接在結果句後面（add_entry）
+
+
+SCRATCH_FLAGS = {
+    "explore": {"_outing_busy": False, "_loot_scale": 1.0, "_drop_scale": 1.0, "_gate_scale": 1.0, "_outing_close": set(), "_beat": None, "_outing_upset": False},
+    "gear": {"_affinity_before": None},
+    "battle": {"_escort_picked": False, "_escort_now": None, "_battle_ref": None},
+    "sortie": {"_clash_won": False, "_sortie_marked": False, "_sortie_moved": 0.0, "_sortie_flipped": False},
+    "smithy": {"smith_result": None},
+    "peers": {"peer_brief": None},
+    "cultivation": {"forged": False, "forged_thing": None, "secret_solved": None},
+    "companions": {"_persuade_said": None, "_talk_turn": None, "_talk_said": None, "_parley_decision": None},
+}
+
+
+def test_the_scratch_flags_are_declared_by_their_packages_and_do_not_clash():
+    """Feature.scratch()（第二輪第 92 批）：24 個旗標照包宣告、預設值照原本的 Game.__init__；名字不重複、不撞 Game 類別上的東西（不然 setattr 會蓋掉方法）；
+    每次回新的 dict，_outing_close 兩份 Game 不能共用。"""
+    got = {f.name: f.scratch() for f in registry.DECLARED if f.scratch()}
+    assert got == SCRATCH_FLAGS
+    names = [name for flags in got.values() for name in flags]
+    assert len(names) == len(set(names)) == 24
+    assert not [name for name in names if hasattr(Game, name)]
+    for f in registry.DECLARED:
+        assert f.scratch() is not f.scratch()
+    assert Feature().scratch() == {}
+
+
+def _has_every_scratch_flag(g: Game) -> bool:
+    return all(hasattr(g, name) for flags in SCRATCH_FLAGS.values() for name in flags)
+
+
+def test_every_game_has_the_scratch_flags_before_it_drops_stale_references(game, monkeypatch):
+    """scratch_init 在 _drop_stale_references 之前跑完（那一支會換季、跑掛鉤，會讀旗標）；_kin、_admin_target、_load_kin 開的也有；FEATURES 換掉（假的或空的）建的也有
+    （核心的 combat、pushing、choose 照樣讀，所以走 DECLARED 不走 registered）；兩份 Game 的 _outing_close 不是同一個。"""
+    from tianxia.characters import CharacterStore
+
+    assert _has_every_scratch_flag(game)
+
+    other = game._kin(game.state.model_copy(deep=True))
+    assert _has_every_scratch_flag(other) and other._outing_close is not game._outing_close
+
+    other.state.player.name = "別人"
+    CharacterStore(game.world.db).save(other.state)
+    assert game._load_kin("別人") is not None and _has_every_scratch_flag(game._load_kin("別人"))
+    target = game._admin_target("別人")
+    assert target is not game and _has_every_scratch_flag(target)
+
+    seen = []
+    real = Game._drop_stale_references
+    monkeypatch.setattr(Game, "_drop_stale_references", lambda self: seen.append(_has_every_scratch_flag(self)) or real(self))
+    for features in ([], [Menuy([])]):
+        monkeypatch.setattr(registry, "FEATURES", features)
+        built = Game(game.content, game.state, game.rng, game.world)
+        assert _has_every_scratch_flag(built)
+    assert seen == [True, True]
+
+
 class Tailed(Feature):
     """帶後綴的 act 子動詞的假包（關著：這幾格不問 enabled）。plainverb 只有沒後綴的那幾格。"""
 
@@ -2002,6 +2260,16 @@ def test_a_verb_with_a_tail_gets_the_tail_and_a_verb_without_one_falls_to_the_co
         g._act("plainverb:乙")
     assert g._action_title("act", "plainverb:乙") == "提前出關"
     assert g._fight_squad("act:plainverb:乙") is None and g._fight_squad("act:plainverb") is thug
+
+
+def test_the_silver_verbs_answer_the_title_only_for_kind_act(world):
+    """銀兩那四樣（Verb.act_only；第二輪第 99 批從 Game._action_title 的字面換來）：kind 要是 "act" 才問主人，別的 kind 帶同一個字照舊是「提前出關」。"""
+    from conftest import real_content
+
+    g = Game.new(real_content("season21"), "甲", rng=random.Random(0), world=world)
+    for verb in ("silver_donate", "mentor", "furnace", "buy_legend"):
+        assert g._action_title("sect", verb) == "提前出關"
+        assert g._action_title("act", verb) != "提前出關"
 
 
 def test_every_act_verb_has_the_owner_in_the_plan():
@@ -2220,6 +2488,75 @@ def test_the_howto_page_is_the_table_joined_and_slots_look_up_their_functions_wh
     assert "第五十九批換掉的" in guide_words.page(content, season, recruitable=False)
 
 
+# core_content（第二輪第 100 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第100批.md 第二節）：位置固定的內容驗證
+class ContentSlotter(Feature):
+    """只登記內容驗證格的假包。"""
+
+    name = "content_slotter"
+
+    def __init__(self, hooks):
+        self.hooks = tuple(hooks)
+
+    def enabled(self, ctx):
+        return False
+
+    def content_slots(self):
+        return self.hooks
+
+
+def test_a_feature_takes_no_content_slot_by_default_and_the_table_is_the_plan():
+    assert Feature().content_slots() == ()
+    assert features_core.CONTENT_SLOTS == (
+        "insight_scenes", "insight_strong", "faction_choices", "seal", "stances", "errands", "companions", "foreshadows", "promotions", "opportunities",
+        "duels", "gear", "signature_arms", "bounties", "storylines")
+
+
+def test_check_at_only_knows_its_table_and_only_one_package_a_slot(monkeypatch):
+    """打錯字、表外的格、同一格登記兩次（兩包或同一包）都丟 ValueError；每一次都驗登記的全部格，不只驗問的那一格。"""
+    hook = features_core.ContentSlot
+    none = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "DECLARED", ())
+    with pytest.raises(ValueError):
+        features_core.check_at("no_such_slot", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("no_such_slot", none)]),))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("duels", none)]), ContentSlotter([hook("duels", none)])))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+    monkeypatch.setattr(registry, "DECLARED", (ContentSlotter([hook("duels", none), hook("duels", none)]),))
+    with pytest.raises(ValueError):
+        features_core.check_at("gear", None, None)
+
+
+def test_check_at_reads_declared_not_features_and_passes_what_the_call_site_passes(monkeypatch):
+    """契約測試把 FEATURES 換成 [] 時內容母本可能正好在建：照舊驗（讀 DECLARED）。多傳的參數原樣傳；沒人登記的格跳過。"""
+    seen = []
+    slotter = ContentSlotter([features_core.ContentSlot("gear", lambda content, need, *args: seen.append((content, need, args)))])
+    monkeypatch.setattr(registry, "DECLARED", (slotter,))
+    monkeypatch.setattr(registry, "FEATURES", [])
+    features_core.check_at("gear", "內容", "need", "known")
+    assert seen == [("內容", "need", ("known",))]
+    features_core.check_at("duels", "內容", "need")
+    assert len(seen) == 1
+
+
+def test_every_content_slot_has_exactly_one_package(monkeypatch):
+    """照真的 DECLARED：15 格都有主人、沒有一格默默不驗（主人照計畫第二節那張表）；FEATURES 換成 [] 照樣叫得到真的包。"""
+    owners = {f.name: [h.slot for h in f.content_slots()] for f in registry.DECLARED if f.content_slots()}
+    assert owners == {
+        "sense": ["insight_scenes", "insight_strong"], "faction": ["faction_choices"], "seal": ["seal"],
+        "companions": ["stances", "errands", "companions"], "military": ["foreshadows", "promotions", "opportunities"],
+        "bout": ["duels"], "gear": ["gear", "signature_arms"], "bounties": ["bounties"], "story": ["storylines"]}
+    assert sorted(s for slots in owners.values() for s in slots) == sorted(features_core.CONTENT_SLOTS)
+    from conftest import real_content
+
+    monkeypatch.setattr(registry, "FEATURES", [])
+    seen: list[bool] = []
+    features_core.check_at("bounties", real_content("season21"), lambda ok, message: seen.append(ok))
+    assert seen and all(seen)
+
+
 # shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）：狀態列與江湖畫面的格
 class Slotter(Feature):
     """只登記狀態列格的假包；open 是 enabled 的答案（狀態列的格不問它）。"""
@@ -2245,6 +2582,8 @@ def test_the_status_order_is_the_table_in_the_plan():
                  "party", "news", "tales", "admin", "guide", "horse_art", "push", "web_push", "shop", "prep", "milestone", "features", "glow", "fronts",
                  "orders", "week_card", "mostly", "sides_card", "figures_here", "companions", "event_opts", "rumor_layers", "convoy", "conquest",
                  "sortie_cards", "siege", "xingshi", "plan", "place_state", "place_deeds", "letter", "zhuan", "season_result", "ending"),
+        "admin": ("phase", "battles", "events", "trends", "timetable", "season_one", "season21", "realign", "default_dates", "mandate_at", "showdowns",
+                  "next_has_timetable", "fallen", "seal", "xingshi", "conquest", "mingtie", "divine_out", "llm_queue", "now"),
     }
     assert Feature().status_slots() == ()
 
@@ -2253,11 +2592,13 @@ def _slot(table, slot, keys=None):
     return features_core.StatusHook(table, slot, lambda ctx, frame: {k: slot for k in (keys or (slot,))})
 
 
-def test_a_package_can_only_take_a_status_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
-    """表上沒有的表或格、兩包（或同一包兩次）登記同一格，status_hooks 都丟 ValueError（問別的表也丟：每一次都驗全部）；核心代叫的寫了表外的格，status_run 丟。"""
-    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "nosuch")])])
-    with pytest.raises(ValueError):
-        features_core.status_hooks("status")
+def test_a_package_slot_off_the_table_goes_to_the_tail_and_only_one_package_a_slot(monkeypatch):
+    """包的格不在表上：status_hooks 收下、status_run 走完表再照登記的先後叫，鍵排在最後（第二輪第 74 批，同 action_table）。表名打錯、兩包（或同一包兩次）登記同一格，
+    status_hooks 都丟 ValueError（問別的表也丟：每一次都驗全部）；核心代叫的寫了表外的格，status_run 照丟（只有包能接尾巴）。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "nosuch"), _slot("status", "invites")]), Slotter([_slot("status", "later"), _slot("status", "head")])])
+    assert list(features_core.status_hooks("status")) == ["nosuch", "invites", "later", "head"]
+    assert features_core.status_hooks("main") == {}  # 別的表不收它們
+    assert list(features_core.status_run("status", {}, {}, None)) == ["head", "invites", "nosuch", "later"]
     monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("nosuch", "head")])])
     with pytest.raises(ValueError):
         features_core.status_hooks("status")

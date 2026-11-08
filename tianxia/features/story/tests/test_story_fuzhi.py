@@ -7,7 +7,8 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import storyline, team
+from tianxia.features.story import storyline
+from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.rules import day_seconds, fill_marks
 

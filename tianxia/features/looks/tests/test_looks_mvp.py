@@ -7,7 +7,7 @@ from conftest import real_content
 from test_looks import _game
 from test_looks_moves import _art, _made, on  # noqa: F401  fixture
 
-from tianxia.battle_instance import BattleInstance, BattleParticipant, BattleRoundRecord
+from tianxia.features.battle.instance import BattleInstance, BattleParticipant, BattleRoundRecord
 from tianxia.engine import Game
 from tianxia.features.looks import actions, moves, mvp
 from tianxia.sqlite_world import open_world

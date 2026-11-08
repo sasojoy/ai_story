@@ -6,7 +6,9 @@ import random
 
 import pytest
 
-from tianxia import bot, bot_policy, duel, rules
+from tianxia import bot, bot_policy
+from tianxia.features.bout import duel_rules as duel
+from tianxia import rules
 from tianxia.core import battle_base as battle_instance  # 全部拆包第 54 批：duel_actions 沒給分數時讀核心的 assess_gamble，換這一格才打得到
 from tianxia.content import ContentError, validate
 from tianxia.engine import DUEL_FLEE, Game
@@ -459,7 +461,7 @@ def test_the_pool_lost_to_a_boss_is_counted_after_the_armor_so_the_injury_is_sma
 def test_every_model_that_carries_a_cut_reads_old_saves_and_is_read_by_older_programs():
     """退版安全（3.9）：DuelState、ArenaEntry、ArenaSide、BattleParticipant、SealSide 都不是 _Strict（extra 預設 ignore）——新程式讀沒有 cut 的舊存檔是 0，
     舊程式讀有 cut 的新存檔會略過它不認得的鍵。資料庫結構（第 7 版）不動。（實讀過 origin/feature/smithing-flow 的舊程式，結果寫在計畫與回報。）"""
-    from tianxia.battle_instance import BattleParticipant
+    from tianxia.features.battle.instance import BattleParticipant
     from tianxia.state import ArenaEntry, ArenaSide, DuelState
     from tianxia.world_state import SealSide
 

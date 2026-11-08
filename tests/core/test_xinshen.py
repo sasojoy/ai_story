@@ -1,6 +1,6 @@
 """心神（tianxia/core/xinshen.py；設計稿 https://claude.ai/artifact/NbTxoAPdroin7N9cRjCiP3 第 4 版；Joy 2026-11-06「可以 寫」）：
 跟人物說話不扣體力、扣心神；免費、月卡、存著的三份分開記，一般交談先扣月卡、再扣免費、最後動存著的，隱線只扣免費；
-每位人物每天前幾輪長情誼、之後只聊天，最多 Config.xinshen.turns_per_figure 輪；問酒家另算一天幾次。"""
+每位人物每天前幾輪長情誼、之後只聊天，最多 Config.xinshen.turns_per_figure 輪；問酒家另算一天幾次（規則與測試在酒肆包，tianxia/features/tavern/tests/test_tavern.py）。"""
 from __future__ import annotations
 
 import random
@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
+from tianxia.features.companions import companion_agent
 from tianxia.characters import name_key
 from tianxia.core import xinshen
 from tianxia.engine import Game
@@ -59,17 +59,6 @@ def test_no_card_means_no_card_share_and_a_new_card_counts_the_same_day(on, game
     xinshen.spend(s, on, day, False, 0, 2)
     assert xinshen.purse(s, on, day, False, 0) == xinshen.Purse(free=4, card=0, bank=0)
     assert xinshen.purse(s, on, day, True, 0).card == 4  # 買卡那一刻當天就有
-
-
-def test_tavern_asks_count_per_day_only_when_on(content, game):
-    s = game.state
-    assert xinshen.asks_left(s, content, 100) is None  # 關著不限
-    content.config.xinshen.enabled = True
-    for left in (3, 2, 1):
-        assert xinshen.asks_left(s, content, 100) == left
-        xinshen.note_ask(s, content, 100)
-    assert xinshen.asks_left(s, content, 100) == 0
-    assert xinshen.asks_left(s, content, 101) == 3
 
 
 # ── 對話 ────────────
@@ -200,7 +189,17 @@ def test_refund_takes_back_only_what_is_still_stored(shop):
 
 
 def test_the_howto_page_says_talk_spends_xinshen(on, game):
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
 
-    text = howto.page(on, game.state.world, recruitable=False)
+    text = guide_howto.page(on, game.state.world, recruitable=False)
     assert "扣心神：按選項 1 點、自己說 2 點" in text and "還能聊到第 8 輪" in text
+
+
+def test_the_real_incense_goes_on_sale_with_the_switch():
+    """凝神香直接上架（Joy 2026-11-07「凝神香要直接上架」）：正式內容只看心神的開關，不等日期。"""
+    from conftest import real_content
+
+    content = real_content()
+    for item_id in ("xinshen_5", "xinshen_30"):
+        sale = content.mall[item_id].on_sale
+        assert sale.rule == xinshen.EFFECT and sale.start is None and sale.end is None

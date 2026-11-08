@@ -7,7 +7,10 @@ import pytest
 from conftest import real_content
 from stances_kit import at, real_game
 from bounty_ctx import bounty_ctx
-from tianxia import bounties, calendar, figure_life, figures, letters, relations
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar, figure_life, figures
+from tianxia.features.companions import letters
+from tianxia import relations
 from tianxia.content import ContentError, validate
 from tianxia.models import RelationDef
 from tianxia.state import Feast, GameState, ParleyDebt, PlayerState, Toast

@@ -5,8 +5,13 @@ from unittest import mock
 import pytest
 from conftest import FixedRandom, next_season, real_content
 
-from tianxia import bot, fusion, glyph, insight_llm, insights, journal, naming, sensing, treasures
+from tianxia import bot, fusion
+from tianxia.features.sense import glyph, insight_llm
+from tianxia import insights, journal, naming
+from tianxia.features.sense import sensing
+from tianxia import treasures
 from tianxia.engine import Game
+from tianxia.features.sense import bots as sense_bots
 from tianxia.models import InsightScene, SenseMethod
 from tianxia.sqlite_world import open_world
 
@@ -325,7 +330,7 @@ def test_a_server_bot_hands_a_new_shape_to_the_model_or_lands_on_the_base(lake):
     _pick(lake, "柔")
     closed = bot_policy.NamingSlot(open=False)
     with pytest.MonkeyPatch.context() as m:
-        m.setattr(bot, "SENSE_DRAW", 1.0)
+        m.setattr(sense_bots, "SENSE_DRAW", 1.0)
         bot_policy._sense(lake, random.Random(0), closed)
     assert closed.job is None and "shui" in lake.state.player.insights and lake.state.player.own_insights == {}
 
@@ -334,8 +339,8 @@ def test_a_server_bot_hands_a_new_shape_to_the_model_or_lands_on_the_base(lake):
     _pick(lake, "柔")
     slot = bot_policy.NamingSlot(open=True)
     with pytest.MonkeyPatch.context() as m:
-        m.setattr(bot, "SENSE_DRAW", 1.0)
-        m.setattr(bot, "sense_stroke", lambda game, rng, same=False: glyph.SAMPLES["柔" if same else "慢"])
+        m.setattr(sense_bots, "SENSE_DRAW", 1.0)
+        m.setattr(sense_bots, "sense_stroke", lambda game, rng, same=False: glyph.SAMPLES["柔" if same else "慢"])
         bot_policy._sense(lake, random.Random(0), slot)
     assert isinstance(slot.job, bot_policy.SenseJob) and slot.job.request.needs_name
     bot_policy.apply_job(lake, slot.job, ("湖心月", ""))

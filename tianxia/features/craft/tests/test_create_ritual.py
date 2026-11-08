@@ -6,11 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import arts as arts_mod, create, moves, tactics, team
+from tianxia import arts as arts_mod
+from tianxia.features.craft import create
+from tianxia import moves, tactics, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import ATTRIBUTES, MartialArt as _MA
-from tianxia import create
+from tianxia.features.craft import create
 from tianxia.state import CreateDraft
 
 
@@ -214,7 +216,7 @@ def test_fire_follows_the_score_and_scales_the_growing_numbers(content):
 
 
 def test_a_created_art_grows_its_own_move(content):
-    from tianxia import skillview
+    from tianxia.features.cultivation import art_view
 
     game = _game(content)
     reading = create.IntentReading(score=80, attributes=["快"], lean="無", move="追風影", say="腳下一錯追了上去")
@@ -235,7 +237,7 @@ def test_a_created_art_grows_its_own_move(content):
     p.member.wugong_id, p.member.wugong_level = "追影拳", 1
     held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")
     assert held.tactic.rate < move.rate  # 第一成招還生
-    row = next(r for r in skillview.art_rows(game.state, content, game.world) if r["id"] == "追影拳")
+    row = next(r for r in art_view.art_rows(game.state, content, game.world) if r["id"] == "追影拳")
     assert row["tactic"].startswith(seal + "〔疾影〕") and row["tactic"].endswith("（招還生）")
     p.member.wugong_level = content.config.arts.move_raw_levels + 1
     held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")

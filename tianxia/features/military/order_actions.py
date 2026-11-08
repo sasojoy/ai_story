@@ -7,11 +7,13 @@ step_items、step_place，只讀；ORDER_GAIN 從 weekcard 搬來，字一個不
 from __future__ import annotations
 
 from tianxia import materials
-from tianxia import atlas, orders  # 共用規則層（軍令卡的寫法 atlas.order_how、打擊點 _strike_place、摸清 is_known，第 50 批收進；軍令 orders）
+from tianxia import atlas, orders  # 共用規則層（打擊點 _strike_place、摸清 is_known，第 50 批收進；軍令 orders）
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.option import Option
 from tianxia.models import Location
 from tianxia.rules import front_of
+
+from . import order_cards  # 軍令卡上怎麼出力那一行（第二輪第 97 批從 atlas 搬進這一包）
 
 
 def order_options(ctx, loc: Location) -> list[Option]:
@@ -66,7 +68,7 @@ def orders_view(ctx) -> list[dict]:
     """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
     截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
     收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
-    沒達成的軍令多一個 how：怎麼出力（atlas.order_how，FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵。"""
+    沒達成的軍令多一個 how：怎麼出力（order_cards.order_how，FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵。"""
     s, c = ctx.state, ctx.content
     if s.world.ended:
         return []
@@ -80,7 +82,7 @@ def orders_view(ctx) -> list[dict]:
             "deadline": ctx.stamp(orders.deadline(s, c, o)),  # 下週一 00:00；21 天季是隔天 00:00
         }
         if not o.done and (o.template != "strike" or o.figure is not None):
-            view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
+            view["how"] = order_cards.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
         views.append(view)
     return views
 

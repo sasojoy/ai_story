@@ -7,7 +7,8 @@ from __future__ import annotations
 
 
 from stances_kit import LUZHI, real_game
-from tianxia import errands, step, weekcard
+from tianxia.features.companions import errands
+from tianxia import step, weekcard
 
 
 def _steps(g):

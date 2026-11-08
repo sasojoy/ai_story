@@ -1,7 +1,7 @@
 """掛著重賞的討伐要名動一方以上才揭得了（名聲設計 4.2）；重賞給出去之後誰都揭得了；手上揭著的不收回。"""
 from conftest import real_content
 
-from tianxia import bounties
+from tianxia.features.bounties import rules as bounties
 from tianxia.state import Bounty, new_game_state
 
 

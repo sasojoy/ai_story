@@ -8,13 +8,13 @@
 - 拿到時江湖史一行、天下大事傳聞一句（具名）；上神器譜（book_rows，forge_secrets.divine_book 併進去，跨季讀 seasons 表）。
 - 不擲骰：兩條路都是門檻，不碰 Game.rng（FB-129）。
 
-只 import models、state、weapons、treasures、figures、rules、core.signature_base（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；舊名 tianxia/signature_arms.py
-留成指到這裡的別名（leaderboard.gear_card、測試）；engine 的 _drop_stale_references 第 55 批起讀核心的 core/signature_base.py。
+只 import models、state、weapons、treasures、figures、rules、core.signature_base（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；
+engine 的 _drop_stale_references 第 55 批起讀核心的 core/signature_base.py。
 """
 from __future__ import annotations
 
 from tianxia import figures, treasures, weapons  # 共用規則層
-from tianxia.core.signature_base import owned, refresh_names  # noqa: F401  核心（core_seams，全部拆包第 55 批：清失效參照讀的那一小半搬進核心，這裡 re-export 同一批）
+from tianxia.core.signature_base import REF, owned, refresh_names  # noqa: F401  核心（core_seams，全部拆包第 55 批：清失效參照讀的那一小半搬進核心，這裡 re-export 同一批）
 from tianxia.models import Content, SignatureArmDef  # 核心
 from tianxia.rules import add_chronicle, add_rumor  # 核心
 from tianxia.state import Equipment, GameState, PlayerState, SignatureClaim  # 核心
@@ -88,9 +88,6 @@ def annal_line(content: Content, item: Equipment, via: str) -> str:
 
 # 榜單「神器譜」那一張的一筆（Joy 2026-10-17）：名字以外的那一段，寫法同 BOOK_LINE
 ENTRY_TEXT = "{noun}・屬{attribute}・{general}的本命兵器，{how}，在{owner}手上"
-
-
-REF = "本命|"  # 榜單神器譜裡本命兵器那一筆的鍵：「本命|人物 id」（leaderboard.gear_card 照它找）
 
 
 def book_entries(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str, str, str]]:

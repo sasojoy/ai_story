@@ -16,7 +16,7 @@
 過了期限只有一個問法（past_due，FB-152、FB-153）：這一季收了，榜上的一律算過了；寫「到季末」的單撐到季真的收了；其他的照自己的期限。
 只改 GameState（玩家與共用的季）；不 import engine、world。
 
-原 tianxia/bounties.py（全部拆包第 45 批搬進懸賞榜包，舊名是指到這裡的別名）。別人讀的那一半（active、mine、title、how、issuer、open_bounties、stranded、post_rally、post_figure……）
+原 tianxia/bounties.py（全部拆包第 45 批搬進懸賞榜包）。別人讀的那一半（active、mine、title、how、issuer、open_bounties、stranded、post_rally、post_figure……）
 在核心 core/bounty_base.py，這裡 re-export 同一批物件；留在這裡的都是自己這一包在用的（交差、揭下、求兵、通緝、掛單、狀態）。交差那幾個函式要叫人物情誼包的委派
 （道謝信、守約、兌現），所以第一個參數是 ctx（_done、on_*、_complete_rally、_complete_commission、commission_reward、status）；_complete、take、give 照舊拿 state、content、world
 （scripts/measure_sanren.py、sim_server_bots.py 換它們的替身照這個簽名）。"""
@@ -34,6 +34,7 @@ from tianxia.core.bounty_base import (  # noqa: F401  別人讀的那一半搬�
     quota, RALLY_AID, RALLY_POSTED, SEASON_END, _side, _side_ok, stranded, STRANDED_JOIN, STRANDED_LOST, STRIKE_GATHER,
     STRIKE_OUTING, STRIKE_OUTING_RANGER, STRIKE_PRACTICE, STRIKE_PRECISE, STRIKE_SORTIE, _strike_spots, _takeable, title,
     to_season_end, unit_of, UNPICKED, visible,
+    army_of, rallies, targets,  # 第二輪第 89 批：假人往哪裡走（移動包 bots._bounty_hop 讀 targets）；照舊 rules.rallies 叫的換這一份打得到
 )
 from tianxia.characters import name_key
 from tianxia.core.option import Option
@@ -83,7 +84,7 @@ PRIZE_GATE = "這張重賞的單，名動一方以上的人才揭得到。"  # �
 OFFICIAL_GATE = "要{title}才揭得了官府的海捕文書"  # 待 joy 潤（名聲 5.4：俠一路一方豪俠以上才揭得了）
 POSTED_FACTION = "{faction}貼出了通緝你的告示（{title}）。"  # 待 joy 潤（名聲 4.6：被掛的人收到）
 POSTED_OFFICIAL = "官府貼出了海捕文書，畫的是你（{title}）。"  # 待 joy 潤（名聲 5.4）
-UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（shopview.BACKS）
+UNPICK_ID = "bounty:unpick"  # 第三層最後一顆（hand_in_options）：店面認得它（core/shop_base.BACKS）
 
 
 def week_seconds(state: GameState, content: Content) -> float:
@@ -123,13 +124,6 @@ def due_short(b: Bounty, content: Content, world: WorldState) -> str:
             return f"到第 {at.week - 1} 週・剩 {left}"
         return f"期限 第 {at.week} 週・剩 {left}"
     return f"期限 {calendar.day_text(b.expires)}・剩 {left}"
-
-
-def army_of(state: GameState, content: Content) -> str | None:
-    """站哪一軍（名聲 4.6）：照 rules.side_of（就是 allied.side_of；豪強分屬兩軍的季，依附官軍或黃巾的豪強是那一軍），
-    只認官軍、黃巾；散人、沒有依附的第三方豪強（14 天的季）是 None。"""
-    side = allied.side_of(state, content)
-    return side if side in ENEMY else None
 
 
 def stale_line(state: GameState, content: Content, world: WorldStateStore, arg: str) -> str:
@@ -396,18 +390,6 @@ def _figure_thanks(state: GameState, content: Content, b: Bounty, amount: int) -
 
 
 RALLY_DONE = "【求援】{who}的求援你辦成了：「{title}」。"  # 待 joy 潤
-
-
-def rallies(state: GameState, content: Content) -> list[Bounty]:
-    """我看得到、還辦得了的求援委託（WorldState.rallies；大勢人物擴充第三批）：掛單的是我這一邊（army_of：官軍、黃巾，依附的豪強
-    照依附那一軍）、沒過期、還有名額、我還沒辦過。不用揭，辦成了前 quota 個有賞。懸賞榜關著、休季沒有。"""
-    w = state.world
-    side = army_of(state, content)
-    if not active(state, content) or side is None:
-        return []
-    me = name_key(state.player.name)
-    return [b for b in w.rallies
-            if b.faction == side and b.expires > w.time and _left(b) > 0 and me not in (name_key(t) for t in b.done_by)]
 
 
 def _complete_rally(ctx, b: Bounty) -> list[str]:
@@ -1036,17 +1018,6 @@ def _hang_asks(w: WorldState, content: Content, give_rng: random.Random, give_ki
                 silver=cfg.silver.get(kind, 0), deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute,
                 weapon_kind=weapon_kind,
             ))
-
-
-def targets(state: GameState, content: Content) -> list[str]:
-    """假人往哪裡走：手上每一張要去的地點（討伐、打探：那裡；護送：終點）。"""
-    out = []
-    for b in mine(state, content) + open_commissions(state, content) + rallies(state, content):  # 委託、求援也去（擴充第二、三批）
-        if b.kind == "escort":
-            out.append(b.end)
-        elif b.kind in ("strike", "scout"):
-            out.append(b.location)
-    return [loc for loc in out if loc in content.locations]
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:

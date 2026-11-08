@@ -10,7 +10,7 @@ import re
 from test_jianghu_page_web import _fight_round, battle, node, run_prologue_web as run  # noqa: F401（battle 是 fixture）
 
 import server
-from tianxia import engine
+from tianxia.features.battle.rules import ROUND_BLOCKS
 
 
 def _many_lines(fighter):
@@ -38,12 +38,12 @@ def test_each_round_is_its_own_block_newest_first(battle):
 
 def test_only_the_last_few_entries_are_shown(battle):
     _, fighter = battle
-    for _ in range(engine.ROUND_BLOCKS):
+    for _ in range(ROUND_BLOCKS):
         _fight_round(fighter)
     text = fighter.scene_text()
     n = fighter.world.get_battle().round_number
     heads = [int(x) for x in re.findall(r"##### 第 (\d+) 回合", text)]
-    assert heads == list(range(n, n - engine.ROUND_BLOCKS, -1)) and "集結完畢，戰鬥開始" not in text
+    assert heads == list(range(n, n - ROUND_BLOCKS, -1)) and "集結完畢，戰鬥開始" not in text
 
 
 @node

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import forge_secrets  # 共用規則層
-from tianxia import skillview  # 過渡：待搬（門下頁的說明，SHARED_LATER）
+from tianxia import art_cards  # 共用規則層（裝備那一塊的列）
 
 from . import signature_arms
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
 
 def gear_rows(ctx: Game) -> dict:
-    """修練頁「裝備」那一塊的資料（skillview.gear_rows；裝備四欄設計 2.5）。"""
-    return skillview.gear_rows(ctx.state, ctx.content, ctx.world)
+    """修練頁「裝備」那一塊的資料（art_cards.gear_rows；裝備四欄設計 2.5）。"""
+    return art_cards.gear_rows(ctx.state, ctx.content, ctx.world)
 
 
 def divine_book_view(ctx: Game) -> list[dict]:

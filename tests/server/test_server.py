@@ -1,3 +1,4 @@
+import os
 import ast
 import contextlib
 import hashlib
@@ -18,19 +19,25 @@ import server
 import server_push
 import webharness
 from conftest import at, old_explore, season_one_events
-from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, journal, naming, skillview, sqlite_world,
-    tale, team,
-)
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import calendar
+from tianxia.features.companions import companion_agent
+from tianxia import database, fight_llm, journal, naming
+from tianxia.features.cultivation import art_view
+from tianxia import sqlite_world
+from tianxia.features.tale import tale
+from tianxia import team
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
+from tianxia.features.admin import routes as admin_routes
 from tianxia.journal import WORLD_NEWS
 from tianxia.martial_arts import MartialArt
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile, Rumor
-from tianxia.world_state import season_length_days
+from tianxia.state import BotProfile, FigureState, Lock, Rumor, TimelineResult, WorldState
+from tianxia.world_state import SharedWorldState, season_length_days
 # autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
 from server_kit import (  # noqa: F401
     DASH, DIALOGUE_TURN, FENG_HUO, HURRY, ME, _ScriptedQueue, _a_player_with_insights, _a_showdown_fighter,
@@ -157,7 +164,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
     列三條戰線，不列黃巾聲勢（由戰線合成；割據 2026-10-31 拿掉）。"""
     def listed():
-        return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
+        return [t["id"] for t in server.look(game, lambda g: admin_routes.admin_choices(server, g))["trends"]]
 
     assert listed() == ["huangjin", "yuxi"]
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
@@ -170,7 +177,7 @@ def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(ga
     """計畫 T8：開戰與觸發大事的下拉選單照 Game.admin_battles／admin_fires——這一季蓋了「開」的章時，
     beta 那場決戰、四個黃巾聲勢門檻與舊玉璽鏈不列；開關關著照舊。"""
     def listed(kind):
-        return [x["id"] for x in server.look(game, server.admin_choices)[kind]]
+        return [x["id"] for x in server.look(game, lambda g: admin_routes.admin_choices(server, g))[kind]]
 
     assert "huangjin_showdown" in listed("battles") and "huangjin_60" in listed("events")
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
@@ -780,6 +787,27 @@ def test_server_timing_lists_only_what_was_measured():
     assert server.server_timing({"lock": 0.5, "lock_n": 3, "view": 0.02}, 1.0) == 'lock;desc="n=3";dur=500.0, view;dur=20.0, total;dur=1000.0'
 
 
+def test_every_response_carries_the_csp(client):
+    """CSP（帳號與客服第 213 批，設計第三節「CSP 標頭另開小批」）：每個回應都帶同一條 Content-Security-Policy——頁、API、靜態檔、404、
+    GameError 的 400、沒登入的 401 都是；Turnstile 要 challenges.cloudflare.com。字面寫死在這裡，防有人悄悄改寬。
+    （500 由 Starlette 最外層回、不經 middleware，不帶；那是純文字頁，這裡不打。）"""
+    from fastapi.routing import APIRoute
+
+    assert server.CSP == "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+    gets = sorted(r.path for r in server.app.routes if isinstance(r, APIRoute) and "GET" in r.methods and "{" not in r.path)
+    gets += ["/zhuan/nope", "/zhanji/nope", "/static/app.js", "/static/zhuan_page.js", "/static/tale_page.js", "/no/such/page"]
+    seen = {}
+    for path in gets:
+        r = client.get(path)
+        seen[path] = r.headers.get("content-security-policy")
+    r = client.post("/api/login", json={"login": "nobody_here", "password": "wrong-pw"})
+    seen["POST /api/login"] = r.headers.get("content-security-policy")
+    _player(client)
+    for path in ("/api/main", "/admin", "/"):
+        seen[f"{path} (登入後)"] = client.get(path).headers.get("content-security-policy")
+    assert {path: got for path, got in seen.items() if got != server.CSP} == {}
+    assert client.get("/static/zhuan_page.js").status_code == 200 and client.get("/static/tale_page.js").status_code == 200
+
 def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     _player(client)
     before = client.get("/api/main").json()["status"]["stamina"]
@@ -1004,7 +1032,7 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
     也拿掉了（輿圖簡化設計 5.4）；一張到底（2026-10-30）篩選改成浮在搜尋列底下的一排。網頁的版面與樣式對得上，就靠這一條。"""
     js = webharness.app_source()
-    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "map.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
     # 一張到底（企劃者 2026-10-30）：右上角那一欄（我在哪、放大、縮小）沒有了，改成右下兩顆圓鈕（回到我、看整張）；篩選回來了，浮在搜尋列底下
     assert "map-ctl" not in js and ".map-ctl" not in css and 'data-act="map-home"' in js and 'data-act="map-fit"' in js
@@ -1017,7 +1045,7 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
     js = webharness.app_source()
     submit = js[js.index('form.id === "name-art"'):]
-    submit = submit[:submit.index('form.id === "ad-mall-form"')]  # 名字表單那一段到下一個表單（閉關的表單 2026-10-25 拿掉了）
+    submit = submit[:submit.index('} // cultivationForm')]  # 名字表單那一段到那個框的結尾（第 85 批：下一個表單 ad-mall-form 搬進商城那一包的畫面檔，排在前面了）
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
     assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
@@ -1321,7 +1349,7 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
 def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
     """收著的第一行是功效的句子時，fitFirstRound 量到太高也不會把它縮成數字行：compactRound 只認「第N回合」開頭的句子，
     〔功效名〕開頭的一律回 null、整句照常顯示（寧可多佔一行也不藏字）。S1 的 45 句，每一句配上一個人名與一群人都試過；
-    S1 的句子本來就不寫數字（content.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
+    S1 的句子本來就不寫數字（traits.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
     import json
 
     js = webharness.app_source()
@@ -2116,10 +2144,10 @@ def test_the_practice_page_gets_a_card_for_each_worn_art(client, monkeypatch):
 
 
 def test_the_menxia_payload_carries_the_attribute_note_both_pages_fold_away(client):
-    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 skillview.attribute_line 照程式的規則寫，網頁只放進去。"""
+    """W2：修練頁與煉製頁各摺一行「屬性有什麼用」，字由 art_view.attribute_line 照程式的規則寫，網頁只放進去。"""
     _player(client)
     note = client.get("/api/menxia").json()["attribute_note"]
-    assert note == skillview.attribute_line(server.CONTENT)
+    assert note == art_view.attribute_line(server.CONTENT)
     assert "×1.3" in note and "剛柔" in note
 
 
@@ -2206,7 +2234,9 @@ def test_the_other_blocks_settled_on_the_jianghu_page_flag_the_way_back_too(game
 
 
 def test_duel_text_without_a_duel_asks_no_model(game, monkeypatch):
-    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
+    from tianxia.core import battle_base  # 第二輪第 102 批：bout.routes 讀核心那一格，換別名那一格打不到（這條是「不該評」，打不到會假綠）
+
+    monkeypatch.setattr(battle_base, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
     with at(game, 0.0), mock.patch("server.time.time", return_value=0.0):
         assert server.duel_text(game, "撒石灰") == ["（此刻無法這麼做。）"]
 
@@ -2301,7 +2331,7 @@ def test_open_season_only_works_for_admins(tmp_path, monkeypatch):
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
     assert fresh.world.season_phase() == "preparing"
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}))
     assert fresh.world.season_phase() == "running"
 
 
@@ -2333,23 +2363,23 @@ def test_preparing_has_no_now_card_and_no_countdown(tmp_path, monkeypatch):
     assert view["now"] == "" and "賽季開始" in view["latest"]
     assert view["status"]["calendar"] and view["status"]["next_event"] is None
     assert view["guide"] is None  # 說書人的對話框也不叫人去探索（FB-045～052 審查 I1）
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}))
     view = server.main_view(fresh)
     assert view["now"] and view["status"]["next_event"] is not None and view["guide"] is not None
     # FB-062：下一件寫季曆時刻加現實倒數，畫面（web/app.js）把兩個拼成「宛城之戰・第 9 週・週四 20:44（現實約 4 小時 32 分後）」
     next_event = view["status"]["next_event"]
     assert re.fullmatch(r"第 \d+ 週・週[一二三四五六日] \d\d:\d\d", next_event["at"]) and next_event["in_seconds"] >= 0
-    server.act(fresh, lambda g: server.ADMIN_ACTIONS["end_season"](g, {}))
+    server.act(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["end_season"].run(g, {}))
     assert server.main_view(fresh)["guide"] is None  # 休季也一樣
 
 
 def test_only_admins_can_reset_a_password(client, monkeypatch):
     _player(client)
     player = server.game_for("沈青衫")
-    assert server.reset_password(player, "shen_01", "temp-pass") == "（只有管理者能重設密碼。）"
+    assert admin_routes.reset_password(server, player, "shen_01", "temp-pass") == "（只有管理者能重設密碼。）"
     monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
-    assert server.reset_password(player, "沒這個人", "temp-pass") == "找不到這個帳號或名號。"
-    assert server.reset_password(player, "shen_01", "123") == "密碼至少 6 字。"
+    assert admin_routes.reset_password(server, player, "沒這個人", "temp-pass") == "找不到這個帳號或名號。"
+    assert admin_routes.reset_password(server, player, "shen_01", "123") == "密碼至少 6 字。"
     out = client.post("/api/admin/reset_password", json={"target": "沈青衫", "temp": "temp-pass"}).json()
     assert out == {"message": "已重設 shen_01 的密碼。"}
     server.login("shen_01", "temp-pass")
@@ -2567,8 +2597,9 @@ def test_the_page_names_every_file_with_a_version_from_its_content(client):
     assert urls and all("?v=" in url for url in urls)
 
 
-def test_the_versioned_urls_are_served_and_the_browser_must_ask_each_time(client):
+def test_the_versioned_urls_are_served_and_the_browser_must_ask_each_time(client, monkeypatch):
     """no-cache：每次都向伺服器確認（/static 有 ETag，沒變就是 304）；改了檔沒重開伺服器也不會被瀏覽器釘住舊檔。"""
+    monkeypatch.delenv("TIANXIA_PUBLIC_URL", raising=False)  # 設了這個變數 /static 走長快取（第二輪第 78 批），跑測試的 shell 可能設著
     app_js = _version_of((server.WEB / "app.js").read_bytes())
     style_css = _version_of((server.WEB / "style.css").read_bytes())
     journal_css = _version_of(server.JOURNAL_CSS.encode("utf-8"))
@@ -2582,6 +2613,60 @@ def test_the_unversioned_urls_are_not_cached_either(client):
     """舊網址（沒帶版本號）也一樣不能被啟發式快取。"""
     assert client.get("/static/app.js").headers["Cache-Control"] == "no-cache"
     assert client.get("/journal.css").headers["Cache-Control"] == "no-cache"
+
+
+def test_the_versioned_urls_are_cached_for_good_only_online_with_the_right_hash(client, monkeypatch):
+    """設了 TIANXIA_PUBLIC_URL（線上）、?v= 又等於那個檔現在的內容雜湊，才回長快取；HEAD 與 304 也一樣，
+    已經快取舊標頭的手機再驗一次就換成新標頭，上線不用換網址、不用清快取。"""
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    long_cache = "max-age=31536000, immutable"
+    # 頁面給的網址就是拿得到長快取的網址
+    app_js = _version_of((server.WEB / "app.js").read_bytes())
+    assert re.search(r'"(/static/app\.js\?v=[^"]+)"', client.get("/").text)[1] == f"/static/app.js?v={app_js}"
+    for name in ("app.js", "style.css", "icon-180.png"):
+        url = f"/static/{name}?v={_version_of((server.WEB / name).read_bytes())}"
+        got = client.get(url)
+        assert got.status_code == 200, url
+        assert got.headers["Cache-Control"] == long_cache, url
+        head = client.head(url)
+        assert head.status_code == 200, url
+        assert head.headers["Cache-Control"] == long_cache, url
+        again = client.get(url, headers={"If-None-Match": got.headers["ETag"]})
+        assert again.status_code == 304, url
+        assert again.headers["Cache-Control"] == long_cache, url
+
+
+def test_every_other_url_still_asks_each_time(client, monkeypatch):
+    """其餘照舊 no-cache（各打一次）：改了檔沒重開，舊網址的 ?v= 對不上就還是會問；首頁、管理頁、sw.js 與自己路由的檔不會被釘死。"""
+
+    def version_of(name):
+        return _version_of((server.WEB / name).read_bytes())
+
+    def asks_each_time(url):
+        got = client.get(url)
+        assert got.status_code == 200, url
+        assert got.headers["Cache-Control"] == "no-cache", url
+
+    app_js = f"/static/app.js?v={version_of('app.js')}"
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    for url in (
+        "/static/app.js",
+        "/static/app.js?v=0000000000",
+        f"{app_js}&x=1",
+        "/",
+        "/admin",
+        "/sw.js",
+        f"/static/sw.js?v={version_of('sw.js')}",
+        f"/static/index.html?v={version_of('index.html')}",
+        f"/journal.css?v={_version_of(server.JOURNAL_CSS.encode('utf-8'))}",
+        f"/manifest.webmanifest?v={version_of('manifest.webmanifest')}",
+    ):
+        asks_each_time(url)
+    # 環境變數空字串算沒設，跟拿掉一樣
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "")
+    asks_each_time(app_js)
+    monkeypatch.delenv(server.PUBLIC_URL_ENV)
+    asks_each_time(app_js)
 
 
 def test_the_version_follows_the_content():
@@ -3307,7 +3392,7 @@ def test_an_action_that_changes_the_phase_is_seen_by_the_view_of_the_same_poll(t
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", False)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["路人"])
     fresh = Game.new(server.CONTENT, "路人", world=open_world(tmp_path / "world.db"))
-    msgs, view = server.act_look(fresh, lambda g: server.ADMIN_ACTIONS["open_season"](g, {}), server.main_view)
+    msgs, view = server.act_look(fresh, lambda g: server.FEATURE_ADMIN_ACTIONS["open_season"].run(g, {}), server.main_view)
     assert msgs and "season:preparing" not in [o["id"] for o in view["options"]]
     assert fresh.world.season_phase() == "running"
 
@@ -4158,8 +4243,6 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
     say = _js_function(js, "async function sayLine(")
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
-    gather = _js_function(js, "async function gatherSay(")  # 找素材的「自己說」（第 32 項）
-    assert "watchQueue(submitBtn, GATHER_SAY_WAIT)" in gather and "stop();" in gather.split("finally")[1]
     persuade = _js_function(js, "async function persuadeSay(")  # 託付的勸降（減法季批 6，FB-829）
     assert "watchQueue(submitBtn, PERSUADE_WAIT)" in persuade and "stop();" in persuade.split("finally")[1]
     assert js.count("watchQueue(") == 8  # 定義一個、使用七個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」、勸降各另一個）
@@ -4250,6 +4333,24 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
             assert top not in names, (top, names.get(top), name)
             names[top] = name
     assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
+
+
+def test_the_page_versions_follow_a_pull_without_a_restart(tmp_path, monkeypatch):
+    """2026-11-07 對話告辭急修：主機只 pull、沒重開，頁面上的 ?v= 還是啟動時那一份，手機一直拿舊檔。web/ 的檔換了，頁面就重算。"""
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text('<link rel="stylesheet" href="/static/a.css">', encoding="utf-8")
+    (web / "a.css").write_text("a{}", encoding="utf-8")
+    monkeypatch.setattr(server, "WEB", web)
+    monkeypatch.setattr(server.features_core, "with_scripts", lambda html: html)
+    monkeypatch.setattr(server, "PAGE", server.PAGE)  # 測完換回正式那一份
+    monkeypatch.setattr(server, "_PAGE_STAMP", ())
+    first = server.current_page()
+    assert server.current_page() is first  # 沒換檔不重算
+    (web / "a.css").write_text("a{color:red}", encoding="utf-8")
+    os.utime(web / "a.css", ns=(1, 1))
+    second = server.current_page()
+    assert second != first and f"?v={server.content_version(b'a{color:red}')}" in second
 
 
 class _OneShot(server_push.PushHub):
@@ -4543,6 +4644,343 @@ def test_the_fingerprint_cannot_be_torn_by_a_write_between_its_reads(monkeypatch
     assert server.current_fingerprint() != before  # 寫確實進去了：下一次讀（新的快照）才看得到
 
 
+def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
+    """預檢 F4：世界時間與 season_last_real 每一次同步、每一下排程都在動，不能算進指紋，不然每個分頁每幾秒就被叫醒；
+    決戰裡誰加入、這一回合出手了幾個（預檢 F2）畫面上看不到，也不算。"""
+    open_world().mutate(lambda st: None)
+    before = server.current_fingerprint()
+    open_world().mutate(lambda st: (setattr(st, "season_last_real", 9e9), setattr(st.season, "time", st.season.time + 3600)))
+    assert server.current_fingerprint() == before
+    _a_showdown_fighter(client)
+    with_battle = server.current_fingerprint()
+    assert with_battle != before  # 決戰開了：大家都看得到
+    client.post("/api/choose", json={"id": "battle:join:guan"})  # 又一個人加入：看不到
+    open_world().mutate_battle(lambda b: b.round.pending_actions.__setitem__("沈青衫", "safe"))
+    assert server.current_fingerprint() == with_battle
+    open_world().mutate_battle(lambda b: setattr(b, "trend", b.trend + 1))  # 戰局動了：看得到
+    assert server.current_fingerprint() != with_battle
+
+
+# 推送指紋的欄位分類（最終審查 m5）：全服共用的世界狀態（SharedWorldState、它的賽季 WorldState、進行中的決戰 BattleInstance）
+# 每一個欄位，不是「算進指紋」（底下的改法真的讓指紋變，下面的測試會試）、就是「不算」（寫一句為什麼）。以後誰加了新欄位，
+# 兩邊都沒有就紅——到時候要決定：它改了，全服每個人的畫面看得出來嗎？看得出來就要算進去（不然開著的分頁最久 60 秒才知道），
+# 看不出來（或不能讓人看出來）就寫進「不算」。暫停（paused_at）就是這樣漏過一次。
+_SEASON = "season"  # 容器欄位：它自己不算，裡面的欄位各自分類（WorldState 的欄位在 "WorldState" 那一組）
+FINGERPRINTED = {
+    "SharedWorldState": {
+        "season_number": lambda st: setattr(st, "season_number", st.season_number + 1),
+        "season_opened": lambda st: setattr(st, "season_opened", False),  # 籌備中：階段變了
+        "paused_at": lambda st: setattr(st, "paused_at", 1000.0),
+        "season": _SEASON,
+        "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
+        # 奪璽單挑（玉璽碎片設計 5.10、13.3）：全服觀戰，回合推進、出招，開著的分頁要更新
+        "seal_duels": lambda st: st.seal_duels.append(_seal_duel()),
+        # 攻城戰（領地爭奪第二批）：每一場同決戰，開集結、回合推進、收場，開著的分頁要更新
+        "sieges": lambda st: st.sieges.append(battle_instance.BattleInstance(battle_id="changshe_fire")),
+    },
+    "WorldState": {
+        "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
+        "revealed": lambda st: st.season.revealed.add("h"),  # 隱藏的那一條浮現了
+        "rumors": lambda st: st.season.rumors.append(Rumor(time=0.0, text="天下大事", layer="world")),
+        "chronicle": lambda st: st.season.chronicle.append(Rumor(time=0.0, text="江湖史一筆")),
+        "ended": lambda st: setattr(st.season, "ended", True),  # 休季：階段變了
+        "ending_title": lambda st: setattr(st.season, "ending_title", "天下大亂"),
+        "storyline": lambda st: setattr(st.season, "storyline", "另一條主線"),
+        "act": lambda st: setattr(st.season, "act", st.season.act + 1),
+        "timeline": lambda st: st.season.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0)),
+        "showdowns_opened": lambda st: st.season.showdowns_opened.__setitem__("changshe_fire", "changshe_fire"),
+        "figures": lambda st: st.season.figures.__setitem__("lu_zhi", FigureState(prestige=70)),
+    },
+    "BattleInstance": {
+        "battle_id": lambda st: setattr(st.active_battle, "battle_id", "wancheng"),
+        "phase": lambda st: setattr(st.active_battle, "phase", "active"),
+        "round_number": lambda st: setattr(st.active_battle, "round_number", 1),
+        "trend": lambda st: setattr(st.active_battle, "trend", 55),
+        # 「已送出 X／在場 Y」（試玩回饋 2026-10-08）：兩軍有人出手，開著的分頁要更新那個數
+        "round": lambda st: (
+            setattr(st.active_battle, "phase", "active"),
+            st.active_battle.participants.__setitem__("甲", battle_instance.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1)),
+            st.active_battle.round.pending_actions.__setitem__("甲", "guan_hold"),
+        ),
+        # 放手一搏的劇情回合結算後才補上（Joy 2026-10-13）：補上的那一下場景的字變了
+        "tales": lambda st: st.active_battle.tales.append(battle_instance.GambleTale(
+            round=1, act_index=0, name="甲", faction="guan", text="火攻", won=True, fixed="x", numbers="y",
+        )),
+    },
+}
+NOT_IN_THE_FINGERPRINT = {
+    "SharedWorldState": {
+        "companion_tag_counts": "跟人物對話才用的記數，不在共用的畫面上",
+        "companion_drift_note": "同伴的性情句，只在跟他對話時用",
+        "companion_drift_synthesized_at": "性情語意化的記數，不在畫面上",
+        "companions": "同伴被招走、升級只影響門下頁與招募鈕，那是各人自己的畫面（自己的動作走 self 通知），別人下次輪詢才補也不礙事",
+        "event_flavor": "事件的潤色句，一次寫好之後不變，跟著事件的公告出現",
+        "jade_seal_fragments": "玉璽碎片的歸屬，只在持有者的畫面",
+        "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
+        "tianji": "換季才加一，同時 season_number 也變了",
+        "seal": "碎片的歸屬：現世、易手、隱沒都寫天下大事（傳聞流水號已在指紋裡）；密鹽不能讓人看出來（13.3）",
+        "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
+        "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
+        "mingtie_cleared": "管理者放回的名帖，同上",
+        "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
+        "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
+        # 3b-2 接線了（main.sortie_card、main.sorties）；搬進指紋要在 server_push.world_fingerprint 加一格、server.current_fingerprint 傳
+        # shared.sorties——server_push 是雲端側的檔，交雲端側改（計畫 4.0 之三第 5 條）
+        "sorties": "出陣約戰（減法季批 3b）：接線了，但推送指紋的那一格在雲端側的 server_push，等他們改；之前開著的分頁照輪詢看到別人貼的約戰",
+    },
+    "WorldState": {
+        "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
+        "flags": "世界旗標只是條件，不直接畫在共用畫面上（推送計畫 F4）",
+        "flag_times": "旗標第一次成立的時間，同上",
+        "chapter_weights": "章回主線做成的份量：畫面上只有章回卡那一行（各人自己的卡，下次輪詢才補也不礙事），改歷史在大事結算那一刻才看得出來",
+        "chapter_done": "章回做成的人數：同上，只寫在各人自己的章回卡上",
+        "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
+        "sim_accum": "不滿一小時的時間累積器",
+        "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
+        "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
+        "feasts": "開席、散席都寫天下大事（傳聞流水號已在指紋裡）；席上別人敬的那一句只畫在入席的人的場景，下次輪詢才補也不礙事",
+        "feast_seq": "宴席的流水號，跟 feasts 一起寫",
+        "plans": "盤算公告、結算都寫天下大事（傳聞流水號已在指紋裡）；兩邊各幾人只畫在江湖頁的盤算卡，下次輪詢才補也不礙事",
+        "stops_done": "行程每一站做完了沒，做的那一下都寫天下大事",
+        "deeds": "世界記事：人物對話與此地舊事才讀，寫的那一下都有天下大事或江湖紀錄",
+        "deed_seq": "世界記事的流水號，跟 deeds 一起寫",
+        "places": "地點的樣子（地點會變樣）：變樣那一下都有天下大事或世界記事一起寫；照時間轉重建、回太平不寫存檔，畫面下次輪詢自己現算",
+        "inscriptions": "走一趟的留言：只在別人下一次走一趟、路上抽到才看得到，不在共用的畫面上",
+        "inscription_seq": "留言的流水號，跟 inscriptions 一起寫",
+        "yuedan": "月旦評發出去那一刻寫天下大事與江湖史（都在指紋裡）；還沒發的那一批誰都看不到",
+        "yuedan_week": "評到第幾週的記號，跟 yuedan 一起寫",
+        "rallies": "求援委託只在那一方的人的懸賞卡（各人自己的畫面），掛單時寫一則陣營傳聞",
+        "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
+        "ending_id": "同上",
+        "final_trends": "同上（結算卡的資料）",
+        "final_rankings": "同上（結算卡的資料）",
+        "final_tiers": "同上（結局卡的資料：收季那一刻跟 ended 一起寫，減法季批 3c）",
+        "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
+        "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
+        "marks_fired": "痕跡過門檻那一刻寫一則地方傳聞（傳聞流水號在指紋裡；世界層那一句 2026-10-25 拿掉）；江湖史在季末",
+        "mark_helpers": "誰替痕跡出過力只用來記本人的行狀，不畫在共用畫面上（改了讓每個分頁刷新會洩漏有人做了看不見的事，同 marks）",
+        "stance_counts": "人物心意的全服計數（減法季批 6）：只畫在跟他談的人自己的人物頁（自己的動作走 self 通知）；算進去會洩漏有人跟他說了話（同 marks）",
+        "stance_week": "心意計數是哪一週的記號，玩家看不到",
+        "persona": "人物性子此刻的值（功能包 persona）：只畫在點人物那一層的簡介；換段那一刻另寫傳聞（傳聞流水號已在指紋裡）",
+        "persona_day": "人物性子結算到第幾天的記號，玩家看不到",
+        "persona_push": "人物性子今天的淨推力：玩家看不到；算進去會洩漏有人跟他說了話（同 stance_counts）",
+        "persona_tug": "同上（今天的總份數）",
+        "persona_torn": "拉鋸只在結算那一刻變（每天一次），畫在簡介上；簡介跟著人物那一層重讀",
+        "persona_log": "換段紀錄：換的那一刻另寫傳聞（傳聞流水號已在指紋裡）",
+        "god_names": "特殊頓悟全服神品意境的名字（只拿來擋重名），不畫在共用畫面上；首悟上江湖史走傳聞流水號",
+        "god_firsts": "特殊頓悟每個模板這一季第一個悟出的人（江湖史那一句走傳聞流水號），不畫在共用畫面上",
+        "stance_active": "人物此刻照哪一個心意做事：換的那一刻另寫天下大事（傳聞流水號已在指紋裡）；週初歸零跟著週初的掛鉤",
+        "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
+        "season_one": "開季時蓋的章，開季之後不變",
+        "season21": "開季時蓋的章（21 天季），開季之後不變",
+        "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
+        "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
+        "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
+        "length_days": "同上",
+        "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
+        "lock_losers": "同上",
+        "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
+        "event_bonus": "時刻表結果帶來的修正，同上",
+        "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
+        "hooked_week": "週初掛鉤的內部記號",
+        "hooked_day": "21 天季每天掛鉤的內部記號",
+        "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
+        "showdown_opened_at": "開集結那一刻（輿圖歸週用），跟 showdowns_opened 一起寫，那一下指紋已經變了（FB-563）",
+        "showdowns_cancelled": "管理者取消的決戰：取消那一下另寫天下大事（傳聞流水號已在指紋裡），輿圖不列它下次輪詢才補（FB-563）",
+        "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
+        "plots": "集體密謀只有自己陣營的人看得到（發起的軍情是陣營軍情，不進天下大事的流水號）；算進去，別的陣營會從『又被叫醒了』看出對方有動靜（乙二）",
+        "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
+        "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
+        "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
+        "invites": "玩家之間的邀請只有發的人與收的人看得到，伺服器做完動作直接叫醒他們兩個的分頁（Game.touched）；算進去會叫醒全服",
+        "spar_tally": "切磋的每日次數，畫面上看不到",
+        "gift_tally": "贈物的每日次數（FB-116），只在玩家卡上那一顆鈕灰不灰，打開卡才重問",
+        "discuss_tally": "論武的每日次數（FB-116），只在玩家卡上那一顆鈕灰不灰，打開卡才重問",
+        "raids": "截殺的冷卻，只在打開玩家卡時看得到（截殺當下 touched 叫醒被截殺的人）",
+        "ambushes": "埋伏是看不見的（設伏劫道）：中伏的那一下 touched 叫醒伏兵",
+        "figure_guards": "護衛的崗只寫在挑戰鈕的「身邊有 N 人護衛」與自家人的按鈕上；站崗、擋下都是某個人自己的動作，別人下次輪詢才補也不礙事",
+        "aid_tally": "犒軍、探望、聲威回復的每日記數，畫面上看不到",
+        "guard_credits": "護衛擋下挑戰、等著補給護衛的那幾句，只在護衛自己同步時領",
+        "supply": "屯糧練兵的量只在自家人的按鈕上（自己的動作走 self 通知），開集結那一刻寫天下大事",
+        "bounties": "懸賞榜只在城裡打開第二層選單時看得到，揭、交差都是自己的動作（通緝當下 touched 叫醒被通緝的人）",
+        "bounty_seq": "懸賞的流水號，玩家看不到",
+        "armaments": "陣營的軍備存量（素材與經濟）：捐的人自己那一下的畫面就更新；同陣營其他人的存量等下一次輪詢，不必為它叫醒全服的分頁",
+        "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
+        "bounty_day": "21 天季懸賞每天掛單掛到第幾天，玩家看不到",
+        "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
+        "clashes": "混戰寫進截殺冷卻的那幾筆（FB-607：拒絕話照實寫），跟 raids 一起寫、一樣只在打開玩家卡時看得到",
+        "clashed": "混戰被撞的護身是混戰寫的（FB-607），跟 raided 一起寫、一樣只在打開玩家卡時看得到",
+        "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
+        "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
+        "arena_seq": "擂台的流水號，玩家看不到",
+        "arena_closed": "擂台這一季收了沒（季末排名寫進江湖史與傳聞，那一下指紋就變了）",
+        "arena_day": "擂台的俸記到哪一天，玩家看不到（俸在本人同步時補）",
+        "tavern_walls": "酒肆的題壁只在坐進那一間酒肆時看得到；坐在裡面的人照輪詢每十秒重抓",
+        "tavern_whispers": "酒肆的風聲在被打聽的人自己同步時補（寫風聲的人另外叫醒他的分頁，Game.touched）",
+        "tavern_treats": "請全店喝酒只在坐進那一間酒肆時看得到；請的那一下另有地方傳聞",
+        "tavern_hits": "雇殺手（第三批）只在本人同步時結算與補",
+        "tavern_hit_seq": "雇殺手的流水號，玩家看不到",
+        "tavern_chatter": "酒客閒談（第四批）只在坐進那一間酒肆時看得到",
+        "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
+        "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
+        "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
+        "general_gifts": "名將贈禮給了誰，只寫在拿到的人自己的江湖紀錄裡（裝備四欄 6.4）",
+        "secret_sets": "「裝滿」秘方這一季誰先暗合；傳聞與江湖史另有自己的欄位，這裡只記先後",
+        "signature_arms": "名將本命兵器給了誰，只寫在拿到的人自己的江湖紀錄裡；江湖史與天下大事傳聞進 chronicle、rumors，那一下指紋就變了（兵器設計 4.10）",
+        "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
+        "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
+        "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
+        "divine_lineup": "開季時蓋的章（神器輪替），開季之後不變",
+        "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
+        "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
+        "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
+        "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
+        "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
+        "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
+        "attrs_v2": "開季時蓋的章（五項屬性），開季之後不變",
+        "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",
+        "titles_holders": "名號結算的那一下寫江湖傳聞（傳聞流水號已在指紋裡）；各人戴哪一個是自己存檔的事，下次輪詢才補也不礙事",
+        "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
+                    "進度不露數字、只回推的人自己那一句話",
+        "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
+        "xingshi_ticket": "還在等模型寫的那一張單，誰都看不到",
+        "xingshi_mark": "上一篇讀到哪裡的記號，玩家看不到",
+        "seal_acts": "玉璽碎片的獨門行動（改版第 2 批）：起用那一下另寫天下大事與江湖史（都在指紋裡）；引將期滿回原處改的是 figures（算進指紋）",
+    },
+    "BattleInstance": {
+        "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
+        "participants": "誰加入、誰出手了，畫面上看不到；這一回合送出幾個的人數算在 round 那一格（推送計畫 F2）",
+        "act_index": "換幕只在 round_number 加一的那一下發生",
+        "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
+        "tactic_kinds": "戰法名 → kind 只在回合結算時跟著 narrative_log 一起加，那一下 round_number 也變了",
+        "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
+        "outcome_title": "收場時跟 phase 一起寫入",
+        "outcome_text": "同上",
+        "outcome_world_flags": "同上",
+        "outcome_trend_delta": "同上",
+        "end_time": "同上",
+        "unfinished_text": "同上",
+        "unfinished": "同上",
+        "record_id": "資料庫裡的流水號，不是畫面",
+        "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
+        "trend_start": "開打時就定了，跟 phase 一起寫入",
+        "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "mvps": "每回合的 MVP（looks 的 mvp.crown），一回合結算才加一筆，那一下 round_number 也變了",
+        "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
+        "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
+        "outcome_reason": "收場時跟 phase 一起寫入",
+        "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
+        "outcome_margin": "收場時跟 phase 一起寫入",
+        "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
+        "seal_emerge": "現世擲中了：集結那一刻另寫天下大事（3.4），指紋本來就變了",
+        "seal_shard": "璽動牽動哪一片：另寫天下大事（4.3）",
+        "seal_holder": "同上",
+        "seal_holder_faction": "同上（快照，畫面上看不到）",
+        "seal_holder_side": "同上",
+        "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
+        "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "front_note": "起點照哪一條戰線：開集結那一刻快照（另寫天下大事，指紋本來就變了），之後不再改",
+        "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
+        "orders": "主將令：回合結算那一下換，round_number 也變了",
+        "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",
+    },
+}
+
+
+WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
+
+
+def test_every_shared_world_field_is_classified_for_the_push_fingerprint():
+    """新欄位兩邊都沒寫就紅：逼加欄位的人當場決定它算不算進推送的指紋。"""
+    for name, model in WORLD_MODELS.items():
+        counted, ignored = set(FINGERPRINTED[name]), set(NOT_IN_THE_FINGERPRINT[name])
+        assert not counted & ignored, f"{name} 同時在兩邊：{sorted(counted & ignored)}"
+        assert set(model.model_fields) == counted | ignored, (
+            f"{name} 的欄位沒分類或寫錯了：沒分類 {sorted(set(model.model_fields) - counted - ignored)}，"
+            f"不存在 {sorted((counted | ignored) - set(model.model_fields))}——見 FINGERPRINTED／NOT_IN_THE_FINGERPRINT 上面的說明"
+        )
+        assert all(reason.strip() for reason in NOT_IN_THE_FINGERPRINT[name].values()), name
+
+
+@pytest.mark.parametrize(
+    ("name", "field"),
+    [(name, field) for name, fields in FINGERPRINTED.items() for field, change in fields.items() if change != _SEASON],
+)
+def test_every_field_counted_in_the_push_fingerprint_really_changes_it(name, field):
+    """上面說「算進指紋」的欄位，真的改了就讓 server.current_fingerprint() 變（不是只寫在清單上）。每個欄位自己一個資料庫。"""
+    world = open_world()
+    world.seed_first_season(server.CONTENT)
+    if world.season_phase() == "preparing":
+        world.open_season(server.CONTENT, 1000.0)
+
+    def setup(st):
+        st.season.trends, st.season.revealed = {"t": 10, "h": 5}, {"t"}  # 一條浮現的、一條隱藏的
+        st.active_battle = battle_instance.BattleInstance(battle_id="changshe_fire")
+
+    world.mutate(setup)
+    before = server.current_fingerprint()
+    world.mutate(FINGERPRINTED[name][field])
+    assert server.current_fingerprint() != before, f"{name}.{field} 改了，指紋沒變"
+
+
+def _three_read_fingerprint() -> str:
+    """推送看守原本的讀法：三次各自的快照，還把這一季每一則傳聞與江湖史讀回來數。新的讀法（一次快照加 MAX／COUNT）要跟它一樣。"""
+    world = open_world()
+    shared = world.read()
+    return server_push.world_fingerprint(
+        shared.season_number, shared.season_phase(), world.get_season(), world.get_battle(),
+        paused=shared.paused_at is not None,
+    )
+
+
+def test_the_one_snapshot_fingerprint_is_the_old_three_read_one_on_every_state():
+    """m2：同樣的東西算進去、同樣的東西不算（F2 的決戰、F4 的排除項），在一連串不同的狀態裡每一步都跟舊的算法一樣，
+    該變的變、不該變的不變。"""
+    world = open_world()
+    content = server.CONTENT
+    revealed = []
+
+    def trend_up(season):
+        key = revealed[0]
+        season.trends[key] += 1
+
+    def nudge_trend():
+        world.mutate_season(trend_up)
+
+    def pick_revealed():
+        revealed.append(next(iter(world.get_season().revealed)))
+
+    def rumors(*items):
+        return lambda: world.mutate_season(lambda s: s.rumors.extend(items))
+
+    steps = [  # (這一步, 指紋會不會變)
+        (lambda: world.seed_first_season(content), True),
+        (pick_revealed, False),
+        (rumors(Rumor(time=1.0, text="天下大事", layer="world")), True),
+        (rumors(Rumor(time=1.0, text="軍情", layer="faction", faction="guan"),
+                Rumor(time=1.0, text="地方", layer="local", region="yingchuan"),
+                Rumor(time=1.0, text="只有你", layer="personal", character="甲")), False),
+        (rumors(Rumor(time=3.0, text="又一則天下大事", layer="world")), True),
+        (lambda: world.mutate_season(lambda s: s.chronicle.append(Rumor(time=2.0, text="江湖史一筆"))), True),
+        (nudge_trend, True),
+        (lambda: world.mutate_season(lambda s: s.locks.__setitem__("changshe_fire", Lock(side="guan", name="甲", time=1.0))), False),
+        (lambda: world.start_battle(content.battles["huangjin_showdown"], now=0.0), True),
+        (lambda: world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0)), False),
+        (lambda: world.mutate_battle(lambda b: setattr(b, "trend", b.trend + 3)), True),
+        (lambda: world.mutate_season(lambda s: s.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0))), True),
+        (lambda: world.mutate_season(lambda s: setattr(s, "ended", True)), True),
+        (lambda: world.next_season(content, now=1.0), True),
+    ]
+    assert server.current_fingerprint() == _three_read_fingerprint()  # 還沒有賽季的空資料庫
+    for number, (step, changes) in enumerate(steps):
+        before = server.current_fingerprint()
+        step()
+        now = server.current_fingerprint()
+        assert now == _three_read_fingerprint(), number
+        assert (now != before) is changes, number
+
+
 def test_push_line_says_whether_push_is_on():
     config = server.CONTENT.config
     assert server.push_line(config) == "推送：關（分頁每 10 秒輪詢）"
@@ -4660,10 +5098,10 @@ def test_players_cannot_pause_the_season(client):
 
 
 def test_the_pause_buttons_call_what_the_server_has():
-    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
+    """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 FEATURE_ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
     js = webharness.app_source()
     for op in ("pause_clock", "resume_clock"):
-        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.ADMIN_ACTIONS
+        assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.FEATURE_ADMIN_ACTIONS
     assert "S.main.paused" in js
     assert "paused" in server.main_view(Game.new(server.CONTENT, "測試"))
 
@@ -4679,7 +5117,7 @@ def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off(
 
 def test_world_step_does_not_move_a_paused_season():
     """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
-    打到一半的決戰那一路見 tests/core/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
+    打到一半的決戰那一路見 tianxia/features/admin/tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
     world = open_world()
     scale = server.CONTENT.config.time_scale
     server.world_step(lambda: 1000.0)  # 記下時鐘

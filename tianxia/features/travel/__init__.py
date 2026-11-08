@@ -4,7 +4,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 - menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（只有 set_move_mode 留一行委派給 server、測試；選單那幾個第 56 批換成 road、here 的格）
 - road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（第 48 批 _arrivals 搬進 departure.py，直接叫 sight；委派拿掉）
 - go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
-- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）
+- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；前三個掛在 game_api.py 的表，_journey_line 沒人經 Game 叫，第二輪第 72 批拿掉）
 - party.py：原本 Game 上結伴同行的 _join、join_refusal、_party_expires、_party、party_view、leave_party、_part_ways、_lead、_partners、_share_road
   （_join、join_refusal、party_view 留委派；_party_expires 第 55 批換成 sync.deliver 的 party 那一格）
 - bots.py：假人的分數（原本 bot_policy.score 的 move: 那一段）
@@ -15,7 +15,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SceneHook, SeamHook, StatusHook, Verb
 from tianxia.core.services import ROAD_TASKS
 
 
@@ -106,6 +106,17 @@ class TravelFeature(Feature):
                 MenuHook("here", "move", lambda ctx, loc, cost, odds: menu.move_options(ctx, loc)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 own/road 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：在路上那一張。"""
+        if self._scenes is None:
+            from . import road_actions  # noqa: PLC0415
+
+            self._scenes = (SceneHook("own", "road", lambda ctx: road_actions.road_scene(ctx)),)
+        return self._scenes
 
     # howto（全部拆包第 59 批「引導二」）
     def howto(self) -> tuple[HowtoHook, ...]:

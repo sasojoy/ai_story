@@ -16,23 +16,23 @@
 | `plan_actions.py` | 盤算：`options`、`act`、`title`、`plan_view`（江湖頁的盤算卡）、`place_deeds_view`（此地舊事） |
 | `yuedan_actions.py` | 月旦評 A 段（`request`）、C 段（`apply`）；B 段在 `routes.py` 的 `yuedan_once` → `yuedan.write` |
 | `admin_actions.py` | 管理者「叫回人物」：`fallen`、`revive_figure` |
-| `figure_aid.py`、`yuedan.py` | 規則模組（舊名 `tianxia/figure_aid.py`、`tianxia/yuedan.py` 留成指到同一個模組的別名；`figure_aid` 跟自然回復共用上限的那五個函式第 40 批搬進共用規則層 `figures`，這裡 re-export 同一個物件） |
+| `figure_aid.py`、`yuedan.py` | 規則模組（`figure_aid` 跟自然回復共用上限的那五個函式第 40 批搬進共用規則層 `figures`，這裡 re-export 同一個物件） |
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 
-`snubbed_until`（閉門不見到幾時）、`figure_wins`（這一季打贏每位人物幾次；本命兵器 `features/gear/signature_arms.py`〔舊名 `tianxia/signature_arms.py` 是別名〕也讀）、`figure_dented`（聲威哪天扣過）、`figure_rare_drops`、`tier3_drops`、
-`tier4_wins`、`tier4_challenge_drops`（三階與四階的帳）、`plans_paid`（領過盤算結果的站；寫的是舊模組 `plans.py`）。`treasure_drops` 是寶物的帳，不認領。
+`snubbed_until`（閉門不見到幾時）、`figure_wins`（這一季打贏每位人物幾次；本命兵器 `features/gear/signature_arms.py`也讀）、`figure_dented`（聲威哪天扣過）、`figure_rare_drops`、`tier3_drops`、
+`tier4_wins`、`tier4_challenge_drops`（三階與四階的帳）、`plans_paid`（領過盤算結果的站；寫的是共用層 `plans.py`）。`treasure_drops` 是寶物的帳，不認領。
 
 **世界狀態**（`WorldState`）：`figure_guards`、`aid_tally`、`guard_credits`、`plans`、`yuedan`、`yuedan_week` 屬於世界，留在原地。
 
-## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# figure_acts` 那一段）
+## 還留在核心原位的接縫（理由在 `tests/core/boundary_tables.py` 的 `# figure_acts` 那一組）
 
-- `act:challenge:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`、`tail_squad`（按下去、標題、對手隊伍）；選單第 56 批是 `here/challenge` 那一格。Game 留 `_challenge_options`、`_challenge`（`scripts/measure_challenge.py` 換，格裡經 `ctx` 叫）、`_figure_squad`（`test_rise` 等直接叫，格裡經 `ctx` 叫）、`_snubbed_character`、`challenge_odds` 的一行委派。
+- `act:challenge:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`、`tail_squad`（按下去、標題、對手隊伍）；選單第 56 批是 `here/challenge` 那一格。Game 留 `_challenge_options`、`_challenge`（`scripts/measure_challenge.py` 換，格裡經 `ctx` 叫）、`_figure_squad`（`test_rise` 等直接叫，格裡經 `ctx` 叫）、`_snubbed_character`、`challenge_odds` 掛在 `game_api.py` 的表。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync.deliver` 的 `guard` 那一格（第 55 批，委派拿掉）：夾在 `echoes` 與 `notices` 之間（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
 - `figures.py` 的 `figure_aid.restore` 全部拆包第 40 批換掉：犒軍與自然回復共用一天上限的那五個函式（`on`、`_day`、`_life`、`left_today`、`restore`）搬進共用規則層 `figures`（`aid_` 開頭），`figures.recover` 直接叫自己的 `aid_restore`，`figure_aid.py` 照原名 re-export 同一個物件。`social.py` 已經不讀 `yuedan.line_for`（第 40 批合完量的：只剩 `engine` 的委派經包讀）。
-- 過渡 import（第 60 批另多 `bots.py` 函式裡 → `bot_policy` 1 處；第 45 批合完重印）1 處：`yuedan.py` 函式裡 → `leaderboard`；`aid_actions.py` 第 45 批改發事件 `ctx.publish("aid", ...)`（護衛、犒軍辦成：懸賞榜包交差，位置不動），不再 import 舊名 `bounties`；原本的 `figures`、`figure_life`、`plans`（8 處）第 40 批收進共用規則層，不算過渡。
-- 世界層的格（core_world：全部拆包第 25 批）：月旦評每一步（原本 `world.py` 經別名叫 `yuedan.tick`）是世界層 `step` 的 `yuedan` 那一格（`__init__.py` 的 `world()` → `yuedan.world_step`；排在盤算之後、那一步最後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
+- 包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`aid_actions.py` 第 45 批改發事件 `ctx.publish("aid", ...)`（護衛、犒軍辦成：懸賞榜包交差，位置不動）。
+- 世界層的格（core_world：全部拆包第 25 批）：月旦評每一步（原本 `world.py` 叫 `yuedan.tick`）是世界層 `step` 的 `yuedan` 那一格（`__init__.py` 的 `world()` → `yuedan.world_step`；排在盤算之後、那一步最後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
 - `bot_policy._stamina_play` 的 `("ambush:set:", "works:", "aid:")`、`models.ALLOW_FAMILIES` 的 `aid:`、`plan:`、`act:challenge:` 字串：核心原位。
 
 ## 測試
@@ -44,10 +44,10 @@
 
 混著別的功能、留在原處的（`條數＝碰到這一包的／全檔`，用語法樹數過，數字是粗的）；改這一包時連它們一起跑：
 
-- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
+- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tianxia/features/admin/tests/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
   `tests/figures/test_figure_attrition.py`（4／9）、`tests/battle/test_rise.py`（4／10）、`tests/figures/test_gentry_allied.py`、`tests/figures/test_figure_life_batch3.py`（4／9，月旦評）
 - 打贏的一串：`tianxia/features/gear/tests/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tianxia/features/gear/tests/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
-  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
+  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tianxia/features/seal/tests/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
 
@@ -67,3 +67,8 @@
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`revive_figure`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
 **鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的月旦評 `_yuedan_waiting`、`write_yuedan`、`yuedan_once`、`YUEDAN_RUNNING`（`outlock` 掛鉤那一格 `yuedan`；殼留一行包裝 `yuedan_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：`CHALLENGE_SCORE`、`CHALLENGE_ODDS`、`STRIKE_ODDS` 第 89 批搬進這裡（舊名 re-export），`_crippled`、`ORDER_SCORE` 走共用層 `bot_base`；那 1 處 `bot_policy` 清掉。另外要跑 `tests/figures/test_figures.py`。
+- `yuedan.py` 函式裡到 `leaderboard` 那一處第 88 批起是共用規則層。
+- 這一包多登記 `admin` 表的 `fallen` 格（第 90 批）。

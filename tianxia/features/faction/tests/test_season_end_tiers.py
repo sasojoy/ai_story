@@ -9,7 +9,8 @@ import random
 import pytest
 
 from wins_kit import save, wins_content, wins_game
-from tianxia import social, wins
+from tianxia.features.peers import social
+from tianxia import wins
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 

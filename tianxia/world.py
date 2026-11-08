@@ -8,7 +8,7 @@
   核心契約 tests/core/test_contract_core.py、test_contract_features.py 逐字鎖住（核心測試，會跟著跑）。
 - 不寫 world 檔名的混合檔 test_for 挑不到，另外跑（-n 4；這 25 個檔不含 slow 850 條、約 45 秒，第 25 批審查修正量的）：
   - 換掉或直接叫這裡的掛鉤串列與函式：tests/figures/test_timetable.py（WEEK_HOOKS、season_hour、season_events：週初那一串的先後）、
-    tests/figures/test_seats.py（WEEK_HOOKS[0]）、tests/core/test_season_pause.py（catch_up_season）、
+    tests/figures/test_seats.py（WEEK_HOOKS[0]）、tianxia/features/admin/tests/test_season_pause.py（catch_up_season）、
     tianxia/features/companions/tests/test_stances_tie.py（DAY_HOOKS 叫 stances.daily）、tests/figures/test_week7_season.py
   - 經世界一步、週初、每天、開季、收季、開集結推這裡代叫的舊模組（_STEP_CORE、_WEEK_CORE、_DAY_CORE、_MUSTER_CORE、
     settle_season_start、end_season）：tianxia/features/bounties/tests/test_bounties.py（規則關著的季每週掛單、開季那一格）、tests/ranger/test_season21_daily.py、
@@ -32,13 +32,13 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-# 核心本體（全部拆包第 25 批收進 tianxia/core/__init__.py 的 MODULES）：不 import 功能包與舊名的別名。宴客的散席、月旦評、擂台的前三名、
+# 核心本體（全部拆包第 25 批收進 tianxia/core/__init__.py 的 MODULES）：不 import 功能包。宴客的散席、月旦評、擂台的前三名、
 # 龍頭上陣、題壁照帶由各包登記世界層的格（tianxia/core/features.py 的 WORLD_ORDER），還沒成包、不在共用規則層的舊模組由這裡代叫（標批號）
 from . import calendar, flavor, renown, seats, territory, timetable, wins  # 核心本體與共用規則層
 from .core import battle_base as battle_instance  # 決戰的資料型別與判定（全部拆包第 54 批進核心）
 from . import figure_life  # 共用規則層（人物活起來，全部拆包第 40 批收進）
 from . import figures  # 共用規則層（大勢人物，全部拆包第 40 批收進）
-from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批已成包，signature_arms 經舊名別名；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收）
+from . import leaderboard  # 共用規則層（賽季榜單，第二輪第 88 批收進）
 from . import orders  # 共用規則層（軍令，全部拆包第 40 批收進）
 from . import plans  # 共用規則層（盤算，全部拆包第 40 批收進）
 from . import ranks  # 共用規則層（晉升，全部拆包第 40 批收進）
@@ -726,7 +726,7 @@ def settle_season_start(season: WorldState, content: Content, rng: random.Random
     """開季那一刻（世界秒 0）結算第 1 週週一 00:00 的事（FB-040）：只跑 season_events（週初掛鉤＋到了的大事），
     不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，本週大事那時還是空的。
     開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時不跑季的事，
-    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。
+    所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 features/admin/actions.py 的 _settle_season_start）。
     規則關著的季只掛第 1 週的懸賞（懸賞榜包 rules.tick，start 那一格；不碰 hooked_week，同一週只掛一次）：管理者開季後第一眼看到的榜不是空的。"""
     if not calendar.season_one_on(season, content):  # 世界層 start（全部拆包第 25 批）：懸賞那一格核心代叫
         return [] if season.ended else _results(features_core.world_run("start", _START_CORE, _season_vehicle(content, season), content, rng))

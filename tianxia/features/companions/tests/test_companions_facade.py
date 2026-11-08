@@ -2,7 +2,8 @@
 from unittest import mock
 import pytest
 from conftest import FixedRandom, walk_to
-from tianxia import companion_agent, rules, team
+from tianxia.features.companions import companion_agent
+from tianxia import rules, team
 from engine_kit import FAKE_TURN, NEXT_TURN, _figure, _hall, _no_model, _prepared, _spy_battle_status, ids  # noqa: F401
 
 pytestmark = pytest.mark.whole_content
@@ -363,7 +364,7 @@ def test_calling_on_a_figure_starts_the_dialogue_with_that_figure(content, game)
     _hall(content, game)
     game.choose("act:call")
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN), \
-            mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+            mock.patch("tianxia.features.guide.rules.note_action", return_value=[]) as noted:
         msgs = game.choose("call:scholar")
     assert msgs == ["他點了點頭。"]
     p = game.state.player

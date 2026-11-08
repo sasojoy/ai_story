@@ -618,7 +618,7 @@ def grant(state: GameState, content: Content, clue_items: dict[str, int], counte
 
 
 # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的三格（捐糧、直接給伏筆片段、伏筆物品與計數），原本那幾段逐字搬；
-# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 34 批：伏筆進軍情包，那三格改由軍情包登記）。先後在 core/features.py 的 EFFECT_ORDER。
+# 第 34 批伏筆進軍情包，那三格改由軍情包登記（在那之前是核心 rules._EFFECT_CORE 代叫）。先後在 core/features.py 的 EFFECT_ORDER。
 # 捐糧與片段原本跟符文殘片（seal.effect_runic）共用一個守衛（三個欄位有一個不空、而且 season_one）：拆開之後各自守自己的欄位——空著的那一段本來就
 # 什麼都不做，season_one 只讀內容與季上的章、捐糧那一段不會改它（計畫 2.5）。
 

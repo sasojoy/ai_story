@@ -10,7 +10,8 @@ from test_outing import _draws, _game, _settle_event, _walked, _with_ink
 
 from conftest import real_content
 from tianxia import content as content_mod
-from tianxia import sensing, speech
+from tianxia.features.sense import sensing
+from tianxia import speech
 from tianxia.core import features as features_core
 from tianxia.core.option import IDLE_MARK
 from tianxia.features.explore import explore_rules, outing_rules

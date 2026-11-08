@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 from conftest import FixedRandom, idle_step, next_season
 from test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
-from tianxia import defection, guide
+from tianxia.features.faction import defection
+from tianxia.features.guide import rules as guide
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.models import Effect, Enlist, EnlistStep, ExploreMix, FreeTextChoice, HintDef, Hints, Recruiter, TutorialGoal
@@ -79,7 +80,7 @@ def test_a_bad_hint_book_is_refused_at_load(hints_root, change, message):
 
 
 def test_every_known_hint_id_is_one_of_the_eighteen():
-    from tianxia import hints
+    from tianxia.features.guide import hints
 
     # 設計 5.2 的十八條，加上 explain-1 的 h_bond（第一次交友或談話：情誼有什麼用；事件型，不看狀態）
     # 新手引導重做（2026-10-22）：拿掉 h_refine_fail，多五條（h_drill_done 是事件型）
@@ -294,7 +295,7 @@ def test_a_note_is_fixed_when_it_is_queued(game):
 
 
 def test_unknown_or_missing_hints_are_ignored(game):
-    from tianxia import hints
+    from tianxia.features.guide import hints
 
     game.skip_tutorial()
     assert hints.note_for(game.state, game.content, "h_not_there") is None
@@ -453,7 +454,7 @@ def test_status_data_carries_the_switch(game):
 def test_the_settings_sheet_has_the_switch_and_sends_hints_off():
     """設定抽屜的「不再提示」（網頁沒有建置步驟、沒有前端測試：這裡只看原始碼有接上，node --check 另外擋語法）。"""
     src = webharness.app_source().replace("\r\n", "\n")
-    assert 'id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）' in src
+    assert 'id="hints-off" ${s.hints_off ? "checked" : ""}><span><b>不再提示</b><small>碰到新玩法時的小提醒</small></span>' in src
     assert 'ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked })' in src
     assert src.index("略過新手引導</button>") < src.index('id="hints-off"')  # 在「略過新手引導」下面
 
@@ -969,7 +970,7 @@ def test_sync_notices_what_changed_without_an_action(game):
 
 def _feeling(game):
     """探索落在悟意境那一支、這一處有場景：跳出一張「有所感」的卡（做法選單，卡片本身是畫面）。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     from tianxia.models import InsightScene, SenseMethod
 
     scene = InsightScene(
@@ -1015,7 +1016,7 @@ def test_a_hint_shows_when_the_feeling_is_let_go(game):
 def test_a_hint_shows_when_the_stroke_is_drawn(game):
     """畫完那一筆（server 的 sense_request／sense_draw，不走 choose）：悟到意境、排著的提示在這一則上框；悟到的意境本身也可能讓
     某一條成立（第二個意境：h_merge），這時候看一遍。"""
-    from tianxia import glyph
+    from tianxia.features.sense import glyph
 
     game.skip_tutorial()
     scene = _feeling(game)
@@ -1153,7 +1154,7 @@ def test_a_page_action_notices_it_too(game):
 def test_every_page_action_looks_for_hints(game, monkeypatch):
     """修練頁、煉製頁的每一種動作做完都經過 _menxia_entry、看一遍提示（療傷、練成、改練、裝意境、拆意境、合成、熔武學、熔意境、修練）：
     一個一個做、每做成一個，檢查就多叫一次。爐裡只合意境（Joy 2026-10-21），武學＋意境是裝槽（lake_kick 是下品的內容武學，裝得了）。"""
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
 
     game.skip_tutorial()
     p = game.state.player
@@ -1228,7 +1229,7 @@ def test_a_tutorial_step_is_not_a_hint(game):
 
 
 def test_a_hint_note_remembers_whose_voice_it_is(game):
-    from tianxia import hints
+    from tianxia.features.guide import hints
 
     game.skip_tutorial()
     p = game.state.player
@@ -1385,7 +1386,7 @@ def test_a_free_text_answer_that_joins_a_sect_also_greets(on):
 
 
 def test_queue_note_follows_the_same_gates_as_the_queue(game):
-    from tianxia import hints
+    from tianxia.features.guide import hints
 
     note = HintNote(id="s_rejoin", speaker="老石", text="「又是你。」", by="guan")
     assert hints.queue_note(game.state, note) is True
@@ -1460,7 +1461,8 @@ def test_mall_waits_for_level_five_and_looks_for_the_first_arena(game, monkeypat
 
 
 def test_seal_chuangong_place_follow_their_own_rules(game, monkeypatch):
-    from tianxia import chuangong, place_state
+    from tianxia.features.cultivation import chuangong
+    from tianxia import place_state
     from tianxia.characters import name_key
     from tianxia.core import seal_base
 

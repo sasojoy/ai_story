@@ -1,30 +1,40 @@
 """懸賞榜（討伐、打探、護送、求兵、通緝、人物託付與求援）。功能包，開發規範手冊 3.2；全部拆包第 45 批搬進來（引擎那一半）；懸賞榜的畫法在 web/bounties.js（第 65 批）。
 包名 bounties 跟設定 Config.bounties、季上的 WorldState.bounties 同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- rules.py：懸賞榜的規則（原 tianxia/bounties.py；那個名字留成指到這裡的別名）。別人讀的那一半在核心 core/bounty_base.py，rules re-export 同一批
-- wanted.py：通緝掛上玩家卡（原 tianxia/wanted.py，別名；載入這一包時登記進核心的 cards.ACTIONS）
+- rules.py：懸賞榜的規則（原 tianxia/bounties.py）。別人讀的那一半在核心 core/bounty_base.py，rules re-export 同一批
+- wanted.py：通緝掛上玩家卡（原 tianxia/wanted.py；載入這一包時登記進核心的 cards.ACTIONS）
 - actions.py：懸賞榜第二、三層的選單與選單上按下去的一下、打開榜、掛通緝、截殺打贏的發布點、退押金與作廢、系統通緝（原本 Game 上的 4 個方法與 _act、sync、own_turn_checks 裡那幾行）
 - step_actions.py：「你這一步」的委託與懸賞兩格（原本 step._STEP_CORE）
 - bots.py：假人的分數（原本 bot_policy.score 的 bounty 那一段）
 
 接縫掛鉤：choose（bounty:*）、verbs（act:bounties 打開榜與紀錄標題）、bot_pick、bus（六種事件交差）、world（step、week、day、start 掛單）、steps（commission、bounty）、defection（stranded）。
 店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：入口排在鐵匠鋪、馬市前面；drop_shops 會在 sync.close 多收一次）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, DefectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, WorldHook
+from tianxia.core.features import ContentSlot
 
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（core/cards.py 的 ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 
 
 class BountiesFeature(Feature):
     name = "bounties"
-    web = ("bounties.js", "bounties.css")  # 懸賞榜的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。rewardChips、bountiesHtml 與賞的樣子第 67 批從 main.js、style.css 切出來；榜的樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
+    web = ("bounties.js", "bounties.css")  # 懸賞榜的畫法（全部拆包第 65 批從 app.js 切出來）。rewardChips、bountiesHtml 與賞的樣子第 67 批從 main.js、style.css 切出來；榜的樣子在 shop.css（第 86 批切出來）
     prefix = "bounty"  # bounty:take:<id>、drop、pick、give:<id>:<東西>、unpick、back；灰掉的 more、none、empty 按不下去；入口 act:bounties 是核心的前綴
     # 榜開著沒、第三層指著哪一張：換季跟著新角色重來。bounties_done 是交差的總數（寫在 rules._complete；新手目標、行狀、傳承讀）
     # 店面共用的 shop_line／shop_clue／shop_hold（七間店共用，核心）不在這裡；Bounty 類別與 WorldState.bounties、rallies、bounty_seq、bounty_week、bounty_day 的定義在核心 state.py
     player_fields = ("picking_bounty", "bounty_pick", "bounties_done")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("bounties", lambda *a: checks.check_bounties(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """懸賞榜開著（bounty_base.active：設定開著、劇本有陣營、這一季還沒收），或此刻還坐在榜前：季收了、開關被關掉（還沒經過 sync 收店）照樣按得到「返回」、
@@ -35,14 +45,14 @@ class BountiesFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """bounty:*（懸賞榜第二、三層選單上的每一顆）：標題「懸賞榜」（原 Game._action_title 的 bounty 那一支），動作照原 Game._bounty。
-        FB-162 被搶的那一句（選單上沒有的 bounty: 回為什麼不成）、翻頁不寫紀錄仍在 Game.choose 原位，在這個掛鉤之前與之後。"""
+        FB-162 被搶的那一句（選單上沒有的 bounty: 回為什麼不成）是 stale/bounties 那一格（actions.stale_cell，第二輪第 92 批），在這個掛鉤之前；翻頁不寫紀錄是 Outcome.quiet（actions.browse_quiet，同一批）。"""
         if kind != self.prefix:
             return None
         from tianxia.core import bounty_base  # noqa: PLC0415
 
         from . import actions  # noqa: PLC0415
 
-        return Outcome(title=bounty_base.BOARD, run=lambda: actions.bounty(ctx, arg))
+        return Outcome(title=bounty_base.BOARD, run=lambda: actions.bounty(ctx, arg), quiet=lambda entry: actions.browse_quiet(arg, entry))
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415
@@ -50,6 +60,14 @@ class BountiesFeature(Feature):
         return bots.score(ctx, option)
 
     # ── 接縫掛鉤（不問 enabled，原位本來就不看開關；判斷都在被叫的函式裡）──
+
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：懸賞榜。組法在 shop_view.page。"""
+        if shop != "board":
+            return None
+        from . import shop_view as page  # noqa: PLC0415
+
+        return page.page(ctx)
 
     _verbs: tuple[Verb, ...] | None = None
 
@@ -158,6 +176,7 @@ class BountiesFeature(Feature):
                 MenuHook("open", "bounties", lambda ctx: actions.open_cell(ctx)),
                 MenuHook("depart", "bounties", lambda ctx: bounty_base.close_board(ctx.state.player)),
                 MenuHook("block", "bounties", lambda state, content: actions.travel_block(state, content)),
+                MenuHook("stale", "bounties", lambda ctx, option, option_id: actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
 
