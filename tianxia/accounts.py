@@ -389,11 +389,11 @@ class AccountStore:
 
     # ── 補設密碼、忘記密碼、刪帳號（帳號與客服第 204 批；設計 4.4、6.4）──
 
-    def add_password(self, key: str | None, login: str | None, password: str | None) -> str:
+    def add_password(self, key: str | None, login: str | None, password: str | None, staff: bool = False) -> str:
         """沒密碼的帳號補設密碼：帳號名過 check_login、別人用了丟 LOGIN_TAKEN；同一筆交易寫 password 列與記號列，鍵不變（回 id:<n>）。
         已經有密碼丟 ValueError（包先擋好，這裡不是玩家看的字）；帳號不在丟 KeyError。scrypt 在交易外算。"""
         shown = check_login(login)
-        check_password(password)
+        check_password(password, staff)  # staff：名單上的帳號 12 字（殼照 identity_base.listed 判；M 波）
         lower = normalize(shown)
         salt, digest = _new_secret(password)
         with self.db.transaction() as conn:
@@ -414,7 +414,7 @@ class AccountStore:
             )
         return f"id:{account.id}"
 
-    def reset_password(self, key: str | None, new: str | None, keep: str | None = None) -> None:
+    def reset_password(self, key: str | None, new: str | None, keep: str | None = None, staff: bool = False) -> None:
         """忘記密碼（用綁定的方式登入後設新密碼）：不必知道舊密碼；其他裝置登出，keep（這個裝置的 cookie）留著；解除擋猜密碼。
         沒有密碼丟 AccountError(NO_PASSWORD)；帳號不在丟 KeyError。"""
         account = self.get(key)
@@ -422,7 +422,7 @@ class AccountStore:
             raise KeyError(key)
         if account.hash is None:
             raise AccountError(NO_PASSWORD)
-        check_password(new)
+        check_password(new, staff)  # staff 同 add_password（M 波）
         self._replace_secret(account.key, new, keep)
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT subject FROM logins WHERE provider = 'password' AND account_id = ?", (account.id,)).fetchone()

@@ -601,7 +601,9 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            shell.account_store().add_password(account.key, body.get("login"), new)
+            staff = identity_base.listed(shell.CONTENT, login=str(body.get("login") or ""), character=account.character,
+                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
+            shell.account_store().add_password(account.key, body.get("login"), new, staff=staff)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         except ValueError:
@@ -635,7 +637,9 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            shell.account_store().reset_password(account.key, new, keep=token)
+            staff = identity_base.listed(shell.CONTENT, login=account.login, character=account.character,
+                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
+            shell.account_store().reset_password(account.key, new, keep=token, staff=staff)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         side.drop_reset(_hash(proof))

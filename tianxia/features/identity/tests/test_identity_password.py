@@ -120,3 +120,28 @@ def test_api_password_unchanged(clock):
     r = c.post("/api/password", json={"old": "secret-pw", "new": "other-pw", "again": "other-pw"})
     assert r.json() == {"message": "密碼已更新。"}
     assert TestClient(server.app).post("/api/login", json={"login": "shen_01", "password": "other-pw"}).status_code == 200
+
+
+# ── M 波：名單上的帳號補設、忘記密碼也要 12 字（第 207 批的 check_password staff；routes 那兩條是第 208 批的範圍）──
+
+
+def test_set_password_listed_needs_12(clock, monkeypatch):
+    c = TestClient(server.app)
+    phone_account(c)
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
+    assert error(_set(c, new="new-secret")) == accounts.STAFF_SHORT_PASSWORD
+    assert _set(c, new="a-long-password").json() == {"message": binding.PASSWORD_SET}
+
+
+def test_reset_listed_needs_12(clock, monkeypatch):
+    c = TestClient(server.app)
+    _pw(c)
+    bind(c)
+    clock.now += 73 * HOUR
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
+    d = TestClient(server.app)
+    _phone_login(d)
+    assert error(d.post("/api/identity/password/reset", json={"new": "brand-new", "again": "brand-new"})) == \
+        accounts.STAFF_SHORT_PASSWORD
+    assert d.post("/api/identity/password/reset", json={"new": "a-long-password", "again": "a-long-password"}).json() == \
+        {"message": binding.PASSWORD_RESET}
