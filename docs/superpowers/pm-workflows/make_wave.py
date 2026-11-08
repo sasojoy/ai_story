@@ -775,7 +775,7 @@ WEB_K = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關�
 
 
 WAVES["K"] = dict(
-    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support",
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
     extra_lenses=[
         dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 202、203、212 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.2、4.6、4.7、6.3 與計畫的「J 波落地時 PM 加的」") + " **另外**：關著時沒登入打每一條新路由都要 404（不是 401、422）；驗證碼的計數用兩個執行緒同時送同一號碼，不能多寄；challenge 跨用途（登入碼拿去綁定）要被拒；關著時登入頁不再打 `/api/identity/gate`。"),
     ],
@@ -828,6 +828,8 @@ def main():
         args["design"] = w["design"]
     if w.get("new_packages"):
         args["new_packages"] = w["new_packages"]
+    if w.get("new_existing"):
+        args["new_existing"] = True
     if a.finish:
         args["built"] = json.loads(Path(a.finish).read_text(encoding="utf-8"))
         args["merge_base"] = a.merge_base
