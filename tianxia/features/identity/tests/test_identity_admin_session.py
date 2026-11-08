@@ -193,3 +193,46 @@ def test_bot_names_not_revealed_by_password_rule(clock):
     a = TestClient(server.app).post("/api/register", json={"login": "botman", "password": "secret-pw", "again": "secret-pw"})
     b = TestClient(server.app).post("/api/register", json={"login": "plain_1", "password": "secret-pw", "again": "secret-pw"})
     assert (a.status_code, a.json()) == (b.status_code, b.json()) == (200, {"stage": "create"})
+
+
+# ── M 波：商城、形象那兩條唯讀的管理者頁也問 admin_session_ok（第 207 批留下）──
+
+
+def _shop_admin(c) -> tuple[int, int]:
+    return (c.post("/api/admin/mall", json={"name": "沈青衫"}).status_code, c.get("/api/admin/looks").status_code)
+
+
+def _mall_on(monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.mall, "enabled", True)
+    assert server.CONTENT.looks  # 形象的頁要內容裡至少一套
+
+
+def test_code_login_admin_refused_on_mall_and_looks(clock, monkeypatch):
+    _mall_on(monkeypatch)
+    _player(TestClient(server.app))
+    c = TestClient(server.app)
+    phone_account(c, to="0987654321", name=BOSS)
+    monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS])
+    plain = TestClient(server.app)
+    register(plain, "ma_01", name="馬伯庸")
+    assert _shop_admin(c) == (403, 403) == _shop_admin(plain)
+    boss = TestClient(server.app)
+    register(boss, "boss_09", "a-long-password", name="段紅袖")
+    monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS, "段紅袖"])
+    assert _shop_admin(boss) == (200, 200)  # 密碼登入、剛登入的照舊進得去
+    clock.now += HOURS
+    assert _shop_admin(boss) == (403, 403)
+
+
+def test_mall_and_looks_admin_off_unchanged(monkeypatch, key_file, tmp_path):  # noqa: F811
+    """identity 關著：密碼登入 7 小時前的管理者照舊看得到商城與形象的管理頁。"""
+    monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "g.db")
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "g.db"))
+    tick = Clock(server.time.time())
+    monkeypatch.setattr(server, "time", tick)
+    _mall_on(monkeypatch)
+    _player(TestClient(server.app))
+    c = _boss(monkeypatch)
+    tick.now += HOURS
+    assert _shop_admin(c) == (200, 200)
+    assert not (tmp_path / "g-identity.sqlite").exists()
