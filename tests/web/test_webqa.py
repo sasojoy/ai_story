@@ -349,6 +349,21 @@ def test_what_the_wrapper_patches_is_still_in_server_py():
     assert set(wanted) - _names_in(ROOT / "server.py") == set()
 
 
+def test_both_copies_get_the_same_push_key_before_a_server_starts(tmp_path):
+    # 第 110 批：--jobs 4 時同一份複本的四個伺服器同時產生金鑰、一個讀到半份 PEM（MalformedFraming）；兩份複本先放同一把
+    pytest.importorskip("cryptography")
+    from cryptography.hazmat.primitives import serialization
+
+    gate = _load("gate")
+    pems = []
+    for name in ("a", "b"):
+        gate.seed_local(str(tmp_path / name))
+        pems.append((tmp_path / name / ".local" / "webpush_vapid.pem").read_bytes())
+    assert pems[0] == pems[1]
+    serialization.load_pem_private_key(pems[0], password=None)
+    assert re.search(r'^VAPID_FILE = ROOT / "\.local" / "webpush_vapid\.pem"', (ROOT / "server.py").read_text(encoding="utf-8"), re.M), "server.py 讀金鑰的路徑換了，seed_local 要跟著換"
+
+
 def test_the_model_queue_is_off_in_the_wrapper():
     # 佇列一格、別的寫手佔著就跳過，那一篇放回單子等 30 秒，而時鐘是凍的：第 77 批第一次全量 extra:069～074 一邊多一筆天下形勢
     text = (TOOL / "serve.py").read_text(encoding="utf-8")

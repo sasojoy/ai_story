@@ -191,6 +191,24 @@ def mutate(copy: str, which: str) -> None:
         raise ToolBroke(f"no mutation {which}")
 
 
+VAPID_TEST_SCALAR = 0x7E6B_A110_5EED_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001  # batch 110: a fixed P-256 key, the same on both copies
+
+
+def seed_local(copy: str) -> None:
+    """Batch 110: the copy's .local/ before any server starts. git archive leaves it out, and server.py makes the push key on first use
+    (server.VAPID_FILE, .local/webpush_vapid.pem): with --jobs N the servers of one copy wrote it at once and one read half a file (MalformedFraming).
+    One fixed test key, never the repo's .local/, never random: base and head get the same bytes."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    key = ec.derive_private_key(VAPID_TEST_SCALAR, ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    local = os.path.join(copy, ".local")
+    os.makedirs(local, exist_ok=True)
+    with open(os.path.join(local, "webpush_vapid.pem"), "wb") as f:
+        f.write(pem)
+
+
 def static_digest(web: str, ext=STATIC_EXT) -> dict:
     out = {}
     for root, _, files in os.walk(web):
@@ -436,6 +454,8 @@ def run(args) -> int:
         import unpack
 
         copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
+        for copy in copies:
+            seed_local(copy)
         if args.mutate:
             mutate(copies[1], args.mutate)
         sa, sb = static_digest(os.path.join(copies[0], "web")), static_digest(os.path.join(copies[1], "web"))
