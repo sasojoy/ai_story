@@ -29,3 +29,10 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - 畫面只剩貨架、紀錄、購買確認、易名帖、管理者查帳（`web/mall.js` 505 行，`mallClick` 13 個 case）；形象那一頁在 `web/looks.js`（第 94 批）。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時問核心 `core/identity_base.phone_ok(ctx, 鍵)`，只問動手的人：
+- 商城買（鍵 `mall_buy`）：`actions.purchase` 在「商城關著」那一行之後回 `identity_base.PHONE_NEEDED`；`actions.view` 每一件 `can=False, why=那一句, max=0`（`web/mall.js` 照 `can`／`why` 畫，網頁沒動）。
+- 封測發放（鍵 `mall_grant`；設計寫 `beta_grant`）：`actions.grant` 沒綁就這一輪不發，綁了那一輪才發；`identity_base.phone_subject` 有值時走 `rules.grant_beta_phone`：同一筆交易裡手機編號 `grant:beta:phone:<subject>`（`rules.grant_phone_ref`，`mall_ledger.ref` UNIQUE、0 元寶）有了就不發，否則照 `grant_beta` 發、發成了再記手機編號。同一支手機一輩子一次（解綁、刪帳號不刪帳本）；開閘前發過的不追回、不補手機編號；假人與閘關著照舊走 `grant_beta`。帳本給本人看的紀錄會多一行「封測發放 +0」（沒濾）。
+- 沒有新路由（不適用「關著 404」）、新欄位、新表；資料庫第 9 版不動。測試 `tests/test_mall_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。
