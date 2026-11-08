@@ -182,7 +182,7 @@ def test_desk_card_and_lookup_form(main):
     m = {**main, "support_unread": 0, "support_staff": True}
     desk = run(m, "return H.supportDeskHtml();", S=_desk_state(_card()))
     assert "查帳剩" in desk and "<b>18</b>" in desk and "這一小時" in desk
-    assert 'id="support-lookup-form"' in desk and 'name="kind"' in desk and 'name="text"' in desk and 'name="id"' in desk and 'value="3"' in desk
+    assert 'id="support-lookup-form"' in desk and 'name="kind"' in desk and 'name="text"' in desk and 'name="ticket"' in desk and 'name="id"' not in desk and 'value="3"' in desk  # 欄位不能叫 id：瀏覽器會拿它蓋掉 form.id，殼就找不到處理函式
     assert "查別的帳號" in desk and "不收名號" in desk and "每小時 20 次" in desk
     assert "帳號 shen_01" in desk and "密碼、手機 09*****678" in desk and "2700 元寶" in desk and "元寶帳本" in desk
     assert "−300" in desk and "+3000" in desk and "封測發放" in desk and "購買" in desk
@@ -191,14 +191,14 @@ def test_desk_card_and_lookup_form(main):
     gone = run(m, "return H.supportDeskHtml();", S=_desk_state({"gone": True}))
     assert "單上的帳號已經不在了。" in gone and "元寶帳本" not in gone
     out = run(m, """return (async () => {
-        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "email", text: "a@b.com", id: "3" });
+        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "email", text: "a@b.com", ticket: "3" });
         return { calls: T.calls, msg: H.S.supportLookupMsg, left: H.S.supportDesk.lookups_left, card: H.S.supportDeskCard.login, html: H.supportDeskHtml() };
       })();""", S=_desk_state(_card()), responses={"/api/support/lookup": {"found": True, "card": _card(login="li_02"), "left": 17, "message": ""}})
     assert out["calls"] == [["/api/support/lookup", {"id": 3, "kind": "email", "text": "a@b.com"}]]
     assert out["msg"] == "已查到 li_02（這一小時還剩 17 次）。" and out["left"] == 17 and out["card"] == "li_02"
     assert "帳號 li_02" in out["html"] and "已查到 li_02" in out["html"] and 'value="a@b.com"' in out["html"]
     none = run(m, """return (async () => {
-        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "login", text: "nobody", id: "3" });
+        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "login", text: "nobody", ticket: "3" });
         return [H.S.supportLookupMsg, H.S.supportDeskCard];
       })();""", S=_desk_state(_card()), responses={"/api/support/lookup": {"found": False, "card": None, "left": 16, "message": "查無此帳號。"}})
     assert none == ["查無此帳號。這一小時還剩 16 次。", None]

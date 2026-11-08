@@ -129,7 +129,7 @@
         <form id="support-lookup-form" class="sup-lookup">
           <select name="kind">${SUPPORT_LOOKUP_KINDS.map(([k, name]) => `<option value="${k}"${k === kind ? " selected" : ""}>${name}</option>`).join("")}</select>
           <input class="input" name="text" value="${esc(q.text || "")}" placeholder="完整帳號、Email 或手機">
-          <input class="input sup-lookup-id" name="id" inputmode="numeric" value="${esc(id)}" placeholder="單號">
+          <input class="input sup-lookup-id" name="ticket" inputmode="numeric" value="${esc(id)}" placeholder="單號">
           <button class="btn small" type="submit">查</button>
           <p class="form-msg">${esc(S.supportLookupMsg || "")}</p>
         </form>
@@ -214,9 +214,9 @@
         const r = await api("/api/support/reply", { id: Number(form.dataset.id), body: data.body || "" });
         S.supportMine = r.mine;
         renderKeepingSheet();
-      } else if (form.id === "support-lookup-form") { // 查別的帳號（第 212 批）：查到的卡留著，回單後也還在
-        S.supportLookupQ = { kind: data.kind, text: data.text || "", id: data.id };
-        const r = await api("/api/support/lookup", { id: Number(data.id), kind: data.kind, text: data.text || "" });
+      } else if (form.id === "support-lookup-form") { // 查別的帳號（第 212 批）：查到的卡留著，回單後也還在。單號那一欄叫 ticket：欄位叫 id 的話瀏覽器會拿它蓋掉 form.id，殼就找不到這支處理函式（K 波落地時實機點出來的）
+        S.supportLookupQ = { kind: data.kind, text: data.text || "", id: data.ticket };
+        const r = await api("/api/support/lookup", { id: Number(data.ticket), kind: data.kind, text: data.text || "" });
         S.supportDeskCard = r.card;
         if (S.supportDesk) S.supportDesk.lookups_left = r.left;
         S.supportLookupMsg = r.found ? `已查到 ${r.card.login}（這一小時還剩 ${r.left} 次）。` : `${r.message}這一小時還剩 ${r.left} 次。`; // 待 joy 潤
