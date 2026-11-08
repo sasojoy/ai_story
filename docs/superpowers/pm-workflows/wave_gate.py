@@ -302,12 +302,12 @@ def concurrent_gates(gates: Path, mine: Path) -> int:
     return sum(1 for d in gates.iterdir() if d.is_dir() and d != mine and (d / "gate.log").exists() and not (d / "done").exists())
 
 
-def compare_extra(decision: dict, jobs: str = "", new: str = "") -> list[str]:
+def compare_extra(decision: dict, jobs: str = "", new: str = "", also_existing: bool = False) -> list[str]:
     """compare 的參數：挑到的軌、設定、半舊半新；--new 不管 --changed 還是全軌都傳（PM 11/08 加的）。"""
     picked = decision["tracks"]
     extra = (["--tracks", ",".join(picked)] if picked is not None else []) + (["--jobs", jobs] if jobs else [])
     extra += ["--profiles", ",".join(decision["profiles"])] + (["--crossover"] if decision["crossover"] else [])
-    return extra + (["--new", new] if new else [])
+    return extra + (["--new", new] if new else []) + (["--also-existing"] if (new and also_existing) else [])
 
 
 def main() -> int:
@@ -318,6 +318,7 @@ def main() -> int:
     ap.add_argument("--name", default="")
     ap.add_argument("--tracks", default="", help="只比這幾軌（修正之後重驗用）；蓋過 --changed 挑的")
     ap.add_argument("--new", default="", help="新功能波：新包的名字（逗號分開），compare 扣掉它們帶來的 js、css、表、op（企劃者 11/08「新東西列出來，其餘一樣」）；--changed 與全軌都傳")
+    ap.add_argument("--also-existing", action="store_true", help="跟 --new 一起用：base 已經有這一包（同一包的後續批）也放行它自己的 js、css、表、op（K 波起；compare 要有這個參數）")
     ap.add_argument("--no-suite", action="store_true")
     ap.add_argument("--no-compare", action="store_true")
     ap.add_argument("--jobs", default="")
@@ -419,7 +420,7 @@ def main() -> int:
     if not a.no_compare and decision["mode"] != "none":
         unpack(repo, base, work / "base")
         both = ["--base", str(work / "base"), "--head", str(root)]
-        extra = compare_extra(decision, a.jobs, a.new)
+        extra = compare_extra(decision, a.jobs, a.new, a.also_existing)
         cached = ["--cache", str(repo / ".local" / "wave_gate" / "cache")] if a.cache else []  # 只給 compare；explore-compare 不快取
         running["compare"] = start([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *extra, *cached], root, env, out / "compare.txt")
         if not a.tracks:  # compare 有跑就跟著跑，不照包挑
