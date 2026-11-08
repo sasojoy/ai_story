@@ -180,6 +180,7 @@
   }
 
   function enter(data) {
+    if (data.identity) S.identity = true; // identity（帳號與客服第 202 批）：/api/me 開著才帶這個旗標（identity.js 沒旗標不問 gate）；之後的回應沒帶不清掉
     resetOrdersWatch(); // 換了帳號、角色：入伍段第一步的看過與計時都重來
     forgetHowto(); // 玩法說明也是（登入失效之後重新登入，沒經過登出那顆鈕）
     forgetMap(); // 輿圖也是（FB-329）：停在輿圖分頁時下面 render 之後重抓這個人的

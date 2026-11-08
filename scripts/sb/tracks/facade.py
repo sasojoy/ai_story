@@ -64,7 +64,9 @@ FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pa
                                 # identity（帳號與客服第 201 批）：殼的登入頁掛格（shell.js 三行）與 renderGate 畫完叫格的那一行，只認字面
                                 + r'|^  const GATE_SLOTS = \[\]; //|^  function registerGateSlot\(fn\) \{ GATE_SLOTS\.push\(fn\); \} //'
                                 + r'|^  function drawGateSlots\(gate\) \{ for \(const fn of GATE_SLOTS\) fn\(gate, S\); \} //'
-                                + r'|^    drawGateSlots\(\$app\.querySelector\("\.gate"\)\);$')
+                                + r'|^    drawGateSlots\(\$app\.querySelector\("\.gate"\)\);$'
+                                # identity 第 202 批：enter 開頭一整行（/api/me 開著才帶 identity 旗標），只認字面
+                                + r'|^    if \(data\.identity\) S\.identity = true; //')
 # support（帳號與客服第 211 批；設計第七節「殼多的行寫進 FACADE_SHELL_LINES」，企劃者 2026-11-08 點頭第 2 版）：客服在殼上接的那幾行。
 # 改過的行原樣與改過的都放行（base、head 各去掉自己那一份），head 才有的兩行接縫只放行 head 那一行；開關關著時畫出來的不變，由 page 段與包的網頁測試比。
 SUPPORT_SHELL_TOUCHED = (

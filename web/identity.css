@@ -1,7 +1,8 @@
-/* 登入頁的格（帳號綁定，features/identity；帳號與客服第 201 批）：快速登入那一格的幾條路與客服信箱那一行。
-   選擇器全帶 .gate 前綴，不蓋殼的樣式；開關關著時這幾個 class 不會出現在頁面上。 */
+/* 登入頁的格（帳號綁定，features/identity；帳號與客服第 201、202 批）：快速登入那一格的幾條路、隱私權與提示那幾行、建角色頁「已經有帳號？」那一行。
+   選擇器全帶 .gate 前綴、class 都是 idp 開頭，不蓋殼的樣式；開關關著時這幾個 class 不會出現在頁面上。 */
 .gate .idp { display: flex; flex-direction: column; gap: 10px; }
 .gate .idp .btn { width: 100%; }
-.gate .support-mail { margin: 12px 0 0; text-align: center; }
-.gate .support-mail a { color: inherit; text-decoration: underline; word-break: break-all; }
-.gate .fine { font-size: 13px; color: var(--ink-2); }
+.gate .idp-fine { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); text-align: center; }
+.gate .idp-fine a { color: inherit; text-decoration: underline; margin-left: 4px; }
+.gate .idp-hint { text-align: left; }
+.gate .idp-have { margin-top: 16px; }
