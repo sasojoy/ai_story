@@ -785,6 +785,53 @@ WAVES["K"] = dict(
 )
 
 
+def b204():
+    return jb(204, "帳號四：綁定頁、近期驗證、解綁、補設密碼、忘記密碼、門號回收、管理者工具、驗證碼登入的畫面", "identity", "dev/acct-4", "8361", [
+        "- 範圍照計畫第 204 批那一節全部（含「J 波留下來的」、「K 波留下來的」、「K 波審查與修正輪留下」三段）與設計 4.3、4.4、6.4、6.5；畫面照 `pick.txt`：設定抽屜「帳號綁定」B 版（摺起來、跟修改密碼放一起、摺著時一行寫現況、紅點在摺疊列與 ⚙），驗證碼登入那一頁照登入頁 C 版的手機驗證碼流程。拆成這幾步、每步一筆 commit：①這次 session 的登入方式與時間（`session_auth`）：`server._start_session` 回 token（設計第七節 `server.py` 那一列，PM 11/08 加），密碼、LINE、Google、驗證碼四種登入都記；近期驗證（有密碼打密碼、沒密碼對現有一種重驗一次，查不到就當沒驗過）。②綁：四種都走登入那一套、`purpose=bind`、bind 池；`verified_at`；72 小時新綁限制 `new_binding_hours`；解綁至少留一種（密碼算一種）、解綁後 30 天 `rebind_days`（解綁與刪帳號的雜湊永久留著）；每次綁、解綁、設密碼寫一則「帳號」遊戲紀錄並通知現有 Email、手機（假寄送）。③補設密碼（取帳號名過 `check_login`、同一筆交易寫 `password` 列、鍵不變）；忘記密碼（用綁定方式登入後 10 分鐘內、短效 HttpOnly cookie 證明、`/api/password` 不動、其他裝置登出、通知其他綁定；新綁不滿 72 小時的不能用）。④門號回收：`fresh_days` 180、過期的三種處理、用密碼或第三方的玩家 180 天提醒一次不擋遊戲。⑤管理者工具（identity 包 `admin_tools`：解綁某一種、刪帳號〔刪 `accounts` 與 `logins` 列、名號占住、錢包留著〕、看綁定與時間）；管理者重設密碼畫面列綁定、對沒密碼的回「這個帳號沒有密碼，請他用綁定的方式登入」；名單上的帳號用驗證碼或第三方進來的 session 不給管理與客服權限、權限動作要密碼登入且 6 小時內驗過（接客服一的 strict xfail `test_staff_needs_password_session`，拿掉 xfail）。⑥畫面：綁定頁 B 版；驗證碼登入那一頁（填號碼、Turnstile、收碼、重寄倒數、錯 5 次作廢的提示；K 波的鈕寫「尚未開放」，路由都在）；已登入的瀏覽器再走登入先問一次要不要換帳號；`phone_gate` 開著、沒綁手機時 `Feature.status` 給本人 `phone_missing`、摺疊列與 ⚙ 紅點（第 205 批不碰 identity 包與 `web/identity.*`，紅點歸你）。",
+        "- **K 波審查與修正輪留下、這一批順手收**（計畫 204 那一節的「K 波審查與修正輪留下」一段，PM 11/08 加；開工時計畫裡可能還沒有這一段，照這裡）：`routes.py` 的 `api_code_send`、`api_code_verify` 改走 `shell.time.time()`（現在自己 `import time`）；`IdentityStore` 每次請求都建構並跑 DDL 與 `PRAGMA journal_mode=WAL`，改成開一次（新檔併發會 database is locked）；Turnstile `hostname` 為 None 時不要跳過比對；`fake_services` 開著時啟動印警告、正式設定（`season21`、`week7`）載入時擋掉；`AccountStore.login_key` 與 `identity_base.account_key_for` 併成一份。",
+        "- **不做**九個入口與灰鈕（第 205 批）、CSP（213）、登入頁客服信箱那一行（214，support 包）、註冊勾選（206）。`web/admin.js` 只改計畫列的那幾行（`:22` 分流、`data-login` 改放 `key`、重設畫面列綁定）；`server.py` 只改 `_start_session` 回 token；`web/shell.js`、`web/app.js` 不碰（設定抽屜那一格走 identity 包已有的掛法）。新字每句 `待 joy 潤`，`rollback` 逐欄寫（旁檔新欄、`session_auth`、`verified_at`）。",
+    ])
+
+
+def b205():
+    return jb(205, "帳號五：`phone_ok` 的九個入口、灰鈕、封測發放的手機編號", "identity", "dev/acct-5", "8362", [
+        "- 範圍照計畫第 205 批那一節與設計 4.5：`identity_base.phone_ok(ctx, key)` 照判斷順序補完（`identity.enabled` 或 `phone_gate` 關 → 真；鍵不在 `phone_required` 表上 → 真；假人 `state.player.bot` 不是 None → 真；不是假人又查不到帳號 → 假；其餘看 `logins` 有沒有 `provider='phone'`；**開工前先看第 203 批手機驗證碼登入建出來的 `logins` 列長什麼樣，照那一份查**）；九個入口照 4.5「問的位置」那張表逐個接（截殺 `peers/raid_actions.raid`；掛通緝 `bounties/actions` 的 wanted；玩家單 `take`、`give` 只看發單的是不是玩家；贈物 `peers/social._gift`；切磋、論武的發起 `spar_actions.spar`、`discuss_actions.request` 叫模型之前；接受一律在 `invite_actions.answer_invite` 最前面、`invites.drop` 之前，被擋時邀請留著、發起人看到的跟被不理一樣；市集 `looks/actions` 的 list 與 buy，unlist 不擋；商城 `mall/actions.purchase`；封測發放 `mall/actions.grant` 開頭）；被擋時卡與店面的鈕預先灰掉寫原因（`CardButton(enabled=False, note=…)`，只問自己）、回話一句（待 joy 潤）；封測元寶綁了手機那一輪才發、再記一筆 `grant:beta:phone:<HMAC>`（`mall_ledger.ref` UNIQUE）、同一支手機一輩子一次、解綁刪帳號都不放掉；`phone_gate` 開與關各跑一次的測試；**對手三種（沒綁的真人、綁了的真人、假人）發起人看到的逐字相同**（逐字測試；照「只問動手的人」暫定，企劃者問完別人要改再開一批）。",
+        "- **不碰** `tianxia/features/identity/`、`web/identity.*`、`web/shell.js`、`web/app.js`（紅點與 `phone_missing` 歸第 204 批）；`identity_base.py` 只改 `phone_ok` 與它要的查詢；別的包只在 4.5 列的那幾個函式開頭加一次判斷、不重排、不改別的字；包不准 import identity 包（問核心 `identity_base`）。`phone_gate` 預設關、關著一個字不變（compare 要一樣）。",
+    ])
+
+
+def b213():
+    return jb(213, "CSP 標頭、`battle.js` 的 `onerror`", "server", "dev/csp", "8363", [
+        "- 範圍照計畫第 213 批那一節：`server.py` 每個回應加 `Content-Security-Policy: script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'`（Turnstile 要 `challenges.cloudflare.com`；設計第三節點名「CSP 標頭另開小批」，這就是那一批）；先把 `web/battle.js` 四處 `onerror=` 改成事件註冊；全 repo 掃 `web/`、`index.html`、伺服器生成的頁有沒有 inline `<script>`、`on*=` 屬性、`javascript:` 連結、`eval`／`new Function`，有就改走事件註冊或拿掉，一個都不能留；`tests/server/test_server.py` 加一條每個頁與 API 回應都帶這個標頭、`tests/web/` 加一條 `web/*.js` 與 `index.html` 沒有 inline handler（守住以後不長回來）；用 head 開伺服器實機走江湖、輿圖、店面、決戰、管理頁、登入頁各一次，主控台不能有 `Refused to`。",
+        "- **CSP 不是開關**：加了就是整站都有，網頁比對（全回合）要跟 base 一樣、壞一頁就是整站壞。**不做**其他標頭（HSTS、frame-ancestors、Referrer-Policy 另開）。`server.py` 只加這個 middleware 一處（設計第七節 `server.py` 那一列：PM 11/08 加「CSP 標頭」）。",
+    ])
+
+
+def b214():
+    return jb(214, "客服三：登入頁的客服信箱那一行（support 包畫）", "support", "dev/support-3", "8364", [
+        "- 範圍：登入頁的客服信箱那一行歸 support 包（計畫第 204 批「K 波留下來的」第 202 批那一條，PM 拆成這一批；企劃者 11/08 挑「遊戲內客服單＋登入頁放聯絡方式（客服信箱）」）：`web/support.js` 用 `registerGateSlot` 畫一行「登不進去？寫信到 <信箱>」（字照 `Config.support.mailbox`；待 joy 潤；support 包自己的 `gate_slot()` 與 `GATE_LINE` 接上），開一條不用登入的 `GET /api/support/mailbox`（第一行 gate、關著 404、進 `NO_LOGIN_ROUTES` 寫理由；設計第七節有列）；關著時登入頁輸出位元組一樣（對 base）；`web/support.js` 的 node 測試補這一格；375 與 1280 各看一次。",
+        "- **不碰** `web/shell.js`、`web/app.js`、identity 包、`server.py`。接在第 213 批之後同一條線做（同一個工作樹，等 213 commit 完再開；213 動了 `server.py` 的標頭，你開的新路由自然帶到）。",
+    ])
+
+
+WEB_L = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關）**", "**這一波：設定抽屜的帳號綁定（B 版）、驗證碼登入那一頁、忘記密碼與補設密碼、綁手機才能用的九個入口（`phone_gate`）、登入頁的客服信箱那一行（開關預設關）；CSP 標頭沒有開關、整站都有**").replace(
+    "實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話",
+    "實機走：登入頁按 Email 進驗證碼那一頁（假寄送把碼印在 log）登入、設定抽屜「帳號綁定」摺疊列展開、綁一個 Email（走驗證碼）、解綁、補設密碼並取帳號名、忘記密碼（用綁定登入後設新密碼）、管理者重設畫面列綁定；再開 `phone_gate`：沒綁手機時贈物或切磋的鈕灰掉寫原因、⚙ 與摺疊列紅點、用手機驗證碼綁上之後鈕回來；登入頁底下客服信箱那一行；**每一頁主控台沒有 CSP 違規（`Refused to`）**，江湖、輿圖、店面、管理頁也各開一次看").replace(
+    "要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）", "要全部一樣（新包的 js、css 多出來的 script 與 link 行工具自己放行；其他差異是 blocker）。CSP 關不掉，所以這一關同時在驗 CSP 沒有弄壞任何一頁").replace(
+    "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給）", "客服身分用 `TIANXIA_SUPPORT=<你建的帳號>` 給；`fake_services: true` 要一起開——合併時 PM 定過只有公開網址是正式網域才擋，head 要是還擋 `season_one`，覆寫檔多寫 `\"season_one\": false`；`fake_services` 開著 Turnstile 一律過、不必設網站金鑰，head 要是還要 `\"ok\"`，直接打 API 補那一步並寫進回報）")
+
+
+WAVES["L"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 204、205、213、214 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.3、4.4、4.5、6.4、6.5 與計畫 204、205、213 三節") + " **另外**：對手三種（沒綁的真人、綁了的真人、假人）發起人看到的逐字相同（拿三個對手各跑一次截殺、贈物、切磋，把回話與數字 diff）；`phone_gate` 開著假人一律回真、identity 關著一律回真；72 小時、30 天、180 天各挑一條把數字改壞看測試會紅；忘記密碼的 cookie 過期或新綁不滿 72 小時就不能設；名單上的帳號用驗證碼進來打管理者 API 與客服 API 都要被拒；解綁至少留一種；CSP 標頭每個回應都有、`web/` 與 `index.html` 沒有 inline handler；登入頁關著時位元組一樣。"),
+    ],
+    lines=[dict(name="帳號四", batches=[b204]), dict(name="帳號五", batches=[b205]), dict(name="CSP 與客服三", batches=[b213, b214])],
+    merge_port=8365, fix_port=8366,
+    web_check=dict(ports="8367、8368", steps=WEB_L),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
