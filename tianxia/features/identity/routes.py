@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets as _rand
 import time
 
-from fastapi import APIRouter, Body, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from tianxia.accounts import _token_hash
 from tianxia.core import identity_base
@@ -64,6 +66,23 @@ def _code_gate(shell, channel: str | None = None) -> bytes:
     return key
 
 
+async def _json(request: Request, required: bool) -> dict:
+    """gate 之後才讀內文（K 波修：Body(...) 在進函式前就解析，關著打壞的內文回 422、不是 404）。
+    空的：required 照舊的 Body(...) 回 422，否則當 {}（同舊的 Body(default={})）；壞的或不是物件 422。"""
+    raw = await request.body()
+    if not raw:
+        if required:
+            raise HTTPException(422)
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise HTTPException(422) from None
+    if not isinstance(data, dict):
+        raise HTTPException(422)
+    return data
+
+
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()
 
@@ -103,10 +122,15 @@ def router(shell) -> APIRouter:
         return gate_info(shell.CONTENT)
 
     @r.post("/api/identity/start")
-    def api_start(request: Request, response: Response, body: dict = Body(...)):
+    async def api_start(request: Request, response: Response):
+        """第一行 gate（關著 404，先於讀內文）；同步的本體丟進執行緒池。"""
+        gate()
+        body = await _json(request, required=True)
+        return await run_in_threadpool(start, request, response, body)
+
+    def start(request: Request, response: Response, body: dict):
         """開一張一次性單、回對方的授權網址（不用 302：fetch 跟不了外站轉址）。不用登入（NO_LOGIN_ROUTES 寫了理由）。
         已經登入的瀏覽器擋下（設計「先問要不要換」的保守版：快速登入只在登入頁有）。同一個來源 IP 一小時 start_per_hour 次。"""
-        gate()
         content = shell.CONTENT
         cfg = content.config.identity
         provider = body.get("provider")
@@ -168,14 +192,19 @@ def router(shell) -> APIRouter:
         return resp
 
     @r.post("/api/identity/character")
-    def api_character(request: Request, response: Response, body: dict = Body(...)):
-        """建角色那一步（第三方驗過、還沒有帳號）：開帳號、寫 logins、建角色同一筆交易，名號不合格整筆退、帳號不留。
-        先看 cookie（tx_pending、tx_session 都沒帶 401，同第 211 批「先 401 再 gate」），再過 gate；pending 拿不到 401 同一句。
-        開帳號那一步共用殼的註冊限制（shell._register_allowed、_registered：密碼註冊與這裡一起算）。"""
+    async def api_character(request: Request, response: Response):
+        """先看 cookie（401）、再 gate（404），都在讀內文之前；同步的本體丟進執行緒池。"""
         token = request.cookies.get(PENDING_COOKIE) or ""
         if not token and shell.SESSIONS.get(request.cookies.get(shell.COOKIE, "")) is None:
             raise HTTPException(401, PLEASE_LOGIN)
         gate()
+        body = await _json(request, required=True)
+        return await run_in_threadpool(character, request, response, body, token)
+
+    def character(request: Request, response: Response, body: dict, token: str):
+        """建角色那一步（第三方驗過、還沒有帳號）：開帳號、寫 logins、建角色同一筆交易，名號不合格整筆退、帳號不留。
+        先看 cookie（tx_pending、tx_session 都沒帶 401，同第 211 批「先 401 再 gate」），再過 gate；pending 拿不到 401 同一句。
+        開帳號那一步共用殼的註冊限制（shell._register_allowed、_registered：密碼註冊與這裡一起算）。"""
         now = shell.time.time()
         side = store.IdentityStore()
         got = side.get_pending(_digest(token), now) if token else None
@@ -209,7 +238,13 @@ def router(shell) -> APIRouter:
         return shell._entry(key)
 
     @r.post("/api/identity/code/send")
-    def api_code_send(request: Request, response: Response, body: dict = Body(default={})):
+    async def api_code_send(request: Request, response: Response):
+        """第一行 _code_gate（關著、沒金鑰、沒有驗證碼的路 404，先於讀內文）；同步的本體丟進執行緒池（本體照舊拿 channel 再過一次）。"""
+        _code_gate(shell)
+        body = await _json(request, required=False)
+        return await run_in_threadpool(code_send, request, response, body)
+
+    def code_send(request: Request, response: Response, body: dict):
         """{channel: "phone"/"email", to, turnstile}。寄出與額度滿了回同一份 {message, notice, privacy}（不透露有沒有帳號）；
         寄出才設 tx_code。打錯的、沒過 Turnstile、寄送服務壞了回各自那一句（400）。"""
         channel = str(body.get("channel") or "")
@@ -230,7 +265,13 @@ def router(shell) -> APIRouter:
         return reply
 
     @r.post("/api/identity/code/verify")
-    def api_code_verify(request: Request, response: Response, body: dict = Body(default={})):
+    async def api_code_verify(request: Request, response: Response):
+        """第一行 _code_gate（關著、沒金鑰、沒有驗證碼的路 404，先於讀內文）；同步的本體丟進執行緒池。"""
+        _code_gate(shell)
+        body = await _json(request, required=False)
+        return await run_in_threadpool(code_verify, request, response, body)
+
+    def code_verify(request: Request, response: Response, body: dict):
         """{code}；單從 tx_code 取。沒單、過期、錯碼回 BAD_CODE（錯碼算在單上）。對了：有帳號就開 session、記這次用哪一種登入、
         回 _entry；查無帳號只寫待處理（建角色之前不開帳號，設計 4.2）、設 tx_pending、回 {stage: create, pending: true}。"""
         key = _code_gate(shell)
