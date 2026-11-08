@@ -53,6 +53,18 @@ FEATURES = TIANXIA / "features"
 CORE = set(CORE_MODULES)
 
 
+@functools.lru_cache(maxsize=None)
+def _text(path: Path) -> str:
+    """同一個檔只讀一次（第 109 批）：這個檔裡的規則只讀原始碼、不寫；tmp_path 的檔一條測試一個路徑，不會讀到舊的。"""
+    return path.read_text(encoding="utf-8")
+
+
+@functools.lru_cache(maxsize=None)
+def _parse(source: str) -> ast.Module:
+    """同一份原始碼只 parse 一次（第 109 批）：樹只走訪、沒有一條規則就地改節點（改之前 grep 過）。"""
+    return ast.parse(source)
+
+
 def _packages() -> list[str]:
     return sorted(p.name for p in FEATURES.iterdir() if (p / "__init__.py").exists())
 
@@ -74,7 +86,7 @@ def _type_checking_lines(tree: ast.AST) -> set[int]:
 def imports_of(source: str, module: str, *, type_checking: bool = False) -> list[tuple[int, str]]:
     """source（模組 module 的原文）import 了哪些 tianxia 的模組：[(行, 絕對模組名)]。
     from tianxia import a 記成 tianxia.a；相對 import 照 module 算成絕對的。if TYPE_CHECKING: 底下的只有 type_checking=True 才算。"""
-    tree = ast.parse(source)
+    tree = _parse(source)
     skip = set() if type_checking else _type_checking_lines(tree)
     package = module.rsplit(".", 1)[0]
     out: list[tuple[int, str]] = []
@@ -129,7 +141,7 @@ def test_feature_packages_only_import_the_core_the_shared_layer_or_their_own_pac
     found = []
     for name in _packages():
         for path in _package_files(name):
-            found += problems_of(path.read_text(encoding="utf-8"), _modname(path))
+            found += problems_of(_text(path), _modname(path))
     assert not found, "\n".join(found)
 
 
@@ -147,7 +159,7 @@ def _feature_imports(path: Path) -> list[tuple[int, str]]:
 
 @functools.lru_cache(maxsize=None)
 def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
-    text = path.read_text(encoding="utf-8")
+    text = _text(path)
     if "features" not in text:
         return ()  # 寫不到 features 的檔不可能 import 包：不必 parse（engine.py 一萬七千行，parse 一次一秒多）
     seen: dict[tuple[int, str], str] = {}
@@ -163,13 +175,13 @@ def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
 def test_the_old_modules_that_only_read_the_arena_ranks_read_the_core_not_the_bout_package():
     for name in ARENA_RANK_READERS:
         assert "bout" not in {feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{name}.py")}, name
-        assert "arena_ranks" in (TIANXIA / f"{name}.py").read_text(encoding="utf-8"), name
-    assert "arena_ranks" in (TIANXIA / "core" / "presence.py").read_text(encoding="utf-8")  # 身分字的擂台稱號（第 37 批）
+        assert "arena_ranks" in _text(TIANXIA / f"{name}.py"), name
+    assert "arena_ranks" in _text(TIANXIA / "core" / "presence.py")  # 身分字的擂台稱號（第 37 批）
 
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
-    return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
+    return _parse(_text(TIANXIA / "engine.py"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
 
 
 @functools.lru_cache(maxsize=None)
@@ -255,7 +267,7 @@ def outside_imports(source: str, module: str) -> set[str]:
 def shared_reach() -> set[tuple[str, str]]:
     """共用規則層碰到的別的舊模組：{(共用規則層的模組, 舊模組)}。"""
     return {(name, old) for name in SHARED
-            for old in outside_imports((TIANXIA / f"{name}.py").read_text(encoding="utf-8"), f"tianxia.{name}")}
+            for old in outside_imports(_text(TIANXIA / f"{name}.py"), f"tianxia.{name}")}
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -320,11 +332,11 @@ def test_every_tianxia_import_resolves():
     files = [p for p in sorted(TIANXIA.rglob("*.py")) if "tests" not in p.relative_to(ROOT).parts]
     files += sorted(ROOT.glob("*.py")) + sorted((ROOT / "scripts").rglob("*.py"))
     found = {(p.relative_to(ROOT).as_posix(), name) for p in files
-             for name in unresolved_imports(p.read_text(encoding="utf-8"), _modname(p))}
+             for name in unresolved_imports(_text(p), _modname(p))}
     flows = sorted((ROOT / "scripts" / "webqa" / "flows").glob("*.mjs"))
     assert flows, "一個情境檔都沒掃到：掃法壞了"
     found |= {(p.relative_to(ROOT).as_posix(), name) for p in flows
-              for hit in FLOW_PYTHON_IMPORT.findall(p.read_text(encoding="utf-8")) for name in unresolved_imports(hit + "\n", "x")}
+              for hit in FLOW_PYTHON_IMPORT.findall(_text(p)) for name in unresolved_imports(hit + "\n", "x")}
     assert not found - UNRESOLVED_OK, f"解不到的舊名（舊名對照看 docs/guide/核心與存檔.md）：{sorted(found - UNRESOLVED_OK)}"
 
 
@@ -369,14 +381,14 @@ GAME_ALIASES = ("attacker", "defender")
 
 def service_list() -> set[str]:
     """tianxia/core/services_list.md 那張服務清單上的名字（寫成 `ctx.<名字>` 的）。"""
-    return set(re.findall(r"`ctx\.(\w+)", SERVICES.read_text(encoding="utf-8")))
+    return set(re.findall(r"`ctx\.(\w+)", _text(SERVICES)))
 
 
 def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
     """功能包的模組碰了 Game 上不在服務清單的東西（ctx.x、g.x、game.x；手冊 3.3「只准叫服務清單上的方法」）。
     只認那三個變數名，加上 GAME_ALIASES（attacker、defender：只算 Game 上有的名字）：拿別的名字接 Game 的看不到，第一版先這樣。"""
     out = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(_parse(source)):
         if not (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)) or node.attr in allowed:
             continue
         if node.value.id in CTX_NAMES or (node.value.id in GAME_ALIASES and node.attr in game_members()):
@@ -396,14 +408,14 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
     found = []
     for name in _packages():
         for path in _package_files(name):
-            found += off_list_calls(path.read_text(encoding="utf-8"), _modname(path), allowed_for(name, allowed))
+            found += off_list_calls(_text(path), _modname(path), allowed_for(name, allowed))
     assert found == []
 
 
 def foreign_relay_calls(source: str, module: str, package: str) -> list[str]:
     """這一包經 Game 叫了別包三段式的名字。"""
     owner = {name: pack for pack, names in RELAY_OWNERS.items() for name in names}
-    return [f"{module}:{node.lineno} {node.value.id}.{node.attr}（{owner[node.attr]} 的）" for node in ast.walk(ast.parse(source))
+    return [f"{module}:{node.lineno} {node.value.id}.{node.attr}（{owner[node.attr]} 的）" for node in ast.walk(_parse(source))
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in CTX_NAMES
             and owner.get(node.attr, package) != package]
 
@@ -416,7 +428,7 @@ def test_the_three_stage_relay_names_are_only_called_by_their_owner():
     found = []
     for name in _packages():
         for path in _package_files(name):
-            found += foreign_relay_calls(path.read_text(encoding="utf-8"), _modname(path), name)
+            found += foreign_relay_calls(_text(path), _modname(path), name)
     assert found == []
 
 
@@ -427,7 +439,7 @@ def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = No
     core_world2：頂層的核心模組也認 game，全部拆包第 40 批）。"""
     delegates = GAME_DELEGATES if delegates is None else delegates
     out: set[tuple[str, str]] = set()
-    for top in ast.parse(source).body:
+    for top in _parse(source).body:
         where = f"{name}.{top.name}" if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else name
         out |= {(where, node.attr) for node in ast.walk(top)
                 if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in names and node.attr in delegates}
@@ -440,7 +452,7 @@ def test_the_core_modules_reach_no_package_delegate_through_ctx():
     found: set[tuple[str, str]] = set()
     for path in sorted((TIANXIA / "core").glob("*.py")):
         if path.name != "registry.py":
-            found |= ctx_delegate_callers(path.read_text(encoding="utf-8"), path.stem)
+            found |= ctx_delegate_callers(_text(path), path.stem)
     assert found == set(CORE_DELEGATE_CALLERS)
     assert all(isinstance(why, str) and why.strip() for why in CORE_DELEGATE_CALLERS.values())
     assert ctx_delegate_callers("def f(ctx):\n    return ctx._tavern_price(1)\n", "m") == {("m.f", "_tavern_price")}  # 掃描抓得到
@@ -474,7 +486,7 @@ def test_the_game_reaches_the_event_check_only_through_its_one_line_delegates():
 
 
 def test_the_event_check_calls_the_patched_game_methods_through_ctx():
-    tree = ast.parse((TIANXIA / "core" / "event_check.py").read_text(encoding="utf-8"))
+    tree = _parse(_text(TIANXIA / "core" / "event_check.py"))
     direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in EVENT_CHECK_VIA_CTX)
     assert direct == []
@@ -515,7 +527,7 @@ def test_the_game_reaches_the_combat_service_only_through_its_one_line_delegates
 def test_the_combat_service_calls_the_patched_game_methods_through_ctx():
     """被換掉的 8 個，combat 裡一處都不直接叫本體；真的有人互叫的 6 個（COMBAT_CALLED_THROUGH_CTX）寫成 ctx.<委派>。
     另外 2 個模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
-    tree = ast.parse((TIANXIA / "core" / "combat.py").read_text(encoding="utf-8"))
+    tree = _parse(_text(TIANXIA / "core" / "combat.py"))
     direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in COMBAT_VIA_CTX)
     assert direct == []
@@ -555,7 +567,7 @@ def test_the_game_reaches_the_push_and_pill_services_only_through_their_one_line
 def test_the_push_and_pill_services_call_the_patched_game_methods_through_ctx(module, via_ctx, delegates):
     """被換掉的那幾個，模組裡一處都不直接叫本體。pushing 真的有人互叫的只有 daily_push_cap（PUSHING_CALLED_THROUGH_CTX，寫成 ctx.daily_push_cap）；
     其餘的模組裡沒有人互叫，所以這裡不要求 ctx.<委派> 寫到（照抄 event_check 那條的 `<= via` 會紅）。"""
-    tree = ast.parse((TIANXIA / "core" / f"{module}.py").read_text(encoding="utf-8"))
+    tree = _parse(_text(TIANXIA / "core" / f"{module}.py"))
     direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in via_ctx)
     assert direct == []
@@ -627,18 +639,18 @@ def _load_time_nodes(tree: ast.AST):
 def web_framework_problems() -> list[str]:
     found = []
     for path in _engine_files():
-        text = path.read_text(encoding="utf-8")
+        text = _text(path)
         rel = path.relative_to(ROOT).as_posix()
         is_routes = path.name == "routes.py" and path.parent.parent == FEATURES
         if any(w in text for w in WEB_FRAMEWORKS) and not is_routes:
-            for node in ast.walk(ast.parse(text)):
+            for node in ast.walk(_parse(text)):
                 names = ([a.name for a in node.names] if isinstance(node, ast.Import)
                          else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
                 found += [f"{rel}:{node.lineno} import {n}（只有功能包的 routes.py 可以）" for n in names
                           if n.split(".")[0] in WEB_FRAMEWORKS]
         if _ROUTES_IMPORT.search(text):
             module = _modname(path)
-            tree = ast.parse(text)
+            tree = _parse(text)
             skip = _type_checking_lines(tree)
             for node in _load_time_nodes(tree):
                 if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno in skip:
@@ -762,7 +774,7 @@ def package_fields_touched(source: str, names: tuple[str, ...]) -> list[str]:
         return any(name.startswith(n) if n.endswith("_") else name == n for n in names)
 
     out = []
-    for node in ast.parse(source).body:
+    for node in _parse(source).body:
         if isinstance(node, ast.FunctionDef):
             name = node.name
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -782,7 +794,7 @@ def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
     原本寫在 apply_effect 最後一段的一條線那一步、clear_progress 裡的押糧與提示，照這一條都抓得到。"""
     for module, names in EFFECT_DEFECT_SCAN.items():
         where = FEATURES / "faction" / f"{module}.py" if module == "defection" else TIANXIA / f"{module}.py"  # defection 第 35 批搬進陣營包
-        assert package_fields_touched(where.read_text(encoding="utf-8"), names) == [], module
+        assert package_fields_touched(_text(where), names) == [], module
     old = ("def apply_effect(effect, state):\n    p = state.player\n    progress = p.storylines.get(effect.story.line)\n"
            "    p.keepsakes.append(effect.story.keepsake)\n"
            "def clear_progress(p):\n    p.convoy = None\n    p.hint_queue = []\n    p.rank = 0\n"
@@ -794,7 +806,7 @@ def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
 
 def bus_bypasses(source: str) -> list[int]:
     """source 裡直接叫事件訂閱者的行號（模組層 _BUS_CORE 那一個賦值裡的不算）：bounties.<交差>(...)、<誰>._seal_find(...) 這一類呼叫。"""
-    tree = ast.parse(source)
+    tree = _parse(source)
     allowed: set[int] = set()
     for node in tree.body:
         targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
@@ -814,7 +826,7 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     """engine.py、核心（core/ 與 MODULES，搬進核心的函式也要守，第二輪第 102 批）與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
     原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
     files = _core_files() + [path for name in _packages() for path in _package_files(name)]
-    found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
+    found = {str(path.relative_to(ROOT)): bus_bypasses(_text(path)) for path in files}
     hits = {path: lines for path, lines in found.items() if lines}
     assert not hits, f"不准直接叫事件的訂閱者，走 ctx.publish：{hits}"
     old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
@@ -839,7 +851,7 @@ def test_step_and_weekcard_joined_the_core_and_reach_no_package():
     assert {"step", "weekcard"} <= CORE
     for name in ("step", "weekcard"):
         assert _feature_imports(TIANXIA / f"{name}.py") == [], name
-        tree = ast.parse((TIANXIA / f"{name}.py").read_text(encoding="utf-8"))
+        tree = _parse(_text(TIANXIA / f"{name}.py"))
         assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & STEP_PACKAGE_READS, name
     old_weekcard = ("from . import calendar, chapters, rules, week_unlock, wins\n"
                     "from .features.companions import errands\n"
@@ -880,7 +892,7 @@ def test_the_top_level_core_modules_reach_no_package_delegate_through_the_game()
     for name in sorted(CORE):
         path = TIANXIA / f"{name}.py"
         if path.exists():
-            found |= ctx_delegate_callers(path.read_text(encoding="utf-8"), name, names=("ctx", "game"))
+            found |= ctx_delegate_callers(_text(path), name, names=("ctx", "game"))
     assert found == set(CORE_TOP_DELEGATE_CALLERS)
     assert all(isinstance(why, str) and why.strip() for why in CORE_TOP_DELEGATE_CALLERS.values())
     src = "def f(game):\n    return game._tavern_price(1)\n"
@@ -891,7 +903,7 @@ def test_the_top_level_core_modules_reach_no_package_delegate_through_the_game()
 def condition_fields_touched(source: str) -> list[str]:
     """source 的 check_condition 裡碰到的包認領的欄位：["行 欄位（包）"]。條件本身的欄位（cond.<名>：Condition 的 clue_items 跟 PlayerState 的同名）不算。"""
     claimed = claimed_fields()
-    fn = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "check_condition")
+    fn = next(n for n in _parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "check_condition")
     return [f"{sub.lineno} {sub.attr}（{claimed[sub.attr]}）" for sub in ast.walk(fn)
             if isinstance(sub, ast.Attribute) and sub.attr in claimed and not (isinstance(sub.value, ast.Name) and sub.value.id == "cond")]
 
@@ -899,7 +911,7 @@ def condition_fields_touched(source: str) -> list[str]:
 def test_check_condition_touches_no_package_field():
     """核心本體的 rules.check_condition 不直接讀包認領的欄位：一條線的記號（storylines）問共用規則層的 story_base.mark_of、伏筆物品
     （clue_items）問核心的查詢服務 omen_base.clue_count。先證明掃描看得到：換之前的寫法（split/trunk d4b36bf6 第 218～227、298 行）抓得到兩樣。"""
-    assert condition_fields_touched((TIANXIA / "rules.py").read_text(encoding="utf-8")) == []
+    assert condition_fields_touched(_text(TIANXIA / "rules.py")) == []
     old = ("def check_condition(cond, state, content=None):\n    p = state.player\n"
            "    for key, need in cond.story_marks.items():\n        progress = p.storylines.get(key)\n"
            "    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):\n        return False\n")
@@ -919,7 +931,7 @@ def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_
 
     assert "atlas" in SHARED
     assert _feature_imports(TIANXIA / "atlas.py") == []
-    tree = ast.parse((TIANXIA / "atlas.py").read_text(encoding="utf-8"))
+    tree = _parse(_text(TIANXIA / "atlas.py"))
     assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & ATLAS_PACKAGE_FIELDS
     assert duel_rules.on is conquest.duel_on and sortie_duel.on is conquest.duel_on
     assert fs_rules.fs_answering is omen_base.fs_answering and party.following is travel_base.following
@@ -933,7 +945,7 @@ def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_
 
 def private_touches(source: str) -> list[str]:
     """碰了別的物件私有成員的地方（x._y；self 的、雙底線的不算）。"""
-    return [f"{node.lineno} {node.attr}" for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Attribute) and node.attr.startswith("_")
+    return [f"{node.lineno} {node.attr}" for node in ast.walk(_parse(source)) if isinstance(node, ast.Attribute) and node.attr.startswith("_")
             and not node.attr.startswith("__") and not (isinstance(node.value, ast.Name) and node.value.id == "self")]
 
 
@@ -942,7 +954,7 @@ def test_the_bot_shell_touches_nothing_private_on_the_game():
     assert private_touches("def f(game):\n    return game._side()\n") == ["2 _side"]  # 掃描本身抓得到
     assert private_touches("class A:\n    def f(self):\n        return self._x, self.__class__\n") == []
     for name in ("bot_policy.py", "bot.py", "bot_runner.py", "server_bots.py"):
-        assert private_touches((TIANXIA / name).read_text(encoding="utf-8")) == [], name
+        assert private_touches(_text(TIANXIA / name)) == [], name
 
 
 # core_bots（第二輪第 89 批）
@@ -962,13 +974,13 @@ def test_no_package_imports_the_bot_shell():
     assert shell_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tianxia import bot\n", module) == set()  # 只給型別看的
     assert shell_imports("from tianxia import bot_base, botany\n", module) == set()  # 共用層 bot_base 不算
     found = {(_modname(path).removeprefix("tianxia.features."), shell) for name in _packages() for path in _package_files(name)
-             for shell in shell_imports(path.read_text(encoding="utf-8"), _modname(path))}
+             for shell in shell_imports(_text(path), _modname(path))}
     assert found == set(), f"包不准 import 假人殼：{sorted(found)}"
 
 
 def test_bot_pick_asks_the_packages_for_what_it_skips():
     """bot.pick 的「永遠按得下去」只問各包的宣告（features_core.bot_idle）：act: 字面只剩沒有主人的 act:heal（第 57 批第四節）與挑戰本人照勝算挑那兩行（不是「永遠按得下去」，計畫第四節）。"""
-    tree = ast.parse((TIANXIA / "bot.py").read_text(encoding="utf-8"))
+    tree = _parse(_text(TIANXIA / "bot.py"))
     pick = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "pick")
     words = {node.value for stmt in pick.body[1:] for node in ast.walk(stmt) if isinstance(node, ast.Constant) and isinstance(node.value, str)}
     assert {w for w in words if w.startswith("act:")} == {"act:heal", "act:challenge:"}
@@ -981,7 +993,7 @@ def game_api_names() -> dict[str, str]:
     """各包 game_api.py 的 TABLE 上的名字 → 包。"""
     out: dict[str, str] = {}
     for path in sorted((TIANXIA / "features").glob("*/game_api.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = _parse(_text(path))
         table = next(n.value for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "TABLE")
         out.update({key.value: path.parent.name for key in table.keys})
     return out
@@ -1054,10 +1066,10 @@ def test_the_delegates_whose_parameter_names_differ_are_never_called_by_keyword(
     roots = [p for base in ("tianxia", "tests", "scripts") for p in (TIANXIA.parent / base).rglob("*.py")]
     found = []
     for path in [*roots, TIANXIA.parent / "server.py", TIANXIA.parent / "run_bots.py"]:
-        source = path.read_text(encoding="utf-8")
+        source = _text(path)
         if not any(name in source for name in RENAMED_PARAMS):
             continue
-        for node in ast.walk(ast.parse(source)):
+        for node in ast.walk(_parse(source)):
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in RENAMED_PARAMS
                     and {k.arg for k in node.keywords} & set(RENAMED_PARAMS[node.func.attr])):
                 found.append(f"{path.name}:{node.lineno}")
@@ -1069,7 +1081,7 @@ def test_the_delegates_whose_parameter_names_differ_are_never_called_by_keyword(
 
 def _game_attrs(source: str):
     """原始碼裡每一個經 Game 碰的名字（node）：認法同 off_list_calls。"""
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(_parse(source)):
         if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and (
                 node.value.id in CTX_NAMES or (node.value.id in GAME_ALIASES and node.attr in game_members())):
             yield node
@@ -1089,7 +1101,7 @@ def _every_cross_package_call() -> dict[tuple[str, str], set[str]]:
     found: dict[tuple[str, str], set[str]] = {}
     for name in _packages():
         for path in _package_files(name):
-            for pair, names in cross_package_calls(path.read_text(encoding="utf-8"), name).items():
+            for pair, names in cross_package_calls(_text(path), name).items():
                 found.setdefault(pair, set()).update(names)
     return found
 
@@ -1110,7 +1122,7 @@ def test_the_calls_between_packages_are_exactly_the_written_list():
 def server_package_modules() -> tuple[tuple[str, str], ...]:
     """server.py 最外層 import 進來、指到功能包的名字：((名字, 包), ...)。"""
     out: dict[str, str] = {}
-    for node in ast.parse((ROOT / "server.py").read_text(encoding="utf-8")).body:
+    for node in _parse(_text(ROOT / "server.py")).body:
         if isinstance(node, ast.Import):
             pairs = [(a.asname or a.name.split(".")[0], a.name) for a in node.names]
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -1124,7 +1136,7 @@ def server_package_modules() -> tuple[tuple[str, str], ...]:
 def foreign_shell_refs(source: str, package: str) -> set[tuple[str, str]]:
     """這一包的 shell.<名字> 指到別包（名字是 server.py 最外層 import 的模組）：{(這一包, 名字)}。server 頂上賦值出來的（map_base_view = map_views.map_base_view）不算。"""
     points = dict(server_package_modules())
-    return {(package, node.attr) for node in ast.walk(ast.parse(source))
+    return {(package, node.attr) for node in ast.walk(_parse(source))
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "shell"
             and points.get(node.attr, package) != package}
 
@@ -1138,7 +1150,7 @@ def test_no_package_reaches_another_package_through_the_shell():
     found: set[tuple[str, str]] = set()
     for name in _packages():
         for path in _package_files(name):
-            found |= foreign_shell_refs(path.read_text(encoding="utf-8"), name)
+            found |= foreign_shell_refs(_text(path), name)
     assert found == set(), f"經殼碰別包的模組，改走核心或 ctx 服務：{sorted(found)}"
 
 
@@ -1147,7 +1159,7 @@ def service_list_leftovers() -> list[str]:
     callers: dict[str, set[str]] = {}
     for name in _packages():
         for path in _package_files(name):
-            for node in _game_attrs(path.read_text(encoding="utf-8")):
+            for node in _game_attrs(_text(path)):
                 callers.setdefault(node.attr, set()).add(name)
     owner = game_api_names()
     return sorted(name for name in service_list() if not callers.get(name, set()) - {owner.get(name)})
@@ -1162,7 +1174,7 @@ def _core_files() -> list[Path]:
 def test_the_core_only_imports_the_core_and_the_shared_layer():
     """核心只 import 核心與共用層，函式裡也算；包是 test_the_core_never_imports_a_feature_package_except_the_registry 那一條。"""
     assert outside_imports("def f():\n    from tianxia import server_bots\n", "tianxia.core.pills") == {"server_bots"}  # 掃描本身抓得到
-    found = {_modname(path): sorted(hit) for path in _core_files() if (hit := outside_imports(path.read_text(encoding="utf-8"), _modname(path)))}
+    found = {_modname(path): sorted(hit) for path in _core_files() if (hit := outside_imports(_text(path), _modname(path)))}
     assert not found, f"核心只准 import 核心與共用層：{found}"
 
 
@@ -1178,7 +1190,7 @@ def test_the_core_names_no_package_even_for_type_checking():
     assert imports_of(source, "tianxia.engine") == []  # 不帶 type_checking 照舊不算
     assert type_checking_packages("if TYPE_CHECKING:\n    from .engine import Game\n    from . import tactics\n", "tianxia.bot_base") == []
     paths = [p for p in _core_files() if p.name != "registry.py"] + [TIANXIA / f"{name}.py" for name in sorted(SHARED)]
-    found = {_modname(path): hit for path in paths if (hit := type_checking_packages(path.read_text(encoding="utf-8"), _modname(path)))}
+    found = {_modname(path): hit for path in paths if (hit := type_checking_packages(_text(path), _modname(path)))}
     assert not found, f"核心與共用層連 TYPE_CHECKING 也不准寫包名：{found}"
 
 
@@ -1192,17 +1204,17 @@ def test_every_top_level_module_has_a_place():
 
 def game_names_touched(source: str) -> set[str]:
     """source 裡 game.<名字> 碰到的名字。"""
-    return {node.attr for node in ast.walk(ast.parse(source))
+    return {node.attr for node in ast.walk(_parse(source))
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "game"}
 
 
 def test_the_bot_base_touches_only_the_listed_names_on_the_game():
     """共用層 bot_base 准拿 Game（第二輪第 102 批落地認定），碰的 game.xxx 只有 BOT_BASE_GAME，多了少了都紅；拿 Game 的參數一律叫 game，別名才掃得到。"""
     assert game_names_touched("def f(game):\n    return game._side() + game.state.world\n") == {"_side", "state"}  # 掃描本身抓得到
-    source = (TIANXIA / "bot_base.py").read_text(encoding="utf-8")
+    source = _text(TIANXIA / "bot_base.py")
     touched = game_names_touched(source)
     assert touched == BOT_BASE_GAME, f"bot_base 碰了名單外的 {sorted(touched - BOT_BASE_GAME)}；名單上沒人碰的 {sorted(BOT_BASE_GAME - touched)}（boundary_tables.BOT_BASE_GAME）"
-    other = [arg.arg for node in ast.walk(ast.parse(source)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    other = [arg.arg for node in ast.walk(_parse(source)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
              for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
              if arg.annotation is not None and re.search(r"\bGame\b", ast.unparse(arg.annotation)) and arg.arg != "game"]
     assert other == []
@@ -1211,7 +1223,7 @@ def test_the_bot_base_touches_only_the_listed_names_on_the_game():
 def takes_the_game(source: str) -> list[str]:
     """source 拿 Game 的地方：import Game（TYPE_CHECKING 底下也算）、註記寫 Game、參數叫 game、沒註記成 Ctx 的 ctx（tactics 的 ctx 是它自己的 Ctx）。"""
     out: list[str] = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(_parse(source)):
         if isinstance(node, ast.ImportFrom) and any(a.name == "Game" for a in node.names):
             out.append(f"{node.lineno} import Game")
         elif isinstance(node, ast.AnnAssign) and re.search(r"\bGame\b", ast.unparse(node.annotation)):
@@ -1235,7 +1247,7 @@ def test_only_the_bot_base_in_the_shared_layer_takes_the_game():
     assert takes_the_game("def f(ctx): pass\n") == ["1 f 的參數 ctx"]
     assert takes_the_game("def f(ctx: Ctx, holder: Holder): pass\nif TYPE_CHECKING:\n    from .engine import Option\n") == []
     found = {name: hit for name in sorted(SHARED) if name != "bot_base"
-             if (hit := takes_the_game((TIANXIA / f"{name}.py").read_text(encoding="utf-8")))}
+             if (hit := takes_the_game(_text(TIANXIA / f"{name}.py")))}
     assert not found, f"共用層只有 bot_base 准拿 Game：{found}"
 
 
