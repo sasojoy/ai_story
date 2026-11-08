@@ -189,6 +189,7 @@
       setMain(data.main);
       closeEvents(); // 重新連：現在這個登入的連線（上一個帳號的、登入失效前的，不能留著）
       connectEvents(); // main.push 是 true 才真的連（預設關：不開 EventSource）
+      if (S.patchNotes === undefined) loadPatchNotes(); // 有沒看過的改版就跳一次（patchPopHtml）
     } else {
       S.stage = data.stage === "create" ? "create" : "gate";
       closeEvents();
@@ -814,6 +815,7 @@
     } catch (e) { S.patchNotes = []; }
     const box = document.getElementById("gate-patch");
     if (box) box.innerHTML = gatePatchHtml(S.patchNotes);
+    if (S.stage === "game" && S.tab === "jianghu" && typeof patchUnseen === "function" && patchUnseen().length) renderPage(); // 進了遊戲才讀到：有沒看過的就跳（news.js）
   }
 
   function renderCreate() {

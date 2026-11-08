@@ -70,3 +70,7 @@ details > summary.nw-title::after { content: "▾"; margin-left: auto; font: 400
 details[open] > summary.nw-title::after { content: "▴"; }
 details > summary.nw-title { min-height: 44px; align-items: center; }
 .nw-go-fight { display: block; margin-top: 8px; min-height: 44px; }
+
+/* 進遊戲後跳一次的改版資訊小窗（news.js patchPopHtml）：卡用登入頁 .patch-card 的樣子，這裡只補標題與鈕 */
+.patch-pop .patch-card h3 { font-size: 17px; margin-bottom: 6px; }
+.patch-pop .patch-ok { display: block; width: 100%; min-height: 44px; margin-top: 14px; }

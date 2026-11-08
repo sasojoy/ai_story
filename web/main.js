@@ -978,7 +978,9 @@
     // 合併的本週卡（2026-11-07）裡已經有章回與投靠鈕：卡在的時候不另畫章回卡與三方卡；收起來（×）只剩章回卡、三方卡照舊
     const box = !letterCard && m.week_card && shown("quest") && !wkHidden(m, "strip");
     const sidesFirst = box || (m.on_road && m.week_card && shown("quest") && !wkHidden(m, "strip")) ? "" : sidesFirstHtml(m);
-    const ckPop = typeof ckPopHtml === "function" && !pro() ? ckPopHtml(m) : ""; // 每天第一次登入的簽到小窗（checkin.js）
+    // 跳出來的小窗同一刻只一張：先改版資訊（有新版時一次），看完才是每天第一次登入的簽到（checkin.js）
+    const patchPop = typeof patchPopHtml === "function" ? patchPopHtml(m) : "";
+    const ckPop = patchPop || (typeof ckPopHtml === "function" && !pro() ? ckPopHtml(m) : "");
     const peek = ckPop + (letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top")));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
