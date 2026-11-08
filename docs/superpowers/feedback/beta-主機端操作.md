@@ -569,12 +569,16 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 - **正式機的 `identity.fake_services` 一定要是 `false`**：開著時用假的寄送（不真的寄，只記在行程裡）與假的 Turnstile（L 波起不看 token、一律放行），只給開發、測試、QA 用。L 波起的擋法：開著時伺服器啟動一律印一行「警告：identity.fake_services 開著（假的簡訊、Email 與 Turnstile），正式機必須關。」；**`TIANXIA_PUBLIC_URL` 是正式網域（`tianxiadashi.com`、`www.tianxiadashi.com`）就拒絕啟動**（印原因後結束）。其他網址或沒設照常起，所以企劃者的測試環境（season21）可以開假寄送驗驗證碼登入。開正式伺服器照舊一定設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`，這道擋才有用。
 - **Turnstile 網站金鑰**：設定的 `identity.turnstile_site_key` 沒設時，驗證碼那一頁不載 Cloudflare 的 script、不畫 Turnstile 格子；本機 QA 開 `fake_services` 不用設金鑰（假的 Turnstile 一律過）。正式機要設網站金鑰、`.local/identity.json` 放 `turnstile_secret`，`fake_services` 關。CSP 已經放行 `https://challenges.cloudflare.com` 的 script。
 - 簡訊（三竹）、Email（Resend）的寄送服務商**還沒接**，`.local/identity.json` 也還沒有它們的金鑰欄位；接上之前正式機一律用 `NoSender`，一寄就回「現在無法寄送」，不會亂寄。接上那一批再補這裡的欄位。
-- 全服分池上限在設定的 `identity.sms_caps`、`identity.mail_caps`（池 → [每天, 每小時]，預設 login 400/100、bind 300/75、anon 200/50），照服務商額度調；滿了現在只記在旁檔，還不會通知管理者。
+- 全服分池上限在設定的 `identity.sms_caps`、`identity.mail_caps`（池 → [每天, 每小時]，預設 login 400/100、bind 300/75、anon 200/50），照服務商額度調；滿了記在旁檔，M 波第 208 批起同一格一小時最多通知一次：推播給管理者名單上每個名號綁的帳號（有訂推播才收得到），**管理頁「現在」那幾格底下會多一行**「驗證碼全服上限到了：…起暫停寄送。」（列 24 小時內的）。一號一分鐘、每日、來源那幾種滿了不通知。
+- **綁定通知（M 波第 208 批，選填）**：`.local/identity.json` 可以在 `key` 旁邊加一把 `notify_key`（至少 16 字的亂數，跟 `key` 不要同一把；生法同上，把 `'key'` 換成 `'notify_key'`、改成讀舊檔再加一欄）。有它才把綁定時的 Email、手機加密另存一份，綁、解綁、補設密碼、忘記密碼時寄通知；沒有就只寫遊戲裡的「帳號」紀錄、不寄。**這一把也不要換**：換了舊的密文解不開，等於那些人收不到通知（重新綁一次就好）。只想停通知：拿掉 `notify_key`、兩個程式重開。只有這一批以後、用綁定流程綁的才存得到號碼。
+- `fake_services` 開著時，寄通知那一下 `server_out.log` 會印一行「identity 通知 <provider> <遮罩過的號碼>：<內文>」給 QA 看（驗證碼不會印進 log）。
 - 緊急開關：`identity.enabled`，或從 `ways` 拿掉 `email`、`phone`（只關這兩條）。
 
 **綁手機才能用（`identity.phone_gate`，L 波第 205 批，預設關）**：開著時截殺、掛通緝、揭與交玩家掛的單、贈物、切磋與論武、形象市集上架與買、商城購買、封測元寶要先綁手機（名單在 `identity.phone_required`）。**等簡訊寄送真的接上之後才開**：沒接之前沒人綁得了手機，一開等於這些功能全部鎖死。關掉（設 `false`、兩個程式重開）就回到原本的樣子，逐位元組一樣；開閘時帳本會多出 `grant:beta:phone:<…>` 的 0 元寶列，關掉也留著無害。
 
-**帳號綁定的管理者工具（L 波第 204 批）**：identity 開著時管理頁有三個工具：看某個帳號的綁定與時間（`identity_view`）、幫他解綁某一種（`identity_unbind`；密碼不從這裡拿掉）、刪帳號（`identity_delete`：刪 `accounts`、`logins`、`sessions` 列，所有裝置登出、**不能復原**；名號仍被占住、錢包留著；不能刪自己）。管理頁「重設密碼」那一塊找到帳號後會列綁定；解綁、刪帳號做完要再按一次「找」才看得到新的樣子。
+**帳號綁定的管理者工具（L 波第 204 批）**：identity 開著時管理頁有三個工具：看某個帳號的綁定與時間（`identity_view`）、幫他解綁某一種（`identity_unbind`；密碼不從這裡拿掉）、刪帳號（`identity_delete`：刪 `accounts`、`logins`、`sessions` 列，所有裝置登出、**不能復原**；名號仍被占住、錢包留著；不能刪自己）。管理頁「重設密碼」那一塊找到帳號後會列綁定；M 波第 208 批起解綁、刪帳號做完會自己重找那一列（刪掉的就不見了）。
+
+**identity 開著時管理者要用密碼登入（M 波第 207 批）**：管理者要**用帳號密碼登入、6 小時內登入或重驗過**才有管理者權限；用驗證碼或 LINE、Google 進來的、或密碼登入超過 6 小時的，管理頁與管理者工具都當成不是管理者（回話一模一樣，不會提示原因）。用驗證碼進來的事後在設定裡重驗也拿不回，要登出、用密碼重新登入。名單上的帳號（管理者、客服名單）**密碼至少 12 字**（註冊、改密碼、補設、忘記密碼、管理頁重設、`scripts/set_password.py` 都要；現有的短密碼照樣登得進去，但開 identity 之前最好先用 `set_password.py` 換成 12 字以上）。identity 關著時一個字不變。管理者幫人重設密碼之後，identity 開著時那個帳號 72 小時（`identity.reset_hold_hours`）不能花元寶、贈物、上架或買市集、綁新的登入方式，遊戲紀錄會寫一則給本人看；回給管理者的字不變。
 
 **CSP 標頭（L 波第 213 批，整站、不是開關）**：伺服器每個回應都帶 `Content-Security-Policy`（只准載自己網域與 Cloudflare Turnstile 的 script、不准 inline 的程式）。線上要是哪一頁被擋（主控台有 `Refused to …`、按鈕沒反應），緊急做法是 **revert 那一筆**（`efe6ac12b`，`server.py` 的 `CSP` 常數與那一個 middleware）再重開兩個程式；`web/battle.js` 與兩支公開頁 script（`web/zhuan_page.js`、`web/tale_page.js`）的搬家留著也沒事。資料庫、存檔、旁檔都不動，季中能換。維修頁（`scripts/maintenance.py`）是另一支行程，不帶這個標頭。
 
