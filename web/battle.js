@@ -180,7 +180,7 @@
   function flagsHtml(g) {
     const f = g.flags;
     if (!f || typeof titleSeal !== "function") return "";
-    const row = (w, list) => (list && list.length ? `<div class="bf-flags"><b>${esc(w.name)}將旗</b>${list.map((x) => `<span>${titleSeal(x.title)} ${esc(x.name)}</span>`).join("")}</div>` : "");
+    const row = (w, list) => (list && list.length ? `<div class="ttl-flags"><b>${esc(w.name)}將旗</b>${list.map((x) => `<span>${titleSeal(x.title)} ${esc(x.name)}</span>`).join("")}</div>` : "");
     return row(g.left, f.left) + row(g.right, f.right);
   }
   // 戰局條底下的「本場戰功」（Joy 2026-10-10 個人戰功，battle_instance.merit_board）：兩軍各列前幾名，最後一行是自己排第幾、戰功怎麼來的。

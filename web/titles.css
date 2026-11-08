@@ -1,28 +1,28 @@
 /* 稱號與官職（features/titles）：三檔印色——金（頂尖四個）、朱（其餘名號）、墨（官職） */
-.tt-seal { display: inline-block; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.78em; line-height: 1.5; letter-spacing: 0.05em; white-space: nowrap; vertical-align: middle; }
-.tt-seal.tt-gold { color: #a07a12; background: rgba(214, 170, 40, 0.12); }
-.tt-seal.tt-zhu { color: #b3261e; background: rgba(179, 38, 30, 0.08); }
-.tt-seal.tt-ink { color: var(--ink, #333); background: rgba(0, 0, 0, 0.04); }
-.tt-seal.big { font-size: 1.05em; padding: 2px 8px; border-width: 2px; }
-.tt-chip { margin-left: 6px; padding: 0; border: 0; background: none; }
-.tt-chip .tt-empty { font-size: 0.75em; color: var(--muted, #888); border: 1px dashed currentColor; border-radius: 3px; padding: 0 4px; }
-.tt-sheet h4 { margin: 12px 0 4px; font-size: 0.9em; color: var(--muted, #888); }
-.tt-note { margin: 0 0 8px; font-size: 0.85em; color: var(--muted, #888); }
-.tt-list { list-style: none; margin: 0; padding: 0; }
-.tt-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line, #ddd); }
-.tt-row small { flex: 1 1 auto; min-width: 0; color: var(--muted, #888); font-size: 0.82em; line-height: 1.4; }
-.tt-row .tt-seal { flex: none; }
-.tt-row .btn { flex: none; width: auto; min-width: 0; margin: 0; padding: 4px 14px; font-size: 0.9em; }
-.tt-row > span:not(.tt-seal) { flex: 1 1 auto; }
-.tt-row .tt-on { flex: none; }
-.tt-row.on { font-weight: 600; }
-.tt-row .tt-on { font-size: 0.85em; color: var(--accent, #b3261e); }
-.tt-list.goals .tt-seal { opacity: 0.45; }
-.mt-seal { margin: 6px 0; }
-.bf-flags { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0; font-size: 0.9em; }
-.bf-flags b { margin-right: 4px; }
+.ttl-seal { display: inline-block; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.78em; line-height: 1.5; letter-spacing: 0.05em; white-space: nowrap; vertical-align: middle; }
+.ttl-seal.ttl-gold { color: #a07a12; background: rgba(214, 170, 40, 0.12); }
+.ttl-seal.ttl-zhu { color: #b3261e; background: rgba(179, 38, 30, 0.08); }
+.ttl-seal.ttl-ink { color: var(--ink, #333); background: rgba(0, 0, 0, 0.04); }
+.ttl-seal.big { font-size: 1.05em; padding: 2px 8px; border-width: 2px; }
+.ttl-chip { margin-left: 6px; padding: 0; border: 0; background: none; }
+.ttl-chip .ttl-empty { font-size: 0.75em; color: var(--muted, #888); border: 1px dashed currentColor; border-radius: 3px; padding: 0 4px; }
+.ttl-sheet h4 { margin: 12px 0 4px; font-size: 0.9em; color: var(--muted, #888); }
+.ttl-note { margin: 0 0 8px; font-size: 0.85em; color: var(--muted, #888); }
+.ttl-list { list-style: none; margin: 0; padding: 0; }
+.ttl-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line, #ddd); }
+.ttl-row small { flex: 1 1 auto; min-width: 0; color: var(--muted, #888); font-size: 0.82em; line-height: 1.4; }
+.ttl-row .ttl-seal { flex: none; }
+.ttl-row .btn { flex: none; width: auto; min-width: 0; margin: 0; padding: 4px 14px; font-size: 0.9em; }
+.ttl-row > span:not(.ttl-seal) { flex: 1 1 auto; }
+.ttl-row .ttl-on { flex: none; }
+.ttl-row.on { font-weight: 600; }
+.ttl-row .ttl-on { font-size: 0.85em; color: var(--accent, #b3261e); }
+.ttl-list.goals .ttl-seal { opacity: 0.45; }
+.ttl-mt { margin: 6px 0; }
+.ttl-flags { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0; font-size: 0.9em; }
+.ttl-flags b { margin-right: 4px; }
 @media (prefers-color-scheme: dark) {
-  .tt-seal.tt-gold { color: #e3bd4f; }
-  .tt-seal.tt-zhu { color: #ef7a6f; }
-  .tt-seal.tt-ink { color: #ddd; background: rgba(255, 255, 255, 0.06); }
+  .ttl-seal.ttl-gold { color: #e3bd4f; }
+  .ttl-seal.ttl-zhu { color: #ef7a6f; }
+  .ttl-seal.ttl-ink { color: #ddd; background: rgba(255, 255, 255, 0.06); }
 }

@@ -25,7 +25,7 @@
     const c = card || { strokes: [], titles: [], motto: "" };
     return `<div class="mt-card ${cls}">
       <svg class="mt-ink${pad ? " mt-pad" : ""}" ${pad ? 'id="mt-pad" ' : ""}viewBox="0 0 300 400" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${mtStrokesSvg(c.strokes)}</svg>
-      <div class="mt-name">${esc(name)}</div>${mtSeal(name)}${c.seal && typeof titleSeal === "function" ? `<div class="mt-seal">${titleSeal(c.seal, true)}</div>` : ""}
+      <div class="mt-name">${esc(name)}</div>${mtSeal(name)}${c.seal && typeof titleSeal === "function" ? `<div class="ttl-mt">${titleSeal(c.seal, true)}</div>` : ""}
       <div class="mt-foot">${c.titles && c.titles.length ? `<div class="mt-titles">${c.titles.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}<p class="mt-motto">${c.motto ? `「${esc(c.motto)}」` : ""}</p></div>
       ${c.hidden ? '<p class="mt-hidden">這一張的畫與題字看不到了。</p>' : ""}
     </div>`;

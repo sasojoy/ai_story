@@ -17,7 +17,7 @@
   // 一個印（grade 是 gold／zhu／ink）：名帖、玩家卡、決戰、榜單都照這一個畫
   function titleSeal(t, big) {
     if (!t || !t.name) return "";
-    return `<span class="tt-seal tt-${esc(t.grade || "ink")}${big ? " big" : ""}">${esc(t.name)}</span>`;
+    return `<span class="ttl-seal ttl-${esc(t.grade || "ink")}${big ? " big" : ""}">${esc(t.name)}</span>`;
   }
 
   // 狀態列名字旁：戴著的名號（官職本來就寫在底下那一行，不重複）；點了開換戴（小窗畫在 app.js render 的疊層那一格）
@@ -26,18 +26,18 @@
     if (!t) return "";
     const w = t.worn || {};
     const chip = w.name && w.grade !== "ink" ? titleSeal(w) : "";
-    return `<button class="tt-chip linkish" data-act="titles-open" aria-label="${TT_HEAD}">${chip || `<span class="tt-empty">${TT_HEAD}</span>`}</button>`;
+    return `<button class="ttl-chip linkish" data-act="titles-open" aria-label="${TT_HEAD}">${chip || `<span class="ttl-empty">${TT_HEAD}</span>`}</button>`;
   }
 
   function titlesSheetHtml(t) {
     const mine = t.rows.filter((r) => r.mine), goals = t.rows.filter((r) => !r.mine);
-    const row = (r) => `<li class="tt-row${r.worn ? " on" : ""}">${titleSeal(r)}<small>${esc(TT_GRADE[r.grade] || "")}・${esc(r.how)}</small>`
-      + (r.worn ? `<b class="tt-on">${TT_WORN}</b>` : `<button class="btn ghost" data-act="titles-wear" data-id="${esc(r.id)}">${TT_WEAR}</button>`) + "</li>";
-    const auto = `<li class="tt-row${t.pin ? "" : " on"}"><span>${TT_AUTO}</span>${t.pin ? `<button class="btn ghost" data-act="titles-wear" data-id="">${TT_WEAR}</button>` : `<b class="tt-on">${TT_WORN}</b>`}</li>`;
-    const goal = goals.length ? `<h4>${TT_GOAL}</h4><ul class="tt-list goals">${goals.map((r) => `<li class="tt-row">${titleSeal(r)}<small>${esc(r.how)}</small></li>`).join("")}</ul>` : "";
-    return `<div class="sheet-bg" data-act="titles-close"></div><div class="sheet tt-sheet" role="dialog" aria-label="${TT_HEAD}"><div class="grip"></div>`
-      + `<h3>${TT_HEAD}</h3><p class="tt-note">${TT_NOTE}</p>`
-      + `<ul class="tt-list">${mine.length ? auto + mine.map(row).join("") : `<li class="tt-row"><span>${TT_NONE}</span></li>`}</ul>${goal}</div>`;
+    const row = (r) => `<li class="ttl-row${r.worn ? " on" : ""}">${titleSeal(r)}<small>${esc(TT_GRADE[r.grade] || "")}・${esc(r.how)}</small>`
+      + (r.worn ? `<b class="ttl-on">${TT_WORN}</b>` : `<button class="btn ghost" data-act="titles-wear" data-id="${esc(r.id)}">${TT_WEAR}</button>`) + "</li>";
+    const auto = `<li class="ttl-row${t.pin ? "" : " on"}"><span>${TT_AUTO}</span>${t.pin ? `<button class="btn ghost" data-act="titles-wear" data-id="">${TT_WEAR}</button>` : `<b class="ttl-on">${TT_WORN}</b>`}</li>`;
+    const goal = goals.length ? `<h4>${TT_GOAL}</h4><ul class="ttl-list goals">${goals.map((r) => `<li class="ttl-row">${titleSeal(r)}<small>${esc(r.how)}</small></li>`).join("")}</ul>` : "";
+    return `<div class="sheet-bg" data-act="titles-close"></div><div class="sheet ttl-sheet" role="dialog" aria-label="${TT_HEAD}"><div class="grip"></div>`
+      + `<h3>${TT_HEAD}</h3><p class="ttl-note">${TT_NOTE}</p>`
+      + `<ul class="ttl-list">${mine.length ? auto + mine.map(row).join("") : `<li class="ttl-row"><span>${TT_NONE}</span></li>`}</ul>${goal}</div>`;
   }
 
   async function titlesWear(id) {
