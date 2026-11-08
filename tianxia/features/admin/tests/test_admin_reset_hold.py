@@ -11,7 +11,7 @@ from server_kit import (  # noqa: F401
 )
 
 from tianxia import database
-from tianxia.accounts import AccountStore
+from tianxia.accounts import STAFF_SHORT_PASSWORD, AccountStore
 from tianxia.core import identity_base
 
 pytestmark = pytest.mark.whole_content
@@ -20,7 +20,8 @@ pytestmark = pytest.mark.whole_content
 def _reset(client, monkeypatch):
     _player(client)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
-    return client.post("/api/admin/reset_password", json={"target": "沈青衫", "temp": "temp-pass"}).json()
+    # 目標在管理者名單上：identity 開著時臨時密碼要 12 字（第 207 批），關著照舊；用 14 字兩邊都過
+    return client.post("/api/admin/reset_password", json={"target": "沈青衫", "temp": "temp-pass-1234"}).json()
 
 
 def test_reset_records_hold_and_note_when_on(client, monkeypatch, tmp_path):
@@ -57,7 +58,7 @@ def test_failed_reset_writes_nothing(client, monkeypatch, tmp_path):
     _player(client)
     monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
     out = client.post("/api/admin/reset_password", json={"target": "沈青衫", "temp": "123"}).json()
-    assert out == {"message": "密碼至少 6 字。"}
+    assert out == {"message": STAFF_SHORT_PASSWORD}  # 目標在名單上、identity 開著：12 字那一句（第 207 批）
     aid = AccountStore(database.open_database()).account_id("shen_01")
     assert identity_base.reset_held(aid, server.time.time()) is False  # 旁檔在不在都一樣（登入那一下開著就會記 session_auth）
     if identity_base.side_file().exists():
