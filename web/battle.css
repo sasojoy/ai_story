@@ -67,3 +67,13 @@
 .b-fold[open] > summary::after { content: " ▴"; }
 :is(.scene, .report-detail) .b-fold-lines { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); }
 :is(.scene, .report-detail) .b-lines .b-fold-lines li { font-weight: 400; font-size: 13.5px; color: var(--ink-2); padding: 2px 0; border-top: 0; }
+
+/* 戰局條底下的回合格換成 Joy 給的墨塊（2026-11-08，web/img/rounds/）：官軍贏藍墨、黃巾贏金墨、相持灰墨、還沒打淡框、正在打實框。
+   格子寬照舊平分；高度放到 26px 讓墨塊看得出筆觸，圖用 contain 不拉變形 */
+.gauge .g-rounds { gap: 2px; }
+.gauge .g-r { height: 26px; line-height: 26px; font-size: 11px; font-weight: 700; border-radius: 0; color: var(--ink);
+  background: url("/static/img/rounds/round-todo.webp") center / contain no-repeat; }
+.gauge .g-r.side-guan { background: url("/static/img/rounds/round-guan-win.webp") center / contain no-repeat; color: #fff; }
+.gauge .g-r.side-huang { background: url("/static/img/rounds/round-huang-win.webp") center / contain no-repeat; color: #2a241d; }
+.gauge .g-r.tie { background: url("/static/img/rounds/round-tie.webp") center / contain no-repeat; color: var(--ink); } /* 相持的灰墨在暗色模式是深灰：字跟著 --ink 翻成淺色 */
+.gauge .g-r.g-now { background: url("/static/img/rounds/round-now.webp") center / contain no-repeat; box-shadow: none; color: var(--ink); }
