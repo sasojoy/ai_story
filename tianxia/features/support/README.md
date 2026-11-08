@@ -38,3 +38,4 @@
 
 - `test_for` 挑不到的：`tianxia/features/notify/tests/`（改了 notify 的 `kinds` 那三處）、`tests/web/test_shell_web.py`（表單框、點擊清單照字面）、`tests/bots/test_server_bots.py`（`web/support.js` 不准寫假人相關字）。
 - 情境：`scripts/same_behavior.py` 的 `petition` 軌（客服關著時登入的人打七條、`/api/main`、`/api/push`）；比對帶 `--new support`。
+- `test_for` 自己會帶、不用另外跑（PM J 波核對）：`tests/core/test_contract_features.py`（改包的檔帶核心契約 `[support]`）、`tests/core/test_shell_stays_thin.py`（改 `web/` 帶）。
