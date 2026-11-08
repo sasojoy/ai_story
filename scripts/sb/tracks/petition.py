@@ -52,4 +52,9 @@ class PetitionScenario(Scenario):
 
 
 # 改一個字（selftest）：開關的那一道 gate 反過來，關著的季每條路由都不再 404
-register_track("petition", PetitionScenario, (("tianxia/features/support/routes.py",), ("if not shell.CONTENT.config.support.enabled:", "if shell.CONTENT.config.support.enabled:")), "season21")
+register_track("petition", PetitionScenario, (("tianxia/features/support/routes.py",), ("if not shell.CONTENT.config.support.enabled:", "if shell.CONTENT.config.support.enabled:")), "season21",
+               # 第 I 波合併時補（第 107 批要每軌寫 covers；這一軌是 J 波新加的，沒量過）：/api/main 跟別軌一樣叫到每一包的掛鉤，再加客服的路由
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "support", "tale", "tavern", "territory_acts", "travel", "zhuan"))
