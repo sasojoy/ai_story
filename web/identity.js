@@ -23,6 +23,7 @@
   const IDENTITY_THIRD = ["line", "google"];
   const IDENTITY_CODES = ["email", "phone"];
   const IDENTITY_FAIL = "登入沒有完成，請再試一次"; // 待 joy 潤
+  const IDP_SWITCH_YES = "換這個帳號"; // 待 joy 潤
   const IDENTITY_CANCEL = "已取消登入"; // 待 joy 潤
   const IDENTITY_PRIVACY = "只拿 LINE、Google 給的使用者編號，不拿 Email 與個人資料。"; // 待 joy 潤
   const IDENTITY_PRIVACY_LINK = "隱私權說明"; // 待 joy 潤
@@ -240,14 +241,12 @@
     document.head.appendChild(s);
   }
 
-  // 已登入的瀏覽器再走登入：伺服器回 {ask}，問一次，要換才帶 switch: true 再送一次
-  async function identityAsked(path, body) {
-    let r = await api(path, body);
-    if (r && r.ask) {
-      if (typeof confirm !== "function" || !confirm(r.ask)) return null;
-      r = await api(path, { ...body, switch: true });
-    }
-    return r;
+  // 已登入的瀏覽器再走登入：伺服器回 {ask}，用網頁自己的確認框（app.js 的 ask）問一次，要換才帶 switch: true 再送一次、回覆交給 then；
+  // 按取消就停在這裡（什麼都不送、then 不叫）
+  async function identityAsked(path, body, then) {
+    const r = await api(path, body);
+    if (!(r && r.ask)) return then(r);
+    return ask(r.ask, IDP_SWITCH_YES, async () => then(await api(path, { ...body, switch: true })));
   }
 
   function identityCodeState() {
@@ -275,11 +274,14 @@
 
   async function identityCodeSend(st, to, token) {
     const body = { channel: st.way, to, turnstile: token || "", purpose: st.purpose };
-    const r = st.purpose === "login" ? await identityAsked("/api/identity/code/send", body) : await api("/api/identity/code/send", body);
-    if (!r) return;
-    Object.assign(st, { sent: true, to, notice: r.message || "", until: Date.now() + IDP_RESEND_SECONDS * 1000, stale: "" });
-    identityCodeRedraw();
-    identityTick();
+    const sent = (r) => {
+      if (!r) return;
+      Object.assign(st, { sent: true, to, notice: r.message || "", until: Date.now() + IDP_RESEND_SECONDS * 1000, stale: "" });
+      identityCodeRedraw();
+      identityTick();
+    };
+    if (st.purpose === "login") return identityAsked("/api/identity/code/send", body, sent);
+    sent(await api("/api/identity/code/send", body));
   }
 
   async function identityCodeVerify(st, code) {
@@ -331,8 +333,9 @@
 
   async function identityStart(way, purpose = "login") {
     const body = { provider: way, purpose };
-    const r = purpose === "login" ? await identityAsked("/api/identity/start", body) : await api("/api/identity/start", body);
-    if (r && r.url) location.href = r.url;
+    const go = (r) => { if (r && r.url) location.href = r.url; };
+    if (purpose === "login") return identityAsked("/api/identity/start", body, go);
+    go(await api("/api/identity/start", body));
   }
 
   // ── 設定抽屜「帳號綁定」（B 版）──

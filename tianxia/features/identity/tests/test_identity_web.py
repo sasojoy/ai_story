@@ -248,13 +248,13 @@ function kit(opts) {
   let renders = 0;
   const replies = (opts.replies || []).slice();
   const api = async (path, body) => { posts.push([path, body === undefined ? null : body]); return replies.length ? replies.shift() : {}; };
-  const confirm = (text) => { asked.push(text); return opts.confirm !== false; };
+  const ask = (text, yes, go) => { asked.push(text); return opts.confirm !== false ? go() : undefined; }; // 網頁自己的確認框：按「換」才叫 go
   const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
-    "registerForms", "$app", "api", "enter", "location", "history", "confirm",
+    "registerForms", "$app", "api", "enter", "location", "history", "ask",
     idSrc + "\nreturn { identityFoldHtml, identityCodeHtml, identityAdminHtml, identityClick, identityForm };")(
     S, esc, (t) => toasts.push(t), () => { renders++; }, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
     () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {}, { href: "https://example.com/" },
-    { replaceState: () => {} }, confirm);
+    { replaceState: () => {} }, ask);
   return { S, k, posts, toasts, asked, renders: () => renders };
 }
 async function main() {
