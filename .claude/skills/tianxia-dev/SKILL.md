@@ -148,6 +148,17 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - Windows 的 `tar -xf` 解 `git archive` 會在中文檔名（`docs/`）噴「Invalid empty pathname」，程式碼目錄照樣解得出來；比一次 `tianxia/`、`content/` 的檔數確認。
   - 回報寫「差異只有哪幾行」，不是只寫「測試過了」。
 
+## 殼不再長（H 波第 106 批，2026-11-08）
+
+殼（`Game` 的方法與 `__init__` 屬性、`app.js` 的 case／form／change／頂層名字、`main.js` 頂層名字、`style.css` 的 class、`server.py` 的 `app.*` 與不用登入的路由、`content/` 頂層與 `events/` 的檔、`validate` 讀的欄位、不標 QUIET 的欄位……）的現況名單在 `tests/core/shell_tables.py`，`tests/core/test_shell_stays_thin.py` 只擋多出來的（手冊第十五節「架構收尾 H 波」第 3 條）。
+
+- **改到名單會紅時**：先把新東西搬進包——方法進 `features/<包>/actions.py`、`rules.py`（要掛在 `Game` 上才寫 `game_api.py`），鈕、表單、change 進 `web/<包>.js`，樣式進 `web/<包>.css`，內容進 `tianxia/features/<包>/content/`，新欄位標 `Field(<預設>, json_schema_extra=QUIET)`。真的要留在殼：企劃者或 Joy 點頭，改 `tests/core/shell_tables.py` 那一張名單，PR（或回報）寫誰、哪天、原話。搬走東西不用改名單。不要為了變綠去改測試本身。
+- **路由第一行要有開關的 gate**，關著丟 404（照 `tianxia/features/heroines/routes.py` 的 `api_adult`）。新包不在 `ROUTES_NO_SWITCH`，`test_package_routes_are_404_with_the_switch_off` 會關著打每一條。
+- **`registerClicks`、`registerForms`、`registerChanges` 照框的字面寫**：頂層兩格縮排、第一個參數是具名函式、整句一行，例 `  registerClicks(heroinesClick, ["adult-yes", "adult-no"]);`。包成別的寫法（多行陣列、匿名函式、放進 if）`test_shell_web` 認不出主人，會紅。
+- **`tianxia/` 不准讀電腦時鐘**（全部，不只核心；放行只有 `database`、`accounts`、`bot_runner`、各包 `routes`、`looks/studio_local`、`notify/webpush`）。
+- **`test_for` 現在多帶**：包的 `routes.py` 帶 `test_action_tables.py`、`test_outlock.py`；`web/` 帶 `test_server_bots.py` 與 `test_shell_stays_thin.py`；`scripts/*.py` 帶邊界；`content/` 帶 `test_shell_stays_thin.py`；核心測試與核心契約都含 `test_shell_stays_thin.py`；改 `tianxia/`、`scripts/`、根目錄的 `.py` 或 `.mjs` 另外連 slow 跑舊名掃描 `test_every_tianxia_import_resolves` 那一條（約 6 秒）。
+- **掛開關的新功能**的對照：`scripts/same_behavior.py compare --new <包>`，新東西列成清單貼進 PR，其餘全部一樣；表名要帶包名前綴（`<包>` 或 `<包>_*`），不然照紅。`explore-compare` 還沒有 `--new`，新包帶表時那一條會紅，回報寫明、交 PM 看。
+
 ## 內容改動的雷
 
 - **內容檔歸誰**（企劃者 2026-10-03；手冊第十五節）：內容檔（`content/*.json` 與 `tianxia/features/<包>/content/`）只有開發（含雲端開發）與 Joy 改；討論對話、設計 session 把內容寫成「欄位對應 JSON 的表」交開發轉檔。Joy 寫好的事件文字不改，非改不可先問企劃者（經 PM）。**內容 id 不改**（PM 2026-10-31）：上線後武學、物品、地點、事件、商品、配方的 id 不改，要換名改 `name`；真要拿掉某個 id，`_drop_stale_references`（或包的 `on_drop_stale`）要清得掉，回報的〈退版風險〉寫明。新包的內容檔以包名開頭（`tianxia/features/<包>/content/<包>.json`），舊的內容檔搬包時不改名。
