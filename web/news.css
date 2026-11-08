@@ -62,3 +62,8 @@ summary.nw-title::-webkit-details-marker { display: none; }
 .nw-just { margin-bottom: 12px; }
 .nw-journal .tx-journal { margin: 0; }
 .nw-journal .tx-time { flex-basis: 3.2em; }
+
+/* 收起來的卡（本週江湖大事）：標題右邊一個箭頭，看得出來點得開 */
+details > summary.nw-title::after { content: "▾"; margin-left: auto; font: 400 14px var(--sans); color: var(--ink-2); }
+details[open] > summary.nw-title::after { content: "▴"; }
+details > summary.nw-title { min-height: 32px; align-items: center; }
