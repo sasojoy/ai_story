@@ -1140,6 +1140,7 @@ STAGE_PACKAGES += ["persona"]  # 人物性子（develop cf927227，合回第 4 �
 STAGE_PACKAGES += ["heroines"]  # 女子與隱線（PR #179）：heroines_stage.py
 STAGE_PACKAGES += ["identity"]  # 帳號綁定（scripts/new_feature.py 生的 identity_stage.py）
 STAGE_PACKAGES += ["support"]  # 客服（scripts/new_feature.py 生的 support_stage.py）
+STAGE_PACKAGES += ["titles"]  # 稱號與官職（scripts/new_feature.py 生的 titles_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

@@ -52,17 +52,18 @@ def side(state: GameState, content: Content) -> str:
 
 
 def affiliation(state: GameState, content: Content) -> str:
-    """門派・陣營・頭銜・擂台稱號・上一季論功的稱號（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
+    """門派・陣營・頭銜・擂台稱號・上一季論功的稱號（有哪幾樣寫哪幾樣；稱號與官職開著時只到頭銜，戴的那一個另外寫在名字旁），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
     狀態列（Game.status_data）與玩家卡都用這一個。"""
     p = state.player
     sect = content.sects[p.sect].name if p.sect else None
     faction = allied.label_of(state, content) or None  # 豪強分屬兩軍的季寫「地方豪強（依附官軍）」
     named = ranger.title(content, state)
-    ring = arena_ranks.title_of(state.world, p.name) if arena_ranks.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
+    titles = content.config.titles.enabled  # 稱號與官職（features/titles）開著：擂台稱號與論功的稱號改成名字旁戴的那一個，這一行只寫門派・陣營・官職
+    ring = arena_ranks.title_of(state.world, p.name) if arena_ranks.on(content) and not titles else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
     if faction is None and named is not None:
         base = f"{sect or '散人'}・{named}"
     else:
         base = "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
     base = f"{base}・{ring}" if ring else base
     # 上一季論功的稱號（減法季設計 3.3；PlayerState.season_title，換季時掛上）：沒有是空字串，一個字都不多
-    return f"{base}・{p.season_title}" if p.season_title else base
+    return f"{base}・{p.season_title}" if p.season_title and not titles else base

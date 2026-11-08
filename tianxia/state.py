@@ -1139,6 +1139,10 @@ class PlayerState(BaseModel):
     # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
     # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
+    # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
+    # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
+    titles_pin: str = Field("", json_schema_extra=QUIET)
+    titles_worn: dict[str, str] = Field(default_factory=dict, json_schema_extra=QUIET)
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -2031,6 +2035,9 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 舊的開季章（領地爭奪 2026-10-27 起沒有開關、不看章，conquest.on）；只留著讓舊存檔讀得進來
+    # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
+    titles_week: int = Field(0, json_schema_extra=QUIET)
+    titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
