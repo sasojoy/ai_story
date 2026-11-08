@@ -411,7 +411,7 @@ class ArtsScenario(Scenario):
         """傳功：同伴（練武學、內功、三項屬性、不傳的一項）、部下（第一季規則的季：多練一成、臂力）、心得不足、本人、名冊上沒有。"""
         who = self.TEACHER
         mate = sorted(self.c.characters)[0]
-        skills = [sid for sid, s in sorted(self.c.skills.items()) if s.quality == "下品"]
+        skills = [sid for sid, s in sorted(self.open_skills().items()) if s.quality == "下品"]
         self.world.try_recruit(mate, who)
         if skills:
             self.world.update_companion(mate, lambda pr: (setattr(pr, "wugong_id", skills[0]), setattr(pr, "neigong_id", skills[-1])))
@@ -466,7 +466,7 @@ class ArtsScenario(Scenario):
         p = self.chars.load(who).player
         art = p.member.wugong_id
         if art is None:
-            art = next((sid for sid, s in sorted(self.c.skills.items()) if s.quality == "下品" and s.kind == "武學"), None)
+            art = next((sid for sid, s in sorted(self.open_skills().items()) if s.quality == "下品" and s.kind == "武學"), None)
             self.edit(who, lambda pl: setattr(pl.member, "wugong_id", art))
         self.edit(who, lambda pl: (pl.art_quality.__setitem__(art, "上品"), setattr(pl.member, "wugong_level", 10)))
         loc = "runan_wilds" if territory.on(self.c) else ("lake" if self.profile == "test" else "changshe")

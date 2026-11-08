@@ -153,6 +153,16 @@ class Scenario:
             fn(state.player)
             self.chars.save(state)
 
+    def open_sects(self) -> dict:
+        """開關關著的門派（Sect.switch，門派包）不算：情境照舊只挑玩家拜得到的門派。"""
+        is_open = getattr(self.c, "sect_open", lambda _sid: True)
+        return {sid: s for sid, s in self.c.sects.items() if is_open(sid)}
+
+    def open_skills(self) -> dict:
+        """只在關著的門派學得到的武學不算，同上。"""
+        is_open = getattr(self.c, "sect_open", lambda _sid: True)
+        return {sid: s for sid, s in self.c.skills.items() if s.learn is None or s.learn.sect is None or is_open(s.learn.sect)}
+
     def place(self, name: str, loc: str | None, faction: str | None = "keep") -> bool:
         if loc is not None and loc not in self.c.locations:
             fallback = sorted(i for i, x in self.c.locations.items() if x.enemies)  # 測試內容沒有正式的地點：換一處遊歷打得到人的
