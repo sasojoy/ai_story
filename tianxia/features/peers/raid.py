@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import gender, mounts
+from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批）：灰鈕寫同一句
 
 from . import raid_actions, social
 
@@ -20,7 +21,7 @@ KIND = "raid"
 def buttons(game: Game, other: Game) -> list[social.CardButton]:
     if not raid_actions.is_shown(game, other):
         return []
-    problem = raid_actions.refusal(game, other)
+    problem = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, "raid") else raid_actions.refusal(game, other)
     if problem is not None:
         return [social.CardButton(action=KIND, label="截殺", note=problem, enabled=False)]
     cost = game.content.config.raid.stamina
