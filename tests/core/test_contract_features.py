@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import functools
 import importlib.util
 import random
 import re
@@ -74,6 +75,13 @@ def _own_ids(feature, game) -> list[str]:
     return ids
 
 
+@functools.lru_cache(maxsize=None)
+def _ids_on_a_fresh_game(name: str) -> tuple[str, ...]:
+    """這一包在一個新角色上給的 id；test_choose_takes_only_its_own_ids 的 others 每一列要 35 包，一個行程算一次就好（第二輪第 75 批；三個契約檔 -n 4 量到 55 秒 → 31 秒）。
+    每次現算只有 feast 不一樣（feast:join:<編號> 的編號全服累計，算一次多一個），都是 feast: 前綴，對 choose 吃不吃沒有差。"""
+    return tuple(_own_ids(next(f for f in FEATURES if f.name == name), _game()))
+
+
 def _starts(option_id: str, feature) -> bool:
     return any(option_id.startswith(f"{p}:") for p in features_core.prefixes(feature))
 
@@ -95,6 +103,36 @@ def test_no_two_packages_claim_the_same_prefix_verb_or_shop():
     assert len(verbs) == len(set(verbs)), verbs
     keys = [s.key for f in FEATURES for s in f.shops()]
     assert len(keys) == len(set(keys)), keys
+
+
+SHOP_OWNERS = {"smith": "smithy", "arena": "bout", "donate": "outlets", "dadian": "outlets", "board": "bounties", "market": "gear", "tavern": "tavern"}
+
+
+class _Untouched:
+    """碰任何屬性就丟：Feature.shop_view 開頭先認店，不是自己的店不看 ctx（靠這個問得出誰認，不用真的開一間店）。"""
+
+    class Touched(Exception):
+        pass
+
+    def __getattr__(self, name):
+        raise self.Touched(name)
+
+
+def _claims(feature, shop: str) -> bool:
+    try:
+        return feature.shop_view(_Untouched(), shop) is not None
+    except _Untouched.Touched:
+        return True
+
+
+def test_one_shop_has_exactly_one_package_answering_its_page():
+    """第二輪第 93 批：一間店只有一包認（Feature.shop_view；features.shop_page 照 FEATURES 問、第一個不是 None 的回去，兩包都認就分不清了）。
+    店的清單是 shop_base.BACKS（page_view._shop_live 認的那一份）；不認得的店沒有人認。"""
+    from tianxia.core import shop_base
+
+    claims = {shop: [f.name for f in FEATURES if _claims(f, shop)] for shop in shop_base.BACKS}
+    assert claims == {shop: [owner] for shop, owner in SHOP_OWNERS.items()}
+    assert [f.name for f in FEATURES if _claims(f, "沒有這間店")] == []
 
 
 def test_a_tuple_prefix_is_spread_and_dispatched_by_the_first_match(monkeypatch):
@@ -144,9 +182,9 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
     home = type(feature).__module__
     # core_world（第 25 批）：世界層的格（WorldHook）也一樣；core_effects（第 32 批）：效果的格（EffectHook）、叛投的格（DefectHook）也一樣；
     # core_eventbus（第 26 批）：事件的格（BusHook）也一樣；core_step（第 36 批）：「你這一步」的格（StepHook）也一樣
-    # 玩法說明的格（HowtoHook，第 59 批）也一樣
+    # 玩法說明的格（HowtoHook，第 59 批）也一樣；內容驗證的格（ContentSlot，第二輪第 100 批）也一樣
     for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection(), *feature.bus(),
-                 *feature.steps(), *feature.howto()]:
+                 *feature.steps(), *feature.howto(), *feature.content_slots()]:
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):
@@ -219,7 +257,7 @@ def test_options_carry_the_package_prefix(feature):
 def test_choose_takes_only_its_own_ids(feature):
     game = _game()
     own = _own_ids(feature, game)
-    others = [i for f in FEATURES if f is not feature for i in _own_ids(f, _game())]
+    others = [i for f in FEATURES if f is not feature for i in _ids_on_a_fresh_game(f.name)]
     for option_id in CORE_IDS + others:
         kind, _, arg = option_id.partition(":")
         assert feature.choose(game, kind, arg) is None, option_id
@@ -393,7 +431,11 @@ def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypat
     monkeypatch.setattr(features_core, "status_run", spy)
     view = server.main_view(_game())
     assert list(view)[:5] == ["status", "quest", "scene", "art", "options"]
+    from tianxia.features.admin import routes as admin_routes  # noqa: PLC0415  管理頁那一張不在 main_view 裡（第二輪第 90 批）
+
+    admin_view = admin_routes.admin_choices(server, _game())
+    assert list(admin_view)[:2] == ["phase", "battles"]
     assert core.keys() == features_core.STATUS_ORDER.keys()
     for table, order in features_core.STATUS_ORDER.items():
         own = set(features_core.status_hooks(table))
-        assert not own & core[table] and own | core[table] == set(order), table
+        assert not own & core[table] and set(order) <= own | core[table], table  # 表外的格是包接在表尾的（第二輪第 74 批），這裡只管表上的一格不少

@@ -2,7 +2,7 @@
 主動搬六包第 10 批搬進來（引擎那一半）；網頁的畫法在 web/tavern.js（全部拆包第 65 批），樣子在 web/tavern.css（第 67 批）。README.md 寫這一包做什麼、導覽與設計稿、
 認領的欄位、還留在原位的接縫。
 
-- rules.py：純規則（原 tianxia/tavern.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/tavern.py）
 - ask.py：問酒家照問句找事實（原 tianxia/tavern_ask.py；同上）
 - actions.py：原本 Game 上酒肆的 43 個方法（Game 留一行委派）
 - bots.py：假人的分數（原本 bot_policy.score 的 tavern 那一段）
@@ -18,13 +18,13 @@ from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, Shop, V
 
 class TavernFeature(Feature):
     name = "tavern"
-    web = ("tavern.js", "tavern.css")  # 酒肆的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子第 67 批從 style.css 切出來（店面那一層的底留 style.css）
+    web = ("tavern.js", "tavern.css")  # 酒肆的畫法（全部拆包第 65 批從 app.js 切出來）。樣子第 67 批從 style.css 切出來（店面那一層的底在 shop.css）
     prefix = "tavern"  # tavern:news、tavern:treat、tavern:hide、tavern:trace、tavern:board、tavern:back；入口 act:tavern 是核心的前綴
     bot_always = ("tavern:",)  # 坐在酒肆裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）
     # 酒肆開著沒、酒家最近幾則回話、聽過的傳聞、查到過的名號、哪一天請過酒、收到的風聲、藏行跡到幾時、託酒家留意的人、
     # 保鏢跟到幾時、剛被殺手得手的護身：換季全部跟著新角色重來（季上的牆、風聲、請酒、殺手單、閒談照季存）
     player_fields = ("picking_tavern", "tavern_notes", "tavern_heard", "tavern_known", "tavern_treat_day", "whispers", "hidden_until",
-                     "tavern_watches", "tavern_guard_until", "tavern_shield_until")
+                     "tavern_watches", "tavern_guard_until", "tavern_shield_until", "tavern_asks")
     carried: tuple[str, ...] = ()
 
     def enabled(self, ctx) -> bool:
@@ -70,6 +70,14 @@ class TavernFeature(Feature):
                 close=lambda ctx: rules.close(ctx.state), menu=lambda ctx: actions.tavern_options(ctx), entry=entry,
             ),)
         return self._shops
+
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：酒肆，本體在 actions.tavern_view。"""
+        if shop != "tavern":
+            return None
+        from . import actions  # noqa: PLC0415
+
+        return actions.tavern_view(ctx)
 
     _verbs: tuple[Verb, ...] | None = None
 

@@ -11,7 +11,8 @@ from test_shop2 import ARMS, SCOUT, SWORD, _board, _horse, _ids, _market
 
 import server
 import webharness
-from tianxia import mounts, shopview
+from tianxia import mounts
+from tianxia.features.gear import shop_view as gear_shop
 from tianxia.state import Equipment
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
@@ -48,19 +49,19 @@ def test_the_market_draws_a_row_of_stalls_and_the_ridden_horse_card(market):
     assert f'data-act="choose" data-id="{mounts.BACK}"' in html and "出店" in html
     assert html.count('data-act="shop-horse"') == 3  # 你騎的、待售、裝備庫一匹
     assert f'data-act="choose" data-id="{mounts.FEED}"' in html and f"{mounts.WEAR_WORD} 40" in html  # 預設點著你騎的
-    assert shopview.HUNGRY_NOTE in html and "省體力" in html
+    assert gear_shop.HUNGRY_NOTE in html and "省體力" in html
     assert "shop-tabs" not in html  # 馬市不分頁
 
 
 def test_tapping_a_stall_shows_its_card(market):
     out = run(market, "return (async () => { H.render(); " + _click('{ act: "shop-horse", id: "騎:2" }') + " return T.els.app.innerHTML; })();")
-    assert f'data-id="{mounts.WIELD}騎:2"' in out and shopview.SLOWER in out and f'data-id="{mounts.FEED}"' not in out
+    assert f'data-id="{mounts.WIELD}騎:2"' in out and gear_shop.SLOWER in out and f'data-id="{mounts.FEED}"' not in out
 
 
 def test_no_horse_draws_an_empty_stall_and_focuses_the_sale(content, world):
     m = server.main_view(_market(content, world))
     html = run(m, "H.render(); return T.els.app.innerHTML;")
-    assert shopview.NO_HORSE in html and f'data-act="choose" data-id="{mounts.BUY}"' in html
+    assert gear_shop.NO_HORSE in html and f'data-act="choose" data-id="{mounts.BUY}"' in html
     assert html.count('data-act="shop-horse"') == 1  # 空的那一間點不了
 
 
@@ -204,7 +205,7 @@ def test_a_refused_hand_in_does_not_stamp(board):
 def test_the_stamp_and_notes_respect_reduced_motion():
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert "@media (prefers-reduced-motion: reduce) { .shop-board .note.done { animation: none; } }" in css  # 2026-10-14 微調
 
 
@@ -256,7 +257,7 @@ def test_the_held_row_and_a_held_note_do_not_share_a_class(board):
     board.choose(f"bounty:take:{scout}")
     html = run(server.main_view(board), "H.render(); return T.els.app.innerHTML;")
     assert 'class="held-row"' in html and 'class="note k-scout held"' in html
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     assert ".shop-board .held {" not in css and ".shop-board .held-row {" in css
 
 
@@ -273,7 +274,7 @@ def test_the_horse_card_rows_do_not_reuse_the_status_bar_class(market):
 def _css():
     from pathlib import Path
 
-    return (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    return "".join((Path(__file__).resolve().parents[4] / "web" / name).read_text(encoding="utf-8") for name in ("style.css", "shop.css"))
 
 
 def _rule(css: str, selector: str) -> str:

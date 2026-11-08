@@ -18,7 +18,9 @@ import requests
 
 from conftest import at, idle_step, walk_to
 from test_engine import _install_battle_def, _install_battle_def_with_free_text, _join_and_open
-from tianxia import battle_instance, companion_agent, fusion, naming
+from tianxia.features.battle import instance as battle_instance
+from tianxia.features.companions import companion_agent
+from tianxia import fusion, naming
 from tianxia.engine import FreeTextRequest, Game
 from tianxia.models import Config, Effect, FreeTextChoice
 from tianxia.ollama_client import OllamaClient

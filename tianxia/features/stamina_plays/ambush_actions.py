@@ -1,5 +1,5 @@
 """設伏劫道的動作（功能包 tianxia/features/stamina_plays/；原本是 Game 上的 _ambush_*，開發規範手冊 3.2）。
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game 上留一行委派（sync、_arrivals、測試與腳本叫的）。
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。Game 上的名字掛在 game_api.py 的表（sync、_arrivals、測試與腳本叫的）。
 _ambush_fight、_ambush_spoils、_ambush_record 是兩個人之間的事：路過的人（ctx）中了 owner 的埋伏，函式帶兩個 ctx，不把 self 當唯一的人。
 encounter.resolve_encounter 一律用模組屬性叫（same_behavior 的 stamina 軌換掉這個屬性來強制伏兵必勝／必敗）。"""
 from __future__ import annotations

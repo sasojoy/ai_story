@@ -15,7 +15,7 @@
 開關是 rules.jianfa(content, world, "stances")；關著每個函式都當沒有這回事（季上的欄位不讀不寫、提示詞一個字不變）。
 字待 joy 潤。
 
-功能包 tianxia/features/companions/ 的行動那一半（全部拆包第 19 批；原本是 tianxia/stances.py，那一個名字留成指到這裡的別名）：跟人物說話記一筆、人物頁、
+功能包 tianxia/features/companions/ 的行動那一半（全部拆包第 19 批；原本是 tianxia/stances.py）：跟人物說話記一筆、人物頁、
 假人挑心意。世界那一半（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）在共用規則層 tianxia/stance_world.py，這裡 re-export。
 只 import models、state、rules、共用規則層 stance_world、figures（延後）；companion_agent、bot_policy 與這一包的 actions 叫它。"""
 from __future__ import annotations

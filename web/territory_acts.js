@@ -25,5 +25,5 @@
 
   async function loadXingshi() {
     S.xingshi = await api("/api/xingshi");
-    if (S.tab === "news" && S.news === "xingshi") renderPage();
+    if (S.tab === "news" && ["reports", "trends", "xingshi"].includes(S.news)) renderPage(); // 見聞改版：天下形勢在戰況那一頁
   }

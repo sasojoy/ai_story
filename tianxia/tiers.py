@@ -4,13 +4,17 @@
 綠林看惡名、擂主看擂台名次；門檻在 Config.jianfa.tier_doors。門沒開的那一則抽不到（events.event_candidates）；開到第二、三階的人
 抽事件時先照 Config.jianfa.tier_mix 挑一階、再在那一階裡照權重抽（narrow）。第二、三階的檢定不吃第一階的放寬（rules.check_outlook，
 Check.tier 由載入時蓋）。掛在減法季的子開關 event_tiers：關著時第二、三階一則都抽不到，第一階照舊。
+
+共用規則層（第二輪第 87 批收進 registry.SHARED）：不 import 功能包，名次讀核心的 arena_ranks。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界
+（收進來之前挑 22 個檔）。另外跑（-n 4）slow 的 tests/core/test_event_tiers、tests/season/test_real_content，加上 events.py 說明「另外跑」那一串（經 events 讀到它）。
 """
 
 from __future__ import annotations
 
 import random
 
-from . import arena, renown
+from . import renown
+from .core import arena_ranks
 from .models import Content, Event
 from .rules import jianfa
 from .state import GameState
@@ -30,7 +34,7 @@ def _reached(state: GameState, content: Content, door: str, need: int) -> bool:
         return renown.fame_tier(state, content) >= need
     if door in ("俠義", "綠林"):
         return renown.path(state) == ("俠" if door == "俠義" else "寇") and renown.virtue_tier(state, content) >= need
-    entry = arena.entry_of(state.world, state.player.name)  # 擂主：名次至少到第幾名
+    entry = arena_ranks.entry_of(state.world, state.player.name)  # 擂主：名次至少到第幾名
     return entry is not None and entry.rank <= need
 
 

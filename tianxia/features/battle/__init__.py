@@ -6,15 +6,16 @@
   補回被洗掉的戰報、放手一搏的輸入框與三段式、補劇情（Game 留 22 個一行委派）
 - admin.py：全部拆包第 6 批，管理者的決戰工具 7 個方法——立刻開戰的選單、立刻開戰、取消決戰、三場大戲那三顆鈕（Game 留 6 個一行委派）
 - sieges.py：全部拆包第 6 批，攻城 7 個方法——還沒收場的那一串、這一場的定義、推一場、收兵、取消、收場與守城軍令（Game 留 6 個一行委派；
-  攻城的規則本身在 tianxia/siege.py，共用規則層）
+  攻城的規則在 siege_rules.py 與共用規則層 tianxia/siege.py）
+- siege_rules.py：第二輪第 97 批從 tianxia/siege.py 切過來，只有決戰讀的那一半（誰站哪一格、開打那一下、收場、場景字）；開集結、留守、名字、內容驗證留在共用規則層
 - muster.py：全部拆包第 7 批，集結、加入、晚到、臨時投效、改投、挑同伴、在不在場、假人趕路、出招的分派 29 個方法（Game 留 13 個一行委派）
-- escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖；舊名是別名）
+- escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖）
 - bots.py：全部拆包第 7 批，假人看到 battle: 的選項怎麼按（原本 bot_policy.score 的 battle 那一段）
 - progress.py：全部拆包第 8 批，推進與結算 20 個方法——我在哪一場、一回合一回合推（回合首功包在外面）、收兵（季終、取消、收季）、收場與論功、
   只能觀戰與整個取代畫面、份量快照補上（Game 留 14 個一行委派）
-- generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威；舊名是別名）——挑法 on、pick
+- generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威）——挑法 on、pick
   留在共用規則層 tianxia/chiefs.py（siege 也讀），這裡 re-export
-- instance.py：全部拆包第 54 批從 tianxia/battle_instance.py 搬來（集結、出招、結算回合、戰局條與論功的字、鎖外評分與補劇情，111 個名字；舊名是別名）——
+- instance.py：全部拆包第 54 批從 tianxia/battle_instance.py 搬來（集結、出招、結算回合、戰局條與論功的字、鎖外評分與補劇情，111 個名字）——
   資料型別與別處要讀的判定（63 個名字）在核心 tianxia/core/battle_base.py，這裡 re-export 同一批物件
 
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
@@ -24,7 +25,7 @@ battle: 的分派是 MENU_ORDER["quick"] 的 battle 那一格（全部拆包第 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook, WorldHook, slot_some
+from tianxia.core.features import Feature, MenuHook, SceneHook, SeamHook, StatusHook, WorldHook, slot_some
 
 
 class BattleFeature(Feature):
@@ -33,7 +34,7 @@ class BattleFeature(Feature):
     # 江湖頁最上面的戰場面板與關鍵時刻的覆蓋（battle.js 的後半、battle_panel.css；panel.py 給資料；Joy 2026-11-06 大決戰優化）
     # battle_panel.css 排在 legacy.css 後面（web/index.html），同權重的它說了算；battle.css 排在 style.css 緊接著
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
-    content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege.py，共用規則層）
+    content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege_rules.py 與共用規則層 siege.py）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
     # 對它不成立，不放進來（README 照列）
@@ -41,6 +42,15 @@ class BattleFeature(Feature):
     # muster.settle_partings 讀寫）——換季都跟著新角色重來
     player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
     carried = ("battle_results_seen",)  # season.carry 那一格照帶（不看開關，同商城、出陣的 carried）
+
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
+            "_escort_picked": False,
+            "_escort_now": None,
+            "_battle_ref": None,  # 領地爭奪第二批：這一下按的鈕指定的那一場（加入鈕帶 @流水號，_battle_choose 設、_battle_now 讀）
+        }
 
     def enabled(self, ctx) -> bool:
         """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
@@ -147,6 +157,15 @@ class BattleFeature(Feature):
             self._menus = (MenuHook("quick", "battle", lambda ctx, kind, arg, option_id: muster.battle_choose(ctx, arg) if kind == "battle" else None),)
         return self._menus
 
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的 art/battle 一格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：全服戰鬥蓋著場景時沒有圖（序章裡不算）。經 ctx 叫：tick=False，只看不推進。"""
+        if self._scenes is None:
+            self._scenes = (SceneHook("art", "battle", lambda ctx: {} if ctx._battle_for_me(tick=False) is not None else None),)
+        return self._scenes
+
     # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
     _status_slots: tuple[StatusHook, ...] | None = None
 
@@ -161,6 +180,13 @@ class BattleFeature(Feature):
                                                                  "card_gauge": view.card_gauge(ctx) if frame.card is not None else None}),
                 # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
                 StatusHook("main", "siege", lambda ctx, frame: slot_some("siege", view.siege_banner(ctx))),
+                # 管理頁「立刻開戰」的下拉選單（Game.admin_battles：內容的順序，第一季不觸發的 beta 決戰不列；第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "battles", lambda ctx, frame: {"battles": [{"label": b.name, "id": b.id} for b in ctx.admin_battles()]}),
+                # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
+                StatusHook("admin", "showdowns", lambda ctx, frame: {"showdowns": [
+                    {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
+                    for event, why in ctx.admin_showdowns()
+                ]}),
             )
         return self._status_slots
 

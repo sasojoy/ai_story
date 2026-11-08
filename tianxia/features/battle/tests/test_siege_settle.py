@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from conquest_kit import announce, conquest_game, go, join
 
-from tianxia import figures, generals, siege
+from tianxia import figures
+from tianxia.features.battle import generals
+from tianxia import siege
 
 NOW = 1_792_000_000.0
 LOC = "xinye"  # 新野：開季時是黃巾的（守方是陣營），留守是那一區黃巾的大勢人物

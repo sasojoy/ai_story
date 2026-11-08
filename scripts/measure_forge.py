@@ -36,6 +36,7 @@ TMP = Path(tempfile.mkdtemp(prefix="measure_forge_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
 from tianxia import bot, database, library, naming  # noqa: E402
+from tianxia.features.craft import bots as craft_bots  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -114,7 +115,7 @@ def measure(seed: int, profile: str | None, reserve: int) -> tuple[dict[str, tup
     with mock.patch.object(naming, "propose", propose), mock.patch.object(naming, "pick", pick), \
             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse), \
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
-            mock.patch.object(bot, "FORGE_RESERVE", reserve), mock.patch.object(bot, "forge_and_cultivate", counted_round), \
+            mock.patch.object(bot, "FORGE_RESERVE", reserve), mock.patch.object(craft_bots, "FORGE_RESERVE", reserve), mock.patch.object(bot, "forge_and_cultivate", counted_round), \
             mock.patch.object(Game, "forge", counted_forge):
         game = bot.play_season(content, seed, world=world, observe=observe)
     calls["final_stamina"] = round(game.state.player.stamina)

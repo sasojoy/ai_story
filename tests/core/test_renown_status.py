@@ -3,7 +3,9 @@ import random
 
 from conftest import real_content, renown_unscaled
 
-from tianxia import howto, renown, rules, social
+from tianxia.features.guide import howto as guide_howto
+from tianxia import renown, rules
+from tianxia.features.peers import social
 from tianxia.engine import Game
 from tianxia.models import Condition
 from tianxia.state import new_game_state
@@ -90,10 +92,10 @@ def test_howto_has_a_renown_section_with_this_seasons_bars():
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
-    text = howto.page(c, g.state.world, recruitable=False)
+    text = guide_howto.page(c, g.state.world, recruitable=False)
     assert "#### 名聲" in text and "#### 名望" not in text
     assert "小有名氣 56" in text  # 14 天的季：門檻 10 × 5.6
     assert "這一季 14 天，門檻是週末季的 5.6 倍。" in text
     c.config.renown.titles = False
-    text = howto.page(c, g.state.world, recruitable=False)
+    text = guide_howto.page(c, g.state.world, recruitable=False)
     assert "#### 名望" in text and "#### 名聲" not in text

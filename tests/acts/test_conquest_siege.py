@@ -4,31 +4,44 @@ from __future__ import annotations
 import pytest
 
 from conquest_kit import announce, conquest_game, go, join, plain_game
-from tianxia import battle_instance, battlelog, conquest, conquest_day, rules, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import rules, siege
+from tianxia.features.battle import siege_rules
 from tianxia.state import BattleRecord
 import random
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import battle_instance, conquest
-from tianxia.battle_instance import SiegeInfo
+from tianxia.features.battle import instance as battle_instance
+from tianxia import conquest
+from tianxia.features.battle.instance import SiegeInfo
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.database import SCHEMA_VERSION
 from tianxia.sqlite_world import open_world
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import battle_instance, conquest, siege
-from tianxia.battle_instance import GUARD
+from tianxia.features.battle import instance as battle_instance
+from tianxia import conquest, siege
+from tianxia.features.battle.instance import GUARD
 import inspect
 import server
 from conquest_kit import announce, conquest_game, go, join, win_sortie
-from tianxia import atlas, bot_policy, conquest, conquest_day, orders, ranks, siege
+from tianxia import bot_policy, conquest
+from tianxia.features.territory_acts import conquest_day
+from tianxia import orders, ranks, siege
+from tianxia.features.military import order_cards
 from tianxia.engine import Game
 from tianxia.state import Order
-from tianxia import battle_instance, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, plain_game, press
-from tianxia import conquest, howto
+from tianxia import conquest
+from tianxia.features.sortie import howto as sortie_howto
 from tianxia import siege
 from conquest_kit import announce, conquest_game, go, join, press
-from tianxia import atlas, conquest, mapdata, orders, siege
+from tianxia import conquest
+from tianxia.features.map import mapdata
+from tianxia import orders, siege
 from fastapi.testclient import TestClient
 from conftest import real_content
 from conquest_kit import conquest_rules
@@ -790,13 +803,13 @@ def test_nobody_shows_up_is_still_void_even_with_a_guard_helper():
 def test_the_absent_army_cannot_come_late_and_the_scene_says_so():
     game = _game_melee()
     battle = _start(game, _add(game, _open_melee(game), {"甲": "guan"}))
-    assert siege.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
-    assert siege.slots(battle.siege, "guan") == ["guan"]
-    assert siege.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
+    assert siege_rules.join_problem(game.content, battle.siege, "huang", "huang") is not None  # 棄權的那一軍晚到也插不上手
+    assert siege_rules.slots(battle.siege, "guan") == ["guan"]
+    assert siege_rules.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
     assert battle.siege.absent == "huang"
-    line = siege.scene_line(game.content, battle.siege, battle)
-    assert line.startswith(siege.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
-    assert siege.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
+    line = siege_rules.scene_line(game.content, battle.siege, battle)
+    assert line.startswith(siege_rules.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
+    assert siege_rules.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰
 
 
 # ── 原 test_conquest_letter.py（整檔搬進來） ──
@@ -933,7 +946,7 @@ def test_day_turn_only_voids_letters_that_never_opened():
 
 def test_votes_and_the_22_settle_are_gone():
     assert "conquest_vote" not in server.MAIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
-    assert "conquest_settle_now" not in server.ADMIN_ACTIONS
+    assert "conquest_settle_now" not in server.FEATURE_ADMIN_ACTIONS
     assert {"conquest_progress", "admin_conquest_letter"} <= set(server.FEATURE_ADMIN_ACTIONS)  # 第 46 批搬進地盤包的 admin_tools。FB-609：管理者那一個改名，不蓋掉玩家的
     assert not hasattr(Game, "conquest_vote")
     assert not any(hasattr(conquest_day, name) for name in ("tally", "plan", "merge", "settle", "settle_now", "commander_picks"))
@@ -949,7 +962,7 @@ def test_orders_list_and_credit_the_highest_block():
     _fill(game, "hilltop_wilds", "guan", 30)
     _fill(game, "runan_wilds", "guan", 10)
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
-    how = atlas.siege_how(s, c, order)
+    how = order_cards.siege_how(s, c, order)
     assert "荒丘" in how and "汝南荒野" not in how
     win_sortie(game)  # 在汝南荒野打贏：不是最高的那一塊，記不到
     assert s.player.name not in order.progress
@@ -1421,34 +1434,34 @@ def test_state_of_a_block_follows_the_slot():
 
 def test_attack_line_says_where_the_siege_is():
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
-    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road")  # 沒排攻城：隨時推得動
+    assert sortie_howto.SORTIE_PROGRESS in _note(game, "nanyang_road")  # 沒排攻城：隨時推得動
     slot = announce(game, "nanyang_road", "huang")  # 戰書排了一場：凍結
     for status, phase, why in FROZEN:
         _put(game, slot, status, phase)
         note = _note(game, "nanyang_road")
-        assert howto.SORTIE_BLOCKED.format(why=why) in note, (status, phase)
+        assert sortie_howto.SORTIE_BLOCKED.format(why=why) in note, (status, phase)
         assert game.sortie_progress("nanyang_road") == 0.0  # 列與記：寫推不動就真的推不動
     for status in ("done", "void"):  # 打完（這裡沒易手：輸了砍半另算）、作罷：解凍
         _put(game, slot, status, "")
-        assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road"), status
+        assert sortie_howto.SORTIE_PROGRESS in _note(game, "nanyang_road"), status
         assert game.sortie_progress("nanyang_road") > 0
 
 
 def test_own_block_under_siege_says_the_same_in_the_hold_line():
     """自家的區塊被下了戰書（守）：凍結的那一段照實寫在哪一步，不接「有人來攻時守拉的量…」（攻城已經排了）；打完照常守得動。"""
     game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
-    assert howto.SORTIE_BLOCKED_HOLD.format(why=conquest.WHY_IDLE, half="一半") in _note(game, "yingchuan_wilds")  # 沒人推：照舊
+    assert sortie_howto.SORTIE_BLOCKED_HOLD.format(why=conquest.WHY_IDLE, half="一半") in _note(game, "yingchuan_wilds")  # 沒人推：照舊
     press(game, "yingchuan_wilds", "huang")
-    assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")  # 黃巾在推：守得動
+    assert sortie_howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")  # 黃巾在推：守得動
     slot = announce(game, "yingchuan_wilds", "huang")
     for status, phase, why in FROZEN:
         _put(game, slot, status, phase)
         note = _note(game, "yingchuan_wilds")
         assert note.startswith("這裡是自家地盤：不用打，") and "拿自家隊伍" in note, (status, phase)
-        assert howto.SORTIE_BLOCKED.format(why=why) in note and "有人來攻時" not in note, (status, phase)
+        assert sortie_howto.SORTIE_BLOCKED.format(why=why) in note and "有人來攻時" not in note, (status, phase)
         assert game.sortie_progress("yingchuan_wilds") == 0.0
     _put(game, slot, "done", "")
-    assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
+    assert sortie_howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
 
 
 def test_another_block_is_not_dragged_along():
@@ -1556,9 +1569,9 @@ def test_a_frozen_own_block_is_listed_for_defend_on_the_card_map_and_bots():
     c, w = game.content, game.state.world
     assert conquest.push_problem(w, c, "huang", "runan", "hold") == conquest.WHY_FROZEN  # 守不動進度（規則沒變）
     assert orders.defend_places(c, w, order) == ["runan"]  # 修前是空的
-    text = atlas.order_how(game.state, c, order)
-    assert text != atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(c, "yingru"))  # 修前「此刻沒有…沒有可守的」
-    assert text == atlas.DEFEND_SIEGE_CONQUEST.format(where="汝南")
+    text = order_cards.order_how(game.state, c, order)
+    assert text != order_cards.DEFEND_NONE_CONQUEST.format(front=rules.trend_name(c, "yingru"))  # 修前「此刻沒有…沒有可守的」
+    assert text == order_cards.DEFEND_SIEGE_CONQUEST.format(where="汝南")
     assert mapdata._order_marks(game.state, c, "huang").get("runan") == mapdata.ORDER_WORDS["defend"]
     assert "runan" in orders.targets(game.state, c, "huang")
 
@@ -1577,7 +1590,7 @@ def test_on_the_frozen_block_only_the_siege_guard_counts():
     assert counts(orders.SIEGE_GUARD, "runan") and not counts("duty", "runan")
     assert counts("duty", "runan_academy") and not counts(orders.SIEGE_GUARD, "runan_academy")
     assert not orders.duty_counts(game.state, c, "huang", "runan") and orders.duty_counts(game.state, c, "huang", "runan_academy")
-    text = atlas.order_how(game.state, c, order)
+    text = order_cards.order_how(game.state, c, order)
     assert "汝南學宮" in text and "汝南正等著一場攻城" in text
 
 
@@ -1631,8 +1644,8 @@ def test_a_ranger_helping_the_defence_is_not_credited():
 # ── 原 test_conquest_fb609_letter_route.py（整檔搬進來） ──
 # FB-609（QA 驗輿圖第三版第 1 批）：玩家下戰書的 API 被管理者的同名動作蓋掉，沒有一個玩家下得了戰書。
 #
-# server.MAIN_ACTIONS 與 ADMIN_ACTIONS 都有 conquest_letter（玩家的 Game.conquest_letter、管理者的「立刻下戰書」），/api/do/{op} 先查
-# ADMIN_ACTIONS：在任第 4 階的玩家打 POST /api/do/conquest_letter 回 400「只有管理者能這麼做。」。修法（PM 2026-10-21）：管理者那一個改名
+# 當時 server.MAIN_ACTIONS 與 ADMIN_ACTIONS（第二輪第 90 批拿掉，現在是各包 admin_tools 合成的 FEATURE_ADMIN_ACTIONS）都有 conquest_letter（玩家的 Game.conquest_letter、管理者的「立刻下戰書」），/api/do/{op} 先查
+# 管理者那一張：在任第 4 階的玩家打 POST /api/do/conquest_letter 回 400「只有管理者能這麼做。」。修法（PM 2026-10-21）：管理者那一個改名
 # admin_conquest_letter（同 Game.admin_conquest_letter），兩張表不准重名。
 #
 # 伺服器用正式內容的 21 天季、打開領地爭奪，自己的一份（不碰別的測試的 server.CONTENT）。
@@ -1725,12 +1738,10 @@ def test_the_admin_letter_has_its_own_name_and_players_are_refused(conquest_serv
 def test_player_and_admin_action_names_never_collide():
     """/api/do 先查管理者那一張：同名的玩家動作永遠走不到（FB-609）。兩張表、以及 api_do 先接走的那幾個，名字都不能重。
     功能包的管理者工具（server.FEATURE_ADMIN_ACTIONS，開發規範手冊 3.3 的 admin_tools）又排在這些前面、最先查，一樣不能跟它們重。"""
-    assert set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS) == set()
-    assert set(server.ADMIN_ACTIONS) & SPECIAL_OPS == set()
     assert set(server.MAIN_ACTIONS) & SPECIAL_OPS == set()
     tools = set(server.FEATURE_ADMIN_ACTIONS)
     assert "mall_reissue" in tools  # 讀到了（商城那三樣）
-    assert tools & (set(server.MAIN_ACTIONS) | set(server.ADMIN_ACTIONS) | SPECIAL_OPS) == set()
+    assert tools & (set(server.MAIN_ACTIONS) | SPECIAL_OPS) == set()
     assert "admin_conquest_letter" in server.FEATURE_ADMIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
 
 

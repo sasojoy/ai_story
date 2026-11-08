@@ -54,7 +54,8 @@ def test_every_god_template_shows_numbers_not_braces():
     """正式站「柔攻神品」那一行寫著 {stun_pct}、{turns}（Joy 2026-11-01）：四十個模板畫出來都不能留下大括號。"""
     from types import SimpleNamespace
 
-    from tianxia import skillview, tactics
+    from tianxia.features.cultivation import art_view
+    from tianxia import tactics
     from tianxia.state import InsightFx
 
     c = real_content()
@@ -66,4 +67,4 @@ def test_every_god_template_shows_numbers_not_braces():
         assert not any("{" in t or "}" in t for t in shown), (g.id, shown)
         # 修好之前悟成的，存檔裡的說明是模板：畫的時候照模板重寫
         saved = SimpleNamespace(note=g.tactic.desc)
-        assert skillview.insight_note(c, saved, fx) == g.desc
+        assert art_view.insight_note(c, saved, fx) == g.desc

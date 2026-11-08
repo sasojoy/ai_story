@@ -4,14 +4,14 @@
 調度軍令（caller、call_orders）、開集結（start_muster、start_from_front、shift_deadlines）、收場的理由（outcome_reason、result_at、BLOW_REASON…）、
 放手一搏的評分（assess_gamble、SuccessRateJudgment、GambleVerdict、clean_story、claims_a_kill）。
 
-規則那一半（集結、出招、結算回合、畫面的字、鎖外評分與補劇情）在決戰包 tianxia/features/battle/instance.py，它 re-export 這裡全部的名字，舊名 tianxia/battle_instance.py
-是指到它的別名。邊界測試不准核心、共用規則層、舊模組、別的包碰決戰包或它的別名，所以它們讀的都得留在這裡；這裡一個字都不讀決戰包。
+規則那一半（集結、出招、結算回合、畫面的字、鎖外評分與補劇情）在決戰包 tianxia/features/battle/instance.py，它 re-export 這裡全部的名字。
+邊界測試不准核心、共用規則層、舊模組、別的包碰決戰包，所以它們讀的都得留在這裡；這裡一個字都不讀決戰包。
 
 誰讀：核心本體的 world_state、sqlite_world、world、team（函式裡，延後）、core/duel_base、core/seal_base；共用規則層的 chiefs、conquest、event_llm、siege；舊模組 tale、seal_duel、
-bot_policy、bot_runner；engine；bout、seal、territory_acts、looks、faction 幾包。讀的時候區域名照舊叫 battle_instance（from tianxia.core import battle_base as battle_instance）。
+bot_policy、bot_runner；engine；bout、seal、tale、territory_acts、looks、faction 幾包（bout、seal、tale 的鎖外路由也讀這裡，第二輪第 102 批）。讀的時候區域名照舊叫 battle_instance（from tianxia.core import battle_base as battle_instance）。
 
-換掉 assess_gamble 的測試兩種都有：tests/server/test_server.py、單挑包的 test_arena_crowd 經別名換決戰包那一格（server.py 與 view.py 讀那一格）；單挑包的 test_duel、test_arena 測沒給分數時的
-鎖內退路（duel_actions、arena_actions 讀這裡），換這裡那一格。engine 的奪璽那一處也讀這裡，沒有測試換它。
+換掉 assess_gamble 的測試：放手一搏的路由（bout、seal 的 routes，第二輪第 102 批）與鎖內退路（duel_actions、arena_actions）讀這裡，test_server、單挑包的 test_bout_shell、test_arena_crowd、test_duel、test_arena
+換這裡這一格；決戰的 view.py 讀決戰包那一格，換那裡。engine 的奪璽那一處也讀這裡，沒有測試換它。
 
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。
 """
@@ -153,6 +153,8 @@ class BattleParticipant(BaseModel):
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
     renown: list[str] = Field(default_factory=list)  # 名聲：加入時快照的稱號（本場戰功、論功那一句寫；善惡第 1 段起、名望名動一方起）
+    # 稱號與官職（features/titles）：加入時戴著的那一個（{"id","name","grade"}；本場戰功、將旗、首功那一句寫）。開關關著、沒戴是空的，空的不寫這個鍵
+    title: dict[str, str] = Field(default_factory=dict)
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
     turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
     newbie: bool = False  # 還在新手期（roster.newbie）
@@ -164,6 +166,14 @@ class BattleParticipant(BaseModel):
     # 奪璽單挑（seal_duel.side_from_participant）帶過去，對手打中他的那一下乘 1 − 它。決戰本身不吃（一個字不改）。舊資料沒有＝0
     cut: float = 0.0
     card: dict | None = None  # 五項屬性的季：加入那一刻的五項與加成（team.pvp_card），奪璽單挑照對手重算；舊的季、舊資料 None
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_title(self, handler):
+        """title 是空的時候不寫這個鍵：稱號開關關著，決戰那一列的 JSON 跟加這一欄之前一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("title") == {}:
+            del data["title"]
+        return data
 
 
 # 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」

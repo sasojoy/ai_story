@@ -1,5 +1,5 @@
 """宴客的動作（功能包 tianxia/features/feast/；原本是 Game 上的 _feast_* 與 feast_*，開發規範手冊 3.2）。
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game.feast_*（server 的三段式叫的）留一行委派到這裡。"""
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。Game.feast_*（server 的三段式叫的）掛在 game_api.py 的表。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

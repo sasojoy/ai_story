@@ -10,14 +10,17 @@
 - close_season：江湖史在季末寫（PM 2026-10-25 第 4 件，照整合設計 5.2）——每個地點挑最高的那一條痕跡寫一句。
 公開的只有後果與痕跡：傳聞、江湖史、描寫都不帶名字，也不寫玩家寫的句子。
 
-只 import models、rules、state；接線在 engine（Game.location_text、_save_season／sync／world_tick 叫 fire_due、跨過門檻那一刻出過力的人的
-行狀 annals.MARK）、xingshi.facts、world.end_season（close_season）。開關是 rules.jianfa(content, world, "marks_visible")。
+只 import models、rules、state 與核心的行狀 annal_base；接線在 engine（Game.location_text、_save_season／world_tick 叫 fire_due、sync 叫 tick：
+防漏與跨過門檻那一刻出過力的人的行狀 annals.MARK）、xingshi.facts、world.end_season（close_season）。開關是 rules.jianfa(content, world, "marks_visible")。
 """
 from __future__ import annotations
 
+from .core import annal_base as annals
 from .models import Content, Location, MarkRule
 from .rules import add_chronicle, add_rumor, change_trend, jianfa, resolve_trends
 from .state import GameState, WorldState
+
+MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
 
 
 def place_of(mark: str) -> str:
@@ -44,6 +47,39 @@ def fire_due(state: GameState, content: Content) -> list[MarkRule]:
         for trend_id, delta in resolve_trends(content, state.world, rule.trend, place).items():
             change_trend(state, content, trend_id, delta)
     return fired
+
+
+def credits(state: GameState, content: Content) -> bool:
+    """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
+    不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
+    回有沒有記到。"""
+    s, c = state, content
+    w, name = s.world, s.player.name
+    mine = [mark for mark, names in w.mark_helpers.items() if mark in w.marks_fired and name in names]
+    if not mine:
+        return False
+    by_mark = {r.mark: r for r in c.mark_rules}
+    for mark in mine:
+        names = w.mark_helpers[mark]
+        names.remove(name)
+        if not names:
+            del w.mark_helpers[mark]
+        rule = by_mark.get(mark)
+        if rule is None:
+            continue
+        loc = c.locations.get(place_of(mark))
+        annals.note(s, c, annals.MARK, MARK_ANNAL.format(rumor=rule.rumor), 2,
+                    place=loc.name if loc is not None else "", time=w.marks_fired[mark])
+    return True
+
+
+def tick(state: GameState, content: Content) -> bool:
+    """痕跡看得見（減法季批 4）：同步時補發過了門檻還沒發的（防漏），再替自己記出過力的那幾則行狀（credits）；
+    回有沒有改到季（發了、名號拿掉了），有才存季（存季是呼叫端的事：engine 的 _deliver_marks）。關著什麼都不做。"""
+    if not jianfa(content, state.world, "marks_visible"):
+        return False
+    fired = fire_due(state, content)
+    return credits(state, content) or bool(fired)
 
 
 def season_lines(world: WorldState, content: Content) -> list[str]:

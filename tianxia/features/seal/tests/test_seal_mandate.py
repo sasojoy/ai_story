@@ -9,9 +9,11 @@ import pytest
 from conftest import real_content
 from test_seal import SALT, _ended, _registry, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_engine import _admin, _player
-from tianxia import seal
+from tianxia.features.seal import seal
 from tianxia.engine import Game
-from tianxia import atlas, fusion, seal, social
+from tianxia import atlas, fusion
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
 
 
 def install_mandate(content):
@@ -108,7 +110,7 @@ def test_a_bad_mandate_setup_is_refused_at_load(mandated, change, message):
 
 def test_old_saves_read_without_the_new_fields():
     """舊存檔：新欄位都有預設值（不升版）；登記記一筆時寫上這一輪。"""
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.features.battle.instance import BattleInstance
     from tianxia.state import WorldState
     from tianxia.world_state import SealEvent, SealRegistry
 
@@ -191,9 +193,11 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
 
     root = Path(__file__).resolve().parents[4]  # 全部拆包第 27 批從 tests/seal/ 搬進玉璽包的 tests/（只改層數）
     # 全部拆包第 27 批：seal.py 整份搬進玉璽包（tianxia/features/seal/seal.py）、它的 mandate_event 搬進核心本體 seal_base——白名單加這兩個檔、
-    # 掃的範圍加玉璽包的資料夾（跟搬之前掃的是同一批程式），判斷不動
-    allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py",
-               "tianxia/core/seal_base.py", "tianxia/features/seal/seal.py"}
+    # 掃的範圍加玉璽包的資料夾（跟搬之前掃的是同一批程式），判斷不動。第二輪第 96 批：check_territory 從 content.py 搬進 territory.py，白名單跟著加
+    # 第二輪第 100 批：validate_seal 從 content.py 搬進玉璽包的 checks.py（content.py 別處還在讀，留著）——白名單加這個檔，判斷不動。
+    allowed = {"tianxia/timetable.py", "tianxia/content.py", "tianxia/models.py",
+               "tianxia/core/seal_base.py", "tianxia/features/seal/seal.py", "tianxia/territory.py",
+               "tianxia/features/seal/checks.py"}
     hits = [
         f"{p.relative_to(root).as_posix()}:{n}"
         for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), *root.glob("tianxia/features/seal/*.py"),

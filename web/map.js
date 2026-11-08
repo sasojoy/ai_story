@@ -600,7 +600,7 @@
   const deskMap = () => !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
   // 抽屜的高度：半開（量到內容裡 .m-peek-end 那一點：附近那一排卡片底下、卡的動作那一排底下）、拉高六成、全開九成四、版圖變化 320；
   // 量不到（還沒排版）照預設。桌機是右欄（CSS 蓋掉高度）
-  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200;
+  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200, MV_SHORT = 520; // MV_SHORT：地圖框矮於這個就是矮螢幕（375×667 量到 499）
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
@@ -610,6 +610,9 @@
   function peekPx(avail) {
     const end = document.querySelector("#mbody .m-peek-end");
     const at = end && end.offsetTop ? end.offsetTop + 10 : 0;
+    // 矮螢幕（UI 手感丁批 4-1）：附近那一排預設只露標題一行，地圖多一截；點標題或把手拉開
+    const head = avail < MV_SHORT && S.mapMode !== "place" ? document.querySelector("#mbody .m-nhead") : null;
+    if (head && head.offsetHeight) return Math.max(64, head.offsetTop + head.offsetHeight + 14);
     const fall = S.mapMode === "place" ? Math.max(MV_PEEK_PLACE, Math.round(avail / 3)) : MV_PEEK_NEAR;
     return Math.round(Math.min(avail * 0.6, Math.max(MV_PEEK_MIN, at || fall)));
   }
@@ -859,7 +862,7 @@
     const label = f === "all" ? from : `${chipName(base, st, f)}・${list.length} 處`;
     // 本週那一處排在第一張（不管多遠）：小字照實說，不寫成「由近到遠」（全面自檢 U-16）
     const wk = nearWeek(st), wkFirst = !!wk && list.length > 1 && list[0].id === wk.id;
-    const head = `<div class="m-nhead"><b>${esc(label)}</b><small>${wkFirst ? MV_WORDS.swipeWk : MV_WORDS.swipe}</small></div>`;
+    const head = `<div class="m-nhead" data-act="map-open" role="button"><b>${esc(label)}</b><small>${wkFirst ? MV_WORDS.swipeWk : MV_WORDS.swipe}</small></div>`;
     const cards = list.length ? `<div class="m-cards">${list.map((b) => nearCard(base, st, b)).join("")}</div>` : `<p class="m-sub m-none">${MV_WORDS.none}</p>`;
     // 第 3 週「離贏還差多少」（減法季整合設計 6.8）
     const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";
@@ -1678,3 +1681,60 @@
     cardsWire();
     mvWire(wrap);
   }
+  async function mapClick(act, el, ev) {
+    switch (act) {
+        case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
+        case "map-home": mapHome(); break; // 右下「◎」：回到我
+        case "map-fit": mapFit(); break; // 右下「全」：看整張天下
+        case "map-more": mapOpen(); break; // 卡上「往上拉：能悟、對手……」
+        case "map-place": mapPick(el.dataset.id); break; // 地圖上點了一處（小圖、名字）、附近那一排點了一張：抽屜開它的卡
+        case "map-pick": mapPick(el.dataset.id, true); break; // 找地點、今天去哪裡出陣挑了一處：飛過去、開它的卡
+        case "map-region": mapBack(); mapRegionFly(el.dataset.id); break; // 找地點的「跳到大區」：收起那一頁，飛過去
+        case "map-filter": mapFilter(el.dataset.id); break; // 上面那一排標籤（再按一次回全部）
+        case "map-wash": washToggle(); break; // 「塗層」
+        case "map-search": mapFind(); break;
+        case "map-open": mapOpen(); break;
+        case "map-back": mapBack(); break;
+        case "map-letter": { // 卡上的「下戰書」（設計 4.4）：先問一次，再照伺服器的入口條件下（Game.conquest_letter）
+          const loc = el.dataset.id, place = (placeOf(S.mapBase, loc) || { name: loc }).name;
+          ask(LETTER_ASK.replace("{place}", place), LETTER_WORD, async () => { await doMain("conquest_letter", { loc }); if (S.tab === "map") await loadMap(); });
+          break;
+        }
+        case "map-travel": await travel(el.dataset.mode); break;
+        case "map-timeline": mapTimeline(S.mapMode !== "timeline"); break;
+        case "map-week": stopPlay(); mapWeekTo(Number(el.dataset.week)); break;
+        case "map-graph": stopPlay(); graphPick(el, ev); break;
+        case "map-now": stopPlay(); mapWeekTo(S.mapState.now_week); break;
+        case "map-mark": mapPick(el.dataset.id); break; // 年表上點一個地點的名字：地圖上圈出它（再點一次取消）
+        case "map-play": { // 從第 1 週一週一週放到現在
+          stopPlay();
+          let w = 1;
+          mapWeekTo(w);
+          mapPlaying = setInterval(() => {
+            if (S.tab !== "map" || S.mapMode !== "timeline" || w >= S.mapState.now_week) { stopPlay(); return; }
+            mapWeekTo(++w);
+          }, PLAY_MS);
+          break;
+        }
+        case "map-jianghu": { // 就在這裡：出陣、探索真的做（減法季整合設計第七章【PM】），回江湖頁看結果；探索三選一開著時回江湖頁攤開那三種
+          const key = el.dataset.key, opts = (S.main && S.main.options) || [];
+          // 出陣約戰開著（丙）：回江湖頁展開出陣前那張卡，不送 act:train（伺服器只會回一句「封好三招再出陣」）；截糧的運糧隊經過時照舊直接打
+          if (key === "sortie" && S.main && sortieCardOn(S.main)) {
+            S.wheelSel = SX_OPEN;
+            S.sortieAnswer = null;
+            S.sortiePick = [];
+            await goTab("jianghu");
+            revealMoveCard();
+            break;
+          }
+          const modes = opts.some((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
+          const id = key === "sortie" ? "act:train" : key === "explore" && !modes ? "act:explore" : null;
+          const ready = id && opts.some((o) => o.id === id && o.enabled !== false);
+          S.wheelSel = key === "explore" && !ready ? "explore" : null;
+          await goTab("jianghu");
+          if (ready) await choose(document.querySelector(`[data-id="${id}"]`) || el, id);
+          break;
+        }
+    } // mapClick
+  } // mapClick
+  registerClicks(mapClick, ["map-report", "map-home", "map-fit", "map-more", "map-place", "map-pick", "map-region", "map-filter", "map-wash", "map-search", "map-open", "map-back", "map-letter", "map-travel", "map-timeline", "map-week", "map-graph", "map-now", "map-mark", "map-play", "map-jianghu"]);

@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 from conftest import real_content
 
-from tianxia import divine, equipment, forge_secrets, smithing
+from tianxia import divine, equipment, forge_secrets
+from tianxia.features.smithy import smithing
 from tianxia.sqlite_world import open_world
+from tianxia.features.admin import routes as admin_routes
 
 pytestmark = pytest.mark.whole_content
 
@@ -111,7 +113,7 @@ def test_the_admin_hears_which_divines_appear():
 
 
 def test_the_settings_page_warns_when_new_divines_run_out():
-    """FB-400：「新神器用完了」除了主控台與換季那一句回話，設定頁管理者那一塊也寫一行（server.admin_choices 的 divine_out）。"""
+    """FB-400：「新神器用完了」除了主控台與換季那一句回話，設定頁管理者那一塊也寫一行（features/admin/routes.py 的 admin_choices 的 divine_out）。"""
     import webharness
 
     if webharness.NODE is None:
@@ -122,10 +124,10 @@ def test_the_settings_page_warns_when_new_divines_run_out():
     c = _content()
     w = _opened(c)
     admin, _ = _admin_rolls(c, w)
-    assert server.admin_choices(admin)["divine_out"] == ""
+    assert admin_routes.admin_choices(server, admin)["divine_out"] == ""
     w.mutate(lambda s: setattr(s.divine, "seen", [r.id for r in c.forge_secrets.values() if r.divine]))
     admin, _ = _admin_rolls(c, w)
-    choices = server.admin_choices(admin)
+    choices = admin_routes.admin_choices(server, admin)
     assert choices["divine_out"] == divine.EXHAUSTED
     drawer = run(server.main_view(admin), "return H.adminHtml();", S={"admin": choices})
     assert f'<p class="muted">{divine.EXHAUSTED}</p>' in drawer
@@ -174,7 +176,7 @@ def _smith(c, w, name, level=20):
 
 
 def _forge_sword(c, w, game, rid=SWORD):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     recipe = c.forge_secrets[rid]
     main = next(m.id for m in c.materials.values() if m.tier == 4 and m.attribute == recipe.main.attribute)
@@ -288,7 +290,7 @@ def test_switching_rotation_off_keeps_each_original_in_its_own_row():
 def test_the_smith_does_not_blame_the_materials_for_a_divine_you_have():
     """FB-403：已經有那一件神器、再開那一爐被擋下時，掌櫃那一句是自己那一組（have_divine），不會挑到講料的「料不對，這爐開不了。」；
     原因還成立時（東西沒動）一直是那一句。"""
-    from tianxia import shopview
+    from tianxia.core import shop_base
 
     c = _content()
     w = _opened(c)
@@ -301,7 +303,7 @@ def test_the_smith_does_not_blame_the_materials_for_a_divine_you_have():
     msgs = jia.smith_forge(recipe.kind, "kuai_4", "rou_4")
     assert f"（{forge_secrets.HAVE_DIVINE}。）" in msgs
     assert p.shop_line == "have_divine"
-    line = shopview.line_text(jia.state, c, "smith")
+    line = shop_base.line_text(jia.state, c, "smith")
     assert line in c.shop_lines["smith"]["have_divine"] and line not in c.shop_lines["smith"]["refused"]
 
 

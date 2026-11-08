@@ -8,7 +8,9 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import letters, opening, prologue, weekcard
+from tianxia.features.companions import letters
+from tianxia.features.guide import opening
+from tianxia import prologue, weekcard
 from tianxia.features.faction import sides as faction_sides
 from tianxia.engine import Game
 

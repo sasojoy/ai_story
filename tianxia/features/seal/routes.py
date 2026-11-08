@@ -1,6 +1,7 @@
 """玉璽碎片的動作表（功能包 tianxia/features/seal/；原本寫在 server.py 的 MAIN_ACTIONS、ADMIN_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、admin_tools 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-奪璽單挑的放手一搏（/api/do/seal_text）是鎖外三段式，第 69 批搬進這個檔（outlock 掛鉤；battle_instance 是決戰包的，照舊經殼）。現實時間由殼給（shell.time，引擎不讀時鐘）。"""
+奪璽單挑的放手一搏（/api/do/seal_text）是鎖外三段式，第 69 批搬進這個檔（outlock 掛鉤；評分讀核心 core/battle_base，不經殼碰決戰包，第二輪第 102 批）。現實時間由殼給（shell.time，引擎不讀時鐘）。"""
+from tianxia.core import battle_base
 from tianxia.core.duel_base import Scene
 from tianxia.core.features import AdminTool, Outlock, no_gate
 
@@ -46,14 +47,14 @@ def seal_text(shell, game, text: str) -> list[str]:
     if isinstance(request, list):
         return request
     total = game.content.config.free_text_budget_seconds
-    fallback = shell.battle_instance.GambleVerdict(shell.battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+    fallback = battle_base.GambleVerdict(battle_base.DEFAULT_FREE_TEXT_SUCCESS_RATE)
     scene = Scene(request.title, request.scene)
 
     def score():
         client = shell.within_budget(game.client, total - (shell._monotonic() - started))
         if client is None and game.client is not None:
             return fallback
-        return shell.battle_instance.assess_gamble(
+        return battle_base.assess_gamble(
             client, scene, request.faction_name, request.text, request.name,
             setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
         )

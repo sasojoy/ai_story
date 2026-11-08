@@ -17,7 +17,7 @@ import pathlib
 import pytest
 from pydantic import BaseModel
 
-from tianxia import companion_agent, parley
+from tianxia.features.companions import companion_agent, parley
 from tianxia.ollama_client import _non_null, _require_in_schema
 
 ROOT = pathlib.Path(__file__).resolve().parents[2] / "tianxia"

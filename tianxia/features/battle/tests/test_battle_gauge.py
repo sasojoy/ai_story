@@ -12,7 +12,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.engine import Game
 from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning
 

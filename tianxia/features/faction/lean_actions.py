@@ -1,11 +1,11 @@
 """豪強改幫（三陣營四勝利，設計 3.2；全部拆包第 35 批；原本是 Game 上的 _lean_options、_lean_anytime、_lean_step，本體一字沒改，self 換成 ctx）。
-Game 留一行委派的：_lean_anytime（choose 查選單之前不在選單上的「改幫…」）；_lean_step 只有投靠那一串叫（join_actions.faction_step）。lean_options 第 56 批起是 here/lean 那一格，委派拿掉。
+Game 留一行委派的：_lean_step 只有投靠那一串叫（join_actions.faction_step）。lean_options 第 56 批起是 here/lean 那一格、lean_anytime 第二輪第 92 批起是 stale/lean 那一格叫的（stale_cell：不在選單上的「改幫…」），委派拿掉。
 """
 from __future__ import annotations
 
 from tianxia import wins
 from tianxia.core import bounty_base
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from .ending_actions import four_wins
 
 
@@ -25,13 +25,25 @@ def lean_options(ctx) -> list[Option]:
 
 def lean_anytime(ctx, option_id: str) -> Option | None:
     """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、人站在正在打決戰的大區，
-    選單只剩那些事）照樣收（有事件待選是例外，choose 擋：FB-820），條件跟選單上的那一顆一樣（lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
+    選單只剩那些事）照樣收（有事件待選是例外，stale_cell 擋：FB-820），條件跟選單上的那一顆一樣（lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
     只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
     不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
     （lean_step 的 _ally_follows_battle）。"""
     if ctx.world.paused_at() is not None or ctx._preparing() or ctx.state.world.ended:
         return None
     return next((o for o in lean_options(ctx) if o.id == option_id), None)
+
+
+def stale_cell(ctx, option: Option | None, option_id: str) -> Option | Refused | None:
+    """stale/lean 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）：「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收（回那一顆，核心換掉查到的）。
+    唯一的例外：有事件待選時不收（FB-820，PM 2026-10-26）——不然同一則事件裡依陣營出現的選項兩邊都挑得到。
+    回一句（Refused：伺服器傳去網頁跳提示），什麼都不動、不寫江湖紀錄。"""
+    if option is None and option_id.startswith(wins.LEAN_PREFIX):
+        found = lean_anytime(ctx, option_id)
+        if found is not None and ctx.state.pending_event is not None:
+            return Refused(ctx._log([wins.LEAN_EVENT_PENDING]))
+        return found
+    return None
 
 
 def lean_step(ctx, side: str) -> list[str]:

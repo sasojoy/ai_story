@@ -11,7 +11,7 @@ PR 說明的填法（企劃者 2026-11-05「可以，連 PR 範本一起」）�
 
 ## 改了哪一包
 
-<!-- 已經搬成包的寫 `tianxia/features/<包>/`；舊名 `tianxia/<模組>.py` 是別名的（檔裡只有 `sys.modules[__name__] = …`）寫它指到的包名；還在 engine.py 的寫 `Game` 哪一群方法（方法前綴）；全新的玩法用 `scripts/new_feature.py` 生一包。動到的核心檔也列出來，連同共用層的 `SHARED`（`tianxia/core/registry.py`）、核心的 `MODULES`（`tianxia/core/__init__.py`）、`tianxia/core/*_base.py`（下面「誰點頭」那一格要填）。 -->
+<!-- 已經搬成包的寫 `tianxia/features/<包>/`；還在 engine.py 的寫 `Game` 哪一群方法（方法前綴）；全新的玩法用 `scripts/new_feature.py` 生一包。動到的核心檔也列出來，連同共用層的 `SHARED`（`tianxia/core/registry.py`）、核心的 `MODULES`（`tianxia/core/__init__.py`）、`tianxia/core/*_base.py`（下面「誰點頭」那一格要填）。 -->
 
 ## 跑了哪些測試、幾條過
 
@@ -56,7 +56,7 @@ PR 說明的填法（企劃者 2026-11-05「可以，連 PR 範本一起」）�
 
 ## 關著不變的證明（掛開關的新功能才要）
 
-<!-- 掛開關的新功能：附 scripts/same_behavior.py compare 的結果，所有軌（不帶 --tracks 就是全部）、三種設定（season21、week7、test；不帶 --profiles 就是這三種）全部一樣。寫指令、base 與 head 的 SHA、每一軌每一種設定的結果。
+<!-- 掛開關的新功能：附 scripts/same_behavior.py compare --new <包>[,<包>] 的結果，所有軌（不帶 --tracks 就是全部）、三種設定（season21、week7、test；不帶 --profiles 就是這三種）。貼上它印的「新包帶來、扣掉的差異」清單（js、css、帶包名前綴的表、op、管理者動作），其餘全部一樣（企劃者 2026-11-08「新東西列出來，其餘一樣」）。寫指令、base 與 head 的 SHA、每一軌每一種設定的結果。
 改內容與平衡數字的 PR 不強制附（企劃者 2026-11-05「只有掛開關的新功能要」）。不是掛開關的新功能就寫「不適用」。 -->
 
 ## 改了導覽哪一節

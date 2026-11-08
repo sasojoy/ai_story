@@ -2,7 +2,7 @@
  *
  * 懸賞榜（boardHtml）：手上揭著的格子、木板上的告示（paperHtml）、放大一張紙、揭下、放棄、交差蓋朱印的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
- * 全部拆包第 65 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第65批.md）。點擊分派的 case、店面的框（shopHtml、renderShop）照舊在 app.js（殼）。
+ * 全部拆包第 65 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第65批.md）。點擊用 registerClicks 登記在這支檔；店面的框（shopHtml、renderShop）照舊在 app.js（殼）。
  */
 "use strict";
 
@@ -27,7 +27,7 @@
     const note = (n) => (n.done
       ? `<div class="note k-${esc(n.kind)} done">${face(n)}<i class="stamp">交差</i></div>`
       : `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
-        ${face(n)}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`);
+        ${face(n)}${!n.held && !n.action.enabled && n.action.why ? `<small class="why">${esc(n.action.why)}</small>` : ""}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`); // 灰的那一張寫為什麼揭不了（UI 手感乙批 5-2）
     // 剛交差的那一張（boardHanded）：伺服器那一份已經沒有它，照原本的位置再畫一下、蓋「交差」，跟著淡出（企劃者 2026-10-14 微調）
     const notes = shop.notes.slice();
     const done = S.boardStamp && !notes.some((n) => n.id === S.boardStamp.id) ? S.boardStamp : null;
@@ -125,3 +125,10 @@
     return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
       <summary>🪧 懸賞（${list.length}）${level ? `<span class="order-level">${esc(level)}</span>` : ""}</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
   }
+  async function bountiesClick(act, el, ev) {
+    switch (act) {
+        case "board-zoom": await boardZoom(el, el.dataset.id); break; // 懸賞榜點一張告示（第四節）：放大成一張紙
+        case "board-close": await boardClose(el); break; // 放回去、收起
+    } // bountiesClick
+  } // bountiesClick
+  registerClicks(bountiesClick, ["board-zoom", "board-close"]);

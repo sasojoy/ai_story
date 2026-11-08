@@ -141,3 +141,24 @@
     const body = document.querySelector(".shop-seal .shop-body");
     if (body) body.scrollTop = top;
   }
+  async function sealClick(act, el, ev) {
+    switch (act) {
+        // 玉璽碎片的獨門行動（改版第 2 批）：傳承那一列的鈕——要指定目標的開那一層，頒詔、承露直接問；那一層裡挑一邊、挑一個人（先問一次）、收起；
+        // 江湖頁碎片卡那一行跳到修練頁那一顆
+        case "seal-act": {
+          const a = sealActNow();
+          if (!a || (!a.ok && !sealBrowse(a))) { if (a && a.why) toast(a.why); break; }
+          if (a.kind in SEAL_VERB) { S.sealAct = true; S.sealSide = null; await keepScroll(render); } else sealAsk(a, null);
+          break;
+        }
+        case "seal-side": { S.sealSide = el.dataset.side; const a = sealActNow(); if (a) redrawSealAct(a); break; }
+        case "seal-pick": { // 灰著的那一列不問（FB-645 起整顆按不下去時也列得出灰的）
+          const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id);
+          if (t && a.ok && !t.why) sealAsk(a, t);
+          break;
+        }
+        case "seal-act-close": S.sealAct = false; S.sealSide = null; await keepScroll(render); break;
+        case "seal-act-go": await goTab("practice"); document.querySelector(".gear .wrow.heirloom")?.scrollIntoView({ block: "center" }); break;
+    } // sealClick
+  } // sealClick
+  registerClicks(sealClick, ["seal-act", "seal-side", "seal-pick", "seal-act-close", "seal-act-go"]);

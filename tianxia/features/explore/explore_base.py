@@ -3,7 +3,7 @@
 `_here_squads`、撿破境丹 `_legend_find`、練功分級 `_practice_tier`。Game 留 6 個一行委派（`_explore_outcome`、`_here_squads` 只有這一包自己叫，
 不留）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）。**經 ctx 叫的**：
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）。**經 ctx 叫的**：
 `_explore_weights`、`_explore_can`、`_legend_find`、`_wild_foes`（測試與 scripts/same_behavior.py 在 Game 上換掉它們，包裡直接叫模組函式就換不到）；
 `_explore_outcome`、`_here_squads` 沒有人換過，包內直接叫。擲骰順序（頭目 → 奇遇 → 比重抽一支 → 野怪／事件）、`_legend_find` 機率 0 不擲、
 序章裡不撿破境丹也不擲，都照原本；`ctx.rng` 就是原本的 `self.rng`。
@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import random
 
+from tianxia import forge_secrets, secret_recipes  # 共用規則層（殘譜、半張鑄譜）
 from tianxia import insights  # 共用規則層（這裡悟不悟得出）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬四景）
 from tianxia import renown, team, territory, training, treasures  # 核心、共用規則層
-from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
+from tianxia.events import event_candidates, pick_event  # 共用規則層（事件：候選、抽一則）
 from tianxia.models import EXPLORE_BRANCHES, ExploreBranch, Location, Squad
 
 
@@ -61,6 +62,19 @@ def legend_find(ctx, rng: random.Random | None = None) -> list[str]:
         return []
     ctx.state.player.legend_items += 1
     return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
+
+
+def scrap_find(ctx) -> list[str]:
+    """探索最後再擲一次有沒有撿到殘譜（殘譜版的口訣），記進武學譜；再擲一次半張鑄譜（打造隱藏配方設計 6.2），記進鑄譜。
+    同 _tale_clue 用自己的亂數。"""
+    s, cfg = ctx.state, ctx.content.config.secrets
+    out = []
+    seed = f"殘譜|{s.player.name}|{s.world.time}|{s.player.location}"
+    if secret_recipes.roll(cfg.scrap_chance, seed):
+        clue = secret_recipes.hear(s, ctx.content, secret_recipes.tianji_of(ctx.world), secret_recipes.SCRAP, seed)
+        if clue:
+            out.append(cfg.scrap_frame.format(clue=clue))
+    return out + forge_secrets.clue_line(s, ctx.content, ctx.world, forge_secrets.SCRAP, f"鑄殘譜|{s.player.name}|{s.world.time}|{s.player.location}")
 
 
 def explore_outcome(ctx) -> list[str]:

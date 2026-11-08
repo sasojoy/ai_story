@@ -9,11 +9,18 @@ import pytest
 from conftest import real_content
 from test_content import copy_fixture, edit_json
 
-from tianxia import companion_agent, library, skillview, team, traits
+from tianxia.features.companions import companion_agent
+from tianxia import library
+from tianxia.features.cultivation import art_view
+from tianxia import team, traits
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
-from tianxia import arts, library, mingtie, roster, signature, skillview, tactics, team
+from tianxia import arts, library
+from tianxia.features.peers import mingtie
+from tianxia import roster, signature
+from tianxia.features.cultivation import art_view
+from tianxia import tactics, team
 
 
 def _game(content=None):
@@ -74,7 +81,7 @@ def test_cards_show_the_tactic():
     line = traits.card_line(content, art)
     assert "本命〔仁義聚眾〕起手・每回合必定" in line and "回氣血 4%" in line
     _wear(game, "zhangfei_wugong", "zhangfei_neigong")
-    card = skillview.member_card(game.state, content, game.world, PLAYER)
+    card = art_view.member_card(game.state, content, game.world, PLAYER)
     assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・第 1 回合一直在" in card
 
 def test_a_tactic_on_an_ordinary_art_is_rejected(tmp_path):
@@ -113,7 +120,7 @@ def test_a_signature_art_cannot_be_melted():
     assert library.melt_art(game.state, content, game.world, "liubei_wugong") == [library.SIGNATURE_KEPT]
     assert library.melt_many(game.state, content, game.world, ["liubei_wugong"], [])[0] == library.MELT_MANY_NOTHING
     assert "liubei_wugong" in p.arts and p.stats.get("xinde", 0) == xinde
-    row = next(r for r in skillview.art_rows(game.state, content, game.world) if r["id"] == "liubei_wugong")
+    row = next(r for r in art_view.art_rows(game.state, content, game.world) if r["id"] == "liubei_wugong")
     assert row["melt"]["ok"] is False and row["melt"]["note"] == library.SIGNATURE_KEPT
     others = [a for a in p.arts if a != "liubei_wugong"]
     for a in others:  # 庫裡只剩本命時，機器人什麼都不熔
@@ -124,7 +131,7 @@ def test_a_signature_art_cannot_be_melted():
 
 # ── 原 test_fb640_figure_arts.py（整檔搬進來） ──
 # FB-640（release/1021：develop 的 FB-364 給九位歷史武將同行補了起始武學，main 的 d0ca2c25 給學來的 23 門下品武學各帶一個小戰法；
-# 兩邊各自都過，合起來正式內容載不起來，content.check_signature_arts 把人物的 starting_* 一律當本命）。PM 裁決：兩邊都留，
+# 兩邊各自都過，合起來正式內容載不起來，signature.check_signature_arts 把人物的 starting_* 一律當本命）。PM 裁決：兩邊都留，
 # 本命＝人物起始武學裡的絕學（寫本命戰法的那一門，tactics.figure_arts）；同伴起始帶的學來的下品武學照樣帶小戰法、不是本命：
 # 誰的都不算（tactics.figure_of）、情誼到了不教、名帖不寫親傳、玩家照樣在各地學得到也熔得掉；十八位大勢人物的本命一個字不變。
 
@@ -217,7 +224,7 @@ def test_companion_card_and_fight_use_the_minor_tactic(world):
     c = real_content()
     game = Game.new(c, "測試俠客", rng=random.Random(0), world=world)
     roster._seed_starting_skills(world, "huatuo", c.characters["huatuo"])
-    card = skillview.member_card(game.state, c, world, "huatuo")
+    card = art_view.member_card(game.state, c, world, "huatuo")
     # main 632cc5e5：卡上不寫「小戰法」，學來的武學招名前蓋「看家」印、本命蓋「本命」印（tactics.title_of）
     assert "看家〔搶山一腿〕" in card and "看家〔吐故納新〕" in card and "本命〔" not in card
     assert team.mate_power(game.state, c, world, "huatuo") > 0

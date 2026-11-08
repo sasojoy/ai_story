@@ -1,5 +1,5 @@
 """煉製與自創包的動作（全部拆包第 44 批）：原本 Game 上煉製頁開爐與自創五步的 16 個方法，Game 留一行委派給 server、假人、測試與核心原位、引導包。
-計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的；
+計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；
 這一包互相叫直接叫函式。規則照模組屬性叫（create.set_intent……：測試換掉模組上的，這裡照樣打得到）。
 
 鎖外三段式（A 開單、B 叫模型、C 重驗）照舊：
@@ -13,13 +13,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import fusion  # 過渡：待搬（合成與揣摩：fusion 留共用層，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia import insight_fx, journal  # 共用規則層、核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章只准照劇本合成）
-from tianxia import skillview  # 過渡：待搬（煉製頁的預覽與提示；共用規則層 SHARED_LATER）
+from tianxia import renown  # 共用規則層（首創回饋補名望）
 from tianxia.core.services import PREPARING_REFUSAL, not_while_preparing
 
-from . import create
+from . import create, forge_view
 
 if TYPE_CHECKING:
     from tianxia import naming
@@ -90,17 +90,17 @@ def forge(
 
 
 def forge_line(ctx: Game, insight_ids: list[str]) -> str:
-    return skillview.forge_line(ctx.state, ctx.content, ctx.world, insight_ids)
+    return forge_view.forge_line(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 def forge_preview(ctx: Game, insight_ids: list[str]) -> dict | None:
-    """兩格都放好時煉製頁的預覽卡（skillview.forge_preview）。只讀。"""
-    return skillview.forge_preview(ctx.state, ctx.content, ctx.world, insight_ids)
+    """兩格都放好時煉製頁的預覽卡（forge_view.forge_preview）。只讀。"""
+    return forge_view.forge_preview(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 def forge_picks(ctx: Game, insight_ids: list[str]) -> dict | None:
-    """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（skillview.forge_picks）。只讀。"""
-    return skillview.forge_picks(ctx.state, ctx.content, ctx.world, insight_ids)
+    """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（forge_view.forge_picks）。只讀。"""
+    return forge_view.forge_picks(ctx.state, ctx.content, ctx.world, insight_ids)
 
 
 # ── 自創武學（五步：執器、擺式、立意、成形、立名；規則在 create.py）──
@@ -188,3 +188,27 @@ def cancel(ctx: Game) -> list[str]:
 def view(ctx: Game) -> dict:
     """煉製頁「自創」那一塊（create.view）。只讀。"""
     return create.view(ctx.state, ctx.content, ctx.world)
+
+
+def deliver_echoes(ctx) -> None:
+    """首創名望回饋（Config.first_echo）：這一季別人照著你首創的武學或意境合了出來（兵器配方打了出來）（fusion.echo 記在 WorldState.echoes），
+    你同步時補名望——每多一個人 +fame_per，補到第幾個人記在 Echo.paid，所以一個人只算一次。好幾門一起補就合成一則紀錄。
+    做法同 _deliver_renames：合的那一下不動別人的角色，每個人自己的 Game 同步時自己補。第一季沒開著時 echoes 是空的。"""
+    p = ctx.state.player
+    rule = ctx.content.config.first_echo
+    lines, gained = [], 0
+    for entry in ctx.state.world.echoes.values():
+        co = entry.co_creator == p.name  # 論武合出來的：另一個首創者照自己的帳補（co_paid）
+        due = len(entry.followers) - (entry.co_paid if co else entry.paid)
+        if p.name not in (entry.creator, entry.co_creator) or due <= 0:
+            continue
+        if co:
+            entry.co_paid = len(entry.followers)
+        else:
+            entry.paid = len(entry.followers)
+        gained += due * rule.fame_per
+        lines.append(f"江湖上又有 {due} 人照著你首創的{entry.name}{entry.made}了出來。")
+    if not lines:
+        return
+    ctx._write(journal.ECHO, lines + renown.gain(ctx.state, ctx.content, "fame", gained))  # 名聲設計 3.2
+    ctx._save_season()  # 補到第幾個人記在共用賽季裡

@@ -82,7 +82,7 @@ def test_silver_donate_refused():
 
 
 def test_mentor_adds_ten_within_the_cap_once():
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
 
     game = _game(at="yingchuan")  # 潁川有醫館、是城鎮
     s, c = game.state, game.content
@@ -119,7 +119,7 @@ def test_mentor_only_at_a_clinic_town():
 
 
 def test_furnace_shifts_the_base_odds_once():
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _game(at="yingchuan")
     s, c, w = game.state, game.content, game.world
@@ -166,7 +166,7 @@ def test_buying_a_legend_pill_at_the_clinic_two_a_season():
 
 def test_clinic_pills_and_xinde_pills_keep_separate_counts():
     """FB-370：醫館用銀兩買的與修練頁用心得換的各記各的（以前 PlayerState 有兩個同名欄位，兩條路讀寫同一個數）。"""
-    from tianxia import cultivation
+    from tianxia.features.cultivation import cultivation
 
     game = _game(at="yingchuan", money=1000)
     p = game.state.player

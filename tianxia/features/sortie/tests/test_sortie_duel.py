@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, text_of, tick
-from tianxia import conquest, sortie_duel
+from tianxia import conquest
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.characters import CharacterStore
 
 
@@ -285,7 +286,8 @@ def test_defender_wins_pulls_the_attackers_bar(monkeypatch):
 
 def test_holding_by_answering_counts_for_the_defend_order_and_the_card_says_so(monkeypatch):
     """約戰開著時守城是應戰守住（巡哨、傳道不再算）：守方贏了照拉之前的清單記守城，軍令卡寫「去應戰、守住」。"""
-    from tianxia import atlas, orders
+    from tianxia import orders
+    from tianxia.features.military import order_cards
     from tianxia.state import Order
 
     c, world = _pair()
@@ -299,7 +301,7 @@ def test_holding_by_answering_counts_for_the_defend_order_and_the_card_says_so(m
     conquest.push(w, c, "zhuo_county", "huang", "黃巾兵", 20.0, "attack")
     g._save_season()
     assert orders.defend_places(c, w, order) == ["zhuo_county"]
-    assert "去應戰、守住" in atlas.order_how(g.state, c, order)
+    assert "去應戰、守住" in order_cards.order_how(g.state, c, order)
     _go(c, world, "乙")
     _answer(c, world, "甲", _only(world).id)
     rounds_go(monkeypatch, "落敗")

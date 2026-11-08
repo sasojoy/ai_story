@@ -1,7 +1,7 @@
 """出陣（投靠了陣營的人在領地爭奪的區塊上攻、守；混戰；出陣回報；約戰；舊遊歷、序章雪恥、跟自家隊伍操練、守勢）。功能包，開發規範手冊 3.2；
 主動搬六包第 1、2 批與全部拆包第 17 批（出陣三）搬進來。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- rules.py：純規則（原 tianxia/sortie.py；那個名字留成指到這裡的別名）
+- rules.py：純規則（原 tianxia/sortie.py）
 - actions.py：原本 Game 上出陣本體、混戰、出陣回報的 21 個方法（Game 留一行委派），與 act:train 那一格的 train_*（第 11 批）
 - duel_rules.py、duel_actions.py：出陣約戰（第 2 批）
 - train_actions.py：舊遊歷、序章雪恥、跟自家隊伍操練、守勢、遊歷推大勢（第 17 批；Game 留 8 個一行委派）
@@ -33,6 +33,16 @@ class SortieFeature(Feature):
     player_fields = ("sortie_day", "sorties_today", "sortie_treasures", "sortie_horses",
                      "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today")
     carried = ("sortie_day", "sorties_today")  # 換季不能多出一輪陣（season.carry 那一格照帶）；掉寶的上限跟著新的一季重來
+
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
+            "_clash_won": False,
+            "_sortie_marked": False,
+            "_sortie_moved": 0.0,  # 這一下出陣自己推（拉）動了多少（_push_progress 加；出陣回報讀）
+            "_sortie_flipped": False,  # 這一下出陣推滿、當場易手
+        }
 
     def enabled(self, ctx) -> bool:
         """一直開著（全部拆包第 17 批）：act:train 那一格每一季都是這一包的——地盤（＝領地爭奪，`rules.on`＝`territory.on`）開著是出陣

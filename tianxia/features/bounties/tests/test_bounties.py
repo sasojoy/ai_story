@@ -10,7 +10,9 @@ import pytest
 
 from conftest import install_season_one, real_content
 from bounty_ctx import bounty_ctx
-from tianxia import bot, bot_policy, bounties, calendar, ranger, rules
+from tianxia import bot, bot_policy
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar, ranger, rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import FactionDef
@@ -19,7 +21,8 @@ from tianxia.state import Bounty, BotProfile, GameState, PlayerState, WorldState
 from tianxia.world import advance_world_state, season_end_time, settle_season_start
 from tianxia.world_state import fresh_season
 from conftest import real_content
-from tianxia import bounties, calendar
+from tianxia.features.bounties import rules as bounties
+from tianxia import calendar
 from tianxia.state import Bounty
 from tianxia.world_state import fresh_season, season_length_days, stamp_season
 
@@ -639,14 +642,20 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     assert not content.config.season_one and content.config.bounties.enabled
     seen: dict[str, tuple[int, int]] = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
     step = [0]
+    at_600: list[list[str]] = []  # 第 600 步之後那一刻的江湖紀錄標題（開局那一次 observe 也算，所以是第 601 次）
 
     def observe(game):
         step[0] += 1
         for b in game.state.world.bounties:
             if b.kind != "wanted":
                 seen.setdefault(b.id, (step[0], b.week))
+        if step[0] == 601:
+            at_600.append([e.title for e in game.state.journal])
 
     game = bot.play_season(content, 1, world=open_world(tmp_path / "season.db"), observe=observe)
+    # 整季機器人照出陣走（出陣探索與地盤設計第七節；以前 tests/season/test_core_loop_bots.py 另跑 600 步，第 108 批併進這一季：
+    # play_season 的迴圈不看 max_steps，第 601 次 observe 那一刻的江湖紀錄就是跑 600 步的那一份，一次性腳本比過）：前 600 步有探索
+    assert at_600 and any(t.startswith("探索") for t in at_600[0])
     season = game.state.world
     batches: dict[int, set[int]] = {}
     for at, week in seen.values():

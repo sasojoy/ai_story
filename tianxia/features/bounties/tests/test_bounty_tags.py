@@ -8,7 +8,8 @@ from test_season21_daily import _first, _game
 
 import server
 import webharness
-from tianxia import bounties, shopview
+from tianxia.features.bounties import rules as bounties
+from tianxia.features.bounties import shop_view as bounties_shop
 
 pytestmark = pytest.mark.whole_content
 
@@ -48,7 +49,7 @@ def test_a_prize_gets_its_own_red_tag():
 def test_the_board_notes_carry_the_corner_and_tags():
     game = _ranger()
     game.choose("act:bounties")
-    view = shopview.board_view(game.state, game.content, game.world)
+    view = bounties_shop.board_view(game.state, game.content, game.world)
     note = next(n for n in view["notes"] if n["kind"] == "strike")
     assert note["corner"] == "120" and note["tags"][0]["v"] == "120" and note["level"] == "賞照你第 20 級"
 
@@ -98,7 +99,7 @@ def test_the_notice_face_carries_a_short_gift_and_the_prize():
     b = _first(s, "strike")
     b.prize = "treasure"
     game.choose("act:bounties")
-    view = shopview.board_view(s, game.content, game.world)
+    view = bounties_shop.board_view(s, game.content, game.world)
     note = next(n for n in view["notes"] if n["id"] == b.id)
     assert note["gift"] == "＋二階" and note["prize_chip"] == "重賞"
     scout = next(n for n in view["notes"] if n["kind"] == "scout")
@@ -120,7 +121,7 @@ def test_the_held_seal_moves_further_left_on_wide_screens():
     """FB-390：寬過 641px 時「已揭」換成 13px，揭著的朱印照新的字寬往左讓（手機也從 34px 挪到 38px：量到壓了 3px）。"""
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "shop.css").read_text(encoding="utf-8")
     phone, wide = css.split("@media (min-width: 641px)", 1)[0], css.split("@media (min-width: 641px)", 1)[1]
     assert ".shop-board .note.held .corner { right: 38px; }" in phone
     assert ".shop-board .note.held .corner { right: 46px; }" in wide

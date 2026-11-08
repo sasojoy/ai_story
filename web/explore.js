@@ -29,3 +29,47 @@
     const form = saying ? `<form class="free answer gather-say" id="gather-say-form"><input class="input" name="text" maxlength="20" placeholder="${esc(GATHER_SAY_HINT)}" aria-label="${esc(say.label)}"><button class="btn primary small" type="submit">${esc(GATHER_SAY_GO)}</button></form>` : "";
     return `${head}<div class="gather-branches" role="group" aria-label="找素材">${cells}${form}</div>`;
   }
+
+  // 找素材的「自己說」（第 32 項）：送出後要等模型評這個找法（同隨口應對），按鈕先寫「盤算中……」；等候的話照 waitLineFor(GATHER_SAY_ID)
+  const GATHER_SAY_WAIT = "盤算中……"; // 待 joy 潤
+  async function gatherSay(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = GATHER_SAY_WAIT;
+      const stop = watchQueue(submitBtn, GATHER_SAY_WAIT);
+      try {
+        const r = await api("/api/do/gather_text", { text });
+        S.gatherSaying = false;
+        S.wheelSel = null; // 同按了別的探索：收起展開的探索（分支展開與否照記著，S.gatherOpen）
+        applyMain(r.main);
+        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        // 被擋下來的那一句（字數不對、換了做法）在江湖紀錄裡沒有，用提示泡泡講；做成了的結果在「剛剛」
+        if (said && !said.startsWith("你：")) toast(said);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        stop();
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        submitBtn.textContent = GATHER_SAY_GO;
+      }
+    }, waitLineFor(GATHER_SAY_ID));
+  }
+
+  async function exploreClick(act, el, ev) {
+    switch (act) {
+        case "gather-wheel": // 找素材分支（第 32 項）：「找素材」點了在它底下攤開（再點一次收起）；輸入框跟著收
+          S.gatherOpen = !S.gatherOpen;
+          S.gatherSaying = false;
+          renderPage();
+          if (S.gatherOpen) revealMoveCard();
+          break;
+    } // exploreClick
+  } // exploreClick
+  registerClicks(exploreClick, ["gather-wheel"]);
+  async function exploreForm(form, data) {
+      if (form.id === "gather-say-form") {
+        if (!data.text.trim()) return;
+        await gatherSay(form, data.text.trim());
+      } // exploreForm
+  } // exploreForm
+  registerForms(exploreForm, ["gather-say-form"]);

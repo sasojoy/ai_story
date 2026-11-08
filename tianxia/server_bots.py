@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from .core.name_base import FAMOUS_NAMES, reserved_names  # noqa: F401  全部拆包第 58 批搬進核心，這裡 re-export 同一批物件
+from .core.name_base import FAMOUS_NAMES, active, reserved_names  # noqa: F401  全部拆包第 58 批（active 第二輪第 87 批）搬進核心，這裡 re-export 同一批物件
 from .models import Config
 from .state import BotProfile, Personality
 
@@ -102,8 +102,3 @@ def act_chance(profile: BotProfile, config: Config) -> float:
 def strength(config: Config, profile: BotProfile) -> float:
     """這個假人挑最高分選項的機率：總強度旋鈕加上個性的加減，限制在 0～1。"""
     return max(0.0, min(1.0, config.bot_strength + TEMPERS[profile.personality].strength_bonus))
-
-
-def active(profile: BotProfile, season_number: int) -> bool:
-    """這一季被叫醒、替某個陣營效力中（不是退隱）。"""
-    return profile.faction is not None and profile.season_number == season_number

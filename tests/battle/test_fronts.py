@@ -10,7 +10,10 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, classic_rules, real_content
-from tianxia import battle_instance, bot_policy, front_lines, mapview, rules, team, timetable, world
+from tianxia.features.battle import instance as battle_instance
+from tianxia import bot_policy, front_lines
+from tianxia.features.map import mapview
+from tianxia import rules, team, timetable, world
 from tianxia.features.map import layers
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult

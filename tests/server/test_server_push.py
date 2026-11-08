@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
 import server_push
-from tianxia.battle_instance import BattleInstance, BattleParticipant
+from tianxia.features.battle.instance import BattleInstance, BattleParticipant
 from tianxia.state import FigureState, Lock, Order, Rumor, TimelineResult, WorldState
 
 

@@ -8,6 +8,11 @@
 不是歷史人物本來就有的固定威力，呼應設計文件原文「你（或你創的武學）在天下武學排名上
 留下什麼紀錄」），依威力排名取前 TOP_N 名。小規模工作室試玩（十幾人以內，見設計文件
 8.1），同步掃描所有存檔的成本可以忽略，不需要另外維護一份即時更新的排行榜快取。
+
+共用規則層（第二輪第 88 批收進 registry.SHARED）：不 import 功能包，連函式裡都不行（本命兵器那一筆的鍵讀 core/signature_base，卡片讀同一層的 art_cards：牽動的模組多、
+world 又 import 這裡，所以照舊延後）。改這一份 scripts/test_for.py 只挑自己檔名＋煙霧＋邊界（收進來之前挑 9 個檔）。另外跑（-n 4）直接讀到它的：
+tests/figures/ 的 test_figure_life_batch3、test_finale；tests/gear/test_board_cards；tests/server/test_server；tianxia/features/ 的 bout/tests/test_arena、mall/tests/test_mall_bots、
+seal/tests/test_seal_acts_hidden、test_seal_revamp_hidden。
 """
 from __future__ import annotations
 
@@ -44,6 +49,7 @@ BOARDS: tuple[tuple[str, str, str], ...] = (
     ("內功", "內功榜", "身上那門內功的評分；一樣高看威力"),  # 待 joy 潤
     ("擂台", "擂台榜", "擂台上的名次；前十名有稱號"),
 )
+WORN = "_worn"  # compute_boards 回的整張裡「每個人戴的頭銜」那一格（稱號與官職開著、有人戴才有）
 STAT_BOARDS = {"善人": ("good", "善名"), "惡人": ("evil", "惡名"), "名人": ("fame", "名望")}
 MASTERED = "絕學"
 
@@ -58,10 +64,13 @@ def compute_boards(
     board: dict[str, list] = {kind: [] for kind, _, _ in BOARDS}
     season_number = world.get_season_number()
     firsts = world.season_firsts()
+    worn: dict[str, dict] = {}  # 稱號與官職（features/titles）開著：每個人此刻戴的那一個，榜單名字後面畫小印
     for state in (characters or open_characters()).all():  # 讀不懂的存檔 all() 已經跳過
         p = state.player
         if p.season_number != season_number:
             continue
+        if content.config.titles.enabled and p.titles_worn.get("name"):
+            worn[p.name] = dict(p.titles_worn)
         member = p.member
         for slot, kind in (("neigong_id", "內功"), ("wugong_id", "武學")):
             skill_id = getattr(member, slot)
@@ -90,6 +99,8 @@ def compute_boards(
         else:
             rows.sort(key=lambda row: (tuple(-v for v in row[1]), row[0]))
         board[kind] = rows if top is None else rows[:top]
+    if worn:
+        board[WORN] = worn  # type: ignore[assignment]  不是一張榜：view 拿來畫小印，BOARDS 不列它
     return board
 
 
@@ -145,9 +156,13 @@ def view(board: dict[str, list], me: str | None = None, top: int = TOP_N) -> lis
     """見聞「榜單」分頁的資料：一張榜一筆（id、標題、說明、前 top 名），board 是整張（compute_boards(top=None)）。
     me 不在前 top 名、但在榜上時多一筆 mine（你排第幾、那一段）。"""
     out = []
+    worn = board.get(WORN) or {}
     for kind, label, note in BOARDS:
         rows = board.get(kind, [])
         entry = {"id": kind, "title": label, "note": note, "rows": [_view_row(kind, row, i, me) for i, row in enumerate(rows[:top], 1)]}
+        for r in entry["rows"] if worn else ():
+            if r["name"] in worn:
+                r["title"] = worn[r["name"]]
         if me is not None:
             at = next((i for i, row in enumerate(rows, 1) if row[0] == me), None)
             if at is not None and at > top:
@@ -165,9 +180,9 @@ def art_card(
     content: Content, world: WorldStateStore, board: dict[str, list], kind: str, name: str,
     me: str | None = None, characters: CharacterStore | None = None, top: int = TOP_N,
 ) -> dict | None:
-    """武學榜、內功榜那一列的唯讀功法卡（skillview.shown_art）：board 是整張（compute_boards(top=None)，伺服器的快取）。
+    """武學榜、內功榜那一列的唯讀功法卡（art_cards.shown_art）：board 是整張（compute_boards(top=None)，伺服器的快取）。
     name 不在那張榜的前 top 名、也不是你自己，或主人換了季、身上那一欄空了，回 None。"""
-    from . import skillview  # skillview 牽動的模組多，world 也 import 這裡：用到才 import，免得繞成圈
+    from . import art_cards  # art_cards 牽動的模組多，world 也 import 這裡：用到才 import，免得繞成圈
 
     if kind not in ("武學", "內功"):
         return None
@@ -177,21 +192,22 @@ def art_card(
     state = (characters or open_characters()).load(name)
     if state is None or state.player.season_number != world.get_season_number():
         return None
-    card = skillview.shown_art(state, content, world, kind)
+    card = art_cards.shown_art(state, content, world, kind)
     return None if card is None else {**card, "owner": state.player.name}
 
 
 def gear_card(
     content: Content, world: WorldStateStore, season: int, ref: str, characters: CharacterStore | None = None,
 ) -> dict | None:
-    """神器譜那一筆的唯讀裝備卡（skillview.shown_gear）：ref 是 Game.divine_book_view 那一筆的 ref。原品還在主人身上、裝備庫或寄放處
+    """神器譜那一筆的唯讀裝備卡（art_cards.shown_gear）：ref 是 Game.divine_book_view 那一筆的 ref。原品還在主人身上、裝備庫或寄放處
     就照那一件畫（淬煉、磨損照實）；不在了（換季、內容拿掉）照譜上記的種類、屬性、階畫。找不到那一筆回 None。"""
-    from . import forge_secrets, signature_arms, skillview
+    from . import art_cards, forge_secrets
+    from .core.signature_base import REF
     from .state import Equipment
 
     owner, item, name, live = None, None, "", True
-    if ref.startswith(signature_arms.REF):
-        cid = ref[len(signature_arms.REF):]
+    if ref.startswith(REF):
+        cid = ref[len(REF):]
         claim = next((claims[cid] for s, claims in world.signature_records() if s == season and cid in claims), None)
         arm = next((a for a in content.gear.signature_arms if a.character == cid), None)
         if claim is None or arm is None:
@@ -213,7 +229,7 @@ def gear_card(
         live = item is not None
         item = item or Equipment(slot=find.slot, id="譜", name=find.name, kind=find.kind, attribute=find.attribute, tier=find.tier,
                                  original=True, secret=find.secret)
-    return {**skillview.shown_gear(content, item, live), "name": name, "owner": owner, "season": season}
+    return {**art_cards.shown_gear(content, item, live), "name": name, "owner": owner, "season": season}
 
 
 TOP_CONTRIB = 5  # 結算畫面每個陣營列幾名（第一季設計 13.3：各陣營貢獻最高的前幾名）

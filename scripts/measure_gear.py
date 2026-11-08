@@ -42,7 +42,11 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_gear_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import armor, bot, bot_policy, bounties, database, naming, orders, smithing, team  # noqa: E402
+from tianxia import armor, bot, bot_policy  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database, naming, orders  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
+from tianxia import team  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -84,7 +88,7 @@ def _steer(game, options, rng) -> str | None:
     return "act:train" if "act:train" in ids else None
 
 
-def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
+def run(seed: int, profile: str | None, armor_on: bool, steer: bool, max_steps: int | None = None) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.armor.enabled = armor_on
     content.config.mounts.enabled = False  # 防具那一項只比防具：坐騎固定關著，數字才跟裝備一量的對得上（坐騎看 measure_mounts）
@@ -194,7 +198,7 @@ def run(seed: int, profile: str | None, armor_on: bool, steer: bool) -> dict:
             mock.patch.object(armor, "buy", buy), mock.patch.object(armor, "repair", repair), \
             mock.patch.object(smithing, "forge", forge), mock.patch.object(smithing, "temper", temper), \
             mock.patch.object(bot, "pick", pick):
-        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(armor_on)}.db"), observe=observe)
+        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(armor_on)}.db"), observe=observe, **({"max_steps": max_steps} if max_steps else {}))
     p = game.state.player
     season = game.state.world
     return {
@@ -217,6 +221,7 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     parser.add_argument("--profile", default=None)
     parser.add_argument("--steer", action="store_true", help="一半的時候照手上的懸賞、軍令走（週末那一組用，同 measure_sanren）")
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     content = load_content(ROOT / "content", profile=args.profile)
     print(profile_line(content, args.profile) + ("（照手上的事走）" if args.steer else ""), flush=True)
@@ -227,7 +232,7 @@ def main() -> None:
     print(f"對照（設計 4.1 照表算，不含身法與回血；一階下品對上內功 {cut:.0%}）：{ref}", flush=True)
     for seed in args.seeds:
         for on in (False, True):
-            r = run(seed, args.profile, on, args.steer)
+            r = run(seed, args.profile, on, args.steer, args.max_steps)
             lasts = "—" if r["lasts"] is None else f"{r['lasts']:.1f}"
             after = "—" if r["after_hard_win"] is None else f"{r['after_hard_win']:.0%}"
             print(f"種子 {seed} 防具{'開' if on else '關'}：遊歷野怪 {r['fights']} 場（勝率 {r['win']:.0%}）、"

@@ -1,6 +1,6 @@
 """一條線包的動作（全部拆包第 30 批：原本 Game 上的 10 個方法，計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.1）。
 Game 留 10 個一行委派（server、假人、腳本、測試在叫的；story_act、story_fight、story_bout 只有這一包叫，不留）。第一個參數 ctx 是 Game（手冊 3.3）；
-叫回 Game 的只用 tianxia/core/services.py 那張清單上的；這一包互相叫直接叫函式。最後四段（story_menu、story_options、close_season、story_title）是核心原位
+叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式。最後四段（story_menu、story_options、close_season、story_title）是核心原位
 （答題的選單、「未了之事」那一顆、換季收線、江湖紀錄的標題）叫的本體，story_title 與 story_act 接 choose 掛鉤。
 
 章回主線 chapters 在這個檔載入的時候就 import（模組層，不能晚）：它載入時往 storyline.TASKS 登記「章回的一拍」（chapter_beat），原本是 engine 在模組層 import 它，
@@ -165,7 +165,7 @@ def story_title(ctx: Game, arg: str) -> str:
 
 
 def scene(ctx: Game) -> str | None:
-    """自己眼前的場景卡（接縫掛鉤；原本 Game._own_scene_text 有所感、取名那兩支之後的一支）：一條線的答題，場景寫這一題（選單上是答案）；沒有答題是 None。"""
+    """自己眼前的場景卡（場景掛鉤 Feature.scenes，SCENE_ORDER 的 own/story；原本 Game._own_scene_text 有所感、取名那兩支之後的一支）：一條線的答題，場景寫這一題（選單上是答案）；沒有答題是 None。"""
     s, c = ctx.state, ctx.content
     question = storyline.question_text(s, c) if s.player.story_open is not None else None
     if not question:

@@ -7,8 +7,8 @@ import pytest
 
 from tianxia.atlas import location_view
 from tianxia.content import load_content
-from tianxia.mapart import bezier_point, bezier_tail, fmt, icon_kind, icon_svg, mix, road_control, terrain
-from tianxia.mapview import (
+from tianxia.features.map.mapart import bezier_point, bezier_tail, fmt, icon_kind, icon_svg, mix, road_control, terrain
+from tianxia.features.map.mapview import (
     LEGEND_ICONS, LEGEND_LAYERS, LEGEND_RING, LEGEND_STATES, LEGEND_STRIKE, MINI_HEIGHT, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE,
     legend_data, render_map, render_minimap, text_box, text_width,
 )

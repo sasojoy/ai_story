@@ -6,7 +6,8 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import foreshadow, weekcard
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import weekcard
 from tianxia.features.faction import sides as faction_sides
 from tianxia.engine import Game
 

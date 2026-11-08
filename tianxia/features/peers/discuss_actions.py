@@ -1,6 +1,6 @@
 """論武的動作（功能包 tianxia/features/peers/；原本是 Game 上的 discusses_left、discuss_items、_discuss_cost、discuss_refusal、discuss_invite、
 _discuss_partner、discuss_request、_discuss_forge、discuss_problem、discuss_invite_problem、discuss_item_problem、_discuss；全部拆包第 38 批搬進來，行為一個字不變）。
-ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
+ctx 是 Game；只叫 tianxia/core/services_list.md 那張清單上的方法。
 
 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半。走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、
 不佔你的持有）；持有上限、「已經有了」照舊各自擋。武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import gender, insights, naming
-from tianxia import fusion  # 過渡：待搬（合成與揣摩 fusion，SHARED_LATER）
+from tianxia import fusion  # 共用規則層（合成與揣摩）
+from tianxia.core import identity_base  # 綁手機才能論武（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import presence
 from tianxia.rules import season_one
 
@@ -82,6 +83,8 @@ def refusal(ctx, other: Game) -> str | None:
 
 def send(ctx, other: Game, item: str) -> list[str]:
     """玩家卡上的「論武・以 X」：帶著你要出的那一樣發一張邀請，對方在卡上挑他出的那一樣答應才開爐。"""
+    if not identity_base.phone_ok(ctx, "discuss"):  # 只問發起的人（第 205 批）；答應的那一方由 answer_invite 擋
+        return [identity_base.PHONE_NEEDED]
     s = ctx.state
     problem = refusal(ctx, other)
     if problem is not None:
@@ -109,6 +112,8 @@ def request(ctx, inv, other: Game, item: str) -> naming.NamingRequest | None:
     C 段（_discuss）一定會擋的先問（discuss_invite_problem、discuss_item_problem：他正忙、論滿了、你挑的那一樣合不成……）：
     成不了就不開單、不叫模型，呼叫端照「不必取名」直接走 C 段，回的話、邀請作廢與通知都同以前，只是不等模型（FB-245）。
     C 段照樣重驗（A 到 C 之間狀態可能變）。"""
+    if not identity_base.phone_ok(ctx, "discuss"):  # 答應的人沒綁手機：不開單、不叫模型，C 段由 answer_invite 擋（第 205 批）
+        return None
     if inv is None or inv.kind != "discuss":
         return None
     if invite_problem(ctx, inv, other) is not None or item_problem(ctx, inv, other, item) is not None:

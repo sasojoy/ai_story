@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 
 import server
 from conftest import next_season
-from tianxia import bot, skillview
+from tianxia import bot
+from tianxia.features.cultivation import art_view
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
@@ -65,7 +66,7 @@ def test_the_status_bar_offers_the_pill(game):
 
 
 def test_the_bag_lists_the_pills(game):
-    text = skillview.bag_text(game.state, game.content)
+    text = art_view.bag_text(game.state, game.content)
     assert "回體丹 ×20" in text and "服丹" in text
 
 

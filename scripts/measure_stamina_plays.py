@@ -21,7 +21,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import ambush, database, territory, works  # noqa: E402
+from tianxia.features.stamina_plays import ambush_rules as ambush  # noqa: E402
+from tianxia import database, territory  # noqa: E402
+from tianxia.features.stamina_plays import works_rules as works  # noqa: E402
 from tianxia import world as world_mod  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import load_content  # noqa: E402

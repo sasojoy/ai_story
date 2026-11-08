@@ -9,12 +9,13 @@
 
 ## 補充說明（這一包的東西在哪）
 
-- `notices.py`（原 `tianxia/notices.py`，舊名留成 `sys.modules` 別名）：五種事，純函式，只讀存檔與決戰。
+- `notices.py`（原 `tianxia/notices.py`）：五種事，純函式，只讀存檔與決戰。送信日走 `ctx.mail_day_at`（人物情誼包的服務），不再經殼碰 `letters`（第二輪第 102 批）。
+- **「客服」種類**（J 波第 211 批）：`Kind` 多 `"support"`，`notices.kinds(config)` 在客服包開著（`Config.support.enabled`）時才多這一種，關著等於 `KINDS`（`KINDS` 本身不動，關著時 `/api/push` 的回應不變）；`routes.py` 三處改叫 `kinds(shell.CONTENT.config)`，`web/notify.js` 的 `PUSH_KIND_NAMES` 多 `["support","客服"]`、只在伺服器的 kinds 有這個鍵才畫。推播的字在客服包的 `routes.py`（`PUSH_TEXT`，包不 import 別包），推是客服包經 `WEB_PUSH` 送的；玩家關掉「客服」的設定留在 push 小檔。
 - `webpush.py`（原 `server_push.py` 下半段，連同 `cryptography` 的 try-import）：RFC 8291 加密、RFC 8292 VAPID 簽名、`PushStore`、`WebPush`。沒有 tianxia 的 import。`server_push.py` 檔尾把十四個名字原樣再匯出（`server.py`、測試、`same_behavior` 讀 `server_push.<名字>`）。
 - `routes.py`：看守一輪 `notice_round`、`_notice_keys`、開看守 `start_web_push`、`web_push_line`，加上五條 `/api/push*` 與 `/sw.js`（路由搬、`web/sw.js` 檔留在 `web/` 原位）。
 - 掛鉤只接 `routes`、`threads`。`threads` 叫殼的 `start_web_push`；`main()` 原本在 `print(web_push_line(...))` 下一行直接叫它，現在經 `start_threads`（晚幾行、在 `start_narration` 之後，都在 `uvicorn.run` 之前，沒有輸出、沒有順序依賴；退版：把那一行放回去、`threads` 改回 `None`）。`enabled` 回 `True`。
 - 選項前綴：沒有。`choose`、`bot_policy.py`、`bot.py`、`bot_runner.py` 都沒有手機通知。假人沒有帳號，進不了訂閱名單。
-- 核心要用的：`tianxia/core/services.py` 的 `# notify`：看守在行動鎖內叫 `game.morning_mail(now)`（主人人物情誼包，Game 上一行委派）。
+- 核心要用的：`tianxia/core/services_list.md` 的 `# notify`：看守在行動鎖內叫 `game.morning_mail(now)`（主人人物情誼包，名字掛在那一包的 `game_api.py`；這一包自己沒有表）。
 - SSE 那一半（`server_push.py` 的 `PushHub`、`watch_world`、`sse_stream`，`server.py` 的 `HUB`、`/api/events`）是殼，沒搬。
 
 ## 認領的欄位（手冊 3.5）
@@ -29,11 +30,11 @@
 
 ## 測試
 
-整檔搬進 `tests/`：`test_web_push.py`（加密與簽名、五種事、09:00 來信、訂閱 API 與看守；原 `tests/server/test_web_push.py`，只改說明字；有一條 `@pytest.mark.smoke`）、`test_notify_package.py`（有登記、五條路由與 `/sw.js`、舊名是同一個物件、`main()` 經掛鉤開看守）。`pytest tianxia/features/notify/tests -n 4`。
+整檔搬進 `tests/`：`test_web_push.py`（加密與簽名、五種事、09:00 來信、訂閱 API 與看守；原 `tianxia/features/notify/tests/test_web_push.py`，只改說明字；有一條 `@pytest.mark.smoke`）、`test_notify_package.py`（有登記、五條路由與 `/sw.js`、`main()` 經掛鉤開看守）。`pytest tianxia/features/notify/tests -n 4`。
 
 **另外要跑的混合檔**（含手機通知的測試，但檔案不屬於這一包，不拆；`test_for` 改這一包挑不到）：
 
-- `tests/server/test_server.py -k "main or users or push"`（`_users_in_server` 掃 `server.py` 與各包 `routes.py`、`test_main_starts…`）、`tianxia/features/battle/tests/test_battle_shell.py -k push`（推送指紋那兩條，第 61 批搬去決戰包）
+- `tests/server/test_server.py -k "main or users or push or fingerprint"`（`_users_in_server` 掃 `server.py` 與各包 `routes.py`、`test_main_starts…`；推送指紋那幾條第二輪第 102 批搬回來）
 - `tianxia/features/companions/tests/test_relations_letters.py`（`Game.morning_mail`）
 
 注意：`tests/server/test_push.py` 測的是推力規則（`tianxia/push.py`），不是這一包的（總表附錄丙把它歸手機通知是誤判）。

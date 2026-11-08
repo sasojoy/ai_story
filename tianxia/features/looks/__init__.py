@@ -11,6 +11,7 @@ from tianxia.core.features import Feature
 class LooksFeature(Feature):
     name = "looks"
     prefix = None  # 換裝走 /api/looks/…，選單上沒有 looks: 的選項；假人不換
+    web = ("looks.js", "looks.css")
     content = ("looks.json",)
     player_fields: tuple[str, ...] = ()  # 穿哪一套記在錢包那一側（mall_entitlements），帳號的、換季照帶，不在角色上
     carried: tuple[str, ...] = ()

@@ -7,12 +7,12 @@
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`TravelFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`move`、`road`（`choose` 回 `Outcome`：標題先算，前往寫「前往 <地點>」、折返跟前往同一個標題、路上小事寫它自己的名字）、`bot_always`＝`road:`、`verbs()`＝`halt`（`run`＝`go_actions.halt`、`title`＝「喊停」）與 `part`（`run`＝`party.part_ways`、`title`＝「分道揚鑣」）、`routes`、`content`＝`road_sights.json`（測試內容那一份在 `tests/content/`，全部拆包第 63 批） |
-| `menu.py` | 原本 `Game._move_option`、`_back_way`、`_back_option`、`_road_task_options`、`set_move_mode`；`Game` 留 4 個一行委派（`_back_way` 只有包自己叫，沒有委派） |
+| `menu.py` | 原本 `Game._move_option`、`_back_way`、`_back_option`、`_road_task_options`、`set_move_mode`；`Game` 上的名字掛在 `game_api.py` 的表（`_back_way` 只有包自己叫，沒有委派） |
 | `road_actions.py` | 原本 `Game._move`、`_road`、`_road_ends`、`_road_rewards_used`、`_road_reward_due`、`_count_road_reward`、`_road_reopen`、`_road_think`、`_road_ask`、`_road_gather`、`_road_sight`；第 48 批 `Game` 上 `_road_reward_due`、`_count_road_reward`、`_road_sight` 三個委派拿掉（`party.share_road`、`departure.arrivals` 直接叫）；`think`／`ask`／`gather` 把收穫跟訊息一起回傳（`(訊息, 收穫)`），`road` 再交給 `party.share_road`，`Game._road_gain` 不再寄放 |
-| `departure.py` | 原本 `Game._depart`、`_arrivals`、`_arrive`、`_journey_line`；`Game` 留 4 個一行委派（`_depart` 給人物帶路、腳本與測試，包內的 `go_actions`／`road_actions` 照舊經 `ctx._depart` 叫；`_arrivals` 給 `sync`、`advance`；`_arrive` 給核心契約測試鎖事件接法；`_journey_line` 照 `core/services.py` 留著，狀態列的 `journey` 那一格第 66 批起直接叫本體）。`_real_minutes` 留核心 |
-| `party.py` | 原本 `Game._join`、`join_refusal`、`_party_expires`、`_party`、`party_view`、`leave_party`、`_part_ways`、`_lead`、`_partners`、`_share_road`；`Game` 留 3 個一行委派（`_join` 給玩家互動包、`join_refusal` 給假人回結伴邀請、`party_view` 給殼的 `/api/main`；`_party_expires` 第 55 批換成 `sync.deliver` 的 `party` 那一格，拿掉），其餘呼叫端都在包內 |
-| `go_actions.py` | 原本 `Game._halt`、`travel`、`travel_refusal`；`Game` 留 `travel`、`travel_refusal` 兩個一行委派 |
-| `bots.py` | 假人的分數（原 `bot_policy.score` 的 `move:` 那一段）：要 `profile` 與 `bot_policy` 的七個私有函式，經 `from tianxia import bot_policy` 延後 import（過渡） |
+| `departure.py` | 原本 `Game._depart`、`_arrivals`、`_arrive`、`_journey_line`；`Game` 上的名字掛在 `game_api.py` 的表（`_depart` 給人物帶路、腳本與測試，包內的 `go_actions`／`road_actions` 照舊經 `ctx._depart` 叫；`_arrivals` 給 `sync`、`advance`；`_arrive` 給核心契約測試鎖事件接法；`_journey_line` 沒人經 `Game` 叫，第二輪第 72 批拿掉，狀態列的 `journey` 那一格第 66 批起直接叫本體）。`_real_minutes` 留核心 |
+| `party.py` | 原本 `Game._join`、`join_refusal`、`_party_expires`、`_party`、`party_view`、`leave_party`、`_part_ways`、`_lead`、`_partners`、`_share_road`；`Game` 上的名字掛在 `game_api.py` 的表（`_join` 給玩家互動包、`join_refusal` 給假人回結伴邀請、`party_view` 給殼的 `/api/main`；`_party_expires` 第 55 批換成 `sync.deliver` 的 `party` 那一格，拿掉），其餘呼叫端都在包內 |
+| `go_actions.py` | 原本 `Game._halt`、`travel`、`travel_refusal`；`Game` 上的 `travel`、`travel_refusal` 掛在 `game_api.py` 的表 |
+| `bots.py` | 假人的分數（原 `bot_policy.score` 的 `move:` 那一段）：共用的走共用層 `bot_base`，不 import 假人殼 |
 | `routes.py` | `POST /api/travel`（原 `server.py` 的 `api_travel`；回的鍵與順序不變：`main`、`arrived`，走不成時再加 `reason`、`map`）、`POST /api/party/leave`（原 `api_party_leave`，照舊經 `shell._tell_tabs` 通知；回 `main`、`message`） |
 | `tests/` | `test_travel_smoke.py`、`test_travel_bots.py`、`test_travel_routes.py`（新寫的；移動的規則測試散在混合檔，見下） |
 
@@ -23,7 +23,7 @@
 **接縫的位置不能動**（位置就是行為）：`sync.close`、`advance.arrive` 的 `arrive` 那一格（第 55 批；經 `ctx._arrivals()`）；`_arrivals` 迴圈中途的 `_ambush_check` → `_arrive`〔`publish("arrive")`，糧車先於懸賞護送，由 `BUS_ORDER` 鎖住〕→ 騎乘飽足（`mounts.hunger` 照舊經模組屬性叫，`scripts/measure_mounts.py` 換的就是它）→ `road_actions.sight`（都在 `departure.arrivals` 裡，第 48 批搬進來，順序逐字不動）。`_depart` 開頭收店四行（`bounty_base.close_board` → `parley_escort = None` → `equipment.close_smith` → `mounts.close_market` → `features_core.close_shops`）的先後也不動；三間店排進 `Shop` 是第 45 批的事。
 **舊的趕路**照舊認得：`atlas.MODE_NAMES`、`TIME_SHARE`、`TravelMode` 不動；`go_actions.halt` 的 `if j.mode == "hurry"` 那一句、`menu.road_task_options` 的 `j.mode == "dash"` 都逐字搬；`travel_refusal` 對 `hurry` 回「無法安排前往這裡」（`mode not in atlas.MODES`）。
 **經 Game 的委派叫自己**：`go_actions.travel` 開頭問 `ctx.travel_refusal(...)`（不是直接叫同檔的函式），因為 `tests/gear/test_weapons.py`、`test_armor.py`、`test_mounts.py` 換掉 `game.travel_refusal` 來繞過檢查、直接測 `_depart` 的防線。
-**過渡**（第 48 批合完重印 9 處；第 40 批合完是 6 處，原本 7 處）：`atlas`（輿圖：路程、走法、折返的路、所在大區，第 50 批前後；`__init__.py`、`menu.py`、`road_actions.py`、`go_actions.py`，第 48 批再加 `departure.py`、`party.py` 各一處）、`bounties`（`departure.py`：出發時收起懸賞榜 `close_board`，第 45 批）、`bots.py` 延後 import `bot`、`bot_policy`（假人的挑法還在舊模組）。`ranks`（疾行送到糧車記貢獻；`go_actions.py` 跟 `atlas` 同一行）第 40 批收進共用規則層，不算過渡。`bot_policy.score` 在 `features_core.bot_pick` 之前直接問 `bots.score(game, option, profile)`（測試傳的 `profile` 不一定是 `game.state.player.bot`，掛鉤沒有 `profile`），這是「舊模組 → 包」一處。
+**import**：包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`bot_policy.score` 在 `features_core.bot_pick` 之前直接問 `bots.score(game, option, profile)`（測試傳的 `profile` 不一定是 `game.state.player.bot`，掛鉤沒有 `profile`）。
 **第 45 批合完重印 2 處**：`bots.py` → `bot`、`bot_policy`；~~`departure.py` 的 `close_board` 改讀核心 `core/bounty_base`~~（收店四行第 56 批收了：`departure.py` 走 `MENU_ORDER["depart"]`，懸賞榜、鐵匠鋪、馬市各包登記自己那一格，帶路 `escort` 與店面登記的 `shops` 由 `departure._DEPART_CORE` 代叫；不再 import `bounty_base`、`equipment`）。
 **第 50 批合完重印 3 處**：`bots.py` → `bot`、`bot_policy`；`departure.py` → `bounties`。`__init__`、`menu`、`go_actions`、`road_actions`、`departure`、`party` 讀 `atlas` 的六行改註「共用規則層」（`atlas` 第 50 批收進 `registry.SHARED`；`go_actions` 的 `ranks`、`road_actions` 的 `materials` 本來就是共用層）。
 **審查守的**：`bot.py` 的 `bot_always` 只拿掉 `road:` 一個字面（改由包宣告）；`bot_policy.take_turn` 的 `("road:", "defect:", …)` 字面不動（同層的 `invite:`、`errand:` 也是字面）。`tests/gear/test_weapons.py` 的 `game._move("lake")` 改成 `road_actions.move(game, "lake")`（`_move` 沒有委派；只改叫法，斷言不動）。`tests/core/test_contract_features.py` 的 `CORE_IDS` 換掉兩個 id、加 `MENU_BY_CORE`（選單由核心原位排、包一律開著，「關著的包選單上沒有它的前綴」那一行對這一包不查）。
@@ -48,3 +48,10 @@
 照條拆來：`test_travel_facade.py`（53 條，從 `tests/core/test_engine.py` 拆來）、`test_travel_shell.py`（10 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 
 這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py`：假人的分數 `score`（原 `bot_policy.score` 的 `move:` 那一段）與往哪裡走的常數、下一站（`_home`、`_front_*`、`_losing_front`、`_summons_hop`、`_bounty_hop`、`_order_hop`、`_order_hop_now`、`_focus_hop`、`_clinic_score`、`clinic_hop`、`CLINIC_AT`）第 89 批從 `bot_policy`、`bot` 搬來，舊名 re-export；別包也讀的走共用層 `bot_base`，一律寫 `bot_base.X`，換 `bot_base` 的才打得到。`next_hop` 第 101 批進 `bot_base`，移動包不留這個名字。
+- `bots.py` 不 import `bot`、`bot_policy`；`_focus_hop` 經 `game.sorties_left()` 碰出陣包（`CROSS_PACKAGE_CALLS`）。
+- 另外要跑（改 `bots.py`）：`tests/acts/test_clinic.py`、`tests/acts/test_conquest_flip.py`、`tests/battle/test_fronts.py`、`tests/figures/test_gentry_allied.py`、`tests/figures/test_promotions_high.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+
+在路上的場景（第二輪第 91 批）搬進 `road_actions.road_scene`，登記 `SCENE_ORDER` 的 `own/road`。

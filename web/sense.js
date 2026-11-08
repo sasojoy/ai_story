@@ -166,3 +166,17 @@
     return `<form class="free answer own-name" id="own-name-form"><input class="input" name="text" maxlength="6" placeholder="${esc(OWN_NAME_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(OWN_NAME_GO)}</button></form>`;
   }
   const namingGodNow = (o) => S.godNaming && o.id === OWN_NAME_ID && o.enabled;
+  async function senseClick(act, el, ev) {
+    switch (act) {
+        case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
+        case "sense-send": await senseSend(); break;
+    } // senseClick
+  } // senseClick
+  registerClicks(senseClick, ["sense-clear", "sense-send"]);
+  async function senseForm(form, data) {
+      if (form.id === "own-name-form") {
+        if (!data.text.trim()) return;
+        await godName(form, data.text.trim());
+      } // senseForm
+  } // senseForm
+  registerForms(senseForm, ["own-name-form"]);

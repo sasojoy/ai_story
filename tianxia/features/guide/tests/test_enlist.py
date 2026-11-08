@@ -4,7 +4,7 @@ import pytest
 
 from conftest import idle_step
 from test_orders import _game, _order, _win
-from tianxia import enlist, guide
+from tianxia.features.guide import enlist, rules as guide
 from tianxia.state import ONBOARDING_VERSION
 from tianxia.content import ContentError, validate
 from tianxia.models import Enlist, EnlistStep, Hints, Recruiter, TutorialGoal

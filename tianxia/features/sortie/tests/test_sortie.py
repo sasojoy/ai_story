@@ -12,9 +12,11 @@ from conquest_kit import conquest_rules
 from test_real_content import _walk_the_hut
 
 import server
-from tianxia import sortie, team
+from tianxia.features.sortie import rules as sortie
+from tianxia import team
 from tianxia.encounter import EncounterResult
-from tianxia.engine import Game, drill_share
+from tianxia.core.services import drill_share
+from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import Order
 
@@ -96,11 +98,11 @@ def test_a_hold_never_asks_the_model():
 
 
 def test_the_siege_card_says_sortie():
-    from tianxia import atlas
+    from tianxia.features.military import order_cards
 
     game = _game()
     order = Order(id="1:huang:siege:yingru", template="siege", faction="huang", week=1, front="yingru", quota=9, text="")
-    assert "出陣" in atlas.order_how(game.state, game.content, order) and "遊歷" not in atlas.order_how(game.state, game.content, order)
+    assert "出陣" in order_cards.order_how(game.state, game.content, order) and "遊歷" not in order_cards.order_how(game.state, game.content, order)
 
 
 # ── 守勢行動（PM 2026-10-14 對計畫第 17 條的決定）──────────────────

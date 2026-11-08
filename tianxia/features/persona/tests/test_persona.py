@@ -6,7 +6,8 @@ from __future__ import annotations
 import pytest
 from stances_kit import DAY, LUZHI, at, real_game, talking
 
-from tianxia import annals, companion_agent
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.companions import companion_agent
 from tianxia.features.persona import rules as persona
 from tianxia.state import PersonaNote
 
@@ -200,16 +201,16 @@ def test_the_request_carries_the_ends_to_the_model():
 
 
 def test_the_intro_shows_now_history_and_your_count():
-    import server
+    from tianxia.features.socialize import intro as socialize_intro
 
     g = game()
     s, c = g.state, g.content
-    assert server.figure_intro(LUZHI, g)["now"] is None
+    assert socialize_intro.figure_intro(LUZHI, g)["now"] is None
     s.world.persona = {LUZHI: {UPRIGHT: -61}}
     persona.record(s, c, LUZHI, "圓融", 90)
     push(g, "圓融")
     next_day(g)
-    intro = server.figure_intro(LUZHI, g)
+    intro = socialize_intro.figure_intro(LUZHI, g)
     assert intro["nature"] and intro["now"] == _axis(c, UPRIGHT).stages[1].text
     assert len(intro["history"]) == 2 and intro["history"][-1] == persona.MINE.format(n=1)
 

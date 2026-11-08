@@ -18,7 +18,8 @@ import pytest
 from conftest import real_content
 from test_seal import sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import arena, battlelog, encounter, rules, team
+from tianxia.features.bout import arena_rules as arena
+from tianxia import battlelog, encounter, rules, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.models import MOVES, Squad
@@ -38,7 +39,7 @@ def trio(sealed, world):
     c.config.arena.enabled = True
 
     def _give(st):
-        from tianxia import seal
+        from tianxia.features.seal import seal
 
         shard = seal.filled(st.seal, c).shards["chishou"]
         shard.state, shard.holder, shard.since_season = "held", "甲", 0
@@ -325,7 +326,7 @@ def test_with_the_revamp_off_nothing_is_bare_or_hidden(trio):
 def test_an_ambush_report_names_the_rivals_bare_power(world, holder_is_owner):
     """設伏的伏兵與中伏的人，戰報寫對方不含碎片的威力（正式內容：無碎片 8.64，含碎片 9.504），打起來照含的。"""
     from test_stamina_plays import _player, _plays_on, _reload, _set
-    from tianxia import seal
+    from tianxia.features.seal import seal
 
     c = _plays_on(real_content())
     c.config.auto_open_first_season = True

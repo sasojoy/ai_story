@@ -4,7 +4,7 @@
 盯狀態變化的 mark、watch，與種類常數 SHOWDOWN…STORY、KINDS、GROUPS、UNHEARD），寫進 PlayerState.annals／annals_mark：
 核心（engine、event_check）、舊模組 fusion 與各包都經它，不 import 列傳包（核心不准 import 包；smithing 照舊 import 舊名 annals，拿到的是
 同一批物件，第 41 批鐵匠鋪合併時改）。列傳包的 standing.py 管查詢與行狀頁那一半（profile、standing、tier_*、xingshi_notes、rows）。
-舊名 tianxia/annals.py 是指到 standing.py 的 sys.modules 別名（standing 用 import * 加 _gear、_notable re-export 這裡的名字，同一批物件）。
+standing 用 import * 加 _gear、_notable re-export 這裡的名字，同一批物件。
 
 原本寫在 tianxia/annals.py，一個字沒改（只有 watch、mark 裡兩個延後 import 從 from . 改成 from ..）。與 event_check、omen_base 同樣不進 MODULES。
 
@@ -31,7 +31,7 @@ CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多�
 # 起用玉璽碎片的獨門行動（Game.seal_use）：持有者平時藏起來（碎片改版設計第二、三章「行狀只記在用的人自己的行狀裡」），酒肆與買兇找人
 # 不讀這一類（heard；FB-643）。本人的行狀頁照「行事」寫、季末的傳歸在出身與行事那一段（GROUPS），跟一般的事一樣
 SEAL = "seal"
-# 地方痕跡過了門檻、你出過力（減法季批 4，Game._mark_credits）：公開的只有痕跡、不列名字，所以酒肆打聽不到（UNHEARD）；季末的傳照行事寫
+# 地方痕跡過了門檻、你出過力（減法季批 4，marks.credits）：公開的只有痕跡、不列名字，所以酒肆打聽不到（UNHEARD）；季末的傳照行事寫
 MARK = "mark"
 # 人物心意到了門檻、你這一週也勸過（減法季批 6，人物情誼包 actions.stance_annals）：公開的只有他改做什麼、不列誰勸的，酒肆打聽不到；季末的傳照人物那一段
 STANCE = "stance"

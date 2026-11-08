@@ -49,10 +49,9 @@
       "xinshen": 5
     },
     "on_sale": {
-      "rule": "xinshen",
-      "start": "2026-11-14"
+      "rule": "xinshen"
     },
-    "draft": "Joy 2026-11-06 定 5 點 30 元寶；心神開關開著、跑一週後（11/14 起）才上架；說明待 joy 潤"
+    "draft": "Joy 2026-11-06 定 5 點 30 元寶；心神開關開著就上架（Joy 2026-11-07「凝神香要直接上架」）；說明待 joy 潤"
   },
   {
     "id": "xinshen_30",
@@ -64,8 +63,7 @@
       "xinshen": 30
     },
     "on_sale": {
-      "rule": "xinshen",
-      "start": "2026-11-14"
+      "rule": "xinshen"
     },
     "draft": "Joy 2026-11-06 定 30 點 150 元寶；同上；說明待 joy 潤"
   },

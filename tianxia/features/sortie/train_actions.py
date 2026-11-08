@@ -1,7 +1,7 @@
 """舊遊歷、序章雪恥、跟自家隊伍操練、守勢、遊歷推大勢（功能包 tianxia/features/sortie/；原本是 Game 上的 14 個方法，全部拆包第 17 批
 「出陣三」，計畫 docs/superpowers/plans/2026-11-01-出陣包-第3批.md）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，一個例外：`_train_note` 是 `foes_note`（跟 actions.train_note〔行動列底下那一行〕分開）。另外兩個是從
 Game 原位收來的：`train_fight`（`Game._act` 的 train 那一支：扣體力、並肩出陣、出陣或遊歷）、`train_squad`（`Game._fight_squad` 的
 act:train 那一支）。Game 留 8 個一行委派（核心的單打服務 `_squad_encounter`、軍情的 `order_options`、假人、測試、腳本還在叫）。
@@ -23,7 +23,7 @@ from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪
 from tianxia import territory  # 共用規則層（地盤：站的照控制方）
 from tianxia.core.option import Option
 from tianxia.core.services import BACKED_LINE, BIG_FIGHT_WAIT, PLAN_MISS, drill_share  # 並肩出陣的兩句（第 20 批：原本 import parley）
-from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
+from tianxia.events import pick_event  # 共用規則層（遊歷打完的戰後事件）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
 

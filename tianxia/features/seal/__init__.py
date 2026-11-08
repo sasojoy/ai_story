@@ -2,14 +2,14 @@
 天命之季與天命之爭、換季的隱沒與散去，與管理者的強制現世、隱沒判斷、蓋天命之季。全部拆包第 27 批「玉璽一」搬進來
 （計畫 docs/superpowers/plans/2026-11-07-玉璽包-第1批.md）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- seal.py：碎片的規則與字句（原 tianxia/seal.py 整份；那個名字留成指到這裡的 sys.modules 別名）。核心與決戰包讀的那一小半在核心本體
+- seal.py：碎片的規則與字句（原 tianxia/seal.py 整份）。核心與決戰包讀的那一小半在核心本體
   tianxia/core/seal_base.py，這裡 re-export 同一批。
 - actions.py：原本 Game 上的季流程（抄本、撿到、份量快照與加權、補送、奪璽單挑的戰報、定天命、收場）；Game 留一行委派
 - admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（測試、管理頁的讀取叫）；管理者工具在 routes.py 的 admin_tools（全部拆包第 68 批）
 - season.py：開季藏一片、天命之季的章、舊季收尾（原本核心 sqlite_world 的三段）
 
 第 28 批「玉璽二」再搬進來（計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
-- duel_rules.py：奪璽單挑的純規則（原 tianxia/seal_duel.py 整份，舊名留成別名）
+- duel_rules.py：奪璽單挑的純規則（原 tianxia/seal_duel.py 整份）
 - duel_actions.py：奪璽單挑的玩法（挑挑戰者與開單挑、推進、三招、放手一搏、奪璽卡、背景輪詢）；Game 留一行委派
 - card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
 - bots.py：假人看到 seal: 一律不按
@@ -17,10 +17,12 @@
 選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有 APIRouter（管理者的 seal_*、seal_use 在 routes.py 的 admin_tools、main_actions，全部拆包第 68 批；seal_text 是鎖外三段式，第 69 批進 routes.py 的 outlock）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
 from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, StatusHook, WorldHook
+from tianxia.core.features import ContentSlot
 
 
 class SealFeature(Feature):
@@ -31,8 +33,16 @@ class SealFeature(Feature):
     # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
     carried: tuple[str, ...] = ("seal_seen",)
-    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
+    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：validate_seal 在 checks.py，content.validate 原位經 check_at 叫，不接 check_content，第 34 批認定第 2 條）；檔名照舊
     content = ("seal.json",)
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("seal", lambda *a: checks.validate_seal(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """碎片開著：Config.seal.enabled，而且內容有 content/seal.json（seal.on）。掛鉤都不問它。"""
@@ -160,6 +170,8 @@ class SealFeature(Feature):
             self._status_slots = (
                 # 奪璽卡（玉璽碎片設計 5.10）：全服看得到，沒有單挑是 None；持有者的碎片卡（第十節）；seal_watch 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
                 StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
+                # 管理頁的玉璽一組（碎片關著是 None，不畫；第二輪第 90 批從殼的 admin_choices 搬來）
+                StatusHook("admin", "seal", lambda ctx, frame: {"seal": ctx.admin_seal_choices()}),
             )
         return self._status_slots
 

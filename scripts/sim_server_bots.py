@@ -23,7 +23,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import allied, bot, bounties, database, insight_llm, library, naming, server_bots  # noqa: E402
+from tianxia import allied, bot  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database  # noqa: E402
+from tianxia.features.sense import insight_llm  # noqa: E402
+from tianxia import library, naming, server_bots  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import name_key, open_characters  # noqa: E402
 from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402

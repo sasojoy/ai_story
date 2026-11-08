@@ -11,7 +11,8 @@ import re
 from test_jianghu_page_web import battle, node, run_prologue_web as run  # noqa: F401（battle 是 fixture）
 
 import server
-from tianxia import battlelog, engine
+from tianxia import battlelog
+from tianxia.features.battle.rules import RESTORED_NOTE
 from tianxia.state import BattleRecord
 
 
@@ -77,7 +78,7 @@ def test_the_report_page_puts_big_battles_first_and_folds_every_round(battle):
     reports = server.reports_view(fighter, record.id)
     reports["list"].append({"label": "大勝　第99場　遊歷", "id": 99, "big": False})
     listing = run(m, 'H.S.tab = "news"; H.S.news = "reports"; H.S.reports = R; H.S.reportOpen = false; H.renderPage(); return T.els.page.innerHTML;'.replace("R", repr_js(reports)))
-    assert listing.index("大戰") < listing.index(f'data-id="{record.id}"') < listing.index("最近的仗") < listing.index('data-id="99"')
+    assert listing.index("nw-big") < listing.index(f'data-id="{record.id}"') < listing.index('data-id="99"')  # 大戰固定在頂（見聞改版）
     out = run(m, 'H.S.tab = "news"; H.S.news = "reports"; H.S.reports = R; H.S.reportOpen = true; H.S.roundsOpen = new Set(["rID:2"]); H.renderPage(); return T.els.page.innerHTML;'
               .replace("R", repr_js(reports)).replace("ID", str(record.id)))
     keys = re.findall(r'<details class="b-round" data-round="([^"]+)"', out)
@@ -101,7 +102,7 @@ def test_a_washed_out_showdown_report_comes_back_once(battle):
     fighter.sync(fighter.now)
     back = [r for r in fighter.state.battles if r.kind == "showdown"]
     assert len(back) == 1 and back[0].battle_ref == record.battle_ref and back[0].log
-    assert engine.RESTORED_NOTE in back[0].notes and back[0].tier == record.tier
+    assert RESTORED_NOTE in back[0].notes and back[0].tier == record.tier
     assert fighter.state.player.stats.get("silver", 0) == silver  # 軍餉不再發
     fighter.state.player.showdowns_restored = 0
     fighter.sync(fighter.now)

@@ -56,7 +56,7 @@ def _notice_keys(shell, game, account_key: str, now: float) -> tuple[list, bool]
     """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色；開著的分頁照常輪詢就看得到，不叫 HUB：只有動作的端點叫，
     見 _tell_tabs），回傳（五種事, 正在玩）。
     正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
-    day = shell.letters.mail_day(game.content, game.state.world, now)
+    day = game.mail_day_at(now)
     if day is not None and shell.MAIL_DONE.get(account_key) != day:
         if game.morning_mail(now):
             shell.open_characters().save(game.state)
@@ -111,17 +111,17 @@ def router(shell) -> APIRouter:
         """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰，加上五種通知各開著沒（設定頁一種一個開關，預設全開）。開關關著 404。"""
         push = _web_push(shell)
         off = push.store.kinds_off(shell._account(request))
-        return {"key": push.vapid.public, "kinds": {k: k not in off for k in notices.KINDS}}
+        return {"key": push.vapid.public, "kinds": {k: k not in off for k in notices.kinds(shell.CONTENT.config)}}
 
     @r.post("/api/push/prefs")
     def api_push_prefs(request: Request, body: dict = Body(...)):
         """開或關一種通知：{kind, on}。存在這個帳號（每一台裝置一樣）。"""
         push = _web_push(shell)
         kind = str(body.get("kind", ""))
-        if kind not in notices.KINDS:
+        if kind not in notices.kinds(shell.CONTENT.config):
             raise shell.GameError("沒有這一種通知。")
         off = push.store.set_kind(shell._account(request), kind, bool(body.get("on")))
-        return {"kinds": {k: k not in off for k in notices.KINDS}}
+        return {"kinds": {k: k not in off for k in notices.kinds(shell.CONTENT.config)}}
 
     @r.post("/api/push/test")
     def api_push_test(request: Request, body: dict = Body(...)):

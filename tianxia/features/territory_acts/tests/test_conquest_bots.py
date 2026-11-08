@@ -7,7 +7,8 @@ import random
 import pytest
 
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import battle_instance, bot_policy, conquest, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import bot_policy, conquest, siege
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.state import BotProfile

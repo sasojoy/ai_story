@@ -8,7 +8,9 @@ from collections import Counter
 import pytest
 
 from conftest import real_content
-from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, secret_recipes, smithing, team, weapons
+from tianxia import armor, equipment, forge_secrets, fusion, naming, rules, secret_recipes
+from tianxia.features.smithy import smithing
+from tianxia import team, weapons
 from tianxia.content import ContentError, validate
 from tianxia.models import ForgeSecret, ForgeSide
 from tianxia.state import Equipment, GearFind, Manual, Weapon, WeaponRecipe, new_game_state
@@ -71,7 +73,7 @@ def test_match_reads_the_shape_kind_slot_and_main_aux_order(forge_content):
 
 @pytest.mark.smoke
 def test_the_real_pool_has_fifty_four_named_recipes_and_validates():
-    rc = real_content()  # 載入時已經跑過 _validate_forge_secrets
+    rc = real_content()  # 載入時已經跑過 validate_forge_secrets
     # 3.4：兵器 22、防具 9，神器 9；正式季第 10 批加新神器第一批 12 件（兵器 8、防具 4，wave 2）；第 4 批補三階一組（兵器 8、防具 3）
     assert len(rc.forge_secrets) == 54 and sum(r.divine for r in rc.forge_secrets.values()) == 21
     assert sum(r.divine and r.wave == 1 for r in rc.forge_secrets.values()) == 9
@@ -334,14 +336,12 @@ def test_the_go_button_names_only_what_your_own_book_has_solved(forge_content, w
 
 def test_named_gear_does_not_share_two_characters_with_a_divine_or_a_tactic():
     """FB-431：名器的名字（拿掉兵器字、防具字）不跟神器、本命兵器、戰法特技共用連著的兩個字；正式內容過得了。"""
-    from tianxia import content as content_mod
-
     rc = real_content()
     problems: list[str] = []
-    content_mod._validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
+    forge_secrets.validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
     assert problems == []
     rid = next(r.id for r in rc.forge_secrets.values() if r.slot == "armor" and not r.divine)
     rc.forge_secrets[rid] = rc.forge_secrets[rid].model_copy(update={"name": "隕星鎧"})
-    content_mod._validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
+    forge_secrets.validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
     assert len(problems) == 1 and "隕星刀" in problems[0] and "隕星" in problems[0]
-    assert content_mod._named_stem("寒淵拳套", "weapon", "拳腳") == "寒淵"  # 拳套不算撞字
+    assert forge_secrets.named_stem("寒淵拳套", "weapon", "拳腳") == "寒淵"  # 拳套不算撞字

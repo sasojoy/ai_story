@@ -10,11 +10,22 @@ from typing import TYPE_CHECKING
 from tianxia import equipment  # 共用規則層
 from tianxia import mounts  # 共用規則層
 from tianxia import territory  # 共用規則層
-from tianxia.core.option import Option  # 核心
+from tianxia.core.option import Option, Refused  # 核心
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
+
+
+def stale_cell(ctx: Game, option: Option | None, option_id: str) -> Refused | None:
+    """stale/market 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：
+    同懸賞榜 FB-162，回為什麼不成的那一句（Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄。"""
+    if (option is None or not option.enabled) and option_id.startswith("market:"):
+        problem = mounts.stale_problem(ctx.state, ctx.content, option_id.partition(":")[2])
+        if ctx._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
+            ctx._shop_after(problem, "refused")
+        return Refused(ctx._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
+    return None
 
 
 def market_options(ctx: Game) -> list[Option]:

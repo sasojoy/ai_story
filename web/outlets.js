@@ -2,7 +2,7 @@
  *
  * 軍需帳（donateHtml）與打點帳簿（dadianHtml）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
- * 全部拆包第 65 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第65批.md）。點擊分派的 case、店面的框（shopHtml、renderShop）照舊在 app.js（殼）。
+ * 全部拆包第 65 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第65批.md）。點擊用 registerClicks 登記在這支檔；店面的框（shopHtml、renderShop）照舊在 app.js（殼）。
  */
 "use strict";
 
@@ -116,3 +116,13 @@
     if (!items.length) return;
     await shopDo("donate", { items }, () => { S.donatePick = {}; });
   }
+  async function outletsClick(act, el, ev) {
+    switch (act) {
+        // 軍需帳（素材與經濟 B6）：挑一格、＋−個數、全選一階、捐出
+        case "dn-cell": donateCell(el.dataset.id, el.dataset.why); break;
+        case "dn-step": donateStep(el.dataset.id, Number(el.dataset.d)); break;
+        case "dn-tier1": donateTierOne(); break;
+        case "dn-go": await donateGo(); break;
+    } // outletsClick
+  } // outletsClick
+  registerClicks(outletsClick, ["dn-cell", "dn-step", "dn-tier1", "dn-go"]);

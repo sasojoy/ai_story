@@ -1,7 +1,7 @@
 """俠的醫館折扣與寇的黑市（名聲設計 5.2）。"""
 from conftest import no_week_unlock, real_content, renown_unscaled
 
-from tianxia import economy, renown, skillview, team
+from tianxia import economy, renown, art_cards, team
 from tianxia.state import new_game_state
 
 
@@ -24,9 +24,9 @@ def test_the_heal_button_says_why():
     s = new_game_state(c, "甲")
     s.player.member.injury = 20
     s.player.stats.update({"good": 15, "silver": 100})
-    assert "（一方豪俠・八五折）" in skillview.heal_note(s, c)
+    assert "（一方豪俠・八五折）" in art_cards.heal_note(s, c)
     c.config.renown.clinic = False
-    assert "八五折" not in skillview.heal_note(s, c) and team.heal_cost(c, s.player.member, s) == 10
+    assert "八五折" not in art_cards.heal_note(s, c) and team.heal_cost(c, s.player.member, s) == 10
 
 
 def test_both_reasons_share_one_bracket():
@@ -36,7 +36,7 @@ def test_both_reasons_share_one_bracket():
     s = new_game_state(c, "甲")
     s.player.member.injury = 40
     s.player.stats.update({"fame": 50, "good": 30, "silver": 100})
-    note = skillview.heal_note(s, c)
+    note = art_cards.heal_note(s, c)
     assert note == "內傷 40・16 兩（威震州郡・九折，州郡大俠・八五折）"
 
 
@@ -53,7 +53,7 @@ def test_black_market_for_rogues():
 def test_the_store_says_black_market_and_the_smith_says_so_too():
     import random
 
-    from tianxia import shopview
+    from tianxia.features.smithy import shop_view as smithy_shop
     from tianxia.engine import Game
 
     c = renown_unscaled(no_week_unlock(real_content("week7")))
@@ -64,14 +64,14 @@ def test_the_store_says_black_market_and_the_smith_says_so_too():
     s.player.location = "yingchuan"
     s.player.materials["gang_1"] = 2
     s.player.stats["evil"] = 5
-    rows = shopview.trade_view(s, c, 0)
+    rows = smithy_shop.trade_view(s, c, 0)
     row = next(r for r in rows["sell"] if r["id"] == "gang_1")
     assert (row["price"], row["dark"]) == (3, "（黑市價）") and "照黑市價收" in rows["sell_cap"]
     g.choose("act:smith")
     assert g.smith_sell("gang_1", 1)[-1] == "銀兩 +3"
     assert s.player.shop_line == "black_market"
     s.player.stats["evil"] = 0
-    assert shopview.trade_view(s, c, 0)["sell"][0]["dark"] == ""
+    assert smithy_shop.trade_view(s, c, 0)["sell"][0]["dark"] == ""
 
 
 def test_the_virtue_perks_name_the_clinic_and_the_market():

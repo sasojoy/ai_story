@@ -6,8 +6,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent, parley
-from tianxia.companion_agent import CompanionTurn
+from tianxia.features.companions import companion_agent, parley
+from tianxia.features.companions.companion_agent import CompanionTurn
 from tianxia.engine import SAY_MAX
 from tianxia.state import Bounty
 
@@ -217,7 +217,7 @@ def test_a_scout_condition_becomes_a_commission_and_he_pays_back(talking):
     assert msgs[0].startswith("你答應了韓鐵：替他打探湖邊")
     letter = p.letters[-1]
     assert letter.kind == "條件" and letter.task.kind == "scout" and letter.task.parley_ask == "spar"
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     done = bounties._complete_commission(talking, letter.task)
     assert "下回見到韓鐵，他會兌現答應你的事。" in done and p.parley_owed["mate"] == "spar"

@@ -5,7 +5,7 @@ import random
 import pytest
 
 from conftest import FixedRandom
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble
 
 pytestmark = pytest.mark.whole_content

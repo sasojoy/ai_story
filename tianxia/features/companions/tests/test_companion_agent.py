@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from tianxia import companion_agent
-from tianxia.companion_agent import DriftSynthesis, resolve_tag_delta
+from tianxia.features.companions import companion_agent
+from tianxia.features.companions.companion_agent import DriftSynthesis, resolve_tag_delta
 from tianxia.world_state import WorldStateStore
 
 
@@ -230,6 +230,26 @@ def test_generate_turn_converts_simplified_text_to_traditional():
     assert turn.relationship_note_update == "關係還算融洽"
 
 
+def test_generate_turn_cuts_the_json_the_model_wrote_into_the_narrative():
+    """2026-11-08 線上（gemma3:4b）：整份回答用彎引號寫進 narrative，玩家看到「”, “options”: [“…”], “option_tags”: [」。"""
+    client = mock.Mock()
+    leaked = "『醫理與武藝本是同源。』我轉向你。『你怎麼看？』”, “options”: [“詢問華佗”、“請華佗演示”], “option_tags”: ["
+    client.chat_structured.return_value = companion_agent.CompanionTurn(
+        narrative=leaked, options=["問醫理", "告辭", "聽他說"], option_tags=["真誠請教", "尋常寒暄", "尋常寒暄"],
+    )
+    assert companion_agent.generate_turn(client, []).narrative == "『醫理與武藝本是同源。』我轉向你。『你怎麼看？』"
+    client.chat_structured.return_value = companion_agent.CompanionTurn(
+        narrative='{"narrative": "他點了點頭。", "options": ["a"]', options=["a"], option_tags=["尋常寒暄"],
+    )
+    assert companion_agent.generate_turn(client, []).narrative == "他點了點頭。"
+    client.chat_structured.return_value = companion_agent.CompanionTurn(  # 整格只有 JSON、切完沒話：這一輪算生成失敗
+        narrative='“options”: [“a”]', options=["a"], option_tags=["尋常寒暄"],
+    )
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(client, [])
+    assert companion_agent._cut_leaked_json("他說：「好，」『options』不是鍵。") == "他說：「好，」『options』不是鍵。"
+
+
 def test_generate_turn_raises_dialogue_unavailable_when_the_client_fails_or_is_missing():
     client = mock.Mock()
     client.chat_structured.side_effect = RuntimeError("模型 'gemma4:26b' 未找到")
@@ -271,7 +291,7 @@ def test_prepare_turn_wraps_the_outcome_and_marks_failure_with_no_turn(content, 
 def test_prepare_turn_logs_which_companion_failed(content, state, world, caplog):
     request = companion_agent.build_request(state, content, world, "mate", "talk:0", "閒聊幾句")
     with mock.patch.object(companion_agent, "generate_turn", side_effect=companion_agent.DialogueUnavailable("連不上")), \
-            caplog.at_level("WARNING", logger="tianxia.companion_agent"):
+            caplog.at_level("WARNING", logger="tianxia.features.companions.companion_agent"):
         companion_agent.prepare_turn(mock.Mock(), request)
     assert any("mate" in r.getMessage() and "連不上" in r.getMessage() for r in caplog.records)
 

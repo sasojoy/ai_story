@@ -131,7 +131,7 @@ def test_the_forge_go_button_is_one_wrapping_item_and_the_book_keeps_its_place()
     assert _text(inner) == line["go"]
     row = page[page.index('class="shop-gorow"'):]
     assert row.index("shop-go") < row.index('data-act="book-open" data-book="forge"')  # 「鑄譜」跟開爐鈕同一列
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "shop.css").read_text(encoding="utf-8")
     gorow = re.search(r"(?m)^\.shop-gorow \{([^}]*)\}", css).group(1)
     assert "grid-template-columns: minmax(0, 1fr) auto" in gorow
 

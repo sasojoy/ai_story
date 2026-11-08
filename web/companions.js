@@ -4,6 +4,26 @@
  */
 "use strict";
 
+  // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
+  async function sayLine(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = "對方沉吟中…";
+      const stop = watchQueue(submitBtn, "對方沉吟中…");
+      try {
+        const r = await api("/api/say", { text, option: sayingId() });
+        S.saying = false;
+        applyMain(r.main);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        stop();
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        submitBtn.textContent = "說出口";
+      }
+    });
+  }
+
   // 託付的勸降（減法季批 6，FB-829）：送出後要等模型評這一句（同隨口應對），按鈕先寫「斟酌中……」；
   // 被擋下來的那一句（字數不對、人不在那裡）在江湖紀錄裡沒有，用提示泡泡講，輸入框留著；送成了（勸成、打起來、對方不置可否）收起
   const PERSUADE_WAIT = "斟酌中……"; // 待 joy 潤
@@ -81,7 +101,7 @@
       <div class="vn-acts">${talk}${acts}<button class="vn-act paper" data-act="fig-log" data-id="${esc(f.id)}"><b>${FIG_LOG}</b></button></div>
       ${vnBox(f.name, f.side, `${figIntroHtml(f.intro, f.side)}<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
   }
-  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；server.figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
+  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；socialize 包 intro.py 的 figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
   // 另一串做）時多「如今」一格與變化紀錄，沒變之前不畫這兩格
   const INTRO_NATURE = "本性", INTRO_NOW = "如今"; // 待 joy 潤
   // 每樣只寫一次（PM 11/6）：陣營看名牌旁的籤，身分那一行去掉開頭同一個陣營；情誼在「交談」鈕底下，框底不再寫
@@ -171,3 +191,35 @@
     renderPage();
     await choose(document.querySelector(`[data-id="${CSS.escape(last)}"]`) || document.body, last);
   }
+  async function companionsClick(act, el, ev) {
+    switch (act) {
+        case "fig-open": S.fig = el.dataset.id; renderPage(); break;
+        case "fig-close": S.fig = null; renderPage(); break;
+        case "fig-act": { const id = el.dataset.id; S.fig = null; renderPage(); await choose(document.querySelector(`[data-id="${CSS.escape(id)}"]`) || el, id); break; }
+        case "fig-talk": await figTalk(el.dataset.id); break;
+        case "fig-log": await openFigLog(el.dataset.id); break;
+        case "fig-log-close": S.figLog = null; renderPage(); break;
+        case "fig-log-season": await openFigLog(S.figLog.id, el.dataset.s); break;
+        case "fig-log-more": await moreFigLog(); break;
+        case "letter-open": {
+          const id = Number(el.dataset.id), wasOpen = el.getAttribute("aria-expanded") === "true";
+          S.letterOpen = wasOpen ? null : id;
+          S.letterShut = wasOpen ? id : null; // 一到就攤開的那一封（開局的託付）收攏了就記著，重畫不再自己攤開
+          renderPage();
+          break;
+        }
+        case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
+        case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
+    } // companionsClick
+  } // companionsClick
+  registerClicks(companionsClick, ["fig-open", "fig-close", "fig-act", "fig-talk", "fig-log", "fig-log-close", "fig-log-season", "fig-log-more", "letter-open", "letter-read", "letter-decline"]);
+  async function companionsForm(form, data) {
+      if (form.id === "say-form") {
+        if (!data.text.trim()) return;
+        await sayLine(form, data.text.trim());
+      } else if (form.id === "persuade-form") {
+        if (!data.text.trim()) return;
+        await persuadeSay(form, data.text.trim());
+      } // companionsForm
+  } // companionsForm
+  registerForms(companionsForm, ["say-form", "persuade-form"]);

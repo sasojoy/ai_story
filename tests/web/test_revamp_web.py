@@ -13,6 +13,7 @@ from test_prologue_web import run as run_classic
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.admin import routes as admin_routes
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
@@ -161,7 +162,7 @@ def test_the_duty_card_leads_with_what_can_be_done_now(wan):
 def test_the_admin_page_has_tiles_tabs_and_a_hold_to_confirm_danger_zone(wan):
     wan.state.player.name = "Rayal"
     m = server.main_view(wan)
-    page = run(m, "return H.adminHtml();", S={"admin": server.admin_choices(wan)})
+    page = run(m, "return H.adminHtml();", S={"admin": admin_routes.admin_choices(server, wan)})
     assert len(__import__("re").findall(r'class="ad-tile( hot)?"', page)) == 4 and 'data-act="ad-tab"' in page
     assert 'data-act="ad-hold" data-op="end_season"' in page and 'data-act="ad-hold" data-op="next_season"' in page
     assert 'data-act="admin" data-op="end_season"' not in page  # 收季只在危險區、要長按
@@ -172,8 +173,10 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     性子隨互動變了（另一串做）時多「如今」與變化紀錄。每一位大勢人物都有一份。"""
     import json
 
+    from tianxia.features.socialize import intro as socialize_intro
+
     figures = json.loads((server.ROOT / "content" / "figures.json").read_text(encoding="utf-8"))
-    assert all(server.figure_intro(f["id"]) and server.figure_intro(f["id"])["nature"] for f in figures)
+    assert all(socialize_intro.figure_intro(f["id"]) and socialize_intro.figure_intro(f["id"])["nature"] for f in figures)
     m = server.main_view(wan)
     hejin = next(f for f in m["figures_here"] if f["id"] == "hejin")
     assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []

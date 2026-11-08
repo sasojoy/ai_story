@@ -11,7 +11,7 @@ import random
 import pytest
 
 from conftest import FixedRandom, real_content
-from tianxia import battle_instance as bi
+from tianxia.features.battle import instance as bi
 from tianxia import chiefs, figures
 from tianxia.models import MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning, FreeTextGamble
 from tianxia.state import GameState, PlayerState

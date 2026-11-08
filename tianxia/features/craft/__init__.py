@@ -2,7 +2,7 @@
 （執器、擺式、立意、成形、立名）、重悟帖、作罷。全部拆包第 44 批搬進來（計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- create.py：自創的規則（原 tianxia/create.py；舊名留成別名）。擺式的幾何抽到共用規則層 tianxia/pose.py，create 照名字 re-export
+- create.py：自創的規則（原 tianxia/create.py）。擺式的幾何抽到共用規則層 tianxia/pose.py，create 照名字 re-export
 - actions.py：原本 Game 上的 16 個方法（Game 留 16 個一行委派給 server、假人、測試與核心原位、引導包）
 - routes.py：/api/forge_line（原本寫在 server.py；殼照 FEATURES 掛）
 
@@ -11,13 +11,13 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, StatusHook
+from tianxia.core.features import Feature, SeamHook, StatusHook
 
 
 class CraftFeature(Feature):
     name = "craft"
     prefix = None  # 沒有選項前綴：煉製頁全是網頁按鈕打 /api/menxia/<op>、/api/do/<op>
-    web = ("craft.js", "craft.css")  # 煉製頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊分派的 case、renderPage 的 fixedKiln 照舊在 app.js（殼）。功法清單的篩選與樣子第 67 批從 main.js、style.css 切出來（爐那幾段跟引導的 .onb-dim 同權重，留 style.css）
+    web = ("craft.js", "craft.css")  # 煉製頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊、change 用 registerClicks、registerChanges 登記在 craft.js，renderPage 的 fixedKiln 照舊在 app.js（殼）。功法清單的篩選與樣子第 67 批從 main.js、style.css 切出來（爐那幾段跟引導的 .onb-dim 同權重，留 style.css）
     content = ("create_forms.json",)  # content.py 照它到這一包的 content/ 載（自創的偏向表、擺式預設、招式表）；preset_recipes.json 是序章、命名、引導共用的，不歸這一包
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：自創走到一半的單子、這一季自創付了幾次心得。換季跟著新角色重來。
     # 重悟帖張數 create_rerolls 歸商城（player_fields／carried）；意境 insights、own_insights 是共用規則層的
@@ -53,6 +53,17 @@ class CraftFeature(Feature):
                 StatusHook("status", "create", lambda ctx, frame: {"create": actions.view(ctx)}),
             )
         return self._status_slots
+
+    # core_rest（第二輪第 99 批）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 echoes 那一格（順序在 SEAM_ORDER；不問 enabled）：別人照著你首創的配方合了出來，補名望（首創名望回饋）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "echoes", lambda ctx: actions.deliver_echoes(ctx)),)
+        return self._seams
 
     def menxia_actions(self, shell) -> dict:
         from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）

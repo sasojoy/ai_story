@@ -7,7 +7,7 @@
 等過 yuedan_wait_seconds 還沒寫好（模型叫不動、伺服器沒開背景寫字）照固定句發（tick）。被評的人的玩家卡上掛這一週那一句
 （line_for）。只是名聲，不加數值。
 只 import models、state、rules、calendar、leaderboard、figure_life、zh；world、engine、server、social 呼叫它。
-（全部拆包第 31 批搬進功能包 figure_acts；舊名 tianxia/yuedan.py 留成別名。）"""
+（全部拆包第 31 批搬進功能包 figure_acts。）"""
 from __future__ import annotations
 
 import hashlib
@@ -75,7 +75,7 @@ def tick(state: GameState, content: Content, world) -> None:
     week = calendar.point(w.time, content, w).week
     tuning = content.config.figure_life
     if week >= tuning.yuedan_from_week and week > w.yuedan_week:
-        from tianxia import leaderboard  # noqa: PLC0415  過渡：待搬（榜單 leaderboard）  leaderboard → team → …：延後載入
+        from tianxia import leaderboard  # noqa: PLC0415  共用規則層（榜單）；leaderboard → team → …：延後載入
 
         w.yuedan_week = week
         board = leaderboard.compute_boards(content, world)

@@ -6,7 +6,9 @@ import random
 import pytest
 from conftest import real_content
 
-from tianxia import library, skillview, smithing, tactics, team, traits
+from tianxia import library, art_cards
+from tianxia.features.smithy import smithing
+from tianxia import tactics, team, traits
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 from tianxia.state import PLAYER, Equipment
@@ -152,12 +154,12 @@ def test_binding_rules_and_the_gear_row():
     p.rack.append(_named("柔"))
     assert smithing.bind_problem(game.state, content, game.world, "兵:8", art.id) == smithing.BIND_NOT_ORIGINAL
     assert smithing.bind_problem(game.state, content, game.world, "兵:9", "basic_fist") == smithing.BIND_BAD_ART
-    rows = {r["id"]: r for b in skillview.gear_rows(game.state, content, game.world)["slots"] for r in b["rack"]}
+    rows = {r["id"]: r for b in art_cards.gear_rows(game.state, content, game.world)["slots"] for r in b["rack"]}
     assert rows["兵:9"]["bind"]["options"][0]["id"] == art.id and rows["兵:8"]["bind"] is None
     msgs = game.bind_art("兵:9", art.id)
     assert msgs[0].startswith("【試劍】與【迴風劍】人器合一")
     assert smithing.bind_problem(game.state, content, game.world, "兵:9", art.id).startswith("（【試劍】已經配了")
-    rows = {r["id"]: r for b in skillview.gear_rows(game.state, content, game.world)["slots"] for r in b["rack"]}
+    rows = {r["id"]: r for b in art_cards.gear_rows(game.state, content, game.world)["slots"] for r in b["rack"]}
     assert rows["兵:9"]["bind"] is None and any(t.startswith("以器配招〔迴風劍〕") for t in rows["兵:9"]["tactic"])
     p.member.wugong_id = None  # 那一門不在手上了：可以再配別門
     assert library.owned_arts(game.state) == [a for a in (p.member.neigong_id,) if a] + list(p.arts)

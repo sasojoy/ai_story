@@ -1,7 +1,7 @@
 """鐵匠鋪的架上（全部拆包第 41 批）：第二層選單（兵器頁、防具頁、素材頁，打造兵器…／打造防具…挑到一半時換成那一步）與選單上按下去的一下
 （切頁、買、修、換上、拆解、打造與淬煉的每一步、離開）。原本 Game 上的 8 個方法，Game 只留 smith_options 的一行委派（核心原位的選單叫它）；
 choose 的 smith: 由包的 choose 掛鉤接走（Outcome.run 叫 smith）。計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.1。
-第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的；這一包互相叫直接叫函式。
+第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式。
 規則照模組屬性叫（weapons.buy、smithing.step……：測試換掉模組上的，這裡照樣打得到）。"""
 from __future__ import annotations
 
@@ -14,17 +14,36 @@ from tianxia import economy  # 共用規則層
 from tianxia import four_tiers  # 共用規則層
 from tianxia import silver  # 共用規則層
 from tianxia import team  # 核心
-from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option  # 核心
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import smith_base  # 核心（打造單子讀的那一小半：收店那兩格讀，core_seams）
 
+from . import shop_view
 from . import smithing
 from . import forge_actions
 from . import trade_actions
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
+
+
+def page_quiet(arg: str, entry) -> bool:
+    """Outcome.quiet（第二輪第 92 批；原本在 Game.choose 後半）：鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁，沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」。"""
+    return arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
+
+
+def forge_merges(arg: str) -> bool:
+    """Outcome.merge（同上）：打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
+    打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）會全部併進上一爐那一則。"""
+    return smith_base.is_forge_step(arg) and arg != "forge"
+
+
+def forged_fold(ctx: Game, arg: str):
+    """Outcome.fold（同上；動作之後才叫，要讀動作之後的單子）。FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
+    收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。
+    收掉的只有單子自己的回話（smith_base.is_step_line）：前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）。"""
+    forged = arg.partition(":")[0] == smith_base.GO_VERB and ctx.state.player.smith_draft is None
+    return smith_base.is_step_line if forged else False
 
 
 def smith_options(ctx: Game) -> list[Option]:
@@ -155,9 +174,9 @@ def trade_on(ctx: Game) -> bool:
 def material_options(ctx: Game) -> list[Option]:
     """鐵匠鋪的素材頁（素材與經濟設計第四、五節；店面關著時、整季機器人與假人看的那一串）：背包裡收得了的每一種一顆「賣一個」，
     手上有低一階料的每個（屬性, 階）一顆「升一個」（三階寫今天還能換幾個；按不下去的灰掉寫為什麼），回兵器／防具頁，最後「離開」。
-    字與按得下去與否都照店面的 shopview.trade_view（同一份規則）。都不花體力。"""
+    字與按得下去與否都照店面的 shop_view.trade_view（同一份規則）。都不花體力。"""
     s, c = ctx.state, ctx.content
-    trade = shopview.trade_view(s, c, ctx._pill_day()) or {"sell": [], "upgrade": []}
+    trade = shop_view.trade_view(s, c, ctx._pill_day()) or {"sell": [], "upgrade": []}
     opts = [
         Option(id=f"smith:sell:{row['id']}", enabled=row["problem"] is None,
                label=economy.SELL_LABEL.format(name=row["name"], price=row["price"], have=row["have"]) + row["dark"])  # 名聲 5.2：（黑市價）
@@ -250,7 +269,7 @@ def enter(ctx: Game) -> list[str]:
     equipment.open_smith(ctx.state.player, ctx.content)  # 打開鐵匠鋪（見 smith_options），不花體力；單子從頭開始（Review Focus 4）、停在第一個開著的那一頁
     ctx.state.player.shop_clue = ""
     ctx._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
-    ctx.state.player.smith_rule = shopview.next_rule(ctx.state, ctx.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
+    ctx.state.player.smith_rule = shop_view.next_rule(ctx.state, ctx.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
     return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
 
 

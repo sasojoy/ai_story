@@ -7,7 +7,7 @@ ctx.free_text_request（tests/server/test_server 換掉 Game.free_text_request�
 戰鬥的單打服務、地盤的進度……）一律經 ctx。
 
 - 事件卡：present（把事件端到眼前）、event_text（旁白）、event_tier（州郡大事、天下大事那一行）、event_option_view（江湖頁的鈕）、
-  choice_label_of（選單上那一顆的字）
+  choice_label_of（選單上那一顆的字）、pending_options（有事件待選時那一份選單，第二輪第 92 批從 Game._everyday_options 搬來；Game 留一行委派 _pending_options：Game 碰事件檢定只經一行委派，邊界測試守）
 - 固定選項：resolve_choice（按下去：檢定、打一場、套效果、行狀）、event_battle（劇情戰）、apply（效果；串下一則）、tale_clue（說書的口訣）
 - 隨口應對：free_text_of、branches_of、event_free_text_prompt（那一顆與輸入框）、free_text_request（A 段，鎖內只讀）、
   answer_event（C 段）、answer_branch（分岔的 C 段）、deed_credit（分岔的後果記貢獻）、add_gamble_narration（E 段，潤色插回紀錄）；
@@ -33,6 +33,7 @@ event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西
     tests/core/test_event_tiers.py（整檔 slow；event_tier 沒有測試寫到它的名字）、tests/core/test_events_new_regions.py、
     tests/core/test_faction_events.py、tianxia/features/military/tests/test_foreshadow.py、tianxia/features/military/tests/test_item7_foreshadow_cooldown.py、
     tianxia/features/military/tests/test_real_foreshadows.py
+  - 有事件待選時那一份選單（pending_options）：名字沒有測試寫，經 options 走，另外跑 tests/core/test_renown_choices.py（virtue_choices 關著不出現那一支 week7 走不到，只有它守）、tests/core/test_outcomes_answer.py（隨口應對的分岔）
 - 與 scripts/same_behavior.py 的 events 一軌（compare --tracks events；見計畫第五、六節）
 """
 from __future__ import annotations
@@ -43,18 +44,20 @@ from pydantic import BaseModel
 
 from . import annal_base as annals
 from . import bounty_base
-from .. import battlelog, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
+from .. import battlelog, event_llm, forge_secrets, journal, narration, renown, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
 from .. import stance_world as stance_rules  # 人物心意的世界那一半（共用規則層，全部拆包第 19 批）
-from ..events import choice_label, stamina_note, visible_choices
+from ..events import choice_label, free_text_note, stamina_note, visible_choices
 from ..journal import Draft
 from ..models import FREE_TEXT_MAX, Choice, Effect, Event, FreeTextChoice, Outcome
 from ..rules import (
     apply_effect, check_gap, check_result_line, evil_success, failed, fill_marks, free_text_rate, jianfa, rate_words, roll_check,
 )
 from ..world import check_thresholds
+from .option import Option
+from .services import BIG_FIGHT_WAIT
 
 if TYPE_CHECKING:
     from ..engine import Game  # noqa: F401  ctx 就是 Game（第一階）
@@ -162,6 +165,34 @@ def choice_label_of(ctx, choice: Choice, odds: bool) -> str:
 # ── 固定選項：檢定、打一場、效果 ──
 
 
+def pending_options(ctx, odds: bool) -> list[Option]:
+    """有事件待選時那一份選單（第二輪第 92 批；原本在 Game._everyday_options，字與先後一字不動）：每個看得到的選項一顆，自由文字那一顆排最後。
+    經 ctx 的那幾個是 Game 上換得掉的（_choice_label、is_big、_free_text_of、_branches），同這個檔的規矩。"""
+    s, c = ctx.state, ctx.content
+    event = c.events[s.pending_event]
+    opts = []
+    for i, ch in visible_choices(event, s, c):
+        opt = Option(
+            id=f"choice:{i}", label=ctx._choice_label(ch, odds),
+            wait=BIG_FIGHT_WAIT if ch.combat and ctx.is_big(c.squads[ch.combat]) else "",
+        )
+        if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
+            if not renown.on(c, "virtue_choices"):
+                continue
+            ok = renown.open_to(s, c, "choices", ch.needs.path, ch.needs.tier)  # 傳承的門路也開得了第一段
+            opt.enabled, opt.tag = ok, ch.needs.path
+            opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
+        opts.append(opt)
+    free = ctx._free_text_of(event)
+    if free is not None:
+        branches = ctx._branches(event)
+        opts.append(Option(
+            id=FREE_TEXT_OPTION, label=free.prompt + free_text_note(free, c, branching=bool(branches)),
+            outcomes=outcome_rules.tags(branches) if branches else None,
+        ))
+    return opts
+
+
 def resolve_choice(ctx, index: int) -> list[str]:
     s, c = ctx.state, ctx.content
     event = c.events[s.pending_event]
@@ -203,7 +234,7 @@ def tale_clue(ctx, event: Event) -> list[str]:
         clue = secret_recipes.hear(s, ctx.content, secret_recipes.tianji_of(ctx.world), secret_recipes.TALE, seed)
         if clue:
             out.append(cfg.tale_frame.format(clue=clue))
-    return out + ctx._forge_clue(forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
+    return out + forge_secrets.clue_line(s, ctx.content, ctx.world, forge_secrets.TALE, f"鑄說書|{s.player.name}|{s.world.time}|{event.id}")
 
 
 def event_battle(ctx, event: Event, choice: Choice) -> list[str]:

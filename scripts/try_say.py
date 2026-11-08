@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp()) / "try_say.db"))  # 開世界之前：不碰這份 clone 的 saves/
 
-from tianxia import companion_agent  # noqa: E402
+from tianxia.features.companions import companion_agent  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game, say_text  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402

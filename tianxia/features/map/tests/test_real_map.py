@@ -12,7 +12,9 @@ from tianxia.content import load_content
 from tianxia.events import event_matches_location
 from tianxia.state import new_game_state
 import random
-from tianxia import atlas, fusion, seal, social
+from tianxia import atlas, fusion
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
 from tianxia.engine import Game
 
 CONTENT_DIR = Path(__file__).parents[4] / "content"  # 全部拆包第 49 批整檔搬進包（原本 tests/season/ 是 parents[2]）

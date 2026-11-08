@@ -1,6 +1,6 @@
 """新手引導包的動作（全部拆包第 22 批：原本 Game 上的 31 個方法，計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md 1.1）。
 Game 留 24 個一行委派（server、測試、別的功能在叫的），其餘 7 個只有這一包在叫。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用
-tianxia/core/services.py 那張清單上的；這一包互相叫直接叫函式，只有被測試換掉的 _hint_triggers 與 _note_action 經 ctx。
+tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式，只有被測試換掉的 _hint_triggers 與 _note_action 經 ctx。
 最後一段是核心原位與出陣包叫的服務（Game._opening_on……的本體）。"""
 from __future__ import annotations
 
@@ -35,6 +35,12 @@ def hire_here(ctx) -> bool:
     if not (c.config.hire.enabled and attrset.on(c, s.world)):
         return False
     return any(ch.hire_at == s.player.location and roster.owned_by(ctx.world, cid) is None for cid, ch in c.characters.items())
+
+def note_action(ctx: Game, action: str) -> list[str]:
+    """做完一個行動，引導（說書人的步驟與入伍段）看這一步完成了沒（rules.note_action），回那幾行（呼叫端交給 _guide）。
+    叫模組屬性：tests/core/test_engine.py 換的是 tianxia.features.guide.rules.note_action。第二輪第 98 批從 Game 本體搬進來。"""
+    return rules.note_action(ctx.state, ctx.content, ctx.world, action)
+
 
 def note_gift(ctx: Game) -> None:
     """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：

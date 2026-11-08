@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import random
+import re
 import time
 from pathlib import Path
 
@@ -14,7 +15,9 @@ import server
 import webharness
 import zhuan_html
 from conftest import next_season
-from tianxia import annals, biography, epiphany, gender
+from tianxia.features.zhuan import standing as annals, biography
+from tianxia.features.sense import epiphany
+from tianxia import gender
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parents[4]
@@ -428,6 +431,8 @@ def test_the_server_writes_in_the_background_shares_and_serves_the_public_page(c
     assert '<meta property="og:title" content="沈青衫傳">' in html
     assert f'<meta property="og:url" content="https://testserver/zhuan/{code}">' in html
     assert 'content="https://testserver/static/zhuan-og.png"' in html and "沈青衫者，" in html
+    assert re.findall(r"<script\b[^>]*>", html) == ['<script src="/static/zhuan_page.js">']  # CSP（第 213 批）：沒有 inline 的 <script>
+    assert TestClient(server.app).get("/static/zhuan_page.js").status_code == 200
     monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxia.example/")
     assert client.get("/api/zhuan?season=1").json()["url"] == f"https://tianxia.example/zhuan/{code}"
     taken = client.post("/api/zhuan/share", json={"season": 1, "public": False}).json()

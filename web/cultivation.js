@@ -2,7 +2,7 @@
  *
  * 俠客頁（pagePractice）：武學、裝備、門下、屬性四個分頁、功法庫與篩選、批量熔煉、意境槽、武學卡上的絕招、破境動畫與破境卡（ascendCard）的畫法。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；/ 的 script 標籤由伺服器照 FEATURES 生成，這支排在 app.js 前面。
- * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、change 分派的 case 與 renderPage 照舊在 app.js（殼）。
+ * 全部拆包第 64 批從 app.js 逐行切出來（計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md）。點擊、表單、change 用 registerClicks、registerForms、registerChanges 登記在這支檔；renderPage 照舊在 app.js（殼）。
  */
 "use strict";
 
@@ -153,7 +153,15 @@
     return lines.map((l) => `<p>${l}</p>`).join("");
   }
 
-  const heroFigure = (s) => HERO_FIGURES[s && s.gender === "女" ? "女" : "男"];
+  // 剪影照性別與這一季挑的成長（HERO_FIGURES.growth）；遊俠、自己配、還沒挑的照舊用遊俠那張
+  const heroFigure = (s) => {
+    const sex = s && s.gender === "女" ? "女" : "男";
+    const k = s && s.growth && s.growth.chosen, alt = k && HERO_FIGURES.growth[k];
+    if (!alt) return HERO_FIGURES[sex];
+    const f = alt[sex];
+    return { src: `/static/img/growth/${k}-${sex === "女" ? "f" : "m"}.webp`, ratio: f.ratio,
+      nodes: f.nodes.map(([key, x, y, side]) => ({ key, kind: "art", x, y, side })) };
+  };
 
   // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
   function heroInfo(n, x, s) {
@@ -236,6 +244,23 @@
     return cells ? `<div class="self-gears">${cells}</div>` : "";
   }
   const CN_TENTHS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  // 武學的成數畫成一筆乾墨（UI 手感戊批，Joy 2026-11-08 看畫稿說可以；以前是十個小方格）：墨走到現在的成數，筆頭蓋一枚小朱印寫「幾成」，
+  // 底下九道細刻度（五成那一道長一點）；絕學是金墨，十成的印寫「大成」。沒練過（零成）只有底下那一道淡墨與刻度
+  const SA_X0 = 5, SA_X1 = 284; // 墨從哪裡起、十成到哪裡（viewBox 320 寬，右邊留給印）
+  function saInk(lv, top) {
+    const end = SA_X0 + ((SA_X1 - SA_X0) * lv) / 10;
+    const ticks = Array.from({ length: 9 }, (_, k) => { const x = (SA_X0 + ((SA_X1 - SA_X0) * (k + 1)) / 10).toFixed(1); return k === 4 ? `<rect x="${x}" y="24" width="1.8" height="7"/>` : `<rect x="${x}" y="25" width="1.4" height="5"/>`; }).join("");
+    const ink = top ? "#8a611a" : "#2a241d", ink2 = top ? "#c9952f" : "#3a3128", seal = top ? "#b7862b" : "#a8322a";
+    const d = `M${SA_X0} 18.5 Q${((SA_X0 + end) / 2).toFixed(1)} 15.5 ${end.toFixed(1)} 17.6`;
+    const stroke = lv > 0 ? `<path d="${d}" stroke="${ink}" stroke-width="10" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${ink2}" stroke-width="4" stroke-linecap="round" fill="none" opacity=".55"/>`
+      + `<path d="${d}" stroke="#fbf7ef" stroke-width="1.2" stroke-dasharray="14 9 30 6 22 11" fill="none" opacity=".5" transform="translate(0 -2)"/>`
+      + `<path d="${d}" stroke="#fbf7ef" stroke-width=".9" stroke-dasharray="9 13 24 7" fill="none" opacity=".4" transform="translate(0 2.6)"/>` : "";
+    const word = lv >= 10 && top ? "大成" : `${CN_TENTHS[lv]}成`;
+    const stamp = lv > 0 ? `<g transform="translate(${Math.min(288, end + 3).toFixed(1)} 4)"><rect width="30" height="22" rx="3" fill="${seal}"/><rect x="2" y="2" width="26" height="18" rx="2" fill="none" stroke="#f6e3cc" stroke-width="1"/>`
+      + `<text x="15" y="15.2" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fdf3e4">${word}</text></g>` : "";
+    return `<svg class="sa-ink" viewBox="0 0 320 34" aria-hidden="true"><path d="M4 18 Q160 15 316 18" stroke="#d9ccb2" stroke-width="7" stroke-linecap="round" fill="none" opacity=".75"/>`
+      + `<g fill="#b8a888">${ticks}</g>${stroke}${stamp}</svg>`;
+  }
   // 「武學」那一段（俠客頁重排，Joy 2026-10-24）：小標題右邊一顆「功法庫 N/M・意境 K ›」（攤開底下的功法庫摺疊、捲過去），
   // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
   function selfArtsHtml(x) {
@@ -249,7 +274,7 @@
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
       const card = `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
-        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${Array.from({ length: 10 }, (_, k) => `<i${k < lv ? ' class="on"' : ""}></i>`).join("")}</i></span></button>`;
+        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${saInk(lv, top)}</i></span></button>`;
       // 絕招掛在「武學」那一門底下（跟著手上的打法走；內功不掛）
       return a.kind === "武學" && hm ? `<div class="self-art-wrap${top ? " q4" : ""}">${card}${heroMoveHtml(hm, a)}</div>` : card;
     }).join("")}</div></section>`;
@@ -280,10 +305,10 @@
     S.heroMoveShow = mid;
     render();
     const hm = S.main && S.main.hero_move;
-    sceneAsMe(hm && hm.worn ? hm.worn.style : ""); // 台上站的是自己（mall.js）
+    sceneAsMe(hm && hm.worn ? hm.worn.style : ""); // 台上站的是自己（looks.js）
     if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
-  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
+  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（looks.js 的 openMallMoves）。
   // 萬寶閣也用 #scene-preview 那一塊畫布：先把俠客頁這一塊收起來
   async function heroMoveGo(style) {
     S.heroMoveShow = null;
@@ -774,7 +799,7 @@
       const on = x.person === c.key;
       const hp = c.hp_max ? `<span class="mate-hp" role="meter" aria-valuemin="0" aria-valuemax="${c.hp_max}" aria-valuenow="${c.hp}" aria-label="氣血"><i style="width:${Math.max(0, Math.min(100, Math.round((c.hp / c.hp_max) * 100)))}%"></i></span><small class="mate-hpn">氣血 ${c.hp}／${c.hp_max}</small>` : "";
       const arts = c.arts.map((a) => `<span class="mate-art"><em>${esc(a.kind)}</em>${a.name ? `<b>${esc(a.name)}</b><small>${esc(a.quality)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}</small>`
-        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${Array.from({ length: 10 }, (_, k) => `<i${k < (a.level | 0) ? ' class="on"' : ""}></i>`).join("")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
+        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${saInk(Math.max(0, Math.min(10, a.level | 0)), a.quality === "絕學")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
       const detail = on && x.person_card ? `<div class="mate-detail">${mateExtra(x.person_card)}${noteAt("person")}
         ${x.person === "player" || x.person.startsWith("follower:") ? ""
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
@@ -921,3 +946,134 @@
   function askMeltInsight(el) {
     ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
   }
+  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
+  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
+  function heroStay(draw) {
+    const page = document.getElementById("page");
+    const y = window.scrollY || 0;
+    draw();
+    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
+    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
+    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
+    const target = Math.min(y, Math.max(0, tabsTop - 8));
+    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
+    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
+    window.scrollTo(0, target);
+  }
+  async function cultivationClick(act, el, ev) {
+    switch (act) {
+        case "hero-tab": heroStay(() => { S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); }); break; // Joy 11/7「按完不要都給我跳置頂」
+        case "attr-help": heroStay(() => { S.attrHelp = !S.attrHelp; renderPage(); }); break; // 屬性頁的「？」：五項各管什麼
+        case "xinde-more": heroStay(() => { S.xindeOpen = !S.xindeOpen; renderPage(); }); break; // 屬性頁心得那一行：點開看整句提示
+        case "hero-move-show": await heroMoveShow(el.dataset.id || ""); break; // 俠客頁武學卡底下的絕招演一次
+        case "hero-move-go": await heroMoveGo(el.dataset.style || ""); break; // 換一招：萬寶閣絕招那一頁
+        case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：開那一樣的抽屜
+        case "self-sec": { // 俠客頁「功法庫・意境 ›」那一顆：攤開底下那個摺疊、捲到它
+          (S.selfOpen || (S.selfOpen = {}))[el.dataset.sec] = true;
+          renderPage();
+          const box = document.querySelector(`details.self-fold[data-sec="${CSS.escape(el.dataset.sec)}"]`);
+          if (box && box.scrollIntoView) box.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        }
+        case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
+        case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
+        case "kind": S.kind = el.dataset.kind; renderPage(); break;
+        case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
+        case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "lib-filter": setLibFilter(el.dataset.filter); renderPage(); break;
+        case "lib-all": S.libAll = true; renderPage(); break;
+        case "melt-mode": S.meltSel = S.meltSel ? null : { arts: [], ins: [] }; S.artOpen = null; S.meltOpen = null; S.meltNote = null; renderPage(); break;
+        case "melt-pick": meltToggle("arts", el.dataset.id); break;
+        case "melt-pick-ins": meltToggle("ins", el.dataset.id); break;
+        case "melt-shown": meltPickShown(); break;
+        case "melt-weak": meltView().weak = !meltView().weak; renderPage(); break;
+        case "melt-open": S.meltOpen = S.meltOpen === el.dataset.key ? null : el.dataset.key; renderPage(); break;
+        case "melt-clear": if (S.meltSel) { S.meltSel = { arts: [], ins: [] }; renderPage(); } break;
+        case "melt-go": askMeltMany(el); break;
+        case "rack-all": S.rackAll = true; renderPage(); break;
+        case "ins-open": S.insOpen = S.insOpen === el.dataset.id ? null : el.dataset.id; S.artOpen = null; S.pdrawer = false; renderPage(); break;
+        case "slot-pick": { // 空槽：攤開（再點收起）手上空著的意境
+          const same = S.slotPick && S.slotPick.art === el.dataset.id && S.slotPick.i === Number(el.dataset.i);
+          S.slotPick = same ? null : { art: el.dataset.id, i: Number(el.dataset.i) };
+          renderPage(); break;
+        }
+        case "slot-in": S.slotPick = null; await mx("slot", { art: el.dataset.id, insight: el.dataset.ins, index: Number(el.dataset.i) }); break;
+        case "ascend-ok": await mx("ascend_dismiss", {}); break;
+        case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;
+        case "person":
+          S.person = S.person === el.dataset.key ? null : el.dataset.key;
+          await loadMenxia();
+          break;
+        case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
+        case "feed": await mx("feed"); break;
+        case "release-mate": { // 歷史武將同行：放他回江湖，先問一次（問句伺服器寫好，roster.RELEASE_CONFIRM）
+          const who = S.person;
+          ask(el.dataset.confirm, "放他走", async () => { S.person = null; await mx("release", { person: who }); });
+          break;
+        }
+        case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
+        case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）
+          const pick = document.getElementById("bind-art-" + el.dataset.id);
+          if (pick && pick.value) ask("綁了之後不能改配（那一門熔掉、交掉才能再配），確定嗎？", "綁上", () => mx("bind_art", { weapon: el.dataset.id, art: pick.value }));
+          break;
+        }
+        case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
+          ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
+          break;
+        case "switch": {
+          // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
+          await mx("switch", { art: el.dataset.id }); // 真的送出了才收起卡片（mx 換上伺服器回來的那一份才收）；還在忙或失敗就照舊開著
+          break;
+        }
+        case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; S.insOpen = null; S.pdrawer = false; renderPage(); break;
+        case "cultivate": {
+          // 服丹衝關（use_legend，伺服器只認真正的布林 true）。真的擲了骰（mx 換上了伺服器回來的那一份 menxia、丹少了一枚）
+          // 才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
+          const id = el.dataset.id, pill = el.dataset.by === "pill";
+          const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
+          const was = S.menxia?.legend_items;
+          await mx("cultivate", { art: id, use_legend: pill });
+          if (row && pill && typeof was === "number") {
+            // 看手上的丹（不是那一列的 legend：被拒絕時那一列也會變成 null，例如體力在別處花掉了，那時不能播彈回）
+            const now = (S.menxia?.owned_arts || []).find((a) => a.id === id);
+            const won = !!now && now.quality === "絕學";
+            if (won || (S.menxia?.legend_items ?? was) < was) breakAnim(row, won);
+          }
+          break;
+        }
+        case "melt": askMelt(el); break;
+        case "melt-insight": askMeltInsight(el); break;
+    } // cultivationClick
+  } // cultivationClick
+  registerClicks(cultivationClick, ["hero-tab", "attr-help", "xinde-more", "hero-move-show", "hero-move-go", "hero-node", "self-sec", "drawer-close", "ins-filter", "kind", "mx", "art-info", "lib-filter", "lib-all", "melt-mode", "melt-pick", "melt-pick-ins", "melt-shown", "melt-weak", "melt-open", "melt-clear", "melt-go", "rack-all", "ins-open", "slot-pick", "slot-in", "ascend-ok", "slot-out", "person", "wield", "feed", "release-mate", "teach", "bind-art", "dismantle", "switch", "art", "cultivate", "melt", "melt-insight"]);
+  async function cultivationForm(form, data) {
+      if (form.id === "name-art") {
+        // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name", { name: data.name });
+        // 被拒了（表單還在，原因寫在頁面上方那一行）：mx 重畫的表單是空的，把剛打的字放回去，不用重打；定成了表單就不在
+        const again = document.querySelector('#name-art input[name="name"]');
+        if (again && S.menxia && S.menxia.naming) again.value = data.name;
+      } else if (form.dataset && form.dataset.op === "name-divine") {
+        // 神器原品定名（5.2）：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了那一列就不再畫表單
+        if (!data.name.trim()) { toast("先取個名字。"); return; }
+        await mx("name_divine", { weapon: form.dataset.id, name: data.name.trim() });
+        // 被拒了（那一列的表單還在，原因寫在頁面上方那一行）：原因也記下來、表單裡留一行（FB-193），重畫；mx 重畫的表單是空的，
+        // 把剛打的字放回去，不用重打（同絕學定名那張）。表單 id 帶著裝備 id 的冒號，用 getElementById 找（不走選擇器）；
+        // 定成了那一列不再畫表單，找不到就什麼都不放
+        if (document.getElementById("name-divine-" + form.dataset.id)) {
+          S.divineWhy[form.dataset.id] = (S.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          renderPage();
+        }
+        const again = document.getElementById("name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
+        if (again) again.value = data.name;
+      } // cultivationForm
+  } // cultivationForm
+  registerForms(cultivationForm, ["name-art", "op:name-divine"]);
+  async function cultivationChange(ev) {
+    if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
+      meltView()[ev.target.dataset.key] = ev.target.value;
+      renderPage();
+    }
+  } // cultivationChange
+  registerChanges(cultivationChange);

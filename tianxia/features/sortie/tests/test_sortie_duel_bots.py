@@ -10,7 +10,8 @@ import random
 
 import pytest
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, seat
-from tianxia import bot, bot_policy, sortie_duel
+from tianxia import bot, bot_base, bot_policy
+from tianxia.features.sortie import duel_rules as sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.models import MOVES as THREE
 
@@ -19,7 +20,7 @@ def _quiet(monkeypatch):
     """take_turn 前面那幾樣隨機的事（截殺、名帖、設伏工事、酒肆、擂台）不做，只看打分數那一步。"""
     for name in ("_raid", "_hand_card", "_stamina_play", "_tavern", "_arena"):
         monkeypatch.setattr(bot_policy, name, lambda *a, **k: None)
-    monkeypatch.setattr(bot_policy, "_outmatched", lambda game, loc: False)  # 打得過守軍（不然守軍難度六十幾，新角色不去攻）
+    monkeypatch.setattr(bot_base, "_outmatched", lambda game, loc: False)  # 打得過守軍（不然守軍難度六十幾，新角色不去攻）
 
 
 def test_duel_moves_are_three_known_moves():
