@@ -508,3 +508,78 @@ def test_remove_login_keeps_the_last_way(store):
         store.remove_login("alpha", "password")  # 密碼列這一批不准拿（鍵終身不變）
     store.remove_login("alpha", "line")
     assert store.authenticate("alpha", "secret-pw").key == "alpha"
+
+
+# ── 帳號與客服第 204 批：補設密碼的記號列、search(keys)、照 account_id 換密碼、刪帳號 ──
+
+
+def _cheap(monkeypatch):
+    from tianxia import accounts
+
+    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
+
+
+def test_id_marker_keeps_key(store, monkeypatch):
+    _cheap(monkeypatch)
+    key = store.create_without_password("phone", "h" * 64, "09*****678")
+    store.bind_character(key, "沈青衫")
+    assert store.add_password(key, "Ray_77", "secret-pw") == key
+    with pytest.raises(AccountError):
+        store.add_password(store.create_without_password("email", "e" * 64, "r*@x.co"), "RAY_77", "secret-pw")  # 帳號名有人用了
+    with pytest.raises(ValueError):
+        store.add_password(key, "other_1", "secret-pw")  # 已經有密碼
+    assert store.get(key).login == "Ray_77" and store.get(key).hash is not None
+    assert store.get("ray_77").key == key and store.authenticate("ray_77", "secret-pw").key == key
+    assert store.owner_of("沈青衫") == key and store.find("ray_77") == key and store.login_key("phone", "h" * 64) == key
+    with pytest.raises(ValueError):
+        store.remove_login(key, "id")  # 記號列不算一種、拿不掉
+    with pytest.raises(ValueError):
+        store.add_login(key, "id", "id:9", "")
+    store.remove_login(key, "phone")  # 還有密碼：拿得掉
+    assert sorted(x["provider"] for x in store.logins_of(key)) == ["id", "password"]
+    with pytest.raises(ValueError):
+        store.remove_login(key, "password")
+    assert store.get(key).key == key
+
+
+def test_search_default_bytes_unchanged(store, monkeypatch):
+    _cheap(monkeypatch)
+    store.register("alpha", "secret-pw")
+    store.bind_character("alpha", "沈青衫")
+    key = store.create_without_password("phone", "h" * 64, "09*****678")
+    assert store.search("a") == [{"login": "alpha", "character": "沈青衫"}]
+    assert store.search("id:") == [{"login": key, "character": ""}]
+    aid = store.account_id("alpha")
+    assert store.search("a", keys=True) == [{"key": "alpha", "id": aid, "login": "alpha", "character": "沈青衫"}]
+    store.add_password(key, "ray_77", "secret-pw")
+    assert store.search("ray", keys=True)[0]["key"] == key and store.search("ray") == [{"login": "ray_77", "character": ""}]
+
+
+def test_replace_secret_by_account_id(store, clock, monkeypatch):
+    _cheap(monkeypatch)
+    key = store.create_without_password("phone", "h" * 64, "09*****678")
+    store.add_password(key, "ray_77", "secret-pw")
+    sessions = SessionStore(store.db, clock=clock)
+    keep, other = sessions.create(key), sessions.create("ray_77")
+    store.change_password(key, "secret-pw", "second-pw", keep=keep)
+    assert store.authenticate("ray_77", "second-pw").key == key
+    assert sessions.get(keep) == key and sessions.get(other) is None  # 兩種鍵的登入狀態都清
+    store.set_password("ray_77", "third-pw")
+    assert store.authenticate("ray_77", "third-pw").key == key and sessions.get(keep) is None
+    k2 = sessions.create(key)
+    store.reset_password(key, "fourth-pw", keep=k2)
+    assert store.authenticate("ray_77", "fourth-pw").key == key and sessions.get(k2) == key
+
+
+def test_delete_account_rows(store, clock):
+    key = store.create_without_password("phone", "h" * 64, "09*****678")
+    store.bind_character(key, "沈青衫")
+    token = SessionStore(store.db, clock=clock).create(key)
+    gone = store.delete_account(key)
+    assert gone == [{"provider": "phone", "subject": "h" * 64, "display": "09*****678"}]
+    assert store.get(key) is None and store.owner_of("沈青衫") is None and SessionStore(store.db, clock=clock).get(token) is None
+    with store.db.snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM logins").fetchone()[0] == 0
+    with pytest.raises(KeyError):
+        store.delete_account(key)
+

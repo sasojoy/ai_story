@@ -35,3 +35,12 @@
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - 畫面 `web/looks.js`（第 94 批從 `mall.js` 切出來，615 行）：形象頁、自建形象、市集、絕招、管理者區自建形象與成品牆，`looksClick` 26 個 act；`LooksFeature.web = ("looks.js", "looks.css")`。樣式沒寫字級的 84 行第 104 批搬到 `web/looks.css`（排在 `mall.css` 前面），手機字級與電腦寬共 60 行還在 `web/mall.css`。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時，形象市集的上架 `actions.market_list` 與買 `actions.market_buy`（鍵 `looks_market`）在既有「市集沒開」那一行之後問核心 `core/identity_base.phone_ok`，只問動手的人，被擋回 `identity_base.PHONE_NEEDED`；下架 `market_unlist` 不擋。市集的鈕在 `web/looks.js`、沒有可用的欄位，這一批不碰網頁、不灰鈕（按下去回那一句）。沒有新路由、新欄位、新表。測試 `tests/test_looks_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。
+
+## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
+
+identity 開著時，被扣押的帳號不能上架形象市集：`actions.market_list` 緊接在 `phone_ok` 那兩行之後問核心 `identity_base.hold_reason(ctx, "looks_market")`，有就回那一句（不灰鈕，`web/looks.js` 沒動）。
+下架 `market_unlist` 不擋（第 208 批計畫）；買 `market_buy` 也在花元寶，M 波起買的人被扣押也擋（同一個鍵、同一句，在它的 `phone_ok` 之後）。沒有新路由、新欄位、新表。測試 `tests/test_looks_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

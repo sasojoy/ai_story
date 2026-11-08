@@ -72,7 +72,7 @@
 
 ## import 的規矩（手冊 3.11）
 
-包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`raid_actions.py` 讀核心 `core/bounty_base`。
+包只 import 核心、共用層、自己這一包（第二輪第 102 批硬規矩，手冊 3.11，寫註也放行不了），沒有過渡 import。`raid_actions.py` 讀核心 `core/bounty_base`；截殺、贈物、切磋、論武、邀請的那幾支讀核心 `core/identity_base`（第 205 批）。
 
 ## 量到的（第 37 批 Task 5）
 
@@ -102,3 +102,18 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `bots.py` 多 `_answer_discuss`（第 101 批）。`mingtie.py`、`bots.py` 到 `leaderboard` 第 88 批起、`discuss_actions.py` 到 `fusion` 第 87 批起都是共用規則層。
 - `admin_mingtie_reports` 改由這一包登記的 `admin` 表 `mingtie` 格叫，不再是 server 叫（第 90 批）。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時問核心 `core/identity_base.phone_ok(ctx, 鍵)`，只問動手的那一個人（對手綁沒綁、是不是假人都不影響）：
+- 截殺 `raid`：`raid_actions.raid` 第一行；卡上的「截殺」（`raid.buttons`，`is_shown` 之後）灰掉寫 `identity_base.PHONE_NEEDED`。
+- 贈物 `gift`：`social._gift` 第一行；「贈素材」（`_gift_buttons`，身上沒東西照舊不畫）灰掉。
+- 切磋 `spar`、論武 `discuss` 的發起：`spar_actions.send`、`discuss_actions.send` 第一行；卡上的「切磋」「論武」灰掉。
+- 答應：`invite_actions.answer_invite` 最前面（`yes` 且 kind 是 spar、discuss），被擋時邀請留著、不存檔、不通知；卡上的「答應切磋」「答應論武」灰，婉拒、收回不擋。論武的 A 段 `discuss_actions.request` 被擋回 None（不開取名單）。選單上的 `invite:yes:` 不灰（不是卡），按下去由 `answer_invite` 回那一句。
+- 沒有新路由（不適用「關著 404」）、新欄位、新表；新字只有核心那一句。測試 `tests/test_peers_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時 `test_for` 不往包裡找，跑 `tests/core/test_identity_base.py` 與 peers、bounties、mall、looks 四包的 `test_*_phone_gate.py`。
+
+## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
+
+identity 開著時，被扣押的帳號不能贈物：`social._gift` 緊接在 `phone_ok` 那兩行之後問核心 `identity_base.hold_reason(game, "gift")`，有就回那一句、素材不動；
+「贈素材」（`_gift_buttons`）手機那一句優先，其次扣押那一句，再其次照舊 `gift_refusal`。只問送的人：對方被扣押不影響我送；別人看我的卡一個字不變。
+沒有新路由、新欄位、新表。測試 `tests/test_peers_hold.py`（小工具 `tests/kit/phone_kit.hold`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

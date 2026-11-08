@@ -34,18 +34,20 @@
         <p>${esc(f.record)}・${esc(f.strength)}</p>${f.arts.length ? `<p class="arts">${esc(f.arts.join("、"))}</p>` : ""}${f.famed ? `<p class="arts famed">${esc(f.famed)}</p>` : ""}</div>
         <button class="btn${f.enabled ? " primary" : ""} small" data-act="choose" data-id="${esc(f.id)}" ${f.enabled ? "" : `disabled title="${esc(f.why || "")}"`}>${f.enabled ? "<b>挑戰</b>" : f.short ? `<b>${esc(f.short[0])}</b>${f.short[1] ? `<small>${esc(f.short[1])}</small>` : ""}` : esc(f.why)}</button>
       </article>`;
-    if (!me.joined) return mine;
+    // 還沒報名：底下不再空著，放榜上前五名（UI 手感乙批 5-3），看了知道要挑的是誰
+    if (!me.joined) return shop.board.length ? `${mine}<h4 class="ring-h">${ARENA_TOP_H}</h4><ol class="ring-board">${shop.board.slice(0, 5).map(boardRow).join("")}</ol>` : mine;
     const foes = shop.foes.length ? `<div class="ring-foes">${shop.foes.map(card).join("")}</div>` : `<p class="shop-empty">${esc(shop.nobody)}</p>`;
     return `${mine}<h4 class="ring-h">挑得到的人</h4>${foes}`;
   }
 
+  const ARENA_TOP_H = "擂台上的前幾名"; // 待 joy 潤
+  const boardRow = (r) => `<li class="${r.me ? "me" : ""}${r.rank <= 3 ? ` top${r.rank | 0}` : ""}"><span class="rk">${r.rank | 0}</span>
+        <div class="nm"><b>${esc(r.name)}</b><span class="wl">${r.wins | 0} 勝 ${r.losses | 0} 負${r.draws ? ` ${r.draws | 0} 和` : ""}${r.streak >= 2 ? `・連勝 ${r.streak | 0}` : ""}</span></div>
+        ${r.title ? `<span class="ttl">${esc(r.title)}</span>` : ""}</li>`;
   // 擂台榜：照名次排，前三名有名次色、稱號一個小牌子，你自己那一列標出來；底下一行每天的俸
   function arenaBoardHtml(shop) {
     if (!shop.board.length) return `<p class="shop-empty">${esc(shop.board_empty)}</p>`;
-    const row = (r) => `<li class="${r.me ? "me" : ""}${r.rank <= 3 ? ` top${r.rank | 0}` : ""}"><span class="rk">${r.rank | 0}</span>
-        <div class="nm"><b>${esc(r.name)}</b><span class="wl">${r.wins | 0} 勝 ${r.losses | 0} 負${r.draws ? ` ${r.draws | 0} 和` : ""}${r.streak >= 2 ? `・連勝 ${r.streak | 0}` : ""}</span></div>
-        ${r.title ? `<span class="ttl">${esc(r.title)}</span>` : ""}</li>`;
-    return `<ol class="ring-board">${shop.board.map(row).join("")}</ol>${shop.wages ? `<p class="ring-note">${esc(shop.wages)}</p>` : ""}`;
+    return `<ol class="ring-board">${shop.board.map(boardRow).join("")}</ol>${shop.wages ? `<p class="ring-note">${esc(shop.wages)}</p>` : ""}`;
   }
 
   // 打到一半：兩邊的氣血、中間一條氣勢（越往右越是你佔上風）、他的架勢、三招、放手一搏、這一場打過的回合

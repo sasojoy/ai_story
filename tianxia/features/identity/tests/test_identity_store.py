@@ -93,7 +93,7 @@ def test_old_side_file_gets_the_new_columns(tmp_path):
     s = idstore.IdentityStore(path)
     with sqlite3.connect(path) as conn:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(challenges)")]
-    assert cols[-3:] == ["channel", "subject_hmac", "display"]
+    assert cols[-4:] == ["channel", "subject_hmac", "display", "contact"]  # 第 208 批多 contact（綁定的單封存的號碼）
     assert s.challenge("old")["code_hmac"] == "h"
     idstore.IdentityStore(path)  # 再開一次不重複補
 
@@ -109,7 +109,8 @@ def test_ticket_is_one_time_and_expires(tmp_path):
     s = idstore.IdentityStore(tmp_path / "x-identity.sqlite")
     s.put_ticket("h1", "line", "login", "b1", "no-1", "ver-1", expires=200.0, now=100.0)
     s.put_ticket("h2", "google", "login", "b2", "no-2", "ver-2", expires=150.0, now=100.0)
-    assert s.take_ticket("h1", 199.0) == {"provider": "line", "purpose": "login", "browser_hash": "b1", "nonce": "no-1", "verifier": "ver-1"}
+    assert s.take_ticket("h1", 199.0) == {"provider": "line", "purpose": "login", "browser_hash": "b1", "nonce": "no-1", "verifier": "ver-1",
+                                          "account_id": None}  # 第 204 批：綁定與重驗的單綁帳號，登入的單是 None
     assert s.take_ticket("h1", 199.0) is None  # 讀完就刪：不能重放
     assert s.take_ticket("h2", 150.0) is None  # 到期那一刻就不算
     assert s.take_ticket("nope", 1.0) is None
@@ -144,3 +145,20 @@ def test_old_side_file_gets_the_new_tables(tmp_path):
     assert {"oauth_tickets", "pending"} <= tables and kept == 1
     s.put_pending("t", "line", "U", expires=9.0, now=1.0)
     assert s.get_pending("t", 2.0) == ("line", "U")
+
+
+def test_old_side_file_gets_new_tables(tmp_path):
+    """第 208 批：第 204 批建的旁檔（沒有 reset_holds、contacts、cap_alerts，challenges 沒有 contact 欄）照開、補建補欄，舊資料不動。"""
+    path = tmp_path / "old-identity.sqlite"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE challenges (id TEXT PRIMARY KEY, purpose TEXT NOT NULL, account_id INTEGER, code_hmac TEXT NOT NULL, "
+                     "tries INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL, created REAL NOT NULL)")
+        conn.execute("CREATE TABLE holds (account_id INTEGER PRIMARY KEY, until REAL NOT NULL)")
+        conn.execute("INSERT INTO holds VALUES (3, 99.0)")
+    s = idstore.IdentityStore(path)
+    with sqlite3.connect(path) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(challenges)")}
+    assert {"reset_holds", "contacts", "cap_alerts"} <= tables
+    assert "contact" in cols
+    assert s.hold_until(3) == 99.0

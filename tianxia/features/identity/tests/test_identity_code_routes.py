@@ -92,15 +92,24 @@ def test_send_reply_identical_bound_unbound_and_capped(on):
     assert "set-cookie" not in capped.headers  # 滿了不開新單，舊的 cookie 照舊能用
 
 
-def test_send_errors_say_their_own_line(on):
+def test_send_errors_say_their_own_line(on, monkeypatch):
     c = TestClient(server.app)
     assert _send(c, to="+14155550100").json() == {"error": codes.BAD_PHONE}
     assert _send(c, to="nope", channel="email").json() == {"error": codes.BAD_EMAIL}
-    assert _send(c, token="").json() == {"error": codes.NEED_HUMAN}
+    monkeypatch.setattr(senders.FAKES.turnstile, "fail", True)
+    assert _send(c).json() == {"error": codes.NEED_HUMAN}
+    monkeypatch.setattr(senders.FAKES.turnstile, "fail", False)
     senders.FAKES.sms.fail = True
     r = _send(c)
     assert (r.status_code, r.json()) == (400, {"error": codes.CANNOT_SEND})
     assert senders.FAKES.sms.outbox == []
+
+
+def test_fake_turnstile_passes_without_a_site_key(on):
+    """假的就是假的（L 波 PM 定）：沒設網站金鑰時表單送空字串，fake_services 開著照樣寄得出去。"""
+    c = TestClient(server.app)
+    assert _send(c, token="").status_code == 200
+    assert len(senders.FAKES.sms.outbox) == 1
 
 
 def test_challenge_bound_to_cookie(on):

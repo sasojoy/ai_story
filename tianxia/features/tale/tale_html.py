@@ -22,20 +22,6 @@ CTA_GO = "進入江湖"
 SHARE = "分享"
 BACK = "‹ 返回"
 
-SCRIPT = """
-(function(){
-  function toast(msg){var d=document.createElement("div");d.className="zj-toast";d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove();},2200);}
-  var share=document.getElementById("zj-share"),back=document.getElementById("zj-back");
-  if(share)share.addEventListener("click",function(){
-    var url=share.getAttribute("data-url"),title=document.title;
-    if(navigator.share){navigator.share({title:title,url:url}).catch(function(){});return;}
-    if(navigator.clipboard){navigator.clipboard.writeText(url).then(function(){toast("網址已複製");},function(){prompt("複製這個網址",url);});}
-    else prompt("複製這個網址",url);
-  });
-  if(back)back.addEventListener("click",function(){try{parent.postMessage({zhanji:"close"},location.origin);}catch(e){}});
-})();
-"""
-
 
 def cn_count(n: int) -> str:
     """一到十寫中文，十一到九十九寫「十一」「二十三」，再多寫阿拉伯數字（標題列的小字）。"""
@@ -146,7 +132,7 @@ def page(view: dict, *, url: str, image: str, embedded: bool = False) -> str:
 <div class="zj-title"><h1>{escape(view.get('battle_name') or title)}</h1><span class="zj-seal">戰記</span></div>{sub}</div></header>
 {result_html(view)}{toc_html(view)}<main>{acts}</main>{cast_html(view)}
 <p class="zj-colophon"><span>{COLOPHON}</span><i>天下<br>大勢</i></p>{cta}</div>
-<script>{SCRIPT}</script></body></html>"""
+<script src="/static/tale_page.js"></script></body></html>"""
 
 
 def missing() -> str:

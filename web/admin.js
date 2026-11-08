@@ -187,12 +187,12 @@
       <form id="reset-form" class="stack">
         <div class="row"><input class="input" name="target" id="ad-reset-target" placeholder="帳號或名號" aria-label="帳號或名號" autocomplete="off" value="${esc(S.adResetTarget || "")}"><button class="btn small" type="button" data-act="ad-find">找</button></div>
         ${found ? (found.length
-          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`
+          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.key || x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`
           : '<p class="muted ad-note">找不到含這幾個字的帳號或名號。</p>') : ""}
         <div class="row"><input class="input" name="temp" id="ad-reset-temp" placeholder="臨時密碼（至少 ${AD_PW_MIN} 字）" aria-label="臨時密碼" autocomplete="off"><button class="btn small" type="button" data-act="ad-gen">產生一組</button></div>
         <p class="form-msg" role="alert"></p>
         <div class="row"><button class="btn" type="submit">重設密碼</button></div>
-      </form>`;
+      </form>${typeof identityAdminHtml === "function" ? identityAdminHtml() : ""}`;
   }
   const AD_PW_MIN = 6; // 同 tianxia/accounts.py 的 PASSWORD_MIN
 
@@ -201,12 +201,13 @@
     const q = String((input && input.value) || "").trim();
     S.adResetTarget = q;
     if (!q) { S.adAccounts = null; renderKeepingSheet(); toast("先打幾個字。"); return; }
-    const r = await api("/api/admin/accounts", { q });
+    const r = await api(S.main && S.main.identity ? "/api/identity/admin/accounts" : "/api/admin/accounts", { q }); // identity 開著（帳號與客服第 204 批）：每列多帶帳號鍵與綁定
     S.adAccounts = (r && r.rows) || [];
     renderKeepingSheet();
   }
   function adminPick(login) {
     S.adResetTarget = login;
+    S.adPicked = (S.adAccounts || []).find((x) => (x.key || x.login) === login) || null; // identity（帳號與客服第 204 批）：選中那一列的綁定（identity.js 畫）
     S.adAccounts = null;
     renderKeepingSheet();
     document.getElementById("ad-reset-temp")?.focus();

@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from tianxia import calendar, divine, rules, timetable
 from tianxia.core import features as features_core
+from tianxia.core import identity_base
 from tianxia.core.features import AdminTool, no_gate
 from tianxia.world_state import season_length_days
 
@@ -144,9 +145,19 @@ def timetable_choices(shell, game) -> dict:
     return {"timetable": rows, "results": results, "locks": locks}
 
 
-def reset_password(shell, game, target: str, temp: str) -> str:
-    """管理者幫人重設密碼（先照帳號找，再照名號找）；臨時密碼由管理者私下告訴對方。"""
+def admin_ok(shell, request, game) -> bool:
+    """這個請求能不能當管理者（帳號與客服第 207 批）：名號在名單上（Game.is_admin），而且 identity 開著時這次是密碼登入、
+    staff_hours 內驗過（identity_base.admin_session_ok；關著一律回真，原樣）。request 是 None（直接叫的）只看名號。"""
     if not game.is_admin():
+        return False
+    token = request.cookies.get(shell.COOKIE) if request is not None else None
+    return request is None or identity_base.admin_session_ok(shell.CONTENT, token, shell.time.time)
+
+
+def reset_password(shell, game, target: str, temp: str, request=None) -> str:
+    """管理者幫人重設密碼（先照帳號找，再照名號找）；臨時密碼由管理者私下告訴對方。
+    第 207 批：session 不夠跟不是管理者同一句；identity 開著時目標是名單上的帳號（identity_base.listed），臨時密碼也要 12 字。"""
+    if not admin_ok(shell, request, game):
         return "（只有管理者能重設密碼。）"
     store = shell.account_store()
     try:
@@ -154,10 +165,19 @@ def reset_password(shell, game, target: str, temp: str) -> str:
             key = store.find(target)
             if key is None:
                 return "找不到這個帳號或名號。"
-            store.set_password(key, temp)
+            staff = False
+            if identity_base.on(shell.CONTENT):
+                account = store.get(key)
+                staff = account is not None and identity_base.listed(
+                    shell.CONTENT, login=account.login, character=account.character, account_id=account.id)
+            store.set_password(key, temp, staff=staff)
     except shell.AccountError as exc:
         return str(exc)
-    return f"已重設 {store.get(key).login} 的密碼。"
+    account = store.get(key)
+    if identity_base.on(shell.CONTENT):  # 帳號與客服第 208 批（設計 6.4）：重設之後扣押 reset_hold_hours、寫一則「帳號」紀錄；關著不碰旁檔
+        hours = shell.CONTENT.config.identity.reset_hold_hours
+        identity_base.record_admin_reset(account.id, shell.time.time(), hours, identity_base.NOTE_ADMIN_RESET.format(hours=hours))
+    return f"已重設 {account.login} 的密碼。"
 
 
 
@@ -195,7 +215,7 @@ def router(shell) -> APIRouter:
     @r.get("/api/admin")
     def api_admin(request: Request):
         game = shell._game(request)
-        if not game.is_admin():
+        if not admin_ok(shell, request, game):
             raise HTTPException(403)
         return shell.look(game, lambda g: admin_choices(shell, g))
 
@@ -204,7 +224,7 @@ def router(shell) -> APIRouter:
         """管理者區「玩家個人劇情」查一個名號（Game.admin_player_choices）：他是誰、能不能發召見、能給的機緣與伏筆片段。只讀。
         名號放在 POST 的內容裡、不放在網址上。查不到回 200 加 {"refusal": …}（原因寫在表單那一行）。"""
         game = shell._game(request)
-        if not game.is_admin():
+        if not admin_ok(shell, request, game):
             raise HTTPException(403)
         name = str(body.get("name", ""))
         return shell.look(game, lambda g: g.admin_player_choices(name))
@@ -213,12 +233,12 @@ def router(shell) -> APIRouter:
     def api_admin_accounts(request: Request, body: dict = Body(...)):
         """管理頁「重設密碼」的帳號搜尋（管理頁獨立，Joy 2026-11-01）：帳號或名號含這幾個字的，最多 10 筆 {login, character}。只讀、管理者以外 403。"""
         game = shell._game(request)
-        if not game.is_admin():
+        if not admin_ok(shell, request, game):
             raise HTTPException(403)
         return {"rows": shell.account_store().search(str(body.get("q", "")))}
 
     @r.post("/api/admin/reset_password")
     def api_reset_password(request: Request, body: dict = Body(...)):
-        return {"message": reset_password(shell, shell._game(request), str(body.get("target", "")), str(body.get("temp", "")))}
+        return {"message": reset_password(shell, shell._game(request), str(body.get("target", "")), str(body.get("temp", "")), request)}
 
     return r

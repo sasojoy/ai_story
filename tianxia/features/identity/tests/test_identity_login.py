@@ -149,19 +149,25 @@ def test_start_returns_url_and_sets_browser_cookie(monkeypatch):
     assert cookie.startswith("tx_oauth=") and "HttpOnly" in cookie and "Path=/auth/" in cookie and "samesite=lax" in cookie.lower()
     assert "Max-Age=600" in cookie
     assert _side_rows("oauth_tickets") == 1 and seen["calls"] == []
-    for bad in ({"provider": "email", "purpose": "login"}, {"provider": "line", "purpose": "bind"}, {"provider": "nope"}):
+    for bad in ({"provider": "email", "purpose": "login"}, {"provider": "line", "purpose": "other"}, {"provider": "nope"}):
         assert c.post("/api/identity/start", json=bad).status_code == 404, bad
+    assert c.post("/api/identity/start", json={"provider": "line", "purpose": "bind"}).status_code == 401  # 第 204 批：綁要登入
     monkeypatch.setattr(server.CONTENT.config.identity, "ways", ["google"])
     assert c.post("/api/identity/start", json={"provider": "line", "purpose": "login"}).status_code == 404  # 不在 ways
 
 
-def test_start_refuses_when_logged_in(monkeypatch):
+def test_start_asks_when_logged_in(monkeypatch):
+    """第 204 批：已登入的瀏覽器再走登入，先問一次要不要換帳號（取代原本的 400）；帶 switch: true 才開單。"""
+    from tianxia.features.identity import binding
+
     _turn_on(monkeypatch)
     c = TestClient(server.app)
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     r = c.post("/api/identity/start", json={"provider": "line", "purpose": "login"})
-    assert r.status_code == 400 and r.json()["error"] == "你已經登入了，要換帳號請先登出"
+    assert r.status_code == 200 and r.json() == {"ask": binding.SWITCH_ASK}
     assert "set-cookie" not in r.headers
+    r = c.post("/api/identity/start", json={"provider": "line", "purpose": "login", "switch": True})
+    assert r.status_code == 200 and list(r.json()) == ["url"]
 
 
 def test_start_throttled_per_ip(monkeypatch):

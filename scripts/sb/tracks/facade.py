@@ -84,6 +84,40 @@ SUPPORT_SHELL_TOUCHED = (
     '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.filter(([k]) => k !== "support" || k in kinds).map(([k, name]) =>',
 )
 FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in SUPPORT_SHELL_TOUCHED))
+# identity（帳號與客服第 204 批；設計第七節 web/admin.js 那一列，企劃者 2026-11-08 點頭第 2 版）：管理頁重設密碼那一塊改的行——
+# data-login 改放帳號鍵、開著改打 /api/identity/admin/accounts、選中那一列記下來、表單後面接 identityAdminHtml()（關著回空字串）。
+# 改過的行原樣與改過的都放行，head 才有的那一行只放行 head 那一行；開關關著時畫出來的不變（identityAdminHtml 回空字串，S.main.identity 不在）。
+IDENTITY_ADMIN_TOUCHED = (
+    '          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`',
+    '          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.key || x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`',
+    '      </form>`;',
+    '      </form>${typeof identityAdminHtml === "function" ? identityAdminHtml() : ""}`;',
+    '    const r = await api("/api/admin/accounts", { q });',
+    '    const r = await api(S.main && S.main.identity ? "/api/identity/admin/accounts" : "/api/admin/accounts", { q }); // identity 開著（帳號與客服第 204 批）：每列多帶帳號鍵與綁定',
+    '    S.adPicked = (S.adAccounts || []).find((x) => (x.key || x.login) === login) || null; // identity（帳號與客服第 204 批）：選中那一列的綁定（identity.js 畫）',
+)
+FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in IDENTITY_ADMIN_TOUCHED))
+# CSP 標頭（帳號與客服第 213 批；設計第七節 server.py 那一列，PM 11/08 加「CSP 標頭」）：web/battle.js 決戰頭像的五個 inline onerror 拿掉，
+# 改成頂層一個 capture 的 error 監聽（bpFaceGone）。改過的四行原樣與改過的都放行，head 才有的七行（兩行註解、函式四行、監聽一行）只放行 head 那幾行。
+# 畫面行為（抓不到就拿掉圖）由 tests/web/test_csp_web.py 與 battle 包的網頁測試守。「  }」那一行也在名單上：兩邊都一樣拿掉，不影響對稱。
+CSP_TOUCHED = (
+    '    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy" onerror="this.remove()"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;',
+    '    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;',
+    '  // 頭像抓不到就拿掉那張圖、露出底下的字（bpFace 的 em）。以前寫在 img 的 inline 屬性上，CSP（第 213 批）不准 inline 的程式，',
+    '  // 改成頂層一個監聽：error 不冒泡，要 capture；只認決戰頭像那三種框裡的 img',
+    '  function bpFaceGone(ev) {',
+    '    const img = ev.target;',
+    '    if (img && img.tagName === "IMG" && img.closest(".bp-face, .bp-duo, .bp-solo")) img.remove();',
+    '  }',
+    '  document.addEventListener("error", bpFaceGone, true);',
+    '      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="" onerror="this.remove()">` : ""}</div>`;',
+    '      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="">` : ""}</div>`;',
+    '      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"><i class="bp-slash"></i></div>`',
+    '      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt=""><i class="bp-slash"></i></div>`',
+    '      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`',
+    '      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt=""></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`',
+)
+FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in CSP_TOUCHED))
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 

@@ -11,6 +11,7 @@ import unicodedata
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from tianxia.core import identity_base
 from tianxia.core.features import AdminTool
 
 from . import actions
@@ -118,7 +119,7 @@ def router(shell) -> APIRouter:
         """管理者查一個名號（或帳號）的帳（actions.admin_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""
         _mall_on()
         game = shell._game(request)
-        if not game.is_admin():
+        if not game.is_admin() or not identity_base.admin_session_ok(shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time):  # 帳號與客服 M 波（第 207 批留下）：identity 開著時要密碼登入、staff_hours 內驗過；關著一律真、不讀時鐘
             raise HTTPException(403)
         name = str(body.get("name", ""))[:40]
         return shell.act_look(game, lambda g: None, lambda g: actions.admin_ledger(g, name))[1]

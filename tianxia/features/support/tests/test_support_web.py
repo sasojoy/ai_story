@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 import webharness
@@ -16,7 +17,7 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES = '"bookHtml", "peerHtml"]'
-SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml"]')
+SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate"]')
 assert SUPPORT_DRIVER != DRIVER
 
 XSS = ('<img src=x onerror="globalThis.__pwned=1">', "<script>globalThis.__pwned=1</script>", '"><svg onload=alert(1)>')
@@ -44,7 +45,7 @@ def _without_support(tmp_path):
             continue
         text = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
         if name == "app.js":
-            for new, old in (("${pushRow()}${supportRow()}", "${pushRow()}"), (': supportDeskLink()}<button', ': ""}<button'),
+            for new, old in (("        ${supportRow()}\n", "        \n"), (': supportDeskLink()}<button', ': ""}<button'),
                              ('    if (S.supportPage && typeof supportPageHtml === "function") return supportPageHtml(); // 客服自己一頁（support.js；開關關著時進不來）\n', "")):
                 assert text.count(new) == 1, new
                 text = text.replace(new, old)
@@ -224,3 +225,126 @@ def test_card_escapes_payload(main):
                 assert tag not in html, (payload, tag)
             assert "&lt;" in html
     assert run(m, "return globalThis.__pwned || null;") is None
+
+
+# ── 登入頁的客服信箱那一行（第 214 批；registerGateSlot）：renderGate 是 app.js 那一支原文，support.js 整支載進來（同 identity 包的 test_identity_web.py）──
+GATE_DRIVER = r"""
+const supSrc = fs.readFileSync(input.support, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+function page(opts) {
+  const S = Object.assign({ stage: "gate" }, opts.S || {});
+  const slots = [], urls = [];
+  let html = "", renders = 0;
+  const gate = { get innerHTML() { return html; }, set innerHTML(v) { html = v; } };
+  const $app = { get innerHTML() { return html; }, set innerHTML(v) { html = v; }, querySelector: (sel) => (sel === ".gate" ? gate : null) };
+  const fetch = (url) => {
+    urls.push(url);
+    if (opts.reply === "throw") return Promise.reject(new Error("offline"));
+    return Promise.resolve(opts.reply ? { ok: true, json: () => Promise.resolve(opts.reply) } : { ok: false, json: () => Promise.resolve({ detail: "Not Found" }) });
+  };
+  const drawGateSlots = (g) => { for (const f of slots) f(g, S); };
+  const real = new Function("S", "$app", "promoHtml", "gatePatchHtml", "loadPatchNotes", "drawGateSlots", fn("renderGate") + "\nreturn renderGate;")(
+    S, $app, () => '<div class="promo"></div>', () => "", () => {}, drawGateSlots);
+  const renderGate = () => { renders++; real(); };
+  const kit = new Function("S", "esc", "fetch", "renderGate", "registerClicks", "registerForms", "registerGateSlot",
+    supSrc + "\nreturn { supportGate, supportGateHtml };")(
+    S, esc, fetch, renderGate, () => {}, () => {}, (f) => { if (opts.slot !== false) slots.push(f); });
+  return { S, kit, renderGate, html: () => html, counts: () => [renders, urls.length], urls };
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+async function twice(p) { p.renderGate(); const first = p.html(); await tick(); p.renderGate(); return { first, html: p.html(), counts: p.counts(), urls: p.urls }; }
+async function main() {
+  const out = {};
+  for (const mode of [undefined, "register"]) {
+    const bare = page({ slot: false, S: { gateMode: mode } });
+    bare.renderGate();
+    out["bare-" + String(mode)] = bare.html();
+    out["noflag-" + String(mode)] = await twice(page({ reply: input.info, S: { gateMode: mode } }));  // 沒旗標：開著的信箱也不問
+    out["shut-" + String(mode)] = await twice(page({ S: { gateMode: mode, identity: true } }));  // 旗標在、mailbox 404
+    out["empty-" + String(mode)] = await twice(page({ reply: {}, S: { gateMode: mode, identity: true } }));
+    out["blank-" + String(mode)] = await twice(page({ reply: { mailbox: "a@b.c", line: "" }, S: { gateMode: mode, identity: true } }));
+    out["offline-" + String(mode)] = await twice(page({ reply: "throw", S: { gateMode: mode, identity: true } }));
+    const open = page({ reply: input.info, S: { gateMode: mode, identity: true } });
+    open.renderGate();
+    await tick();
+    const after = open.html();
+    open.renderGate();
+    open.renderGate();
+    out["open-" + String(mode)] = { after, html: open.html(), counts: open.counts(), urls: open.urls };
+  }
+  out.xss = [];
+  for (const bad of input.xss) {
+    const p = page({ reply: { mailbox: bad, line: "登不進去？" + bad + "（人工回信）" }, S: { identity: true } });
+    p.renderGate();
+    await tick();
+    out.xss.push(p.html());
+    const q = page({ reply: { mailbox: "a@b.c", line: bad }, S: { identity: true } });
+    q.renderGate();
+    await tick();
+    out.xss.push(q.html());
+  }
+  out.pwned = globalThis.__pwned || null;
+  return out;
+}
+finish(main());
+"""
+MAIL_INFO = {"mailbox": "support@tianxiadashi.com", "line": "登不進去？寫信到客服信箱：support@tianxiadashi.com（人工回信）"}
+
+
+def _gate():
+    return webharness.run(GATE_DRIVER, {"support": str(webharness.WEB / "support.js"), "info": MAIL_INFO, "xss": list(XSS)})
+
+
+def _text(html: str) -> str:
+    return re.sub(r"<[^>]+>", "", html)
+
+
+def test_gate_same_while_closed():
+    """S.identity 沒設（/api/me 沒帶旗標）：連問都不問，登入頁跟沒有這一支逐字一樣；旗標在、mailbox 404、回空的、斷線也一樣，而且只問一次。"""
+    out = _gate()
+    for mode in ("undefined", "register"):
+        bare = out["bare-" + mode]
+        assert 'id="gate-form"' in bare and 'id="gate-patch"' in bare and "sup-gate" not in bare
+        noflag = out["noflag-" + mode]
+        assert noflag["first"] == bare and noflag["html"] == bare and noflag["counts"] == [2, 0], mode
+        for case in ("shut", "empty", "blank", "offline"):
+            o = out[f"{case}-{mode}"]
+            assert o["first"] == bare and o["html"] == bare, (case, mode)
+            assert o["counts"] == [2, 1] and o["urls"] == ["/api/support/mailbox"], (case, mode)  # 只問一次、不重畫
+
+
+def test_gate_draws_the_mailbox_line():
+    out = _gate()
+    for mode in ("undefined", "register"):
+        o = out["open-" + mode]
+        html = o["after"]
+        assert o["counts"] == [4, 1] and o["urls"] == ["/api/support/mailbox"]  # 畫一次＋問到了重畫一次＋再畫兩次：只問一次
+        assert html.count('<p class="sup-gate">') == 1 and o["html"].count('<p class="sup-gate">') == 1  # 重畫不疊兩行
+        assert o["html"] == html
+        assert html.index("</form>") < html.index('<p class="sup-gate">') < html.index('id="gate-patch"')  # 表單外、改版資訊前
+        line = html[html.index('<p class="sup-gate">'):]
+        line = line[:line.index("</p>") + 4]
+        assert _text(line) == MAIL_INFO["line"]  # 字是伺服器給的那一句，JS 不另寫
+        assert f'<span class="sup-mail">{MAIL_INFO["mailbox"]}</span>' in line
+        bare = out["bare-" + mode]
+        assert html.replace(line, "") == bare  # 除了那一行，登入頁一個字不動
+
+
+def test_gate_line_escapes():
+    out = _gate()
+    for html in out["xss"]:
+        for tag in ("<img", "<script", "<svg"):
+            assert tag not in html, tag
+        assert "&lt;" in html
+    assert out["pwned"] is None
+
+
+def test_gate_whole_app_same_while_closed(main, tmp_path):
+    """整支 app.js：沒旗標時 renderGate 畫出來的跟拿掉 support.js 的那一份一樣，也沒問 /api/support/mailbox。"""
+    script = """return (async () => { H.S.stage = "gate"; H.renderGate(); await new Promise((r) => setTimeout(r, 0));
+      return [T.els.app.innerHTML, T.calls.map((c) => c[0])]; })();"""
+    now = run(main, script)
+    before = webharness.run(DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "renderGate"]'),
+                            {"m": main, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}, "app": str(_without_support(tmp_path))})
+    assert now == before
+    assert 'id="gate-patch"' in now[0] and not [u for u in now[1] if u.startswith("/api/support")]

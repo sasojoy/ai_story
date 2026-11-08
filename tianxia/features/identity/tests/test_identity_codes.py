@@ -74,6 +74,7 @@ def test_send_normalizes_and_rejects_non_taiwan(kit):
 
 
 def test_turnstile_checked_server_side(kit):
+    kit.fakes.turnstile.fail = True  # 假的一律過（L 波）；量「沒過」那一條
     status, body, cid = kit.send(token="nope")
     assert (status, body, cid) == (400, {"error": codes.NEED_HUMAN}, None)
     assert kit.fakes.sms.outbox == []
@@ -99,7 +100,7 @@ def test_turnstile_checked_server_side(kit):
         raise OSError("down")
     assert senders.CloudflareTurnstile("sec", "identity_code", urlopen=broken).verify("tok", "", "example.com") is False
     assert senders.CloudflareTurnstile("", "identity_code", urlopen=fake_urlopen(good)).verify("tok", "", "example.com") is False
-    assert senders.FakeTurnstile().verify("ok", "", "") and not senders.FakeTurnstile().verify("", "", "")
+    assert senders.FakeTurnstile().verify("ok", "", "") and senders.FakeTurnstile().verify("", "", None)  # 假的不看 token
 
 
 def test_send_reply_identical_bound_unbound_and_capped(kit):
@@ -231,9 +232,9 @@ def test_same_code_in_flight_twice_only_one_wins(kit):
 
 
 def test_challenge_of_another_purpose_is_refused(kit):
-    """單綁用途：這一批只認 login，別種用途的單（例：之後的 bind）碼對了也回 None（路由回 BAD_CODE）。"""
+    """單綁用途：只認 login、bind、reauth（第 204 批），別種用途的單碼對了也回 None（路由回 BAD_CODE）。"""
     cid = "bind-cid-0001"
-    kit.store.put_challenge(cid, "bind", "phone", kit.subj(), "09*****678", codes.code_hmac(KEY, cid, "123456"), T0 + 300, T0)
+    kit.store.put_challenge(cid, "other", "phone", kit.subj(), "09*****678", codes.code_hmac(KEY, cid, "123456"), T0 + 300, T0)
     assert codes.verify(cfg=kit.cfg, key=KEY, store=kit.store, cid=cid, code="123456", now=T0 + 1) is None
 
 

@@ -122,6 +122,7 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .hero-node.on .dot { transform: scale(1.5); background: var(--hero-cinnabar); border-color: #fff; box-shadow: 0 0 12px rgba(178, 45, 21, 1), 0 0 20px rgba(255, 120, 100, 0.8); }
 .hero-node.dim .dot { background: rgba(255, 255, 255, 0.5); box-shadow: none; border-color: rgba(200, 155, 60, 0.6); }
 .hero-node.dim .pulse { display: none; }
+.hero-node::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; } /* 光點 28×28 → 點得到 44×44 */
 .hero-node span { position: absolute; font-size: 10px; font-weight: 800; line-height: 1.4; white-space: nowrap; color: var(--hero-label-ink);
   background: var(--hero-label-bg); border: 1px solid #dcd1be; padding: 0 5px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); pointer-events: none; }
 .hero-node.r span { left: 24px; }
@@ -474,8 +475,9 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .self-hd .attr-q { margin-left: auto; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font: 600 12px/20px var(--sans); color: var(--ink-2); text-align: center; padding: 0; }
 .self-hd .pts + .attr-q { margin-left: 8px; }
 .self-xinde.one { flex-wrap: nowrap; align-items: center; min-width: 0; }
-.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; min-height: 36px; }
 .self-xinde .xinde-tip.open { white-space: normal; }
+.self-xinde .xinde-tip:not(.open) { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } /* 心得提示放兩行（UI 手感丙批 2-5：一行只剩「💡 你已攢下 20 點心得…」） */
 .hm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hm-meters > :only-child { grid-column: 1 / -1; }
 .hm-meter, .hm-meters .lilian { margin: 0; font: 500 12px/1.5 var(--sans); color: var(--ink-2); min-width: 0; }
@@ -491,4 +493,4 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .hm-fame .hm-renown { margin-top: 8px; }
 .hm-tail .lg-entry { margin: 0; }
 .hm-tail .stances-line { margin: 8px 0 0; }
-.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到一行，點進抽屜看全文 */
+.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到放到三行（UI 手感丙批 2-2：一行只剩「城鎮裡的鐵匠鋪買得到…」），點進抽屜看全文 */

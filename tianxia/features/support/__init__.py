@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from tianxia.core.features import Feature, StatusHook
 
-# 登入頁客服信箱那一行（設計 6.1；帳號一的 registerGateSlot 合進來後 PM 接，這一批沒人叫）。{mailbox} 照 Config.support.mailbox
+# 登入頁客服信箱那一行（設計 6.1；第 214 批起 /api/support/mailbox 回、web/support.js 用 registerGateSlot 畫）。{mailbox} 照 Config.support.mailbox
 GATE_LINE = "登不進去？寫信到客服信箱：{mailbox}（人工回信）"  # 待 joy 潤
 
 
@@ -36,7 +36,7 @@ class SupportFeature(Feature):
         return routes.router(shell)
 
     def gate_slot(self, config) -> str:
-        """登入頁那一行的字（關著回空字串）。帳號一開 registerGateSlot 之後由 PM 接上。"""
+        """登入頁那一行的字（關著回空字串）。/api/support/mailbox 叫（第 214 批），web/support.js 畫。"""
         return GATE_LINE.format(mailbox=config.support.mailbox) if config.support.enabled else ""
 
     def on_own_turn(self, ctx) -> None:

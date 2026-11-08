@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 from test_prologue_web import run
@@ -112,7 +113,7 @@ def test_the_bottom_news_tab_brings_back_the_news_tabs_after_the_hero_record(vie
     hero, back = pages[3], pages[4]
     assert "‹ 俠客" in hero and "news-seg" not in hero
     assert "news-seg" in back and "‹ 俠客" not in back
-    assert 'class="on" data-act="news" data-news="boards"' in back
+    assert re.search(r'class="on"[^>]*data-act="news" data-news="boards"', back)
 
 
 def test_the_worn_move_hangs_under_the_martial_art_card(views):

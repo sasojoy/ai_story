@@ -280,6 +280,7 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/support/answer"): "support：同上",
     ("POST", "/api/support/close"): "support：同上",
     ("POST", "/api/support/lookup"): "support：同上",
+    ("GET", "/api/support/mailbox"): "登入頁的客服信箱（第 214 批）：登不進去的人才看這一行，本來就沒登入；關著 404（gate 先於一切），只回設定裡公開的信箱字串，不看 cookie、不開旁檔、回應不因人而異（設計第七節給信箱的那一條，J 波 PM 認定②改歸 support）",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──

@@ -71,3 +71,45 @@ def test_on_bad_ticket_id_404_and_bad_json_422(support_on, monkeypatch):
         assert _bad_json(s, path).status_code == 422, path
         assert s.post(path, json=[1, 2]).status_code == 422, path
     assert not sidecar().exists()
+
+
+# ── 登入頁的客服信箱（帳號與客服第 214 批）：GET /api/support/mailbox 不用登入；關著 404 跟沒有這條路一樣 ──
+MAILBOX = "/api/support/mailbox"
+
+
+def test_mailbox_off_404_like_nowhere():
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    nowhere = anon.get(NOWHERE)
+    for who in (anon, player()):
+        r = who.get(MAILBOX)
+        assert (r.status_code, r.content) == (404, nowhere.content)
+    assert not sidecar().exists()
+
+
+def test_mailbox_on_without_login(support_on):
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    r = anon.get(MAILBOX)
+    config = server.CONTENT.config
+    assert r.status_code == 200
+    assert r.json() == {"mailbox": config.support.mailbox, "line": package.FEATURE.gate_slot(config)}
+    assert config.support.mailbox in r.json()["line"]
+    assert "set-cookie" not in r.headers
+    assert not sidecar().exists()
+
+
+def test_mailbox_same_for_everyone(support_on, monkeypatch):
+    """不因人而異：沒登入、玩家、客服、帶壞 cookie 的回應逐位元組一樣（名號、帳號不出現；假人沒有帳號，也看不出來）。"""
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    forged = TestClient(server.app, raise_server_exceptions=False)
+    forged.cookies.set(server.COOKIE, "not-a-real-session")
+    replies = [c.get(MAILBOX) for c in (anon, player(), staffer(monkeypatch), forged)]
+    assert {(r.status_code, r.content) for r in replies} == {(200, replies[0].content)}
+    for name in ("沈青衫", "青衣", "shen_01", "kefu_01"):
+        assert name not in replies[0].text
+    assert not sidecar().exists()
+
+
+def test_mailbox_follows_config(support_on, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.support, "mailbox", "help@example.org")
+    body = TestClient(server.app, raise_server_exceptions=False).get(MAILBOX).json()
+    assert body["mailbox"] == "help@example.org" and "help@example.org" in body["line"]

@@ -579,9 +579,9 @@ def _js_function(js: str, header: str) -> str:
 def test_the_page_draws_the_layers_when_the_server_sends_them():
     """網頁沒有測試框架：擋住「伺服器送了四層、網頁卻還畫一整張」與「每次輪詢都重畫」。"""
     js = webharness.app_source()
-    assert "m.rumor_layers ? rumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
-    layers = _js_function(js, "function rumorLayersHtml(")
-    assert "esc(l.title)" in layers and "${l.body}" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
+    assert "m.rumor_layers ? newsRumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
+    layers = _js_function(js, "function newsRumorLayersHtml(")  # 見聞改版（news 包）：天下大事搬去江湖史，其餘照遠近排、每層收合
+    assert "esc(NEWS_LAYER_NAME[l.id] || l.title)" in layers and "l.body" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
     refresh = _js_function(js, "async function refreshPage(")
     assert 'rumors: ["rumors", "rumor_layers"]' in refresh and "JSON.stringify(old[k])" in refresh
 

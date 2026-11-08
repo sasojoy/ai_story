@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender
 from tianxia.characters import name_key
+from tianxia.core import identity_base  # 綁手機才能切磋（帳號與客服第 205 批）：發起與答應的鈕灰掉寫同一句
 from tianxia.rules import season_one
 
 from . import invite_actions, invites, social, spar_actions
@@ -29,13 +30,18 @@ def buttons(game: Game, other: Game) -> list[social.CardButton]:
     inv = _pending(game, other)
     if inv is not None and name_key(inv.target) == name_key(game.state.player.name):
         tired = game.state.player.stamina < cost
+        if not identity_base.phone_ok(game, KIND):  # 只問答應的人（第 205 批）；婉拒照舊
+            return [
+                social.CardButton(action=KIND, arg="yes", label="答應切磋", note=identity_base.PHONE_NEEDED, enabled=False),
+                social.CardButton(action=KIND, arg="no", label="婉拒"),
+            ]
         return [
             social.CardButton(action=KIND, arg="yes", label="答應切磋", note=f"體力 {cost}", enabled=not tired),
             social.CardButton(action=KIND, arg="no", label="婉拒"),
         ]
     if inv is not None:
         return [social.CardButton(action=KIND, arg="cancel", label="收回切磋邀請", note=f"等{gender.pronoun(other.state)}回覆")]
-    problem = spar_actions.refusal(game, other)
+    problem = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, KIND) else spar_actions.refusal(game, other)
     return [social.CardButton(
         action=KIND, arg="invite", label="切磋", note=f"體力 {cost}" if problem is None else problem, enabled=problem is None,
     )]

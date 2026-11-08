@@ -153,7 +153,15 @@
     return lines.map((l) => `<p>${l}</p>`).join("");
   }
 
-  const heroFigure = (s) => HERO_FIGURES[s && s.gender === "女" ? "女" : "男"];
+  // 剪影照性別與這一季挑的成長（HERO_FIGURES.growth）；遊俠、自己配、還沒挑的照舊用遊俠那張
+  const heroFigure = (s) => {
+    const sex = s && s.gender === "女" ? "女" : "男";
+    const k = s && s.growth && s.growth.chosen, alt = k && HERO_FIGURES.growth[k];
+    if (!alt) return HERO_FIGURES[sex];
+    const f = alt[sex];
+    return { src: `/static/img/growth/${k}-${sex === "女" ? "f" : "m"}.webp`, ratio: f.ratio,
+      nodes: f.nodes.map(([key, x, y, side]) => ({ key, kind: "art", x, y, side })) };
+  };
 
   // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
   function heroInfo(n, x, s) {

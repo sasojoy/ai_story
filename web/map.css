@@ -40,6 +40,9 @@
 .mv-lab { white-space: nowrap; display: flex; align-items: center; gap: 4px; text-align: left; font: 700 14px/1.2 var(--serif) !important; color: var(--mv-ink) !important;
   text-shadow: 0 0 2px var(--mv-paper), 0 0 4px var(--mv-paper), 0 0 7px var(--mv-paper), 0 0 10px rgb(244 236 220 / 0.9); }
 .mv-lab.big { font-size: 16px !important; letter-spacing: 0.04em; }
+/* 名字與地點小圖點得到的範圍放大（UI 手感丁批 4-2：名字只有 19 高、小圖 30×38）：名字上下各多 12、小圖四邊多 6 */
+.mv-marks button.mv-lab::after { content: ""; position: absolute; inset: -12px -6px; }
+.mv-marks button.mv-pin::after { content: ""; position: absolute; inset: -6px; }
 .mv-lab.here { color: var(--mv-red) !important; }
 .mv-lab .t { display: flex; flex-direction: column; }
 .mv-lab .nm { display: flex; align-items: center; gap: 3px; }
@@ -82,6 +85,15 @@
 .mv-q span:last-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mv-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px 4px; scrollbar-width: none; }
 .mv-chips::-webkit-scrollbar { display: none; }
+/* 篩選那一排往右還有：右緣淡出（UI 手感丁批 4-3） */
+.mv-chips { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+/* 矮螢幕（UI 手感丁批 4-1）：搜尋列收成篩選那一排最前面的一顆放大鏡，點了照舊開找地點那一頁；地圖上面只蓋一層 */
+@media (max-height: 760px) and (max-width: 899px) {
+  .mv-top { display: flex; align-items: center; padding-left: 12px; }
+  .mv-q { flex: none; width: 40px; height: 36px; margin: 0; padding: 0; justify-content: center; }
+  .mv-q span:last-child { display: none; }
+  .mv-chips { flex: 1; min-width: 0; padding: 0 12px 0 6px; }
+}
 .mv-chip { flex: none; height: 30px; padding: 0 11px; border-radius: 3px; border: 1px solid rgb(42 35 28 / 0.4); background: rgb(244 236 220 / 0.92); color: var(--mv-ink, #2a231c);
   font: 400 15px var(--kai); cursor: pointer; white-space: nowrap; }
 .mv-chip.on { background: var(--mv-ink, #2a231c); color: var(--mv-halo, #f7f1e3); border-color: var(--mv-ink, #2a231c); }

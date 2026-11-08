@@ -1,6 +1,6 @@
 """帳號綁定的數字（Config.identity；手冊第十五節「波次 B、C」第 15 條）。不 import models（models 引用這裡），所以不繼承 _Strict，自己寫 extra="forbid"。
 
-設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md（第 2 版）。72 小時、30 天、180 天那三個數字第 204 批才加。客服信箱第 202 批拿掉（登入頁那一行歸客服包畫）。
+設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md（第 2 版）。72 小時、30 天、180 天那三個數字第 204 批加（連同近期驗證、忘記密碼、客服權限的時間窗）。客服信箱第 202 批拿掉（登入頁那一行歸客服包畫）。
 開著還要 .local/identity.json 的金鑰讀得到（core/identity_base.on）。
 """
 from __future__ import annotations
@@ -37,3 +37,12 @@ class IdentityTuning(BaseModel):
     fake_services: bool = False  # 開發與測試用假的寄送與假的 Turnstile；正式機必須關
     turnstile_action: str = "identity_code"  # siteverify 回的 action 要等於它
     privacy_url: str = "/privacy"  # 個資告知短文連去的隱私權頁（條款包的）
+    # ── 綁定、解綁、補設與忘記密碼、門號回收（第 204 批；設計 4.3、4.4）──
+    new_binding_hours: int = 72  # 新綁的方式這麼久內不能拿來設密碼、解綁別的方式、走忘記密碼（花元寶、贈物、上架市集的擋是第 205 批的入口）
+    rebind_days: int = 30  # 解綁之後這支手機（Email、第三方帳號）這麼久內不能綁別的帳號、也不能開新帳號；原帳號重綁不受限
+    fresh_days: int = 180  # Email、手機這麼久內驗過碼才算還是本人的（門號回收）；也是密碼與第三方玩家被提醒一次的間隔
+    stale_hold_days: int = 7  # 只剩過期那一種登入的帳號：進得了遊戲，這麼久內不能設密碼、解綁（花元寶等是第 205 批的入口）
+    recent_seconds: int = 600  # 近期驗證：登入或重驗之後這麼久內才能綁、解綁、補設密碼（設計沒寫時間窗，PM 計畫先定 10 分鐘）
+    reset_seconds: int = 600  # 忘記密碼：用綁定方式登入之後這麼久內能設新密碼（tx_reset cookie 同長）
+    staff_hours: int = 6  # 客服權限要這次是密碼登入，而且這麼久內登入或重驗過（設計 4.4）
+    reset_hold_hours: int = 72  # 第 208 批：管理者重設密碼之後這麼久內不能花元寶、贈物、上架市集、綁定新的登入方式（設計 6.4）

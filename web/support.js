@@ -3,7 +3,8 @@
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  * 開關關著時伺服器的 /api/main 沒有 support_unread、support_staff：這裡每一個畫法都回空字串，設定抽屜與管理頁一個位元組都不變。
  * 畫面照企劃者 2026-11-08 挑的：抽屜 C（一行「客服 ›」，點了自己一頁，分段「我的單／寫新單」），管理頁 B（寬版左清單、右單＋帳號卡；窄版照清單頁）。
- * 換版只換 supportPageHtml、supportDeskHtml 兩個函式；帳號卡（第 212 批：點開單直接帶出、查別的帳號查到的）只換 supportCardHtml。玩家與客服寫的字一律只過 esc，不經 markdown。字待 joy 潤。
+ * 換版只換 supportPageHtml、supportDeskHtml 兩個函式；帳號卡（第 212 批：點開單直接帶出、查別的帳號查到的）只換 supportCardHtml。
+ * 登入頁的客服信箱那一行（第 214 批）：registerGateSlot(supportGate)，只換 supportGateHtml；/api/me 沒帶 identity 旗標時不問、不畫。玩家與客服寫的字一律只過 esc，不經 markdown。字待 joy 潤。
  */
 "use strict";
 
@@ -22,6 +23,37 @@
   }
   function supportCat(t) { return esc(t.category_name || t.category); }
   function supportStatus(st) { return `<span class="sup-st sup-${esc(st)}">${esc(SUPPORT_STATUS[st] || st)}</span>`; }
+
+  // ── 登入頁的客服信箱那一行（第 214 批；殼的 registerGateSlot，登記在檔尾）──
+  // 字是伺服器給的（/api/support/mailbox 回 GATE_LINE 套好信箱的那一句），這裡不另寫一份。/api/me 沒帶 identity 旗標（S.identity）時連問都不問：
+  // 殼在登入頁沒有客服的旗標，關著時登入頁不能多一次請求。問過一次就記在 S.supportMail（null 問著、{} 沒有），之後重畫照記的。
+  // 換版只換 supportGateHtml；位置在 #gate-patch（改版資訊）前面，找不到就放 .gate 最後。
+  function supportGateHtml(info) {
+    const line = String(info.line || ""), mail = String(info.mailbox || "");
+    const at = mail ? line.indexOf(mail) : -1;
+    const body = at < 0 ? esc(line) : `${esc(line.slice(0, at))}<br><span class="sup-mail">${esc(mail)}</span>${esc(line.slice(at + mail.length))}`;
+    return `<p class="sup-gate">${body}</p>`;
+  }
+  function supportGateInto(inner, html) {
+    const clean = inner.replace(/<p class="sup-gate">[\s\S]*?<\/p>/g, "");
+    const at = clean.indexOf('<section class="gate-patch"');
+    return at < 0 ? clean + html : clean.slice(0, at) + html + clean.slice(at);
+  }
+  function supportGate(gate, S) {
+    if (!gate || !S.identity) return;
+    if (S.supportMail === undefined) {
+      S.supportMail = null;
+      fetch("/api/support/mailbox").then((r) => (r.ok ? r.json() : null)).catch(() => null).then((info) => {
+        S.supportMail = info && typeof info.line === "string" && info.line ? info : {};
+        if (S.supportMail.line && S.stage === "gate") renderGate();
+      });
+      return;
+    }
+    const info = S.supportMail;
+    if (!info || !info.line) return;
+    const html = supportGateInto(gate.innerHTML, supportGateHtml(info));
+    if (html !== gate.innerHTML) gate.innerHTML = html;
+  }
 
   // ── 設定抽屜那一行（關著回 ""）──
   function supportRow() {
@@ -224,3 +256,4 @@
       } // supportForm
   } // supportForm
   registerForms(supportForm, ["support-new-form", "support-reply-form", "support-lookup-form"]);
+  registerGateSlot(supportGate);

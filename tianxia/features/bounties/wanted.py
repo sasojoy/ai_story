@@ -25,7 +25,9 @@ def buttons(game: Game, other: Game) -> list[cards.CardButton]:
     mine, theirs = game._side(), other._side()  # 豪強分屬兩軍：照依附那一軍分敵我
     if mine is None or theirs in (None, mine):
         return []
-    problem = rules.post_problem(s, game.content, o)
+    from tianxia.core import identity_base  # noqa: PLC0415  綁手機才能通緝（帳號與客服第 205 批）：頂端只碰核心的登記表，同上
+
+    problem = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, KIND) else rules.post_problem(s, game.content, o)
     if problem is not None:
         return [cards.CardButton(action=KIND, label="通緝", note=problem, enabled=False)]
     cfg = game.content.config.bounties
