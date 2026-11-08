@@ -439,4 +439,8 @@ class HeraldScenario(ExploreScenario):
 
 
 # 改一個字（selftest）：懸賞交差那一句（bounties._complete；第 45 批懸賞榜成包時那一行搬進包，這裡要多寫包裡的檔）
-register_track("herald", HeraldScenario, (("tianxia/features/bounties/rules.py",), ("」交差了，", "」交差了！")), "week7")
+register_track("herald", HeraldScenario, (("tianxia/features/bounties/rules.py",), ("」交差了，", "」交差了！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

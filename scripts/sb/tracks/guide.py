@@ -482,4 +482,8 @@ class GuideScenario(Scenario):
 
 # 改一個字（selftest）：任務卡「就當散人」那一句（newbie.DRIFTER_LINE；搬之前在 tianxia/newbie.py、之後在包裡）
 register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py",),
-                                         ("就當個散人，天下照樣走得。", "就當個散人，天下照樣走得！")), "week7")
+                                         ("就當個散人，天下照樣走得。", "就當個散人，天下照樣走得！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

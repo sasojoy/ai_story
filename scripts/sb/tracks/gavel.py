@@ -309,4 +309,8 @@ class GavelScenario(SwitchboardScenario):
 
 # 改一個字（selftest）：清鎖定成功那一句（本體在 admin_clear_lock：第 90 批搬進包的檔、engine 兩處找）；只有這一軌走得到（switchboard 只走到「沒有人鎖定」）
 register_track("gavel", GavelScenario, (("tianxia/features/admin/actions.py", "tianxia/engine.py"),
-                                        ("已清掉{event.title}的鎖定。", "已清除{event.title}的鎖定。")), "week7")
+                                        ("已清掉{event.title}的鎖定。", "已清除{event.title}的鎖定。")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

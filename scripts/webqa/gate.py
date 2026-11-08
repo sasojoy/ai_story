@@ -40,6 +40,38 @@ HOSTILE = {  # selftest only: a page that does what the walk must survive
 QUIET = "css-comment"  # selftest only: a stylesheet that differs with nothing to see: the replay runs and stays green
 ROUND_SECONDS = {"fast": 5400, "full": 16200}  # the slowest round so far, main on fast, took 34 minutes
 PORT_LOCK = threading.Lock()
+COVERAGE = os.path.join(HERE, "coverage.json")  # round -> web files it calls into (batch 107; scripts/webqa/coverage.py build/check)
+SHELL_FILES = {"web/app.js", "web/main.js", "web/shell.js", "web/index.html", "web/style.css"}  # every round stands on these
+
+
+def rounds_for(changed, table, rounds=ROUNDS):
+    """--changed-files: which rounds to walk, and why. Wide when unsure: the shell, scripts/webqa, no table, a file outside web/,
+    or any changed file no round reaches, all walk every round. web/<pkg>.css goes with web/<pkg>.js."""
+    changed = [c.strip().replace("\\", "/") for c in changed if c.strip()]
+    if not changed:
+        return list(rounds), "no changed files given: every round"
+    if not table:
+        return list(rounds), "no coverage.json: every round"
+    picked = set()
+    for f in changed:
+        if f in SHELL_FILES or f.startswith("scripts/webqa/"):
+            return list(rounds), f"{f} is the shell or the tool: every round"
+        if not f.startswith("web/"):
+            return list(rounds), f"{f} is outside web/: every round"
+        key = f[:-4] + ".js" if f.endswith(".css") else f
+        hit = {r for r in rounds if key in table.get(r, ())}
+        if not hit:
+            return list(rounds), f"{f} is reached by no round in coverage.json: every round"
+        picked |= hit
+    return [r for r in rounds if r in picked], "from coverage.json: " + ", ".join(sorted(changed))
+
+
+def load_coverage(path=COVERAGE):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 class ToolBroke(Exception):
@@ -376,7 +408,8 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
 def run(args) -> int:
     t0 = time.monotonic()
     summary = {"base": args.base, "head": args.head, "green": False, "exit": 2, "real": [], "expected": [], "noise": {}, "scenes": 0, "shots": 0, "same_shots": 0, "noise_rows": [], "not_reached": [], "missing_must_reach": [], "must_reach_quick_missing": [], "tool": [], "seconds": 0,
-               "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": [], "replay": {"ran": False, "why": "did not get that far"}}
+               "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": [], "replay": {"ran": False, "why": "did not get that far"},
+               "round_files": {}, "rounds_why": "every round (no --changed-files)"}
     per_round = {}
     work = os.path.join(args.out, "_work")
     try:
@@ -390,6 +423,12 @@ def run(args) -> int:
         if fixed_ports or fixed_cdps:
             args.jobs = 1  # one pair of ports, one round at a time
         rounds = [r.strip() for r in args.rounds.split(",") if r.strip()] if args.rounds else list(ROUNDS)
+        if args.changed_files is not None:  # batch 107: only the rounds coverage.json says reach the changed files; --rounds too: both
+            wanted, why = rounds_for(args.changed_files.split(","), load_coverage())
+            rounds = [r for r in rounds if r in wanted]
+            summary["rounds_why"] = why
+            if not rounds:
+                raise ToolBroke(f"--rounds and --changed-files leave no round ({why})")
         for r in rounds:
             if not os.path.exists(os.path.join(HERE, "flows", f"{r}.mjs")):
                 raise ToolBroke(f"no round {r}")
@@ -440,6 +479,7 @@ def run(args) -> int:
             summary["tool"] += [f"{r}: {x}" for x in out["tool"]]
             summary["fingerprint"][r] = out.get("fingerprint")
             summary["noise_rows"] += [{"round": r, **x} for x in out["noise_rows"]]
+            summary["round_files"][r] = sorted(f"web/{file}" for file, functions in out.get("coverage", {}).items() if any(functions.values()))  # both walks, merged
             for file, functions in out.get("coverage", {}).items():
                 mine = coverage.setdefault(file, {})
                 for fn, hit in functions.items():
@@ -493,6 +533,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--profile", default="season21")
     ap.add_argument("--jobs", type=int, default=2, help="rounds walked at the same time, each on its own free ports; --ports means one at a time")
     ap.add_argument("--rounds", help="comma separated; default all: " + ",".join(ROUNDS))
+    ap.add_argument("--changed-files", help="comma separated repo paths (wave_gate --changed passes the web/ files): walk only the rounds coverage.json says reach them; "
+                                            "the shell, scripts/webqa or an unmapped file walk every round; with --rounds, both")
     ap.add_argument("--corpus", choices=("fast", "full"), default="fast", help="fast: no crawls")
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")

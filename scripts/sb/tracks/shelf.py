@@ -152,5 +152,9 @@ class ShelfScenario(Scenario):
 
 # 改一個字（selftest）：四階名器一件的說明（沒有一軌打得出這一件，別的軌抓不到）；搬進包的檔、舊位置兩處找
 register_track("shelf", ShelfScenario, (("tianxia/features/smithy/content/tier4_named.json", "content/tier4_named.json"),
-                                        ("握著像握一捧井水。", "握著像握一捧井水！")), "week7")
+                                        ("握著像握一捧井水。", "握著像握一捧井水！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
 TRACK_REQUIRES["shelf"] = "content/figure_intros.json"  # 這一軌讀 server.FIGURE_INTROS；合回 develop 第 1 段之前的主幹沒有這個檔（_tracks_on 看的是 base）

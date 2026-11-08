@@ -655,5 +655,9 @@ def arts_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # 改一個字（selftest）：配點沒有點那一句（搬之前在 engine.py 的 allocate_stat、之後在 features/cultivation/actions.py），week7 墨池配點那一下抓到
 # 改一個字（合回 develop 第 0 段換過）：原本改的是舊配點那一句，五項屬性的季（week7、season21）走 _allocate_v2、碰不到；換成練成絕學定名那一句
 register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py", "tianxia/engine.py"),
-                                      ("練成絕學的人，定名", "練成絕學的人，命名")), "week7")
+                                      ("練成絕學的人，定名", "練成絕學的人，命名")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
 register_bots("arts", ARTS_BOT_PROFILES, arts_bots_run)  # 修練那一軌的假人（--seats arts）

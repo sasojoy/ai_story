@@ -421,4 +421,8 @@ class RelayScenario(Scenario):
 
 # 改一個字（selftest）：宴客敬酒詞評不到時的保底分（第 69 批搬進宴客包 routes.py；搬進包的檔、殼兩處找）。gates 段排隊那一下照字寫退路、full 走 C 段也帶它。
 register_track("relay", RelayScenario, (("tianxia/features/feast/routes.py", "server.py"),
-                                        ("fallback=feasts.DEFAULT_SCORE", "fallback=feasts.DEFAULT_SCORE + 1")), "week7")
+                                        ("fallback=feasts.DEFAULT_SCORE", "fallback=feasts.DEFAULT_SCORE + 1")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

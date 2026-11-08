@@ -436,5 +436,13 @@ TRACK_REQUIRES.update({"here": "content/figure_intros.json", "places": "tianxia/
 
 # 改一個字（selftest）：說得上話但鈕上不是他的那一句（搬之前在 engine.py，搬之後在交友求見包）、戰火那一句（共用層 place_state，這一批不搬）
 register_track("here", HereScenario, (("tianxia/engine.py", "tianxia/features/socialize/view.py", "tianxia/features/socialize/menus.py"),
-                                      ('"先按「交友」"', '"先按下「交友」"')), "week7")
-register_track("places", PlacesScenario, (("tianxia/place_state.py",), ("這一帶剛打過仗，焦土還沒冷", "這一帶剛打過仗，焦土還未冷")), "week7")
+                                      ('"先按「交友」"', '"先按下「交友」"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+register_track("places", PlacesScenario, (("tianxia/place_state.py",), ("這一帶剛打過仗，焦土還沒冷", "這一帶剛打過仗，焦土還未冷")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

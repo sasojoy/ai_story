@@ -207,4 +207,8 @@ class RoamScenario(StripScenario):
             self.me(who, "接手之後探索")
 
 
-register_track("roam", RoamScenario, (("tianxia/features/explore/explore_base.py", "tianxia/engine.py"), ('一枚——{cfg.legend_item_note}', '一枚——{cfg.legend_item_note}！')), "week7")
+register_track("roam", RoamScenario, (("tianxia/features/explore/explore_base.py", "tianxia/engine.py"), ('一枚——{cfg.legend_item_note}', '一枚——{cfg.legend_item_note}！')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

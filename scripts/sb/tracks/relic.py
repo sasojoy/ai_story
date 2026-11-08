@@ -596,4 +596,8 @@ class RelicScenario(HeraldScenario):
 # 改一個字（selftest）：管理者收回「下一季」的天命之季章那一句（Game.admin_seal_mandate；搬之前在 engine.py，搬進包之後在
 # tianxia/features/seal/admin.py〔計畫 1.1 的檔名；搬的人照實際的檔名改第 1 項〕），week7 mandate_mark 那一段抓到
 register_track("relic", RelicScenario, (("tianxia/engine.py", "tianxia/features/seal/admin.py"),
-                                       ("換季時照樣會蓋）。", "換季時照樣會蓋）！")), "week7")
+                                       ("換季時照樣會蓋）。", "換季時照樣會蓋）！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

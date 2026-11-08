@@ -187,5 +187,13 @@ class ZhuanFrameScenario(ZhuanScenario):
 
 # 改一個字（selftest）：簡介檔沒寫他那一支才看得到（who 的預設值）；「哪一季？」只有 season 認不得才看得到。兩句都是這一批搬的，搬之前在 server.py。
 register_track("portrait", PortraitScenario, (("tianxia/features/socialize/intro.py", "server.py"),
-                                              ('"who": row.get("who", "")', '"who": row.get("who", "？")')), "season21")
-register_track("zhuanframe", ZhuanFrameScenario, (("tianxia/features/zhuan/routes.py", "server.py"), ('"哪一季？"', '"哪一季?"')), "season21")
+                                              ('"who": row.get("who", "")', '"who": row.get("who", "？")')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+register_track("zhuanframe", ZhuanFrameScenario, (("tianxia/features/zhuan/routes.py", "server.py"), ('"哪一季？"', '"哪一季?"')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

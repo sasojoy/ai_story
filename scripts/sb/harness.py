@@ -30,6 +30,13 @@ MUTANT_PROFILE: dict[str, str] = {}
 TRACK_REQUIRES: dict[str, str] = {}  # 只有部分根起得來的軌（軌名 → 根上要有的檔）：沒有那個檔的根，compare、selftest 略過這一軌（_tracks_on）
 FULL_SAME_AS: dict[str, str] = {}  # 整段跟另一軌一模一樣的軌（軌名 → 那一軌）：compare 清單上兩軌都在時整段只跑那一軌（register_track 的 full_same_as）
 SECONDS: dict[str, float] = {}  # 這一次 compare 每個子行程跑了幾秒（log 的主檔名 → 秒）；沒跑的不在表上
+# 第 107 批：每軌走到哪幾包（register_track 的 covers；season21 跑一次、sys.monitoring 記 tianxia/features/<包>/ 被叫到的函式，加上軌讀的 web/<包>.js|css，寫死在各軌檔尾）。
+# compare --covers 挑 covers 有交集的軌加上 ALWAYS_TRACKS（走過的包最多、或專門比畫面與殼的那幾軌）。
+# 第 107 批量到（9610b568、season21）：76 軌每一軌都走到全部 38 包（每一步的同步、選單、狀態列叫到每一包的掛鉤；照計畫不扣），所以 --covers 現在挑不掉任何一軌。
+# 包數變了、或要換量法（例：扣掉每一軌都叫到的掛鉤）再量一次；量法的腳本沒有進版控，寫在第 107 批的回報。
+COVERS: dict[str, tuple[str, ...]] = {}
+ALWAYS_TRACKS = ("battle", "sortie", "progress", "switchboard", "facade", "drape")
+IN_CALL = [0]  # Scenario.call 進出的深度：切點（前半寫完、快照）要在 0（不在請求中間）
 
 
 # ═══════════════════════════ 調度（compare、selftest） ═══════════════════════════
@@ -45,6 +52,40 @@ def _tracks_on(tracks: list[str], root: Path) -> list[str]:
         else:
             keep.append(t)
     return keep
+
+
+def pick_tracks(packages: list[str], tracks: list[str] | None = None) -> list[str]:
+    """compare --covers、pick：covers 跟這幾包有交集的軌，加上 ALWAYS_TRACKS；照 TRACK_NAMES 的先後。tracks 給了就再取交集（--tracks 同時給）。"""
+    want = set(packages)
+    picked = [t for t in TRACK_NAMES if t in ALWAYS_TRACKS or want & set(COVERS.get(t, ()))]
+    return [t for t in picked if t in tracks] if tracks else picked
+
+
+def _sqlite_file(path: Path) -> bool:
+    with path.open("rb") as fh:
+        return fh.read(16) == b"SQLite format 3\x00"
+
+
+def snapshot_db(db: Path, half: Path) -> None:
+    """前半的快照（第 107 批：compare --crossover 不再另開 base 前半）：db 寫出來的每樣東西（_db_files）抄到 half 的名字，只換開頭的主檔名。
+    SQLite 檔用 backup()（連 -wal 裡的一起拿到一致的那一份），-wal、-shm 不抄；其他檔與資料夾原樣抄。half 原本的檔先清掉。"""
+    for old in _db_files(half):
+        shutil.rmtree(old) if old.is_dir() else old.unlink()
+    for path in _db_files(db):
+        if path.name.endswith(("-wal", "-shm")):
+            continue
+        dest = half.with_name(half.stem + path.name[len(db.stem):])
+        if path.is_dir():
+            shutil.copytree(path, dest)
+        elif _sqlite_file(path):
+            src, dst = sqlite3.connect(path), sqlite3.connect(dest)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+                src.close()
+        else:
+            shutil.copyfile(path, dest)
 
 
 def _child(args: list[str], log: Path) -> None:
@@ -91,8 +132,9 @@ def _db_files(db: Path) -> list[Path]:
     return [p for p in db.parent.iterdir() if p.name.startswith((f"{db.stem}-", db.name))]
 
 
-def _base_step(step: tuple, folder: Path | None, cell: str, out: Path, db: Path | None = None):
-    """base 那一步。沒開快取：原樣。命中：換成還原，不開子行程。沒命中：跑完存起來（子行程結束碼非 0 時 _child 丟例外，壞的存不進去）。"""
+def _base_step(step: tuple, folder: Path | None, cell: str, out: Path, db: Path | None = None, half_out: Path | None = None):
+    """base 那一步。沒開快取：原樣。命中：換成還原，不開子行程。沒命中：跑完存起來（子行程結束碼非 0 時 _child 丟例外，壞的存不進去）。
+    half_out（第 107 批，base 整段同時出前半與快照）：db 是快照的名字，這一格多存前半輸出（half.gz）與快照。"""
     if folder is None:
         return step
     if cache.hit(folder, cell):
@@ -100,18 +142,18 @@ def _base_step(step: tuple, folder: Path | None, cell: str, out: Path, db: Path 
         def restore() -> None:
             for path in _db_files(db) if db else ():  # --part second 不會自己清
                 shutil.rmtree(path) if path.is_dir() else path.unlink()
-            cache.restore(folder, cell, out, db)
+            cache.restore(folder, cell, out, db, half_out)
 
         return restore
 
     def run_and_save() -> None:
         _child(*step)
-        cache.save(folder, cell, out, _db_files(db) if db else (), db.stem if db else "")
+        cache.save(folder, cell, out, _db_files(db) if db else (), db.stem if db else "", half_out)
 
     return run_and_save
 
 
-def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, str]) -> None:
+def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, str], crossover: bool = True) -> None:
     """每格每個子行程幾秒、最慢的十格（照那一格跑過的秒數加總）。這幾行不准出現閘門當紅的字（wave_gate.red_lines）。"""
     totals: dict[str, float] = {}
 
@@ -120,7 +162,16 @@ def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, st
         for word, stem in kinds:
             spent = SECONDS.get(f"{label}_{stem}_{n}")
             totals[name] = totals.get(name, 0.0) + (spent or 0.0)
-            cells.append(f"{word} {spent:.1f}" if spent is not None else (f"{word} 同 {twin}" if twin and stem in ("base", "head") else f"{word} 快取"))
+            if spent is not None:
+                cells.append(f"{word} {spent:.1f}")
+            elif twin and stem in ("base", "head"):
+                cells.append(f"{word} 同 {twin}")
+            elif stem in ("base1", "head2") and not crossover:
+                cells.append(f"{word} 沒跑")
+            elif stem == "base1" and not twin:  # 第 107 批：前半併在 base 整段裡（快照）
+                cells.append(f"{word} 併在 base")
+            else:
+                cells.append(f"{word} 快取")
         print(f"秒數 {name} " + " ".join(cells))
 
     for t, p in outputs:
@@ -153,7 +204,8 @@ def _print_new(names: tuple[str, ...], outs: list[Path]) -> None:
 
 
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
-            tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = ()) -> bool:
+            tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = (), crossover: bool = False) -> bool:
+    """crossover（第 107 批 --crossover，PM 定改預設）：才比「base 整段」＝「base 前半＋head 後半」；不帶就不跑那一串，每格印「半舊半新 沒跑」。"""
     check_new(base, head, new)
     head_new = ["--new", ",".join(new)] if new else []  # 只有 head 的子行程帶（整段、後半、假人）
     tmp.mkdir(parents=True, exist_ok=True)
@@ -169,17 +221,23 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             dbs = {k: tmp / f"{label}_{k}_{n}.db" for k in ("base", "head", "half")}
             outputs[(t, p)] = o
             run = ["--tmp", str(tmp), "--track", t]
+            second = (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second", *head_new], tmp / f"{label}_head2_{n}.log")
             if t in twins:  # 整段比那一軌跑出來的（檔名照命名算，清單的先後不影響）；後半照舊接，宣告過時會紅
                 o["base"], o["head"] = (tmp / f"{label}_{k}_{twins[t]}_{p}.txt" for k in ("base", "head"))
+                if crossover:  # 切點跟那一軌不同，前半照舊另開（保守：整段借那一軌的）
+                    chains.append([
+                        _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
+                                   folder, f"first_{n}", o["base1"], dbs["half"]),
+                        second,
+                    ])
+                continue
+            full = ["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])]
+            if crossover:  # 第 107 批：base 整段跑到切點時同時寫前半與快照（--snapshot），head 後半從快照接，不再另開 base 前半
+                full += ["--snapshot", str(dbs["half"]), "--snapshot-out", str(o["base1"])]
+                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"allx_{n}", o["base"], dbs["half"], o["base1"]), second])
             else:
-                chains.append([_base_step((["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log"),
-                                          folder, f"all_{n}", o["base"])])
-                chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"]), *head_new], tmp / f"{label}_head_{n}.log")])
-            chains.append([
-                _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
-                           folder, f"first_{n}", o["base1"], dbs["half"]),
-                (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second", *head_new], tmp / f"{label}_head2_{n}.log"),
-            ])
+                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"all_{n}", o["base"])])
+            chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"]), *head_new], tmp / f"{label}_head_{n}.log")])
     bot_out = {}
     if bots:
         for seats, p in [r for r in _bot_runs(tracks) if r[1] in profiles]:  # --profiles 給什麼就跑什麼
@@ -196,11 +254,16 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
     for (t, p), o in outputs.items():
         hb, nb, bb = _digest(o["base"])
         hh, nh, bh = _digest(o["head"])
-        hx, nx, bx = _digest(o["base1"], o["head2"])
-        same, half = hb == hh, hb == hx
+        if crossover:
+            hx, nx, bx = _digest(o["base1"], o["head2"])
+            half = hb == hx
+            cross = f"｜base 前半＋head 後半 {hx[:16]} {'一樣' if half else '不一樣'}"
+        else:  # 第 107 批：不帶 --crossover 不跑這一串（閘門 --changed 只在改到存檔欄位時才帶）
+            half, cross = True, "｜半舊半新 沒跑"
+        same = hb == hh
         ok &= same and half
         print(f"{t:6} {p:9} 整段 base {nb} 行 {bb} 位元組 {hb[:16]}｜head {hh[:16]} {'一樣' if same else '不一樣'}"
-              f"｜base 前半＋head 後半 {hx[:16]} {'一樣' if half else '不一樣'}" + (f"（整段同 {twins[t]}）" if t in twins else ""))
+              + cross + (f"（整段同 {twins[t]}）" if t in twins else ""))
         if not same:
             print("  " + _first_diff(o["base"].read_bytes(), o["head"].read_bytes()))
         if not half:
@@ -212,7 +275,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
         print(f"假人 {seats:6} {p:9} {nb} 行 {bb} 位元組 base {hb[:16]}｜head {hh[:16]} {'一樣' if hb == hh else '不一樣'}")
         if hb != hh:
             print("  " + _first_diff(o["base"].read_bytes(), o["head"].read_bytes()))
-    _print_seconds(label, outputs, bot_out, twins)
+    _print_seconds(label, outputs, bot_out, twins, crossover)
     if folder:
         print(f"快取：命中 {cache.hits} 格、沒命中 {cache.misses} 格、{folder} {cache.megabytes(folder):.0f} MB")
     if new:
@@ -249,15 +312,15 @@ def _selftest_cache(base: Path, tmp: Path, profiles: list[str], workers: int, tr
         p = MUTANT_PROFILE[t]
         if p not in profiles:
             continue
-        fill = compare(base, base, tmp, [p], workers, True, "selfcache1", [t], a)
+        fill = compare(base, base, tmp, [p], workers, True, "selfcache1", [t], a, crossover=True)
         filled = cache.misses
-        again = compare(base, base, tmp, [p], workers, True, "selfcache2", [t], a)
+        again = compare(base, base, tmp, [p], workers, True, "selfcache2", [t], a, crossover=True)
         hit2, miss2 = cache.hits, cache.misses
-        caught_head = not compare(base, mutants[t], tmp, [p], workers, True, "selfcache3", [t], a)
+        caught_head = not compare(base, mutants[t], tmp, [p], workers, True, "selfcache3", [t], a, crossover=True)
         hit3 = cache.hits
         shutil.rmtree(b, ignore_errors=True)
         shutil.copytree(a, b)
-        caught_base = not compare(mutants[t], base, tmp, [p], workers, True, "selfcache4", [t], b)
+        caught_base = not compare(mutants[t], base, tmp, [p], workers, True, "selfcache4", [t], b, crossover=True)
         hit4, miss4 = cache.hits, cache.misses
         ok &= fill and filled > 0 and again and hit2 > 0 and miss2 == 0 and caught_head and hit3 > 0 and caught_base and hit4 == 0 and miss4 > 0
         print(f"快取 {t} {p} 填 {filled}{'' if fill else ' 不一樣'}｜再跑命中 {hit2} 沒命中 {miss2} {'一樣' if again else '不一樣'}"
@@ -279,13 +342,15 @@ def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: l
             o = {k: tmp / f"self_{k}_{n}.txt" for k in ("a", "b", "first", "second", "mut")}
             outs[(t, p)] = o
             run = ["--tmp", str(tmp), "--track", t]
-            for k in ("a", "b"):
-                chains.append([(["run", str(base), p, str(o[k]), *run, "--db", str(tmp / f"self_{k}_{n}.db")], tmp / f"self_{k}_{n}.log")])
-            chains.append([
-                (["run", str(base), p, str(o["first"]), *run, "--db", str(tmp / f"self_half_{n}.db"), "--part", "first"], tmp / f"self_first_{n}.log"),
-                (["run", str(base), p, str(o["second"]), *run, "--db", str(tmp / f"self_half_{n}.db"), "--part", "second"],
-                 tmp / f"self_second_{n}.log"),
-            ])
+            half = tmp / f"self_half_{n}.db"
+            second = (["run", str(base), p, str(o["second"]), *run, "--db", str(half), "--part", "second"], tmp / f"self_second_{n}.log")
+            # 第 107 批：a 那一趟帶 --snapshot（整段同時出前半與快照），後半從快照接；b 不帶，a＝b 證明快照不擾動。整段同一軌的（muster）照舊 first→second
+            snap = [] if FULL_SAME_AS.get(t) else ["--snapshot", str(half), "--snapshot-out", str(o["first"])]
+            a_run = (["run", str(base), p, str(o["a"]), *run, "--db", str(tmp / f"self_a_{n}.db"), *snap], tmp / f"self_a_{n}.log")
+            chains.append([a_run, second] if snap else [a_run])
+            chains.append([(["run", str(base), p, str(o["b"]), *run, "--db", str(tmp / f"self_b_{n}.db")], tmp / f"self_b_{n}.log")])
+            if not snap:
+                chains.append([(["run", str(base), p, str(o["first"]), *run, "--db", str(half), "--part", "first"], tmp / f"self_first_{n}.log"), second])
             if p == MUTANT_PROFILE[t]:
                 chains.append([(["run", str(mutants[t]), p, str(o["mut"]), *run, "--db", str(tmp / f"self_mut_{n}.db")], tmp / f"self_mut_{n}.log")])
     bot_out = {}
@@ -304,7 +369,8 @@ def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: l
         hb, _, _ = _digest(o["b"])
         hx, _, _ = _digest(o["first"], o["second"])
         ok &= ha == hb and ha == hx
-        line = (f"{t:6} {p:9} {na} 行 {ba} 位元組 跑兩次 {'一樣' if ha == hb else '不一樣'}｜前半＋後半 {'一樣' if ha == hx else '不一樣'}")
+        line = (f"{t:6} {p:9} {na} 行 {ba} 位元組 跑兩次 {'一樣' if ha == hb else '不一樣'}｜前半＋後半 {'一樣' if ha == hx else '不一樣'}"
+                f"（{'前半 base 整段' if not FULL_SAME_AS.get(t) else '前半另開'}）｜切點 不在請求中")  # 切點在請求中間的話子行程丟例外，到不了這裡
         if p == MUTANT_PROFILE[t]:
             hm, _, _ = _digest(o["mut"])
             caught = hm != ha
@@ -534,10 +600,11 @@ BOT_SEATS: dict[str, tuple[tuple[str, ...], Callable[..., None]]] = {}  # bots -
 SUBCOMMANDS: dict[str, Callable[[list[str]], int]] = {}  # 子命令名 → 處理函式（整串引數給它）；入口的 main 先查這張表
 
 
-def register_track(name: str, scenario: type, mutation: tuple, profile: str, *, full_same_as: str = "") -> None:
+def register_track(name: str, scenario: type, mutation: tuple, profile: str, *, full_same_as: str = "", covers: tuple[str, ...] = ()) -> None:
     """再開一軌（TRACKS、MUTATIONS、MUTANT_PROFILE 三張表一起登記；同一個軌名再登記一次，TRACKS 丟 ValueError）。TRACK_NAMES 由 load_tracks 照檔名算。
     full_same_as：這一軌跟那一軌同一套段落、只有切點不同，整段一個位元組都一樣（那一軌要先登記）。compare 清單上兩軌都在時省這一軌的 base、head 整段；
-    後半照舊比那一軌的 base，宣告過時會紅。"""
+    後半照舊比那一軌的 base，宣告過時會紅。
+    covers（第 107 批）：這一軌走到哪幾包（量法見 COVERS），compare --covers、pick 用；tests/core/test_same_behavior_covers.py 守它非空、包都在。"""
     if full_same_as:
         twin = TRACKS.get(full_same_as)
         if twin is None or not issubclass(scenario, twin) or scenario.PHASES_FIRST + scenario.PHASES_SECOND != twin.PHASES_FIRST + twin.PHASES_SECOND:
@@ -546,6 +613,7 @@ def register_track(name: str, scenario: type, mutation: tuple, profile: str, *, 
     TRACKS[name] = scenario
     MUTATIONS[name] = mutation
     MUTANT_PROFILE[name] = profile
+    COVERS[name] = tuple(covers)
 
 
 def register_bots(seats: str, profiles: tuple[str, ...], runner: Callable[..., None]) -> None:

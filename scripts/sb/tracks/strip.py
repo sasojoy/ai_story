@@ -395,4 +395,8 @@ class StripScenario(EventScenario):
             self.call(who, "GET", "/api/howto")
 
 
-register_track("strip", StripScenario, (("tianxia/treasures.py",), ("靜心感悟擲中的機會 +", "靜心感悟擲中的機會＋")), "week7")
+register_track("strip", StripScenario, (("tianxia/treasures.py",), ("靜心感悟擲中的機會 +", "靜心感悟擲中的機會＋")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))

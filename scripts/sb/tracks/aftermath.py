@@ -312,4 +312,8 @@ class AftermathScenario(EventScenario):
 
 # 改一個字（selftest）：等判讀的時候人被帶走那一句（搬之前在 engine.py、之後在 tianxia/core/combat.py），gone 那一段抓到
 register_track("aftermath", AftermathScenario, (("tianxia/core/combat.py", "tianxia/engine.py"),
-                                                 ("你離開了，這一仗沒打成。", "你離開了，這一仗沒打成！")), "week7")
+                                                 ("你離開了，這一仗沒打成。", "你離開了，這一仗沒打成！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
+                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
