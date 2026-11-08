@@ -168,7 +168,7 @@
     S.patchSeen = patchKey(top);
     try { localStorage.setItem(PATCH_SEEN, S.patchSeen); } catch (e) { /* 私密視窗：這一次關了算數 */ }
   }
-  async function newsClick(act) {
+  async function newsClick(act, el, ev) {
     switch (act) {
         case "patch-close": patchPopClose(); renderPage(); break; // 進遊戲後跳的改版資訊：看過了，下一次改版才再跳
     } // newsClick
