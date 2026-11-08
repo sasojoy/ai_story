@@ -21,7 +21,7 @@ GATE_LINE = "登不進去？寫信到客服信箱：{mailbox}（人工回信）"
 class SupportFeature(Feature):
     name = "support"
     prefix = None  # 沒有選項：客服是設定抽屜與管理頁的事
-    web: tuple[str, ...] = ()
+    web = ("support.js", "support.css")  # 設定抽屜的客服頁與客服身分的管理頁（手冊 G9）；css 的 link 手寫在 index.html 最後一行，js 手加進 webharness.APP_FILES
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()  # 不加存檔欄位：單與回覆都在旁檔
     carried: tuple[str, ...] = ()
