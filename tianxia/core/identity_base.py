@@ -249,6 +249,29 @@ def staff_session_ok(db, content, token: str | None, now: float) -> bool:
     return created is not None and now - created <= hours
 
 
+def admin_session_ok(db, content, token: str | None, now: float) -> bool:
+    """管理者權限要的 session（設計 4.4 最後一條；第 207 批）：關著一律回真（管理者行為位元組一樣：不走 staff_session_ok 關著那一支，
+    那一支看 session 建立的時間，會讓關著時登入超過 staff_hours 的管理者掉權限；也不碰旁檔）；開著時同 staff_session_ok 開著那一支：
+    這次是密碼登入、而且 staff_hours 內登入或重驗過，查不到回假。名號是不是管理者照舊由 Game.is_admin 判，殼先問它、再問這一支。"""
+    if not on(content):
+        return True
+    return staff_session_ok(db, content, token, now)
+
+
+def listed(content, login: str | None = None, character: str | None = None, account_id: int | None = None) -> bool:
+    """名單上的帳號（第 207 批；密碼至少 12 字那一條問）：名號在管理者名單上（config.admins，已併 .local/admins.txt 與 TIANXIA_ADMINS；
+    跟 Game.is_admin 同一個比法）、帳號名照名單上的名號比（不分大小寫：註冊時還沒有角色）、或客服名單（support_staff，不看客服開關）。"""
+    admins = content.config.admins
+    if character is not None and character in admins:
+        return True
+    key = normalize(login) if login else ""
+    if key and key in {normalize(a) for a in admins}:
+        return True
+    if account_id is not None:
+        return support_staff(content.config, account_id, login or "")
+    return bool(key) and not key.isdigit() and key in support_names(content.config)
+
+
 def blocked_name(name: str | None, content) -> bool:
     """開著時不准拿來當名號的：id: 開頭（跟帳號鍵撞）、客服與官方的字（name_base.STAFF_NAMES）。關著一律回假（行為不變）。"""
     if not on(content):

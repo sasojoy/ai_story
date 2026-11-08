@@ -191,3 +191,81 @@ def test_blocked_name_only_when_on(content, keyed):
     assert all(ib.blocked_name(n, content) for n in names)
     assert not ib.blocked_name("沈浪", content)
     assert not ib.blocked_name("客服甲", content)
+
+
+# ── 第 207 批：管理者的 session、名單上的帳號、12 字 ──
+
+
+def test_admin_session_ok_off_is_always_true(game, content, tmp_path, monkeypatch):
+    """關著一律回真（管理者行為位元組一樣）：不看 session 建立的時間（不走 staff_session_ok 關著那一支），也不碰旁檔。"""
+    from tianxia.accounts import AccountStore, SessionStore
+
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "g.db"))
+    db = game.world.db
+    AccountStore(db).register("boss_01", "secret-pw")
+    token = SessionStore(db, clock=lambda: 1000.0).create("boss_01")
+    assert content.config.identity.enabled is False
+    for t in (None, "nope", token):
+        assert ib.admin_session_ok(db, content, t, 1000.0 + 7 * 3600) is True
+    assert not ib.side_file().exists()
+
+
+def test_admin_session_ok_on_needs_password_within_hours(game, content, keyed, tmp_path, monkeypatch):
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "g.db"))
+    content.config.identity.enabled = True
+    db = game.world.db
+    hours = content.config.identity.staff_hours * 3600
+    ib.record_session("pw", "password", 1000.0)
+    assert ib.admin_session_ok(db, content, "pw", 1000.0 + hours) is True
+    assert ib.admin_session_ok(db, content, "pw", 1000.0 + hours + 1) is False
+    ib.record_reauth("pw", "password", 1000.0 + hours + 1)
+    assert ib.admin_session_ok(db, content, "pw", 1000.0 + hours + 2) is True  # 重驗過回來
+    for method in ("phone", "email", "line", "google"):
+        ib.record_session(method, method, 1000.0)
+        assert ib.admin_session_ok(db, content, method, 1000.0) is False
+    assert ib.admin_session_ok(db, content, None, 1000.0) is False
+    assert ib.admin_session_ok(db, content, "nope", 1000.0) is False
+
+
+def test_listed_matches_admins_and_support(content, monkeypatch):
+    monkeypatch.delenv(ib.SUPPORT_ENV, raising=False)
+    content.config.admins = ["Rayal", "段青山"]
+    content.config.support.staff = ["kefu_01", "77"]
+    assert ib.listed(content, character="段青山") is True
+    assert ib.listed(content, login="RAYAL") is True  # 帳號名照名號的寫法比、不分大小寫（註冊時還沒角色）
+    assert ib.listed(content, login="KeFu_01") is True
+    assert ib.listed(content, login="someone", account_id=77) is True
+    assert ib.listed(content, login="77") is False  # 全是數字的一筆只當 id（同 support_staff）
+    assert ib.listed(content, login="someone", character="沈浪", account_id=5) is False
+    assert ib.listed(content) is False
+
+
+def test_check_password_staff_needs_12():
+    from tianxia import accounts
+
+    assert accounts.check_password("12345678") == "12345678"  # 不在名單：一個字不變
+    for short in ("", "12345", "12345678901"):
+        with pytest.raises(accounts.AccountError) as got:
+            accounts.check_password(short, staff=True)
+        assert str(got.value) == accounts.STAFF_SHORT_PASSWORD
+    assert accounts.check_password("123456789012", staff=True) == "123456789012"
+    with pytest.raises(accounts.AccountError) as got:
+        accounts.check_password("x" * (accounts.PASSWORD_MAX + 1), staff=True)
+    assert str(got.value) == accounts.LONG_PASSWORD
+    assert accounts.STAFF_SHORT_PASSWORD == "這個帳號的密碼至少 12 字。"
+
+
+def test_account_store_passes_staff(game):
+    from tianxia import accounts
+
+    store = accounts.AccountStore(game.world.db)
+    with pytest.raises(accounts.AccountError):
+        store.register("boss_01", "secret-pw", staff=True)
+    store.register("boss_01", "secret-pw")
+    with pytest.raises(accounts.AccountError):
+        store.change_password("boss_01", "secret-pw", "other-pw-1", staff=True)
+    with pytest.raises(accounts.AccountError):
+        store.set_password("boss_01", "other-pw-1", staff=True)
+    store.change_password("boss_01", "secret-pw", "a-long-password", staff=True)
+    store.set_password("boss_01", "another-long-pw", staff=True)
+    assert store.authenticate("boss_01", "another-long-pw") is not None
