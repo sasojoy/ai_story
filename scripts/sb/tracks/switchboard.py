@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 from sb.base import Scenario
-from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
+from sb.harness import ADMIN, CLOCK, STEP, emit, new_ops, register_track
 
 # ═══════════════════════════ 動作表一軌（全部拆包第 68 批：伺服器分包一）═══════════════════════════
 
@@ -229,14 +229,15 @@ class SwitchboardScenario(Scenario):
     def tables(self) -> None:
         """表本身：MAIN、MENXIA 的鍵照順序（分包之後合起來的順序不變）；管理者那一張會拆到功能包的工具，合起來照名字排；還有這一軌沒列到的 op。"""
         s = self.server
-        emit("MAIN_ACTIONS 的鍵", list(s.MAIN_ACTIONS))
-        emit("MENXIA_ACTIONS 的鍵", list(s.MENXIA_ACTIONS))
+        new = new_ops(s)  # compare --new（第 106 批）：新包帶來的 op 扣掉；沒帶參數時三個都是空的
+        emit("MAIN_ACTIONS 的鍵", [op for op in s.MAIN_ACTIONS if op not in new["main"]])
+        emit("MENXIA_ACTIONS 的鍵", [op for op in s.MENXIA_ACTIONS if op not in new["menxia"]])
         leftover = getattr(s, "ADMIN_ACTIONS", {})  # 第二輪第 90 批把殼的那一張搬進管理者包（base 還有、head 沒有；合起來的名字不變）
-        admin = set(leftover) | set(s.FEATURE_ADMIN_ACTIONS)
+        admin = (set(leftover) | set(s.FEATURE_ADMIN_ACTIONS)) - new["admin"]
         emit("管理者動作（兩張表合起來）", sorted(admin))
         emit("暫停中照做", sorted(s.PAUSE_OK_ACTIONS))
         emit("動到別人的存檔", sorted(s.PLAYER_ADMIN_ACTIONS))
-        emit("這一軌沒列到的 op", [sorted(set(s.MAIN_ACTIONS) - set(SWITCH_MAIN)), sorted(set(s.MENXIA_ACTIONS) - set(SWITCH_MENXIA)), sorted(set(leftover) - set(SWITCH_ADMIN))])
+        emit("這一軌沒列到的 op", [sorted(set(s.MAIN_ACTIONS) - set(SWITCH_MAIN) - new["main"]), sorted(set(s.MENXIA_ACTIONS) - set(SWITCH_MENXIA) - new["menxia"]), sorted(set(leftover) - set(SWITCH_ADMIN))])
 
     def strangers(self) -> None:
         """沒登入：每一個 op 一下（功能包的管理者工具也要 401、不是 404）；跨表的、不認得的 op。"""
@@ -427,4 +428,8 @@ class SwitchboardScenario(Scenario):
 
 # 改一個字（selftest）：閉關的預設時數（MAIN_ACTIONS["seclude"]：第 68 批搬進閉關包，搬進包的檔、殼兩處找）
 register_track("switchboard", SwitchboardScenario, (("tianxia/features/seclusion/routes.py", "server.py"),
-                                                    ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7")
+                                                    ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mall", "military", "outlets",
+                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

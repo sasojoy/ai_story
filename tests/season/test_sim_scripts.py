@@ -89,7 +89,7 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
-    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 1)
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.3)
     content = load_content(ROOT / "content")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     try:
@@ -107,14 +107,14 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
 
 def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
     """第一季豪強分屬兩軍（7 天季預設開）：假人整季跑一段，投靠豪強的假人都挑了依附哪一軍、名冊沒有不帶依附的豪強，
-    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。只跑 0.4 個現實日（×6 約 2.4 個世界日，跟以前跑完 2.5 天的週末季一樣長；
-    依附在投靠那一刻就挑好）。"""
+    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。只跑 0.1 個現實日（×6 約 0.6 個世界日；
+    依附在投靠那一刻就挑好；第 108 批從 0.4 縮，0.1 天就有投靠豪強的假人）。"""
     from tianxia import database
     from tianxia.characters import open_characters
     from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
-    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.4)
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.1)
     content = load_content(ROOT / "content", profile="week7")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
@@ -184,7 +184,7 @@ def test_the_exp_pace_measure_prints_one_line_per_side(capsys, monkeypatch, tmp_
 def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons(capsys, monkeypatch):
     """兵器量表：--seeds 1 跑一次，兵器開、兵器關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_weapons")
-    monkeypatch.setattr(sys, "argv", ["measure_weapons.py", "--seeds", "1", "--profile", "week7"])
+    monkeypatch.setattr(sys, "argv", ["measure_weapons.py", "--seeds", "1", "--profile", "week7", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 兵器開：" in out and "種子 1 兵器關：" in out
@@ -197,7 +197,7 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
 def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(capsys, monkeypatch):
     """裝備量表（防具那一項，裝備四欄設計第十節）：--seeds 1 跑一次週末設定、照手上的事走，防具開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_gear")
-    monkeypatch.setattr(sys, "argv", ["measure_gear.py", "--seeds", "1", "--profile", "week7", "--steer"])
+    monkeypatch.setattr(sys, "argv", ["measure_gear.py", "--seeds", "1", "--profile", "week7", "--steer", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 防具開：" in out and "種子 1 防具關：" in out and out.count("對照（") == 1
@@ -211,7 +211,7 @@ def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(caps
 def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(capsys, monkeypatch):
     """坐騎量表（裝備四欄設計第十節第 2 項）：--seeds 1 跑一次週末設定、照手上的事走、走法混著用，坐騎開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_mounts")
-    monkeypatch.setattr(sys, "argv", ["measure_mounts.py", "--seeds", "1", "--profile", "week7", "--steer", "--gait", "mix"])
+    monkeypatch.setattr(sys, "argv", ["measure_mounts.py", "--seeds", "1", "--profile", "week7", "--steer", "--gait", "mix", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 坐騎開：" in out and "種子 1 坐騎關：" in out
@@ -223,7 +223,7 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
 def test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures(capsys, monkeypatch):
     """寶物量表（裝備四欄設計第十節第 3 項）：--seeds 1 跑一次週末設定、照手上的事走，寶物開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_treasures")
-    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "week7", "--steer"])
+    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "week7", "--steer", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 寶物開：" in out and "種子 1 寶物關：" in out
@@ -263,7 +263,7 @@ def test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry
         return loaded
 
     monkeypatch.setattr(measure, "load_content", with_gentry)
-    monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none", "--faction", "haoqiang"])
+    monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none", "--faction", "haoqiang", "--max-steps", "300"])
     measure.main()
     side = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("種子 1 陣營："))
     assert "haoqiang 第" in side
@@ -332,7 +332,7 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     """口訣與秘方量表多一段鑄器（打造隱藏配方設計第十二節第 1、2、4 項）：--seeds 1 跑一次週末設定，三種機器人各一行鑄器、
     三邊合起來一行、三行平均（只量不改，不驗數字）。"""
     measure = _load("measure_secrets")
-    monkeypatch.setattr(sys, "argv", ["measure_secrets.py", "--seeds", "1"])
+    monkeypatch.setattr(sys, "argv", ["measure_secrets.py", "--seeds", "1", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     lines = out.splitlines()

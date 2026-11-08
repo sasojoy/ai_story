@@ -831,7 +831,10 @@ def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp
 def season_of(content, tmp_path_factory):
     """機器人照種子玩完的一季，同一個種子在這個模組裡只跑一次（測試整併第 3 區）：種子 1 那一季以前跑兩次，
     「整季 [1]」與「學會悟、合、修」各一次，兩次一模一樣（play_season 對同一份內容、同一個種子是決定性的，也不改內容）；
-    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。"""
+    現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。
+    第 108 批：「學會悟、合、修」那四句併進整季 [1]（-n 4 下兩條分到不同 worker 就各跑一季）；閒著的選單那一條
+    第一季規則關著的那一半併進種子 2 這一季（_idle_observer 只讀不改：帶不帶它，種子 2 這一季的結局、看過的事件、
+    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。"""
     from tianxia.sqlite_world import open_world
 
     games, worlds = {}, []
@@ -839,9 +842,14 @@ def season_of(content, tmp_path_factory):
     def season(seed):
         if seed not in games:
             worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
-            games[seed] = play_season(content, seed, world=worlds[-1])
+            observe = None
+            if seed == 2:
+                season.idle_seen[seed] = set()
+                observe = _idle_observer(season.idle_seen[seed])
+            games[seed] = play_season(content, seed, world=worlds[-1], observe=observe)
         return games[seed]
 
+    season.idle_seen = {}
     yield season
     for world in worlds:
         world.db.close()
@@ -854,16 +862,14 @@ def test_bot_plays_a_full_season(season_of, seed):
     assert game.state.world.ended
     assert game.state.world.ending_title
     assert len(game.state.player.seen_events) >= 3
-
-
-@pytest.mark.slow
-def test_the_bot_learns_insights_fuses_and_cultivates(season_of):
-    game = season_of(1)
-    p = game.state.player
-    assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
-    assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
-    assert p.art_quality or p.art_mastery, "整季都沒修練過"
-    assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+    if seed == 1:  # 機器人學會悟、合、修（以前另一條測試，看的是同一季）
+        p = game.state.player
+        assert p.insights, "整季都沒悟到意境：探索的悟意境那一支沒接上"
+        assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
+        assert p.art_quality or p.art_mastery, "整季都沒修練過"
+        assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+    if seed == 2:  # 閒著的選單、第一季規則關著（以前 test_every_idle_menu_id…[False] 跑 700 步，現在看整季）
+        _assert_idle_ids_known(season_of.idle_seen[seed])
 
 
 def test_a_new_character_starts_with_the_two_starter_arts_at_level_one(content):
@@ -2223,27 +2229,38 @@ def test_real_showdowns_start_from_the_opening_fronts():
     assert starts == {"changshe_fire": 55, "wancheng": 58, "guangzong": 48}
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize("season_one", [False, True])
-def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
-    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「探索」；
-    決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。"""
-    from tianxia.models import allow_known
-    from tianxia.sqlite_world import open_world
-
-    real = content.model_copy(deep=True)
-    real.config.season_one = season_one
-    seen: set[str] = set()
+def _idle_observer(seen: set[str]):
+    """閒著的選單（有「探索」；決戰集結時前面多的 battle: 不算）上的 id 收進 seen。只讀（tick=False），不改那一季。"""
 
     def observe(game):
         ids = [o.id for o in game.options(odds=False, tick=False)]
         if "act:explore" in ids:  # 閒著的選單（engine.IDLE_MARK；以前認打坐，2026-10-12 拿掉了）
             seen.update(oid for oid in ids if not oid.startswith("battle:"))
 
-    play_season(real, 2, max_steps=700, observe=observe, world=open_world(tmp_path / f"idle-{season_one}.db"))
+    return observe
+
+
+def _assert_idle_ids_known(seen: set[str]) -> None:
+    from tianxia.models import allow_known
+
     assert "act:explore" in seen and any(oid.startswith("move:") for oid in seen)
     stray = {oid for oid in seen if not allow_known(oid)}
     assert not stray, f"閒著的選單上有、models.ALLOW_FIXED／ALLOW_FAMILIES 沒列的 id：{sorted(stray)}（引擎新加的行動要補進去）"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("season_one", [True])
+def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_path, season_one):
+    """序章每一步的 allow 只准寫閒著的選單真的做得出來的 id（models.allow_known）。整季隨機玩，每一個閒著的選單（有「探索」；
+    決戰集結時前面多的 battle: 不算）裡的 id 都要被認得：引擎多了新的行動、沒有列進 ALLOW_FIXED／ALLOW_FAMILIES，這裡就會叫。
+    第一季規則關著的那一半併進整季 [2]（第 108 批，看整季）；這裡只剩打開的那一半。"""
+    from tianxia.sqlite_world import open_world
+
+    real = content.model_copy(deep=True)
+    real.config.season_one = season_one
+    seen: set[str] = set()
+    play_season(real, 2, max_steps=300, observe=_idle_observer(seen), world=open_world(tmp_path / f"idle-{season_one}.db"))  # 第 108 批 700 → 300
+    _assert_idle_ids_known(seen)
 
 
 # ── 意境提示：每個地點最濃的意境（意境提示設計第三節，企劃者 10/15 守「渡口是風」）──

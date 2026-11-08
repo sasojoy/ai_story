@@ -9,7 +9,7 @@
     python docs/superpowers/plans/2026-11-07-第二輪-第103批-改名工具.py targets      # 新 import 指到的模組與名字都在（只讀）
 
 規則：本地名不動（`patch.object`、`monkeypatch.setattr(seal, …)` 打的是同一個模組物件）；順序不動（一句裡混著別的名字就照原順序切段）；尾註抄到每一段；
-字串裡的 import 樣本不碰。範圍 tests/、tianxia/、scripts/、server.py、run_bots.py；docs/ 底下的舊工具是當時的紀錄，不改。
+字串裡的 import 樣本不碰。範圍 tests/、tianxia/、scripts/、根目錄的 *.py（第 106 批）；docs/ 底下的舊工具是當時的紀錄，不改。
 
 殼不能保留本地名（一個殼拆成好幾個模組），所以 `<殼>.x` 逐名換成真位置，這個檔用到哪個才 import 哪個，接在原本那一行的位置。同檔註解、說明字裡的 `<殼>.x` 一起換。
 """
@@ -165,7 +165,7 @@ WIDE = 160
 
 def git_files() -> list[str]:
     out = subprocess.run(
-        ["git", "-c", "core.quotepath=off", "ls-files", "--", "tests", "tianxia", "scripts", "server.py", "run_bots.py"],
+        ["git", "-c", "core.quotepath=off", "ls-files", "--", "tests", "tianxia", "scripts", ":(glob)*.py"],
         capture_output=True,
         encoding="utf-8",
         check=True,
@@ -508,7 +508,7 @@ def import_seq(tree: ast.Module, rel: str) -> list[tuple[str, str]]:
 
 def check(base: str) -> int:
     names = subprocess.run(
-        ["git", "-c", "core.quotepath=off", "diff", "--name-status", base, "--", "tests", "tianxia", "scripts", "server.py", "run_bots.py"],
+        ["git", "-c", "core.quotepath=off", "diff", "--name-status", base, "--", "tests", "tianxia", "scripts", ":(glob)*.py"],
         capture_output=True,
         encoding="utf-8",
         check=True,

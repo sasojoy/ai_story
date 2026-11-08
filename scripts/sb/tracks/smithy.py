@@ -668,7 +668,11 @@ class SmithyScenario(Scenario):
 # 改一個字（selftest）：一步一步打造「退一步」那一句（搬之前在 tianxia/smithing.py、之後在 tianxia/features/smithy/smithing.py；第 2 項是舊名的檔，
 # 搬的人照實際的檔名改這一個字串）。抓到的地方：砧乙挑種類之後按「上一步」
 register_track("smithy", SmithyScenario, (("tianxia/features/smithy/smithing.py",),
-                                          ('UNDONE = "退回一步。"', 'UNDONE = "退回一步！"')), "week7")
+                                          ('UNDONE = "退回一步。"', 'UNDONE = "退回一步！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))
 
 
 # 鐵匠鋪那一軌改一個字的那一句（UNDONE，# smithy 那一段登記的）這一批跟著鐵匠鋪的常數搬進了 tianxia/core/smith_base.py：檔清單前面補上

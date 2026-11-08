@@ -27,7 +27,7 @@
     const note = (n) => (n.done
       ? `<div class="note k-${esc(n.kind)} done">${face(n)}<i class="stamp">交差</i></div>`
       : `<button class="note k-${esc(n.kind)}${n.held ? " held" : ""}${!n.held && !n.action.enabled ? " dim" : ""}" data-act="board-zoom" data-id="${esc(n.id)}">
-        ${face(n)}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`);
+        ${face(n)}${!n.held && !n.action.enabled && n.action.why ? `<small class="why">${esc(n.action.why)}</small>` : ""}${n.held ? '<i class="stamp">已揭</i>' : ""}</button>`); // 灰的那一張寫為什麼揭不了（UI 手感乙批 5-2）
     // 剛交差的那一張（boardHanded）：伺服器那一份已經沒有它，照原本的位置再畫一下、蓋「交差」，跟著淡出（企劃者 2026-10-14 微調）
     const notes = shop.notes.slice();
     const done = S.boardStamp && !notes.some((n) => n.id === S.boardStamp.id) ? S.boardStamp : null;

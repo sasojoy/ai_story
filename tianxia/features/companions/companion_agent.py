@@ -12,6 +12,7 @@ companion_tag_counts/companion_drift_note，這個模組只負責累積 tag、�
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from random import Random
 from typing import Annotated, ClassVar
@@ -663,6 +664,25 @@ def _generate_with(
     return generate_turn(client, messages, required, **_extra_kw(ids, ends))
 
 
+# 模型把整份回答（含 options、option_tags 那幾個鍵）用彎引號寫進 narrative 這一格（2026-11-08 線上，省電模式 gemma3:4b：
+# 華佗的話後面接著「”, “options”: [“…”], “option_tags”: [」整段顯示給玩家）。結構化輸出擋不住：彎引號不會結束字串，
+# 對 schema 來說是一個合法的長字串。看到「引號＋逗號＋引號包著的欄位名＋冒號」就從那裡切掉，前面那段才是人物的話。
+_LEAK_KEYS = "options|option_tags|relationship_note_update|talk_memo|player_tag|stance|persona|ask|willing|condition|narrative_terms|narrative_no"
+_QUOTE = "[\"'“”‘’「」]"
+_LEAKED_TAIL = re.compile(rf"(?:{_QUOTE}?\s*[,，]\s*|^\s*\{{?\s*){_QUOTE}\s*(?:{_LEAK_KEYS})\s*{_QUOTE}\s*[:：]")
+_LEAKED_HEAD = re.compile(rf"^\s*\{{?\s*{_QUOTE}\s*narrative\s*{_QUOTE}\s*[:：]\s*{_QUOTE}?")
+
+
+def _cut_leaked_json(text: str) -> str:
+    """narrative 裡混進整份 JSON 時，只留人物說的那一段（開頭的 {"narrative": 也剝掉）；沒混進就原樣回。"""
+    m = _LEAKED_TAIL.search(text)
+    if m is None and _LEAKED_HEAD.match(text) is None:
+        return text
+    if m is not None:
+        text = text[:m.start()]
+    return _LEAKED_HEAD.sub("", text).strip()
+
+
 def generate_turn(
     client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...] = (), stances: tuple[str, ...] = (),
     persona: tuple[str, ...] = (),
@@ -692,6 +712,7 @@ def generate_turn(
                 required_fields=["narrative", "options"], require_in_schema=True,
                 **({"schema_required": list(required)} if required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
             )
+        turn = turn.model_copy(update={"narrative": _cut_leaked_json(turn.narrative)})
         if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
             raise ValueError("模型沒寫人物的話或選項")
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。

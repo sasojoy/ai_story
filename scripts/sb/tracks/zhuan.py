@@ -6,7 +6,7 @@ import hashlib
 import random
 
 from sb.base import Scenario
-from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
+from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, page_script, register_track
 
 # ═══════════════════════════ zhuan：列傳一軌（全部拆包第 29 批，dev/zhuan-1） ═══════════════════════════
 # 列傳（tianxia/biography.py、zhuan_end.py、zhuan_html.py 與 Game 上寫傳、休季三顆、行狀頁的 20 個方法、server 的列傳那一段與 5 條路由、zhuan: 前綴）
@@ -142,8 +142,9 @@ class ZhuanScenario(Scenario):
         path = "/zhuan/" + url.rsplit("/zhuan/", 1)[-1]
         self.begin()
         r = self.TestClient(self.server.app).get(path)
-        emit(f"頁面 {tag} {path}", {"status": r.status_code, "len": len(r.text), "sha": hashlib.sha256(r.text.encode("utf-8")).hexdigest(),
-                                     "head": r.text[:160], "has": [k for k in ("評曰", "<img", "朱印", "og:image") if k in r.text]})
+        text = page_script(r.text)  # 頁上的程式換成同一個記號（第 213 批搬成 web/zhuan_page.js）
+        emit(f"頁面 {tag} {path}", {"status": r.status_code, "len": len(text), "sha": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                                     "head": text[:160], "has": [k for k in ("評曰", "<img", "朱印", "og:image") if k in text]})
 
     # ── 前半 ──
 
@@ -432,4 +433,7 @@ class ZhuanScenario(Scenario):
 
 # 改一個字（selftest）：蓋紀念印那一句（搬之前在 tianxia/zhuan_end.py、之後在 tianxia/features/zhuan/zhuan_end.py）
 register_track("zhuan", ZhuanScenario, (("tianxia/features/zhuan/zhuan_end.py",),
-                                        ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21")
+                                        ('SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"', 'SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}！"')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

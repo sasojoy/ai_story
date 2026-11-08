@@ -1,3 +1,4 @@
+import os
 import ast
 import contextlib
 import hashlib
@@ -785,6 +786,27 @@ def test_server_timing_lists_only_what_was_measured():
     assert server.server_timing({}, 0.0123) == "total;dur=12.3"
     assert server.server_timing({"lock": 0.5, "lock_n": 3, "view": 0.02}, 1.0) == 'lock;desc="n=3";dur=500.0, view;dur=20.0, total;dur=1000.0'
 
+
+def test_every_response_carries_the_csp(client):
+    """CSP（帳號與客服第 213 批，設計第三節「CSP 標頭另開小批」）：每個回應都帶同一條 Content-Security-Policy——頁、API、靜態檔、404、
+    GameError 的 400、沒登入的 401 都是；Turnstile 要 challenges.cloudflare.com。字面寫死在這裡，防有人悄悄改寬。
+    （500 由 Starlette 最外層回、不經 middleware，不帶；那是純文字頁，這裡不打。）"""
+    from fastapi.routing import APIRoute
+
+    assert server.CSP == "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+    gets = sorted(r.path for r in server.app.routes if isinstance(r, APIRoute) and "GET" in r.methods and "{" not in r.path)
+    gets += ["/zhuan/nope", "/zhanji/nope", "/static/app.js", "/static/zhuan_page.js", "/static/tale_page.js", "/no/such/page"]
+    seen = {}
+    for path in gets:
+        r = client.get(path)
+        seen[path] = r.headers.get("content-security-policy")
+    r = client.post("/api/login", json={"login": "nobody_here", "password": "wrong-pw"})
+    seen["POST /api/login"] = r.headers.get("content-security-policy")
+    _player(client)
+    for path in ("/api/main", "/admin", "/"):
+        seen[f"{path} (登入後)"] = client.get(path).headers.get("content-security-policy")
+    assert {path: got for path, got in seen.items() if got != server.CSP} == {}
+    assert client.get("/static/zhuan_page.js").status_code == 200 and client.get("/static/tale_page.js").status_code == 200
 
 def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     _player(client)
@@ -4313,6 +4335,24 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
     assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
 
 
+def test_the_page_versions_follow_a_pull_without_a_restart(tmp_path, monkeypatch):
+    """2026-11-07 對話告辭急修：主機只 pull、沒重開，頁面上的 ?v= 還是啟動時那一份，手機一直拿舊檔。web/ 的檔換了，頁面就重算。"""
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text('<link rel="stylesheet" href="/static/a.css">', encoding="utf-8")
+    (web / "a.css").write_text("a{}", encoding="utf-8")
+    monkeypatch.setattr(server, "WEB", web)
+    monkeypatch.setattr(server.features_core, "with_scripts", lambda html: html)
+    monkeypatch.setattr(server, "PAGE", server.PAGE)  # 測完換回正式那一份
+    monkeypatch.setattr(server, "_PAGE_STAMP", ())
+    first = server.current_page()
+    assert server.current_page() is first  # 沒換檔不重算
+    (web / "a.css").write_text("a{color:red}", encoding="utf-8")
+    os.utime(web / "a.css", ns=(1, 1))
+    second = server.current_page()
+    assert second != first and f"?v={server.content_version(b'a{color:red}')}" in second
+
+
 class _OneShot(server_push.PushHub):
     """一訂閱就送一則再收尾，TestClient 才拿得到整份回應（不會結束的串流 TestClient 等不完）。"""
 
@@ -4799,6 +4839,8 @@ NOT_IN_THE_FINGERPRINT = {
         "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
         "attrs_v2": "開季時蓋的章（五項屬性），開季之後不變",
         "no_gentry": "開季時蓋的章（拿掉地方豪強），開季之後不變",
+        "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",
+        "titles_holders": "名號結算的那一下寫江湖傳聞（傳聞流水號已在指紋裡）；各人戴哪一個是自己存檔的事，下次輪詢才補也不礙事",
         "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
                     "進度不露數字、只回推的人自己那一句話",
         "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",

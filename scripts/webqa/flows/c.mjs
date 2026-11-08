@@ -17,6 +17,8 @@ const PANEL = `(() => { const q = (s) => document.querySelector(s); const t = (s
 
 const fact = async (c, name) => { const f = await c.ev(PANEL); c.report.facts[name] = f; return f; };
 const shot = async (c, name, opts = { who: "p1" }) => { const f = await fact(c, name); await c.shoot(name, opts); return f; };
+// batch 110: the opening overlay is drawn after the first /api/main of the page; wait for it rather than for the clock (up to 3 s), and say so when it never came
+const waitOv = async (c, name) => { for (let i = 0; i < 30; i++) { if (await c.ev(`!!document.getElementById("bp-ov")`)) return true; await c.sleep(100); } c.report.facts[`${name}:overlay_missing`] = true; return false; };
 const closeOv = async (c) => { const had = await c.ev(`(() => { const e = document.getElementById("bp-ov"); if (!e) return false; e.click(); return true; })()`); await c.sleep(420); return had; };
 
 const moveOf = (m, i = 0) => { const acts = (m.json.options || []).filter((o) => o.enabled && o.id.startsWith("battle:act:")); return acts.length ? acts[Math.min(i, acts.length - 1)].id : null; };
@@ -135,6 +137,7 @@ const ALL = [
     const q = await c.api("p2", "/api/main");
     const j2 = (q.json.options || []).find((o) => o.id.startsWith("battle:join:") || o.id.startsWith("battle:enlist:") || o.id.startsWith("battle:siege"));
     if (j2) await c.api("p2", "/api/choose", { id: j2.id });
+    await blank(c);  // batch 110: an open page polling while the clock jumps plays the opening overlay away
     for (let hop = 0; hop < 6; hop++) {
       await c.py("CLOCK['now'] += 900; out = 1");
       await c.api("admin", "/api/do/fast_forward", { hours: 1 });
@@ -144,6 +147,7 @@ const ALL = [
     }
     c.log("brief2", JSON.stringify(await brief(c)));
     await c.load("/");
+    await waitOv(c, "sg_open_overlay");
     await shot(c, "sg_open_overlay");
     await closeOv(c);
     await shot(c, "sg_active");
@@ -190,6 +194,7 @@ const ALL = [
     c.log("p3 opts", JSON.stringify((m3.json.options || []).map((o) => o.id)).slice(0, 300));
   }],
   ["active", async (c) => {
+    await blank(c);  // batch 110: muster left p3's page open; its polls must not play the overlay away while the clock jumps
     for (let hop = 0; hop < 6; hop++) {
       await c.py("CLOCK['now'] += 600; out = 1");
       await c.api("admin", "/api/do/fast_forward", { hours: 1 });
@@ -199,6 +204,7 @@ const ALL = [
     }
     c.log("brief", JSON.stringify(await brief(c)), JSON.stringify(await c.py("out = stage.chiefs(world)")));
     await c.asPlayer("p1");
+    await waitOv(c, "bt_open_overlay");
     await shot(c, "bt_open_overlay");
     c.log("closed", await closeOv(c));
     await shot(c, "bt_active");

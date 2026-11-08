@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, Private
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
+from .core.tuning.identity import IdentityTuning  # 帳號綁定
+from .core.tuning.support import SupportTuning  # 客服
+from .core.tuning.titles import TitlesTuning  # 稱號與官職
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4422,6 +4425,9 @@ class Config(_Strict):
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
     world_tick_seconds: float = Field(default=0, ge=0)
+    identity: IdentityTuning = Field(default_factory=IdentityTuning)  # 帳號綁定（tianxia/core/tuning/identity.py）
+    support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
+    titles: TitlesTuning = Field(default_factory=TitlesTuning)  # 稱號與官職（tianxia/core/tuning/titles.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
@@ -4431,6 +4437,18 @@ class Config(_Strict):
         if 0 < seconds < 1:
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
+
+    @model_serializer(mode="wrap")
+    def _drop_default_tuning(self, handler):
+        """新包的子模型（tianxia/core/tuning/<包>.py）整格還是預設值時不寫進序列化：開關關著，內容的鍵一個都不多（同 _drop_unset）。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for name, field in type(self).model_fields.items():
+                kind = field.annotation
+                if (name in data and isinstance(kind, type) and kind.__module__.startswith("tianxia.core.tuning.")
+                        and getattr(self, name) == kind()):
+                    del data[name]
+        return data
 
     # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
     # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的

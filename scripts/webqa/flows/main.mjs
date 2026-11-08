@@ -177,10 +177,13 @@ export const flows = [
       await c.step(ACT("shop-unwrap"), "sm_unwrap", {});
       await c.step(ACT("shop-wield"), "sm_wield", { who: "p1" });
       await c.step(ACT("shop-keep"), "sm_keep", { who: "p1" });
+      // batch 111: the shop covers #page (web/shop.css), so 修 and 淬煉 are the two big buttons on the 裝備庫 tab (web/smithy.js smithWornHtml)
       await c.load("/");
-      await c.step(CH("smith:repair"), "sm_repair", { who: "p1" });
+      await c.click('[data-act="shop-tab"][data-tab="rack"]');
+      await c.step(`.shop-layer .shop-worn ~ .shop-bigs ${CH("smith:repair")}`, "sm_repair", { who: "p1" });
       await c.load("/");
-      await c.step(CH("smith:temper"), "sm_temper", { who: "p1" });
+      await c.click('[data-act="shop-tab"][data-tab="rack"]');
+      await c.step(`.shop-layer .shop-worn ~ .shop-bigs ${CH("smith:temper")}`, "sm_temper", { who: "p1" });
       await c.load("/");
       await c.step('[data-act="shop-tab"][data-tab="forge"]', "sm_forge");
       await c.step(ACT("shop-kind"), "sm_forge_kind");
@@ -217,7 +220,8 @@ export const flows = [
       await c.load("/");
       await c.step(CH("smith:page:armor"), "sm_armor", { who: "p1" });
       await c.load("/");
-      await c.step(CH("smith:page:material"), "sm_material", { who: "p1" });
+      // batch 111: the shop draws no smith:page:material button (only the hidden menu under it has one): the way enterShop falls back
+      if (await c.step(CH("smith:page:material"), "sm_material", { who: "p1" }) !== "ok") { await c.api("p1", "/api/choose", { id: "smith:page:material" }); await c.load("/"); await c.shoot("sm_material", { who: "p1" }); }
       await c.load("/");
       await leave(c, "smith", "smith:back");
     }],
@@ -225,13 +229,21 @@ export const flows = [
       await enterShop(c, "market", "zhuo_county", "act:market");
       await c.crawl("mk", () => c.load("/"), SHOP_UI, { total: 12, cap: 2 });
       await c.load("/");
-      await c.step(CH("market:wield:騎:8"), "mk_wield", { who: "p1" });
+      // batch 111: the market is a row of stalls; a stall shows its card and the card's one button (web/gear.js marketHtml, horseCard).
+      // A bare CHP("market:") hits the shop's own "‹ 出店" first (data-id market:back), so every button here is looked up inside .horse-card
+      await c.click('[data-act="shop-horse"][data-id="騎:8"]');
+      await c.step(`.horse-card ${CH("market:wield:騎:8")}`, "mk_wield", { who: "p1" });
       await c.load("/");
       await c.step(CH("market:feed"), "mk_feed", { who: "p1" });
       await c.load("/");
-      await c.step(CH("market:buy"), "mk_buy", { who: "p1" });
+      await c.click('.stall.r-sale[data-act="shop-horse"]');
+      await c.step(`.horse-card ${CH("market:buy")}`, "mk_buy", { who: "p1" });
       await c.step(ACT("shop-horse"), "mk_horse", { who: "p1" });
-      await c.step(CHP("market:"), "mk_buy2", { who: "p1" });
+      // the first stall's button can be grey (just fed): take the first stall whose card has a button that presses
+      const card = `.horse-card ${CHP("market:")}`;
+      const stalls = await c.ev(`document.querySelectorAll('.stalls > button.stall').length`);
+      for (let i = 1; i <= stalls && !(await c.ev(`!!document.querySelector(${JSON.stringify(card)})`)); i++) await c.click(`.stalls > button.stall:nth-of-type(${i})`);
+      await c.step(card, "mk_buy2", { who: "p1" });
       await c.load("/");
       await leave(c, "market", "market:back");
     }],
@@ -273,11 +285,16 @@ export const flows = [
       await c.crawl("bd", () => c.load("/"), SHOP_UI, { total: 12, cap: 3 });
       await c.load("/");
       await c.step(ACT("board-zoom"), "bd_zoom");
+      // batch 111: 揭下, 交出 and 放棄 are on the paper a note opens (web/bounties.js paperHtml); 放棄 asks once (shop-ask, then ask-yes)
       await c.load("/");
-      await c.step(CHP("bounty:take:"), "bd_take", { who: "p1" });
-      await c.step(CHP("bounty:pick"), "bd_pick", { who: "p1" });
-      await c.step(CHP("bounty:give:"), "bd_give", { who: "p1" });
-      await c.step(CHP("bounty:drop"), "bd_drop", { who: "p1" });
+      await c.click('.shop-layer .note:not(.dim):not(.held)[data-act="board-zoom"]');
+      await c.step(`.board-sheet ${CHP("bounty:take:")}`, "bd_take", { who: "p1" });
+      await c.step(`.board-sheet ${CHP("bounty:pick")}`, "bd_pick", { who: "p1" });
+      await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" });
+      await c.load("/");
+      await c.click('.shop-layer .slot[data-act="board-zoom"]');
+      await c.step('.board-sheet [data-act="shop-ask"][data-id^="bounty:drop"]', "bd_drop_ask", { light: true });
+      await c.step('[data-act="ask-yes"]', "bd_drop", { who: "p1" });
       await c.load("/");
       await leave(c, "board", "bounty:back");
     }],
@@ -323,9 +340,10 @@ export const flows = [
       await c.step(ACT("here-all-close"), "here_all_close");
       // the mingtie editor (名帖)
       await c.load("/");
-      await c.tab("news");
-      await c.click('[data-act="news"][data-news="journal"]');
+      // batch 111: the mingtie box moved to the 俠客 page (SELF_NEWS: the portrait card's "名帖 ›", web/cultivation.js heroAnnalsHtml)
+      await c.tab("practice");
       await c.click('[data-act="news"][data-news="mingtie"]');
+      await c.settle(300);
       await c.shoot("mingtie_box", { light: true });
       await c.step(ACT("mt-edit"), "mt_edit", {});
       await c.step(ACT("mt-shuffle"), "mt_shuffle", { light: true });
@@ -334,9 +352,12 @@ export const flows = [
     }],
     ["call", async (c) => {
       await place(c, "沈浪", "wan_city");
+      // batch 111: 宛城 has four figures, so 交友 picks the person first (web/main.js socialPick): the cell opens a list (call_list) and
+      // 朱儁's line talks to him straight away (fig-talk, his talk.via is act:call, call:zhujun). The old one-tap 交友 only when the list has it
       await c.load("/");
-      await c.step(CH("act:call"), "call_list", { who: "p1" });
-      await c.step(CH("call:zhujun"), "call_zhujun", { who: "p1" });
+      await c.step('[data-act="wheel"][data-key="social"]', "call_list", {});
+      if (await c.click(`.act-move ${CH("act:call")}`) === "ok") await c.step(CH("call:zhujun"), "call_zhujun", { who: "p1" });
+      else await c.step('.act-move [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
       await c.crawl("cl", () => c.load("/"), [...UI, "fig-close", "fig-log-close", "letter-read"], { total: 10, cap: 2 });
       await c.load("/");
       await c.step(ACT("fig-log"), "call_log");

@@ -8,7 +8,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from sb.harness import ADMIN, CLOCK, emit, register_track
+from sb.harness import ADMIN, CLOCK, emit, page_script, register_track
 from sb.tracks.battle import BattleScenario
 
 # ═══════════════════════════ scribe（全部拆包第 52 批：戰記） ═══════════════════════════
@@ -129,7 +129,7 @@ class ScribeScenario(BattleScenario):
         for suffix in ("", "?in=1"):
             self.begin()
             r = anyone.get(f"/zhanji/{code}{suffix}")
-            emit(f"GET /zhanji/<代碼{record_id}>{suffix} {r.status_code}", self.masked(r.text))
+            emit(f"GET /zhanji/<代碼{record_id}>{suffix} {r.status_code}", self.masked(page_script(r.text)))
 
     def write_one(self, tag: str) -> None:
         self.begin()
@@ -207,7 +207,7 @@ class ScribeScenario(BattleScenario):
         self.begin()
         emit("tale_view 還沒接上", self.server.tale_view(1))
         r = self.TestClient(self.server.app).get("/zhanji/nope")
-        emit(f"GET /zhanji/nope {r.status_code}", r.text)
+        emit(f"GET /zhanji/nope {r.status_code}", page_script(r.text))
         self.write_one("還沒接上")
         game = self.server.game_for(self.GAMBLER)
         emit("tale_index 還沒接上", self.server.tale_index(game))
@@ -305,7 +305,7 @@ class ScribeScenario(BattleScenario):
         for url in ("/zhanji/nope", f"/zhanji/{a}"):
             self.begin()
             r = anyone.get(url)
-            emit(f"GET {url} {r.status_code}", r.text)
+            emit(f"GET {url} {r.status_code}", page_script(r.text))
         self.tale_get(None, a)
         self.sidecar("發了代碼")
 
@@ -520,4 +520,8 @@ class ScribeScenario(BattleScenario):
 
 # 改一個字（selftest）：開篇那一拍（戰記本體，第 52 批搬進包；舊名的檔、搬進包的檔兩處找）
 register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py",),
-                                          ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7")
+                                          ('OPEN_LINE = "{name}帶著人馬到了。"', 'OPEN_LINE = "{name}帶著人馬到了！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern",
+                       "territory_acts", "travel", "zhuan"))

@@ -1,11 +1,16 @@
 """The real server from one unpacked copy, for the web comparison: clock and random frozen, model on a dead port, one staging route.
 
-usage: python -u serve.py <copy root> <port> <db file> [profile]
+usage: python -u serve.py <copy root> <port> <db file> [profile] [--outbox <file>]
 
 Exit 3 when something this wrapper patches is gone (the code it patches moves around between waves; a patch that silently
 stops applying would turn into noise on every run). gate.py turns that into its exit 2.
+
+--outbox (batch 110): codes never go to the log (batch 208: only the notice line, LOG_LINE), so a round that reaches a code reads it here.
+With the identity switch and fake_services both on, every fake SMS and mail is appended as one JSON line {"kind", "to", "text"};
+otherwise one line says the outbox is off and nothing is touched.
 """
 import importlib
+import json
 import os
 import random
 import sys
@@ -14,6 +19,11 @@ import time
 import traceback
 import types
 
+OUTBOX = None
+if "--outbox" in sys.argv:  # taken out first: the four places stay where they are
+    _i = sys.argv.index("--outbox")
+    OUTBOX = sys.argv[_i + 1]
+    del sys.argv[_i:_i + 2]
 ROOT, PORT, DB = sys.argv[1:4]
 PROFILE = sys.argv[4] if len(sys.argv) > 4 else "season21"
 sys.path.insert(0, ROOT)
@@ -57,9 +67,43 @@ missing = [name for name in PATCH_NAMES if not hasattr(server, name)]
 _seal = _seal_module()
 if _seal is None:
     missing.append("secrets in " + " or ".join(SEAL_MODULES))
+OUTBOX_SENDERS = ("sms", "mail")  # tianxia.features.identity.senders.FAKES.<name>.send, only reached for with --outbox
+
+
+def _fakes():
+    try:
+        from tianxia.features.identity import senders
+    except ImportError:
+        return None
+    fakes = getattr(senders, "FAKES", None)
+    return fakes if fakes is not None and all(callable(getattr(getattr(fakes, k, None), "send", None)) for k in OUTBOX_SENDERS) else None
+
+
+_FAKES = _fakes() if OUTBOX else None
+if OUTBOX and _FAKES is None:
+    missing.append("tianxia.features.identity.senders.FAKES " + ", ".join(f"{k}.send" for k in OUTBOX_SENDERS))
 if missing:
     print("webqa: patch targets gone:", ", ".join(missing), flush=True)
     sys.exit(3)
+
+
+def _to_outbox(kind, send):
+    def wrapped(to, *rest):
+        send(to, *rest)
+        with open(OUTBOX, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"kind": kind, "to": to, "text": rest[-1]}, ensure_ascii=False) + "\n")
+    return wrapped
+
+
+if OUTBOX:
+    _id = server.CONTENT.config.identity
+    if _id.enabled and _id.fake_services:
+        for _kind in OUTBOX_SENDERS:
+            _sender = getattr(_FAKES, _kind)
+            _sender.send = _to_outbox(_kind, _sender.send)
+        print(f"webqa: outbox {OUTBOX}", flush=True)
+    else:
+        print("webqa: outbox off (identity off)", flush=True)
 
 assert server.CONTENT.config.ollama_url == "http://127.0.0.1:9", server.CONTENT.config.ollama_url
 server._monotonic = lambda: CLOCK["now"]

@@ -186,6 +186,9 @@ CORE_PUSHING_DELEGATES = {
 }
 CORE_PILLS_DELEGATES = {"_top_up_pills", "take_stamina_pill", "pill_now", "pill_cap", "pills_left_today"}
 
+# core_xinshen：心神（核心本體 tianxia/core/xinshen.py，架構收尾第 105 批）：Game 上本體只有一行 `return xinshen.<名>(self, …)` 的方法。只有模組自己叫的 _xinshen_card 不留委派
+CORE_XINSHEN_DELEGATES = {"xinshen_purse", "xinshen_spend", "xinshen_view"}
+
 # 被測試、腳本換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：模組裡一律不直接叫本體。模組裡的函式 → Game 上的委派、誰換掉它。
 # 模組裡真的有人互叫的只有 PUSHING_CALLED_THROUGH_CTX 那一個（寫成 ctx.<委派>）；其餘模組裡沒有人互叫，都經委派，打得到
 PUSHING_VIA_CTX = {

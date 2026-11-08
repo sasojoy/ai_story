@@ -4,7 +4,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 
-from sb.harness import ADMIN, emit, register_track
+from sb.harness import ADMIN, emit, page_script, register_track
 from sb.tracks.here import HereScenario
 from sb.tracks.zhuan import ZhuanScenario
 
@@ -153,7 +153,7 @@ class ZhuanFrameScenario(ZhuanScenario):
         self.begin()
         r = self.TestClient(self.server.app).get("/zhuan/" + url.rsplit("/zhuan/", 1)[-1])
         emit(f"公開頁 {tag}", {"status": r.status_code, "插畫": '<figure class="zh-art"' in r.text, "紀念印": '<div class="zh-mark"' in r.text,
-                             "sha": hashlib.sha256(r.text.encode("utf-8")).hexdigest()})
+                             "sha": hashlib.sha256(page_script(r.text).encode("utf-8")).hexdigest()})
 
     def odd_seasons(self) -> None:
         who = self.RULE
@@ -187,5 +187,10 @@ class ZhuanFrameScenario(ZhuanScenario):
 
 # 改一個字（selftest）：簡介檔沒寫他那一支才看得到（who 的預設值）；「哪一季？」只有 season 認不得才看得到。兩句都是這一批搬的，搬之前在 server.py。
 register_track("portrait", PortraitScenario, (("tianxia/features/socialize/intro.py", "server.py"),
-                                              ('"who": row.get("who", "")', '"who": row.get("who", "？")')), "season21")
-register_track("zhuanframe", ZhuanFrameScenario, (("tianxia/features/zhuan/routes.py", "server.py"), ('"哪一季？"', '"哪一季?"')), "season21")
+                                              ('"who": row.get("who", "")', '"who": row.get("who", "？")')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "mall", "military", "outlets", "peers",
+                       "seal", "seclusion", "socialize", "sortie", "stamina_plays", "story", "territory_acts", "travel", "zhuan"))
+register_track("zhuanframe", ZhuanFrameScenario, (("tianxia/features/zhuan/routes.py", "server.py"), ('"哪一季？"', '"哪一季?"')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "companions", "explore", "faction", "gear", "looks", "mall",
+                       "socialize", "sortie", "zhuan"))

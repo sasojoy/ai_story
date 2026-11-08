@@ -6,6 +6,8 @@
    還原錯了把它們一起改名回去就好。殘留的 -wal 屬於舊檔，跟著移走，不然 SQLite 會把它套進還原回來的檔；
    資料庫檔已經不在、只剩殘留的 -wal 等時也一樣搬走（搬走比拒絕安全）。
 4. 把 .restoring 改名成資料庫。下次伺服器打開時自己換回 WAL 模式。
+5. 旁檔（帳號與客服第 201 批：-identity.sqlite、-support.sqlite）：備份旁邊有同一個時間戳的就一起還原（現有的照第 3 步改名留著）；
+   沒有的話把現有的改名留著、印警告（不讓跟主檔不同時間點的旁檔留在原位）。
 
 只有 Windows 擋得住「伺服器還開著」：Windows 上檔案還被打開（伺服器或假人程式還開著）時改名會失敗，
 這時停下來、什麼都不動。Linux 與 macOS 的改名不管檔案有沒有被打開都會成功，在那裡這支腳本不會攔你，
@@ -27,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from backup_db import BackupError, STAMP, describe, verify  # noqa: E402
+from backup_db import SIDE_FILES, side_of, verify_side  # noqa: E402  identity：旁檔跟主檔同一個時間戳
 from tianxia.database import default_path  # noqa: E402
 
 SIDECARS = ("-wal", "-shm", "-journal")
@@ -83,7 +86,45 @@ def restore(backup_file: Path, target: Path, *, now: dt.datetime) -> Path | None
                 f"要退回就把它們一起改名回去，名字去掉 .pre-restore-… 那一段（{e}）"
             ) from e
         raise
+    for note in restore_sides(backup_file, target, now=now):
+        print(note, file=sys.stderr if note.startswith("警告") else sys.stdout)
     return aside
+
+
+def _aside(path: Path, now: dt.datetime) -> Path:
+    """現有的旁檔（連同 -wal／-shm／-journal）改名成 <檔名>.pre-restore-<時間>，同主檔的做法。"""
+    candidate = path.with_name(f"{path.name}.pre-restore-{now.strftime(STAMP)}")
+    if path.exists():
+        _move(path, candidate)
+    for suffix in SIDECARS:
+        side = path.with_name(path.name + suffix)
+        if side.exists():
+            _move(side, candidate.with_name(candidate.name + suffix))
+    return candidate
+
+
+def restore_sides(backup_file: Path, target: Path, *, now: dt.datetime) -> list[str]:
+    """主檔還原好之後（identity，帳號與客服第 201 批）：每個旁檔找備份旁邊同一個時間戳的那一份一起還原，現有的改名留著；
+    備份旁邊沒有、可是現在有的，把現有的改名留著、印警告（跟主檔不同時間點的旁檔不留在原位）。回要印的話，一個旁檔一句。"""
+    notes = []
+    for side in SIDE_FILES:
+        source, current = side_of(backup_file, side), side_of(target, side)
+        busy = current.exists() or any(current.with_name(current.name + s).exists() for s in SIDECARS)
+        try:
+            if source.is_file():
+                verify_side(source)
+                staged = current.with_name(current.name + ".restoring")
+                shutil.copyfile(source, staged)
+                aside = _aside(current, now) if busy else None
+                os.replace(staged, current)
+                notes.append(f"還原了旁檔：{current}" + (f"（還原前的留在 {aside}）" if aside else ""))
+            elif busy:
+                aside = _aside(current, now)
+                notes.append(f"警告：備份旁邊沒有同一個時間的旁檔 {side}，現有的改名留著：{aside}")
+        except (OSError, BackupError) as e:
+            current.with_name(current.name + ".restoring").unlink(missing_ok=True)
+            notes.append(f"警告：旁檔 {side} 沒有還原成（主檔已經還原）：{current}（{e}）")
+    return notes
 
 
 def main(argv: list[str] | None = None) -> int:

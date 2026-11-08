@@ -512,5 +512,8 @@ def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 
 # 改一個字（selftest）：操練那一句（搬之前在 engine.py 的 _drill、之後在 features/sortie/train_actions.py），none 的官軍大營操練到
 register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions.py", "tianxia/engine.py"),
-                                        ("軍心為之一振。", "軍心為之一振！")), "week7")
+                                        ("軍心為之一振。", "軍心為之一振！")), "week7",
+               covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear", "guide",
+                       "military", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
+                       "zhuan"))
 register_bots("train", TRAIN_BOT_PROFILES, train_bots_run)  # 出陣三那一軌的假人（--seats train）

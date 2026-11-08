@@ -1,7 +1,8 @@
 """心神（設計稿 https://claude.ai/artifact/NbTxoAPdroin7N9cRjCiP3 第 4 版；Joy 2026-11-06「可以 寫」；數字在 Config.xinshen）。
 
 跟人物說話這種要叫模型的互動不扣體力，改扣心神。核心的資源（跟體力一樣），功能包經 Game 的服務叫（ctx.xinshen_purse、
-ctx.xinshen_spend；services.py 第一段）：女性角色的隱線只叫「免費限定」那一種。
+ctx.xinshen_spend；services.py 第一段）：女性角色的隱線只叫「免費限定」那一種。本體在這個檔的檔尾（收 ctx；架構收尾第 105 批，同 core/pills.py），
+Game 上留 xinshen_purse、xinshen_spend、xinshen_view 三個一行委派（status_view、companions、測試在叫；只有這裡叫的 _xinshen_card 不留）。
 
 三份分開記：
 - 免費：每天（回體丹那一套的換日，台灣 00:00）補到 free_daily，用不完不留（PlayerState.xinshen_free／_day）。
@@ -12,9 +13,9 @@ ctx.xinshen_spend；services.py 第一段）：女性角色的隱線只叫「免
   資料庫結構不動（第 9 版）：mall_entitlements 的 kind 有 CHECK，所以不記在那裡。
 扣的順序：一般交談先扣月卡（今天不用就沒了）、再扣免費、最後動存著的；免費限定只扣免費那一份。
 
-問酒家不扣心神，另外一天最多 ask_per_day 次（tavern_asks）。
+問酒家不扣心神，另外一天最多 ask_per_day 次：規則與存檔那一格（tavern_asks）在酒肆包（features/tavern/rules.py，架構收尾第 105 批搬回），這裡只留數字（Config.xinshen）與次數用完那一句（ASKS_DONE）。
 
-只 import models、state、wallet、core.services 的月卡那一格；不讀時鐘，第幾天由呼叫端（Game._pill_day）給。
+只 import models、state、wallet（月卡那一格的鍵抄一份，見 CARD_KEY）；不讀時鐘，第幾天由呼叫端給：純規則那幾個函式收 day，檔尾的本體問 ctx._pill_day()。
 """
 from __future__ import annotations
 
@@ -129,27 +130,6 @@ def spend(state: GameState, content: Content, day: int, card: bool, banked: int,
     return from_bank
 
 
-# ── 問酒家（另算） ─────────────────────────────
-
-
-def asks_left(state: GameState, content: Content, day: int) -> int | None:
-    """今天還能問酒家幾次；心神關著或不限（ask_per_day 0）是 None。"""
-    cap = content.config.xinshen.ask_per_day
-    if not on(content) or cap <= 0:
-        return None
-    rec = state.player.tavern_asks
-    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
-    return max(0, cap - used)
-
-
-def note_ask(state: GameState, content: Content, day: int) -> None:
-    if asks_left(state, content, day) is None:
-        return
-    rec = state.player.tavern_asks
-    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
-    state.player.tavern_asks = [day, used + 1]
-
-
 # ── 寫給玩家看的字（待 joy 潤） ─────────────────
 
 
@@ -171,3 +151,34 @@ def view(content: Content, have: Purse, card: bool) -> dict:
     """狀態列那一格：{name, now: 今天的兩份加起來, cap: 今天補到多少, bank: 存著的}。"""
     cfg = content.config.xinshen
     return {"name": cfg.name, "now": have.daily, "cap": cfg.free_daily + (cfg.card_daily if card else 0), "bank": have.bank}
+
+
+# ── 本體（收 ctx；Game 上留一行委派）──────────────
+
+
+def _xinshen_card(ctx) -> bool:
+    return card_active(ctx._wallet(), ctx._mall_owner(), ctx._pill_day())
+
+
+def xinshen_purse(ctx) -> Purse:
+    """此刻手上的心神（免費、月卡、存著的三份）。"""
+    return purse(ctx.state, ctx.content, ctx._pill_day(), _xinshen_card(ctx), bank(ctx._wallet(), ctx._mall_owner()))
+
+
+def xinshen_spend(ctx, n: int, free_only: bool = False) -> bool:
+    """扣 n 點心神：一般交談先扣月卡、再扣免費、最後動存著的；free_only（女性角色的隱線）只扣免費那一份。夠就扣、回 True。"""
+    wallet = ctx._wallet()
+    from_bank = spend(ctx.state, ctx.content, ctx._pill_day(), _xinshen_card(ctx),
+                      bank(wallet, ctx._mall_owner()), n, free_only)
+    if from_bank is None:
+        return False
+    if from_bank:
+        use_bank(wallet, ctx._mall_owner(), from_bank)
+    return True
+
+
+def xinshen_view(ctx) -> dict | None:
+    """狀態列的心神那一格；關著是 None。"""
+    if not on(ctx.content):
+        return None
+    return view(ctx.content, ctx.xinshen_purse(), _xinshen_card(ctx))

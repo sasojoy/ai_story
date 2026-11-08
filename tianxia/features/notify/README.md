@@ -10,6 +10,7 @@
 ## 補充說明（這一包的東西在哪）
 
 - `notices.py`（原 `tianxia/notices.py`）：五種事，純函式，只讀存檔與決戰。送信日走 `ctx.mail_day_at`（人物情誼包的服務），不再經殼碰 `letters`（第二輪第 102 批）。
+- **「客服」種類**（J 波第 211 批）：`Kind` 多 `"support"`，`notices.kinds(config)` 在客服包開著（`Config.support.enabled`）時才多這一種，關著等於 `KINDS`（`KINDS` 本身不動，關著時 `/api/push` 的回應不變）；`routes.py` 三處改叫 `kinds(shell.CONTENT.config)`，`web/notify.js` 的 `PUSH_KIND_NAMES` 多 `["support","客服"]`、只在伺服器的 kinds 有這個鍵才畫。推播的字在客服包的 `routes.py`（`PUSH_TEXT`，包不 import 別包），推是客服包經 `WEB_PUSH` 送的；玩家關掉「客服」的設定留在 push 小檔。
 - `webpush.py`（原 `server_push.py` 下半段，連同 `cryptography` 的 try-import）：RFC 8291 加密、RFC 8292 VAPID 簽名、`PushStore`、`WebPush`。沒有 tianxia 的 import。`server_push.py` 檔尾把十四個名字原樣再匯出（`server.py`、測試、`same_behavior` 讀 `server_push.<名字>`）。
 - `routes.py`：看守一輪 `notice_round`、`_notice_keys`、開看守 `start_web_push`、`web_push_line`，加上五條 `/api/push*` 與 `/sw.js`（路由搬、`web/sw.js` 檔留在 `web/` 原位）。
 - 掛鉤只接 `routes`、`threads`。`threads` 叫殼的 `start_web_push`；`main()` 原本在 `print(web_push_line(...))` 下一行直接叫它，現在經 `start_threads`（晚幾行、在 `start_narration` 之後，都在 `uvicorn.run` 之前，沒有輸出、沒有順序依賴；退版：把那一行放回去、`threads` 改回 `None`）。`enabled` 回 `True`。

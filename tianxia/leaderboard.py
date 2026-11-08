@@ -49,6 +49,7 @@ BOARDS: tuple[tuple[str, str, str], ...] = (
     ("內功", "內功榜", "身上那門內功的評分；一樣高看威力"),  # 待 joy 潤
     ("擂台", "擂台榜", "擂台上的名次；前十名有稱號"),
 )
+WORN = "_worn"  # compute_boards 回的整張裡「每個人戴的頭銜」那一格（稱號與官職開著、有人戴才有）
 STAT_BOARDS = {"善人": ("good", "善名"), "惡人": ("evil", "惡名"), "名人": ("fame", "名望")}
 MASTERED = "絕學"
 
@@ -63,10 +64,13 @@ def compute_boards(
     board: dict[str, list] = {kind: [] for kind, _, _ in BOARDS}
     season_number = world.get_season_number()
     firsts = world.season_firsts()
+    worn: dict[str, dict] = {}  # 稱號與官職（features/titles）開著：每個人此刻戴的那一個，榜單名字後面畫小印
     for state in (characters or open_characters()).all():  # 讀不懂的存檔 all() 已經跳過
         p = state.player
         if p.season_number != season_number:
             continue
+        if content.config.titles.enabled and p.titles_worn.get("name"):
+            worn[p.name] = dict(p.titles_worn)
         member = p.member
         for slot, kind in (("neigong_id", "內功"), ("wugong_id", "武學")):
             skill_id = getattr(member, slot)
@@ -95,6 +99,8 @@ def compute_boards(
         else:
             rows.sort(key=lambda row: (tuple(-v for v in row[1]), row[0]))
         board[kind] = rows if top is None else rows[:top]
+    if worn:
+        board[WORN] = worn  # type: ignore[assignment]  不是一張榜：view 拿來畫小印，BOARDS 不列它
     return board
 
 
@@ -150,9 +156,13 @@ def view(board: dict[str, list], me: str | None = None, top: int = TOP_N) -> lis
     """見聞「榜單」分頁的資料：一張榜一筆（id、標題、說明、前 top 名），board 是整張（compute_boards(top=None)）。
     me 不在前 top 名、但在榜上時多一筆 mine（你排第幾、那一段）。"""
     out = []
+    worn = board.get(WORN) or {}
     for kind, label, note in BOARDS:
         rows = board.get(kind, [])
         entry = {"id": kind, "title": label, "note": note, "rows": [_view_row(kind, row, i, me) for i, row in enumerate(rows[:top], 1)]}
+        for r in entry["rows"] if worn else ():
+            if r["name"] in worn:
+                r["title"] = worn[r["name"]]
         if me is not None:
             at = next((i for i, row in enumerate(rows, 1) if row[0] == me), None)
             if at is not None and at > top:

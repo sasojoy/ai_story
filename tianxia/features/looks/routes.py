@@ -8,6 +8,7 @@ import time
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
+from tianxia.core import identity_base
 from tianxia.core.features import AdminTool
 from tianxia.database import default_path
 
@@ -204,7 +205,7 @@ def router(shell) -> APIRouter:
         """管理者看自建形象的訂單（actions.admin_view）。"""
         gate()
         game = shell._game(request)
-        if not game.is_admin():
+        if not game.is_admin() or not identity_base.admin_session_ok(shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time):  # 帳號與客服 M 波（第 207 批留下）：identity 開著時要密碼登入、staff_hours 內驗過；關著一律真、不讀時鐘
             raise HTTPException(403)
         return shell.act_look(game, lambda g: None, lambda g: actions.admin_view(g))[1]
 
