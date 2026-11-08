@@ -17,8 +17,8 @@ from pathlib import Path
 from ..characters import name_key
 from .name_base import STAFF_NAMES
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-KEY_FILE = ROOT / ".local" / "identity.json"  # {"key": "<至少 16 字>"}；不進版控
+_REPO = Path(__file__).resolve().parent.parent.parent
+KEY_FILE = _REPO / ".local" / "identity.json"  # {"key": "<至少 16 字>"}；不進版控
 KEY_MIN = 16
 ID_PREFIX = "id:"  # 沒有密碼的帳號的鍵（accounts.id）；名號不准以它開頭
 
