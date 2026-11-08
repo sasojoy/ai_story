@@ -616,7 +616,9 @@
         ${figImg(x.key)}<b>${esc(x.name)}</b><small>${esc(PREP_TAGS[x.key] || "")}</small>${bars(x.split)}</button>`).join("") +
       `<button class="prep-opt${pick === "custom" ? " on" : ""}" data-act="prep-pick" data-preset="custom" aria-pressed="${pick === "custom"}">${figImg("custom")}<b>自己配</b><small>五項各 ${g.custom_min}～${max} 點，合計 ${g.per_level}</small></button>`;
     const edit = pick === "custom" && S.growthDraft ? growthEditHtml(g, S.growthDraft) : "";
-    const go = pick && pick !== "custom" ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>` : "";
+    // 「定下來」一直釘在畫面底下（UI 手感甲批 1-1：以前挑了之後鈕在畫面外，小手機看不到）；還沒挑是灰的
+    const go = pick === "custom" ? "" : pick ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>`
+      : `<button class="btn primary prep-go" disabled>先挑一種長法</button>`; // 待 joy 潤
     return `<p class="prep-lead">每升一級五項合計長 ${g.per_level} 點，照你挑的這一套分。<b>這一季只挑一次</b>，挑了就定了；每 10 級另外送的點，隨時自己配。</p>
       <div class="prep-opts">${cards}</div>${edit}${go}${g.event_cap ? `<p class="prep-note">江湖歷練每一季最多長 ${g.event_cap | 0} 點，滿了化為心得。</p>` : ""}`;
   }
