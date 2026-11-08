@@ -8,6 +8,9 @@ summary.json, report.txt and red/. Noise is classified by noise.py; only what is
 --changed-files that picks no round (an empty list; package files NOT_ON_TABLE says no round reaches while they are off) is exit 0 with
 nothing unpacked, and summary.not_walked says which files and why. --dry-run prints the pick and stops.
 --new <pkg,...> lists the css-rules of the new packages' own sheets (web/<pkg>.css) as NEW instead of red; every other sheet counts as before.
+Codes (identity) never go to the server log (batch 208: only the notice line, LOG_LINE): a round that reaches a code reads the fake
+senders' outbox, --outbox, which serve.py appends to <round>/<base|head>.outbox.jsonl when identity and fake_services are on. No round
+reaches a code yet (identity is off in season21): ready, never walked.
 
 What the walk cannot see: it freezes animation, and it takes no pictures at 640, 641 and 900. Both come from the corpus replay (replay.py), and the
 replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
@@ -236,10 +239,14 @@ def mutate(copy: str, which: str) -> None:
 VAPID_TEST_SCALAR = 0x7E6B_A110_5EED_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001  # batch 110: a fixed P-256 key, the same on both copies
 
 
-def seed_local(copy: str) -> None:
+IDENTITY_TEST_KEYS = {"key": "webqa-test-key-0123456789", "notify_key": "webqa-notify-key-0123456789", "turnstile_secret": "webqa-test"}  # --outbox only
+
+
+def seed_local(copy: str, outbox: bool = False) -> None:
     """Batch 110: the copy's .local/ before any server starts. git archive leaves it out, and server.py makes the push key on first use
     (server.VAPID_FILE, .local/webpush_vapid.pem): with --jobs N the servers of one copy wrote it at once and one read half a file (MalformedFraming).
-    One fixed test key, never the repo's .local/, never random: base and head get the same bytes."""
+    One fixed test key, never the repo's .local/, never random: base and head get the same bytes. With --outbox the identity package's test keys
+    go in too (.local/identity.json, identity_base.KEY_FILE), so a copy with the switch on can send a code."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -249,6 +256,9 @@ def seed_local(copy: str) -> None:
     os.makedirs(local, exist_ok=True)
     with open(os.path.join(local, "webpush_vapid.pem"), "wb") as f:
         f.write(pem)
+    if outbox:
+        with open(os.path.join(local, "identity.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(IDENTITY_TEST_KEYS, f)
 
 
 def static_digest(web: str, ext=STATIC_EXT) -> dict:
@@ -263,12 +273,13 @@ def static_digest(web: str, ext=STATIC_EXT) -> dict:
 
 
 class Server:
-    def __init__(self, label, copy, port, db, profile, logs, env):
+    def __init__(self, label, copy, port, db, profile, logs, env, outbox=False):
         self.label, self.port = label, port
         self.out = open(os.path.join(logs, f"{label}.server.out"), "wb")
         self.err = open(os.path.join(logs, f"{label}.server.err"), "wb")
         self.errpath = self.err.name
-        self.proc = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "serve.py"), copy, str(port), db, profile], stdout=self.out, stderr=self.err, env=env, cwd=os.path.dirname(db),
+        extra = ["--outbox", os.path.join(logs, f"{label}.outbox.jsonl")] if outbox else []
+        self.proc = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "serve.py"), copy, str(port), db, profile, *extra], stdout=self.out, stderr=self.err, env=env, cwd=os.path.dirname(db),
                                      creationflags=DETACHED)
 
     def wait_up(self, seconds=120):
@@ -315,7 +326,7 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
     try:
         rows = (("base", copies[0], ports[0], f"http://{origins[0]}", f"http://127.0.0.1:{ports[0]}", cdps[0]), ("head", copies[1], ports[1], f"http://{origins[1]}", f"http://127.0.0.1:{ports[1]}", cdps[1]))
         for label, copy, port, *_ in rows:
-            servers.append(Server(label, copy, port, os.path.join(folder, f"{label}.db"), args.profile, folder, env))
+            servers.append(Server(label, copy, port, os.path.join(folder, f"{label}.db"), args.profile, folder, env, outbox=args.outbox))
         for s in servers:
             s.wait_up()
         walks = []
@@ -512,7 +523,7 @@ def run(args) -> int:
 
         copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
         for copy in copies:
-            seed_local(copy)
+            seed_local(copy, outbox=args.outbox)
         if args.mutate:
             mutate(copies[1], args.mutate)
         if args.new:  # batch 110: the new packages' own sheets are listed, not red (same_behavior compare --new: new things listed, the rest the same)
@@ -625,6 +636,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--changed-files", help="comma separated repo paths (wave_gate --changed passes the web/ files): walk only the rounds coverage.json says reach them; "
                                             "the shell, scripts/webqa or an unmapped file walk every round; with --rounds, both")
     ap.add_argument("--new", help="comma separated new packages (behind a switch): the css-rules of their own web/<pkg>.css are listed as NEW, not red; other sheets as before")
+    ap.add_argument("--outbox", action="store_true", help="each server appends the fake SMS and mail it sends to <round>/<base|head>.outbox.jsonl (identity and fake_services on only)")
     ap.add_argument("--corpus", choices=("fast", "full"), default="fast", help="fast: no crawls")
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")

@@ -383,6 +383,21 @@ def test_both_copies_get_the_same_push_key_before_a_server_starts(tmp_path):
     assert re.search(r'^VAPID_FILE = ROOT / "\.local" / "webpush_vapid\.pem"', (ROOT / "server.py").read_text(encoding="utf-8"), re.M), "server.py 讀金鑰的路徑換了，seed_local 要跟著換"
 
 
+def test_what_the_outbox_wraps_is_still_in_the_identity_package(tmp_path):
+    # 第 110 批：--outbox 包 FAKES 的 sms.send、mail.send；搬走或改名，閘門帶 --outbox 時才會 exit 3，這裡早一點紅
+    tree = ast.parse((TOOL / "serve.py").read_text(encoding="utf-8"))
+    names = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "OUTBOX_SENDERS")
+    from tianxia.core import identity_base
+    from tianxia.features.identity import senders
+
+    assert names and all(callable(getattr(getattr(senders.FAKES, k), "send", None)) for k in names)
+    gate = _load("gate")
+    gate.seed_local(str(tmp_path), outbox=True)
+    assert identity_base.read_key(tmp_path / ".local" / "identity.json"), "測試金鑰要讀得到（至少 16 字）"
+    gate.seed_local(str(tmp_path / "plain"))
+    assert not (tmp_path / "plain" / ".local" / "identity.json").exists()
+
+
 def test_the_model_queue_is_off_in_the_wrapper():
     # 佇列一格、別的寫手佔著就跳過，那一篇放回單子等 30 秒，而時鐘是凍的：第 77 批第一次全量 extra:069～074 一邊多一筆天下形勢
     text = (TOOL / "serve.py").read_text(encoding="utf-8")
