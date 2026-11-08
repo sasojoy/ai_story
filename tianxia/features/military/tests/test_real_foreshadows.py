@@ -15,11 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from conftest import FixedRandom, no_territory, old_explore, renown_unscaled
+from conftest import FixedRandom, no_territory, old_explore, real_content, renown_unscaled
 from tianxia import calendar
 from tianxia.features.military import fs_rules as foreshadow
 from tianxia import rules, team, timetable
-from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.events import event_candidates
@@ -92,7 +91,7 @@ ALL_EVENTS: dict = {}  # meet 會把 content.events 換成只剩一則（測完�
 
 @pytest.fixture(scope="module")
 def fs_content():
-    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
+    c = renown_unscaled(real_content("week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True  # 這一組測的是開打後的內容
     no_territory(c)  # 不畫地盤：這一組照領地爭奪之前的遊歷測（以前這一份的季沒蓋豪強分屬兩軍的章，地盤本來就不開；2026-10-31 章拿掉）
@@ -102,7 +101,7 @@ def fs_content():
 
 @pytest.fixture(scope="module")
 def off_content():
-    c = load_content(CONTENT_DIR)  # 正式設定：第一季開關是關的
+    c = real_content()  # 正式設定：第一季開關是關的
     c.config.auto_open_first_season = True
     return c
 
@@ -241,7 +240,7 @@ def test_front_must_be_a_front_not_just_a_region(where):
     from tianxia.content import ContentError, validate
     from tianxia.models import FigureChange
 
-    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
+    c = renown_unscaled(real_content("week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     validate(c)  # 原樣是對的
     if where == "chain":
@@ -792,7 +791,7 @@ def test_end_to_end_one_chain(world):
     """真實內容、週末設定：官軍、黃巾、管理者各一個角色。管理者快轉到長社決戰前一週的夜裡；官軍備齊長社的條件、答對風向，
     黃巾也答對他那條 → 官軍鎖定、黃巾搶輸，鎖定那一刻不發傳聞。管理者再快轉到決戰排定的時間，第 6 週長社決戰收場（官軍大勝）：
     公告寫出官軍的名字與黃巾搶輸的一筆，江湖史有一筆「（名號改寫）」，之後每個人同步都收到那則公告。"""
-    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
+    c = renown_unscaled(real_content("week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True
     jia = Game.new(c, "趙甲", rng=random.Random(1), world=world)

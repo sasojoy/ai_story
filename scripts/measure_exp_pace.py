@@ -175,7 +175,7 @@ def _spend(game: Game, ledger: Ledger, spot: str, rng: random.Random) -> int:
             ids = {o.id for o in game.options(odds=False) if o.enabled}
             if "act:train" in ids:
                 ledger.source = "出陣"
-                game.choose("act:train")
+                game.choose(bot.duel_go(game, "act:train", rng))  # 約戰開著時 act:train 只打開出陣前那張卡，同整季機器人換成貼一張
                 continue
         p.location = spot
         ids = {o.id for o in game.options(odds=False) if o.enabled}
