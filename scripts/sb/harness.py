@@ -31,10 +31,11 @@ MUTANT_PROFILE: dict[str, str] = {}
 TRACK_REQUIRES: dict[str, str] = {}  # 只有部分根起得來的軌（軌名 → 根上要有的檔）：沒有那個檔的根，compare、selftest 略過這一軌（_tracks_on）
 FULL_SAME_AS: dict[str, str] = {}  # 整段跟另一軌一模一樣的軌（軌名 → 那一軌）：compare 清單上兩軌都在時整段只跑那一軌（register_track 的 full_same_as）
 SECONDS: dict[str, float] = {}  # 這一次 compare 每個子行程跑了幾秒（log 的主檔名 → 秒）；沒跑的不在表上
-# 第 107 批：每軌走到哪幾包（register_track 的 covers；season21 跑一次、sys.monitoring 記 tianxia/features/<包>/ 被叫到的函式，加上軌讀的 web/<包>.js|css，寫死在各軌檔尾）。
-# compare --covers 挑 covers 有交集的軌加上 ALWAYS_TRACKS（走過的包最多、或專門比畫面與殼的那幾軌）。
-# 第 107 批量到（9610b568、season21）：76 軌每一軌都走到全部 38 包（每一步的同步、選單、狀態列叫到每一包的掛鉤；照計畫不扣），所以 --covers 現在挑不掉任何一軌。
-# 包數變了、或要換量法（例：扣掉每一軌都叫到的掛鉤）再量一次；量法的腳本沒有進版控，寫在第 107 批的回報。
+# 每軌走到哪幾包（register_track 的 covers，寫死在各軌檔尾），量法是 scripts/sb/covers_measure.py（第 109 批）：三種設定每軌各跑一次、sys.monitoring 記
+# tianxia/ 被叫到的函式；共同組照設定各算（同一設定裡被 ≥ 90% 的軌碰到的函式：每一步的同步、選單、狀態列叫到每一包的掛鉤），扣掉之後碰到的包取聯集，
+# 再併上軌讀的 web/<包>.js|css（drape、facade 在 Python 那一側幾乎不碰包）。共同組裡的包函式都要有 ALWAYS_TRACKS 碰到（analyze 守，破了結束碼 1）：
+# 改到共同組的東西只靠 ALWAYS 抓。compare --covers 挑 covers 有交集的軌加上 ALWAYS_TRACKS。加軌、加包或換量法：measure → analyze → write 再量一次。
+# 第 107 批（9610b568、只 season21、不扣共同組）：76 軌每一軌都走到全部 38 包，--covers 挑不掉任何一軌；第 109 批（41a6f870）扣掉之後小包挑得掉（support 3 軌、persona 4）。
 COVERS: dict[str, tuple[str, ...]] = {}
 ALWAYS_TRACKS = ("battle", "sortie", "progress", "switchboard", "facade", "drape")
 IN_CALL = [0]  # Scenario.call 進出的深度：切點（前半寫完、快照）要在 0（不在請求中間）

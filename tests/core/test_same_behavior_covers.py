@@ -1,6 +1,7 @@
 """same_behavior 的 covers、--covers、--crossover 與前半快照（測試流程優化第 107 批）。整條比對在波末閘門跑，這裡只驗不開伺服器就看得到的。"""
 from __future__ import annotations
 
+import importlib.util
 import sqlite3
 import warnings
 from pathlib import Path
@@ -56,6 +57,50 @@ def test_pick_takes_the_tracks_that_cover_the_package_plus_always(sb, monkeypatc
     assert sb.pick_tracks(["x"]) == ["a", "c", "battle"]
     assert sb.pick_tracks(["nothing"]) == ["battle"]
     assert sb.pick_tracks(["x", "y"], ["b", "battle"]) == ["b", "battle"]  # --tracks 同時給取交集
+
+
+@pytest.fixture
+def measure_tool():
+    spec = importlib.util.spec_from_file_location("_covers_measure_under_test", ROOT / "scripts" / "sb" / "covers_measure.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _row(*fns: str, web: tuple[str, ...] = ()) -> dict:
+    return {"fns": list(fns), "web": list(web)}
+
+
+def test_analyze_takes_off_the_common_group_per_profile(measure_tool):
+    """第 109 批：共同組照設定各算（被 ≥ 門檻比例的軌碰到），扣掉之後碰到的包才算；web/<包>.js|css 併進來。"""
+    hook, a1, b1 = "features/a/x.py:hook:1", "features/a/x.py:only:9", "features/b/y.py:f:3"
+    season = {"t1": _row(hook, a1), "t2": _row(hook, b1), "t3": _row(hook, "core/x.py:g:1"), "t4": _row(hook, web=("c.js", "style.css", "c/inner.js"))}
+    test = {"t1": _row(b1), "t2": _row(b1), "t3": _row(b1), "t4": _row(b1, hook)}  # 這一設定 b1 是共同組、hook 不是
+    covers = measure_tool.track_covers({"season21": season, "test": test}, {"a", "b", "c"}, 0.9)
+    assert covers == {"t1": ["a"], "t2": ["b"], "t3": [], "t4": ["a", "c"]}
+    assert measure_tool.track_covers({"season21": season}, {"a", "b", "c"}, 1.01)["t1"] == ["a"], "門檻高於 100% 就沒有共同組"
+    assert measure_tool.package_of("features/a/x.py:f:1") == "a" and measure_tool.package_of("engine.py:f:1") is None
+
+
+def test_analyze_guards_that_always_tracks_catch_the_common_group(measure_tool):
+    hook = "features/a/x.py:hook:1"
+    rows = {"t1": _row(hook), "t2": _row(hook), "t3": _row(hook), "battle": _row("core/x.py:g:1")}
+    assert measure_tool.always_gaps({"season21": rows}, 0.75, ("battle",)) == [f"season21 {hook}"], "共同組裡 ALWAYS 沒碰到的包函式要列出來（analyze 會結束碼 1）"
+    rows["battle"] = _row(hook)
+    assert measure_tool.always_gaps({"season21": rows}, 0.75, ("battle",)) == []
+
+
+def test_write_replaces_covers_and_drops_the_hand_written_note(measure_tool):
+    text = ('register_track("a", A, ((), ("x", "y")), "season21",\n'
+            '               # 合 K 波時補：手寫的\n'
+            '               covers=("old",))\n'
+            'register_track("b", B, ((), ("x", "y")), "week7")\n')
+    out, done = measure_tool.rewrite_covers(text, {"a": ["p", "q"], "b": ["r"]})
+    assert done == ["b", "a"]
+    assert out == ('register_track("a", A, ((), ("x", "y")), "season21",\n'
+                   '               covers=("p", "q"))\n'
+                   'register_track("b", B, ((), ("x", "y")), "week7",\n'
+                   '               covers=("r",))\n')
 
 
 def _chains(sb, monkeypatch, tmp_path, crossover: bool, tracks: list[str]) -> list[list]:

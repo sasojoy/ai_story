@@ -377,6 +377,5 @@ class StackScenario(MapScenario):
 register_track("stack", StackScenario, (("tianxia/atlas.py", "tianxia/features/faction/join_actions.py"),
                                         ("投靠還沒決定，先決定再安排前往", "投靠還沒決定，先決定再安排前往！")), "season21",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "looks", "map", "military", "outlets", "peers", "seclusion", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

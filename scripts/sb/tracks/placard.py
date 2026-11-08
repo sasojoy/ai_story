@@ -696,6 +696,6 @@ class PlacardScenario(HeraldScenario):
 # 改一個字（selftest）：進榜那一句（原本 Game._act；第 45 批搬進懸賞榜包的 actions.py，兩處都列）
 register_track("placard", PlacardScenario, (("tianxia/engine.py", "tianxia/features/bounties/actions.py"), ("看上面貼了些什麼。", "看上面貼了些什麼！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

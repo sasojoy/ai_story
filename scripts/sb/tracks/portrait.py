@@ -189,11 +189,8 @@ class ZhuanFrameScenario(ZhuanScenario):
 register_track("portrait", PortraitScenario, (("tianxia/features/socialize/intro.py", "server.py"),
                                               ('"who": row.get("who", "")', '"who": row.get("who", "？")')), "season21",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "mall", "military", "outlets", "peers",
+                       "seal", "seclusion", "socialize", "sortie", "stamina_plays", "story", "territory_acts", "travel", "zhuan"))
 register_track("zhuanframe", ZhuanFrameScenario, (("tianxia/features/zhuan/routes.py", "server.py"), ('"哪一季？"', '"哪一季?"')), "season21",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("admin", "battle", "bounties", "bout", "companions", "explore", "faction", "gear", "looks", "mall",
+                       "socialize", "sortie", "zhuan"))

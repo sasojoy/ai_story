@@ -402,6 +402,6 @@ class RoadmateScenario(TravelScenario):
 # 改一個字（selftest）：跟不上的那一句（_lead，第 48 批從 Game 搬進 tianxia/features/travel/party.py；base 上還在 engine.py，所以兩個檔都寫），week7 疾行那一組抓到
 register_track("roadmate", RoadmateScenario, (("tianxia/features/travel/party.py", "tianxia/engine.py"), ("你們就此分開。", "你們就此分開！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

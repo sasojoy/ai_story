@@ -640,11 +640,10 @@ TRACK_REQUIRES.update({"growth": GrowthScenario.TRACK_FILE, "legacy": LegacyScen
 # 改一個字（selftest）：歷練到頂那一句（核心的 attrset，合回之後照舊在那裡）、識海不帶那一句（傳承包，develop 上已經是包）
 register_track("growth", GrowthScenario, (("tianxia/attrset.py",), ("這一季的歷練已到火候", "這一季的歷練已達火候")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
 register_track("legacy", LegacyScenario, (("tianxia/features/legacy/actions.py",), ("這一季識海不帶上一季的神品意境。", "這一季識海不帶上一季的神品意境！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
+                       "zhuan"))
