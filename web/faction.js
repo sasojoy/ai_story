@@ -21,7 +21,7 @@
       + `<p class="sides-note">${SIDES_FIRST_NOTE}</p>${sidesTableHtml(sc)}</details>`;
   }
   // 中間那一格：投靠了的人是這一回（章回卡的內容），沒投靠的人是兩顆投靠鈕（最近的投靠點、走多久；就在那裡直接按投靠）
-  const FACTION_JOIN = "先投一方", FACTION_JOIN_NOTE = "，才有章回、軍令和戰功", FACTION_JOIN_BTN = "投{side}", FACTION_HERE = "就在這"; // 待 joy 潤
+  const FACTION_JOIN = "先投一方", FACTION_JOIN_NOTE = "，才有章回、軍令和戰功", FACTION_JOIN_BTN = "投{side}", FACTION_HERE = "就在這", FACTION_JOIN_LATER = "；眼前這一場決戰，也可以先臨時投效"; // 待 joy 潤
   function factionJoinHtml(m) {
     const sc = m.sides_card;
     if (!sc || sc.joined) return "";
@@ -32,6 +32,8 @@
       const act = here ? `data-act="choose" data-id="faction:${esc(c.id)}"` : `data-act="tab" data-tab="map"${gotoAttrs(near && near.location)}`;
       return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${FACTION_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;
     };
+    // 決戰集結、開打時（UI 手感乙批 6-2）：面板底下已經有「臨時投效」兩顆鈕，這裡不再並排兩顆投靠鈕，只留一行
+    if (typeof bpOn === "function" && bpOn(m)) return `<div class="wk-mid"><p class="ch-next"><b>${FACTION_JOIN}</b>${FACTION_JOIN_NOTE}${FACTION_JOIN_LATER}</p></div>`;
     const two = sc.cols.filter((c) => c.id === "guan" || c.id === "huang");
     return `<div class="wk-mid"><p class="ch-next"><b>${FACTION_JOIN}</b>${FACTION_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
   }
