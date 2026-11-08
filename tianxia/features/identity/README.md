@@ -1,9 +1,9 @@
 # 帳號綁定（`tianxia/features/identity/`）
 
-帳號可以不靠密碼：第三方（LINE、Google）、Email 與手機驗證碼登入、綁定與解綁、忘記密碼、綁手機才能用的功能。第 201 批（帳號一）打底：沒有密碼的帳號與 `id:<n>` 鍵、登入頁的格與 `/api/identity/gate`、旁檔與備份還原。第 202 批（帳號二）：**LINE、Google 登入**；驗過、查無對應的身分不開帳號，到建角色成功才在同一筆交易開帳號。第 203 批（帳號三）加了 Email、手機驗證碼登入的兩條路由、防刷與寄送介面（見「驗證碼登入」；畫面還沒有），查無帳號一樣寫 `pending`、建角色走第 202 批那一條。**綁定頁、忘記密碼都還沒有**（第 204～205 批）。
+帳號可以不靠密碼：第三方（LINE、Google）、Email 與手機驗證碼登入、綁定與解綁、忘記密碼、綁手機才能用的功能。第 201 批（帳號一）打底：沒有密碼的帳號與 `id:<n>` 鍵、登入頁的格與 `/api/identity/gate`、旁檔與備份還原。第 202 批（帳號二）：**LINE、Google 登入**；驗過、查無對應的身分不開帳號，到建角色成功才在同一筆交易開帳號。第 203 批（帳號三）加了 Email、手機驗證碼登入的兩條路由、防刷與寄送介面（見「驗證碼登入」；畫面還沒有），查無帳號一樣寫 `pending`、建角色走第 202 批那一條。第 204 批（帳號四）加了設定抽屜的「帳號綁定」、近期驗證、綁定與解綁、補設與忘記密碼、門號回收、管理者工具與驗證碼登入的畫面（見「綁定、密碼、門號回收」）；九個入口與灰鈕是第 205 批。
 
 - 導覽：`docs/guide/核心與存檔.md`（還沒寫那一節；句子在第 201、202 批回報的 docs，波末文件代理寫）。
-- 設計稿：`docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md` 第 2 版（企劃者 2026-11-08 點頭）4.1、4.2、4.4、第七、八節；計畫 `docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md`、`…-第201批.md`、`…-第202批.md`。
+- 設計稿：`docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md` 第 2 版（企劃者 2026-11-08 點頭）4.1、4.2、4.4、第七、八節；計畫 `docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md`、`…-第201批.md`、`…-第202批.md`、`…-第204批.md`。
 - 開關：`Config.identity.enabled`（`tianxia/core/tuning/identity.py`，預設關）**加上** `.local/identity.json` 的 `key` 讀得到（`{"key": "<至少 16 字>", "line": {"client_id", "client_secret"}, "google": {...}}`，不進版控）才算開著（`core/identity_base.on`）；LINE、Google 各自還要 `oauth.ready`（在 `ways` 裡、那一家兩欄都有、`redirect_base` 不空）。關著：四條路由 404、`/api/me` 不帶 `identity` 旗標、登入頁一個字都不變（`web/identity.js` 沒旗標連 gate 都不問）、`blocked_name` 一律回假、`phone_ok` 一律回真。只關第三方：`ways` 拿掉 line、google。
 - 設定：`ways`（登入頁畫哪幾條路：`line`、`google`、`email`、`phone`）、`redirect_base`（回呼網址的前半，寫死設定值，例 `https://tianxiadashi.com`；回呼是 `<redirect_base>/auth/<provider>/callback`）、`ticket_seconds`（一次性單，600）、`pending_seconds`（還沒建角色的身分，1800）、`start_per_hour`（同一個來源 IP 一小時按幾次第三方登入，30）、`turnstile_site_key`（第 203 批用）、`phone_gate`、`phone_required`（第 205 批才有人讀）。客服信箱 `support_mail` 第 202 批拿掉（登入頁那一行歸客服包）。
 - 內容：沒有內容檔。
@@ -20,7 +20,7 @@
   - `GET /auth/{provider}/callback`：不用登入；不認得的 provider 404；票一律作廢；`error` → 302 `/?auth=cancel`；票、`tx_oauth`、id_token 有一樣不對 → `/?auth=fail`；查得到帳號 → 開 session、`/?auth=ok`；查不到 → 寫 `pending`、發 `tx_pending`（path `/api/identity/`、`pending_seconds`）、`/?auth=new&via=<provider>`，**不開帳號**。一律刪 `tx_oauth`。
   - `POST /api/identity/character` `{name, gender}`：先看 cookie（`tx_pending`、`tx_session` 都沒有 401「請先登入。」）再過 gate；pending 拿不到 401 同一句；共用殼的註冊限制（`server._register_allowed`、`_registered`：跟密碼註冊一起算）；`create_without_password` 與 `server.create_character` 併進同一筆交易，名號不合格整筆退、帳號不留；成功寫 `bindings_meta`、刪 pending 與 cookie、開 session，回 `server._entry`。連按兩次：交易裡再查一次身分，查得到就直接登入、不再開。
 - 畫面：`web/identity.js` 經殼的 `registerGateSlot` 掛在登入頁（`renderGate` 畫完叫 `drawGateSlots`）；`/api/me` 沒帶 `identity` 旗標（`app.js` `enter` 開頭那一行設 `S.identity`）就整支不動、不問 gate。開著時照企劃者 11/08 挑的 C 版（分段「快速登入｜帳號登入｜註冊」、上次選的格記在瀏覽器）。LINE、Google 鈕 POST start、整頁去授權網址；Email、手機按了只說「尚未開放」。LINE 與別的 App 內建網頁（`identityEnv`：`Line/`、FBAN、FBAV、Instagram、`; wv)`）藏 Google 鈕、多一行改用瀏覽器開的提示；從主畫面開的多一行提示。載入時讀 `?auth=`（ok、new、fail、cancel 才認）並 `replaceState` 拿掉 `auth`、`via`；fail、cancel 在登入頁說一句；new 下一拍切到殼的建角色頁，表單改名 `idp-create-form`（`identityForm` 認，送 `/api/identity/character`；殼的 submit 鏈不認它），底下多「已經有帳號？」一行與回帳號登入的鈕。畫法在 `identityGateHtml`、`identityCreateHtml`。樣式 `web/identity.css`（選擇器都帶 `.gate`、class 都是 `idp` 開頭）。
-- 掛鉤只接 `routes`。`enabled` 回 `identity_base.on`。選項前綴：沒有。假人沒有帳號，碰不到這一包。
+- 掛鉤：`routes`；第 204 批加 `on_own_turn`（第一行看 `p.bot`、再看開關：「帳號」紀錄與 180 天提醒）、`status_slots`（main 表的表外格 `identity`）、`admin_tools`（`routes.admin_tools`）、`threads`（不開執行緒：`fake_services` 開著印一行警告）、`check_content`（`fake_services` 與 `season_one` 同時開就擋）。`enabled` 回 `identity_base.on`。選項前綴：沒有。假人沒有帳號，碰不到這一包。
 - 殼：`web/shell.js` 三行（`GATE_SLOTS`、`registerGateSlot`、`drawGateSlots`）、`web/app.js` `renderGate` 一行與 `enter` 開頭一行（第 202 批），`scripts/sb/tracks/facade.py` 的 `FACADE_SHELL_LINES` 照字面放行；`server.name_taken` 與商城易名帖後備併 `blocked_name`；`server.me` 開著才帶 `identity: True`（第 202 批）。`tests/core/shell_tables.NO_LOGIN_ROUTES` 列 gate、start、callback 三條（寫了理由）。
 - cookie：`tx_oauth`、`tx_pending`（第 202 批，見上）；`secure` 照 `server.cookie_secure`。
 - 旁檔 `-identity.sqlite`、`-support.sqlite`（客服包的）在 `scripts/sb/harness.py` 的 `_wipe_db`、`scripts/backup_db.py`（`SIDE_FILES`，跟主檔同一個時間戳）、`scripts/restore_db.py`。
@@ -35,9 +35,36 @@
 - 旁檔多的：`challenges` 三欄 `channel`、`subject_hmac`、`display`（第 201 批開的舊旁檔開檔時補）、`trusted_devices` 一表；`pending` 跟第 202 批共用一張（多 `display` 欄）。主資料庫只讀 `logins`（`core/identity_base.account_key_for`），不寫。
 - cookie（HttpOnly、SameSite=Lax、`secure` 照 `shell.cookie_secure`）：`tx_code`（單的 id，`code_ttl`）、`tx_dev`（長效隨機，成功登入才發；旁檔只存 sha256）、`tx_pending`（同第 202 批：`pending_seconds`、path `/api/identity/`；合 K 波時從 10 分鐘併成同一個設定）。
 - 設定（`tianxia/core/tuning/identity.py`）：`code_ttl`、`code_tries`、`resend_seconds`、`daily_shared`、`daily_trusted`、`source_hour`、`sms_caps`、`mail_caps`、`fake_services`（**正式機必須 false**：假的不會真的寄、假的 Turnstile 會放行）、`turnstile_action`、`privacy_url`（條款包的隱私權頁）。
-- 畫面：這一批不畫（派工單不准碰 `web/`）。登入頁 C 版的手機驗證碼流程、Turnstile 元件、個資告知短文與隱私權連結留給准碰 `web/identity.js` 的那一批（畫法集中在一個 `drawCodeForm()`）。
+- 畫面：第 204 批畫了（見下一節「畫面」）。
 - 情境軌 `scripts/sb/tracks/missive.py`：三種設定關著，沒登入（含偽造 `tx_code`）與登入的人打兩條路由都是 404。
-- 還沒做：綁定用途的碼（`bind` 池，第 204 批）、門號回收、到池上限通知管理者。建角色時把 `pending` 開成帳號：合 K 波時接上第 202 批的 `/api/identity/character`（`logins.display` 寫 `pending.display` 遮罩過的號碼）。
+- 還沒做：到池上限通知管理者（綁定用途與門號回收第 204 批做了）。建角色時把 `pending` 開成帳號：合 K 波時接上第 202 批的 `/api/identity/character`（`logins.display` 寫 `pending.display` 遮罩過的號碼）。
+
+## 綁定、密碼、門號回收（第 204 批，帳號四；設計 4.3、4.4、6.4、6.5）
+
+- 這次登入的方式與時間（`session_auth`）：殼的 `server._start_session(request, response, key, method="password")` 回 token；開著時把帳號鍵換成帳號自己的鍵（補設過密碼的帳號用帳號名登入也是 `id:<n>`）、經核心 `identity_base.record_session` 記 `method`（`password`、`line`、`google`、`email`、`phone`）與 `at`。DDL 在核心一份（`identity_base.SESSION_DDL`，`store.py` import）。關著一個字不變（不寫旁檔）。
+- 近期驗證（`binding.recent`）：`now - max(at, verified) ≤ recent_seconds`（600；設計沒寫時間窗，PM 計畫定 10 分鐘）；查不到當沒驗過。綁、解綁、補設密碼都要。重驗 `POST /api/identity/reauth`：有密碼打密碼（`authenticate`，同一套擋猜）；沒密碼回 `{ways}`，前端走 start、code 的 `purpose: "reauth"`（要是這個帳號綁的那一個）。重驗只改 `verified`、`verified_by`。
+- 已登入的瀏覽器再走登入（start、code/send 的 `purpose: "login"`）：回 `{ask}` 問一次，帶 `switch: true` 才開單；登入成功那一下把原本的登入狀態登出。
+- 綁（start、code/send 的 `purpose: "bind"`，要登入＋近期驗證）：第三方的票、驗證碼的單都記 `account_id`，回來時瀏覽器登入的要是同一個帳號；驗證碼走 `bind` 池與綁定那一份字。已綁其他帳號、這一種綁過、30 天，**驗過碼才說**（寄碼那一步跟沒綁的同一句）。成功：`logins` 加一列、`bindings_meta.bound_at`＝`verified_at`＝這一下、一則「帳號」紀錄。第三方回呼 `/?auth=bound|taken|wait|reauth|fail`。
+- 72 小時（`new_binding_hours`）：`bound_at` 不滿的那一種不能拿來設密碼、解綁別的方式（這次是拿它驗的：`verified_by`／`method`）、走忘記密碼。`bound_at` 是 NULL（開帳號那一種、第 204 批以前綁的）不算新綁。花元寶、贈物、上架市集的擋是第 205 批的入口。
+- 解綁 `POST /api/identity/unbind {provider}`：近期驗證、密碼不能解綁、至少留一種（密碼算一種；補設密碼的記號列不算）、扣押中不行、這次拿新綁的驗的不行。記 `unbound`（雜湊**永久**留著）、刪 `bindings_meta`、一則紀錄。
+- 30 天（`rebind_days`）：同一個身分從別的帳號解綁或刪帳號不滿 30 天，不能綁到別的帳號（`REBIND_WAIT`）、也不能開新帳號（驗證碼與第三方登入查無帳號那一步就擋，不寫 pending）。原帳號重綁不受限。
+- 補設密碼 `POST /api/identity/password/set {login, new, again}`：沒密碼的帳號才行；近期驗證、扣押、72 小時；`AccountStore.add_password` 同一筆交易寫 `password` 列與記號列（`provider='id'`、`subject='id:<n>'`、`display=''`），**鍵不變**（session 不換，之後用帳號名登入也回 `id:<n>`）。
+- 忘記密碼：用綁定的方式（驗證碼、第三方）登入、帳號有密碼時發 `tx_reset`（HttpOnly、Lax、path `/api/identity/`、`reset_seconds` 600；旁檔 `resets` 存 sha256）；`POST /api/identity/password/reset {new, again}`：cookie 對得上這個帳號、10 分鐘內、那一種綁超過 72 小時、不在扣押；`AccountStore.reset_password` 其他裝置登出（留這個 cookie）、解除擋猜；一則紀錄。`/api/password` 不動。
+- 門號回收（`fresh_days` 180）：驗證碼登入時那一種的 `verified_at` 過期（沒有那一列當新鮮）——帳號還有別種：**不開 session**、回 `{stale, message, ways}`、發 `tx_recheck`（`code_ttl`），畫面多「這不是我的帳號」→ `POST /api/identity/code/release`：從舊帳號拿掉這支手機（或 Email）、記 `unbound`、舊帳號一則紀錄，接著寫 pending 走建角色；只有這一種：照開 session、`holds` 扣押 `stale_hold_days`（7）天（不能設密碼、解綁）。`verified_at` 只在開了 session 才更新（拒絕那一下更新的話，再驗一次就過了）。用密碼或第三方的玩家：`on_own_turn` 看到綁的手機或 Email 過期、`reminded_at` 也過期，寫一則提醒、記 `reminded_at`，不擋遊戲。
+- 管理者工具（`/api/do/<op>`，`routes.admin_tools` 給 gate 與現實時間，本體 `admin.py`）：`identity_view {target}`（一行一種：綁定與上次驗證的時間）、`identity_unbind {target, provider}`（只看至少留一種；密碼不從這裡拿）、`identity_delete {target}`（`AccountStore.delete_account`：刪 `accounts`、`logins`、`sessions` 列，名號由存檔占住、錢包留著、雜湊留著；不能刪自己）。`POST /api/identity/admin/accounts {q}`：`search(keys=True)` 加每列綁定與時間，不是管理者 403。管理者重設密碼對沒密碼的帳號照舊回 `NO_PASSWORD`。
+- 客服權限（support 包 `routes._staff` 問 `identity_base.staff_session_ok`）：開著時這次要是密碼登入、而且 `staff_hours`（6）內登入或重驗過；關著時看 session 建立的時間（`SessionStore.created_at`）。**管理者那一半（`is_admin`）這一批沒做**：權限判斷在 `server.py` 的 `/api/do`、`/api/main` 與 `engine.is_admin`、admin 包，不在設計第七節（見回報 leftovers）。
+- 「帳號」紀錄（`notes.py`，兩段式同客服包）：路由記進旁檔 `account_notes`（`state` 0）；本人下一輪 `on_own_turn` 寫進存檔、標 1、記那一則的遊戲時間；再下一輪在重讀的存檔找到才標 2，找不到退回 0 補寫。**不寄 Email、簡訊**（旁檔只存雜湊，沒有號碼可寄）。
+- `/api/main` 的 `identity` 格（`status_slots`，main 表的表外格）：關著、名號沒綁帳號（假人與還沒綁的同一個樣子）回 `{}`；有帳號回本人的 `{kinds, has_password, phone_missing}`（`phone_missing` 只在 `phone_gate` 開著、沒綁手機時真）。`GET /api/identity/me`：本人的每一種（遮好的顯示字、`bound_at`、`verified_at`、新綁、能不能解綁）、還能綁的、近期驗證與忘記密碼剩幾秒、扣押。
+- 旁檔多的（`ADDED_COLUMNS` 補欄、`CREATE TABLE IF NOT EXISTS` 補表）：`session_auth.verified`／`verified_by`、`bindings_meta.bound_at`／`reminded_at`、`oauth_tickets.account_id`；`resets`、`holds`、`account_notes`、`rechecks` 四表。`IdentityStore` 建表一個路徑只跑一次（`identity_base.ensure_schema`；檔被刪了再跑）。
+- 核心 `accounts.py` 多的：記號列（`MARKER`、`_MARKED`：`_get`、`_owner`、`login_key` 認它）、`search(keys=True)`、`_replace_secret` 照 `account_id` 改並清兩種鍵的登入狀態、`add_password`、`reset_password`、`logins_of`、`delete_account`、`SessionStore.created_at`；`find` 回帳號自己的鍵。沒有記號列的庫每一支的結果跟第 203 批一樣。
+- K 波修正輪收的：驗證碼兩條照 `shell.time.time()`；Turnstile 拿不到網域（`hostname` 是 None）一律不過；`fake_services` 開著啟動印警告、`season_one` 開著（season21、week7）載入就擋；`identity_base.account_key_for` 就是 `AccountStore.login_key`。
+
+## 畫面（第 204 批；企劃者 11/08 挑的：設定抽屜 B 版、登入頁 C 版的手機驗證碼流程）
+
+- 驗證碼那一頁（`identityCodeHtml`，登入、綁定、重驗共用）：號碼、Turnstile（有網站金鑰才載 `challenges.cloudflare.com/turnstile/v0/api.js`、`render=explicit`）、寄碼、60 秒重寄倒數（每秒只改那一顆鈕）、錯 5 次作廢的提示、輸碼；門號過期多「這不是我的帳號」。登入頁按 Email、手機在快速登入那一格換成它（`S.identityCode`）；已登入先 `confirm` 問一次換不換帳號。
+- 設定抽屜「帳號綁定」（`identityFoldHtml`）：`app.js`、`shell.js` 不碰，`MutationObserver` 看到抽屜的 `#pw-form` 摺疊就在後面插 `details.fold.idp-fold`；摺著一行「已綁：…」（沒綁手機且 `phone_gate` 開著多「・還沒綁手機」），紅點（`.idp-dot`）在摺疊列與 ⚙（`[data-act="sheet"]`）。沒密碼的帳號把殼的「修改密碼」摺疊藏起來（`hidden`），補設畫在這一格。插進去時打一次 `/api/identity/me`。綁、解綁（`ask` 確認）、重驗、補設、忘記密碼都在這一格；第三方回來 `/?auth=bound|taken|wait|reauth` 下一拍 toast 一句。
+- 管理頁（`web/admin.js` 只改計畫列的幾行，`scripts/sb/tracks/facade.py` 的 `IDENTITY_ADMIN_TOUCHED` 放行）：`data-login` 放帳號鍵；開著（`S.main.identity` 在）搜尋改打 `/api/identity/admin/accounts`；選中那一列記進 `S.adPicked`；重設密碼表單後面接 `identityAdminHtml()`（每一種一顆解綁、一顆刪帳號，走 `ask` 與 `adminDo`；關著回空字串）。
+- 樣式 `web/identity.css`（`.idp-code`、`.idp-fold`、`.idp-dot`、`.idp-admin`；不改殼的元素）。
 
 ## 認領的欄位（手冊 3.5）
 
@@ -46,12 +73,13 @@
 ## 退版
 
 換回舊程式：沒有密碼的帳號（第 202 批起 LINE、Google 開的，第 203 批起驗證碼開的）`_get` 查不到、進不來（角色在、資料不丟，再換回來照登），密碼帳號不受影響；旁檔（多出的兩張表）沒人讀；`tx_oauth`、`tx_pending` cookie 舊程式不認、自己過期；資料庫第 9 版不動、沒有遷移；季中能換、不必休季。備份照舊 `scripts/backup_db.py --dest <資料夾> --tag manual`。緊急開關 `Config.identity.enabled`（關著四條路由 404、`/api/me` 不帶旗標、登入頁不變），或 `ways` 拿掉 line、google 只關第三方。
+第 204 批：資料庫第 9 版不動、沒有新存檔欄位。主資料庫多的列：綁定的 `logins` 列、補設密碼的 `password` 列與 `provider='id'` 記號列（舊程式不認記號：那個帳號的鍵變回小寫帳號名，舊 session 失效，用密碼或綁定的方式重登就好）。旁檔新欄（`session_auth.verified`／`verified_by`、`bindings_meta.bound_at`／`reminded_at`、`oauth_tickets.account_id`）與四張新表舊程式不讀、留著無害；`session_auth` 換回舊程式只少了近期驗證。`tx_reset`、`tx_recheck` 舊程式不認、自己過期。季中能換、不必休季。緊急開關照舊 `Config.identity.enabled`（關掉時新路由與工具 404、`/api/main` 沒有 `identity` 格、客服權限回到「session 建立 6 小時內」）。
 第 203 批：資料庫第 9 版不動、主資料庫不寫、沒有新存檔欄位；旁檔只在開著且有人送碼才多一表三欄，舊程式不讀、留著無害；`tx_code`、`tx_dev`、`tx_pending` 舊程式不認。驗證碼另一個緊急開關：從 `ways` 拿掉 `email`、`phone`（兩條路由 404）。
 
 ## 測試
 
-- 這一包：`tianxia/features/identity/tests/`（煙霧、旁檔、伺服器、網頁、`_wipe_db`；第 202 批加 `test_identity_oauth.py`、`test_identity_login.py`：假的登入服務換 `oauth.HTTP`；第 203 批 `test_identity_codes.py` 純規則與寄送、`test_identity_code_routes.py` 兩條路由）。
-- 情境：`scripts/sb/tracks/wicket.py`（`--track wicket`：關著時四條路由與 `/api/me`）；`scripts/sb/tracks/missive.py`（`--track missive`：第 203 批兩條路由）。
+- 這一包：`tianxia/features/identity/tests/`（煙霧、旁檔、伺服器、網頁、`_wipe_db`；第 202 批加 `test_identity_oauth.py`、`test_identity_login.py`：假的登入服務換 `oauth.HTTP`；第 203 批 `test_identity_codes.py` 純規則與寄送、`test_identity_code_routes.py` 兩條路由；第 204 批 `test_identity_session.py`、`test_identity_bind.py`、`test_identity_password.py`、`test_identity_recycle.py`、`test_identity_admin.py`、`test_identity_gate_off.py`、`test_identity_status.py`，`test_identity_web.py` 加抽屜、驗證碼那一頁與管理頁）。
+- 情境：`scripts/sb/tracks/wicket.py`（`--track wicket`：關著時四條路由與 `/api/me`）；`scripts/sb/tracks/missive.py`（`--track missive`：第 203 批兩條路由）；`scripts/sb/tracks/inkstone.py`（`--track inkstone`：第 204 批七條路由、綁定用途、三個管理者工具，登入的人打，關著都 404）。
 - 核心：`tests/core/test_identity_base.py`、`tests/core/test_accounts.py`（沒有密碼的帳號那一段）。
-- 另外要跑的（`scripts/test_for.py` 照這一包挑不到）：`tests/core/test_accounts.py`、`tests/server/test_backup_db.py`、`tests/server/test_set_password.py`、`tests/web/test_webharness.py`、`tianxia/features/mall/tests/test_mall_card_daily.py`（易名帖擋名號）、`tests/server/test_server.py`（註冊撞保留名號；第 202 批再加 `-k "register or login or me"`：`/api/me` 與共用的註冊限制）、`tests/core/test_shell_stays_thin.py`、`tests/web/test_shell_web.py`、`tests/bots/test_server_bots.py`（`web/identity.js` 不准寫假人字樣）、`tests/core/test_contract_features.py -k identity`、`tests/core/test_feature_boundaries.py`；第 203 批：驗證碼路由的回應由這一包的 `test_bots_cannot_be_told_apart` 用同一個 `leaks` 掃、`tests/core/test_identity_base.py`（`account_key_for`）。
-- 情境（K 波 PM 核對）：`scripts/same_behavior.py` 的 `wicket`（第 202 批）、`missive`（第 203 批）軌；第 202 批起 base 已經有這一包，比對帶 `--new identity --also-existing`。
+- 另外要跑的（`scripts/test_for.py` 照這一包挑不到）：`tests/core/test_accounts.py`、`tests/server/test_backup_db.py`、`tests/server/test_set_password.py`、`tests/web/test_webharness.py`、`tianxia/features/mall/tests/test_mall_card_daily.py`（易名帖擋名號）、`tests/server/test_server.py`（註冊撞保留名號；第 202 批再加 `-k "register or login or me"`：`/api/me` 與共用的註冊限制）、`tests/core/test_shell_stays_thin.py`、`tests/web/test_shell_web.py`、`tests/bots/test_server_bots.py`（`web/identity.js` 不准寫假人字樣）、`tests/core/test_contract_features.py -k identity`、`tests/core/test_feature_boundaries.py`；第 203 批：驗證碼路由的回應由這一包的 `test_bots_cannot_be_told_apart` 用同一個 `leaks` 掃、`tests/core/test_identity_base.py`（`account_key_for`）；第 204 批：`tianxia/features/support/tests/`（客服權限 `test_staff_needs_password_session`、帳號卡濾記號列）、`tianxia/features/admin/tests/test_admin_routes.py`（重設密碼與搜尋）、`tests/server/test_server.py -k "login or register or password"`（`_start_session` 回 token）、`tests/core/test_accounts.py`（記號列四條）。
+- 情境（K 波 PM 核對）：`scripts/same_behavior.py` 的 `wicket`（第 202 批）、`missive`（第 203 批）、`inkstone`（第 204 批）軌；第 202 批起 base 已經有這一包，比對帶 `--new identity --also-existing`。

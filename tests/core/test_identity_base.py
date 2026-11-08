@@ -115,6 +115,42 @@ def test_account_key_for_reads_logins(game):
     assert ib.account_key_for(db, "email", "h" * 64) is None
 
 
+def test_account_key_for_is_login_key(game, monkeypatch):
+    """第 204 批（K 波審查）：併成一份，就是 AccountStore.login_key。"""
+    from tianxia.accounts import AccountStore
+
+    seen = []
+    monkeypatch.setattr(AccountStore, "login_key", lambda self, provider, subject: seen.append((provider, subject)) or "k")
+    assert ib.account_key_for(game.world.db, "phone", "h" * 64) == "k" and seen == [("phone", "h" * 64)]
+
+
+def test_staff_session_ok_off_uses_session_created(game, content):
+    """第 204 批：identity 關著時看 session 建立的時間（staff_hours 內）；查不到回假。"""
+    from tianxia.accounts import AccountStore, SessionStore
+
+    db = game.world.db
+    AccountStore(db).register("kefu_01", "secret-pw")
+    token = SessionStore(db, clock=lambda: 1000.0).create("kefu_01")
+    clocked = SessionStore(db, clock=lambda: 1000.0)
+    assert clocked.created_at(token) == 1000.0 and clocked.created_at("nope") is None
+    assert content.config.identity.enabled is False
+    assert ib.staff_session_ok(db, content, token, 1000.0 + 6 * 3600) is True
+    assert ib.staff_session_ok(db, content, token, 1000.0 + 6 * 3600 + 1) is False
+    assert ib.staff_session_ok(db, content, "nope", 1000.0) is False
+    assert ib.staff_session_ok(db, content, None, 1000.0) is False
+
+
+def test_session_auth_roundtrip_and_last_checked(tmp_path):
+    side = tmp_path / "g-identity.sqlite"
+    assert ib.session_auth("t", side) is None
+    ib.record_session("t", "phone", 100.0, side)
+    assert ib.session_auth("t", side) == {"method": "phone", "at": 100.0, "verified": None, "verified_by": None}
+    assert ib.last_checked(ib.session_auth("t", side)) == 100.0
+    assert ib.record_reauth("t", "password", 500.0, side) is True
+    assert ib.session_auth("t", side)["method"] == "phone" and ib.last_checked(ib.session_auth("t", side)) == 500.0
+    assert ib.side_file(tmp_path / "g.db") == side
+
+
 def test_blocked_name_only_when_on(content, keyed):
     names = ("客服", "GM", "gm", "id:3", "ID:3", "官方", "管理員")
     assert not any(ib.blocked_name(n, content) for n in names)

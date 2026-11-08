@@ -161,7 +161,7 @@ def test_gate_quick_tab_when_open():
     assert 'id="gate-form"' in login and 'name="again"' not in login and 'data-act="identity-way"' not in login
     assert '<button class="on" data-act="gate" data-mode="login">帳號登入</button>' in login
     assert out["login"]["stored"] == {"tx_gate_mode": "login"}
-    assert out["toasts"] == ["尚未開放"]
+    assert out["toasts"] == []  # 第 204 批：Email、手機不再說尚未開放，換成驗證碼那一頁（test_code_flow_asks_before_switch）
     assert out["start"]["posts"] == [["/api/identity/start", {"provider": "google", "purpose": "login"}]]
     assert out["back"]["gateMode"] == "register" and 'name="again"' in out["back"]["html"]  # 記住上次的格
 
@@ -194,7 +194,7 @@ def test_auth_new_switches_to_create_and_back():
     n = out["authNew"]
     assert n["replaced"] == ["/?x=1#top"]  # 只拿掉 auth、via
     assert n["sameTick"] == {"stage": "gate"}  # renderGate 裡不切：下一拍才切
-    assert n["stage"] == "create" and n["pending"] == "google" and n["forms"] == ["idp-create-form"] and n["fetched"] == 0
+    assert n["stage"] == "create" and n["pending"] == "google" and n["forms"] == ["idp-create-form", "idp-code-form", "idp-reauth-form", "idp-setpw-form", "idp-reset-form"] and n["fetched"] == 0
     assert 'id="idp-create-form"' in n["html"] and 'id="create-form"' not in n["html"]  # 殼的 submit 鏈不認，identityForm 認
     assert "已經有帳號？用帳號密碼登入，再把這個綁上去" in n["html"] and 'data-act="identity-back"' in n["html"]
     assert out["backToLogin"] == {"stage": "gate", "gateMode": "login", "pending": None}
@@ -216,7 +216,7 @@ def test_create_posts_to_identity_then_forgets_pending():
 def test_identity_js_names_no_one_and_marks_new_words():
     text = Path(WEB / "identity.js").read_text(encoding="utf-8")
     for line in text.splitlines():
-        if line.strip().startswith("const IDENTITY_") and any("一" <= ch <= "鿿" for ch in line):
+        if line.strip().startswith(("const IDENTITY_", "const IDP_")) and any("一" <= ch <= "鿿" for ch in line):
             assert "待 joy 潤" in line, line
     for word in ("假人", "機器人", "bot"):
         assert word not in text.lower(), word
@@ -235,3 +235,141 @@ def test_app_enter_takes_the_flag_in_one_whole_line():
     assert flag.startswith("    if (data.identity) S.identity = true; //") and "待 joy 潤" not in flag
     assert sum("S.identity" in ln for ln in lines) == 1
     assert re.search(allow, flag)
+
+
+# ── 第 204 批：設定抽屜「帳號綁定」（B 版）、驗證碼那一頁、管理頁的登入方式 ──
+
+DRIVER_204 = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+function kit(opts) {
+  const S = Object.assign({ stage: "gate" }, opts.S || {});
+  const posts = [], toasts = [], asked = [];
+  let renders = 0;
+  const replies = (opts.replies || []).slice();
+  const api = async (path, body) => { posts.push([path, body === undefined ? null : body]); return replies.length ? replies.shift() : {}; };
+  const confirm = (text) => { asked.push(text); return opts.confirm !== false; };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "confirm",
+    idSrc + "\nreturn { identityFoldHtml, identityCodeHtml, identityAdminHtml, identityClick, identityForm };")(
+    S, esc, (t) => toasts.push(t), () => { renders++; }, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {}, { href: "https://example.com/" },
+    { replaceState: () => {} }, confirm);
+  return { S, k, posts, toasts, asked, renders: () => renders };
+}
+async function main() {
+  const out = {};
+  const { k } = kit({});
+  const NOW = 1_800_000_000_000;
+  out.closed = k.identityFoldHtml({ kinds: ["password", "line"], has_password: true, phone_missing: true }, {}, NOW);
+  out.closedOk = k.identityFoldHtml({ kinds: ["password", "phone"], has_password: true, phone_missing: false }, {}, NOW);
+  const meNoPw = { kinds: [{ provider: "phone", name: "手機", shown: "09*****678", new: false, can_unbind: false }], ways: ["line", "email"],
+    has_password: false, recent: 0, reset: 0, hold: false, turnstile: "" };
+  out.noPw = k.identityFoldHtml({ kinds: ["phone"], has_password: false, phone_missing: false }, { me: meNoPw, open: true }, NOW);
+  const mePw = { kinds: [{ provider: "password", name: "密碼", shown: "shen_01", new: false, can_unbind: false },
+    { provider: "phone", name: "手機", shown: "09*****678", new: true, can_unbind: true }], ways: [], has_password: true,
+    recent: 300, reset: 540, hold: true, turnstile: "" };
+  out.pw = k.identityFoldHtml({ kinds: ["password", "phone"], has_password: true, phone_missing: false }, { me: mePw }, NOW);
+  out.pwStale = k.identityFoldHtml({ kinds: ["password"], has_password: true, phone_missing: false }, { me: { ...mePw, recent: 0, reset: 0, hold: false } }, NOW);
+  out.codeSent = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: NOW + 30000, notice: "已寄出" }, "", NOW);
+  out.codeReady = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: NOW - 1 }, "", NOW);
+  out.codeFirst = k.identityCodeHtml({ way: "email", purpose: "bind" }, "0x4AAA", NOW);
+  out.codeNoKey = k.identityCodeHtml({ way: "phone", purpose: "reauth" }, "", NOW);
+  out.codeStale = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: 0, stale: "太久沒驗證了" }, "", NOW);
+  // 驗證碼登入：按 Email 換成表單；已登入先問一次（{ask}），要換才帶 switch: true 再送
+  const flow = kit({ S: { identity: true }, replies: [{ ask: "要換帳號嗎？" }, { message: "驗證碼已寄出" }, { stage: "create", pending: true }] });
+  await flow.k.identityClick("identity-way", { dataset: { way: "email" } }, {});
+  out.flowState = JSON.parse(JSON.stringify(flow.S.identityCode));
+  await flow.k.identityForm({ id: "idp-code-form" }, { phase: "send", to: " a@b.co ", "cf-turnstile-response": "tok" });
+  out.flow = { posts: flow.posts, asked: flow.asked, sent: flow.S.identityCode.sent, renders: flow.renders() };
+  const no = kit({ S: { identity: true }, confirm: false, replies: [{ ask: "要換帳號嗎？" }] });
+  await no.k.identityClick("identity-way", { dataset: { way: "phone" } }, {});
+  await no.k.identityForm({ id: "idp-code-form" }, { phase: "send", to: "0912345678" });
+  out.declined = { posts: no.posts, sent: !!no.S.identityCode.sent };
+  // 管理頁：選中的那一列（帳號鍵）有綁定才畫；identity 關著（S.main 沒有 identity 格）回空字串
+  const row = { key: "id:7", login: "id:7", character: "沈青衫", binds: [
+    { provider: "phone", name: "手機", shown: "09*****678", bound_at: null, verified_at: 1800000000 },
+    { provider: "password", name: "密碼", shown: "ray_77", bound_at: 1800000000, verified_at: null }] };
+  out.adminOff = kit({ S: { main: {}, adPicked: row, adResetTarget: "id:7" } }).k.identityAdminHtml();
+  out.adminOther = kit({ S: { main: { identity: {} }, adPicked: row, adResetTarget: "ray_77" } }).k.identityAdminHtml();
+  out.adminOn = kit({ S: { main: { identity: {} }, adPicked: row, adResetTarget: "id:7" } }).k.identityAdminHtml();
+  return out;
+}
+finish(main());
+"""
+
+
+def _run_204():
+    return run(DRIVER_204, {"identity": str(WEB / "identity.js")})
+
+
+def test_fold_html_closed_line_and_dots():
+    out = _run_204()
+    closed = out["closed"]
+    assert closed.startswith('<details class="fold idp-fold"><summary>帳號綁定<span class="idp-dot" aria-hidden="true"></span>')
+    assert "已綁：密碼、LINE・還沒綁手機" in closed and "讀取中" in closed  # 摺著一行寫現況；點開才有 /api/identity/me 的資料
+    assert "idp-dot" not in out["closedOk"] and "已綁：密碼、手機" in out["closedOk"]
+    pw = out["pw"]
+    assert 'data-act="identity-unbind" data-way="phone"' in pw and pw.count('data-act="identity-unbind"') == 1  # 密碼不能解綁
+    assert "新綁" in pw and "5 分鐘內可以改" in pw and "保護期中" in pw and 'id="idp-reset-form"' in pw and "9 分鐘內" in pw
+    assert 'id="idp-setpw-form"' not in pw and 'id="idp-reauth-form"' not in pw
+    stale = out["pwStale"]
+    assert 'id="idp-reauth-form"' in stale and 'name="password"' in stale and 'id="idp-reset-form"' not in stale
+    assert "客服不會跟你要驗證碼或密碼" in stale
+
+
+def test_fold_hides_pw_fold_without_password():
+    out = _run_204()
+    no_pw = out["noPw"]
+    assert no_pw.startswith('<details class="fold idp-fold" open>')
+    assert 'id="idp-setpw-form"' in no_pw and 'name="login"' in no_pw  # 補設密碼畫在這一格
+    assert 'data-act="identity-reauth" data-way="phone"' in no_pw and 'id="idp-reauth-form"' not in no_pw  # 沒密碼：用綁的那一種重驗
+    assert 'data-act="identity-bind" data-way="line"' in no_pw and 'data-act="identity-bind" data-way="email"' in no_pw
+    src = (WEB / "identity.js").read_text(encoding="utf-8")
+    assert "if (!info.has_password) fold.hidden = true;" in src  # 殼的「修改密碼」摺疊藏起來（DOM 那一段，node 測不到）
+
+
+def test_code_form_countdown_and_tries_hint():
+    out = _run_204()
+    sent = out["codeSent"]
+    assert 'data-act="identity-code-resend" disabled>30 秒後可以重寄</button>' in sent
+    assert "驗證碼錯 5 次就作廢" in sent and 'name="code"' in sent and 'autocomplete="one-time-code"' in sent and "已寄出" in sent
+    assert 'data-act="identity-code-resend">重寄驗證碼</button>' in out["codeReady"]
+    first = out["codeFirst"]
+    assert "綁 Email" in first and 'class="cf-turnstile" data-sitekey="0x4AAA"' in first and 'name="to"' in first and 'type="email"' in first
+    assert "cf-turnstile" not in out["codeNoKey"] and "用手機重新驗證" in out["codeNoKey"] and 'inputmode="tel"' in out["codeNoKey"]
+    assert 'data-act="identity-not-mine">這不是我的帳號</button>' in out["codeStale"] and "太久沒驗證了" in out["codeStale"]
+    assert "客服不會跟你要驗證碼" in sent
+
+
+def test_code_flow_asks_before_switch():
+    out = _run_204()
+    assert out["flowState"] == {"way": "email", "purpose": "login"}
+    body = {"channel": "email", "to": "a@b.co", "turnstile": "tok", "purpose": "login"}
+    assert out["flow"]["posts"] == [["/api/identity/code/send", body], ["/api/identity/code/send", {**body, "switch": True}]]
+    assert out["flow"]["asked"] == ["要換帳號嗎？"] and out["flow"]["sent"] is True and out["flow"]["renders"] >= 2
+    assert out["declined"] == {"posts": [["/api/identity/code/send", {"channel": "phone", "to": "0912345678", "turnstile": "",
+                                                                       "purpose": "login"}]], "sent": False}
+
+
+def test_admin_js_pick_uses_key():
+    src = (WEB / "admin.js").read_text(encoding="utf-8")
+    assert 'data-act="ad-pick" data-login="${esc(x.key || x.login)}"' in src
+    assert '"/api/identity/admin/accounts" : "/api/admin/accounts"' in src
+    assert '${typeof identityAdminHtml === "function" ? identityAdminHtml() : ""}' in src
+    out = _run_204()
+    assert out["adminOff"] == "" and out["adminOther"] == ""  # 關著、或選的不是這一列：一個字都不多
+    on = out["adminOn"]
+    assert "這個帳號的登入方式" in on and "手機：09*****678（綁定 開帳號時，上次驗證 " in on
+    assert 'data-act="identity-admin-unbind" data-way="phone"' in on and on.count('data-act="identity-admin-unbind"') == 1
+    assert 'data-act="identity-admin-delete"' in on
+
+
+def test_new_words_marked():
+    """第 204 批新寫給玩家看的字：identity.js 的 IDP_ 常數、IDENTITY_BACK_TEXT 每一行都標待 joy 潤。"""
+    text = (WEB / "identity.js").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    at = next(i for i, ln in enumerate(lines) if "const IDENTITY_BACK_TEXT" in ln)
+    for line in lines[at + 1:at + 5]:
+        assert "待 joy 潤" in line, line
+    assert sum(1 for ln in lines if ln.strip().startswith("const IDP_")) >= 40

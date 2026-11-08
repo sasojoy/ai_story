@@ -23,6 +23,7 @@ BAD_PHONE = "只收台灣手機門號（09 開頭十碼）。"  # 待 joy 潤
 BAD_EMAIL = "這看起來不是 Email。"  # 待 joy 潤
 NEED_HUMAN = "請先完成真人驗證，再按一次。"  # 待 joy 潤
 BAD_CODE = "驗證碼不對或已過期，請重新取得。"  # 待 joy 潤
+NOT_THIS = "這不是這個帳號綁的號碼，請用這個帳號綁的那一個重新驗證。"  # 待 joy 潤（第 204 批：重驗打了別的號碼）
 NOTICE = "這個 Email 或手機只用來寄驗證碼與帳號通知；我們只存加密過的雜湊與遮掉一半的顯示字，不另作他用。詳見隱私權說明。"  # 待 joy 潤
 SMS_LOGIN = "【天下大勢】登入驗證碼 {code}，{minutes} 分鐘內有效。客服不會跟你要驗證碼，請勿告訴任何人。"  # 待 joy 潤
 SMS_BIND = "【天下大勢】有人要把這支手機綁到遊戲帳號，驗證碼 {code}，{minutes} 分鐘內有效。不是你就不用理會。客服不會跟你要驗證碼。"  # 待 joy 潤
@@ -33,7 +34,8 @@ MAIL_BIND = "有人要把這個 Email 綁到遊戲帳號，驗證碼是 {code}�
 CHANNELS = ("phone", "email")
 HOUR = 3600
 DAY = 86400
-PURPOSE = "login"  # 這一批只開登入用途；bind 是第 204 批
+PURPOSE = "login"  # 預設用途（第 203 批只有它）
+PURPOSES = ("login", "bind", "reauth")  # 第 204 批：bind 用綁定那一份字、bind 池；reauth（沒密碼的帳號重驗一次）用登入那一份字、登入池
 
 
 def normalize(channel: str, to: str | None) -> tuple[str, str] | None:
@@ -102,8 +104,10 @@ def sent_reply(cfg) -> dict:
 
 
 def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, hostname: str | None,
-         dev_hash: str | None, is_bound, now: float, make_id=None, make_code=None) -> tuple[int, dict, str | None]:
-    """寄一張登入用的驗證碼。回 (狀態碼, 回應, 新單的 id 或 None)。
+         dev_hash: str | None, is_bound, now: float, make_id=None, make_code=None, purpose: str = PURPOSE,
+         account_id: int | None = None, subject_ok=None) -> tuple[int, dict, str | None]:
+    """寄一張驗證碼（purpose：login、bind、reauth；第 204 批起 bind、reauth 的單記 account_id）。回 (狀態碼, 回應, 新單的 id 或 None)。
+    subject_ok(subject) 給了就在 Turnstile 之後問一次（reauth：要是這個帳號綁的那一個），回假的回 (400, {error: NOT_THIS}, None)。
     正規化 → Turnstile（失敗不碰計數）→ 查有沒有綁（決定池）→ 每一格一起記（滿了回 SENT、不寄、舊單不動）→ 產碼、寄
     （SendFailed 回 CANNOT_SEND，計數不退）→ 開單（同一個身分的舊單作廢）。"""
     from .senders import SendFailed  # noqa: PLC0415  同一包；放這裡讓純規則的 import 不拖 urllib
@@ -115,13 +119,15 @@ def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, h
     if not senders.turnstile.verify(str(token or ""), ip, hostname):
         return 400, {"error": NEED_HUMAN}, None
     subject = identity_base.subject_hmac(key, channel, value)
-    pool = pool_of(PURPOSE, bool(is_bound(subject)))
+    if subject_ok is not None and not subject_ok(subject):
+        return 400, {"error": NOT_THIS}, None
+    pool = pool_of(purpose, bool(is_bound(subject)))
     trusted = bool(dev_hash) and store.is_trusted(dev_hash, subject)
     if store.check_all_and_record(buckets_for(cfg, channel, subject, pool, ip_buckets(ip), dev_hash, trusted), now) is not None:
         return 200, sent_reply(cfg), None
     cid = (make_id or (lambda: secrets.token_urlsafe(24)))()
     code = (make_code or new_code)()
-    title, text = text_for(channel, PURPOSE, code, cfg.code_ttl)
+    title, text = text_for(channel, purpose, code, cfg.code_ttl)
     try:
         if channel == "phone":
             senders.sms.send(value, text)
@@ -129,7 +135,8 @@ def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, h
             senders.mail.send(value, title, text)
     except SendFailed:
         return 400, {"error": CANNOT_SEND}, None
-    store.put_challenge(cid, PURPOSE, channel, subject, display, code_hmac(key, cid, code), now + cfg.code_ttl, now)
+    store.put_challenge(cid, purpose, channel, subject, display, code_hmac(key, cid, code), now + cfg.code_ttl, now,
+                        account_id=account_id)
     return 200, sent_reply(cfg), cid
 
 
@@ -138,7 +145,7 @@ def verify(*, cfg, key: bytes, store, cid: str | None, code, now: float) -> dict
     if not cid:
         return None
     row = store.challenge(cid)
-    if row is None or row.get("purpose") != PURPOSE or not row.get("channel"):
+    if row is None or row.get("purpose") not in PURPOSES or not row.get("channel"):
         return None
     if row["expires"] <= now:
         store.drop_challenge(cid)

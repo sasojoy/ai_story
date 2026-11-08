@@ -84,6 +84,19 @@ SUPPORT_SHELL_TOUCHED = (
     '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.filter(([k]) => k !== "support" || k in kinds).map(([k, name]) =>',
 )
 FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in SUPPORT_SHELL_TOUCHED))
+# identity（帳號與客服第 204 批；設計第七節 web/admin.js 那一列，企劃者 2026-11-08 點頭第 2 版）：管理頁重設密碼那一塊改的行——
+# data-login 改放帳號鍵、開著改打 /api/identity/admin/accounts、選中那一列記下來、表單後面接 identityAdminHtml()（關著回空字串）。
+# 改過的行原樣與改過的都放行，head 才有的那一行只放行 head 那一行；開關關著時畫出來的不變（identityAdminHtml 回空字串，S.main.identity 不在）。
+IDENTITY_ADMIN_TOUCHED = (
+    '          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`',
+    '          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.key || x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`',
+    '      </form>`;',
+    '      </form>${typeof identityAdminHtml === "function" ? identityAdminHtml() : ""}`;',
+    '    const r = await api("/api/admin/accounts", { q });',
+    '    const r = await api(S.main && S.main.identity ? "/api/identity/admin/accounts" : "/api/admin/accounts", { q }); // identity 開著（帳號與客服第 204 批）：每列多帶帳號鍵與綁定',
+    '    S.adPicked = (S.adAccounts || []).find((x) => (x.key || x.login) === login) || null; // identity（帳號與客服第 204 批）：選中那一列的綁定（identity.js 畫）',
+)
+FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in IDENTITY_ADMIN_TOUCHED))
 # map.js 檔尾第 84 批多的點擊框：搬進去的 case 由 facade 軌「所有 js 的行」比，map 軌比的是框以外的部分（base 沒有這一塊，不變）
 MAP_CLICK_FRAME = re.compile(rb"  async function mapClick\(.*?registerClicks\(mapClick, [^\n]*\n", re.S)
 

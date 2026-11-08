@@ -116,15 +116,24 @@ def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     c.post("/api/character", json={"name": "沈青衫"})
     routes = sorted((m, p) for p, ms in server.app.openapi()["paths"].items() if p.startswith(("/api/identity", "/auth/")) for m in ms)
-    assert routes == [("get", "/api/identity/gate"), ("get", "/auth/{provider}/callback"), ("post", "/api/identity/character"),
-                      ("post", "/api/identity/code/send"), ("post", "/api/identity/code/verify"), ("post", "/api/identity/start")]
+    assert routes == [("get", "/api/identity/gate"), ("get", "/api/identity/me"), ("get", "/auth/{provider}/callback"),
+                      ("post", "/api/identity/admin/accounts"), ("post", "/api/identity/character"), ("post", "/api/identity/code/release"),
+                      ("post", "/api/identity/code/send"), ("post", "/api/identity/code/verify"), ("post", "/api/identity/password/reset"),
+                      ("post", "/api/identity/password/set"), ("post", "/api/identity/reauth"), ("post", "/api/identity/start"),
+                      ("post", "/api/identity/unbind")]  # 第 204 批多七條
     off = [c.get(p) for p in ("/", "/api/me", "/api/main")]
     c.cookies.set("tx_code", "forged")  # 第 203 批：帶著偽造的單也一樣 404
+    c.cookies.set("tx_recheck", "forged")  # 第 204 批：「這不是我的帳號」先看這個 cookie（沒帶 401），帶著偽造的也 404
     assert all((c.get(p.replace("{provider}", "line")) if m == "get" else c.post(p, json={})).status_code == 404 for m, p in routes)
     _turn_on(monkeypatch)
     on = [c.get(p) for p in ("/", "/api/me", "/api/main")]
-    assert [on[0].content, on[2].content] == [off[0].content, off[2].content] and all(r.status_code == 200 for r in off)
-    assert on[1].json() == {**off[1].json(), "identity": True} and "identity" not in off[1].json()
+    assert on[0].content == off[0].content and all(r.status_code == 200 for r in off)
+    # 第 204 批：開著 /api/main 只在最後多 identity 那一格（status_slots 的表外格，只給本人），其餘逐位元組一樣
+    tail = b',"identity":{"kinds":["password"],"has_password":true,"phone_missing":false}}'
+    assert on[2].content == off[2].content[:-1] + tail and b'"identity"' not in off[2].content
+    want = {**off[1].json(), "identity": True}
+    want["main"] = {**want["main"], "identity": {"kinds": ["password"], "has_password": True, "phone_missing": False}}
+    assert on[1].json() == want and "identity" not in off[1].json()  # /api/me 帶的 main 同上多那一格
     page = off[0].text
     assert [ln.strip() for ln in page.splitlines() if "identity" in ln] == [
         '<link rel="stylesheet" href="/static/identity.css?v=' + server.asset_version("/static/identity.css") + '">',

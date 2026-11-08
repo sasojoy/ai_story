@@ -231,9 +231,9 @@ def test_same_code_in_flight_twice_only_one_wins(kit):
 
 
 def test_challenge_of_another_purpose_is_refused(kit):
-    """單綁用途：這一批只認 login，別種用途的單（例：之後的 bind）碼對了也回 None（路由回 BAD_CODE）。"""
+    """單綁用途：只認 login、bind、reauth（第 204 批），別種用途的單碼對了也回 None（路由回 BAD_CODE）。"""
     cid = "bind-cid-0001"
-    kit.store.put_challenge(cid, "bind", "phone", kit.subj(), "09*****678", codes.code_hmac(KEY, cid, "123456"), T0 + 300, T0)
+    kit.store.put_challenge(cid, "other", "phone", kit.subj(), "09*****678", codes.code_hmac(KEY, cid, "123456"), T0 + 300, T0)
     assert codes.verify(cfg=kit.cfg, key=KEY, store=kit.store, cid=cid, code="123456", now=T0 + 1) is None
 
 
