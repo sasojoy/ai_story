@@ -378,3 +378,46 @@ def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
     rows = (TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines()
     rounds = {line.split(":", 1)[0] for line in rows if line and not line.startswith("#")}
     assert rounds <= set(gate.ROUNDS) and rounds
+
+
+# ── 第 107 批：回合對照表（coverage.json）與 --changed-files ──
+
+
+def test_the_coverage_table_checks_out():
+    coverage = _load("coverage")
+    assert coverage.check() == [], "scripts/webqa/coverage.json 對不上：照 coverage.py 的說明重跑一次 --quick 再 build"
+
+
+def test_a_missing_file_in_the_table_is_caught(tmp_path):
+    coverage = _load("coverage")
+    table = json.loads((TOOL / "coverage.json").read_text(encoding="utf-8"))
+    table[next(iter(table))].append("web/no_such_file.js")
+    bad = tmp_path / "coverage.json"
+    bad.write_text(json.dumps(table), encoding="utf-8")
+    assert any("no_such_file" in p for p in coverage.check(str(bad)))
+
+
+def test_every_package_script_picks_some_round():
+    """包的網頁檔改到，挑到的回合非空（對照表沒有它就全走，也算）；殼的檔一律全走。"""
+    gate = _load("gate")
+    table = gate.load_coverage()
+    packages = {p.name for p in (ROOT / "tianxia" / "features").iterdir() if p.is_dir()}
+    for js in sorted((ROOT / "web").glob("*.js")):
+        if js.stem in packages:
+            rounds, why = gate.rounds_for([f"web/{js.name}"], table)
+            assert rounds, (js.name, why)
+    for shell in sorted(gate.SHELL_FILES):
+        assert gate.rounds_for([shell], table)[0] == list(gate.ROUNDS), shell
+    assert gate.rounds_for(["scripts/webqa/driver.mjs"], table)[0] == list(gate.ROUNDS)
+
+
+def test_changed_files_follow_the_table():
+    gate = _load("gate")
+    table = {"main": ["web/app.js", "web/seal.js"], "x": ["web/mall.js"]}
+    rounds = ("main", "x")
+    assert gate.rounds_for(["web/app.js"], table, rounds)[0] == ["main", "x"], "殼的檔不看對照表，全走"
+    assert gate.rounds_for(["web/seal.js"], table, rounds)[0] == ["main"]
+    assert gate.rounds_for(["web/seal.css"], table, rounds)[0] == ["main"], "包的 css 照同名 js 的回合"
+    assert gate.rounds_for(["web/seal.js", "web/mall.js"], table, rounds)[0] == ["main", "x"]
+    assert gate.rounds_for(["web/zzz.js"], table, rounds)[0] == ["main", "x"], "對不到任何回合就全走"
+    assert gate.rounds_for(["web/seal.js"], {}, rounds)[0] == ["main", "x"], "沒有對照表就全走"
