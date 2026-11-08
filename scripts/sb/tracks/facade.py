@@ -223,4 +223,4 @@ register_track("facade", FacadeScenario, (("web/cultivation.js", "web/app.js"), 
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
                        "military", "news", "notify", "outlets", "peers", "seal", "sense", "smithy", "sortie", "story",
-                       "support", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "support", "tale", "tavern", "territory_acts", "titles", "travel", "zhuan"))
