@@ -7,7 +7,7 @@
   寄送與 Turnstile 是網路呼叫。
 都不拿行動鎖、不叫模型；全部不用登入（tests/core/shell_tables.NO_LOGIN_ROUTES 寫了理由）。
 殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；第三方登入的現在時間照 shell.time.time()（路由是殼，oauth.py 不讀時鐘），
-驗證碼兩條在這裡讀 time.time()、傳進 codes。新寫給玩家看的字標「待 joy 潤」。
+驗證碼兩條也照 shell.time.time()（第 204 批，K 波審查：原本自己 import time）、傳進 codes。新寫給玩家看的字標「待 joy 潤」。
 """
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ import hashlib
 import hmac
 import json
 import secrets as _rand
-import time
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -249,7 +248,7 @@ def router(shell) -> APIRouter:
         寄出才設 tx_code。打錯的、沒過 Turnstile、寄送服務壞了回各自那一句（400）。"""
         channel = str(body.get("channel") or "")
         key = _code_gate(shell, channel)
-        now = time.time()
+        now = shell.time.time()
         db = open_database()
         dev = request.cookies.get(DEV_COOKIE)
         status, reply, cid = codes.send(
@@ -281,7 +280,7 @@ def router(shell) -> APIRouter:
         peek = side.challenge(cid) if cid else None
         if peek is not None and peek.get("channel") and peek["channel"] not in cfg.ways:
             raise HTTPException(404)  # 這條路被拿掉了：同關著
-        now = time.time()
+        now = shell.time.time()
         row = codes.verify(cfg=cfg, key=key, store=side, cid=cid, code=body.get("code"), now=now)
         if row is None:
             raise shell.GameError(codes.BAD_CODE)

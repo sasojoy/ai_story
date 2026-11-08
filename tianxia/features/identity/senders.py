@@ -91,7 +91,7 @@ class CloudflareTurnstile:
             return False
         if not isinstance(data, dict) or data.get("success") is not True:
             return False
-        if hostname and data.get("hostname") != hostname:
+        if hostname is None or data.get("hostname") != hostname:  # 第 204 批（K 波審查）：拿不到自己的網域一律不過，不再跳過比對
             return False
         return data.get("action") == self.action
 

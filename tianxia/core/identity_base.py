@@ -1,8 +1,10 @@
 """帳號綁定「別人也要讀」的那一半（帳號與客服第 201 批；設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md 4.1、4.5、第七節）：
 Email、手機的正規化與遮罩、加金鑰的雜湊、讀金鑰、開關（on）、綁手機才能用的功能問這裡（phone_ok）、名號擋不擋（blocked_name）。
 
-純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
-account_key_for（第 203 批）只讀 logins。
+純規則：不 import 功能包、不讀時鐘、不寫東西（第 204 批的 session_auth 例外，見下）。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
+account_key_for（第 203 批）只讀 logins（第 204 批起就是 AccountStore.login_key，併成一份）。
+第 204 批：這次登入的方式與時間（record_session、record_reauth、session_auth、staff_session_ok）讀寫旁檔 <db>-identity.sqlite 的
+session_auth 一張表（核心讀包的旁檔只碰這一張；DDL 在這裡一份、包的 store.py import），時間由呼叫端傳入。
 客服名單也在這（第 212 批從 support 包搬來：商城的易名帖要問「這個名號是不是客服」；support_staff_name 只讀 accounts、logins，
 名單的 .local/support.txt 只讀不寫）。
 金鑰在 .local/identity.json（不進版控）：讀不到、格式不對都當功能關著（on 回假）。
@@ -15,11 +17,14 @@ import hmac
 import json
 import os
 import re
+import sqlite3
+import threading
 import unicodedata
 from pathlib import Path
 
-from ..accounts import normalize
+from ..accounts import AccountStore, SessionStore, normalize
 from ..characters import name_key
+from ..database import default_path
 from .name_base import STAFF_NAMES
 
 _REPO = Path(__file__).resolve().parent.parent.parent
@@ -111,16 +116,118 @@ def phone_ok(ctx, feature_key: str) -> bool:
 
 
 def account_key_for(db, provider: str, subject: str) -> str | None:
-    """這個身分（logins 的 provider、subject）綁在哪個帳號：有 password 列回小寫帳號（鍵終身不變），沒有回 id:<n>；查無回 None。
-    只讀（第 203 批驗證碼登入用；設計第七節「查 logins」）。"""
-    with db.snapshot() as conn:
-        row = conn.execute("SELECT account_id FROM logins WHERE provider = ? AND subject = ?", (provider, subject)).fetchone()
-        if row is None:
-            return None
-        pw = conn.execute(
-            "SELECT subject FROM logins WHERE account_id = ? AND provider = 'password'", (row["account_id"],),
+    """這個身分（logins 的 provider、subject）綁在哪個帳號；查無回 None。第 204 批併成一份：就是 AccountStore(db).login_key
+    （K 波審查：兩份同義；補設密碼的記號列也照它認 id:<n>）。只讀。"""
+    return AccountStore(db).login_key(provider, subject)
+
+
+# ── 這次登入的方式與時間（第 204 批；設計 4.3「這次 session 的登入方式與時間記在旁檔，查不到就當沒驗過」、4.4）──
+# 旁檔 <db>-identity.sqlite 的 session_auth 一張表：殼的 _start_session 開著時寫（密碼、LINE、Google、驗證碼四種都記），
+# identity 包的近期驗證與 support 包的客服權限讀。DDL 只有這一份（identity 包的 store.py import 它）。時間一律由呼叫端傳入。
+SIDE_SUFFIX = "identity"
+SESSION_DDL = ("CREATE TABLE IF NOT EXISTS session_auth (token_hash TEXT PRIMARY KEY, method TEXT NOT NULL, at REAL NOT NULL, "
+               "verified REAL, verified_by TEXT)")
+SESSION_COLUMNS = (("session_auth", "verified", "REAL"), ("session_auth", "verified_by", "TEXT"))  # 第 201～203 批開的旁檔沒有這兩欄
+_READY: set[tuple[str, str]] = set()  # (旁檔路徑, 哪一份表) 跑過建表的（K 波審查：每次請求都跑 DDL 與 PRAGMA，新檔併發會 database is locked）
+_READY_LOCK = threading.Lock()
+
+
+def side_file(db_path=None) -> Path:
+    """遊戲資料庫旁邊同名多 -identity.sqlite（跟著 TIANXIA_DB，呼叫當下才讀）。"""
+    db = Path(db_path) if db_path is not None else default_path()
+    return db.with_name(f"{db.stem}-{SIDE_SUFFIX}.sqlite")
+
+
+def ensure_schema(path: Path, name: str, tables, added=()) -> None:
+    """這個旁檔建表、補欄、WAL；同一個路徑同一份表只跑一次（檔案被刪掉了再跑：sb 的 _wipe_db 會刪旁檔）。"""
+    key = (str(path), name)
+    if key in _READY and Path(path).exists():
+        return
+    with _READY_LOCK:
+        if key in _READY and Path(path).exists():
+            return
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path, isolation_level=None, timeout=10)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            for sql in tables:
+                conn.execute(sql)
+            for table, column, kind in added:
+                have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                if column not in have:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+        finally:
+            conn.close()
+        _READY.add(key)
+
+
+def _session_conn(path: Path | None):
+    path = Path(path) if path is not None else side_file()
+    ensure_schema(path, "session", (SESSION_DDL,), SESSION_COLUMNS)
+    return sqlite3.connect(path, isolation_level=None, timeout=10)
+
+
+def token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8", "surrogatepass")).hexdigest()  # 同 accounts._token_hash
+
+
+def record_session(token: str, method: str, at: float, path: Path | None = None) -> None:
+    """開一個 session 時記它用哪一種登入（password、line、google、email、phone）與時間；同一個 token 再記一次就蓋過（重驗欄清掉）。"""
+    conn = _session_conn(path)
+    try:
+        conn.execute(
+            "INSERT INTO session_auth (token_hash, method, at, verified, verified_by) VALUES (?, ?, ?, NULL, NULL) "
+            "ON CONFLICT (token_hash) DO UPDATE SET method = excluded.method, at = excluded.at, verified = NULL, verified_by = NULL",
+            (token_digest(token), method, at),
+        )
+    finally:
+        conn.close()
+
+
+def record_reauth(token: str, by: str, at: float, path: Path | None = None) -> bool:
+    """重新驗證過一次：只改 verified、verified_by（method 不變）。這個 session 沒有紀錄回假（查不到就當沒驗過）。"""
+    conn = _session_conn(path)
+    try:
+        return conn.execute(
+            "UPDATE session_auth SET verified = ?, verified_by = ? WHERE token_hash = ?", (at, by, token_digest(token)),
+        ).rowcount == 1
+    finally:
+        conn.close()
+
+
+def session_auth(token: str | None, path: Path | None = None) -> dict | None:
+    """{method, at, verified, verified_by}；沒帶 token、旁檔沒有這一筆回 None。"""
+    if not token:
+        return None
+    path = Path(path) if path is not None else side_file()
+    if not path.exists():
+        return None
+    conn = _session_conn(path)
+    try:
+        row = conn.execute(
+            "SELECT method, at, verified, verified_by FROM session_auth WHERE token_hash = ?", (token_digest(token),),
         ).fetchone()
-    return pw["subject"] if pw is not None else f"{ID_PREFIX}{row['account_id']}"
+    finally:
+        conn.close()
+    return None if row is None else {"method": row[0], "at": row[1], "verified": row[2], "verified_by": row[3]}
+
+
+def last_checked(auth: dict | None) -> float | None:
+    """這個 session 最後一次證明「是本人」的時間：登入那一下或重驗那一下，取晚的；沒有紀錄回 None。"""
+    if auth is None:
+        return None
+    return max(auth["at"], auth["verified"] or 0.0)
+
+
+def staff_session_ok(db, content, token: str | None, now: float) -> bool:
+    """客服權限要的 session（設計 4.4、6.2）：開著時這次是密碼登入、而且 staff_hours 內登入或重驗過；
+    關著時（session 都是密碼登入）看 session 建立的時間在 staff_hours 內。查不到一律回假。"""
+    hours = content.config.identity.staff_hours * 3600
+    if on(content):
+        auth = session_auth(token)
+        return auth is not None and auth["method"] == "password" and now - last_checked(auth) <= hours
+    created = SessionStore(db, clock=lambda: now).created_at(token)
+    return created is not None and now - created <= hours
 
 
 def blocked_name(name: str | None, content) -> bool:

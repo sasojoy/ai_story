@@ -109,7 +109,8 @@ def test_ticket_is_one_time_and_expires(tmp_path):
     s = idstore.IdentityStore(tmp_path / "x-identity.sqlite")
     s.put_ticket("h1", "line", "login", "b1", "no-1", "ver-1", expires=200.0, now=100.0)
     s.put_ticket("h2", "google", "login", "b2", "no-2", "ver-2", expires=150.0, now=100.0)
-    assert s.take_ticket("h1", 199.0) == {"provider": "line", "purpose": "login", "browser_hash": "b1", "nonce": "no-1", "verifier": "ver-1"}
+    assert s.take_ticket("h1", 199.0) == {"provider": "line", "purpose": "login", "browser_hash": "b1", "nonce": "no-1", "verifier": "ver-1",
+                                          "account_id": None}  # 第 204 批：綁定與重驗的單綁帳號，登入的單是 None
     assert s.take_ticket("h1", 199.0) is None  # 讀完就刪：不能重放
     assert s.take_ticket("h2", 150.0) is None  # 到期那一刻就不算
     assert s.take_ticket("nope", 1.0) is None

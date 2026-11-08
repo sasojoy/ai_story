@@ -399,6 +399,16 @@ class SessionStore:
             return None
         return row["account"]
 
+    def created_at(self, token: str | None) -> float | None:
+        """這個 cookie 的登入狀態是什麼時候開的（客服權限的 6 小時；帳號與客服第 204 批）；沒有、或過期了是 None。"""
+        if not token:
+            return None
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT created FROM sessions WHERE token_hash = ?", (_token_hash(token),)).fetchone()
+        if row is None or self.clock() - row["created"] >= SESSION_SECONDS:
+            return None
+        return row["created"]
+
     def pop(self, token: str | None, default: str | None = None) -> str | None:
         """登出：刪掉這個登入狀態，回傳原本的帳號（沒有就是 default）。"""
         if not token:

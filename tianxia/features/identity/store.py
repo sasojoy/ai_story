@@ -12,9 +12,10 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from tianxia.core import identity_base
 from tianxia.database import default_path
 
-SUFFIX = "identity"
+SUFFIX = identity_base.SIDE_SUFFIX
 TABLES = (
     "CREATE TABLE IF NOT EXISTS bindings_meta (account_id INTEGER NOT NULL, provider TEXT NOT NULL, subject_hmac TEXT NOT NULL, "
     "verified_at REAL NOT NULL, PRIMARY KEY (account_id, provider))",
@@ -24,7 +25,7 @@ TABLES = (
     "tries INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL, created REAL NOT NULL)",
     "CREATE TABLE IF NOT EXISTS counters (bucket TEXT NOT NULL, at REAL NOT NULL)",
     "CREATE INDEX IF NOT EXISTS counters_bucket ON counters (bucket, at)",
-    "CREATE TABLE IF NOT EXISTS session_auth (token_hash TEXT PRIMARY KEY, method TEXT NOT NULL, at REAL NOT NULL)",
+    identity_base.SESSION_DDL,  # 第 204 批：DDL 在核心一份（殼的 _start_session 經 identity_base 寫）；第 201 批開的這一張補兩欄
     # 第 202 批：第三方登入的一次性單（state 的雜湊；browser_hash 是 tx_oauth cookie 的雜湊，擋登入 CSRF）
     "CREATE TABLE IF NOT EXISTS oauth_tickets (state_hash TEXT PRIMARY KEY, provider TEXT NOT NULL, purpose TEXT NOT NULL, "
     "browser_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL, expires REAL NOT NULL, created REAL NOT NULL)",
@@ -35,9 +36,21 @@ TABLES = (
     # 驗證碼的 subject 是加金鑰的雜湊；display 是驗證碼那條遮罩過的號碼（第三方空字串）
     "CREATE TABLE IF NOT EXISTS pending (token_hash TEXT PRIMARY KEY, provider TEXT NOT NULL, subject TEXT NOT NULL, "
     "display TEXT NOT NULL DEFAULT '', expires REAL NOT NULL, created REAL NOT NULL)",
+    # 第 204 批：忘記密碼的短效證明（tx_reset 的 sha256）、只剩過期那一種的帳號的扣押、「帳號」紀錄（兩段式）、「這不是我的帳號」的單（tx_recheck）
+    "CREATE TABLE IF NOT EXISTS resets (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, provider TEXT NOT NULL, at REAL NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS holds (account_id INTEGER PRIMARY KEY, until REAL NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS account_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, text TEXT NOT NULL, "
+    "at REAL NOT NULL, state INTEGER NOT NULL DEFAULT 0, jtime REAL)",
+    "CREATE INDEX IF NOT EXISTS account_notes_account ON account_notes (account_id, state)",
+    "CREATE TABLE IF NOT EXISTS rechecks (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, provider TEXT NOT NULL, "
+    "subject_hmac TEXT NOT NULL, display TEXT NOT NULL DEFAULT '', at REAL NOT NULL)",
 )
-# 第 203 批補的欄（第 201 批開的旁檔沒有）：開檔時缺哪一欄補哪一欄
-ADDED_COLUMNS = (("challenges", "channel", "TEXT"), ("challenges", "subject_hmac", "TEXT"), ("challenges", "display", "TEXT"))
+# 補的欄（舊旁檔沒有）：開檔時缺哪一欄補哪一欄。第 203 批 challenges 三欄；第 204 批 session_auth 兩欄（identity_base.SESSION_COLUMNS）、
+# bindings_meta 的 bound_at（NULL＝開帳號那一種或舊資料，不算新綁）與 reminded_at、oauth_tickets 的 account_id（綁定與重驗的單綁帳號）
+ADDED_COLUMNS = (("challenges", "channel", "TEXT"), ("challenges", "subject_hmac", "TEXT"), ("challenges", "display", "TEXT"),
+                 *identity_base.SESSION_COLUMNS, ("bindings_meta", "bound_at", "REAL"), ("bindings_meta", "reminded_at", "REAL"),
+                 ("oauth_tickets", "account_id", "INTEGER"))
+NOTE_NEW, NOTE_PENDING, NOTE_DONE = 0, 1, 2  # account_notes.state：還沒寫、寫進存檔等下一輪確認、確認過
 
 
 def side_path(db: Path) -> Path:
@@ -52,15 +65,8 @@ def default_side_path() -> Path:
 class IdentityStore:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path is not None else default_side_path()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._conn() as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            for sql in TABLES:
-                conn.execute(sql)
-            for table, column, kind in ADDED_COLUMNS:
-                have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-                if column not in have:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+        # 第 204 批（K 波審查）：建表、補欄、WAL 一個路徑只跑一次（identity_base.ensure_schema；檔被刪了再跑）
+        identity_base.ensure_schema(self.path, "store", TABLES, ADDED_COLUMNS)
 
     @contextmanager
     def _conn(self):
@@ -130,25 +136,26 @@ class IdentityStore:
     # ── 第三方登入的一次性單（第 202 批）──────────────
 
     def put_ticket(self, state_hash: str, provider: str, purpose: str, browser_hash: str, nonce: str, verifier: str,
-                   expires: float, now: float) -> None:
+                   expires: float, now: float, account_id: int | None = None) -> None:
+        """account_id：綁定與重驗的單綁開單的那個帳號（第 204 批；登入的單是 None）。"""
         with self._write() as conn:
             conn.execute(
-                "INSERT INTO oauth_tickets (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, created) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, now),
+                "INSERT INTO oauth_tickets (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, created, account_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (state_hash, provider, purpose, browser_hash, nonce, verifier, expires, now, account_id),
             )
 
     def take_ticket(self, state_hash: str, now: float) -> dict | None:
         """拿走這張單（讀完就刪，不能重放）；過期的當沒有。順手清掉所有過期的單。"""
         with self._write() as conn:
             row = conn.execute(
-                "SELECT provider, purpose, browser_hash, nonce, verifier, expires FROM oauth_tickets WHERE state_hash = ?",
+                "SELECT provider, purpose, browser_hash, nonce, verifier, expires, account_id FROM oauth_tickets WHERE state_hash = ?",
                 (state_hash,),
             ).fetchone()
             conn.execute("DELETE FROM oauth_tickets WHERE state_hash = ? OR expires <= ?", (state_hash, now))
         if row is None or row[5] <= now:
             return None
-        return {"provider": row[0], "purpose": row[1], "browser_hash": row[2], "nonce": row[3], "verifier": row[4]}
+        return {"provider": row[0], "purpose": row[1], "browser_hash": row[2], "nonce": row[3], "verifier": row[4], "account_id": row[6]}
 
     # ── 還沒開帳號的身分（第 202 批；建角色前不開帳號，設計 4.2；第 203 批驗證碼查無帳號也寫這裡）──
 
@@ -263,3 +270,110 @@ class IdentityStore:
         with self._conn() as conn:
             row = conn.execute("SELECT method, at FROM session_auth WHERE token_hash = ?", (token_hash,)).fetchone()
         return None if row is None else (row[0], row[1])
+
+    # ── 綁定（第 204 批）─────────────────────────────
+
+    def mark_bound(self, account_id: int, provider: str, subject_hmac: str, at: float) -> None:
+        """剛綁上去：verified_at、bound_at 都記這一下（72 小時從 bound_at 算）。"""
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO bindings_meta (account_id, provider, subject_hmac, verified_at, bound_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (account_id, provider) DO UPDATE SET subject_hmac = excluded.subject_hmac, "
+                "verified_at = excluded.verified_at, bound_at = excluded.bound_at, reminded_at = NULL",
+                (account_id, provider, subject_hmac, at, at),
+            )
+
+    def meta(self, account_id: int) -> dict[str, dict]:
+        """這個帳號每一種的 {subject_hmac, verified_at, bound_at, reminded_at}（provider → 那一份）。"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT provider, subject_hmac, verified_at, bound_at, reminded_at FROM bindings_meta WHERE account_id = ?", (account_id,),
+            ).fetchall()
+        return {r[0]: {"subject_hmac": r[1], "verified_at": r[2], "bound_at": r[3], "reminded_at": r[4]} for r in rows}
+
+    def drop_meta(self, account_id: int, provider: str | None = None) -> None:
+        with self._write() as conn:
+            if provider is None:
+                conn.execute("DELETE FROM bindings_meta WHERE account_id = ?", (account_id,))
+            else:
+                conn.execute("DELETE FROM bindings_meta WHERE account_id = ? AND provider = ?", (account_id, provider))
+
+    def set_reminded(self, account_id: int, provider: str, at: float) -> None:
+        with self._write() as conn:
+            conn.execute("UPDATE bindings_meta SET reminded_at = ? WHERE account_id = ? AND provider = ?", (at, account_id, provider))
+
+    def unbound_elsewhere(self, subject_hmac: str, provider: str, account_id: int | None) -> float | None:
+        """這個身分最近一次從「別的帳號」（不是 account_id）解綁或刪帳號的時間；沒有回 None。原帳號重綁不受 30 天限制。"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(at) FROM unbound WHERE subject_hmac = ? AND provider = ? AND (account_id IS NULL OR account_id != ?)",
+                (subject_hmac, provider, -1 if account_id is None else account_id),
+            ).fetchone()
+        return row[0]
+
+    # ── 忘記密碼、扣押、這不是我的帳號（第 204 批）───────
+
+    def put_reset(self, token_hash: str, account_id: int, provider: str, at: float) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM resets WHERE account_id = ?", (account_id,))
+            conn.execute("INSERT INTO resets (token_hash, account_id, provider, at) VALUES (?, ?, ?, ?)", (token_hash, account_id, provider, at))
+
+    def get_reset(self, token_hash: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT account_id, provider, at FROM resets WHERE token_hash = ?", (token_hash,)).fetchone()
+        return None if row is None else {"account_id": row[0], "provider": row[1], "at": row[2]}
+
+    def drop_reset(self, token_hash: str) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM resets WHERE token_hash = ?", (token_hash,))
+
+    def set_hold(self, account_id: int, until: float) -> None:
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO holds (account_id, until) VALUES (?, ?) ON CONFLICT (account_id) DO UPDATE SET until = MAX(until, excluded.until)",
+                (account_id, until),
+            )
+
+    def hold_until(self, account_id: int) -> float | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT until FROM holds WHERE account_id = ?", (account_id,)).fetchone()
+        return None if row is None else row[0]
+
+    def put_recheck(self, token_hash: str, account_id: int, provider: str, subject_hmac: str, display: str, at: float) -> None:
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO rechecks (token_hash, account_id, provider, subject_hmac, display, at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (token_hash) DO UPDATE SET account_id = excluded.account_id, provider = excluded.provider, "
+                "subject_hmac = excluded.subject_hmac, display = excluded.display, at = excluded.at",
+                (token_hash, account_id, provider, subject_hmac, display, at),
+            )
+
+    def take_recheck(self, token_hash: str, now: float, ttl: float) -> dict | None:
+        """拿走這張單（讀完就刪）；過了 ttl 秒當沒有。"""
+        with self._write() as conn:
+            row = conn.execute(
+                "SELECT account_id, provider, subject_hmac, display, at FROM rechecks WHERE token_hash = ?", (token_hash,),
+            ).fetchone()
+            conn.execute("DELETE FROM rechecks WHERE token_hash = ? OR at <= ?", (token_hash, now - ttl))
+        if row is None or now - row[4] > ttl:
+            return None
+        return {"account_id": row[0], "provider": row[1], "subject_hmac": row[2], "display": row[3]}
+
+    # ── 「帳號」紀錄（第 204 批；兩段式同客服包）──────────
+
+    def add_note(self, account_id: int, text: str, at: float) -> None:
+        with self._write() as conn:
+            conn.execute("INSERT INTO account_notes (account_id, text, at) VALUES (?, ?, ?)", (account_id, text, at))
+
+    def notes(self, account_id: int, state: int) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, text, at, jtime FROM account_notes WHERE account_id = ? AND state = ? ORDER BY id", (account_id, state),
+            ).fetchall()
+        return [{"id": r[0], "text": r[1], "at": r[2], "jtime": r[3]} for r in rows]
+
+    def set_note_state(self, ids, state: int, jtime: float | None = None) -> None:
+        if not ids:
+            return
+        with self._write() as conn:
+            conn.executemany("UPDATE account_notes SET state = ?, jtime = ? WHERE id = ?", [(state, jtime, i) for i in ids])

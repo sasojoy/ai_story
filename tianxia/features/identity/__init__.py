@@ -15,6 +15,10 @@ from __future__ import annotations
 from tianxia.core import identity_base
 from tianxia.core.features import Feature
 
+# 主機看的字（不是玩家看的）：fake_services 是開發與測試用的假寄送與假 Turnstile
+FAKE_WARNING = "警告：identity.fake_services 開著（假的簡訊、Email 與 Turnstile），正式機必須關。"
+FAKE_REFUSED = "identity.fake_services 只給開發與測試用：正式設定（season_one 開著）不准開"
+
 
 class IdentityFeature(Feature):
     name = "identity"
@@ -31,6 +35,16 @@ class IdentityFeature(Feature):
         from . import routes  # noqa: PLC0415  只有殼掛路由時才 import（routes 要 fastapi）
 
         return routes.router(shell)
+
+    def threads(self, shell) -> None:
+        """不開執行緒：伺服器啟動時（start_threads 只在 server.main 叫）fake_services 開著印一行警告給主機看（第 204 批，K 波審查）。"""
+        if shell.CONTENT.config.identity.fake_services:
+            print(FAKE_WARNING, flush=True)
+
+    def check_content(self, content, need) -> None:
+        """正式設定（season21、week7 都開 season_one）不准開 fake_services：載入就擋（第 204 批，K 波審查）。"""
+        cfg = content.config
+        need(not (cfg.identity.fake_services and cfg.season_one), FAKE_REFUSED)
 
 
 FEATURE = IdentityFeature()
