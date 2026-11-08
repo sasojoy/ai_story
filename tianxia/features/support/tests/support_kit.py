@@ -34,9 +34,10 @@ def player(login="shen_01", name="沈青衫") -> TestClient:
 
 
 def staffer(monkeypatch, login="kefu_01", name="青衣") -> TestClient:
-    """名單上的客服（照登入名認）。"""
+    """名單上的客服（照登入名認）。建好帳號才列（第 207 批：identity 開著時名單上的帳號註冊要 12 字，這裡測的不是密碼）。"""
+    c = player(login, name)
     monkeypatch.setattr(server.CONTENT.config.support, "staff", [login])
-    return player(login, name)
+    return c
 
 
 def sidecar():
