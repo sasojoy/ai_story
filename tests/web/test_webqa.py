@@ -413,11 +413,11 @@ def test_every_package_script_picks_some_round():
 
 def test_changed_files_follow_the_table():
     gate = _load("gate")
-    table = {"main": ["web/app.js", "web/seal.js"], "x": ["web/mall.js"]}
+    table = {"main": ["web/app.js", "web/seal.js"], "x": ["web/yyy.js"]}
     rounds = ("main", "x")
     assert gate.rounds_for(["web/app.js"], table, rounds)[0] == ["main", "x"], "殼的檔不看對照表，全走"
     assert gate.rounds_for(["web/seal.js"], table, rounds)[0] == ["main"]
     assert gate.rounds_for(["web/seal.css"], table, rounds)[0] == ["main"], "包的 css 照同名 js 的回合"
-    assert gate.rounds_for(["web/seal.js", "web/mall.js"], table, rounds)[0] == ["main", "x"]
+    assert gate.rounds_for(["web/seal.js", "web/yyy.js"], table, rounds)[0] == ["main", "x"]
     assert gate.rounds_for(["web/zzz.js"], table, rounds)[0] == ["main", "x"], "對不到任何回合就全走"
     assert gate.rounds_for(["web/seal.js"], {}, rounds)[0] == ["main", "x"], "沒有對照表就全走"
