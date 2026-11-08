@@ -1,5 +1,8 @@
 """客服的 API（帳號與客服第 211 批；設計 6.1、6.2、6.6）：殼照 FEATURES 掛（路徑 /api/support/* 不跟別的路由重疊，先後不影響）。
-每一條第一行 _gate：先要登入（沒登入 401，開著關著一樣），再看開關（Config.support.enabled 關著 404）。客服那四條再過 _staff：不是名單上的帳號一律 404
+每一條都是 async def，第一行 _gate_off（第 212 批，計畫「J 波落地時 PM 加的」第 1 條）：Config.support.enabled 關著一律 404
+{"detail":"Not Found"}，先於登入、先於參數解析（沒登入、壞 JSON、單號不是數字都一樣，跟沒有這條路同一個回應）。之後才自己解 JSON
+（壞的或不是物件 422）、單號在 gate 之後轉數字（不是數字 404「找不到這張單。」），再把同步的本體丟進執行緒池（sqlite 與 shell._account
+都在那裡，不卡事件迴圈；server.api_events 的前例）。本體第一步 _gate 認登入（沒登入 401）。客服那幾條再過 _staff：不是名單上的帳號一律 404
 （跟沒有這條路同一句，不透露有客服頁）。不走 AdminTool、不放寬 /api/admin、is_admin 不動。
 
 殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；現在時間照 shell.time.time()（路由是殼，規則層 rules.py 不讀時鐘）。
@@ -7,7 +10,10 @@
 這個檔只在殼掛路由時才 import（要 fastapi）。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException, Request
+import json
+
+from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from tianxia.database import default_path, open_database
 
@@ -22,11 +28,28 @@ def sidecar_path():
     return store.store_path(default_path())
 
 
-def _gate(shell, request: Request) -> str:
-    key = shell._account(request)  # 沒登入 401（先於開關：不用登入的路由清單不加這一包）
+def _gate_off(shell) -> None:
+    """每一條路由的第一行：關著 404（HTTPException 的預設字 Not Found，跟沒有這條路一樣）。"""
     if not shell.CONTENT.config.support.enabled:
         raise HTTPException(404)
-    return key
+
+
+async def _json(request: Request) -> dict:
+    """gate 之後才讀內文：空的當 {}（同舊的 Body(default={})），壞的或不是物件 422。"""
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise HTTPException(422) from None
+    if not isinstance(data, dict):
+        raise HTTPException(422)
+    return data
+
+
+def _gate(shell, request: Request) -> str:
+    return shell._account(request)  # 沒登入 401（開關在 _gate_off 已經看過；不用登入的路由清單不加這一包）
 
 
 def _me(shell, key: str) -> accounts_view.Who:
@@ -54,6 +77,13 @@ def _int(value) -> int:
         return 0
 
 
+def _tid(text: str) -> int:
+    """路徑上的單號（gate 之後才轉）：不是數字 404「找不到這張單。」。"""
+    if not (text.isascii() and text.isdigit()):
+        raise HTTPException(404, rules.NOT_FOUND)
+    return int(text)
+
+
 def _version(shell) -> str:
     notes = shell.patch_notes()
     return notes[0]["date"] if notes else ""
@@ -76,7 +106,7 @@ def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> 
 
 
 def _staff_ticket(t: dict, replies: list[dict]) -> dict:
-    """客服看的一張單：全部回覆（含內部註記）＋帳號卡（這批只畫單上已有的：帳號、名號、建帳號日；查帳號是客服二）。"""
+    """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "admin_flag": bool(t["admin_flag"]), "created": t["created"], "updated": t["updated"], "version": t["version"],
@@ -98,123 +128,165 @@ def _push(shell, ticket: dict, now: float) -> None:
     push.send(owner.key, shell.NOTICE_TITLE, PUSH_TEXT, tag="support", now=now)
 
 
+# ── 同步的本體（執行緒池裡跑）──
+
+def _file_ticket(shell, request: Request, body: dict) -> dict:
+    """玩家送一張單：{category, body}。帳號、名號、時間、版本伺服器填（客戶端塞的其他欄位不看）。回 {id, mine}。"""
+    who = _me(shell, _gate(shell, request))
+    cfg = shell.CONTENT.config.support
+    category, text = str(body.get("category", "")), str(body.get("body", ""))
+    why = rules.ticket_problem(category, text, cfg.body_max)
+    if why is not None:
+        raise shell.GameError(why)
+    sidecar = store.open_store(sidecar_path(), create=True)
+    try:
+        tid = sidecar.add_ticket(account_id=who.id, account_created=who.created, login=who.login, character=who.character or "",
+                                 version=_version(shell), category=category, body=text.strip(), now=shell.time.time(),
+                                 open_max=cfg.open_max, daily_max=cfg.daily_max)
+    except Refused as e:
+        raise _refused(shell, e) from None
+    return {"id": tid, "mine": _mine(shell, who, sidecar)}
+
+
+def _my_tickets(shell, request: Request) -> dict:
+    """自己的單與看得到的回覆（不含內部註記）；看了就把客服的回覆記成看過。"""
+    who = _me(shell, _gate(shell, request))
+    sidecar = store.open_store(sidecar_path(), create=False)
+    out = _mine(shell, who, sidecar)
+    if sidecar is not None:
+        sidecar.mark_seen(who.id, who.created)
+    return out
+
+
+def _player_reply(shell, request: Request, body: dict) -> dict:
+    """玩家再回一句：{id, body}。單號、帳號、建帳號的時間都對才行，否則 404 同一句（別人的、不存在的、帳號換過的都一樣）。"""
+    who = _me(shell, _gate(shell, request))
+    cfg = shell.CONTENT.config.support
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    tid = _int(body.get("id"))
+    t = sidecar.ticket(tid)
+    if t is None or not rules.owns(t, who.id, who.created):
+        raise HTTPException(404, rules.NOT_FOUND)
+    text = str(body.get("body", ""))
+    why = rules.body_problem(text, cfg.body_max)
+    if why is not None:
+        raise shell.GameError(why)
+    try:
+        sidecar.player_reply(tid, who.id, who.created, text.strip(), shell.time.time())
+    except Refused as e:
+        if str(e) == rules.NOT_FOUND:
+            raise HTTPException(404, rules.NOT_FOUND) from None
+        raise _refused(shell, e) from None
+    return {"mine": _mine(shell, who, sidecar)}
+
+
+def _queue(shell, request: Request) -> dict:
+    """客服頁：沒回的、等玩家、今天新單三個數與沒結的單。"""
+    _staff(shell, request)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        return {"open": 0, "waiting": 0, "fresh": 0, "tickets": [], "categories": rules.CATEGORIES}
+    q = sidecar.queue(shell.time.time())
+    q["tickets"] = [{"id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]),
+                     "body": t["body"], "status": t["status"], "admin_flag": bool(t["admin_flag"]), "character": t["character"],
+                     "login": t["login"], "created": t["created"], "updated": t["updated"]} for t in q["tickets"]]
+    q["categories"] = rules.CATEGORIES
+    return q
+
+
+def _view_ticket(shell, request: Request, text: str) -> dict:
+    """客服看一張單：全部回覆（含內部註記）＋帳號卡（單上已有的）。單號在認過客服之後才轉（不是客服的人看不出這條路在）。"""
+    _staff(shell, request)
+    tid = _tid(text)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    t = sidecar.ticket(tid) if sidecar is not None else None
+    if t is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    return _staff_ticket(t, sidecar.replies(tid, internal=True))
+
+
+def _answer(shell, request: Request, body: dict) -> dict:
+    """客服回一則：{id, body, then: wait|close|admin}。回覆並等玩家／回覆並結單／請管理者處理（內部註記，玩家看不到，不推播）。"""
+    who = _staff(shell, request)
+    then = str(body.get("then", ""))
+    if then not in rules.THEN:
+        raise shell.GameError(rules.BAD_THEN)
+    text = str(body.get("body", ""))
+    why = rules.body_problem(text, shell.CONTENT.config.support.body_max)
+    if why is not None:
+        raise shell.GameError(why)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    now = shell.time.time()
+    tid = _int(body.get("id"))
+    try:
+        t = sidecar.staff_reply(tid, who.id, text.strip(), then, now)
+    except Refused as e:
+        if str(e) == rules.NOT_FOUND:
+            raise HTTPException(404, rules.NOT_FOUND) from None
+        raise _refused(shell, e) from None
+    if then != "admin":
+        _push(shell, t, now)
+    return _staff_ticket(t, sidecar.replies(tid, internal=True))
+
+
+def _close(shell, request: Request, body: dict) -> dict:
+    """客服結單：{id}。"""
+    _staff(shell, request)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    tid = _int(body.get("id"))
+    try:
+        sidecar.close(tid, shell.time.time())
+    except Refused:
+        raise HTTPException(404, rules.NOT_FOUND) from None
+    return _staff_ticket(sidecar.ticket(tid), sidecar.replies(tid, internal=True))
+
+
 def router(shell) -> APIRouter:
     r = APIRouter()
 
     @r.post("/api/support/ticket")
-    def api_support_ticket(request: Request, body: dict = Body(default={})):
-        """玩家送一張單：{category, body}。帳號、名號、時間、版本伺服器填（客戶端塞的其他欄位不看）。回 {id, mine}。"""
-        who = _me(shell, _gate(shell, request))
-        cfg = shell.CONTENT.config.support
-        category, text = str(body.get("category", "")), str(body.get("body", ""))
-        why = rules.ticket_problem(category, text, cfg.body_max)
-        if why is not None:
-            raise shell.GameError(why)
-        sidecar = store.open_store(sidecar_path(), create=True)
-        try:
-            tid = sidecar.add_ticket(account_id=who.id, account_created=who.created, login=who.login, character=who.character or "",
-                                     version=_version(shell), category=category, body=text.strip(), now=shell.time.time(),
-                                     open_max=cfg.open_max, daily_max=cfg.daily_max)
-        except Refused as e:
-            raise _refused(shell, e) from None
-        return {"id": tid, "mine": _mine(shell, who, sidecar)}
+    async def api_support_ticket(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_file_ticket, shell, request, body)
 
     @r.get("/api/support/mine")
-    def api_support_mine(request: Request):
-        """自己的單與看得到的回覆（不含內部註記）；看了就把客服的回覆記成看過。"""
-        who = _me(shell, _gate(shell, request))
-        sidecar = store.open_store(sidecar_path(), create=False)
-        out = _mine(shell, who, sidecar)
-        if sidecar is not None:
-            sidecar.mark_seen(who.id, who.created)
-        return out
+    async def api_support_mine(request: Request):
+        _gate_off(shell)
+        return await run_in_threadpool(_my_tickets, shell, request)
 
     @r.post("/api/support/reply")
-    def api_support_reply(request: Request, body: dict = Body(default={})):
-        """玩家再回一句：{id, body}。單號、帳號、建帳號的時間都對才行，否則 404 同一句（別人的、不存在的、帳號換過的都一樣）。"""
-        who = _me(shell, _gate(shell, request))
-        cfg = shell.CONTENT.config.support
-        sidecar = store.open_store(sidecar_path(), create=False)
-        if sidecar is None:
-            raise HTTPException(404, rules.NOT_FOUND)
-        tid = _int(body.get("id"))
-        t = sidecar.ticket(tid)
-        if t is None or not rules.owns(t, who.id, who.created):
-            raise HTTPException(404, rules.NOT_FOUND)
-        text = str(body.get("body", ""))
-        why = rules.body_problem(text, cfg.body_max)
-        if why is not None:
-            raise shell.GameError(why)
-        try:
-            sidecar.player_reply(tid, who.id, who.created, text.strip(), shell.time.time())
-        except Refused as e:
-            if str(e) == rules.NOT_FOUND:
-                raise HTTPException(404, rules.NOT_FOUND) from None
-            raise _refused(shell, e) from None
-        return {"mine": _mine(shell, who, sidecar)}
+    async def api_support_reply(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_player_reply, shell, request, body)
 
     @r.get("/api/support/queue")
-    def api_support_queue(request: Request):
-        """客服頁：沒回的、等玩家、今天新單三個數與沒結的單。"""
-        _staff(shell, request)
-        sidecar = store.open_store(sidecar_path(), create=False)
-        if sidecar is None:
-            return {"open": 0, "waiting": 0, "fresh": 0, "tickets": [], "categories": rules.CATEGORIES}
-        q = sidecar.queue(shell.time.time())
-        q["tickets"] = [{"id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]),
-                         "body": t["body"], "status": t["status"], "admin_flag": bool(t["admin_flag"]), "character": t["character"],
-                         "login": t["login"], "created": t["created"], "updated": t["updated"]} for t in q["tickets"]]
-        q["categories"] = rules.CATEGORIES
-        return q
+    async def api_support_queue(request: Request):
+        _gate_off(shell)
+        return await run_in_threadpool(_queue, shell, request)
 
     @r.get("/api/support/ticket/{tid}")
-    def api_support_ticket_view(tid: int, request: Request):
-        """客服看一張單：全部回覆（含內部註記）＋帳號卡（單上已有的）。"""
-        _staff(shell, request)
-        sidecar = store.open_store(sidecar_path(), create=False)
-        t = sidecar.ticket(tid) if sidecar is not None else None
-        if t is None:
-            raise HTTPException(404, rules.NOT_FOUND)
-        return _staff_ticket(t, sidecar.replies(tid, internal=True))
+    async def api_support_ticket_view(tid: str, request: Request):
+        _gate_off(shell)
+        return await run_in_threadpool(_view_ticket, shell, request, tid)
 
     @r.post("/api/support/answer")
-    def api_support_answer(request: Request, body: dict = Body(default={})):
-        """客服回一則：{id, body, then: wait|close|admin}。回覆並等玩家／回覆並結單／請管理者處理（內部註記，玩家看不到，不推播）。"""
-        who = _staff(shell, request)
-        then = str(body.get("then", ""))
-        if then not in rules.THEN:
-            raise shell.GameError(rules.BAD_THEN)
-        text = str(body.get("body", ""))
-        why = rules.body_problem(text, shell.CONTENT.config.support.body_max)
-        if why is not None:
-            raise shell.GameError(why)
-        sidecar = store.open_store(sidecar_path(), create=False)
-        if sidecar is None:
-            raise HTTPException(404, rules.NOT_FOUND)
-        now = shell.time.time()
-        tid = _int(body.get("id"))
-        try:
-            t = sidecar.staff_reply(tid, who.id, text.strip(), then, now)
-        except Refused as e:
-            if str(e) == rules.NOT_FOUND:
-                raise HTTPException(404, rules.NOT_FOUND) from None
-            raise _refused(shell, e) from None
-        if then != "admin":
-            _push(shell, t, now)
-        return _staff_ticket(t, sidecar.replies(tid, internal=True))
+    async def api_support_answer(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_answer, shell, request, body)
 
     @r.post("/api/support/close")
-    def api_support_close(request: Request, body: dict = Body(default={})):
-        """客服結單：{id}。"""
-        _staff(shell, request)
-        sidecar = store.open_store(sidecar_path(), create=False)
-        if sidecar is None:
-            raise HTTPException(404, rules.NOT_FOUND)
-        tid = _int(body.get("id"))
-        try:
-            sidecar.close(tid, shell.time.time())
-        except Refused:
-            raise HTTPException(404, rules.NOT_FOUND) from None
-        return _staff_ticket(sidecar.ticket(tid), sidecar.replies(tid, internal=True))
+    async def api_support_close(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_close, shell, request, body)
 
     return r
