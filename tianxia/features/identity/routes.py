@@ -5,11 +5,15 @@ from fastapi import APIRouter, HTTPException
 
 from tianxia.core import identity_base
 
+from . import oauth
+
 
 def gate_info(content) -> dict:
-    """登入頁要知道的：哪幾條路開著、客服信箱、Turnstile 的網站金鑰（公開的那一把）。只讀設定，跟誰來問無關。"""
+    """登入頁要知道的：哪幾條路開著、Turnstile 的網站金鑰（公開的那一把）。只讀設定與金鑰檔，跟誰來問無關。
+    line、google 要 oauth.ready（金鑰兩欄、redirect_base）才列；email、phone 照設定列（第 203 批才接）。客服信箱第 202 批拿掉（客服包畫）。"""
     cfg = content.config.identity
-    return {"ways": list(cfg.ways), "support_mail": cfg.support_mail, "turnstile": cfg.turnstile_site_key}
+    ways = [w for w in cfg.ways if w not in oauth.PROVIDERS or oauth.ready(content, w)]
+    return {"ways": ways, "turnstile": cfg.turnstile_site_key}
 
 
 def router(shell) -> APIRouter:

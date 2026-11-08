@@ -21,7 +21,7 @@ def fresh_server(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
     monkeypatch.setattr(server.CONTENT.config.identity, "enabled", False)
     monkeypatch.setattr(server.CONTENT.config.identity, "ways", [])
-    monkeypatch.setattr(server.CONTENT.config.identity, "support_mail", "")
+    monkeypatch.setattr(server.CONTENT.config.identity, "redirect_base", "")
     monkeypatch.setattr(server.CONTENT.config.identity, "turnstile_site_key", "")
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES, server.REGISTRATIONS):
         store.clear()
@@ -35,7 +35,7 @@ def fresh_server(monkeypatch):
 @pytest.fixture
 def key_file(tmp_path, monkeypatch):
     path = tmp_path / "identity.json"
-    path.write_text(json.dumps({"key": "k" * 32}), encoding="utf-8")
+    path.write_text(json.dumps({"key": "k" * 32, "line": {"client_id": "cid-line", "client_secret": "sec-line"}}), encoding="utf-8")
     monkeypatch.setattr(identity_base, "KEY_FILE", path)
     return path
 
@@ -44,7 +44,7 @@ def _turn_on(monkeypatch):
     cfg = server.CONTENT.config.identity
     monkeypatch.setattr(cfg, "enabled", True)
     monkeypatch.setattr(cfg, "ways", ["line", "google", "email", "phone"])
-    monkeypatch.setattr(cfg, "support_mail", "help@example.com")
+    monkeypatch.setattr(cfg, "redirect_base", "https://example.com")
     monkeypatch.setattr(cfg, "turnstile_site_key", "0x4AAA")
 
 
@@ -58,9 +58,10 @@ def test_gate_is_404_without_the_key(monkeypatch, tmp_path):
     assert TestClient(server.app).get("/api/identity/gate").status_code == 404
 
 
-def test_gate_lists_ways_mail_and_turnstile(monkeypatch, key_file):
+def test_gate_lists_ready_ways_and_turnstile(monkeypatch, key_file):
+    """line、google 要備好（oauth.ready：金鑰兩欄、redirect_base）才列；email、phone 照設定列（按了照舊尚未開放）。不帶客服信箱（第 202 批）。"""
     _turn_on(monkeypatch)
-    want = {"ways": ["line", "google", "email", "phone"], "support_mail": "help@example.com", "turnstile": "0x4AAA"}
+    want = {"ways": ["line", "email", "phone"], "turnstile": "0x4AAA"}  # google 的金鑰沒寫
     anon = TestClient(server.app).get("/api/identity/gate")
     assert anon.status_code == 200 and anon.json() == want
     player = TestClient(server.app)
