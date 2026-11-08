@@ -222,7 +222,9 @@
   // 場景卡裡的戰場那一塊。戰場面板開著（main.battle_panel，battle.js；Joy 2026-11-06 大決戰優化）時戰局條畫在面板裡，
   // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）
   function battleInner(m) {
-    const base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    let base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    // 面板上已經畫了兩邊主將、副將的氣血（UI 手感乙批 1-3）：場景卡裡「官軍：主將皇甫嵩（氣血 1500/1500）…」那幾行不再寫一次
+    if (bpOn(m)) base = base.replace(/(<p[^>]*>|<br\s*\/?>)\s*[^<：]{1,8}：(?:主將|副將)[^<]*?（(?:氣血|敗走)[^<]*?(?=<\/p>|<br)/g, "$1").replace(/<p[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/g, "");
     // 自己在場上：戰局條、陣容、主將令、回合數都在面板上，場景卡只留戰報；還沒加入（要按加入、投效）的照舊整段（面板不畫戰局條）
     if (bpOn(m) && m.battle_panel.me && !base.startsWith('<p class="battle-fold"')) return bpTrim(siegeStrip(battleMvpHtml(m) + base, m.siege), m);
     return siegeStrip(withGauge(base, m.battle_gauge, battleMvpHtml(m)), m.siege);

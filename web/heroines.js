@@ -14,7 +14,7 @@
         <p><b>我已年滿十八歲，願意看到成人內容。</b></p>
         <div class="row"><button class="btn small primary" data-act="adult-yes">確認</button><button class="btn small ghost" data-act="adult-no">取消</button></div></div>`;
     }
-    return `<label class="toggle"><input type="checkbox" id="adult" ${h.adult ? "checked" : ""}> 成人內容（預設關；打開要確認年滿十八歲）</label>`;
+    return `<label class="toggle"><input type="checkbox" id="adult" ${h.adult ? "checked" : ""}><span><b>成人內容</b><small>預設關；打開要確認年滿十八歲</small></span></label>`;
   }
 
   async function adultSet(value) {

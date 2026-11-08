@@ -113,12 +113,13 @@ def outing_plan_at(ctx, loc: Location, *, hidden: set[str] | None = None) -> Out
     整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
     s, c = ctx.state, ctx.content
     cfg = c.config.jianfa
-    kind = explore_rules.kind_of(cfg, loc).kind
+    table = explore_rules.kind_of(cfg, loc)
+    kind = table.kind
     how, foe = outing_foe(ctx, loc, kind)
     # 接了懸賞：遭遇就是懸賞那一路，不擲頭目；此刻遇得上的頭目問單挑包（查詢服務 ctx._boss_ready，全部拆包第 12 批）
     boss = None if how == "bounty" else ctx._boss_ready()
     weights = outing_weights(ctx, loc, has_foes=foe is not None, bounty_here=how == "bounty", hidden=hidden)
-    return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_rules.hint_of(kind, how, weights))
+    return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_rules.hint_of(kind, how, weights, table.name or ""))
 
 
 def mostly_here(ctx) -> str:
