@@ -8,7 +8,7 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 
 用法（python 不加 -I：-I 會連 PYTHONHASHSEED 一起忽略；子行程自己帶 PYTHONHASHSEED=0）：
   python scripts/same_behavior.py compare --base <根> --head <根> --tmp <暫存資料夾> [--profiles none,weekend,...] [--tracks sortie,duel]
-      [--jobs 4] [--no-bots] [--cache <資料夾>]
+      [--jobs 4] [--no-bots] [--cache <資料夾>] [--new <包>[,<包>]]
   python scripts/same_behavior.py selftest --base <根> --tmp <暫存資料夾> [--tracks ...] [--cache <資料夾>]   同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到
   python scripts/same_behavior.py run <根> <設定> <輸出檔> --tmp <暫存資料夾> [--track sortie|duel] [--part all|first|second] [--db <資料庫檔>]
   python scripts/same_behavior.py bots <根> <設定> <輸出檔> --tmp <暫存資料夾> [--seats sortie|duel]
@@ -17,6 +17,9 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 
 --cache（第二輪第 71 批，scripts/sb/cache.py）：預設關。base 的結果存起來，根與腳本都沒變就不再跑，head 永遠跑；只給同一波修正後重跑用，進 develop、上 main 的那一次不開。
 selftest --cache 多驗快取本身（每一軌四次 compare，只帶幾軌）。
+
+--new <包>（第 106 批）：新包進來時用。新包帶來的差異（包 web 宣告的 js、css 的行，帶包名前綴的表〔<包> 或 <包>_*，不帶前綴的照紅〕，新 op 與管理者動作）只在 head 的子行程扣掉，
+比完印一行清單，其餘照比；base 已經有那一包、head 沒有那一包都拒絕。不帶就跟以前一個位元組都不差。規矩（新包進 develop 的比對怎麼寫）等企劃者點頭，寫在手冊。
 
 固定的那幾層（不固定的話同一份程式跑兩次就不一樣，比對本身不穩）：
 - 亂數：伺服器每個請求都 Game(CONTENT, state) 不傳 rng（engine 的 `self.rng = rng or random.Random()`）——這裡把
@@ -83,18 +86,21 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--db")
     r.add_argument("--part", choices=("all", "first", "second"), default="all")
     r.add_argument("--track", choices=tuple(TRACKS), default="sortie")
+    r.add_argument("--new", default="", help="這幾包是新包，帶來的差異扣掉（compare --new 只給 head 的子行程帶）")
     b = sub.add_parser("bots")
     b.add_argument("root")
     b.add_argument("profile", choices=PROFILES)
     b.add_argument("out")
     b.add_argument("--tmp", required=True)
     b.add_argument("--seats", choices=tuple(BOT_SEATS), default="sortie")
+    b.add_argument("--new", default="", help="同 run 的 --new")
     for name in ("compare", "selftest"):
         x = sub.add_parser(name)
         x.add_argument("--base", required=True)
         if name == "compare":
             x.add_argument("--head", required=True)
             x.add_argument("--no-bots", action="store_true")
+            x.add_argument("--new", default="", help="新包（逗號隔開）：帶來的差異扣掉、印成清單，其餘照比")
         x.add_argument("--tmp", required=True)
         x.add_argument("--profiles", default=",".join(PROFILES))
         x.add_argument("--tracks", default=",".join(harness.TRACK_NAMES))
@@ -108,11 +114,15 @@ def main(argv: list[str] | None = None) -> int:
         if a.part in ("all", "first"):
             _wipe_db(db)
         _setup_child(Path(a.root).resolve(), a.profile, db)
+        harness.set_new(n for n in a.new.split(",") if n)
         TRACKS[a.track](Path(a.root).resolve(), a.profile, db).run(a.part, Path(a.out))
+        harness.write_new(Path(a.out))
         sys.stdout.flush()
         os._exit(0)  # TestClient 留下的執行緒不等
     if a.cmd == "bots":
+        harness.set_new(n for n in a.new.split(",") if n)  # _setup_child 在 runner 裡；set_new 只記名字，先後不影響
         BOT_SEATS[a.seats][1](Path(a.root).resolve(), a.profile, Path(a.out), Path(a.tmp))
+        harness.write_new(Path(a.out))
         sys.stdout.flush()
         os._exit(0)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -123,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cache_dir = Path(a.cache).resolve() if a.cache else None
     if a.cmd == "compare":
-        ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir)
+        ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir,
+                     new=tuple(n for n in a.new.split(",") if n))
     else:
         ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks, cache_dir=cache_dir)
     print("全部一樣" if ok else "有不一樣的")

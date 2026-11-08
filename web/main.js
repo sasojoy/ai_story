@@ -559,26 +559,11 @@
       + `<b class="side-guan">官 ${g}</b><span class="wk-track"><i style="width:${at}%"></i>${ticks}<u style="left:${at}%"></u></span><b class="side-huang">${h} 黃</b></div>`
       + `${gap ? `<p class="wk-gap">${gap}</p>` : ""}</div>`;
   }
-  // 中間那一格：投靠了的人是這一回（章回卡的內容），沒投靠的人是兩顆投靠鈕（最近的投靠點、走多久；就在那裡直接按投靠）
-  const WK_JOIN = "先投一方", WK_JOIN_NOTE = "，才有章回、軍令和戰功", WK_JOIN_BTN = "投{side}", WK_HERE = "就在這"; // 待 joy 潤
-  function wkJoinHtml(m) {
-    const sc = m.sides_card;
-    if (!sc || sc.joined) return "";
-    const btn = (c) => {
-      const near = (c.join_at || []).slice().sort((a, b) => (a.minutes | 0) - (b.minutes | 0))[0];
-      const sub = near ? `${esc(near.name)}・${near.minutes | 0 ? `${near.minutes | 0} 分` : WK_HERE}` : esc(c.where[0] || "");
-      const here = near && !(near.minutes | 0) && (m.options || []).some((o) => o.id === `faction:${c.id}`);
-      const act = here ? `data-act="choose" data-id="faction:${esc(c.id)}"` : `data-act="tab" data-tab="map"${gotoAttrs(near && near.location)}`;
-      return `<button class="btn wk-join-btn side-${esc(c.id)}" ${act}>${WK_JOIN_BTN.replace("{side}", esc(c.name))}<small>${sub}</small></button>`;
-    };
-    const two = sc.cols.filter((c) => c.id === "guan" || c.id === "huang");
-    return `<div class="wk-mid"><p class="ch-next"><b>${WK_JOIN}</b>${WK_JOIN_NOTE}</p><div class="wk-join">${two.map(btn).join("")}</div></div>`;
-  }
   const WK_MORE = "這一季在打什麼・下一件", WK_MORE_FREE = "兩邊各要做什麼・贏了給什麼"; // 待 joy 潤
   function wkBoxHtml(m, w, open) {
     const bp = bpOn(m);
     const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
-    const ch = chapterCardHtml(m, true), join = ch ? "" : wkJoinHtml(m);
+    const ch = chapterCardHtml(m, true), join = ch ? "" : factionJoinHtml(m);
     const free = m.sides_card && !m.sides_card.joined;
     return `<section id="week" class="card wk-box" aria-label="${esc(w.label)}${esc(w.when)}">`
       + `<div class="wk-top"><p class="wk-head"><b class="wk-seg">${esc(w.when)}</b><span class="wk-th">${esc(w.theme || "")}</span></p>`
@@ -587,15 +572,7 @@
       + `<button class="wk-x" data-act="wk-hide" data-id="strip" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button></div></section>`;
   }
   // 點最下面那一行拉起來的那一層：自己那一方攤開、別方收成一行（點了攤開）；投靠在哪只給還沒投靠的人。其餘照以前「為什麼」那一塊
-  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局", WK_SIDE_BAR = "{verb}到 {bar} 就是「{title}」"; // 待 joy 潤
-  function wkSidesSheetHtml(sc) {
-    if (!sc) return "";
-    const rows = SIDES_ROWS.filter(([k]) => sc.joined ? k !== "where" : true);
-    const dl = (c) => `<dl>${rows.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl>`;
-    return `<div class="sides">${sc.cols.map((c) => (!sc.joined || c.mine
-      ? `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>${dl(c)}</div>`
-      : `<details class="side side-${esc(c.id)}"><summary><h4>${esc(c.name)}<small>${esc([c.now, c.bar ? WK_SIDE_BAR.replace("{verb}", c.id === "guan" ? "壓" : "推").replace("{bar}", c.bar).replace("{title}", c.bar_title || "") : ""].filter(Boolean).join("・"))}</small></h4></summary>${dl(c)}</details>`)).join("")}</div>`;
-  }
+  const WK_SHEET = "這一季在打什麼", WK_RULES = "玩法說明・可能的結局"; // 待 joy 潤
   function wkSheetHtml(m, w) {
     return `<div class="sheet-bg" data-act="wk" data-id="why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${WK_SHEET}"><div class="grip"></div>`
       + `<div class="top-row"><h3 style="flex:1">${WK_SHEET}</h3><button class="btn small ghost" data-act="wk" data-id="why">關閉</button></div>`
@@ -669,7 +646,7 @@
     const howto = s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO; // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
     if (sheet) { // 拉起來的那一層（PM 2026-11-07：別又是一大片字）：三方、下一件、新手、簽到各一小塊；收季規則、這一季在打什麼、可能的結局收進最底「玩法說明」
       const rules = `${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${warHelp(m, "stance")}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`;
-      return `${m.sides_card ? wkSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複
+      return `${m.sides_card ? factionSidesSheetHtml(m.sides_card) : ""}${locked}${next}${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}` // 簽到改成每天第一次登入跳小窗（ckPopHtml），這裡不重複
         + `<details class="wk-rules"><summary>${WK_RULES}</summary>${rules}${howto}</details>`;
     }
     return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`

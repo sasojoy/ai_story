@@ -1,4 +1,5 @@
-"""same_behavior 的調度與固定層：compare、selftest、子行程的假時鐘假模型與資料庫文字、軌的登記表（第二輪第 70 批）。"""
+"""same_behavior 的調度與固定層：compare、selftest、子行程的假時鐘假模型與資料庫文字、軌的登記表（第二輪第 70 批）。
+compare --new（第 106 批）：新包帶來的差異（web 宣告的 js、css，帶包名前綴的表，新 op 與管理者動作）只在 head 的子行程扣掉，比完印成清單；base 的子行程走原路。"""
 from __future__ import annotations
 
 import concurrent.futures
@@ -130,8 +131,31 @@ def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, st
         print(f"最慢 {spent:.1f} {name}")
 
 
+def check_new(base: Path, head: Path, names: tuple[str, ...]) -> None:
+    """--new 只給真的新的包：base 已經有的扣掉就藏差異了，head 沒有的是打錯字。"""
+    for name in names:
+        if (base / "tianxia" / "features" / name).exists():
+            raise SystemExit(f"--new {name}：base 已經有這一包，不是新包")
+        if not (head / "tianxia" / "features" / name).is_dir():
+            raise SystemExit(f"--new {name}：head 沒有這一包")
+
+
+def _print_new(names: tuple[str, ...], outs: list[Path]) -> None:
+    """head 的子行程各自記下扣了什麼（<輸出檔>.new.json，write_new）：合起來印一行。"""
+    seen: dict[str, set[str]] = {}
+    for out in outs:
+        path = Path(f"{out}.new.json")
+        if path.exists():
+            for kind, items in json.loads(path.read_text(encoding="utf-8")).items():
+                seen.setdefault(kind, set()).update(items)
+    listed = "、".join(f"{kind} {' '.join(sorted(seen[kind]))}" for kind in NEW_KINDS if seen.get(kind))
+    print(f"新包 {'、'.join(names)} 帶來、扣掉的差異：{listed or '沒有'}")
+
+
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
-            tracks: list[str] | None = None, cache_dir: Path | None = None) -> bool:
+            tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = ()) -> bool:
+    check_new(base, head, new)
+    head_new = ["--new", ",".join(new)] if new else []  # 只有 head 的子行程帶（整段、後半、假人）
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
     SECONDS.clear()
@@ -150,11 +174,11 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             else:
                 chains.append([_base_step((["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log"),
                                           folder, f"all_{n}", o["base"])])
-                chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"])], tmp / f"{label}_head_{n}.log")])
+                chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"]), *head_new], tmp / f"{label}_head_{n}.log")])
             chains.append([
                 _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
                            folder, f"first_{n}", o["base1"], dbs["half"]),
-                (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second"], tmp / f"{label}_head2_{n}.log"),
+                (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second", *head_new], tmp / f"{label}_head2_{n}.log"),
             ])
     bot_out = {}
     if bots:
@@ -163,7 +187,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             bot_out[(seats, p)] = {k: tmp / f"{label}_bots_{k}_{n}.txt" for k in ("base", "head")}
             for k, root in (("base", base), ("head", head)):
                 step = (["bots", str(root), p, str(bot_out[(seats, p)][k]), "--tmp", str(tmp / f"{label}_bots_{k}_{n}"),
-                         "--seats", seats], tmp / f"{label}_bots_{k}_{n}.log")
+                         "--seats", seats, *(head_new if k == "head" else [])], tmp / f"{label}_bots_{k}_{n}.log")
                 chains.append([_base_step(step, folder, f"bots_{n}", bot_out[(seats, p)][k]) if k == "base" else step])
     started = time.time()
     _run_set(chains, workers)
@@ -191,6 +215,8 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
     _print_seconds(label, outputs, bot_out, twins)
     if folder:
         print(f"快取：命中 {cache.hits} 格、沒命中 {cache.misses} 格、{folder} {cache.megabytes(folder):.0f} MB")
+    if new:
+        _print_new(new, [o[k] for o in outputs.values() for k in ("head", "head2")] + [o["head"] for o in bot_out.values()])
     return ok
 
 
@@ -412,11 +438,66 @@ def emit(tag: str, value) -> None:
     BUF.write(json.dumps(value, ensure_ascii=False) + "\n")
 
 
+# compare --new：head 的子行程才有值（same_behavior 的 run、bots 叫 set_new）；base 的子行程這裡全是空的，走原路、輸出一個位元組不變。
+NEW: dict = {"packages": (), "seen": {}}
+NEW_KINDS = ("js", "css", "表", "op", "管理者動作")
+
+
+def set_new(names) -> None:
+    """記下這幾包是新包。這裡不 import registry：多一次 import 可能動到亂數先後；第一次用到才 import（new_features）。"""
+    NEW["packages"], NEW["seen"] = tuple(names), {}
+
+
+def note_new(kind: str, what: str) -> None:
+    NEW["seen"].setdefault(kind, set()).add(what)
+
+
+def write_new(out: Path) -> None:
+    """扣了什麼寫 <輸出檔>.new.json，compare 比完讀回來；沒帶 --new 不寫。"""
+    if NEW["packages"]:
+        Path(f"{out}.new.json").write_text(json.dumps({kind: sorted(items) for kind, items in NEW["seen"].items()}, ensure_ascii=False), encoding="utf-8")
+
+
+def new_features() -> list:
+    if not NEW["packages"]:
+        return []
+    from tianxia.core.registry import FEATURES  # 子行程 chdir 到被比的根之後才有
+
+    return [feature for feature in FEATURES if feature.name in NEW["packages"]]
+
+
+def new_web() -> frozenset[str]:
+    """這幾包 web 宣告的 js、css（facade、drape 不算進行數與規則，版本號照驗）。"""
+    return frozenset(name for feature in new_features() for name in feature.web)
+
+
+def new_ops(server) -> dict[str, set[str]]:
+    """這幾包帶來的 op：main_actions、menxia_actions、admin_tools 的鍵（switchboard 那幾張表扣掉）。"""
+    ops: dict[str, set[str]] = {"main": set(), "menxia": set(), "admin": set()}
+    for feature in new_features():
+        ops["main"] |= set(feature.main_actions(server))
+        ops["menxia"] |= set(feature.menxia_actions(server))
+        ops["admin"] |= set(feature.admin_tools(server))
+    for op in ops["main"] | ops["menxia"]:
+        note_new("op", op)
+    for op in ops["admin"]:
+        note_new("管理者動作", op)
+    return ops
+
+
+def is_new_table(name: str) -> bool:
+    """只扣帶包名前綴的表（mall_* 的前例）；不帶的照紅，免得順手藏掉別的表。"""
+    return any(name == package or name.startswith(f"{package}_") for package in NEW["packages"])
+
+
 def db_text(path: Path) -> str:
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         out = []
         for (table,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall():
+            if is_new_table(table):
+                note_new("表", table)
+                continue
             cols = [r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()]
             rows = []
             for row in con.execute(f"SELECT * FROM {table}").fetchall():

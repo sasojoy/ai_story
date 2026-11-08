@@ -1194,29 +1194,6 @@
       <button class="btn small" data-act="gender-pick" data-value="男">男</button><button class="btn small" data-act="gender-pick" data-value="女">女</button></div>`;
   }
 
-
-  // 成人內容（features/heroines；設計稿「三位女子出場」第三節，Joy 2026-11-06）：預設關；打開之前先跳確認卡，按了確認才送出。
-  // 這一季的內容沒有女子時伺服器不給 main.heroines，這一格不出現。字句待 joy 潤
-  function adultRow() {
-    const h = S.main && S.main.heroines;
-    if (!h) return "";
-    if (S.adultAsk) {
-      return `<div class="card adult-ask"><p>成人內容是成年角色之間、彼此情願的親密情節，只有你自己看得到，不會寫進傳聞、江湖史或列傳。</p>
-        <p><b>我已年滿十八歲，願意看到成人內容。</b></p>
-        <div class="row"><button class="btn small primary" data-act="adult-yes">確認</button><button class="btn small ghost" data-act="adult-no">取消</button></div></div>`;
-    }
-    return `<label class="toggle"><input type="checkbox" id="adult" ${h.adult ? "checked" : ""}> 成人內容（預設關；打開要確認年滿十八歲）</label>`;
-  }
-
-  async function adultSet(value) {
-    await busy(async () => {
-      const r = await api("/api/heroines/adult", { value });
-      applyMain(r.main);
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (text) toast(text);
-    }, SENT_WAITING);
-  }
-
   function sheetHtml() {
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     const s = S.main.status;
@@ -1317,20 +1294,6 @@
     if (S.reportOpen && S.reports.tale_id != null) await loadTale(S.reports.tale_id);
   }
 
-  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
-  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
-  function heroStay(draw) {
-    const page = document.getElementById("page");
-    const y = window.scrollY || 0;
-    draw();
-    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
-    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
-    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
-    const target = Math.min(y, Math.max(0, tabsTop - 8));
-    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
-    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
-    window.scrollTo(0, target);
-  }
   async function goTab(tab) {
     const pg = document.getElementById("page");
     if (pg && pg.style) pg.style.minHeight = ""; // 俠客頁撐高的那一截（heroStay）換頁就放掉
@@ -1841,8 +1804,6 @@
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "gender-pick": S.genderPick = el.dataset.value || null; render(); break;
-        case "adult-yes": S.adultAsk = null; await adultSet(true); break;
-        case "adult-no": S.adultAsk = null; render(); break;
         case "gender-go": S.genderPick = null; await doMain("gender", { value: el.dataset.value }); break;
         case "ask-yes": {
           // 上一個動作（例如等模型回話的對話）還沒回來：送了也會被 busy() 丟掉，所以先講一聲、確認框留著再按一次

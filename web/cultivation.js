@@ -921,6 +921,20 @@
   function askMeltInsight(el) {
     ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
   }
+  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
+  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
+  function heroStay(draw) {
+    const page = document.getElementById("page");
+    const y = window.scrollY || 0;
+    draw();
+    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
+    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
+    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
+    const target = Math.min(y, Math.max(0, tabsTop - 8));
+    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
+    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
+    window.scrollTo(0, target);
+  }
   async function cultivationClick(act, el, ev) {
     switch (act) {
         case "hero-tab": heroStay(() => { S.heroTab = el.dataset.tab; S.pdrawer = false; renderPage(); }); break; // Joy 11/7「按完不要都給我跳置頂」
