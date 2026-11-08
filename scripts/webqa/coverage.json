@@ -25,6 +25,7 @@
   "web/mall.js",
   "web/map.js",
   "web/military.js",
+  "web/news.js",
   "web/notify.js",
   "web/outing.js",
   "web/outlets.js",
@@ -38,6 +39,7 @@
   "web/support.js",
   "web/tale.js",
   "web/tavern.js",
+  "web/territory_acts.js",
   "web/travel.js",
   "web/zhuan.js"
  ],
@@ -63,6 +65,7 @@
   "web/mall.js",
   "web/map.js",
   "web/military.js",
+  "web/news.js",
   "web/notify.js",
   "web/outing.js",
   "web/peers.js",
@@ -99,6 +102,7 @@
   "web/mall.js",
   "web/map.js",
   "web/military.js",
+  "web/news.js",
   "web/notify.js",
   "web/outing.js",
   "web/peers.js",
@@ -109,6 +113,7 @@
   "web/sortie.js",
   "web/story.js",
   "web/tavern.js",
+  "web/territory_acts.js",
   "web/travel.js"
  ],
  "z": [
@@ -131,6 +136,7 @@
   "web/mall.js",
   "web/map.js",
   "web/military.js",
+  "web/news.js",
   "web/notify.js",
   "web/outing.js",
   "web/peers.js",
@@ -139,6 +145,7 @@
   "web/sortie.js",
   "web/story.js",
   "web/tavern.js",
+  "web/territory_acts.js",
   "web/travel.js"
  ],
  "v": [
@@ -195,6 +202,7 @@
   "web/mall.js",
   "web/map.js",
   "web/military.js",
+  "web/news.js",
   "web/notify.js",
   "web/outing.js",
   "web/peers.js",
@@ -204,6 +212,7 @@
   "web/sortie.js",
   "web/story.js",
   "web/tavern.js",
+  "web/territory_acts.js",
   "web/travel.js"
  ],
  "cs": [
