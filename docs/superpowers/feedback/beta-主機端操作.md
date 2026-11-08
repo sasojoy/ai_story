@@ -438,6 +438,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 每日備份只留最近 14 天每天一份，加最近 8 週每週一份，其餘自動刪掉；最新的一份不管多舊都會留著。手動備份和資料夾裡別的檔都不會被刪。
 - 某一份舊備份刪不掉（被別的程式開著）時，其他能刪的照刪，腳本最後把刪不掉的檔一份一份列出來、印「刪舊備份失敗」，「上次執行結果」會是 `0x1`；今天的備份已經做好，隔天會再試。
 - 資料夾裡有 `.bad` 結尾的檔，是驗證沒通過的備份，留著給人查原因（把檔案和那次印出的訊息給開發的人），不會被自動刪。資料庫自己壞掉時（腳本印「資料庫本身壞了」），複製到一半的檔也會留成 `.bad`，每天跑一次就多一份，壞掉修好之後記得自己清掉。
+- **旁檔**（J 波，2026-11-08）：資料庫旁邊有 `<db>-identity.sqlite`（帳號綁定）、`<db>-support.sqlite`（客服單）時，`backup_db.py` 驗過主檔之後把它們一起備份成 `<備份檔名>-identity.sqlite`、`-support.sqlite`（同一個時間戳，例 `tianxia-daily-20261108-050000-identity.sqlite`；每做成一份多印一行「已備份旁檔：…」）。旁檔壞了留成 `.bad`、印警告，主檔照留、結果照樣成功。刪舊備份時一起刪同名的旁檔。兩個開關都關著時這兩個檔不會出現，什麼都不多印。
 - 遊戲的資料庫換了位置（例如換到線上版資料夾），第 1 步要重貼一次，`/F` 會蓋掉舊的。
 - 備份和遊戲資料在同一顆硬碟：硬碟壞掉時兩份一起沒。在還沒上雲之前，偶爾把 `C:\Ray\tianxia-play\backup` 整個資料夾複製到隨身碟或別台電腦。
 
@@ -473,7 +474,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
    cd C:\Ray\專案\天下大勢
    .venv\Scripts\python.exe scripts\restore_db.py <備份檔> --db C:\Ray\tianxia-play\tianxia.db
    ```
-3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著。如果舊的資料庫旁邊還有 `-wal`、`-shm`、`-journal`（伺服器當機留下的），它們也一起改了名，腳本會把這些檔的路徑一個一個印出來。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。
+3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著。如果舊的資料庫旁邊還有 `-wal`、`-shm`、`-journal`（伺服器當機留下的），它們也一起改了名，腳本會把這些檔的路徑一個一個印出來。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。主檔還原好之後，腳本會找備份旁邊同一個時間戳的旁檔（`-identity.sqlite`、`-support.sqlite`）一起還原，現有的改名成 `.pre-restore-<時間>` 留著；備份沒有旁檔、現在卻有的，現有的會改名留著並印「警告：備份旁邊沒有同一個時間的旁檔…」；旁檔還原失敗只印警告，主檔已經還原好。
 4. 照平常的方式開伺服器和假人。所有人都要重新登入一次。
 
 **還原錯了、要退回去**：先停掉伺服器和假人，再把還原出來的檔移開，把舊的改名回去，**舊的 `-wal`、`-shm`、`-journal` 有印出來的也要一起改回去**（不然舊的資料庫會少掉還沒寫進主檔的最後一段）。以腳本印出的檔名為準，下面是例子：
@@ -540,6 +541,29 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 **玉璽二（天命之爭）上線之後要退回舊程式**：資料庫版本沒變（第 5 版），但舊程式會丟天命之季的章（`mandate`、`mandate_result`、登記的 `mandate_season`、`mandate_pending`）：正在跑的天命之季會變回一般季（提前收季、璽動照 7%、天命之爭從時刻表消失）。退版一定要停伺服器和假人、拿上線前的備份還原。
 
 **挑戰大勢人物每季都有上線之後要退回舊程式**：先試緊急開關——`content/config.json` 加一行 `"figure_challenge_every_season": false`，兩個程式重開：第一季以外的季沒有挑戰鈕、不閉門、求見照 `talk_at`、聲威不回、虛擬玩家照常出手、輿圖跟以前一樣（已經記下的 `bocai_defeated` 留著）。真的要退版：資料庫結構沒變（第 5 版），舊程式打得開檔；`PlayerState.figure_rare_drops`、`trend_accum` 的 `regen:`、`lost:` 鍵、14 天的季寫進去的 `WorldState.figures` 舊程式都不讀或略過；退版前先把 `content/config.json` 裡這一批新的設定（`figure_challenge_every_season`、`figure_prestige_regen`、`figure_daily_loss_cap`、`figure_rare_cap`、`figure_treasure_cap`）拿掉，`content/figures.json` 的 `out_flag` 跟著程式一起退——舊程式的 `Config`、`FigureDef` 不認得這些欄位，讀設定就會報錯。`tier3_per_figure` 退回 2 照舊程式的值。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨。
+
+## 帳號綁定與客服（J 波，2026-11-08；兩個開關都預設關）
+
+**帳號綁定（identity）的金鑰**：開關 `identity.enabled` 要打開，主機還要放 `.local/identity.json`，內容一行 `{"key": "<至少 16 字的亂數>"}`。可以這樣生：
+
+```powershell
+.venv\Scripts\python.exe -c "import json, secrets, pathlib; p = pathlib.Path('.local/identity.json'); p.parent.mkdir(exist_ok=True); p.write_text(json.dumps({'key': secrets.token_urlsafe(32)}), encoding='utf-8') if not p.exists() else print('已經有了，不蓋')"
+```
+
+（不要用 PowerShell 5.1 的 `Set-Content -Encoding utf8` 寫：它會加 BOM，伺服器讀不進來就當關著。）
+
+- `.local/` 在 `.gitignore` 裡，**不進版控、不貼給任何人**；讀不到這個檔就當開關關著（`/api/identity/gate` 回 404、登入頁不變）。
+- **金鑰不要換**：Email、手機是用它算雜湊存的，換了舊的就對不上。跟資料庫一起另外備份一份到安全的地方。
+- 開之前先查一次正式資料庫有沒有名號以 `id:` 開頭、或叫客服、官方、管理員、GM 的舊角色（開關只擋新取的名號）。
+
+**客服人員名單怎麼設**：客服認帳號（登入名或 `accounts.id`），不認名號。三個來源合起來：
+- `.local/support.txt`：一行一個帳號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
+- `TIANXIA_SUPPORT=甲,乙`（逗號分隔，臨時用）。
+- `content/config.json` 的 `support.staff`。
+
+客服登入之後進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過；管理者本人不自動算客服，要列在名單上才是。客服單存在 `<db>-support.sqlite`（有人送單才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
+
+**緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到現在的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。
 
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 
