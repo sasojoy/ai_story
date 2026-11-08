@@ -107,14 +107,14 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
 
 def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
     """第一季豪強分屬兩軍（7 天季預設開）：假人整季跑一段，投靠豪強的假人都挑了依附哪一軍、名冊沒有不帶依附的豪強，
-    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。只跑 0.4 個現實日（×6 約 2.4 個世界日，跟以前跑完 2.5 天的週末季一樣長；
-    依附在投靠那一刻就挑好）。"""
+    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。只跑 0.1 個現實日（×6 約 0.6 個世界日；
+    依附在投靠那一刻就挑好；第 108 批從 0.4 縮，0.1 天就有投靠豪強的假人）。"""
     from tianxia import database
     from tianxia.characters import open_characters
     from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
-    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.4)
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.1)
     content = load_content(ROOT / "content", profile="week7")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     try:
