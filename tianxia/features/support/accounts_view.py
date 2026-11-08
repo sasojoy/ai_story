@@ -1,9 +1,10 @@
 """客服包自己唯讀查主檔的 accounts、logins（帳號與客服第 211 批）：帳號鍵 → 帳號、名號 → 帳號、帳號 id → 推播用的帳號鍵。
-只讀（db.snapshot()），不改 accounts.py；帳號一的 accounts.account_id(key) 合進來之後換過去（計畫第一節）。假人沒有帳號：名號查不到就是 None。"""
+只讀（db.snapshot()），不改 accounts.py；帳號鍵 → 帳號照帳號一的 AccountStore.account_id（第 212 批換過去）。假人沒有帳號：名號查不到就是 None。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from tianxia.accounts import AccountStore
 from tianxia.characters import name_key
 from tianxia.database import Database
 
@@ -29,10 +30,10 @@ def _who(row) -> Who | None:
 
 
 def by_key(db: Database, key: str) -> Who | None:
-    """登入狀態認的帳號鍵（server._account 回的那個，小寫登入名）。"""
-    with db.snapshot() as conn:
-        return _who(conn.execute(_SELECT + "WHERE a.id = (SELECT account_id FROM logins WHERE provider = 'password' AND subject = ?)",
-                                 (key,)).fetchone())
+    """登入狀態認的帳號鍵（server._account 回的那個：小寫登入名，沒有密碼的帳號是 id:<n>）。第 212 批起照帳號一的
+    AccountStore.account_id 認（id:<n> 的帳號也送得了單；只認沒有密碼列的那種，同登入）。"""
+    account_id = AccountStore(db).account_id(key)
+    return None if account_id is None else by_id(db, account_id)
 
 
 def by_character(db: Database, name: str) -> Who | None:

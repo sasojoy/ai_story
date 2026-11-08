@@ -26,6 +26,9 @@ from . import rules as mall
 if TYPE_CHECKING:
     from tianxia.engine import Game
 
+# 客服本人拿易名帖改名（帳號與客服第 212 批；字放這裡：mall/rules.py 不在設計第七節的名單上）
+RENAME_STAFF = "客服的名號不能用易名帖改。"  # 待 joy 潤
+
 
 def grant(ctx: Game) -> None:
     """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。本人這一輪（Game.own_turn_checks 的 on_own_turn 掛鉤）叫。"""
@@ -129,6 +132,8 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
         return [mall.NO_RENAME]
     if p.bot is not None or ctx.is_admin():
         return [mall.RENAME_ADMIN]
+    if identity_base.support_staff_name(ctx.world.db, ctx.content.config, old):  # 客服也不能改名（帳號與客服第 212 批；客服開關關著不擋）
+        return [RENAME_STAFF]
     if new == old:
         return [mall.RENAME_SAME]
     if taken is None:
