@@ -99,7 +99,8 @@ def test_old_password_flows_are_byte_identical(monkeypatch, key_file, tmp_path):
     _turn_on(monkeypatch)
     monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "on.db")
     on = _flow()
-    assert on == off
+    flagged = [(code, text[:-1] + ',"identity":true}' if i in (0, 2, 9) else text) for i, (code, text) in enumerate(off)]
+    assert on == flagged  # 開著：只有 /api/me 多帶旗標（第 202 批），其餘逐位元組一樣
     assert off[0] == (200, '{"stage":"login"}') and off[2] == (200, '{"stage":"create"}')
     assert json.loads(off[6][1])["error"] == "帳號或密碼不對。"
     assert json.loads(off[7][1])["error"] == "帳號或密碼不對。"
@@ -107,20 +108,21 @@ def test_old_password_flows_are_byte_identical(monkeypatch, key_file, tmp_path):
 
 
 def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
-    """關著：這一包的路由 404；/、/api/me、/api/main 跟開著時逐位元組一樣（開關只管 /api/identity/*）。/ 上這一包只多 script 與 link 兩行。"""
+    """關著：這一包的路由 404；/、/api/main 跟開著時逐位元組一樣，/api/me 開著只多 identity 旗標（第 202 批）。/ 上這一包只多 script 與 link 兩行。"""
     import time
 
     monkeypatch.setattr(time, "time", lambda: 1_800_000_000.0)
     c = TestClient(server.app)
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     c.post("/api/character", json={"name": "沈青衫"})
-    paths = [p for p in server.app.openapi()["paths"] if p.startswith("/api/identity")]
-    assert paths == ["/api/identity/gate"]
+    paths = [p for p in server.app.openapi()["paths"] if p.startswith(("/api/identity", "/auth/"))]
+    assert sorted(paths) == ["/api/identity/character", "/api/identity/gate", "/api/identity/start", "/auth/{provider}/callback"]
     off = [c.get(p) for p in ("/", "/api/me", "/api/main")]
-    assert all(c.get(p).status_code == 404 for p in paths)
+    assert c.get("/api/identity/gate").status_code == 404
     _turn_on(monkeypatch)
     on = [c.get(p) for p in ("/", "/api/me", "/api/main")]
-    assert [r.content for r in on] == [r.content for r in off] and all(r.status_code == 200 for r in off)
+    assert [on[0].content, on[2].content] == [off[0].content, off[2].content] and all(r.status_code == 200 for r in off)
+    assert on[1].json() == {**off[1].json(), "identity": True} and "identity" not in off[1].json()
     page = off[0].text
     assert [ln.strip() for ln in page.splitlines() if "identity" in ln] == [
         '<link rel="stylesheet" href="/static/identity.css?v=' + server.asset_version("/static/identity.css") + '">',

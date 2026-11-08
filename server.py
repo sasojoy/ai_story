@@ -1834,7 +1834,10 @@ def api_patch_notes() -> dict:
 @app.get("/api/me")
 def me(request: Request):
     key = SESSIONS.get(request.cookies.get(COOKIE, ""))
-    return {"stage": "login"} if key is None else _entry(key)
+    out = {"stage": "login"} if key is None else _entry(key)
+    if identity_base.on(CONTENT):  # identity（帳號與客服第 202 批）：開著才帶旗標，web/identity.js 沒旗標不問 /api/identity/gate；關著原樣
+        out["identity"] = True
+    return out
 
 
 @app.post("/api/login")
