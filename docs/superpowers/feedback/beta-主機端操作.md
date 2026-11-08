@@ -566,17 +566,24 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **開 Email、手機驗證碼登入（K 波第 203 批）**：
 - `.local/identity.json` 要有 `key` 與 `turnstile_secret`（Cloudflare Turnstile 的 secret；網站金鑰是設定的 `identity.turnstile_site_key`）。伺服器端驗的時候 siteverify 回的 action 要等於設定的 `identity.turnstile_action`（預設 `identity_code`），Turnstile 元件那邊的 action 要寫一樣的。
-- **正式機的 `identity.fake_services` 一定要是 `false`**：開著時用假的寄送（不真的寄，只記在行程裡）與假的 Turnstile（任何送 `ok` 的都放行），只給開發、測試、QA 用。
+- **正式機的 `identity.fake_services` 一定要是 `false`**：開著時用假的寄送（不真的寄，只記在行程裡）與假的 Turnstile（L 波起不看 token、一律放行），只給開發、測試、QA 用。L 波起的擋法：開著時伺服器啟動一律印一行「警告：identity.fake_services 開著（假的簡訊、Email 與 Turnstile），正式機必須關。」；**`TIANXIA_PUBLIC_URL` 是正式網域（`tianxiadashi.com`、`www.tianxiadashi.com`）就拒絕啟動**（印原因後結束）。其他網址或沒設照常起，所以企劃者的測試環境（season21）可以開假寄送驗驗證碼登入。開正式伺服器照舊一定設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`，這道擋才有用。
+- **Turnstile 網站金鑰**：設定的 `identity.turnstile_site_key` 沒設時，驗證碼那一頁不載 Cloudflare 的 script、不畫 Turnstile 格子；本機 QA 開 `fake_services` 不用設金鑰（假的 Turnstile 一律過）。正式機要設網站金鑰、`.local/identity.json` 放 `turnstile_secret`，`fake_services` 關。CSP 已經放行 `https://challenges.cloudflare.com` 的 script。
 - 簡訊（三竹）、Email（Resend）的寄送服務商**還沒接**，`.local/identity.json` 也還沒有它們的金鑰欄位；接上之前正式機一律用 `NoSender`，一寄就回「現在無法寄送」，不會亂寄。接上那一批再補這裡的欄位。
 - 全服分池上限在設定的 `identity.sms_caps`、`identity.mail_caps`（池 → [每天, 每小時]，預設 login 400/100、bind 300/75、anon 200/50），照服務商額度調；滿了現在只記在旁檔，還不會通知管理者。
 - 緊急開關：`identity.enabled`，或從 `ways` 拿掉 `email`、`phone`（只關這兩條）。
+
+**綁手機才能用（`identity.phone_gate`，L 波第 205 批，預設關）**：開著時截殺、掛通緝、揭與交玩家掛的單、贈物、切磋與論武、形象市集上架與買、商城購買、封測元寶要先綁手機（名單在 `identity.phone_required`）。**等簡訊寄送真的接上之後才開**：沒接之前沒人綁得了手機，一開等於這些功能全部鎖死。關掉（設 `false`、兩個程式重開）就回到原本的樣子，逐位元組一樣；開閘時帳本會多出 `grant:beta:phone:<…>` 的 0 元寶列，關掉也留著無害。
+
+**帳號綁定的管理者工具（L 波第 204 批）**：identity 開著時管理頁有三個工具：看某個帳號的綁定與時間（`identity_view`）、幫他解綁某一種（`identity_unbind`；密碼不從這裡拿掉）、刪帳號（`identity_delete`：刪 `accounts`、`logins`、`sessions` 列，所有裝置登出、**不能復原**；名號仍被占住、錢包留著；不能刪自己）。管理頁「重設密碼」那一塊找到帳號後會列綁定；解綁、刪帳號做完要再按一次「找」才看得到新的樣子。
+
+**CSP 標頭（L 波第 213 批，整站、不是開關）**：伺服器每個回應都帶 `Content-Security-Policy`（只准載自己網域與 Cloudflare Turnstile 的 script、不准 inline 的程式）。線上要是哪一頁被擋（主控台有 `Refused to …`、按鈕沒反應），緊急做法是 **revert 那一筆**（`efe6ac12b`，`server.py` 的 `CSP` 常數與那一個 middleware）再重開兩個程式；`web/battle.js` 與兩支公開頁 script（`web/zhuan_page.js`、`web/tale_page.js`）的搬家留著也沒事。資料庫、存檔、旁檔都不動，季中能換。維修頁（`scripts/maintenance.py`）是另一支行程，不帶這個標頭。
 
 **客服人員名單怎麼設**：客服認帳號（登入名或 `accounts.id`），不認名號。三個來源合起來：
 - `.local/support.txt`：一行一個帳號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
 - `TIANXIA_SUPPORT=甲,乙`（逗號分隔，臨時用）。
 - `content/config.json` 的 `support.staff`。
 
-客服登入之後進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過；管理者本人不自動算客服，要列在名單上才是。客服單存在 `<db>-support.sqlite`（有人送單才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
+客服登入之後進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過；管理者本人不自動算客服，要列在名單上才是。L 波第 204 批起客服要**用帳號密碼登入、登入 6 小時內**（`identity.staff_hours`）才有客服權限：用驗證碼或 LINE、Google 進來的不算，超過 6 小時重新登入一次就好。客服單存在 `<db>-support.sqlite`（有人送單才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
 
 **緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到現在的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。
 
