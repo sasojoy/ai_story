@@ -232,6 +232,21 @@ class AccountStore:
             )
         return f"id:{account_id}"
 
+    def login_key(self, provider: str, subject: str) -> str | None:
+        """第三方或驗證碼的身分對到哪個帳號（第 202 批）：有 password 列的帳號回小寫帳號，沒有的回 id:<n>；查無或 provider 是 password 回 None。
+        subject 原樣比對（分大小寫，不過 normalize）。"""
+        if provider == "password":
+            return None
+        with self.db.snapshot() as conn:
+            row = conn.execute(
+                "SELECT l.account_id, p.subject AS pw FROM logins l LEFT JOIN logins p ON p.account_id = l.account_id "
+                "AND p.provider = 'password' WHERE l.provider = ? AND l.subject = ?",
+                (provider, subject),
+            ).fetchone()
+        if row is None:
+            return None
+        return row["pw"] if row["pw"] is not None else f"id:{row['account_id']}"
+
     def add_login(self, login: str | None, provider: str, subject: str, display: str) -> None:
         """綁一種登入方式到這個帳號（帳號鍵不變）：一個帳號每種只留一列、別人占著的不行、password 不走這裡，都丟 ValueError；
         帳號不在丟 KeyError。"""
