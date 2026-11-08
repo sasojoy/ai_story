@@ -53,8 +53,10 @@ SHELL_FILES = {"web/app.js", "web/main.js", "web/shell.js", "web/index.html", "w
 
 NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py check wants every web/*.js on the table, in SHELL_FILES or here
     "web/sw.js": "not a page script: the notify package's route serves it to the service worker",
-    "web/identity.js": "the identity switch is off in season21: no round reaches it",
-    "web/support.js": "the support switch is off in season21: no round reaches it",
+    "web/explore.js": "the gather branches (explore:gather) left the engine with explore three-ways (batch 13): no season offers the option",
+    "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
+    "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
+    "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
 }
 
 
@@ -85,7 +87,7 @@ def rounds_detail(changed, table, rounds=ROUNDS, not_on_table=NOT_ON_TABLE, repo
         hit = {r for r in rounds if key in table.get(r, ())}
         if not hit:
             if key in not_on_table:
-                not_walked.append(f"{f}: no round reaches it while it is off ({not_on_table[key]})")
+                not_walked.append(f"{f}: no round reaches it ({not_on_table[key]})")
                 continue
             return list(rounds), f"{f} is reached by no round in coverage.json and NOT_ON_TABLE gives no reason: every round", []
         picked |= hit

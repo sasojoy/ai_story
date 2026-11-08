@@ -434,7 +434,7 @@ def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
 
 def test_the_coverage_table_checks_out():
     coverage = _load("coverage")
-    assert coverage.check() == [], "scripts/webqa/coverage.json 對不上：照 coverage.py 的說明重跑一次 --quick 再 build"
+    assert coverage.check() == [], "scripts/webqa/coverage.json 對不上：照 coverage.py 的說明重跑一次（不帶 --quick）再 build"
 
 
 def test_a_missing_file_in_the_table_is_caught(tmp_path):
@@ -444,6 +444,20 @@ def test_a_missing_file_in_the_table_is_caught(tmp_path):
     bad = tmp_path / "coverage.json"
     bad.write_text(json.dumps(table), encoding="utf-8")
     assert any("no_such_file" in p for p in coverage.check(str(bad)))
+
+
+def test_a_script_no_round_reaches_has_to_say_why(tmp_path):
+    # 第 110 批：web/*.js 不在表上、不是殼、NOT_ON_TABLE 也沒寫理由，check 要紅；寫在 NOT_ON_TABLE 卻有回合走到也紅
+    coverage, gate = _load("coverage"), _load("gate")
+    table = json.loads((TOOL / "coverage.json").read_text(encoding="utf-8"))
+    thin = {r: [f for f in files if f != "web/seal.js"] for r, files in table.items()}
+    bad = tmp_path / "coverage.json"
+    bad.write_text(json.dumps(thin), encoding="utf-8")
+    assert any(p.startswith("web/seal.js is reached by no round") for p in coverage.check(str(bad)))
+    stale = {r: [*files, "web/sw.js"] for r, files in table.items()}
+    bad.write_text(json.dumps(stale), encoding="utf-8")
+    assert any("web/sw.js is in gate.NOT_ON_TABLE" in p for p in coverage.check(str(bad)))
+    assert "web/sw.js" in gate.NOT_ON_TABLE
 
 
 def test_every_package_script_picks_some_round():
@@ -486,8 +500,8 @@ def test_dry_run_prints_the_pick_and_walks_nothing():
         assert r.returncode == 0, r.stderr
         return r.stdout
     assert "rounds: (none)" in dry("")
-    out = dry("web/identity.js")
-    assert "rounds: (none)" in out and "not walked: web/identity.js" in out
+    out = dry("web/explore.js")  # 包的檔、沒有回合走到、NOT_ON_TABLE 寫了為什麼（identity.js 關著也有函式在登入頁跑，在表上：第 110 批量到）
+    assert "rounds: (none)" in out and "not walked: web/explore.js" in out
     gate = _load("gate")
     assert f"rounds: {','.join(gate.ROUNDS)}" in dry("web/app.js")
 
