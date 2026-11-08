@@ -1,5 +1,6 @@
 """扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）：形象市集上架（鍵 looks_market）。被扣押的帳號上架回那一句；
-下架、買照舊（第 208 批計畫：買是 looks_market 的另一個入口，這一批只擋上架）。identity 關著一個字不變。"""
+下架照舊。M 波：買也在花元寶（設計 4.3、4.4「不能花元寶」），買的人被扣押也擋（同一個鍵、同一句）；賣的人被扣押不擋買。
+identity 關著一個字不變。"""
 from __future__ import annotations
 
 import phone_kit
@@ -30,12 +31,14 @@ def test_list_blocked_while_held(on, world, keyed):  # noqa: F811
     assert "掛到市集了" in actions.market_list(maker, look, 800)[-1]
 
 
-def test_unlist_and_buy_not_blocked(on, world, keyed):  # noqa: F811
+def test_buy_blocked_while_buyer_held(on, world, keyed):  # noqa: F811
     maker, look, buyer = _setup(on, world)
     phone_kit.gate(on, on=False)
     assert "掛到市集了" in actions.market_list(maker, look, 800)[-1]
-    phone_kit.hold(world.db, "ray1", T0 + 100)
+    phone_kit.hold(world.db, "ray1", T0 + 100)  # 賣的人被扣押不擋買
     phone_kit.hold(world.db, "ray2", T0 + 100)
+    assert actions.market_buy(buyer, look, "mkt-ref-951") == [_stale(on)]
+    buyer.sync(T0 + 100)
     assert "買下了" in actions.market_buy(buyer, look, "mkt-ref-951")[-1]
 
 

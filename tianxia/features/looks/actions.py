@@ -489,7 +489,7 @@ def market_list(ctx: Game, look: str, price: int) -> list[str]:
         return ctx._log([market.NOT_OPEN])
     if not identity_base.phone_ok(ctx, "looks_market"):  # 只問上架的人（第 205 批）
         return ctx._log([identity_base.PHONE_NEEDED])
-    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（第 208 批）：只擋上架；買與下架不擋
+    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（第 208 批）：擋上架；M 波起買也擋（花元寶），下架不擋
     if held:
         return ctx._log([held])
     done, line = market.list_look(wallet, ctx._mall_owner(), look, price)
@@ -512,6 +512,9 @@ def market_buy(ctx: Game, look: str, ref: str) -> list[str]:
         return ctx._log([market.NOT_OPEN])
     if not identity_base.phone_ok(ctx, "looks_market"):  # 只問買的人（第 205 批）
         return ctx._log([identity_base.PHONE_NEEDED])
+    held = identity_base.hold_reason(ctx, "looks_market")  # 扣押期（M 波；設計 4.3、4.4「不能花元寶」）：只問買的人
+    if held:
+        return ctx._log([held])
     found = market.listing(wallet, look)
     seller = (wallet.character_name(found["seller"]) or found["seller"]) if found else ""
     pid, line = market.buy(ctx.content, wallet, ctx._mall_owner(), look, ref, names=_made_names(ctx, wallet), seller_name=seller,

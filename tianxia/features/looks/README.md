@@ -43,4 +43,4 @@
 ## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
 
 identity 開著時，被扣押的帳號不能上架形象市集：`actions.market_list` 緊接在 `phone_ok` 那兩行之後問核心 `identity_base.hold_reason(ctx, "looks_market")`，有就回那一句（不灰鈕，`web/looks.js` 沒動）。
-買 `market_buy` 與下架 `market_unlist` 不擋（第 208 批計畫）。沒有新路由、新欄位、新表。測試 `tests/test_looks_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。
+下架 `market_unlist` 不擋（第 208 批計畫）；買 `market_buy` 也在花元寶，M 波起買的人被扣押也擋（同一個鍵、同一句，在它的 `phone_ok` 之後）。沒有新路由、新欄位、新表。測試 `tests/test_looks_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。
