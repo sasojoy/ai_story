@@ -56,15 +56,15 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - QA 不重跑；派工單點名要跑的那幾個檔才跑，其餘靠實機（瀏覽器）驗；不要為了「保險」跑整套。純搬、`web/` 沒動的批，QA 改成兩台真伺服器逐位元組比（總表 5.0，`tianxia-qa`）。
   - 修回饋單的測試寫進那個模組的測試檔，不開 `test_fb…` 新檔（2026-10-27 測試整理 1b 併掉了 53 個）；派工單寫「測試寫進 `tests/test_<模組>.py`」。
   - 改到 `tests/conftest.py` 的批：`test_for` 照改到的 fixture、函式挑用到它的測試檔；autouse 的、最外層的、或用到它的超過 50 個檔就跑煙霧。改 `tests/fixtures/`、`pyproject.toml` 時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
-- **拆分主幹 `split/trunk` 不照下面這一條**（企劃者 2026-11-04「不要一直測試變成高度重複測試，這就是拆分的精神」）：照手冊 4.2「同一件事只驗一次」，第 45 批起照 4.2「波次模式：一波一驗」（企劃者 2026-11-06「火力全開，用最快速度把分批作業想辦法弄好」：波末合一次、閘門 `docs/superpowers/pm-workflows/wave_gate.py` 一次、每條線審查一位、修一輪）；下面這一條與「唯讀審查」寫的審查員自己重跑，只管 `develop`。拆分 11/08 做完之後，主機側的波（`wave/<波>` → `develop`）照舊用波次模式與 `wave_gate.py` 的閘門。
+- **拆分主幹 `split/trunk` 不照下面這一條**（企劃者 2026-11-04「不要一直測試變成高度重複測試，這就是拆分的精神」）：照手冊 4.2「同一件事只驗一次」，第 45 批起照 4.2「波次模式：一波一驗」（企劃者 2026-11-06「火力全開，用最快速度把分批作業想辦法弄好」：波末合一次、閘門 `docs/superpowers/pm-workflows/wave_gate.py` 一次、每條線審查一位、修一輪）；下面這一條與「唯讀審查」寫的審查員自己重跑，只管 `develop`。拆分 11/08 做完之後，主機側的波（`wave/<波>` → `develop`）照舊用波次模式與 `wave_gate.py` 的閘門。**I 波起（企劃者 11/08 四題都選建議，手冊 4.2 新表）**：波末用 `wave_gate.py --changed`（pytest 先跑不含 slow＋一條整季冒煙 `test_bot_plays_a_full_season[1]`，再照 diff 挑軌〔各軌 `covers`＋`ALWAYS_TRACKS`〕、設定〔`season21`＋`test`，季長相關才加 `week7`〕、半舊半新〔`state.py`、`models.py`、存檔欄位、`database.py` 才跑〕、網頁〔動到 `web/` 才跑，照對照表挑回合〕；改到 `tianxia/core/`、共用層、`engine.py`、`content/` 頂層、`scripts/sb/` 或拿不準的退回全軌）；每日 03:30 與上 `main` 前用 `--full`。**過渡**（第 109 批重量 `covers` 之前）：新功能波（開關關著）的比對只跑 `ALWAYS_TRACKS` 六軌加 `--new <包>`（手冊第十五節「I 波」第 4 條）。
 - **合併時跑哪一種**（企劃者 2026-10-31 定「照舊」，手冊第十一節第 3 題；手冊原本提的「合併只跑三級」作廢。Joy 2026-10-26「只有上 main 跑整套 slow」、10-27「改UI也需要跑那麼多那麼久是不是有什麼問題？」之後 PM 收的這一套照用，另加那一包相關的 slow）：
   - **批合進功能分支、功能分支合進 `develop`、`main` 合回 `develop`／功能分支**：
     - 只動 `web/`（`app.js`、`main.js` 除外）、文件、測試：只跑 `scripts/test_for.py --base origin/<要合進去的分支>` 挑的相關測試，**不跑整套**。
     - 改到 `web/app.js`、`web/main.js`：比照動到 `tianxia/`，相關測試＋**不含 slow 的整套**（PM 11/07，手冊第十五節「第二輪 G 波」第 2 條：`test_for` 只照名字挑之後這兩個檔的閘門變薄；改頂層 `const` 的字，寫死那句字的測試挑不到）。
-    - 動到 `tianxia/`、`content/`、`server.py`：相關測試＋**不含 slow 的整套** `.venv/Scripts/python.exe -m pytest -q -n 4`（`pyproject.toml` 預設就擋掉 slow；約 3～4 分鐘）＋**那一包相關的 slow**（包的 README 列的那幾個檔、批次表第二節：例如出陣的 `test_bot_policy_conquest`、`test_conquest_flip`、`test_core_loop_web`、`test_econ_gather_sortie`）。
+    - 動到 `tianxia/`、`content/`、`server.py`：相關測試＋**不含 slow 的整套** `.venv/Scripts/python.exe -m pytest -q -n 4`（`pyproject.toml` 預設就擋掉 slow；約 8～9 分鐘）＋**那一包相關的 slow**（包的 README 列的那幾個檔、批次表第二節：例如出陣的 `test_bot_policy_conquest`、`test_conquest_flip`、`test_core_loop_web`、`test_econ_gather_sortie`）。
     - 整套含 slow 每天 03:30 由排程跑一次（`scripts/nightly.ps1`，上面那張表）。
-  - **`develop` 合進 `main`（上線）之前一定跑整套含 slow**：`.venv/Scripts/python.exe -m pytest -q -n 4 -m "slow or not slow"`（或 `scripts/test_for.py --all`；不寫 `-m ""`；約 15～19 分鐘）。
-  - **網頁閘門**由 `wave_gate.py --web` 叫 `scripts/webqa/gate.py`；先自測用 `scripts/webqa/selftest.py --sha <x> --out <夾>`（base 對 base 綠、跑兩次 fingerprint 全同、兩個正控制都紅）。
+  - **`develop` 合進 `main`（上線）之前一定跑整套含 slow 與全軌比對**（11/08：全軌三設定四趟只在上 main 前）：`docs/superpowers/pm-workflows/wave_gate.py --full`（裡面就是 `.venv/Scripts/python.exe -m pytest -q -n 4 -m "slow or not slow"` 加全軌三設定＋`--crossover`＋網頁全回合；只要整套也可以 `scripts/test_for.py --all`；不寫 `-m ""`；整套含 slow 單獨跑約 10 分、跟比對同時跑 17～19 分）。
+  - **網頁閘門**由 `wave_gate.py --web` 叫 `scripts/webqa/gate.py`（`--changed` 時帶 `--changed-files`，照 `scripts/webqa/coverage.json` 只走碰得到的回合，殼的檔或對不到的一律全走）；先自測用 `scripts/webqa/selftest.py --sha <x> --out <夾>`（base 對 base 綠、跑兩次 fingerprint 全同、兩個正控制都紅）。
   - 都由做合併的人跑，`TIANXIA_DB` 設到 repo 外的暫存檔。綠了才推；紅了把失敗的那幾條交回開發，修好之後再跑那幾條就好，推之前再跑一次同一種。
 - 不要為了預先判斷平衡跑模擬或量表（企劃者 2026-10-14「給玩家實際體驗回饋最準」）；計畫本身寫了要量的照量。
 - 開發、QA 自己不再開多代理工作流程（Workflow），也不一項一個子代理（PM 派出來的那一個子代理就是開發或 QA 本人）。
