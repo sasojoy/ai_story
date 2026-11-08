@@ -133,7 +133,7 @@ def test_verify_logs_in_bound_account(on, monkeypatch):
     assert side.verified_at(account_id, "phone") is not None
     dev = c.cookies.get("tx_dev")
     assert dev and side.is_trusted(hashlib.sha256(dev.encode()).hexdigest(), _subj("phone", "+886912345678"))
-    assert c.get("/api/me").json() == {"stage": "create"}
+    assert c.get("/api/me").json() == {"stage": "create", "identity": True}  # 第 202 批：開著 /api/me 帶旗標
     assert c.post(VERIFY, json={"code": _code()}).json() == {"error": codes.BAD_CODE}  # 同一碼不能用第二次
 
 
@@ -151,7 +151,23 @@ def test_verify_unknown_makes_pending_not_account(on):
     with sqlite3.connect(_side(on)) as conn:
         rows = conn.execute("SELECT provider, subject, display FROM pending").fetchall()
     assert rows == [("email", _subj("email", "raylin@gmail.com"), "r*@gmail.com")]
-    assert c.get("/api/me").json() == {"stage": "login"}  # 沒開 session
+    assert c.get("/api/me").json() == {"stage": "login", "identity": True}  # 沒開 session（第 202 批：開著帶旗標）
+
+
+def test_code_pending_becomes_an_account_at_character(on):
+    """合 K 波：驗證碼查無帳號留的 pending，走第 202 批的建角色那一條開帳號；logins 寫 email、雜湊、遮罩，下次驗碼直接登入。"""
+    c = TestClient(server.app)
+    _send(c, to="Ray.Lin@Gmail.com", channel="email")
+    assert c.post(VERIFY, json={"code": _code("email")}).json() == {"stage": "create", "pending": True}
+    r = c.post("/api/identity/character", json={"name": "林驗碼"})
+    assert r.status_code == 200 and c.cookies.get(server.COOKIE)
+    db = database.open_database()
+    with db.snapshot() as conn:
+        rows = conn.execute("SELECT provider, subject, display FROM logins WHERE provider = 'email'").fetchall()
+    assert [tuple(row) for row in rows] == [("email", _subj("email", "raylin@gmail.com"), "r*@gmail.com")]
+    with sqlite3.connect(_side(on)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM pending").fetchone()[0] == 0
+    assert identity_base.account_key_for(db, "email", _subj("email", "raylin@gmail.com")) is not None  # 下次驗碼查得到
 
 
 def test_bots_cannot_be_told_apart(on):
