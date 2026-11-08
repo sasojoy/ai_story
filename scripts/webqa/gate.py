@@ -5,6 +5,12 @@
 Exit 0 green, 1 real differences, 2 the tool broke (no browser, node or PIL; a server did not start; a patch target is gone;
 the driver died or stopped answering; a flow threw; a scene that has to be reached was not). Everything below --out is throwaway except
 summary.json, report.txt and red/. Noise is classified by noise.py; only what is left counts.
+--changed-files that picks no round (an empty list; package files NOT_ON_TABLE says no round reaches while they are off) is exit 0 with
+nothing unpacked, and summary.not_walked says which files and why. --dry-run prints the pick and stops.
+--new <pkg,...> lists the css-rules of the new packages' own sheets (web/<pkg>.css) as NEW instead of red; every other sheet counts as before.
+Codes (identity) never go to the server log (batch 208: only the notice line, LOG_LINE): a round that reaches a code reads the fake
+senders' outbox, --outbox, which serve.py appends to <round>/<base|head>.outbox.jsonl when identity and fake_services are on. No round
+reaches a code yet (identity is off in season21): ready, never walked.
 
 What the walk cannot see: it freezes animation, and it takes no pictures at 640, 641 and 900. Both come from the corpus replay (replay.py), and the
 replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
@@ -33,6 +39,7 @@ DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if 
 STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".ogg")
 STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
+PKG_CSS = "pkg-css"  # batch 110: one rule more in web/identity.css: red without --new, NEW (not red) with --new identity; not a selftest control
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
     "page-alert": 'document.addEventListener("click", () => { alert("webqa selftest"); }, { capture: true, once: true });',
@@ -44,26 +51,56 @@ COVERAGE = os.path.join(HERE, "coverage.json")  # round -> web files it calls in
 SHELL_FILES = {"web/app.js", "web/main.js", "web/shell.js", "web/index.html", "web/style.css"}  # every round stands on these
 
 
-def rounds_for(changed, table, rounds=ROUNDS):
-    """--changed-files: which rounds to walk, and why. Wide when unsure: the shell, scripts/webqa, no table, a file outside web/,
-    or any changed file no round reaches, all walk every round. web/<pkg>.css goes with web/<pkg>.js."""
+NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py check wants every web/*.js on the table, in SHELL_FILES or here
+    "web/sw.js": "not a page script: the notify package's route serves it to the service worker",
+    "web/explore.js": "the gather branches (explore:gather) left the engine with explore three-ways (batch 13): no season offers the option",
+    "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
+    "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
+    "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
+}
+
+
+def package_file(f: str, repo: str = REPO) -> bool:
+    """web/<pkg>.js or web/<pkg>.css with tianxia/features/<pkg>/ there. Anything else under web/ (shop.css, battle_panel.css, tale_page.js…) is the shell."""
+    name = f[len("web/"):] if f.startswith("web/") else ""
+    stem, ext = os.path.splitext(name)
+    return bool(stem) and "/" not in name and ext in (".js", ".css") and os.path.isdir(os.path.join(repo, "tianxia", "features", stem))
+
+
+def rounds_detail(changed, table, rounds=ROUNDS, not_on_table=NOT_ON_TABLE, repo=REPO):
+    """rounds_for with the files left unwalked: (rounds, why, not_walked). A package's file no round reaches is not walked only when
+    NOT_ON_TABLE says why; without a reason it walks every round (a table that was never built must not leave a package unchecked)."""
     changed = [c.strip().replace("\\", "/") for c in changed if c.strip()]
     if not changed:
-        return list(rounds), "no changed files given: every round"
+        return [], "--changed-files lists no file: no round", []
     if not table:
-        return list(rounds), "no coverage.json: every round"
-    picked = set()
+        return list(rounds), "no coverage.json: every round", []
+    picked, not_walked = set(), []
     for f in changed:
         if f in SHELL_FILES or f.startswith("scripts/webqa/"):
-            return list(rounds), f"{f} is the shell or the tool: every round"
+            return list(rounds), f"{f} is the shell or the tool: every round", []
         if not f.startswith("web/"):
-            return list(rounds), f"{f} is outside web/: every round"
+            return list(rounds), f"{f} is outside web/: every round", []
+        if not package_file(f, repo):
+            return list(rounds), f"{f} is the shell (no tianxia/features/ package of that name): every round", []
         key = f[:-4] + ".js" if f.endswith(".css") else f
         hit = {r for r in rounds if key in table.get(r, ())}
         if not hit:
-            return list(rounds), f"{f} is reached by no round in coverage.json: every round"
+            if key in not_on_table:
+                not_walked.append(f"{f}: no round reaches it ({not_on_table[key]})")
+                continue
+            return list(rounds), f"{f} is reached by no round in coverage.json and NOT_ON_TABLE gives no reason: every round", []
         picked |= hit
-    return [r for r in rounds if r in picked], "from coverage.json: " + ", ".join(sorted(changed))
+    got = [r for r in rounds if r in picked]
+    why = "from coverage.json: " + ", ".join(sorted(changed)) if got else "no changed file is reached by a round: no round"
+    return got, why, not_walked
+
+
+def rounds_for(changed, table, rounds=ROUNDS, not_on_table=NOT_ON_TABLE, repo=REPO):
+    """--changed-files: which rounds to walk, and why. Wide when unsure: the shell (SHELL_FILES, and web/ files with no package of that name),
+    scripts/webqa, no table, a file outside web/, or a package file no round reaches with no reason in NOT_ON_TABLE, all walk every round.
+    web/<pkg>.css goes with web/<pkg>.js. An empty list walks nothing (not giving --changed-files at all walks every round)."""
+    return rounds_detail(changed, table, rounds, not_on_table, repo)[:2]
 
 
 def load_coverage(path=COVERAGE):
@@ -76,6 +113,10 @@ def load_coverage(path=COVERAGE):
 
 class ToolBroke(Exception):
     """Something the comparison stands on is not there: exit 2, whatever the pages look like."""
+
+
+class NothingToWalk(Exception):
+    """Batch 110: --changed-files picked no round (an empty list, or package files no round reaches while they are off): exit 0, nothing unpacked."""
 
 
 def find_chrome(arg: str | None) -> str:
@@ -181,6 +222,12 @@ def mutate(copy: str, which: str) -> None:
         lines.insert(links[-1], line)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write("\n".join(lines))
+    elif which == PKG_CSS:
+        p = os.path.join(copy, "web", "identity.css")
+        if not os.path.isfile(p):
+            raise ToolBroke("mutate pkg-css: no web/identity.css")
+        with open(p, "a", encoding="utf-8", newline="") as f:
+            f.write("\n.webqa-selftest-rule { outline: 3px solid red; }\n")
     elif which == QUIET:
         with open(os.path.join(copy, "web", "style.css"), "a", encoding="utf-8", newline="") as f:
             f.write("\n/* webqa selftest */\n")
@@ -189,6 +236,31 @@ def mutate(copy: str, which: str) -> None:
             f.write("\n" + HOSTILE[which] + "\n")
     else:
         raise ToolBroke(f"no mutation {which}")
+
+
+VAPID_TEST_SCALAR = 0x7E6B_A110_5EED_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001  # batch 110: a fixed P-256 key, the same on both copies
+
+
+IDENTITY_TEST_KEYS = {"key": "webqa-test-key-0123456789", "notify_key": "webqa-notify-key-0123456789", "turnstile_secret": "webqa-test"}  # --outbox only
+
+
+def seed_local(copy: str, outbox: bool = False) -> None:
+    """Batch 110: the copy's .local/ before any server starts. git archive leaves it out, and server.py makes the push key on first use
+    (server.VAPID_FILE, .local/webpush_vapid.pem): with --jobs N the servers of one copy wrote it at once and one read half a file (MalformedFraming).
+    One fixed test key, never the repo's .local/, never random: base and head get the same bytes. With --outbox the identity package's test keys
+    go in too (.local/identity.json, identity_base.KEY_FILE), so a copy with the switch on can send a code."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    key = ec.derive_private_key(VAPID_TEST_SCALAR, ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    local = os.path.join(copy, ".local")
+    os.makedirs(local, exist_ok=True)
+    with open(os.path.join(local, "webpush_vapid.pem"), "wb") as f:
+        f.write(pem)
+    if outbox:
+        with open(os.path.join(local, "identity.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(IDENTITY_TEST_KEYS, f)
 
 
 def static_digest(web: str, ext=STATIC_EXT) -> dict:
@@ -203,12 +275,13 @@ def static_digest(web: str, ext=STATIC_EXT) -> dict:
 
 
 class Server:
-    def __init__(self, label, copy, port, db, profile, logs, env):
+    def __init__(self, label, copy, port, db, profile, logs, env, outbox=False):
         self.label, self.port = label, port
         self.out = open(os.path.join(logs, f"{label}.server.out"), "wb")
         self.err = open(os.path.join(logs, f"{label}.server.err"), "wb")
         self.errpath = self.err.name
-        self.proc = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "serve.py"), copy, str(port), db, profile], stdout=self.out, stderr=self.err, env=env, cwd=os.path.dirname(db),
+        extra = ["--outbox", os.path.join(logs, f"{label}.outbox.jsonl")] if outbox else []
+        self.proc = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "serve.py"), copy, str(port), db, profile, *extra], stdout=self.out, stderr=self.err, env=env, cwd=os.path.dirname(db),
                                      creationflags=DETACHED)
 
     def wait_up(self, seconds=120):
@@ -255,7 +328,7 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
     try:
         rows = (("base", copies[0], ports[0], f"http://{origins[0]}", f"http://127.0.0.1:{ports[0]}", cdps[0]), ("head", copies[1], ports[1], f"http://{origins[1]}", f"http://127.0.0.1:{ports[1]}", cdps[1]))
         for label, copy, port, *_ in rows:
-            servers.append(Server(label, copy, port, os.path.join(folder, f"{label}.db"), args.profile, folder, env))
+            servers.append(Server(label, copy, port, os.path.join(folder, f"{label}.db"), args.profile, folder, env, outbox=args.outbox))
         for s in servers:
             s.wait_up()
         walks = []
@@ -277,7 +350,7 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
             with open(os.path.join(folder, f"{label}.driver.err"), encoding="utf-8", errors="replace") as f:
                 raise ToolBroke(f"{label} driver left no report (exit {d.returncode}): {f.read()[-800:]}")
     walked = time.monotonic() - t0
-    out = compare.compare(walks[0], walks[1], origins, os.path.join(args.out, "red"), red_budget=args.red_left)
+    out = compare.compare(walks[0], walks[1], origins, os.path.join(args.out, "red"), red_budget=args.red_left, new_sheets=args.new_sheets)
     args.red_left -= out["red_images"]
     out["seconds"] = round(walked)
     out["compare_seconds"] = round(time.monotonic() - t0 - walked)
@@ -312,8 +385,10 @@ def run_replay(args, work, copies, rounds, changed, expect, summary) -> None:
     done = {"ran": True, "changed": changed, "passes": {}}
     summary["replay"] = done
     for label, how in (("replay", {"frozen": True, "shoot": True}), ("replay-anim", {"frozen": False, "shoot": False})):
-        res = replay.replay(corpus, os.path.join(copies[0], "web"), os.path.join(copies[1], "web"), os.path.join(args.out, label), chrome=args.chrome, node=args.node, red_budget=args.red_left, **how)
+        res = replay.replay(corpus, os.path.join(copies[0], "web"), os.path.join(copies[1], "web"), os.path.join(args.out, label), chrome=args.chrome, node=args.node, red_budget=args.red_left, new_sheets=args.new_sheets, **how)
         args.red_left -= res["red_images"]
+        if "new_css" in res:
+            summary["new_css"] += [{"round": label, **x} for x in res["new_css"]]
         kept, excused = apply_expect(res["real"], expect)
         summary["real"] += [{"round": label, **x} for x in kept]
         summary["expected"] += [{"round": label, **x} for x in excused]
@@ -378,11 +453,20 @@ def apply_expect(real, expect):
 
 
 def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
+    if summary["green"] and not summary["rounds"]:
+        lines = [f"webqa {summary['base']} -> {summary['head']}: NOTHING TO WALK (exit 0): {summary['rounds_why']}"]
+        lines += [f"NOT WALKED {x}" for x in summary.get("not_walked", [])]
+        with open(os.path.join(out_dir, "report.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        return
     lines = [f"webqa {summary['base']} -> {summary['head']}: {'GREEN' if summary['green'] else 'RED' if summary['exit'] == 1 else 'TOOL BROKE'} (exit {summary['exit']})",
              f"scenes {summary['scenes']} shots {summary['shots']} identical {summary['same_shots']} seconds {summary['seconds']}",
              f"noise {summary['noise']}", f"fingerprint {summary['fingerprint']}", f"replay (pictures at 640, 641, 900; animation declarations) {summary['replay']}", ""]
     for t in summary["tool"]:
         lines.append(f"TOOL {t}")
+    lines += [f"NOT WALKED {x}" for x in summary.get("not_walked", [])]
+    for row in summary.get("new_css", []):
+        lines.append(f"NEW {row['round']} {row['sheet']} only A {json.dumps(row['only A'], ensure_ascii=False)[:300]} only B {json.dumps(row['only B'], ensure_ascii=False)[:300]}")
     for row in summary["real"]:
         lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}")
     for row in summary["expected"]:
@@ -411,10 +495,21 @@ def run(args) -> int:
                "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": [], "replay": {"ran": False, "why": "did not get that far"},
                "round_files": {}, "rounds_why": "every round (no --changed-files)"}
     per_round = {}
+    args.new_sheets = None
     work = os.path.join(args.out, "_work")
     try:
         shutil.rmtree(work, ignore_errors=True)
         os.makedirs(work)
+        rounds = [r.strip() for r in args.rounds.split(",") if r.strip()] if args.rounds else list(ROUNDS)
+        if args.changed_files is not None:  # batch 107: only the rounds coverage.json says reach the changed files; --rounds too: both
+            wanted, why, not_walked = rounds_detail(args.changed_files.split(","), load_coverage())
+            summary["rounds_why"] = why
+            summary["not_walked"] = not_walked
+            if not wanted:  # batch 110: nothing to walk is green, not the tool broken: no copies, no servers
+                raise NothingToWalk(why)
+            rounds = [r for r in rounds if r in wanted]
+            if not rounds:
+                raise ToolBroke(f"--rounds and --changed-files leave no round ({why})")
         args.chrome = find_chrome(args.chrome)
         args.node = find_node(args.node)
         need_pil()
@@ -422,13 +517,6 @@ def run(args) -> int:
         fixed_cdps = pick_ports(args.cdp_ports, "cdp-ports") if args.cdp_ports else None
         if fixed_ports or fixed_cdps:
             args.jobs = 1  # one pair of ports, one round at a time
-        rounds = [r.strip() for r in args.rounds.split(",") if r.strip()] if args.rounds else list(ROUNDS)
-        if args.changed_files is not None:  # batch 107: only the rounds coverage.json says reach the changed files; --rounds too: both
-            wanted, why = rounds_for(args.changed_files.split(","), load_coverage())
-            rounds = [r for r in rounds if r in wanted]
-            summary["rounds_why"] = why
-            if not rounds:
-                raise ToolBroke(f"--rounds and --changed-files leave no round ({why})")
         for r in rounds:
             if not os.path.exists(os.path.join(HERE, "flows", f"{r}.mjs")):
                 raise ToolBroke(f"no round {r}")
@@ -436,8 +524,15 @@ def run(args) -> int:
         import unpack
 
         copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
+        for copy in copies:
+            seed_local(copy, outbox=args.outbox)
         if args.mutate:
             mutate(copies[1], args.mutate)
+        if args.new:  # batch 110: the new packages' own sheets are listed, not red (same_behavior compare --new: new things listed, the rest the same)
+            pkgs = [p.strip() for p in args.new.split(",") if p.strip()]
+            args.new_sheets = {f"{p}.css" for p in pkgs if any(os.path.isfile(os.path.join(c, "web", f"{p}.css")) for c in copies)}
+            summary["new"] = pkgs
+            summary["new_css"] = []
         sa, sb = static_digest(os.path.join(copies[0], "web")), static_digest(os.path.join(copies[1], "web"))
         for name in sorted(set(sa) | set(sb)):
             if sa.get(name) != sb.get(name):
@@ -478,6 +573,8 @@ def run(args) -> int:
             summary["not_reached"] += [f"{r}: {x}" for x in out["not_reached"]]
             summary["tool"] += [f"{r}: {x}" for x in out["tool"]]
             summary["fingerprint"][r] = out.get("fingerprint")
+            if "new_css" in out:
+                summary["new_css"] += [{"round": r, **x} for x in out["new_css"]]
             summary["noise_rows"] += [{"round": r, **x} for x in out["noise_rows"]]
             summary["round_files"][r] = sorted(f"web/{file}" for file, functions in out.get("coverage", {}).items() if any(functions.values()))  # both walks, merged
             for file, functions in out.get("coverage", {}).items():
@@ -496,6 +593,10 @@ def run(args) -> int:
         summary["coverage"] = {"functions": total, "called": sum(1 for v in coverage.values() for hit in v.values() if hit), "not_called": {k: sorted(fn for fn, hit in v.items() if not hit) for k, v in sorted(coverage.items()) if not all(v.values())}}
         summary["exit"] = 2 if summary["tool"] else 1 if summary["real"] else 0
         summary["green"] = summary["exit"] == 0
+    except NothingToWalk as e:
+        summary["rounds"] = []
+        summary["replay"] = {"ran": False, "why": str(e)}
+        summary["exit"], summary["green"] = 0, True
     except ToolBroke as e:
         summary["tool"].append(str(e))
         summary["exit"] = 2
@@ -522,9 +623,10 @@ def run(args) -> int:
 
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", required=True)
-    ap.add_argument("--head", required=True)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--base", help="required unless --dry-run")
+    ap.add_argument("--head", help="required unless --dry-run")
+    ap.add_argument("--out", help="required unless --dry-run")
+    ap.add_argument("--dry-run", action="store_true", help="print the rounds --changed-files and --rounds pick, why, and the files not walked; walk nothing")
     ap.add_argument("--repo", default=REPO, help="the clone the two commits are in")
     ap.add_argument("--ports", help="a,b; default two free ones. 7861 is refused")
     ap.add_argument("--cdp-ports", help="a,b; default two free ones")
@@ -535,11 +637,13 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--rounds", help="comma separated; default all: " + ",".join(ROUNDS))
     ap.add_argument("--changed-files", help="comma separated repo paths (wave_gate --changed passes the web/ files): walk only the rounds coverage.json says reach them; "
                                             "the shell, scripts/webqa or an unmapped file walk every round; with --rounds, both")
+    ap.add_argument("--new", help="comma separated new packages (behind a switch): the css-rules of their own web/<pkg>.css are listed as NEW, not red; other sheets as before")
+    ap.add_argument("--outbox", action="store_true", help="each server appends the fake SMS and mail it sends to <round>/<base|head>.outbox.jsonl (identity and fake_services on only)")
     ap.add_argument("--corpus", choices=("fast", "full"), default="fast", help="fast: no crawls")
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, QUIET, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
@@ -550,9 +654,29 @@ def parser() -> argparse.ArgumentParser:
     return ap
 
 
+def dry_run(args) -> int:
+    """Batch 110: the pick only, the same one run() makes."""
+    rounds = [r.strip() for r in args.rounds.split(",") if r.strip()] if args.rounds else list(ROUNDS)
+    why, not_walked = "every round (no --changed-files)", []
+    if args.changed_files is not None:
+        wanted, why, not_walked = rounds_detail(args.changed_files.split(","), load_coverage())
+        rounds = [r for r in rounds if r in wanted]
+    print(f"rounds: {','.join(rounds) or '(none)'}")
+    print(f"why: {why}")
+    for x in not_walked:
+        print(f"not walked: {x}")
+    return 0
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
-    args = parser().parse_args(argv)
+    ap = parser()
+    args = ap.parse_args(argv)
+    if args.dry_run:
+        return dry_run(args)
+    missing = [n for n in ("base", "head", "out") if not getattr(args, n)]
+    if missing:
+        ap.error("the following arguments are required: " + ", ".join(f"--{n}" for n in missing))
     args.out = os.path.abspath(args.out)
     os.makedirs(args.out, exist_ok=True)
     return run(args)

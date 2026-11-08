@@ -41,6 +41,12 @@ export const flows = [
     await news();
     await c.shoot("x_news", { who: "p1" });
     await c.crawl("xn", news, ["news", "board", "board-card", "report-list", "report"], { depth: 3, total: 26, cap: 8 });
+    // batch 110: 〈天下形勢〉 (web/territory_acts.js) only shows in a season that has it (main.xingshi); walk it when it is there, say so when not
+    await news();
+    if (await c.ev(`!!document.querySelector('[data-act="news"][data-news="reports"]')`)) { await c.click('[data-act="news"][data-news="reports"]'); await c.settle(300); }
+    const xs = await c.ev(`!!document.querySelector('[data-act="news"][data-news="xingshi"]')`);
+    c.log("xingshi seg", xs);
+    if (xs) await c.step('[data-act="news"][data-news="xingshi"]', "x_news_xingshi", { who: "p1", wait: 600 });
     await c.load("/");
     await c.tab("practice");
     await c.step('[data-act="news"]', "x_self_news", { who: "p1" });

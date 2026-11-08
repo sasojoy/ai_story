@@ -159,6 +159,25 @@ def test_a_changed_dom_a_changed_style_and_changed_clicks_are_real(compare, tmp_
     assert _classes(compare.compare(a, _walk(tmp_path / "d", steps=["x click y -> missing"]), HOSTS)) == ["steps"]
 
 
+def _css(walk: Path, rows) -> Path:
+    (walk / "cssrules.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+    return walk
+
+
+def test_a_new_packages_own_sheet_is_listed_not_red(compare, tmp_path):
+    # 第 110 批：--new 的包自己那張表的規則兩邊各自扣掉，差異列成 new_css；別張表照舊 css-rules；沒帶 --new 同一份資料是 real
+    base = [["style.css", ".card { padding: 1px; }"], ["identity.css", ".id-a { color: red; }"]]
+    a = _css(_walk(tmp_path / "a"), base)
+    b = _css(_walk(tmp_path / "b"), [*base, ["identity.css", ".id-b { color: blue; }"]])
+    out = compare.compare(a, b, HOSTS, new_sheets={"identity.css"})
+    assert out["real"] == [] and out["new_css"] == [{"sheet": "identity.css", "only A": [], "only B": [".id-b { color: blue; }"], "counts": [1, 2]}]
+    assert _classes(compare.compare(a, b, HOSTS)) == ["css-rules"] and "new_css" not in compare.compare(a, b, HOSTS)
+    c = _css(_walk(tmp_path / "c"), [["style.css", ".card { padding: 2px; }"], base[1]])
+    assert _classes(compare.compare(a, c, HOSTS, new_sheets={"identity.css"})) == ["css-rules"], "別張表照舊算"
+    old = _css(_walk(tmp_path / "old"), [t for _, t in base])
+    assert compare.compare(old, _css(_walk(tmp_path / "old2"), [t for _, t in base]), HOSTS, new_sheets={"identity.css"})["real"] == [], "舊格式（純字串）也讀得懂"
+
+
 def test_a_used_value_moving_is_noise_and_stays_out_of_the_fingerprint(compare, tmp_path):
     out = compare.compare(_walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", vals=("red", "312.5px"), dots=0), HOSTS)
     assert out["real"] == [] and out["noise"] == {"layout-used": 1}
@@ -349,6 +368,36 @@ def test_what_the_wrapper_patches_is_still_in_server_py():
     assert set(wanted) - _names_in(ROOT / "server.py") == set()
 
 
+def test_both_copies_get_the_same_push_key_before_a_server_starts(tmp_path):
+    # 第 110 批：--jobs 4 時同一份複本的四個伺服器同時產生金鑰、一個讀到半份 PEM（MalformedFraming）；兩份複本先放同一把
+    pytest.importorskip("cryptography")
+    from cryptography.hazmat.primitives import serialization
+
+    gate = _load("gate")
+    pems = []
+    for name in ("a", "b"):
+        gate.seed_local(str(tmp_path / name))
+        pems.append((tmp_path / name / ".local" / "webpush_vapid.pem").read_bytes())
+    assert pems[0] == pems[1]
+    serialization.load_pem_private_key(pems[0], password=None)
+    assert re.search(r'^VAPID_FILE = ROOT / "\.local" / "webpush_vapid\.pem"', (ROOT / "server.py").read_text(encoding="utf-8"), re.M), "server.py 讀金鑰的路徑換了，seed_local 要跟著換"
+
+
+def test_what_the_outbox_wraps_is_still_in_the_identity_package(tmp_path):
+    # 第 110 批：--outbox 包 FAKES 的 sms.send、mail.send；搬走或改名，閘門帶 --outbox 時才會 exit 3，這裡早一點紅
+    tree = ast.parse((TOOL / "serve.py").read_text(encoding="utf-8"))
+    names = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "OUTBOX_SENDERS")
+    from tianxia.core import identity_base
+    from tianxia.features.identity import senders
+
+    assert names and all(callable(getattr(getattr(senders.FAKES, k), "send", None)) for k in names)
+    gate = _load("gate")
+    gate.seed_local(str(tmp_path), outbox=True)
+    assert identity_base.read_key(tmp_path / ".local" / "identity.json"), "測試金鑰要讀得到（至少 16 字）"
+    gate.seed_local(str(tmp_path / "plain"))
+    assert not (tmp_path / "plain" / ".local" / "identity.json").exists()
+
+
 def test_the_model_queue_is_off_in_the_wrapper():
     # 佇列一格、別的寫手佔著就跳過，那一篇放回單子等 30 秒，而時鐘是凍的：第 77 批第一次全量 extra:069～074 一邊多一筆天下形勢
     text = (TOOL / "serve.py").read_text(encoding="utf-8")
@@ -385,7 +434,7 @@ def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
 
 def test_the_coverage_table_checks_out():
     coverage = _load("coverage")
-    assert coverage.check() == [], "scripts/webqa/coverage.json 對不上：照 coverage.py 的說明重跑一次 --quick 再 build"
+    assert coverage.check() == [], "scripts/webqa/coverage.json 對不上：照 coverage.py 的說明重跑一次（不帶 --quick）再 build"
 
 
 def test_a_missing_file_in_the_table_is_caught(tmp_path):
@@ -397,15 +446,29 @@ def test_a_missing_file_in_the_table_is_caught(tmp_path):
     assert any("no_such_file" in p for p in coverage.check(str(bad)))
 
 
+def test_a_script_no_round_reaches_has_to_say_why(tmp_path):
+    # 第 110 批：web/*.js 不在表上、不是殼、NOT_ON_TABLE 也沒寫理由，check 要紅；寫在 NOT_ON_TABLE 卻有回合走到也紅
+    coverage, gate = _load("coverage"), _load("gate")
+    table = json.loads((TOOL / "coverage.json").read_text(encoding="utf-8"))
+    thin = {r: [f for f in files if f != "web/seal.js"] for r, files in table.items()}
+    bad = tmp_path / "coverage.json"
+    bad.write_text(json.dumps(thin), encoding="utf-8")
+    assert any(p.startswith("web/seal.js is reached by no round") for p in coverage.check(str(bad)))
+    stale = {r: [*files, "web/sw.js"] for r, files in table.items()}
+    bad.write_text(json.dumps(stale), encoding="utf-8")
+    assert any("web/sw.js is in gate.NOT_ON_TABLE" in p for p in coverage.check(str(bad)))
+    assert "web/sw.js" in gate.NOT_ON_TABLE
+
+
 def test_every_package_script_picks_some_round():
-    """包的網頁檔改到，挑到的回合非空（對照表沒有它就全走，也算）；殼的檔一律全走。"""
+    """包的網頁檔改到，挑到的回合非空（對照表沒有它就全走，也算），或 NOT_ON_TABLE 寫了為什麼沒有回合走到（第 110 批）；殼的檔一律全走。"""
     gate = _load("gate")
     table = gate.load_coverage()
     packages = {p.name for p in (ROOT / "tianxia" / "features").iterdir() if p.is_dir()}
     for js in sorted((ROOT / "web").glob("*.js")):
         if js.stem in packages:
             rounds, why = gate.rounds_for([f"web/{js.name}"], table)
-            assert rounds, (js.name, why)
+            assert rounds or f"web/{js.name}" in gate.NOT_ON_TABLE, (js.name, why)
     for shell in sorted(gate.SHELL_FILES):
         assert gate.rounds_for([shell], table)[0] == list(gate.ROUNDS), shell
     assert gate.rounds_for(["scripts/webqa/driver.mjs"], table)[0] == list(gate.ROUNDS)
@@ -421,3 +484,31 @@ def test_changed_files_follow_the_table():
     assert gate.rounds_for(["web/seal.js", "web/yyy.js"], table, rounds)[0] == ["main", "x"]
     assert gate.rounds_for(["web/zzz.js"], table, rounds)[0] == ["main", "x"], "對不到任何回合就全走"
     assert gate.rounds_for(["web/seal.js"], {}, rounds)[0] == ["main", "x"], "沒有對照表就全走"
+    # 第 110 批：空清單不走；包的檔不在表上、NOT_ON_TABLE 有理由就不走並寫原因；沒理由照舊全走（保守）
+    assert gate.rounds_for([], table, rounds)[0] == [] and gate.rounds_for([" "], table, rounds)[0] == []
+    got, why, not_walked = gate.rounds_detail(["web/identity.js"], table, rounds, {"web/identity.js": "off"})
+    assert got == [] and not_walked and "web/identity.js" in not_walked[0] and "off" in not_walked[0], why
+    assert gate.rounds_for(["web/identity.css"], table, rounds, {"web/identity.js": "off"})[0] == [], "包的 css 照同名 js"
+    assert gate.rounds_for(["web/identity.js"], table, rounds, {})[0] == ["main", "x"], "沒寫理由就全走"
+    assert gate.rounds_for(["web/identity.js", "web/seal.js"], table, rounds, {"web/identity.js": "off"})[0] == ["main"]
+    assert gate.rounds_for(["web/shop.css"], table, rounds)[0] == ["main", "x"], "沒有同名的包就是殼"
+
+
+def test_dry_run_prints_the_pick_and_walks_nothing():
+    def dry(files):
+        r = subprocess.run([sys.executable, str(TOOL / "gate.py"), "--dry-run", f"--changed-files={files}"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+    assert "rounds: (none)" in dry("")
+    out = dry("web/explore.js")  # 包的檔、沒有回合走到、NOT_ON_TABLE 寫了為什麼（identity.js 關著也有函式在登入頁跑，在表上：第 110 批量到）
+    assert "rounds: (none)" in out and "not walked: web/explore.js" in out
+    gate = _load("gate")
+    assert f"rounds: {','.join(gate.ROUNDS)}" in dry("web/app.js")
+
+
+def test_nothing_to_walk_is_green_before_anything_is_looked_for(tmp_path):
+    r = _gate(tmp_path, "--changed-files=", "--chrome", str(tmp_path / "no-such-chrome.exe"))
+    assert r.returncode == 0, r.stdout
+    summary = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
+    assert summary["green"] and summary["rounds"] == [] and not summary["tool"]
+    assert "NOTHING TO WALK" in (tmp_path / "out" / "report.txt").read_text(encoding="utf-8").splitlines()[0]

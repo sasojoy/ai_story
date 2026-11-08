@@ -49,4 +49,5 @@ export const CANVASES = `(() => { const out = []; for (const c of document.query
 
 export const DOM_TEXT = `(() => { const c = document.body.cloneNode(true); c.querySelectorAll("script").forEach((x) => x.remove()); const attrs = {}; for (const a of document.documentElement.attributes) attrs[a.name] = a.value; return JSON.stringify({ html: attrs, body: c.outerHTML }); })()`;
 
-export const CSS_RULES = `(() => { const out = []; for (const s of document.styleSheets) { if (s.ownerNode && /__qa_/.test(s.ownerNode.id || "")) continue; let r; try { r = s.cssRules; } catch (e) { continue; } for (const x of r) out.push(x.cssText); } return out; })()`;
+// batch 110: each rule with the sheet it came from ("identity.css" for /static/identity.css?v=…; "" for anything not under /static/), so gate.py --new can set a new package's own sheet apart
+export const CSS_RULES = `(() => { const out = []; for (const s of document.styleSheets) { if (s.ownerNode && /__qa_/.test(s.ownerNode.id || "")) continue; let r; try { r = s.cssRules; } catch (e) { continue; } const h = s.href || ""; const i = h.indexOf("/static/"); const name = i < 0 ? "" : h.slice(i + 8).split(/[?#]/)[0]; for (const x of r) out.push([name, x.cssText]); } return out; })()`;
