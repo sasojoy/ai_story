@@ -37,3 +37,9 @@
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - `admin_choices` 走 `STATUS_ORDER["admin"]`，20 格。`web/admin.js` 由這一包宣告，`test_for.WEB_SCRIPTS` 拿掉它，改管理頁照這一包挑（第 90 批）；submit、change 分支第 85 批搬進 `admin.js`。
 - 走不到的（`gavel` 軌的說明寫了）：跳到季末「時刻表上沒有下一件大事了」、神器用完那一句（`test_divine_rotation` 守）、第一季規則的季 `fire` 只回「沒有這件大事」。
+
+## 重設密碼之後的扣押（帳號與客服第 208 批；設計 6.4）
+
+`routes.reset_password` 成功之後，identity 開著（`core/identity_base.on`）才經核心 `identity_base.record_admin_reset` 寫旁檔：`reset_holds` 扣押 `Config.identity.reset_hold_hours`（72）小時
+（不能花元寶、贈物、上架市集、綁定新的登入方式），一則「帳號」紀錄（`identity_base.NOTE_ADMIN_RESET`，identity 包下一輪寫進存檔）。回給管理者的字不變；identity 關著不碰旁檔。
+這一包不 import identity 包，全經核心。測試 `tests/test_admin_reset_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

@@ -39,3 +39,8 @@
 ## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
 
 `Config.identity.phone_gate`（預設關）開著時，形象市集的上架 `actions.market_list` 與買 `actions.market_buy`（鍵 `looks_market`）在既有「市集沒開」那一行之後問核心 `core/identity_base.phone_ok`，只問動手的人，被擋回 `identity_base.PHONE_NEEDED`；下架 `market_unlist` 不擋。市集的鈕在 `web/looks.js`、沒有可用的欄位，這一批不碰網頁、不灰鈕（按下去回那一句）。沒有新路由、新欄位、新表。測試 `tests/test_looks_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。
+
+## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
+
+identity 開著時，被扣押的帳號不能上架形象市集：`actions.market_list` 緊接在 `phone_ok` 那兩行之後問核心 `identity_base.hold_reason(ctx, "looks_market")`，有就回那一句（不灰鈕，`web/looks.js` 沒動）。
+買 `market_buy` 與下架 `market_unlist` 不擋（第 208 批計畫）。沒有新路由、新欄位、新表。測試 `tests/test_looks_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

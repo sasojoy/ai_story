@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from tianxia import calendar, divine, rules, timetable
 from tianxia.core import features as features_core
+from tianxia.core import identity_base
 from tianxia.core.features import AdminTool, no_gate
 from tianxia.world_state import season_length_days
 
@@ -157,7 +158,11 @@ def reset_password(shell, game, target: str, temp: str) -> str:
             store.set_password(key, temp)
     except shell.AccountError as exc:
         return str(exc)
-    return f"已重設 {store.get(key).login} 的密碼。"
+    account = store.get(key)
+    if identity_base.on(shell.CONTENT):  # 帳號與客服第 208 批（設計 6.4）：重設之後扣押 reset_hold_hours、寫一則「帳號」紀錄；關著不碰旁檔
+        hours = shell.CONTENT.config.identity.reset_hold_hours
+        identity_base.record_admin_reset(account.id, shell.time.time(), hours, identity_base.NOTE_ADMIN_RESET.format(hours=hours))
+    return f"已重設 {account.login} 的密碼。"
 
 
 
