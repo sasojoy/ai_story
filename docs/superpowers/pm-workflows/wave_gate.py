@@ -9,7 +9,8 @@
    不帶 --changed：所有軌、三種設定、--crossover（跟以前一樣）。--changed：照 decide() 挑（下面），只比改到的包走到的軌。
 5. 帶 --web 才跑（--changed 時 decide 說網頁有動也跑）：等前面都跑完叫 head 上的 scripts/webqa/gate.py --base <sha> --head <sha> --out <結果夾>/web，
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
-   --changed 時把 decide 的 web_files 交給 --changed-files（只走對照表上碰得到的回合）；--full 全回合。
+   --changed 時把 decide 的 web_files 交給 --changed-files（只走對照表上碰得到的回合）；網頁要開的原因不只 web/ 的檔（server.py 回頁面的行、
+   別處的 css／html、scripts/webqa、要全軌比的改動）就不交、全回合；--full 全回合。
 
 用法（Windows 上用 venv 的 python）：
   python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--changed | --full] [--dry-run]
@@ -119,6 +120,7 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     packages: set[str] = set()
     compared: list[str] = []  # 會進比對的檔（設定與半舊半新只看這些檔的行）
     web = False
+    web_other = False  # 網頁要開的原因不只 web/ 的檔：網頁回合不縮減
     web_files: list[str] = []
     for f in sorted(set(files)):
         parts = f.split("/")
@@ -135,9 +137,9 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
             compared.append(f)
             continue
         if name.endswith((".css", ".html")) and not f.startswith("docs/"):  # docs/ 的 html（架構圖）不上網頁
-            web = True
+            web = web_other = True
         if f.startswith("scripts/webqa/"):
-            web = True
+            web = web_other = True
             reasons.append(f"{f}：只開網頁")
             continue
         if f.startswith("tests/fixtures/content/") or f.startswith(FULL_PREFIXES) or f in FULL_FILES or re.fullmatch(r"requirements[\w-]*\.txt", f):
@@ -183,7 +185,7 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     for f in files:
         if f == "server.py" or (f.startswith("tianxia/features/") and f.endswith("/routes.py")):
             if any(PAGE_WORDS.search(line) for line in lines.get(f, ())):
-                web = True
+                web = web_other = True
                 reasons.append(f"{f}：改到回頁面的行，開網頁")
     if full:
         mode, profiles = "full", list(SB_PROFILES)
@@ -192,7 +194,7 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     else:
         mode, profiles = "none", []
     return {"mode": mode, "packages": None if full else sorted(packages), "full_reasons": full_reasons, "profiles": [p for p in SB_PROFILES if p in profiles],
-            "crossover": crossover and mode != "none", "web": web, "web_files": web_files, "reasons": reasons}
+            "crossover": crossover and mode != "none", "web": web, "web_files": web_files, "web_all_rounds": web_other or full, "reasons": reasons}
 
 
 def pick(script: Path, packages: list[str] | None) -> list[str] | None:
@@ -435,7 +437,7 @@ def main() -> int:
     want_web = a.web or a.full or (a.changed and decision["web"])
     if want_web and web.exists():  # 上面全部等完才跑，不跟整套同時跑：同時跑的話畫面比對的雜訊多
         started = time.monotonic()
-        files_arg = ["--changed-files", ",".join(decision["web_files"])] if a.changed and decision["web_files"] else []
+        files_arg = ["--changed-files", ",".join(decision["web_files"])] if a.changed and decision["web_files"] and not decision.get("web_all_rounds") else []
         proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *files_arg], root,
                         {**env, "TIANXIA_DB": str(work / "tmp" / "web.db")}, out / "web.txt")
         code = proc.wait()
