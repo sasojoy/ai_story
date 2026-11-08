@@ -34,9 +34,11 @@
     return `<button class="nw-rep" data-act="report" data-id="${x.id}"><span class="nw-seal ${tone}">${esc(result)}</span>`
       + `<span class="nw-who">${esc(foe)}<small>${esc([x.big ? stamp : clock, place].filter(Boolean).join("・"))}</small></span><span class="nw-go" aria-hidden="true">›</span></button>`;
   }
+  const NEWS_GO_FIGHT = "回江湖，出陣或上擂台打一場 ›"; // 待 joy 潤
   function newsReportsHtml(r) {
     if (!r) return '<div class="card"><p class="muted">載入中…</p></div>';
-    if (!r.list.length) return `<div class="card">${r.detail}</div>`;
+    // 還沒打過：底下一顆回江湖頁（出陣、遊歷、擂台都在那裡），不只一句「還沒打過仗」（UI 手感丙批 3-2）
+    if (!r.list.length) return `<div class="card">${r.detail}<button class="linkish nw-go-fight" data-act="tab" data-tab="jianghu">${NEWS_GO_FIGHT}</button></div>`;
     const big = r.list.filter((x) => x.big), rest = r.list.filter((x) => !x.big);
     const days = [];
     for (const x of rest) {
