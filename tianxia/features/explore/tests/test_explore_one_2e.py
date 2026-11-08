@@ -308,6 +308,8 @@ def test_the_cell_word_and_the_action_line_always_say_the_same_thing(side):
             continue
         head = _note(game).partition("，")[2].partition("；")[0]  # 「多半遇事，也可能有悟、得料」
         word = plan.hint.removeprefix(explore_one.PLACE_WORDS[plan.kind])
+        for named in explore_one.NAMED_PLACE_WORDS.values():  # 有名字的地點（書院「院裡」）換掉地點種類的字
+            word = word.removeprefix(named)
         if head.startswith("多半"):
             assert word == LINE_WORD[head[2:4]], (loc_id, head, plan.hint)
         elif head.startswith("會"):
