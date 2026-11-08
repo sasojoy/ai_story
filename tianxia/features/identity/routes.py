@@ -513,7 +513,9 @@ def router(shell) -> APIRouter:
         return {"kinds": kinds, "ways": ways, "has_password": "password" in have,
                 "recent": 0 if last is None else max(0, int(cfg.recent_seconds - (now - last))),
                 "reset": reset_left, "hold": binding.held(side.hold_until(account.id), now),
-                "turnstile": cfg.turnstile_site_key}
+                "turnstile": cfg.turnstile_site_key,
+                # 第 208 批：⚙ 的紅點與摺疊列照它即時更新（web/identity.js identitySyncDot；同 notes.main_slot 的判斷）
+                "phone_missing": bool(cfg.phone_gate) and "phone" not in have}
 
     @r.get("/api/identity/me")
     def api_me(request: Request):

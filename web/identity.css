@@ -18,3 +18,5 @@
 .idp-fold .idp-shown { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--ink-2); }
 .idp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red, #c0392b); vertical-align: top; margin-left: 2px; }
 .idp-admin { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+/* 第 208 批：管理頁「現在」那幾格後面的全服池上限通知（/api/admin 的 identity_alerts） */
+.idp-alert { margin: 8px 0 0; color: var(--red, #c0392b); overflow-wrap: anywhere; }

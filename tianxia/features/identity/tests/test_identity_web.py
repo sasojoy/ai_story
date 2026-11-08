@@ -373,3 +373,116 @@ def test_new_words_marked():
     for line in lines[at + 1:at + 5]:
         assert "待 joy 潤" in line, line
     assert sum(1 for ln in lines if ln.strip().startswith("const IDP_")) >= 40
+
+
+# ── 第 208 批：綁、解綁之後 ⚙ 的紅點與摺疊列不重新載入就更新；管理頁解綁、刪帳號做完自己重找；全服池上限那一行 ──
+
+DRIVER_208 = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+function el(html) {
+  const node = { html, open: false, outer: null,
+    insertAdjacentHTML(where, v) { node.html += v; node.inserted = (node.inserted || "") + v; },
+    querySelector(sel) {
+      if (sel !== ".idp-dot" || !node.html.includes("idp-dot")) return null;
+      return { remove() { node.html = node.html.replace('<span class="idp-dot" aria-hidden="true"></span>', ""); } };
+    },
+    set outerHTML(v) { node.outer = v; }, get outerHTML() { return node.outer; } };
+  return node;
+}
+function kit(opts) {
+  const S = Object.assign({ stage: "game" }, opts.S || {});
+  const posts = [], did = [];
+  let renders = 0;
+  const replies = (opts.replies || []).slice();
+  const api = async (path, body) => { posts.push([path, body === undefined ? null : body]); return replies.length ? replies.shift() : {}; };
+  const ask = (text, yes, go) => go();
+  const dom = opts.dom || {};
+  const document = {
+    querySelectorAll: (sel) => (sel === '[data-act="sheet"]' ? (dom.sheets || []) : []),
+    querySelector: (sel) => (sel === ".idp-fold" ? dom.fold || null : sel === ".ad-tiles" ? dom.tiles || null
+      : sel === ".idp-alert" ? (dom.tiles && dom.tiles.inserted ? {} : null) : null),
+    getElementById: () => null,
+  };
+  const adminDo = async (op, body) => { did.push([op, body, S.adPicked]); };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "ask", "document", "adminDo", "renderKeepingSheet",
+    idSrc + "\nreturn { identityLoadMe, identityDecorate, identityClick, identitySyncDot };")(
+    S, esc, () => {}, () => {}, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {}, { href: "https://example.com/" },
+    { replaceState: () => {} }, ask, document, adminDo, () => { renders++; });
+  return { S, k, posts, did, renders: () => renders };
+}
+const me = (kinds, missing) => ({ kinds: kinds.map((p) => ({ provider: p, name: p, shown: "", new: false, can_unbind: p !== "password" })),
+  ways: [], has_password: kinds.includes("password"), recent: 0, reset: 0, hold: false, turnstile: "", phone_missing: missing });
+async function main() {
+  const out = {};
+  // 解綁手機：⚙ 補上紅點、摺疊列的標題跟著換
+  const sheet = el("⚙");
+  const fold = el("");
+  const a = kit({ S: { main: { identity: { kinds: ["password", "phone"], has_password: true, phone_missing: false } } },
+    dom: { sheets: [sheet], fold }, replies: [me(["password"], true)] });
+  await a.k.identityLoadMe();
+  out.unbound = { sheet: sheet.html, fold: fold.outer, info: a.S.main.identity };
+  // 綁上手機：紅點拿掉
+  const bSheet = el('⚙<span class="idp-dot" aria-hidden="true"></span>');
+  const bFold = el("");
+  const b = kit({ S: { main: { identity: { kinds: ["password"], has_password: true, phone_missing: true } } },
+    dom: { sheets: [bSheet], fold: bFold }, replies: [me(["password", "phone"], false)] });
+  await b.k.identityLoadMe();
+  out.bound = { info: b.S.main.identity, sheet: bSheet.html, fold: bFold.outer };
+  // 管理頁：解綁之後重抓那一列；刪帳號之後是 null
+  const row = { key: "id:7", login: "id:7", character: "沈青衫", binds: [{ provider: "phone" }, { provider: "line" }] };
+  const fresh = { key: "id:7", login: "id:7", character: "沈青衫", binds: [{ provider: "line" }] };
+  const u = kit({ S: { main: { identity: {} }, adPicked: row, adResetTarget: "id:7" }, replies: [{ rows: [fresh] }] });
+  await u.k.identityClick("identity-admin-unbind", { dataset: { way: "phone", name: "手機" } }, {});
+  await new Promise((r) => setTimeout(r, 10)); // ask 的回呼不在 identityClick 的 await 裡
+  out.unbindAdmin = { picked: u.S.adPicked, did: u.did, posts: u.posts, renders: u.renders() };
+  const d = kit({ S: { main: { identity: {} }, adPicked: row, adResetTarget: "id:7" }, replies: [{ rows: [] }, { rows: [] }] });
+  await d.k.identityClick("identity-admin-delete", {}, {});
+  await new Promise((r) => setTimeout(r, 10));
+  out.deleteAdmin = { picked: d.S.adPicked, posts: d.posts };
+  // 管理頁頂上那一行：有字才插
+  const tiles = el("");
+  kit({ S: { main: {}, admin: { identity_alerts: ["驗證碼全服上限到了：甲"] } }, dom: { tiles } }).k.identityDecorate();
+  out.alertOn = tiles.inserted || "";
+  const tiles2 = el("");
+  kit({ S: { main: {}, admin: { trends: [] } }, dom: { tiles: tiles2 } }).k.identityDecorate();
+  out.alertOff = tiles2.inserted || "";
+  return out;
+}
+finish(main());
+"""
+
+
+def _run_208():
+    return run(DRIVER_208, {"identity": str(WEB / "identity.js")})
+
+
+def test_unbind_and_bind_update_dot_and_fold_without_reload():
+    out = _run_208()
+    un = out["unbound"]
+    assert un["info"] == {"kinds": ["password"], "has_password": True, "phone_missing": True}
+    assert un["sheet"] == '⚙<span class="idp-dot" aria-hidden="true"></span>'
+    assert '<summary>帳號綁定<span class="idp-dot" aria-hidden="true"></span>' in un["fold"] and "還沒綁手機" in un["fold"]
+    bound = out["bound"]
+    assert bound["info"] == {"kinds": ["password", "phone"], "has_password": True, "phone_missing": False}
+    assert bound["sheet"] == "⚙"  # 綁上之後紅點拿掉
+    assert "idp-dot" not in bound["fold"] and "已綁：密碼、手機" in bound["fold"] and "還沒綁手機" not in bound["fold"]
+
+
+def test_admin_unbind_and_delete_refind_the_row():
+    out = _run_208()
+    un = out["unbindAdmin"]
+    assert un["did"] == [["identity_unbind", {"target": "id:7", "provider": "phone"}, None]]  # 做的時候那一列先清掉（照舊）
+    assert un["posts"] == [["/api/identity/admin/accounts", {"q": "id:7"}]]
+    assert un["picked"] == {"key": "id:7", "login": "id:7", "character": "沈青衫", "binds": [{"provider": "line"}]} and un["renders"] == 1
+    de = out["deleteAdmin"]
+    assert de["picked"] is None
+    assert de["posts"] == [["/api/identity/admin/accounts", {"q": "id:7"}], ["/api/identity/admin/accounts", {"q": "沈青衫"}]]
+
+
+def test_admin_alert_line_only_with_words():
+    out = _run_208()
+    assert out["alertOn"] == '<p class="muted idp-alert">驗證碼全服上限到了：甲</p>'
+    assert out["alertOff"] == ""

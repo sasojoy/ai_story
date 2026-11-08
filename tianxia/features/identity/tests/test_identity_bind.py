@@ -226,3 +226,15 @@ def test_bind_refused_while_admin_reset_hold(clock):
     clock.now += 72 * HOUR
     _reauth(c, clock)
     assert send(c, purpose="bind").status_code == 200
+
+
+def test_me_has_phone_missing(clock, monkeypatch):
+    """第 208 批：/api/identity/me 多 phone_missing（同 /api/main 的 identity 格），網頁綁、解綁之後照它更新紅點。"""
+    c = TestClient(server.app)
+    _pw(c)
+    assert c.get("/api/identity/me").json()["phone_missing"] is False  # phone_gate 關
+    monkeypatch.setattr(server.CONTENT.config.identity, "phone_gate", True)
+    assert c.get("/api/identity/me").json()["phone_missing"] is True
+    bind(c)
+    assert c.get("/api/identity/me").json()["phone_missing"] is False
+    assert c.get("/api/main").json()["identity"]["phone_missing"] is False

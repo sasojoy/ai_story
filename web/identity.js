@@ -379,7 +379,55 @@
   async function identityLoadMe() {
     S.idp = S.idp || {};
     try { S.idp.me = await api("/api/identity/me"); } catch (e) { return; }
+    identityMeToMain(S.idp.me);
+    identitySyncDot();
     identityFoldRedraw();
+  }
+
+  // 第 208 批：綁、解綁之後不重新載入就更新 ⚙ 的紅點與摺疊列——/api/identity/me 回來的照抄進 /api/main 的 identity 格（kinds、has_password、phone_missing）
+  function identityMeToMain(me) {
+    const info = S.main && S.main.identity;
+    if (!info || !me || !Array.isArray(me.kinds)) return;
+    info.kinds = me.kinds.map((k) => k.provider);
+    info.has_password = !!me.has_password;
+    if (typeof me.phone_missing === "boolean") info.phone_missing = me.phone_missing;
+  }
+
+  // ⚙（data-act="sheet"）的紅點照 S.main.identity.phone_missing：該有沒有就補、不該有有就拿掉
+  function identitySyncDot() {
+    const info = S.main && S.main.identity;
+    if (!info || typeof document === "undefined") return;
+    for (const b of document.querySelectorAll('[data-act="sheet"]')) {
+      const dot = b.querySelector(".idp-dot");
+      if (info.phone_missing && !dot) b.insertAdjacentHTML("beforeend", '<span class="idp-dot" aria-hidden="true"></span>');
+      else if (!info.phone_missing && dot) dot.remove();
+    }
+  }
+
+  // 第 208 批：管理頁「現在」那幾格（.ad-tiles）後面插全服池上限的通知（/api/admin 的 identity_alerts；關著、沒有通知就沒有這個鍵）
+  function identityAlertHtml(lines) {
+    return lines.map((t) => `<p class="muted idp-alert">${esc(t)}</p>`).join("");
+  }
+  function identityAlerts() {
+    const lines = S.admin && S.admin.identity_alerts;
+    if (!Array.isArray(lines) || !lines.length || typeof document === "undefined") return;
+    const tiles = document.querySelector(".ad-tiles");
+    if (!tiles || document.querySelector(".idp-alert")) return;
+    tiles.insertAdjacentHTML("afterend", identityAlertHtml(lines));
+  }
+
+  // 管理頁解綁、刪帳號做完：照剛才那一列再找一次，放回 S.adPicked（刪掉了就是 null），畫面不必再按一次「找」
+  async function identityAdminRefind(row) {
+    if (!row) return;
+    const want = row.key || row.login;
+    let found = null;
+    for (const q of [row.login, row.character].filter(Boolean)) {
+      const r = await api("/api/identity/admin/accounts", { q });
+      found = ((r && r.rows) || []).find((x) => (x.key || x.login) === want) || null;
+      if (found) break;
+    }
+    S.adPicked = found;
+    renderKeepingSheet();
   }
 
   function identityFoldRedraw() {
@@ -394,11 +442,10 @@
 
   // 抽屜每畫一次（殼的 render 整塊換掉）：插「帳號綁定」那一格、⚙ 的紅點；沒有 identity 格（關著、沒帳號）什麼都不做
   function identityDecorate() {
+    identityAlerts();
     const info = S.main && S.main.identity;
     if (!info) return;
-    for (const b of document.querySelectorAll('[data-act="sheet"]')) {
-      if (info.phone_missing && !b.querySelector(".idp-dot")) b.insertAdjacentHTML("beforeend", '<span class="idp-dot" aria-hidden="true"></span>');
-    }
+    identitySyncDot();
     const pw = document.getElementById("pw-form");
     const fold = pw && pw.closest("details");
     if (!fold || !fold.parentElement || fold.parentElement.querySelector(".idp-fold")) return;
@@ -466,15 +513,19 @@
           break;
         }
         case "identity-admin-unbind":
-          ask(IDP_ADMIN_UNBIND_ASK(el.dataset.name || el.dataset.way), IDP_UNBIND, () => {
-            S.adPicked = null; // 做完那一列的綁定就舊了：再按一次「找」重抓
-            return adminDo("identity_unbind", { target: S.adResetTarget, provider: el.dataset.way }, IDP_UNBIND);
+          ask(IDP_ADMIN_UNBIND_ASK(el.dataset.name || el.dataset.way), IDP_UNBIND, async () => {
+            const picked = S.adPicked;
+            S.adPicked = null; // 做完那一列的綁定就舊了：做完照那一列再找一次（第 208 批）
+            await adminDo("identity_unbind", { target: S.adResetTarget, provider: el.dataset.way }, IDP_UNBIND);
+            await identityAdminRefind(picked);
           });
           break;
         case "identity-admin-delete":
-          ask(IDP_ADMIN_DELETE_ASK, IDP_ADMIN_DELETE, () => {
+          ask(IDP_ADMIN_DELETE_ASK, IDP_ADMIN_DELETE, async () => {
+            const picked = S.adPicked;
             S.adPicked = null;
-            return adminDo("identity_delete", { target: S.adResetTarget }, IDP_ADMIN_DELETE);
+            await adminDo("identity_delete", { target: S.adResetTarget }, IDP_ADMIN_DELETE);
+            await identityAdminRefind(picked);
           });
           break;
     } // identityClick
