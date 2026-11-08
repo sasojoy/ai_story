@@ -95,6 +95,18 @@ def test_phone_ok_order(game, keyed):
     assert ib.phone_ok(game, "not_listed") is True
 
 
+def test_phone_ok_true_when_identity_is_off_even_with_phone_gate_on(game, keyed, tmp_path, monkeypatch):
+    """緊急關掉 identity（enabled 關、或金鑰讀不到）時 phone_gate 開著也一律過：九個入口不能被關著的包擋住（L 波審查）。"""
+    cfg = game.content.config.identity
+    cfg.phone_gate = True
+    _bind(game)  # 有帳號、沒綁手機：identity 開著的話會擋
+    assert ib.phone_ok(game, "raid") is True  # enabled 關
+    cfg.enabled = True
+    assert ib.phone_ok(game, "raid") is False  # 對照：開著就擋
+    monkeypatch.setattr(ib, "KEY_FILE", tmp_path / "missing.json")
+    assert ib.phone_ok(game, "raid") is True  # 金鑰讀不到＝沒開
+
+
 def test_phone_ok_true_once_the_phone_is_bound(game, keyed):
     cfg = game.content.config.identity
     cfg.enabled = True
