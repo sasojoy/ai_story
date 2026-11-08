@@ -43,7 +43,10 @@
 .sup-lookup { display: grid; grid-template-columns: auto minmax(0, 1fr) 5em auto; gap: 6px; align-items: center; }
 .sup-lookup .form-msg { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 480px) {
-  .sup-lookup { grid-template-columns: auto minmax(0, 1fr); }
+  /* 窄版：種類、單號、查一列，完整的字自己一整列（以前單號落在 auto 欄、把下拉撐寬，字欄只剩約 130px） */
+  .sup-lookup { grid-template-columns: minmax(0, 1fr) 5em auto; }
+  .sup-lookup select { min-width: 0; }
+  .sup-lookup [name="text"] { grid-column: 1 / -1; grid-row: 2; }
 }
 /* 寬版（只給客服頁）：桌面左清單、右單＋帳號卡；手機照清單頁 */
 .ad-shell.sup-wide { max-width: 1024px; }
