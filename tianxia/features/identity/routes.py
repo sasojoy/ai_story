@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from tianxia.core import identity_base
 from tianxia.database import open_database
 
-from . import binding, codes, contacts, notes, oauth, senders, store
+from . import alerts, binding, codes, contacts, notes, oauth, senders, store
 
 CODE_COOKIE = "tx_code"  # 這張驗證碼的單（challenge id）；max_age＝code_ttl
 RESET_COOKIE = "tx_reset"  # 第 204 批：用綁定的方式登入、帳號有密碼時發（忘記密碼的證明）；path PENDING_PATH，max_age＝reset_seconds
@@ -391,6 +391,7 @@ def router(shell) -> APIRouter:
             is_bound=lambda subject: identity_base.account_key_for(db, channel, subject) is not None, now=now,
             purpose=purpose, account_id=account.id if account is not None else None, subject_ok=subject_ok,
             seal=contacts.sealer(channel) if purpose == "bind" else None,  # 第 208 批：綁定的單封號碼，綁成功才存（通知用）
+            on_full=lambda bucket: alerts.pool_full(shell, bucket, now),  # 第 208 批：全服池滿了通知管理者（同一格一小時一次）
         )
         if status != 200:
             raise shell.GameError(reply["error"])

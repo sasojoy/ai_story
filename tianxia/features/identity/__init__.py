@@ -63,11 +63,13 @@ class IdentityFeature(Feature):
     _status_slots: tuple[StatusHook, ...] | None = None
 
     def status_slots(self) -> tuple[StatusHook, ...]:
-        """main 表的表外格（第 204 批）：關著、沒有帳號回 {}；開著回本人的 identity 格（設定抽屜的「帳號綁定」與紅點）。"""
+        """main 表的表外格（第 204 批）：關著、沒有帳號回 {}；開著回本人的 identity 格（設定抽屜的「帳號綁定」與紅點）。
+        第 208 批：admin 表的表外格 identity_alerts（全服池上限的通知，接在表尾；不改 STATUS_ORDER）：關著、沒有通知回 {}。"""
         if self._status_slots is None:
-            from . import notes  # noqa: PLC0415
+            from . import alerts, notes  # noqa: PLC0415
 
-            self._status_slots = (StatusHook("main", "identity", lambda ctx, frame: notes.main_slot(ctx)),)
+            self._status_slots = (StatusHook("main", "identity", lambda ctx, frame: notes.main_slot(ctx)),
+                                  StatusHook("admin", "identity_alerts", lambda ctx, frame: alerts.admin_slot(ctx)))
         return self._status_slots
 
     def admin_tools(self, shell) -> dict:
