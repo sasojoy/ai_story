@@ -68,10 +68,9 @@
 .sa-hd small { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 .sa-note { color: var(--ink-2); font-size: 12px; }
 /* 十成畫成十點墨（同抽屜裡的 .ten）：練到第幾成亮到第幾點，絕學的點是朱色 */
-.sa-ten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-.sa-ten > i { display: block; height: 7px; border-radius: 2px; background: var(--card-2); }
-.sa-ten > i.on { background: var(--gold); }
-.self-art.q4 .sa-ten > i.on { background: var(--accent); }
+.sa-ten { display: block; }
+.sa-ten .sa-ink { display: block; width: 100%; height: auto; max-height: 36px; }
+.sa-ink text { font-family: var(--kai); }
 /* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
    段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */
 .self-sec { margin: 0 0 14px; }

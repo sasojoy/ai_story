@@ -1210,12 +1210,12 @@
         ${renameRow()}
         ${adultRow()}
         ${pushRow()}${supportRow()}
-        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
+        <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}><span><b>匿名行走</b><small>只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫</small></span></label>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
           <button class="btn" data-act="do" data-op="skip_tutorial">略過新手引導</button>
           ${S.recap ? `<button class="btn" data-act="recap" aria-expanded="${!!S.recapOpen}">重看序章</button>` : ""}
-          <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）</label>
+          <label class="toggle"><input type="checkbox" id="hints-off" ${s.hints_off ? "checked" : ""}><span><b>不再提示</b><small>碰到新玩法時的小提醒</small></span></label>
         </div>
         ${S.howtoOpen ? `<div class="howto card" id="howto">${S.howtoFailed
           ? '<p class="muted">說明沒拿到，連不上伺服器。</p><button class="btn small" data-act="howto-retry">再試一次</button>'
