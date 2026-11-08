@@ -1,14 +1,18 @@
 """客服單的旁檔（帳號與客服第 211 批；設計 6.1、第七節）：遊戲資料庫旁邊、同名多「-support.sqlite」（TIANXIA_DB 換了檔，它跟著換；
 同 notify 包的 push_store_path）。不進資料庫第 9 版、沒有存檔欄位。開關關著時沒有人建這個檔（open_store(create=False) 不建）。
 
-兩張表：
+四張表：
 - tickets：一張單。account_id、account_created、login、character、version 是送單那一下伺服器填的（不收客戶端的）。
-- replies：單上的每一則（玩家再回一句、客服回覆、請管理者處理的內部註記）。seen：玩家看過了沒；journaled：寫過「客服」紀錄沒。
+- replies：單上的每一則（玩家再回一句、客服回覆、請管理者處理的內部註記）。seen：玩家看過了沒；journaled：確定存進存檔的「客服」紀錄了沒。
+- lookups（第 212 批）：客服查帳號與看單帶出帳號卡，每一次一列（含查無、超過次數）。只有 INSERT，沒有任何路由改或刪（客服改不到）。
+  shown：帳號存正規化後的，Email、手機只存遮好的字（不存明碼、不存雜湊）。counted 1 才算進每小時的次數（看單帶卡、超過次數那一下是 0）。
+- pending_notes（第 212 批）：寫進存檔、還沒確定存成的「客服」紀錄（reply_id、ticket_id、at＝寫進去那一下的遊戲時間）；notes.py 下一輪對存檔確認。
 純 sqlite3；「檢查並記一筆」在同一筆 BEGIN IMMEDIATE 裡（兩個分頁同時送單也不會超過上限）。時間一律由呼叫端傳進來。"""
 from __future__ import annotations
 
 import contextlib
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 from . import rules
@@ -23,6 +27,11 @@ SCHEMA = (
     "staff INTEGER NOT NULL, internal INTEGER NOT NULL, body TEXT NOT NULL, created REAL NOT NULL, "
     "seen INTEGER NOT NULL DEFAULT 0, journaled INTEGER NOT NULL DEFAULT 0)",
     "CREATE INDEX IF NOT EXISTS replies_ticket ON replies (ticket_id)",
+    # 第 212 批（CREATE IF NOT EXISTS：第 211 批建的舊檔打開時補上，舊的兩張表不 ALTER）
+    "CREATE TABLE IF NOT EXISTS lookups (id INTEGER PRIMARY KEY, staff_account_id INTEGER NOT NULL, ticket_id INTEGER NOT NULL, "
+    "kind TEXT NOT NULL, shown TEXT NOT NULL, found_account_id INTEGER, outcome TEXT NOT NULL, counted INTEGER NOT NULL, created REAL NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS lookups_staff ON lookups (staff_account_id, created)",
+    "CREATE TABLE IF NOT EXISTS pending_notes (reply_id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, at REAL NOT NULL)",
 )
 
 
@@ -172,6 +181,40 @@ class SupportStore:
             conn.execute("UPDATE tickets SET status = ?, admin_flag = MAX(admin_flag, ?), updated = ? WHERE id = ?",
                          (status, int(internal), now, ticket_id))
             return _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
+
+    # ── 查帳號（第 212 批）──
+
+    @staticmethod
+    def _used(conn, staff_account_id: int, now: float) -> int:
+        return int(conn.execute("SELECT COUNT(*) FROM lookups WHERE staff_account_id = ? AND counted = 1 AND created > ?",
+                                (staff_account_id, rules.hour_start(now))).fetchone()[0])
+
+    @staticmethod
+    def _log(conn, staff_account_id: int, ticket_id: int, kind: str, shown: str, found: int | None, outcome: str, counted: int, now: float) -> None:
+        conn.execute("INSERT INTO lookups (staff_account_id, ticket_id, kind, shown, found_account_id, outcome, counted, created) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (staff_account_id, ticket_id, kind, shown, found, outcome, counted, now))
+
+    def lookup(self, *, staff_account_id: int, ticket_id: int, kind: str, shown: str, now: float, hourly: int,
+               find: Callable[[], int | None]) -> tuple[str, int | None, int]:
+        """數這位客服這一小時算過的次數、查、記一筆，同一筆 BEGIN IMMEDIATE（兩個分頁同時查也不會超過）。find 是唯讀查主檔（另一個庫，很短）。
+        回 (outcome, 查到的帳號 id, 這一小時還剩幾次)：滿了記一筆 limit（不算次數）、不叫 find；否則記 found／none（算一次）。"""
+        with self._write() as conn:
+            used = self._used(conn, staff_account_id, now)
+            if used >= hourly:
+                self._log(conn, staff_account_id, ticket_id, kind, shown, None, "limit", 0, now)
+                return "limit", None, 0
+            found = find()
+            self._log(conn, staff_account_id, ticket_id, kind, shown, found, "found" if found is not None else "none", 1, now)
+            return ("found" if found is not None else "none"), found, hourly - used - 1
+
+    def log_card(self, *, staff_account_id: int, ticket_id: int, shown: str, found: int | None, now: float) -> None:
+        """看單時帶出帳號卡：不算次數，照樣記一筆（帳號對得上 card，對不上 gone）。"""
+        with self._write() as conn:
+            self._log(conn, staff_account_id, ticket_id, "card", shown, found, "card" if found is not None else "gone", 0, now)
+
+    def lookups_left(self, staff_account_id: int, now: float, hourly: int) -> int:
+        with contextlib.closing(self._conn()) as conn:
+            return max(0, hourly - self._used(conn, staff_account_id, now))
 
     def close(self, ticket_id: int, now: float) -> None:
         with self._write() as conn:

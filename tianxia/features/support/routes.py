@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from tianxia.database import default_path, open_database
 
-from . import accounts_view, rules, staff, store
+from . import accounts_view, lookup, rules, staff, store
 from .store import Refused
 
 # 推播的內文（標題照殼的 NOTICE_TITLE）；notify 包的「客服」種類關掉就不送
@@ -183,28 +183,61 @@ def _player_reply(shell, request: Request, body: dict) -> dict:
 
 
 def _queue(shell, request: Request) -> dict:
-    """客服頁：沒回的、等玩家、今天新單三個數與沒結的單。"""
-    _staff(shell, request)
+    """客服頁：沒回的、等玩家、今天新單三個數與沒結的單；lookups_left 是這位客服這一小時還能查幾次帳號（第 212 批）。"""
+    who = _staff(shell, request)
+    hourly = shell.CONTENT.config.support.lookup_hourly
     sidecar = store.open_store(sidecar_path(), create=False)
     if sidecar is None:
-        return {"open": 0, "waiting": 0, "fresh": 0, "tickets": [], "categories": rules.CATEGORIES}
-    q = sidecar.queue(shell.time.time())
+        return {"open": 0, "waiting": 0, "fresh": 0, "tickets": [], "categories": rules.CATEGORIES, "lookups_left": hourly}
+    now = shell.time.time()
+    q = sidecar.queue(now)
     q["tickets"] = [{"id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]),
                      "body": t["body"], "status": t["status"], "admin_flag": bool(t["admin_flag"]), "character": t["character"],
                      "login": t["login"], "created": t["created"], "updated": t["updated"]} for t in q["tickets"]]
     q["categories"] = rules.CATEGORIES
+    q["lookups_left"] = sidecar.lookups_left(who.id, now, hourly)
     return q
 
 
 def _view_ticket(shell, request: Request, text: str) -> dict:
-    """客服看一張單：全部回覆（含內部註記）＋帳號卡（單上已有的）。單號在認過客服之後才轉（不是客服的人看不出這條路在）。"""
-    _staff(shell, request)
+    """客服看一張單：全部回覆（含內部註記）＋單上的帳號帶出的帳號卡 card（第 212 批；帳號 id 與建帳號的時間都對才給，不對給
+    {"gone": true}）。帶卡不算查帳次數、照樣記一筆。單號在認過客服之後才轉（不是客服的人看不出這條路在）。"""
+    who = _staff(shell, request)
     tid = _tid(text)
     sidecar = store.open_store(sidecar_path(), create=False)
     t = sidecar.ticket(tid) if sidecar is not None else None
     if t is None:
         raise HTTPException(404, rules.NOT_FOUND)
-    return _staff_ticket(t, sidecar.replies(tid, internal=True))
+    out = _staff_ticket(t, sidecar.replies(tid, internal=True))
+    out["card"] = lookup.card(open_database(), t["account_id"], ledger_rows=shell.CONTENT.config.support.ledger_rows,
+                              created_must=t["account_created"])
+    found = None if out["card"].get("gone") else t["account_id"]
+    sidecar.log_card(staff_account_id=who.id, ticket_id=tid, shown=t["login"] or f"id:{t['account_id']}", found=found, now=shell.time.time())
+    return out
+
+
+def _lookup(shell, request: Request, body: dict) -> dict:
+    """查別的帳號：{id（單號）, kind（login|email|phone）, text}。單不存在 404（不算、不留：沒帶單就不是一次查詢）；寫法不對回那一句
+    （不算、不留）；這一小時滿了記一筆 limit、回那一句；否則查、記一筆（查無也算一次）。回 {found, card, left, message}。"""
+    who = _staff(shell, request)
+    cfg = shell.CONTENT.config.support
+    sidecar = store.open_store(sidecar_path(), create=False)
+    tid = _int(body.get("id"))
+    if sidecar is None or sidecar.ticket(tid) is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    kind, text = str(body.get("kind", "")), str(body.get("text", ""))
+    why = rules.lookup_problem(kind, text)
+    if why is not None:
+        raise shell.GameError(why)
+    value = rules.lookup_value(kind, text)
+    db = open_database()
+    outcome, found, left = sidecar.lookup(staff_account_id=who.id, ticket_id=tid, kind=kind, shown=rules.lookup_shown(kind, value),
+                                          now=shell.time.time(), hourly=cfg.lookup_hourly,
+                                          find=lambda: lookup.find(db, shell.CONTENT, kind, value))
+    if outcome == "limit":
+        raise shell.GameError(rules.LOOKUP_LIMIT.format(n=cfg.lookup_hourly))
+    card = None if found is None else lookup.card(db, found, ledger_rows=cfg.ledger_rows)
+    return {"found": found is not None, "card": card, "left": left, "message": "" if found is not None else rules.LOOKUP_NONE}
 
 
 def _answer(shell, request: Request, body: dict) -> dict:
@@ -288,5 +321,11 @@ def router(shell) -> APIRouter:
         _gate_off(shell)
         body = await _json(request)
         return await run_in_threadpool(_close, shell, request, body)
+
+    @r.post("/api/support/lookup")
+    async def api_support_lookup(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_lookup, shell, request, body)
 
     return r
