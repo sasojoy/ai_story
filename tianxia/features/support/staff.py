@@ -47,8 +47,10 @@ def names(config) -> frozenset[str]:
 
 
 def is_staff(config, who) -> bool:
-    """who 是 accounts_view.Who（沒有帳號是 None：假人、還沒登入的都不是）。比 id 的數字或登入名。"""
+    """who 是 accounts_view.Who（沒有帳號是 None：假人、還沒登入的都不是）。比 id 的數字或登入名。
+    名單上全是數字的一筆只當 id：登入名可以全是數字、註冊又是開放的，不然搶註冊登入名 777 就頂了 id 777 的客服（第 J 波審查）。"""
     if who is None:
         return False
     listed = names(config)
-    return str(who.id) in listed or (bool(who.login) and normalize(who.login) in listed)
+    login = normalize(who.login) if who.login else ""
+    return str(who.id) in listed or (bool(login) and not login.isdigit() and login in listed)

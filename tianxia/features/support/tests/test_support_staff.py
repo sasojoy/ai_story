@@ -52,6 +52,19 @@ def test_the_list_does_not_take_character_names(monkeypatch, support_isolated):
     assert not staff.is_staff(config, None)
 
 
+def test_a_number_on_the_list_is_only_an_id(monkeypatch, support_isolated):
+    """名單寫 id 的數字：登入名取成同一個數字的人不算客服（不然搶註冊登入名就頂了那個 id）。"""
+    player("shen_01", "沈青衫")
+    player("777", "李白衣")
+    config = server.CONTENT.config
+    shen, digits = _who("shen_01"), _who("777")
+    assert digits.id != 777
+    monkeypatch.setattr(config.support, "staff", ["777", str(shen.id)])
+    assert staff.is_staff(config, shen) and not staff.is_staff(config, digits)
+    monkeypatch.setattr(config.support, "staff", [str(digits.id)])
+    assert staff.is_staff(config, digits)
+
+
 def test_the_file_is_reread_when_it_changes(support_isolated):
     player()
     config = server.CONTENT.config
