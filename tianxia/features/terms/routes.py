@@ -2,7 +2,7 @@
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀，時鐘照 shell.time（測試換 time.time）。
 
 - GET /terms、/privacy：兩頁，不用登入、開關關著也看得到。
-- GET /api/terms：這個帳號要不要按同意（沒登入 401，網頁不理它）。開關關著 need 是空字串。
+- GET /api/terms：這個帳號要不要按同意（沒登入 401，網頁不理它）。開關關著 404（網頁把非 200 當沒事）。
 - POST /api/terms/agree：{version, source}，version 不是現行版回 409（頁面開著的時候條款改版了）。
 - record_consent(shell, account_key, version, source)：給註冊那一邊叫（設計稿「請註冊那邊接的一個勾選」）。"""
 from __future__ import annotations
@@ -61,10 +61,15 @@ def router(shell) -> APIRouter:
 
     @r.get("/api/terms")
     def api_terms(request: Request):
+        """關著 404（網頁把非 200 當「沒事」）；開著才問登入。"""
+        if not shell.CONTENT.config.terms.enabled:
+            raise HTTPException(404)
         return status(shell, shell._account(request))
 
     @r.post("/api/terms/agree")
     def api_terms_agree(request: Request, body: dict = Body(...)):
+        if not shell.CONTENT.config.terms.enabled:
+            raise HTTPException(404)
         account_key = shell._account(request)
         source = body.get("source") if body.get("source") in ("gate", "update") else "gate"
         try:

@@ -75,7 +75,9 @@ def test_api_asks_until_agreed_then_stays_quiet(client):
 
 def test_switch_off_never_asks(client, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config.terms, "enabled", False)
-    assert client.get("/api/terms").json()["need"] == ""
+    assert client.get("/api/terms").status_code == 404  # 關著 404：網頁把非 200 當「沒事」
+    assert client.post("/api/terms/agree", json={"version": "x"}).status_code == 404
+    assert client.get("/terms").status_code == 200  # 條款頁本身永遠看得到
 
 
 def test_record_consent_for_the_register_side(client):
