@@ -22,7 +22,7 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 selftest --cache 多驗快取本身（每一軌四次 compare，只帶幾軌）。
 
 --new <包>（第 106 批）：新包進來時用。新包帶來的差異（包 web 宣告的 js、css 的行，帶包名前綴的表〔<包> 或 <包>_*，不帶前綴的照紅〕，新 op 與管理者動作）只在 head 的子行程扣掉，
-比完印一行清單，其餘照比；base 已經有那一包、head 沒有那一包都拒絕。不帶就跟以前一個位元組都不差。規矩（新包進 develop 的比對怎麼寫）等企劃者點頭，寫在手冊。
+比完印一行清單，其餘照比；base 已經有那一包、head 沒有那一包都拒絕。--also-existing（K 波）：同一包的後續批，base 已經有也收、扣法一樣（head 沒有照舊拒絕）。不帶就跟以前一個位元組都不差。規矩（新包進 develop 的比對怎麼寫）等企劃者點頭，寫在手冊。
 
 固定的那幾層（不固定的話同一份程式跑兩次就不一樣，比對本身不穩）：
 - 亂數：伺服器每個請求都 Game(CONTENT, state) 不傳 rng（engine 的 `self.rng = rng or random.Random()`）——這裡把
@@ -113,6 +113,8 @@ def main(argv: list[str] | None = None) -> int:
             x.add_argument("--head", required=True)
             x.add_argument("--no-bots", action="store_true")
             x.add_argument("--new", default="", help="新包（逗號隔開）：帶來的差異扣掉、印成清單，其餘照比")
+            x.add_argument("--also-existing", action="store_true",
+                           help="跟 --new 一起用：base 已經有這一包（同一包的後續批）也收，扣法一樣；不帶照舊拒絕")
             x.add_argument("--covers", default="", help="改到的包（逗號隔開）：只比 covers 有交集的軌加上 ALWAYS_TRACKS；--tracks 同時給取交集")
             x.add_argument("--crossover", action="store_true", help="比半舊半新（base 前半＋head 後半）；不帶就不跑那一串")
         x.add_argument("--tmp", required=True)
@@ -158,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     cache_dir = Path(a.cache).resolve() if a.cache else None
     if a.cmd == "compare":
         ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir,
-                     new=tuple(n for n in a.new.split(",") if n), crossover=a.crossover)
+                     new=tuple(n for n in a.new.split(",") if n), crossover=a.crossover, also_existing=a.also_existing)
     else:
         ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks, cache_dir=cache_dir)
     print("全部一樣" if ok else "有不一樣的")

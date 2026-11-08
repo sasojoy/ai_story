@@ -182,10 +182,11 @@ def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, st
         print(f"最慢 {spent:.1f} {name}")
 
 
-def check_new(base: Path, head: Path, names: tuple[str, ...]) -> None:
-    """--new 只給真的新的包：base 已經有的扣掉就藏差異了，head 沒有的是打錯字。"""
+def check_new(base: Path, head: Path, names: tuple[str, ...], also_existing: bool = False) -> None:
+    """--new 只給真的新的包：base 已經有的扣掉就藏差異了，head 沒有的是打錯字。
+    also_existing（K 波 --also-existing）：同一包的後續批，base 已經有也放行；head 沒有照舊拒絕。"""
     for name in names:
-        if (base / "tianxia" / "features" / name).exists():
+        if not also_existing and (base / "tianxia" / "features" / name).exists():
             raise SystemExit(f"--new {name}：base 已經有這一包，不是新包")
         if not (head / "tianxia" / "features" / name).is_dir():
             raise SystemExit(f"--new {name}：head 沒有這一包")
@@ -204,9 +205,11 @@ def _print_new(names: tuple[str, ...], outs: list[Path]) -> None:
 
 
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
-            tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = (), crossover: bool = False) -> bool:
-    """crossover（第 107 批 --crossover，PM 定改預設）：才比「base 整段」＝「base 前半＋head 後半」；不帶就不跑那一串，每格印「半舊半新 沒跑」。"""
-    check_new(base, head, new)
+            tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = (), crossover: bool = False,
+            also_existing: bool = False) -> bool:
+    """crossover（第 107 批 --crossover，PM 定改預設）：才比「base 整段」＝「base 前半＋head 後半」；不帶就不跑那一串，每格印「半舊半新 沒跑」。
+    also_existing（K 波）：--new 的包 base 已經有也收（扣法一樣）。"""
+    check_new(base, head, new, also_existing)
     head_new = ["--new", ",".join(new)] if new else []  # 只有 head 的子行程帶（整段、後半、假人）
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
