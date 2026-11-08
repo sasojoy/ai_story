@@ -19,8 +19,7 @@ from tianxia.database import default_path
 
 SUFFIX = identity_base.SIDE_SUFFIX
 TABLES = (
-    "CREATE TABLE IF NOT EXISTS bindings_meta (account_id INTEGER NOT NULL, provider TEXT NOT NULL, subject_hmac TEXT NOT NULL, "
-    "verified_at REAL NOT NULL, PRIMARY KEY (account_id, provider))",
+    identity_base.META_DDL,  # 第 208 批：bindings_meta、holds、account_notes 的 DDL 搬到核心一份（扣押期 hold_reason 也讀），字面不變
     "CREATE TABLE IF NOT EXISTS unbound (subject_hmac TEXT NOT NULL, provider TEXT NOT NULL, at REAL NOT NULL, account_id INTEGER)",
     "CREATE INDEX IF NOT EXISTS unbound_subject ON unbound (subject_hmac, provider)",
     "CREATE TABLE IF NOT EXISTS challenges (id TEXT PRIMARY KEY, purpose TEXT NOT NULL, account_id INTEGER, code_hmac TEXT NOT NULL, "
@@ -40,18 +39,23 @@ TABLES = (
     "display TEXT NOT NULL DEFAULT '', expires REAL NOT NULL, created REAL NOT NULL)",
     # 第 204 批：忘記密碼的短效證明（tx_reset 的 sha256）、只剩過期那一種的帳號的扣押、「帳號」紀錄（兩段式）、「這不是我的帳號」的單（tx_recheck）
     "CREATE TABLE IF NOT EXISTS resets (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, provider TEXT NOT NULL, at REAL NOT NULL)",
-    "CREATE TABLE IF NOT EXISTS holds (account_id INTEGER PRIMARY KEY, until REAL NOT NULL)",
-    "CREATE TABLE IF NOT EXISTS account_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, text TEXT NOT NULL, "
-    "at REAL NOT NULL, state INTEGER NOT NULL DEFAULT 0, jtime REAL)",
-    "CREATE INDEX IF NOT EXISTS account_notes_account ON account_notes (account_id, state)",
+    identity_base.HOLD_DDL,
+    identity_base.NOTES_DDL,
+    identity_base.NOTES_INDEX_DDL,
     "CREATE TABLE IF NOT EXISTS rechecks (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, provider TEXT NOT NULL, "
     "subject_hmac TEXT NOT NULL, display TEXT NOT NULL DEFAULT '', at REAL NOT NULL)",
+    # 第 208 批：管理者重設之後的扣押（DDL 在核心）、綁定通知用的加密號碼（contacts.py；跟 HMAC 分開、不進任何查詢與比對）、
+    # 全服池上限通知管理者的「上次通知」（同一格一小時一次）
+    identity_base.RESET_HOLD_DDL,
+    "CREATE TABLE IF NOT EXISTS contacts (account_id INTEGER NOT NULL, provider TEXT NOT NULL, sealed BLOB NOT NULL, "
+    "display TEXT NOT NULL DEFAULT '', PRIMARY KEY (account_id, provider))",
+    "CREATE TABLE IF NOT EXISTS cap_alerts (bucket TEXT PRIMARY KEY, at REAL NOT NULL)",
 )
 # 補的欄（舊旁檔沒有）：開檔時缺哪一欄補哪一欄。第 203 批 challenges 三欄；第 204 批 session_auth 兩欄（identity_base.SESSION_COLUMNS）、
 # bindings_meta 的 bound_at（NULL＝開帳號那一種或舊資料，不算新綁）與 reminded_at、oauth_tickets 的 account_id（綁定與重驗的單綁帳號）
 ADDED_COLUMNS = (("challenges", "channel", "TEXT"), ("challenges", "subject_hmac", "TEXT"), ("challenges", "display", "TEXT"),
-                 *identity_base.SESSION_COLUMNS, ("bindings_meta", "bound_at", "REAL"), ("bindings_meta", "reminded_at", "REAL"),
-                 ("oauth_tickets", "account_id", "INTEGER"))
+                 *identity_base.SESSION_COLUMNS, *identity_base.META_COLUMNS,
+                 ("oauth_tickets", "account_id", "INTEGER"), ("challenges", "contact", "BLOB"))  # 第 208 批：綁定的單封存的號碼
 NOTE_NEW, NOTE_PENDING, NOTE_DONE = 0, 1, 2  # account_notes.state：還沒寫、寫進存檔等下一輪確認、確認過
 
 

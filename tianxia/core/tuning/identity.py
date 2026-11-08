@@ -45,3 +45,4 @@ class IdentityTuning(BaseModel):
     recent_seconds: int = 600  # 近期驗證：登入或重驗之後這麼久內才能綁、解綁、補設密碼（設計沒寫時間窗，PM 計畫先定 10 分鐘）
     reset_seconds: int = 600  # 忘記密碼：用綁定方式登入之後這麼久內能設新密碼（tx_reset cookie 同長）
     staff_hours: int = 6  # 客服權限要這次是密碼登入，而且這麼久內登入或重驗過（設計 4.4）
+    reset_hold_hours: int = 72  # 第 208 批：管理者重設密碼之後這麼久內不能花元寶、贈物、上架市集、綁定新的登入方式（設計 6.4）

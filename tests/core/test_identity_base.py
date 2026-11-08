@@ -191,3 +191,122 @@ def test_blocked_name_only_when_on(content, keyed):
     assert all(ib.blocked_name(n, content) for n in names)
     assert not ib.blocked_name("沈浪", content)
     assert not ib.blocked_name("客服甲", content)
+
+
+# ── 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）：hold_reason、record_admin_reset、reset_held ──
+
+H_NOW = 2_000_000_000.0
+
+
+def _held_game(game, keyed, now=H_NOW):
+    """identity 開著、名號綁了帳號 ray1、Game.now＝now；回 accounts.id。"""
+    from tianxia.accounts import AccountStore
+
+    game.content.config.identity.enabled = True
+    _bind(game)
+    game.now = now
+    return AccountStore(game.world.db).account_id("ray1")
+
+
+def _side_exec(sql, args=()):
+    import sqlite3
+
+    path = ib.side_file()
+    ib.ensure_schema(path, "hold", ib.HOLD_TABLES, ib.META_COLUMNS)
+    with sqlite3.connect(path) as conn:
+        conn.execute(sql, args)
+
+
+def test_hold_reason_off_is_none(game, keyed, tmp_path, monkeypatch):
+    aid = _held_game(game, keyed)
+    _side_exec("INSERT INTO holds (account_id, until) VALUES (?, ?)", (aid, H_NOW + 100))
+    assert ib.hold_reason(game, "mall_buy") is not None  # 對照：開著就擋
+    game.content.config.identity.enabled = False
+    assert ib.hold_reason(game, "mall_buy") is None
+    game.content.config.identity.enabled = True
+    monkeypatch.setattr(ib, "KEY_FILE", tmp_path / "missing.json")
+    assert ib.hold_reason(game, "mall_buy") is None  # 金鑰讀不到＝沒開
+
+
+def test_hold_reason_bot_and_no_account_none(game, keyed):
+    """假人與沒帳號的名號同一個樣子（都 None）：看不出誰是假人；扣押是帳號的狀態，沒帳號不擋（跟 phone_ok 不同）。"""
+    from tianxia.state import BotProfile
+
+    game.content.config.identity.enabled = True
+    game.now = H_NOW
+    _side_exec("INSERT INTO holds (account_id, until) VALUES (1, ?)", (H_NOW + 100,))
+    assert ib.hold_reason(game, "mall_buy") is None  # 沒帳號
+    game.state.player.bot = BotProfile(personality="普通", seed=1)
+    assert ib.hold_reason(game, "mall_buy") is None  # 假人
+
+
+def test_hold_reason_new_binding_72h(game, keyed):
+    aid = _held_game(game, keyed)
+    hours = game.content.config.identity.new_binding_hours
+    _side_exec("INSERT INTO bindings_meta (account_id, provider, subject_hmac, verified_at, bound_at) VALUES (?, 'password', 'x', 0, NULL)",
+               (aid,))
+    assert ib.hold_reason(game, "gift") is None  # bound_at 是 NULL：開帳號那一種，不算新綁
+    _side_exec("INSERT INTO bindings_meta (account_id, provider, subject_hmac, verified_at, bound_at) VALUES (?, 'phone', 'h', ?, ?)",
+               (aid, H_NOW - 71 * 3600, H_NOW - 71 * 3600))
+    assert ib.hold_reason(game, "gift") == ib.HOLD_NEW.format(hours=hours)
+    game.now = H_NOW + 2 * 3600  # 綁了 73 小時
+    assert ib.hold_reason(game, "gift") is None
+
+
+def test_hold_reason_stale_hold(game, keyed):
+    aid = _held_game(game, keyed)
+    days = game.content.config.identity.stale_hold_days
+    _side_exec("INSERT INTO holds (account_id, until) VALUES (?, ?)", (aid, H_NOW + 10))
+    assert ib.hold_reason(game, "looks_market") == ib.HOLD_STALE.format(days=days)
+    game.now = H_NOW + 10
+    assert ib.hold_reason(game, "looks_market") is None
+
+
+def test_hold_reason_admin_reset(game, keyed):
+    aid = _held_game(game, keyed)
+    hours = game.content.config.identity.reset_hold_hours
+    assert hours == 72
+    ib.record_admin_reset(aid, H_NOW - 3600, hours, "x")
+    _side_exec("INSERT INTO holds (account_id, until) VALUES (?, ?)", (aid, H_NOW + 10))
+    assert ib.hold_reason(game, "mall_buy") == ib.HOLD_RESET.format(hours=hours)  # 重設排在只剩過期一種之前
+    assert ib.reset_held(aid, H_NOW) is True and ib.reset_held(aid, H_NOW + 71 * 3600) is False
+    assert ib.reset_held(aid + 1, H_NOW) is False
+
+
+def test_hold_reason_unknown_key(game, keyed):
+    aid = _held_game(game, keyed)
+    _side_exec("INSERT INTO holds (account_id, until) VALUES (?, ?)", (aid, H_NOW + 100))
+    assert ib.hold_reason(game, "raid") is None
+    assert set(ib.HOLD_KEYS) == {"mall_buy", "gift", "looks_market"}
+
+
+def test_hold_reason_no_side_file_does_not_create(game, keyed):
+    _held_game(game, keyed)
+    assert not ib.side_file().exists()
+    assert ib.hold_reason(game, "mall_buy") is None
+    assert not ib.side_file().exists()
+    assert ib.reset_held(1, H_NOW) is False and not ib.side_file().exists()
+
+
+def test_record_admin_reset_writes_hold_and_note(tmp_path):
+    import sqlite3
+
+    side = tmp_path / "g-identity.sqlite"
+    ib.record_admin_reset(7, 1000.0, 72, "管理者重設了", side)
+    ib.record_admin_reset(7, 500.0, 72, "第二次（較早）", side)
+    with sqlite3.connect(side) as conn:
+        assert conn.execute("SELECT until FROM reset_holds WHERE account_id = 7").fetchone()[0] == 1000.0 + 72 * 3600  # 取晚的
+        notes = conn.execute("SELECT account_id, text, at, state FROM account_notes ORDER BY id").fetchall()
+    assert notes == [(7, "管理者重設了", 1000.0, 0), (7, "第二次（較早）", 500.0, 0)]
+    assert ib.reset_held(7, 1000.0 + 72 * 3600 - 1, side) is True
+    assert "{hours}" in ib.NOTE_ADMIN_RESET
+
+
+def test_store_ddl_matches_core():
+    """holds、account_notes、bindings_meta、reset_holds 的 DDL 只有核心一份：identity 包的 store.TABLES 用的就是那幾個常數。"""
+    from tianxia.features.identity import store as idstore
+
+    for sql in ib.HOLD_TABLES:
+        assert sql in idstore.TABLES
+    for col in ib.META_COLUMNS:
+        assert col in idstore.ADDED_COLUMNS
