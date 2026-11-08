@@ -1,7 +1,8 @@
 """帳號綁定「別人也要讀」的那一半（帳號與客服第 201 批；設計 docs/superpowers/specs/2026-11-08-帳號綁定與客服-design.md 4.1、4.5、第七節）：
-Email、手機的正規化與遮罩、加金鑰的雜湊、讀金鑰、開關（on）、綁手機才能用的功能問這裡（phone_ok）、名號擋不擋（blocked_name）。
+Email、手機的正規化與遮罩、加金鑰的雜湊、讀金鑰、開關（on）、綁手機才能用的功能問這裡（phone_ok、phone_subject、被擋的那一句 PHONE_NEEDED；
+第 205 批接上九個入口：截殺、掛通緝、玩家單的揭與交、贈物、切磋與論武的發起與答應、市集上架與買、商城買、封測發放）、名號擋不擋（blocked_name）。
 
-純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
+純規則：不 import 功能包、不讀時鐘、不寫東西。只有 phone_ok、phone_subject 讀主資料庫的 accounts、logins 兩張表（經 ctx.world.db），
 account_key_for（第 203 批）只讀 logins。
 客服名單也在這（第 212 批從 support 包搬來：商城的易名帖要問「這個名號是不是客服」；support_staff_name 只讀 accounts、logins，
 名單的 .local/support.txt 只讀不寫）。
@@ -91,23 +92,41 @@ def on(content) -> bool:
     return bool(content.config.identity.enabled) and read_key() is not None
 
 
-def phone_ok(ctx, feature_key: str) -> bool:
-    """這個角色能不能用這個功能（設計 4.5；第 205 批才有人問）。關著、phone_gate 關、功能不在名單、假人、沒有帳號都回真
-    （四者同值：看不出誰是假人）；否則看這個帳號有沒有綁手機。"""
+# 綁手機才能用的功能被擋時的回話與灰鈕的 note（同一句；四包共用，包之間不能互相 import，所以放核心；第 205 批）
+PHONE_NEEDED = "要先在設定裡綁定手機，才能這麼做。"  # 待 joy 潤
+
+
+def _account_phone(ctx, feature_key: str) -> tuple[bool, str | None]:
+    """phone_ok 與 phone_subject 共用的判斷（設計 4.5 的順序）：(要不要問, 綁的那一列 phone 的 subject 或 None)。
+    identity 關或 phone_gate 關 → 不問；鍵不在 phone_required → 不問；假人（state.player.bot 不是 None）→ 不問；
+    其餘查這個名號的帳號：查不到、或帳號沒有 provider='phone' 的列 → (真, None)。只問動手的這一個人（ctx 自己）。"""
     cfg = ctx.content.config.identity
-    if not on(ctx.content) or not cfg.phone_gate or feature_key not in cfg.phone_required:
-        return True
+    if not cfg.enabled or not cfg.phone_gate or feature_key not in cfg.phone_required or not on(ctx.content):
+        return False, None
     player = ctx.state.player
     if player.bot is not None:
-        return True
+        return False, None
     with ctx.world.db.snapshot() as conn:
         row = conn.execute("SELECT id FROM accounts WHERE character_key = ?", (name_key(player.name),)).fetchone()
         if row is None:
-            return True
+            return True, None
         phone = conn.execute(
-            "SELECT 1 FROM logins WHERE account_id = ? AND provider = 'phone'", (row["id"],),
+            "SELECT subject FROM logins WHERE account_id = ? AND provider = 'phone'", (row["id"],),
         ).fetchone()
-    return phone is not None
+    return True, (phone["subject"] if phone is not None else None)
+
+
+def phone_ok(ctx, feature_key: str) -> bool:
+    """這個角色能不能用這個功能（設計 4.5；第 205 批接上九個入口）。identity 關、phone_gate 關、功能不在名單、假人都回真；
+    不是假人又查不到帳號回假；其餘看這個帳號有沒有綁手機（logins 有沒有 provider='phone'）。"""
+    asked, subject = _account_phone(ctx, feature_key)
+    return not asked or subject is not None
+
+
+def phone_subject(ctx, feature_key: str) -> str | None:
+    """綁的那支手機的 logins.subject（加金鑰的雜湊 hex）：只有 phone_ok 走到「有 phone 列」才回，其餘（關著、不在名單、假人、沒綁）一律 None。
+    封測發放記「同一支手機一輩子一次」用（第 205 批）。"""
+    return _account_phone(ctx, feature_key)[1]
 
 
 def account_key_for(db, provider: str, subject: str) -> str | None:
