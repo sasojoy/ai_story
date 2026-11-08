@@ -112,3 +112,14 @@ def test_new_reaches_compare_either_way(gate):
         assert extra[-2:] == ["--new", "identity,support"]
         assert "--new" not in gate.compare_extra(d, "", "")
     assert gate.compare_extra(changed, "2", "x")[:4] == ["--tracks", "facade,seal", "--jobs", "2"]
+
+
+def test_new_reaches_the_web_gate(gate):
+    """N 波合併時補（第 110 批留下的）：wave_gate --web 把 --new <包> 轉給 scripts/webqa/gate.py --new；--also-existing 不轉（webqa 沒有）。"""
+    changed = {"web_files": ["web/identity.js"], "web_all_rounds": False}
+    assert gate.web_args(changed, True, "identity,support") == ["--changed-files", "web/identity.js", "--new", "identity,support"]
+    assert "--new" not in gate.web_args(changed, True, "")
+    full = {"web_files": [], "web_all_rounds": False}
+    assert gate.web_args(full, False, "identity,support") == ["--new", "identity,support"]
+    assert gate.web_args(full, False, "") == []
+    assert gate.web_args({"web_files": ["web/app.js"], "web_all_rounds": True}, True, "") == [], "全回合不交 --changed-files"

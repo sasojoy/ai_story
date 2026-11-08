@@ -10,7 +10,7 @@
 5. 帶 --web 才跑（--changed 時 decide 說網頁有動也跑）：等前面都跑完叫 head 上的 scripts/webqa/gate.py --base <sha> --head <sha> --out <結果夾>/web，
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
    --changed 時把 decide 的 web_files 原樣交給 --changed-files（只走對照表上碰得到的回合；對不到的檔怎麼辦由 gate.py 定）；網頁要開的原因不只 web/ 的檔
-   （server.py 回頁面的行、別處的 css／html、scripts/webqa）就不交、全回合；核心退回全軌只管比對的軌，不拉網頁全回合（第 109 批）；--full 全回合。
+   （server.py 回頁面的行、別處的 css／html、scripts/webqa）就不交、全回合；核心退回全軌只管比對的軌，不拉網頁全回合（第 109 批）；--full 全回合。帶 --new 時原樣轉給 gate.py --new（N 波）。
 
 用法（Windows 上用 venv 的 python）：
   python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--changed | --full] [--dry-run]
@@ -386,6 +386,12 @@ def compare_extra(decision: dict, jobs: str = "", new: str = "", also_existing: 
     return extra + (["--new", new] if new else []) + (["--also-existing"] if (new and also_existing) else [])
 
 
+def web_args(decision: dict, changed: bool, new: str = "") -> list[str]:
+    """scripts/webqa/gate.py 的參數：--changed 且不全回合才交 --changed-files；--new 照樣轉（N 波合併時補；--also-existing webqa 沒有、不轉）。"""
+    files = ["--changed-files", ",".join(decision["web_files"])] if changed and decision["web_files"] and not decision.get("web_all_rounds") else []
+    return files + (["--new", new] if new else [])
+
+
 def main() -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
@@ -426,6 +432,7 @@ def main() -> int:
         decision["tracks"] = a.tracks.split(",") if a.tracks else picked_tracks(mine, decision)
         decision["files"] = len(files) if a.changed else None
         decision["new"] = a.new.split(",") if a.new else []
+        decision["web_args"] = web_args(decision, a.changed, a.new) if (a.web or a.full or (a.changed and decision["web"])) else None
         print(json.dumps(decision, ensure_ascii=False, indent=1))
         return 0
 
@@ -514,8 +521,7 @@ def main() -> int:
     want_web = a.web or a.full or (a.changed and decision["web"])
     if want_web and web.exists():  # 上面全部等完才跑，不跟整套同時跑：同時跑的話畫面比對的雜訊多
         started = time.monotonic()
-        files_arg = ["--changed-files", ",".join(decision["web_files"])] if a.changed and decision["web_files"] and not decision.get("web_all_rounds") else []
-        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *files_arg], root,
+        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *web_args(decision, a.changed, a.new)], root,
                         {**env, "TIANXIA_DB": str(work / "tmp" / "web.db")}, out / "web.txt")
         code = proc.wait()
         f.close()
