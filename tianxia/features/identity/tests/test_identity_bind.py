@@ -139,6 +139,15 @@ def test_unbind_with_new_binding_refused_72h(clock):
     assert _kinds(key) == ["email"]
 
 
+def test_new_binding_and_rebind_wait_edges():
+    """72 小時、30 天的邊界（L 波審查：改成 71 小時、29 天原本的測試照樣綠）：差一秒還算、滿了就不算。"""
+    cfg = server.CONTENT.config.identity
+    assert (cfg.new_binding_hours, cfg.rebind_days) == (72, 30)
+    t0 = 1_800_000_000.0
+    assert binding.is_new({"bound_at": t0}, t0 + 72 * HOUR - 1, cfg) and not binding.is_new({"bound_at": t0}, t0 + 72 * HOUR, cfg)
+    assert binding.rebind_wait(t0, t0 + 30 * DAY - 1, cfg) and not binding.rebind_wait(t0, t0 + 30 * DAY, cfg)
+
+
 def test_rebind_other_account_waits_30_days(clock):
     a = TestClient(server.app)
     _pw(a)
