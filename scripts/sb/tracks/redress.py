@@ -112,4 +112,6 @@ class RedressScenario(Scenario):
 
 # 改一個字（selftest）：序章那一場的字（第 98 批從 features/sortie/rules.py 搬到 core/services.py，兩處找），雪恥那一顆與戰報的標題都抓到
 register_track("redress", RedressScenario, (("tianxia/core/services.py", "tianxia/features/sortie/rules.py"),
-                                            ('PROLOGUE_FIGHT = "雪恥"', 'PROLOGUE_FIGHT = "雪恨"')), "season21")
+                                            ('PROLOGUE_FIGHT = "雪恥"', 'PROLOGUE_FIGHT = "雪恨"')), "season21",
+               covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "gear", "guide", "map",
+                       "military", "seal", "sortie", "zhuan"))

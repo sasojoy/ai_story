@@ -396,4 +396,8 @@ class SurgeScenario(StripScenario):
 
 # 改一個字（selftest）：今天服滿那一句（搬之前在 engine.py、之後在 tianxia/core/pills.py），pills 那一段抓到
 register_track("surge", SurgeScenario, (("tianxia/core/pills.py", "tianxia/engine.py"),
-                                        ("今天已服{n}顆，明日 00:00 後再服。", "今天已服{n}顆，明日 00:00 後再服！")), "week7")
+                                        ("今天已服{n}顆，明日 00:00 後再服。", "今天已服{n}顆，明日 00:00 後再服！")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

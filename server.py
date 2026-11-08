@@ -87,6 +87,7 @@ from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.core import identity_base  # identity（帳號與客服第 201 批）：開著時擋客服與 id: 開頭的名號（name_taken）
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
@@ -297,7 +298,8 @@ def name_taken(name: str) -> bool:
     管理者，見 server_bots.reserved_names，FB-004）。全部回同一句話，就沒辦法用名號試出誰是假人、名單裡有誰
     （帳號密碼登入設計第三節）。"""
     reserved = {n.casefold() for n in server_bots.reserved_names(CONTENT)}
-    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved
+    return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved \
+        or identity_base.blocked_name(name, CONTENT)  # identity：帳號綁定開著才擋（關著回假，行為不變）
 
 
 def _reload(game: Game) -> None:
@@ -322,6 +324,10 @@ def _reload(game: Game) -> None:
 # 同一個角色開兩個分頁也各走各的、不會互相蓋掉——GAMES 裡一個角色只有一份 Game，走法只記在那份物件上就做不到。
 # FastAPI 的同步端點各自在複製出來的 context 裡跑，設了只在這次請求裡有效；不經過 _game 的（登入、/api/me）就是步行。
 MOVE_MODE: contextvars.ContextVar[str] = contextvars.ContextVar("move_mode", default="walk")
+# 這次請求的登入 token（帳號與客服第 207 批）：main_view 的 admin 格拿不到 request，照它問 identity_base.admin_session_ok。
+# _server_timing 每個請求一開始設（端點、執行緒池裡的都看得到），_start_session 開了新 token 再設一次（登入回應的 _entry 不另經 _game）。
+# identity 關著時 admin_session_ok 一律回真、不讀它。
+SESSION_TOKEN: contextvars.ContextVar[str | None] = contextvars.ContextVar("session_token", default=None)
 
 
 # ── 鎖內模型呼叫的全服斷路器（PM 2026-10-05）──
@@ -1426,7 +1432,8 @@ def _main_view_body(game: Game) -> dict:
             "chronicle": md(game.chronicle_text()),
         },
         "admin": lambda ctx, frame: {
-            "admin": game.is_admin(),
+            # 第 207 批：identity 開著時名單上的人還要這次是密碼登入、staff_hours 內驗過（關著 admin_session_ok 一律回真，原樣）
+            "admin": game.is_admin() and identity_base.admin_session_ok(CONTENT, SESSION_TOKEN.get(), time.time),
             "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         },
         "horse_art": lambda ctx, frame: {"horse_art": horse_art()},  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
@@ -1598,7 +1605,9 @@ def register(login_name: str, password: str, again: str) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
     try:
-        account_store().register(login_name, password)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
+        # 第 207 批：identity 開著時名單上的帳號名（identity_base.listed）密碼至少 12 字；關著 staff 一律假
+        staff = identity_base.on(CONTENT) and identity_base.listed(CONTENT, login=login_name)
+        account_store().register(login_name, password, staff=staff)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
     return normalize(login_name)
@@ -1633,7 +1642,12 @@ def change_password(account_key: str, old: str, new: str, again: str, keep: str 
     if (new or "") != (again or ""):
         return PASSWORDS_DIFFER
     try:
-        account_store().change_password(account_key, old, new, keep)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        store = account_store()
+        staff = False  # 第 207 批：identity 開著時名單上的帳號（名號、帳號名、客服名單）新密碼至少 12 字；關著一律假、不多查
+        if identity_base.on(CONTENT):
+            account = store.get(account_key)
+            staff = account is not None and identity_base.listed(CONTENT, login=account.login, character=account.character, account_id=account.id)
+        store.change_password(account_key, old, new, keep, staff=staff)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -1647,6 +1661,7 @@ app = FastAPI(title="天下大勢", docs_url=None, redoc_url=None, openapi_url=N
 @app.middleware("http")
 async def _server_timing(request: Request, call_next):
     """/api/ 的回應帶 Server-Timing（見 TIMING）。推送的長連線（/api/events）不包：那是串流，量總時間沒有意義。"""
+    SESSION_TOKEN.set(request.cookies.get(COOKIE))  # 第 207 批：main_view 的 admin 格照它問（見 SESSION_TOKEN）
     path = request.url.path
     if not path.startswith("/api/") or path == "/api/events":
         return await call_next(request)
@@ -1658,6 +1673,19 @@ async def _server_timing(request: Request, call_next):
     finally:
         TIMING.reset(token)
     response.headers["Server-Timing"] = server_timing(got, time.perf_counter() - started)
+    return response
+
+
+# 帳號與客服第 213 批（設計第三節「CSP 標頭另開小批」）：只准從自己這裡與 Turnstile（challenges.cloudflare.com）載程式，
+# 不准 inline 的程式（<script> 不帶 src、on*= 屬性、javascript:）、不准 <object>、不准 <base>。不是開關：整站都有
+CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+
+
+@app.middleware("http")
+async def _content_security_policy(request: Request, call_next):
+    """每個回應帶 CSP（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = CSP
     return response
 
 
@@ -1745,12 +1773,22 @@ def _registered(ip: str, now: float) -> None:
         REGISTRATIONS.setdefault(ip, []).append(now)
 
 
-def _start_session(request: Request, response: Response, account_key: str) -> None:
+def _start_session(request: Request, response: Response, account_key: str, method: str = "password") -> str:
+    """開登入狀態、回 token。identity 開著（帳號與客服第 204 批；設計第七節 server.py 那一列）：帳號鍵換成帳號自己的鍵（補設過密碼的帳號
+    用帳號名登入也是 id:<n>），這次用哪一種登入（method：password、line、google、email、phone）與時間記進旁檔；關著一個字不變。"""
+    identity_on = identity_base.on(CONTENT)
+    if identity_on:
+        account = account_store().get(account_key)
+        account_key = account.key if account is not None else account_key
     token = SESSIONS.create(account_key)
+    SESSION_TOKEN.set(token)  # 第 207 批：登入回應的 _entry 照這個新 token 算 admin 格（見 SESSION_TOKEN）
     _warm_model()
     response.set_cookie(
         COOKIE, token, httponly=True, samesite="lax", max_age=SESSION_SECONDS, secure=cookie_secure(request),
     )
+    if identity_on:
+        identity_base.record_session(token, method, time.time())
+    return token
 
 
 def _entry(account_key: str) -> dict:
@@ -1785,8 +1823,27 @@ def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
     return OWN_ASSET.sub(lambda m: f"{m[1]}={m[2]}{m[3]}?v={version_of(m[3])}{m[2]}", html)
 
 
-# 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外
-PAGE = versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes().decode("utf-8")), asset_version)
+def _web_stamp() -> tuple:
+    """web/ 底下每個檔的修改時間：主機只 pull、沒重開伺服器時，頁面上的 ?v= 也要跟著換（2026-11-07 對話告辭急修上線後，
+    頁面還是舊的 ?v=，Joy 的手機一直拿舊檔）。"""
+    return tuple(sorted((e.name, e.stat().st_mtime_ns) for e in os.scandir(WEB) if e.is_file()))
+
+
+def _build_page() -> str:
+    return versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes().decode("utf-8")), asset_version)
+
+
+# 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外。之後 web/ 有檔換了（pull 了沒重開）就重算一次
+PAGE = _build_page()
+_PAGE_STAMP = _web_stamp()
+
+
+def current_page() -> str:
+    global PAGE, _PAGE_STAMP
+    stamp = _web_stamp()
+    if stamp != _PAGE_STAMP:
+        PAGE, _PAGE_STAMP = _build_page(), stamp
+    return PAGE
 NO_CACHE = {"Cache-Control": "no-cache"}  # 每次都向伺服器確認（有 ETag，沒變就是 304）；不用 immutable：開發時改了檔沒重開，會被瀏覽器釘死
 
 
@@ -1815,7 +1872,7 @@ class WebFiles(StaticFiles):
 
 @app.get("/")
 def index():
-    return HTMLResponse(PAGE, headers=NO_CACHE)
+    return HTMLResponse(current_page(), headers=NO_CACHE)
 
 
 @app.get("/journal.css")
@@ -1832,7 +1889,10 @@ def api_patch_notes() -> dict:
 @app.get("/api/me")
 def me(request: Request):
     key = SESSIONS.get(request.cookies.get(COOKIE, ""))
-    return {"stage": "login"} if key is None else _entry(key)
+    out = {"stage": "login"} if key is None else _entry(key)
+    if identity_base.on(CONTENT):  # identity（帳號與客服第 202 批）：開著才帶旗標，web/identity.js 沒旗標不問 /api/identity/gate；關著原樣
+        out["identity"] = True
+    return out
 
 
 @app.post("/api/login")
@@ -1953,7 +2013,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         tool.gate()  # 那一包關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
     if tool is not None:
-        if not game.is_admin():
+        # 第 207 批：identity 開著時還要這次是密碼登入、staff_hours 內驗過；不夠的跟不是管理者同一句（關著 admin_session_ok 一律回真）
+        if not game.is_admin() or not identity_base.admin_session_ok(CONTENT, request.cookies.get(COOKIE), time.time):
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)  # 商城：帳跟季無關，暫停中也做得了
     elif op in OUTLOCK_OPS:  # 鎖外的三段式（各包 routes.py 的 outlock 掛鉤）：A、C 段自己拿鎖，B 段叫模型不握鎖，所以不包在 act 裡

@@ -19,6 +19,7 @@ DRIVER = r"""
 const cut = (from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); if (a < 0 || b < a) throw new Error("找不到 " + from); return src.slice(a, b); };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const lgNum = (n) => String(n);
+const HERO_FIGURES = { 男: { src: "/static/hero.webp" }, 女: { src: "/static/hero-f.webp" }, growth: { warrior: {}, balanced: {} } };
 const S = input.S;
 eval(cut("\n  // 成長配比（五項屬性的季才有 s.growth）", "\n  function statUsesHtml") + cut("\n  function jhHintsHtml", "\n  function pageJianghu")
   + "\nglobalThis.__P = { prepHtml, growthHtml, jhHintsHtml, lilianHtml };");
@@ -63,6 +64,10 @@ def test_the_growth_step_lists_the_presets_and_waits_for_a_pick():
     assert "成長配比" in text(html) and "識海" in text(html) and "這一季只挑一次" in text(html)
     assert [m for m in re.findall(r'data-act="prep-pick" data-preset="(\w+)"', html)] == ["warrior", "ranger", "balanced", "custom"]
     assert 'data-act="prep-growth"' not in html  # 還沒點：沒有「定下來」
+    # 每一套一張剪影（Joy 2026-11-08）：遊俠與自己配用俠客頁那張，其餘照性別在 img/growth/
+    assert re.findall(r'<img src="([^"]+)"', html) == ["/static/img/growth/warrior-m.webp", "/static/hero.webp", "/static/img/growth/balanced-m.webp", "/static/hero.webp"]
+    female = run({**main, "status": {**main["status"], "gender": "女"}}, "prep")
+    assert re.findall(r'<img src="([^"]+)"', female)[:2] == ["/static/img/growth/warrior-f.webp", "/static/hero-f.webp"]
     picked = run(main, "prep", prepPick="ranger")
     assert 'data-act="prep-growth"' in picked and "照「遊俠」長" in text(picked)
     custom = run(main, "prep", prepPick="custom", growthDraft={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2})

@@ -193,4 +193,8 @@ class ShutScenario(StripScenario):
 
 
 register_track("shut", ShutScenario, (("tianxia/features/guide/newbie.py",),
-                                      ("到匪寇橫行的地方出門探索，打贏一場", "到匪寇橫行的地方出門探索，打贏兩場")), "week7")
+                                      ("到匪寇橫行的地方出門探索，打贏一場", "到匪寇橫行的地方出門探索，打贏兩場")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

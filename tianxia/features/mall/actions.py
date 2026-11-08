@@ -12,6 +12,7 @@ from tianxia import calendar
 from tianxia import journal  # 核心（江湖紀錄，PM 10/31）：帶 changes 的那一則 ctx._write 寫不了
 from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore
 from tianxia.characters import CharacterStore, name_key
+from tianxia.core import identity_base  # identity（帳號與客服第 201 批）：易名帖撞客服與 id: 開頭的名號（開著才擋，核心）
 from tianxia.core.name_base import reserved_names  # 保留的名號：易名帖撞名照建角色（全部拆包第 58 批）
 from tianxia.core.services import ART as ZHUAN_ART, NO_SUCH_PLAYER, art_problem  # 這一季用不上的列傳插畫票不賣（FB-845；全部拆包第 29 批進核心服務）
 from tianxia.core import xinshen  # 心神（核心的資源）：凝神香跟著心神的開關上架
@@ -25,13 +26,22 @@ from . import rules as mall
 if TYPE_CHECKING:
     from tianxia.engine import Game
 
+# 客服本人拿易名帖改名（帳號與客服第 212 批；字放這裡：mall/rules.py 不在設計第七節的名單上）
+RENAME_STAFF = "客服的名號不能用易名帖改。"  # 待 joy 潤
+
 
 def grant(ctx: Game) -> None:
     """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。本人這一輪（Game.own_turn_checks 的 on_own_turn 掛鉤）叫。"""
     wallet = ctx._wallet()
     if wallet is None:
         return
-    amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    if not identity_base.phone_ok(ctx, "mall_grant"):  # 綁了手機那一輪才發（帳號與客服第 205 批）
+        return
+    phone = identity_base.phone_subject(ctx, "mall_grant")  # 閘關、不在名單、假人是 None：照舊只看錢包
+    if phone is None:
+        amount = mall.grant_beta(ctx.content, wallet, ctx._mall_owner(), ctx.now)
+    else:
+        amount = mall.grant_beta_phone(ctx.content, wallet, ctx._mall_owner(), phone, ctx.now)
     if amount:
         journal.add_entry(ctx.state, JournalEntry(
             time=ctx.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
@@ -60,6 +70,11 @@ def purchase(ctx: Game, item_id: str, ref: str, qty: int = 1) -> Receipt:
     wallet = ctx._wallet()
     if wallet is None:
         return Receipt(ctx._log([mall.OFF]))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 只問買的人（第 205 批）
+        return Receipt(ctx._log([identity_base.PHONE_NEEDED]))
+    held = identity_base.hold_reason(ctx, "mall_buy")  # 扣押期（第 208 批）：新綁 72 小時、只剩過期一種、管理者重設之後
+    if held:
+        return Receipt(ctx._log([held]))
     result = mall.buy(
         ctx.state, ctx.content, wallet, item_id, ref,
         now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), qty=qty, moment=moment(ctx),
@@ -128,12 +143,14 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
         return [mall.NO_RENAME]
     if p.bot is not None or ctx.is_admin():
         return [mall.RENAME_ADMIN]
+    if identity_base.support_staff_name(ctx.world.db, ctx.content.config, old):  # 客服也不能改名（帳號與客服第 212 批；客服開關關著不擋）
+        return [RENAME_STAFF]
     if new == old:
         return [mall.RENAME_SAME]
     if taken is None:
         store = CharacterStore(ctx.world.db)
         reserved = {n.casefold() for n in reserved_names(ctx.content)}
-        taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
+        taken = lambda n: store.exists(n) or n.casefold() in reserved or identity_base.blocked_name(n, ctx.content)  # noqa: E731  identity：開著才擋
     if name_key(new) != name_key(old) and taken(new):
         return [NAME_IN_USE]
     if rename.clash(old, name_key(old), ctx.content) or rename.clash(new, name_key(new), ctx.content):
@@ -181,6 +198,12 @@ def view(ctx: Game) -> dict | None:
     if wallet is None:
         return None
     data = mall.view(ctx.content, wallet, ctx._mall_owner(), ctx._pill_day(), ctx.world.get_season_number(), moment(ctx))
+    if not identity_base.phone_ok(ctx, "mall_buy"):  # 沒綁手機：每一件都灰、寫同一句（第 205 批；web/mall.js 照 can、why 畫）
+        for row in data["items"]:
+            row.update(can=False, why=identity_base.PHONE_NEEDED, max=0)
+    elif held := identity_base.hold_reason(ctx, "mall_buy"):  # 扣押期（第 208 批）：沒被手機那一句灰掉的才換這一句
+        for row in data["items"]:
+            row.update(can=False, why=held, max=0)
     cfg = ctx.content.config
     data["pills"] = {
         "name": cfg.stamina_pill_name, "count": ctx.state.player.stamina_pills, "today": ctx.pills_left_today(),

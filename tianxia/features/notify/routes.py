@@ -111,17 +111,17 @@ def router(shell) -> APIRouter:
         """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰，加上五種通知各開著沒（設定頁一種一個開關，預設全開）。開關關著 404。"""
         push = _web_push(shell)
         off = push.store.kinds_off(shell._account(request))
-        return {"key": push.vapid.public, "kinds": {k: k not in off for k in notices.KINDS}}
+        return {"key": push.vapid.public, "kinds": {k: k not in off for k in notices.kinds(shell.CONTENT.config)}}
 
     @r.post("/api/push/prefs")
     def api_push_prefs(request: Request, body: dict = Body(...)):
         """開或關一種通知：{kind, on}。存在這個帳號（每一台裝置一樣）。"""
         push = _web_push(shell)
         kind = str(body.get("kind", ""))
-        if kind not in notices.KINDS:
+        if kind not in notices.kinds(shell.CONTENT.config):
             raise shell.GameError("沒有這一種通知。")
         off = push.store.set_kind(shell._account(request), kind, bool(body.get("on")))
-        return {"kinds": {k: k not in off for k in notices.KINDS}}
+        return {"kinds": {k: k not in off for k in notices.kinds(shell.CONTENT.config)}}
 
     @r.post("/api/push/test")
     def api_push_test(request: Request, body: dict = Body(...)):

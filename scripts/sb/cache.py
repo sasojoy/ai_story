@@ -1,6 +1,6 @@
 """same_behavior 的快取（第二輪第 71 批）：同一波修正之後重跑閘門時，base 那一邊不必再跑一次。預設關，--cache 才開（鍵漏掉相依會假綠，預設關才不會忘）。
 
-只存 base：整段（all_）、前半連資料庫快照（first_）、假人（bots_）。head 永遠跑，所以改 head 一個字照樣抓得到。
+只存 base：整段（all_）、前半連資料庫快照（first_）、假人（bots_）；第 107 批起 --crossover 的 base 整段同時出前半與快照，存成 allx_（output.gz、half.gz、snap/）。head 永遠跑，所以改 head 一個字照樣抓得到。
 鍵是指紋加格名（軌、設定在格名上）。指紋寧可多算，多算只是多跑：
 - 根的內容雜湊：每個檔的相對路徑加內容，只排除 .git、__pycache__（saves、.local 不排除：根被動過就該沒命中）。
 - scripts/sb/**/*.py 加 same_behavior.py，不是繼承鏈：每個子行程都載入全部的軌，facade.py 改寫 MapScenario.web，smithy、shelf 改寫表，繼承鏈看不到。
@@ -112,11 +112,14 @@ def _unpack(src: Path, dest: Path) -> None:
         shutil.copyfileobj(fin, fout)
 
 
-def save(folder: Path, cell: str, output: Path, db_files: Iterable[Path] = (), stem: str = "") -> None:
-    """存一格。db_files：這一格的資料庫與旁邊每個檔（可以是資料夾），名字都以 stem 開頭，存的時候 stem 換成 HALF。"""
+def save(folder: Path, cell: str, output: Path, db_files: Iterable[Path] = (), stem: str = "", half_out: Path | None = None) -> None:
+    """存一格。db_files：這一格的資料庫與旁邊每個檔（可以是資料夾），名字都以 stem 開頭，存的時候 stem 換成 HALF。
+    half_out（第 107 批 allx_ 格：base 整段同時出前半與快照）：前半輸出多存一份 half.gz。"""
     tmp = folder / f"{cell}.tmp{os.getpid()}"
     tmp.mkdir()
     _pack(output, tmp / "output.gz")
+    if half_out is not None:
+        _pack(half_out, tmp / "half.gz")
     for path in db_files:
         for f in path.rglob("*") if path.is_dir() else [path]:
             if f.is_file():
@@ -124,9 +127,11 @@ def save(folder: Path, cell: str, output: Path, db_files: Iterable[Path] = (), s
     os.replace(tmp, folder / cell)
 
 
-def restore(folder: Path, cell: str, output: Path, db: Path | None = None) -> None:
-    """還原一格：輸出解到 output；db 給了就把快照解到它旁邊，HALF 換回這一次的主檔名（舊檔由叫的人先清）。"""
+def restore(folder: Path, cell: str, output: Path, db: Path | None = None, half_out: Path | None = None) -> None:
+    """還原一格：輸出解到 output；db 給了就把快照解到它旁邊，HALF 換回這一次的主檔名（舊檔由叫的人先清）；half_out 給了把前半輸出解到那裡。"""
     _unpack(folder / cell / "output.gz", output)
+    if half_out is not None:
+        _unpack(folder / cell / "half.gz", half_out)
     if db is None:
         return
     snap = folder / cell / "snap"

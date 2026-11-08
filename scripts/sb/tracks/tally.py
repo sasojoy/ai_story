@@ -372,4 +372,7 @@ class TallyScenario(CompanionsScenario):
 
 
 # 改一個字（selftest）：守勢行動替守城記功的那一道分（第 60 批第 2 段從 bot_policy.score 搬進出陣包的 bots.py，那一句照寫，兩處找）。
-register_track("tally", TallyScenario, (("tianxia/bot_policy.py", "tianxia/features/sortie/bots.py"), ("if counts else 0.0", "if not counts else 0.0")), "season21")
+register_track("tally", TallyScenario, (("tianxia/bot_policy.py", "tianxia/features/sortie/bots.py"), ("if counts else 0.0", "if not counts else 0.0")), "season21",
+               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
+                       "figure_acts", "gear", "guide", "hire", "legacy", "looks", "military", "outlets", "peers", "seal",
+                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel"))

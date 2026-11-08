@@ -23,7 +23,22 @@
 - 改 `core/name_base.py`：`tianxia/features/mall/tests/test_mall_card_daily.py`（易名帖撞保留的名號）、`tests/server/test_server.py`（註冊撞保留的名號）、`tests/bots/test_bot_runner.py`（假人取名）。核心的檔不往上走，`test_for` 只挑核心測試、煙霧與寫到這兩個名字的 `test_server_bots`、`test_figures`（第 58 批量過）。
 - 改 `actions.py` 的 `buy`、`purchase`、`view`：`tianxia/features/looks/tests/`、`tianxia/features/zhuan/tests/` 與 `tianxia/features/explore/tests/test_outing.py` 也叫它們（形象、列傳、走一趟的票）。`test_for` 挑這一包的 `tests/` 與契約、邊界，不會挑到別包的測試（第 58 批量過）。
 
+**易名帖與帳號綁定**（J 波第 201 批）：帳號綁定（identity）開著時，易名帖多擋客服、官方、管理員、GM（`core/name_base.STAFF_NAMES`）與 `id:` 開頭的名號：`actions.rename_self` 的 `taken` 後備併 `core/identity_base.blocked_name`，回撞名同一句「這個名號已有人使用。」；關著照舊，`reserved_names` 不動。客服本人也不能改名（設計第七節的 `actions.py` 那一處）還沒排，見計畫第 201、211 批留給後面的。
+
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「商城」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
 
 **第二輪 E 波補註**（上面對不上的以這裡為準）：
 - 畫面只剩貨架、紀錄、購買確認、易名帖、管理者查帳（`web/mall.js` 505 行，`mallClick` 13 個 case）；形象那一頁在 `web/looks.js`（第 94 批）。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時問核心 `core/identity_base.phone_ok(ctx, 鍵)`，只問動手的人：
+- 商城買（鍵 `mall_buy`）：`actions.purchase` 在「商城關著」那一行之後回 `identity_base.PHONE_NEEDED`；`actions.view` 每一件 `can=False, why=那一句, max=0`（`web/mall.js` 照 `can`／`why` 畫，網頁沒動）。
+- 封測發放（鍵 `mall_grant`；設計寫 `beta_grant`）：`actions.grant` 沒綁就這一輪不發，綁了那一輪才發；`identity_base.phone_subject` 有值時走 `rules.grant_beta_phone`：同一筆交易裡手機編號 `grant:beta:phone:<subject>`（`rules.grant_phone_ref`，`mall_ledger.ref` UNIQUE、0 元寶）有了就不發，否則照 `grant_beta` 發、發成了再記手機編號。同一支手機一輩子一次（解綁、刪帳號不刪帳本）；開閘前發過的不追回、不補手機編號；假人與閘關著照舊走 `grant_beta`。帳本給本人看的紀錄會多一行「封測發放 +0」（沒濾）。
+- 沒有新路由（不適用「關著 404」）、新欄位、新表；資料庫第 9 版不動。測試 `tests/test_mall_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。
+
+## 扣押期（帳號與客服第 208 批；設計 4.3、4.4、6.4）
+
+identity 開著時，被扣押的帳號（新綁不滿 `new_binding_hours`、只剩過期那一種的 `stale_hold_days`、管理者重設密碼之後的 `reset_hold_hours`）不能花元寶：
+`actions.purchase` 緊接在 `phone_ok` 那一行之後問核心 `identity_base.hold_reason(ctx, "mall_buy")`，有就回那一句、不扣元寶；`actions.view` 沒被手機那一句灰掉的，每一件 `can=False, why=那一句, max=0`。
+只問本人；假人、沒帳號、identity 關著一律不擋。沒有新路由、新欄位、新表；字在核心（`HOLD_NEW`、`HOLD_STALE`、`HOLD_RESET`）。測試 `tests/test_mall_hold.py`。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py`、四包的 `test_*_phone_gate.py` 與 mall、peers、looks 的 `test_*_hold.py`、admin 的 `test_admin_reset_hold.py`。

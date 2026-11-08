@@ -52,7 +52,7 @@
 - `ctx._wallet()`：商城開著時的 Wallet（資料庫那一側）；關著是 None。`ctx._mall_owner()`：錢包的主人（名號的 casefold）
 - `ctx.pill_cap()`、`ctx.pills_left_today()`：回體丹一天的上限（含月卡）與今天還能服幾顆
 - `ctx.xinshen_purse()`、`ctx.xinshen_spend(n, free_only=False)`：心神（跟人物交談扣的；tianxia/core/xinshen.py）此刻手上幾點、扣 n 點；
-  女性角色的隱線一律 free_only（只扣每天免費那一份）。`ctx.xinshen_asks_left()`、`ctx.xinshen_note_ask()`：問酒家今天還能問幾次、記一次（酒肆包）
+  女性角色的隱線一律 free_only（只扣每天免費那一份）
 
 共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
 # battle（全部拆包第 6 批：PM 定的「siege.py 不搬，這一批用到的名字列進共用段、標主人」）

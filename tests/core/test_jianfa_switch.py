@@ -2,22 +2,18 @@
 season21、week7 新開的季蓋章，週末設定不蓋；正在跑的季照它自己的章；主機把開關關掉時一律照關著。"""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+from conftest import real_content
 from tianxia import rules
-from tianxia.content import load_content
 from tianxia.world_state import fresh_season, stamp_season
 
-pytestmark = pytest.mark.slow  # 載三份正式內容
-
-CONTENT = Path(__file__).resolve().parents[2] / "content"
+pytestmark = pytest.mark.slow  # 載三份正式內容（第 108 批起拿 real_content 的複本，母本一個工作階段載一次）
 
 
 @pytest.mark.parametrize(("profile", "on"), [("season21", True), ("week7", True), (None, False)])
 def test_which_settings_stamp_the_season(profile, on):
-    content = load_content(CONTENT, profile=profile)
+    content = real_content(profile)
     season = fresh_season(content, now=1_800_000_000.0)
     assert content.config.jianfa.enabled is on
     assert season.jianfa_on is on and rules.jianfa(content, season) is on
@@ -59,7 +55,7 @@ def test_batch2_numbers_ride_on_config_jianfa():
     """批 2 的數字繼承自 jianfa_numbers.JianfaNumbers（純規則吃同一份）；子開關 stat_milestones 是批 2 加的。"""
     from tianxia.jianfa_numbers import JianfaNumbers
 
-    cfg = load_content(CONTENT, profile="season21").config.jianfa
+    cfg = real_content("season21").config.jianfa
     assert isinstance(cfg, JianfaNumbers)
     # 2d（企劃者 2026-10-26）：一趟只抽一件事（沒有「一趟幾拍」了）；體力 2026-10-27 改回 6（曾是 18、15）
     assert (cfg.explore_stamina, cfg.drill_full_per_day, cfg.drill_floor, cfg.drill_level_cap) == (6, 15, 0.3, 45)
@@ -77,7 +73,7 @@ def test_every_real_place_has_an_explore_table_and_travelers_are_wild():
     from tianxia.content import TRAVELER_MIN, TRAVELER_TAG
     from tianxia.events import event_matches_location
 
-    c = load_content(CONTENT, profile="season21")
+    c = real_content("season21")
     cfg = c.config.jianfa
     assert all(explore_one.match(cfg, loc.tags) is not None for loc in c.locations.values())
     kinds = {loc.id: explore_one.kind_of(cfg, loc).kind for loc in c.locations.values()}
@@ -93,7 +89,7 @@ def test_every_real_place_has_an_explore_table_and_travelers_are_wild():
 def test_validate_catches_a_place_without_a_table_only_when_jianfa_is_on():
     from tianxia.content import ContentError, validate
 
-    c = load_content(CONTENT, profile="season21")
+    c = real_content("season21")
     c.locations["yingshui"].tags = ["酒肆"]  # 店面標籤不歸表
     with pytest.raises(ContentError, match="yingshui"):
         validate(c)
@@ -105,7 +101,7 @@ def test_validate_wants_three_traveler_events(monkeypatch):
     from tianxia import content as content_mod
     from tianxia.content import ContentError, validate
 
-    c = load_content(CONTENT, profile="season21")
+    c = real_content("season21")
     monkeypatch.setattr(content_mod, "TRAVELER_MIN", 99)
     with pytest.raises(ContentError, match="旅人"):
         validate(c)
@@ -116,7 +112,7 @@ def test_a_place_can_override_its_four_columns():
     from tianxia.features.explore import explore_rules as explore_one
     from tianxia.jianfa_numbers import ExploreMix
 
-    c = load_content(CONTENT, profile="season21")
+    c = real_content("season21")
     loc = c.locations["yingshui"]
     assert "explore_mix" not in loc.model_dump()
     loc.explore_mix = ExploreMix(event=70, encounter=10, material=10, insight=10)

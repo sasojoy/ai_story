@@ -193,6 +193,26 @@ def test_rename_refuses_taken_and_reserved_names(on):
     assert len(mall.rename_tokens(_wallet(game), "沈浪")) == 1  # 沒改成不用掉
 
 
+def test_rename_refuses_staff_and_id_names_only_when_identity_is_on(on, tmp_path, monkeypatch):
+    """帳號綁定開著（帳號與客服第 201 批）：易名帖也擋客服、GM、id: 開頭，回撞名同一句；關著照舊改得成（行為不變）。"""
+    import json
+
+    from tianxia.core import identity_base
+
+    key = tmp_path / "identity.json"
+    key.write_text(json.dumps({"key": "k" * 32}), encoding="utf-8")
+    monkeypatch.setattr(identity_base, "KEY_FILE", key)
+    game = _ready(_rename_on(on))
+    mall_actions.buy(game, "rename", "n")
+    on.config.identity.enabled = True
+    from tianxia.accounts import NAME_TAKEN
+
+    for name in ("客服", "GM", "id:3"):
+        assert mall_actions.rename_self(game, name) == [NAME_TAKEN], name  # 跟撞到別人的名號同一句
+    on.config.identity.enabled = False
+    assert "有人使用" not in mall_actions.rename_self(game, "客服")[0]
+
+
 def test_rename_is_once_a_season(on):
     game = _ready(_rename_on(on))
     assert mall_actions.buy(game, "rename", "a")[0].startswith("買下")

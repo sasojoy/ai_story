@@ -339,4 +339,8 @@ class AbacusScenario(Scenario):
 
 # 改一個字（selftest）：同一個編號再送回的那一句（mall.DUPLICATE：前半買好、後半新程式收到重送，FB-491）
 register_track("abacus", AbacusScenario, (("tianxia/features/mall/rules.py",),
-                                          ('DUPLICATE = "這一筆已經買好了：「{name}」。"', 'DUPLICATE = "這一筆已經買好了：「{name}」！"')), "week7")
+                                          ('DUPLICATE = "這一筆已經買好了：「{name}」。"', 'DUPLICATE = "這一筆已經買好了：「{name}」！"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
+                       "zhuan"))

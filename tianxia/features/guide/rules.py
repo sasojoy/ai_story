@@ -151,12 +151,14 @@ def pending_line(state: GameState, content: Content) -> str | None:
 
 
 def step_words(state: GameState, content: Content, step) -> tuple[str, str]:
-    """這一步的話與收起來那一行：五項屬性的季有 text_v2／line_v2 就照它（配點那一步改講挑成長配比）。"""
-    from tianxia import attrset  # noqa: PLC0415
+    """這一步的話與收起來那一行：五項屬性的季有 text_v2／line_v2 就照它（配點那一步改講挑成長配比）；
+    拿掉地方豪強的季（allied.gentry_on 是 False）有 text_two_sides 就照它（師父送行、初入江湖不再講豪強）。"""
+    from tianxia import allied, attrset  # noqa: PLC0415
 
+    text = step.text_two_sides if step.text_two_sides and not allied.gentry_on(content, state.world) else step.text
     if attrset.on(content, state.world):
-        return step.text_v2 or step.text, step.line_v2 or step.line
-    return step.text, step.line
+        return step.text_v2 or text, step.line_v2 or step.line
+    return text, step.line
 
 
 def step_text(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
@@ -222,7 +224,10 @@ def quest_text(state: GameState, content: Content, world: WorldStateStore | None
     e = content.tutorial.enlist
     if (e is not None and e.drifter_line and state.player.faction is None and season_one(content, w)
             and not tutorial_active(state, content)):  # 出師後到投靠前，靜靜留一行：三邊各在哪裡收人（設計 4.1、6.3；不催）
-        parts.append(f"**投靠**：{e.drifter_line}")
+        from tianxia import allied  # noqa: PLC0415
+
+        line = e.drifter_line_two_sides if e.drifter_line_two_sides and not allied.gentry_on(content, w) else e.drifter_line
+        parts.append(f"**投靠**：{line}")
     hint = next_hint(state, content, world)
     if hint:
         parts.append(f"**下一步**：{hint}")

@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from tianxia import atlas, figures, orders  # 共用規則層（atlas 核心那一半：地點與路的資料；第 50 批拆兩半，圖層與勝算在同一包的 layers）
+from tianxia import allied, atlas, figures, orders  # 共用規則層（atlas 核心那一半：地點與路的資料；第 50 批拆兩半，圖層與勝算在同一包的 layers）
 from tianxia.core import bounty_base
 from tianxia import calendar, conquest, equipment, insights, materials, mounts, rules, terrain, territory, timetable, week_unlock
 from tianxia.core import explore_base  # 探索表的小字、地形標籤、勝算的「必敗」：探索包、有所感包的純函式搬到核心的服務檔（第 49 批）、第 50 批移到核心的 core/explore_base.py
@@ -579,7 +579,8 @@ def state(
     order_at, bounty_at = _order_marks(s, c, faction), _bounty_marks(s, c)
     goals, news, people = set(layers.goal_places(s, c)), layers.news_places(s, c), _people(s, c)
     armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
-    base_ids = territory.bases(c) if on else {}
+    # 大本營：拿掉豪強的季（allied.factions_of）豪強的三個投靠點不再是誰的大本營
+    base_ids = {loc: f for loc, f in territory.bases(c).items() if allied.faction_open(c, w, f)} if on else {}
     fixed = c.scenario.territory.fixed if on else {}
     conquest_on = conquest.on(c, w)
     blocks = conquest.blocks(c) if conquest_on else {}
@@ -665,7 +666,7 @@ def state(
         "key": base_key(s, c, mostly), "now_week": now_week, "weeks_total": weeks_total, "season_one": rules.season_one(c, w),
         "territory": on, "faction": faction, "here": p.location, "stamina": int(p.stamina), "sorties_left": sorties_left,
         # 會佔地的幾方（網頁的各佔幾處、圖例照它畫）：劇本的陣營，拿掉要依附的那一個（豪強分屬兩軍、不佔地）
-        "sides": [f.id for f in c.scenario.factions if not (f.allies and rules.haoqiang_allied(c, w))],
+        "sides": [f.id for f in allied.factions_of(c, w) if not (f.allies and rules.haoqiang_allied(c, w))],
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,

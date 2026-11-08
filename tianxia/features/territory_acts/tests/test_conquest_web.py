@@ -59,7 +59,7 @@ PAGE = r"""
 const S = { main: input.m || {}, news: input.news || "reports", xingshiOpen: input.open ? new Map(input.open) : null };
 const many = (name) => src.match(new RegExp(`\\n  const ${name} = \\[[\\s\\S]*?\\n  \\];`))[0]; // 多行的 const：konst 抓不到，照原文切
 const H = new Function("S", [
-  konst("esc"), many("NEWS"), many("NEWS_PARTS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
+  konst("esc"), many("NEWS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
   fn("xingshiParas"), fn("xingshiHtml"), fn("newsSegHtml"),
   "return { xingshiHtml, newsSegHtml };",
 ].join("\n"))(S);
@@ -290,18 +290,16 @@ def test_empty_and_pending_and_off():
     assert page(None)["page"] == "" and "載入中" in webharness.run(PAGE, {"m": {}, "x": None})["page"]
 
 
-def test_tab_only_when_on_and_two_rows_for_nine():
-    """減法季批 1：見聞五顆籤（大事、傳聞、榜單、江湖史、紀錄；Joy 2026-10-24 榜單回見聞），大事底下一排小的：戰報、大勢，形勢只有開著的季才有、
-    排在大勢後面；紀錄底下分紀錄、名帖匣。"""
-    off = page(m={})["seg"]
-    assert 'data-news="xingshi"' not in off
-    on = page(m={"xingshi": True})["seg"]
-    assert 'data-news="xingshi"' in on and 'class="seg news-sub"' in on
-    names = re.findall(r'data-news="(\w+)"', on)
-    assert names == ["reports", "rumors", "boards", "chronicle", "journal", "reports", "trends", "xingshi"]
-    assert 'data-news="xingshi"' not in page(m={"xingshi": True}, news="rumors")["seg"]  # 別的籤底下沒有那一排
-    journal = re.findall(r'data-news="(\w+)"', page(m={"xingshi": True}, news="mingtie")["seg"])
-    assert journal == ["reports", "rumors", "boards", "chronicle", "journal", "journal", "mingtie"]
+def test_one_row_of_five_tabs():
+    """見聞改版（Joy 2026-11-08 說好）：五顆籤一排、沒有第二層（戰況、傳聞、江湖史、榜單、紀錄）；天下形勢在戰況那一頁裡，
+    名帖匣搬去俠客頁（從俠客進來的那一段，最上面是「‹ 俠客」）。"""
+    for m in ({}, {"xingshi": True}):
+        seg = page(m=m)["seg"]
+        assert re.findall(r'data-news="(\w+)"', seg) == ["reports", "rumors", "chronicle", "boards", "journal"]
+        assert "news-sub" not in seg
+    assert 'class="on"' in page(m={"xingshi": True}, news="xingshi")["seg"].split('data-news="reports"')[0].rsplit("<button", 1)[1]  # 舊的形勢認成戰況
+    mingtie = page(m={}, news="mingtie")["seg"]
+    assert "‹ 俠客" in mingtie and "名帖匣" in mingtie and 'data-news="journal"' not in mingtie
 
 
 @pytest.mark.slow

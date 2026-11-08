@@ -10,7 +10,7 @@
 ## 補充說明（這一包的東西在哪）
 
 - `tale.py`（原 `tianxia/tale.py`）：備料（`gather`）、請模型寫（`write`）、組成整篇（`compose`／`plain`）、存放（`TaleStore`）。不讀時鐘、不碰狀態。讀核心 `core/battle_base` 五個名字：`CENTER`、`BattleInstance`、`BattleRoundRecord`、`GambleMoment`、`claims_a_kill`。寫戰記走 `ctx.write_battle_tales`（決戰包的服務），路由的 `side_names` 讀 `core/battle_base`，不再經殼碰決戰包（第二輪第 102 批）。
-- `tale_html.py`（原根目錄 `tale_html.py`；根目錄那個名字還是別名，第 103 批沒收）：戰記頁的標記，只 import 標準庫；樣子在 `web/tale.css`（`index.html` 不載入，只有戰記頁自己連）。
+- `tale_html.py`（原根目錄 `tale_html.py`；根目錄那個名字還是別名，第 103 批沒收）：戰記頁的標記，只 import 標準庫；樣子在 `web/tale.css`（`index.html` 不載入，只有戰記頁自己連）。頁上的程式（分享、遊戲裡那一層的「返回」）在 `web/tale_page.js`，頁裡只寫 `<script src>`（CSP 不准 inline 的程式，第 213 批從 `tale_html.SCRIPT` 原樣搬出；不宣告進 `web`，`/` 不載）。
 - `routes.py`：路由 `/api/tale/{battle_id}`、`/zhanji/{code}`，加上 `server.py` 原本的戰記那一段（`tale_view`、`tale_cover`、`tale_page_view`、`_tale_due`、`tale_index`、`tale_store_path`、`start_tales`、`tale_material`、`tale_round`）與決戰放手一搏補劇情（`_tales_waiting`、`narrate_battle`、`narrate_once`；它們不是戰記本體，是派工單一起點名的同一段）。第一個參數都是 `shell`（server 模組）。
 - 掛鉤只接 `routes`、`threads`（全部拆包第 52 批開的，殼開、測試停；`threads` 叫殼的 `start_tales`）。`enabled` 回 `True`（同輿圖包，這一包沒有遊戲當下的掛鉤，沒有誰問它）。
 - 選項前綴：沒有。`choose`、`bot_policy.py`、`bot.py`、`bot_runner.py` 都沒有戰記（`_tale_clue`、`outing_tale`、`Config.secrets.tale_*` 是同名別的事）。假人只會進名錄。沒有 `bots.py`、沒有 `<包名>_stage.py`。

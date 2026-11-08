@@ -274,6 +274,8 @@ def battle_marks(ctx) -> dict:
     card = team.pvp_card(ctx.state, ctx.content, ctx.world)
     if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
         marks["card"] = card
+    if ctx.content.config.titles.enabled and ctx.state.player.titles_worn:  # 稱號與官職：加入那一刻戴的那一個（關著、沒戴不多這一鍵）
+        marks["title"] = dict(ctx.state.player.titles_worn)
     return marks
 
 

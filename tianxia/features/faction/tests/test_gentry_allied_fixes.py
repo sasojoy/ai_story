@@ -14,6 +14,7 @@ def _wk():
     c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     return c
 
 

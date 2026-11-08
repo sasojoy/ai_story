@@ -79,13 +79,13 @@ def where(state: GameState, content: Content, cid: str) -> str | None:
     return state.world.whereabouts.get(cid) or home_of(content, cid)
 
 
-def side_of(content: Content, cid: str) -> str | None:
-    """站哪一方：大勢人物照人物表的陣營，其他人照 CharacterDef.side。"""
+def side_of(content: Content, cid: str, world=None) -> str | None:
+    """站哪一方：大勢人物照人物表的陣營，其他人照 CharacterDef.side（world 是這一季：拿掉豪強的季照 side_two_sides，CharacterDef.side_in）。"""
     fid = figures.of_character(content, cid)
     if fid is not None:
         return content.figures[fid].faction
     ch = content.characters.get(cid)
-    return ch.side if ch is not None else None
+    return ch.side_in(world) if ch is not None else None
 
 
 def _region(content: Content, loc: str | None) -> str | None:
@@ -367,7 +367,7 @@ def _post(state: GameState, content: Content, cid: str, motive: str, region: str
           fallen: str, posted: set[str]) -> list[str]:
     from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
-    side = side_of(content, cid)
+    side = side_of(content, cid, state.world)
     if side is None or side in posted:
         return []
     made = bounty_base.post_figure(state, content, cid, motive, region, spot)
@@ -402,7 +402,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
     for cid, ch in content.characters.items():
         if not ch.deep_interaction or cid == victim:
             continue
-        mine = side_of(content, cid)
+        mine = side_of(content, cid, state.world)
         if mine is None or region is None or _region(content, where(state, content, cid)) != region:
             continue
         if kind == "beat":
