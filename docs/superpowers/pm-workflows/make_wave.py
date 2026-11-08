@@ -751,6 +751,40 @@ WAVES["J"] = dict(
 )
 
 
+def b202():
+    return jb(202, "帳號二：LINE、Google 登入，建角色前不開帳號", "identity", "dev/acct-2", "8354", [
+        "- 範圍照計畫第 202 批那一節（含「J 波落地時 PM 加的」兩條：`/api/me` 帶 `identity` 旗標、identity.js 沒旗標不問 gate；登入頁的客服信箱只留 support 包的 gate slot）。假的登入服務測；`NO_LOGIN_ROUTES` 加 start 與 callback 並寫理由；開帳號那一步共用殼的註冊限制。畫面照 `pick.txt` 的 C 版。**不做**驗證碼、綁定頁、忘記密碼。",
+    ])
+
+
+def b203():
+    return jb(203, "帳號三：Email、手機驗證碼登入、防刷、寄送介面", "identity", "dev/acct-3", "8355", [
+        "- 範圍照計畫第 203 批那一節與設計 4.2 驗證碼、4.6 防刷、4.7 介面：challenge 綁 cookie 與用途、分池上限、Turnstile 伺服器端驗、IPv6 /64、兩個寄送介面與假的實作、個資告知短文連隱私權頁。計數全在旁檔原子化。**不做**綁定、門號回收（第 204 批）。跟第 202 批平行：不要碰 `/api/me`、`server.py`、`web/shell.js`；identity 包裡新開 `codes.py`、`senders.py`，`routes.py` 只加自己的路由，`__init__.py` 的 `Feature` 只加自己的格。",
+    ])
+
+
+def b212():
+    return jb(212, "客服二：查帳號", "support", "dev/support-2", "8356", [
+        "- 範圍照計畫第 212 批那一節（含「J 波落地時 PM 加的」三條：關著一律 404 且 gate 先於參數解析、易名帖客服本人也不能改名、客服紀錄先存檔成功再標旁檔）。查帳號只收完整帳號、Email、手機（比對 HMAC，用 `core/identity_base.py` 的正規化；手機與 Email 的 HMAC 查詢要等第 203 批的 `logins` 列，這批先接 identity_base 的函式，查不到就回查無）、要帶單號、每位客服每小時 20 次、每次留紀錄（含查無）、看綁定遮掉的字與 `Wallet.ledger`；單上的帳號帶出帳號卡不算查帳次數、照樣留紀錄（企劃者 11/08 挑 B 版）。桌面兩欄照 `pick.txt`。",
+    ])
+
+
+WEB_K = WEB_J.replace("**這一波加了兩個新包的畫面（開關預設關）**", "**這一波：登入頁的快速登入（LINE、Google、Email、手機）、建角色的「已經有帳號？」、客服桌面的查帳號與帳號卡（開關預設關）**").replace(
+    "實機走登入頁多出來的格、設定抽屜的客服格送一張單、客服身分登入看單與回單、玩家被拒的回話",
+    "實機走：登入頁按 LINE（假的登入服務回一個 subject）進到建角色、「已經有帳號？」那一行、用 Email 收碼（假寄送把碼印在 log）登入、驗證碼錯 5 次作廢、同一號碼 60 秒內再寄被擋、客服桌面點開一張單帶出帳號卡、查完整 Email、**J 波沒走到的客服桌面那一頁（管理頁 B 版：手機與 1024 寬）**")
+
+
+WAVES["K"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 202、203、212 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計 4.2、4.6、4.7、6.3 與計畫的「J 波落地時 PM 加的」") + " **另外**：關著時沒登入打每一條新路由都要 404（不是 401、422）；驗證碼的計數用兩個執行緒同時送同一號碼，不能多寄；challenge 跨用途（登入碼拿去綁定）要被拒；關著時登入頁不再打 `/api/identity/gate`。"),
+    ],
+    lines=[dict(name="帳號二", batches=[b202]), dict(name="帳號三與客服二", batches=[b203, b212])],
+    merge_port=8357, fix_port=8358,
+    web_check=dict(ports="8359、8360", steps=WEB_K),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
@@ -794,6 +828,8 @@ def main():
         args["design"] = w["design"]
     if w.get("new_packages"):
         args["new_packages"] = w["new_packages"]
+    if w.get("new_existing"):
+        args["new_existing"] = True
     if a.finish:
         args["built"] = json.loads(Path(a.finish).read_text(encoding="utf-8"))
         args["merge_base"] = a.merge_base
