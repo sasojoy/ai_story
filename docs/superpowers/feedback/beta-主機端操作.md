@@ -555,6 +555,21 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 - `.local/` 在 `.gitignore` 裡，**不進版控、不貼給任何人**；讀不到這個檔就當開關關著（`/api/identity/gate` 回 404、登入頁不變）。
 - **金鑰不要換**：Email、手機是用它算雜湊存的，換了舊的就對不上。跟資料庫一起另外備份一份到安全的地方。
 - 開之前先查一次正式資料庫有沒有名號以 `id:` 開頭、或叫客服、官方、管理員、GM 的舊角色（開關只擋新取的名號）。
+- 哪幾條登入的路出現在登入頁，看設定覆寫的 `identity.ways`（預設空；可以放 `line`、`google`、`email`、`phone`）。只想關某一條，就把它從 `ways` 拿掉、兩個程式重開。
+
+**開 LINE、Google 登入（K 波第 202 批）**：
+1. 先到 LINE（LINE Login channel）、Google（OAuth 用戶端）的後台登記回呼網址：`<redirect_base>/auth/line/callback`、`<redirect_base>/auth/google/callback`（例 `https://tianxiadashi.com/auth/line/callback`）。沒登記，對方會擋下來。
+2. `.local/identity.json` 在 `key` 旁邊加兩欄（只加要開的那一家）：`{"key": "…", "line": {"client_id": "…", "client_secret": "…"}, "google": {"client_id": "…", "client_secret": "…"}}`。同樣不要用 `Set-Content -Encoding utf8` 寫（BOM）。
+3. 設定覆寫裡設 `identity.redirect_base` 寫這台對外的網址（正式機 `https://tianxiadashi.com`；企劃者的測試環境寫它自己的，各寫各的），`identity.ways` 加 `line`、`google`。`redirect_base` 是空的、或缺那一家的 `client_id`、`client_secret`，那一家的鈕就不出現。
+- 查不到帳號的人先留在旁檔的 `pending`（30 分鐘），建角色成功那一下才開帳號；開帳號跟密碼註冊共用同一份註冊限制（同一個來源一小時 5 個）。
+- 只想關第三方：從 `ways` 拿掉 `line`、`google`，或從 `.local/identity.json` 拿掉那一家的兩欄。
+
+**開 Email、手機驗證碼登入（K 波第 203 批）**：
+- `.local/identity.json` 要有 `key` 與 `turnstile_secret`（Cloudflare Turnstile 的 secret；網站金鑰是設定的 `identity.turnstile_site_key`）。伺服器端驗的時候 siteverify 回的 action 要等於設定的 `identity.turnstile_action`（預設 `identity_code`），Turnstile 元件那邊的 action 要寫一樣的。
+- **正式機的 `identity.fake_services` 一定要是 `false`**：開著時用假的寄送（不真的寄，只記在行程裡）與假的 Turnstile（任何送 `ok` 的都放行），只給開發、測試、QA 用。
+- 簡訊（三竹）、Email（Resend）的寄送服務商**還沒接**，`.local/identity.json` 也還沒有它們的金鑰欄位；接上之前正式機一律用 `NoSender`，一寄就回「現在無法寄送」，不會亂寄。接上那一批再補這裡的欄位。
+- 全服分池上限在設定的 `identity.sms_caps`、`identity.mail_caps`（池 → [每天, 每小時]，預設 login 400/100、bind 300/75、anon 200/50），照服務商額度調；滿了現在只記在旁檔，還不會通知管理者。
+- 緊急開關：`identity.enabled`，或從 `ways` 拿掉 `email`、`phone`（只關這兩條）。
 
 **客服人員名單怎麼設**：客服認帳號（登入名或 `accounts.id`），不認名號。三個來源合起來：
 - `.local/support.txt`：一行一個帳號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
