@@ -269,6 +269,15 @@ NO_LOGIN_ROUTES = {
     # identity（帳號與客服第 203 批；設計 4.2、4.6）
     ("POST", "/api/identity/code/send"): "還沒登入才要用驗證碼登入；關著或這條路不在 ways 404；先過伺服器端 Turnstile，再過旁檔的一號、每日、來源、全服池節流，回應不透露有沒有帳號",
     ("POST", "/api/identity/code/verify"): "同上：驗碼本身就是登入；關著 404；單綁 tx_code cookie、錯 5 次作廢、5 分鐘過期，查無帳號只寫待處理不開帳號",
+    # support（帳號與客服第 212 批；計畫「J 波落地時 PM 加的」第 1 條：關著一律 404、gate 先於登入與參數解析）
+    ("POST", "/api/support/ticket"): "Config.support.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401（test_support_gate.py 守）",
+    ("GET", "/api/support/mine"): "support：同上",
+    ("POST", "/api/support/reply"): "support：同上",
+    ("GET", "/api/support/queue"): "support：同上（開著還要是客服名單上的帳號，不是 404）",
+    ("GET", "/api/support/ticket/{tid}"): "support：同上",
+    ("POST", "/api/support/answer"): "support：同上",
+    ("POST", "/api/support/close"): "support：同上",
+    ("POST", "/api/support/lookup"): "support：同上",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──
