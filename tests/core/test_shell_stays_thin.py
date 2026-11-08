@@ -529,3 +529,6 @@ def test_compare_new_also_existing_takes_a_package_base_already_has(harness, tmp
         harness.check_new(ROOT, ROOT, ("zz_no_such_pack",), also_existing=True)
     cli = (ROOT / "scripts" / "same_behavior.py").read_text(encoding="utf-8")
     assert "also_existing=a.also_existing" in cli and '"--also-existing"' in cli  # compare 子命令收得到、傳得進去
+    import inspect  # noqa: PLC0415
+
+    assert "*base_new" in inspect.getsource(harness.compare)  # base 也有這一包：base 的子行程同樣扣，不然 base 多出包自己的行

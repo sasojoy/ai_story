@@ -208,9 +208,11 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = (), crossover: bool = False,
             also_existing: bool = False) -> bool:
     """crossover（第 107 批 --crossover，PM 定改預設）：才比「base 整段」＝「base 前半＋head 後半」；不帶就不跑那一串，每格印「半舊半新 沒跑」。
-    also_existing（K 波）：--new 的包 base 已經有也收（扣法一樣）。"""
+    also_existing（K 波）：--new 的包 base 已經有也收（扣法一樣，base 的子行程也扣：兩邊都不比這幾包自己的 js、css、表、op）。"""
     check_new(base, head, new, also_existing)
     head_new = ["--new", ",".join(new)] if new else []  # 只有 head 的子行程帶（整段、後半、假人）
+    # --also-existing（K 波）：base 也有這幾包，base 的子行程同樣扣（不然 base 多出包自己的行、head 扣掉，反而紅）；快取的鍵分開
+    base_new, tag = (head_new, "_new_" + "_".join(new)) if (new and also_existing) else ([], "")
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
     SECONDS.clear()
@@ -229,17 +231,17 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
                 o["base"], o["head"] = (tmp / f"{label}_{k}_{twins[t]}_{p}.txt" for k in ("base", "head"))
                 if crossover:  # 切點跟那一軌不同，前半照舊另開（保守：整段借那一軌的）
                     chains.append([
-                        _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
-                                   folder, f"first_{n}", o["base1"], dbs["half"]),
+                        _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first", *base_new], tmp / f"{label}_base1_{n}.log"),
+                                   folder, f"first_{n}{tag}", o["base1"], dbs["half"]),
                         second,
                     ])
                 continue
-            full = ["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])]
+            full = ["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"]), *base_new]
             if crossover:  # 第 107 批：base 整段跑到切點時同時寫前半與快照（--snapshot），head 後半從快照接，不再另開 base 前半
                 full += ["--snapshot", str(dbs["half"]), "--snapshot-out", str(o["base1"])]
-                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"allx_{n}", o["base"], dbs["half"], o["base1"]), second])
+                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"allx_{n}{tag}", o["base"], dbs["half"], o["base1"]), second])
             else:
-                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"all_{n}", o["base"])])
+                chains.append([_base_step((full, tmp / f"{label}_base_{n}.log"), folder, f"all_{n}{tag}", o["base"])])
             chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"]), *head_new], tmp / f"{label}_head_{n}.log")])
     bot_out = {}
     if bots:
@@ -248,8 +250,8 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             bot_out[(seats, p)] = {k: tmp / f"{label}_bots_{k}_{n}.txt" for k in ("base", "head")}
             for k, root in (("base", base), ("head", head)):
                 step = (["bots", str(root), p, str(bot_out[(seats, p)][k]), "--tmp", str(tmp / f"{label}_bots_{k}_{n}"),
-                         "--seats", seats, *(head_new if k == "head" else [])], tmp / f"{label}_bots_{k}_{n}.log")
-                chains.append([_base_step(step, folder, f"bots_{n}", bot_out[(seats, p)][k]) if k == "base" else step])
+                         "--seats", seats, *(head_new if k == "head" else base_new)], tmp / f"{label}_bots_{k}_{n}.log")
+                chains.append([_base_step(step, folder, f"bots_{n}{tag}", bot_out[(seats, p)][k]) if k == "base" else step])
     started = time.time()
     _run_set(chains, workers)
     ok = True
