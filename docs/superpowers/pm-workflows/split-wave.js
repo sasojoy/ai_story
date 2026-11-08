@@ -121,7 +121,7 @@ ${ROUND2 ? `一個 Task 一個 commit，照第二輪總表那一節與你的計�
 **只跑這些，各一次**（跑在最後的程式上）：\`python ${TOOLS}/undef_scan.py tianxia server.py\`；\`python -m pytest -q -n 4 tianxia/features/${b.pkg}/tests\`（有這個資料夾才跑）加計畫列的幾個最直接的檔；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\`。base 上就紅的（這條分支可能還在修合併的紅）在 base 上跑同一條確認，寫進回報、不用修。
 回報 head、commits、tests、decided（你選保守做法的判斷）、leftovers（留給哪一批）${ROUND2 ? '、docs（要寫進 README、導覽的句子）' : ''}。`
 
-const devOpts = (b, key) => ({ label: `dev:b${b.n}-${key}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', ...(b.model ? { model: b.model } : {}) })
+const devOpts = (b, key) => ({ label: `dev:b${b.n}-${key}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', model: b.model || 'opus' })  // 企劃者 11/08：開發派 Opus
 
 async function buildLine(line) {
   let base = line.base
@@ -158,7 +158,7 @@ ${MERGE_INTO ? '**另外要合的（PM 寫）**：\n' + MERGE_INTO + '\n' : ''}
 分支：明確 fetch 上面每一條。\`git switch -c ${WAVE_BRANCH} ${MERGE_BASE}\`（同名已存在就加 -work 重開），一條一條 \`merge --no-ff\`。埠 ${MERGE_PORT}，暫存 ${SP}\\wave${WAVE}\\merge\\。
 衝突照「程式為準」：兩邊的行都留；共用登記檔（邊界清單、services_list.md、registry.py、FEATURES、\`aliases()\`、\`bot_policy\`）各包的段都留、照 FEATURES 的順序接。**git 自己合好的也逐檔看**：兩邊各自的增刪行，合好的那一筆都要在。一條線把舊模組搬走、另一條線還在改舊位置的，改動照新位置寫回去。
 合完**只跑**：\`python ${TOOLS}/undef_scan.py tianxia server.py\` 0 個；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\` 過。紅了修（合起來才壞的一個 commit）。**整套、比對不跑**：下一關一次跑。
-推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree' })
+推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree', model: 'opus' })
 if (!merged || halted_word(merged.stopped)) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }
 if (A.stop_after_merge) return { wave: WAVE, built, merged, head: sha_of(merged.head), stopped: '' }  // 企劃者 11/07「不要卡著」：合好就開下一波，閘門疊著跑
 
@@ -167,7 +167,7 @@ const docsRun = () => agent(`你是《天下大勢》PM 派的文件子代理，
 ${COMMON}
 分支：明確 fetch ${WAVE_BRANCH}；\`git switch -c ${WAVE_BRANCH}-docs origin/${WAVE_BRANCH}\`（同名已存在就加 -work），做完快轉推回 \`${WAVE_BRANCH}\`。暫存 ${SP}\\wave${WAVE}\\docs\\。
 ${A.after_merge}
-回報 head、做了哪些（fixed）、發現不該做或對不上的（rejected）、跑的結果（tests）。只有企劃者能定的才寫 stopped。`, { label: `docs:wave${WAVE}`, phase: 'Merge', schema: FIX_SCHEMA, isolation: 'worktree' })
+回報 head、做了哪些（fixed）、發現不該做或對不上的（rejected）、跑的結果（tests）。只有企劃者能定的才寫 stopped。`, { label: `docs:wave${WAVE}`, phase: 'Merge', schema: FIX_SCHEMA, isolation: 'worktree', model: 'opus' })
 const docsPromise = (A.after_merge && A.docs_alongside) ? docsRun() : null  // 只動文件，跟閘門同時跑，閘門不驗它（企劃者 11/07）
 if (A.after_merge && !A.docs_alongside) {  // 合完、閘門之前的文件輪（PM 寫；閘門要驗到它）
   docsPass = await docsRun()
@@ -193,16 +193,16 @@ ${COMMON}
 1. 先跑機械報告（明確 fetch 這條分支）：\`& "${PY}" "${PM_TOOLS}/moved_report.py" ${l.base} ${l.head}\`（用 PowerShell）。語法樹一樣的不必再看；**有差的每一行都看**：是機械改寫（self 換 ctx、經服務叫、換 import 路徑）還是行為改了。
 2. 對${ROUND2 ? `第二輪總表 ${MASTER} 第 ${l.done.map(d => d.n).join('、')} 批那幾節（數字會過時，以現行程式為準）` : `總表 ${MASTER} 第 ${l.done.map(d => d.n).join('、')} 列與附錄甲丙`}：有沒有漏搬、搬錯包；委派都是一行；別名是同一個模組物件；包只 import 核心、共用規則層與標過渡的舊模組；核心批的順序表跟原本的呼叫順序一樣（順序就是行為）；\`PlayerState\` 欄位認領；前綴與 \`bots.py\`；有沒有測試被改了斷言（只准改路徑與 import）；有沒有碰到派工單沒寫的 \`web/\`、資料庫結構、CLAUDE.md、手冊、總表。
 3. 這條線新加的情境真的走到了嗎（讀程式）；monkeypatch 敏感的路照舊打得到嗎。
-每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反規矩；should；nit）、在哪裡、證據。沒有就回空陣列，不要湊。`, { label: `review:${l.line}`, phase: 'Review', schema: REVIEW_SCHEMA })
+每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反規矩；should；nit）、在哪裡、證據。沒有就回空陣列，不要湊。`, { label: `review:${l.line}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })  // 企劃者 11/08：測試與審查派 Sonnet
 const lensOf = (x) => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推），**專門挑錯**：預設這一波在你這個鏡頭下有問題，你的工作是找出來或親手證明沒有。審第 ${WAVE} 波合好的結果 \`${WAVE_BRANCH}\` ${gateHead}，對 base ${MERGE_BASE}（明確 fetch）。
 ${COMMON}
 **這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完刪。
 **你的鏡頭**：${x.text}
-每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA })
+每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })
 const checkPromise = !A.web_check ? null : agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${gateHead} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**
 ${COMMON}
 埠 ${A.web_check.ports}，分主機名（127.0.0.1 對 localhost）。要看的：${A.web_check.steps}
-回報 same、走了哪些步驟、差異、截圖路徑。收的時候伺服器 taskkill /T、刪暫存大檔。`, { label: `check:wave${WAVE}`, phase: 'Check', schema: { type: 'object', properties: { same: { type: 'boolean' }, steps: { type: 'string' }, diffs: { type: 'array', items: { type: 'string' } }, report: { type: 'string' } }, required: ['same', 'steps', 'diffs', 'report'] } })
+回報 same、走了哪些步驟、差異、截圖路徑。收的時候伺服器 taskkill /T、刪暫存大檔。`, { label: `check:wave${WAVE}`, phase: 'Check', schema: { type: 'object', properties: { same: { type: 'boolean' }, steps: { type: 'string' }, diffs: { type: 'array', items: { type: 'string' } }, report: { type: 'string' } }, required: ['same', 'steps', 'diffs', 'report'] }, model: 'sonnet' })
 const reviewsRaw = await parallel([...built.map(l => () => reviewOf(l)), ...(A.extra_lenses || []).map(x => () => lensOf(x))])
 const reviews = reviewsRaw.filter(Boolean)
 const gate = await gatePromise
@@ -225,7 +225,7 @@ ${gate ? gate.result : '閘門沒有結果：先用同樣的參數跑一次 wave
 ${JSON.stringify(findings, null, 1)}
 **企劃者 11/07「加快分拆，不要卡著」：這一關不超過 60 分鐘，到了就把修好的推上去、交。** 順序：閘門紅的 → blocker → 一兩行能修好的 should；其餘 should 不修，寫進 rejected，開頭寫「留給下一波：」。**工具（scripts/webqa、scripts/sb、wave_gate）的誤報不修工具**，寫進 rejected；工具整個跑不起來（結束碼 2）才修。不重跑全量網頁比對、不跑 selftest。
 做法：一條一個 commit、修一條推一次。比對紅了先用那一軌（\`same_behavior compare --tracks <軌>\`）對每條線的 head 比，找到是哪一條線、哪一批；是腳本的問題（情境走的路兩邊不同）就修腳本、兩邊重比。測試紅了照「合併丟東西」「只是路徑」「真的行為變了」分類：**不要為了綠改行為，也不要改斷言的意思**。修完**只重跑修到的**：那幾條測試、那幾軌，改了 \`tianxia/\` 再跑 \`python ${TOOLS}/undef_scan.py tianxia server.py\` 與邊界、契約。不跑整套（PM 最後再跑一次）。屬實的才修，不屬實的寫進 rejected 附證據。nit 不修。只有企劃者能定的才寫 stopped。
-回報 head、修了哪些、駁回哪些、重跑的結果。`, { label: `fix:wave${WAVE}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree' })
+回報 head、修了哪些、駁回哪些、重跑的結果。`, { label: `fix:wave${WAVE}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree', model: 'opus' })
   if (fix && fix.head) head = sha_of(fix.head)
 }
 
