@@ -159,6 +159,25 @@ def test_a_changed_dom_a_changed_style_and_changed_clicks_are_real(compare, tmp_
     assert _classes(compare.compare(a, _walk(tmp_path / "d", steps=["x click y -> missing"]), HOSTS)) == ["steps"]
 
 
+def _css(walk: Path, rows) -> Path:
+    (walk / "cssrules.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+    return walk
+
+
+def test_a_new_packages_own_sheet_is_listed_not_red(compare, tmp_path):
+    # 第 110 批：--new 的包自己那張表的規則兩邊各自扣掉，差異列成 new_css；別張表照舊 css-rules；沒帶 --new 同一份資料是 real
+    base = [["style.css", ".card { padding: 1px; }"], ["identity.css", ".id-a { color: red; }"]]
+    a = _css(_walk(tmp_path / "a"), base)
+    b = _css(_walk(tmp_path / "b"), [*base, ["identity.css", ".id-b { color: blue; }"]])
+    out = compare.compare(a, b, HOSTS, new_sheets={"identity.css"})
+    assert out["real"] == [] and out["new_css"] == [{"sheet": "identity.css", "only A": [], "only B": [".id-b { color: blue; }"], "counts": [1, 2]}]
+    assert _classes(compare.compare(a, b, HOSTS)) == ["css-rules"] and "new_css" not in compare.compare(a, b, HOSTS)
+    c = _css(_walk(tmp_path / "c"), [["style.css", ".card { padding: 2px; }"], base[1]])
+    assert _classes(compare.compare(a, c, HOSTS, new_sheets={"identity.css"})) == ["css-rules"], "別張表照舊算"
+    old = _css(_walk(tmp_path / "old"), [t for _, t in base])
+    assert compare.compare(old, _css(_walk(tmp_path / "old2"), [t for _, t in base]), HOSTS, new_sheets={"identity.css"})["real"] == [], "舊格式（純字串）也讀得懂"
+
+
 def test_a_used_value_moving_is_noise_and_stays_out_of_the_fingerprint(compare, tmp_path):
     out = compare.compare(_walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", vals=("red", "312.5px"), dots=0), HOSTS)
     assert out["real"] == [] and out["noise"] == {"layout-used": 1}

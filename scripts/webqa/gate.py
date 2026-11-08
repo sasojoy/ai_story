@@ -7,6 +7,7 @@ the driver died or stopped answering; a flow threw; a scene that has to be reach
 summary.json, report.txt and red/. Noise is classified by noise.py; only what is left counts.
 --changed-files that picks no round (an empty list; package files NOT_ON_TABLE says no round reaches while they are off) is exit 0 with
 nothing unpacked, and summary.not_walked says which files and why. --dry-run prints the pick and stops.
+--new <pkg,...> lists the css-rules of the new packages' own sheets (web/<pkg>.css) as NEW instead of red; every other sheet counts as before.
 
 What the walk cannot see: it freezes animation, and it takes no pictures at 640, 641 and 900. Both come from the corpus replay (replay.py), and the
 replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
@@ -35,6 +36,7 @@ DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if 
 STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".ogg")
 STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
+PKG_CSS = "pkg-css"  # batch 110: one rule more in web/identity.css: red without --new, NEW (not red) with --new identity; not a selftest control
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
     "page-alert": 'document.addEventListener("click", () => { alert("webqa selftest"); }, { capture: true, once: true });',
@@ -215,6 +217,12 @@ def mutate(copy: str, which: str) -> None:
         lines.insert(links[-1], line)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write("\n".join(lines))
+    elif which == PKG_CSS:
+        p = os.path.join(copy, "web", "identity.css")
+        if not os.path.isfile(p):
+            raise ToolBroke("mutate pkg-css: no web/identity.css")
+        with open(p, "a", encoding="utf-8", newline="") as f:
+            f.write("\n.webqa-selftest-rule { outline: 3px solid red; }\n")
     elif which == QUIET:
         with open(os.path.join(copy, "web", "style.css"), "a", encoding="utf-8", newline="") as f:
             f.write("\n/* webqa selftest */\n")
@@ -329,7 +337,7 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
             with open(os.path.join(folder, f"{label}.driver.err"), encoding="utf-8", errors="replace") as f:
                 raise ToolBroke(f"{label} driver left no report (exit {d.returncode}): {f.read()[-800:]}")
     walked = time.monotonic() - t0
-    out = compare.compare(walks[0], walks[1], origins, os.path.join(args.out, "red"), red_budget=args.red_left)
+    out = compare.compare(walks[0], walks[1], origins, os.path.join(args.out, "red"), red_budget=args.red_left, new_sheets=args.new_sheets)
     args.red_left -= out["red_images"]
     out["seconds"] = round(walked)
     out["compare_seconds"] = round(time.monotonic() - t0 - walked)
@@ -364,8 +372,10 @@ def run_replay(args, work, copies, rounds, changed, expect, summary) -> None:
     done = {"ran": True, "changed": changed, "passes": {}}
     summary["replay"] = done
     for label, how in (("replay", {"frozen": True, "shoot": True}), ("replay-anim", {"frozen": False, "shoot": False})):
-        res = replay.replay(corpus, os.path.join(copies[0], "web"), os.path.join(copies[1], "web"), os.path.join(args.out, label), chrome=args.chrome, node=args.node, red_budget=args.red_left, **how)
+        res = replay.replay(corpus, os.path.join(copies[0], "web"), os.path.join(copies[1], "web"), os.path.join(args.out, label), chrome=args.chrome, node=args.node, red_budget=args.red_left, new_sheets=args.new_sheets, **how)
         args.red_left -= res["red_images"]
+        if "new_css" in res:
+            summary["new_css"] += [{"round": label, **x} for x in res["new_css"]]
         kept, excused = apply_expect(res["real"], expect)
         summary["real"] += [{"round": label, **x} for x in kept]
         summary["expected"] += [{"round": label, **x} for x in excused]
@@ -442,6 +452,8 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     for t in summary["tool"]:
         lines.append(f"TOOL {t}")
     lines += [f"NOT WALKED {x}" for x in summary.get("not_walked", [])]
+    for row in summary.get("new_css", []):
+        lines.append(f"NEW {row['round']} {row['sheet']} only A {json.dumps(row['only A'], ensure_ascii=False)[:300]} only B {json.dumps(row['only B'], ensure_ascii=False)[:300]}")
     for row in summary["real"]:
         lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}")
     for row in summary["expected"]:
@@ -470,6 +482,7 @@ def run(args) -> int:
                "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": [], "replay": {"ran": False, "why": "did not get that far"},
                "round_files": {}, "rounds_why": "every round (no --changed-files)"}
     per_round = {}
+    args.new_sheets = None
     work = os.path.join(args.out, "_work")
     try:
         shutil.rmtree(work, ignore_errors=True)
@@ -502,6 +515,11 @@ def run(args) -> int:
             seed_local(copy)
         if args.mutate:
             mutate(copies[1], args.mutate)
+        if args.new:  # batch 110: the new packages' own sheets are listed, not red (same_behavior compare --new: new things listed, the rest the same)
+            pkgs = [p.strip() for p in args.new.split(",") if p.strip()]
+            args.new_sheets = {f"{p}.css" for p in pkgs if any(os.path.isfile(os.path.join(c, "web", f"{p}.css")) for c in copies)}
+            summary["new"] = pkgs
+            summary["new_css"] = []
         sa, sb = static_digest(os.path.join(copies[0], "web")), static_digest(os.path.join(copies[1], "web"))
         for name in sorted(set(sa) | set(sb)):
             if sa.get(name) != sb.get(name):
@@ -542,6 +560,8 @@ def run(args) -> int:
             summary["not_reached"] += [f"{r}: {x}" for x in out["not_reached"]]
             summary["tool"] += [f"{r}: {x}" for x in out["tool"]]
             summary["fingerprint"][r] = out.get("fingerprint")
+            if "new_css" in out:
+                summary["new_css"] += [{"round": r, **x} for x in out["new_css"]]
             summary["noise_rows"] += [{"round": r, **x} for x in out["noise_rows"]]
             summary["round_files"][r] = sorted(f"web/{file}" for file, functions in out.get("coverage", {}).items() if any(functions.values()))  # both walks, merged
             for file, functions in out.get("coverage", {}).items():
@@ -604,11 +624,12 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--rounds", help="comma separated; default all: " + ",".join(ROUNDS))
     ap.add_argument("--changed-files", help="comma separated repo paths (wave_gate --changed passes the web/ files): walk only the rounds coverage.json says reach them; "
                                             "the shell, scripts/webqa or an unmapped file walk every round; with --rounds, both")
+    ap.add_argument("--new", help="comma separated new packages (behind a switch): the css-rules of their own web/<pkg>.css are listed as NEW, not red; other sheets as before")
     ap.add_argument("--corpus", choices=("fast", "full"), default="fast", help="fast: no crawls")
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, QUIET, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
