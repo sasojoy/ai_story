@@ -10,6 +10,11 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .peer-head h3 { margin: 0 0 2px; font-size: 20px; }
 .peer-record { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
 .peer-title { color: var(--ink-2); font-size: 13px; }
+/* 名分（結義第一批）：名號底下一枚朱框楷書小籤 */
+.peer-jieyi {
+  display: inline-block; margin: 2px 0 4px; padding: 1px 8px; border: 1.5px solid var(--accent); border-radius: 4px;
+  font: 700 13px/1.5 var(--kai); letter-spacing: 0.08em; color: var(--accent); background: var(--card);
+}
 .peer-title .peer-seg { white-space: nowrap; }
 .peer-arts { display: grid; gap: 8px; margin: 14px 0; }
 .peer-art { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
@@ -61,6 +66,12 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
   background: #b23a2a; border-radius: 1cqw; padding: 0.6cqw; pointer-events: none; transform: rotate(-3deg);
 }
 .mt-seal i { font-style: normal; color: #f8f2e4; font-size: 4.4cqw; line-height: 5cqw; text-align: center; font-weight: 700; }
+/* 名分（結義第一批）：名號左邊一條直書的朱紅小籤，寫義名與排行 */
+.mt-jieyi {
+  position: absolute; top: 20cqw; right: 20cqw; writing-mode: vertical-rl; padding: 1.4cqw 0.8cqw; font: 700 4.6cqw/1 var(--kai);
+  letter-spacing: 0.6cqw; color: #f8f2e4; background: linear-gradient(170deg, #b23a2a, #8e2a1f); border-radius: 0.8cqw;
+  box-shadow: inset 0 0 0 0.5cqw rgba(232, 196, 120, 0.55); pointer-events: none;
+}
 .mt-foot { position: absolute; left: 6cqw; right: 6cqw; bottom: 5cqw; pointer-events: none; }
 .mt-titles { display: flex; flex-wrap: wrap; gap: 1.5cqw; margin-bottom: 2cqw; }
 .mt-titles span {

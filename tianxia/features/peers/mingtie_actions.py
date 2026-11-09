@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender, speech
 from tianxia.characters import name_key
+from tianxia.core import jieyi_base  # 名分（結義第一批）：名帖上的義名排行
 from tianxia.core.services import NO_SUCH_PLAYER
 from tianxia.state import Mingtie
 
@@ -36,7 +37,13 @@ def face(ctx, state: GameState) -> dict | None:
     seen = mingtie_rules.shown(shared_or_none(ctx), state.player.name, card.version, ctx.state, ctx.content)
     out = mingtie_rules.view(card) if seen else mingtie_rules.blank_view(card)
     seal = mingtie_rules.seal_of(state, ctx.content)  # 稱號與官職開著：戴著的那一個印成大印；關著沒有這個鍵
-    return {**out, "seal": seal} if seal else out
+    return _with_jieyi(ctx, {**out, "seal": seal} if seal else out, state.player.name)
+
+
+def _with_jieyi(ctx, card, name: str):
+    """名分（結義第一批）：名帖上名號旁邊寫義名與排行（「潁川三義・行二」）；沒結義、開關關著沒有這個鍵。"""
+    tag = jieyi_base.card_tag(ctx.content, ctx.world, name)
+    return {**card, "jieyi": tag} if tag and isinstance(card, dict) else card
 
 
 def _with_seal(card, seal):
@@ -53,10 +60,10 @@ def view(ctx, board: dict | None = None) -> dict:
         seen = mingtie_rules.shown(shared, copy.name, copy.card.version, ctx.state, c)
         box.append({
             "name": copy.name, "when": copy.when, "place": copy.place, "season": copy.season,
-            "card": mingtie_rules.view(copy.card) if seen else mingtie_rules.blank_view(copy.card),
+            "card": _with_jieyi(ctx, mingtie_rules.view(copy.card) if seen else mingtie_rules.blank_view(copy.card), copy.name),
         })
     return {
-        "mine": _with_seal(mingtie_rules.view(p.mingtie), mingtie_rules.seal_of(ctx.state, c)),
+        "mine": _with_jieyi(ctx, _with_seal(mingtie_rules.view(p.mingtie), mingtie_rules.seal_of(ctx.state, c)), p.name),
         "pool": mingtie_rules.earned(ctx.state, c, ctx.world, board),
         "made_left": mingtie_rules.made_left(ctx.state, c, day),
         "sent_left": mingtie_rules.sent_left(ctx.state, c, day),

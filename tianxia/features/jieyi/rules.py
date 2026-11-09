@@ -43,6 +43,13 @@ ANNAL_OTHER_JOINED = "{who}入了你們{bond}，排行第{rank}。"
 ANNAL_LEFT = "你割袍斷義，離開了{bond}。"
 ANNAL_OTHER_LEFT = "{who}割袍斷義，離開了{bond}。"
 ANNAL_ENDED = "{bond}只剩你一人，就此散了。"
+# 義聚（第二批）
+GATHER = "義聚"
+GATHER_LABEL = "義聚・{names}也在此（體力 +{n}）"
+GATHER_DONE = "你與{names}在{place}義聚，把酒敘舊，體力 +{n}。"
+GATHER_AGAIN = "今天已經義聚過了，明天再來。"
+GATHER_ALONE = "要有兄弟跟你在同一個地方才能義聚。"
+LOG_GATHER = "第 {season} 季，{names}在{place}義聚。"
 NOTES_CAP = 12  # 一個人最多攢幾行還沒記進列傳的（太久沒上線，舊的先丟）
 
 
@@ -177,3 +184,34 @@ def leave(book: JieyiBook, content: Content, name: str, season: int, now: float,
         for m in bond.members:
             note(book, m, ANNAL_OTHER_LEFT.format(who=name, bond=was))
     return LEFT.format(bond=was)
+
+
+def gather_amount(cfg: JieyiTuning, people: int) -> int:
+    """義聚回的體力：在場 people 人（含自己，2 起）照 gather_stamina 那一排，超過的照最後一格；不到 2 人是 0。"""
+    if people < 2 or not cfg.gather_stamina:
+        return 0
+    return cfg.gather_stamina[min(people - 2, len(cfg.gather_stamina) - 1)]
+
+
+def gathered_today(book: JieyiBook, name: str, day: str) -> bool:
+    return book.gathered.get(name_key(name)) == day
+
+
+def gather(book: JieyiBook, content: Content, name: str, present: list[str], place: str, season: int, day: str) -> tuple[int, str]:
+    """name 按了義聚：present 是此刻同一地方的兄弟（不含自己）。回（體力, 那一句）；不行的體力是 0。
+    同一組同一天只在義譜寫一行（第一個按的人寫，後來的人不再寫）。"""
+    bond = bond_of(book, name)
+    if bond is None or not present:
+        return 0, GATHER_ALONE
+    if gathered_today(book, name, day):
+        return 0, GATHER_AGAIN
+    n = gather_amount(content.config.jieyi, len(present) + 1)
+    book.gathered[name_key(name)] = day
+    loc = content.locations.get(place)
+    place_name = loc.name if loc else place
+    names = "、".join(present)
+    tag = f"bond:{bond.id}"
+    if book.gathered.get(tag) != day:
+        book.gathered[tag] = day
+        _log(book, content, bond, LOG_GATHER.format(season=season, names="、".join([name, *present]), place=place_name))
+    return n, GATHER_DONE.format(names=names, place=place_name, n=n)

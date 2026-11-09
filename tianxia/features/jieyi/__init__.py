@@ -16,7 +16,7 @@ from . import actions as _actions  # noqa: F401  「邀他結義」登記進玩�
 class JieyiFeature(Feature):
     name = "jieyi"
     prefix = "jieyi"  # jieyi:yes:<邀請>、jieyi:no:<邀請>
-    web = ("jieyi.js", "jieyi.css")  # 俠客頁門下那一段的結義
+    web = ("jieyi.js", "jieyi.css")  # 見聞「名帖匣」裡的金蘭帖（第一批從俠客頁同伴那一頁搬過來）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
@@ -31,6 +31,10 @@ class JieyiFeature(Feature):
         if kind != self.prefix:
             return None
         return Outcome(title=_actions.TITLE, run=lambda: _actions.answer(ctx, arg))
+
+    def deliver_notices(self, ctx) -> None:
+        """自己同步時：兄弟被截殺的消息、別人替你追回的銀兩、還沒記進列傳的結義大事（第一批）。"""
+        _actions.deliver(ctx)
 
     def status(self, ctx):
         view = _actions.view(ctx)

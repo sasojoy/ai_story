@@ -1060,8 +1060,8 @@
   const PEOPLE_HEAD = "此地人物"; // 待 joy 潤
   const HERE_HEAD = "此地可為"; // 待 joy 潤
   // 點了人物才畫的那幾顆（護衛、犒軍、挑戰本人），與搬去酒肆的招募：不進此地可為
-  // 結義的答應、婉拒（jieyi:）畫在場景卡底下那一張「結義之邀」（web/jieyi.js 的 jieyiOfferHtml），也不進此地可為
-  const FIG_ACT = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:)/;
+  // 結義的答應、婉拒（jieyi:yes:、jieyi:no:）畫在場景卡底下那一張「結義之邀」（web/jieyi.js 的 jieyiOfferHtml），也不進此地可為
+  const FIG_ACT = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:(?:yes|no):)/; // 義聚（jieyi:gather）照常進此地可為
   const HIRE = /^hire:/;
   // 行動列四格的墨圖（web/img/acts/，金色水墨）：格子的 key → 圖名
   const ACT_ART = { explore: "explore", train: "sortie", social: "social", move: "move" };

@@ -20,6 +20,7 @@ SWORN_NO = "你們是結義的兄弟，下不了這個手。"  # 截殺、揭通
 SWORN_BOUNTY = "要拿的是你結義兄弟，這一張你不揭。"
 AVENGED = "你替{victim}出了這口氣，從{raider}身上追回 {silver} 兩，會轉交給{victim}。"
 AVENGED_NONE = "你替{victim}出了這口氣。"
+SIDE_BY_SIDE = "{bond}並肩：你與{mates}同在{side}出手，戰功多算 {pct}%。"  # 並肩作戰（第二批）：決戰戰報
 AVENGE_LABEL = "替兄出頭"  # 卡上截殺那一顆換成這個名字（有仇可報時）
 AVENGE_CONFIRM = "{raider}截殺過你的兄弟{victim}，要替{victim}出這口氣？輸了一樣要丟銀兩、掉氣血。"
 
@@ -88,6 +89,13 @@ def card_tag(content: Content, world: Any, name: str) -> str:
     bk = _book_on(content, world)
     bond = bond_of(bk, name) if bk is not None else None
     return CARD_TAG.format(bond=bond_name(bk, content, bond), rank=num(rank_of(bond, name))) if bond else ""
+
+
+def bond_title(content: Content, world: Any, name: str) -> str:
+    """name 此刻那一組的義名（「潁川三義」）；沒結義、開關關著是空字串。"""
+    bk = _book_on(content, world)
+    bond = bond_of(bk, name) if bk is not None else None
+    return bond_name(bk, content, bond) if bond else ""
 
 
 def feud_against(content: Content, world: Any, me: str, raider: str, now: float) -> JieyiFeud | None:
