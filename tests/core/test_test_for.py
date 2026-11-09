@@ -780,7 +780,7 @@ def test_the_smoke_set_covers_every_block():
     煙霧不能也是 slow：單獨跑 -m smoke 會蓋掉 addopts 的 not slow（那一條就跑了、兩分鐘的保證破了），test_for 照
     -m "not slow" 跑又會悄悄把它濾掉（那一塊的煙霧少一條）。"""
     ids = test_for.smoke_ids()
-    assert 100 <= len(ids) <= 170 and len(set(ids)) == len(ids)
+    assert 100 <= len(ids) <= 180 and len(set(ids)) == len(ids)  # 每一包至少一條，新包一包加一條（門派包 2026-11-09 從 170 放到 180）
     slow = [i for i in ids if _slow_smoke(test_for._text(ROOT / i.split("::")[0]), i.split("::")[1:])]
     assert not slow, f"煙霧不能標 slow：{slow}"
     # 手冊 4.3「搬成包的區塊，煙霧改成那一包 tests/ 裡的一條」：tianxia/features/<包>/tests/ 的算那一包（商城的在 mall 包裡）
