@@ -688,3 +688,59 @@ def test_admin_page_no_line_when_false_or_404():
         assert out[case]["after"] == [] and out[case]["posts"].count("/api/identity/session") == 1
     for case in ("closed", "admin", "jianghu", "nohead"):  # 關著（沒有 identity 格）、已經夠格、不在 /admin、標題還沒畫：不問
         assert out[case]["after"] == [] and "/api/identity/session" not in out[case]["posts"]
+
+
+# 第 210 批修（R 波審查）：名單上、還不夠格的人開 /admin，殼不畫管理頁、網址換回 /：江湖頁跳同一句（toast），一頁只問一次
+DRIVER_210_BOUNCE = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+async function page(opts) {
+  const S = Object.assign({ stage: "game", adminPage: false }, opts.S || {});
+  const posts = [];
+  const toasts = [];
+  const document = { querySelectorAll: () => [], querySelector: () => null, getElementById: () => null };
+  const api = async (path) => {
+    posts.push(path);
+    if (path === "/api/identity/session") {
+      if (opts.session === 404) throw new Error("404");
+      return opts.session;
+    }
+    return {};
+  };
+  const location = { href: "https://example.com" + (opts.from || "/admin"), pathname: opts.from || "/admin" };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "document", "renderKeepingSheet",
+    idSrc + "\nreturn { identityDecorate };")(
+    S, esc, (t) => toasts.push(t), () => {}, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {}, location, { replaceState: () => {} }, document, () => {});
+  location.pathname = "/"; // 殼把網址換回 /
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  return { posts, toasts };
+}
+async function main() {
+  const info = { kinds: ["password"], has_password: true, phone_missing: false };
+  const S = () => ({ main: { admin: false, identity: info } });
+  return {
+    on: await page({ S: S(), session: { relogin: true } }),
+    off: await page({ S: S(), session: { relogin: false } }),
+    gone: await page({ S: S(), session: 404 }),
+    closed: await page({ S: { main: { admin: false } }, session: { relogin: true } }),
+    admin: await page({ S: { main: { admin: true, identity: info } }, session: { relogin: true } }),
+    plain: await page({ S: S(), session: { relogin: true }, from: "/" }),
+  };
+}
+finish(main());
+"""
+
+
+def test_admin_bounce_relogin_toast():
+    out = run(DRIVER_210_BOUNCE, {"identity": str(WEB / "identity.js")})
+    said = "管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。"
+    assert out["on"]["toasts"] == [said] and out["on"]["posts"].count("/api/identity/session") == 1  # 觸發兩次只跳一次、只問一次
+    for case in ("off", "gone"):
+        assert out[case]["toasts"] == [] and out[case]["posts"].count("/api/identity/session") == 1
+    for case in ("closed", "admin", "plain"):  # 關著、已經夠格、不是從 /admin 進來的：不問
+        assert out[case]["toasts"] == [] and "/api/identity/session" not in out[case]["posts"]

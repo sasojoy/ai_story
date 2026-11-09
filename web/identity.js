@@ -504,8 +504,20 @@
   // 還不夠格（S.main.admin 假）時問一次 /api/identity/session，結果記在 S.idp.adRelogin；admin.js 整頁重畫換掉那一行時照記下的補回、不再問
   // 同 admin.js 的 ADMIN_PATH（包之間不共用名字，自己寫一份）
   const identityAdminPath = /^\/admin\/?$/;
+  // 第 210 批修：名單上、還不夠格的人直接開 /admin，殼（app.js）不畫管理頁（沒有 .ad-head）、網址換回 /，標題下那一行補不上。
+  // 所以載入時記下是不是從 /admin 進來的；被送回江湖頁時一樣只問一次 /api/identity/session，真就跳同一句（toast，不多加字）
+  const identityCameAdmin = typeof location !== "undefined" && !!location && identityAdminPath.test(location.pathname || "");
+  function identityAdminBounced() {
+    if (!identityCameAdmin || S.adminPage || !S.main || !S.main.identity || S.main.admin) return;
+    S.idp = S.idp || {};
+    if (S.idp.adBounce !== undefined) return;
+    S.idp.adBounce = null; // 問著
+    api("/api/identity/session").then((got) => { S.idp.adBounce = !!(got && got.relogin === true); if (S.idp.adBounce) toast(IDP_RELOGIN); },
+      () => { S.idp.adBounce = false; });
+  }
   function identityAdminRelogin() {
-    if (typeof document === "undefined" || typeof location === "undefined" || !location || !identityAdminPath.test(location.pathname || "")) return;
+    if (typeof document === "undefined" || typeof location === "undefined" || !location) return;
+    if (!identityAdminPath.test(location.pathname || "")) return identityAdminBounced();
     if (!S.main || !S.main.identity || S.main.admin || !document.querySelector(".ad-head")) return;
     S.idp = S.idp || {};
     if (S.idp.adRelogin === undefined) {
