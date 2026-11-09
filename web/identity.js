@@ -473,6 +473,7 @@
   // 抽屜每畫一次（殼的 render 整塊換掉）：插「帳號綁定」那一格、⚙ 的紅點；沒有 identity 格（關著、沒帳號）什麼都不做
   function identityDecorate() {
     identityAlerts();
+    identityAdminRelogin();
     const info = S.main && S.main.identity;
     if (!info) return;
     identitySyncDot();
@@ -497,6 +498,30 @@
     const el = document.querySelector(".idp-fold");
     if (!el || document.querySelector(".idp-relogin")) return;
     el.insertAdjacentHTML("beforebegin", identityReloginHtml());
+  }
+
+  // 第 210 批：管理頁（/admin，跟江湖頁同一張頁；admin.js 不動）標題（.ad-head）下也畫同一行。只在 identity 開著（有 identity 格）、
+  // 還不夠格（S.main.admin 假）時問一次 /api/identity/session，結果記在 S.idp.adRelogin；admin.js 整頁重畫換掉那一行時照記下的補回、不再問
+  // 同 admin.js 的 ADMIN_PATH（包之間不共用名字，自己寫一份）
+  const identityAdminPath = /^\/admin\/?$/;
+  function identityAdminRelogin() {
+    if (typeof document === "undefined" || typeof location === "undefined" || !location || !identityAdminPath.test(location.pathname || "")) return;
+    if (!S.main || !S.main.identity || S.main.admin || !document.querySelector(".ad-head")) return;
+    S.idp = S.idp || {};
+    if (S.idp.adRelogin === undefined) {
+      S.idp.adRelogin = null; // 問著
+      api("/api/identity/session").then((got) => { S.idp.adRelogin = !!(got && got.relogin === true); identityAdminReloginDraw(); },
+        () => { S.idp.adRelogin = false; });
+      return;
+    }
+    identityAdminReloginDraw();
+  }
+  function identityAdminReloginDraw() {
+    if (S.idp.adRelogin !== true) return;
+    const head = document.querySelector(".ad-head");
+    const next = head && head.nextElementSibling;
+    if (!head || (next && String(next.className || "").split(/\s+/).includes("idp-relogin"))) return;
+    head.insertAdjacentHTML("afterend", identityReloginHtml());
   }
 
   function identityWatch() {

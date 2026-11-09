@@ -614,3 +614,77 @@ def test_relogin_line_only_when_flag_true():
     assert out["on"]["before"] == [["beforebegin", line]] and "/api/identity/session" in out["on"]["posts"]
     assert out["off"]["before"] == [] and out["gone"]["before"] == []  # 假、404（關著）什麼都不畫
     assert out["admin"]["before"] == [] and "/api/identity/session" not in out["admin"]["posts"]  # 已經是管理者：不問
+
+
+# ── 第 210 批：管理頁（/admin）標題下也畫「請用密碼重新登入」（admin.js 不動；MutationObserver 看到 .ad-head 才問）──
+
+DRIVER_210 = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+async function page(opts) {
+  const S = Object.assign({ stage: "game" }, opts.S || {});
+  const posts = [];
+  const after = [];
+  const head = { insertAdjacentHTML: (where, v) => { after.push([where, v]); head.nextElementSibling = { className: "form-msg idp-relogin" }; },
+    nextElementSibling: { className: "muted ad-wait" } };
+  const document = {
+    querySelectorAll: () => [],
+    querySelector: (sel) => (sel === ".ad-head" && opts.head !== false ? head : null),
+    getElementById: () => null,
+  };
+  const api = async (path) => {
+    posts.push(path);
+    if (path === "/api/identity/session") {
+      if (opts.session === 404) throw new Error("404");
+      return opts.session;
+    }
+    return {};
+  };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "document", "renderKeepingSheet",
+    idSrc + "\nreturn { identityDecorate };")(
+    S, esc, () => {}, () => {}, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {},
+    { href: "https://example.com" + (opts.path || "/admin"), pathname: opts.path || "/admin" }, { replaceState: () => {} }, document, () => {});
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  k.identityDecorate(); // 畫完又觸發一次（插進去那一行本身也會叫 MutationObserver）
+  await new Promise((r) => setTimeout(r, 10));
+  const once = after.length;
+  head.nextElementSibling = { className: "muted ad-wait" }; // admin.js 整頁重畫：那一行被換掉
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  return { posts, after, once };
+}
+async function main() {
+  const info = { kinds: ["password"], has_password: true, phone_missing: false };
+  const S = () => ({ main: { admin: false, identity: info } });
+  return {
+    on: await page({ S: S(), session: { relogin: true } }),
+    off: await page({ S: S(), session: { relogin: false } }),
+    gone: await page({ S: S(), session: 404 }),
+    closed: await page({ S: { main: { admin: false } }, session: { relogin: true } }),
+    admin: await page({ S: { main: { admin: true, identity: info } }, session: { relogin: true } }),
+    jianghu: await page({ S: S(), session: { relogin: true }, path: "/" }),
+    nohead: await page({ S: S(), session: { relogin: true }, head: false }),
+  };
+}
+finish(main());
+"""
+
+
+def test_admin_page_relogin_line_when_true():
+    out = run(DRIVER_210, {"identity": str(WEB / "identity.js")})
+    line = '<p class="form-msg idp-relogin">管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。</p>'
+    on = out["on"]
+    assert on["once"] == 1 and on["after"][0] == ["afterend", line]  # 標題下一行、觸發兩次只一行
+    assert on["after"] == [["afterend", line]] * 2  # admin.js 重畫把那一行換掉：照記下的結果補回
+    assert on["posts"].count("/api/identity/session") == 1  # 一頁只問一次
+
+
+def test_admin_page_no_line_when_false_or_404():
+    out = run(DRIVER_210, {"identity": str(WEB / "identity.js")})
+    for case in ("off", "gone"):
+        assert out[case]["after"] == [] and out[case]["posts"].count("/api/identity/session") == 1
+    for case in ("closed", "admin", "jianghu", "nohead"):  # 關著（沒有 identity 格）、已經夠格、不在 /admin、標題還沒畫：不問
+        assert out[case]["after"] == [] and "/api/identity/session" not in out[case]["posts"]
