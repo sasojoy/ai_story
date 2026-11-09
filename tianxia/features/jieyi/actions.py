@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia.characters import name_key
-from tianxia.core import cards
+from tianxia.core import annal_base as annals
+from tianxia.core import cards, presence
 from tianxia.core.option import Option
+from tianxia.state import Rumor
 
 from . import rules
 
@@ -20,6 +22,10 @@ YES = "{him}邀你結義：答應"  # 待 joy 潤（江湖頁「結義之邀」�
 NO = "{him}邀你結義：婉拒"  # 待 joy 潤
 ASK_CONFIRM = "結義之後換季也不散，要散得割袍斷義。向{him}提起結義？"  # 待 joy 潤
 TITLE = "結義"
+# 待 joy 潤：替兄出頭與名分（第一批）
+FEUD_TOLD = "你的兄弟{victim}在{place}被{raider}截殺了。{hours} 小時內在同一個地方遇到{raider}，他的卡上能「替兄出頭」。"
+FEUD_PAID = "{who}替你向{raider}討回了這口氣，追回 {silver} 兩交到你手上。"
+FEUD_DONE = "{who}替你向{raider}討回了這口氣。"
 
 
 def on(ctx: Game) -> bool:
@@ -136,10 +142,21 @@ def answer(ctx: Game, arg: str) -> list[str]:
             rules.drop(bk, offer.id)
             out.append(rules.DECLINED.format(him=offer.sender))
             return
-        out.append(rules.accept(bk, ctx.content, offer, me.season_number, ctx.now))
+        out.append(rules.accept(bk, ctx.content, offer, me.season_number, ctx.now, chron))
 
+    chron: list[str] = []
     ctx.world.mutate(_apply)
+    _chronicle(ctx, chron)
     return out
+
+
+def _chronicle(ctx: Game, lines: list[str]) -> None:
+    """名分：開義、入義、割袍、散義寫進這一季的江湖史。"""
+    if not lines:
+        return
+    for line in lines:
+        ctx.state.world.chronicle.append(Rumor(time=ctx.state.world.time, text=line))
+    ctx._save_season()
 
 
 def leave(ctx: Game) -> list[str]:
@@ -147,7 +164,11 @@ def leave(ctx: Game) -> list[str]:
     if not on(ctx):
         return [rules.NO_BOND]
     out: list[str] = []
-    ctx.world.mutate(lambda shared: out.append(rules.leave(shared.jieyi, ctx.content, ctx.state.player.name, ctx.state.player.season_number, ctx.now)))
+    chron: list[str] = []
+    ctx.world.mutate(lambda shared: out.append(rules.leave(shared.jieyi, ctx.content, ctx.state.player.name, ctx.state.player.season_number, ctx.now, chron)))
+    if chron:  # 真的割了（沒結義的回 NO_BOND）：自己的列傳當場記
+        annals.note(ctx.state, ctx.content, annals.DEED, out[0], 3)
+    _chronicle(ctx, chron)
     return ctx._log(out)
 
 
@@ -173,3 +194,48 @@ def view(ctx: Game) -> dict | None:
 
 
 LEAVE_CONFIRM = "割袍斷義就離開{bond}，{hours} 小時內不能再結義。確定？"  # 待 joy 潤
+
+
+def deliver(ctx: Game) -> None:
+    """自己同步時（Feature.deliver_notices）：兄弟被截殺的消息、別人替你追回的銀兩、還沒記進列傳的結義大事。開關關著不送（帳留著）。"""
+    if not on(ctx):
+        return
+    bk = book(ctx)
+    if bk is None:
+        return
+    me = ctx.state.player
+    k = name_key(me.name)
+    bond = rules.bond_of(bk, me.name)
+    bros = {name_key(m) for m in bond.members if name_key(m) != k} if bond else set()
+    if not (bk.notes.get(k) or any(name_key(f.victim) in bros or name_key(f.victim) == k for f in bk.feuds)):
+        return  # 沒有自己的事：不進 mutate（不寫全服那一列）
+    cfg = ctx.content.config.jieyi
+    lines: list[str] = []
+    notes: list[str] = []
+    silver = [0]
+
+    def _apply(shared) -> None:
+        book_ = shared.jieyi
+        notes.extend(book_.notes.pop(k, []))
+        for f in book_.feuds:
+            if name_key(f.victim) in bros and f.avenged_by is None and k not in f.told and ctx.now - f.at < cfg.feud_seconds:
+                f.told.append(k)
+                loc = ctx.content.locations.get(f.place)
+                lines.append(FEUD_TOLD.format(victim=f.victim, raider=f.raider, place=loc.name if loc else f.place,
+                                              hours=max(1, round((cfg.feud_seconds - (ctx.now - f.at)) / 3600))))
+            elif name_key(f.victim) == k and f.avenged_by is not None and k not in f.told:
+                f.told.append(k)
+                silver[0] += f.owed
+                lines.append((FEUD_PAID if f.owed else FEUD_DONE).format(who=f.avenged_by, raider=f.raider, silver=f.owed))
+                f.owed = 0
+        from tianxia.core import jieyi_base  # noqa: PLC0415
+
+        jieyi_base.prune_feuds(book_, ctx.content, ctx.now)
+
+    ctx.world.mutate(_apply)
+    if silver[0]:
+        me.stats["silver"] = me.stats.get("silver", 0) + silver[0]
+    for line in notes:
+        annals.note(ctx.state, ctx.content, annals.DEED, line, 3)
+    if lines:
+        ctx._write(TITLE, lines)
