@@ -1146,6 +1146,7 @@ STAGE_PACKAGES += ["terms"]  # 條款（scripts/new_feature.py 生的 terms_stag
 STAGE_PACKAGES += ["jieyi"]  # 結義（scripts/new_feature.py 生的 jieyi_stage.py）
 STAGE_PACKAGES += ["mail"]  # 帖友書信（scripts/new_feature.py 生的 mail_stage.py）
 STAGE_PACKAGES += ["zongmen"]  # 門派（scripts/new_feature.py 生的 zongmen_stage.py）
+STAGE_PACKAGES += ["guard"]  # 親衛隊長（scripts/new_feature.py 生的 guard_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():
