@@ -659,4 +659,7 @@ register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py"
                covers=("battle", "bounties", "bout", "companions", "craft", "cultivation", "explore", "faction", "figure_acts", "gear",
                        "guide", "military", "peers", "seal", "seclusion", "sense", "socialize", "sortie", "stamina_plays", "story",
                        "tavern", "travel", "zhuan"))
-register_bots("arts", ARTS_BOT_PROFILES, arts_bots_run)  # 修練那一軌的假人（--seats arts）
+register_bots("arts", ARTS_BOT_PROFILES, arts_bots_run,
+              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
+                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
+                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 修練那一軌的假人（--seats arts）

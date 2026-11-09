@@ -19,6 +19,9 @@
 --changed（第 107 批）：照 git diff base..head 決定比哪幾軌、哪幾種設定、要不要半舊半新與網頁（decide()，拿不準一律往寬：退回全軌）。
   第 109 批：只改軌檔（scripts/sb/tracks/<軌>.py）是 mode "tracks"，只比那個檔登記的軌＋import 它的軌檔登記的軌、三種設定、半舊半新；
   tianxia/core/ 直下的 .md、.gitattributes 不比。
+  第 112 批：tianxia/core/tuning/<包>.py 照包挑（核心、共用層、舊模組或 server.py 也讀 Config.<包> 就照舊全軌，別包讀的一起挑）；
+  packages 模式另把包交給 compare --bot-covers，假人座位也照 register_bots 的 covers 挑（ALWAYS、座位名在軌裡、covers 有交集，聯集，只會多跑）；
+  head 的 same_behavior.py 沒有 --bot-covers（舊的 head）或 --tracks 蓋過時照舊。--dry-run 多印 bot_covers、seats。
 --full：全軌三設定＋--crossover＋整套含 slow＋--web 全回合（上 main 前、每日）。--changed 與 --full 不能一起帶；--tracks 照舊蓋過挑軌。
 --dry-run：只印 decide 的 JSON 與會挑到的軌，不開工作樹、不跑任何東西、不碰結果夾；挑軌用這支腳本所在那一份程式的 same_behavior.py pick
 （舊波的 head 上沒有 covers），所以拿得來對舊波的 diff 跑。
@@ -323,6 +326,31 @@ def pick(script: Path, packages: list[str] | None) -> list[str] | None:
     return [t for t in out.stdout.strip().split(",") if t]
 
 
+def bot_covers(script: Path, decision: dict, tracks_given: bool) -> list[str] | None:
+    """第 112 批：packages 模式交給 compare 的 --bot-covers（假人座位也照包挑：ALWAYS、座位名在軌裡、座位 covers 有交集，三者聯集，只會多跑）；
+    其他模式、--tracks 蓋過的、或那一份 same_behavior.py 還沒有 --bot-covers（舊的 head）回 None＝照舊。"""
+    if decision["mode"] != "packages" or tracks_given:
+        return None
+    try:
+        if "--bot-covers" not in script.read_text(encoding="utf-8"):
+            return None
+    except OSError:
+        return None
+    return list(decision["packages"])
+
+
+def picked_seats(script: Path, decision: dict) -> list[str] | None:
+    """--dry-run 印的座位（same_behavior.py pick --seats 的第二行）；沒帶 --bot-covers 的回 None（照舊：座位名在挑到的軌裡才跑）。"""
+    if decision.get("bot_covers") is None:
+        return None
+    out = subprocess.run([sys.executable, str(script), "pick", "--covers", ",".join(decision["bot_covers"]) or ",", "--tracks", ",".join(decision["tracks"] or []), "--seats"],
+                         capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"})
+    if out.returncode != 0:
+        raise RuntimeError(f"same_behavior pick --seats 失敗：{out.stderr[-500:]}")
+    lines = out.stdout.strip().split("\n")
+    return [s for s in lines[1].split(",") if s] if len(lines) > 1 else []
+
+
 def git(repo: Path, *args: str) -> str:
     out = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if out.returncode != 0:
@@ -422,6 +450,8 @@ def compare_extra(decision: dict, jobs: str = "", new: str = "", also_existing: 
     picked = decision["tracks"]
     extra = (["--tracks", ",".join(picked)] if picked is not None else []) + (["--jobs", jobs] if jobs else [])
     extra += ["--profiles", ",".join(decision["profiles"])] + (["--crossover"] if decision["crossover"] else [])
+    if decision.get("bot_covers") is not None:  # 第 112 批：只有 packages 模式、head 的 compare 認得才有
+        extra += ["--bot-covers", ",".join(decision["bot_covers"]) or ","]
     return extra + (["--new", new] if new else []) + (["--also-existing"] if (new and also_existing) else [])
 
 
@@ -470,6 +500,8 @@ def main() -> int:
                         "web": a.full or a.web, "web_files": [], "reasons": []}
         mine = here.parents[2] / "scripts" / "same_behavior.py"  # 這支腳本所在那一份的（舊波的 head 上沒有 covers）
         decision["tracks"] = a.tracks.split(",") if a.tracks else picked_tracks(mine, decision)
+        decision["bot_covers"] = bot_covers(mine, decision, bool(a.tracks))
+        decision["seats"] = picked_seats(mine, decision)
         decision["files"] = len(files) if a.changed else None
         decision["new"] = a.new.split(",") if a.new else []
         decision["web_args"] = web_args(decision, a.changed, a.new) if (a.web or a.full or (a.changed and decision["web"])) else None
@@ -497,6 +529,7 @@ def main() -> int:
         files = git(repo, "-c", "core.quotepath=off", "diff", "--name-only", base, head).splitlines()
         decision = decide(files, git(repo, "-c", "core.quotepath=off", "diff", "-U0", base, head), root)
         decision["tracks"] = picked_tracks(Path(script), decision)
+        decision["bot_covers"] = bot_covers(Path(script), decision, bool(a.tracks))
     else:
         decision = {"mode": "full", "packages": None, "full_reasons": ["--full" if a.full else "沒帶 --changed"], "profiles": list(SB_PROFILES),
                     "crossover": True, "web": a.full or a.web, "web_files": [], "reasons": [], "tracks": None}

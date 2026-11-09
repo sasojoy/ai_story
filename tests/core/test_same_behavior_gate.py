@@ -154,3 +154,18 @@ def test_new_reaches_the_web_gate(gate):
     assert gate.web_args(full, False, "identity,support") == ["--new", "identity,support"]
     assert gate.web_args(full, False, "") == []
     assert gate.web_args({"web_files": ["web/app.js"], "web_all_rounds": True}, True, "") == [], "全回合不交 --changed-files"
+
+
+def test_bot_covers_reach_compare_only_in_packages_mode(gate, tmp_path):
+    """第 112 批：packages 模式把包交給 compare --bot-covers（座位照 covers 挑）；全軌、--tracks 蓋過、舊 head 的 compare 認不得都照舊不帶。"""
+    script = ROOT / "scripts" / "same_behavior.py"
+    packages = {"mode": "packages", "packages": ["seal"], "tracks": ["facade", "seal"], "profiles": ["season21"], "crossover": False}
+    assert gate.bot_covers(script, packages, False) == ["seal"]
+    assert gate.bot_covers(script, packages, True) is None, "--tracks 蓋過的照舊"
+    assert gate.bot_covers(script, {**packages, "mode": "full", "packages": None}, False) is None
+    old = tmp_path / "same_behavior.py"
+    old.write_text("x.add_argument('--covers')\n", encoding="utf-8")
+    assert gate.bot_covers(old, packages, False) is None, "舊 head 的 compare 沒有 --bot-covers"
+    assert gate.compare_extra({**packages, "bot_covers": ["seal"]})[-2:] == ["--bot-covers", "seal"]
+    assert gate.compare_extra({**packages, "bot_covers": []})[-2:] == ["--bot-covers", ","]
+    assert "--bot-covers" not in gate.compare_extra(packages)
