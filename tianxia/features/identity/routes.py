@@ -196,6 +196,8 @@ def router(shell) -> APIRouter:
             if owner != account.id or not identity_base.record_reauth(token, provider, now):
                 return back(request, "fail")
             return back(request, "reauth")
+        if identity_base.reset_held(account.id, now):  # 第 209 批：開單之後才被管理者重設的，回呼這一步也擋（網頁照 RESET_NO_BIND 那一句）
+            return back(request, "held")
         if owner is not None:
             return back(request, "bound" if owner == account.id else "taken")
         if binding.rebind_wait(side.unbound_elsewhere(hashed, provider, account.id), now, shell.CONTENT.config.identity):
@@ -481,6 +483,7 @@ def router(shell) -> APIRouter:
                 raise shell.GameError(codes.BAD_CODE)
             side.record_verified(account.id, channel, subject, now)
             return {"message": binding.REAUTH_OK.format(minutes=max(1, cfg.recent_seconds // 60))}
+        not_reset_held(account, now)  # 第 209 批：寄碼之後才被管理者重設的，驗碼這一步也擋（同寄碼那一句）
         found = accounts.login_key(channel, subject)
         if found is not None:
             raise shell.GameError(binding.ALREADY_KIND if accounts.account_id(found) == account.id else binding.BOUND_ELSEWHERE)

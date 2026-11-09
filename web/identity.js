@@ -40,8 +40,9 @@
     taken: "這個已綁定其他帳號。", // 待 joy 潤
     wait: "這個剛從別的帳號解綁，30 天內不能再拿來綁定或開新帳號。", // 待 joy 潤
     reauth: "驗證好了。", // 待 joy 潤
+    held: "管理者剛幫這個帳號重設了密碼，72 小時內不能綁定新的登入方式。", // 待 joy 潤（第 209 批：同 binding.RESET_NO_BIND；72 = Config.identity.reset_hold_hours，同 wait 寫死 30）
   };
-  const IDENTITY_AUTH_CODES = ["ok", "new", "fail", "cancel", "bound", "taken", "wait", "reauth"];
+  const IDENTITY_AUTH_CODES = ["ok", "new", "fail", "cancel", "bound", "taken", "wait", "reauth", "held"];
   const IDENTITY_AUTH = identityReadAuth();
   // 驗證碼那一頁（第 204 批；每句待 joy 潤）
   const IDP_CODE_TITLE = { phone: "用手機驗證碼登入", email: "用 Email 驗證碼登入" }; // 待 joy 潤

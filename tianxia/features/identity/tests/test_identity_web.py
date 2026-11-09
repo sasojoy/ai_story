@@ -514,3 +514,9 @@ def test_register_tab_shows_pw_min_only_when_on():
     assert "idp-pw-min" not in out["pwLogin"] and 'id="gate-form"' in out["pwLogin"]
     assert "idp-pw-min" in out["pwEmpty"] and 'placeholder="至少 12 字"' in out["pwEmpty"]  # 沒有別的路也畫（12 字照樣要求）
     assert "idp-pw-min" not in out["pwNone"] and 'placeholder="至少 6 字"' in out["pwNone"]  # gate 沒帶 pw_min：一個字不動
+
+
+def test_auth_held_is_known_and_toasted():
+    out = _run()
+    assert out["held"]["replaced"] == ["/"]
+    assert out["held"]["toasts"] == ["管理者剛幫這個帳號重設了密碼，72 小時內不能綁定新的登入方式。"]

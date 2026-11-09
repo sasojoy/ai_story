@@ -238,3 +238,46 @@ def test_me_has_phone_missing(clock, monkeypatch):
     bind(c)
     assert c.get("/api/identity/me").json()["phone_missing"] is False
     assert c.get("/api/main").json()["identity"]["phone_missing"] is False
+
+
+# ── 第 209 批：寄碼、開單之後才被重設的，驗碼與第三方回呼那一步也擋（同一句；重驗不受影響）──
+
+
+def test_verify_bind_refused_when_reset_held(clock):
+    from tianxia.core import identity_base
+
+    c = TestClient(server.app)
+    aid = _pw(c)
+    assert send(c, purpose="bind").status_code == 200
+    identity_base.record_admin_reset(aid, clock.now, 72, "x")  # 寄碼之後才被管理者重設
+    told = binding.RESET_NO_BIND.format(hours=server.CONTENT.config.identity.reset_hold_hours)
+    assert error(verify(c)) == told
+    assert _kinds("shen_01") == ["password"] and side_rows("SELECT COUNT(*) FROM bindings_meta WHERE bound_at IS NOT NULL") == [(0,)]
+
+
+def test_verify_reauth_not_affected_by_reset_hold(clock):
+    from tianxia.core import identity_base
+
+    c = TestClient(server.app)
+    aid = _pw(c)
+    assert bind(c).json() == {"message": binding.BOUND}
+    clock.now += 61
+    assert send(c, purpose="reauth").status_code == 200
+    identity_base.record_admin_reset(aid, clock.now, 72, "x")
+    assert verify(c).status_code == 200  # 重驗只改這次 session 的驗證時間，不是綁新的
+
+
+def test_callback_bind_refused_when_reset_held(clock, monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+
+    from tianxia.core import identity_base
+
+    seen = _fake_idp(monkeypatch, sub="U-88")
+    c = TestClient(server.app)
+    aid = _pw(c)
+    r = c.post("/api/identity/start", json={"provider": "line", "purpose": "bind"})
+    q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["url"]).query).items()}
+    seen["nonce"], seen["provider"] = q["nonce"], "line"
+    identity_base.record_admin_reset(aid, clock.now, 72, "x")  # 開單之後才被管理者重設
+    assert _callback(c, "line", state=q["state"], code="x").headers["location"] == "/?auth=held"
+    assert _kinds("shen_01") == ["password"]
