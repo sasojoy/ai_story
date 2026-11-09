@@ -345,6 +345,20 @@ class JieyiBond(BaseModel):
     log: list[str] = Field(default_factory=list)  # 義譜：哪一季、在哪裡、誰入義、誰離開（給人看的句子）
 
 
+class JieyiFeud(BaseModel):
+    """一筆仇（結義第一批「替兄出頭」，Joy 2026-11-09「其他按照建議」）：victim 被 raider 截殺打輸。victim 的兄弟 feud_seconds（現實秒）內
+    在同一地點遇到 raider，卡上的截殺不看陣營與護身；打贏了 raider 照截殺輸的規則失銀兩，贏的那一份（owed）轉給 victim。一筆仇只報一次。"""
+
+    id: str
+    victim: str
+    raider: str
+    place: str
+    at: float  # 現實秒（Game.now）
+    told: list[str] = Field(default_factory=list)  # 已經收到「兄弟被截殺」那一則的兄弟（名號鍵）
+    avenged_by: str | None = None
+    owed: int = 0  # 追回、還沒交到 victim 手上的銀兩
+
+
 class JieyiOffer(BaseModel):
     """一張還沒回的結義邀請。時刻是現實秒（Game.now）：邀請跨季也不怪、跟賽季時鐘無關。"""
 
@@ -363,9 +377,12 @@ class JieyiBook(BaseModel):
     offers: list[JieyiOffer] = Field(default_factory=list)
     left_at: dict[str, float] = Field(default_factory=dict)  # 名號鍵 → 上次割袍斷義的現實秒（冷卻）
     seq: int = 0  # 下一組的流水號
+    feuds: list[JieyiFeud] = Field(default_factory=list)  # 替兄出頭的仇（第一批）；報了、交完銀兩、過期的清掉
+    notes: dict[str, list[str]] = Field(default_factory=dict)  # 名號鍵 → 還沒寫進他列傳的結義大事（名分；他自己同步時記進行狀、清掉）
+    gathered: dict[str, str] = Field(default_factory=dict)  # 名號鍵 → 上次義聚的「季:季曆天」（第二批：一人一天一次）
 
     def empty(self) -> bool:
-        return not (self.bonds or self.offers or self.left_at or self.seq)
+        return not (self.bonds or self.offers or self.left_at or self.seq or self.feuds or self.notes or self.gathered)
 
 
 class SealView(NamedTuple):

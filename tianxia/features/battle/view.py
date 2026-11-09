@@ -25,6 +25,7 @@ from . import instance as battle_instance  # 這一包的回合規則（第 54 �
 from tianxia import conquest  # 共用規則層（地盤）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
 from tianxia import figure_life, front_lines, wins  # 共用規則層（人物活起來、戰線、三陣營四勝利）
+from tianxia.core import jieyi_base  # 並肩作戰（結義第二批）：戰報點名
 from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：開著沒有、天命之爭、璽動與戰功居前那一句；全部拆包第 27 批）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
@@ -141,6 +142,9 @@ def showdown_lines(
     if rank is not None:  # 個人戰功（Joy 2026-10-10）：自己這一邊排第幾、怎麼來的
         parts = "、".join(battle_instance.merit_parts(me))
         lines.append(f"你的戰功 {mine}，在{side}排第 {rank}／{len(ranking)}" + (f"（{parts}）" if parts else ""))
+    pct = battle_instance.sworn_pct(me)
+    if pct:  # 並肩作戰（結義第二批）：戰報點名
+        lines.append(jieyi_base.SIDE_BY_SIDE.format(bond=jieyi_base.bond_title(c, ctx.world, me.name) or "你們", mates="、".join(me.sworn_mates), side=side, pct=pct))
     return lines, role, rank, ranking
 
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 
 from tianxia.characters import name_key
+from tianxia.core.jieyi_base import NUMS, _place_word, bond_name, bond_of, num, rank_of  # noqa: F401（別包讀的那一半在核心，這裡 re-export 同一批）
 from tianxia.core.tuning.jieyi import JieyiTuning
 from tianxia.models import Content
 from tianxia.world_state import JieyiBond, JieyiBook, JieyiOffer
 
-NUMS = "一二三四五六七八九十"
 
 # 待 joy 潤：這一包新寫給玩家看的字
 NEED_CARDS = "要先跟他互換過名帖"
@@ -32,37 +32,25 @@ LOG_FORMED = "第 {season} 季，{a}與{b}在{place}結義。"
 LOG_JOINED = "第 {season} 季，{who}在{place}入義，排行第{rank}。"
 LOG_LEFT = "第 {season} 季，{who}割袍斷義。"
 LOG_ENDED = "第 {season} 季，只剩{who}一人，{bond}就此散了。"
-
-
-def num(n: int) -> str:
-    return NUMS[n - 1] if 1 <= n <= len(NUMS) else str(n)
-
-
-def bond_of(book: JieyiBook, name: str) -> JieyiBond | None:
-    k = name_key(name)
-    return next((b for b in book.bonds.values() if any(name_key(m) == k for m in b.members)), None)
-
-
-def rank_of(bond: JieyiBond, name: str) -> int:
-    k = name_key(name)
-    return next((i + 1 for i, m in enumerate(bond.members) if name_key(m) == k), 0)
-
-
-def _place_word(content: Content, place: str) -> str:
-    loc = content.locations.get(place)
-    word = (loc.name if loc else place).split("（")[0]
-    return word[:-1] if len(word) > 2 and word[-1] in "郡縣" else word
-
-
-def bond_name(book: JieyiBook, content: Content, bond: JieyiBond) -> str:
-    """名號照開義的地點與人數取（潁川二義、潁川三義）；同地同人數撞名的照開義的先後補「其二」「其三」。"""
-    base = f"{_place_word(content, bond.place)}{num(len(bond.members))}義"
-    twins = sorted(
-        (b for b in book.bonds.values() if f"{_place_word(content, b.place)}{num(len(b.members))}義" == base),
-        key=lambda b: int(b.id) if b.id.isdigit() else 0,
-    )
-    nth = next((i for i, b in enumerate(twins) if b.id == bond.id), 0)
-    return base if nth == 0 else f"{base}（其{num(nth + 1)}）"
+# 名分（第一批）：江湖史一行、各人列傳一行（列傳照「你」寫，他自己同步時記進行狀）
+CHRON_FORMED = "{a}與{b}在{place}結為{bond}。"
+CHRON_JOINED = "{who}入了{bond}，排行第{rank}。"
+CHRON_LEFT = "{who}割袍斷義，離開了{bond}。"
+CHRON_ENDED = "{bond}只剩{who}一人，就此散了。"
+ANNAL_FORMED = "你與{him}在{place}結為{bond}，排行第{rank}。"
+ANNAL_JOINED = "你在{place}入了{bond}，排行第{rank}。"
+ANNAL_OTHER_JOINED = "{who}入了你們{bond}，排行第{rank}。"
+ANNAL_LEFT = "你割袍斷義，離開了{bond}。"
+ANNAL_OTHER_LEFT = "{who}割袍斷義，離開了{bond}。"
+ANNAL_ENDED = "{bond}只剩你一人，就此散了。"
+# 義聚（第二批）
+GATHER = "義聚"
+GATHER_LABEL = "義聚"  # 此地可為的圓章底下只放得下兩三個字；誰在、回多少寫在名帖匣的金蘭帖上
+GATHER_DONE = "你與{names}在{place}義聚，把酒敘舊，體力 +{n}。"
+GATHER_AGAIN = "今天已經義聚過了，明天再來。"
+GATHER_ALONE = "要有兄弟跟你在同一個地方才能義聚。"
+LOG_GATHER = "第 {season} 季，{names}在{place}義聚。"
+NOTES_CAP = 12  # 一個人最多攢幾行還沒記進列傳的（太久沒上線，舊的先丟）
 
 
 def expire(book: JieyiBook, now: float) -> None:
@@ -124,6 +112,12 @@ def drop(book: JieyiBook, offer_id: str) -> None:
     book.offers = [o for o in book.offers if o.id != offer_id]
 
 
+def note(book: JieyiBook, name: str, line: str) -> None:
+    """記一行要寫進 name 列傳的（他自己同步時 actions.deliver 記進行狀）。"""
+    k = name_key(name)
+    book.notes[k] = (book.notes.get(k, []) + [line])[-NOTES_CAP:]
+
+
 def _log(book: JieyiBook, content: Content, bond: JieyiBond, line: str) -> None:
     bond.log.append(line)
     cap = content.config.jieyi.log_cap
@@ -131,9 +125,10 @@ def _log(book: JieyiBook, content: Content, bond: JieyiBond, line: str) -> None:
         bond.log = bond.log[-cap:]
 
 
-def accept(book: JieyiBook, content: Content, offer: JieyiOffer, season: int, now: float) -> str:
+def accept(book: JieyiBook, content: Content, offer: JieyiOffer, season: int, now: float, chron: list[str] | None = None) -> str:
     """他答應了（offer.target 是答應的人）：兩人都沒有就開一組；邀的人已經有一組就入那一組。回給答應的人看的那一句。
-    答應的那一刻再驗一次（這段時間裡可能別人先入了、滿了、他自己入了別組）：不行回那一句、邀請照樣收掉。"""
+    答應的那一刻再驗一次（這段時間裡可能別人先入了、滿了、他自己入了別組）：不行回那一句、邀請照樣收掉。
+    chron 有給就接上江湖史那一行（名分）；各人列傳那一行記在 book.notes。"""
     drop(book, offer.id)
     problem = invite_problem(book, content, offer.sender, offer.target, now)
     if problem is not None:
@@ -141,32 +136,82 @@ def accept(book: JieyiBook, content: Content, offer: JieyiOffer, season: int, no
     place = content.locations.get(offer.location)
     place_name = place.name if place else offer.location
     bond = bond_of(book, offer.sender)
+    out = chron if chron is not None else []
     if bond is None:
         book.seq += 1
         bond = JieyiBond(id=str(book.seq), place=offer.location, season=season, members=[offer.sender, offer.target])
         book.bonds[bond.id] = bond
         _log(book, content, bond, LOG_FORMED.format(season=season, a=offer.sender, b=offer.target, place=place_name))
-        return FORMED.format(him=offer.sender, bond=bond_name(book, content, bond), rank=num(2))
+        name = bond_name(book, content, bond)
+        out.append(CHRON_FORMED.format(a=offer.sender, b=offer.target, place=place_name, bond=name))
+        note(book, offer.sender, ANNAL_FORMED.format(him=offer.target, place=place_name, bond=name, rank=num(1)))
+        note(book, offer.target, ANNAL_FORMED.format(him=offer.sender, place=place_name, bond=name, rank=num(2)))
+        return FORMED.format(him=offer.sender, bond=name, rank=num(2))
     bond.members.append(offer.target)
     rank = num(len(bond.members))
     _log(book, content, bond, LOG_JOINED.format(season=season, who=offer.target, place=place_name, rank=rank))
-    return JOINED.format(bond=bond_name(book, content, bond), rank=rank)
+    name = bond_name(book, content, bond)
+    out.append(CHRON_JOINED.format(who=offer.target, bond=name, rank=rank))
+    for m in bond.members[:-1]:
+        note(book, m, ANNAL_OTHER_JOINED.format(who=offer.target, bond=name, rank=rank))
+    note(book, offer.target, ANNAL_JOINED.format(place=place_name, bond=name, rank=rank))
+    return JOINED.format(bond=name, rank=rank)
 
 
-def leave(book: JieyiBook, content: Content, name: str, season: int, now: float) -> str:
+def leave(book: JieyiBook, content: Content, name: str, season: int, now: float, chron: list[str] | None = None) -> str:
+    """割袍斷義。chron 同 accept；離開的人自己那一行列傳由呼叫端當場記（他就在線上），留下的人記在 book.notes。"""
     bond = bond_of(book, name)
     if bond is None:
         return NO_BOND
     was = bond_name(book, content, bond)
+    out = chron if chron is not None else []
     k = name_key(name)
     bond.members = [m for m in bond.members if name_key(m) != k]
     book.left_at[k] = now
     book.offers = [o for o in book.offers if name_key(o.sender) != k]  # 他發出去、還沒回的邀請一起收掉
     _log(book, content, bond, LOG_LEFT.format(season=season, who=name))
+    out.append(CHRON_LEFT.format(who=name, bond=was))
     if len(bond.members) <= 1:
         _log(book, content, bond, LOG_ENDED.format(season=season, who="".join(bond.members) or name, bond=was))
         last = bond.members[0] if bond.members else None
         del book.bonds[bond.id]
         if last is not None:
             book.left_at.pop(name_key(last), None)  # 被留下的那一位不算割袍，不冷卻
+            out.append(CHRON_ENDED.format(bond=was, who=last))
+            note(book, last, ANNAL_OTHER_LEFT.format(who=name, bond=was))
+            note(book, last, ANNAL_ENDED.format(bond=was))
+    else:
+        for m in bond.members:
+            note(book, m, ANNAL_OTHER_LEFT.format(who=name, bond=was))
     return LEFT.format(bond=was)
+
+
+def gather_amount(cfg: JieyiTuning, people: int) -> int:
+    """義聚回的體力：在場 people 人（含自己，2 起）照 gather_stamina 那一排，超過的照最後一格；不到 2 人是 0。"""
+    if people < 2 or not cfg.gather_stamina:
+        return 0
+    return cfg.gather_stamina[min(people - 2, len(cfg.gather_stamina) - 1)]
+
+
+def gathered_today(book: JieyiBook, name: str, day: str) -> bool:
+    return book.gathered.get(name_key(name)) == day
+
+
+def gather(book: JieyiBook, content: Content, name: str, present: list[str], place: str, season: int, day: str) -> tuple[int, str]:
+    """name 按了義聚：present 是此刻同一地方的兄弟（不含自己）。回（體力, 那一句）；不行的體力是 0。
+    同一組同一天只在義譜寫一行（第一個按的人寫，後來的人不再寫）。"""
+    bond = bond_of(book, name)
+    if bond is None or not present:
+        return 0, GATHER_ALONE
+    if gathered_today(book, name, day):
+        return 0, GATHER_AGAIN
+    n = gather_amount(content.config.jieyi, len(present) + 1)
+    book.gathered[name_key(name)] = day
+    loc = content.locations.get(place)
+    place_name = loc.name if loc else place
+    names = "、".join(present)
+    tag = f"bond:{bond.id}"
+    if book.gathered.get(tag) != day:
+        book.gathered[tag] = day
+        _log(book, content, bond, LOG_GATHER.format(season=season, names="、".join([name, *present]), place=place_name))
+    return n, GATHER_DONE.format(names=names, place=place_name, n=n)

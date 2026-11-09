@@ -820,7 +820,6 @@
       <div class="mates">${cards.map(mateCard).join("")}</div>
       ${cards.length > 1 ? "" : '<p class="muted mates-none">交友、結識大勢人物，情誼夠了就有人願意追隨你。</p>'}</section>`
         : fold("roster", `同伴${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
-    const jyBlock = typeof jieyiHtml === "function" ? jieyiHtml(S.main) : ""; // 結義（web/jieyi.js；沒結義不畫）
     const zmBlock = typeof zongmenHtml === "function" ? zongmenHtml(S.main) : ""; // 師門（web/zongmen.js；不是哪一門的人不畫）：介面重整後自己一個分頁
     // 紀念物（長篇奇事，企劃者 2026-10-27）：故事裡收下的小東西，沒有效果、不能賣，跨季跟著角色；一件都沒有不畫
     const keepItems = (S.main && S.main.keepsakes) || [];
@@ -834,7 +833,7 @@
       const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
-        : tab === "mates" ? `${rosterBlock}${jyBlock}`
+        : tab === "mates" ? `${rosterBlock}`
         : tab === "sect" ? zmBlock
         : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
@@ -845,7 +844,7 @@
       ${selfArtsHtml(x)}
       ${gearBlock}
       ${rosterBlock}
-      ${jyBlock}${zmBlock}
+      ${zmBlock}
       ${keeps}
       ${selfStatsHtml(s)}
       ${selfEntriesHtml(x)}

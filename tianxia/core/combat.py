@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 
 from . import battle_base as battle_instance
 from . import features as features_core
+from . import jieyi_base  # 並肩作戰（結義第二批）：決戰加入時快照兄弟
 from .services import PROLOGUE_FIGHT, drill_share
 from .. import (
     armor, atlas, attrset, battlelog, conquest, encounter, fight_llm, gender, materials, mounts, ranger, renown, rise, roster, rounds, styles, tactics,
@@ -274,6 +275,10 @@ def battle_marks(ctx) -> dict:
     card = team.pvp_card(ctx.state, ctx.content, ctx.world)
     if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
         marks["card"] = card
+    bros = jieyi_base.brothers(ctx.content, ctx.world, ctx.state.player.name)
+    if bros:  # 並肩作戰（結義第二批）：有結義兄弟才多這三鍵；開關關著、沒結義一個字不變
+        cfg = ctx.content.config.jieyi
+        marks.update(sworn=sorted(bros), sworn_step=cfg.side_merit_pct, sworn_max=cfg.side_merit_max)
     if ctx.content.config.titles.enabled and ctx.state.player.titles_worn:  # 稱號與官職：加入那一刻戴的那一個（關著、沒戴不多這一鍵）
         marks["title"] = dict(ctx.state.player.titles_worn)
     return marks

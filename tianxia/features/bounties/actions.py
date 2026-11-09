@@ -44,7 +44,7 @@ def options(ctx: Game) -> list[Option]:
         if b.id in mine:
             opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
             continue
-        problem = identity_base.PHONE_NEEDED if b.poster and not identity_base.phone_ok(ctx, "bounty_post") else rules.take_problem(s, c, b)
+        problem = identity_base.PHONE_NEEDED if b.poster and not identity_base.phone_ok(ctx, "bounty_post") else rules.take_problem(s, c, b, ctx.world)
         opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
                            enabled=problem is None))
     if stuck:
@@ -68,8 +68,8 @@ def bounty(ctx: Game, arg: str) -> list[str]:
         if b is not None and b.poster and not identity_base.phone_ok(ctx, "bounty_post"):  # 玩家掛的單（第 205 批）
             ctx._shop_after(identity_base.PHONE_NEEDED, "take", shop_view.board_key)
             return [identity_base.PHONE_NEEDED]
-        ctx._shop_after(rules.take_problem(s, c, b) if b is not None else rules.GONE, "take", shop_view.board_key)  # 1.4
-        return rules.take(s, c, rest)
+        ctx._shop_after(rules.take_problem(s, c, b, ctx.world) if b is not None else rules.GONE, "take", shop_view.board_key)  # 1.4
+        return rules.take(s, c, rest, ctx.world)
     if verb == "drop":
         msgs = rules.drop(s, c, rest)
         ctx._shop_say("refused" if msgs == [rules.NOT_HELD] else "drop")

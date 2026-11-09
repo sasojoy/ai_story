@@ -9,6 +9,7 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia.core import jieyi_base  # 結義第一批「替兄出頭」：伏兵打贏、被埋伏的人有結義兄弟就記一筆仇（開關關著不動）
 from tianxia import battlelog, calendar, encounter, four_tiers, gender, prologue, roster, team, wins
 from tianxia.characters import name_key
 from tianxia.core.services import RaidSpoils
@@ -128,6 +129,7 @@ def fight(ctx: Game, owner: Game, amb, when: float) -> list[str]:
            extra=[ambush_rules.BROKEN.format(rival=me.name, to=c.locations[amb.to].name)] if broke else [])
     msgs = record(ctx, mirrored, owner.state.player.name, ours, owner, got, as_owner=False, shown=ours_shown)
     if winner is owner:
+        jieyi_base.record_feud(owner, me.name, owner.state.player.name)
         owner._raid_bounty(me.name)  # 伏兵揭了通緝他：交差（寫在伏兵自己的紀錄）
     elif winner is ctx:
         msgs += ctx._raid_bounty(owner.state.player.name)

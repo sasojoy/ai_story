@@ -60,6 +60,10 @@
   open_bounties）、標題與怎麼完成（title、how、issuer、enemy_name）、接不接得了（can_take、stranded、join_note、drop_stranded、hunting、official_hit）、委託（open_commissions、commission_line）、
   掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
 
+# jieyi（結義第一、二批，Joy 2026-11-09「其他按照建議」「第二批也繼續做」）
+- jieyi_base.py：結義「別人讀」的那一半——名號與排行（num、bond_of、rank_of、bond_name、bond_title、card_tag）、義不相殘（brothers、sworn）、替兄出頭（feud_against、record_feud、
+  prune_feuds、avenge）與字句；玩家互動、懸賞榜、決戰、設伏幾包與 core/combat 讀它，結義包的 rules re-export 名號那一批。同 event_check 不進 MODULES。
+
 # mall（全部拆包第 58 批：商城收尾）
 - name_base.py：保留的名號——FAMOUS_NAMES、reserved_names，與這一季效力中的 active（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名、出陣約戰補位共用，
   商城包、出陣包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。
