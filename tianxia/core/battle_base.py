@@ -180,6 +180,9 @@ class BattleParticipant(BaseModel):
         data = handler(self)
         if isinstance(data, dict) and data.get("title") == {}:
             del data["title"]
+        if isinstance(data, dict) and not data.get("sworn"):  # 並肩作戰（結義第二批）：沒結義的不寫這四鍵，JSON 跟加這幾欄之前一樣
+            for k in ("sworn", "sworn_step", "sworn_max", "sworn_mates"):
+                data.pop(k, None)
         return data
 
 
