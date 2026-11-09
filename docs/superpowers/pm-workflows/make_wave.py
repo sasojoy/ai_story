@@ -954,6 +954,46 @@ WAVES["P"] = dict(
 )
 
 
+def b112():
+    return ib(112, "decide 把 `tuning/<包>.py` 歸包、假人座位進 covers、子行程啟動占比、webqa 沒到的景與 flow 說明、identity 開著的軌怎麼開", "dev/gate-112", "8395", [
+        "- 範圍：計畫第 112 批那一節（PM 11/09 從「之後（不在這一波）」挑出來的六項）。動 `docs/superpowers/pm-workflows/wave_gate.py`、`scripts/sb/**`（`covers_measure.py`、`harness.py`、軌檔只准改 `covers=`）、`scripts/webqa/**`（flows、`driver.mjs` 的說明、`must_reach.txt`）、`tests/core/test_same_behavior_gate.py`、`tests/core/test_same_behavior_covers.py`、`tests/web/test_webqa.py`。**不碰 `tianxia/`、`web/`、`server.py`**。",
+        "- **第 1 項 decide 歸包**（`wave_gate.decide`）：改 `tianxia/core/tuning/<包>.py` 算改那一包（`packages` 加它，跟改 `tianxia/features/<包>/` 一樣挑軌；包不存在才退回全軌），不再因它退回全軌。先紅後綠一條。拿 K、L、M、P 四波的真 diff（交接第一節有 SHA：`cb411b94`、`63909841`、`96862401`、P 波合好的那一筆）`--changed --dry-run` 改前改後各跑一次，表寫進回報（P 波因 `server.py`、`accounts.py` 仍退全軌，照實寫）。",
+        "- **第 2 項 假人座位進 covers**：`covers_measure.py measure` 也量 `harness.BOT_SEATS` 每個座位的 runner 走到哪幾包（同一套 `sys.monitoring`、同一個共同組門檻），寫進 `covers.json` 與 `register_bots(covers=…)`（或等值的登記）；`same_behavior.py pick --covers <包>` 挑到的座位才跑、`ALWAYS_TRACKS` 的座位照跑；`verify --mutate` 一對（改一包的規則，挑到的座位紅、沒挑到的不紅）。量一次多久寫進回報。",
+        "- **第 3 項 子行程啟動占比**：covers 收窄之後再量一次（拿 P 波閘門 `compare.txt` 各軌 base／head 秒數與 `--tracks drape,facade` 那種小跑的總牆鐘，算啟動佔比），**只做決定**：要不要一個子行程連跑多軌，決定與理由寫進回報，這一批不實作。",
+        "- **第 4 項 webqa 沒到的景**：酒肆 `tv_*_do1`、`tv_hit`、`tavern_left`（`tav-do` 第二下 missing；`tv_hire` 之後 `.shop-layer .shop-back` missing）、召喚對話 `call_log`、`call_talk`、`call_act`、`call_close`（`fig-talk` 打開對話後 `fig-log`、`fig-talk`、`fig-act`、`fig-close` missing）、求兵 `bd_pick`、`bd_give`（第一張揭得下的告示不是求兵），**加上 P 波閘門新冒出來的感悟畫板兩景** `sense_pad_clear`、`sense_sent`（must_reach 裡的；`133_sense_pad_drawn` 之後 `sense-clear`、`sense-send` 兩側都 missing、連 disabled 的都沒有；O 波基準 `97e0a3ee0` 走得到、`727234452` 起走不到，中間只有 Joy 11/09 合的六個 PR：見聞改版的「改版資訊進遊戲後跳一次」、俠客頁多信匣與名帖匣、結義、書信、條款、拿掉豪強的季。PM 11/09 另派查核，結果寫在 `origin/develop` 的交接「現在在跑」與 `docs/superpowers/plans/2026-11-09-波次P紀錄.md`「落地（PM）」節，**開工先 `git fetch origin develop` 讀那兩處**：查出是畫面真的壞〔玩家畫完鈕不見〕就不在這一批修、寫進回報交 PM；是 flow 走不到才在這裡修）——照現行 DOM 改 flow 讓它們走到；走到之後穩的（連跑兩次都到）才加進 `must_reach.txt`，不穩的寫 decided 不加。`driver.mjs` 開頭補「寫 flow 的注意」（店面開著 `#page` hidden、鈕在 `.shop-layer`／`.horse-card`／`.board-sheet` 裡找、`CHP(\"<前綴>:\")` 會撞「‹ 出店」、兩人以上交友先跳名單）與 `--quick` 的限制（手冊 4.2 那三點）。證明：不帶 `--quick` 的八回合 base＝head exit 0、`missing_must_reach` 空，summary 裡這幾景都到。",
+        "- **第 5 項 identity 開著的軌怎麼開**（只研究、寫法建議，**這一批不加軌**）：現在 `register_track(..., profile=)` 只能挑 season21／week7／test 三種設定，identity 開著要 `Config.identity.enabled`、`fake_services`、`.local/identity.json` 的固定金鑰（照 webqa `gate.seed_local` 的做法）、驗證碼要固定或從假寄送讀回。量出：harness 要加什麼（每軌 `overrides=` 或第四種設定檔）、金鑰怎麼放進兩份複本、碼怎麼固定、半舊半新切點、假人段要不要；寫成一節給 PM 定，附預估工時。",
+        "- **第 6 項**：`nightly.py` 程式 diff 為空就沿用上一次閘門（每週強制一次）——只寫決定與做法進回報，不實作。",
+    ])
+
+
+def b206():
+    return jb(206, "帳號六：註冊兩個勾選、建帳號記版本（接 Joy 的條款包）", "identity", "dev/acct-6", "8396", [
+        "- 範圍照設計第五節與計畫第 206 批那一節（PM 2026-11-09 重寫）；依據是企劃者 2026-11-08 原話「使用條款是另一條線（拿資料庫第 10 版，帳號這邊接註冊的兩個勾選）」加設計第五節「記版本的函式要放核心，或由條款包掛進註冊與建角色的流程」。**條款包已經在 develop**（Joy 11/09 PR #193，`tianxia/features/terms/`：`/terms`、`/privacy` 不用登入、`GET /api/terms`／`POST /api/terms/agree` 要登入、登入後沒同意現行版的疊一層 `.terms-layer`、同意紀錄在旁檔 `<db>-terms.sqlite` 的 `consents(id, account, version, source, at)`、`store.SOURCES` 有 `register`、`routes.record_consent(shell, account_key, version, source)` 已寫好只有測試叫；**資料庫不升版**，第 10 版的說法作廢）。先讀它的 README「給註冊那一邊」那一段、`rules.py`、`store.py`、`routes.py`、`web/terms.js`。",
+        "- ①**核心接縫 `tianxia/core/terms_base.py`**（新檔；照第 209 批 `identity_base.set_notifier`／`notify` 的寫法：核心只放掛鉤與純規則，包在掛路由時登記；`tianxia/core/__init__.py` 的說明與 `tests/core/boundary_tables.py` 照 `identity_base` 的樣子登記）：`on(content)`（`config.terms.enabled`）；`set_hook(obj)`，hook 要有 `version()` 與 `record(account_key, source)`；`register_check(content, body)`——開著而且 hook 在時，`terms_agree`、`age_ok` 兩個勾選都要是真、`terms_version` 等於 `hook.version()`，不然丟 `GameError` 一句（`# 待 joy 潤`，兩種情形同一句，不透露版本），關著或沒 hook 什麼都不做；`record(content, account_key, source=\"register\")`——沒 hook 回 False、不 500，`ValueError(STALE)` 吞掉只記 log。terms 包在 `routes.py` 掛路由時 `terms_base.set_hook(...)`（`version` 讀 `rules.load()[\"version\"]`，`record` 叫 `record_consent`）。",
+        "- ②**殼與建角色各兩行**：`server.py` 的 `register`（約 1604 行那一支）建帳號前 `terms_base.register_check(CONTENT, body)`，`account_store().register(...)` 成功後 `terms_base.record(CONTENT, key)`；`/api/register` 的 handler 把 body 整個（或多讀 `terms_agree`、`age_ok`、`terms_version` 三欄）傳給它。identity 包 `/api/identity/character`（`routes.py:307` 那一支，建角色那一步才開帳號；設計第五節的順序：驗身分 → 建角色頁的勾選 → 建帳號記版本 → 進遊戲）同樣兩行，`web/identity.js` 建角色的送出要把表單裡多出來的欄位一起送（整張表單序列化，不要只挑名字、性別）。**terms 關著兩條路對 base 位元組一樣**（`register_check`、`record` 關著直接 return）。",
+        "- ③**畫面在 terms 包的 `web/terms.js`**（Joy 的包；不改殼 `app.js`、`main.js`；它本來就用 MutationObserver 改 `.gate` 的 DOM）：登入頁註冊模式的 `#gate-form`（`.seg` 切到註冊時）與 identity 的建角色表單（`identityCreateHtml` 畫的那一張；用它的 form 或 `data-` 記號找）各插兩個勾選——「我已滿 18 歲或已得到法定代理人同意」（`name=\"age_ok\"`）、「我已讀過並同意《使用條款》與《隱私權條款》」（`name=\"terms_agree\"`，兩個書名連 `/terms`、`/privacy`，新分頁）——與 hidden `terms_version`；版本從 terms 包新加的 `GET /api/terms/version`（不用登入、第一行 gate、關著 404、只回 `{version}`）拿；沒勾就送出時前端先擋、在表單下面寫那一句（同 ①，`// 待 joy 潤`）；terms 關著不插、不問。`tests/core/shell_tables.py` 的 `NO_LOGIN_ROUTES` 加 `GET /api/terms/version` 一列寫理由（還沒註冊的人要拿得到版本號；跟 `/terms` 同一個理由）。字每句旁 `待 joy 潤`，兩個勾選的字照 Joy 的 `terms.js` 同意鈕那句（「我已滿 18 歲或已得到法定代理人同意，並同意以上條款」）拆成兩句。",
+        "- ④**K 波留下的連結**：`web/identity.js` 第三方那格「隱私權說明」`href=\"#\"`（`IDENTITY_PRIVACY_LINK`）改連 `/privacy`（新分頁）；驗證碼輸入處要是已經有個資告知那段字就加同一個連結，沒有就寫 leftovers 不加。",
+        "- ⑤**同意層不重問**：註冊時記了 `register` 之後進遊戲 `/api/terms` 的 `need` 是空字串、不跳層（terms 現有的 `rules.need`，不改）；測試一條走完整條路。",
+        "- 測試：terms 開著——殼註冊沒勾、只勾一個、版本舊 → 同一句被拒、帳號沒建；都勾 → 建了、`consents` 多一列 `source=register`、進遊戲不跳層；identity 建角色同樣四條；terms 關著 → 兩條路對 base 位元組一樣、`/api/terms/version` 404、terms.js 不插勾選；node 測試：terms.js 註冊模式插兩個勾選與 hidden、登入模式不插、沒勾擋送出；邊界（terms 只 import 核心、identity 不 import terms）；`shell_tables` 那一列。每一條先紅後綠。",
+        "- **不做**：條款內容與版本（`content/terms.json` 不動）、同意層的畫法（terms 現有）、金流、IPv6 /64、第 209 批的東西（已進 develop）。資料庫第 9 版不動；terms 旁檔的表不改（只多寫 `register` 的列）。`core_changes` 逐條列（`core/terms_base.py` 新檔、`server.py` register 兩行與 body 欄位、`shell_tables.NO_LOGIN_ROUTES` 一列、terms 包 `routes.py` 掛 hook 與新路由、`web/terms.js`、identity 包兩處），每條寫依據（上面的原話與設計第五節）。退版：換回舊程式只是註冊不記 consent、登入後由同意層補問，什麼都不丟；季中能換；緊急開關 `Config.terms.enabled`（關掉就回到 base 的註冊）。",
+    ])
+
+
+WEB_Q = "**這一波兩線：帳號六（註冊兩個勾選接條款包，開關預設關）與測試工具第 112 批（flow 與 covers，沒動 `web/`）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過八回合網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空（第 112 批第 4 項改了 flow，那幾景要到）。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled`、`terms.enabled` 打開，只開 head；`fake_services: true`；`.local/identity.json` 放測試金鑰與 `notify_key`）：實機走——登入頁切到註冊：看得到兩個勾選與《使用條款》《隱私權條款》兩個連結（點開是 `/terms`、`/privacy` 兩頁）；都不勾送出被擋、表單下面有那一句；只勾一個也被擋；都勾送出 → 進遊戲，**沒有**疊同意層；登出、用 Email 驗證碼走到建角色頁：也有兩個勾選，沒勾被擋、勾了建好進遊戲不跳層；第三方那格的「隱私權說明」連到 `/privacy`；主控台 0 錯誤、沒有 `Refused to`；網路沒有 4xx／5xx（刻意的 401、404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. **第 112 批的工具**：`python scripts/webqa/coverage.py check` 過；`python scripts/same_behavior.py pick --covers identity` 印軌數（第 1 項歸包後應該跟 N 波量的 17 軌同一個量級）；`wave_gate.py --base <base> --head <head> --changed --dry-run` 的 decision 貼進回報。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["Q"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 206 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計第五節、條款包 README「給註冊那一邊」與計畫第 206 批那一節（PM 11/09 重寫）") + " **另外**：terms 關著時 `/api/register` 與 `/api/identity/character` 對 base 位元組一樣、`/api/terms/version` 404、terms.js 不插勾選；開著時沒勾、只勾一個、版本舊三種都同一句被拒且帳號沒建；都勾建好之後 `consents` 多一列 `source=register`、進遊戲 `/api/terms` 的 `need` 空；核心 `terms_base` 只有掛鉤與純規則、不 import 包；identity 包沒有 import terms；`shell_tables.NO_LOGIN_ROUTES` 多的那一列有理由；新字每句旁有 `待 joy 潤`。"),
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 112 批。第 1 項：`decide` 對 `tianxia/core/tuning/<包>.py` 歸包有先紅後綠、K／L／M／P 四波的 dry-run 表改前改後對得上；第 2 項：假人座位的 covers 是量出來的（看 covers.json 有座位那一段）、反向驗一對真的一邊紅一邊不紅、`pick --covers` 沒挑到的座位真的不跑（看 compare 的 bots 段）；第 4 項：那九景在不帶 `--quick` 的八回合裡真的到了（summary 的 scenes），加進 `must_reach.txt` 的只有連跑兩次都到的；第 5、6 項只有文字、沒有程式。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="帳號六", batches=[b206]), dict(name="測試工具", batches=[b112])],
+    merge_port=8397, fix_port=8398,
+    web_check=dict(ports="8399、8400", steps=WEB_Q),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
