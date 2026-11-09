@@ -1,5 +1,6 @@
 # Scene names (without the running number) the fast walk has to reach, round:scene. gate.py --write-must-reach replaces the rounds it walked.
 main:gate
+main:patch_pop
 main:prep_growth
 main:opening_picked
 main:opening_event
@@ -122,6 +123,8 @@ main:call_list
 main:call_zhujun
 main:call_log
 main:call_talk
+main:call_close
+main:call_act
 main:letter_open
 main:guide_next
 main:ex_wilds

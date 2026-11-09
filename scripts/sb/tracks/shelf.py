@@ -155,6 +155,6 @@ register_track("shelf", ShelfScenario, (("tianxia/features/smithy/content/tier4_
                                         ("握著像握一捧井水。", "握著像握一捧井水！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "terms",
+                       "territory_acts", "travel", "zhuan"))
 TRACK_REQUIRES["shelf"] = "content/figure_intros.json"  # 這一軌讀 server.FIGURE_INTROS；合回 develop 第 1 段之前的主幹沒有這個檔（_tracks_on 看的是 base）

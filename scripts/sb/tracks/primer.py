@@ -224,6 +224,6 @@ class PrimerScenario(StripScenario):
 register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py",),
                                           ("點狀態列的體力條，也看得到這幾句。", "點狀態列的體力條，也看得到這幾句！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

@@ -228,3 +228,78 @@ def test_latest_and_the_ps1_carry_a_bom(place):
     _summarize(out, checkout, "2026-10-31", cases=[("tests.core.test_a", "test_one", "pass")])
     assert (out / "latest.txt").read_bytes().startswith(b"\xef\xbb\xbf")
     assert (ROOT / "scripts" / "nightly.ps1").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+# 第 113 批：程式沒變就沿用前一次的結果（不跑 pytest）
+
+_GREEN = {"date": "2026-11-08", "sha": "aaaa1111bbbb", "started": "2026-11-08 03:30 ", "exit": 0, "minutes": 17.2,
+          "workers": 4, "notes": [], "result": {"tests": 9000, "failures": 0, "errors": 0, "skipped": 3, "passed": 8997,
+                                                 "time": 1030.0}, "failed": [], "red_since": {}}
+
+
+def _diff(monkeypatch, stdout: str, code: int = 0):
+    """假的 git：diff --name-only 回 stdout；其他指令不該被叫到。"""
+    def fake_git(cwd, *args, check=False, timeout=None):
+        assert args[0] == "diff" and args[1] == "--name-only", args
+        return nightly.subprocess.CompletedProcess(args, code, stdout, "")
+    monkeypatch.setattr(nightly, "git", fake_git)
+    return nightly.changed_files(Path("."), _GREEN["sha"], "cccc2222dddd")
+
+
+@pytest.mark.parametrize("stdout, previous, today, reuse", [
+    ("", _GREEN, "2026-11-09", True),  # 空 diff（同一個 SHA、或只差合併）：沿用
+    ("docs/superpowers/plans/x.md\n.claude/skills/a/SKILL.md\nCLAUDE.md\n", _GREEN, "2026-11-09", True),  # 只改文件
+    ("docs/guide/a.md\ntests/core/test_x.py\n", _GREEN, "2026-11-09", False),  # tests/ 變了照跑
+    ("", _GREEN, "2026-11-15", False),  # 離最後一次真跑 7 天：照跑
+    ("", {**_GREEN, "exit": 1, "failed": ["tests/core/test_a.py::test_one"]}, "2026-11-09", False),  # 前一次紅：照跑
+])
+def test_reuse_only_when_nothing_but_docs_changed_after_a_green_run_within_a_week(monkeypatch, stdout, previous, today, reuse):
+    changed = _diff(monkeypatch, stdout)
+    ok, reason = nightly.reuse_decision(previous, nightly.last_real(previous), changed, today, False)
+    assert ok is reuse, reason
+
+
+def test_reuse_counts_the_week_from_the_last_real_run_and_force_or_a_lost_sha_runs(monkeypatch):
+    reused = {**_GREEN, "date": "2026-11-12", "reused_from": "x", "last_real": "2026-11-08"}
+    assert nightly.last_real(reused) == "2026-11-08"
+    assert not nightly.reuse_decision(reused, nightly.last_real(reused), [], "2026-11-15", False)[0]
+    assert nightly.reuse_decision(reused, nightly.last_real(reused), [], "2026-11-14", False)[0]
+    assert not nightly.reuse_decision(_GREEN, "2026-11-08", [], "2026-11-09", True)[0]  # --force
+    assert _diff(monkeypatch, "", code=128) is None  # 前一次的 SHA 不在了：比不了
+    assert not nightly.reuse_decision(_GREEN, "2026-11-08", None, "2026-11-09", False)[0]
+    assert not nightly.reuse_decision(None, None, None, "2026-11-09", False)[0]
+    assert nightly.code_changes(["README.md", "docs/a.py", "scripts/x.md", "tests/a.py"]) == ["scripts/x.md", "tests/a.py"]
+
+
+def _fake_run(monkeypatch, tmp_path, changed):
+    out = tmp_path / "nightly"
+    out.mkdir()
+    (out / "2026-11-08.json").write_text(json.dumps(_GREEN), encoding="utf-8")
+    ran = []
+    monkeypatch.setattr(nightly, "prepare_checkout", lambda repo, checkout, branch: ("cccc2222dddd", []))
+    monkeypatch.setattr(nightly, "changed_files", lambda checkout, old, new: changed)
+    monkeypatch.setattr(nightly, "commits_between", lambda repo, previous, sha: ("a..b", "git log a..b", ["c1 文件"]))
+    monkeypatch.setattr(nightly, "run_suite", lambda *a: ran.append(a) or (5, 1.0))
+    return out, ran
+
+
+def test_a_reused_night_writes_the_json_and_latest_without_running(monkeypatch, tmp_path):
+    out, ran = _fake_run(monkeypatch, tmp_path, ["docs/guide/a.md"])
+    assert nightly._run(tmp_path, out, tmp_path / "checkout", "develop", 4, "2026-11-09", "2026-11-09 03:30 ") == 0
+    assert ran == []
+    kept = json.loads((out / "2026-11-09.json").read_text(encoding="utf-8"))
+    assert kept["sha"] == "cccc2222dddd" and kept["reused_from"] == "aaaa1111bbbb" and kept["last_real"] == "2026-11-08"
+    assert kept["result"] == _GREEN["result"] and kept["exit"] == 0
+    latest = (out / "latest.txt").read_text(encoding="utf-8-sig").splitlines()
+    assert latest[0] == "沿用 aaaa1111（程式沒變）"
+    assert "8997 passed" in latest[2] and (out / "latest.txt").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_force_or_a_code_change_runs_the_suite(monkeypatch, tmp_path):
+    out, ran = _fake_run(monkeypatch, tmp_path, [])
+    nightly._run(tmp_path, out, tmp_path / "checkout", "develop", 4, "2026-11-09", "s", force=True)
+    assert len(ran) == 1 and "沿用" not in (out / "latest.txt").read_text(encoding="utf-8-sig")
+    (out / "latest.txt").unlink()
+    monkeypatch.setattr(nightly, "changed_files", lambda checkout, old, new: ["tianxia/engine.py"])
+    nightly._run(tmp_path, out, tmp_path / "checkout", "develop", 4, "2026-11-09", "s")
+    assert len(ran) == 2
