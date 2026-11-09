@@ -616,6 +616,7 @@ class SqliteWorldStore:
         """易名帖（rename.py）：資料庫裡名號當身分的地方一起從 old 換成 new，一筆交易。只換整個字串相等的（rename.swap）；
         這一季的全服狀態、決戰、全服登記與投靠名冊照換，以前的季不動；列傳、錢包、帳號跨季照鍵搬；
         別人的存檔裡提到他的（邀請、結伴、風聞……）照換。自己那一列角色由呼叫端用新名號存（這裡刪掉舊的那一列）。"""
+        from .core import renames
         from .core.swap import swap_json
         okey, nkey = name_key(old), name_key(new)
         mapping = {old: new, okey: nkey}
@@ -650,6 +651,10 @@ class SqliteWorldStore:
                     conn.execute(f"UPDATE {table} SET owner = ?, ref = ? WHERE id = ?", (nkey, ref, r["id"]))
             conn.execute("UPDATE mall_entitlements SET owner = ? WHERE owner = ?", (nkey, okey))
             conn.execute("DELETE FROM characters WHERE key = ?", (okey,))
+            # 資料庫旁邊的小檔（帖友書信）不在這一筆交易裡：COMMIT 之後照登記的叫（core/renames）
+            path = getattr(self.db, "path", None)
+            if path is not None:
+                self.db.after_commit(lambda: renames.run(path, okey, nkey))
             for r in conn.execute("SELECT key, data FROM characters").fetchall():
                 data = swap_json(r["data"], mapping)
                 if data != r["data"]:

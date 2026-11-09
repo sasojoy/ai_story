@@ -40,6 +40,7 @@
   const SELF_NEWS = [
     { id: "annals", name: "行狀" },
     { id: "mingtie", name: "名帖匣" }, // 見聞改版（Joy 2026-11-08）：名帖是自己的東西，從見聞・紀錄搬來
+    { id: "mail", name: "信匣", when: (m) => !!(m && m.mail) }, // 帖友書信（Joy 2026-11-07，web/mail.js）：開著的季才畫（main.mail），跟名帖匣一起
   ];
   const POLL_MS = 10000;
   // 江湖頁「前往」的走法（跟 atlas.MODES 同一份）。選的走法只放在 S.moveMode：不寫進 localStorage、cookie，
@@ -233,6 +234,7 @@
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
+    if (main.mail && main.mail.unread) paintNewsDot(); // 信匣有沒看的信：輪詢拿到的也補一顆紅點
     // 自建形象的圖版本（main.looks_ver）：那幾支組圖網址時接成 ?v=，圖一換網址就換，手機不必清快取
     window.LOOKS_VER = main.looks_ver || "";
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
@@ -254,9 +256,13 @@
 
   // 分頁列上見聞那一顆補上紅點：分頁列只在整頁重畫（render）時畫，輪詢只重畫狀態列與頁面，
   // 所以紅點亮起的當下就地補一顆（已經有、或正在看見聞時不補）
+  // 見聞的紅點：新的一場（S.unseen），或信匣有沒看的信（main.mail.unread，web/mail.js）
+  // 信匣在俠客頁（SELF_NEWS）：沒看的信亮「俠客」那一顆（mail.js 的 mailDot；看信匣的時候不亮）
   function paintNewsDot() {
     const tab = document.querySelector('.tabs .tab[data-tab="news"]');
     if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
+    const hero = document.querySelector('.tabs .tab[data-tab="practice"]');
+    if (hero && typeof mailDot === "function" && mailDot() && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
   }
 
   // ── 整體 ──
@@ -345,7 +351,7 @@
     const glow = (t) => [t.id, ...(on(t) ? [] : t.also || [])].map((id) => `tab:${id}`).join(" ");
     return `${typeof bpMiniHtml === "function" ? bpMiniHtml() : ""}<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${on(t) ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="${glow(t)}">
-          <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
+          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && S.unseen && S.tab !== "news") || (t.id === "practice" && typeof mailDot === "function" && mailDot()) ? '<i class="dot"></i>' : ""}
         </button>`).join("")}${mall ? `
         <button class="tab tab-mall" data-act="mall-open" data-tab="mall" data-glow="tab:mall" aria-label="商城，元寶 ${S.main.mall.balance | 0}"><span class="ico">寶</span>商城</button>` : ""}</div></nav>`;
   }
@@ -1184,6 +1190,7 @@
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
+    else if (S.news === "mail") body = mailBoxHtml();
     else body = `${m.latest ? `<div class="nw-just">${m.latest}</div>` : ""}<div class="card nw-card">${newsJournalHtml((m.journal || "") + (m.older || ""))}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
@@ -1348,6 +1355,7 @@
       if (tab === "news" && newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
       if (tab === "news" && S.news === "boards") await loadBoards();
       if (tab === "news" && S.news === "mingtie") await loadMingtie();
+      if (tab === "news" && S.news === "mail" && !S.mailWith) await loadMail();
     } catch (e) { /* api() 已經提示過 */ }
   }
 
@@ -1859,6 +1867,7 @@
           if (newsPart(S.news) === NEWS[0] && S.main && S.main.xingshi) await loadXingshi();
           if (S.news === "boards") await loadBoards();
           if (S.news === "mingtie") await loadMingtie();
+          if (S.news === "mail") { S.mailWith = null; await loadMail(); }
           break;
         case "board": S.board = el.dataset.board; renderPage(); break;
         case "board-card": await openBoardCard(el); break;

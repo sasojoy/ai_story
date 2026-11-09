@@ -259,6 +259,10 @@ NO_LOGIN_ROUTES = {
     ("GET", "/privacy"): "隱私權條款全文：同上",
     ("GET", "/api/terms"): "terms：Config.terms.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401",
     ("POST", "/api/terms/agree"): "terms：同上",
+    # mail（帖友書信；Joy 2026-11-07 要的，2026-11-08「趕快合一合」）
+    ("GET", "/api/mail"): "mail：Config.mail.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401",
+    ("GET", "/api/mail/thread"): "mail：同上",
+    ("POST", "/api/mail/{op}"): "mail：同上",
     ("GET", "/api/looks/img/{look}/{sheet}"): "形象圖，<img> 不帶登入、只回圖",
     # 先於登入擋掉：沒登入也不是 401，但碰不到資料
     ("POST", "/api/mall/rename"): "先驗名號（空名 400），給了名號才問登入",
