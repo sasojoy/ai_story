@@ -45,4 +45,8 @@ def record(content, account_key: str, version, source: str = "register") -> bool
     except ValueError:
         _log.warning("terms: register consent not recorded (version changed)")
         return False
+    except Exception:
+        # 旁檔寫不進去（鎖住、磁碟滿）也不往上丟：帳號已經開好了，登入後同意層會補問。
+        _log.exception("terms: register consent not recorded (side file write failed)")
+        return False
     return True

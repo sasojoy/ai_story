@@ -77,3 +77,16 @@ def test_terms_base_record_swallows_stale(content, hook):
     content.config.terms.enabled = True
     hook.stale = True
     assert tb.record(content, "ab", "v1") is False  # 不丟例外、不 500：登入後同意層補問
+
+
+def test_terms_base_record_swallows_a_side_file_write_failure(content):
+    """旁檔寫不進去（鎖住、磁碟滿）也不往上丟：帳號已經開好了，回 False，登入後同意層補問。"""
+    import sqlite3
+
+    class Broken(FakeHook):
+        def record(self, account_key, version, source):
+            raise sqlite3.OperationalError("database is locked")
+
+    content.config.terms.enabled = True
+    tb.set_hook(Broken())
+    assert tb.record(content, "ab", "v2") is False
