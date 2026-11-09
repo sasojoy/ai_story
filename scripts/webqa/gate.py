@@ -60,6 +60,7 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/titles.js": "the titles package (Config.titles) is off in every profile the walk runs: no main.titles, so nothing calls into it",
     "web/terms.js": "the terms package (Config.terms) is off in every profile the walk runs: /api/terms is 404, so its sheet never shows",
     "web/jieyi.js": "the jieyi package (Config.jieyi) is off in every profile the walk runs: no main.jieyi and no offer card, so nothing calls into it",
+    "web/mail.js": "the mail package (Config.mail) is off in every profile the walk runs: no main.mail, so the 信匣 entry is not drawn and nothing calls into it",
 }
 
 

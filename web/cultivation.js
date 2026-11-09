@@ -355,7 +355,7 @@
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
   // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
-  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name} ›</button>`).join("") : "");
+  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.filter((n) => !n.when || n.when(S.main)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
