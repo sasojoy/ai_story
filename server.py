@@ -1497,8 +1497,8 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
              "blocked": game.practice_refusal(k),
              # 練下一成要的心得（修練頁的鈕上寫給玩家看）；還沒學或已經第十成就沒有價錢
              "price": team.practice_cost(game.state, game.content, k) if learned[k] and level[k] < team.MAX_LEVEL else None,
-             # 武學打了才升的季：這一成的熟練進度與今天還能長多少（修練頁那一門底下一行）；別的季是 None
-             "progress": team.practice_progress(game.state, game.content, k)}
+             # 武學打了才升的季：這一成的熟練進度與今天還能長多少（修練頁那一門底下一行）；別的季不送這一鍵（關著一個字不變）
+             **({"progress": prog} if (prog := team.practice_progress(game.state, game.content, k)) is not None else {})}
             for k in KINDS
         ],
         # 療傷要多少銀兩（修練頁的療傷鈕上寫）：照內傷計價，沒有內傷是 0
