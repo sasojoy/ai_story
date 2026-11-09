@@ -78,6 +78,8 @@
   加跨店的內容檢查 check_shop_lines（content.validate 原位函式內 import，不開 CONTENT_SLOTS 新格）；page_view、酒肆、軍需帳與四間店的 shop_view.py 讀它。各間店本體在包裡（Feature.shop_view）。同 event_check 不進 MODULES。
 # identity（J 波第 201 批「帳號一」；計畫 docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md）
 - identity_base.py：帳號綁定別人也要讀的那一半——正規化、遮罩、金鑰、subject_hmac、on、phone_ok、blocked_name；identity 包、server.name_taken、商城易名帖讀它。同 event_check 不進 MODULES。
+# terms（第 206 批「帳號六」；計畫 docs/superpowers/plans/2026-11-08-帳號與客服-第206批.md）
+- terms_base.py：註冊那兩條路（server.register、identity 包建角色）查兩個勾選、建好帳號記同意版本的接縫——on、set_hook、register_problem、record；terms 包掛路由時 set_hook，殼與 identity 包讀它。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

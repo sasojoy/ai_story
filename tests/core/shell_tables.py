@@ -259,6 +259,7 @@ NO_LOGIN_ROUTES = {
     ("GET", "/privacy"): "隱私權條款全文：同上",
     ("GET", "/api/terms"): "terms：Config.terms.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401",
     ("POST", "/api/terms/agree"): "terms：同上",
+    ("GET", "/api/terms/version"): "terms（第 206 批）：註冊頁與建角色頁的勾選要帶現行版號，還沒有帳號的人要拿得到；跟 /terms 同一個理由，只回版號一格；關著 404（gate 先於一切）",
     # mail（帖友書信；Joy 2026-11-07 要的，2026-11-08「趕快合一合」）
     ("GET", "/api/mail"): "mail：Config.mail.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401",
     ("GET", "/api/mail/thread"): "mail：同上",

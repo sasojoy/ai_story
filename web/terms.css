@@ -10,3 +10,7 @@
 .terms-row .btn { flex: 1; }
 .terms-out { width: 100%; margin-top: 8px; }
 .terms-card [hidden] { display: none !important; }
+/* 第 206 批：註冊頁與建角色頁的兩個勾選 */
+.terms-check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.terms-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+.terms-check a { color: inherit; }

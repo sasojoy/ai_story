@@ -88,6 +88,7 @@ from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.core import identity_base  # identity（帳號與客服第 201 批）：開著時擋客服與 id: 開頭的名號（name_taken）
+from tianxia.core import terms_base  # terms（帳號與客服第 206 批）：註冊查兩個勾選、建好帳號記同意版本；關著什麼都不做
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
@@ -1601,15 +1602,18 @@ def login(login_name: str, password: str) -> str:
     return normalize(login_name)
 
 
-def register(login_name: str, password: str, again: str) -> str:
+def register(login_name: str, password: str, again: str, terms: dict | None = None) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
+    if why := terms_base.register_problem(CONTENT, terms or {}):  # 第 206 批：terms 開著才查兩個勾選與版號；關著回 None
+        raise GameError(why)
     try:
         # 第 209 批（企劃者 2026-11-09「2 選 A」）：identity 開著時全體密碼至少 12 字（不看名單：註冊頁試不出名單）；關著 strict 一律假
         strict = identity_base.on(CONTENT)
         account_store().register(login_name, password, strict=strict)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
+    terms_base.record(CONTENT, normalize(login_name), (terms or {}).get("terms_version"))  # 第 206 批：記勾過的那一版；關著不記
     return normalize(login_name)
 
 
@@ -1916,7 +1920,7 @@ def api_register(request: Request, response: Response, body: dict = Body(...)):
     ip, now = client_ip(request), time.time()
     if not _register_allowed(ip, now):
         raise GameError(TOO_MANY_REGISTERS)
-    key = register(body.get("login", ""), body.get("password", ""), body.get("again", ""))
+    key = register(body.get("login", ""), body.get("password", ""), body.get("again", ""), body)  # 第 206 批：整個 body 給條款勾選
     _registered(ip, now)
     _start_session(request, response, key)
     return _entry(key)

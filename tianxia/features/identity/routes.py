@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 
 from tianxia import accounts as shell_accounts
 from tianxia.core import identity_base
+from tianxia.core import terms_base  # 第 206 批：建角色那一步開帳號要兩個勾選、記同意版本（不 import terms 包）
 from tianxia.database import open_database
 
 from . import alerts, binding, codes, contacts, notes, oauth, senders, store
@@ -337,6 +338,8 @@ def router(shell) -> APIRouter:
             ip = shell.client_ip(request)
             if not shell._register_allowed(ip, now):
                 raise shell.GameError(shell.TOO_MANY_REGISTERS)
+            if why := terms_base.register_problem(shell.CONTENT, body):  # 第 206 批：terms 開著才查；拒了 pending 不丟、可以再送
+                raise shell.GameError(why)
             with shell.open_database().transaction():  # create_without_password 與 create_character 的交易併進這一筆
                 key = accounts.login_key(provider, sub)  # 連按兩次：前一下在這筆交易開始前已經開好
                 if key is None:
@@ -347,6 +350,7 @@ def router(shell) -> APIRouter:
                     made = True
             if made:
                 shell._registered(ip, now)
+                terms_base.record(shell.CONTENT, key, body.get("terms_version"))  # 第 206 批：記勾過的那一版；關著不記
                 secret = identity_base.read_key()
                 if secret is not None:
                     hashed = identity_base.subject_hmac(secret, provider, sub) if provider in oauth.PROVIDERS else sub
