@@ -8,6 +8,7 @@ from sb.harness import emit, register_track
 
 BIND_ROUTES = (
     ("GET", "/api/identity/me", None),
+    ("GET", "/api/identity/session", None),  # 第 209 批「請用密碼重新登入」：base 沒有這條、head 關著，兩邊都 404
     ("POST", "/api/identity/reauth", {"password": "secret-pw"}),
     ("POST", "/api/identity/unbind", {"provider": "phone"}),
     ("POST", "/api/identity/password/set", {"login": "mo_qiao", "new": "inkstone-1", "again": "inkstone-1"}),

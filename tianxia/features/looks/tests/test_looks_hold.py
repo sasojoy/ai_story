@@ -55,3 +55,47 @@ def test_identity_off_list_unchanged(on, world, keyed):  # noqa: F811
     phone_kit.gate(on, on=False, identity=False)
     phone_kit.hold(world.db, "ray1", T0 + 100)
     assert "掛到市集了" in actions.market_list(maker, look, 800)[-1]
+
+
+# ── 第 209 批：花元寶的另外兩個入口（自建形象、招式下單）也擋（同一句、元寶不動；鍵照商城買 mall_buy）──
+
+
+def _orderer(on, world):  # noqa: F811
+    from test_looks import _game
+    from test_looks_moves import _art
+
+    from tianxia.models import MallItem
+
+    on.mall["move_basic"] = MallItem(id="move_basic", name="通用絕招", price=60, kind="look", effects={"move_basic": 1})
+    maker = _game(on, world=world)
+    phone_kit.account(world.db, "沈浪", "ray1")
+    _art(maker)
+    return maker
+
+
+def test_order_and_order_move_blocked_while_held(on, world, keyed):  # noqa: F811
+    from tianxia.wallet import Wallet
+
+    maker = _orderer(on, world)
+    phone_kit.gate(on, on=False)
+    phone_kit.hold(world.db, "ray1", T0 + 100)
+    before = Wallet(world.db).balance("沈浪")
+    assert actions.order(maker, "白衣書生", "白衣書生，背著竹簍", "order-ref-h01") == [_stale(on)]
+    assert actions.order_move(maker, "一劍寒光九萬里", "move-ref-h01", basic=True) == [_stale(on)]
+    assert Wallet(world.db).balance("沈浪") == before
+    maker.sync(T0 + 100)
+    actions.order(maker, "白衣書生", "白衣書生，背著竹簍", "order-ref-h02")
+    actions.order_move(maker, "一劍寒光九萬里", "move-ref-h02", basic=True)
+    assert Wallet(world.db).balance("沈浪") == before - 900 - 60  # 過了扣押照扣
+
+
+def test_identity_off_orders_unchanged(on, world, keyed):  # noqa: F811
+    from tianxia.wallet import Wallet
+
+    maker = _orderer(on, world)
+    phone_kit.gate(on, on=False, identity=False)
+    phone_kit.hold(world.db, "ray1", T0 + 100)
+    before = Wallet(world.db).balance("沈浪")
+    actions.order(maker, "白衣書生", "白衣書生，背著竹簍", "order-ref-h03")
+    actions.order_move(maker, "一劍寒光九萬里", "move-ref-h03", basic=True)
+    assert Wallet(world.db).balance("沈浪") == before - 900 - 60

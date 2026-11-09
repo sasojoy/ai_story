@@ -126,6 +126,20 @@ async function main() {
   let caught = "";
   try { await failing.FORMS["idp-create-form"](submitForm, { name: "周泰安" }); } catch (e) { caught = e.message; }
   out.createFails = { caught, pending: failing.S.identityPending };
+  // 第 209 批：identity 開著（gate 帶 pw_min）時註冊格多一行「密碼至少 12 字」、placeholder 換字；登入格、gate 沒帶 pw_min 不動
+  const pwInfo = Object.assign({}, info, { pw_min: 12 });
+  for (const [key, mode, inf] of [["pwReg", "register", pwInfo], ["pwLogin", "login", pwInfo],
+    ["pwEmpty", "register", { ways: [], turnstile: "", pw_min: 12 }], ["pwNone", "register", info]]) {
+    const p = page({ info: inf, stored: { tx_gate_mode: mode }, S: { identity: true, gateMode: mode } });
+    p.renderGate();
+    await tick();
+    p.renderGate();
+    out[key] = p.html();
+  }
+  // 第 209 批：管理者重設密碼之後的扣押期，第三方綁定回 ?auth=held（認得、拿掉）
+  const held = page({ info, S: { identity: true }, href: "https://example.com/?auth=held&via=line" });
+  await tick();
+  out.held = { replaced: held.replaced, toasts: held.toasts };
   return out;
 }
 finish(main());
@@ -486,3 +500,82 @@ def test_admin_alert_line_only_with_words():
     out = _run_208()
     assert out["alertOn"] == '<p class="muted idp-alert">驗證碼全服上限到了：甲</p>'
     assert out["alertOff"] == ""
+
+
+# ── 第 209 批：註冊格的 12 字提示、?auth=held ──
+
+
+def test_register_tab_shows_pw_min_only_when_on():
+    out = _run()
+    reg = out["pwReg"]
+    assert '<p class="idp-fine idp-pw-min">密碼至少 12 字。</p><p class="form-msg"' in reg
+    assert 'placeholder="至少 12 字"' in reg and 'placeholder="至少 6 字"' not in reg
+    assert reg.count("idp-pw-min") == 1  # 再畫一次不重複
+    assert "idp-pw-min" not in out["pwLogin"] and 'id="gate-form"' in out["pwLogin"]
+    assert "idp-pw-min" in out["pwEmpty"] and 'placeholder="至少 12 字"' in out["pwEmpty"]  # 沒有別的路也畫（12 字照樣要求）
+    assert "idp-pw-min" not in out["pwNone"] and 'placeholder="至少 6 字"' in out["pwNone"]  # gate 沒帶 pw_min：一個字不動
+
+
+def test_auth_held_is_known_and_toasted():
+    out = _run()
+    assert out["held"]["replaced"] == ["/"]
+    assert out["held"]["toasts"] == ["管理者剛幫這個帳號重設了密碼，72 小時內不能綁定新的登入方式。"]
+
+
+# ── 第 209 批：設定抽屜「帳號綁定」上方的「請用密碼重新登入」──
+
+DRIVER_209 = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+async function drawer(opts) {
+  const S = Object.assign({ stage: "game" }, opts.S || {});
+  const posts = [];
+  const before = [];
+  let inserted = false;
+  const idpFold = { insertAdjacentHTML: (where, v) => before.push([where, v]), set outerHTML(v) {}, open: false };
+  const parent = { querySelector: (sel) => (sel === ".idp-fold" && inserted ? idpFold : null) };
+  const shellFold = { parentElement: parent, hidden: false, insertAdjacentHTML: () => { inserted = true; } };
+  const pw = { closest: () => shellFold };
+  const document = {
+    querySelectorAll: () => [],
+    querySelector: (sel) => (sel === ".idp-fold" && inserted ? idpFold : sel === ".idp-relogin" && before.length ? {} : null),
+    getElementById: (id) => (id === "pw-form" ? pw : null),
+  };
+  const api = async (path, body) => {
+    posts.push(path);
+    if (path === "/api/identity/session") {
+      if (opts.session === 404) throw new Error("404");
+      return opts.session;
+    }
+    return { kinds: [], ways: [], has_password: true, recent: 0, reset: 0, hold: false, turnstile: "" };
+  };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "document", "renderKeepingSheet",
+    idSrc + "\nreturn { identityDecorate, identityReloginHtml };")(
+    S, esc, () => {}, () => {}, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {}, { href: "https://example.com/" },
+    { replaceState: () => {} }, document, () => {});
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  return { posts, before, html: k.identityReloginHtml() };
+}
+async function main() {
+  const info = { kinds: ["password"], has_password: true, phone_missing: false };
+  return {
+    on: await drawer({ S: { main: { admin: false, identity: info } }, session: { relogin: true } }),
+    off: await drawer({ S: { main: { admin: false, identity: info } }, session: { relogin: false } }),
+    gone: await drawer({ S: { main: { admin: false, identity: info } }, session: 404 }),
+    admin: await drawer({ S: { main: { admin: true, identity: info } }, session: { relogin: true } }),
+  };
+}
+finish(main());
+"""
+
+
+def test_relogin_line_only_when_flag_true():
+    out = run(DRIVER_209, {"identity": str(WEB / "identity.js")})
+    line = '<p class="form-msg idp-relogin">管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。</p>'
+    assert out["on"]["html"] == line
+    assert out["on"]["before"] == [["beforebegin", line]] and "/api/identity/session" in out["on"]["posts"]
+    assert out["off"]["before"] == [] and out["gone"]["before"] == []  # 假、404（關著）什麼都不畫
+    assert out["admin"]["before"] == [] and "/api/identity/session" not in out["admin"]["posts"]  # 已經是管理者：不問

@@ -13,7 +13,7 @@ from datetime import datetime
 
 from tianxia.core import identity_base
 
-from . import binding, notes, store
+from . import binding, contacts, notes, store
 
 NOT_FOUND = "找不到這個帳號或名號。"  # 管理者重設密碼的同一句（features/admin/routes.py；不是新字）
 ADMIN_UNBOUND = "已解綁 {who} 的{kind}。"  # 待 joy 潤
@@ -87,8 +87,10 @@ def unbind(shell, game, body: dict, now: float) -> list[str]:
     side = _side()
     side.record_unbound(binding.subject_hash(identity_base.read_key() or b"", provider, rows[provider]["subject"]), provider, account.id, now)
     side.drop_meta(account.id, provider)
-    side.drop_contacts(account.id, provider)  # 第 208 批：通知用的加密號碼一起刪（管理者做的不寄）
+    side.drop_contacts(account.id, provider)  # 第 208 批：通知用的加密號碼一起刪
     notes.add(side, account.id, binding.NOTE_ADMIN_UNBOUND.format(kind=binding.kind_name(provider)), now)
+    # 第 209 批（PM 11/09 定寄）：寄給剩下綁著的 Email、手機（被拿掉的那一支上面已刪）；沒有可寄的只寫上面那則紀錄
+    contacts.send_all(shell, side, account.id, binding.MAIL_ADMIN_UNBOUND.format(kind=binding.kind_name(provider)))
     return [ADMIN_UNBOUND.format(who=account.login, kind=binding.kind_name(provider))]
 
 

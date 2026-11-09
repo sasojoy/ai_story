@@ -127,7 +127,7 @@ def test_verify_logs_in_bound_account(on, monkeypatch):
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
     db = database.open_database()
     store = AccountStore(db)
-    store.register("shen_01", "secret-pw")
+    store.register("shen_01", "secret-pw-12")
     store.add_login("shen_01", "phone", _subj("phone", "+886912345678"), "09*****678")
     c = TestClient(server.app)
     _send(c)

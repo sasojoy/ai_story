@@ -57,7 +57,8 @@ TABLES = (
 # bindings_meta 的 bound_at（NULL＝開帳號那一種或舊資料，不算新綁）與 reminded_at、oauth_tickets 的 account_id（綁定與重驗的單綁帳號）
 ADDED_COLUMNS = (("challenges", "channel", "TEXT"), ("challenges", "subject_hmac", "TEXT"), ("challenges", "display", "TEXT"),
                  *identity_base.SESSION_COLUMNS, *identity_base.META_COLUMNS,
-                 ("oauth_tickets", "account_id", "INTEGER"), ("challenges", "contact", "BLOB"))  # 第 208 批：綁定的單封存的號碼
+                 ("oauth_tickets", "account_id", "INTEGER"), ("challenges", "contact", "BLOB"),  # 第 208 批：綁定的單封存的號碼
+                 ("pending", "contact", "BLOB"), ("rechecks", "contact", "BLOB"))  # 第 209 批：登入驗碼的號碼帶到建角色、「這不是我的帳號」
 NOTE_NEW, NOTE_PENDING, NOTE_DONE = 0, 1, 2  # account_notes.state：還沒寫、寫進存檔等下一輪確認、確認過
 
 
@@ -167,15 +168,23 @@ class IdentityStore:
 
     # ── 還沒開帳號的身分（第 202 批；建角色前不開帳號，設計 4.2；第 203 批驗證碼查無帳號也寫這裡）──
 
-    def put_pending(self, token_hash: str, provider: str, subject: str, expires: float, now: float, display: str = "") -> None:
+    def put_pending(self, token_hash: str, provider: str, subject: str, expires: float, now: float, display: str = "",
+                    contact: bytes | None = None) -> None:
+        """contact（第 209 批）：驗證碼那條單上封的號碼（contacts.sealer 封的），建角色時存進 contacts；第三方是 None。"""
         with self._write() as conn:
             conn.execute("DELETE FROM pending WHERE expires <= ?", (now,))
             conn.execute(
-                "INSERT INTO pending (token_hash, provider, subject, display, expires, created) VALUES (?, ?, ?, ?, ?, ?) "
+                "INSERT INTO pending (token_hash, provider, subject, display, expires, created, contact) VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT (token_hash) DO UPDATE SET provider = excluded.provider, subject = excluded.subject, "
-                "display = excluded.display, expires = excluded.expires, created = excluded.created",
-                (token_hash, provider, subject, display, expires, now),
+                "display = excluded.display, expires = excluded.expires, created = excluded.created, contact = excluded.contact",
+                (token_hash, provider, subject, display, expires, now, contact),
             )
+
+    def pending_contact(self, token_hash: str) -> bytes | None:
+        """第 209 批：待處理那一列封的號碼；沒有回 None。"""
+        with self._conn() as conn:
+            row = conn.execute("SELECT contact FROM pending WHERE token_hash = ?", (token_hash,)).fetchone()
+        return row[0] if row is not None else None
 
     def pending_display(self, token_hash: str) -> str:
         """驗證碼那條留的遮罩號碼（建角色寫 logins.display 用）；沒有回空字串。"""
@@ -347,25 +356,27 @@ class IdentityStore:
             row = conn.execute("SELECT until FROM holds WHERE account_id = ?", (account_id,)).fetchone()
         return None if row is None else row[0]
 
-    def put_recheck(self, token_hash: str, account_id: int, provider: str, subject_hmac: str, display: str, at: float) -> None:
+    def put_recheck(self, token_hash: str, account_id: int, provider: str, subject_hmac: str, display: str, at: float,
+                    contact: bytes | None = None) -> None:
+        """contact（第 209 批）：單上封的號碼，「這不是我的帳號」之後帶進 pending、建角色時存。"""
         with self._write() as conn:
             conn.execute(
-                "INSERT INTO rechecks (token_hash, account_id, provider, subject_hmac, display, at) VALUES (?, ?, ?, ?, ?, ?) "
+                "INSERT INTO rechecks (token_hash, account_id, provider, subject_hmac, display, at, contact) VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT (token_hash) DO UPDATE SET account_id = excluded.account_id, provider = excluded.provider, "
-                "subject_hmac = excluded.subject_hmac, display = excluded.display, at = excluded.at",
-                (token_hash, account_id, provider, subject_hmac, display, at),
+                "subject_hmac = excluded.subject_hmac, display = excluded.display, at = excluded.at, contact = excluded.contact",
+                (token_hash, account_id, provider, subject_hmac, display, at, contact),
             )
 
     def take_recheck(self, token_hash: str, now: float, ttl: float) -> dict | None:
         """拿走這張單（讀完就刪）；過了 ttl 秒當沒有。"""
         with self._write() as conn:
             row = conn.execute(
-                "SELECT account_id, provider, subject_hmac, display, at FROM rechecks WHERE token_hash = ?", (token_hash,),
+                "SELECT account_id, provider, subject_hmac, display, at, contact FROM rechecks WHERE token_hash = ?", (token_hash,),
             ).fetchone()
             conn.execute("DELETE FROM rechecks WHERE token_hash = ? OR at <= ?", (token_hash, now - ttl))
         if row is None or now - row[4] > ttl:
             return None
-        return {"account_id": row[0], "provider": row[1], "subject_hmac": row[2], "display": row[3]}
+        return {"account_id": row[0], "provider": row[1], "subject_hmac": row[2], "display": row[3], "contact": row[5]}
 
     # ── 「帳號」紀錄（第 204 批；兩段式同客服包）──────────
 

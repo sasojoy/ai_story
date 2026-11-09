@@ -52,6 +52,9 @@ NOTE_PASSWORD_RESET = "這個帳號用{kind}登入後重設了密碼，其他裝
 NOTE_ADMIN_UNBOUND = "管理者幫這個帳號解綁了{kind}。"  # 待 joy 潤
 NOTE_REMIND = "你綁的{kind}已經很久沒驗證了，還是你的嗎？到設定的「帳號綁定」重新驗一次就好，不驗也不影響遊戲。"  # 待 joy 潤
 NOTE_RELEASED = "有人驗過這個帳號綁的{kind}，說那不是你的帳號：已經從這個帳號拿掉。"  # 待 joy 潤
+# 第 209 批（PM 11/09 定：管理者解綁、「這不是我的帳號」也寄通知）：寄給剩下綁著的 Email、手機（被拿掉的那一支不寄）
+MAIL_ADMIN_UNBOUND = "管理者幫這個帳號解綁了{kind}。不是你要求的話，請馬上寫信給客服。"  # 待 joy 潤
+MAIL_RELEASED = "有人驗過這個帳號綁的{kind}，說那不是這個帳號的，已經從這個帳號拿掉。不是你的意思的話，請馬上寫信給客服。"  # 待 joy 潤
 
 
 def kind_name(provider: str) -> str:

@@ -244,34 +244,46 @@ def test_listed_matches_admins_and_support(content, monkeypatch):
     assert ib.listed(content) is False
 
 
-def test_check_password_staff_needs_12():
+def test_check_password_strict_needs_12():
     from tianxia import accounts
 
-    assert accounts.check_password("12345678") == "12345678"  # 不在名單：一個字不變
+    assert accounts.check_password("12345678") == "12345678"  # strict 假（identity 關著）：一個字不變
     for short in ("", "12345", "12345678901"):
         with pytest.raises(accounts.AccountError) as got:
-            accounts.check_password(short, staff=True)
-        assert str(got.value) == accounts.STAFF_SHORT_PASSWORD
-    assert accounts.check_password("123456789012", staff=True) == "123456789012"
+            accounts.check_password(short, strict=True)
+        assert str(got.value) == accounts.STRICT_SHORT_PASSWORD
+    assert accounts.check_password("123456789012", strict=True) == "123456789012"
     with pytest.raises(accounts.AccountError) as got:
-        accounts.check_password("x" * (accounts.PASSWORD_MAX + 1), staff=True)
+        accounts.check_password("x" * (accounts.PASSWORD_MAX + 1), strict=True)
     assert str(got.value) == accounts.LONG_PASSWORD
-    assert accounts.STAFF_SHORT_PASSWORD == "這個帳號的密碼至少 12 字。"
+    assert accounts.STRICT_SHORT_PASSWORD == "密碼至少 12 字。"  # 第 209 批：全體同一句，不帶「這個帳號」
 
 
-def test_account_store_passes_staff(game):
+
+def test_notify_without_notifier_is_zero(monkeypatch):
+    """第 209 批：admin 包經核心寄通知；identity 包沒登記（沒掛路由）回 0、不丟例外。"""
+    import tianxia.core.identity_base as ib
+
+    monkeypatch.setattr(ib, "_NOTIFIER", None)
+    assert ib.notify(1, "x") == 0
+    seen = []
+    ib.set_notifier(lambda account_id, text: seen.append((account_id, text)) or 2)
+    assert ib.notify(5, "y") == 2 and seen == [(5, "y")]
+    assert ib.NOTICE_ADMIN_RESET == "管理者幫這個帳號重設了密碼。不是你要求的話，請馬上寫信給客服。"
+
+def test_account_store_passes_strict(game):
     from tianxia import accounts
 
     store = accounts.AccountStore(game.world.db)
     with pytest.raises(accounts.AccountError):
-        store.register("boss_01", "secret-pw", staff=True)
+        store.register("boss_01", "secret-pw", strict=True)
     store.register("boss_01", "secret-pw")
     with pytest.raises(accounts.AccountError):
-        store.change_password("boss_01", "secret-pw", "other-pw-1", staff=True)
+        store.change_password("boss_01", "secret-pw", "other-pw-1", strict=True)
     with pytest.raises(accounts.AccountError):
-        store.set_password("boss_01", "other-pw-1", staff=True)
-    store.change_password("boss_01", "secret-pw", "a-long-password", staff=True)
-    store.set_password("boss_01", "another-long-pw", staff=True)
+        store.set_password("boss_01", "other-pw-1", strict=True)
+    store.change_password("boss_01", "secret-pw", "a-long-password", strict=True)
+    store.set_password("boss_01", "another-long-pw", strict=True)
     assert store.authenticate("boss_01", "another-long-pw") is not None
 
 

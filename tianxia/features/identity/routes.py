@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
+from tianxia import accounts as shell_accounts
 from tianxia.core import identity_base
 from tianxia.database import open_database
 
@@ -47,7 +48,8 @@ def gate_info(content) -> dict:
     line、google 要 oauth.ready（金鑰兩欄、redirect_base）才列；email、phone 照設定列（第 203 批才接）。客服信箱第 202 批拿掉（客服包畫）。"""
     cfg = content.config.identity
     ways = [w for w in cfg.ways if w not in oauth.PROVIDERS or oauth.ready(content, w)]
-    return {"ways": ways, "turnstile": cfg.turnstile_site_key}
+    # pw_min（第 209 批）：identity 開著時全體密碼的下限，註冊格那一行提示照它寫（這條路關著 404，關著拿不到）
+    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN}
 
 
 def _digest(value: str) -> str:
@@ -113,6 +115,8 @@ def admin_tools(shell) -> dict:
 
 def router(shell) -> APIRouter:
     r = APIRouter()
+    # 第 209 批：admin 包重設密碼之後經核心 identity_base.notify 寄通知（admin 包不能 import 這一包）；關著不會有人叫
+    identity_base.set_notifier(lambda account_id, text: contacts.send_all(shell, store.IdentityStore(), account_id, text))
 
     def gate() -> None:
         if not identity_base.on(shell.CONTENT):
@@ -194,6 +198,8 @@ def router(shell) -> APIRouter:
             if owner != account.id or not identity_base.record_reauth(token, provider, now):
                 return back(request, "fail")
             return back(request, "reauth")
+        if identity_base.reset_held(account.id, now):  # 第 209 批：開單之後才被管理者重設的，回呼這一步也擋（網頁照 RESET_NO_BIND 那一句）
+            return back(request, "held")
         if owner is not None:
             return back(request, "bound" if owner == account.id else "taken")
         if binding.rebind_wait(side.unbound_elsewhere(hashed, provider, account.id), now, shell.CONTENT.config.identity):
@@ -345,6 +351,9 @@ def router(shell) -> APIRouter:
                 if secret is not None:
                     hashed = identity_base.subject_hmac(secret, provider, sub) if provider in oauth.PROVIDERS else sub
                     side.record_verified(accounts.account_id(key), provider, hashed, now)
+                if provider not in oauth.PROVIDERS:  # 第 209 批：驗證碼開的帳號存通知用的號碼（第三方沒有號碼；沒有金鑰不存）
+                    contacts.keep(side, accounts.account_id(key), provider, side.pending_contact(_digest(token)),
+                                  side.pending_display(_digest(token)))
         side.drop_pending(_digest(token))
         response.delete_cookie(PENDING_COOKIE, path=PENDING_PATH, httponly=True, samesite="lax", secure=shell.cookie_secure(request))
         shell._start_session(request, response, key, provider)  # 第 204 批：這次是用那一種登入的（session_auth）
@@ -390,7 +399,8 @@ def router(shell) -> APIRouter:
             hostname=request.url.hostname, dev_hash=_hash(dev) if dev else None,
             is_bound=lambda subject: identity_base.account_key_for(db, channel, subject) is not None, now=now,
             purpose=purpose, account_id=account.id if account is not None else None, subject_ok=subject_ok,
-            seal=contacts.sealer(channel) if purpose == "bind" else None,  # 第 208 批：綁定的單封號碼，綁成功才存（通知用）
+            # 第 208 批：綁定的單封號碼，綁成功才存（通知用）；第 209 批：登入用途也封，開了 session 或建了角色才存
+            seal=contacts.sealer(channel) if purpose in ("bind", "login") else None,
             on_full=lambda bucket: alerts.pool_full(shell, bucket, now),  # 第 208 批：全服池滿了通知管理者（同一格一小時一次）
         )
         if status != 200:
@@ -429,7 +439,8 @@ def router(shell) -> APIRouter:
             if binding.rebind_wait(side.unbound_elsewhere(subject, channel, None), now, cfg):  # 第 204 批：30 天內不能開新帳號
                 raise shell.GameError(binding.REBIND_WAIT.format(days=cfg.rebind_days))
             token = _rand.token_urlsafe(32)
-            side.put_pending(_hash(token), channel, subject, expires=now + cfg.pending_seconds, now=now, display=row["display"])
+            side.put_pending(_hash(token), channel, subject, expires=now + cfg.pending_seconds, now=now, display=row["display"],
+                             contact=row.get("contact"))  # 第 209 批：封的號碼帶到建角色那一步才存
             _cookie(shell, request, response, PENDING_COOKIE, token, cfg.pending_seconds, path=PENDING_PATH)
             response.delete_cookie(CODE_COOKIE)
             return {"stage": "create", "pending": True}
@@ -441,7 +452,8 @@ def router(shell) -> APIRouter:
             others = [k for k in have_of(account) if k != channel]
             if others:
                 proof = _rand.token_urlsafe(32)
-                side.put_recheck(_hash(proof), account.id, channel, subject, row["display"], now)
+                side.put_recheck(_hash(proof), account.id, channel, subject, row["display"], now,
+                                 contact=row.get("contact"))  # 第 209 批：沒開 session 不存，帶到「這不是我的帳號」
                 _cookie(shell, request, response, RECHECK_COOKIE, proof, cfg.code_ttl, path=PENDING_PATH)
                 return {"stale": True, "message": binding.STALE_USE_OTHER, "ways": binding.kinds_of(others)}
             side.set_hold(account.id, now + cfg.stale_hold_days * binding.DAY)
@@ -454,6 +466,7 @@ def router(shell) -> APIRouter:
         shell._start_session(request, response, account_key, channel)  # 第 204 批：這次用哪一種登入由殼記（session_auth）
         if account is not None and account.id is not None:
             side.record_verified(account.id, channel, subject, now)
+            contacts.keep(side, account.id, channel, row.get("contact"), row["display"])  # 第 209 批：通知用的號碼（沒有金鑰不存）
         after_binding_login(request, response, account_key, channel, now, side)
         return shell._entry(account_key)
 
@@ -472,6 +485,7 @@ def router(shell) -> APIRouter:
                 raise shell.GameError(codes.BAD_CODE)
             side.record_verified(account.id, channel, subject, now)
             return {"message": binding.REAUTH_OK.format(minutes=max(1, cfg.recent_seconds // 60))}
+        not_reset_held(account, now)  # 第 209 批：寄碼之後才被管理者重設的，驗碼這一步也擋（同寄碼那一句）
         found = accounts.login_key(channel, subject)
         if found is not None:
             raise shell.GameError(binding.ALREADY_KIND if accounts.account_id(found) == account.id else binding.BOUND_ELSEWHERE)
@@ -523,6 +537,16 @@ def router(shell) -> APIRouter:
         token, account = logged_in(request)
         gate()
         return me_info(request, token, account, shell.time.time())
+
+    @r.get("/api/identity/session")
+    def api_session(request: Request):
+        """第 209 批「請用密碼重新登入」：先 401 再 gate（同 /api/identity/me）。relogin 只有這個帳號在名單上（管理者、客服）而且
+        這次 session 不夠格（admin_session_ok 假：驗證碼、第三方、密碼登入超過 staff_hours）才真；名單外永遠假、同一個形狀。
+        只讀自己的帳號（試不出別人）；不拿行動鎖、不寫東西。"""
+        token, account = logged_in(request)
+        gate()
+        listed = identity_base.listed(shell.CONTENT, login=account.login, character=account.character, account_id=account.id)
+        return {"relogin": bool(listed and not identity_base.admin_session_ok(shell.CONTENT, token, shell.time.time))}
 
     @r.post("/api/identity/reauth")
     async def api_reauth(request: Request):
@@ -601,9 +625,8 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            staff = identity_base.listed(shell.CONTENT, login=str(body.get("login") or ""), character=account.character,
-                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
-            shell.account_store().add_password(account.key, body.get("login"), new, staff=staff)
+            strict = identity_base.on(shell.CONTENT)  # identity 開著全體 12 字（第 209 批；這條路關著 404，所以一定真）
+            shell.account_store().add_password(account.key, body.get("login"), new, strict=strict)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         except ValueError:
@@ -637,9 +660,8 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            staff = identity_base.listed(shell.CONTENT, login=account.login, character=account.character,
-                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
-            shell.account_store().reset_password(account.key, new, keep=token, staff=staff)
+            strict = identity_base.on(shell.CONTENT)  # 同補設密碼（第 209 批）
+            shell.account_store().reset_password(account.key, new, keep=token, strict=strict)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         side.drop_reset(_hash(proof))
@@ -678,11 +700,13 @@ def router(shell) -> APIRouter:
             side.drop_meta(row["account_id"], row["provider"])
             side.drop_contacts(row["account_id"], row["provider"])  # 第 208 批：號碼已經不是舊帳號的了，不寄
             note(side, row["account_id"], binding.NOTE_RELEASED.format(kind=binding.kind_name(row["provider"])), now)
+            # 第 209 批（PM 11/09）：寄給舊帳號剩下綁著的（被拿掉那一支上面已刪，不寄）
+            contacts.send_all(shell, side, row["account_id"], binding.MAIL_RELEASED.format(kind=binding.kind_name(row["provider"])))
         elif old_key is not None:
             raise shell.GameError(codes.BAD_CODE)
         token = _rand.token_urlsafe(32)
         side.put_pending(_hash(token), row["provider"], row["subject_hmac"], expires=now + cfg.pending_seconds, now=now,
-                         display=row["display"])
+                         display=row["display"], contact=row["contact"])  # 第 209 批：號碼帶到新帳號
         _cookie(shell, request, response, PENDING_COOKIE, token, cfg.pending_seconds, path=PENDING_PATH)
         return {"stage": "create", "pending": True, "message": binding.NOT_MINE_DONE}
 
