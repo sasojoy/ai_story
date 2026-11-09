@@ -628,6 +628,10 @@ def file_battle(ctx, record, wear: bool | None = None, armor_wear: bool | None =
     if armor.wears(record.kind, record.tier) if armor_wear is None else armor_wear:
         ctx._last_wear += armor.wear(ctx.state, ctx.content, record.tier)
     record.notes += ctx._last_wear
+    # 武學打了才升（Config.arts.fight_practice，季上蓋章才有；Joy 2026-11-09「甲方案」）：身上兩門照這一場長熟練，寫進這一場的得失。序章不長
+    grown = [] if prologue_rules.active(ctx.state, ctx.content) else team.grow_from_fight(
+        ctx.state, ctx.content, ctx.world, record.kind, record.tier, record.difficulty, record.our_power)
+    record.changes += grown
     battlelog.add_record(ctx.state, record)
     ctx.state.battle_card = record.id
     line = battlelog.summary_line(record)
@@ -637,6 +641,7 @@ def file_battle(ctx, record, wear: bool | None = None, armor_wear: bool | None =
         ctx._draft.notes += ctx._last_wear
         if record.exp and team_exp:
             ctx._draft.changes.append(f"經驗 +{record.exp}（每人）")
+        ctx._draft.changes += grown
     return line
 
 

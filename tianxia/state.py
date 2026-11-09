@@ -830,6 +830,10 @@ class PlayerState(BaseModel):
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # 武學打了才升（Config.arts.fight_practice，季上蓋章才有）：每門功法這一成已經累積的熟練、這一個遊戲日每門已經長了多少、那是第幾天。空的不寫進存檔
+    art_exp: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    art_exp_today: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    art_exp_day: int = Field(0, json_schema_extra=QUIET)
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
@@ -2038,6 +2042,7 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     # 這一季開季時地方豪強已經拿掉了（Config.gentry 關著；allied.gentry_on）：只剩官軍、黃巾、散人。舊季讀檔是 False（豪強照舊），False 不寫進存檔
