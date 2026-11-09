@@ -269,6 +269,8 @@ def test_reuse_counts_the_week_from_the_last_real_run_and_force_or_a_lost_sha_ru
     assert not nightly.reuse_decision(_GREEN, "2026-11-08", None, "2026-11-09", False)[0]
     assert not nightly.reuse_decision(None, None, None, "2026-11-09", False)[0]
     assert nightly.code_changes(["README.md", "docs/a.py", "scripts/x.md", "tests/a.py"]) == ["scripts/x.md", "tests/a.py"]
+    # wave_gate.py 有 test_same_behavior_gate 守著：docs/superpowers/pm-workflows/ 底下的改動照算程式
+    assert nightly.code_changes(["docs/superpowers/pm-workflows/wave_gate.py"]) == ["docs/superpowers/pm-workflows/wave_gate.py"]
 
 
 def _fake_run(monkeypatch, tmp_path, changed):

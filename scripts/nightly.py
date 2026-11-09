@@ -37,6 +37,7 @@ LOCK_STALE = 3 * 3600  # 秒：排程的時限是兩小時，鎖比這還舊就�
 LOCK_NAME = "running.lock"
 REUSE_DAYS = 7  # 第 113 批：程式沒變也至少每這麼多天真跑一次
 NOT_CODE = ("docs/", ".claude/")  # 這底下的改動不算程式改了（根目錄的 *.md 也不算；tests/ 算）
+CODE_UNDER_DOCS = ("docs/superpowers/pm-workflows/",)  # 例外：這底下的工具有測試守著（test_same_behavior_gate 載入 wave_gate.py），算程式
 
 
 def take_lock(out: Path, now: float | None = None) -> bool:
@@ -129,8 +130,8 @@ def changed_files(checkout: Path, old: str, new: str) -> list[str] | None:
 
 
 def code_changes(files: list[str]) -> list[str]:
-    """扣掉 docs/、.claude/、根目錄的 *.md 之後剩下的檔。"""
-    return [f for f in files if not f.startswith(NOT_CODE) and not ("/" not in f and f.lower().endswith(".md"))]
+    """扣掉 docs/、.claude/、根目錄的 *.md 之後剩下的檔（docs/superpowers/pm-workflows/ 照算程式）。"""
+    return [f for f in files if (f.startswith(CODE_UNDER_DOCS) or not f.startswith(NOT_CODE)) and not ("/" not in f and f.lower().endswith(".md"))]
 
 
 def last_real(previous: dict) -> str:
