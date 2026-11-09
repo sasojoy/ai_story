@@ -140,13 +140,13 @@ def test_admin_unbind_and_delete_drop_contacts(notify):
     aid = _pw(c)
     bind(c)
     bind(c, MAIL, "email")
-    sent = (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox))
     admin = SimpleNamespace(state=SimpleNamespace(player=SimpleNamespace(name="")))  # 管理者工具只讀 game.state.player.name（刪自己的擋）
     idadmin.unbind(server, admin, {"target": "shen_01", "provider": "phone"}, notify.now)
     assert [r[1] for r in _contacts()] == ["email"]
+    sent = (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox))  # 第 209 批起管理者解綁寄給剩下的（test_admin_unbind_notifies_rest）
     idadmin.delete(server, admin, {"target": "shen_01"}, notify.now)
     assert _contacts() == [] and AccountStore(database.open_database()).get("shen_01") is None
-    assert (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox)) == sent  # 管理者做的不寄
+    assert (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox)) == sent  # 刪帳號照舊不寄（派工單沒點名）
     assert aid is not None
 
 
@@ -244,3 +244,66 @@ def test_not_mine_new_account_keeps_contact(notify):
     assert d.post("/api/identity/character", json={"name": "新來的"}).status_code == 200
     new = _aid(server.SESSIONS.get(token_of(d)))
     assert [(r[0], r[1]) for r in _contacts()] == [(new, "phone")] and new != old  # 舊帳號那一列拿掉、新帳號存一列
+
+
+# ── 第 209 批：管理者重設、管理者解綁、「這不是我的帳號」也寄通知（PM 11/09 定；寄給剩下綁著的，被拿掉的那一支不寄）──
+
+
+def _boss_client():
+    b = TestClient(server.app)
+    register(b, "boss_01", "secret-pw-12", name="段青山")
+    return b
+
+
+def test_admin_reset_notifies(notify, monkeypatch):
+    from tianxia.core import identity_base
+
+    c = TestClient(server.app)
+    _pw(c)
+    bind(c)
+    bind(c, MAIL, "email")
+    boss = _boss_client()
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["段青山"])
+    out = boss.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass-1234"}).json()
+    assert out == {"message": "已重設 shen_01 的密碼。"}  # 回給管理者的字不變
+    assert senders.FAKES.sms.outbox[-1] == (PHONE_N, contacts.SMS_TEXT.format(text=identity_base.NOTICE_ADMIN_RESET))
+    assert senders.FAKES.mail.outbox[-1] == (MAIL, identity_base.NOTICE_ADMIN_RESET)
+
+
+def test_admin_unbind_notifies_rest(notify):
+    c = TestClient(server.app)
+    _pw(c)
+    bind(c)
+    bind(c, MAIL, "email")
+    sms = len(senders.FAKES.sms.outbox)
+    admin = SimpleNamespace(state=SimpleNamespace(player=SimpleNamespace(name="")))
+    idadmin.unbind(server, admin, {"target": "shen_01", "provider": "phone"}, notify.now)
+    assert senders.FAKES.mail.outbox[-1] == (MAIL, binding.MAIL_ADMIN_UNBOUND.format(kind="手機"))
+    assert len(senders.FAKES.sms.outbox) == sms  # 被拿掉的那一支不寄
+
+
+def test_not_mine_notifies_old_account_rest(notify):
+    c = TestClient(server.app)
+    phone_account(c)
+    bind(c, MAIL, "email")
+    c.post("/api/logout")
+    notify.now += 181 * 24 * HOUR
+    d = TestClient(server.app)
+    assert send(d).status_code == 200
+    assert verify(d).json()["stale"] is True
+    sms = len(senders.FAKES.sms.outbox)
+    assert d.post("/api/identity/code/release").status_code == 200
+    assert senders.FAKES.mail.outbox[-1] == (MAIL, binding.MAIL_RELEASED.format(kind="手機"))
+    assert len(senders.FAKES.sms.outbox) == sms  # 那支手機已經不是這個帳號的了
+
+
+def test_nothing_to_send_only_note(notify):
+    c = TestClient(server.app)
+    aid = _pw(c)
+    bind(c)
+    sent = (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox))
+    admin = SimpleNamespace(state=SimpleNamespace(player=SimpleNamespace(name="")))
+    idadmin.unbind(server, admin, {"target": "shen_01", "provider": "phone"}, notify.now)
+    assert (len(senders.FAKES.sms.outbox), len(senders.FAKES.mail.outbox)) == sent  # 只剩密碼：沒有可寄的
+    texts = [r[0] for r in side_rows("SELECT text FROM account_notes WHERE account_id = ?", (aid,))]
+    assert texts[-1] == binding.NOTE_ADMIN_UNBOUND.format(kind="手機")

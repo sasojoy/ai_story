@@ -115,6 +115,8 @@ def admin_tools(shell) -> dict:
 
 def router(shell) -> APIRouter:
     r = APIRouter()
+    # 第 209 批：admin 包重設密碼之後經核心 identity_base.notify 寄通知（admin 包不能 import 這一包）；關著不會有人叫
+    identity_base.set_notifier(lambda account_id, text: contacts.send_all(shell, store.IdentityStore(), account_id, text))
 
     def gate() -> None:
         if not identity_base.on(shell.CONTENT):
@@ -688,6 +690,8 @@ def router(shell) -> APIRouter:
             side.drop_meta(row["account_id"], row["provider"])
             side.drop_contacts(row["account_id"], row["provider"])  # 第 208 批：號碼已經不是舊帳號的了，不寄
             note(side, row["account_id"], binding.NOTE_RELEASED.format(kind=binding.kind_name(row["provider"])), now)
+            # 第 209 批（PM 11/09）：寄給舊帳號剩下綁著的（被拿掉那一支上面已刪，不寄）
+            contacts.send_all(shell, side, row["account_id"], binding.MAIL_RELEASED.format(kind=binding.kind_name(row["provider"])))
         elif old_key is not None:
             raise shell.GameError(codes.BAD_CODE)
         token = _rand.token_urlsafe(32)

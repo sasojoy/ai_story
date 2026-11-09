@@ -259,6 +259,18 @@ def test_check_password_strict_needs_12():
     assert accounts.STRICT_SHORT_PASSWORD == "密碼至少 12 字。"  # 第 209 批：全體同一句，不帶「這個帳號」
 
 
+
+def test_notify_without_notifier_is_zero(monkeypatch):
+    """第 209 批：admin 包經核心寄通知；identity 包沒登記（沒掛路由）回 0、不丟例外。"""
+    import tianxia.core.identity_base as ib
+
+    monkeypatch.setattr(ib, "_NOTIFIER", None)
+    assert ib.notify(1, "x") == 0
+    seen = []
+    ib.set_notifier(lambda account_id, text: seen.append((account_id, text)) or 2)
+    assert ib.notify(5, "y") == 2 and seen == [(5, "y")]
+    assert ib.NOTICE_ADMIN_RESET == "管理者幫這個帳號重設了密碼。不是你要求的話，請馬上寫信給客服。"
+
 def test_account_store_passes_strict(game):
     from tianxia import accounts
 

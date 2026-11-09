@@ -11,6 +11,8 @@ session_auth 一張表（核心讀包的旁檔只碰這一張；DDL 在這裡一
 第 208 批：扣押期（hold_reason：花元寶、贈物、上架市集三個入口在 phone_ok 那一行之後問；只讀旁檔的 bindings_meta、holds、reset_holds，
 旁檔不在不建）；「不寫東西」多一個例外 record_admin_reset（admin 包重設密碼成功之後寫 reset_holds 與一則「帳號」紀錄）。
 那四張表的 DDL 也在這裡一份（identity 包的 store.py import）。
+第 209 批：寄通知的口（set_notifier／notify）：identity 包掛路由時登記寄送函式，admin 包重設密碼之後經 notify 寄 NOTICE_ADMIN_RESET
+（admin 包不能 import identity 包）；這裡只轉手、不碰網路。
 金鑰在 .local/identity.json（不進版控）：讀不到、格式不對都當功能關著（on 回假）。
 核心本體（tianxia/core/ 底下的檔），不進 MODULES。identity 包、server.py 的 name_taken、商城包的易名帖讀它。
 """
@@ -435,6 +437,23 @@ def record_admin_reset(account_id: int, at: float, hours: int, text: str, path: 
         conn.execute("COMMIT")
     finally:
         conn.close()
+
+
+NOTICE_ADMIN_RESET = "管理者幫這個帳號重設了密碼。不是你要求的話，請馬上寫信給客服。"  # 待 joy 潤（第 209 批：寄給這個帳號綁著的 Email、手機）
+_NOTIFIER = None  # 第 209 批：identity 包在 router(shell) 登記的寄送函式 (account_id, text) -> 寄出幾則；admin 包不能 import identity 包，經這裡寄
+
+
+def set_notifier(fn) -> None:
+    """identity 包登記寄送函式（殼掛路由那一下）；None 拿掉。"""
+    global _NOTIFIER
+    _NOTIFIER = fn
+
+
+def notify(account_id: int, text: str) -> int:
+    """寄一則通知給這個帳號綁著的 Email、手機（admin 包重設密碼之後叫）；沒登記（identity 包沒掛）回 0。寄送失敗、沒有金鑰都是 0 則，不丟例外。"""
+    if _NOTIFIER is None:
+        return 0
+    return _NOTIFIER(account_id, text)
 
 
 def reset_held(account_id: int, now: float, path: Path | None = None) -> bool:

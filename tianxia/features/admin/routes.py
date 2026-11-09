@@ -173,6 +173,7 @@ def reset_password(shell, game, target: str, temp: str, request=None) -> str:
     if identity_base.on(shell.CONTENT):  # 帳號與客服第 208 批（設計 6.4）：重設之後扣押 reset_hold_hours、寫一則「帳號」紀錄；關著不碰旁檔
         hours = shell.CONTENT.config.identity.reset_hold_hours
         identity_base.record_admin_reset(account.id, shell.time.time(), hours, identity_base.NOTE_ADMIN_RESET.format(hours=hours))
+        identity_base.notify(account.id, identity_base.NOTICE_ADMIN_RESET)  # 第 209 批（PM 11/09）：寄給這個帳號綁著的 Email、手機
     return f"已重設 {account.login} 的密碼。"
 
 
