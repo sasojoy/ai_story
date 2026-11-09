@@ -83,6 +83,7 @@ from ..features import support  # 客服（帳號與客服第 211 批；開關 C
 from ..features import news  # 見聞
 from ..features import titles  # 稱號與官職
 from ..features import terms  # 條款
+from ..features import jieyi  # 結義
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -164,6 +165,7 @@ FEATURES: list[Feature] = [
     news.FEATURE,
     titles.FEATURE,
     terms.FEATURE,
+    jieyi.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

@@ -1,0 +1,12 @@
+/* 結義（俠客頁門下那一段；web/jieyi.js） */
+.jieyi .jy-members { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.jieyi .jy-members li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line, #c9b98f); font-family: var(--serif); }
+.jieyi .jy-members li.me b { color: var(--accent, inherit); }
+.jieyi .jy-rank { min-width: 1.6em; text-align: center; border: 1px solid var(--line, #c9b98f); border-radius: 4px; font-size: 13px; color: var(--ink-2); }
+.jieyi .jy-members small { color: var(--ink-2); }
+.jieyi .jy-log { margin-top: 6px; }
+.jieyi .jy-log ul { margin: 4px 0 0; padding-left: 1.2em; font-size: 14px; color: var(--ink-2); }
+.jieyi .jy-leave { margin-top: 8px; }
+.jy-offer h3 { margin: 0 0 6px; font-family: var(--serif); }
+.jy-offer .jy-offer-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.jy-offer .jy-offer-btns { display: flex; gap: 6px; }

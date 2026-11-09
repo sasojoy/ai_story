@@ -1941,7 +1941,7 @@ def api_main(request: Request):
 MAIN_ACTION_ORDER = (
     "seclude", "smith_forge", "smith_sell", "smith_upgrade", "smith_furnace", "donate", "tavern", "anonymous", "gender", "story_seen",
     "letter_read", "letter_decline", "hints_off", "skip_tutorial", "view_map", "view_orders", "view_tab", "guide_ack", "allocate", "growth",
-    "newbie_drifter", "pill", "checkin", "conquest_letter", "seal_use", "sortie_go", "sortie_answer", "sortie_join", "outing",
+    "newbie_drifter", "pill", "checkin", "conquest_letter", "seal_use", "sortie_go", "sortie_answer", "sortie_join", "outing", "jieyi_leave",
 )
 MAIN_ACTIONS = features_core.action_table(MAIN_ACTION_ORDER, {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),

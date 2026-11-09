@@ -11,6 +11,7 @@ from .core.tuning.identity import IdentityTuning  # 帳號綁定
 from .core.tuning.support import SupportTuning  # 客服
 from .core.tuning.titles import TitlesTuning  # 稱號與官職
 from .core.tuning.terms import TermsTuning  # 條款
+from .core.tuning.jieyi import JieyiTuning  # 結義
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4430,6 +4431,7 @@ class Config(_Strict):
     support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
     titles: TitlesTuning = Field(default_factory=TitlesTuning)  # 稱號與官職（tianxia/core/tuning/titles.py）
     terms: TermsTuning = Field(default_factory=TermsTuning)  # 條款（tianxia/core/tuning/terms.py）
+    jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
