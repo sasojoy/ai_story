@@ -455,6 +455,7 @@ def status(ctx) -> dict:
         "meter": round((b.qing + t.qing_cap) / (2 * t.qing_cap), 3), "can_rename": not b.renamed, "along": b.along,
         "can_study": _can_study(ctx, b) and _free(ctx),
         "say_max": t.say_max,
+        "art": rules.art(t, b),
         "event": None if ev is None else {"text": ev.text, "shown": ev.shown, "kind": ev.kind, "choices": [c.label for c in ev.choices]},
         "log": [{"stamp": e.stamp, "text": e.text, "tone": (e.qing > 0) - (e.qing < 0)} for e in reversed(b.log[-12:])],
         "count": len(b.log),

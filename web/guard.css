@@ -5,12 +5,19 @@
 .guard { display: flex; flex-direction: column; gap: 14px; margin: 10px 0 16px; }
 
 /* ── 頁首：院子的圖淡進卡色，左下他的直排名帖與心性朱印 ── */
-.guard .gd-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); min-height: 150px; }
+.guard .gd-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); min-height: 190px; }
 .guard .gd-hero-art {
-  height: 150px; background: center 45% / cover no-repeat;
+  height: 190px; background: center 45% / cover no-repeat;
   -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent); mask-image: linear-gradient(to bottom, #000 50%, transparent);
 }
 @media (prefers-color-scheme: dark) { .guard .gd-hero-art { filter: brightness(.78) saturate(.85); } }
+/* 他的立繪：右下一幅小掛軸，底邊淡進卡色（圖的紙色寫死，不跟深色換） */
+.guard .gd-face {
+  position: absolute; right: 10px; bottom: 0; height: 176px; width: auto; aspect-ratio: 3 / 4; object-fit: cover; object-position: top;
+  border: 1px solid var(--line); border-bottom: 0; border-radius: 4px 4px 0 0; box-shadow: 0 2px 10px rgba(30, 18, 8, 0.22);
+  -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent); mask-image: linear-gradient(to bottom, #000 82%, transparent);
+}
+@media (prefers-color-scheme: dark) { .guard .gd-face { filter: brightness(.9); } }
 .guard .gd-tie { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: flex-end; gap: 10px; }
 .guard .gd-name {
   writing-mode: vertical-rl; padding: 10px 5px; font: 700 21px/1 var(--kai); letter-spacing: 0.25em;

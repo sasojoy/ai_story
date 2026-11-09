@@ -105,6 +105,37 @@ def school_name(key: str) -> str:
     return texts.SCHOOLS.get(key, {}).get("name", "")
 
 
+# 圖（web/img/guard/；圖的清單 https://claude.ai/artifact/46RRJCExUY8pZReoW1hayp）：出路 → 檔名的那一段；心性五檔 → 三種神情
+ART = "/static/img/guard/"
+PATH_ART = {"將軍": "jiang", "謀士": "mou", "遊俠": "xia", "鐵匠": "tie", "農夫": "nong", "乞丐": "gai", "殺手": "sha",
+            "弓箭手": "gong", "醫者": "yi", "斥候": "chi"}
+MEET_ART = ("soldiers", "slaves", "river", "spy", "fever", "thief")
+LOOKS = ("wen", "wen", "jing", "leng", "leng")  # 恩深、敬重用「恩」那一張，淡然「靜」，怨懟、恨極用「恨」那一張
+
+
+def art(t, b: GuardBook) -> dict:
+    """頁首那兩張：hero 是橫幅（遇見時是那一種開場、出師考驗、立誓，其餘是院子），face 是他的立繪（遇見那一刻不露臉）。"""
+    sx = "f" if b.sex == "女" else "m"
+    look = LOOKS[min(band_index(t, b.qing), len(LOOKS) - 1)]
+    hero = "yard"
+    if b.stage == "met" and b.opening in MEET_ART:
+        hero = "meet-" + b.opening
+    elif b.stage in ("trial", "settle"):
+        hero = "trial"
+    elif b.stage == "oath":
+        hero = "oath-leng" if look == "leng" else "oath-wen"
+    face = ""
+    if b.stage in ("saved", "left"):
+        face = f"child/{sx}-saved"
+    elif b.stage == "grow":
+        face = f"child/{sx}-grown"
+    elif b.stage in ("study", "trial", "settle") and b.school:
+        face = f"study/{sx}-{b.school}"
+    elif b.stage in ("oath", "sworn") and b.path in PATH_ART:
+        face = f"grown/{sx}-{PATH_ART[b.path]}-{look}"
+    return {"hero": f"{ART}story/{hero}.webp", "face": f"{ART}{face}.webp" if face else ""}
+
+
 def _fill_school(text: str, b: GuardBook) -> str:
     return fill(text.replace("{school}", school_name(b.school)), b)
 

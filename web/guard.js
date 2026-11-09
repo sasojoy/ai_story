@@ -3,6 +3,7 @@
  * 設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su（Joy 2026-11-09「其他都按照建議」）。照 docs/superpowers/specs/2026-11-09-介面設計規範.md 畫：
  * 頂上院子一張圖淡進卡色、他的直排名帖與心性的朱印；一條情分墨線（不露數字）；眼前那一件事（三個做法、自己寫）；
  * 底下撕紙的紀事。第二批：求學時寫他在哪、哪時回來（信也是眼前那一件），出師以後名帖旁寫出路與稱號、多一段只有你看得到的生平。
+ * 第四批：頁首換成 Joy 畫的圖（main.guard.art：hero 橫幅、face 立繪，照階段、出路與心性挑；web/img/guard/）。
  * 伺服器收養了才給 main.guard；沒有就不畫。
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  */
@@ -32,6 +33,7 @@
   const GD_SWORN = "{name}站在你身後。";
   const GD_BIO = "生平";
   const GD_BIO_SUB = "只有你看得到";
+  const GD_YARD = "/static/img/guard/story/yard.webp";
   const GD_KIND = { letter: "來信", trial: "出師考驗", oath: "立誓" };
 
   const gdFill = (s, g) => s.replace(/\{name\}/g, g.name).replace(/\{pron\}/g, g.pron)
@@ -41,8 +43,10 @@
     const g = m && m.guard;
     if (!g) return "";
     const pct = Math.max(0, Math.min(1, Number(g.meter) || 0.5)) * 100;
+    const art = g.art || {};
     const hero = `<header class="gd-hero">
-      <div class="gd-hero-art" style="background-image:url('/static/img/events/village.webp')" role="img" aria-label="${esc(g.name)}"></div>
+      <div class="gd-hero-art" style="background-image:url('${esc(art.hero || GD_YARD)}')" aria-hidden="true"></div>
+      ${art.face ? `<img class="gd-face" src="${esc(art.face)}" alt="${esc(g.name)}" loading="lazy" width="768" height="1024">` : ""}
       <div class="gd-tie"><span class="gd-name">${esc(g.name)}</span><span class="gd-tie-side">
         <span class="gd-stage">${esc(g.stage_text || "")}${g.path ? `・${esc(g.path)}「${esc(g.title)}」` : ""}</span>
         <span class="gd-seal">${esc(g.band)}</span></span></div>

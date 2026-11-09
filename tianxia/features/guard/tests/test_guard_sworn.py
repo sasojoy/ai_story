@@ -87,3 +87,32 @@ def test_left_at_home_he_says_nothing(sworn):
 
 def test_every_band_has_lines():
     assert set(texts.HURT_LINES) == set(texts.SEASON_LETTERS) == set(texts.OATHS)
+
+
+def test_his_picture_follows_stage_path_and_heart(sworn):
+    """頁首的圖（web/img/guard/）：投效了是長大的立繪，出路與心性挑那一張；檔案都在。"""
+    import pathlib
+    t = sworn.content.config.guard
+    b = sworn.state.player.guard
+    root = pathlib.Path(__file__).resolve().parents[4] / "web"
+    b.qing = t.qing_cap
+    a = rules.art(t, b)
+    assert a["hero"].endswith("story/yard.webp")
+    assert a["face"] == f"/static/img/guard/grown/m-{rules.PATH_ART[b.path]}-wen.webp"
+    assert actions.status(sworn)["guard"]["art"] == a
+    b.qing = -t.qing_cap
+    assert rules.art(t, b)["face"].endswith("-leng.webp")
+    b.stage = "oath"
+    assert rules.art(t, b)["hero"].endswith("story/oath-leng.webp")
+    b.stage, b.sex = "grow", "女"
+    assert rules.art(t, b)["face"].endswith("child/f-grown.webp")
+    b.stage, b.opening = "met", "river"
+    assert rules.art(t, b) == {"hero": "/static/img/guard/story/meet-river.webp", "face": ""}
+    for sx in "mf":  # 每一種組合的檔都在
+        for code in rules.PATH_ART.values():
+            for look in set(rules.LOOKS):
+                assert (root / f"img/guard/grown/{sx}-{code}-{look}.webp").exists()
+        for school in t.schools:
+            assert (root / f"img/guard/study/{sx}-{school}.webp").exists()
+    for key in rules.MEET_ART:
+        assert (root / f"img/guard/story/meet-{key}.webp").exists()
