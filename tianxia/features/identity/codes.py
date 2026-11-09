@@ -140,7 +140,7 @@ def send(*, cfg, key: bytes, store, senders, channel: str, to, token, ip: str, h
             senders.mail.send(value, title, text)
     except SendFailed:
         return 400, {"error": CANNOT_SEND}, None
-    contact = seal(value) if seal is not None and purpose == "bind" else None
+    contact = seal(value) if seal is not None and purpose in ("bind", "login") else None  # 第 209 批：登入用途也封（重驗不封）
     store.put_challenge(cid, purpose, channel, subject, display, code_hmac(key, cid, code), now + cfg.code_ttl, now,
                         account_id=account_id, contact=contact)
     return 200, sent_reply(cfg), cid

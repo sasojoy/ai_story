@@ -347,6 +347,9 @@ def router(shell) -> APIRouter:
                 if secret is not None:
                     hashed = identity_base.subject_hmac(secret, provider, sub) if provider in oauth.PROVIDERS else sub
                     side.record_verified(accounts.account_id(key), provider, hashed, now)
+                if provider not in oauth.PROVIDERS:  # 第 209 批：驗證碼開的帳號存通知用的號碼（第三方沒有號碼；沒有金鑰不存）
+                    contacts.keep(side, accounts.account_id(key), provider, side.pending_contact(_digest(token)),
+                                  side.pending_display(_digest(token)))
         side.drop_pending(_digest(token))
         response.delete_cookie(PENDING_COOKIE, path=PENDING_PATH, httponly=True, samesite="lax", secure=shell.cookie_secure(request))
         shell._start_session(request, response, key, provider)  # 第 204 批：這次是用那一種登入的（session_auth）
@@ -392,7 +395,8 @@ def router(shell) -> APIRouter:
             hostname=request.url.hostname, dev_hash=_hash(dev) if dev else None,
             is_bound=lambda subject: identity_base.account_key_for(db, channel, subject) is not None, now=now,
             purpose=purpose, account_id=account.id if account is not None else None, subject_ok=subject_ok,
-            seal=contacts.sealer(channel) if purpose == "bind" else None,  # 第 208 批：綁定的單封號碼，綁成功才存（通知用）
+            # 第 208 批：綁定的單封號碼，綁成功才存（通知用）；第 209 批：登入用途也封，開了 session 或建了角色才存
+            seal=contacts.sealer(channel) if purpose in ("bind", "login") else None,
             on_full=lambda bucket: alerts.pool_full(shell, bucket, now),  # 第 208 批：全服池滿了通知管理者（同一格一小時一次）
         )
         if status != 200:
@@ -431,7 +435,8 @@ def router(shell) -> APIRouter:
             if binding.rebind_wait(side.unbound_elsewhere(subject, channel, None), now, cfg):  # 第 204 批：30 天內不能開新帳號
                 raise shell.GameError(binding.REBIND_WAIT.format(days=cfg.rebind_days))
             token = _rand.token_urlsafe(32)
-            side.put_pending(_hash(token), channel, subject, expires=now + cfg.pending_seconds, now=now, display=row["display"])
+            side.put_pending(_hash(token), channel, subject, expires=now + cfg.pending_seconds, now=now, display=row["display"],
+                             contact=row.get("contact"))  # 第 209 批：封的號碼帶到建角色那一步才存
             _cookie(shell, request, response, PENDING_COOKIE, token, cfg.pending_seconds, path=PENDING_PATH)
             response.delete_cookie(CODE_COOKIE)
             return {"stage": "create", "pending": True}
@@ -443,7 +448,8 @@ def router(shell) -> APIRouter:
             others = [k for k in have_of(account) if k != channel]
             if others:
                 proof = _rand.token_urlsafe(32)
-                side.put_recheck(_hash(proof), account.id, channel, subject, row["display"], now)
+                side.put_recheck(_hash(proof), account.id, channel, subject, row["display"], now,
+                                 contact=row.get("contact"))  # 第 209 批：沒開 session 不存，帶到「這不是我的帳號」
                 _cookie(shell, request, response, RECHECK_COOKIE, proof, cfg.code_ttl, path=PENDING_PATH)
                 return {"stale": True, "message": binding.STALE_USE_OTHER, "ways": binding.kinds_of(others)}
             side.set_hold(account.id, now + cfg.stale_hold_days * binding.DAY)
@@ -456,6 +462,7 @@ def router(shell) -> APIRouter:
         shell._start_session(request, response, account_key, channel)  # 第 204 批：這次用哪一種登入由殼記（session_auth）
         if account is not None and account.id is not None:
             side.record_verified(account.id, channel, subject, now)
+            contacts.keep(side, account.id, channel, row.get("contact"), row["display"])  # 第 209 批：通知用的號碼（沒有金鑰不存）
         after_binding_login(request, response, account_key, channel, now, side)
         return shell._entry(account_key)
 
@@ -682,7 +689,7 @@ def router(shell) -> APIRouter:
             raise shell.GameError(codes.BAD_CODE)
         token = _rand.token_urlsafe(32)
         side.put_pending(_hash(token), row["provider"], row["subject_hmac"], expires=now + cfg.pending_seconds, now=now,
-                         display=row["display"])
+                         display=row["display"], contact=row["contact"])  # 第 209 批：號碼帶到新帳號
         _cookie(shell, request, response, PENDING_COOKIE, token, cfg.pending_seconds, path=PENDING_PATH)
         return {"stage": "create", "pending": True, "message": binding.NOT_MINE_DONE}
 

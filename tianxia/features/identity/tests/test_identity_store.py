@@ -162,3 +162,24 @@ def test_old_side_file_gets_new_tables(tmp_path):
     assert {"reset_holds", "contacts", "cap_alerts"} <= tables
     assert "contact" in cols
     assert s.hold_until(3) == 99.0
+
+
+def test_old_side_file_gets_contact_columns(tmp_path):
+    """第 209 批：第 208 批建的旁檔（pending、rechecks 沒有 contact 欄）照開、補欄；舊列 contact 是 NULL、照讀。"""
+    path = tmp_path / "old-identity.sqlite"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE pending (token_hash TEXT PRIMARY KEY, provider TEXT NOT NULL, subject TEXT NOT NULL, "
+                     "display TEXT NOT NULL DEFAULT '', expires REAL NOT NULL, created REAL NOT NULL)")
+        conn.execute("CREATE TABLE rechecks (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, provider TEXT NOT NULL, "
+                     "subject_hmac TEXT NOT NULL, display TEXT NOT NULL DEFAULT '', at REAL NOT NULL)")
+        conn.execute("INSERT INTO pending VALUES ('t', 'phone', 's', '09*****678', 999.0, 1.0)")
+        conn.execute("INSERT INTO rechecks VALUES ('r', 7, 'phone', 's', '09*****678', 100.0)")
+    s = idstore.IdentityStore(path)
+    with sqlite3.connect(path) as conn:
+        for table in ("pending", "rechecks"):
+            assert "contact" in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}, table
+    assert s.get_pending("t", 10.0) == ("phone", "s") and s.pending_contact("t") is None
+    assert s.take_recheck("r", 101.0, 300) == {"account_id": 7, "provider": "phone", "subject_hmac": "s", "display": "09*****678",
+                                              "contact": None}
+    s.put_pending("u", "email", "e", 999.0, 10.0, display="r*@x", contact=b"blob")
+    assert s.pending_contact("u") == b"blob" and s.pending_contact("nope") is None

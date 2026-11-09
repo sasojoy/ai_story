@@ -1,7 +1,7 @@
 """綁定、解綁、補設與忘記密碼的通知（帳號與客服第 208 批；設計 4.3「通知現有的 Email、手機」，企劃者 11/08 選「另存加密的號碼給通知用」）：
 綁 Email、手機成功時把號碼用 .local/identity.json 的 notify_key 加密存進旁檔 contacts（跟 HMAC 分開、不進任何查詢與比對），只在寄通知那一刻解開；
 每次綁、解綁、補設密碼、忘記密碼經 senders 寄一則給現有的 Email、手機（忘記密碼不寄登入用的那一種）；解綁、刪帳號刪那一列。
-讀不到 notify_key 只寫紀錄、不寄；NoSender（fake 關）不 500；登入用途的碼不存號碼；log 那一行只寫遮過的號碼。"""
+讀不到 notify_key 只寫紀錄、不寄；NoSender（fake 關）不 500；登入用途的碼第 209 批起也存號碼（開了 session、建了角色才存；重驗不封）；log 那一行只寫遮過的號碼。"""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from test_identity_bind import _pw, _reauth
+from test_identity_login import _pending_client
 from test_identity_password import _phone_login
+from test_identity_recycle import _stale_with_password
 from test_identity_server import fresh_server, key_file  # noqa: F401
 from test_identity_session import (  # noqa: F401
     bind, clock, error, on, phone_account, register, send, side_rows, subj, token_of, verify,
@@ -85,8 +87,8 @@ def test_unbind_notifies_the_removed_one_and_drops_it(notify):
 
 def test_set_password_notifies(notify):
     c = TestClient(server.app)
-    phone_account(c)  # 登入用途開的帳號：號碼不存（登入的碼不封存）
-    assert _contacts() == []
+    phone_account(c)  # 第 209 批：驗證碼開的帳號也存號碼（之後的通知寄得到）
+    assert [r[1] for r in _contacts()] == ["phone"]
     bind(c, MAIL, "email")
     notify.now += 73 * HOUR
     c.post("/api/identity/code/send", json={"channel": "email", "to": MAIL, "turnstile": "ok", "purpose": "reauth"})
@@ -94,6 +96,7 @@ def test_set_password_notifies(notify):
     r = c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"})
     assert r.json() == {"message": binding.PASSWORD_SET}
     assert _mail()[-1] == binding.NOTE_PASSWORD_SET.format(login="ray_77")
+    assert _sms()[-1] == contacts.SMS_TEXT.format(text=binding.NOTE_PASSWORD_SET.format(login="ray_77"))  # 第 209 批：開帳號那支手機也收到
 
 
 def test_reset_password_skips_the_way_used_to_log_in(notify):
@@ -147,12 +150,13 @@ def test_admin_unbind_and_delete_drop_contacts(notify):
     assert aid is not None
 
 
-def test_login_code_stores_no_contact(notify):
+def test_reauth_code_stores_no_contact(notify):
+    """第 209 批起登入用途也封號碼（test_login_code_keeps_contact）；重驗用途照舊不封。"""
     c = TestClient(server.app)
     phone_account(c)
-    assert side_rows("SELECT contact FROM challenges") == [] and _contacts() == []
-    d = TestClient(server.app)
-    assert send(d, to="0987654321").status_code == 200  # 別的號碼（同一號 60 秒內不再寄）
+    assert side_rows("SELECT contact FROM challenges") == []
+    notify.now += 61  # 同一號 60 秒內不再寄
+    assert send(c, purpose="reauth").status_code == 200
     assert side_rows("SELECT contact FROM challenges") == [(None,)]
 
 
@@ -161,3 +165,82 @@ def test_seal_roundtrip_and_aad(notify):
     assert contacts.unseal(blob, "7|phone") == "+886900000000"
     assert contacts.unseal(blob, "8|phone") is None  # aad 不同解不開
     assert contacts.unseal(b"junk", "7|phone") is None
+
+
+# ── 第 209 批：登入用途的驗碼與用驗證碼開帳號也存通知用的號碼（之後解綁、補設密碼的通知寄得到）──
+
+
+def _add_notify_key(key_file):  # noqa: F811
+    data = json.loads(key_file.read_text(encoding="utf-8"))
+    data["notify_key"] = "n" * 32
+    key_file.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _aid(key):
+    return AccountStore(database.open_database()).account_id(key)
+
+
+def test_login_code_keeps_contact(clock, key_file):  # noqa: F811
+    c = TestClient(server.app)
+    key = phone_account(c)  # 沒有 notify_key：開帳號那一下不存
+    assert _contacts() == []
+    _add_notify_key(key_file)
+    d = TestClient(server.app)
+    clock.now += 61  # 同一號 60 秒內不再寄
+    assert send(d).status_code == 200
+    assert verify(d).json()["stage"] == "game"
+    [(owner, provider, sealed, display)] = _contacts()
+    assert (owner, provider, display) == (_aid(key), "phone", "09*****678")
+    assert b"912345678" not in sealed and contacts.unseal(sealed, f"{owner}|phone") == PHONE_N
+
+
+def test_code_signup_keeps_contact(notify):
+    c = TestClient(server.app)
+    key = phone_account(c)
+    [(owner, provider, sealed, display)] = _contacts()
+    assert (owner, provider, display) == (_aid(key), "phone", "09*****678")
+    assert contacts.unseal(sealed, f"{owner}|phone") == PHONE_N
+    assert side_rows("SELECT COUNT(*) FROM pending") == [(0,)]  # 建好角色，待處理那一列連號碼一起刪
+
+
+def test_oauth_signup_keeps_nothing(notify, monkeypatch):
+    c = _pending_client(monkeypatch)
+    assert side_rows("SELECT contact FROM pending") == [(None,)]  # 第三方沒有號碼
+    assert c.post("/api/identity/character", json={"name": "柳如煙"}).status_code == 200
+    assert _contacts() == []
+
+
+def test_no_notify_key_login_ok_no_row(clock):
+    c = TestClient(server.app)
+    phone_account(c)
+    d = TestClient(server.app)
+    clock.now += 61
+    assert send(d).status_code == 200
+    r = verify(d)
+    assert r.status_code == 200 and r.json()["stage"] == "game"
+    assert _contacts() == [] and side_rows("SELECT COUNT(*) FROM challenges") == [(0,)]
+
+
+def test_stale_with_others_keeps_nothing_until_session(notify):
+    key = _stale_with_password(notify)
+    before = _contacts()  # 開帳號那一下存的
+    d = TestClient(server.app)
+    assert send(d).status_code == 200
+    assert verify(d).json()["stale"] is True
+    assert _contacts() == before  # 沒開 session：不存
+    [(blob,)] = side_rows("SELECT contact FROM rechecks")
+    assert blob is not None and b"912345678" not in blob
+    assert _aid(key) == before[0][0]
+
+
+def test_not_mine_new_account_keeps_contact(notify):
+    key = _stale_with_password(notify)
+    old = _aid(key)
+    d = TestClient(server.app)
+    send(d)
+    verify(d)
+    assert d.post("/api/identity/code/release").status_code == 200
+    assert side_rows("SELECT contact IS NOT NULL FROM pending") == [(1,)]
+    assert d.post("/api/identity/character", json={"name": "新來的"}).status_code == 200
+    new = _aid(server.SESSIONS.get(token_of(d)))
+    assert [(r[0], r[1]) for r in _contacts()] == [(new, "phone")] and new != old  # 舊帳號那一列拿掉、新帳號存一列
