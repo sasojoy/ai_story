@@ -1,7 +1,7 @@
 """親衛隊長的玩家動作與鎖外工作（手冊 G10）。只在殼建動作表、鎖外工作時才 import（__init__ 的掛鉤裡面才 from . import routes）；不 import 網頁框架。
 殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 
-- /api/do/guard_rename {name}：養成冊上替他改名（一次）；/api/do/guard_along {on}：出門帶不帶他（鎖外工作的表，進鎖就做，不叫模型）。
+- /api/do/guard_rename {name}：親衛隊長那一頁上替他改名（一次）；/api/do/guard_along {on}：出門帶不帶他（鎖外工作的表，進鎖就做，不叫模型）。
 - /api/do/guard_say {text}：自己寫的那一句，三段：A actions.say_request（鎖內只讀）→ B 鎖外 rules.judge_say（預算 Config.guard.budget_seconds）
   → C actions.apply_say 重驗同一件才記。
 - 背景寫字 guard（表外的格，接在 OUTLOCK_ORDER 表尾）：有一件事要生（want）時放鎖之後開一條執行緒：A actions.event_request → B rules.write_event
@@ -22,7 +22,7 @@ def _on(game) -> bool:
 
 
 def _plain(shell, game, step) -> list[str]:
-    """養成冊上不叫模型的那兩顆（改名、帶不帶）：也走鎖外工作的表（包自己的 /api/do/{op}，不加殼的 MAIN_ACTION_ORDER），進鎖做完就回。"""
+    """親衛隊長那一頁上不叫模型的那兩顆（改名、帶不帶）：也走鎖外工作的表（包自己的 /api/do/{op}，不加殼的 MAIN_ACTION_ORDER），進鎖做完就回。"""
     if not _on(game):
         return [rules.NO_SUCH]
     return shell.act(game, not_while_preparing(step))

@@ -376,7 +376,7 @@ class GuardBook(BaseModel):
     place: str = ""  # 在哪裡遇見的（沒收的話他留在這裡）
     name: str = ""
     sex: str = ""  # 男／女（少年／少女）
-    renamed: bool = False  # 取過名字了（收養時先照名字表給一個，養成冊上能改一次）
+    renamed: bool = False  # 取過名字了（收養時先照名字表給一個，親衛隊長那一頁上能改一次）
     qing: int = 0  # 情分（−qing_cap～qing_cap）
     tags: dict[str, int] = Field(default_factory=dict)  # 性向 → 分數
     log: list[GuardEntry] = Field(default_factory=list)
@@ -402,6 +402,10 @@ class GuardBook(BaseModel):
     bio: str = ""  # 生平（模型讀紀事寫；別人看不到）
     oath: str = ""  # 立誓那一段
     sworn_season: int = 0  # 哪一季投效的
+    # 第三批：投效之後
+    season_qing: int | None = None  # 這一季開始（或投效那一刻）的情分：心性一季最多換 band_steps_per_season 檔，照它夾
+    hp_seen: float | None = None  # 這一下動作之前的氣血比例（同步時抄、做完一件事時比：掉到 hurt_ratio 以下他說一句）
+    hurt_day: int = 0  # 他上一次開口是第幾天（一天一次）
 
 
 class LegacyBook(BaseModel):

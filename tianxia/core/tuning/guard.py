@@ -40,6 +40,17 @@ class GuardTuning(BaseModel):
     path_options: int = Field(default=3, ge=1)  # 出師時交給模型挑的出路有幾條
     bio_max: int = Field(default=300, ge=50)  # 生平最多幾個字
     settle_budget_seconds: float = Field(default=60, gt=0)  # 出師結算（稱號、生平、立誓那一段）模型的時間預算
+    # 第三批：投效之後（設計稿第四節）
+    hurt_ratio: float = Field(default=0.3, gt=0, le=1)  # 做完一件事氣血掉到上限的幾成以下、而且比做之前少：他說一句（一天一次）
+    band_steps_per_season: int = Field(default=1, ge=0)  # 投效之後心性一季最多換幾檔（恨可以被焐回來、恩也會寒心，只是很慢）
+    # 專長（設計稿第三節；Joy 2026-11-09「好」：先合時數字全 0，假人照平衡清單量過再填）。出路 → {鍵: 值}；鍵與原位對照在 core/guard_base.py
+    perks: dict[str, dict[str, float]] = Field(default_factory=lambda: {
+        "將軍": {"big_fight": 0.0}, "謀士": {"ambush": 0.0}, "遊俠": {"bounty_pct": 0.0}, "鐵匠": {"forge_points": 0.0},
+        "農夫": {"stamina_day": 0.0}, "乞丐": {"tavern_asks": 0.0}, "殺手": {"raid": 0.0}, "弓箭手": {"fight_pp": 0.0},
+        "醫者": {"toll_cut": 0.0}, "斥候": {"explore_legend": 0.0},
+    })
+    # 心性的加成（設計稿第四節）：恩深、敬重有機會替你擋一下（落敗閃成僵持）；怨懟、恨極不擋刀（Joy 2026-11-09 照推薦）
+    band_perks: dict[str, dict[str, float]] = Field(default_factory=lambda: {"恩深": {"dodge": 0.0}, "敬重": {"dodge": 0.0}})
     qing_cap: int = Field(default=20, ge=1)  # 情分上下限
     step_cap: int = Field(default=3, ge=1)  # 一件事最多動多少情分（模型評 −2～+2，固定事件寫死的也夾這個）
     tags: list[str] = Field(default_factory=lambda: list(TAGS))

@@ -5,7 +5,7 @@
 - on_sync：每天保底的家裡的事；after_action：帶他出門、花了體力的那一下有機會冒出一件。
   模型叫得到就排給背景寫字（routes 的 OutlockJob，鎖外生）；叫不到、假人、等太久都換固定事件（rules.fixed_event）。
 - 自己寫的那一句走鎖外三段式（routes.guard_say：say_request → judge_say → apply_say）。
-- rename、set_along：養成冊上的改名（一次）與出門帶不帶他。
+- rename、set_along：親衛隊長那一頁上的改名（一次）與出門帶不帶他。
 - 求學（20 級起，7 天季 15 級；之後看時間不看等級）：挑七處之一（花銀兩、推性向），這幾天寫信回來；期滿回來考驗（trial），
   答了就結算（settle：模型從前三條出路挑一條、取稱號、寫生平與立誓，鎖外；叫不到換固定的），然後跪誓（oath），答了就投效（sworn）。
 - on_season_start：跟著帳號走，換季照帶（眼前那一件收掉、天的帳歸零、求學剩下的時間照帶）。"""
@@ -55,8 +55,8 @@ def _free(ctx) -> bool:
     return p.journey is None and ctx._idle()
 
 
-ADOPTED = ("grow", "study", "trial", "settle", "oath", "sworn")  # 收養以後的幾段（養成冊畫得出來）
-EVENT_STAGES = ("grow", "study", "trial", "oath")  # 會攤開一件事的幾段
+ADOPTED = ("grow", "study", "trial", "settle", "oath", "sworn")  # 收養以後的幾段（親衛隊長那一頁畫得出來）
+EVENT_STAGES = ("grow", "study", "trial", "oath", "sworn")  # 會攤開一件事的幾段（投效之後照樣有家裡、路上的事與每季那一封）
 
 
 def _adopted(b) -> bool:
@@ -193,6 +193,8 @@ def _answer(ctx, b: GuardBook, choice) -> list[str]:
     """答了眼前那一件（三個做法之一，或自己寫的那一句評回來的）：記帳，再照那一件是什麼往下一段走。"""
     kind = b.event.kind if b.event is not None else ""
     out = rules.apply(_t(ctx), b, choice, _today(ctx), ctx.stamp(ctx.state.world.time))
+    if b.stage == "sworn" and b.season_qing is not None:  # 投效之後一季最多換一檔
+        b.qing = rules.season_clamp(_t(ctx), b.season_qing, b.qing)
     if kind == "letter":
         b.letters += 1
     elif kind == "trial":
@@ -201,7 +203,7 @@ def _answer(ctx, b: GuardBook, choice) -> list[str]:
         if b.stage == "settle":
             out.append(rules.fill(rules.SETTLING, b))
     elif kind == "oath":
-        b.stage, b.sworn_season = "sworn", _season(ctx)
+        b.stage, b.sworn_season, b.season_qing = "sworn", _season(ctx), b.qing
         out.append(rules.fill(rules.SWORN, b).replace("{path}", b.path).replace("{title}", b.title))
     return out
 
@@ -282,6 +284,8 @@ def on_sync(ctx, elapsed: float) -> None:
     b = rules.book(ctx.state)
     if b is not None:
         b.stamina_seen = ctx.state.player.stamina  # 這一下動作之前的體力（after_action 比）
+        if b.stage == "sworn":
+            b.hp_seen = _hp_ratio(ctx)  # 這一下動作之前的氣血（after_action 比：重傷時他說一句）
     if b is not None and b.stage == "study" and b.event is None and not b.want and ctx.state.world.time >= b.study_until:
         b.stage = "trial"  # 學成回來（看時間不看等級）
     if not _waiting(b):
@@ -291,7 +295,7 @@ def on_sync(ctx, elapsed: float) -> None:
         if ctx.state.world.time - b.want_at >= t.wait_seconds:  # 背景寫字一直沒回來：換固定的
             _fallback(ctx, b, b.want)
         return
-    if b.stage == "grow":
+    if b.stage in ("grow", "sworn"):
         today = _today(ctx)
         done = b.home_n if b.home_day == today else 0
         if done < _home_quota(ctx):
@@ -304,6 +308,24 @@ def on_sync(ctx, elapsed: float) -> None:
         _ask(ctx, b, b.stage)
 
 
+def on_day(ctx) -> None:
+    """換日（回體丹那一天換了）：親衛隊長是農夫的，每天替你回幾點體力（Config.guard.perks 農夫 stamina_day，預設 0；core/guard_base.perk 問開關、投效、帶在身邊）。"""
+    from tianxia.core import guard_base  # noqa: PLC0415
+
+    n = guard_base.perk(ctx.state, ctx.content, "stamina_day")
+    if n:
+        p = ctx.state.player
+        p.stamina = min(float(ctx.content.config.stamina_max), p.stamina + n)
+
+
+def _hp_ratio(ctx) -> float:
+    from tianxia import team  # noqa: PLC0415
+
+    s, c = ctx.state, ctx.content
+    now, cap = team.member_neili(c, s.player.member, team.con_of(s, c, ctx.world, team.PLAYER), season=s.world)
+    return now / cap if cap > 0 else 1.0
+
+
 def after_action(ctx) -> list[str]:
     """帶他出門、花了體力的那一下（出陣、遊歷、探索、截殺……）：有機會冒出一件路上的事。"""
     b = rules.book(ctx.state)
@@ -311,8 +333,9 @@ def after_action(ctx) -> list[str]:
         return []
     p = ctx.state.player
     before, b.stamina_seen = b.stamina_seen, p.stamina
-    if b.stage != "grow" or not _waiting(b) or b.want or not b.along or before is None or p.stamina >= before:
-        return []
+    said = _hurt(ctx, b)
+    if b.stage not in ("grow", "sworn") or not _waiting(b) or b.want or not b.along or before is None or p.stamina >= before:
+        return said
     t, today = _t(ctx), _today(ctx)
     if (b.road_n if b.road_day == today else 0) >= t.road_per_day:
         return []
@@ -320,7 +343,20 @@ def after_action(ctx) -> list[str]:
     if roll >= t.road_chance:
         return []
     _ask(ctx, b, "road")
-    return [rules.fill("（{name}在一旁看著。）", b)] if b.event is not None else []
+    return said + ([rules.fill("（{name}在一旁看著。）", b)] if b.event is not None and b.stage == "grow" else [])
+
+
+def _hurt(ctx, b: GuardBook) -> list[str]:
+    """投效之後，做完一件事氣血掉到 hurt_ratio 以下、而且比做之前少（打輸、重傷）：他照心性說一句，一天一次（恩的擔心，恨的在等）。"""
+    if b.stage != "sworn" or not b.along:
+        return []
+    before, now = b.hp_seen, _hp_ratio(ctx)
+    b.hp_seen = now
+    today = _today(ctx)
+    if before is None or now >= before or now >= _t(ctx).hurt_ratio or b.hurt_day == today:
+        return []
+    b.hurt_day = today
+    return [rules.hurt_line(_t(ctx), b, today)]
 
 
 # ── 給模型的單子（A 段，鎖內只讀）與寫回（C 段）───────────────────────────
@@ -332,7 +368,7 @@ def _request(ctx, b: GuardBook, kind: str, seq: int, **extra) -> rules.EventRequ
         place=_place_name(ctx, p.location), band=rules.band(t, b.qing), opening=rules.opening(b.opening)["text"][:80],
         memos=tuple(e.text for e in b.log[-t.prompt_memos:]),
         tags=tuple(k for k, _ in sorted(b.tags.items(), key=lambda kv: -kv[1])[:3]), tag_list=tuple(t.tags),
-        school=rules.school_name(b.school) if b.stage != "grow" else "",
+        school=rules.school_name(b.school) if b.stage != "grow" else "", path=b.path if b.stage == "sworn" else "", title=b.title if b.stage == "sworn" else "",
         paths=tuple(rules.top_paths(t, b)) if kind in ("trial", "settle") else (), **extra)
 
 
@@ -380,7 +416,7 @@ def apply_say(ctx, req: rules.EventRequest, judged) -> list[str]:
     return [f"你：「{req.say}」", *_answer(ctx, b, judged)]
 
 
-# ── 養成冊上的 ────────────────────────────────────────────────────────
+# ── 親衛隊長那一頁上的 ────────────────────────────────────────────────────────
 
 def rename(ctx, name: str) -> list[str]:
     b = rules.book(ctx.state)
@@ -405,7 +441,7 @@ def set_along(ctx, on: bool) -> list[str]:
 
 
 def status(ctx) -> dict:
-    """養成冊那一份（main.guard）：收養了才有。情分不露數字，只給心性那一檔與墨線的位置（0～1）。"""
+    """親衛隊長那一頁那一份（main.guard）：收養了才有。情分不露數字，只給心性那一檔與墨線的位置（0～1）。"""
     b = rules.book(ctx.state)
     if not _adopted(b):
         return {}
@@ -433,7 +469,11 @@ def on_season_start(ctx, old) -> None:
     if b.stage == "study":  # 求學剩下的時間照帶（世界秒換季重數）
         then, now = (old.world.time if old is not None else ctx.state.world.time), ctx.state.world.time
         b.study_from, b.study_until = now - max(0.0, then - b.study_from), now + max(0.0, b.study_until - then)
-    b.event, b.want, b.want_at, b.stamina_seen, b.picking = None, "", 0.0, None, False
-    b.home_day = b.home_n = b.road_day = b.road_n = 0
+    b.event, b.want, b.want_at, b.stamina_seen, b.picking, b.hp_seen = None, "", 0.0, None, False, None
+    b.home_day = b.home_n = b.road_day = b.road_n = b.hurt_day = 0
+    if b.stage == "sworn":  # 投效了：這一季從這裡算心性能換幾檔；開季那一天先來一封（這一季的他）
+        b.season_qing = b.qing
+        b.home_day, b.home_n = _today(ctx), _home_quota(ctx)
+        _ask(ctx, b, "season")
     if b.stage in ("met", "saved"):  # 還沒救下、還沒決定收不收的那一段：新的一季重新遇見
         ctx.state.player.guard = None

@@ -116,6 +116,8 @@ def fixed_event(t, b: GuardBook, kind: str, day: int, salt: str) -> GuardEvent:
         raw = {"id": "trial", "text": texts.TRIALS.get(top_paths(t, b)[0], texts.TRIALS["遊俠"]), "choices": texts.TRIAL_CHOICES}
     elif kind == "oath":
         raw = {"id": "oath", "text": b.oath or texts.OATHS[band(t, b.qing)], "choices": texts.OATH_CHOICES}
+    elif kind == "season":
+        raw = {"id": "season", "text": texts.SEASON_LETTERS[band(t, b.qing)], "choices": texts.SEASON_CHOICES}
     else:
         pool = texts.ROAD if kind == "road" else texts.LETTERS if kind == "letter" else texts.HOME
         seen = {e.text for e in b.log}
@@ -196,6 +198,35 @@ def apply(t, b: GuardBook, choice: GuardChoice, day: int, stamp: str) -> list[st
     return [choice.reaction] if choice.reaction else []
 
 
+def band_index(t, qing: int) -> int:
+    """心性第幾檔：0 恩深 … len(bands) 恨極。"""
+    for i, (floor, _) in enumerate(t.bands):
+        if qing >= floor:
+            return i
+    return len(t.bands)
+
+
+def band_bounds(t, idx: int) -> tuple[int, int]:
+    """第 idx 檔的情分範圍（含兩端）。"""
+    hi = t.qing_cap if idx == 0 else t.bands[idx - 1][0] - 1
+    lo = -t.qing_cap if idx >= len(t.bands) else t.bands[idx][0]
+    return lo, hi
+
+
+def season_clamp(t, start: int, qing: int) -> int:
+    """投效之後心性一季最多換 band_steps_per_season 檔（設計稿第四節「還能變」）：照這一季開始那一刻的那一檔，夾在上下幾檔之內。"""
+    i, n = band_index(t, start), t.band_steps_per_season
+    lo = band_bounds(t, min(len(t.bands), i + n))[0]
+    hi = band_bounds(t, max(0, i - n))[1]
+    return max(lo, min(hi, qing))
+
+
+def hurt_line(t, b: GuardBook, salt) -> str:
+    """你重傷時他說的那一句：照心性，同一天同一個人固定。"""
+    pool = texts.HURT_LINES[band(t, b.qing)]
+    return fill(pool[seed("重傷", b.name, salt) % len(pool)], b)
+
+
 def peek(event: GuardEvent, n: int = 14) -> str:
     """選項上那一句：事件開頭到第一個句號，太長截斷。"""
     head = re.split(r"[。！？]", event.text, maxsplit=1)[0]
@@ -246,6 +277,8 @@ class EventRequest:
     tags: tuple[str, ...]
     tag_list: tuple[str, ...]
     school: str = ""  # 求學的去處（名字；信與出師時才有）
+    path: str = ""  # 出師以後：出路與稱號
+    title: str = ""
     paths: tuple[str, ...] = ()  # 出師考驗、結算：交給模型挑的出路
     say: str = ""  # 自己寫的那一句（評一句時才有）
     event: str = ""  # 眼前那一件（評一句時才有）
@@ -260,9 +293,10 @@ SYSTEM = (
 
 
 def _context(req: EventRequest) -> str:
-    who = "少女" if req.sex == "女" else "少年"
+    who = "女" if req.sex == "女" else "男"
+    grown = f"已經長大出師，成了{req.path}，人稱「{_safe(req.title)}」，是收養人的親衛隊長" if req.path else ("少女" if req.sex == "女" else "少年") + "，還小"
     lines = [
-        f"孩子：{_safe(req.name)}（{who}，還小），被{_safe(req.master)}救下收養。救下時：{req.opening}",
+        f"孩子：{_safe(req.name)}（{who}，{grown}），被{_safe(req.master)}救下收養。救下時：{req.opening}",
         f"收養人：{_safe(req.master)}（{'女' if req.master_sex == '女' else '男'}），此刻在{req.place}。",
         f"孩子此刻心裡怎麼看收養人：{req.band}。",
     ]
@@ -292,6 +326,7 @@ def write_event(client, req: EventRequest, t) -> GuardEvent | None:
     what = {
         "road": "寫一件收養人帶他出門（出陣、遊歷、截殺這一類）時，路上剛發生的事。",
         "letter": f"孩子在{req.school}求學，寫一封信回來給收養人：寫他在那裡的一件事、一個心事或一個請求，用孩子的口吻。",
+        "season": "新的一季開始了。寫他在這一季的頭一天跟收養人說的話或做的事（照他心裡怎麼看收養人）。",
         "trial": f"孩子學成回來，寫他的出師考驗：照他可能走的路（{'、'.join(req.paths)}）出一道題，寫到他要動手、收養人在旁邊為止。",
     }.get(req.kind, "寫一件住處、街坊、日常裡的一件小事。")
     how = "收養人怎麼回信" if req.kind == "letter" else "收養人在考驗時怎麼做" if req.kind == "trial" else "收養人怎麼做"

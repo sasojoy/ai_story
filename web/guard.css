@@ -1,22 +1,16 @@
-/* 親衛隊長的養成冊（俠客頁「同伴」最上面；web/guard.js）。照 docs/superpowers/specs/2026-11-09-介面設計規範.md：
+/* 親衛隊長的親衛隊長那一頁（俠客頁「同伴」最上面；web/guard.js）。照 docs/superpowers/specs/2026-11-09-介面設計規範.md：
    色只用 style.css 的色票（深色模式跟著換）；名字、段標題、紀事用楷書（--kai）；點得到的至少 44px 高。
-   匾額與名帖是「本身就是一件東西」的面，照師門的匾額寫死木色與紙色。 */
+   名帖是「本身就是一件東西」的面，寫死紙色。 */
 
 .guard { display: flex; flex-direction: column; gap: 14px; margin: 10px 0 16px; }
 
-/* ── 頁首：院子的圖淡進卡色，右上直書的匾，左下他的直排名帖與心性朱印 ── */
+/* ── 頁首：院子的圖淡進卡色，左下他的直排名帖與心性朱印 ── */
 .guard .gd-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); min-height: 150px; }
 .guard .gd-hero-art {
   height: 150px; background: center 45% / cover no-repeat;
   -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent); mask-image: linear-gradient(to bottom, #000 50%, transparent);
 }
 @media (prefers-color-scheme: dark) { .guard .gd-hero-art { filter: brightness(.78) saturate(.85); } }
-.guard .gd-plaque {
-  position: absolute; top: 12px; right: 14px; margin: 0; padding: 12px 7px;
-  writing-mode: vertical-rl; font: 700 20px/1 var(--kai); letter-spacing: 0.28em;
-  color: #f1dfae; background: linear-gradient(160deg, #3a2a1c, #22180f); border: 2px solid #9c7a3c; border-radius: 3px;
-  box-shadow: 0 4px 12px rgba(30, 18, 8, 0.35), inset 0 0 0 2px #22180f;
-}
 .guard .gd-tie { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: flex-end; gap: 10px; }
 .guard .gd-name {
   writing-mode: vertical-rl; padding: 10px 5px; font: 700 21px/1 var(--kai); letter-spacing: 0.25em;

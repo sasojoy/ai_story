@@ -2,11 +2,11 @@
 README.md 寫這一包做什麼、導覽與設計稿。第一批：遇見與成長。
 
 - rules.py：純規則（帳、心性、固定事件、給模型的提示與夾法）；texts.py：固定的字（開場、名字表、固定事件）。
-- actions.py：「此地還能做」那幾顆、接管的選單、什麼時候冒出一件事、養成冊的那一份、換季照帶。
+- actions.py：「此地還能做」那幾顆、接管的選單、什麼時候冒出一件事、親衛隊長那一頁的那一份、換季照帶。
 - routes.py：/api/do/guard_rename、guard_along、guard_say（鎖外三段式）與背景生事件（OutlockJob guard）。
 - bots.py：假人的分數（假人也養一個，走固定事件、不叫模型）。
 - 換季：season.carry 那一格照帶（不看開關），on_season_start 收拾眼前那一件。
-- web/guard.js、guard.css：俠客頁「同伴」最上面的養成冊。
+- web/guard.js、guard.css：俠客頁「同伴」最上面的親衛隊長那一頁。
 新寫給玩家看的字標「待 joy 潤」。
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from tianxia.core.features import Feature, Outcome
 class GuardFeature(Feature):
     name = "guard"
     prefix = "guard"  # guard:meet、save、leave、part、back、adopt:<男|女>、open、pick:<i>、later
-    web = ("guard.js", "guard.css")  # 俠客頁「同伴」最上面的養成冊（cultivation.js 的同伴那一頁叫 guardHtml）
+    web = ("guard.js", "guard.css")  # 俠客頁「同伴」最上面的親衛隊長那一頁（cultivation.js 的同伴那一頁叫 guardHtml）
     content: tuple[str, ...] = ()  # 第一批的固定字在 texts.py
     player_fields: tuple[str, ...] = ("guard",)  # PlayerState.guard（GuardBook）
     carried: tuple[str, ...] = ("guard",)  # 跟著帳號走：換季照帶（season.carry 那一格，不看開關；收拾在 on_season_start）
@@ -51,6 +51,11 @@ class GuardFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         actions.on_sync(ctx, elapsed)
+
+    def on_day(self, ctx) -> None:
+        from . import actions  # noqa: PLC0415
+
+        actions.on_day(ctx)
 
     def after_action(self, ctx) -> list[str]:
         if not self.enabled(ctx):  # 接縫掛鉤不問 enabled：自己問

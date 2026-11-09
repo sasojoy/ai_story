@@ -24,6 +24,7 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import atlas  # 共用規則層（大區：遠近；第 50 批收進）
 from tianxia import figures  # 共用規則層（大勢人物：名氣、心事；第 40 批收進）
 from tianxia import gender
+from tianxia.core import guard_base  # 親衛隊長（乞丐，第三批 Joy 2026-11-09「好」）：一天多問酒家幾次（Config.guard.perks，預設 0）
 from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）
 from tianxia.core import xinshen  # 心神（核心的資源）：開著才限次數
 from tianxia import renown  # 共用規則層（名望段、善惡稱號）
@@ -954,6 +955,7 @@ def asks_left(state: GameState, content: Content, day: int) -> int | None:
     cap = content.config.xinshen.ask_per_day
     if not xinshen.on(content) or cap <= 0:
         return None
+    cap += int(guard_base.perk(state, content, "tavern_asks"))
     rec = state.player.tavern_asks
     used = rec[1] if len(rec) == 2 and rec[0] == day else 0
     return max(0, cap - used)
