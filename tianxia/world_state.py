@@ -436,6 +436,7 @@ def stamp_season(season: WorldState, content: Content, now: float | None = None)
     season.season21 = cfg.season21
     season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
     season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
+    season.fight_practice = cfg.arts.fight_practice.enabled  # 武學打了才升（Joy 2026-11-09）：照開季蓋章，正在跑的季不變
     season.attrs_v2 = cfg.attributes.v2.enabled  # 五項屬性（屬性與跨季架構 v2 第三節；attrset.on）：照開季蓋章，正在跑的季不變
     season.no_gentry = not cfg.gentry  # 地方豪強（企劃者 2026-11-07「下一季起整個拿掉」）：照開季蓋章，正在跑的季不變（allied.gentry_on）
     season.jianfa_on = cfg.jianfa.enabled  # 減法季（Config.jianfa）：season21、week7 開，週末不開；正在跑的季不變（rules.jianfa）

@@ -6,4 +6,5 @@
  "push_events": true, "llm_queue_slots": 1, "llm_queue_wait_seconds": 45,
  "attributes": {"v2": {"enabled": true}}, "legacy": {"enabled": true},
  "persona_shift": {"enabled": true},
- "xinshen": {"enabled": true}}
+ "xinshen": {"enabled": true},
+ "arts": {"create_first_xinde": 100, "fight_practice": {"enabled": false, "daily_cap": 40}}}
