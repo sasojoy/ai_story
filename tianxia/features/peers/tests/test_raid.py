@@ -296,7 +296,8 @@ def test_cooldowns_for_the_same_target_and_for_anyone_after_a_raid(pair):
     assert not button["enabled"] and "剛被人截殺過" in button["note"]
     world.mutate_season(lambda season: setattr(season, "time", season.time + cfg.shield_seconds))
     assert _raid_buttons(content, world, "丙", "乙")[0]["enabled"]
-    assert not _raid_buttons(content, world, "甲", "乙")[0]["enabled"]  # 甲對乙的冷卻比較長
+    # 甲對乙另有一對的冷卻：比護身長才還擋著（2026-11-09 起護身跟這一對的冷卻都是 3 小時，一到就一起開）
+    assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"] == (cfg.pair_cooldown_seconds <= cfg.shield_seconds)
     world.mutate_season(lambda season: setattr(season, "time", season.time + cfg.pair_cooldown_seconds))
     assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"]
 
