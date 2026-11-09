@@ -180,6 +180,13 @@ def test_gate_quick_tab_when_open():
     assert out["back"]["gateMode"] == "register" and 'name="again"' in out["back"]["html"]  # 記住上次的格
 
 
+def test_identity_privacy_link_opens_privacy():
+    """第 206 批：第三方那格的「隱私權說明」連條款包的 /privacy、開新分頁（K 波留下的 href="#"）。"""
+    quick = _run()["quick"]["html"]
+    assert '<a href="/privacy" target="_blank" rel="noopener">隱私權說明</a>' in quick
+    assert 'href="#"' not in quick
+
+
 def test_gate_has_no_mail_line():
     out = _run()
     e = out["empty"]

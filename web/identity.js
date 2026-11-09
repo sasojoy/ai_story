@@ -153,7 +153,7 @@
     const hint = inside ? IDENTITY_INAPP : env === "standalone" && third ? IDENTITY_STANDALONE : "";
     const buttons = code || `<div class="idp card">${ways.map((w) =>
       `<button class="btn idp-${w}" data-act="identity-way" data-way="${w}">${IDENTITY_WAYS[w]}</button>`).join("")}${
-      third ? `<p class="idp-fine">${esc(IDENTITY_PRIVACY)}<a href="#">${esc(IDENTITY_PRIVACY_LINK)}</a></p>` : ""}${
+      third ? `<p class="idp-fine">${esc(IDENTITY_PRIVACY)}<a href="/privacy" target="_blank" rel="noopener">${esc(IDENTITY_PRIVACY_LINK)}</a></p>` : ""}${
       hint ? `<p class="idp-fine idp-hint">${esc(hint)}</p>` : ""}</div>`;
     const out = html.replace(/<div class="seg">[\s\S]*?<\/div>/, seg);
     return mode === "quick" ? out.replace(/<form id="gate-form"[\s\S]*?<\/form>/, buttons) : out;

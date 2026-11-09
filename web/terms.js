@@ -17,9 +17,67 @@
     noMust: "不同意的話沒辦法進遊戲。要終止帳號、退還沒用掉的元寶，請寫信到 {email}。",
     noAsk: "不同意新版的話，可以終止帳號並退還沒用掉的元寶，請寫信到 {email}。",
     logout: "登出",
+    // 第 206 批：註冊頁與建角色頁的兩個勾選（拆自上面 agree 那一句）與沒勾就送出時表單下面那一句（同伺服器 terms_base.REGISTER_NEED）
+    age: "我已滿 18 歲或已得到法定代理人同意", // 待 joy 潤
+    read: "我已讀過並同意《使用條款》與《隱私權條款》", // 待 joy 潤
+    need: "請先勾選滿 18 歲與同意使用條款、隱私權條款，再送出。", // 待 joy 潤
   };
   let termsAsked = false; // 這一次登入問過 /api/terms 了（登出、回到登入頁就重來）
   let termsBusy = false;
+
+  // ── 第 206 批：註冊的兩個勾選 ──
+  // 插在註冊模式的 #gate-form（有「再輸入一次密碼」那一格才是註冊）與 identity 建角色那一張（#idp-create-form）的 .form-msg 前面；
+  // 殼自己的 #create-form（密碼帳號註冊完才建角色，帳號已經開了）不插。版號問 /api/terms/version：非 200（關著 404、伺服器沒這一包）
+  // 這一頁不再問、不插；斷線下一次重畫再問。送出時（capture，先於 app.js 那一支）沒全勾就擋下、寫那一句。畫法集中在 termsChecksHtml。
+  let termsVersionAsk = null; // Promise：版號字串，或 null（不問）
+
+  function termsChecksHtml(version) {
+    const read = termsEsc(TERMS_SAY.read)
+      .replace("《使用條款》", '《<a href="/terms" target="_blank" rel="noopener">使用條款</a>》')
+      .replace("《隱私權條款》", '《<a href="/privacy" target="_blank" rel="noopener">隱私權條款</a>》');
+    return `<label class="terms-check"><input type="checkbox" name="age_ok"><span>${termsEsc(TERMS_SAY.age)}</span></label>` +
+      `<label class="terms-check"><input type="checkbox" name="terms_agree"><span>${read}</span></label>` +
+      `<input type="hidden" name="terms_version" value="${termsEsc(version)}">`;
+  }
+
+  function termsWantsChecks(form) {
+    if (!form) return false;
+    if (form.id === "idp-create-form") return true;
+    return form.id === "gate-form" && !!form.querySelector('[name="again"]');
+  }
+
+  function termsVersion() {
+    if (!termsVersionAsk) {
+      termsVersionAsk = fetch("/api/terms/version", { credentials: "same-origin" })
+        .then((res) => (res.ok ? res.json().then((d) => (d && d.version) || null) : null))
+        .catch(() => { termsVersionAsk = null; return null; }); // 斷線：下一次再問
+    }
+    return termsVersionAsk;
+  }
+
+  async function termsInsertChecks() {
+    const forms = [...document.querySelectorAll("#gate-form, #idp-create-form")].filter((f) => termsWantsChecks(f) && !f.querySelector(".terms-check"));
+    if (!forms.length) return;
+    const version = await termsVersion();
+    if (!version) return;
+    for (const form of forms) {
+      if (form.isConnected === false || form.querySelector(".terms-check")) continue;
+      const msg = form.querySelector(".form-msg");
+      if (msg) msg.insertAdjacentHTML("beforebegin", termsChecksHtml(version));
+      else form.insertAdjacentHTML("beforeend", termsChecksHtml(version));
+    }
+  }
+
+  function termsBlockSubmit(ev) {
+    const form = ev.target;
+    if (!form || !form.querySelector || !form.querySelector(".terms-check")) return; // 沒插勾選的表單一律放行
+    const boxes = [...form.querySelectorAll('.terms-check input[type="checkbox"]')];
+    if (boxes.length && boxes.every((b) => b.checked)) return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    const msg = form.querySelector(".form-msg");
+    if (msg) msg.textContent = TERMS_SAY.need;
+  }
 
   function termsEsc(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -101,6 +159,7 @@
 
   function termsWatch() {
     termsAddLinks();
+    termsInsertChecks();
     const inGame = typeof S !== "undefined" && S.stage === "game";
     if (!inGame) { termsAsked = false; if (document.querySelector(".terms-layer")) termsClose(); return; }
     if (!termsAsked) termsCheck();
@@ -113,4 +172,5 @@
       termsQueued = true;
       queueMicrotask(() => { termsQueued = false; termsWatch(); });
     }).observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
+    document.addEventListener("submit", termsBlockSubmit, true); // 第 206 批：capture，先於 app.js 的 submit 鏈
   }
