@@ -4,13 +4,17 @@
 - GET /terms、/privacy：兩頁，不用登入、開關關著也看得到。
 - GET /api/terms：這個帳號要不要按同意（沒登入 401，網頁不理它）。開關關著 404（網頁把非 200 當沒事）。
 - POST /api/terms/agree：{version, source}，version 不是現行版回 409（頁面開著的時候條款改版了）。
-- record_consent(shell, account_key, version, source)：給註冊那一邊叫（設計稿「請註冊那邊接的一個勾選」）。"""
+- record_consent(shell, account_key, version, source)：給註冊那一邊叫（設計稿「請註冊那邊接的一個勾選」）。
+- GET /api/terms/version（第 206 批）：註冊頁與建角色頁的勾選要帶現行版號；不用登入、開關關著 404，只回 {version}。
+- router 開頭把 _Hook 登記到核心 terms_base（第 206 批）：殼的 register 與 identity 包建角色經它查兩個勾選、記 source=register。"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
+
+from tianxia.core import terms_base
 
 from . import pages, rules
 from .store import ConsentStore
@@ -48,7 +52,21 @@ def status(shell, account_key: str) -> dict:
     return out
 
 
+class _Hook:
+    """給核心 terms_base 的掛鉤（第 206 批）：現行版號、記一筆同意（版本不是現行版丟 ValueError，terms_base 吞掉）。"""
+
+    def __init__(self, shell):
+        self.shell = shell
+
+    def version(self) -> str:
+        return rules.load()["version"]
+
+    def record(self, account_key: str, version: str, source: str) -> None:
+        record_consent(self.shell, account_key, version, source)
+
+
 def router(shell) -> APIRouter:
+    terms_base.set_hook(_Hook(shell))
     r = APIRouter()
 
     def doc_page(doc: str):
@@ -58,6 +76,13 @@ def router(shell) -> APIRouter:
 
     for doc in rules.DOCS:
         r.add_api_route(f"/{doc}", doc_page(doc), methods=["GET"], response_class=HTMLResponse)
+
+    @r.get("/api/terms/version")
+    def api_terms_version():
+        """第 206 批：註冊頁與建角色頁的勾選要帶現行版號；還沒有帳號，不看 cookie。關著 404（gate 先於一切）。"""
+        if not shell.CONTENT.config.terms.enabled:
+            raise HTTPException(404)
+        return {"version": rules.load()["version"]}
 
     @r.get("/api/terms")
     def api_terms(request: Request):

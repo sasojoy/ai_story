@@ -51,12 +51,13 @@ def client(monkeypatch):
 
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
-    monkeypatch.setattr(server.CONTENT.config.terms, "enabled", True)
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()
     server.WORLD_GAME = None
     c = TestClient(server.app)
+    # 第 206 批起開著時註冊要勾兩格、會記 register：這裡要的是「還沒同意過」的帳號，先關著註冊再打開
     c.post("/api/register", json={"login": "terms_01", "password": "secret-pw", "again": "secret-pw"})
+    monkeypatch.setattr(server.CONTENT.config.terms, "enabled", True)
     yield c
     for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
         store.clear()

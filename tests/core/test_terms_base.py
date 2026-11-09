@@ -18,12 +18,19 @@ class FakeHook:
         self.calls.append((account_key, version, source))
 
 
+@pytest.fixture(autouse=True)
+def keep_hook():
+    """hook 是模組全域（殼 import 時 terms 包登記）：每條測試結束放回原來那個，別的測試照樣讀得到。"""
+    before = tb._HOOK
+    yield
+    tb.set_hook(before)
+
+
 @pytest.fixture
 def hook():
     h = FakeHook()
     tb.set_hook(h)
-    yield h
-    tb.set_hook(None)
+    return h
 
 
 def test_terms_base_off_or_no_hook_lets_everything_through(content):
@@ -37,12 +44,9 @@ def test_terms_base_off_or_no_hook_lets_everything_through(content):
     assert tb.record(content, "ab", "v2") is False
     h = FakeHook()
     tb.set_hook(h)
-    try:
-        content.config.terms.enabled = False
-        assert tb.register_problem(content, {}) is None  # 關著有 hook 也不查
-        assert tb.record(content, "ab", "v2") is False and h.calls == []
-    finally:
-        tb.set_hook(None)
+    content.config.terms.enabled = False
+    assert tb.register_problem(content, {}) is None  # 關著有 hook 也不查
+    assert tb.record(content, "ab", "v2") is False and h.calls == []
 
 
 def test_terms_base_needs_both_ticks_and_the_current_version(content, hook):
