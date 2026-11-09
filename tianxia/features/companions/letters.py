@@ -177,7 +177,7 @@ def commission(state: GameState, content: Content, cid: str, rng: random.Random)
     from tianxia import atlas  # noqa: PLC0415  共用規則層（atlas → world → rules：延後載入；第 50 批收進）
 
     w, p = state.world, state.player
-    side = figure_life.side_of(content, cid)
+    side = figure_life.side_of(content, cid, state.world)
     region = figure_life._region(content, figure_life.where(state, content, cid))
 
     def near(loc_id: str) -> bool:

@@ -686,7 +686,8 @@ def test_a_package_file_on_this_tree_picks_only_that_package_and_the_contract(ch
     contract = {p.name for p in test_for.contract_tests()}  # 核心契約含邊界測試（手冊 4.1 第三級）
     assert {"test_contract_core.py", "test_contract_features.py", "test_feature_boundaries.py"} <= contract
     picked = test_for.pick([changed])
-    assert own and own | contract == {p.name for p in picked.files} and not picked.core and not picked.smoke
+    guards = {"test_action_tables.py", "test_outlock.py"} if changed.endswith("/routes.py") else set()  # 第 106 批：包的路由帶這兩個
+    assert own and own | contract | guards == {p.name for p in picked.files} and not picked.core and not picked.smoke
 
 
 def test_slow_is_opt_in_and_three_files_run_on_four_workers():
@@ -820,10 +821,10 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     contract = {p.name for p in test_for.contract_tests()}
     js = test_for.pick(["web/mall.js"])
     # 寫到 web/mall.js 檔名的別包測試照檔名跟；絕招例句（#166）第 94 批切到 web/looks.js，test_looks_scenes.py 不再跟來
-    assert {p.name for p in js.files} == mall_tests | contract
+    assert {p.name for p in js.files} == mall_tests | contract | {"test_server_bots.py"}  # 第 106 批：web/ 一律帶 FB-673 的掃描
     assert not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
-    assert not {p.name for p in js.files} & (_names(["web/app.js"], hunks_of=APP_JS_NO_DIFF) - mall_tests - contract)
+    assert not {p.name for p in js.files} & (_names(["web/app.js"], hunks_of=APP_JS_NO_DIFF) - mall_tests - contract - {"test_server_bots.py"})
     css = {p.name for p in test_for.pick(["web/mall.css"]).files}
     assert mall_tests | contract | {"test_desktop_type.py", "test_shop_width.py"} <= css and "test_server.py" not in css
     assert "test_test_for.py" not in css  # 內文是假原始碼的（TEXT_BLIND）不照檔名算
@@ -864,7 +865,7 @@ def test_core_tests_are_the_core_modules_own_tests_and_test_engine():
     assert CORE_OWN | {"test_engine.py"} <= names
     assert not names & {"test_social.py", "test_factions.py", "test_nightly.py", "test_test_for.py", "test_errands.py"}
     allowed = {f"test_{m}" for m in test_for.CORE_MODULES - test_for.NOT_CORE_TESTS} | {
-        "test_engine", "test_contract", "test_feature_boundaries", "test_wallet"}
+        "test_engine", "test_contract", "test_feature_boundaries", "test_wallet", "test_shell_stays_thin"}  # 第 106 批：殼的名單進 CORE_GLOBS
     assert all(any(p.stem == a or p.stem.startswith(a + "_") or (a in ("test_engine", "test_contract")
                                                                  and p.stem.startswith(a)) for a in allowed)
                for p in test_for.core_tests()), sorted(names)
@@ -1137,6 +1138,12 @@ STAGE_PACKAGES += ["seal"]  # seal（全部拆包第 27 批）：玉璽包的 se
 STAGE_PACKAGES += ["legacy", "hire"]  # 合回 develop（2026-11-06）：傳承、招募的 <包>_stage.py
 STAGE_PACKAGES += ["persona"]  # 人物性子（develop cf927227，合回第 4 段）：persona_stage.py
 STAGE_PACKAGES += ["heroines"]  # 女子與隱線（PR #179）：heroines_stage.py
+STAGE_PACKAGES += ["identity"]  # 帳號綁定（scripts/new_feature.py 生的 identity_stage.py）
+STAGE_PACKAGES += ["support"]  # 客服（scripts/new_feature.py 生的 support_stage.py）
+STAGE_PACKAGES += ["news"]  # 見聞（scripts/new_feature.py 生的 news_stage.py）
+STAGE_PACKAGES += ["titles"]  # 稱號與官職（scripts/new_feature.py 生的 titles_stage.py）
+STAGE_PACKAGES += ["terms"]  # 條款（scripts/new_feature.py 生的 terms_stage.py）
+STAGE_PACKAGES += ["jieyi"]  # 結義（scripts/new_feature.py 生的 jieyi_stage.py）
 STAGE_PACKAGES += ["mail"]  # 帖友書信（scripts/new_feature.py 生的 mail_stage.py）
 
 
@@ -1534,7 +1541,7 @@ FAKE_SHELL_JS = (
     "  }\n"  # 30
     "})();\n"
 )
-SHELL_LOAD = {"test_shell_web.py", "test_server_bots.py"}
+SHELL_LOAD = {"test_shell_web.py", "test_server_bots.py", "test_shell_stays_thin.py"}  # 第 106 批：web/ 一律帶殼的名單（test_shell_stays_thin）
 
 
 def _shell_pick(monkeypatch, line, writers, js="web/app.js", src=FAKE_SHELL_JS):
@@ -1681,3 +1688,89 @@ def test_shell_spans_read_the_real_shell_files(name):
     found = {span[0] for js in ("app.js", "main.js")
              for span in test_for.shell_spans((test_for.ROOT / "web" / js).read_text(encoding="utf-8"))}
     assert name in found
+
+
+# ── 第 106 批：守門跟著帶 ──
+IMPORT_SCAN = "tests/core/test_feature_boundaries.py::test_every_tianxia_import_resolves"
+
+
+@pytest.mark.parametrize("changed", [
+    "tianxia/features/mall/actions.py", "tianxia/server_bots.py", "scripts/set_password.py", "scripts/sb/base.py", "scripts/webqa/flows/z.mjs", "server.py", "run_bots.py", "tale_html.py",
+])
+def test_code_files_bring_the_old_name_scan_and_only_that_one_node(changed):
+    """舊名掃描整條是 slow，不跟著跑就抓不到新寫的舊名；只跑那一條（約 6 秒），不是整個 slow。"""
+    picked = test_for.pick([changed], base="HEAD")
+    assert picked.nodes == {IMPORT_SCAN}
+    assert not picked.empty
+
+
+@pytest.mark.parametrize("changed", [
+    "docs/superpowers/plans/x.md", "content/events/jizhou.json", "tests/core/test_engine.py", "tianxia/features/mall/tests/test_mall_routes.py", "web/mall.css",
+])
+def test_other_files_do_not_bring_the_old_name_scan(changed):
+    assert not test_for.pick([changed], base="HEAD").nodes
+
+
+def test_the_node_runs_apart_with_slow_and_the_exit_code_counts(monkeypatch, capsys):
+    picked = test_for.pick(["tianxia/features/mall/actions.py"], base="HEAD")
+    (node,) = test_for.node_commands(picked, ["-x"])
+    assert _marker(node) == "slow or not slow" and IMPORT_SCAN in node and node[-1] == "-x" and "-n" not in node
+    assert all(IMPORT_SCAN not in cmd for cmd in test_for.pytest_commands(picked, slow=False, extra=[]))  # 不併進去：其他挑到的照舊不含 slow
+    assert any(IMPORT_SCAN in line for line in test_for.describe(picked))
+    assert test_for.node_commands(test_for.Pick(everything=True), []) == []  # 整套本來就含
+    assert test_for.node_commands(test_for.Pick(files={ROOT / "tests/core/test_engine.py"}), []) == []
+    # main：跑完 pytest_commands 接著跑它，它紅了整個紅
+    ran = []
+    monkeypatch.setattr(test_for, "base_line", lambda base, source: ("base", True))
+    monkeypatch.setattr(test_for.subprocess, "call", lambda cmd, cwd=None: ran.append(cmd) or (1 if IMPORT_SCAN in cmd else 0))
+    assert test_for.main(["tianxia/features/mall/actions.py", "--base", "HEAD"]) == 1
+    assert IMPORT_SCAN in ran[-1] and len(ran) == 2
+    capsys.readouterr()
+
+
+def test_a_file_with_only_the_node_runs_only_the_node(monkeypatch):
+    """挑到的只有這一條時不准多一次不帶目標的 pytest（那會變成整套）。"""
+    only = test_for.Pick(nodes={IMPORT_SCAN})
+    assert not only.empty
+    assert test_for.pytest_commands(only, slow=False, extra=[]) == []
+    ran = []
+    monkeypatch.setattr(test_for, "base_line", lambda base, source: ("base", True))
+    monkeypatch.setattr(test_for, "pick", lambda files, base=None: only)
+    monkeypatch.setattr(test_for.subprocess, "call", lambda cmd, cwd=None: ran.append(cmd) or 0)
+    assert test_for.main(["tianxia/zz.py", "--base", "HEAD"]) == 0
+    assert len(ran) == 1 and IMPORT_SCAN in ran[0]
+
+
+def test_a_package_routes_file_brings_the_route_guards():
+    """包的 routes.py：動作表的鎖與鎖外三段式只有這兩個檔守（稽核注入綠）；只有包那一支 routes.py，子資料夾的不算。"""
+    guards = {"test_action_tables.py", "test_outlock.py"}
+    assert guards <= _names(["tianxia/features/feast/routes.py"], base="HEAD")
+    assert not guards & _names(["tianxia/features/feast/actions.py"], base="HEAD")
+    assert not guards & _names(["tianxia/features/feast/tests/routes.py"], base="HEAD")
+
+
+@pytest.mark.parametrize("changed, hunks_of", [
+    ("web/mall.js", None), ("web/mall.css", None), ("web/style.css", None), ("web/index.html", None), ("web/app.js", APP_JS_NO_DIFF),
+])
+def test_web_files_bring_the_bot_word_scan_and_the_shell_lists(changed, hunks_of):
+    """web/ 送到每個玩家的瀏覽器：FB-673 的掃描（test_server_bots）與殼的名單（test_shell_stays_thin）一律帶，包的網頁檔那一支也是。"""
+    assert {"test_server_bots.py", "test_shell_stays_thin.py"} <= _names([changed], base="HEAD", hunks_of=hunks_of)
+
+
+def test_a_shell_js_picked_by_hunk_still_brings_the_shell_lists(monkeypatch):
+    picked = _shell_pick(monkeypatch, 9, {"topHtml": ["test_might.py"]})
+    assert {"test_server_bots.py", "test_shell_stays_thin.py"} <= {p.name for p in picked.files}
+
+
+def test_a_script_brings_the_boundary_test():
+    """腳本 import 包有反方向的名單（test_only_the_shells_the_scripts_and_the_aliases_import_a_package）與舊名掃描，改腳本要帶。"""
+    assert "test_feature_boundaries.py" in _names(["scripts/set_password.py"], base="HEAD")
+
+
+def test_content_brings_the_shell_lists():
+    assert "test_shell_stays_thin.py" in _names(["content/events/jizhou.json"], base="HEAD")
+
+
+def test_core_and_contract_bring_the_shell_lists():
+    assert "test_shell_stays_thin.py" in {p.name for p in test_for.core_tests()}
+    assert "test_shell_stays_thin.py" in {p.name for p in test_for.contract_tests()}

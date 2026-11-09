@@ -287,7 +287,8 @@
   // 序章裡師父的話也放在修練頁、煉製頁最上面（序章的第 4～6、9、10 步在這兩頁做，不用切回江湖頁看要做什麼）；序章外不畫。
   // 碰到才說的提示（伺服器標 hint）也畫在這兩頁最上面：修練失敗、改練、合成、熔煉都是在這兩頁做的，提示在做完的那一下上框、記進紀錄，
   // 不畫的話玩家要切回江湖頁才看得到（新手引導計畫三，T1 審查 I-1）。同一個框、同一顆「知道了」；說書人的步驟、結語、入伍段的框仍只在江湖頁
-  const proGuide = () => (pro() || (S.main.guide && S.main.guide.hint) ? guideHtml(S.main.guide, false) : "");
+  // 序章外碰到才說的提示（「想起師父說過」）不再掛在俠客頁四個分頁頂上，只留江湖頁那一個（Joy 2026-11-08 UI 手感乙批 1-4 選「只留江湖頁」）
+  const proGuide = () => (pro() ? guideHtml(S.main.guide, false) : "");
   async function guideClick(act, el, ev) {
     switch (act) {
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起

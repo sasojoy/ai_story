@@ -25,6 +25,7 @@ from tianxia import atlas  # 共用規則層（大區：遠近；第 50 批收�
 from tianxia import figures  # 共用規則層（大勢人物：名氣、心事；第 40 批收進）
 from tianxia import gender
 from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）
+from tianxia.core import xinshen  # 心神（核心的資源）：開著才限次數
 from tianxia import renown  # 共用規則層（名望段、善惡稱號）
 from tianxia import rules
 from tianxia import territory  # 共用規則層（地盤：誰控制、地頭熟、大勢線）
@@ -943,6 +944,27 @@ def ask_problem(content: Content, question: str) -> str | None:
     if len(q) > content.config.tavern.ask_chars:
         return ASK_LONG_Q.format(n=content.config.tavern.ask_chars)
     return None
+
+
+# ── 問酒家（另算） ─────────────────────────────
+
+
+def asks_left(state: GameState, content: Content, day: int) -> int | None:
+    """今天還能問酒家幾次；心神關著或不限（ask_per_day 0）是 None。"""
+    cap = content.config.xinshen.ask_per_day
+    if not xinshen.on(content) or cap <= 0:
+        return None
+    rec = state.player.tavern_asks
+    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
+    return max(0, cap - used)
+
+
+def note_ask(state: GameState, content: Content, day: int) -> None:
+    if asks_left(state, content, day) is None:
+        return
+    rec = state.player.tavern_asks
+    used = rec[1] if len(rec) == 2 and rec[0] == day else 0
+    state.player.tavern_asks = [day, used + 1]
 
 
 def ask_facts(state: GameState, content: Content, extra: list[str]) -> tuple[str, ...]:

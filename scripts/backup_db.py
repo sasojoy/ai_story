@@ -6,6 +6,8 @@
 做出來的檔改成 DELETE 日誌模式，是一個自足的 .db，不帶 -wal／-shm，複製或之後放進雲端硬碟的同步資料夾，都不會只同步到一半。
 先寫成 .partial、驗過（integrity_check、結構版本、幾張表的列數）才換上正式檔名；驗不過改名成 .bad 留著查。
 
+旁檔（帳號與客服第 201 批）：主檔旁邊的 <主檔名去掉副檔名>-identity.sqlite、-support.sqlite 有就一起備份成 <主備份檔名去掉副檔名>-<side>.sqlite
+（同一個時間戳；只驗 integrity_check；壞了留成 .bad、印警告，主檔照留），保留規則刪主檔時一起刪。
 刻意不用 tianxia.database.open_database 打開來源：它會照 MIGRATIONS 升級結構，不能替線上那個檔升級。
 
 手動：.venv/Scripts/python.exe scripts/backup_db.py --dest <資料夾>          （資料庫照 TIANXIA_DB，沒設是 saves/tianxia.db）
@@ -80,7 +82,67 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
         os.replace(partial, bad)
         raise
     os.replace(partial, final)
+    backup_sides(src, final)
     return final
+
+
+# identity（帳號與客服第 201 批；設計 4.1、第七節）：主檔旁邊的小檔 <主檔名去掉副檔名>-<side>.sqlite 跟主檔同一個時間戳備份與還原。
+# 不存在就跳過；驗只看 integrity_check（沒有結構版本）；壞了改 .bad、印警告，主檔照留
+SIDE_FILES = ("identity", "support")
+
+
+def side_of(db: Path, side: str) -> Path:
+    db = Path(db)
+    return db.with_name(f"{db.stem}-{side}.sqlite")
+
+
+def verify_side(path: Path) -> None:
+    try:
+        conn = sqlite3.connect(Path(path).absolute().as_uri() + "?mode=ro", uri=True)
+    except sqlite3.Error as e:
+        raise BackupError(f"打不開旁檔：{path}（{e}）") from e
+    try:
+        check = conn.execute("PRAGMA integrity_check").fetchone()[0]
+    except sqlite3.Error as e:
+        raise BackupError(f"旁檔壞了，不是可用的資料庫：{path}（{e}）") from e
+    finally:
+        conn.close()
+    if check != "ok":
+        raise BackupError(f"旁檔沒通過完整性檢查：{path}（{check}）")
+
+
+def backup_sides(src: Path, final: Path) -> list[Path]:
+    """主檔備份好之後，旁檔照同一套線上備份成 <主備份檔名去掉副檔名>-<side>.sqlite；回傳做成的。壞了的印警告、留成 .bad，不擋主檔。"""
+    done = []
+    for side in SIDE_FILES:
+        source_path = side_of(src, side)
+        if not source_path.is_file():
+            continue
+        out = side_of(final, side)
+        partial = out.with_name(out.name + ".partial")
+        bad = out.with_name(out.name + ".bad")
+        try:
+            source = sqlite3.connect(source_path, timeout=30)
+            try:
+                target = sqlite3.connect(partial)
+                try:
+                    source.backup(target)
+                    target.execute("PRAGMA journal_mode = DELETE")
+                finally:
+                    target.close()
+            finally:
+                source.close()
+            verify_side(partial)
+        except (sqlite3.Error, OSError, BackupError) as e:
+            if partial.is_file() and partial.stat().st_size:
+                os.replace(partial, bad)
+            else:
+                partial.unlink(missing_ok=True)
+            print(f"旁檔 {side} 沒有備份成（主檔照留）：{source_path}（{e}）", file=sys.stderr)
+            continue
+        os.replace(partial, out)
+        done.append(out)
+    return done
 
 
 def _is_corruption(error: Exception) -> bool:
@@ -169,6 +231,11 @@ def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, kee
             failed.append((path, e))
         else:
             removed.append(path)
+            for side in SIDE_FILES:  # identity：同名的旁檔跟著刪
+                try:
+                    side_of(path, side).unlink(missing_ok=True)
+                except OSError as e:
+                    failed.append((side_of(path, side), e))
     if failed:
         raise PruneError(removed, failed)
     return removed
@@ -196,6 +263,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"備份失敗：{e}", file=sys.stderr)
         return 1
     print(f"已備份：{out}（{describe(verify(out))}）")
+    for side in SIDE_FILES:  # identity：做成了的旁檔一個一行
+        if side_of(out, side).is_file():
+            print(f"已備份旁檔：{side_of(out, side)}")
     if args.prune:
         try:
             removed = prune(Path(args.dest), dt.datetime.now())

@@ -78,7 +78,7 @@ def test_the_report_page_puts_big_battles_first_and_folds_every_round(battle):
     reports = server.reports_view(fighter, record.id)
     reports["list"].append({"label": "大勝　第99場　遊歷", "id": 99, "big": False})
     listing = run(m, 'H.S.tab = "news"; H.S.news = "reports"; H.S.reports = R; H.S.reportOpen = false; H.renderPage(); return T.els.page.innerHTML;'.replace("R", repr_js(reports)))
-    assert listing.index("大戰") < listing.index(f'data-id="{record.id}"') < listing.index("最近的仗") < listing.index('data-id="99"')
+    assert listing.index("nw-big") < listing.index(f'data-id="{record.id}"') < listing.index('data-id="99"')  # 大戰固定在頂（見聞改版）
     out = run(m, 'H.S.tab = "news"; H.S.news = "reports"; H.S.reports = R; H.S.reportOpen = true; H.S.roundsOpen = new Set(["rID:2"]); H.renderPage(); return T.els.page.innerHTML;'
               .replace("R", repr_js(reports)).replace("ID", str(record.id)))
     keys = re.findall(r'<details class="b-round" data-round="([^"]+)"', out)

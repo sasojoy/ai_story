@@ -112,3 +112,47 @@ def test_refuses_a_bad_login(tmp_path, capsys):
     assert _run(tmp_path, "有中文") == 1
     assert "帳號只能用英文字母、數字、底線，3～20 字。" in capsys.readouterr().out
     assert not (tmp_path / "local").exists()
+
+
+def test_set_password_script_refuses_id_keys(tmp_path, capsys):
+    """沒有密碼的帳號鍵 id:<n>（帳號與客服第 201 批）：帳號格式不收冒號，這支碰不到、也不另建帳號。"""
+    key = _store(tmp_path).create_without_password("line", "U1", "LINE")
+    assert _run(tmp_path, key) == 1
+    assert capsys.readouterr().out.strip() == "帳號只能用英文字母、數字、底線，3～20 字。"
+    with _db(tmp_path).snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+    assert not (tmp_path / "local").exists()
+
+
+def _identity_on(monkeypatch, tmp_path, content, admins):
+    """帳號與客服第 207 批：identity 開著（金鑰在、開關開著）、管理者名單是 admins。內容檔換成測試內容那一份。"""
+    import json
+
+    from tianxia.core import identity_base
+
+    key = tmp_path / "identity.json"
+    key.write_text(json.dumps({"key": "k" * 32}), encoding="utf-8")
+    monkeypatch.setattr(identity_base, "KEY_FILE", key)
+    content.config.identity.enabled = True
+    content.config.admins = admins
+    monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
+
+
+def test_set_password_script_listed_needs_12(tmp_path, capsys, monkeypatch, content):
+    from tianxia import accounts
+
+    _identity_on(monkeypatch, tmp_path, content, ["Rayal"])
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "short-pw")  # 8 字
+    assert _run(tmp_path, "Rayal") == 1
+    assert capsys.readouterr().out.strip() == accounts.STAFF_SHORT_PASSWORD
+    assert _store(tmp_path).get("rayal") is None and not (tmp_path / "local").exists()
+    assert _run(tmp_path, "someone") == 0  # 不在名單上：8 字照設
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "a-long-password")
+    assert _run(tmp_path, "Rayal") == 0
+
+
+def test_set_password_script_off_ignores_the_floor(tmp_path, monkeypatch, content):
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "short-pw")
+    content.config.admins = ["Rayal"]
+    monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
+    assert _run(tmp_path, "Rayal") == 0  # identity 關著：一個字不變

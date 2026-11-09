@@ -103,4 +103,5 @@ class AfterglowScenario(Scenario):
 
 
 # 改一個字（selftest）：痕跡行狀那一句（第 99 批從 engine.py 搬進共用層 marks，兩處找），marks 那一段抓到
-register_track("afterglow", AfterglowScenario, (("tianxia/marks.py", "tianxia/engine.py"), ("這裡頭有你出的一分力。", "這裡頭有你出的一分力！")), "season21")
+register_track("afterglow", AfterglowScenario, (("tianxia/marks.py", "tianxia/engine.py"), ("這裡頭有你出的一分力。", "這裡頭有你出的一分力！")), "season21",
+               covers=("companions",))

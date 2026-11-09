@@ -969,7 +969,8 @@
       "haozu_fort",
       "qiao_county"
     ],
-    "side": "haoqiang"
+    "side": "haoqiang",
+    "side_two_sides": "guan"
   },
   {
     "id": "zhangyan",

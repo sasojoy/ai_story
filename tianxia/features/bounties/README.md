@@ -84,3 +84,10 @@
 - `army_of`、`rallies`、`targets` 第 89 批搬進核心 `core/bounty_base`，`rules.py` re-export 同一批物件；`targets` 讀 `bounty_base` 自己那幾個名字，換 `rules.mine` 打不到 `targets`。
 - `bots.py` 多 `take_bounties`（第 101 批）。
 - 另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。另外要跑的：改 `checks.py` 時 `test_for` 帶得到 `tests/core/test_content.py`（PM 定，第二輪 F 波），帶不到 `tests/core/test_content_packs.py`。
+
+## 綁手機才能用（帳號與客服第 205 批；設計 4.5）
+
+`Config.identity.phone_gate`（預設關）開著時問核心 `core/identity_base.phone_ok(ctx, 鍵)`，只問動手的人：
+- 掛通緝（鍵 `wanted`）：`actions.post_wanted` 第一行；卡上的「通緝」（`wanted.buttons`，陣營判斷之後）灰掉寫 `identity_base.PHONE_NEEDED`。
+- 揭與交玩家掛的單（鍵 `bounty_post`；設計寫 `bounty_player`）：只看 `Bounty.poster` 有字（玩家掛的）。`actions.bounty` 的 take、give 先問，被擋回那一句（掌櫃照 refused）；榜上「揭下」那一行灰掉、括號寫那一句。系統掛的單（`poster` 空）照舊。選單上灰的那一顆 `choose` 照舊先回通用那一句。
+- 沒有新路由（不適用「關著 404」）、新欄位、新表。測試 `tests/test_bounties_phone_gate.py`（小工具 `tests/kit/phone_kit.py`）。另外要跑的：改 `core/identity_base.py` 時跑 `tests/core/test_identity_base.py` 與四包的 `test_*_phone_gate.py`。

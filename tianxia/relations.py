@@ -14,13 +14,13 @@ from .state import GameState
 KIN = {"brother": "兄弟", "mentor": "師生", "chief": "上下"}  # 盟友的三種
 
 
-def side_of(content: Content, cid: str) -> str | None:
+def side_of(content: Content, cid: str, world=None) -> str | None:
     """站哪一方：大勢人物照人物表的陣營，其他人照 CharacterDef.side（同 figure_life.side_of；這裡不能 import figure_life）。"""
     fig = content.figures.get(cid)
     if fig is not None:
         return fig.faction
     ch = content.characters.get(cid)
-    return ch.side if ch is not None else None
+    return ch.side_in(world) if ch is not None else None
 
 
 def link(content: Content, a: str, b: str) -> str | None:

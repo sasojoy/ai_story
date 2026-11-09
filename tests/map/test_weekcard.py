@@ -68,6 +68,7 @@ def test_sides_card_writes_two_armies_when_the_four_wins_rule_is_off(on):
 
 
 def test_sides_card_adds_the_gentry_when_four_wins_is_on(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     on.config.jianfa.enabled = True
     g = _game(on)
     sc = faction_sides.sides_card(g)

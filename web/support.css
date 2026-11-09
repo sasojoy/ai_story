@@ -1,0 +1,58 @@
+/* 客服（帳號與客服第 211 批）：設定抽屜的客服頁與客服身分的管理頁。前綴 .sup-（.sp- 已經是修練的）。關著時這些 class 一個都不會出現。 */
+.sup-row .btn { position: relative; }
+.sup-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.sup-seg { display: flex; gap: 4px; margin: 8px 0 10px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
+.sup-seg button { flex: 1; padding: 6px 0; border: 0; border-radius: 999px; background: none; color: var(--ink); font: inherit; }
+.sup-seg button.on { background: var(--ink); color: var(--paper); }
+.sup-tk { display: block; width: 100%; margin: 0 0 8px; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); color: var(--ink); font: inherit; }
+.sup-tk.sup-hot { border-color: var(--gold); }
+.sup-tk-top { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.sup-when { margin-left: auto; opacity: 0.7; }
+.sup-sum, .sup-reply { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-reply { color: var(--gold); }
+.sup-st { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 12px; border: 1px solid var(--line); }
+.sup-answered { border-color: var(--gold); color: var(--gold); }
+.sup-closed { opacity: 0.6; }
+.sup-fine { font-size: 12px; }
+.sup-meta { margin: 4px 0 8px; font-size: 13px; }
+.sup-msg { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sup-msg.sup-cs { border: 2px solid var(--gold); }
+.sup-msg.sup-note { border-style: dashed; opacity: 0.85; }
+.sup-who { display: block; margin-bottom: 2px; font-size: 12px; opacity: 0.75; white-space: normal; }
+.sup-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; font-weight: 600; }
+.sup-title .muted { font-weight: 400; font-size: 12px; }
+.sup-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.sup-tile { padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); text-align: center; }
+.sup-tile small, .sup-tile span { display: block; font-size: 12px; opacity: 0.75; }
+.sup-tile b { font-size: 20px; }
+.sup-row-tk { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; width: 100%; padding: 8px 4px; text-align: left; border: 0;
+  border-bottom: 1px solid var(--line); background: none; color: var(--ink); font: inherit; }
+.sup-row-tk.sel { background: var(--accent-soft); }
+.sup-row-tk .sup-p { grid-column: 2; font-size: 12px; opacity: 0.75; }
+.sup-s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-cat { margin: 0 4px; }
+.sup-acct dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.sup-acct dt { opacity: 0.7; }
+.sup-acct dd { margin: 0; }
+/* 帳號卡的帳本與「查別的帳號」（第 212 批） */
+.sup-ledger-h { margin: 10px 0 4px; font-size: 12px; opacity: 0.75; }
+.sup-ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sup-ledger td { padding: 3px 4px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.sup-ledger .sup-amt { text-align: right; white-space: nowrap; }
+.sup-lookup { display: grid; grid-template-columns: auto minmax(0, 1fr) 5em auto; gap: 6px; align-items: center; }
+.sup-lookup .form-msg { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 480px) {
+  /* 窄版：種類、單號、查一列，完整的字自己一整列（以前單號落在 auto 欄、把下拉撐寬，字欄只剩約 130px） */
+  .sup-lookup { grid-template-columns: minmax(0, 1fr) 5em auto; }
+  .sup-lookup select { min-width: 0; }
+  .sup-lookup [name="text"] { grid-column: 1 / -1; grid-row: 2; }
+}
+/* 寬版（只給客服頁）：桌面左清單、右單＋帳號卡；手機照清單頁 */
+.ad-shell.sup-wide { max-width: 1024px; }
+@media (min-width: 900px) {
+  .sup-split.sup-has-one { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
+}
+/* 登入頁的客服信箱那一行（第 214 批）：改版資訊前面、小字置中；信箱整段可選取 */
+.sup-gate { margin: 16px 2px 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); text-align: center; }
+.sup-mail { user-select: all; -webkit-user-select: all; color: var(--ink); font-weight: 600; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }

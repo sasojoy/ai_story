@@ -24,3 +24,6 @@
 .ck-p4 b { font-size: 14px; }
 .ck-p4.gang b { color: var(--gang); } .ck-p4.rou b { color: var(--rou); } .ck-p4.kuai b { color: var(--kuai); } .ck-p4.man b { color: var(--man); }
 .ck-p4 small { font: 10.5px var(--sans); color: var(--ink-2); }
+.ck-pop h3 { margin: 0 0 6px; font: 700 18px var(--serif); }
+.ck-pop .ck-step { font-weight: 600; }
+.ck-pop .ck-pop-ok { display: block; width: 100%; margin-top: 12px; min-height: 44px; }

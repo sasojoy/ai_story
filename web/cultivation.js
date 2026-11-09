@@ -153,7 +153,15 @@
     return lines.map((l) => `<p>${l}</p>`).join("");
   }
 
-  const heroFigure = (s) => HERO_FIGURES[s && s.gender === "女" ? "女" : "男"];
+  // 剪影照性別與這一季挑的成長（HERO_FIGURES.growth）；遊俠、自己配、還沒挑的照舊用遊俠那張
+  const heroFigure = (s) => {
+    const sex = s && s.gender === "女" ? "女" : "男";
+    const k = s && s.growth && s.growth.chosen, alt = k && HERO_FIGURES.growth[k];
+    if (!alt) return HERO_FIGURES[sex];
+    const f = alt[sex];
+    return { src: `/static/img/growth/${k}-${sex === "女" ? "f" : "m"}.webp`, ratio: f.ratio,
+      nodes: f.nodes.map(([key, x, y, side]) => ({ key, kind: "art", x, y, side })) };
+  };
 
   // 一個光點此刻的樣子：標籤、有沒有東西（沒有的點暗著）、底下那一格的標題、說明、按鈕
   function heroInfo(n, x, s) {
@@ -236,6 +244,23 @@
     return cells ? `<div class="self-gears">${cells}</div>` : "";
   }
   const CN_TENTHS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  // 武學的成數畫成一筆乾墨（UI 手感戊批，Joy 2026-11-08 看畫稿說可以；以前是十個小方格）：墨走到現在的成數，筆頭蓋一枚小朱印寫「幾成」，
+  // 底下九道細刻度（五成那一道長一點）；絕學是金墨，十成的印寫「大成」。沒練過（零成）只有底下那一道淡墨與刻度
+  const SA_X0 = 5, SA_X1 = 284; // 墨從哪裡起、十成到哪裡（viewBox 320 寬，右邊留給印）
+  function saInk(lv, top) {
+    const end = SA_X0 + ((SA_X1 - SA_X0) * lv) / 10;
+    const ticks = Array.from({ length: 9 }, (_, k) => { const x = (SA_X0 + ((SA_X1 - SA_X0) * (k + 1)) / 10).toFixed(1); return k === 4 ? `<rect x="${x}" y="24" width="1.8" height="7"/>` : `<rect x="${x}" y="25" width="1.4" height="5"/>`; }).join("");
+    const ink = top ? "#8a611a" : "#2a241d", ink2 = top ? "#c9952f" : "#3a3128", seal = top ? "#b7862b" : "#a8322a";
+    const d = `M${SA_X0} 18.5 Q${((SA_X0 + end) / 2).toFixed(1)} 15.5 ${end.toFixed(1)} 17.6`;
+    const stroke = lv > 0 ? `<path d="${d}" stroke="${ink}" stroke-width="10" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${ink2}" stroke-width="4" stroke-linecap="round" fill="none" opacity=".55"/>`
+      + `<path d="${d}" stroke="#fbf7ef" stroke-width="1.2" stroke-dasharray="14 9 30 6 22 11" fill="none" opacity=".5" transform="translate(0 -2)"/>`
+      + `<path d="${d}" stroke="#fbf7ef" stroke-width=".9" stroke-dasharray="9 13 24 7" fill="none" opacity=".4" transform="translate(0 2.6)"/>` : "";
+    const word = lv >= 10 && top ? "大成" : `${CN_TENTHS[lv]}成`;
+    const stamp = lv > 0 ? `<g transform="translate(${Math.min(288, end + 3).toFixed(1)} 4)"><rect width="30" height="22" rx="3" fill="${seal}"/><rect x="2" y="2" width="26" height="18" rx="2" fill="none" stroke="#f6e3cc" stroke-width="1"/>`
+      + `<text x="15" y="15.2" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fdf3e4">${word}</text></g>` : "";
+    return `<svg class="sa-ink" viewBox="0 0 320 34" aria-hidden="true"><path d="M4 18 Q160 15 316 18" stroke="#d9ccb2" stroke-width="7" stroke-linecap="round" fill="none" opacity=".75"/>`
+      + `<g fill="#b8a888">${ticks}</g>${stroke}${stamp}</svg>`;
+  }
   // 「武學」那一段（俠客頁重排，Joy 2026-10-24）：小標題右邊一顆「功法庫 N/M・意境 K ›」（攤開底下的功法庫摺疊、捲過去），
   // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
   function selfArtsHtml(x) {
@@ -249,7 +274,7 @@
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
       const card = `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
-        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${Array.from({ length: 10 }, (_, k) => `<i${k < lv ? ' class="on"' : ""}></i>`).join("")}</i></span></button>`;
+        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${saInk(lv, top)}</i></span></button>`;
       // 絕招掛在「武學」那一門底下（跟著手上的打法走；內功不掛）
       return a.kind === "武學" && hm ? `<div class="self-art-wrap${top ? " q4" : ""}">${card}${heroMoveHtml(hm, a)}</div>` : card;
     }).join("")}</div></section>`;
@@ -330,7 +355,7 @@
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
   // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
-  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name} ›</button>`).join("") : "");
+  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.filter((n) => !n.when || n.when(S.main)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
@@ -774,7 +799,7 @@
       const on = x.person === c.key;
       const hp = c.hp_max ? `<span class="mate-hp" role="meter" aria-valuemin="0" aria-valuemax="${c.hp_max}" aria-valuenow="${c.hp}" aria-label="氣血"><i style="width:${Math.max(0, Math.min(100, Math.round((c.hp / c.hp_max) * 100)))}%"></i></span><small class="mate-hpn">氣血 ${c.hp}／${c.hp_max}</small>` : "";
       const arts = c.arts.map((a) => `<span class="mate-art"><em>${esc(a.kind)}</em>${a.name ? `<b>${esc(a.name)}</b><small>${esc(a.quality)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}</small>`
-        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${Array.from({ length: 10 }, (_, k) => `<i${k < (a.level | 0) ? ' class="on"' : ""}></i>`).join("")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
+        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${saInk(Math.max(0, Math.min(10, a.level | 0)), a.quality === "絕學")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
       const detail = on && x.person_card ? `<div class="mate-detail">${mateExtra(x.person_card)}${noteAt("person")}
         ${x.person === "player" || x.person.startsWith("follower:") ? ""
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
@@ -791,6 +816,7 @@
       <div class="mates">${cards.map(mateCard).join("")}</div>
       ${cards.length > 1 ? "" : '<p class="muted mates-none">交友、結識大勢人物，情誼夠了就有人願意追隨你。</p>'}</section>`
       : fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
+    const jyBlock = typeof jieyiHtml === "function" ? jieyiHtml(S.main) : ""; // 結義（web/jieyi.js；沒結義不畫）
     // 紀念物（長篇奇事，企劃者 2026-10-27）：故事裡收下的小東西，沒有效果、不能賣，跨季跟著角色；一件都沒有不畫
     const keepItems = (S.main && S.main.keepsakes) || [];
     const keeps = keepItems.length ? `<section class="self-sec keepsakes" aria-label="紀念"><div class="self-hd"><h3>紀念</h3><small class="muted">故事裡收下的，留著</small></div>
@@ -802,7 +828,7 @@
       const tabs = `<div class="hero-tabs" role="tablist">${HERO_TABS.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
-        : tab === "mates" ? rosterBlock
+        : tab === "mates" ? `${rosterBlock}${jyBlock}`
         : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
@@ -812,6 +838,7 @@
       ${selfArtsHtml(x)}
       ${gearBlock}
       ${rosterBlock}
+      ${jyBlock}
       ${keeps}
       ${selfStatsHtml(s)}
       ${selfEntriesHtml(x)}
@@ -920,6 +947,20 @@
   }
   function askMeltInsight(el) {
     ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
+  }
+  // 俠客頁原地重畫（Joy 2026-11-07「不要每次點門下、裝備那些按鈕，按完都給我跳置頂」）：捲到哪留在哪。
+  // 換到比較短的分頁時，最多往上收到分頁鈕剛好在頂上（#page 撐高到那個位置還捲得到，不讓瀏覽器把頁面收回底部）
+  function heroStay(draw) {
+    const page = document.getElementById("page");
+    const y = window.scrollY || 0;
+    draw();
+    const tabs = typeof document.querySelector === "function" ? document.querySelector("#page .hero-tabs") : null;
+    if (!page || !page.style || !tabs || typeof tabs.getBoundingClientRect !== "function" || typeof window.scrollTo !== "function") return;
+    const tabsTop = tabs.getBoundingClientRect().top + (window.scrollY || 0);
+    const target = Math.min(y, Math.max(0, tabsTop - 8));
+    const need = target + window.innerHeight - page.getBoundingClientRect().top - (window.scrollY || 0);
+    page.style.minHeight = `${Math.max(0, Math.ceil(need))}px`;
+    window.scrollTo(0, target);
   }
   async function cultivationClick(act, el, ev) {
     switch (act) {

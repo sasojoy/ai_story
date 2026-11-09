@@ -703,4 +703,8 @@ class GearScenario(Scenario):
 # 改一個字（selftest）：名將託人送來那一句（signature_arms.GIFT_SENT_LINE；搬之前在 tianxia/signature_arms.py、之後在 tianxia/features/gear/signature_arms.py，
 # 第 1 項是搬進包的檔、第 2 項是舊名的檔，搬的人照實際的檔名改）。抓到的地方：贈丑的本命兵器（他不在身邊，託人送來）
 register_track("gear", GearScenario, (("tianxia/features/gear/signature_arms.py",),
-                                      ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7")
+                                      ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "travel", "zhuan"))

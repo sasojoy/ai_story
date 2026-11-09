@@ -23,6 +23,7 @@ from . import defection, lean_actions
 from .ending_actions import four_wins
 
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7；原本寫在 engine.py）
+NO_SUCH_SIDE = "（這一季沒有這一方可投。）"  # 待 joy 潤：拿掉豪強的季，舊畫面上的投靠豪強按下去（選單不會給這一顆）
 
 
 def sect_options(ctx) -> list[Option]:
@@ -79,6 +80,8 @@ def faction_step(ctx, arg: str) -> list[str]:
         ally, p.pending_faction, p.pending_ally = p.pending_ally, None, None
         if p.location not in faction.join_at:
             return ["（你已經不在投靠的地方了。）"]
+        if not allied.faction_open(ctx.content, ctx.state.world, faction.id):  # 拿掉豪強的季：舊的確認畫面不算數
+            return [NO_SUCH_SIDE]
         p.faction = faction.id
         p.ally = bot_lean(ctx, faction.id, ally) if allied.on(ctx.content, ctx.state.world) else None
         # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
@@ -89,6 +92,8 @@ def faction_step(ctx, arg: str) -> list[str]:
             msgs += ctx._guide(ctx._note_action("join"))  # 走對話框（畫面批次審查 I2）
         return msgs
     faction = ctx.content.scenario.faction(arg)
+    if not allied.faction_open(ctx.content, ctx.state.world, faction.id):  # 拿掉豪強的季：選單不給這一顆，直接送來的也不收
+        return [NO_SUCH_SIDE]
     # 三陣營四勝利開著的季，投靠豪強照投靠點直接給傾向、不出選邊鈕（企劃者 2026-10-24 第 6 件；之後隨時改幫）
     lean = wins.join_lean(ctx.content, faction.id, p.location) if four_wins(ctx) and allied.on(ctx.content, ctx.state.world) else None
     p.pending_faction, p.pending_ally = faction.id, lean
@@ -182,7 +187,8 @@ def join_step_items(ctx) -> list[dict]:
     """「你這一步」的去投靠那一件（原本 weekcard._steps 最後那一段）：散人、劇本有陣營、季沒收才有。"""
     s, c = ctx.state, ctx.content
     if s.player.faction is None and c.scenario.factions and not s.world.ended:
-        places = "、".join(f"{STANCE_NAMES.get(f.id, f.name)}在{_join_place_names(ctx, f)[0]}" for f in c.scenario.factions if _join_place_names(ctx, f))
+        open_now = allied.factions_of(c, s.world)  # 拿掉豪強的季不寫豪強
+        places = "、".join(f"{STANCE_NAMES.get(f.id, f.name)}在{_join_place_names(ctx, f)[0]}" for f in open_now if _join_place_names(ctx, f))
         return [{"kind": "join", "text": JOIN_STEP.format(places=places), step_rules.REF: ("join",)}]
     return []
 
@@ -190,7 +196,8 @@ def join_step_items(ctx) -> list[dict]:
 def join_step_place(ctx, ref: tuple) -> tuple:
     """去投靠那一件的 (id, target, None)（原本 step._target 的去投靠那一支）：最近的投靠點；一樣近照劇本陣營的順序；沒有 (None, None, None)。"""
     c = ctx.content
-    joins = {loc: f for f in reversed(c.scenario.factions) for loc in f.join_at if loc in c.locations}  # 一樣近照劇本陣營的順序
+    # 一樣近照劇本陣營的順序；拿掉豪強的季不往豪強的投靠點帶（allied.factions_of）
+    joins = {loc: f for f in reversed(allied.factions_of(c, ctx.state.world)) for loc in f.join_at if loc in c.locations}
     where = ctx._nearest_to(set(joins)) if joins else None  # noqa: SLF001
     return (joins[where].id, step_rules.place(ctx, where), None) if where is not None else (None, None, None)
 
@@ -205,7 +212,10 @@ def join_options(ctx) -> list[Option]:
     s, c = ctx.state, ctx.content
     if s.player.faction is not None:
         return []
-    return [Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}") for faction in c.scenario.factions if s.player.location in faction.join_at]
+    return [  # 拿掉豪強的季（allied.factions_of）豪強的投靠點不給投靠鈕
+        Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}")
+        for faction in allied.factions_of(c, s.world) if s.player.location in faction.join_at
+    ]
 
 
 def picking_ally(ctx) -> bool:

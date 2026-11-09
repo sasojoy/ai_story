@@ -33,3 +33,7 @@
   function registerChanges(fn) {
     CHANGES.push(fn);
   }
+
+  const GATE_SLOTS = []; // 登入頁的格（identity，帳號與客服第 201 批）：包登記 registerGateSlot(fn)，renderGate 畫完叫 drawGateSlots，fn(gate, S) 自己改 .gate 那一塊
+  function registerGateSlot(fn) { GATE_SLOTS.push(fn); } // 登入頁的格：登記
+  function drawGateSlots(gate) { for (const fn of GATE_SLOTS) fn(gate, S); } // 登入頁的格：renderGate 畫完叫一次，一格一支照登記的先後

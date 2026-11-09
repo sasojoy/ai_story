@@ -147,12 +147,16 @@ def tail_of(how: str | None, weights: Mapping[str, float]) -> str:
     return mostly_of(weights)
 
 
-def hint_of(kind: str, how: str | None, weights: Mapping[str, float]) -> str:
+# 表的種類跟地點本身對不上字的（UI 手感己批 5-4：潁川書院照寺觀那一類抽，鈕上寫成「寺裡多事」）：照表的名字換開頭兩個字
+NAMED_PLACE_WORDS = {"書院": "院裡"}  # 待 joy 潤
+
+
+def hint_of(kind: str, how: str | None, weights: Mapping[str, float], table_name: str = "") -> str:
     """鈕上括號裡最後那一段與四格探索那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘是地點種類的字加上這一處此刻
     比重最大的那一類（`mostly_of`）。weights 就是擲骰用的那一份（`weights()` 再扣掉做不到的——沒有對手遭遇是 0、抽不到事件、悟不出感悟），
     所以行動列底下那一行寫「多半遇事」，這裡就是「…多事」：長社的官軍遭遇是 0 不寫「野外多敵」（FB-832）、寺的事件比感悟重寫「寺裡多事」、
     危險的山遭遇追過素材寫「山裡多敵」（2e，FB-882）。最後兩個字是 `tail_of`（輿圖名字旁，2f）。"""
-    return SPAR_HINT if how == "spar" else PLACE_WORDS[kind] + tail_of(how, weights)
+    return SPAR_HINT if how == "spar" else NAMED_PLACE_WORDS.get(table_name, PLACE_WORDS[kind]) + tail_of(how, weights)
 
 
 BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一類事寫成兩個字（紀錄的結果標記、行動列底下那一行）

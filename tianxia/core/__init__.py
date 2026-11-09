@@ -76,6 +76,8 @@
 # shop（第二輪第 93 批；計畫 docs/superpowers/plans/2026-11-07-第二輪-第93批.md）
 - shop_base.py：店裡共用的（原本在 shopview）——掌櫃的話的情況表 SITUATIONS、離開鈕 BACKS、情況鍵 problem_key、被拒那一句撐到什麼時候 hold_for、still_holds、招牌底下那一句 line_text、素材格的排序 attribute_rank、階名 TIER_NAMES，
   加跨店的內容檢查 check_shop_lines（content.validate 原位函式內 import，不開 CONTENT_SLOTS 新格）；page_view、酒肆、軍需帳與四間店的 shop_view.py 讀它。各間店本體在包裡（Feature.shop_view）。同 event_check 不進 MODULES。
+# identity（J 波第 201 批「帳號一」；計畫 docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md）
+- identity_base.py：帳號綁定別人也要讀的那一半——正規化、遮罩、金鑰、subject_hmac、on、phone_ok、blocked_name；identity 包、server.name_taken、商城易名帖讀它。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
