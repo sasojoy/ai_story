@@ -231,7 +231,7 @@
     const lines = body.split(/<br\s*\/?>/).map((t) => t.trim()).filter((t) => t && !MATE_DUP.test(t.replace(/<[^>]+>/g, "")));
     return lines.length ? `<p class="mate-lines">${lines.join("<br>")}</p>` : "";
   }
-  const MATE_ROLES = { 本人: "self", 出戰: "fight", 在門下: "home", 部下: "follow" }; // 門下卡左邊那枚印的顏色
+  const MATE_ROLES = { 本人: "self", 出戰: "fight", 候命: "home", 部下: "follow" }; // 門下卡左邊那枚印的顏色
   function selfCorners(x, s) {
     if (!x.gear) return "";
     const cells = SELF_CORNERS.map(([key, at]) => {
@@ -796,7 +796,7 @@
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
         ${x.release ? `<button class="btn ghost" data-act="release-mate" data-confirm="${esc(x.release.confirm)}">放他回江湖</button>` : ""}
         ${lessonsHtml(x.lessons)}</div>` : ""}`;
-    // 「門下」那一段（Joy 2026-10-26「門下顯示優化」）：一人一張卡（server 的 roster_cards）——名字、本人／出戰／在門下／部下的印、等級、
+    // 「同伴」那一段（2026-11-09 前叫門下）（Joy 2026-10-26「門下顯示優化」）：一人一張卡（server 的 roster_cards）——名字、本人／出戰／候命／部下的印、等級、
     // 氣血一條、身上兩門各一行（名字、品質、成數十格）。點一張在它底下攤開角色卡與加入、移出、放回江湖、傳功（同以前名冊點人）；再點收起。
     // 舊伺服器沒有 roster_cards 時照舊畫摺疊裡的名冊
     const mateCard = (c) => {
@@ -816,11 +816,12 @@
     };
     const cards = x.roster_cards;
     const fighting = cards ? cards.filter((c) => c.role === "出戰" || c.role === "部下").length : 0;
-    const rosterBlock = cards ? `<section class="self-sec mates-sec" aria-label="門下"><div class="self-hd"><h3>門下</h3><small class="muted">${cards.length > 1 ? `${cards.length - 1} 人・出戰 ${fighting} 人` : "還沒有同伴"}</small></div>
+    const rosterBlock = cards ? `<section class="self-sec mates-sec" aria-label="同伴"><div class="self-hd"><h3>同伴</h3><small class="muted">${cards.length > 1 ? `${cards.length - 1} 人・出戰 ${fighting} 人` : "還沒有同伴"}</small></div>
       <div class="mates">${cards.map(mateCard).join("")}</div>
       ${cards.length > 1 ? "" : '<p class="muted mates-none">交友、結識大勢人物，情誼夠了就有人願意追隨你。</p>'}</section>`
-      : fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
+        : fold("roster", `同伴${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
     const jyBlock = typeof jieyiHtml === "function" ? jieyiHtml(S.main) : ""; // 結義（web/jieyi.js；沒結義不畫）
+    const zmBlock = typeof zongmenHtml === "function" ? zongmenHtml(S.main) : ""; // 師門（web/zongmen.js；不是哪一門的人不畫）：介面重整後自己一個分頁
     // 紀念物（長篇奇事，企劃者 2026-10-27）：故事裡收下的小東西，沒有效果、不能賣，跨季跟著角色；一件都沒有不畫
     const keepItems = (S.main && S.main.keepsakes) || [];
     const keeps = keepItems.length ? `<section class="self-sec keepsakes" aria-label="紀念"><div class="self-hd"><h3>紀念</h3><small class="muted">故事裡收下的，留著</small></div>
@@ -828,11 +829,13 @@
     // 介面重整（2026-11-05，Joy「點了看武學或是裝備，卻不能馬上換…自創武學甚至要滑很下面才能看到」）：序章以外分四頁——
     // 武學（自創、煉製排第一屏，身上兩門，功法庫攤開）、裝備、門下、屬性（以前狀態列點名號攤開的那一大串也在這裡）。記在 S.heroTab
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
-      const tab = HERO_TABS.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
-      const tabs = `<div class="hero-tabs" role="tablist">${HERO_TABS.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
+      const heroTabs = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
+      const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
+      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? `${rosterBlock}${jyBlock}`
+        : tab === "sect" ? zmBlock
         : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
@@ -842,7 +845,7 @@
       ${selfArtsHtml(x)}
       ${gearBlock}
       ${rosterBlock}
-      ${jyBlock}
+      ${jyBlock}${zmBlock}
       ${keeps}
       ${selfStatsHtml(s)}
       ${selfEntriesHtml(x)}
@@ -855,7 +858,8 @@
       ${meltOn ? "" : drawerHtml}`;
   }
 
-  const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "門下"], ["attrs", "屬性"]]; // 待 joy 潤
+  const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "同伴"], ["attrs", "屬性"]]; // 待 joy 潤（Joy 2026-11-09：門下跟門派放一起怪，改名）
+  const HERO_SECT = ["sect", "師門"]; // 待 joy 潤：門派包開著、是哪一門的人才插在同伴後面（web/zongmen.js）
   // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
   // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行。
   // 只放跟自己成長有關的：兩軍態勢在江湖頁、修練的規矩（講武學與意境）在武學那一頁、等級在人像卡上

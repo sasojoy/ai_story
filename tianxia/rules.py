@@ -1285,7 +1285,7 @@ def _fx_join_sect(r: EffectRun) -> list[str]:
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        owner = content.scenario.sect_owner(sect.id)
+        owner = content.sect_faction(sect.id)  # 門派開關開著時門派不綁勢力（門派包）
         # 拿掉豪強的季（allied.factions_of）：拜入曹氏莊院只是入門派，不跟著投靠地方豪強
         if owner is not None and p.faction is None and faction_open(content, r.state.world, owner.id):
             p.faction = owner.id

@@ -182,7 +182,7 @@ class AllegianceScenario(EffectsScenario):
 
     def sect(self) -> None:
         """每個門派：一位拜入（有事件選那個拜入的選項；拜入曹氏莊院之後挑依附哪一軍）、一位婉拒（不拜的那個選項）。"""
-        for i, (sid, sect) in enumerate(sorted(self.c.sects.items())[:2]):
+        for i, (sid, sect) in enumerate(sorted(self.open_sects().items())[:2]):
             for who, accept in ((self.ACCEPT[i], True), (self.DECLINE[i], False)):
                 if not self.place(who, sect.location):
                     continue
@@ -323,7 +323,7 @@ class AllegianceScenario(EffectsScenario):
 
         on = self.factions_on()
         huang, guan = self.faction_of("huang"), self.faction_of("guan")
-        sect_at = next(iter(sorted(self.c.sects.values(), key=lambda s: s.id))).location
+        sect_at = next(iter(sorted(self.open_sects().values(), key=lambda s: s.id))).location
         spots = [(huang.join_at[0] if on else self.hub(), "guan" if on else None, "guan" if on else None),
                  (sect_at, "guan" if on else None, "guan" if on else None),
                  (guan.join_at[0] if on else self.hub(), None, "guan" if on else None)]

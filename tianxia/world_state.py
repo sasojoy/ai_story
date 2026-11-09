@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_serializer, model_validator
 from .core.battle_base import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
-from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
+from .state import GearFind, InsightFx, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .tactics import Bout, BoutSide
 
 SeasonPhase = Literal["preparing", "running", "resting"]  # 籌備（管理者還沒開季）／進行中／休季（這一季已結束）
@@ -303,6 +303,37 @@ class SortieDuel(BaseModel):
     report: dict[str, Any] = Field(default_factory=dict)  # 接線那一批放戰報流水號、送達了沒這類
 
 
+class BookEntry(BaseModel):
+    """師門武譜的一式（門派包第二批，設計稿 v6「師門武譜」）：門人獻上來的一份意境，整份抄下（不看這一季的全服登記，換季照在）。
+    status：pending 等同門試練、in 入了譜（number 是第幾式）、dropped 期限到了沒過。時刻是現實秒（Game.now）；名號比對用 name_key。"""
+
+    id: str
+    # 獻的是意境：insight＋fx 抄下的那一份（id 不用：學的人照自己的流水號另起一份私有的）；
+    # 獻的是武學（自創、合成、練成絕學的，第三批）：art 整份抄下、art_quality 是獻的人那一份的品質（下一季全服登記沒了，學的人照它再登記一份）
+    insight: Insight | None = None
+    fx: InsightFx | None = None
+    art: MartialArt | None = None
+    art_quality: str | None = None
+    giver: str
+    season: int
+    offered_at: float
+    expires_at: float
+    need: int  # 要幾個同門試練過才入譜（獻的那一刻照門人數定）
+    tried: list[str] = Field(default_factory=list)  # 試練過的人（名號）
+    status: Literal["pending", "in", "dropped"] = "pending"
+    number: int = 0
+    in_at: float | None = None
+    learners: list[str] = Field(default_factory=list)  # 學過的人（name_key，跨季）：下一季重學只要一半心得（第三批）
+    pages: list[str] = Field(default_factory=list)  # 手上有這一式殘頁的外人（name_key；截殺打贏親傳撿到，第三批）
+
+
+class SectBook(BaseModel):
+    """一門的武譜：獻上來的每一式（照獻的先後）；seq 給 BookEntry.id 用。"""
+
+    entries: list[BookEntry] = Field(default_factory=list)
+    seq: int = 0
+
+
 class JieyiBond(BaseModel):
     """一組結義（結義包 tianxia/features/jieyi/；設計稿 v2 卷一，Joy 2026-11-07「先做丙，跨季保留關係」）：全服、不分季，存在 SharedWorldState.jieyi。
     members 是名號（不是鍵：易名帖整個字串相等的地方都換，名號跟著換），照入義的先後排，就是排行。"""
@@ -390,15 +421,19 @@ class SharedWorldState(BaseModel):
     # 出陣約戰（減法季批 3b，tianxia/sortie_duel.py）：id → 那一張；還沒結算的與結算完還留著的（keep_hours）。全服、換季清掉（next_season）。
     # 空的時候 world 那一列的 JSON 不寫這個鍵（_drop_empty_sorties）：關著的季、沒人約過戰的存檔跟以前一個位元組都不差
     sorties: dict[str, SortieDuel] = Field(default_factory=dict)
+    # 師門武譜（門派包 features/zongmen 第二批）：門派 id → 那一門的武譜。全服、不分季（換季不清）；空的不寫鍵（_drop_empty_sorties）
+    sect_books: dict[str, SectBook] = Field(default_factory=dict)
     # 結義（結義包，Joy 2026-11-07）：全服、不分季，換季不清。空的時候不寫這個鍵
     jieyi: JieyiBook = Field(default_factory=JieyiBook)
 
     @model_serializer(mode="wrap")
     def _drop_empty_sorties(self, handler):
-        """sorties 是空的時候不寫這個鍵（同 SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        """sorties、sect_books 是空的時候不寫這個鍵（同 SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
-        if isinstance(data, dict) and "sorties" in data and not data["sorties"]:
-            del data["sorties"]
+        if isinstance(data, dict):
+            for key in ("sorties", "sect_books"):
+                if key in data and not data[key]:
+                    del data[key]
         if isinstance(data, dict) and "jieyi" in data and self.jieyi.empty():
             del data["jieyi"]
         return data

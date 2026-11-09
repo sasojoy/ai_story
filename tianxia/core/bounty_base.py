@@ -272,7 +272,7 @@ def join_note(state: GameState, content: Content, choice: Choice) -> str:
     if state.player.faction is not None:
         return ""
     for effect in (choice.effect, choice.fail_effect):
-        owner = content.scenario.sect_owner(effect.join_sect) if effect.join_sect else None
+        owner = content.sect_faction(effect.join_sect)
         held = stranded(state, content, owner.id) if owner is not None else []
         if held:
             return f"（{STRANDED_JOIN.format(n=len(held))}）"

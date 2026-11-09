@@ -1,4 +1,9 @@
 [
   {"id": "yingchuan_academy", "name": "潁川書院", "location": "yingchuan_academy", "alignment": "正", "desc": "潁川名士講學授徒之處，門規嚴謹，重清議、輕武力，投身其中能結交不少日後的謀臣名士。"},
-  {"id": "cao_manor", "name": "曹氏莊院", "location": "cao_manor", "alignment": "中", "desc": "曹家在譙縣的祖宅，家丁護院個個身手不弱，行事不拘一格，只問成效不問出身。"}
+  {"id": "cao_manor", "name": "曹氏莊院", "location": "cao_manor", "alignment": "中", "desc": "曹家在譙縣的祖宅，家丁護院個個身手不弱，行事不拘一格，只問成效不問出身。"},
+  {"id": "baima", "name": "白馬寺", "location": "baima_temple", "alignment": "正", "switch": "zongmen", "desc": "洛陽城西的古寺，西來的僧人在這裡譯經施藥，寺裡的武僧守著山門，也守著城裡無處可去的病人。"},
+  {"id": "nanhua", "name": "南華觀", "location": "jade_cave", "alignment": "中", "switch": "zongmen", "desc": "深山洞府裡的道觀，傳說觀裡收著一部天書，觀主不問世事，卻總有人上山來求。"},
+  {"id": "songyang", "name": "嵩陽劍廬", "location": "deep_mountain", "alignment": "正", "switch": "zongmen", "desc": "嵩山深處幾間草廬，住著一群只問劍、不問出身的人，誰都可以上山試劍。"},
+  {"id": "lulin", "name": "綠林山寨", "location": "lulin_zhai", "alignment": "邪", "switch": "zongmen", "desc": "山林裡的寨子，聚著被官府逼上山的人，講義氣也講分贓。"},
+  {"id": "xiangshe", "name": "鄉里結社", "location": "zhuo_militia_hall", "alignment": "正", "switch": "zongmen", "desc": "涿郡鄉里自己結的社，平時練弓守村，亂世裡也幫著募義勇。"}
 ]
