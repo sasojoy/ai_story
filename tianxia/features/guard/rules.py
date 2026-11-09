@@ -135,6 +135,10 @@ class _Choice(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class _Judged(_Choice):
+    relevant: bool = True
+
+
 class _Event(BaseModel):
     text: str = ""
     choices: list[_Choice] = Field(default_factory=list)
@@ -211,7 +215,7 @@ def write_event(client, req: EventRequest, t) -> GuardEvent | None:
         )},
     ]
     try:
-        got = client.chat_structured(messages, _Event, temperature=0.9, num_predict=900, required_fields=["text", "choices"])
+        got = client.chat_structured(messages, _Event, temperature=0.9, num_predict=900, required_fields=["text", "choices"], require_in_schema=True)
     except Exception:
         return None
     if not got.text or len(got.choices) < 3:
@@ -227,10 +231,6 @@ def judge_say(client, req: EventRequest, t) -> GuardChoice | None:
     """B 段：玩家自己寫的那一句。模型寫孩子的反應、紀事一句、情分、性向；跟這件事無關、看不懂的回 relevant=false（C 段回「沒聽懂」不算這一次）。"""
     if client is None:
         return None
-
-    class _Judged(_Choice):
-        relevant: bool = True
-
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": (
@@ -242,7 +242,7 @@ def judge_say(client, req: EventRequest, t) -> GuardChoice | None:
         )},
     ]
     try:
-        got = client.chat_structured(messages, _Judged, temperature=0.7, num_predict=500, required_fields=["relevant", "reaction", "qing"])
+        got = client.chat_structured(messages, _Judged, temperature=0.7, num_predict=500, required_fields=["relevant", "reaction", "qing"], require_in_schema=True)
     except Exception:
         return None
     if not got.relevant or not got.reaction:
