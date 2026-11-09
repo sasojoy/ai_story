@@ -23,6 +23,19 @@ export const flows = [
   accounts,
   ["prep", async (c) => {
     await c.asPlayer("p3");
+    // batch 113: the first page in the game carries Joy's 改版資訊 sheet (.sheet.patch-pop, web/news.js patchPopHtml). driver load() closes
+    // only story-ok and the check-in sheet, so the pop stayed over the lower half of every page until the sense pad closed it (128 of 237
+    // main scenes in batch 113's walk), and its .sheet kept body.layer-open on under the figure layer. Take it once, then close it like a
+    // player: 知道了 remembers it in this browser's localStorage, so it stays closed for the rest of the round
+    // It is also the browser's first page in the game: the web fonts' glyph subsets (fonts.googleapis.com, unicode-range) were still
+    // arriving for one of four walks' 1280 picture (a 36-level difference along one line). Load the page once more, from cache, before it
+    if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) await c.load("/");
+    if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) {
+      await c.settle(600);
+      await c.shoot("patch_pop", { who: "p3" });
+      await c.click('.sheet.patch-pop [data-act="patch-close"]');
+      await c.settle(260);
+    }
     await c.shoot("prep_growth", { who: "p3" });
     await c.crawl("prep", () => c.load("/"), ["prep-pick", "growth-custom", "growth-step"], { total: 6 });
   }],
@@ -306,7 +319,9 @@ export const flows = [
         await c.load("/");
         await c.click('.shop-layer .note.k-arms:not(.dim)[data-act="board-zoom"]');
         await c.step(`.board-sheet ${CHP("bounty:pick")}`, "bd_pick", { who: "p1" });
-        if (await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" }) === "ok") await c.step('[data-act="ask-yes"]', "bd_given", { who: "p1" });
+        // batch 113: the paper handed in is drawn again with a 交差 stamp and taken away by a 1400 ms wall-clock timer (web/bounties.js
+        // boardHanded, STAMP_MS); base = head showed it on one side and not the other in two of four walks. Wait it out, then take the board
+        if (await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" }) === "ok") await c.step('[data-act="ask-yes"]', "bd_given", { who: "p1", wait: 1900 });
       }
       await c.load("/");
       await c.click('.shop-layer .slot[data-act="board-zoom"]');
@@ -377,15 +392,20 @@ export const flows = [
       else await c.step('.act-move [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
       await c.crawl("cl", () => c.load("/"), [...UI, "fig-close", "fig-log-close", "letter-read"], { total: 10, cap: 2 });
       // batch 112: 往來紀錄, 交談, 護衛 and × are on the figure's own layer (web/companions.js figPickHtml, .vn-layer.pick), which the 此地人物
-      // chip opens (fig-open); a reload closes it, so open it again before each.
-      // × (call_close) and 護衛 (call_act) are not walked: walked base = head, they came out different in two of four main rounds
-      // (BODY.layer-open 1280px vs 1265px, the scrollbar taken away or not at the moment of the picture), so they would only add noise
+      // chip opens (fig-open); a reload closes it, so open it again before each. fig-act closes the layer itself, so × comes before it.
+      // batch 112 stopped walking × (call_close) and 護衛 (call_act): base = head came out different in two of four main rounds
+      // (BODY.layer-open 1280px vs 1265px). The lock that was left on was the 改版資訊 sheet's (still open here then); batch 113 closes
+      // that sheet in "prep", so after × or 護衛 no layer is left and the page has its scrollbar like any other
       const PICK = ".vn-layer.pick";
       const pick = async () => { await c.load("/"); await c.click('.people-row [data-act="fig-open"][data-id="zhujun"]'); };
       await pick();
       await c.step(`${PICK} ${ACT("fig-log")}`, "call_log");
       await pick();
       await c.step(`${PICK} ${ACT("fig-talk")}`, "call_talk", { wait: 1800 });
+      await pick();
+      await c.step(`${PICK} ${ACT("fig-close")}`, "call_close", { who: "p1" });
+      await pick();
+      await c.step(`${PICK} ${ACT("fig-act")}`, "call_act", { who: "p1" });
       await c.api("p1", "/api/choose", { id: "call:back" });
       await c.load("/");
       await c.step(ACT("letter-open"), "letter_open", {});
@@ -751,7 +771,16 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.crawl("end", () => c.load("/"), [...UI, "zhuan-vertical", "zhuan-write", "zhuan-close"], { depth: 2, total: 12, cap: 2 });
       await c.load("/");
       await c.step(ACT("zhuan-open"), "zh_open", { who: "p1", wait: 800 });
-      await c.step(ACT("zhuan-write"), "zh_write", { wait: 800 });
+      // batch 113: zh_write is the first scene with the finished 傳, and its ink picture is <img loading="lazy"> (web/zhuan.js .zh-art):
+      // whether it had loaded and decoded by the time of each picture was timing, so base = head now and then came out a REAL pixel
+      // difference. Bring the pictures into view, wait until they are loaded, decode them, then take the scene (the DOM is not touched)
+      if (await c.click(ACT("zhuan-write"), { wait: 800 }) === "ok") {
+        const IMGS = `[...document.querySelectorAll(".zhuan-layer img")]`;
+        await c.ev(`(() => { for (const i of ${IMGS}) i.scrollIntoView({ block: "center" }); return 1; })()`);
+        for (let i = 0; i < 50 && !(await c.ev(`${IMGS}.every((i) => i.complete && i.naturalWidth > 0)`)); i++) await c.sleep(100);
+        await c.ev(`Promise.all(${IMGS}.map((i) => i.decode().catch(() => 0))).then(() => 1)`);
+        await c.shoot("zh_write", {});
+      } else c.log("skip", ACT("zhuan-write"));
       await c.step(ACT("zhuan-vertical"), "zh_vertical", {});
       await c.step(ACT("zhuan-share"), "zh_share", {});
       await c.step(ACT("zhuan-send"), "zh_send", { who: "p1", wait: 2000 }); // the send button only shows once it is public

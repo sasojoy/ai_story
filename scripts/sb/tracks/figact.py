@@ -596,6 +596,6 @@ class FigActScenario(Scenario):
 register_track("figact", FigActScenario, (("tianxia/features/figure_acts/yuedan.py",),
                                           ('HEAD = "{critic}月旦評（{week}）："', 'HEAD = "{critic}月旦評！（{week}）："')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mall", "military",
-                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail",
+                       "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

@@ -484,6 +484,6 @@ class GuideScenario(Scenario):
 register_track("guide", GuideScenario, (("tianxia/features/guide/newbie.py",),
                                          ("就當個散人，天下照樣走得。", "就當個散人，天下照樣走得！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan", "zongmen"))

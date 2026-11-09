@@ -1780,20 +1780,20 @@ class ProgressScenario(BattleScenario):
 _BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), ("你趕到了戰場，這一回合就能出手。", "你趕到了戰場，這一回合就能出手！"))
 register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail", "mall",
+                       "map", "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))
 register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7", full_same_as="battle",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))  # 第 7 批：同一套段落，切在集結中
+                       "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail", "mall",
+                       "map", "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))  # 第 7 批：同一套段落，切在集結中
 # 第 8 批：推進一軌（ProgressScenario），改一個字是論功那一則（搬之前在 engine.py 的 _merit_line、之後在 features/battle/progress.py）——
 # 後半 A 收場那一下寫進天下大事（season_row 寫出來）。找的那一句要連 f-string 的尾巴（`name}論功：" + `）：progress.py 的模組說明也有
 # 「收場與論功：」，只寫「論功：」在搬完的檔裡有兩處、_mutant 找不到剛好一處就停（第 8 批審查）
 _PROGRESS_MUTATION = (("tianxia/features/battle/progress.py", "tianxia/engine.py"), ('name}論功：" + ', 'name}論功！" + '))
 register_track("progress", ProgressScenario, _PROGRESS_MUTATION, "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "guide", "heroines", "identity", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "feast", "figure_acts", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern",
+                       "territory_acts", "travel", "zhuan", "zongmen"))

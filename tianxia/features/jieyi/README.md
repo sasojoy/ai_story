@@ -29,3 +29,4 @@
 
 - `tests/test_jieyi_uses.py`（12 條）：義不相殘、通緝、替兄出頭與追回銀兩、仇過期、義名排行、江湖史與列傳、義聚、並肩作戰。
 - `tests/test_jieyi.py`（8 條）：互換名帖才邀得了、關著不出聲、婉拒、第三人入義與滿員、割袍斷義的冷卻與剩一人就散、換季不清、空帳不寫鍵、假人的回法。
+- same_behavior 一軌 oath（`scripts/sb/tracks/oath.py`）。

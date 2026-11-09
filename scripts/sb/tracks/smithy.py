@@ -672,7 +672,7 @@ register_track("smithy", SmithyScenario, (("tianxia/features/smithy/smithing.py"
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
                        "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "travel", "zhuan", "zongmen"))
 
 
 # 鐵匠鋪那一軌改一個字的那一句（UNDONE，# smithy 那一段登記的）這一批跟著鐵匠鋪的常數搬進了 tianxia/core/smith_base.py：檔清單前面補上

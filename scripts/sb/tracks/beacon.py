@@ -425,4 +425,4 @@ register_track("beacon", BeaconScenario, (("tianxia/features/notify/notices.py",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "notify", "outlets",
                        "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "travel", "zhuan", "zongmen"))

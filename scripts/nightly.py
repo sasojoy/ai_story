@@ -4,6 +4,10 @@
   .venv/Scripts/python.exe scripts/nightly.py                    # 抓、跑、寫摘要
   .venv/Scripts/python.exe scripts/nightly.py --summarize-only   # 不抓不跑，拿今天已經有的結果重寫摘要
   .venv/Scripts/python.exe scripts/nightly.py --date 2026-10-31 --summarize-only   # 指定哪一天（驗比較用）
+  .venv/Scripts/python.exe scripts/nightly.py --force            # 程式沒變也真跑（不沿用）
+第 113 批：前一次跑完而且全綠、前一次的 SHA 到今天之間改的檔扣掉 docs/、.claude/、根目錄 *.md 之後是空的、
+離最後一次真跑不到 REUSE_DAYS 天，就不跑 pytest：<日期>.json 抄前一次那一份（記 reused_from、last_real），
+latest.txt 第一行寫「沿用 <SHA>（程式沒變）」。tests/ 變了照跑。
 
 寫在 <主要 clone>/.local/nightly/ 底下（.local/ 不進版控）：
   checkout/        origin/develop 的乾淨工作樹（git worktree，每次重設到最新、清掉沒進版控的檔）
@@ -31,6 +35,9 @@ KEEP_DAYS = 30  # <日期>.log、<日期>.xml 留幾天
 FETCH_TIMEOUT = 300  # 秒：fetch 卡住（網路、憑證要跳視窗）就放棄，照本機上一次抓到的 origin/develop 跑，寫進備註
 LOCK_STALE = 3 * 3600  # 秒：排程的時限是兩小時，鎖比這還舊就是被砍掉的那一次留下的，不算數
 LOCK_NAME = "running.lock"
+REUSE_DAYS = 7  # 第 113 批：程式沒變也至少每這麼多天真跑一次
+NOT_CODE = ("docs/", ".claude/")  # 這底下的改動不算程式改了（根目錄的 *.md 也不算；tests/ 算）
+CODE_UNDER_DOCS = ("docs/superpowers/pm-workflows/",)  # 例外：這底下的工具有測試守著（test_same_behavior_gate 載入 wave_gate.py），算程式
 
 
 def take_lock(out: Path, now: float | None = None) -> bool:
@@ -112,6 +119,61 @@ def prepare_checkout(repo: Path, checkout: Path, branch: str) -> tuple[str, list
         git(checkout, "clean", "-ffdx", check=True)
     sha = git(checkout, "rev-parse", "HEAD", check=True).stdout.strip()
     return sha, notes
+
+
+def changed_files(checkout: Path, old: str, new: str) -> list[str] | None:
+    """old..new 之間改到的檔（git diff --name-only）；比不了（old 不在了、git 失敗）回 None。"""
+    out = git(checkout, "diff", "--name-only", f"{old}..{new}")
+    if out.returncode != 0:
+        return None
+    return [line.strip() for line in out.stdout.splitlines() if line.strip()]
+
+
+def code_changes(files: list[str]) -> list[str]:
+    """扣掉 docs/、.claude/、根目錄的 *.md 之後剩下的檔（docs/superpowers/pm-workflows/ 照算程式）。"""
+    return [f for f in files if (f.startswith(CODE_UNDER_DOCS) or not f.startswith(NOT_CODE)) and not ("/" not in f and f.lower().endswith(".md"))]
+
+
+def last_real(previous: dict) -> str:
+    """最後一次真跑的日期：前一次是沿用的就是它記的 last_real，不然就是前一次那一天。"""
+    return previous.get("last_real") or previous["date"]
+
+
+def green(previous: dict) -> bool:
+    """跑完而且全綠：結束碼 0、有結果、一條紅的都沒有。"""
+    return previous.get("exit") == 0 and previous.get("result") is not None and not previous.get("failed")
+
+
+def reuse_decision(previous: dict | None, last_real_date: str | None, changed: list[str] | None, today: str,
+                   force: bool) -> tuple[bool, str]:
+    """這一次能不能沿用前一次的結果、不跑 pytest：（能不能, 理由）。"""
+    if force:
+        return False, "帶了 --force"
+    if previous is None or not previous.get("sha"):
+        return False, "沒有前一次可沿用"
+    if not green(previous):
+        return False, f"前一次（{previous.get('date')}）不是跑完全綠"
+    if changed is None:
+        return False, f"比不了前一次的 SHA {previous['sha'][:8]}"
+    code = code_changes(changed)
+    if code:
+        return False, f"程式改了 {len(code)} 個檔（{code[0]}……）"
+    if last_real_date is None or (dt.date.fromisoformat(today) - dt.date.fromisoformat(last_real_date)).days >= REUSE_DAYS:
+        return False, f"離最後一次真跑（{last_real_date}）已經 {REUSE_DAYS} 天以上"
+    return True, f"程式沒變（改的 {len(changed)} 個檔都是文件）"
+
+
+def write_reused(repo: Path, out: Path, date: str, sha: str, previous: dict, started: str, reason: str) -> str:
+    """沿用前一次：<日期>.json 抄前一次那一份、記 reused_from 與 last_real；latest.txt 第一行寫沿用，其餘照前一次的摘要。"""
+    summary = {**previous, "date": date, "sha": sha, "started": started, "reused_from": previous["sha"],
+               "last_real": last_real(previous),
+               "notes": [f"沿用 {previous['date']}（develop {previous['sha'][:8]}）的結果，沒跑 pytest：{reason}；"
+                         f"最後一次真跑 {last_real(previous)}；要真跑帶 --force"]}
+    span, log_cmd, commits = commits_between(repo, previous, sha)
+    text = f"沿用 {previous['sha'][:8]}（程式沒變）\n" + render(summary, previous, [], [], [], span, log_cmd, commits)
+    (out / f"{date}.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / "latest.txt").write_text(text, encoding="utf-8-sig")
+    return text
 
 
 def run_suite(checkout: Path, out: Path, date: str, workers: int) -> tuple[int, float]:
@@ -269,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--date", default=None, help="這一次記成哪一天（預設今天，YYYY-MM-DD）")
     parser.add_argument("--summarize-only", action="store_true", help="不抓不跑，拿那一天已經有的 junit 重寫摘要")
+    parser.add_argument("--force", action="store_true", help="程式沒變也真跑整套（不沿用前一次）")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     repo = (args.repo or find_repo(Path(__file__).resolve().parent)).resolve()
@@ -292,12 +355,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"另一份每日整套正在跑（{lock_holder(out)}）：這一次不跑。")
         return 1
     try:
-        return _run(repo, out, checkout, args.branch, args.workers, date, started)
+        return _run(repo, out, checkout, args.branch, args.workers, date, started, force=args.force)
     finally:
         release_lock(out)
 
 
-def _run(repo: Path, out: Path, checkout: Path, branch: str, workers: int, date: str, started: str) -> int:
+def _run(repo: Path, out: Path, checkout: Path, branch: str, workers: int, date: str, started: str,
+         force: bool = False) -> int:
     try:
         sha, notes = prepare_checkout(repo, checkout, branch)
     except (RuntimeError, OSError) as exc:  # 抓不到、重設不了：寫進 latest.txt，免得早上看到的是前一天的
@@ -305,7 +369,14 @@ def _run(repo: Path, out: Path, checkout: Path, branch: str, workers: int, date:
         (out / "latest.txt").write_text(text, encoding="utf-8-sig")
         print(text)
         return 1
-    print(f"每日整套：develop {sha[:8]}，跑在 {checkout}", flush=True)
+    previous = load_previous(out, date)
+    changed = changed_files(checkout, previous["sha"], sha) if previous and previous.get("sha") else None
+    reuse, reason = reuse_decision(previous, last_real(previous) if previous else None, changed, date, force)
+    if reuse:
+        print(write_reused(repo, out, date, sha, previous, started, reason))
+        prune(out, date)
+        return 0
+    print(f"每日整套：develop {sha[:8]}，跑在 {checkout}（不沿用：{reason}）", flush=True)
     code, seconds = run_suite(checkout, out, date, workers)
     extra = {"started": started, "exit": code, "minutes": round(seconds / 60, 1), "workers": workers, "notes": notes}
     print(summarize(repo, out, checkout, date, sha, extra))

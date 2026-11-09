@@ -28,7 +28,8 @@ export const flows = [
   rich,
   ["prologue", async (c) => {
     // season21 and week7 characters start in the first-minute opening and never see the hut: this one is put there, it is staged, not walked into.
-    c.log("hut", JSON.stringify(await c.py("from tianxia import prologue as pr\nst = chars.load('新人乙'); pr.begin(st, content); chars.save(st); out = st.player.location")));
+    // a season where arts grow by fighting (Config.arts.fight_practice, stamped) prices 練成 at 10 a point, so 1→3 is 30, past what the hut leaves: top this one up to 40
+    c.log("hut", JSON.stringify(await c.py("from tianxia import prologue as pr\nst = chars.load('新人乙'); pr.begin(st, content); st.player.stats['xinde'] = max(st.player.stats.get('xinde', 0), 40); chars.save(st); out = [st.player.location, st.player.stats['xinde']]")));
     await c.asPlayer("p4");
     const walked = [];
     for (let i = 0; i < 24; i++) {

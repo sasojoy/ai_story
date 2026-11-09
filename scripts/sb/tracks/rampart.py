@@ -476,5 +476,5 @@ class RampartScenario(Scenario):
 register_track("rampart", RampartScenario, (("tianxia/features/battle/siege_rules.py", "tianxia/siege.py"),
                                             ("{side}補上最後一刀，拿下{place}", "{side}補上最末一刀，拿下{place}")), "week7",
                covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
-                       "gear", "guide", "looks", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))
+                       "gear", "guide", "jieyi", "looks", "military", "outlets", "peers", "seal", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))

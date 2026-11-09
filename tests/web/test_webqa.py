@@ -439,6 +439,20 @@ def test_a_stroke_closes_the_patch_sheet_first():
                 assert ".sheet-bg[data-act]" in flow[:flow.index("drawOn(")], f"{path.name} 有一個 flow 畫一筆之前沒關跳出來的小窗"
 
 
+def test_main_closes_the_patch_sheet_after_one_picture_and_waits_for_the_ink_picture():
+    """第 113 批：driver 的 load() 不關改版資訊（.patch-pop），它蓋在 main 回合前 128 景的下半頁、也讓人物層底下的 body.layer-open
+    一直開著（call_close、call_act 量到捲軸 1280 對 1265）。main 第一次進遊戲（prep）先拍 patch_pop、再按「知道了」關掉；
+    zh_write 的水墨是 loading="lazy" 的圖，拍之前等它載完、decode 完（base＝head 偶爾像素 REAL）。"""
+    text = (TOOL / "flows" / "main.mjs").read_text(encoding="utf-8")
+    prep = next(f for f in re.split(r'\n  \["', text) if f.startswith('prep"'))
+    assert prep.index('shoot("patch_pop"') < prep.index('[data-act="patch-close"]') < prep.index('shoot("prep_growth"')
+    assert '"call_close"' in text and '"call_act"' in text
+    seasonend = next(f for f in re.split(r'\n    \["', text) if f.startswith('seasonend"'))
+    assert seasonend.index(".decode()") < seasonend.index('shoot("zh_write"')
+    rows = set((TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines())
+    assert {"main:patch_pop", "main:call_close", "main:call_act", "main:zh_write"} <= rows
+
+
 # ── 第 107 批：回合對照表（coverage.json）與 --changed-files ──
 
 

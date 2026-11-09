@@ -94,4 +94,4 @@ class LanternScenario(Scenario):
 register_track("lantern", LanternScenario, (("tianxia/core/status_view.py", "tianxia/engine.py"), ("🧘 閉關中，現實約 ", "🧘 閉關中，現實大約 ")), "season21",
                covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear", "guide",
                        "map", "military", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "travel", "zhuan"))
+                       "tavern", "travel", "zhuan", "zongmen"))

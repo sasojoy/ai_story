@@ -598,6 +598,6 @@ class RelicScenario(HeraldScenario):
 register_track("relic", RelicScenario, (("tianxia/engine.py", "tianxia/features/seal/admin.py"),
                                        ("換季時照樣會蓋）。", "換季時照樣會蓋）！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "military",
-                       "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mail", "mall",
+                       "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))

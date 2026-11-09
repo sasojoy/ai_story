@@ -430,6 +430,6 @@ class SwitchboardScenario(Scenario):
 register_track("switchboard", SwitchboardScenario, (("tianxia/features/seclusion/routes.py", "server.py"),
                                                     ('b.get("hours"), 8)', 'b.get("hours"), 6)')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall", "military",
+                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

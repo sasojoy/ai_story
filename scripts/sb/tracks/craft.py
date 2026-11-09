@@ -465,4 +465,4 @@ register_track("craft", CraftScenario, (("tianxia/features/craft/create.py",),
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
                        "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "zhuan", "zongmen"))

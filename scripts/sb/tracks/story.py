@@ -528,4 +528,4 @@ register_track("story", StoryScenario, (("tianxia/features/story/storyline.py",)
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets",
                        "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan"))
+                       "travel", "zhuan", "zongmen"))

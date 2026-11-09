@@ -675,6 +675,6 @@ class CrossbladeScenario(PeersScenario):
 # 改一個字（selftest）：被截過的護身那一句（Game.raid_refusal；搬之前在 engine.py，搬進包之後在 tianxia/features/peers/raid_actions.py〔計畫 1.1 的檔名；搬的人照實際的檔名改第 2 項〕），week7 raid_fights 那一段抓到
 register_track("crossblade", CrossbladeScenario, (("tianxia/engine.py", "tianxia/features/peers/raid_actions.py"), ("剛被人截殺過，元氣未復，這時下手太不講江湖道義。", "剛被人截殺過，元氣未復，這時下手太不講江湖道義！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "military", "outlets",
+                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan", "zongmen"))
