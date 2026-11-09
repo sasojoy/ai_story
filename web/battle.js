@@ -167,12 +167,22 @@
     return `<div class="gauge" role="img" aria-label="${esc(`戰局：${g.left.name} ${g.lean} 比 ${100 - g.lean} ${g.right.name}，${g.caption}`)}">`
       + `<div class="g-head">${end(g.left, g.lean, false)}${end(g.right, 100 - g.lean, true)}</div>`
       + `<div class="g-bar">${zones}${ticks}<i class="g-mid"></i>${trail}<b class="g-flag" style="left:${x(g.lean)}%"></b></div>`
-      + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${meritHtml(g, tint)}</div>`;
+      + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${flagsHtml(g)}${meritHtml(g, tint)}</div>`;
   }
   // 本場戰功的名字（名聲 4B）：加入決戰時快照的稱號（善惡第 1 段起、名望名動一方起，r.renown）寫在名字底下第二行；
   // 第一屏放不下時 FIT_STEPS 的 merit 把第二行收掉（.fit-hide）
-  const meritName = (r) => (r.renown && r.renown.length
+  // 稱號與官職開著：第二行改寫加入時戴的那一個（r.title，名號金字、官職墨字），沒戴才退回名聲
+  const meritName = (r) => (r.title && r.title.name && typeof titleSeal === "function"
+    ? `<span class="rn-two">${esc(r.name)}<small>${titleSeal(r.title)}</small></span>`
+    : r.renown && r.renown.length
     ? `<span class="rn-two">${esc(r.name)}<small>${esc(r.renown.join("・"))}</small></span>` : `<span>${esc(r.name)}</span>`);
+  // 將旗（稱號與官職，g.flags）：兩軍各一排戴頭銜的人，戰局條底下；沒有人戴不畫
+  function flagsHtml(g) {
+    const f = g.flags;
+    if (!f || typeof titleSeal !== "function") return "";
+    const row = (w, list) => (list && list.length ? `<div class="ttl-flags"><b>${esc(w.name)}將旗</b>${list.map((x) => `<span>${titleSeal(x.title)} ${esc(x.name)}</span>`).join("")}</div>` : "");
+    return row(g.left, f.left) + row(g.right, f.right);
+  }
   // 戰局條底下的「本場戰功」（Joy 2026-10-10 個人戰功，battle_instance.merit_board）：兩軍各列前幾名，最後一行是自己排第幾、戰功怎麼來的。
   // 集結中、還沒有人出手時不畫
   function meritHtml(g, tint) {
@@ -222,7 +232,9 @@
   // 場景卡裡的戰場那一塊。戰場面板開著（main.battle_panel，battle.js；Joy 2026-11-06 大決戰優化）時戰局條畫在面板裡，
   // 場景卡只留面板沒寫的（這一幕的字、點名、職位、完整戰報），重複的拿掉（bpTrim）
   function battleInner(m) {
-    const base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    let base = musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge));
+    // 面板上已經畫了兩邊主將、副將的氣血（UI 手感乙批 1-3）：場景卡裡「官軍：主將皇甫嵩（氣血 1500/1500）…」那幾行不再寫一次
+    if (bpOn(m)) base = base.replace(/(<p[^>]*>|<br\s*\/?>)\s*[^<：]{1,8}：(?:主將|副將)[^<]*?（(?:氣血|敗走)[^<]*?(?=<\/p>|<br)/g, "$1").replace(/<p[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/g, "");
     // 自己在場上：戰局條、陣容、主將令、回合數都在面板上，場景卡只留戰報；還沒加入（要按加入、投效）的照舊整段（面板不畫戰局條）
     if (bpOn(m) && m.battle_panel.me && !base.startsWith('<p class="battle-fold"')) return bpTrim(siegeStrip(battleMvpHtml(m) + base, m.siege), m);
     return siegeStrip(withGauge(base, m.battle_gauge, battleMvpHtml(m)), m.siege);
@@ -267,8 +279,15 @@
       + `<small class="bp-w">${word}</small><i class="bp-ring"><i style="width:${bpPct(left, p.span)}%"></i></i></div>`;
   }
   function bpFace(c, cls = "") {
-    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy" onerror="this.remove()"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
+    return `<span class="bp-face${cls}"><img src="${BP_FACE(c.fid)}" alt="" loading="lazy"><em aria-hidden="true">${esc((c.name || "").slice(0, 1))}</em></span>`;
   }
+  // 頭像抓不到就拿掉那張圖、露出底下的字（bpFace 的 em）。以前寫在 img 的 inline 屬性上，CSP（第 213 批）不准 inline 的程式，
+  // 改成頂層一個監聽：error 不冒泡，要 capture；只認決戰頭像那三種框裡的 img
+  function bpFaceGone(ev) {
+    const img = ev.target;
+    if (img && img.tagName === "IMG" && img.closest(".bp-face, .bp-duo, .bp-solo")) img.remove();
+  }
+  document.addEventListener("error", bpFaceGone, true);
   function bpChief(c) {
     const pct = bpPct(c.hp, c.cap);
     return `<div class="bp-gen${c.rank === "主將" ? " main" : ""}${c.fallen ? " down" : ""}${!c.fallen && pct <= 30 ? " low" : ""}">${bpFace(c)}`
@@ -318,14 +337,15 @@
       + `<div class="bp-top"><div class="bp-t"><h3>${esc(p.name)}</h3><p>${head}</p></div>${bpClockHtml(p)}</div>`
       + (p.chiefs.left.length || p.chiefs.right.length ? `<div class="bp-gens">${bpSide(p.left, p.chiefs.left, "left")}${bpSide(p.right, p.chiefs.right, "right")}</div>` : "")
       + `${order}</section>`;
-    const gauge = g && p.me ? `<div class="bp-gauge">${gaugeHtml({ ...g, merit: null })}</div>` : "";
+    const gauge = g && p.me ? `<div class="bp-gauge">${gaugeHtml({ ...g, merit: null, flags: null })}</div>` : "";
+    const flags = g ? flagsHtml(g) : ""; // 將旗（稱號與官職）：集結時就畫，在面板底下
     const me = p.me;
     let act = bpMovesHtml(m);
     if (!act && me && me.out) act = `<p class="bp-sent out">${BP_WORDS.out}</p>`;
     else if (!act && me && me.sent) act = `<p class="bp-sent"><b>${BP_WORDS.sent}：${esc(me.sent)}</b><small>${BP_WORDS.wait(p.present - p.sent)}</small></p>`;
     const merit = g && g.merit && p.phase === "active" ? meritHtml(g, (w) => `side-${esc(w.id)}${w.mine ? " mine" : ""}`) : "";
     const fold = merit ? `<details class="bp-merit"${S.bpMeritOpen ? " open" : ""}><summary>${BP_WORDS.merit}${g.merit.me ? `<span>你排第 ${g.merit.me.rank}／${g.merit.me.of} ▸</span>` : ""}</summary>${merit}</details>` : "";
-    return `<div class="bp-wrap">${panel}${gauge}${act}${act && !act.includes("bp-sent") ? free : ""}${bpFeedHtml(p, g || p)}${fold}</div>`;
+    return `<div class="bp-wrap">${panel}${flags}${gauge}${act}${act && !act.includes("bp-sent") ? free : ""}${bpFeedHtml(p, g || p)}${fold}</div>`;
   }
 
   // 場景卡裡跟面板重複的字（engine 的 battle_scene_text 寫的；寫法變了 tests/web/test_battle_panel_web.py 會紅）
@@ -387,15 +407,15 @@
   function bpOverlayHtml(b, p) {
     const say = (who, text) => (text ? `<p class="bp-say"><b>${esc(who)}</b>「${esc(text)}」</p>` : "");
     if (b.kind === "open") {
-      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="" onerror="this.remove()">` : ""}</div>`;
+      const duo = `<div class="bp-duo">${b.fid ? `<img src="${BP_FACE(b.fid)}" alt="">` : ""}<span class="bp-vs">對</span>${b.foe ? `<img class="r" src="${BP_FACE(b.foe.fid)}" alt="">` : ""}</div>`;
       return `${duo}<p class="bp-big">${esc(p.name)}　開打</p>${say(b.name || "", b.say)}`;
     }
     if (b.kind === "hurt") {
-      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"><i class="bp-slash"></i></div>`
+      return `<div class="bp-solo shake"><img src="${BP_FACE(b.fid)}" alt=""><i class="bp-slash"></i></div>`
         + `<p class="bp-big">${esc(BP_WORDS.hurt(b))}</p><i class="bp-hpbig"><i style="width:${b.pct | 0}%"></i></i><p class="bp-sub">${esc(BP_WORDS.hurtSub(b))}</p>`;
     }
     if (b.kind === "fall") {
-      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt="" onerror="this.remove()"></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
+      return `<div class="bp-solo gray"><img src="${BP_FACE(b.fid)}" alt=""></div><p class="bp-big">${esc(BP_WORDS.fall(b))}</p>`
         + `${say(b.name, b.say)}<p class="bp-sub${b.mine ? " mine" : ""}">${esc(BP_WORDS.fallBy(b))}</p>`;
     }
     if (b.kind === "end") {

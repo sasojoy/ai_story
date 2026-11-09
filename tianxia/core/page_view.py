@@ -20,6 +20,7 @@ same_behavior 所有軌（/api/main 逐位元組）：店面七間走 stack，�
 from __future__ import annotations
 
 import functools
+import re
 from typing import TYPE_CHECKING, Any
 
 from .. import atlas, battlelog, calendar, journal, mounts, rumor_view, timetable
@@ -230,7 +231,10 @@ def chronicle_text(ctx: Game) -> str:
     """江湖史：這一季在最前面，往前每一季各一段（線上架構設計 3.2：江湖史跨季保留），再來是歷屆擂主，最後是玉璽碎片。
     神器譜搬到見聞的「榜單」（divine_book_view，Joy 2026-10-17）。"""
     number = ctx.world.get_season_number()
-    current = _timeline(ctx.state.world.chronicle, ctx._day_stamp) or "（江湖史尚無記載。）"
+    if season_one(ctx.content, ctx.state.world):  # 見聞改版（Joy 2026-11-08 說好）：天下大事併進江湖史，照日子分段、新的在前
+        current = _history_days(ctx) or "（江湖史尚無記載。）"
+    else:
+        current = _timeline(ctx.state.world.chronicle, ctx._day_stamp) or "（江湖史尚無記載。）"
     past = ctx.world.chronicle_before(number)
     parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
     parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
@@ -245,6 +249,95 @@ def chronicle_text(ctx: Game) -> str:
     else:
         parts.append(ctx.world.jade_seal_summary())
     return "\n\n---\n\n".join(parts)
+
+
+XINGSHI_LINE = "天下形勢："  # 每天一篇〈天下形勢〉的那一行：見聞・戰況有全文，江湖史與傳聞不再列
+SEASON_BOARD = re.compile(r"^第 \d+ 季.{1,6}(榜|譜)：")  # 季末逐張榜的榜首那幾行：這一季的看「榜單」，往季的照舊留在江湖史
+
+
+def _history_days(ctx: Game) -> str:
+    """這一季的江湖史（見聞改版，Joy 2026-11-08 說好「天下大事併進江湖史」）：江湖史的條目加上傳聞的天下大事，
+    同一個時刻兩邊都有的（同一件事）只留寫得比較完整的那一則；天下形勢那一行（戰況有全文）、這一季的季末榜首（榜單看得到）不列。
+    照日子分段（#### 那一天），新的在前；一天裡也是新的在前。"""
+    w = ctx.state.world
+    world_news = [r for r in w.rumors if r.layer == "world" and not r.text.startswith(XINGSHI_LINE)]
+    kept, dropped = [], set()
+    for e in w.chronicle:
+        if XINGSHI_LINE in e.text or SEASON_BOARD.match(e.text):
+            continue
+        twin = next((i for i, r in enumerate(world_news) if r.time == e.time and i not in dropped and _same_event(e.text, r.text)), None)
+        if twin is None:
+            kept.append(e)
+        elif len(e.text) > len(world_news[twin].text):  # 同一件事寫得比較完整的那一則留著
+            kept.append(e)
+            dropped.add(twin)
+    world_news = [r for i, r in enumerate(world_news) if i not in dropped]
+    days: list[tuple[str, list[str]]] = []
+    for e in sorted([*kept, *world_news], key=lambda e: e.time, reverse=True):
+        stamp = ctx._day_stamp(e.time)
+        day, _, clock = stamp.rpartition(" ")
+        if not day or ":" not in clock:  # 沒有時刻的寫法（舊季曆）：整串當那一天
+            day, clock = stamp, ""
+        if not days or days[-1][0] != day:
+            days.append((day, []))
+        days[-1][1].append(f"{clock}　{e.text}" if clock else e.text)
+    return "\n\n".join(f"#### {day}\n\n" + "\n\n".join(rows) for day, rows in days)
+
+
+def _pairs(text: str) -> set[str]:
+    han = re.sub(r"[^\u4e00-\u9fff]", "", text)
+    return {han[i:i + 2] for i in range(len(han) - 1)}
+
+
+def _same_event(short: str, told: str) -> bool:
+    """江湖史那一行跟同一個時刻的天下大事是不是同一件事：江湖史那一行的兩字詞有四分之一以上也出現在傳聞那一則裡
+    （「長社一戰，波才敗走陽翟」對「……波才敗走陽翟」；季末的「黃巾之亂落幕」對同一刻的「攻下曲陽」只沾到「黃巾」，不算）。"""
+    mine = _pairs(short)
+    return bool(mine) and len(mine & _pairs(told)) / len(mine) >= 0.25
+
+
+def _travel_end(entry: JournalEntry) -> str | None:
+    """「前往 X」那一則的目的地；不是前往是 None。"""
+    return entry.title[len(TRAVEL):] if entry.title.startswith(TRAVEL) else None
+
+
+TRAVEL = "前往 "
+TRAVEL_FOLD = "走了 {n} 段路"  # 待 joy 潤：連著的前往併成一行
+
+
+def _add_changes(changes: list[str]) -> list[str]:
+    """幾則的數值變化加在一起（「心得 +4」「心得 +4」→「心得 +8」）；認不得的照原樣留著。"""
+    total: dict[str, int] = {}
+    other: list[str] = []
+    for c in changes:
+        m = re.fullmatch(r"(\S+) ([+-]\d+)", c)
+        if m is None:
+            other.append(c)
+        else:
+            total[m[1]] = total.get(m[1], 0) + int(m[2])
+    return [f"{k} {v:+d}" for k, v in total.items() if v] + other
+
+
+def own_journal(ctx: Game, first: int = 1) -> list[JournalEntry]:
+    """江湖紀錄頁「剛剛」以下那一串（見聞改版，Joy 2026-11-08 說好）：只放自己的事——江湖大事（江湖史有）不列；
+    只有標題、要點開才知道是什麼的（「奇事」「懸賞榜」），把第一句當標記寫出來；連著的「前往」併成一行「走了 N 段路」。"""
+    rows: list[JournalEntry] = []
+    for e in ctx.state.journal[first:]:
+        if e.title == journal.WORLD_NEWS:
+            continue
+        if not e.tag and e.lines:
+            e = e.model_copy(update={"tag": e.lines[0]})
+        end = _travel_end(e)
+        prev = rows[-1] if rows else None
+        if end is not None and prev is not None and (prev.title.startswith(TRAVEL) or prev.title.startswith(TRAVEL_FOLD[:2])) and not e.lines:
+            stops = prev.tag.split(" → ") if prev.title.startswith(TRAVEL_FOLD[:2]) else [_travel_end(prev)]
+            rows[-1] = prev.model_copy(update={
+                "title": TRAVEL_FOLD.format(n=len(stops) + 1), "tag": " → ".join([end, *stops]),
+                "changes": _add_changes([*prev.changes, *e.changes]), "lines": [],
+            })
+            continue
+        rows.append(e)
+    return rows
 
 
 def _day_stamp(ctx: Game, time: float) -> str:
@@ -319,7 +412,10 @@ def now_front(ctx: Game) -> dict | None:
 
 
 def journal_html(ctx: Game, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
-    return journal.rows_html(ctx.state.journal[start:start + limit], heading, empty, ctx.stamp, functools.partial(_chip, ctx))
+    """江湖紀錄頁「剛剛」以下的第 start 則起 limit 則（own_journal 那一串：只放自己的事、前往併成一行）；start 0 從最新一則算起。"""
+    first = min(start, 1)
+    rows = own_journal(ctx, first)[start - first:start - first + limit]
+    return journal.rows_html(rows, heading, empty, ctx.stamp, functools.partial(_chip, ctx))
 
 
 def _now_start(ctx: Game) -> int:

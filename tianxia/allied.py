@@ -35,6 +35,43 @@ def on(content: Content, world: WorldState) -> bool:
     return calendar.season_one_on(world, content)
 
 
+def gentry_on(content: Content, world: WorldState | None) -> bool:
+    """這一季還有地方豪強這個陣營（劇本寫了 allies 的陣營）：開季時的章（WorldState.no_gentry，Config.gentry 關著時蓋）。
+    企劃者 2026-11-07 決策卡「下一季起整個拿掉」：章之前開的季（第 9 季）照舊有豪強、已經投了的人季中不變；之後開的季只剩官軍、黃巾、散人。
+    沒給季（讀不到章）當作還有。"""
+    return world is None or not world.no_gentry
+
+
+def gentry_split(content: Content, world: WorldState) -> bool:
+    """這一季有地方豪強、而且分屬兩軍（on 且 gentry_on）：玩法說明、引薦人那幾句豪強的字照它（rules.haoqiang_allied）。"""
+    return on(content, world) and gentry_on(content, world)
+
+
+def is_gentry_faction(faction: FactionDef | None) -> bool:
+    """劇本裡要依附一軍的陣營（地方豪強：寫了 allies）。"""
+    return faction is not None and bool(faction.allies)
+
+
+def factions_of(content: Content, world: WorldState | None) -> list[FactionDef]:
+    """這一季有的陣營（照劇本的順序）：拿掉豪強的季（gentry_on 是 False）不列地方豪強。投靠、叛投、名冊、三方卡、輿圖、補假人都照它。"""
+    factions = content.scenario.factions
+    if gentry_on(content, world):
+        return list(factions)
+    return [f for f in factions if not is_gentry_faction(f)]
+
+
+def faction_open(content: Content, world: WorldState | None, faction_id: str | None) -> bool:
+    """這個陣營這一季有（factions_of 裡有它）。"""
+    return any(f.id == faction_id for f in factions_of(content, world))
+
+
+def sect_open(content: Content, world: WorldState | None, sect_id: str) -> bool:
+    """這個門派這一季還是門派：歸豪強的門派（曹氏莊院）在拿掉豪強的季不再是門派（企劃者 2026-11-07「曹氏莊院 不適合當門派」；
+    拜入的試煉照事件條件 gentry 收掉，酒肆問路也不提）。"""
+    owner = content.scenario.sect_owner(sect_id)
+    return owner is None or faction_open(content, world, owner.id)
+
+
 def allies_of(content: Content, faction_id: str | None) -> list[FactionDef]:
     """這個陣營可以依附的幾軍（照劇本的順序）；不是要依附的陣營是空的。"""
     found = content.scenario.find_faction(faction_id)
@@ -140,7 +177,7 @@ def short_name(faction: FactionDef) -> str:
 def roster_text(content: Content, world: WorldState, rolls: dict[str, int]) -> str:
     """名冊那一句（企劃者第 3 題甲）：依附的季照兩軍寫、括號寫豪強（「目前官軍 12 人（其中豪強 3 人）、黃巾軍 9 人」；括號裡是 0
     不寫）；其他季照陣營寫（「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」）。人數照 side_totals，跟人數緩衝、假人選邊同一個數。"""
-    factions = content.scenario.factions
+    factions = factions_of(content, world)  # 拿掉豪強的季不寫地方豪強
     if not on(content, world):
         counts = faction_totals(rolls)
         return "目前" + "、".join(f"{f.name} {counts.get(f.id, 0)} 人" for f in factions)

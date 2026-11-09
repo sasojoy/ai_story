@@ -94,7 +94,7 @@ def sides_card(ctx) -> dict | None:
         return None
     standing = stances(s, c)
     out = {}
-    for f in c.scenario.factions:
+    for f in allied.factions_of(c, w):  # 拿掉豪強的季不列豪強
         now = gentry_now(ctx, f) if f.allies else wins.NOW_ARMY.format(value=standing.get(f.id, 0))
         out[f.id] = {
             "name": f.name, "goal": wins.goal_text(c, f), "reward": wins.reward_card(c, f),

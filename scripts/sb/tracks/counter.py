@@ -263,4 +263,7 @@ class CounterScenario(PlacardScenario):
 
 
 # 改一個字（selftest）：手上揭滿了記的那一句（第二段搬進 core/shop_base.py，兩處都列）
-register_track("counter", CounterScenario, (("tianxia/core/shop_base.py",), ('return "held"', 'return "hold"')), "week7")
+register_track("counter", CounterScenario, (("tianxia/core/shop_base.py",), ('return "held"', 'return "hold"')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guide", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan"))

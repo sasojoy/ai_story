@@ -479,6 +479,7 @@ def test_season21_issued_orders_read_today():
 @pytest.mark.parametrize("profile,each,this", [("season21", "每天", "今日"), ("week7", "每天", "今日")])
 def test_recruiters_follow_the_order_rhythm(profile, each, this):
     content = _content(profile)
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     for faction, brief in (("guan", f"上頭{each}發幾道軍令"), ("huang", f"上頭{each}傳幾道令下來")):
         state = _state(content, faction)
         state.player.enlist_step = 0

@@ -181,7 +181,27 @@ class Result:
         self.real.append({"scene": scene, "class": cls, "detail": detail})
 
 
-def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True) -> dict:
+def css_rule(row) -> tuple[str, str]:
+    """(sheet, cssText). Batch 110 rows are [sheet, text]; a plain string is an older walk's rule with no sheet."""
+    return ("", row) if isinstance(row, str) else (row[0], row[1])
+
+
+def split_new_css(xa, xb, new_sheets, hosts):
+    """Batch 110 --new: the new packages' own sheets come out of both sides before css-rules compares; what differed in them is listed, not red."""
+    keep_a, keep_b, listed = [], [], []
+    mine = {s: ([], []) for s in sorted(new_sheets)}
+    for rows, keep, side in ((xa, keep_a, 0), (xb, keep_b, 1)):
+        for row in rows:
+            sheet, text = css_rule(row)
+            (mine[sheet][side] if sheet in mine else keep).append(text)
+    for sheet, (ta, tb) in mine.items():
+        ma, mb = collections.Counter(noise.mask_common(t, hosts) for t in ta), collections.Counter(noise.mask_common(t, hosts) for t in tb)
+        if ma != mb:
+            listed.append({"sheet": sheet, "only A": [t[:160] for t in list(ma - mb)[:5]], "only B": [t[:160] for t in list(mb - ma)[:5]], "counts": [len(ta), len(tb)]})
+    return keep_a, keep_b, listed
+
+
+def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True, new_sheets=None) -> dict:
     hosts = noise.hosts_pattern(origins)
     ra, rb = load_report(a), load_report(b)
     res = Result()
@@ -331,9 +351,14 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for line in noise.head_only(ra[key], rb[key], hosts):
             res.red(line.split(": ", 1)[0], key + "-head-only", line[:300])
     # what the browser parsed
+    new_css = []
     ca, cb = os.path.join(a, "cssrules.json"), os.path.join(b, "cssrules.json")
     if os.path.exists(ca) and os.path.exists(cb):
         xa, xb = json.loads(read(ca)), json.loads(read(cb))
+        if new_sheets is not None:
+            xa, xb, new_css = split_new_css(xa, xb, new_sheets, hosts)
+        else:
+            xa, xb = [css_rule(t)[1] for t in xa], [css_rule(t)[1] for t in xb]
         ma, mb = collections.Counter(noise.mask_common(t, hosts) for t in xa), collections.Counter(noise.mask_common(t, hosts) for t in xb)
         if ma != mb:
             res.red("(css)", "css-rules", {"only A": [t[:160] for t in list(ma - mb)[:5]], "only B": [t[:160] for t in list(mb - ma)[:5]], "counts": [len(xa), len(xb)]})
@@ -351,6 +376,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
     missed = sorted({s for r in (ra, rb) for s in r["steps"] if s.endswith(("-> missing", "-> hidden", "-> disabled"))})
     out = {"scenes": res.scenes, "scene_names": sa, "shots": res.shots, "same_shots": res.same_shots, "real": res.real, "noise": dict(res.noise), "noise_rows": res.noise_rows, "info": {k: v[:40] for k, v in res.info.items()},
            "tool": res.tool, "not_reached": missed, "red_images": res.red_images}
+    if new_sheets is not None:
+        out["new_css"] = new_css
     coverage = {}
     for walk in (a, b):
         p = os.path.join(walk, "coverage.json")

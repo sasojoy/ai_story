@@ -38,6 +38,8 @@ def test_it_makes_the_package_registers_it_and_adds_the_guide_heading(repo):
     assert 'name = "tavern2"' in init and 'prefix = "tavern2"' in init and "FEATURE = Tavern2Feature()" in init
     assert "web: tuple[str, ...] = ()" in init and "content: tuple[str, ...] = ()" in init  # 畫面、內容檔怎麼宣告（手冊第十五節 G8、G9）
     assert "tianxia/features/tavern2/content/" in init and "不要手改 index.html 的 script" in init
+    # 第 106 批：範本照 test_shell_stays_thin 講：新欄位標 QUIET、路由第一行 gate 丟 404、enabled 讀 Config 預設關
+    assert "json_schema_extra=QUIET" in init and "關著丟 404" in init and "Config.tavern2.enabled" in init and "enabled: bool = False" in init
     assert b"\r\n" in (pkg / "__init__.py").read_bytes()  # 工作樹是 CRLF
     smoke = (pkg / "tests" / "test_tavern2_smoke.py").read_text(encoding="utf-8")  # 每一包至少一條煙霧（手冊 4.3）
     assert "@pytest.mark.smoke\ndef test_tavern2_" in smoke.replace("\r\n", "\n")

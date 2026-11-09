@@ -75,7 +75,7 @@
 - `sides.py`：三方卡 `sides_card`（連 `_bar`、`_goal`、`_places`、`WIN_GIVES`、`WIN_GIVES_OLD`、`HAOQIANG_GOAL`、`HAOQIANG_NOW_PENDING`，原本在 `tianxia/weekcard.py`，字一個不改；核心不 import 包，舊名不留別名）。豪強那一格的補充問同包的 `ending_actions.sides_card`、`tier_hint`；`game._opening_pending()` 經 `ctx`（`core/services_list.md` 有寫）。
 - 江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sides_card`、`ending`。
 - 改 `sides.py` `test_for` 挑不到、另外要跑（`-n 4`）：`tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_feature_boundaries.py tests/map/test_weekcard.py tianxia/features/guide/tests/test_opening.py tests/bots/test_step.py tests/core/test_chapters.py tests/figures/test_week_unlock.py tianxia/features/companions/tests/test_errands_weekcard.py tests/server/test_server.py`；`tianxia/features/faction/tests/test_sides_card.py` 整檔 slow，改到它才跑。
-- 畫面：`web/faction.js`（`sidesTableHtml`、`sidesFirstHtml`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；沒有網頁測試執行，靠 `facade` 軌比字與實機）；`main.js`、`app.js` 叫它們。
+- 畫面：`web/faction.js`（`sidesTableHtml`、`sidesFirstHtml`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；`factionJoinHtml`、`factionSidesSheetHtml` 與 `FACTION_*` 常數，架構收尾第 105 批從 `main.js` 搬來並改名〔舊名 `wkJoinHtml`、`wkSidesSheetHtml`、`WK_*`〕；沒有網頁測試執行，靠 `facade` 軌比字與實機）；`main.js`、`app.js` 叫它們。
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 

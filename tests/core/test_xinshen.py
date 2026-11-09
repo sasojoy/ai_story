@@ -1,6 +1,6 @@
 """心神（tianxia/core/xinshen.py；設計稿 https://claude.ai/artifact/NbTxoAPdroin7N9cRjCiP3 第 4 版；Joy 2026-11-06「可以 寫」）：
 跟人物說話不扣體力、扣心神；免費、月卡、存著的三份分開記，一般交談先扣月卡、再扣免費、最後動存著的，隱線只扣免費；
-每位人物每天前幾輪長情誼、之後只聊天，最多 Config.xinshen.turns_per_figure 輪；問酒家另算一天幾次。"""
+每位人物每天前幾輪長情誼、之後只聊天，最多 Config.xinshen.turns_per_figure 輪；問酒家另算一天幾次（規則與測試在酒肆包，tianxia/features/tavern/tests/test_tavern.py）。"""
 from __future__ import annotations
 
 import random
@@ -59,17 +59,6 @@ def test_no_card_means_no_card_share_and_a_new_card_counts_the_same_day(on, game
     xinshen.spend(s, on, day, False, 0, 2)
     assert xinshen.purse(s, on, day, False, 0) == xinshen.Purse(free=4, card=0, bank=0)
     assert xinshen.purse(s, on, day, True, 0).card == 4  # 買卡那一刻當天就有
-
-
-def test_tavern_asks_count_per_day_only_when_on(content, game):
-    s = game.state
-    assert xinshen.asks_left(s, content, 100) is None  # 關著不限
-    content.config.xinshen.enabled = True
-    for left in (3, 2, 1):
-        assert xinshen.asks_left(s, content, 100) == left
-        xinshen.note_ask(s, content, 100)
-    assert xinshen.asks_left(s, content, 100) == 0
-    assert xinshen.asks_left(s, content, 101) == 3
 
 
 # ── 對話 ────────────

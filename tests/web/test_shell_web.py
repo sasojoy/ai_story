@@ -83,6 +83,15 @@ def test_the_packages_register_their_tabs():
     assert out["value"] == [["practice", "craft"], True, True]
 
 
+def _only_the_literal_call(name: str, src: str, word: str, literal: list[str]) -> None:
+    """第 106 批：照字面的正規式認不得的寫法（頂格、匿名函式、換行）以前會靜靜跳過框的檢查。去掉註解之後，呼叫幾次就要照字面幾次；shell.js 是定義處。"""
+    if name == "shell.js":
+        return
+    bare = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", src, flags=re.S))
+    written = len(re.findall(rf"\b{word}\(", bare))
+    assert written == len(literal), f"{name} 寫了 {written} 次 {word}(，照字面的只有 {len(literal)} 次：照 <包>Click、<包>Form、<包>Change 那個框寫（兩格縮排、具名函式、一行），不然框的檢查掃不到它"
+
+
 def test_every_click_act_has_one_owner():
     """第 84 批：包在 <包>Click 的框裡認自己的 data-act，registerClicks 的清單跟框裡的 case 一個不多一個不少；
     同一個 act 不准兩包都認，也不准包認了、殼的 switch 還留一份（CLICKS 先查，殼那一份會變成靜靜不跑）。"""
@@ -94,6 +103,7 @@ def test_every_click_act_has_one_owner():
         src = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
         calls = re.findall(r"^  registerClicks\((\w+)Click, ", src, re.M)
         assert calls in ([], [name[:-len(".js")]]), f"{name} 登記的框要照檔名：{calls}"
+        _only_the_literal_call(name, src, "registerClicks", calls)
         if not calls:
             continue
         found = frame.findall(src)
@@ -135,6 +145,7 @@ def test_every_form_and_change_has_one_owner():
         stem = name[:-len(".js")]
         calls = re.findall(r"^  registerForms\((\w+)Form, ", src, re.M)
         assert calls in ([], [stem]), f"{name} 登記的框要照檔名：{calls}"
+        _only_the_literal_call(name, src, "registerForms", calls)
         if calls:
             found = form_frame.findall(src)
             assert len(found) == 1, f"{name} 的表單框要照字面"
@@ -144,6 +155,7 @@ def test_every_form_and_change_has_one_owner():
                 forms.setdefault(key, []).append(name)
         calls = re.findall(r"^  registerChanges\((\w+)Change\);", src, re.M)
         assert calls in ([], [stem]), f"{name} 登記的框要照檔名：{calls}"
+        _only_the_literal_call(name, src, "registerChanges", calls)
         if calls:
             found = change_frame.findall(src)
             assert len(found) == 1, f"{name} 的 change 框要照字面"
@@ -169,12 +181,18 @@ def test_every_form_and_change_has_one_owner():
 
 @needs_node
 def test_the_packages_register_their_forms_and_changes():
-    """照 / 的順序真的載一次：九包 17 個表單鍵（查不到才走殼那條鏈）、五包的 change；查表不能碰到原型上的名字。"""
+    """照 / 的順序真的載一次：登記的表單鍵（查不到才走殼那條鏈）與 change 都掛上了，數目跟登記的一樣；查表不能碰到原型上的名字。"""
     ask = """[Object.keys(FORMS).length, CHANGES.length, FORMS["tav-q"] === tavernForm, FORMS["op:shop-name-divine"] === smithyForm,
               CHANGES.includes(notifyChange), FORMS.constructor === undefined]"""
     out = load(features_core.web_scripts(), ask)
     assert out["failed"] == []
-    assert out["value"] == [17, 5, True, True, True, True]
+    forms, changes = 0, 0  # 第 106 批：以前寫死 [17, 5]，新包登記一個就紅；改成跟登記比
+    for name in features_core.web_scripts():
+        src = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+        forms += sum(len(json.loads(listed)) for listed in re.findall(r"^  registerForms\(\w+Form, (\[[^\n]*\])\);$", src, re.M))
+        changes += len(re.findall(r"^  registerChanges\(\w+Change\);$", src, re.M))
+    assert forms and changes  # 真的數到了，不是兩個 0 互比
+    assert out["value"] == [forms, changes, True, True, True, True]
 
 
 @needs_node

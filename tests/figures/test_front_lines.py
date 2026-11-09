@@ -16,7 +16,7 @@ import server
 from conftest import FixedRandom, copy_test_content, real_content
 from tianxia.features.battle import instance as battle_instance
 from tianxia import battlelog, figures, front_lines, journal, rules, team, world
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, check_front_lines, load_content, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import FrontLines, ShowdownPay
@@ -462,17 +462,32 @@ def test_a_missing_file_is_a_content_error_that_names_the_file(tmp_path):
     ("sides 簡體字", lambda d: d["sides"].update({"guan": "官军"}), "繁體"),
 ])
 def test_validation_rejects_bad_phrases(where, change, match):
-    content = load_content(CONTENT_DIR)
+    """第 108 批：只跑戰況說法那一格（content.check_front_lines），不再每條重載、跑整份 validate；
+    第一條（generic 缺一段）照舊走整份 validate，守 validate 有接上這一格。"""
+    content = real_content()
     lines = json.loads(content.front_lines.model_dump_json())
     change(lines)
     content.front_lines = FrontLines(**lines)
     with pytest.raises(ContentError, match=match):
-        validate(content)
+        validate(content) if where == "generic 缺一段" else _check_front_lines(content)
+
+
+def _check_front_lines(content) -> None:
+    """收法同 content.validate：need 收進 list，最後一起丟 ContentError。"""
+    errors: list[str] = []
+
+    def need(ok: bool, message: str) -> None:
+        if not ok:
+            errors.append(message)
+
+    check_front_lines(content, need)
+    if errors:
+        raise ContentError("內容檔有誤：\n" + "\n".join(errors))
 
 
 def test_chinese_numerals_are_not_digits_to_the_number_check():
     """只攔阿拉伯數字（半形、全形）與百分號；一、十、半這類字在成語裡很自然（略勝一籌、十拿九穩），不攔。"""
-    content = load_content(CONTENT_DIR)
+    content = real_content()
     content.front_lines.generic["1"] = ["略勝一籌", "半步先機"]
     content.check_voice.bands[0].lines["default"] = "十拿九穩，難不倒{who}。"  # 檢定選項的心裡話（check_voice）一樣
     validate(content)

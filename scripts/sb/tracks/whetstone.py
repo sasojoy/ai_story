@@ -388,4 +388,7 @@ class WhetstoneScenario(TallyScenario):
 
 
 # 改一個字（selftest）：熔最弱的那一門（第 101 批搬進修練包的 bots.py，那一句照寫，兩處找）。
-register_track("whetstone", WhetstoneScenario, (("tianxia/bot.py", "tianxia/features/cultivation/bots.py"), ("game.melt_art(min(spare)[1])", "game.melt_art(max(spare)[1])")), "week7")
+register_track("whetstone", WhetstoneScenario, (("tianxia/bot.py", "tianxia/features/cultivation/bots.py"), ("game.melt_art(min(spare)[1])", "game.melt_art(max(spare)[1])")), "week7",
+               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guide", "hire", "looks", "military", "outlets", "peers", "seal", "seclusion", "sense",
+                       "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel"))

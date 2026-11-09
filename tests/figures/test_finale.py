@@ -205,6 +205,7 @@ def test_switch_off_season_end_is_unchanged(real):
 
 
 def test_contribution_rankings_top_five_per_side_this_season(on, world):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia import leaderboard
     from tianxia.characters import open_characters
 

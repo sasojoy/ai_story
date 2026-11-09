@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from tianxia.accounts import AccountError, AccountStore, check_login, normalize  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
+from tianxia.core import identity_base  # noqa: E402  帳號與客服第 207 批：identity 開著時名單上的帳號密碼至少 12 字
 from tianxia.database import default_path, open_database  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import SqliteWorldStore  # noqa: E402
@@ -42,7 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         # 讀內容檔很慢：在交易外先讀好。設定照伺服器那一份（TIANXIA_PROFILE，content.serving_profile）：不然濃縮設定的伺服器上，
         # 這裡建的角色拿到的是預設設定（例如開場那一則的贈禮那一行）
         profile = serving_profile()
-        content = load_content(ROOT / "content", profile=profile) if args.character else None
+        # 第 207 批：identity 的金鑰在（開著才可能）就也讀，判名單上的帳號要不要 12 字；金鑰不在一定關著，照舊只有 --character 才讀
+        keyed = identity_base.read_key() is not None
+        content = load_content(ROOT / "content", profile=profile) if args.character or keyed else None
         with db.transaction():  # 跟伺服器、假人程式寫同一個資料庫：一筆交易做完，不會跟假人取名撞在一起
             existing = store.get(args.account)
             state = None
@@ -61,10 +64,13 @@ def main(argv: list[str] | None = None) -> int:
                 if existing is not None and existing.character not in (None, args.character):
                     print(f"帳號 {args.account} 已經有角色「{existing.character}」了。")
                     return 1
+            staff = content is not None and identity_base.on(content) and identity_base.listed(
+                content, login=args.account, character=args.character or (existing.character if existing is not None else None),
+                account_id=existing.id if existing is not None else None)
             if existing is None:
-                store.register(args.account, password)
+                store.register(args.account, password, staff=staff)
             else:
-                store.set_password(args.account, password)
+                store.set_password(args.account, password, staff=staff)
             if args.character:
                 if state is None:
                     game = Game.new(content, args.character, world=SqliteWorldStore(db))

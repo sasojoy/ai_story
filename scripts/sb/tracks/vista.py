@@ -210,4 +210,7 @@ class VistaScenario(StackScenario):
 # 改一個字（selftest）：談著的人那張圖的 kind（第 2 段搬進人物情誼包 talk_actions.py，這一句一字不動；搬到別的檔就補這裡的檔清單）。
 # 正式內容才有像，測試內容的人物沒有像、走不到這一句。
 register_track("vista", VistaScenario, (("tianxia/engine.py", "tianxia/features/companions/talk_actions.py"),
-                                        ('"kind": "figure"', '"kind": "figurf"')), "season21")
+                                        ('"kind": "figure"', '"kind": "figurf"')), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "feast", "figure_acts", "gear", "looks", "map", "military", "outlets", "peers", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

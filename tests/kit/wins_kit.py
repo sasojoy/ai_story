@@ -18,6 +18,7 @@ def wins_content(profile: str = "season21") -> Content:
     content = real_content(profile)
     content.config.auto_open_first_season = True
     content.config.train_event_chance = 0.0
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     return content
 
 

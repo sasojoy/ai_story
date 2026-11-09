@@ -24,7 +24,7 @@ class TavernFeature(Feature):
     # 酒肆開著沒、酒家最近幾則回話、聽過的傳聞、查到過的名號、哪一天請過酒、收到的風聲、藏行跡到幾時、託酒家留意的人、
     # 保鏢跟到幾時、剛被殺手得手的護身：換季全部跟著新角色重來（季上的牆、風聲、請酒、殺手單、閒談照季存）
     player_fields = ("picking_tavern", "tavern_notes", "tavern_heard", "tavern_known", "tavern_treat_day", "whispers", "hidden_until",
-                     "tavern_watches", "tavern_guard_until", "tavern_shield_until")
+                     "tavern_watches", "tavern_guard_until", "tavern_shield_until", "tavern_asks")
     carried: tuple[str, ...] = ()
 
     def enabled(self, ctx) -> bool:

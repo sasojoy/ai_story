@@ -26,6 +26,10 @@ FAMOUS_NAMES = frozenset((  # 三國名人：server_bots 的字庫組得出其�
     "劉禪 曹丕 曹植 曹叡 蔣琬 費禕 董允"
 ).split())
 
+# identity（帳號與客服第 201 批）：客服與官方的字。不進 reserved_names（假人取名與易名帖讀那一份、行為不變）；
+# 擋名號經 core/identity_base.blocked_name，帳號綁定開著才擋
+STAFF_NAMES = ("客服", "官方", "管理員", "GM")
+
 
 def reserved_names(content: Content) -> frozenset[str]:
     """不能拿來當名號的名字（真人與假人共用，FB-004）：三國名人、遊戲內容裡的人物與大勢人物（跟著內容走；彭脫、韓忠

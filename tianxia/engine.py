@@ -734,38 +734,15 @@ class Game:
             return
         features_core.seam_run("own_turn", {}, self)
 
-    # ── 心神（tianxia/core/xinshen.py；功能包經服務清單的 ctx.xinshen_purse／xinshen_spend 叫）──
-
-    def _xinshen_card(self) -> bool:
-        return xinshen.card_active(self._wallet(), self._mall_owner(), self._pill_day())
-
+    # 心神（xinshen_purse、xinshen_spend、xinshen_view）：本體在 tianxia/core/xinshen.py（架構收尾第 105 批），這裡留一行委派；功能包經服務清單的 ctx.xinshen_purse／xinshen_spend 叫
     def xinshen_purse(self) -> xinshen.Purse:
-        """此刻手上的心神（免費、月卡、存著的三份）。"""
-        return xinshen.purse(self.state, self.content, self._pill_day(), self._xinshen_card(), xinshen.bank(self._wallet(), self._mall_owner()))
+        return xinshen.xinshen_purse(self)
 
     def xinshen_spend(self, n: int, free_only: bool = False) -> bool:
-        """扣 n 點心神：一般交談先扣月卡、再扣免費、最後動存著的；free_only（女性角色的隱線）只扣免費那一份。夠就扣、回 True。"""
-        wallet = self._wallet()
-        from_bank = xinshen.spend(self.state, self.content, self._pill_day(), self._xinshen_card(),
-                                  xinshen.bank(wallet, self._mall_owner()), n, free_only)
-        if from_bank is None:
-            return False
-        if from_bank:
-            xinshen.use_bank(wallet, self._mall_owner(), from_bank)
-        return True
+        return xinshen.xinshen_spend(self, n, free_only)
 
     def xinshen_view(self) -> dict | None:
-        """狀態列的心神那一格；關著是 None。"""
-        if not xinshen.on(self.content):
-            return None
-        return xinshen.view(self.content, self.xinshen_purse(), self._xinshen_card())
-
-    def xinshen_asks_left(self) -> int | None:
-        """今天還能問酒家幾次（心神開著才限）；不限是 None。"""
-        return xinshen.asks_left(self.state, self.content, self._pill_day())
-
-    def xinshen_note_ask(self) -> None:
-        xinshen.note_ask(self.state, self.content, self._pill_day())
+        return xinshen.xinshen_view(self)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力／氣血回復、閉關出關、新立門戶福緣——

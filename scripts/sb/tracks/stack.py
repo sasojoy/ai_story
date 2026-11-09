@@ -375,4 +375,7 @@ class StackScenario(MapScenario):
 
 # 改一個字（selftest）：投靠待確認時動身被擋的那一句（第 2 段搬進陣營包 join_actions.py，這一句一字不動；搬到別的檔就補這裡的檔清單）
 register_track("stack", StackScenario, (("tianxia/atlas.py", "tianxia/features/faction/join_actions.py"),
-                                        ("投靠還沒決定，先決定再安排前往", "投靠還沒決定，先決定再安排前往！")), "season21")
+                                        ("投靠還沒決定，先決定再安排前往", "投靠還沒決定，先決定再安排前往！")), "season21",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "looks", "map", "military", "outlets", "peers", "seclusion", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
