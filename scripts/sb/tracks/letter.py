@@ -135,4 +135,4 @@ class LetterScenario(PeersScenario):
 
 # 改一個字（selftest）：開關的那一道 gate 反過來，關著的季每條路由都不再 404、開著的季每條都 404
 register_track("letter", LetterScenario, (("tianxia/features/mail/routes.py",), ("if shell.CONTENT.config.mail.enabled:", "if not shell.CONTENT.config.mail.enabled:")), "season21",
-               covers=("mail", "peers"))
+               covers=("bounties", "figure_acts", "jieyi", "mail", "peers", "socialize"))

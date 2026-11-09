@@ -341,6 +341,6 @@ class AbacusScenario(Scenario):
 register_track("abacus", AbacusScenario, (("tianxia/features/mall/rules.py",),
                                           ('DUPLICATE = "這一筆已經買好了：「{name}」。"', 'DUPLICATE = "這一筆已經買好了：「{name}」！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mail", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan"))

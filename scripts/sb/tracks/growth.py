@@ -644,6 +644,6 @@ register_track("growth", GrowthScenario, (("tianxia/attrset.py",), ("這一季�
                        "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
 register_track("legacy", LegacyScenario, (("tianxia/features/legacy/actions.py",), ("這一季識海不帶上一季的神品意境。", "這一季識海不帶上一季的神品意境！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

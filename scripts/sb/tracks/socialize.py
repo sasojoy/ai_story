@@ -383,6 +383,6 @@ class SocializeScenario(CompanionsScenario):
 register_track("socialize", SocializeScenario, (("tianxia/engine.py", "tianxia/features/socialize/actions.py", "tianxia/features/socialize/view.py"),
                                                ('輪，{when}"', '輪！{when}"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))  # 只改「輪，」那一小段：搬之前是 self._talk_cap()、搬之後是 talk_cap(ctx)，前面的字不同、這一段一樣
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "military", "outlets",
+                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan"))  # 只改「輪，」那一小段：搬之前是 self._talk_cap()、搬之後是 talk_cap(ctx)，前面的字不同、這一段一樣

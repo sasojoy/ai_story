@@ -406,6 +406,6 @@ class StaminaScenario(WorldScenario):
 register_track("stamina", StaminaScenario, (("tianxia/features/stamina_plays/ambush_rules.py",),
                                              ("你收起埋伏，從路邊撤了回來。", "你收起埋伏，從路邊撤了回來！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
-                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "travel", "zhuan"))

@@ -566,6 +566,6 @@ class EventScenario(ExploreScenario):
 register_track("events", EventScenario, (("tianxia/core/event_check.py", "tianxia/engine.py"),
                                           ('msgs = [f"▸ {choice.text}"]', 'msgs = [f"▸ {choice.text}！"]')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan"))

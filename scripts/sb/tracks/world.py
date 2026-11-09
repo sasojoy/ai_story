@@ -360,6 +360,6 @@ class WorldScenario(Scenario):
 # 改一個字（selftest）：集結號角那一句（world._open_battle：時刻表與大勢門檻兩條開集結的路都寫它；world.py 收進核心本體不搬家）
 register_track("world", WorldScenario, (("tianxia/world.py",), ("的集結號角已經吹響！", "的集結號角已經吹響。")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military",
-                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall",
+                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "travel", "zhuan"))

@@ -207,4 +207,6 @@ class OathScenario(PeersScenario):
 
 # 改一個字（selftest）：一組的人數上限那一句反過來（>= 改 >），第 6 人照樣邀得到，season21 fill 那一段抓到
 register_track("oath", OathScenario, (("tianxia/features/jieyi/rules.py",), ("if mine is not None and len(mine.members) >= cfg.max_members:", "if mine is not None and len(mine.members) > cfg.max_members:")), "season21",
-               covers=("jieyi", "peers"))
+               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guide", "jieyi", "looks", "military", "outlets", "peers", "seal", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

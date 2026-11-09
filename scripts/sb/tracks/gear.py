@@ -705,6 +705,6 @@ class GearScenario(Scenario):
 register_track("gear", GearScenario, (("tianxia/features/gear/signature_arms.py",),
                                       ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map", "military",
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
                        "tavern", "territory_acts", "travel", "zhuan"))
