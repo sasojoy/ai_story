@@ -257,14 +257,12 @@
   // 分頁列上見聞那一顆補上紅點：分頁列只在整頁重畫（render）時畫，輪詢只重畫狀態列與頁面，
   // 所以紅點亮起的當下就地補一顆（已經有、或正在看見聞時不補）
   // 見聞的紅點：新的一場（S.unseen），或信匣有沒看的信（main.mail.unread，web/mail.js）
-  // 信匣在俠客頁（SELF_NEWS）：沒看的信亮「俠客」那一顆（看信匣的時候不亮）
-  const newsDot = () => S.tab !== "news" && S.unseen;
-  const mailDot = () => S.news !== "mail" && typeof mailUnread === "function" && mailUnread() > 0;
+  // 信匣在俠客頁（SELF_NEWS）：沒看的信亮「俠客」那一顆（mail.js 的 mailDot；看信匣的時候不亮）
   function paintNewsDot() {
     const tab = document.querySelector('.tabs .tab[data-tab="news"]');
-    if (tab && newsDot() && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
+    if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
     const hero = document.querySelector('.tabs .tab[data-tab="practice"]');
-    if (hero && mailDot() && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
+    if (hero && typeof mailDot === "function" && mailDot() && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
   }
 
   // ── 整體 ──
@@ -353,7 +351,7 @@
     const glow = (t) => [t.id, ...(on(t) ? [] : t.also || [])].map((id) => `tab:${id}`).join(" ");
     return `${typeof bpMiniHtml === "function" ? bpMiniHtml() : ""}<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${on(t) ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="${glow(t)}">
-          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && newsDot()) || (t.id === "practice" && mailDot()) ? '<i class="dot"></i>' : ""}
+          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && S.unseen && S.tab !== "news") || (t.id === "practice" && typeof mailDot === "function" && mailDot()) ? '<i class="dot"></i>' : ""}
         </button>`).join("")}${mall ? `
         <button class="tab tab-mall" data-act="mall-open" data-tab="mall" data-glow="tab:mall" aria-label="商城，元寶 ${S.main.mall.balance | 0}"><span class="ico">寶</span>商城</button>` : ""}</div></nav>`;
   }

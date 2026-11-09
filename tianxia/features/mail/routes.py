@@ -11,21 +11,32 @@
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from tianxia import speech
-from tianxia.core.features import AdminTool, no_gate
+from tianxia.core.features import AdminTool
 
 from . import actions
 
 
+def _gate(shell):
+    """Config.mail.enabled 關著一律 404（先於登入；殼的 test_shell_stays_thin 守）。"""
+    def gate() -> None:
+        if shell.CONTENT.config.mail.enabled:
+            return
+        raise HTTPException(404)
+    return gate
+
+
 def admin_tools(shell) -> dict[str, AdminTool]:
+    gate = _gate(shell)
     return {
-        "mail_remove": AdminTool(no_gate, lambda g, b: actions.admin_settle(g, shell._int(b.get("id"), 0), True)),
-        "mail_keep": AdminTool(no_gate, lambda g, b: actions.admin_settle(g, shell._int(b.get("id"), 0), False)),
-        "mail_mute": AdminTool(no_gate, lambda g, b: actions.admin_mute(g, str(b.get("name", "")), shell._int(b.get("days"), 0))),
+        "mail_remove": AdminTool(gate, lambda g, b: actions.admin_settle(g, shell._int(b.get("id"), 0), True)),
+        "mail_keep": AdminTool(gate, lambda g, b: actions.admin_settle(g, shell._int(b.get("id"), 0), False)),
+        "mail_mute": AdminTool(gate, lambda g, b: actions.admin_mute(g, str(b.get("name", "")), shell._int(b.get("days"), 0))),
     }
 
 
 def router(shell) -> APIRouter:
     r = APIRouter()
+    gate = _gate(shell)
 
     def _view(game, name: str = "") -> dict:
         def build(g):
@@ -38,11 +49,13 @@ def router(shell) -> APIRouter:
 
     @r.get("/api/mail")
     def api_mail(request: Request):
+        gate()
         game = shell._game(request)
         return shell.look(game, lambda g: {"inbox": actions.inbox(g), **actions.status(g)})
 
     @r.get("/api/mail/thread")
     def api_mail_thread(request: Request, name: str = "", before: int = 0):
+        gate()
         game = shell._game(request)
         if before:
             return shell.look(game, lambda g: {"thread": actions.thread(g, name, before)})
@@ -50,6 +63,7 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/mail/{op}")
     def api_mail_do(op: str, request: Request, body: dict = Body(default={})):
+        gate()
         game = shell._game(request)
         name = str(body.get("name", ""))[:40]
         sent = False

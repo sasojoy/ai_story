@@ -2,12 +2,13 @@
  *
  * 見聞 → 紀錄底下第三格「信匣」：一位帖友一行（最新那一封的開頭、他寄來還沒看的幾封）；點開是跟他的往來（照季分段），最底下回信。
  * 右上「⋯」：看名帖、不收他的信（他不會知道）、檢舉寄給你的那一封。名帖匣放大的那一張底下多一顆「寫信」。
- * 見聞分頁的紅點也看 main.mail.unread（mailUnread）。沒有「已讀」：寫給別人的只寫寄出的時刻與地點。
+ * 俠客分頁的紅點看 main.mail.unread（mailDot；信匣跟名帖匣一起在俠客頁）。沒有「已讀」：寫給別人的只寫寄出的時刻與地點。
  * 跟 mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；點擊用 registerClicks 登記在這支檔。字待 joy 潤。
  */
 "use strict";
 
   const mailUnread = () => (S.main && S.main.mail ? S.main.mail.unread | 0 : 0);
+  const mailDot = () => S.news !== "mail" && mailUnread() > 0; // 信匣在俠客頁：沒看的信亮「俠客」那一顆分頁（app.js tabsHtml、paintNewsDot）
   const mailShown = () => !!(S.main && S.main.mail);
 
   function mailTake(r) { // 伺服器回的 {inbox, thread?, mail}：記下來、紅點跟著改
