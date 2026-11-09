@@ -72,11 +72,39 @@
     const form = ev.target;
     if (!form || !form.querySelector || !form.querySelector(".terms-check")) return; // 沒插勾選的表單一律放行
     const boxes = [...form.querySelectorAll('.terms-check input[type="checkbox"]')];
-    if (boxes.length && boxes.every((b) => b.checked)) return;
+    if (boxes.length && boxes.every((b) => b.checked)) {
+      if (termsFresh.has(form)) { termsFresh.delete(form); return; } // 重問過版號的那一次：放行
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      termsResend(form);
+      return;
+    }
     ev.preventDefault();
     ev.stopImmediatePropagation();
     const msg = form.querySelector(".form-msg");
     if (msg) msg.textContent = TERMS_SAY.need;
+  }
+
+  // 第 210 批：版號快取一整頁，條款改版後沒重新整理的註冊頁會帶舊版號、被伺服器同一句擋住、重勾也沒用。所以兩格都勾了的那一次
+  // 先攔下、重問 /api/terms/version（不經快取；問到的也寫回快取）、換掉 hidden 的版號，再送一次（記在 termsFresh，下一次放行、不無窮攔）。
+  // 問不到（斷線、非 200）照舊版號送，讓伺服器那一句擋
+  const termsFresh = new WeakSet();
+  async function termsResend(form) {
+    let version = null;
+    try {
+      const res = await fetch("/api/terms/version", { credentials: "same-origin" });
+      version = res.ok ? ((await res.json()) || {}).version || null : null;
+    } catch (e) { version = null; }
+    if (version) {
+      termsVersionAsk = Promise.resolve(version);
+      const hidden = form.querySelector('[name="terms_version"]');
+      if (hidden) hidden.value = version;
+    }
+    if (form.isConnected === false) return;
+    termsFresh.add(form);
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else if (typeof form.dispatchEvent === "function") form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    else termsFresh.delete(form);
   }
 
   function termsEsc(s) {

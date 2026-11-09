@@ -169,14 +169,25 @@
 
   // 驗證碼表單（第 204 批）：st = {way, purpose, sent, to, until, notice, stale}；now 是毫秒。寄碼前：號碼、Turnstile（有網站金鑰才有那一格）、寄碼；
   // 寄出後：輸碼、錯 5 次作廢的提示、重寄倒數；門號過期（stale）多一顆「這不是我的帳號」。登入、綁定、重驗三種用途共用，只換標題
-  function identityCodeHtml(st, siteKey, now) {
+  // 第 210 批：寄碼前那一張的個資告知（設計第五節、個資法第 8 條）。info 是 /api/identity/gate 或 /api/identity/me 的回應，
+  // 沒有 notice 就不畫（舊伺服器）；句裡的「隱私權說明」那幾個字做成連結（不多加字），句裡沒有才接在句尾
+  function identityNoticeHtml(info) {
+    if (!info || !info.notice) return "";
+    const text = String(info.notice);
+    const link = `<a href="${esc(info.privacy || "/privacy")}" target="_blank" rel="noopener">${esc(IDENTITY_PRIVACY_LINK)}</a>`;
+    const at = text.lastIndexOf(IDENTITY_PRIVACY_LINK);
+    const body = at < 0 ? esc(text) + link : esc(text.slice(0, at)) + link + esc(text.slice(at + IDENTITY_PRIVACY_LINK.length));
+    return `<p class="idp-fine idp-notice">${body}</p>`;
+  }
+
+  function identityCodeHtml(st, siteKey, now, info) {
     const way = st.way;
     const title = (st.purpose === "bind" ? IDP_CODE_BIND_TITLE : st.purpose === "reauth" ? IDP_CODE_REAUTH_TITLE : IDP_CODE_TITLE)[way];
     const left = Math.max(0, Math.ceil(((st.until || 0) - now) / 1000));
     const body = !st.sent
       ? `<label class="field"><span>${esc(IDP_CODE_TO[way])}</span><input class="input" name="to" value="${esc(st.to || "")}" ${
           way === "phone" ? 'inputmode="tel" autocomplete="tel"' : 'type="email" autocomplete="email"'}></label>${
-          siteKey ? `<div class="cf-turnstile" data-sitekey="${esc(siteKey)}" data-action="identity_code"></div>` : ""}
+          siteKey ? `<div class="cf-turnstile" data-sitekey="${esc(siteKey)}" data-action="identity_code"></div>` : ""}${identityNoticeHtml(info)}
         <input type="hidden" name="phase" value="send"><button class="btn" type="submit">${esc(IDP_CODE_SEND)}</button>`
       : `${st.notice ? `<p class="idp-fine">${esc(st.notice)}</p>` : ""}
         <label class="field"><span>${esc(IDP_CODE_INPUT)}</span><input class="input" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
@@ -239,7 +250,7 @@
     }
     const mode = IDENTITY_MODES.includes(S.gateMode) ? S.gateMode : "login";
     identityRemember(mode);
-    const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now()) : "";
+    const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now(), info) : "";
     const drawn = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
     const html = mode === "register" ? identityPwHint(drawn, info.pw_min) : drawn;
     if (html !== gate.innerHTML) gate.innerHTML = html;
@@ -389,7 +400,7 @@
       const reset = me.has_password && me.reset > 0 ? `<form class="stack idp-reset" id="idp-reset-form"><p class="label">${esc(IDP_RESET_TITLE)}</p>
           <p class="idp-fine">${esc(IDP_RESET_LEFT(Math.max(1, Math.ceil(me.reset / 60))))}</p>${pwFields}
           <p class="form-msg" role="alert"></p><button class="btn" type="submit">${esc(IDP_RESET_GO)}</button></form>` : "";
-      const code = st.code ? identityCodeHtml(st.code, me.turnstile, now) : "";
+      const code = st.code ? identityCodeHtml(st.code, me.turnstile, now, me) : "";
       body = `${rows}${binds}${me.hold ? `<p class="form-msg">${esc(IDP_HOLD)}</p>` : ""}${recheck}${code}${reset}${setpw}<p class="idp-fine">${esc(IDP_STAFF)}</p>`;
     }
     return `<details class="fold idp-fold"${st.open ? " open" : ""}><summary>${esc(IDP_FOLD_TITLE)}${dot}<span class="idp-line">${esc(line)}</span></summary><div class="fold-body">${body}</div></details>`;
@@ -462,6 +473,7 @@
   // 抽屜每畫一次（殼的 render 整塊換掉）：插「帳號綁定」那一格、⚙ 的紅點；沒有 identity 格（關著、沒帳號）什麼都不做
   function identityDecorate() {
     identityAlerts();
+    identityAdminRelogin();
     const info = S.main && S.main.identity;
     if (!info) return;
     identitySyncDot();
@@ -486,6 +498,30 @@
     const el = document.querySelector(".idp-fold");
     if (!el || document.querySelector(".idp-relogin")) return;
     el.insertAdjacentHTML("beforebegin", identityReloginHtml());
+  }
+
+  // 第 210 批：管理頁（/admin，跟江湖頁同一張頁；admin.js 不動）標題（.ad-head）下也畫同一行。只在 identity 開著（有 identity 格）、
+  // 還不夠格（S.main.admin 假）時問一次 /api/identity/session，結果記在 S.idp.adRelogin；admin.js 整頁重畫換掉那一行時照記下的補回、不再問
+  // 同 admin.js 的 ADMIN_PATH（包之間不共用名字，自己寫一份）
+  const identityAdminPath = /^\/admin\/?$/;
+  function identityAdminRelogin() {
+    if (typeof document === "undefined" || typeof location === "undefined" || !location || !identityAdminPath.test(location.pathname || "")) return;
+    if (!S.main || !S.main.identity || S.main.admin || !document.querySelector(".ad-head")) return;
+    S.idp = S.idp || {};
+    if (S.idp.adRelogin === undefined) {
+      S.idp.adRelogin = null; // 問著
+      api("/api/identity/session").then((got) => { S.idp.adRelogin = !!(got && got.relogin === true); identityAdminReloginDraw(); },
+        () => { S.idp.adRelogin = false; });
+      return;
+    }
+    identityAdminReloginDraw();
+  }
+  function identityAdminReloginDraw() {
+    if (S.idp.adRelogin !== true) return;
+    const head = document.querySelector(".ad-head");
+    const next = head && head.nextElementSibling;
+    if (!head || (next && String(next.className || "").split(/\s+/).includes("idp-relogin"))) return;
+    head.insertAdjacentHTML("afterend", identityReloginHtml());
   }
 
   function identityWatch() {

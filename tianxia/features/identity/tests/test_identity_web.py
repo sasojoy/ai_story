@@ -3,9 +3,12 @@
 回呼 auth=new 切到建角色頁、表單改名、送 /api/identity/character，回登入頁或送成功都忘掉 pending。renderGate 是 app.js 那一支原文，identity.js 整支載進來。"""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from webharness import WEB, run
+
+from tianxia.features.identity import codes
 
 DRIVER = r"""
 const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
@@ -297,6 +300,12 @@ async function main() {
   out.codeFirst = k.identityCodeHtml({ way: "email", purpose: "bind" }, "0x4AAA", NOW);
   out.codeNoKey = k.identityCodeHtml({ way: "phone", purpose: "reauth" }, "", NOW);
   out.codeStale = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: 0, stale: "太久沒驗證了" }, "", NOW);
+  // 第 210 批：寄碼前那一張的個資告知短文（info 是 /api/identity/gate 或 /api/identity/me 的回應）
+  const INFO = { notice: input.notice, privacy: "/privacy" };
+  out.noticeFirst = ["login", "bind", "reauth"].map((purpose) => k.identityCodeHtml({ way: "phone", purpose }, "", NOW, INFO));
+  out.noticeSent = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: 0, notice: "已寄出" }, "", NOW, INFO);
+  out.noticeNone = [k.identityCodeHtml({ way: "email", purpose: "login" }, "", NOW, { turnstile: "" }),
+    k.identityCodeHtml({ way: "email", purpose: "login" }, "", NOW)];
   // 驗證碼登入：按 Email 換成表單；已登入先問一次（{ask}），要換才帶 switch: true 再送
   const flow = kit({ S: { identity: true }, replies: [{ ask: "要換帳號嗎？" }, { message: "驗證碼已寄出" }, { stage: "create", pending: true }] });
   await flow.k.identityClick("identity-way", { dataset: { way: "email" } }, {});
@@ -321,7 +330,26 @@ finish(main());
 
 
 def _run_204():
-    return run(DRIVER_204, {"identity": str(WEB / "identity.js")})
+    return run(DRIVER_204, {"identity": str(WEB / "identity.js"), "notice": codes.NOTICE})
+
+
+def test_code_form_before_send_has_notice_and_link():
+    """第 210 批（設計第五節、個資法第 8 條）：寄碼前那一張畫 codes.NOTICE，句裡的「隱私權說明」連到 privacy、開新分頁；三種用途都有。"""
+    link = '<a href="/privacy" target="_blank" rel="noopener">隱私權說明</a>'
+    for html in _run_204()["noticeFirst"]:
+        at = html.index('<p class="idp-fine idp-notice">')
+        line = html[at:html.index("</p>", at) + 4]
+        assert link in line and re.sub(r"<[^>]+>", "", line) == codes.NOTICE  # 字一個不多：連結就是句裡那幾個字
+        assert at < html.index('data-act="identity-code-back"') and html.index('name="to"') < at < html.index('value="send"')
+
+
+def test_code_form_after_send_keeps_sent_line_only():
+    sent = _run_204()["noticeSent"]
+    assert "idp-notice" not in sent and '<p class="idp-fine">已寄出</p>' in sent
+
+
+def test_code_form_without_notice_draws_none():
+    assert all("idp-notice" not in html and "/privacy" not in html for html in _run_204()["noticeNone"])  # 舊伺服器、沒傳 info
 
 
 def test_fold_html_closed_line_and_dots():
@@ -586,3 +614,77 @@ def test_relogin_line_only_when_flag_true():
     assert out["on"]["before"] == [["beforebegin", line]] and "/api/identity/session" in out["on"]["posts"]
     assert out["off"]["before"] == [] and out["gone"]["before"] == []  # 假、404（關著）什麼都不畫
     assert out["admin"]["before"] == [] and "/api/identity/session" not in out["admin"]["posts"]  # 已經是管理者：不問
+
+
+# ── 第 210 批：管理頁（/admin）標題下也畫「請用密碼重新登入」（admin.js 不動；MutationObserver 看到 .ad-head 才問）──
+
+DRIVER_210 = r"""
+const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
+const esc = new Function(konst("esc") + "\nreturn esc;")();
+async function page(opts) {
+  const S = Object.assign({ stage: "game" }, opts.S || {});
+  const posts = [];
+  const after = [];
+  const head = { insertAdjacentHTML: (where, v) => { after.push([where, v]); head.nextElementSibling = { className: "form-msg idp-relogin" }; },
+    nextElementSibling: { className: "muted ad-wait" } };
+  const document = {
+    querySelectorAll: () => [],
+    querySelector: (sel) => (sel === ".ad-head" && opts.head !== false ? head : null),
+    getElementById: () => null,
+  };
+  const api = async (path) => {
+    posts.push(path);
+    if (path === "/api/identity/session") {
+      if (opts.session === 404) throw new Error("404");
+      return opts.session;
+    }
+    return {};
+  };
+  const k = new Function("S", "esc", "toast", "renderGate", "render", "fetch", "localStorage", "registerClicks", "registerGateSlot",
+    "registerForms", "$app", "api", "enter", "location", "history", "document", "renderKeepingSheet",
+    idSrc + "\nreturn { identityDecorate };")(
+    S, esc, () => {}, () => {}, () => {}, () => Promise.resolve({ ok: false }), { getItem: () => null, setItem: () => {} },
+    () => {}, () => {}, () => {}, { querySelector: () => null }, api, () => {},
+    { href: "https://example.com" + (opts.path || "/admin"), pathname: opts.path || "/admin" }, { replaceState: () => {} }, document, () => {});
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  k.identityDecorate(); // 畫完又觸發一次（插進去那一行本身也會叫 MutationObserver）
+  await new Promise((r) => setTimeout(r, 10));
+  const once = after.length;
+  head.nextElementSibling = { className: "muted ad-wait" }; // admin.js 整頁重畫：那一行被換掉
+  k.identityDecorate();
+  await new Promise((r) => setTimeout(r, 10));
+  return { posts, after, once };
+}
+async function main() {
+  const info = { kinds: ["password"], has_password: true, phone_missing: false };
+  const S = () => ({ main: { admin: false, identity: info } });
+  return {
+    on: await page({ S: S(), session: { relogin: true } }),
+    off: await page({ S: S(), session: { relogin: false } }),
+    gone: await page({ S: S(), session: 404 }),
+    closed: await page({ S: { main: { admin: false } }, session: { relogin: true } }),
+    admin: await page({ S: { main: { admin: true, identity: info } }, session: { relogin: true } }),
+    jianghu: await page({ S: S(), session: { relogin: true }, path: "/" }),
+    nohead: await page({ S: S(), session: { relogin: true }, head: false }),
+  };
+}
+finish(main());
+"""
+
+
+def test_admin_page_relogin_line_when_true():
+    out = run(DRIVER_210, {"identity": str(WEB / "identity.js")})
+    line = '<p class="form-msg idp-relogin">管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。</p>'
+    on = out["on"]
+    assert on["once"] == 1 and on["after"][0] == ["afterend", line]  # 標題下一行、觸發兩次只一行
+    assert on["after"] == [["afterend", line]] * 2  # admin.js 重畫把那一行換掉：照記下的結果補回
+    assert on["posts"].count("/api/identity/session") == 1  # 一頁只問一次
+
+
+def test_admin_page_no_line_when_false_or_404():
+    out = run(DRIVER_210, {"identity": str(WEB / "identity.js")})
+    for case in ("off", "gone"):
+        assert out[case]["after"] == [] and out[case]["posts"].count("/api/identity/session") == 1
+    for case in ("closed", "admin", "jianghu", "nohead"):  # 關著（沒有 identity 格）、已經夠格、不在 /admin、標題還沒畫：不問
+        assert out[case]["after"] == [] and "/api/identity/session" not in out[case]["posts"]

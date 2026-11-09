@@ -17,7 +17,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import secrets as _rand
+import weakref
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -50,7 +52,12 @@ def gate_info(content) -> dict:
     cfg = content.config.identity
     ways = [w for w in cfg.ways if w not in oauth.PROVIDERS or oauth.ready(content, w)]
     # pw_min（第 209 批）：identity 開著時全體密碼的下限，註冊格那一行提示照它寫（這條路關著 404，關著拿不到）
-    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN}
+    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN, **notice_info(content)}
+
+
+def notice_info(content) -> dict:
+    """第 210 批（設計第五節、個資法第 8 條）：驗證碼寄碼前那一張的個資告知短文與隱私權頁網址（同 codes.send 寄出後回的那兩鍵）。"""
+    return {"notice": codes.NOTICE, "privacy": content.config.identity.privacy_url}
 
 
 def _digest(value: str) -> str:
@@ -109,9 +116,37 @@ def admin_tools(shell) -> dict:
 
     return {
         "identity_view": AdminTool(gate, lambda g, b: admin.view(shell, g, b)),
-        "identity_unbind": AdminTool(gate, lambda g, b: admin.unbind(shell, g, b, shell.time.time())),
+        # 第 210 批：通知不在行動鎖裡寄（真的簡訊、Email 是 HTTP 呼叫，卡在鎖裡全服都等）：鎖內只記下，放鎖之後 identity_notify 寄
+        "identity_unbind": AdminTool(gate, lambda g, b: admin.unbind(shell, g, b, shell.time.time(), later=_LATER.setdefault(g, []))),
         "identity_delete": AdminTool(gate, lambda g, b: admin.delete(shell, g, b, shell.time.time())),
     }
+
+
+# 第 210 批（企劃者 2026-11-09「2. ok」）：管理者解綁在行動鎖內記下要寄的通知（account_id、帳號鍵、拿掉的那一種、那一句），
+# 鍵是那一份 Game（server.act 問 waiting、開 start 都拿同一份）；記憶體、不進存檔、不是 Game 的屬性
+_LATER: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_log = logging.getLogger(__name__)
+
+
+def outlock(shell):
+    """放鎖之後的背景格 identity_notify（OUTLOCK_ORDER 外，接在表尾）：waiting 只讀這一份 Game 有沒有記下的；start 拿走、
+    每一則再查一次那一種已經不在帳號上（動作丟例外、交易撤回的那一則不寄），才寄給剩下綁著的 Email、手機。寄失敗只記 log。"""
+    from tianxia.core.features import Outlock, OutlockJob  # noqa: PLC0415
+
+    def waiting(game):
+        return _LATER.get(game) or None
+
+    def start(game, got) -> None:
+        pending = _LATER.pop(game, None) or []
+        for account_id, key, provider, text in pending:
+            try:
+                if any(r["provider"] == provider for r in shell.account_store().logins_of(key)):
+                    continue
+                contacts.send_all(shell, store.IdentityStore(), account_id, text)
+            except Exception:  # noqa: BLE001  寄不出去不影響回給管理者的話
+                _log.exception("identity_notify")
+
+    return Outlock(jobs=(OutlockJob("identity_notify", waiting, start),))
 
 
 def router(shell) -> APIRouter:
@@ -533,7 +568,8 @@ def router(shell) -> APIRouter:
                 "reset": reset_left, "hold": binding.held(side.hold_until(account.id), now),
                 "turnstile": cfg.turnstile_site_key,
                 # 第 208 批：⚙ 的紅點與摺疊列照它即時更新（web/identity.js identitySyncDot；同 notes.main_slot 的判斷）
-                "phone_missing": bool(cfg.phone_gate) and "phone" not in have}
+                "phone_missing": bool(cfg.phone_gate) and "phone" not in have,
+                **notice_info(shell.CONTENT)}  # 第 210 批：抽屜綁定那一張寄碼前的個資告知
 
     @r.get("/api/identity/me")
     def api_me(request: Request):
