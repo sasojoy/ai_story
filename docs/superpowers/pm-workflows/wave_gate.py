@@ -110,6 +110,34 @@ def _alias_package(path: Path) -> str | None:
     return found.pop() if len(found) == 1 else None
 
 
+def _tuning_readers(head_root: Path, package: str) -> tuple[set[str], list[str]]:
+    """第 112 批：head 樹裡 tianxia/**/*.py（不含任何 tests/ 資料夾與這一包自己）與 server.py 讀 `config.<包>` 的人 →
+    （別的包，包外不是包的檔）。只掃字面 `config.<包>`：`getattr(cfg, name)` 這種動態讀掃不到，認了。"""
+    word = re.compile(rf"config\.{re.escape(package)}\b")
+    others: set[str] = set()
+    outside: list[str] = []
+    paths = sorted((head_root / "tianxia").rglob("*.py")) if (head_root / "tianxia").is_dir() else []
+    if (head_root / "server.py").exists():
+        paths.append(head_root / "server.py")
+    for path in paths:
+        rel = path.relative_to(head_root).parts
+        if "tests" in rel[:-1]:
+            continue
+        if rel[:2] == ("tianxia", "features") and len(rel) >= 4 and rel[2] == package:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not word.search(text):
+            continue
+        if rel[:2] == ("tianxia", "features") and len(rel) >= 4:
+            others.add(rel[2])
+        else:
+            outside.append("/".join(rel))
+    return others, outside
+
+
 TRACK_FILE = re.compile(r"scripts/sb/tracks/(?!__init__\.py$)([^/]+)\.py")  # 一軌的檔（第 109 批）；tracks/__init__.py 與 sb 其他檔照舊退回全軌
 
 
@@ -203,6 +231,16 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
             continue
         if parts[:2] == ["tianxia", "core"] and len(parts) == 3 and name.endswith(".md"):
             reasons.append(f"{f}：文件，不比")
+            continue
+        if parts[:3] == ["tianxia", "core", "tuning"] and len(parts) == 4 and name.endswith(".py") and name != "__init__.py" and (features / name[:-3]).is_dir():
+            stem = name[:-3]  # 第 112 批：tuning/<包>.py 照包挑；核心、共用層、舊模組或 server.py 也讀 Config.<包> 就照舊全軌，別包讀就一起挑
+            others, outside = _tuning_readers(head_root, stem)
+            compared.append(f)
+            if outside:
+                full_reasons.append(f"{f}（核心也讀 Config.{stem}：{'、'.join(outside)}）")
+                continue
+            packages.update({stem, *others})
+            reasons.append(f"{f}：tuning，照包 {stem}" + (f"（別包也讀：{'、'.join(sorted(others))}）" if others else ""))
             continue
         if f.startswith("tests/fixtures/content/") or f.startswith(FULL_PREFIXES) or f in FULL_FILES or re.fullmatch(r"requirements[\w-]*\.txt", f):
             full_reasons.append(f)
@@ -422,7 +460,7 @@ def main() -> int:
         if a.changed:
             view = Path(tempfile.mkdtemp(prefix="wave-dry-"))
             try:
-                unpack(repo, head, view / "head", "tianxia", "scripts/test_for.py", "scripts/sb/tracks")  # decide 只讀 head 的這三樣（包在不在、核心與共用層名單、別名檔、軌檔）
+                unpack(repo, head, view / "head", "tianxia", "scripts/test_for.py", "scripts/sb/tracks", "server.py")  # decide 只讀 head 的這幾樣（包在不在、核心與共用層名單、別名檔、軌檔；第 112 批 tuning 的讀者要 server.py）
                 files = git(repo, "-c", "core.quotepath=off", "diff", "--name-only", base, head).splitlines()
                 decision = decide(files, git(repo, "-c", "core.quotepath=off", "diff", "-U0", base, head), view / "head")
             finally:

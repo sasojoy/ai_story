@@ -26,6 +26,37 @@ def test_a_package_file_compares_only_that_package(gate):
     assert (d["mode"], d["packages"], d["profiles"], d["crossover"], d["web"]) == ("packages", ["seal"], ["season21", "test"], False, False)
 
 
+def test_tuning_file_counts_as_its_package(gate):  # 第 112 批：tuning/<包>.py 照包挑軌（jieyi 只有自己讀 Config.jieyi）
+    d = gate.decide(["tianxia/core/tuning/jieyi.py"], _diff("tianxia/core/tuning/jieyi.py", "-    log_cap: int = 30", "+    log_cap: int = 31"), ROOT)
+    assert (d["mode"], d["packages"], d["profiles"], d["crossover"]) == ("packages", ["jieyi"], ["season21", "test"], False)
+    assert any("tuning，照包 jieyi" in r for r in d["reasons"])
+    field = gate.decide(["tianxia/core/tuning/jieyi.py"], _diff("tianxia/core/tuning/jieyi.py", "+    x: int = Field(0, json_schema_extra=QUIET)"), ROOT)
+    assert field["mode"] == "packages" and field["crossover"], "Field( 那一行照舊開半舊半新"
+
+
+def test_tuning_read_by_core_still_falls_back(gate):  # Config.identity 核心 identity_base.py 也讀：照舊全軌
+    d = gate.decide(["tianxia/core/tuning/identity.py"], "", ROOT)
+    assert d["mode"] == "full" and len(d["full_reasons"]) == 1
+    assert "identity_base.py" in d["full_reasons"][0] and "核心也讀 Config.identity" in d["full_reasons"][0]
+
+
+def test_tuning_init_and_unknown_fall_back(gate):
+    assert gate.decide(["tianxia/core/tuning/__init__.py"], "", ROOT)["full_reasons"] == ["tianxia/core/tuning/__init__.py"]
+    assert gate.decide(["tianxia/core/tuning/nope.py"], "", ROOT)["full_reasons"] == ["tianxia/core/tuning/nope.py"], "包不存在退回全軌"
+
+
+def test_tuning_readers_in_other_packages_join(gate, tmp_path):  # 別包讀 Config.<包> 就一起挑；核心或殼讀就退全軌
+    (tmp_path / "tianxia" / "features" / "aa").mkdir(parents=True)
+    (tmp_path / "tianxia" / "features" / "bb").mkdir(parents=True)
+    (tmp_path / "tianxia" / "features" / "aa" / "x.py").write_text("v = ctx.content.config.aa.on\n", encoding="utf-8")
+    (tmp_path / "tianxia" / "features" / "bb" / "y.py").write_text("v = content.config.aa.cap\nw = content.config.aab\n", encoding="utf-8")
+    (tmp_path / "tianxia" / "features" / "bb" / "tests").mkdir()
+    (tmp_path / "tianxia" / "features" / "bb" / "tests" / "t.py").write_text("v = content.config.aa\n", encoding="utf-8")
+    assert gate._tuning_readers(tmp_path, "aa") == ({"bb"}, [])
+    (tmp_path / "server.py").write_text("if CONTENT.config.aa.on: pass\n", encoding="utf-8")
+    assert gate._tuning_readers(tmp_path, "aa") == ({"bb"}, ["server.py"])
+
+
 @pytest.mark.parametrize("path, why", [
     ("tianxia/core/registry.py", "tianxia/core/registry.py"),
     ("tianxia/engine.py", "tianxia/engine.py（舊模組或殼）"),
