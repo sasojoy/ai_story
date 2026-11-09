@@ -13,7 +13,7 @@ from tianxia.features.identity import store as idstore
 NEW_ROUTES = (
     ("GET", "/api/identity/me"), ("POST", "/api/identity/reauth"), ("POST", "/api/identity/unbind"),
     ("POST", "/api/identity/password/set"), ("POST", "/api/identity/password/reset"), ("POST", "/api/identity/code/release"),
-    ("POST", "/api/identity/admin/accounts"),
+    ("POST", "/api/identity/admin/accounts"), ("GET", "/api/identity/session"),  # 第 209 批
 )
 
 

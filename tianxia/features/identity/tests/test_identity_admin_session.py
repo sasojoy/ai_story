@@ -13,6 +13,7 @@ from test_identity_session import (  # noqa: F401
 
 import server
 from tianxia import accounts, database
+from tianxia.accounts import AccountStore
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.state import BotProfile
@@ -28,7 +29,7 @@ def _say(r) -> str:
     return re.sub(r"<[^>]+>", "", r.json()["message"]).strip()
 
 
-def _boss(monkeypatch, password="secret-pw"):
+def _boss(monkeypatch, password="secret-pw-12"):
     """密碼登入的管理者（建好角色才列：玩家不能取管理者的名號）。"""
     c = TestClient(server.app)
     register(c, "boss_01", password, name=BOSS)
@@ -88,7 +89,7 @@ def test_code_login_admin_refused_everywhere(clock, monkeypatch):
     plain = TestClient(server.app)
     register(plain, "ma_01", name="馬伯庸")
     assert got == REFUSED == _answers(plain)  # 跟不是管理者逐字一樣
-    assert accounts.AccountStore(database.open_database()).authenticate("shen_01", "secret-pw") is not None  # 沒被重設
+    assert accounts.AccountStore(database.open_database()).authenticate("shen_01", "secret-pw-12") is not None  # 沒被重設
 
 
 # ── 密碼登入的管理者 ───────────────────────────────
@@ -97,7 +98,7 @@ def test_code_login_admin_refused_everywhere(clock, monkeypatch):
 def test_password_login_admin_flag_true_on_first_screen(clock, monkeypatch):
     c = _boss(monkeypatch)
     c.post("/api/logout")
-    r = c.post("/api/login", json={"login": "boss_01", "password": "secret-pw"})
+    r = c.post("/api/login", json={"login": "boss_01", "password": "secret-pw-12"})
     assert r.json()["main"]["admin"] is True  # 登入回應不經 _game：_start_session 那一下要設好 token
     assert c.get("/api/me").json()["main"]["admin"] is True
     assert c.get("/api/main").json()["admin"] is True
@@ -110,7 +111,7 @@ def test_password_login_7h_old_refused_then_reauth_restores(clock, monkeypatch):
     c = _boss(monkeypatch)
     clock.now += HOURS
     assert _answers(c) == REFUSED
-    r = c.post("/api/identity/reauth", json={"password": "secret-pw"})
+    r = c.post("/api/identity/reauth", json={"password": "secret-pw-12"})
     assert r.status_code == 200, r.text
     assert c.get("/api/main").json()["admin"] is True
     assert c.get("/api/admin").status_code == 200
@@ -135,13 +136,13 @@ def test_admin_off_bytes_unchanged(monkeypatch, key_file, tmp_path):  # noqa: F8
     assert c.post("/api/admin/accounts", json={"q": "boss"}).status_code == 200
     assert c.post("/api/do/pause_clock", json={}).status_code == 200
     assert c.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass"}).json()["message"].startswith("已重設")
-    assert c.post("/api/password", json={"old": "secret-pw", "new": "short-1", "again": "short-1"}).json()["message"] == "密碼已更新。"
+    assert c.post("/api/password", json={"old": "secret-pw-12", "new": "short-1", "again": "short-1"}).json()["message"] == "密碼已更新。"
     r = TestClient(server.app).post("/api/register", json={"login": BOSS_LOGIN, "password": "secret-pw", "again": "secret-pw"})
     assert r.status_code == 200  # 關著：名單上的帳號名 9 字照註冊
     assert not (tmp_path / "g-identity.sqlite").exists()
 
 
-# ── 名單上的帳號 12 字 ──────────────────────────────
+# ── 12 字（第 207 批只對名單上的帳號；第 209 批起 identity 開著全體：名單上與名單外同一句）──
 
 BOSS_LOGIN = "Rayal"
 
@@ -149,22 +150,24 @@ BOSS_LOGIN = "Rayal"
 def test_register_listed_login_needs_12(clock, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS_LOGIN])
     c = TestClient(server.app)
-    r = c.post("/api/register", json={"login": "rayal", "password": "secret-pw", "again": "secret-pw"})
-    assert error(r) == accounts.STAFF_SHORT_PASSWORD
-    assert c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"}).status_code == 200
+    r = c.post("/api/register", json={"login": "rayal", "password": "secret-pw-1", "again": "secret-pw-1"})
+    assert error(r) == accounts.STRICT_SHORT_PASSWORD
+    r = c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-1", "again": "secret-pw-1"})
+    assert error(r) == accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
     r = TestClient(server.app).post("/api/register", json={"login": "rayal", "password": "a-long-password", "again": "a-long-password"})
     assert r.status_code == 200
 
 
 def test_change_password_listed_needs_12(clock, monkeypatch):
     c = _boss(monkeypatch)
-    out = c.post("/api/password", json={"old": "secret-pw", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"]
-    assert out == accounts.STAFF_SHORT_PASSWORD
-    out = c.post("/api/password", json={"old": "secret-pw", "new": "a-long-password", "again": "a-long-password"}).json()["message"]
+    out = c.post("/api/password", json={"old": "secret-pw-12", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"]
+    assert out == accounts.STRICT_SHORT_PASSWORD
+    out = c.post("/api/password", json={"old": "secret-pw-12", "new": "a-long-password", "again": "a-long-password"}).json()["message"]
     assert out == "密碼已更新。"
     p = TestClient(server.app)
     _player(p)
-    assert p.post("/api/password", json={"old": "secret-pw", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"] == "密碼已更新。"
+    assert p.post("/api/password", json={"old": "secret-pw-12", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"] == \
+        accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
 
 
 def test_admin_reset_listed_needs_12(clock, monkeypatch):
@@ -174,24 +177,25 @@ def test_admin_reset_listed_needs_12(clock, monkeypatch):
     c = _boss(monkeypatch)
     monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS, "段紅袖"])
     assert c.post("/api/admin/reset_password", json={"target": "boss_02", "temp": "temp-pass"}).json()["message"] == \
-        accounts.STAFF_SHORT_PASSWORD
+        accounts.STRICT_SHORT_PASSWORD
     assert c.post("/api/admin/reset_password", json={"target": "段紅袖", "temp": "temp-pass-1234"}).json()["message"].startswith("已重設")
-    assert c.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass"}).json()["message"].startswith("已重設")
+    assert c.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass"}).json()["message"] == \
+        accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
 
 
 def test_listed_short_password_still_logs_in(clock, monkeypatch):
-    c = _boss(monkeypatch)  # 名單上、9 字（列進名單之前設的）
-    c.post("/api/logout")
-    r = c.post("/api/login", json={"login": "boss_01", "password": "secret-pw"})
-    assert r.status_code == 200 and r.json()["stage"] == "game"
+    AccountStore(database.open_database()).register("boss_01", "secret-pw")  # 9 字（開 identity、列進名單之前設的）
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["boss_01"])
+    r = TestClient(server.app).post("/api/login", json={"login": "boss_01", "password": "secret-pw"})
+    assert r.status_code == 200
 
 
 def test_bot_names_not_revealed_by_password_rule(clock):
     bot = Game.new(server.CONTENT, "botman")
     bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
     CharacterStore(database.open_database()).save(bot.state)
-    a = TestClient(server.app).post("/api/register", json={"login": "botman", "password": "secret-pw", "again": "secret-pw"})
-    b = TestClient(server.app).post("/api/register", json={"login": "plain_1", "password": "secret-pw", "again": "secret-pw"})
+    a = TestClient(server.app).post("/api/register", json={"login": "botman", "password": "secret-pw-12", "again": "secret-pw-12"})
+    b = TestClient(server.app).post("/api/register", json={"login": "plain_1", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert (a.status_code, a.json()) == (b.status_code, b.json()) == (200, {"stage": "create"})
 
 

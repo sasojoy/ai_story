@@ -103,11 +103,11 @@ def test_admin_accounts_route_gives_keys(clock, monkeypatch):
     boss = _admin(monkeypatch)
     c = TestClient(server.app)
     key = phone_account(c)
-    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret", "again": "new-secret"}).status_code == 200
+    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"}).status_code == 200
     rows = boss.post("/api/identity/admin/accounts", json={"q": "ray"}).json()["rows"]
     assert [(r["key"], r["login"], r["character"]) for r in rows] == [(key, "ray_77", "沈青衫")]
     assert [b["provider"] for b in rows[0]["binds"]] == ["password", "phone"]
     plain = boss.post("/api/admin/accounts", json={"q": "ray"}).json()["rows"]
     assert plain == [{"login": "ray_77", "character": "沈青衫"}]  # 管理者包原本那一條輸出不變
-    assert boss.post("/api/admin/reset_password", json={"target": "ray_77", "temp": "temp-pass-1"}).json()["message"] == \
+    assert boss.post("/api/admin/reset_password", json={"target": "ray_77", "temp": "temp-pass-123"}).json()["message"] == \
         "已重設 ray_77 的密碼。"

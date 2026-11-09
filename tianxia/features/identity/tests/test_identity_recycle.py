@@ -43,7 +43,7 @@ def test_fresh_code_login_updates_verified_at(clock):
 def _stale_with_password(clock):
     c = TestClient(server.app)
     key = phone_account(c)
-    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret", "again": "new-secret"}).status_code == 200
+    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"}).status_code == 200
     c.post("/api/logout")
     clock.now += 181 * DAY
     return key
@@ -88,13 +88,13 @@ def test_stale_only_way_logs_in_with_7_day_hold(clock):
     assert send(c).status_code == 200 and verify(c).json()["stage"] == "game"
     assert idstore.IdentityStore().hold_until(aid) == clock.now + 7 * DAY
     assert c.get("/api/identity/me").json()["hold"] is True
-    r = c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret", "again": "new-secret"})
+    r = c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"})
     assert error(r) == binding.ON_HOLD.format(days=7)
     clock.now += 7 * DAY
     c.post("/api/logout")
     clock.now += 61
     assert send(c).status_code == 200 and verify(c).json()["stage"] == "game"
-    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret", "again": "new-secret"}).status_code == 200
+    assert c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"}).status_code == 200
 
 
 def test_reminder_once_per_180_days(clock):
@@ -106,7 +106,7 @@ def test_reminder_once_per_180_days(clock):
                 if r[0] == binding.NOTE_REMIND.format(kind="手機")]
     assert c.get("/api/main").status_code == 200 and reminders() == []
     clock.now += 181 * DAY
-    c.post("/api/identity/reauth", json={"password": "secret-pw"})
+    c.post("/api/identity/reauth", json={"password": "secret-pw-12"})
     assert c.get("/api/main").status_code == 200 and len(reminders()) == 1
     assert c.get("/api/main").status_code == 200 and len(reminders()) == 1  # 一次就好
     clock.now += 181 * DAY

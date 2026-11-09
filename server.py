@@ -1607,9 +1607,9 @@ def register(login_name: str, password: str, again: str) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
     try:
-        # 第 207 批：identity 開著時名單上的帳號名（identity_base.listed）密碼至少 12 字；關著 staff 一律假
-        staff = identity_base.on(CONTENT) and identity_base.listed(CONTENT, login=login_name)
-        account_store().register(login_name, password, staff=staff)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
+        # 第 209 批（企劃者 2026-11-09「2 選 A」）：identity 開著時全體密碼至少 12 字（不看名單：註冊頁試不出名單）；關著 strict 一律假
+        strict = identity_base.on(CONTENT)
+        account_store().register(login_name, password, strict=strict)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
     return normalize(login_name)
@@ -1645,11 +1645,8 @@ def change_password(account_key: str, old: str, new: str, again: str, keep: str 
         return PASSWORDS_DIFFER
     try:
         store = account_store()
-        staff = False  # 第 207 批：identity 開著時名單上的帳號（名號、帳號名、客服名單）新密碼至少 12 字；關著一律假、不多查
-        if identity_base.on(CONTENT):
-            account = store.get(account_key)
-            staff = account is not None and identity_base.listed(CONTENT, login=account.login, character=account.character, account_id=account.id)
-        store.change_password(account_key, old, new, keep, staff=staff)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        strict = identity_base.on(CONTENT)  # 第 209 批：identity 開著時全體新密碼至少 12 字（不看名單）；關著一律假
+        store.change_password(account_key, old, new, keep, strict=strict)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -1680,14 +1677,25 @@ async def _server_timing(request: Request, call_next):
 
 # 帳號與客服第 213 批（設計第三節「CSP 標頭另開小批」）：只准從自己這裡與 Turnstile（challenges.cloudflare.com）載程式，
 # 不准 inline 的程式（<script> 不帶 src、on*= 屬性、javascript:）、不准 <object>、不准 <base>。不是開關：整站都有
-CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+# 第 209 批（設計第七節「只加一處 middleware」）：frame-ancestors 'self'——別的網站不准把我們的頁（含公開頁 /zhuan、/zhanji）嵌進 iframe；
+# 只准同源：遊戲裡「戰記 ›」用 iframe 嵌自家的 /zhanji/<code>?in=1（web/tale.js），'none' 連它也擋（第 P 波閘門抓到）
+# （我們自己嵌 Turnstile 的 iframe 不受這條影響）。style-src、img-src、default-src 只掃不加（數字在第 209 批的回報）
+CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
+# 同一處多三個標頭：HSTS 一年含子網域（不加 preload）、不把完整網址帶給別的網站、不准瀏覽器猜檔案類型
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 @app.middleware("http")
 async def _content_security_policy(request: Request, call_next):
-    """每個回應帶 CSP（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
+    """每個回應帶 CSP 與 SECURITY_HEADERS（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = CSP
+    for name, value in SECURITY_HEADERS.items():
+        response.headers[name] = value
     return response
 
 

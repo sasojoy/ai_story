@@ -55,7 +55,7 @@ def clock(on, monkeypatch):
     return tick
 
 
-def register(c, login="shen_01", password="secret-pw", name=None):
+def register(c, login="shen_01", password="secret-pw-12", name=None):
     r = c.post("/api/register", json={"login": login, "password": password, "again": password})
     assert r.status_code == 200, r.text
     if name is not None:
@@ -187,7 +187,7 @@ def test_password_login_records_session_auth(clock):
     assert identity_base.session_auth(token_of(c)) == {"method": "password", "at": clock.now, "verified": None, "verified_by": None}
     clock.now += 5
     c.post("/api/logout")
-    assert c.post("/api/login", json={"login": "SHEN_01", "password": "secret-pw"}).status_code == 200
+    assert c.post("/api/login", json={"login": "SHEN_01", "password": "secret-pw-12"}).status_code == 200
     assert identity_base.session_auth(token_of(c))["at"] == clock.now and server.SESSIONS.get(token_of(c)) == "shen_01"
 
 
@@ -231,7 +231,7 @@ def test_reauth_with_password_extends_recent(clock):
     register(c, name="沈青衫")
     clock.now += server.CONTENT.config.identity.recent_seconds + 1
     assert error(send(c, purpose="bind")) == binding.NEED_RECENT
-    r = c.post("/api/identity/reauth", json={"password": "secret-pw"})
+    r = c.post("/api/identity/reauth", json={"password": "secret-pw-12"})
     assert r.status_code == 200 and "驗證好了" in r.json()["message"]
     auth = identity_base.session_auth(token_of(c))
     assert auth["method"] == "password" and auth["verified"] == clock.now and auth["verified_by"] == "password"
@@ -243,7 +243,7 @@ def test_reauth_wrong_password_counts_toward_lockout(clock):
     register(c, name="沈青衫")
     for _ in range(accounts.MAX_FAILURES):
         assert error(c.post("/api/identity/reauth", json={"password": "wrong-pw"})) == accounts.LOGIN_FAILED
-    assert error(c.post("/api/identity/reauth", json={"password": "secret-pw"})) == accounts.TOO_MANY_TRIES  # 同一套擋猜
+    assert error(c.post("/api/identity/reauth", json={"password": "secret-pw-12"})) == accounts.TOO_MANY_TRIES  # 同一套擋猜
     assert identity_base.session_auth(token_of(c))["verified"] is None
 
 

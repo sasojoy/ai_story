@@ -156,7 +156,7 @@ def admin_ok(shell, request, game) -> bool:
 
 def reset_password(shell, game, target: str, temp: str, request=None) -> str:
     """管理者幫人重設密碼（先照帳號找，再照名號找）；臨時密碼由管理者私下告訴對方。
-    第 207 批：session 不夠跟不是管理者同一句；identity 開著時目標是名單上的帳號（identity_base.listed），臨時密碼也要 12 字。"""
+    第 207 批：session 不夠跟不是管理者同一句；identity 開著時臨時密碼要 12 字（第 209 批起全體，不看名單）。"""
     if not admin_ok(shell, request, game):
         return "（只有管理者能重設密碼。）"
     store = shell.account_store()
@@ -165,18 +165,15 @@ def reset_password(shell, game, target: str, temp: str, request=None) -> str:
             key = store.find(target)
             if key is None:
                 return "找不到這個帳號或名號。"
-            staff = False
-            if identity_base.on(shell.CONTENT):
-                account = store.get(key)
-                staff = account is not None and identity_base.listed(
-                    shell.CONTENT, login=account.login, character=account.character, account_id=account.id)
-            store.set_password(key, temp, staff=staff)
+            strict = identity_base.on(shell.CONTENT)  # 第 209 批：identity 開著全體 12 字（不看名單）；關著一律假
+            store.set_password(key, temp, strict=strict)
     except shell.AccountError as exc:
         return str(exc)
     account = store.get(key)
     if identity_base.on(shell.CONTENT):  # 帳號與客服第 208 批（設計 6.4）：重設之後扣押 reset_hold_hours、寫一則「帳號」紀錄；關著不碰旁檔
         hours = shell.CONTENT.config.identity.reset_hold_hours
         identity_base.record_admin_reset(account.id, shell.time.time(), hours, identity_base.NOTE_ADMIN_RESET.format(hours=hours))
+        identity_base.notify(account.id, identity_base.NOTICE_ADMIN_RESET)  # 第 209 批（PM 11/09）：寄給這個帳號綁著的 Email、手機
     return f"已重設 {account.login} 的密碼。"
 
 

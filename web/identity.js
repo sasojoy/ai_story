@@ -31,14 +31,18 @@
   const IDENTITY_STANDALONE = "從主畫面開的遊戲用 LINE、Google 登入時可能會跳到瀏覽器；回不來的話，直接在瀏覽器登入。"; // 待 joy 潤
   const IDENTITY_HAVE = "已經有帳號？用帳號密碼登入，再把這個綁上去"; // 待 joy 潤
   const IDENTITY_BACK = "用帳號密碼登入"; // 待 joy 潤
+  // 第 209 批：identity 開著時全體密碼至少 n 字（n 是 /api/identity/gate 的 pw_min）：註冊格多一行、placeholder 換字
+  const IDP_PW_MIN = (n) => `密碼至少 ${n} 字。`; // 待 joy 潤
+  const IDP_PW_PLACEHOLDER = (n) => `至少 ${n} 字`; // 待 joy 潤
   // 第 204 批：綁定與重驗從第三方回來的四種（登入了才會碰到，toast 一句）
   const IDENTITY_BACK_TEXT = {
     bound: "綁好了。", // 待 joy 潤
     taken: "這個已綁定其他帳號。", // 待 joy 潤
     wait: "這個剛從別的帳號解綁，30 天內不能再拿來綁定或開新帳號。", // 待 joy 潤
     reauth: "驗證好了。", // 待 joy 潤
+    held: "管理者剛幫這個帳號重設了密碼，72 小時內不能綁定新的登入方式。", // 待 joy 潤（第 209 批：同 binding.RESET_NO_BIND；72 = Config.identity.reset_hold_hours，同 wait 寫死 30）
   };
-  const IDENTITY_AUTH_CODES = ["ok", "new", "fail", "cancel", "bound", "taken", "wait", "reauth"];
+  const IDENTITY_AUTH_CODES = ["ok", "new", "fail", "cancel", "bound", "taken", "wait", "reauth", "held"];
   const IDENTITY_AUTH = identityReadAuth();
   // 驗證碼那一頁（第 204 批；每句待 joy 潤）
   const IDP_CODE_TITLE = { phone: "用手機驗證碼登入", email: "用 Email 驗證碼登入" }; // 待 joy 潤
@@ -57,6 +61,7 @@
   const IDP_RESEND_SECONDS = 60; // = Config.identity.resend_seconds
   // 設定抽屜「帳號綁定」（B 版；每句待 joy 潤）
   const IDP_FOLD_TITLE = "帳號綁定"; // 待 joy 潤
+  const IDP_RELOGIN = "管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。"; // 待 joy 潤（第 209 批）
   const IDP_KIND_NAMES = { password: "密碼", line: "LINE", google: "Google", email: "Email", phone: "手機" }; // 待 joy 潤
   const IDP_FOLD_LINE = (names) => `已綁：${names}`; // 待 joy 潤
   const IDP_FOLD_NO_PHONE = "・還沒綁手機"; // 待 joy 潤
@@ -154,6 +159,14 @@
     return mode === "quick" ? out.replace(/<form id="gate-form"[\s\S]*?<\/form>/, buttons) : out;
   }
 
+  // 第 209 批：註冊格的密碼提示（gate-form 裡的 placeholder 換成 n 字、表單訊息那一行前面插一行）；n 沒有（關著）或已經插過原樣回
+  function identityPwHint(html, n) {
+    if (!n || html.includes("idp-pw-min")) return html;
+    return html.replace(/<form id="gate-form"[\s\S]*?<\/form>/, (form) => form
+      .replace('placeholder="至少 6 字"', `placeholder="${esc(IDP_PW_PLACEHOLDER(n))}"`)
+      .replace('<p class="form-msg"', `<p class="idp-fine idp-pw-min">${esc(IDP_PW_MIN(n))}</p><p class="form-msg"`));
+  }
+
   // 驗證碼表單（第 204 批）：st = {way, purpose, sent, to, until, notice, stale}；now 是毫秒。寄碼前：號碼、Turnstile（有網站金鑰才有那一格）、寄碼；
   // 寄出後：輸碼、錯 5 次作廢的提示、重寄倒數；門號過期（stale）多一顆「這不是我的帳號」。登入、綁定、重驗三種用途共用，只換標題
   function identityCodeHtml(st, siteKey, now) {
@@ -218,11 +231,17 @@
       return;
     }
     const info = S.identityGate;
-    if (!info || !(info.ways || []).length) return;
+    if (!info) return;
+    if (!(info.ways || []).length) { // 沒有別的路：殼的兩格照舊，註冊格照樣補 12 字那一行（第 209 批）
+      const hinted = S.gateMode === "register" ? identityPwHint(gate.innerHTML, info.pw_min) : gate.innerHTML;
+      if (hinted !== gate.innerHTML) gate.innerHTML = hinted;
+      return;
+    }
     const mode = IDENTITY_MODES.includes(S.gateMode) ? S.gateMode : "login";
     identityRemember(mode);
     const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now()) : "";
-    const html = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
+    const drawn = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
+    const html = mode === "register" ? identityPwHint(drawn, info.pw_min) : drawn;
     if (html !== gate.innerHTML) gate.innerHTML = html;
     if (code) identityTurnstile(info.turnstile);
   }
@@ -453,6 +472,20 @@
     S.idp = S.idp || {};
     fold.insertAdjacentHTML("afterend", identityFoldHtml(info, S.idp, Date.now()));
     identityLoadMe();
+    if (!S.main.admin) identityRelogin(); // 已經是管理者（夠格）不問
+  }
+
+  // 第 209 批「請用密碼重新登入」：名單上、這次登入不夠格的本人，「帳號綁定」上方多一行（/api/identity/session 的 relogin）；假、404 不畫
+  function identityReloginHtml() {
+    return `<p class="form-msg idp-relogin">${esc(IDP_RELOGIN)}</p>`;
+  }
+  async function identityRelogin() {
+    let got = null;
+    try { got = await api("/api/identity/session"); } catch (e) { return; }
+    if (!got || got.relogin !== true || typeof document === "undefined") return;
+    const el = document.querySelector(".idp-fold");
+    if (!el || document.querySelector(".idp-relogin")) return;
+    el.insertAdjacentHTML("beforebegin", identityReloginHtml());
   }
 
   function identityWatch() {

@@ -138,15 +138,16 @@ def _identity_on(monkeypatch, tmp_path, content, admins):
     monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
 
 
-def test_set_password_script_listed_needs_12(tmp_path, capsys, monkeypatch, content):
+def test_set_password_script_needs_12_when_on(tmp_path, capsys, monkeypatch, content):
     from tianxia import accounts
 
     _identity_on(monkeypatch, tmp_path, content, ["Rayal"])
     monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "short-pw")  # 8 字
     assert _run(tmp_path, "Rayal") == 1
-    assert capsys.readouterr().out.strip() == accounts.STAFF_SHORT_PASSWORD
+    assert capsys.readouterr().out.strip() == accounts.STRICT_SHORT_PASSWORD
     assert _store(tmp_path).get("rayal") is None and not (tmp_path / "local").exists()
-    assert _run(tmp_path, "someone") == 0  # 不在名單上：8 字照設
+    assert _run(tmp_path, "someone") == 1  # 第 209 批：名單外也要 12 字、同一句
+    assert capsys.readouterr().out.strip() == accounts.STRICT_SHORT_PASSWORD
     monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "a-long-password")
     assert _run(tmp_path, "Rayal") == 0
 

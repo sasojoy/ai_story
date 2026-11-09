@@ -103,6 +103,9 @@ def order(ctx: Game, name: str, prompt: str, ref: str) -> list[str]:
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
+    held = identity_base.hold_reason(ctx, "mall_buy")  # 扣押期（第 209 批）：自建形象也在花元寶；鍵照商城買
+    if held:
+        return ctx._log([held])
     pid, line = orders.place(ctx.content, wallet, ctx._mall_owner(), name, prompt, ref,
                              now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number())
     if pid is None:
@@ -273,6 +276,9 @@ def order_move(ctx: Game, prompt: str, ref: str, draft: dict | None = None, basi
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
+    held = identity_base.hold_reason(ctx, "mall_buy")  # 扣押期（第 209 批）：招式下單也在花元寶；鍵照商城買
+    if held:
+        return ctx._log([held])
     art, name = current_art(ctx)
     pid, line = moves.place(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), prompt, ref,
                             now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(),

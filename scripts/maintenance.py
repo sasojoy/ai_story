@@ -8,6 +8,7 @@ Cloudflare 就原樣送出去**（它只有在連不到來源時才塞自己的�
 刻意極小：只用標準庫、一個行程、不碰資料庫也不碰任何遊戲狀態（睡的意義就是把機器讓出來）。
 狀態碼是 **503 ＋ Retry-After**（不是 200）：這才是「暫時不能服務」的意思，瀏覽器與爬蟲都不會把它當成正式內容。
 頁面自己每 `RETRY` 秒探一次 `/api/main`，伺服器回來了就自動跳回遊戲，玩家不必自己重整。
+探測那一段是這支自己回的外部檔 `PROBE_PATH`（帳號與客服第 209 批：頁面沒有 inline 的 script；那一條回 200，503 的 script 瀏覽器不執行）。
 
 用法：
     .venv/Scripts/python.exe -u scripts/maintenance.py                 # 聽 127.0.0.1:7861
@@ -62,37 +63,48 @@ PAGE = """<!doctype html>
   {note}
   <p class="dim">（每 {retry} 秒自己探一次）</p>
 </div>
-<script>
-  setInterval(function () {{
-    fetch("/api/main", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: "{{}}" }})
-      .then(function (r) {{ if (r.status !== 503) location.reload(); }})
-      .catch(function () {{}});
-  }}, {retry} * 1000);
-</script>
+<script src="{probe}"></script>
 </body></html>
+"""
+# 第 209 批：探測那一段搬成這支自己回的外部檔（伺服器的 CSP 不准 inline 的 script；維修頁照同一個規矩）。
+# 這一條回 200：回 503 的 classic script 瀏覽器照規格不執行
+PROBE_PATH = "/_maintenance/probe.js"
+PROBE = """setInterval(function () {{
+  fetch("/api/main", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: "{{}}" }})
+    .then(function (r) {{ if (r.status !== 503) location.reload(); }})
+    .catch(function () {{}});
+}}, {retry} * 1000);
 """
 
 
 def page(note: str = "") -> bytes:
     body = "\n  ".join(f"<p>{html.escape(line)}</p>" for line in LINES)
     extra = f'<p class="note">{html.escape(note)}</p>' if note else ""
-    return PAGE.format(title=html.escape(TITLE), head=html.escape(HEAD), body=body, note=extra, retry=RETRY).encode("utf-8")
+    return PAGE.format(title=html.escape(TITLE), head=html.escape(HEAD), body=body, note=extra, retry=RETRY,
+                       probe=PROBE_PATH).encode("utf-8")
 
 
 def handler(note: str) -> type[BaseHTTPRequestHandler]:
     body = page(note)
     api = json.dumps({"detail": "維修中", "maintenance": True}, ensure_ascii=False).encode("utf-8")
+    probe = PROBE.format(retry=RETRY).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "tianxia-maintenance"
 
         def _send(self) -> None:
-            """每一條路徑都回 503：/api/ 給 JSON（網頁的輪詢在解析 JSON），其餘給那一頁。"""
-            data, kind = (api, "application/json; charset=utf-8") if self.path.startswith("/api/") else (body, "text/html; charset=utf-8")
-            self.send_response(503)
+            """探測檔（PROBE_PATH）回 200；其他每一條路徑都回 503：/api/ 給 JSON（網頁的輪詢在解析 JSON），其餘給那一頁。"""
+            if self.path == PROBE_PATH:
+                status, data, kind = 200, probe, "text/javascript; charset=utf-8"
+            elif self.path.startswith("/api/"):
+                status, data, kind = 503, api, "application/json; charset=utf-8"
+            else:
+                status, data, kind = 503, body, "text/html; charset=utf-8"
+            self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Retry-After", str(RETRY))
+            if status == 503:
+                self.send_header("Retry-After", str(RETRY))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             if self.command != "HEAD":

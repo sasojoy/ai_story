@@ -29,7 +29,7 @@ def support_on(monkeypatch):
 
 def player(login="shen_01", name="沈青衫") -> TestClient:
     c = TestClient(server.app, raise_server_exceptions=False)
-    _player(c, login=login, name=name)
+    _player(c, login=login, name=name, password="secret-pw-12")  # identity 開著全體 12 字（第 209 批），這裡測的不是密碼
     return c
 
 

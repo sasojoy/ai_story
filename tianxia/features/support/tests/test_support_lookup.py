@@ -100,7 +100,7 @@ def test_lookup_by_full_login_brings_card(monkeypatch):
 def test_card_without_character_has_empty_ledger(monkeypatch):
     s, tid = _desk(monkeypatch)
     c = TestClient(server.app, raise_server_exceptions=False)
-    c.post("/api/register", json={"login": "wu_09", "password": "secret-pw", "again": "secret-pw"})
+    c.post("/api/register", json={"login": "wu_09", "password": "secret-pw-12", "again": "secret-pw-12"})
     card = _look(s, tid, "login", "wu_09").json()["card"]
     assert card["character"] is None and card["ledger"] == [] and card["balance"] == 0
 
