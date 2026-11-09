@@ -1110,7 +1110,7 @@ BUS_ORDER: dict[str, tuple[str, ...]] = {
     "outing": ("bounties", "seal"),
     "explore": ("bounties",),
     "arrive": ("convoy", "bounties"),
-    "raid_win": ("bounties",),
+    "raid_win": ("bounties", "zongmen"),  # zongmen（門派第三批：截殺打贏親傳撿殘頁；Joy 2026-11-08「不錯，按照設計稿動工」，設計稿 v6 卷二）
     "aid": ("bounties",),  # bounties（全部拆包第 45 批：人物託付開成事件，PM 點頭，只加這一列）
     "battle_end": ("seal",),
 }

@@ -16,3 +16,8 @@ class ZongmenTuning(BaseModel):
     trial_xinde: int = 10  # 試練一次花的心得
     learn_xinde: int = 40  # 學一式花的心得
     pending_per_giver: int = 1  # 一個人同時最多有幾式在等試練
+    # 第三批：獻武學、重學、殘頁
+    relearn_share: float = 0.5  # 學過的人（上一季學過、換季歸零了）再學只花這麼多成的心得
+    inner_learned: int = 2  # 學過本門武譜幾式算親傳（有一式入譜刻名的也算）
+    page_chance: float = 0.3  # 截殺打贏別門的親傳，撿到一張殘頁的機會
+    page_xinde: int = 60  # 照殘頁偷學一式花的心得（學到的那份是下品）

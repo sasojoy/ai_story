@@ -2,6 +2,7 @@
 README.md 寫這一包做什麼、導覽與設計稿。第一批：門派不綁勢力（Content.sect_faction）、新的五門（Sect.switch 是 zongmen）在山門拜入與叛出、
 門派身分換季照帶（on_season_start）。第二批：師門武譜（book.py 純規則；帳在全服的 SharedWorldState.sect_books，不分季）——
 山門前試練（選項）、俠客頁門下那一段獻式與學式（routes.py 的 /api/do/zongmen_offer、zongmen_learn）。
+第三批：武譜也收自創、合成、練成絕學的武學；學過的人下一季重學打折；截殺打贏別門的親傳撿殘頁（事件 raid_win 的 zongmen 格），照殘頁偷學（zongmen_page）。
 
 掛鉤照 tianxia/core/features.py 的表；用得到哪一個才寫哪一個。功能包只 import 核心（tianxia/core/ 與手冊 3.1 的核心模組）、共用規則層（registry.SHARED）與自己這一包。
 玩家動作（main_actions、menxia_actions）、管理者工具（admin_tools）、API（routes）、鎖外三段式（outlock）寫在包的 routes.py，掛鉤裡才 from . import routes（手冊第十五節 G10）；路由第一行要有開關的 gate，關著丟 404（例 features/heroines/routes.py，test_shell_stays_thin 逐包打）。
@@ -9,7 +10,7 @@ README.md 寫這一包做什麼、導覽與設計稿。第一批：門派不綁�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import BusHook, Feature, Outcome
 
 
 class ZongmenFeature(Feature):
@@ -50,6 +51,12 @@ class ZongmenFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼建動作表時才 import
 
         return routes.main_actions(shell)
+
+    def bus(self) -> tuple[BusHook, ...]:
+        """截殺、設伏打贏（raid_win）：打贏別門的親傳，照機率撿殘頁（第三批）。在叫的那一下才照模組屬性找 actions.raid_win。"""
+        from . import actions  # noqa: PLC0415
+
+        return (BusHook("raid_win", "zongmen", lambda ctx, target: actions.raid_win(ctx, target)),)
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415

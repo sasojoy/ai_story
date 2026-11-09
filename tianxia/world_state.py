@@ -308,8 +308,12 @@ class BookEntry(BaseModel):
     status：pending 等同門試練、in 入了譜（number 是第幾式）、dropped 期限到了沒過。時刻是現實秒（Game.now）；名號比對用 name_key。"""
 
     id: str
-    insight: Insight  # 抄下的那一份（id 不用：學的人照自己的流水號另起一份私有的）
-    fx: InsightFx
+    # 獻的是意境：insight＋fx 抄下的那一份（id 不用：學的人照自己的流水號另起一份私有的）；
+    # 獻的是武學（自創、合成、練成絕學的，第三批）：art 整份抄下、art_quality 是獻的人那一份的品質（下一季全服登記沒了，學的人照它再登記一份）
+    insight: Insight | None = None
+    fx: InsightFx | None = None
+    art: MartialArt | None = None
+    art_quality: str | None = None
     giver: str
     season: int
     offered_at: float
@@ -319,6 +323,8 @@ class BookEntry(BaseModel):
     status: Literal["pending", "in", "dropped"] = "pending"
     number: int = 0
     in_at: float | None = None
+    learners: list[str] = Field(default_factory=list)  # 學過的人（name_key，跨季）：下一季重學只要一半心得（第三批）
+    pages: list[str] = Field(default_factory=list)  # 手上有這一式殘頁的外人（name_key；截殺打贏親傳撿到，第三批）
 
 
 class SectBook(BaseModel):

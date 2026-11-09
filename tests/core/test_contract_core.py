@@ -927,7 +927,7 @@ def test_the_bus_order_is_the_table_in_the_plan():
         "outing": ("bounties", "seal"),
         "explore": ("bounties",),
         "arrive": ("convoy", "bounties"),
-        "raid_win": ("bounties",),
+        "raid_win": ("bounties", "zongmen"),
         "aid": ("bounties",),  # 全部拆包第 45 批：人物託付開成事件（PM 點頭，只加這一列）
         "battle_end": ("seal",),
     }
@@ -1041,8 +1041,8 @@ def test_the_core_publish_points_ask_the_bus(game, monkeypatch):
         game._squad_encounter("thug")
     assert calls == [("win", "bounties", (game, "lake", "thug"))]
     calls.clear()
-    assert game._raid_bounty("某人") == ["raid_win/bounties"]
-    assert calls == [("raid_win", "bounties", (game, "某人"))]
+    assert game._raid_bounty("某人") == ["raid_win/bounties", "raid_win/zongmen"]
+    assert calls == [("raid_win", "bounties", (game, "某人")), ("raid_win", "zongmen", (game, "某人"))]
     calls.clear()
     assert explore_base.explore(game)[-1] == "explore/bounties"
     assert calls == [("explore", "bounties", (game, "lake"))]
@@ -1095,7 +1095,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
     assert {f.name: [(h.event, h.slot) for h in f.bus()] for f in fs if f.bus()} == {
         "military": [("arrive", "convoy")], "seal": [("outing", "seal"), ("battle_end", "seal")],
         # 全部拆包第 45 批：懸賞榜包登記六格（原本 engine._BUS_CORE 那五格，加 aid），_BUS_CORE 每一列都空了
-        "bounties": [("win", "bounties"), ("outing", "bounties"), ("explore", "bounties"), ("arrive", "bounties"), ("raid_win", "bounties"), ("aid", "bounties")]}
+        "bounties": [("win", "bounties"), ("outing", "bounties"), ("explore", "bounties"), ("arrive", "bounties"), ("raid_win", "bounties"), ("aid", "bounties")],
+        # 門派第三批：截殺打贏親傳撿殘頁（Joy 2026-11-08「不錯，按照設計稿動工」）
+        "zongmen": [("raid_win", "zongmen")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):

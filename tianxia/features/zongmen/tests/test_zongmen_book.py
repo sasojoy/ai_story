@@ -63,7 +63,7 @@ def test_offer_try_and_learn():
     a, b, d = _member(c, "甲"), _member(c, "乙"), _member(c, "丙")
     a = _again(c, a, NOW + 1)
     own = _own(a)
-    assert (own.id, "寒潭映月") in actions.offerable(a)
+    assert (own.id, "意境・寒潭映月") in actions.offerable(a)
     assert actions.offer(a, own.id) == [B.OFFERED.format(name="寒潭映月")]
     _done(a)
     entry = _book(a).entries[0]
