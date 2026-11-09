@@ -2970,6 +2970,28 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class FightPractice(_Strict):
+    """武學打了才升（Joy 2026-11-09「甲方案」「369成不卡手動用心得解 可以一路到10成」「悟性不加熟練」；設計稿 https://claude.ai/artifact/8H3CEY6TQCYy7jLQ4sW5t6）：
+    身上的內功、武學每打一場（core/combat.file_battle 歸檔的那一場）各長熟練，第 N 成升 N+1 成要 N × per_level；
+    也可以照舊在修練頁按練成，花「這一成還差的熟練 × xinde_per_point」點心得直接升（雲篆照打折），一路到第十成都行，沒有瓶頸。
+    一場給 win／draw／lose，再乘對手強弱：難度比（對手難度 ÷ 我方威力）低於 weak_ratio 不給、到 hard_ratio 以上 ×hard_scale；
+    kind 在 double_kinds 的（頭目、擂台、截殺、切磋……）再 ×double_scale。每門每個遊戲日最多長 daily_cap。
+    開關照開季蓋章（WorldState.fight_practice），正在跑的季一個字不變。數字全是【草】。"""
+
+    enabled: bool = False
+    per_level: int = Field(default=10, ge=1)
+    win: int = Field(default=5, ge=0)
+    draw: int = Field(default=3, ge=0)
+    lose: int = Field(default=2, ge=0)
+    weak_ratio: float = Field(default=0.15, ge=0)
+    hard_ratio: float = Field(default=0.3, ge=0)
+    hard_scale: float = Field(default=1.5, ge=0)
+    double_kinds: list[str] = Field(default_factory=lambda: ["duel", "arena", "spar", "raid", "seal", "ambush", "assassin", "siege"])
+    double_scale: float = Field(default=2.0, ge=0)
+    daily_cap: int = Field(default=40, ge=0)
+    xinde_per_point: float = Field(default=1.0, ge=0)
+
+
 class ArtsTuning(_Strict):
     """武學重構（Joy 2026-10-20；tianxia/arts.py）：品級只管威力上限（martial_arts.QUALITY_TOP_POWER）與意境槽數（slots）；
     意境就是技能，裝進槽生效。戰力＝威力 ×（1 ＋ Σ 權重）：一般功效每級 general_weight、高階 high_weight、特別功效 special_weight、
@@ -3007,6 +3029,7 @@ class ArtsTuning(_Strict):
     create_slot_odds: dict[str, float] = Field(default_factory=lambda: {"單": 55, "雙": 35, "全": 10})
     create_neutral_any_scale: float = Field(default=2.0, ge=1)
     create_redo: int = Field(default=1, ge=0)
+    fight_practice: FightPractice = Field(default_factory=FightPractice)  # 武學打了才升（Joy 2026-11-09）
     create_slots: int = Field(default=3, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；第一格也照 create_slot_odds 擲，單色雙色都以權重最高那一路打頭）
     # 以意成招（tianxia/moves.py）：意分 ≤ move_fire_cuts[0] 生、≤ [1] 熟、其餘透；生熟透照 move_fire 打折表上會長的數；
     # 稀有路數擲中的機會 move_rare_odds；一到 move_raw_levels 成招還生，再乘 move_raw_scale

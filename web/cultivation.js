@@ -549,6 +549,9 @@
         const label = slot.maxed ? "已到第十成" : `練成第${level + 1}成（心得 ${slot.price}）`;
         train = `<button class="train-go${off ? "" : " hot"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" aria-label="${esc(slot.blocked || label)}" title="${esc(slot.blocked || label)}" ${off ? "disabled" : ""}><b>${slot.maxed ? "滿" : "練"}</b><small>${slot.maxed ? "十成" : `心得 ${slot.price}`}</small></button>`;
       }
+      // 武學打了才升的季（slot.progress，別的季沒有）：這一成的熟練與今天還能長多少；打仗長、也能按「練」用心得補滿這一成  // 待 joy 潤
+      const pg = slot && slot.progress;
+      const prog = !pg ? "" : `<p class="train-why train-prog">${slot.maxed ? "已到第十成" : `熟練 ${pg.exp}/${pg.need}・今天打仗還能長 ${pg.today_left}`}</p>`;
       const next = slot && !slot.blocked && !slot.maxed ? level : -1; // 練下去會亮的那一格
       const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
       const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
@@ -567,6 +570,7 @@
           ${train}
         </div>
         ${why ? `<p class="train-why">${esc(why)}</p>` : ""}
+        ${prog}
         <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
         ${slotsHtml(a, x)}
         ${a.tactic && !info ? `<p class="art-tactic">${tacticHtml(a.tactic)}</p>` : ""}
