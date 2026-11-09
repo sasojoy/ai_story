@@ -1675,14 +1675,24 @@ async def _server_timing(request: Request, call_next):
 
 # 帳號與客服第 213 批（設計第三節「CSP 標頭另開小批」）：只准從自己這裡與 Turnstile（challenges.cloudflare.com）載程式，
 # 不准 inline 的程式（<script> 不帶 src、on*= 屬性、javascript:）、不准 <object>、不准 <base>。不是開關：整站都有
-CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'"
+# 第 209 批（設計第七節「只加一處 middleware」）：frame-ancestors 'none'——誰都不准把我們的頁（含公開頁 /zhuan、/zhanji）嵌進 iframe
+# （我們自己嵌 Turnstile 的 iframe 不受這條影響）。style-src、img-src、default-src 只掃不加（數字在第 209 批的回報）
+CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+# 同一處多三個標頭：HSTS 一年含子網域（不加 preload）、不把完整網址帶給別的網站、不准瀏覽器猜檔案類型
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 @app.middleware("http")
 async def _content_security_policy(request: Request, call_next):
-    """每個回應帶 CSP（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
+    """每個回應帶 CSP 與 SECURITY_HEADERS（頁、API、靜態檔、404、400 都是；500 由最外層回、不經這裡）。"""
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = CSP
+    for name, value in SECURITY_HEADERS.items():
+        response.headers[name] = value
     return response
 
 
