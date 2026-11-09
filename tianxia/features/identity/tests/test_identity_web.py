@@ -126,6 +126,20 @@ async function main() {
   let caught = "";
   try { await failing.FORMS["idp-create-form"](submitForm, { name: "周泰安" }); } catch (e) { caught = e.message; }
   out.createFails = { caught, pending: failing.S.identityPending };
+  // 第 209 批：identity 開著（gate 帶 pw_min）時註冊格多一行「密碼至少 12 字」、placeholder 換字；登入格、gate 沒帶 pw_min 不動
+  const pwInfo = Object.assign({}, info, { pw_min: 12 });
+  for (const [key, mode, inf] of [["pwReg", "register", pwInfo], ["pwLogin", "login", pwInfo],
+    ["pwEmpty", "register", { ways: [], turnstile: "", pw_min: 12 }], ["pwNone", "register", info]]) {
+    const p = page({ info: inf, stored: { tx_gate_mode: mode }, S: { identity: true, gateMode: mode } });
+    p.renderGate();
+    await tick();
+    p.renderGate();
+    out[key] = p.html();
+  }
+  // 第 209 批：管理者重設密碼之後的扣押期，第三方綁定回 ?auth=held（認得、拿掉）
+  const held = page({ info, S: { identity: true }, href: "https://example.com/?auth=held&via=line" });
+  await tick();
+  out.held = { replaced: held.replaced, toasts: held.toasts };
   return out;
 }
 finish(main());
@@ -486,3 +500,17 @@ def test_admin_alert_line_only_with_words():
     out = _run_208()
     assert out["alertOn"] == '<p class="muted idp-alert">驗證碼全服上限到了：甲</p>'
     assert out["alertOff"] == ""
+
+
+# ── 第 209 批：註冊格的 12 字提示、?auth=held ──
+
+
+def test_register_tab_shows_pw_min_only_when_on():
+    out = _run()
+    reg = out["pwReg"]
+    assert '<p class="idp-fine idp-pw-min">密碼至少 12 字。</p><p class="form-msg"' in reg
+    assert 'placeholder="至少 12 字"' in reg and 'placeholder="至少 6 字"' not in reg
+    assert reg.count("idp-pw-min") == 1  # 再畫一次不重複
+    assert "idp-pw-min" not in out["pwLogin"] and 'id="gate-form"' in out["pwLogin"]
+    assert "idp-pw-min" in out["pwEmpty"] and 'placeholder="至少 12 字"' in out["pwEmpty"]  # 沒有別的路也畫（12 字照樣要求）
+    assert "idp-pw-min" not in out["pwNone"] and 'placeholder="至少 6 字"' in out["pwNone"]  # gate 沒帶 pw_min：一個字不動

@@ -91,7 +91,7 @@ def test_set_password_notifies(notify):
     notify.now += 73 * HOUR
     c.post("/api/identity/code/send", json={"channel": "email", "to": MAIL, "turnstile": "ok", "purpose": "reauth"})
     assert verify(c, "email").status_code == 200
-    r = c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret", "again": "new-secret"})
+    r = c.post("/api/identity/password/set", json={"login": "ray_77", "new": "new-secret-12", "again": "new-secret-12"})
     assert r.json() == {"message": binding.PASSWORD_SET}
     assert _mail()[-1] == binding.NOTE_PASSWORD_SET.format(login="ray_77")
 
@@ -105,7 +105,7 @@ def test_reset_password_skips_the_way_used_to_log_in(notify):
     d = TestClient(server.app)
     _phone_login(d)
     sms_before = len(senders.FAKES.sms.outbox)
-    assert d.post("/api/identity/password/reset", json={"new": "brand-new", "again": "brand-new"}).json() == \
+    assert d.post("/api/identity/password/reset", json={"new": "brand-new-pw-1", "again": "brand-new-pw-1"}).json() == \
         {"message": binding.PASSWORD_RESET}
     assert _mail()[-1] == binding.NOTE_PASSWORD_RESET.format(kind="手機")
     assert len(senders.FAKES.sms.outbox) == sms_before  # 登入用的那一支不寄

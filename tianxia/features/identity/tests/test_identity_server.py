@@ -61,11 +61,11 @@ def test_gate_is_404_without_the_key(monkeypatch, tmp_path):
 def test_gate_lists_ready_ways_and_turnstile(monkeypatch, key_file):
     """line、google 要備好（oauth.ready：金鑰兩欄、redirect_base）才列；email、phone 照設定列（按了照舊尚未開放）。不帶客服信箱（第 202 批）。"""
     _turn_on(monkeypatch)
-    want = {"ways": ["line", "email", "phone"], "turnstile": "0x4AAA"}  # google 的金鑰沒寫
+    want = {"ways": ["line", "email", "phone"], "turnstile": "0x4AAA", "pw_min": 12}  # google 的金鑰沒寫；pw_min 第 209 批
     anon = TestClient(server.app).get("/api/identity/gate")
     assert anon.status_code == 200 and anon.json() == want
     player = TestClient(server.app)
-    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert player.get("/api/identity/gate").content == anon.content  # 跟誰來問無關
 
 
@@ -75,16 +75,16 @@ def _flow() -> list[tuple[int, str]]:
     out = []
     for method, path, body in (
         ("get", "/api/me", None),
-        ("post", "/api/register", {"login": "Shen_01", "password": "secret-pw", "again": "secret-pw"}),
+        ("post", "/api/register", {"login": "Shen_01", "password": "secret-pw-12", "again": "secret-pw-12"}),
         ("get", "/api/me", None),
-        ("post", "/api/password", {"old": "nope-nope", "new": "new-secret", "again": "new-secret"}),
-        ("post", "/api/password", {"old": "secret-pw", "new": "new-secret", "again": "new-secret"}),
+        ("post", "/api/password", {"old": "nope-nope", "new": "new-secret-12", "again": "new-secret-12"}),
+        ("post", "/api/password", {"old": "secret-pw-12", "new": "new-secret-12", "again": "new-secret-12"}),
         ("post", "/api/logout", None),
-        ("post", "/api/login", {"login": "shen_01", "password": "secret-pw"}),
-        ("post", "/api/login", {"login": "id:1", "password": "secret-pw"}),
-        ("post", "/api/login", {"login": "SHEN_01", "password": "new-secret"}),
+        ("post", "/api/login", {"login": "shen_01", "password": "secret-pw-12"}),
+        ("post", "/api/login", {"login": "id:1", "password": "secret-pw-12"}),
+        ("post", "/api/login", {"login": "SHEN_01", "password": "new-secret-12"}),
         ("get", "/api/me", None),
-        ("post", "/api/register", {"login": "shen_01", "password": "secret-pw", "again": "secret-pw"}),
+        ("post", "/api/register", {"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"}),
     ):
         r = c.get(path) if method == "get" else c.post(path, json=body or {})
         out.append((r.status_code, r.text))
@@ -113,7 +113,7 @@ def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
 
     monkeypatch.setattr(time, "time", lambda: 1_800_000_000.0)
     c = TestClient(server.app)
-    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     c.post("/api/character", json={"name": "沈青衫"})
     routes = sorted((m, p) for p, ms in server.app.openapi()["paths"].items() if p.startswith(("/api/identity", "/auth/")) for m in ms)
     assert routes == [("get", "/api/identity/gate"), ("get", "/api/identity/me"), ("get", "/auth/{provider}/callback"),
@@ -174,12 +174,12 @@ def test_staff_and_id_names_blocked_only_when_on(monkeypatch, key_file):
     _turn_on(monkeypatch)
     for i, name in enumerate(names):
         c = TestClient(server.app)
-        c.post("/api/register", json={"login": f"shen_{i}x", "password": "secret-pw", "again": "secret-pw"})
+        c.post("/api/register", json={"login": f"shen_{i}x", "password": "secret-pw-12", "again": "secret-pw-12"})
         r = c.post("/api/character", json={"name": name})
         assert r.status_code == 400 and r.json()["error"] == NAME_TAKEN, name
     taken = TestClient(server.app)
-    taken.post("/api/register", json={"login": "shen_9x", "password": "secret-pw", "again": "secret-pw"})
+    taken.post("/api/register", json={"login": "shen_9x", "password": "secret-pw-12", "again": "secret-pw-12"})
     taken.post("/api/character", json={"name": "沈青衫"})
     again = TestClient(server.app)
-    again.post("/api/register", json={"login": "shen_8x", "password": "secret-pw", "again": "secret-pw"})
+    again.post("/api/register", json={"login": "shen_8x", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert again.post("/api/character", json={"name": "沈青衫"}).json()["error"] == NAME_TAKEN  # 同一句

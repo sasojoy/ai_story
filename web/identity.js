@@ -31,6 +31,9 @@
   const IDENTITY_STANDALONE = "從主畫面開的遊戲用 LINE、Google 登入時可能會跳到瀏覽器；回不來的話，直接在瀏覽器登入。"; // 待 joy 潤
   const IDENTITY_HAVE = "已經有帳號？用帳號密碼登入，再把這個綁上去"; // 待 joy 潤
   const IDENTITY_BACK = "用帳號密碼登入"; // 待 joy 潤
+  // 第 209 批：identity 開著時全體密碼至少 n 字（n 是 /api/identity/gate 的 pw_min）：註冊格多一行、placeholder 換字
+  const IDP_PW_MIN = (n) => `密碼至少 ${n} 字。`; // 待 joy 潤
+  const IDP_PW_PLACEHOLDER = (n) => `至少 ${n} 字`; // 待 joy 潤
   // 第 204 批：綁定與重驗從第三方回來的四種（登入了才會碰到，toast 一句）
   const IDENTITY_BACK_TEXT = {
     bound: "綁好了。", // 待 joy 潤
@@ -154,6 +157,14 @@
     return mode === "quick" ? out.replace(/<form id="gate-form"[\s\S]*?<\/form>/, buttons) : out;
   }
 
+  // 第 209 批：註冊格的密碼提示（gate-form 裡的 placeholder 換成 n 字、表單訊息那一行前面插一行）；n 沒有（關著）或已經插過原樣回
+  function identityPwHint(html, n) {
+    if (!n || html.includes("idp-pw-min")) return html;
+    return html.replace(/<form id="gate-form"[\s\S]*?<\/form>/, (form) => form
+      .replace('placeholder="至少 6 字"', `placeholder="${esc(IDP_PW_PLACEHOLDER(n))}"`)
+      .replace('<p class="form-msg"', `<p class="idp-fine idp-pw-min">${esc(IDP_PW_MIN(n))}</p><p class="form-msg"`));
+  }
+
   // 驗證碼表單（第 204 批）：st = {way, purpose, sent, to, until, notice, stale}；now 是毫秒。寄碼前：號碼、Turnstile（有網站金鑰才有那一格）、寄碼；
   // 寄出後：輸碼、錯 5 次作廢的提示、重寄倒數；門號過期（stale）多一顆「這不是我的帳號」。登入、綁定、重驗三種用途共用，只換標題
   function identityCodeHtml(st, siteKey, now) {
@@ -218,11 +229,17 @@
       return;
     }
     const info = S.identityGate;
-    if (!info || !(info.ways || []).length) return;
+    if (!info) return;
+    if (!(info.ways || []).length) { // 沒有別的路：殼的兩格照舊，註冊格照樣補 12 字那一行（第 209 批）
+      const hinted = S.gateMode === "register" ? identityPwHint(gate.innerHTML, info.pw_min) : gate.innerHTML;
+      if (hinted !== gate.innerHTML) gate.innerHTML = hinted;
+      return;
+    }
     const mode = IDENTITY_MODES.includes(S.gateMode) ? S.gateMode : "login";
     identityRemember(mode);
     const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now()) : "";
-    const html = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
+    const drawn = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
+    const html = mode === "register" ? identityPwHint(drawn, info.pw_min) : drawn;
     if (html !== gate.innerHTML) gate.innerHTML = html;
     if (code) identityTurnstile(info.turnstile);
   }

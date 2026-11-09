@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
+from tianxia import accounts as shell_accounts
 from tianxia.core import identity_base
 from tianxia.database import open_database
 
@@ -47,7 +48,8 @@ def gate_info(content) -> dict:
     line、google 要 oauth.ready（金鑰兩欄、redirect_base）才列；email、phone 照設定列（第 203 批才接）。客服信箱第 202 批拿掉（客服包畫）。"""
     cfg = content.config.identity
     ways = [w for w in cfg.ways if w not in oauth.PROVIDERS or oauth.ready(content, w)]
-    return {"ways": ways, "turnstile": cfg.turnstile_site_key}
+    # pw_min（第 209 批）：identity 開著時全體密碼的下限，註冊格那一行提示照它寫（這條路關著 404，關著拿不到）
+    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN}
 
 
 def _digest(value: str) -> str:
@@ -601,9 +603,8 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            staff = identity_base.listed(shell.CONTENT, login=str(body.get("login") or ""), character=account.character,
-                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
-            shell.account_store().add_password(account.key, body.get("login"), new, staff=staff)
+            strict = identity_base.on(shell.CONTENT)  # identity 開著全體 12 字（第 209 批；這條路關著 404，所以一定真）
+            shell.account_store().add_password(account.key, body.get("login"), new, strict=strict)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         except ValueError:
@@ -637,9 +638,8 @@ def router(shell) -> APIRouter:
         if new != str(body.get("again") or ""):
             raise shell.GameError(shell.PASSWORDS_DIFFER)
         try:
-            staff = identity_base.listed(shell.CONTENT, login=account.login, character=account.character,
-                                         account_id=account.id)  # 名單上的帳號 12 字（第 207 批的 staff；M 波）
-            shell.account_store().reset_password(account.key, new, keep=token, staff=staff)
+            strict = identity_base.on(shell.CONTENT)  # 同補設密碼（第 209 批）
+            shell.account_store().reset_password(account.key, new, keep=token, strict=strict)
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
         side.drop_reset(_hash(proof))

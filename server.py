@@ -1605,9 +1605,9 @@ def register(login_name: str, password: str, again: str) -> str:
     if (password or "") != (again or ""):
         raise GameError(PASSWORDS_DIFFER)
     try:
-        # 第 207 批：identity 開著時名單上的帳號名（identity_base.listed）密碼至少 12 字；關著 staff 一律假
-        staff = identity_base.on(CONTENT) and identity_base.listed(CONTENT, login=login_name)
-        account_store().register(login_name, password, staff=staff)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
+        # 第 209 批（企劃者 2026-11-09「2 選 A」）：identity 開著時全體密碼至少 12 字（不看名單：註冊頁試不出名單）；關著 strict 一律假
+        strict = identity_base.on(CONTENT)
+        account_store().register(login_name, password, strict=strict)  # 自己是一筆交易；不另外包一層：scrypt 很慢，不能握著寫入權算
     except AccountError as exc:
         raise GameError(str(exc))
     return normalize(login_name)
@@ -1643,11 +1643,8 @@ def change_password(account_key: str, old: str, new: str, again: str, keep: str 
         return PASSWORDS_DIFFER
     try:
         store = account_store()
-        staff = False  # 第 207 批：identity 開著時名單上的帳號（名號、帳號名、客服名單）新密碼至少 12 字；關著一律假、不多查
-        if identity_base.on(CONTENT):
-            account = store.get(account_key)
-            staff = account is not None and identity_base.listed(CONTENT, login=account.login, character=account.character, account_id=account.id)
-        store.change_password(account_key, old, new, keep, staff=staff)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        strict = identity_base.on(CONTENT)  # 第 209 批：identity 開著時全體新密碼至少 12 字（不看名單）；關著一律假
+        store.change_password(account_key, old, new, keep, strict=strict)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"

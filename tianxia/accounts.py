@@ -23,7 +23,7 @@ from .database import Database
 
 LOGIN_PATTERN = re.compile(r"[A-Za-z0-9_]{3,20}")
 PASSWORD_MIN = 6
-STAFF_PASSWORD_MIN = 12  # 名單上的帳號（管理者、客服；identity_base.listed）開著 identity 時的下限（帳號與客服第 207 批）
+STRICT_PASSWORD_MIN = 12  # identity 開著時全體的下限（帳號與客服第 209 批：企劃者 2026-11-09「2 選 A」；第 207 批只對名單上的帳號）
 PASSWORD_MAX = 128
 SCRYPT_PARAMS = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 SALT_BYTES = 16
@@ -41,7 +41,7 @@ TOO_MANY_TRIES = "嘗試太多次，請 10 分鐘後再試。"
 BAD_LOGIN = "帳號只能用英文字母、數字、底線，3～20 字。"
 SHORT_PASSWORD = f"密碼至少 {PASSWORD_MIN} 字。"
 LONG_PASSWORD = f"密碼最多 {PASSWORD_MAX} 字。"
-STAFF_SHORT_PASSWORD = f"這個帳號的密碼至少 {STAFF_PASSWORD_MIN} 字。"  # 待 joy 潤（名單上的帳號；不寫「管理者」：註冊頁打一個帳號名就知道它在不在名單上）
+STRICT_SHORT_PASSWORD = f"密碼至少 {STRICT_PASSWORD_MIN} 字。"  # 待 joy 潤（identity 開著時全體同一句：不帶「這個帳號」，註冊頁試不出名單；第 209 批）
 WRONG_OLD_PASSWORD = "舊密碼不對。"
 HAS_CHARACTER = "這個帳號已經有角色了。"
 NO_PASSWORD = "這個帳號沒有密碼，請他用綁定的方式登入。"  # 待 joy 潤（管理者重設密碼碰到沒有密碼的帳號；帳號與客服第 201 批）
@@ -87,11 +87,11 @@ def check_login(login: str | None) -> str:
     return login
 
 
-def check_password(password: str | None, staff: bool = False) -> str:
-    """staff：名單上的帳號（殼照 identity_base.on 與 listed 判；關著一律假）：短於 STAFF_PASSWORD_MIN 一律回 STAFF_SHORT_PASSWORD。"""
+def check_password(password: str | None, strict: bool = False) -> str:
+    """strict：identity 開著就全體（殼照 identity_base.on 判；關著一律假；第 209 批）：短於 STRICT_PASSWORD_MIN 一律回 STRICT_SHORT_PASSWORD。"""
     password = password or ""
-    if staff and len(password) < STAFF_PASSWORD_MIN:
-        raise AccountError(STAFF_SHORT_PASSWORD)
+    if strict and len(password) < STRICT_PASSWORD_MIN:
+        raise AccountError(STRICT_SHORT_PASSWORD)
     if len(password) < PASSWORD_MIN:
         raise AccountError(SHORT_PASSWORD)
     if len(password) > PASSWORD_MAX:
@@ -215,9 +215,9 @@ class AccountStore:
 
     # ── 註冊、登入、角色 ──────────────────────────
 
-    def register(self, login: str | None, password: str | None, staff: bool = False) -> Account:
+    def register(self, login: str | None, password: str | None, strict: bool = False) -> Account:
         shown = check_login(login)
-        check_password(password, staff)
+        check_password(password, strict)
         key = normalize(shown)
         salt, digest = _new_secret(password)  # scrypt 很慢，先算好再進交易
         created = self.clock()
@@ -363,16 +363,16 @@ class AccountStore:
             )
 
     def change_password(self, login: str | None, old: str | None, new: str | None, keep: str | None = None,
-                        staff: bool = False) -> None:
+                        strict: bool = False) -> None:
         """自己改密碼：舊密碼要對；其他裝置的登入狀態清掉，keep（這個裝置的 cookie）留著。"""
         key = _key(login)
         account = self.get(key)
         if account is None or not _matches(account, old or ""):
             raise AccountError(WRONG_OLD_PASSWORD)
-        check_password(new, staff)
+        check_password(new, strict)
         self._replace_secret(key, new, keep)
 
-    def set_password(self, login: str | None, new: str | None, staff: bool = False) -> None:
+    def set_password(self, login: str | None, new: str | None, strict: bool = False) -> None:
         """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼，這個帳號所有裝置都登出。
 
         擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
@@ -382,18 +382,18 @@ class AccountStore:
             raise KeyError(login)
         if account.hash is None:  # 沒有密碼的帳號：不補設（第 204 批才有補設密碼），sessions 不清
             raise AccountError(NO_PASSWORD)
-        check_password(new, staff)
+        check_password(new, strict)
         self._replace_secret(key, new)
         with _THROTTLE_LOCK:
             self.failures.pop(key, None)
 
     # ── 補設密碼、忘記密碼、刪帳號（帳號與客服第 204 批；設計 4.4、6.4）──
 
-    def add_password(self, key: str | None, login: str | None, password: str | None, staff: bool = False) -> str:
+    def add_password(self, key: str | None, login: str | None, password: str | None, strict: bool = False) -> str:
         """沒密碼的帳號補設密碼：帳號名過 check_login、別人用了丟 LOGIN_TAKEN；同一筆交易寫 password 列與記號列，鍵不變（回 id:<n>）。
         已經有密碼丟 ValueError（包先擋好，這裡不是玩家看的字）；帳號不在丟 KeyError。scrypt 在交易外算。"""
         shown = check_login(login)
-        check_password(password, staff)  # staff：名單上的帳號 12 字（殼照 identity_base.listed 判；M 波）
+        check_password(password, strict)  # strict：identity 開著就全體 12 字（殼照 identity_base.on 判；第 209 批）
         lower = normalize(shown)
         salt, digest = _new_secret(password)
         with self.db.transaction() as conn:
@@ -414,7 +414,7 @@ class AccountStore:
             )
         return f"id:{account.id}"
 
-    def reset_password(self, key: str | None, new: str | None, keep: str | None = None, staff: bool = False) -> None:
+    def reset_password(self, key: str | None, new: str | None, keep: str | None = None, strict: bool = False) -> None:
         """忘記密碼（用綁定的方式登入後設新密碼）：不必知道舊密碼；其他裝置登出，keep（這個裝置的 cookie）留著；解除擋猜密碼。
         沒有密碼丟 AccountError(NO_PASSWORD)；帳號不在丟 KeyError。"""
         account = self.get(key)
@@ -422,7 +422,7 @@ class AccountStore:
             raise KeyError(key)
         if account.hash is None:
             raise AccountError(NO_PASSWORD)
-        check_password(new, staff)  # staff 同 add_password（M 波）
+        check_password(new, strict)  # strict 同 add_password（第 209 批）
         self._replace_secret(account.key, new, keep)
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT subject FROM logins WHERE provider = 'password' AND account_id = ?", (account.id,)).fetchone()

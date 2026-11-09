@@ -31,7 +31,7 @@ def _kinds(key):
 
 def _reauth(c, clock):
     clock.now += server.CONTENT.config.identity.recent_seconds + 1
-    assert c.post("/api/identity/reauth", json={"password": "secret-pw"}).status_code == 200
+    assert c.post("/api/identity/reauth", json={"password": "secret-pw-12"}).status_code == 200
 
 
 def test_bind_phone_needs_recent_check(clock):

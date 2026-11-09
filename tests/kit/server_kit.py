@@ -126,10 +126,10 @@ def client():
     return TestClient(server.app)
 
 
-def _player(client, login="shen_01", name="沈青衫", prologue=False):
+def _player(client, login="shen_01", name="沈青衫", prologue=False, password="secret-pw"):
     """註冊、建角色。網頁上建的新角色先走序章（新手引導計畫一）；這裡的測試大多測序章之後的事，預設略過序章站到潁川
     （prologue=True 留在草廬）。"""
-    client.post("/api/register", json={"login": login, "password": "secret-pw", "again": "secret-pw"})
+    client.post("/api/register", json={"login": login, "password": password, "again": password})
     out = client.post("/api/character", json={"name": name}).json()
     if not prologue:
         out = client.post("/api/do/skip_tutorial", json={}).json()

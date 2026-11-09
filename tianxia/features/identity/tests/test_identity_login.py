@@ -111,7 +111,7 @@ def test_login_key_finds_third_party_accounts_only():
     assert accounts.login_key("line", "U-1") is None
     key = accounts.create_without_password("line", "U-1", "LINE")
     assert accounts.login_key("line", "U-1") == key and accounts.login_key("line", "u-1") is None  # subject 分大小寫
-    accounts.register("shen_01", "secret-pw")
+    accounts.register("shen_01", "secret-pw-12")
     accounts.add_login("shen_01", "google", "G-1", "Google")
     assert accounts.login_key("google", "G-1") == "shen_01"  # 有密碼的帳號鍵照舊是小寫帳號
     assert accounts.login_key("password", "shen_01") is None  # 密碼不走這裡
@@ -121,7 +121,7 @@ def test_new_routes_404_while_closed(monkeypatch, tmp_path):
     seen = _fake_idp(monkeypatch)
     anon = TestClient(server.app)
     player = TestClient(server.app)
-    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     for c in (anon, player):
         assert c.post("/api/identity/start", json={"provider": "line", "purpose": "login"}).status_code == 404
         assert _callback(c, "line", code="c", state="s").status_code == 404
@@ -162,7 +162,7 @@ def test_start_asks_when_logged_in(monkeypatch):
 
     _turn_on(monkeypatch)
     c = TestClient(server.app)
-    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     r = c.post("/api/identity/start", json={"provider": "line", "purpose": "login"})
     assert r.status_code == 200 and r.json() == {"ask": binding.SWITCH_ASK}
     assert "set-cookie" not in r.headers
@@ -262,7 +262,7 @@ def test_character_opens_account_and_login_in_one_go(monkeypatch):
 def test_character_bad_name_leaves_no_account(monkeypatch):
     c = _pending_client(monkeypatch)
     taken = TestClient(server.app)
-    taken.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    taken.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     taken.post("/api/character", json={"name": "沈青衫"})
     before = _counts()
     for name, why in (("沈青衫", NAME_TAKEN), ("", "請先輸入你的名號。"), ("id:9", NAME_TAKEN), ("客服", NAME_TAKEN)):
@@ -275,7 +275,7 @@ def test_character_bad_name_leaves_no_account(monkeypatch):
 
 def test_character_respects_register_limit(monkeypatch):
     for i in range(server.REGISTER_LIMIT):
-        r = TestClient(server.app).post("/api/register", json={"login": f"shen_{i}x", "password": "secret-pw", "again": "secret-pw"})
+        r = TestClient(server.app).post("/api/register", json={"login": f"shen_{i}x", "password": "secret-pw-12", "again": "secret-pw-12"})
         assert r.status_code == 200
     c = _pending_client(monkeypatch)
     before = _counts()
@@ -283,9 +283,9 @@ def test_character_respects_register_limit(monkeypatch):
     assert r.status_code == 400 and r.json()["error"] == server.TOO_MANY_REGISTERS and _counts() == before
     server.REGISTRATIONS.clear()
     for i in range(server.REGISTER_LIMIT - 1):
-        TestClient(server.app).post("/api/register", json={"login": f"wei_{i}x", "password": "secret-pw", "again": "secret-pw"})
+        TestClient(server.app).post("/api/register", json={"login": f"wei_{i}x", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert c.post("/api/identity/character", json={"name": "柳如煙"}).status_code == 200  # 第五個是第三方開的
-    r = TestClient(server.app).post("/api/register", json={"login": "late_1", "password": "secret-pw", "again": "secret-pw"})
+    r = TestClient(server.app).post("/api/register", json={"login": "late_1", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert r.json()["error"] == server.TOO_MANY_REGISTERS  # 反過來也算
 
 
@@ -297,7 +297,7 @@ def test_character_without_pending_is_401_and_double_submit_is_idempotent(monkey
     anon.cookies.set("tx_pending", "forged", path="/api/identity/")
     assert anon.post("/api/identity/character", json={"name": "柳如煙"}).status_code == 401
     player = TestClient(server.app)
-    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    player.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     r = player.post("/api/identity/character", json={"name": "柳如煙"})
     assert r.status_code == 401 and r.json()["detail"] == "請先登入。"
     c = _pending_client(monkeypatch, sub="U-9")
@@ -319,7 +319,7 @@ def test_bot_name_and_human_name_refused_alike(monkeypatch):
     bot.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
     open_characters().save(bot.state)
     human = TestClient(server.app)
-    human.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    human.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     human.post("/api/character", json={"name": "沈青衫"})
     c = _pending_client(monkeypatch)
     a = c.post("/api/identity/character", json={"name": "周泰安"})
@@ -330,7 +330,7 @@ def test_bot_name_and_human_name_refused_alike(monkeypatch):
 def test_me_has_identity_flag_only_when_open(monkeypatch):
     c = TestClient(server.app)
     off = [c.get("/api/me").content]
-    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     off.append(c.get("/api/me").content)
     assert off == [b'{"stage":"login"}', b'{"stage":"create"}']  # 關著：跟第 201 批逐位元組一樣
     _turn_on(monkeypatch)
