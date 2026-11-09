@@ -315,7 +315,9 @@ export const flows = [
         await c.load("/");
         await c.click('.shop-layer .note.k-arms:not(.dim)[data-act="board-zoom"]');
         await c.step(`.board-sheet ${CHP("bounty:pick")}`, "bd_pick", { who: "p1" });
-        if (await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" }) === "ok") await c.step('[data-act="ask-yes"]', "bd_given", { who: "p1" });
+        // batch 113: the paper handed in is drawn again with a 交差 stamp and taken away by a 1400 ms wall-clock timer (web/bounties.js
+        // boardHanded, STAMP_MS); base = head showed it on one side and not the other in two of four walks. Wait it out, then take the board
+        if (await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" }) === "ok") await c.step('[data-act="ask-yes"]', "bd_given", { who: "p1", wait: 1900 });
       }
       await c.load("/");
       await c.click('.shop-layer .slot[data-act="board-zoom"]');
