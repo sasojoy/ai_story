@@ -123,9 +123,18 @@ def _run_set(chains: list[list], workers: int) -> None:
             f.result()
 
 
-def _bot_runs(tracks: list[str]) -> list[tuple[str, str]]:
-    """（seats, 設定）：每一軌登記的假人（register_bots）跑它登記的那幾種設定；軌不在清單上的不跑。"""
-    return [(seats, p) for seats, (profiles, _) in BOT_SEATS.items() if seats in tracks for p in profiles]
+def pick_seats(packages: list[str], tracks: list[str]) -> list[str]:
+    """第 112 批 compare --bot-covers：座位名在 ALWAYS_TRACKS、或座位名在要比的軌裡（原本的規則）、或 SEAT_COVERS 跟這幾包有交集；照登記先後。
+    三者取聯集：只會比原本多跑、不會少。"""
+    want = set(packages)
+    return [s for s in BOT_SEATS if s in ALWAYS_TRACKS or s in tracks or want & set(SEAT_COVERS.get(s, ()))]
+
+
+def _bot_runs(tracks: list[str], packages: list[str] | None = None) -> list[tuple[str, str]]:
+    """（seats, 設定）：每一軌登記的假人（register_bots）跑它登記的那幾種設定；軌不在清單上的不跑。
+    packages 給了（compare --bot-covers，第 112 批）改照 pick_seats 挑；沒給照舊。"""
+    seats = pick_seats(packages, tracks) if packages is not None else [s for s in BOT_SEATS if s in tracks]
+    return [(s, p) for s, (profiles, _) in BOT_SEATS.items() if s in seats for p in profiles]
 
 
 def _db_files(db: Path) -> list[Path]:
@@ -208,9 +217,10 @@ def _print_new(names: tuple[str, ...], outs: list[Path]) -> None:
 
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
             tracks: list[str] | None = None, cache_dir: Path | None = None, new: tuple[str, ...] = (), crossover: bool = False,
-            also_existing: bool = False) -> bool:
+            also_existing: bool = False, bot_packages: list[str] | None = None) -> bool:
     """crossover（第 107 批 --crossover，PM 定改預設）：才比「base 整段」＝「base 前半＋head 後半」；不帶就不跑那一串，每格印「半舊半新 沒跑」。
-    also_existing（K 波）：--new 的包 base 已經有也收（扣法一樣，base 的子行程也扣：兩邊都不比這幾包自己的 js、css、表、op）。"""
+    also_existing（K 波）：--new 的包 base 已經有也收（扣法一樣，base 的子行程也扣：兩邊都不比這幾包自己的 js、css、表、op）。
+    bot_packages（第 112 批 --bot-covers）：假人座位照 pick_seats 挑；None 照舊（座位名在軌清單上才跑）。"""
     check_new(base, head, new, also_existing)
     head_new = ["--new", ",".join(new)] if new else []  # 只有 head 的子行程帶（整段、後半、假人）
     # --also-existing（K 波）：base 也有這幾包，base 的子行程同樣扣（不然 base 多出包自己的行、head 扣掉，反而紅）；快取的鍵分開
@@ -247,7 +257,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"]), *head_new], tmp / f"{label}_head_{n}.log")])
     bot_out = {}
     if bots:
-        for seats, p in [r for r in _bot_runs(tracks) if r[1] in profiles]:  # --profiles 給什麼就跑什麼
+        for seats, p in [r for r in _bot_runs(tracks, bot_packages) if r[1] in profiles]:  # --profiles 給什麼就跑什麼
             n = f"{seats}_{p}"
             bot_out[(seats, p)] = {k: tmp / f"{label}_bots_{k}_{n}.txt" for k in ("base", "head")}
             for k, root in (("base", base), ("head", head)):
@@ -497,7 +507,7 @@ def _setup_child(root: Path, profile: str, db: Path) -> None:
 def _wipe_db(db: Path) -> None:
     """同一個暫存資料夾跑第二次之前清掉上一次的資料庫與旁邊的小檔（小檔的名字是 <主檔名去掉副檔名>-xxx.sqlite，不接在主檔名後面）：
     留著的話舊的往來紀錄、戰記、封存會被讀到，「同一份跑兩次一樣」就不穩。"""
-    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push", "identity", "support")  # identity：帳號綁定（第 201 批）；support：客服單（第 211 批；開關關著不建）
+    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push", "identity", "support", "terms")  # identity：帳號綁定（第 201 批）；support：客服單（第 211 批；開關關著不建）；terms：條款同意紀錄（第 206 批起註冊也寫；關著不建）
     names = [db.name, f"{db.name}.state.json"] + [f"{db.stem}-{side}.sqlite" for side in sides]
     for name in names:
         for suffix in ("", "-wal", "-shm"):
@@ -614,6 +624,7 @@ TRACKS = _TrackTable()
 # ═══════════════════════════ 軌與子命令的登記：sb/tracks/*.py 載入時自己登記 ═══════════════════════════
 
 BOT_SEATS: dict[str, tuple[tuple[str, ...], Callable[..., None]]] = {}  # bots --seats 的名字 → （跑哪幾種設定, 跑的函式）
+SEAT_COVERS: dict[str, tuple[str, ...]] = {}  # 座位 → 走到的包（register_bots 的 covers，第 112 批；量法同 COVERS）
 SUBCOMMANDS: dict[str, Callable[[list[str]], int]] = {}  # 子命令名 → 處理函式（整串引數給它）；入口的 main 先查這張表
 
 
@@ -633,11 +644,14 @@ def register_track(name: str, scenario: type, mutation: tuple, profile: str, *, 
     COVERS[name] = tuple(covers)
 
 
-def register_bots(seats: str, profiles: tuple[str, ...], runner: Callable[..., None]) -> None:
-    """再開一組假人：compare、selftest 在那些設定各跑一次，bots --seats <seats> 叫 runner(根, 設定, 輸出檔, 暫存)。"""
+def register_bots(seats: str, profiles: tuple[str, ...], runner: Callable[..., None], *, covers: tuple[str, ...] = ()) -> None:
+    """再開一組假人：compare、selftest 在那些設定各跑一次，bots --seats <seats> 叫 runner(根, 設定, 輸出檔, 暫存)。
+    covers（第 112 批）：這個座位的 runner 走到哪幾包（covers_measure.py measure 一起量、扣掉同一設定軌的共同組，寫在 covers.json 的 bots:<座位>），
+    compare --bot-covers 用（pick_seats）；tests/core/test_same_behavior_covers.py 守它非空、包都在。"""
     if seats in BOT_SEATS:
         raise ValueError(f"假人 {seats} 登記了兩次")
     BOT_SEATS[seats] = (tuple(profiles), runner)
+    SEAT_COVERS[seats] = tuple(covers)
 
 
 def load_tracks() -> None:

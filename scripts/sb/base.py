@@ -1225,5 +1225,11 @@ register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",)
                        "gear", "guide", "heroines", "legacy", "mall", "map", "military", "notify", "outlets", "peers",
                        "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
                        "zhuan"))
-register_bots("sortie", BOT_PROFILES, bots_run)  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
-register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run)  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）
+register_bots("sortie", BOT_PROFILES, bots_run,
+              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
+                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
+                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
+register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run,
+              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
+                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "map", "military", "outlets", "peers",
+                      "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

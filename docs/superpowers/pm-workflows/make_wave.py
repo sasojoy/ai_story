@@ -994,6 +994,58 @@ WAVES["Q"] = dict(
 )
 
 
+def b210():
+    return jb(210, "帳號十：驗證碼頁的個資告知短文、管理頁的「請用密碼重新登入」、解綁與重設密碼的通知搬出行動鎖、註冊頁的條款版號重問", "identity", "dev/acct-10", "8405", [
+        "- 範圍照計畫第 210 批那一節（PM 2026-11-09 把帳號留下的小件歸成一批）；依據：企劃者 2026-11-09 對 PM 列的「帳號留下的小件一批：驗證碼頁的個資告知、管理頁的重新登入提示、解綁通知搬出行動鎖，加上面兩條 nit」答「2. ok」。五項都小，一段一筆 commit、測試先行。這一批准碰 `web/identity.js`、`web/terms.js`（Joy 的條款包那一支，只動第 4、5 項那幾行）、identity 包、核心 `tianxia/core/features.py` 的 `AdminTool` 與 `server.py` 的 `api_do`（只第 3 項那幾行）；**不碰** `web/admin.js`、admin 包、`app.js`、`main.js`、`accounts.py`、`engine.py`、`shell_tables.py`（沒有新路由）。",
+        "- **第 1 項 驗證碼輸入處的個資告知短文連 `/privacy`**（第 203、206 批留下；設計第五節、個資法第 8 條）：`web/identity.js` 的 `identityCodeHtml` **寄碼前那一張**（輸入 Email、手機號碼的地方；登入 `login`、綁定 `bind` 兩種用途都要，`reauth` 也照畫）畫 `codes.NOTICE`（第 49 句，新字清單已有）加「隱私權說明」連結（沿用 `IDENTITY_PRIVACY_LINK` 那幾個字；`href` 照 `Config.identity.privacy_url`，新分頁 `rel=\"noopener\"`）。字與網址怎麼到畫面：identity 自己的 `GET /api/identity/gate`（`gate_info`）多帶 `notice`、`privacy` 兩鍵（關著照舊 404），設定抽屜綁定那一邊用它既有的回應帶同樣兩鍵；**不加新字、不改殼**。寄出之後那一張照舊（`st.notice` 現在放的是「已寄出」那一句，不動）。node 測試：寄碼前有短文與連結、連結指 `/privacy`；關著不畫。",
+        "- **第 2 項 管理頁的「請用密碼重新登入」**（第 209 批留下）：`/admin` 跟江湖頁是同一張頁（admin 包 `routes.py` 回 `shell.current_page()`），`web/identity.js` 已經有 `IDP_RELOGIN`（第 17x 句）與問 `GET /api/identity/session` 的那一段（約 478～490 行，只在設定抽屜畫）。加：在 `/admin` 路徑、管理頁畫出來之後（`web/admin.js` 的 `.ad-head`／`.ad-wait` 出現時，用 MutationObserver 或殼既有的 render 事件，**不改 `web/admin.js`**）也問一次 `relogin`，真就在管理頁標題下補同一句（同一個 class `idp-relogin`，不另造字）；名單外的人、關著、404 什麼都不多畫；一頁只畫一次。node 測試：relogin 真在 `/admin` 有那一行、假沒有；江湖頁那一行照舊。admin 包一個字不動（admin 不能 import identity；這是 identity 包自己的畫面）。",
+        "- **第 3 項 管理者解綁、管理者重設密碼的通知搬出行動鎖**（第 209 批留下；企劃者 11/09「2. ok」）：現在 `identity_unbind` 是 `AdminTool`，在 `server.py` `api_do` 的 `act()` 裡跑，`admin.unbind` 最後那一行 `contacts.send_all` 在鎖裡寄；`reset_password`（admin 包 `routes.py` 176 行 `identity_base.notify`）看它是不是也在鎖裡（`/api/admin/reset_password` 那條路有沒有進 `act()`／`action_lock`）。真的簡訊、Email 是 HTTP 呼叫，卡在全服的行動鎖裡會讓所有人等。**PM 傾向的做法**：核心 `tianxia/core/features.py` 的 `AdminTool` 加一個可選欄 `after: Callable[[], None] | None = None`（預設 None，現有的包一個字不改），`run` 在鎖裡做完、把要寄的（account_id、那一句、extra／skip）記在 game 的暫存或 closure；`server.py` `api_do` 在 `act()` 回來、放鎖之後叫 `tool.after()`（例外只記 log，不影響回話）；identity 的 `identity_unbind` 改成 `run` 不寄、`after` 寄。`reset_password` 在鎖裡的話也改成放鎖之後寄（admin 包經核心 `identity_base.notify` 的既有掛鉤，看怎麼延後最小）；不在鎖裡就寫一句不動。另一種做法是改走既有的 outlock 三段式（要自己做 `is_admin` 與 `admin_session_ok` 的檢查、關著 404），比較大，不選的話寫 decided 為什麼。玩家與管理者看到的回話一個字不變；寄的對象與內容照第 209 批。測試：假 sender 記下「寄的那一刻鎖有沒有被握著」（例：sender 在 `send` 裡試 `WorldStateStore.action_lock` 拿不拿得到，或 `act` 包一層記順序），解綁那一則要在放鎖之後；`test_identity_notify.py` 的 `test_admin_unbind_notifies_rest` 照過；`tests/core` 契約測試對 `AdminTool` 新欄位（有 `after` 的工具 `after` 被叫一次、沒有的照舊）一條。`core_changes` 逐條列（`core/features.py` 一欄、`server.py` 三行上下、identity `admin.py`／`routes.py`、admin 包要是改了寫哪一行），寫企劃者原話「2. ok」（2026-11-09，對 PM 列的那一句）。",
+        "- **第 4 項 註冊頁的條款版號重問**（Q 波審查 nit）：`web/terms.js` 的 `termsVersion()` 把版號快取一整頁；條款改版後沒重新整理的註冊頁帶舊版號送出，被 `REGISTER_NEED` 同一句擋住、重勾也沒用。改成**送出前重問一次**：`termsBlockSubmit` 兩個勾選都勾了之後，capture 攔下這一次 submit、重新 fetch `/api/terms/version`、更新 hidden `terms_version`、再 `form.requestSubmit()`（或等值做法）放行一次（用旗標避免無窮攔；fetch 失敗照舊版號送、讓伺服器那一句擋）；不透露版本、不加新字；關著照舊不插不擋。node 測試：版號改了再送一次就過；改之前那條（沒勾擋）照過。這一支是 Joy 的條款包的檔，只動這一段，其他一行不碰。",
+        "- **第 5 項 順手核對**：terms 關著時 `terms.js` 每次畫註冊表單多打一次 `/api/terms/version`（404）。能用頁面上現成的資訊判斷關著就不問（例：殼已經有的某個旗標、或 404 之後記住這一頁不再問——現在已經是 null 就不再問，看還有沒有多打的情形），沒有乾淨的做法就寫理由不做，不加路由、不改殼。",
+        "- 測試：identity 包 `tests/`（py 與 node）；terms 包 node 測試；`tests/core/test_contract_features.py`（`AdminTool` 新欄位）；identity 關著時 `/api/identity/gate` 404 照舊、`web/identity.js` 不畫；terms 關著位元組一樣。每一條先紅後綠。`new_strings`：預期沒有（短文是第 49 句、提示是第 209 批那一句、連結字沿用）；真的要新字每句旁 `待 joy 潤`。",
+        "- **不做**：管理者刪帳號照舊不寄；維修頁的標頭；自建形象與招式下單的 `phone_ok` 入口；IPv6 /64；金流（企劃者 11/09「先不動」）；第 113 批（測試工具）的東西。資料庫第 9 版不動；旁檔不改表、不加欄。退版：換回舊程式只是短文與提示不見、通知回到鎖裡寄、版號照舊快取，什麼都不丟；季中能換；緊急開關 `Config.identity.enabled`、`Config.terms.enabled`。",
+    ])
+
+
+WEB_R = "**這一波一線：帳號十（帳號留下的小件：驗證碼頁的個資告知短文、管理頁的「請用密碼重新登入」、解綁與重設的通知搬出行動鎖、註冊頁的條款版號重問；開關預設關）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled`、`terms.enabled` 打開，只開 head；`fake_services: true`；`.local/identity.json` 放測試金鑰與 `notify_key`）：實機走——登入頁按 Email（或手機）：輸入號碼那一張看得到個資告知短文與「隱私權說明」連結，點開是 `/privacy`；設定抽屜的綁定那一邊按綁 Email 也看得到同一段；名單上的帳號（`config.json` 的 `admins` 裡的 `Rayal`）用 Email 驗證碼登入後開 `/admin`：看得到「請用密碼重新登入」那一句、不是只有「管理資料沒拿到」；不在名單上的人用驗證碼登入開 `/admin`：沒有那一句（看到什麼照實寫）；管理者用密碼登入，管理頁解綁某人一支 Email：回話照舊、伺服器 log 有寄給剩下那一支的通知（假寄送印的那一行），而且回應先回、寄送在後（看 log 時間或順序；量不到就寫量不到）；主控台 0 錯誤、沒有 `Refused to`；網路沒有 4xx／5xx（刻意的 401、404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 註冊頁的版號重問不用實機改條款版本，看開發的 node 測試有沒有那一條、`terms.js` 送出前有沒有重問（網路面板看第二次 `/api/terms/version`）。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["R"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 210 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計第五節、4.3、6.5 與計畫第 210 批那一節（PM 11/09 歸成一批）") + " **另外**：identity 關著時 `/api/identity/gate` 404、`web/identity.js` 不畫短文與管理頁提示、對 base 位元組一樣；terms 關著 `terms.js` 不插不擋；開著時寄碼前那一張有 `codes.NOTICE` 與連到 `/privacy` 的連結（登入與綁定兩種用途）、管理頁的提示只有名單上非密碼 session 的本人拿得到、名單外永遠沒有；管理者解綁與重設密碼的通知在放鎖之後才寄（看測試怎麼證明，不是只看有寄）、回話一個字不變；`AdminTool` 新欄位預設 None、現有的包一個字不改；註冊頁送出前重問版號、改版後再送一次就過、不透露版本；沒有新路由、`shell_tables` 不動；`web/admin.js` 與 admin 包不動（第 3 項 reset_password 那一行除外，動了要寫理由）；新字每句旁有 `待 joy 潤`（預期沒有新字）。"),
+    ],
+    lines=[dict(name="帳號十", batches=[b210])],
+    merge_port=8406, fix_port=8407,
+    web_check=dict(ports="8408、8409", steps=WEB_R),
+)
+
+
+def b113():
+    return ib(113, "43 軌 covers 改寫、Joy 三包（結義、帖友書信、條款）加軌、webqa 補一景與三個會抖的畫面、nightly 程式沒變就沿用", "dev/gate-113", "8410", [
+        "- 範圍：計畫第 113 批那一節（PM 11/09 從第 112 批留下的挑四項；企劃者 2026-11-09 傍晚原話「前四項開，A 案等要開帳號功能再做」）。動 `scripts/sb/**`（新軌只加檔；各軌的 `covers=` 由 `covers_measure.py write` 改）、`scripts/webqa/**`（flows、`must_reach.txt`、`noise.py`）、`scripts/nightly.py` 與它們的測試（`tests/core/test_same_behavior_covers.py`、`tests/web/test_webqa.py`、nightly 既有的測試檔，沒有就開一個）。**不碰 `tianxia/`、`web/`、`server.py`、`content/`、`docs/superpowers/pm-workflows/wave_gate.py`**。順序 2 → 1 → 3 → 4（先加軌再量 covers，三包才一起進表）。",
+        "- **第 2 項 Joy 三包加軌**（先做）：`jieyi`（結義，Joy PR #195）、`mail`（帖友書信，PR #196）、`terms`（條款，PR #193 加第 206 批）現在沒有一軌走到（`test_same_behavior_covers.py` 的警告），開關都預設關。`scripts/sb/tracks/` 各加一檔（新軌只加檔；名字一個英文字、不跟現有的軌重複，寫進回報），照 `petition.py`、`wicket.py` 的樣子寫：**關著段**打包的路由（兩邊 404）與 `/api/main` 的鍵；**開著段**在情境裡把開關打開（既有做法：`self.tweak(self.c.config.<包>, enabled=True)` 或直接設，例 `tracks/levy.py`、`loom.py`、`relic.py`），走包的主流程——結義：邀、應、名單、解除、第 6 人被拒（最多 5 人）；帖友書信：先交換名帖再寄信、收信匣、沒交換過的被拒、小檔 `<db>-mail.sqlite` 的段落雜湊；條款：`/terms`、`/privacy`、`/api/terms/version`、`/api/register` 帶兩個勾選與版號（沒勾、只勾一個被拒）、`GET /api/terms` 的 `need`、`POST /api/terms/agree`、旁檔 `<db>-terms.sqlite`。半舊半新切在開著段寫過東西之後、重新登入之後；假人段看包的 `bots.py` 有沒有東西（沒有寫沒有）。先讀三包的 README、`routes.py`、`tests/`。`selftest --tracks <三軌>`：三設定跑兩次一樣、改一個字抓得到（`MUTANT_PROFILE` 那一種）。",
+        "- **第 1 項 43 軌 covers 改寫**：第 112 批重量出來有 43 軌的 covers 跟登記的不同、這一波才改。加了三軌之後 `python scripts/sb/covers_measure.py measure --out <夾>`（三設定全軌加假人座位，約 16 分）→ `analyze <夾>`（門檻 90%，ALWAYS 不變量破了結束碼 1）→ `write <夾>`（全部，不帶 `--seats-only`）；`git diff --stat scripts/sb/tracks scripts/sb/base.py` 的軌數寫進回報（照實，不一定剛好 43）。反向驗 `verify --mutate` 抽三包（一大一小加 Joy 的一包，例 battle、support、titles）：挑到的至少一軌紅、沒挑到的一軌都不紅。`test_same_behavior_covers.py` 全過、三包的警告消失。量一次多久寫進回報。",
+        "- **第 3 項 webqa 補一景與三個會抖的畫面**：①`patch_pop`：第一次 `asPlayer` 進江湖頁、點掉小窗之前先拍 Joy 的改版資訊小窗（`.sheet.patch-pop`，從沒比過）一景進 main 回合，連跑兩次都到才進 `must_reach.txt`；②`call_close`、`call_act`（人物層的 × 與護衛）：第 112 批不走的原因是 layer-open 時捲軸有沒有；在 flow 裡等 layer-open 的樣式落定（或 `noise.py` 認「只在 layer-open 的景、差在捲軸那一條」那一類，要窄），收回來走、進 must_reach；③`zh_write`（題壁寫字）base＝head 偶爾像素 REAL：查原因（字型、畫布時機、游標閃）、釘得住就釘，釘不住就寫一條只對那一景的窄 noise 規則，寫進 decided。證明：不帶 `--quick` 八回合 base＝head **連跑兩趟**都 exit 0、tool 0、`missing_must_reach` 空（兩趟都要）。`tests/web/test_webqa.py` 既有的全過，noise 規則加一條測試。",
+        "- **第 4 項 nightly 沿用**：照計畫第 112 批第 6 項寫好的做法實作進 `scripts/nightly.py`：`prepare_checkout` 之後讀前一次 `<日期>.json` 的 `sha` 與最後一次真跑的日期；`git diff --name-only <前一次 sha>..<今天的 sha>` 扣掉 `docs/`、`.claude/`、根目錄 `*.md` 之後是空的、前一次跑完而且綠、離最後一次真跑不到 7 天 → 不跑 pytest，`<日期>.json` 記 `reused_from`、`last_real`，`latest.txt` 第一行「沿用 <SHA>（程式沒變）」其餘照前一次；`tests/` 變了照跑；加一個強制跑的參數（例 `--force`）。判斷寫成獨立的函式、單元測試用假的 git 輸出五種情形（空 diff 沿用、只改 docs 沿用、改 tests 要跑、超過 7 天要跑、前一次紅要跑）。`scripts/nightly.ps1` 看一眼會不會因為沿用提早結束而壞，不改它。**不要真跑整套**來驗。",
+        "- **不做**：A 案 identity 開著的軌（固定金鑰、固定驗證碼、遮雜湊欄、切點）——企劃者 11/09「A 案等要開帳號功能再做」；`wave_gate.py`；一個子行程連跑多軌（第 112 批已決定不做）；`web/`、`tianxia/` 一行不動。退版：只影響測試工具與每日整套，退回第 112 批那一筆照舊。",
+    ])
+
+
+WEB_S = "**這一波沒動 `web/`，改的是比對工具的軌與 covers、網頁比對的 flow、每日整套。這一關不比畫面，驗工具**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 閘門帶 `--changed` 已經跑過網頁八回合（`.local/wave_gate/<head8>/web/report.txt`），不重跑：看 real（有就是 blocker）、`missing_must_reach` 空（含新加的 `patch_pop` 與收回來的 `call_close`、`call_act`）。\n2. 用 head 的工具：`python scripts/sb/covers_measure.py --help` 不必跑量；`python scripts/same_behavior.py pick --covers jieyi`、`mail`、`terms` 各印軌數與名單（各至少一軌、含新軌）；`python -m pytest tests/core/test_same_behavior_covers.py -q` 沒有「沒有一軌走到的包」警告；`python scripts/same_behavior.py selftest --tracks <三個新軌> --base <head 解出來的夾>`（`MUTANT_PROFILE` 那一種設定）：跑兩次一樣、改一個字抓得到；量分鐘數。\n3. nightly：在暫存 out 夾造一份前一次綠的 `<日期>.json`（照開發 README 寫的格式），用判斷函式或 `--dry-run`（開發怎麼做就怎麼叫）對同一個 SHA 跑一次，印「沿用」；改一個 `tests/` 檔名進假 diff 要印「要跑」。**不要真跑整套。**\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["S"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**工具改了，證明力不能掉**。第 113 批。第 2 項：三個新軌真的走到包開著的主流程（看輸出段落，不是只有 404），開關在情境裡開、不改設定檔，selftest 改字抓得到；第 1 項：covers 是 `covers_measure` 量出來寫的（抽兩軌對 `analyze` 的輸出）、反向驗三對一邊紅一邊不紅、ALWAYS 不變量沒破；第 3 項：`patch_pop` 與 `call_close`、`call_act` 在不帶 `--quick` 的八回合裡真的到了而且**連跑兩趟**都到，`zh_write` 的 noise 規則窄到只對那一景、有測試；第 4 項：沿用的判斷有五種情形的單元測試、`tests/` 變了一定跑、超過 7 天一定跑、前一次紅一定跑，`latest.txt` 寫得出「沿用」。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="測試工具", batches=[b113])],
+    merge_port=8411, fix_port=8412,
+    web_check=dict(ports="8413、8414", steps=WEB_S),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}

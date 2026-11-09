@@ -1,6 +1,17 @@
 // One walk against one server. usage: node driver.mjs <label> <pageBase> <apiBase> <outDir> <chromePort>
 // env: TIANXIA_WEBQA_CHROME (the browser), QA_ROUND (flows/<round>.mjs), QA_ONLY (flow names), QA_FAST (cap on crawl totals), QA_RESUME.
 // Exit 0 walked; 2 could not walk (the report says why). A flow that throws is recorded in report.steps, gate.py turns it into exit 2.
+//
+// Writing a flow (handbook 4.2; batches 111, 112):
+// - While a shop is open #page is visibility:hidden: look for the shop's buttons inside .shop-layer (or .horse-card, .board-sheet), never on the page.
+// - CHP("<prefix>:") hits the shop's own "‹ 出店" first (it is data-act="choose" too): scope it (".board-sheet " + CHP(...)) or use the full id.
+// - With two or more people here 交友 opens the list first ([data-act="wheel"][data-key="social"]); a figure's 往來紀錄, 交談, 護衛 and × are on
+//   its own layer (.vn-layer.pick, opened by the 此地人物 chip fig-open), and c.load("/") closes any layer: open it again before each click.
+// - Forms (web/<pkg>.js registerForms) have no button to click: c.fillAndSend(<input>, text), then c.settle and c.shoot.
+// - A button that walks out of the shop (招募 tav-hire) goes last; the sheets that pop on entering the game (改版資訊 .patch-pop, 簽到 .ck-pop) sit
+//   over the page, so a mouse stroke (c.drawOn) has to close them first (click .sheet-bg[data-act] until there is none). c.click and c.step use el.click() and do not care what is on top.
+// - --quick (QA_QUICK) takes no pictures and no styles: scenes that wait on polling (傳的撰寫 zh_*) count as not reached, so it only says
+//   whether the flows still walk, never that must_reach is met. Prove must_reach without --quick (gate.py --jobs 4, all eight rounds).
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";

@@ -429,6 +429,16 @@ def test_every_round_has_its_flows_file_and_must_reach_names_known_rounds():
     assert rounds <= set(gate.ROUNDS) and rounds
 
 
+def test_a_stroke_closes_the_patch_sheet_first():
+    """第 112 批：進遊戲後跳的改版資訊（web/news.js .patch-pop）、簽到小窗（web/checkin.js .ck-pop）蓋在畫布上，滑鼠那一筆畫不到
+    （sense_pad_clear、sense_sent 走不到）：每個畫一筆的 flow（c.drawOn），第一筆之前同一個 flow 裡要先點掉跳出來的那幾張（.sheet-bg）。"""
+    for path in sorted((TOOL / "flows").glob("*.mjs")):
+        text = path.read_text(encoding="utf-8")
+        for flow in re.split(r'\n    \["', text):
+            if "drawOn(" in flow:
+                assert ".sheet-bg[data-act]" in flow[:flow.index("drawOn(")], f"{path.name} 有一個 flow 畫一筆之前沒關跳出來的小窗"
+
+
 # ── 第 107 批：回合對照表（coverage.json）與 --changed-files ──
 
 
