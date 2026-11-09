@@ -1,17 +1,112 @@
-/* 師門武譜（俠客頁門下那一段；web/zongmen.js） */
-.zongmen .zm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.zongmen .zm-entry { border: 1px solid var(--line, #d8d2c4); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
-.zongmen .zm-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.zongmen .zm-num { color: var(--accent, #8a3324); font-weight: 700; font-size: .9em; }
-.zongmen .zm-fx { font-size: .92em; }
-.zongmen .zm-note { font-size: .86em; }
-.zongmen .zm-desc { font-size: .84em; }
-.zongmen .zm-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.zongmen .zm-carve { font-family: var(--serif, serif); color: var(--muted, #776f60); }
-.zongmen .zm-tag { font-size: .85em; color: var(--muted, #776f60); }
-.zongmen .zm-sub { margin-top: 10px; font-weight: 700; font-size: .92em; }
-.zongmen .zm-waits { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.zongmen .zm-wait { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .92em; }
-.zongmen .zm-small { font-size: .86em; margin: 2px 0 6px; }
-.zongmen .zm-offer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.zongmen .zm-offer select { min-width: 0; max-width: 100%; flex: 1 1 140px; }
+/* 師門（俠客頁「師門」分頁；web/zongmen.js）。照 docs/superpowers/specs/2026-11-09-介面設計規範.md：
+   色只用 style.css 的色票（深色模式跟著換），字：門名與式名楷書（--kai）、說明 --sans；點得到的地方至少 44px 高。 */
+
+.zongmen { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+.zongmen .zm-kind {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font: 600 12px/1.6 var(--sans);
+  background: var(--card-2); color: var(--ink-2); white-space: nowrap;
+}
+.zongmen .zm-kind.gang { background: color-mix(in srgb, var(--gang) 14%, var(--card)); color: var(--gang); }
+.zongmen .zm-kind.kuai { background: color-mix(in srgb, var(--kuai) 14%, var(--card)); color: var(--kuai); }
+.zongmen .zm-kind.rou { background: color-mix(in srgb, var(--rou) 14%, var(--card)); color: var(--rou); }
+.zongmen .zm-kind.man { background: color-mix(in srgb, var(--man) 14%, var(--card)); color: var(--man); }
+
+/* ── 山門：一張圖淡進紙色，右上一塊直書的匾，底下朱印、一句門風、在不在山門 ── */
+.zongmen .zm-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); }
+.zongmen .zm-hero-art {
+  height: 168px; background: center 40% / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+.zongmen .zm-plaque {
+  position: absolute; top: 12px; right: 14px; margin: 0; padding: 12px 7px;
+  writing-mode: vertical-rl; font: 700 22px/1 var(--kai); letter-spacing: 0.28em;
+  color: #f1dfae; background: linear-gradient(160deg, #3a2a1c, #22180f); border: 2px solid #9c7a3c; border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(30, 18, 8, 0.35), inset 0 0 0 2px #22180f;
+}
+.zongmen .zm-hero-text { position: relative; margin-top: -40px; padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px; }
+.zongmen .zm-seal {
+  align-self: flex-start; padding: 3px 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent);
+  font: 700 15px/1.2 var(--kai); letter-spacing: 0.2em; background: var(--card); transform: rotate(-4deg);
+}
+.zongmen .zm-seal.inner { background: var(--accent); color: var(--accent-ink); }
+.zongmen .zm-desc { margin: 0; font: 400 14px/1.7 var(--kai); color: var(--ink-2); }
+.zongmen .zm-where { margin: 0; display: flex; align-items: center; gap: 6px; font: 600 13px/1.4 var(--sans); color: var(--ink-2); }
+.zongmen .zm-where i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.zongmen .zm-where.home { color: var(--ok); }
+.zongmen .zm-where.home i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+
+/* ── 每一段的標題：楷書、左邊一筆墨 ── */
+.zongmen .zm-sec-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 2px 8px; }
+.zongmen .zm-sec-hd h4 { margin: 0; padding-left: 10px; border-left: 3px solid var(--ink); font: 700 18px/1.2 var(--kai); letter-spacing: 0.12em; color: var(--ink); }
+.zongmen .zm-sec-hd small { font: 400 12px var(--sans); color: var(--ink-2); }
+.zongmen .zm-empty { margin: 0; padding: 16px; border: 1px dashed var(--line); border-radius: 10px; font: 400 14px/1.7 var(--kai); color: var(--ink-2); text-align: center; }
+
+/* ── 武譜：一式一頁，左邊朱紅直條寫第幾式 ── */
+.zongmen .zm-pages, .zongmen .zm-waits, .zongmen .zm-offers, .zongmen .zm-scraps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.zongmen .zm-pg {
+  display: flex; border-radius: 10px; overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.zongmen .zm-num {
+  flex: none; width: 34px; display: flex; align-items: center; justify-content: center; padding: 10px 0;
+  writing-mode: vertical-rl; font: 700 15px/1 var(--kai); letter-spacing: 0.2em; color: var(--accent-ink); background: var(--accent);
+}
+.zongmen .zm-pg.learned .zm-num { background: color-mix(in srgb, var(--accent) 55%, var(--card)); }
+.zongmen .zm-pg-body { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.zongmen .zm-pg-hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zongmen .zm-pg-name { font: 700 19px/1.3 var(--kai); color: var(--ink); letter-spacing: 0.04em; }
+.zongmen .zm-fx { margin: 0; font: 600 14px/1.5 var(--sans); color: var(--ink); }
+.zongmen .zm-effects { margin: 0; padding: 0; list-style: none; font: 400 13px/1.5 var(--sans); color: var(--ink-2); }
+.zongmen .zm-effects li::before { content: "・"; color: var(--gold); }
+.zongmen .zm-note { margin: 2px 0 0; font: 400 14px/1.6 var(--kai); color: var(--ink-2); }
+.zongmen .zm-pg-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.zongmen .zm-by { font: 400 13px var(--kai); color: var(--ink-2); }
+.zongmen .zm-by::before { content: "—— "; }
+.zongmen .zm-why { font: 400 12px var(--sans); color: var(--ink-2); }
+.zongmen .zm-go { min-height: 44px; padding: 0 18px; font-weight: 700; }
+.zongmen .zm-offer .zm-go, .zongmen .zm-scrap .zm-go { width: auto; flex: none; }
+.zongmen .zm-offer > div { flex: 1; }
+.zongmen .zm-stamp {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
+  border: 2px solid var(--accent); color: var(--accent); font: 700 13px var(--kai); transform: rotate(-12deg); opacity: 0.85;
+}
+
+/* ── 試練中：墨點數人頭 ── */
+.zongmen .zm-wait, .zongmen .zm-offer {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 8px 12px;
+  border-radius: 10px; background: var(--card); border: 1px solid var(--line);
+}
+.zongmen .zm-wait > div:first-child, .zongmen .zm-offer > div { display: flex; flex-direction: column; min-width: 0; }
+.zongmen .zm-wait b, .zongmen .zm-offer b { font: 700 16px/1.3 var(--kai); color: var(--ink); }
+.zongmen .zm-wait small, .zongmen .zm-offer small { font: 400 12px var(--sans); color: var(--ink-2); }
+.zongmen .zm-wait-n { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.zongmen .zm-dots { display: flex; gap: 5px; }
+.zongmen .zm-dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink-2); }
+.zongmen .zm-dots i.on { background: var(--ink); border-color: var(--ink); }
+
+/* ── 殘頁：撕過的紙，邊緣參差、斜一點 ── */
+.zongmen .zm-scrap {
+  position: relative; isolation: isolate; display: flex; flex-direction: column; gap: 4px; padding: 14px 14px 12px; color: var(--ink);
+  filter: drop-shadow(0 2px 3px rgba(60, 40, 20, 0.22));
+}
+.zongmen .zm-scrap::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--card) 70%, var(--gold)), var(--card) 45%, color-mix(in srgb, var(--card) 85%, var(--gold)));
+  clip-path: polygon(0 4%, 6% 0, 18% 3%, 31% 0, 47% 4%, 60% 1%, 74% 4%, 88% 0, 100% 3%, 98% 30%, 100% 62%, 97% 100%, 82% 97%, 66% 100%, 50% 96%, 34% 100%, 17% 97%, 3% 100%, 0 70%, 2% 38%);
+}
+.zongmen .zm-scrap:nth-child(odd) { transform: rotate(-0.6deg); }
+.zongmen .zm-scrap:nth-child(even) { transform: rotate(0.5deg); }
+.zongmen .zm-scrap-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zongmen .zm-scrap-hd small { font: 400 12px var(--sans); color: var(--ink-2); }
+
+/* ── 規矩：收在「？」後面 ── */
+.zongmen .zm-help {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px;
+  border: 0; background: none; color: var(--ink-2); font: 600 13px var(--sans); cursor: pointer;
+}
+.zongmen .zm-q { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 12px; }
+.zongmen .zm-rules { margin: -6px 0 0; padding: 10px 14px 10px 28px; border-radius: 10px; background: var(--card-2); font: 400 13px/1.7 var(--sans); color: var(--ink-2); }
+
+@media (prefers-color-scheme: dark) {
+  .zongmen .zm-hero-art { filter: brightness(0.78) saturate(0.85); }
+  .zongmen .zm-dots i.on { background: var(--ink); }
+}

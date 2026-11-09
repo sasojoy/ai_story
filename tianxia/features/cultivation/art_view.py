@@ -468,7 +468,7 @@ def _art_cell(content: Content, world: WorldStateStore, kind: str, skill_id: str
 
 def roster_cards(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """俠客頁「門下」一人一張卡（Joy 2026-10-26「門下顯示優化」）：名冊的順序（本人、同伴、部下），每人
-    {"key", "name", "role"（本人／出戰／在門下／部下）, "level"（部下 None）, "hp", "hp_max"（部下 None）, "arts": [內功, 武學]（部下只有武學）}。
+    {"key", "name", "role"（本人／出戰／候命／部下）, "level"（部下 None）, "hp", "hp_max"（部下 None）, "arts": [內功, 武學]（部下只有武學）}。
     點了照舊是名冊那一下（person），細節在角色卡。"""
     out = []
     for _label, key in roster.roster_lines(state, content, world):
@@ -483,7 +483,7 @@ def roster_cards(state: GameState, content: Content, world: WorldStateStore) -> 
             member, name, own, role = state.player.member, state.player.name, state, "本人"
         else:
             member, name, own = world.get_companion(key), content.characters[key].name, None
-            role = "出戰" if key in state.player.team else "在門下"
+            role = "出戰" if key in state.player.team else "候命"
         now, cap = team.member_neili(content, member, team.con_of(state, content, world, key), season=state.world)
         out.append({"key": key, "name": name, "role": role, "level": member.level, "hp": round(now), "hp_max": round(cap),
                     "arts": [_art_cell(content, world, "內功", member.neigong_id, member.neigong_level, own),

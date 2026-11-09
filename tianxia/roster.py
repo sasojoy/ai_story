@@ -246,7 +246,7 @@ def roster_lines(state: GameState, content: Content, world: WorldStateStore) -> 
     for cid in owned_companions(world, state.player.name):
         ch = content.characters[cid]
         progress = world.get_companion(cid)
-        status = "出戰" if cid in state.player.team else "在門下"
+        status = "出戰" if cid in state.player.team else "候命"
         lines.append((f"{ch.name}　第 {progress.level} 級　{status}", cid))
     lines += [(f"部下・{follower.name}", key) for key, follower in team.follower_rows(state, content)]  # 計畫 T5
     return lines

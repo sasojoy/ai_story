@@ -367,6 +367,7 @@ def page_learn(ctx: Game, sect_id: str, entry_id: str) -> list[str]:
     return [B.PAGE_LEARNED.format(sect=sect.name, num=B.num(entry.number), name=name)]
 
 
+BY = "{giver}所創・第 {season} 季"  # 待 joy 潤：譜上那一式底下的落款（第幾式另外畫成朱印）
 LEARN_AS = "學到的是{quality}"  # 待 joy 潤
 
 
@@ -380,7 +381,7 @@ def _row(ctx: Game, e, problem: str) -> dict:
         note = e.insight.note
     return {
         "id": e.id, "num": B.num(e.number), "name": B.name_of(e), "attr": B.attr_of(e), "kind": B.kind_of(e),
-        "fx": fx, "carve": B.carve(e), "note": note, "effects": effects,
+        "fx": fx, "by": BY.format(giver=e.giver, season=e.season), "note": note, "effects": effects,
         "learned": B.learned_name(ctx.state.player, e), "problem": problem or "",
     }
 
@@ -409,7 +410,7 @@ def view(ctx: Game) -> dict | None:
     me = name_key(p.name)
     entries = []
     for e in B.entries_in(bk):
-        problem = learn_problem(ctx, e) if gate else rules.AT_GATE.format(place=c.locations[sect.location].name)
+        problem = learn_problem(ctx, e) if gate else ""  # 不在山門：頂上那一行說一次，不每一式都寫
         row = _row(ctx, e, problem)
         price = B.learn_price(e, p.name, cfg)
         row["price"] = price if price != cfg.learn_xinde else None
@@ -420,7 +421,7 @@ def view(ctx: Game) -> dict | None:
     } for e in B.pending(bk, ctx.now)]
     offers = [{"id": iid, "name": name} for iid, name in offerable(ctx)] if gate else []
     return {
-        "sect": sect.name, "place": c.locations[sect.location].name, "gate": gate, "entries": entries, "waiting": waiting,
+        "sect": sect.name, "sect_id": sect.id, "desc": sect.desc, "place": c.locations[sect.location].name, "gate": gate, "entries": entries, "waiting": waiting,
         "offers": offers, "learn_xinde": cfg.learn_xinde, "trial_xinde": cfg.trial_xinde,
         "inner": B.is_inner(p, bk, cfg), "pages": pages, "page_xinde": cfg.page_xinde,
     }

@@ -1,5 +1,5 @@
 """俠客頁「門下」一人一張卡（Joy 2026-10-26「裝備跟門下顯示優化」）：伺服器的 roster_cards（art_view.roster_cards）照名冊的順序
-給本人、同伴、部下各一張（名字、本人／出戰／在門下、等級、氣血、身上兩門），網頁畫成卡，點一張在底下攤開戰法、加入移出、傳功，
+給本人、同伴、部下各一張（名字、本人／出戰／候命、等級、氣血、身上兩門），網頁畫成卡，點一張在底下攤開戰法、加入移出、傳功，
 卡頭已經寫了的（名字、等級、內功、武學、裝備）不再寫一次。正式內容；沒有 node 的網頁那幾條略過。"""
 # 畫法在 web/cultivation.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
@@ -25,7 +25,7 @@ def _game(real, world):  # noqa: F811
 def test_roster_cards_list_self_then_companions_with_their_arts(real, world):  # noqa: F811
     g = _game(real, world)
     cards = server.menxia_view(g)["roster_cards"]
-    assert [(c["key"], c["role"]) for c in cards] == [("player", "本人"), ("liubei", "出戰"), ("caocao", "在門下")]
+    assert [(c["key"], c["role"]) for c in cards] == [("player", "本人"), ("liubei", "出戰"), ("caocao", "候命")]
     me = cards[0]
     assert me["name"] == "沈浪" and me["level"] == g.state.player.member.level and 0 < me["hp"] <= me["hp_max"]
     assert [a["kind"] for a in me["arts"]] == ["內功", "武學"]

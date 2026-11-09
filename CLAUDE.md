@@ -6,6 +6,7 @@
 - 設計：`docs/superpowers/specs/`。總設計 `2026-09-27-天下大勢-design.md`；武學、屬性、戰鬥過程、人物資質以 `2026-10-05-武學與成長-design.md` 為準（第十四節是人物資質）；第一季 `2026-10-02-第一季黃巾之亂-design.md`、`2026-10-04-第一季濃縮版-版本目標.md`；線上架構 `2026-10-02-線上架構-design.md`；伺服器假人 `2026-10-02-伺服器假人-design.md`。
 - 實作計畫：`docs/superpowers/plans/`。
 - **開發規範手冊**（分層與功能包、測試分級、派工、合併、交接；企劃者 2026-10-30「寫成開發規範手冊，讓其他人遵守」）：`docs/superpowers/specs/2026-10-30-開發模式-design.md`。技能檔照它改，對不上時照手冊；手冊跟程式對不上時照程式（手冊最後一節是落地補註）。
+- **介面設計規範**（Joy 2026-11-09「水墨風格 操作友善 有質感的UI」，以後不要再看到簡陋的設計）：`docs/superpowers/specs/2026-11-09-介面設計規範.md`。新畫面、改畫面一律照它（色票、楷書、元件目錄、44px、說明收起來），給 Joy 看截圖前照第八節自己驗一次（淺色深色各拍）。
 - 試玩回饋（FB-編號）：`docs/superpowers/feedback/試玩回饋.md`；裁決：`docs/superpowers/rulings/`；主機端怎麼開伺服器、給網址、備份、換季：`docs/superpowers/feedback/beta-主機端操作.md`。
 - 架構流程圖：`docs/superpowers/architecture/三國篇架構.html`（PM 發佈成 artifact，隨進度更新）。
 

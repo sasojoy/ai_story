@@ -157,7 +157,7 @@ def test_roster_lines_marks_a_bench_companion(state, content, world):
     team.remove_from_team(state, "hero")
     assert roster.roster_lines(state, content, world) == [
         ("本人　沈浪　第 1 級", "player"),
-        ("俠女　第 1 級　在門下", "hero"),
+        ("俠女　第 1 級　候命", "hero"),
     ]
 
 
