@@ -457,4 +457,4 @@ register_track("landturn", LandTurnScenario, (("tianxia/features/territory_acts/
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail",
                        "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "territory_acts", "travel", "zhuan"))
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

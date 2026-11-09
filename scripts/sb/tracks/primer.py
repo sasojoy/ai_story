@@ -226,4 +226,4 @@ register_track("primer", PrimerScenario, (("tianxia/features/guide/howto.py",),
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "military",
                        "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "territory_acts", "travel", "zhuan", "zongmen"))

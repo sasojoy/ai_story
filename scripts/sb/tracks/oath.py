@@ -209,4 +209,4 @@ class OathScenario(PeersScenario):
 register_track("oath", OathScenario, (("tianxia/features/jieyi/rules.py",), ("if mine is not None and len(mine.members) >= cfg.max_members:", "if mine is not None and len(mine.members) > cfg.max_members:")), "season21",
                covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
                        "gear", "guide", "jieyi", "looks", "military", "outlets", "peers", "seal", "sense", "smithy",
-                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))

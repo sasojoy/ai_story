@@ -269,4 +269,4 @@ register_track("compass", CompassScenario, (("tianxia/step.py",), ("else 0) + 1\
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
                        "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan"))
+                       "zhuan", "zongmen"))

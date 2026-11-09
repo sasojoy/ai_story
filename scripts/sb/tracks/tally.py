@@ -375,4 +375,4 @@ class TallyScenario(CompanionsScenario):
 register_track("tally", TallyScenario, (("tianxia/bot_policy.py", "tianxia/features/sortie/bots.py"), ("if counts else 0.0", "if not counts else 0.0")), "season21",
                covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
                        "figure_acts", "gear", "guide", "hire", "legacy", "looks", "military", "outlets", "peers", "seal",
-                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel"))
+                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zongmen"))

@@ -548,4 +548,4 @@ register_track("omen", OmenScenario, (("tianxia/features/military/opp_rules.py",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "territory_acts", "travel", "zhuan", "zongmen"))

@@ -151,4 +151,5 @@ class GarnetScenario(CarveScenario):
 register_track("garnet", GarnetScenario, (("tianxia/seal_acts.py",), ("坐鎮期滿，回到了{place}。", "坐鎮期滿，回到了{place}！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "identity", "looks", "mail", "military", "outlets", "peers", "seal",
-                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan"))
+                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan",
+                       "zongmen"))

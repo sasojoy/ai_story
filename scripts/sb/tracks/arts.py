@@ -658,8 +658,8 @@ register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py"
                                       ("練成絕學的人，定名", "練成絕學的人，命名")), "week7",
                covers=("battle", "bounties", "bout", "companions", "craft", "cultivation", "explore", "faction", "figure_acts", "gear",
                        "guide", "military", "peers", "seal", "seclusion", "sense", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "travel", "zhuan"))
+                       "tavern", "travel", "zhuan", "zongmen"))
 register_bots("arts", ARTS_BOT_PROFILES, arts_bots_run,
               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
                       "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 修練那一軌的假人（--seats arts）
+                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 修練那一軌的假人（--seats arts）

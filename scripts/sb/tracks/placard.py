@@ -698,4 +698,4 @@ register_track("placard", PlacardScenario, (("tianxia/engine.py", "tianxia/featu
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map",
                        "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

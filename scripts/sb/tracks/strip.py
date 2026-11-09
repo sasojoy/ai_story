@@ -399,4 +399,4 @@ register_track("strip", StripScenario, (("tianxia/treasures.py",), ("靜心感�
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "map",
                        "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "territory_acts", "travel", "zhuan"))
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

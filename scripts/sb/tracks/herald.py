@@ -443,4 +443,4 @@ register_track("herald", HeraldScenario, (("tianxia/features/bounties/rules.py",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "travel", "zhuan"))
+                       "travel", "zhuan", "zongmen"))

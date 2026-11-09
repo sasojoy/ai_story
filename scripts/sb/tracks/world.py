@@ -362,4 +362,4 @@ register_track("world", WorldScenario, (("tianxia/world.py",), ("的集結號角
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall",
                        "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

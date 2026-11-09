@@ -524,4 +524,4 @@ register_track("scribe", ScribeScenario, (("tianxia/features/tale/tale.py",),
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tale",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

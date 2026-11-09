@@ -432,4 +432,4 @@ register_track("switchboard", SwitchboardScenario, (("tianxia/features/seclusion
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall", "military",
                        "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

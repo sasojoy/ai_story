@@ -600,4 +600,4 @@ register_track("relic", RelicScenario, (("tianxia/engine.py", "tianxia/features/
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mail", "mall",
                        "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "terms", "territory_acts", "travel", "zhuan"))
+                       "story", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))

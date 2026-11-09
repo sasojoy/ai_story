@@ -677,4 +677,4 @@ register_track("crossblade", CrossbladeScenario, (("tianxia/engine.py", "tianxia
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "military", "outlets",
                        "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "travel", "zhuan"))
+                       "travel", "zhuan", "zongmen"))

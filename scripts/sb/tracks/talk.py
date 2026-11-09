@@ -518,4 +518,4 @@ register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py",)
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "travel", "zhuan"))
+                       "tavern", "travel", "zhuan", "zongmen"))

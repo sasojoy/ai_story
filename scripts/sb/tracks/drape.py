@@ -101,4 +101,5 @@ class DrapeScenario(FacadeScenario):
 register_track("drape", DrapeScenario, (("web/checkin.css", "web/style.css"), (".ck-p4 small { font: 10.5px", ".ck-p4 small { font: 10.6px")), "week7",
                covers=("battle", "bounties", "checkin", "companions", "craft", "cultivation", "explore", "figure_acts", "guide", "identity",
                        "jieyi", "legacy", "looks", "mail", "mall", "map", "military", "news", "notify", "peers",
-                       "seal", "smithy", "sortie", "story", "support", "tavern", "terms", "territory_acts", "titles", "zhuan"))
+                       "seal", "smithy", "sortie", "story", "support", "tavern", "terms", "territory_acts", "titles", "zhuan",
+                       "zongmen"))

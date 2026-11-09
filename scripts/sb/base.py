@@ -1227,19 +1227,20 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear",
                        "guide", "heroines", "legacy", "mall", "military", "outlets", "peers", "seal", "sense", "socialize",
-                       "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
+                       "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))
 # 改一個字（selftest）：同去按第二次那一句
 register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
                                       ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "feast", "figure_acts",
                        "gear", "guide", "heroines", "legacy", "mall", "map", "military", "notify", "outlets", "peers",
                        "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan"))
+                       "zhuan", "zongmen"))
 register_bots("sortie", BOT_PROFILES, bots_run,
               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
                       "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
+                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run,
               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
                       "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "map", "military", "outlets", "peers",
-                      "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）
+                      "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
+                      "zongmen"))  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

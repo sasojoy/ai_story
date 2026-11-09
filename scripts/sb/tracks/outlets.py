@@ -506,4 +506,4 @@ register_track("outlets", OutletsScenario, (("tianxia/features/outlets/donate_ac
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
                        "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan"))
+                       "zhuan", "zongmen"))

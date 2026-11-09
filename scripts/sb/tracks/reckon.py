@@ -261,4 +261,4 @@ register_track("reckon", ReckonScenario, (("tianxia/engine.py", "tianxia/feature
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall",
                        "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "territory_acts", "travel", "zhuan"))
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

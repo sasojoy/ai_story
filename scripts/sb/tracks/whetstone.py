@@ -391,4 +391,4 @@ class WhetstoneScenario(TallyScenario):
 register_track("whetstone", WhetstoneScenario, (("tianxia/bot.py", "tianxia/features/cultivation/bots.py"), ("game.melt_art(min(spare)[1])", "game.melt_art(max(spare)[1])")), "week7",
                covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
                        "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal", "seclusion",
-                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel"))
+                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zongmen"))

@@ -343,4 +343,4 @@ register_track("abacus", AbacusScenario, (("tianxia/features/mall/rules.py",),
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mail", "mall", "military",
                        "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "territory_acts", "travel", "zhuan"))
+                       "territory_acts", "travel", "zhuan", "zongmen"))

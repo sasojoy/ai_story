@@ -196,4 +196,5 @@ register_track("carve", CarveScenario, (("tianxia/engine.py", "tianxia/features/
                                        ('out.append(f"你出了{move}。")', 'out.append(f"你出了{move}！")')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "figure_acts", "gear", "hire", "identity", "looks", "mail", "military", "outlets", "peers", "seal",
-                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan"))
+                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan",
+                       "zongmen"))
