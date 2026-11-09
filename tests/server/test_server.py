@@ -793,7 +793,7 @@ def test_every_response_carries_the_csp(client):
     （500 由 Starlette 最外層回、不經 middleware，不帶；那是純文字頁，這裡不打。）"""
     from fastapi.routing import APIRoute
 
-    assert server.CSP == "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    assert server.CSP == "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
     # 第 209 批（設計第七節「只加一處 middleware」）：同一處多三個標頭；HSTS 不加 preload
     extra = {"strict-transport-security": "max-age=31536000; includeSubDomains", "referrer-policy": "strict-origin-when-cross-origin",
              "x-content-type-options": "nosniff"}

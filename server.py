@@ -1675,9 +1675,10 @@ async def _server_timing(request: Request, call_next):
 
 # 帳號與客服第 213 批（設計第三節「CSP 標頭另開小批」）：只准從自己這裡與 Turnstile（challenges.cloudflare.com）載程式，
 # 不准 inline 的程式（<script> 不帶 src、on*= 屬性、javascript:）、不准 <object>、不准 <base>。不是開關：整站都有
-# 第 209 批（設計第七節「只加一處 middleware」）：frame-ancestors 'none'——誰都不准把我們的頁（含公開頁 /zhuan、/zhanji）嵌進 iframe
+# 第 209 批（設計第七節「只加一處 middleware」）：frame-ancestors 'self'——別的網站不准把我們的頁（含公開頁 /zhuan、/zhanji）嵌進 iframe；
+# 只准同源：遊戲裡「戰記 ›」用 iframe 嵌自家的 /zhanji/<code>?in=1（web/tale.js），'none' 連它也擋（第 P 波閘門抓到）
 # （我們自己嵌 Turnstile 的 iframe 不受這條影響）。style-src、img-src、default-src 只掃不加（數字在第 209 批的回報）
-CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+CSP = "script-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
 # 同一處多三個標頭：HSTS 一年含子網域（不加 preload）、不把完整網址帶給別的網站、不准瀏覽器猜檔案類型
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
