@@ -29,8 +29,11 @@ from dataclasses import dataclass
 from typing import Literal, NamedTuple
 
 from . import attrset, calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
-from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
+# 豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀。haoqiang_allied 是「這一季有豪強、而且分屬兩軍」
+# （allied.gentry_split；拿掉豪強的季是 False：玩法說明不寫豪強那幾句）
+from .allied import gentry_split as haoqiang_allied  # noqa: F401
 from .allied import side_of  # noqa: F401
+from .allied import faction_open
 from .martial_arts import content_art
 from .models import BEST_OF, DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
@@ -225,6 +228,8 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         line, _, mark = key.partition(":")
         if story_base.mark_of(state, line, mark) > most:
             return False
+    if cond.gentry is not None and cond.gentry == bool(state.world.no_gentry):  # 拿掉豪強的季（allied.gentry_on）
+        return False
     if cond.level_min is not None and p.member.level < cond.level_min:
         return False
     # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
@@ -1280,8 +1285,9 @@ def _fx_join_sect(r: EffectRun) -> list[str]:
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
         msgs.append(f"你拜入了{sect.name}！")
-        owner = content.sect_faction(sect.id)
-        if owner is not None and p.faction is None:
+        owner = content.sect_faction(sect.id)  # 門派開關開著時門派不綁勢力（門派包）
+        # 拿掉豪強的季（allied.factions_of）：拜入曹氏莊院只是入門派，不跟著投靠地方豪強
+        if owner is not None and p.faction is None and faction_open(content, r.state.world, owner.id):
             p.faction = owner.id
             msgs.append(f"你從此是{owner.name}的人了。")
     return msgs

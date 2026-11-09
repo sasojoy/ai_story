@@ -1225,16 +1225,15 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 
 # 改一個字（selftest）：出陣回報打輸那一句
 register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear",
+                       "guide", "heroines", "legacy", "mall", "military", "outlets", "peers", "seal", "sense", "socialize",
+                       "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
 # 改一個字（selftest）：同去按第二次那一句
 register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
                                       ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "feast", "figure_acts",
+                       "gear", "guide", "heroines", "legacy", "mall", "map", "military", "notify", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
+                       "zhuan"))
 register_bots("sortie", BOT_PROFILES, bots_run)  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run)  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

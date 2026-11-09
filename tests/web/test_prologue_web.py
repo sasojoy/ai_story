@@ -1013,6 +1013,7 @@ def test_fb094_the_magnates_ending_says_what_the_peace_is_for(on):
 
 def test_fb094_a_week_later_the_recruiter_says_the_ending_anyway(on):
     """一週（季曆）之後第一道軍令還沒做完：引薦人照樣說結語、入伍段關起來。從那一步開始算起，不看電腦時鐘（世界時間）。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia import calendar
 
     game = _enlisted(on, "haoqiang", place="cao_manor")
@@ -1032,6 +1033,7 @@ def test_fb094_a_week_later_the_recruiter_says_the_ending_anyway(on):
 
 
 def test_fb094_the_week_counts_from_when_the_step_started_not_from_joining(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia import calendar
 
     # 投靠之後晾了 0.7 週才去看軍令卡：第一道軍令那一步從看卡的那一刻才開始，一週從那裡算（不是從投靠）。

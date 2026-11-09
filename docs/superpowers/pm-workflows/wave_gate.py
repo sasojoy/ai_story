@@ -9,13 +9,16 @@
    不帶 --changed：所有軌、三種設定、--crossover（跟以前一樣）。--changed：照 decide() 挑（下面），只比改到的包走到的軌。
 5. 帶 --web 才跑（--changed 時 decide 說網頁有動也跑）：等前面都跑完叫 head 上的 scripts/webqa/gate.py --base <sha> --head <sha> --out <結果夾>/web，
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
-   --changed 時把 decide 的 web_files 交給 --changed-files（只走對照表上碰得到的回合）；網頁要開的原因不只 web/ 的檔（server.py 回頁面的行、
-   別處的 css／html、scripts/webqa、要全軌比的改動）就不交、全回合；--full 全回合。
+   --changed 時把 decide 的 web_files 原樣交給 --changed-files（只走對照表上碰得到的回合；對不到的檔怎麼辦由 gate.py 定）；網頁要開的原因不只 web/ 的檔
+   （server.py 回頁面的行、別處的 css／html、scripts/webqa）就不交、全回合；核心退回全軌只管比對的軌，不拉網頁全回合（第 109 批）；--full 全回合。帶 --new 時原樣轉給 gate.py --new（N 波）。
+   --web-jobs N 轉成 gate.py --jobs N（O 波起工作流程的閘門帶 --changed --web-jobs 4：八回合並行約 35 分，不帶要一回合接一回合跑）。
 
 用法（Windows 上用 venv 的 python）：
   python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--changed | --full] [--dry-run]
       [--no-suite] [--no-compare] [--web] [--cache] [--tracks a,b]
 --changed（第 107 批）：照 git diff base..head 決定比哪幾軌、哪幾種設定、要不要半舊半新與網頁（decide()，拿不準一律往寬：退回全軌）。
+  第 109 批：只改軌檔（scripts/sb/tracks/<軌>.py）是 mode "tracks"，只比那個檔登記的軌＋import 它的軌檔登記的軌、三種設定、半舊半新；
+  tianxia/core/ 直下的 .md、.gitattributes 不比。
 --full：全軌三設定＋--crossover＋整套含 slow＋--web 全回合（上 main 前、每日）。--changed 與 --full 不能一起帶；--tracks 照舊蓋過挑軌。
 --dry-run：只印 decide 的 JSON 與會挑到的軌，不開工作樹、不跑任何東西、不碰結果夾；挑軌用這支腳本所在那一份程式的 same_behavior.py pick
 （舊波的 head 上沒有 covers），所以拿得來對舊波的 diff 跑。
@@ -107,10 +110,56 @@ def _alias_package(path: Path) -> str | None:
     return found.pop() if len(found) == 1 else None
 
 
+TRACK_FILE = re.compile(r"scripts/sb/tracks/(?!__init__\.py$)([^/]+)\.py")  # 一軌的檔（第 109 批）；tracks/__init__.py 與 sb 其他檔照舊退回全軌
+
+
+def _track_graph(head_root: Path) -> tuple[dict[str, list[str]], dict[str, set[str]]] | None:
+    """head 的 scripts/sb/tracks/*.py 用 AST 讀（不 import）：檔名 → 登記的軌名、檔名 → import 它的檔名。
+    register_track 的第一個參數不是字面字串就回 None（量不出，退回全軌）。"""
+    import ast
+    folder = head_root / "scripts" / "sb" / "tracks"
+    if not folder.is_dir():
+        return None
+    registered: dict[str, list[str]] = {}
+    importers: dict[str, set[str]] = {}
+    for path in sorted(folder.glob("*.py")):
+        stem = path.stem
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        registered[stem] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", "")) == "register_track":
+                if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+                    return None
+                registered[stem].append(node.args[0].value)
+            mods = [node.module or ""] if isinstance(node, ast.ImportFrom) else [a.name for a in node.names] if isinstance(node, ast.Import) else []
+            for mod in mods:
+                if mod.startswith("sb.tracks."):
+                    importers.setdefault(mod.split(".")[2], set()).add(stem)
+    return registered, importers
+
+
+def _track_file_tracks(head_root: Path, stem: str, graph) -> list[str] | None:
+    """改了 tracks/<stem>.py 影響的軌：它自己登記的＋直接或間接 import 它的檔登記的。head 上沒有這個檔或一軌都沒有回 None。"""
+    if graph is None or stem not in graph[0]:
+        return None
+    registered, importers = graph
+    seen, todo = {stem}, [stem]
+    while todo:
+        for user in importers.get(todo.pop(), ()):
+            if user not in seen:
+                seen.add(user)
+                todo.append(user)
+    hit = sorted({t for s in seen for t in registered.get(s, ())})
+    return hit or None
+
+
 def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     """改到的檔（git diff --name-only base..head）與 -U0 的 diff → 要跑什麼。拿不準一律往寬。
-    mode：full（全軌，packages 是 None）、packages（只比 covers 碰得到這幾包的軌加上 ALWAYS_TRACKS；包是空的就只跑 ALWAYS_TRACKS）、none（不比）。"""
+    mode：full（全軌，packages 是 None）、packages（只比 covers 碰得到這幾包的軌加上 ALWAYS_TRACKS；包是空的就只跑 ALWAYS_TRACKS；
+    再併上 track_files_tracks）、tracks（第 109 批：只改了軌檔，只比 track_files_tracks、不加 ALWAYS）、none（不比）。"""
     lines = _changed_lines(diff_text)
+    graph = _track_graph(head_root) if any(TRACK_FILE.fullmatch(f) for f in files) else None
+    track_tracks: set[str] = set()
     test_for = _load_test_for(head_root)
     core = test_for.core_modules(head_root / "tianxia" / "core" / "__init__.py") if test_for else frozenset()
     shared = test_for.shared_modules(head_root / "tianxia" / "core" / "registry.py") if test_for else frozenset()
@@ -142,11 +191,24 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
             web = web_other = True
             reasons.append(f"{f}：只開網頁")
             continue
+        track_file = TRACK_FILE.fullmatch(f)
+        if track_file:
+            hit = _track_file_tracks(head_root, track_file.group(1), graph)
+            if hit is None:
+                full_reasons.append(f"{f}（軌檔，量不出登記的軌）")
+            else:
+                track_tracks.update(hit)
+                reasons.append(f"{f}：軌檔，跑 {'、'.join(hit)}")
+            compared.append(f)
+            continue
+        if parts[:2] == ["tianxia", "core"] and len(parts) == 3 and name.endswith(".md"):
+            reasons.append(f"{f}：文件，不比")
+            continue
         if f.startswith("tests/fixtures/content/") or f.startswith(FULL_PREFIXES) or f in FULL_FILES or re.fullmatch(r"requirements[\w-]*\.txt", f):
             full_reasons.append(f)
             compared.append(f)
             continue
-        if f.startswith(SKIP_PREFIXES) or (len(parts) == 1 and name.endswith(".md")) or f == ".gitignore":
+        if f.startswith(SKIP_PREFIXES) or (len(parts) == 1 and name.endswith(".md")) or f in (".gitignore", ".gitattributes"):
             reasons.append(f"{f}：不比")
             continue
         if parts[0] == "scripts" and f not in FULL_FILES:
@@ -181,7 +243,7 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     full = bool(full_reasons)
     week7 = any(f.startswith("content/profiles/") or f in ("tianxia/calendar.py", "content/config.json") or "timetable" in f for f in compared) or any(
         WEEK7_WORDS.search(line) for f in compared for line in lines.get(f, ()))
-    crossover = full or any(f.split("/")[-1] in CROSS_FILES for f in compared) or any(CROSS_WORDS.search(line) for f in compared for line in lines.get(f, ()))
+    crossover = full or bool(track_tracks) or any(f.split("/")[-1] in CROSS_FILES for f in compared) or any(CROSS_WORDS.search(line) for f in compared for line in lines.get(f, ()))
     for f in files:
         if f == "server.py" or (f.startswith("tianxia/features/") and f.endswith("/routes.py")):
             if any(PAGE_WORDS.search(line) for line in lines.get(f, ())):
@@ -190,11 +252,26 @@ def decide(files: list[str], diff_text: str, head_root: Path) -> dict:
     if full:
         mode, profiles = "full", list(SB_PROFILES)
     elif packages or web_files:
-        mode, profiles = "packages", ["season21", "test"] + (["week7"] if week7 else [])
+        mode, profiles = "packages", ["season21", "test"] + (["week7"] if week7 or track_tracks else [])
+    elif track_tracks:
+        mode, profiles = "tracks", list(SB_PROFILES)  # 軌檔改了一律三種設定、半舊半新（切點在軌裡）
     else:
         mode, profiles = "none", []
     return {"mode": mode, "packages": None if full else sorted(packages), "full_reasons": full_reasons, "profiles": [p for p in SB_PROFILES if p in profiles],
-            "crossover": crossover and mode != "none", "web": web, "web_files": web_files, "web_all_rounds": web_other or full, "reasons": reasons}
+            "crossover": crossover and mode != "none", "web": web, "web_files": web_files, "web_all_rounds": web_other,  # 第 109 批：核心退回全軌不再拉全回合
+            "track_files_tracks": [] if full else sorted(track_tracks), "reasons": reasons}
+
+
+def picked_tracks(script: Path, decision: dict) -> list[str] | None:
+    """decide 的結果 → 要比的軌（None＝全軌）：tracks 模式只比軌檔的軌；packages 模式 pick(包) 再併上軌檔的軌；none 是空的。"""
+    if decision["mode"] == "none":
+        return []
+    if decision["mode"] == "tracks":
+        return list(decision["track_files_tracks"])
+    picked = pick(script, decision["packages"])
+    if picked is None:
+        return None
+    return picked + [t for t in decision.get("track_files_tracks", ()) if t not in picked]
 
 
 def pick(script: Path, packages: list[str] | None) -> list[str] | None:
@@ -310,6 +387,12 @@ def compare_extra(decision: dict, jobs: str = "", new: str = "", also_existing: 
     return extra + (["--new", new] if new else []) + (["--also-existing"] if (new and also_existing) else [])
 
 
+def web_args(decision: dict, changed: bool, new: str = "") -> list[str]:
+    """scripts/webqa/gate.py 的參數：--changed 且不全回合才交 --changed-files；--new 照樣轉（N 波合併時補；--also-existing webqa 沒有、不轉）。"""
+    files = ["--changed-files", ",".join(decision["web_files"])] if changed and decision["web_files"] and not decision.get("web_all_rounds") else []
+    return files + (["--new", new] if new else [])
+
+
 def main() -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
@@ -323,6 +406,7 @@ def main() -> int:
     ap.add_argument("--no-compare", action="store_true")
     ap.add_argument("--jobs", default="")
     ap.add_argument("--web", action="store_true", help="前面都跑完之後跑網頁比對（scripts/webqa/gate.py）")
+    ap.add_argument("--web-jobs", default="", help="網頁比對轉給 gate.py 的 --jobs（第 110 批起 --jobs 4 八回合約 35 分；不給就一回合接一回合跑，約兩倍長）；O 波起閘門帶 --changed --web-jobs 4")
     ap.add_argument("--cache", action="store_true", help="同一波修正後重跑才開；進 develop、上 main 的那一次不開")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--changed", action="store_true", help="照 base..head 改到的決定比哪幾軌、設定、半舊半新、網頁（decide）")
@@ -338,7 +422,7 @@ def main() -> int:
         if a.changed:
             view = Path(tempfile.mkdtemp(prefix="wave-dry-"))
             try:
-                unpack(repo, head, view / "head", "tianxia", "scripts/test_for.py")  # decide 只讀 head 的這兩樣（包在不在、核心與共用層名單、別名檔）
+                unpack(repo, head, view / "head", "tianxia", "scripts/test_for.py", "scripts/sb/tracks")  # decide 只讀 head 的這三樣（包在不在、核心與共用層名單、別名檔、軌檔）
                 files = git(repo, "-c", "core.quotepath=off", "diff", "--name-only", base, head).splitlines()
                 decision = decide(files, git(repo, "-c", "core.quotepath=off", "diff", "-U0", base, head), view / "head")
             finally:
@@ -347,9 +431,10 @@ def main() -> int:
             decision = {"mode": "full", "packages": None, "full_reasons": ["沒帶 --changed"], "profiles": list(SB_PROFILES), "crossover": True,
                         "web": a.full or a.web, "web_files": [], "reasons": []}
         mine = here.parents[2] / "scripts" / "same_behavior.py"  # 這支腳本所在那一份的（舊波的 head 上沒有 covers）
-        decision["tracks"] = a.tracks.split(",") if a.tracks else pick(mine, decision["packages"]) if decision["mode"] != "none" else []
+        decision["tracks"] = a.tracks.split(",") if a.tracks else picked_tracks(mine, decision)
         decision["files"] = len(files) if a.changed else None
         decision["new"] = a.new.split(",") if a.new else []
+        decision["web_args"] = web_args(decision, a.changed, a.new) if (a.web or a.full or (a.changed and decision["web"])) else None
         print(json.dumps(decision, ensure_ascii=False, indent=1))
         return 0
 
@@ -373,7 +458,7 @@ def main() -> int:
     if a.changed:
         files = git(repo, "-c", "core.quotepath=off", "diff", "--name-only", base, head).splitlines()
         decision = decide(files, git(repo, "-c", "core.quotepath=off", "diff", "-U0", base, head), root)
-        decision["tracks"] = pick(Path(script), decision["packages"]) if decision["mode"] != "none" else []
+        decision["tracks"] = picked_tracks(Path(script), decision)
     else:
         decision = {"mode": "full", "packages": None, "full_reasons": ["--full" if a.full else "沒帶 --changed"], "profiles": list(SB_PROFILES),
                     "crossover": True, "web": a.full or a.web, "web_files": [], "reasons": [], "tracks": None}
@@ -438,8 +523,8 @@ def main() -> int:
     want_web = a.web or a.full or (a.changed and decision["web"])
     if want_web and web.exists():  # 上面全部等完才跑，不跟整套同時跑：同時跑的話畫面比對的雜訊多
         started = time.monotonic()
-        files_arg = ["--changed-files", ",".join(decision["web_files"])] if a.changed and decision["web_files"] and not decision.get("web_all_rounds") else []
-        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *files_arg], root,
+        proc, f = start([py, str(web), "--base", base, "--head", head, "--out", str(out / "web"), *web_args(decision, a.changed, a.new),
+                         *(["--jobs", a.web_jobs] if a.web_jobs else [])], root,
                         {**env, "TIANXIA_DB": str(work / "tmp" / "web.db")}, out / "web.txt")
         code = proc.wait()
         f.close()

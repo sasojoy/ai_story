@@ -621,6 +621,7 @@ def test_enlistment_after_joining_only_in_season_one(on):
 def test_after_the_farewell_a_drifter_is_told_where_to_join_and_nothing_nags(on):
     """師父出師那一步（p11）說完三邊在哪裡之後沒有別的引導步驟、沒有結語、沒有框；散人不被催，「主線與目標」靜靜留一行投靠地點
     （設計 4.1、6.3）。投靠了之後那一行就沒有了。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _game(on, at="yingchuan")
     assert game.state.player.tutorial_step == BASE and game.guide_box() is None
     text = game.quest_text()
@@ -1200,6 +1201,7 @@ def _recruit(on, faction, at):
 def test_the_duty_action_finishes_the_first_order_step_and_glows(on, faction, at):
     """FB-094 選甲：入伍第 2 步「出一次力」也認自己陣營的守勢行動（巡哨、傳道、保境安民），這週的軍令一道都辦不到也走得完；
     FB-093：那顆按鈕在第 2 步會發光，「此地還能做」自己打開。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _recruit(on, faction, at)
     game.state.world.orders = []
     _order(game, "strike", game.state.player.ally or faction, figure="zhangjiao")  # 新手打不動的那種

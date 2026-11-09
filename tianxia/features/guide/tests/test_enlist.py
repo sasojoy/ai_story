@@ -73,6 +73,7 @@ def test_seeing_the_orders_then_doing_one_finishes(enlisting):
 
 
 def test_joining_through_a_sect_starts_enlistment(enlisting):
+    enlisting.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia.models import Effect
     from tianxia.rules import apply_effect
 
@@ -85,6 +86,7 @@ def test_joining_through_a_sect_starts_enlistment(enlisting):
 
 def test_a_sect_joined_through_an_event_choice_starts_enlistment(enlisting):
     """拜入陣營名下的門派在事件的選項裡（choose 的 choice:N），也從那一下開始入伍段（Review Focus 2，走真正的 choose）。"""
+    enlisting.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia.models import Choice, Effect, Event
 
     game = _game(enlisting, at="cao_manor")
@@ -574,6 +576,7 @@ def test_old_saves_with_a_faction_are_not_pulled_in_by_a_free_text_answer(enlist
 
 
 def test_a_free_text_answer_that_joins_a_sect_starts_enlistment(enlisting, world):
+    enlisting.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia.models import Effect
 
     game = _game(enlisting, at="cao_manor", world=world)

@@ -210,7 +210,7 @@ def router(shell) -> APIRouter:
     def admin_page():
         """管理頁自己的網址（Joy 2026-11-01「把管理員工具獨立一個網址」）：同一支網頁，網頁看網址畫管理頁；不是管理者的人打開，
         網頁照常回到江湖（資料都在 /api/admin* 那幾條，那邊才擋人）。"""
-        return HTMLResponse(shell.PAGE, headers=shell.NO_CACHE)
+        return HTMLResponse(shell.current_page(), headers=shell.NO_CACHE)
 
     @r.get("/api/admin")
     def api_admin(request: Request):

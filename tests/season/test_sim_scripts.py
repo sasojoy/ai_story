@@ -92,6 +92,7 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.3)
     content = load_content(ROOT / "content")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）：這條只驗量測接線，照舊的陣營數跑，種子 1 在 0.3 天內才有首創
     try:
         result = sim.run_season(content, tmp_path, seed=1, tick=60.0)
     finally:
@@ -117,6 +118,7 @@ def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.1)
     content = load_content(ROOT / "content", profile="week7")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
+    content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     try:
         result = sim.run_season(content, tmp_path, seed=1, tick=60.0)
         gentry = [s.player for s in open_characters(tmp_path / "tianxia.db").all() if s.player.faction == "haoqiang"]
@@ -254,6 +256,14 @@ def test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry
     assert content.config.bounties.give_kinds == [] and content.config.bounties.kinds and content.config.ranger.exp_per_tier > 0
     measure._strip(content, bare=True, no_give=False)
     assert content.config.bounties.kinds == [] and content.config.ranger.exp_per_tier == 0.0
+    load = measure.load_content
+
+    def with_gentry(*args, **kwargs):
+        loaded = load(*args, **kwargs)
+        loaded.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
+        return loaded
+
+    monkeypatch.setattr(measure, "load_content", with_gentry)
     monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none", "--faction", "haoqiang", "--max-steps", "300"])
     measure.main()
     side = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("種子 1 陣營："))

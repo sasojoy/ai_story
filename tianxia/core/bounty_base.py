@@ -410,7 +410,7 @@ def post_figure(state: GameState, content: Content, cid: str, motive: str, regio
     from tianxia import atlas  # noqa: PLC0415  atlas → world → rules：延後載入
     from tianxia.relations import side_of  # noqa: PLC0415
 
-    side = side_of(content, cid)
+    side = side_of(content, cid, state.world)
     if not active(state, content) or side not in ENEMY or region is None:
         return None
     w, cfg, tuning = state.world, content.config.bounties, content.config.figure_life

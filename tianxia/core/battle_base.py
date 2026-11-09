@@ -153,6 +153,8 @@ class BattleParticipant(BaseModel):
     gambles: list[GambleMoment] = Field(default_factory=list)  # 這個人這一場的每一次放手一搏（玩家傳的行狀寫，最多 GAMBLES_KEPT 次）；舊資料沒有
     troop_bonus: float = 0.0  # 部下讓強攻、奇襲多的份量（份量已經乘過，這裡只給畫面寫幾成）
     renown: list[str] = Field(default_factory=list)  # 名聲：加入時快照的稱號（本場戰功、論功那一句寫；善惡第 1 段起、名望名動一方起）
+    # 稱號與官職（features/titles）：加入時戴著的那一個（{"id","name","grade"}；本場戰功、將旗、首功那一句寫）。開關關著、沒戴是空的，空的不寫這個鍵
+    title: dict[str, str] = Field(default_factory=dict)
     # 玉璽碎片（玉璽碎片設計 4.6）：加入那一刻的快照，挑挑戰者只讀它；舊資料沒有＝False
     turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
     newbie: bool = False  # 還在新手期（roster.newbie）
@@ -164,6 +166,14 @@ class BattleParticipant(BaseModel):
     # 奪璽單挑（seal_duel.side_from_participant）帶過去，對手打中他的那一下乘 1 − 它。決戰本身不吃（一個字不改）。舊資料沒有＝0
     cut: float = 0.0
     card: dict | None = None  # 五項屬性的季：加入那一刻的五項與加成（team.pvp_card），奪璽單挑照對手重算；舊的季、舊資料 None
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_title(self, handler):
+        """title 是空的時候不寫這個鍵：稱號開關關著，決戰那一列的 JSON 跟加這一欄之前一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("title") == {}:
+            del data["title"]
+        return data
 
 
 # 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」

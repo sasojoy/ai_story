@@ -195,6 +195,5 @@ class CarveScenario(RelicScenario):
 register_track("carve", CarveScenario, (("tianxia/engine.py", "tianxia/features/seal/duel_actions.py"),
                                        ('out.append(f"你出了{move}。")', 'out.append(f"你出了{move}！")')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "identity", "looks", "military", "outlets", "peers", "seal", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan"))

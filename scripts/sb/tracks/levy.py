@@ -189,7 +189,6 @@ class LevyScenario(CompanionsScenario):
 
 # 改一個字（selftest）：招募某一位那一下的紀錄標題（第 57 批第 2 段從 engine._action_title 搬進人物情誼包 __init__.py 的 Verb，那一行寫 f"招募・{ctx.content.characters[tail].name}"；搬到別的檔就補這裡的檔清單）
 register_track("levy", LevyScenario, (("tianxia/engine.py", "tianxia/features/companions/__init__.py"), ("招募・{c", "招募！{c")), "season21",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guide", "looks", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))

@@ -67,8 +67,4 @@ register_track("inkstone", InkstoneScenario, (("tianxia/features/identity/routes
     "        gate()\n        return me_info(request, token, account, shell.time.time())",
     "        return me_info(request, token, account, shell.time.time())",
 )), "season21",
-               # 照 wicket、missive 的寫法：登入的人叫到每一包的掛鉤，再加帳號綁定的路由與管理者工具
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "support", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("identity",))

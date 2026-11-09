@@ -756,6 +756,6 @@ class GameStateFor:
 register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py",),
                                                   ('DONE = "{who}託你的事辦成了。"', 'DONE = "{who}託你的事辦成了！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military",
+                       "notify", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "travel", "zhuan"))

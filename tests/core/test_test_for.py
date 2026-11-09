@@ -1141,6 +1141,9 @@ STAGE_PACKAGES += ["heroines"]  # 女子與隱線（PR #179）：heroines_stage.
 STAGE_PACKAGES += ["identity"]  # 帳號綁定（scripts/new_feature.py 生的 identity_stage.py）
 STAGE_PACKAGES += ["support"]  # 客服（scripts/new_feature.py 生的 support_stage.py）
 STAGE_PACKAGES += ["news"]  # 見聞（scripts/new_feature.py 生的 news_stage.py）
+STAGE_PACKAGES += ["titles"]  # 稱號與官職（scripts/new_feature.py 生的 titles_stage.py）
+STAGE_PACKAGES += ["terms"]  # 條款（scripts/new_feature.py 生的 terms_stage.py）
+STAGE_PACKAGES += ["jieyi"]  # 結義（scripts/new_feature.py 生的 jieyi_stage.py）
 STAGE_PACKAGES += ["zongmen"]  # 門派（scripts/new_feature.py 生的 zongmen_stage.py）
 
 

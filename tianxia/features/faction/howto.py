@@ -30,9 +30,10 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     if not content.scenario.factions:
         return []
     allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍的季：豪強先挑依附哪一邊、算那一邊的人（新寫）
+    gentry_on = allied_rules.gentry_on(content, season)  # 拿掉豪強的季（企劃者 2026-11-07）：不寫豪強那幾句
     # FB-112：推線只說有些地方；散人與不是交戰兩軍的陣營（地方豪強，Joy 2026-10-13）可以在決戰的大區臨時投效兩軍之一，
     # 只算那一場（Game._free_agent、_enlist_options；不進投靠名冊、不算叛投）。決戰的職位這一版不寫（控制者裁示：戰鬥那條線還在改，戰場上本來就寫著）
-    gentry = ("地方豪強要先挑依附官軍或黃巾，算那一邊的人，決戰也站那一邊。" if allied
+    gentry = ("" if not gentry_on else "地方豪強要先挑依附官軍或黃巾，算那一邊的人，決戰也站那一邊。" if allied
               else "陣營不是交戰的兩軍時，跟散人一樣臨時投效。")
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
@@ -59,9 +60,9 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
         f"{calendar.week_word('order_this', content, season)}的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
         f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。"
-        + f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。",
+        + (f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。" if gentry_on else ""),
         "**叛投**：一季一次，到別的陣營收人的地方叛投；晉升、召見、部下、這一季的貢獻歸零，屬性、武學、同伴、銀兩不動。"
-        + "換依附的一邊、豪強與同一邊的官軍或黃巾互換，也算叛投。",
+        + ("換依附的一邊、豪強與同一邊的官軍或黃巾互換，也算叛投。" if gentry_on else ""),
     ]
     return lines
 
@@ -76,7 +77,7 @@ def faction_lines(content: Content, season: WorldState) -> list[str]:
     fronts = set(rules.front_ids(content))
     pushers = _order_pushers(content)
     out = []
-    for faction in content.scenario.factions:
+    for faction in allied_rules.factions_of(content, season):  # 拿掉豪強的季只寫官軍、黃巾
         fid = faction.id
         goals = faction.goals
         pushed = {d for key, d in goals.items() if key in fronts}

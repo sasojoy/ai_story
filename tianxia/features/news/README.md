@@ -17,3 +17,5 @@
 ## 測試
 
 `tianxia/features/news/tests/test_news_smoke.py`。畫面的測試寫在原本測那一塊的檔裡，例如 `test_rumor_layers.py`、`test_week7_season.py`、`test_conquest_web.py`、`test_showdown_full_report.py`、`test_engine.py`。
+
+same_behavior 的軌是 facade、drape（讀到 `web/news.js`；Python 那一半每一軌都碰到、被共同組扣掉），兩軌都在 ALWAYS 六軌裡，`pick --covers news` 挑到 sortie、battle、progress、drape、facade、switchboard（第 111 批量的）。

@@ -31,6 +31,7 @@ def _war(content, name="甲"):
 
 
 def test_each_war_element_has_its_explanation_in_season_one(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     help_ = _war(on).status_data()["war_help"]
     assert set(help_) == {"stance", "fronts", "board", "quest"}
     assert all(help_[k] and all(isinstance(line, str) and line for line in help_[k]) for k in help_)
@@ -119,6 +120,7 @@ def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
 def test_the_chaos_and_stance_rule_is_written_once(on):
     """審查 Minor 7：亂局帶與態勢的規則只寫一次（guide_howto.front_rule、guide_howto.allied_rule），態勢、戰況圖卡、玩法說明都拿它
     （割據那一句 geju_rule 2026-10-31 跟豪強第三方一起拿掉）。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _war(on)
     stance, front = guide_howto.allied_rule(on), guide_howto.front_rule(on, card=False)
     help_ = game.status_data()["war_help"]
@@ -194,6 +196,7 @@ def test_the_beta_page_leaves_out_what_only_season_one_has(real):
 
 
 def test_the_season_section_is_the_war_explanations_and_the_closing_rule(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _war(on)
     section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
     assert guide_howto.season_line(on) in section and "35～65 是亂局" in section
@@ -347,6 +350,7 @@ def test_joining_and_orders_read_the_config(on):
 
 
 def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from tianxia import allied, ranks
 
     section = re.search(r"#### 各陣營有什麼不同\n((?:- .*\n)+)", _war(on).howto_text()).group(1)

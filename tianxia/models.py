@@ -9,6 +9,9 @@ from pydantic_core import core_schema
 from .jianfa_numbers import ExploreMix, JianfaNumbers
 from .core.tuning.identity import IdentityTuning  # 帳號綁定
 from .core.tuning.support import SupportTuning  # 客服
+from .core.tuning.titles import TitlesTuning  # 稱號與官職
+from .core.tuning.terms import TermsTuning  # 條款
+from .core.tuning.jieyi import JieyiTuning  # 結義
 from .core.tuning.zongmen import ZongmenTuning  # 門派
 # ── tuning import（new_feature.py 接在這一行前面）──
 
@@ -115,6 +118,9 @@ class Condition(_Strict):
     story_marks: dict[str, int] = Field(default_factory=dict)
     story_marks_max: dict[str, int] = Field(default_factory=dict)  # 同上，至多到幾（寫 0 是「沒記過」：例 沒跟蘇掌櫃交心的人才要檢定）
     level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
+    # 這一季有沒有地方豪強（allied.gentry_on；拿掉豪強的季 WorldState.no_gentry）要等於它：曹氏莊院的拜入試煉寫 true，
+    # 下一季起曹氏莊院不再是門派（企劃者 2026-11-07「曹氏莊院 不適合當門派」）；None 是不看
+    gentry: bool | None = None
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -1146,6 +1152,8 @@ class CharacterDef(_Strict):
     haunts: list[str] = Field(default_factory=list)
     follows: str | None = None
     side: str | None = None
+    # 拿掉地方豪強的季（WorldState.no_gentry，企劃者 2026-11-07「按照建議改」）：side 寫豪強的人改站這一方（許褚歸官軍）；空的照 side
+    side_two_sides: str | None = None
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
@@ -1153,6 +1161,12 @@ class CharacterDef(_Strict):
     # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
     hire_type: str | None = None
     hire_at: str | None = None
+
+    def side_in(self, world=None) -> str | None:
+        """這一季（WorldState）他站哪一方：拿掉地方豪強的季（no_gentry）有 side_two_sides 的照它，其他照 side。"""
+        if world is not None and world.no_gentry and self.side_two_sides is not None:
+            return self.side_two_sides
+        return self.side
 
 
 class PlanContest(_Strict):
@@ -1541,6 +1555,8 @@ class TutorialStep(_Strict):
     # 五項屬性的季（attrset.on）改說的話與那一行（空的照 text、line）：配點那一步改成挑成長配比（每 10 級才送點，升一級沒有點可配）
     text_v2: str = ""
     line_v2: str = ""
+    # 拿掉地方豪強的季（allied.gentry_on 是 False，企劃者 2026-11-07）改說的話：空的照 text（師父送行、初入江湖那兩段講到豪強的才寫）
+    text_two_sides: str = ""
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
@@ -1682,6 +1698,7 @@ class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+    drifter_line_two_sides: str = ""  # 拿掉地方豪強的季（allied.gentry_on 是 False）那一行：只寫兩軍；空的照 drifter_line
 
 
 class OpeningSender(_Strict):
@@ -4416,6 +4433,9 @@ class Config(_Strict):
     world_tick_seconds: float = Field(default=0, ge=0)
     identity: IdentityTuning = Field(default_factory=IdentityTuning)  # 帳號綁定（tianxia/core/tuning/identity.py）
     support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
+    titles: TitlesTuning = Field(default_factory=TitlesTuning)  # 稱號與官職（tianxia/core/tuning/titles.py）
+    terms: TermsTuning = Field(default_factory=TermsTuning)  # 條款（tianxia/core/tuning/terms.py）
+    jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
@@ -4459,6 +4479,10 @@ class Config(_Strict):
     # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
     # 軍階，豪強版的只能升到三階」）：沒有開關，蓋了第一季章的季就是（allied.on）；沒有第一季規則的季（14 天）照舊是第三方豪強。
     # 2026-10-31 開關 haoqiang_allied 連豪強第三方的季（割據、攪局、第三方臨時投效）一起拿掉（T-05，企劃者「都照建議」）
+    # 地方豪強這個陣營（劇本寫了 allies 的陣營）還在不在（企劃者 2026-11-07 決策卡「下一季起整個拿掉」）：開季時蓋章
+    # （WorldState.no_gentry＝not gentry；allied.gentry_on），正在跑的季照它自己的章——章之前開的季（第 9 季）豪強照舊到季末。
+    # content/config.json 寫 false：下一季起只剩官軍、黃巾、散人。模型預設 true，測試內容與沒寫這個鍵的設定一個字都不變
+    gentry: bool = True
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。

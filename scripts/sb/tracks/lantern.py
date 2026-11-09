@@ -92,7 +92,6 @@ class LanternScenario(Scenario):
 
 # 改一個字（selftest）：閉關那一行（第 81 批從 engine.py 搬到 core/status_view.py，兩處找）
 register_track("lantern", LanternScenario, (("tianxia/core/status_view.py", "tianxia/engine.py"), ("🧘 閉關中，現實約 ", "🧘 閉關中，現實大約 ")), "season21",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+               covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear", "guide",
+                       "map", "military", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "travel", "zhuan"))

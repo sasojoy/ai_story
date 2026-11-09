@@ -334,6 +334,40 @@ class SectBook(BaseModel):
     seq: int = 0
 
 
+class JieyiBond(BaseModel):
+    """一組結義（結義包 tianxia/features/jieyi/；設計稿 v2 卷一，Joy 2026-11-07「先做丙，跨季保留關係」）：全服、不分季，存在 SharedWorldState.jieyi。
+    members 是名號（不是鍵：易名帖整個字串相等的地方都換，名號跟著換），照入義的先後排，就是排行。"""
+
+    id: str
+    place: str  # 開義的地點 id（名號照它取）
+    season: int  # 開義的那一季
+    members: list[str] = Field(default_factory=list)
+    log: list[str] = Field(default_factory=list)  # 義譜：哪一季、在哪裡、誰入義、誰離開（給人看的句子）
+
+
+class JieyiOffer(BaseModel):
+    """一張還沒回的結義邀請。時刻是現實秒（Game.now）：邀請跨季也不怪、跟賽季時鐘無關。"""
+
+    id: str
+    sender: str
+    target: str
+    location: str
+    sent_at: float
+    expires_at: float
+
+
+class JieyiBook(BaseModel):
+    """全服的結義帳（結義包）。空的時候 world 那一列的 JSON 不寫這個鍵（SharedWorldState._drop_empty_sorties）。"""
+
+    bonds: dict[str, JieyiBond] = Field(default_factory=dict)
+    offers: list[JieyiOffer] = Field(default_factory=list)
+    left_at: dict[str, float] = Field(default_factory=dict)  # 名號鍵 → 上次割袍斷義的現實秒（冷卻）
+    seq: int = 0  # 下一組的流水號
+
+    def empty(self) -> bool:
+        return not (self.bonds or self.offers or self.left_at or self.seq)
+
+
 class SealView(NamedTuple):
     """seal_state() 讀回來的一份（只讀 world 那一列的 JSON，不讀季）。"""
 
@@ -389,6 +423,8 @@ class SharedWorldState(BaseModel):
     sorties: dict[str, SortieDuel] = Field(default_factory=dict)
     # 師門武譜（門派包 features/zongmen 第二批）：門派 id → 那一門的武譜。全服、不分季（換季不清）；空的不寫鍵（_drop_empty_sorties）
     sect_books: dict[str, SectBook] = Field(default_factory=dict)
+    # 結義（結義包，Joy 2026-11-07）：全服、不分季，換季不清。空的時候不寫這個鍵
+    jieyi: JieyiBook = Field(default_factory=JieyiBook)
 
     @model_serializer(mode="wrap")
     def _drop_empty_sorties(self, handler):
@@ -398,6 +434,8 @@ class SharedWorldState(BaseModel):
             for key in ("sorties", "sect_books"):
                 if key in data and not data[key]:
                     del data[key]
+        if isinstance(data, dict) and "jieyi" in data and self.jieyi.empty():
+            del data["jieyi"]
         return data
 
     def season_phase(self) -> SeasonPhase:
@@ -434,6 +472,7 @@ def stamp_season(season: WorldState, content: Content, now: float | None = None)
     season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
     season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
     season.attrs_v2 = cfg.attributes.v2.enabled  # 五項屬性（屬性與跨季架構 v2 第三節；attrset.on）：照開季蓋章，正在跑的季不變
+    season.no_gentry = not cfg.gentry  # 地方豪強（企劃者 2026-11-07「下一季起整個拿掉」）：照開季蓋章，正在跑的季不變（allied.gentry_on）
     season.jianfa_on = cfg.jianfa.enabled  # 減法季（Config.jianfa）：season21、week7 開，週末不開；正在跑的季不變（rules.jianfa）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）

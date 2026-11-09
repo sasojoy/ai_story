@@ -16,7 +16,7 @@ MAIN_OWNERS = {
     "tavern": "tavern", "anonymous": None, "gender": None, "story_seen": "story", "letter_read": "companions", "letter_decline": "companions",
     "hints_off": "guide", "skip_tutorial": "guide", "view_map": "guide", "view_orders": "guide", "view_tab": "guide", "guide_ack": "guide",
     "allocate": "cultivation", "growth": None, "newbie_drifter": "guide", "pill": None, "checkin": "checkin", "conquest_letter": "territory_acts",
-    "seal_use": "seal", "sortie_go": "sortie", "sortie_answer": "sortie", "sortie_join": "sortie", "outing": "explore",
+    "seal_use": "seal", "sortie_go": "sortie", "sortie_answer": "sortie", "sortie_join": "sortie", "outing": "explore", "jieyi_leave": "jieyi",
     "zongmen_offer": "zongmen", "zongmen_learn": "zongmen", "zongmen_page": "zongmen",
 }
 MENXIA_OWNERS = {

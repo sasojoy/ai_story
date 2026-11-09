@@ -1871,6 +1871,8 @@ def validate(c: Content) -> None:
             need(leader is None or leader.follows is None, f"{where}：follows 的 {ch.follows} 自己也在跟著別人走")
         if ch.side is not None:
             known(where, [ch.side], [f.id for f in c.scenario.factions], "陣營")
+        if ch.side_two_sides is not None:  # 拿掉豪強的季改站的那一方：只能是交戰兩軍之一（不是豪強）
+            known(where, [ch.side_two_sides], [f.id for f in c.scenario.factions if not f.allies], "交戰的一軍")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")

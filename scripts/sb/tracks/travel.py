@@ -388,6 +388,6 @@ class TravelScenario(StaminaScenario):
 # 改一個字（selftest）：舊的趕路喊停那一句（go_actions.halt，第 47 批從 Game._halt 搬進 tianxia/features/travel/；base 上還在 engine.py，所以兩個檔都寫）
 register_track("travel", TravelScenario, (("tianxia/features/travel/go_actions.py", "tianxia/engine.py"), ("（趕路已經花掉的體力不退。）", "（趕路已經花掉的體力不退！）")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "map",
-                       "military", "notify", "outlets", "peers", "persona", "seal", "seclusion", "sense", "smithy", "socialize",
-                       "sortie", "stamina_plays", "story", "tale", "tavern", "territory_acts", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                       "travel", "zhuan"))

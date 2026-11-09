@@ -33,9 +33,14 @@ def face(ctx, state: GameState) -> dict | None:
     card = state.player.mingtie
     if card is None:
         return None
-    if mingtie_rules.shown(shared_or_none(ctx), state.player.name, card.version, ctx.state, ctx.content):
-        return mingtie_rules.view(card)
-    return mingtie_rules.blank_view(card)
+    seen = mingtie_rules.shown(shared_or_none(ctx), state.player.name, card.version, ctx.state, ctx.content)
+    out = mingtie_rules.view(card) if seen else mingtie_rules.blank_view(card)
+    seal = mingtie_rules.seal_of(state, ctx.content)  # 稱號與官職開著：戴著的那一個印成大印；關著沒有這個鍵
+    return {**out, "seal": seal} if seal else out
+
+
+def _with_seal(card, seal):
+    return {**card, "seal": seal} if seal and isinstance(card, dict) else card
 
 
 def view(ctx, board: dict | None = None) -> dict:
@@ -51,7 +56,7 @@ def view(ctx, board: dict | None = None) -> dict:
             "card": mingtie_rules.view(copy.card) if seen else mingtie_rules.blank_view(copy.card),
         })
     return {
-        "mine": mingtie_rules.view(p.mingtie),
+        "mine": _with_seal(mingtie_rules.view(p.mingtie), mingtie_rules.seal_of(ctx.state, c)),
         "pool": mingtie_rules.earned(ctx.state, c, ctx.world, board),
         "made_left": mingtie_rules.made_left(ctx.state, c, day),
         "sent_left": mingtie_rules.sent_left(ctx.state, c, day),

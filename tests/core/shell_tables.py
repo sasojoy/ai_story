@@ -254,6 +254,11 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/logout"): "沒登入登出也是 200",
     ("GET", "/zhuan/{code}"): "公開的傳：分享代碼，唯讀",
     ("GET", "/zhanji/{code}"): "公開的戰記：分享代碼，唯讀",
+    # terms（條款包；Joy 2026-11-07 要的使用條款與隱私權條款，2026-11-08「趕快合一合」）
+    ("GET", "/terms"): "使用條款全文：法律文件要讓還沒註冊的人看得到，唯讀、只回靜態頁",
+    ("GET", "/privacy"): "隱私權條款全文：同上",
+    ("GET", "/api/terms"): "terms：Config.terms.enabled 關著 404，連登入都不問（同 /api/events）；開著沒登入 401",
+    ("POST", "/api/terms/agree"): "terms：同上",
     ("GET", "/api/looks/img/{look}/{sheet}"): "形象圖，<img> 不帶登入、只回圖",
     # 先於登入擋掉：沒登入也不是 401，但碰不到資料
     ("POST", "/api/mall/rename"): "先驗名號（空名 400），給了名號才問登入",
@@ -291,6 +296,9 @@ ROUTE_GATE_EXCEPTIONS = {
     ("POST", "/api/zhuan/write"): "zhuan：同上，寫不了丟 GameError 400，開著也一樣",
     ("POST", "/api/zhuan/share"): "zhuan：同上，分享不了丟 GameError 400，開著也一樣",
     ("POST", "/api/smith_line"): "smithy：店面打造頁問這一爐會怎樣，不算行動、不存檔，路由不問開關",
+    # terms（條款包；Joy 2026-11-08「趕快合一合」）
+    ("GET", "/terms"): "terms：法律文件全文，開關只管「進遊戲要不要按同意」，條款頁本身永遠看得到（唯讀靜態頁）",
+    ("GET", "/privacy"): "terms：同上",
 }
 
 # ── 有路由、Feature.enabled 恆 True（沒有開關可關）的包 → 理由 ──

@@ -1281,6 +1281,7 @@ def _join(game, faction):
 
 @pytest.mark.parametrize("faction", ["guan", "huang", "haoqiang"])
 def test_rejoining_greets_in_the_recruiters_own_voice(on, faction):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _rejoiner(on, faction)
     who = on.tutorial.enlist.recruiters[faction]
     _join(game, faction)
@@ -1365,6 +1366,7 @@ def test_the_greeting_is_not_held_back_by_an_unread_state_hint(on):
 
 def test_a_free_text_answer_that_joins_a_sect_also_greets(on):
     """隨口應對（answer_event）拜入陣營名下的門派：同選項一樣，入伍段早就走完的人收到招呼。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     from conftest import FixedRandom
     from tianxia.models import Choice, Event
 

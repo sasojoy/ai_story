@@ -75,6 +75,34 @@ def test_docs_and_tests_compare_nothing(gate, files):
     assert (d["mode"], d["packages"], d["profiles"], d["crossover"], d["web"]) == ("none", [], [], False, False)
 
 
+def test_one_track_file_runs_only_its_tracks(gate):
+    """第 109 批：只改一軌的 scripts/sb/tracks/<軌>.py 只跑那一軌＋import 它的軌檔登記的軌（facade 被 drape import）；sb 其他檔照舊全軌（上面 harness 那一參數）。"""
+    d = gate.decide(["scripts/sb/tracks/wicket.py"], _diff("scripts/sb/tracks/wicket.py", "+        self.step()"), ROOT)
+    assert (d["mode"], d["track_files_tracks"], d["profiles"], d["crossover"], d["full_reasons"]) == ("tracks", ["wicket"], ["season21", "week7", "test"], True, [])
+    assert gate.decide(["scripts/sb/tracks/facade.py"], "", ROOT)["track_files_tracks"] == ["drape", "facade"]
+    mixed = gate.decide(["scripts/sb/tracks/wicket.py", "tianxia/features/seal/acts.py"], "", ROOT)
+    assert (mixed["mode"], mixed["packages"], mixed["track_files_tracks"], mixed["profiles"]) == ("packages", ["seal"], ["wicket"], ["season21", "week7", "test"])
+    assert gate.decide(["scripts/sb/tracks/__init__.py"], "", ROOT)["mode"] == "full"
+    assert gate.decide(["scripts/sb/tracks/gone_away.py"], "", ROOT)["mode"] == "full", "head 上沒有的軌檔（刪掉的）量不出，退回全軌"
+
+
+@pytest.mark.parametrize("path", ["tianxia/core/services_list.md", ".gitattributes"])
+def test_core_notes_and_gitattributes_compare_nothing(gate, path):
+    d = gate.decide([path], "", ROOT)
+    assert (d["mode"], d["full_reasons"], d["web"]) == ("none", [], False)
+    assert gate.decide(["tianxia/core/tuning/notes.md"], "", ROOT)["mode"] == "full", "只有 tianxia/core/ 直下的 .md 不比"
+
+
+def test_core_fallback_does_not_widen_web_rounds(gate):
+    """第 109 批第 11 項：核心退回全軌只管比對的軌，網頁回合照改到的 web/ 檔挑（M 波 web/identity.js＋identity_base 跑了 70 分全回合）。"""
+    d = gate.decide(["web/identity.js", "tianxia/core/identity_base.py"], "", ROOT)
+    assert (d["mode"], d["web"], d["web_all_rounds"], d["web_files"]) == ("full", True, False, ["web/identity.js"])
+    page = gate.decide(["web/identity.js", "server.py"], _diff("server.py", "+    return HTMLResponse(page)"), ROOT)
+    assert page["mode"] == "full" and page["web_all_rounds"], "server.py 回頁面的行照舊全回合"
+    shell = gate.decide(["web/style.css"], "", ROOT)  # web/ 底下的殼檔照舊原樣交 --changed-files，全不全走由第 110 批的 gate.py 定
+    assert (shell["web_all_rounds"], shell["web_files"]) == (False, ["web/style.css"])
+
+
 def test_new_reaches_compare_either_way(gate):
     """PM 11/08 的 --new：--changed 挑軌與全軌都要傳給 compare。"""
     changed = {"tracks": ["facade", "seal"], "profiles": ["season21"], "crossover": False}
@@ -84,3 +112,14 @@ def test_new_reaches_compare_either_way(gate):
         assert extra[-2:] == ["--new", "identity,support"]
         assert "--new" not in gate.compare_extra(d, "", "")
     assert gate.compare_extra(changed, "2", "x")[:4] == ["--tracks", "facade,seal", "--jobs", "2"]
+
+
+def test_new_reaches_the_web_gate(gate):
+    """N 波合併時補（第 110 批留下的）：wave_gate --web 把 --new <包> 轉給 scripts/webqa/gate.py --new；--also-existing 不轉（webqa 沒有）。"""
+    changed = {"web_files": ["web/identity.js"], "web_all_rounds": False}
+    assert gate.web_args(changed, True, "identity,support") == ["--changed-files", "web/identity.js", "--new", "identity,support"]
+    assert "--new" not in gate.web_args(changed, True, "")
+    full = {"web_files": [], "web_all_rounds": False}
+    assert gate.web_args(full, False, "identity,support") == ["--new", "identity,support"]
+    assert gate.web_args(full, False, "") == []
+    assert gate.web_args({"web_files": ["web/app.js"], "web_all_rounds": True}, True, "") == [], "全回合不交 --changed-files"

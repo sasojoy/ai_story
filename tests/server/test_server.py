@@ -1,3 +1,4 @@
+import os
 import ast
 import contextlib
 import hashlib
@@ -4334,6 +4335,24 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
     assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
 
 
+def test_the_page_versions_follow_a_pull_without_a_restart(tmp_path, monkeypatch):
+    """2026-11-07 對話告辭急修：主機只 pull、沒重開，頁面上的 ?v= 還是啟動時那一份，手機一直拿舊檔。web/ 的檔換了，頁面就重算。"""
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text('<link rel="stylesheet" href="/static/a.css">', encoding="utf-8")
+    (web / "a.css").write_text("a{}", encoding="utf-8")
+    monkeypatch.setattr(server, "WEB", web)
+    monkeypatch.setattr(server.features_core, "with_scripts", lambda html: html)
+    monkeypatch.setattr(server, "PAGE", server.PAGE)  # 測完換回正式那一份
+    monkeypatch.setattr(server, "_PAGE_STAMP", ())
+    first = server.current_page()
+    assert server.current_page() is first  # 沒換檔不重算
+    (web / "a.css").write_text("a{color:red}", encoding="utf-8")
+    os.utime(web / "a.css", ns=(1, 1))
+    second = server.current_page()
+    assert second != first and f"?v={server.content_version(b'a{color:red}')}" in second
+
+
 class _OneShot(server_push.PushHub):
     """一訂閱就送一則再收尾，TestClient 才拿得到整份回應（不會結束的串流 TestClient 等不完）。"""
 
@@ -4704,6 +4723,7 @@ NOT_IN_THE_FINGERPRINT = {
         "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
         "mingtie_cleared": "管理者放回的名帖，同上",
         "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
+        "jieyi": "結義的帳：邀請與答應是雙方自己的動作（被邀的人選單上的那一對下次同步補），名冊只在俠客頁與玩家卡",
         "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
         # 3b-2 接線了（main.sortie_card、main.sorties）；搬進指紋要在 server_push.world_fingerprint 加一格、server.current_fingerprint 傳
         # shared.sorties——server_push 是雲端側的檔，交雲端側改（計畫 4.0 之三第 5 條）
@@ -4820,6 +4840,9 @@ NOT_IN_THE_FINGERPRINT = {
         "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
         "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
         "attrs_v2": "開季時蓋的章（五項屬性），開季之後不變",
+        "no_gentry": "開季時蓋的章（拿掉地方豪強），開季之後不變",
+        "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",
+        "titles_holders": "名號結算的那一下寫江湖傳聞（傳聞流水號已在指紋裡）；各人戴哪一個是自己存檔的事，下次輪詢才補也不礙事",
         "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
                     "進度不露數字、只回推的人自己那一句話",
         "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",

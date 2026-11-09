@@ -131,7 +131,7 @@ def filter_props(out: dict) -> dict:
     return out
 
 
-def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, shoot=True, chrome=None, node=None, cdp_ports=None, red_budget=40) -> dict:
+def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, shoot=True, chrome=None, node=None, cdp_ports=None, red_budget=40, new_sheets=None) -> dict:
     chrome, node = gate.find_chrome(chrome), gate.find_node(node)
     cdps = gate.pick_ports(cdp_ports, "cdp-ports")
     pages = load_corpus(corpus)
@@ -169,7 +169,7 @@ def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, sh
             raise gate.ToolBroke(f"replay left no report (exit {p.returncode})")
     # the two ports differ and the snapshots carry no host; the stylesheet rules can, so both hosts go through the same mask
     origins = [f"127.0.0.1:{s.server_address[1]}" for s in servers]
-    res = compare.compare(walks[0], walks[1], origins, os.path.join(out_dir, "red"), red_budget=red_budget, want_fingerprint=False)
+    res = compare.compare(walks[0], walks[1], origins, os.path.join(out_dir, "red"), red_budget=red_budget, want_fingerprint=False, new_sheets=new_sheets)
     if not frozen:
         res = filter_props(res)
     with_map = sum(1 for _, body in pages.values() if 'id="map-host"' in body)
