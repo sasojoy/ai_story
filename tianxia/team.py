@@ -659,7 +659,7 @@ def _worn_pairing(state: GameState, content: Content, world: WorldStateStore, sw
 
 
 def _signed_pct(ratio: float) -> str:
-    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 skillview 的 _pct 同一個寫法。"""
+    """搭配的百分比，帶正負號（減號用 −）：同屬 +20%、相剋 −20%；整數不寫「.0」。跟 art_view 的 _pct 同一個寫法。"""
     return f"{ratio:+.1%}".replace(".0%", "%").replace("-", "−")
 
 
@@ -740,15 +740,121 @@ def practice_price(content: Content, level: int, scale: float = 1.0) -> int:
     return base if scale == 1.0 else max(1, round(base * scale))
 
 
+# ── 武學打了才升（Config.arts.fight_practice；Joy 2026-11-09「甲方案」）──
+
+DAY_SECONDS = 86400.0
+ART_KINDS = (("內功", "neigong_id", "neigong_level"), ("武學", "wugong_id", "wugong_level"))
+
+
+def fight_practice_on(state: GameState, content: Content) -> bool:
+    """這一季是不是「武學打了才升」：設定開著，而且這一季開季時蓋了章（WorldState.fight_practice）。正在跑的季一個字不變。"""
+    return content.config.arts.fight_practice.enabled and bool(getattr(state.world, "fight_practice", False))
+
+
+def practice_need(content: Content, level: int) -> int:
+    """第 level 成升 level+1 成要的熟練。"""
+    return content.config.arts.fight_practice.per_level * level
+
+
+def practice_cost(state: GameState, content: Content, kind: str) -> int | None:
+    """修練頁「練成」這一下要的心得：還沒學、已經第十成是 None。打了才升的季照這一成還差的熟練 × xinde_per_point（雲篆照打折）；
+    別的季照舊 practice_price。"""
+    member = state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    skill_id, level = getattr(member, slot), getattr(member, level_slot)
+    if skill_id is None or level >= MAX_LEVEL:
+        return None
+    scale = treasures.amount(state, content, "practice")
+    if not fight_practice_on(state, content):
+        return practice_price(content, level, scale)
+    left = max(0, practice_need(content, level) - state.player.art_exp.get(skill_id, 0))
+    return max(1, round(left * content.config.arts.fight_practice.xinde_per_point * scale))
+
+
+def practice_progress(state: GameState, content: Content, kind: str) -> dict | None:
+    """修練頁那一門的熟練進度（打了才升的季才有）：這一成累積多少、要多少、今天還能長多少。還沒學是 None。"""
+    if not fight_practice_on(state, content):
+        return None
+    member = state.player.member
+    slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
+    skill_id, level = getattr(member, slot), getattr(member, level_slot)
+    if skill_id is None:
+        return None
+    p, cfg = state.player, content.config.arts.fight_practice
+    today = p.art_exp_today.get(skill_id, 0) if p.art_exp_day == _day_of(state) else 0
+    return {"exp": p.art_exp.get(skill_id, 0) if level < MAX_LEVEL else 0, "need": practice_need(content, level) if level < MAX_LEVEL else 0,
+            "today_left": max(0, cfg.daily_cap - today)}
+
+
+def _day_of(state: GameState) -> int:
+    return int(float(state.world.time) // DAY_SECONDS)
+
+
+def fight_gain(content: Content, kind: str, tier: str, difficulty: float, our_power: float) -> int:
+    """這一場給每一門的熟練（還沒扣每天上限）：勝 win、僵持 draw、落敗 lose，乘對手強弱與對手種類。太弱、沒有威力的是 0。"""
+    cfg = content.config.arts.fight_practice
+    if our_power <= 0:
+        return 0
+    ratio = difficulty / our_power
+    if ratio < cfg.weak_ratio:
+        return 0
+    base = cfg.win if tier in WIN_TIERS else cfg.draw if tier == "僵持" else cfg.lose
+    scale = (cfg.hard_scale if ratio >= cfg.hard_ratio else 1.0) * (cfg.double_scale if kind in cfg.double_kinds else 1.0)
+    return round(base * scale)
+
+
+def grow_from_fight(state: GameState, content: Content, world: WorldStateStore, kind: str, tier: str,
+                    difficulty: float, our_power: float) -> list[str]:
+    """打完一場：身上的內功、武學各長熟練，滿了自己升一成（可以連升），到第十成為止；每門每個遊戲日最多 daily_cap。
+    回寫給玩家看的句子（戰報的敘事）；不是打了才升的季、身上沒有武學回 []。"""
+    if not fight_practice_on(state, content):
+        return []
+    p, cfg = state.player, content.config.arts.fight_practice
+    worn = [(k, getattr(p.member, s), lv) for k, s, lv in ART_KINDS if getattr(p.member, s) is not None]
+    if not worn or all(getattr(p.member, lv) >= MAX_LEVEL for _k, _s, lv in worn):
+        return []
+    amount = fight_gain(content, kind, tier, difficulty, our_power)
+    if amount <= 0:
+        return ["對手太弱，武學練不到什麼。"]
+    day = _day_of(state)
+    if p.art_exp_day != day:
+        p.art_exp_day, p.art_exp_today = day, {}
+    lines: list[str] = []
+    for _kind, skill_id, level_slot in worn:
+        level = getattr(p.member, level_slot)
+        if level >= MAX_LEVEL:
+            continue
+        art = player_art(state, content, world, skill_id)
+        name = art.name if art else skill_id
+        gain = min(amount, max(0, cfg.daily_cap - p.art_exp_today.get(skill_id, 0)))
+        if gain <= 0:
+            lines.append(f"【{name}】今天練夠了，明天再來。")
+            continue
+        p.art_exp_today[skill_id] = p.art_exp_today.get(skill_id, 0) + gain
+        exp = p.art_exp.get(skill_id, 0) + gain
+        while level < MAX_LEVEL and exp >= practice_need(content, level):
+            exp -= practice_need(content, level)
+            level += 1
+            lines.append(f"【{name}】練到第{level}成。")
+        setattr(p.member, level_slot, level)
+        if level >= MAX_LEVEL:
+            p.art_exp.pop(skill_id, None)
+            lines.append(f"【{name}】熟練 +{gain}（第十成）")
+        else:
+            p.art_exp[skill_id] = exp
+            lines.append(f"【{name}】熟練 +{gain}（第{level}成 {exp}/{practice_need(content, level)}）")
+    return lines
+
+
 def can_practise(state: GameState, content: Content, kind: str) -> bool:
     """身上這一欄有武學、還沒第十成、而且付得起下一成的心得（練成花心得，設計 4.2）。
-    機器人要不要練（bot.can_practise）與主畫面的提示（skillview.practice_hint）共用這一個條件。"""
+    機器人要不要練（bot.can_practise）與主畫面的提示（art_cards.practice_hint）共用這一個條件。"""
     member = state.player.member
     slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
     level = getattr(member, level_slot)
     return (
         getattr(member, slot) is not None and level < MAX_LEVEL
-        and state.player.stats.get("xinde", 0) >= practice_price(content, level, treasures.amount(state, content, "practice"))
+        and state.player.stats.get("xinde", 0) >= (practice_cost(state, content, kind) or 0)
     )
 
 
@@ -768,7 +874,7 @@ def practice(
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
-    price = practice_price(content, level, treasures.amount(state, content, "practice"))
+    price = practice_cost(state, content, kind) or 0  # 打了才升的季：這一成還差的熟練換心得（Joy 2026-11-09「手動用心得解」）
     xinde = state.player.stats.get("xinde", 0)
     if xinde < price:
         return [
@@ -777,6 +883,7 @@ def practice(
         ]
     state.player.stats["xinde"] = xinde - price
     setattr(member, level_slot, level + 1)
+    state.player.art_exp.pop(skill_id, None)  # 這一成的熟練用心得補滿了，下一成從 0 起（打了才升的季；別的季本來就是空的）
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if not safe and rng.random() < cfg.practice_injury_chance:
         now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER), season=state.world)
@@ -852,7 +959,7 @@ def heal_cost(content: Content, member, state: GameState | None = None) -> int:
 
 
 HEAL_FREE = "這一帶承露，醫館分文不取"  # 待 joy 潤：承露（玉璽碎片改版第 2 批）那一區療傷不收錢，療傷那一句的括號
-HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（skillview.heal_note）
+HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（art_cards.heal_note）
 
 
 def heal_free(state: GameState, content: Content) -> bool:
@@ -878,7 +985,7 @@ def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int
 
 
 def heal_problem(state: GameState, content: Content, member, where: str | None = None) -> str | None:
-    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（skillview.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
+    """療傷做不了的原因；None＝可以。heal 與修練頁的療傷鈕（art_cards.heal_button）走同一個判斷，鈕上寫的跟按下去回的是同一句。
     where 是呼叫端問過 clinic.problem 的那一句（不在醫館；None＝在醫館或開關關著），排在「氣血無恙」之後、銀兩之前。"""
     cost = heal_cost(content, member, state)
     if cost <= 0:
@@ -1146,13 +1253,13 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
 def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
     """本人身上的功效換成遭遇戰的數字（武學與成長設計 13.2、13.4）。沒有功效的人是空的 Mods（單次判定跟以前一模一樣）。
 
-    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，content.check_traits 擋共用）。名將本命絕學（13.5）的獨特
+    特別功效目前照「掛點」記在 Loadout.specials（一個掛點一個，traits.check_traits 擋共用）。名將本命絕學（13.5）的獨特
     特別功效進來時，若要改成照 id 記，下面每一處「按掛點讀」都要跟著改——全部的清單（讀的是 lo.specials 的鍵或值）：
     - traits.py：loadout（寫入，同一個掛點只留第一個）、has（`hook in lo.specials`）。
     - team.py：trait_mods（`.get("power_from_difficulty")`、`"double_luck" in`）、fight（`"no_loss" in`）、
       take_encounter_toll（`"no_injury" in`）。
     - engine.py：_battle_rewards（`.get("win_xinde")`）、_take_toll（`.get("heal_after")`）、_action_costs（`.get("train_stamina")`）、
-      _play_rounds（`.get("no_loss")`）、_trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
+      _play_rounds（`.get("no_loss")`）、core/combat.py 的 trait_lines（`double_luck`、`power_from_difficulty`、`no_injury`、`win_xinde`、
       `heal_after`、`train_stamina` 各一處 `in` 或 `[...]`）。
     - 一般功效不在這裡：它們照屬性記層數、數字由 traits.amount 讀。"""
     # 本命戰法第三批（定案 /mnt/project-files/plan/武學與兵器戰法定案.md）：先手、破甲、險、連環、借力改成回合裡的戰法（tactics.py），

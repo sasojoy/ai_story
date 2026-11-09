@@ -2,7 +2,7 @@
 import random
 import pytest
 from conftest import walk_to
-from tianxia import guide
+from tianxia.features.guide import rules as guide
 from tianxia.engine import Game
 from tianxia.state import new_game_state
 from engine_kit import _wugong_step_game, ids  # noqa: F401

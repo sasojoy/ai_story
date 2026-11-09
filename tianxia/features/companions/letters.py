@@ -8,7 +8,7 @@ https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2 第五節�
   同一位人物身上還有一件沒辦完的委託就不再寫求援。
 寫信用自己一份亂數（天機｜名號｜遊戲日），不碰 Game.rng。信的固定句寫在這裡；伺服器鎖外請模型照他的口氣重寫（write、clean，
 三段式：Game.letter_request → write → Game.apply_letter），寫不出來照固定句。宴客的邀請是第三批。
-功能包 tianxia/features/companions/ 的純規則（全部拆包第 19 批；原本是 tianxia/letters.py，那一個名字留成指到這裡的別名）。這一包的 actions、server、bounties 叫它。"""
+功能包 tianxia/features/companions/ 的純規則（全部拆包第 19 批；原本是 tianxia/letters.py）。這一包的 actions、server、bounties 叫它。"""
 from __future__ import annotations
 
 import random
@@ -177,7 +177,7 @@ def commission(state: GameState, content: Content, cid: str, rng: random.Random)
     from tianxia import atlas  # noqa: PLC0415  共用規則層（atlas → world → rules：延後載入；第 50 批收進）
 
     w, p = state.world, state.player
-    side = figure_life.side_of(content, cid)
+    side = figure_life.side_of(content, cid, state.world)
     region = figure_life._region(content, figure_life.where(state, content, cid))
 
     def near(loc_id: str) -> bool:

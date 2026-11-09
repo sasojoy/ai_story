@@ -63,16 +63,21 @@ ASKED_THEN_STARTED = [
 ]
 
 
+TAIL_OWNERS = {"identity_notify": "identity"}  # 包自己接在表尾的格（OUTLOCK_ORDER 外；帳號與客服第 210 批：管理者解綁的通知放鎖之後寄）
+
+
 def test_the_six_slots_keep_the_written_order_and_each_lives_in_its_package():
-    assert [job.slot for job in server.OUTLOCK_JOBS] == list(JOB_OWNERS) == list(features_core.OUTLOCK_ORDER)
+    assert list(JOB_OWNERS) == list(features_core.OUTLOCK_ORDER)
+    assert [job.slot for job in server.OUTLOCK_JOBS] == [*JOB_OWNERS, *TAIL_OWNERS]
+    owners = {**JOB_OWNERS, **TAIL_OWNERS}
     for job in server.OUTLOCK_JOBS:
-        assert job.waiting.__module__ == _routes_of(JOB_OWNERS[job.slot]), job.slot
-        assert job.start.__module__ == _routes_of(JOB_OWNERS[job.slot]), job.slot
+        assert job.waiting.__module__ == _routes_of(owners[job.slot]), job.slot
+        assert job.start.__module__ == _routes_of(owners[job.slot]), job.slot
 
 
 def test_the_eleven_ops_live_in_their_packages_and_collide_with_no_other_table():
     assert {op: fn.__module__ for op, fn in server.OUTLOCK_OPS.items()} == {op: _routes_of(pack) for op, pack in OP_OWNERS.items()}
-    others = set(server.MAIN_ACTIONS) | set(server.ADMIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS)
+    others = set(server.MAIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS)
     assert not set(server.OUTLOCK_OPS) & others  # 同名的話 api_do 的先後會把其中一條整個蓋掉（FB-609 那一類）
 
 

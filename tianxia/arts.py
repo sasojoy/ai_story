@@ -314,7 +314,7 @@ COLOR_FULL = "【{name}】收得下「{insight}」的那幾格都裝滿了。"  
 
 class Refusal(str):
     """做不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
-    （skillview.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。fusion 的合成與這裡的裝槽共用。"""
+    （forge_view.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。fusion 的合成與這裡的裝槽共用。"""
 
     short: str = "合不了"
 

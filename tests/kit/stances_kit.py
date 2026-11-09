@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
-from tianxia import companion_agent, stances
+from tianxia.features.companions import companion_agent, stances
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 

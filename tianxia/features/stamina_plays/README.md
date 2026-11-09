@@ -7,11 +7,11 @@
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`StaminaPlaysFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`ambush`、`works`（`choose`：標題先算，設伏「設伏・地點」「收伏」、屯糧「屯糧練兵・地點」）、`bot_pick`、`bot_always`＝`ambush:`、`works:`、`world()`（世界層 `muster` 的 `works` 那一格） |
-| `ambush_rules.py` | 設伏的純規則（原 `tianxia/ambush.py`；那個名字留成別名）。`MOVE_BLOCKED` 在核心 `core/services.py`，這裡 re-export |
-| `works_rules.py` | 屯糧的純規則（原 `tianxia/works.py`；那個名字留成別名）；`on_muster` 是世界層那一格的身體 |
-| `ambush_actions.py` | 原本 `Game` 上的 `_ambush_act`、`_ambush_expire`、`_ambush_check`、`_ambush_fight`、`_ambush_spoils`、`_ambush_record`；`Game` 留 4 個一行委派（`_ambush_expire`、`_ambush_check`、`_ambush_spoils`、`_ambush_record`） |
+| `ambush_rules.py` | 設伏的純規則（原 `tianxia/ambush.py`）。`MOVE_BLOCKED` 在核心 `core/services.py`，這裡 re-export |
+| `works_rules.py` | 屯糧的純規則（原 `tianxia/works.py`）；`on_muster` 是世界層那一格的身體 |
+| `ambush_actions.py` | 原本 `Game` 上的 `_ambush_act`、`_ambush_expire`、`_ambush_check`、`_ambush_fight`、`_ambush_spoils`、`_ambush_record`；`Game` 上的名字掛在 `game_api.py` 的表（`_ambush_expire`、`_ambush_check`、`_ambush_spoils`、`_ambush_record`） |
 | `works_actions.py` | 原本 `Game._works_act`（只有 `choose` 叫，沒有委派） |
-| `actions.py` | 原本 `Game._stamina_play_options` 的前半（設伏／收伏、屯糧兩段選項）；`Game._stamina_play_head` 留一行委派 |
+| `actions.py` | 原本 `Game._stamina_play_options` 的前半（設伏／收伏、屯糧兩段選項）；`Game._stamina_play_head` 掛在 `game_api.py` 的表 |
 | `bots.py` | 假人的分數（原 `bot_policy.score` 的 `ambush`／`works` 那一段）：一律 `None`（由 `take_turn` 的 `_stamina_play` 做） |
 | `tests/` | `test_stamina_plays.py`、`test_stamina_plays_off.py`（原 `tests/acts/`，整檔搬）、`test_stamina_plays_smoke.py` |
 
@@ -20,19 +20,22 @@
 **世界層的格**（core_world：全部拆包第 25 批；第 39 批換主人）：開集結那一刻結算屯糧是世界層 `muster` 的 `works` 那一格（`__init__.py` 的 `world()` → `works_rules.on_muster`；位置在 `WORLD_ORDER` 的「起點」之後、「玉璽」之前，一個字不動；不問 `enabled`，判斷在 `on_muster` 裡）。
 **選單順序（不能改成 `Feature.options`）**：「設伏／收伏 → 屯糧 → 護衛（`_aid_options`）→ 功能包的選項（`features_core.options`）→ 盤算（`_plan_options`）」。設伏屯糧改成 `Feature.options` 會排進 `FEATURES` 的順序、跑到護衛之後。所以 `Game._stamina_play_options` 留著當接縫，前半叫 `actions.options`。
 **接縫的位置不能動**（位置就是行為）：`sync.close` 的 `ambush` 那一格（第 55 批；`shops` 之後、`arrive` 之前）、`_arrivals` 迴圈中途的 `_ambush_check`（每換一段才查）、移動被擋（`engine.py` 的 `_move_option`，讀 `p.ambush` 與核心的 `MOVE_BLOCKED`）。
-**過渡**：`ambush_rules.py` 的 `has_prey`、`hostile` 第 45 批改讀核心 `core/bounty_base`（`mine`、`hunting`）；`atlas`（第 50 批）；`ambush_actions.py` import `annals`（行狀）；設伏贏了揭通緝交差走 `ctx._raid_bounty`（服務清單二、查詢服務 `# bounties`，第 45 批）。假人的 `_stamina_play`（`bot_policy.py`）挑 `ambush:set:`、`works:`、`aid:`，叫 `game.choose` 公開動作，留在原位。`tianxia/howto.py`、`scripts/measure_stamina_plays.py`、`test_conquest_flip.py` 用舊名 `ambush`、`works`（別名，同一個模組物件）。
+**依賴**：`ambush_rules.py` 的 `has_prey`、`hostile` 第 45 批改讀核心 `core/bounty_base`（`mine`、`hunting`）；`atlas`（第 50 批）；`ambush_actions.py` import `annals`（行狀）；設伏贏了揭通緝交差走 `ctx._raid_bounty`（服務清單二、查詢服務 `# bounties`，第 45 批）。假人的 `_stamina_play`（`bot_policy.py`）挑 `ambush:set:`、`works:`、`aid:`，叫 `game.choose` 公開動作，留在原位。`scripts/measure_stamina_plays.py`、`test_conquest_flip.py` 的本地名 `ambush`、`works` 指這一包的 `ambush_rules`、`works_rules`。
 第 45 批合完重印 **0 處**。第 50 批合完重印 **1 處**：`ambush_rules.py` → `bounties`（第 45 批）；`atlas`（只叫 `is_unlocked`）第 50 批收進共用規則層，改註（接第 39 批第 1 條）。
 **審查守的**：`encounter.resolve_encounter` 一律用模組屬性叫（`same_behavior` 的 `stamina` 軌換掉這個屬性強制伏兵必勝／必敗）；`_ambush_fight` 的亂數用 `random.Random(f"設伏|…")`、不動 `Game.rng`；兩個人之間的函式（`fight`、`record`）帶兩個 ctx。
 **另外要跑的混合檔**（設伏、屯糧的用法散在別人的檔裡，這一輪不拆；改包任一檔時 `test_for` 挑不到，合併閘門要跑「相關的 slow」就靠這一張清單）：
-- `tests/gear/test_four_tiers.py`（叫 `_ambush_spoils`）、`tianxia/features/peers/tests/test_raid.py`（叫 `_ambush_record`）、`tests/acts/test_conquest_flip.py`（import `works` 舊名）。
+- `tests/gear/test_four_tiers.py`（叫 `_ambush_spoils`）、`tianxia/features/peers/tests/test_raid.py`（叫 `_ambush_record`）、`tests/acts/test_conquest_flip.py`（本地名 `works`）。
 - `tianxia/features/seal/tests/test_seal_revamp_sidedoor.py`（slow 的 `test_an_ambush_report_names_the_rivals_bare_power`，借用包的測試檔 `test_stamina_plays` 的 `_player`、`_plays_on`、`_reload`、`_set`；那幾個輔助函式改名或搬動時它會壞）。
 - 世界層 `muster` 代叫（`works` 那一格）：`tests/core/test_world.py`、`tests/battle/test_fronts.py`、`tests/figures/test_timetable.py`。
 - 一起跑：`pytest tianxia/features/stamina_plays/tests tests/gear/test_four_tiers.py tianxia/features/peers/tests/test_raid.py tests/acts/test_conquest_flip.py tianxia/features/seal/tests/test_seal_revamp_sidedoor.py tests/core/test_world.py tests/battle/test_fronts.py tests/figures/test_timetable.py -n 4 -m "slow or not slow"`。
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+**行狀記一筆讀核心**（全部拆包第 29 批之二）：`from tianxia.core import annal_base as annals`（核心本體）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close` 的 `ambush`（`ambush_actions.expire`）。
 
 **第 56 批（選單收接縫，核心批）**：`plays/head`、`block/ambush` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_stamina_play_head` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（設伏那一行），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+**第二輪 E 波補註**（上面對不上的以這裡為準）：
+- `bots.py` 多 `_stamina_play`、`PLAY_CHANCE`、`PLAY_STAMINA`（第 101 批）；要換機會換這裡，換 `bot_policy` 打不到。另外要跑的：改這一包的 `bots.py` 時 `test_for` 挑不到 `tests/bots/test_bot.py`、`test_bot_policy.py`、`test_bot_runner.py`。

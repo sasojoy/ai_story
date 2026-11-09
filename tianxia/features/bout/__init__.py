@@ -4,7 +4,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 單挑底層（剋、推力、挨打、防具、放手一搏、勝負：頭目戰、擂台、奪璽單挑共用）在核心 tianxia/core/duel_base.py；擂台的名次與稱號
 （酒肆、名帖、玩家卡、榜單都讀）在核心 tianxia/core/arena_ranks.py——這一包的規則模組從那兩份 re-export。
 
-- duel_rules.py、arena_rules.py、arena_crowd.py：純規則（原 tianxia/duel.py、arena.py、arena_crowd.py；那三個名字留成指到這裡的別名）
+- duel_rules.py、arena_rules.py、arena_crowd.py：純規則（原 tianxia/duel.py、arena.py、arena_crowd.py）
 - duel_actions.py、arena_actions.py：原本 Game 上頭目戰 16 個、擂台 22 個方法（Game 留 28 個一行委派，含 5 個新開的查詢與審查修正
   補的頭目戰選單）
 - bots.py：假人的分數（原本 bot_policy.score 的 duel、arena 那兩段）
@@ -13,16 +13,18 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
 場邊事件的內容檢查（check_content）、sync 的補送（seams）、閉關中與路上的入口與店面那一頁打到一半那一行（menus）。
-沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
+灰掉的挑擂鈕走 MENU_ORDER 的 stale/arena，場景卡走 SCENE_ORDER；其餘沒有對應掛鉤、留在 Game 原位叫一行委派的寫在 README。
+checks.py：內容驗證（第二輪第 100 批從 content.py 搬來；改了 test_for 會帶 tests/core/test_content.py（PM 定，第二輪 F 波））
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SceneHook, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import ContentSlot
 
 
 class BoutFeature(Feature):
     name = "bout"
-    web = ("bout.js",)  # 擂台的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
+    web = ("bout.js",)  # 擂台的畫法（全部拆包第 65 批從 app.js 切出來）。樣子在 shop.css（第 86 批切出來）
     prefix = ("duel", "arena")  # duel:<招>、duel:flee；arena:<招>、arena:yield、arena:join、arena:fight:<名號鍵>、arena:back、arena:none
     content = ("duels.json", "arena_crowd.json")  # 頭目、場邊事件的固定句（content.py 照它到這一包的 content/ 載）
     # 頭目戰：正在打的那一場、這一季（與這一週）遇上幾次的帳、上一場開打的時刻；擂台：正在打的那一場、剛打完的收場卡、坐在擂台邊、
@@ -30,6 +32,14 @@ class BoutFeature(Feature):
     player_fields = ("duel", "duel_tally", "duel_last", "arena", "arena_last", "picking_arena", "arena_day", "arena_today",
                      "arena_crowd_seen", "arena_crowd_note")
     carried: tuple[str, ...] = ()
+
+    # core_content（第二輪第 100 批）：位置固定的內容驗證，先後在 content.validate 那幾行，格在核心 CONTENT_SLOTS；在叫的那一下才照模組屬性找
+    def content_slots(self) -> tuple[ContentSlot, ...]:
+        from . import checks  # noqa: PLC0415
+
+        return (
+            ContentSlot("duels", lambda *a: checks.check_duels(*a)),
+        )
 
     def enabled(self, ctx) -> bool:
         """內容裡有頭目（duels.json）、或擂台開著（Config.arena.enabled），或此刻還在頭目戰、擂台上、坐在擂台邊：開關在坐著、打著的時候
@@ -100,6 +110,14 @@ class BoutFeature(Feature):
             ),)
         return self._shops
 
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：擂台。組法在 shop_view.page。"""
+        if shop != "arena":
+            return None
+        from . import shop_view as page  # noqa: PLC0415
+
+        return page.page(ctx)
+
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:
@@ -158,8 +176,24 @@ class BoutFeature(Feature):
                 MenuHook("quick", "duel", lambda ctx, kind, arg, option_id: duel_actions.duel_act(ctx, arg) if kind == "duel" else None),
                 MenuHook("quick", "arena", lambda ctx, kind, arg, option_id: (
                     arena_actions.arena_act(ctx, arg) if kind == "arena" and (arg in MOVES or option_id == arena_rules.YIELD_ID) else None)),
+                MenuHook("stale", "arena", lambda ctx, option, option_id: arena_actions.stale_cell(ctx, option, option_id)),
             )
         return self._menus
+
+    # core_scene（第二輪第 91 批「場景卡收接縫」）
+    _scenes: tuple[SceneHook, ...] | None = None
+
+    def scenes(self) -> tuple[SceneHook, ...]:
+        """場景卡的三格（順序在 SCENE_ORDER；不問 enabled：原位本來就不看開關）：頭目戰、擂台那一張；這兩個畫面都沒有圖。"""
+        if self._scenes is None:
+            from . import arena_actions, duel_actions  # noqa: PLC0415
+
+            self._scenes = (
+                SceneHook("own", "duel", lambda ctx: duel_actions.duel_scene(ctx) if ctx.state.player.duel is not None else None),
+                SceneHook("own", "arena", lambda ctx: arena_actions.arena_scene(ctx) if ctx.state.player.arena is not None else None),
+                SceneHook("art", "bout", lambda ctx: {} if ctx.state.player.duel is not None or ctx.state.player.arena is not None else None),
+            )
+        return self._scenes
 
     def outlock(self, shell):
         from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）

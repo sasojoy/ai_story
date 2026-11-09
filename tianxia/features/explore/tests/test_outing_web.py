@@ -174,3 +174,12 @@ def test_the_choice_turns_into_the_result_right_away():
     assert "你咬牙把車身頂起一尺。" in html and "銀兩 +15" in html
     assert 'data-act="outing-tap"' in html and "接著走" in html and "animation-duration:2200ms" in html
     assert 'data-act="outing-choose"' not in html
+
+
+def test_the_gather_say_watches_the_queue_until_it_is_done():
+    """找素材的「自己說」（第 32 項；第二輪第 104 批從 app.js 搬進 web/explore.js）：等模型評找法時問排隊，finally 收掉。
+    從 tests/server/test_server.py 搬來：改 explore.js 不挑那個大檔，留在那裡就沒有一條守門挑得到。"""
+    js = webharness.app_source()
+    start = js.index("async function gatherSay(")
+    gather = js[start:js.index("\n  }\n", start)]
+    assert "watchQueue(submitBtn, GATHER_SAY_WAIT)" in gather and "stop();" in gather.split("finally")[1]

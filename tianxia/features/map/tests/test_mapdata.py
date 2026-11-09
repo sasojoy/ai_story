@@ -5,12 +5,16 @@ import json
 import random
 
 from conftest import classic_rules, real_content
-from tianxia import atlas, calendar, mapdata, mapview, orders, territory
+from tianxia import atlas, calendar
+from tianxia.features.map import mapdata, mapview
+from tianxia import orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 import test_week7_season as fb501
 from conftest import real_content
-from tianxia import calendar, mapdata, timetable
+from tianxia import calendar
+from tianxia.features.map import mapdata
+from tianxia import timetable
 import pytest
 from tianxia.state import Order, TimelineResult
 import datetime
@@ -57,7 +61,7 @@ def test_the_state_suggests_where_to_sortie():
 @pytest.mark.smoke
 def test_a_place_you_can_win_comes_before_one_with_a_big_order_you_would_lose():
     """軍令 +100 的必敗那一處，排在什麼都沒有、打得過的那一處後面。"""
-    from tianxia import mapdata as md
+    from tianxia.features.map import mapdata as md
 
     rows = [{"id": "a", "lose": True, "score": 100}, {"id": "b", "lose": False, "score": -3}]
     assert [g["id"] for g in md.rank_suggestions(rows)] == ["b", "a"]
@@ -65,7 +69,7 @@ def test_a_place_you_can_win_comes_before_one_with_a_big_order_you_would_lose():
 
 def test_a_losing_place_still_shows_when_three_can_be_won():
     """「必敗的照樣列」：打得過的有三處時，必敗的分數最高那一處淡淡地排第四，不會整個不見。"""
-    from tianxia import mapdata as md
+    from tianxia.features.map import mapdata as md
 
     win = [{"id": f"w{i}", "lose": False, "score": -i} for i in range(5)]
     lose = [{"id": "l0", "lose": True, "score": 90}, {"id": "l1", "lose": True, "score": 50}]

@@ -1,6 +1,5 @@
 """全服決戰「看」那一半的字、常數與鎖外三段式的兩張單子（主動搬六包第 5 批；原本寫在 engine.py 的模組層與 Game 的類別屬性）。
-純資料，不碰存檔、不碰 Game。engine 照舊留著測試從那裡拿的幾個名字（ESCORT_MUSTER、ESCORT_SCENE、RESTORED_NOTE、ROUND_BLOCKS、
-TROOPS_LINE、TROOPS_REPORT、第 7 批的 ESCORT_PICK）與 Game.BATTLE_GAMBLE_NOTE／BATTLE_GAMBLE_LAST，都指到這裡同一個值。
+純資料，不碰存檔、不碰 Game。測試從這裡拿（第二輪第 98 批起 engine 不留這些名字）；Game.BATTLE_GAMBLE_NOTE／BATTLE_GAMBLE_LAST 掛在這一包 game_api.py 的表，同一個值。
 """
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # �
 ESCORT_MUSTER = "{name}隨你出陣。"
 ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
 ESCORT_FELL = "隨你出陣：{name}（敗走）"
-# 加入決戰時挑一位隨你上陣（待 joy 潤；muster.py，全部拆包第 7 批從 engine 模組層搬來，engine 照舊 re-export ESCORT_PICK 給測試）
+# 加入決戰時挑一位隨你上陣（待 joy 潤；muster.py，全部拆包第 7 批從 engine 模組層搬來）
 ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
 ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
 ESCORT_NONE = "不派，自己上陣"

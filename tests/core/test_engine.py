@@ -7,10 +7,11 @@ from unittest import mock
 import pytest
 
 from conftest import FixedRandom, at, classic_rules, install_season_one, walk_to
-from tianxia import (
-    atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, library, rules, skillview, team,
-    traits,
-)
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, calendar
+from tianxia.features.companions import companion_agent
+from tianxia import encounter, fight_llm, library, rules, team, traits
 from tianxia.features.map import layers
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -485,7 +486,7 @@ def test_revisiting_a_location_does_not_call_the_model(game):
 def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.stats["xinde"] = 0
-    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+    with mock.patch("tianxia.features.guide.rules.note_action", return_value=[]) as noted:
         game.practice("武學")
     noted.assert_not_called()
 
@@ -493,7 +494,7 @@ def test_a_failed_practice_does_not_finish_the_tutorial_step(game):
 def test_a_real_practice_still_reaches_the_tutorial_hook(game):
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.stats["xinde"] = 5
-    with mock.patch("tianxia.engine.note_action", return_value=[]) as noted:
+    with mock.patch("tianxia.features.guide.rules.note_action", return_value=[]) as noted:
         game.practice("武學")
     noted.assert_called_once()
     assert noted.call_args.args[-1] == "practice"
@@ -2349,7 +2350,7 @@ def test_old_season_not_replayed_when_switch_turns_on(content, world):
     assert list(world.get_season().timeline) == ["uprising"]  # 新的一季才照季曆跑
     assert admin.status_data()["calendar"]["week"] == 1
     past, current = admin.chronicle_text().split("### 第 1 季")[::-1][:2]  # 本季的時間寫季曆，上一季照舊寫天數
-    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past
+    assert "#### 第 1 週・週一\n\n00:00　張角率三十六方同時起義。" in current and "第6天　賽季落幕" in past  # 本季照日子分段（見聞改版）
 
 
 def test_an_unstamped_season_is_not_cut_short_by_the_weekend_profile(content, world):
@@ -2406,7 +2407,8 @@ def test_next_event_time_is_written_like_the_status_bars_second_line(content, wo
     game.advance(d["next_event"]["in_seconds"] * content.config.time_scale)  # 等到下一件的那一刻
     assert game.status_data()["calendar"]["text"] == at
     assert at in game.status_text()
-    assert f"{at}　" in game.chronicle_text()  # 那一件大事寫進江湖史，時刻的寫法跟狀態列一樣
+    day, _, clock = at.rpartition(" ")
+    assert f"#### {day}\n\n{clock}　" in game.chronicle_text()  # 那一件大事寫進江湖史，時刻的寫法跟狀態列一樣（見聞改版：照日子分段）
 
 
 def test_open_season_restamps_with_current_profile(content, world):
@@ -2444,7 +2446,7 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.timeline["uprising"].time == 0
     assert season.hooked_week == 1
     assert "第 1 週・週一 00:00　三十六方同日起事。" in admin.rumors_text()
-    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text()
+    assert "#### 第 1 週・週一\n\n00:00　張角率三十六方同時起義。" in admin.chronicle_text()
     assert [b.split("**")[1] for b in admin.bulletin()] == ["三十六方起義"]
     assert admin.status_data()["next_event"]["title"] == "張曼成攻殺南陽太守"  # 第一件已經結算，倒數指向下一件
 
@@ -2457,7 +2459,7 @@ def test_week_one_is_settled_the_moment_a_stamped_season_opens(content, world):
     admin.admin_next_season(now=300.0)  # 新的一季：開季那一刻照樣結算
     season = world.get_season()
     assert season.time == 0 and list(season.timeline) == ["uprising"] and season.hooked_week == 1
-    assert "第 1 週・週一 00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
+    assert "#### 第 1 週・週一\n\n00:00　張角率三十六方同時起義。" in admin.chronicle_text().split("### 第 1 季")[0]
 
 
 def test_opening_a_season_with_the_switch_off_settles_nothing(content, world):
@@ -2621,7 +2623,7 @@ def test_timestamps_read_like_the_calendar_when_the_season_is_season_one(content
     game.sync(0.0)
     game.sync(calendar.cal_hour_seconds(content))  # 第 1 週週一 01:00：三十六方起義
     assert "剛剛　第 1 週・週一 01:00" in game.latest_entry_html()
-    assert "第 1 週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
+    assert "#### 第 1 週・週一\n\n01:00　張角率三十六方同時起義。" in game.chronicle_text()
     assert "第 1 週・週一 01:00　三十六方同日起事。" in game.rumors_text()
     assert "第 1 週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
     assert "第 1 週・週一 01:00" in layers.header_text(game.state, content)
@@ -2913,14 +2915,14 @@ def test_the_status_says_what_each_stat_does(game):
 
 def test_the_stat_note_says_four_until_an_event_checks_lore():
     """「事件的檢定看前四項」是因為正式內容還沒有任何事件檢定（或隨口應對看）博聞。joy 加了第一個之後這條會失敗：
-    把 skillview.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
-    from tianxia import skillview
+    把 art_cards.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
+    from tianxia import art_cards
 
     real = load_content(ROOT / "content")
     stats = {ch.check.stat for e in real.events.values() for ch in e.choices if ch.check is not None}
     stats |= {e.free_text.stat for e in real.events.values() if e.free_text is not None}
     assert stats and "lore" not in stats
-    assert skillview.STAT_CHECK_NOTE == "事件的檢定看前四項。"
+    assert art_cards.STAT_CHECK_NOTE == "事件的檢定看前四項。"
 
 
 def test_lore_is_the_fifth_stat_and_is_named_in_one_place(game):

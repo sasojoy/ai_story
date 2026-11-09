@@ -4,7 +4,7 @@
  * 每一塊可以摺起來（手機上一次只攤開要用的那一塊）；頂上一張「現在」卡寫此刻的季、時鐘、決戰、模型佇列，做完一件事留在這一頁、
  * 結果寫在畫面底下那一條（以前是關掉抽屜、回江湖頁看一個三秒就消失的泡泡）。設定抽屜只留一顆「管理者工具 ›」連過來。
  * 網址是 /admin 才畫這一頁（S.adminPage）；不是管理者的人打開，照常回到江湖、網址換回 /（資料在 /api/admin* 那幾條，那邊才擋人）。
- * 跟 main.js、mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 app.js 前面；點擊、送出表單的分派照舊在 app.js。
+ * 跟 main.js、mall.js 一樣是一般的 <script>：頂層的名字同在一個全域裡，index.html 排在 app.js 前面；點擊、表單、change 用 registerClicks、registerForms、registerChanges 登記在這支檔。
  */
 "use strict";
 
@@ -14,12 +14,13 @@
   // 管理頁的幾塊（照用途）：id、標題。沒東西的那一塊不畫（領地爭奪、玉璽、商城、形象、名帖照開關與有沒有資料）
   const AD_SECS = {
     season: "賽季與時鐘", battle: "決戰與時刻表", trend: "大勢與事件", conquest: "領地爭奪", seal: "玉璽",
-    player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉",
+    player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉", mail: "書信檢舉",
   };
 
 
   // 整頁：頂上一列（回江湖、標題、重新整理）、「現在」卡、各塊、底下的結果條
   function renderAdmin() {
+    if (!S.main.admin && S.main.support_staff) return renderSupportDesk(); // 客服身分（support.js）：畫客服頁，不叫 /api/admin
     if (typeof hideMapHost === "function") hideMapHost();
     $app.innerHTML = `<div class="ad-shell">${adminHtml()}</div>`;
     if (!S.admin && !S.adLoading) adminReload();
@@ -67,6 +68,7 @@
       conquest: a.conquest ? conquestAdminHtml(a.conquest) : "", seal: a.seal ? sealAdminHtml(a.seal) : "", player: adPlayerSecHtml(a),
       mall: S.main.mall ? mallAdminHtml() : "", looks: S.main.mall && S.main.looks_admin ? looksAdminHtml() : "",
       mingtie: a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : "",
+      mail: a.mail && a.mail.length && typeof mailAdminHtml === "function" ? mailAdminHtml(a.mail) : "", // 帖友書信（web/mail.js）
     }[id] || "";
   }
   // 四格：季、決戰、在線、模型佇列
@@ -186,12 +188,12 @@
       <form id="reset-form" class="stack">
         <div class="row"><input class="input" name="target" id="ad-reset-target" placeholder="帳號或名號" aria-label="帳號或名號" autocomplete="off" value="${esc(S.adResetTarget || "")}"><button class="btn small" type="button" data-act="ad-find">找</button></div>
         ${found ? (found.length
-          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`
+          ? `<div class="row wrap ad-found">${found.map((x) => `<button class="btn small ghost" type="button" data-act="ad-pick" data-login="${esc(x.key || x.login)}">${esc(x.login)}${x.character ? `・${esc(x.character)}` : "・還沒建角色"}</button>`).join("")}</div>`
           : '<p class="muted ad-note">找不到含這幾個字的帳號或名號。</p>') : ""}
         <div class="row"><input class="input" name="temp" id="ad-reset-temp" placeholder="臨時密碼（至少 ${AD_PW_MIN} 字）" aria-label="臨時密碼" autocomplete="off"><button class="btn small" type="button" data-act="ad-gen">產生一組</button></div>
         <p class="form-msg" role="alert"></p>
         <div class="row"><button class="btn" type="submit">重設密碼</button></div>
-      </form>`;
+      </form>${typeof identityAdminHtml === "function" ? identityAdminHtml() : ""}`;
   }
   const AD_PW_MIN = 6; // 同 tianxia/accounts.py 的 PASSWORD_MIN
 
@@ -200,12 +202,13 @@
     const q = String((input && input.value) || "").trim();
     S.adResetTarget = q;
     if (!q) { S.adAccounts = null; renderKeepingSheet(); toast("先打幾個字。"); return; }
-    const r = await api("/api/admin/accounts", { q });
+    const r = await api(S.main && S.main.identity ? "/api/identity/admin/accounts" : "/api/admin/accounts", { q }); // identity 開著（帳號與客服第 204 批）：每列多帶帳號鍵與綁定
     S.adAccounts = (r && r.rows) || [];
     renderKeepingSheet();
   }
   function adminPick(login) {
     S.adResetTarget = login;
+    S.adPicked = (S.adAccounts || []).find((x) => (x.key || x.login) === login) || null; // identity（帳號與客服第 204 批）：選中那一列的綁定（identity.js 畫）
     S.adAccounts = null;
     renderKeepingSheet();
     document.getElementById("ad-reset-temp")?.focus();
@@ -301,7 +304,7 @@
     const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
     // 大勢線的名字不帶「（現在 N）」（選單上多寫的那一段），問句另外寫現在多少、做完多少
     const trendName = (id) => picked(id).replace(/（-?\d+）$/, "");
-    const was = (id) => (typeof adTrendNow === "function" ? adTrendNow(id) : null);
+    const was = (id) => adTrendNow(id);
     const fightName = (S.admin && S.admin.now && S.admin.now.battle && S.admin.now.battle.name) || "";
     // 21 天季的「繼續」（PM 2026-10-19，跟 world.RESUME_SKIP_REAL 一致）；待 joy 潤
     // 季長與對回什麼照季寫（S.admin.realign，同 world.realign_line；FB-501：7 天的季「對回現實的日子」），沒給照 21 天季那一句
@@ -367,6 +370,10 @@
       seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
       mingtie_remove: [`撤下 ${body.name} 的第 ${body.version} 版名帖：畫與自題那一句清掉（頭銜照留），他的江湖紀錄會寫一句，收過這一張的人也看不到了，確定？`, "確定撤下"],
       mingtie_restore: [`放回 ${body.name} 的第 ${body.version} 版名帖：檢舉清掉、大家照舊看得到（檢舉過的人自己那裡照樣藏著），確定？`, "確定放回"],
+      // 帖友書信的檢舉（web/mail.js 的 mailAdminHtml；待 joy 潤）
+      mail_remove: ["撤下這一封信：寄的人與收的人都看不到了，確定？", "確定撤下"],
+      mail_keep: ["這一封信看過沒事：檢舉清掉（檢舉的人那裡照樣收著），確定？", "確定"],
+      mail_mute: body.days ? [`停 ${body.name} 寄信 ${body.days} 天：這段時間他寫不了信（收照收），確定？`, "確定停寄"] : [`解開 ${body.name} 的停寄，確定？`, "確定解開"],
       seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
       // 蓋章的後果要寫明（審查 I2）：天命之季過後再換季，七片全部散去、每一位持有者都失去碎片
       seal_mandate: body.when === "cancel"
@@ -433,3 +440,123 @@
     if (id === "looks" && !S.adLooks && S.main && S.main.mall && S.main.looks_admin) looksAdminDo("load"); // 點開才抓訂單
     renderKeepingSheet();
   }
+  async function adminClick(act, el, ev) {
+    switch (act) {
+        // 管理頁（admin.js；Joy 2026-11-01 管理者工具獨立一個網址）：設定抽屜頂上那顆「管理者工具 ›」是一般的連結（/admin），這幾顆是管理頁上的
+        case "ad-refresh": await adminReload(true); break;
+        case "ad-result-close": S.adResult = null; renderKeepingSheet(); break;
+        case "ad-find": await adminFind(); break;
+        case "ad-pick": adminPick(el.dataset.login); break;
+        case "ad-gen": adminGenTemp(); break;
+        case "ad-tab": adTabPick(el.dataset.tab); break; // 管理頁的分頁籤（介面重整）
+        case "ad-hold": adHoldClick(el); break; // 危險區：短按只提示要長按（長按在 admin.js 的 pointerdown）
+        case "admin": {
+          const op = el.dataset.op;
+          const body = { hours: Number(el.dataset.hours || 1) };
+          if (op === "start_battle") body.id = document.getElementById("ad-battle").value;
+          if (op === "fire") body.id = document.getElementById("ad-fire").value;
+          if (op === "push_trend") { body.id = document.getElementById("ad-trend").value; body.amount = Number(document.getElementById("ad-amount").value || 0); }
+          if (op === "schedule") {
+            const input = document.getElementById(`tt-at-${el.dataset.id}`);
+            if (!input || !input.value) { toast("先選一個時間。"); break; }
+            body.id = el.dataset.id;
+            body.at = new Date(input.value).getTime() / 1000;
+            body.title = (S.admin.timetable.find((r) => r.id === body.id) || {}).label || body.id;
+            body.when = input.value.replace("T", " ");
+          }
+          if (op === "set_trend") { body.id = document.getElementById("ad-front").value; body.value = Number(document.getElementById("ad-value").value || 0); }
+          if (op === "resolve_event") { const [id, key] = document.getElementById("ad-result").value.split("|"); body.id = id; body.key = key; }
+          if (op === "clear_lock") body.id = document.getElementById("ad-lock").value;
+          if (op === "revive_figure") body.id = document.getElementById("ad-fallen").value;
+          if (op === "start_showdown") {
+            body.id = el.dataset.id;
+            body.title = ((S.admin && S.admin.showdowns) || []).find((s) => s.id === body.id)?.label || body.id;
+          }
+          if (op.startsWith("seal_")) { // 玉璽一組：碎片、名號、狀態、局勢係數照欄位讀（假瀏覽器沒有這些欄位時是空的）
+            const val = (id) => (document.getElementById(id) || {}).value || "";
+            body.id = val("ad-seal");
+            body.name = val("ad-seal-name").trim();
+            body.state = val("ad-seal-state") || "held";
+            body.factor = Number(val("ad-seal-factor") || 1);
+            body.take = el.dataset.take === "1";
+            body.when = el.dataset.when || ""; // 蓋天命之季：next／now（玉璽二）
+            body.hide = el.dataset.hide === "1"; // 領地爭奪的季「強制現世」是「現在藏一片」（問句不同；送出去的欄位一樣）
+          }
+          if (op.startsWith("mail_")) { body.id = Number(el.dataset.id || 0); body.name = el.dataset.name || ""; body.days = Number(el.dataset.days || 0); }
+          if (op.startsWith("mingtie_")) { body.name = el.dataset.name || ""; body.version = Number(el.dataset.version || 0); }
+          if (op === "conquest_set" || op === "conquest_progress" || op === "admin_conquest_letter") { // 領地爭奪一組：區塊、陣營、進度照欄位讀
+            const pick = (id) => document.getElementById(id) || {};
+            const block = pick("ad-cq-block"), side = pick("ad-cq-side");
+            body.id = block.value || "";
+            // 問句寫地名：照伺服器給的 name（選單的字後面接了括號，地名自己也可能有括號，不從字切）
+            body.place = ((((S.admin && S.admin.conquest) || {}).blocks || []).find((b) => b.id === body.id) || {}).name || body.id;
+            body.side = op === "conquest_set" && el.dataset.neutral === "1" ? "" : side.value || "";
+            body.sideName = (side.options && side.options[side.selectedIndex]) ? side.options[side.selectedIndex].text : body.side;
+            if (op === "conquest_progress") body.value = Math.max(0, Math.min(100, Number(pick("ad-cq-value").value || 0)));
+          }
+          if (op === "conquest_cancel") body.id = (document.getElementById("ad-cq-siege") || {}).value || "";
+          if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
+            body.name = (S.adPlayer && S.adPlayer.name) || "";
+            if (op === "give_opportunity") {
+              body.id = document.getElementById("ad-opp").value;
+              body.note = ((S.adPlayer && S.adPlayer.opportunities) || []).find((x) => x.id === body.id)?.note || "";
+            }
+            if (op === "give_fragment") body.id = document.getElementById("ad-frag").value;
+          }
+          const [text, yes] = adminAsk(op, body);
+          ask(text, yes, () => adminDo(op, body, yes.replace(/^確定/, ""))); // 先問一次（G3），按了確定才送；結果條上寫做的是哪一件
+          break;
+        }
+    } // adminClick
+  } // adminClick
+  registerClicks(adminClick, ["ad-refresh", "ad-result-close", "ad-find", "ad-pick", "ad-gen", "ad-tab", "ad-hold", "admin"]);
+  async function adminForm(form, data) {
+      if (form.id === "ad-player-form") {
+        // 管理者查一個玩家（玩家個人劇情）：查到了畫他的召見、機緣、伏筆三列；查不到的原因寫在表單那一行。抽屜不關
+        const name = (data.name || "").trim();
+        S.adPlayerName = name;
+        if (!name) { S.adPlayer = null; formMsg(form, "先填名號。"); return; }
+        S.adPlayer = await api("/api/admin/player", { name });
+        renderKeepingSheet(); // 查到的那個人就在表單底下：抽屜停在原地（審查 M-2）
+      } else if (form.id === "reset-form") {
+        // 重設密碼也先問一次（G3）。結果寫在表單那一行、也釘在管理頁底下（成了的那一條連臨時密碼一起寫，私下告訴他之前不必再找一次）；
+        // 失敗時欄位留著改，跟改密碼一樣
+        const target = (data.target || "").trim();
+        const temp = String(data.temp || "");
+        S.adResetTarget = target;
+        if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
+        if (temp.length < AD_PW_MIN) { formMsg(form, `臨時密碼至少 ${AD_PW_MIN} 個字（可以按「產生一組」）。`); return; }
+        ask(`重設 ${target} 的密碼，臨時密碼是「${temp}」：他原本的密碼不能再用，確定？`, "確定重設", async () => {
+          // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
+          // 抽屜整個關了就改用提示泡泡講
+          const say = (text, ok = false) => {
+            const now = document.getElementById("reset-form");
+            if (now) formMsg(now, text, ok);
+            else if (text) toast(text);
+            return now;
+          };
+          say("");
+          try {
+            const r = await api("/api/admin/reset_password", data);
+            const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+            if (S.adminPage) {
+              S.adResult = { text: ok ? `${r.message}臨時密碼：${temp}（私下告訴他，登入後到設定改掉）` : r.message, ok };
+              if (ok) { S.adResetTarget = ""; S.adAccounts = null; }
+              renderKeepingSheet();
+            }
+            const now = say(r.message, ok);
+            if (ok && now) now.reset();
+          } catch (e) {
+            say(failText(e));
+          }
+        });
+      } // adminForm
+  } // adminForm
+  registerForms(adminForm, ["ad-player-form", "reset-form"]);
+  async function adminChange(ev) {
+    if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
+      const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
+      if (box && v != null) box.value = v;
+    }
+  } // adminChange
+  registerChanges(adminChange);

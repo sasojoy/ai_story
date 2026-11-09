@@ -7,7 +7,8 @@ from __future__ import annotations
 
 
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, load, rounds_go, seat, tick
-from tianxia import annals, sortie_duel
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.sortie import duel_rules as sortie_duel
 
 
 def _settled(monkeypatch):

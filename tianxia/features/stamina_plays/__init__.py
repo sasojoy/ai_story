@@ -1,7 +1,7 @@
 """體力玩法：設伏劫道、屯糧練兵（後期體力玩法第一批，Joy 2026-10-16；功能包，開發規範手冊 3.2；全部拆包第 39 批，小包併批）。
 README.md 寫這一包做什麼、導覽與設計稿。
 
-- ambush_rules.py、works_rules.py：純規則（原 tianxia/ambush.py、tianxia/works.py；那兩個名字留成指到這裡的別名）
+- ambush_rules.py、works_rules.py：純規則（原 tianxia/ambush.py、tianxia/works.py）
 - ambush_actions.py：原本 Game 上的 _ambush_*（Game 留一行委派給 sync、_arrivals 與測試）
 - works_actions.py：原本 Game 上的 _works_act
 - actions.py：原本 Game._stamina_play_options 的前半（設伏／收伏、屯糧兩段選項；Game 留接縫，後半護衛、功能包選項、盤算照舊）

@@ -1,5 +1,5 @@
 """減法季的出陣約戰（整合設計 4.3；計畫 docs/superpowers/plans/2026-10-24-減法季-主機側實作計畫.md 第四節 Task 3b-1、4.0 之二）。
-功能包 tianxia/features/sortie/ 的純規則（原 tianxia/sortie_duel.py，那個名字留成指到這裡的別名；主動搬六包第 2 批）。
+功能包 tianxia/features/sortie/ 的純規則（原 tianxia/sortie_duel.py；主動搬六包第 2 批）。
 
 只在 rules.jianfa(content, world, "sortie_duel") 開著的季用；這裡是純規則，不 import engine、不讀電腦時鐘（時刻一律是傳進來的現實秒，
 Game.now），不碰 Game.rng。

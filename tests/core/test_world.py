@@ -656,7 +656,7 @@ def test_the_possible_endings_say_when_the_huangjin_win_can_first_end_the_season
     到了那一週就不寫。其他結局不寫。"""
     from conftest import real_content
     from tianxia import calendar
-    from tianxia.guide import quest_text
+    from tianxia.features.guide.rules import quest_text
     from tianxia.state import new_game_state
     from tianxia.world_state import fresh_season
 

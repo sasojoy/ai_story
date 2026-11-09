@@ -15,7 +15,8 @@ from jianfa_kit import jianfa_game, plain_game, ready
 
 import server
 from tianxia import events as event_rules
-from tianxia import explore_one, mapdata
+from tianxia.features.explore import explore_rules as explore_one
+from tianxia.features.map import mapdata
 from tianxia.state import Bounty
 
 SIDES = ["guan", "huang", "haoqiang", None]
@@ -90,7 +91,7 @@ def test_the_names_follow_when_no_event_can_be_drawn_or_the_insight_is_missed():
     ready(game, loc="baima_temple")
     assert game.outing_plan().hint == "寺裡多悟"
     game = _game("guan")
-    with mock.patch("tianxia.engine.sensing.missed_today", return_value=True):  # 每一處都悟錯過：感悟那一格是 0
+    with mock.patch("tianxia.features.sense.sensing.missed_today", return_value=True):  # 每一處都悟錯過：感悟那一格是 0
         names = _names(game)
         assert _every_place_agrees(game, names) >= 40
 

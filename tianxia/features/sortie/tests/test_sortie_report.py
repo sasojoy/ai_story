@@ -9,7 +9,8 @@ from conquest_kit import conquest_game, go, join, plain_game, win_sortie
 from test_prologue_web import DRIVER as PROLOGUE_DRIVER
 
 import webharness
-from tianxia import conquest, orders, sortie
+from tianxia import conquest, orders
+from tianxia.features.sortie import rules as sortie
 from tianxia.state import Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容

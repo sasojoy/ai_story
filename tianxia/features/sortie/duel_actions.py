@@ -5,7 +5,7 @@
 （world_tick）、任何人的同步（sync）、快轉（advance）、假人程式（sortie_duel_tick）誰先到誰結算（duel_tick → duel_rules.advance，只往前走），
 結算那一下就把季的進度與兩邊（含同去的）做完。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；sortie_duel、sortie 兩個名字
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；sortie_duel、sortie 兩個名字
 照舊，是包裡的 duel_rules、rules）。函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_duel_tick` 是 `duel_tick`（跟
 `sortie_duel_tick` 分開）、`_duel_power_of` 是 `duel_power_of(state, content, world)`（原本就是 staticmethod）。Game 上留 16 個一行委派
 （server、假人、測試與核心原位還在叫：三處結算、選單那一格、choose 最前面、行動列底下那一行、_act、守勢行動、輿圖）。包裡互相叫直接叫
@@ -34,7 +34,7 @@ from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名�
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
 from tianxia import ranks  # 共用規則層（晉升：離下一階還差多少；第 40 批收進）
 from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
-from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
+from tianxia.core import name_base  # 核心（這一季效力中的：補位）
 from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
 from tianxia import wins  # 共用規則層（三陣營四勝利：貢獻記在哪一軍）
 from tianxia.calendar import DAY
@@ -491,7 +491,7 @@ def duel_candidates_for(ctx: Game) -> Callable[[SortieDuel], list[SortieSide]]:
             rows: list[SortieSide] = []
             for state in CharacterStore(ctx.world.db).all(bots_only=True):
                 p = state.player
-                if p.bot is None or not server_bots.active(p.bot, season) or p.journey is not None or p.location is None:
+                if p.bot is None or not name_base.active(p.bot, season) or p.journey is not None or p.location is None:
                     continue
                 state.world = ctx.state.world  # 存檔不帶季（exclude）：豪強依附哪一軍、威力都照手上這一份季算
                 side = allied.side_of(state, c)

@@ -341,7 +341,7 @@ def _row(content: Content, item: Equipment) -> dict:
 
 
 def rows(state: GameState, content: Content) -> dict:
-    """修練頁的寶物那一段（skillview.gear_rows）：身上那件、裝備庫裡的寶物（寶物的開關關著時 worn 是 None、rack 是空的），
+    """修練頁的寶物那一段（art_cards.gear_rows）：身上那件、裝備庫裡的寶物（寶物的開關關著時 worn 是 None、rack 是空的），
     加上傳承那一列 heirloom（玉璽碎片的抄本，只看 Config.seal.enabled；不能換下、沒有鈕）。"""
     p = state.player
     heir = p.heirloom if content.config.seal.enabled and p.heirloom is not None and p.heirloom.template in content.seal else None

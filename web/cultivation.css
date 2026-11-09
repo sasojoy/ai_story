@@ -68,10 +68,9 @@
 .sa-hd small { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 .sa-note { color: var(--ink-2); font-size: 12px; }
 /* 十成畫成十點墨（同抽屜裡的 .ten）：練到第幾成亮到第幾點，絕學的點是朱色 */
-.sa-ten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-.sa-ten > i { display: block; height: 7px; border-radius: 2px; background: var(--card-2); }
-.sa-ten > i.on { background: var(--gold); }
-.self-art.q4 .sa-ten > i.on { background: var(--accent); }
+.sa-ten { display: block; }
+.sa-ten .sa-ink { display: block; width: 100%; height: auto; max-height: 36px; }
+.sa-ink text { font-family: var(--kai); }
 /* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
    段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */
 .self-sec { margin: 0 0 14px; }
@@ -123,6 +122,7 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .hero-node.on .dot { transform: scale(1.5); background: var(--hero-cinnabar); border-color: #fff; box-shadow: 0 0 12px rgba(178, 45, 21, 1), 0 0 20px rgba(255, 120, 100, 0.8); }
 .hero-node.dim .dot { background: rgba(255, 255, 255, 0.5); box-shadow: none; border-color: rgba(200, 155, 60, 0.6); }
 .hero-node.dim .pulse { display: none; }
+.hero-node::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; } /* 光點 28×28 → 點得到 44×44 */
 .hero-node span { position: absolute; font-size: 10px; font-weight: 800; line-height: 1.4; white-space: nowrap; color: var(--hero-label-ink);
   background: var(--hero-label-bg); border: 1px solid #dcd1be; padding: 0 5px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); pointer-events: none; }
 .hero-node.r span { left: 24px; }
@@ -457,9 +457,9 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .keepsakes .keep { padding: 2px 10px; border: 1px solid var(--line, #c9b98f); border-radius: 999px; font: 14px var(--serif); color: var(--ink-2); background: var(--card-2); }
 
 /* 俠客頁四分頁（介面重整） */
-.hero-tabs { position: sticky; top: var(--top-h, 0px); z-index: 5; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0 0 12px; padding: 4px;
+.hero-tabs { position: sticky; top: var(--top-h, 0px); z-index: 5; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin: 0 0 12px; padding: 4px;
   background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
-.hero-tabs button { height: 38px; border: 0; border-radius: 9px; background: transparent; font: 700 15px var(--kai); color: var(--ink-2); letter-spacing: 2px; }
+.hero-tabs button { height: 44px; border: 0; border-radius: 9px; background: transparent; font: 700 15px var(--kai); color: var(--ink-2); letter-spacing: 2px; }
 .hero-tabs button.on { background: var(--disk); color: #f4ede0; }
 .swap-list { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .swap-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -475,8 +475,9 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .self-hd .attr-q { margin-left: auto; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font: 600 12px/20px var(--sans); color: var(--ink-2); text-align: center; padding: 0; }
 .self-hd .pts + .attr-q { margin-left: 8px; }
 .self-xinde.one { flex-wrap: nowrap; align-items: center; min-width: 0; }
-.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; min-height: 36px; }
 .self-xinde .xinde-tip.open { white-space: normal; }
+.self-xinde .xinde-tip:not(.open) { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } /* 心得提示放兩行（UI 手感丙批 2-5：一行只剩「💡 你已攢下 20 點心得…」） */
 .hm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hm-meters > :only-child { grid-column: 1 / -1; }
 .hm-meter, .hm-meters .lilian { margin: 0; font: 500 12px/1.5 var(--sans); color: var(--ink-2); min-width: 0; }
@@ -492,4 +493,5 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .hm-fame .hm-renown { margin-top: 8px; }
 .hm-tail .lg-entry { margin: 0; }
 .hm-tail .stances-line { margin: 8px 0 0; }
-.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到一行，點進抽屜看全文 */
+.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到放到三行（UI 手感丙批 2-2：一行只剩「城鎮裡的鐵匠鋪買得到…」），點進抽屜看全文 */
+.train-prog { color: var(--ink); }  /* 武學打了才升：熟練進度那一行 */

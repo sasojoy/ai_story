@@ -8,7 +8,8 @@ from __future__ import annotations
 import pytest
 import webharness
 from conftest import walk_to
-from tianxia import howto, journal
+from tianxia.features.guide import howto as guide_howto
+from tianxia import journal
 from tianxia.models import ExploreMix
 
 STEP_ONE, STEP_TWO, STEP_THREE, OUTRO = "先探索一下。", "去湖邊。", "看看地圖。", "去闖吧。"
@@ -37,7 +38,7 @@ def test_a_new_character_sees_the_first_step_in_the_box(game):
     assert game.guide_box() == _box(STEP_ONE)
     entry = game.state.journal[0]
     # 開場之後一行是內測贈送的回體丹（explain-1）
-    assert entry.lines == ["測試開始。", howto.gift_line(game.content)] and entry.guide == [f"【說書人】{STEP_ONE}"]
+    assert entry.lines == ["測試開始。", guide_howto.gift_line(game.content)] and entry.guide == [f"【說書人】{STEP_ONE}"]
     assert "說書人" not in journal.card_html(entry)
     assert f"【說書人】{STEP_ONE}" in journal.rows_html([entry])  # 江湖紀錄照舊看得到
 
@@ -163,7 +164,7 @@ def test_skipping_stays_skipped_into_the_next_season():
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
-    from tianxia.guide import base_step_count
+    from tianxia.features.guide.rules import base_step_count
     from tianxia.sqlite_world import open_world
 
     root = Path(__file__).parents[4] / "content"  # 測試檔搬進 tianxia/features/guide/tests/（全部拆包第 22 批）：repo 根往上四層

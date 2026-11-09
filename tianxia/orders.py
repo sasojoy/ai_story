@@ -10,17 +10,20 @@
 
 不 import world、atlas、engine（world 會 import 這裡，掛 WEEK_HOOKS）。
 
-共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名（截糧的站問 territory.on，原本經出陣包 sortie.on）。
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包（截糧的站問 territory.on，原本經出陣包 sortie.on）。
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_orders.py＋煙霧＋邊界（收進來之前經 atlas、rumor_view 往上找挑到 55 個檔）。
 另外跑（-n 4）直接 import 它的：tests/acts/ 的 test_conquest_flip、test_conquest_rules、test_conquest_siege、test_territory；tests/bots/test_step；
-tests/figures/ 的 test_admin_triggers、test_gentry_allied、test_seats、test_week7_season；tests/ranger/test_season21_daily；tests/server/test_push_resistance；
-tests/web/test_map_web；tianxia/features/ 的 map/tests/test_mapdata、test_mapdata_layers、sortie/tests/test_sortie_duel、test_sortie_duel_lean、
-test_sortie_duel_map、test_sortie_duel_words；slow 的 tests/bots/test_bot_policy_conquest、map/tests/test_jianfa_3d_map_foes、sortie/tests/test_sortie_report。
-世界的週初與每天代叫它（world._WEEK_CORE、_DAY_CORE），world.py 說明「另外跑」那一串也跑。"""
+tests/figures/ 的 test_gentry_allied、test_seats、test_week7_season；tests/ranger/test_season21_daily；tests/server/test_push_resistance；
+tianxia/features/ 的 military/tests/test_admin_triggers、map/tests/test_map_web、test_mapdata、test_mapdata_layers、sortie/tests/test_sortie_duel、test_sortie_duel_lean、
+test_sortie_duel_map、test_sortie_duel_words；slow 的 sortie/tests/test_bot_policy_conquest、map/tests/test_jianfa_3d_map_foes、sortie/tests/test_sortie_report。
+世界的週初與每天代叫它（world._WEEK_CORE、_DAY_CORE），world.py 說明「另外跑」那一串也跑。
+
+內容驗證 check_orders 也在這個檔（core_content 第二輪第 96 批，content.validate 在函式內叫）。"""
 from __future__ import annotations
 
 import math
 import random
+import re
 
 from . import calendar, figures, push, rules, timetable
 from .models import Content, OrderTemplate
@@ -420,7 +423,7 @@ def defend_places(content: Content, world: WorldState | None, o: Order) -> list[
     """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家佔著、被推得最高、守得動的區塊
     （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有），加上自家被戰書凍結的那幾塊（FB-605：那裡記的是攻城戰守住，
     _counts 的 SIEGE_GUARD）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
-    （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
+    （軍情包 order_cards.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
     關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 
@@ -644,3 +647,53 @@ def targets(state: GameState, content: Content, faction: str | None, skip: froze
             if fs.status == "active" and fs.location:
                 wanted.add(fs.location)
     return [loc for loc in content.locations if loc in wanted]
+
+
+# ── 內容驗證（第二輪第 96 批）──
+ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
+ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+
+
+def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
+    """軍令（content/orders.json，計畫 T6）：模板的陣營在劇本裡、同一個陣營每種一筆、個人部分照種類；文字只用認得的插槽；
+    插槽的戰線與陣營存在，截糧的地點在那條戰線上、護糧的終點是那個陣營的投靠點；守勢行動的陣營存在；
+    運糧隊存在、屬於那個陣營；號令的人物在人物表裡。"""
+    from .atlas import region_of  # noqa: PLC0415  同 validate：atlas → world → rules，延後載入
+
+    o = c.orders
+    factions = {f.id: f for f in c.scenario.factions}
+    seen: set[tuple[str, str]] = set()
+    for t in o.templates:
+        where = f"orders.json 的 {t.kind}／{t.side}"
+        need(t.side in factions, f"{where}：陣營 {t.side} 不在劇本裡")
+        need((t.kind, t.side) not in seen, f"{where}：同一個陣營的同一種軍令寫了兩筆")
+        seen.add((t.kind, t.side))
+        need(t.personal == ORDER_PERSONAL[t.kind], f"{where}：個人部分應該是 {ORDER_PERSONAL[t.kind]}，寫的是 {t.personal}")
+        for text in (t.text, t.faction_rumor, t.leak_rumor):
+            for slot in re.findall(r"\{[^{}]*\}", text):
+                need(slot in ORDER_SLOTS, f"{where}：不認得的插槽 {slot}")
+        for front in t.when.opening_fronts:
+            need(front in front_ids and front in o.slots, f"{where}：開局週的戰線 {front} 不是有插槽的戰線")
+    for front, by_side in o.slots.items():
+        need(front in front_ids, f"orders.json 的 slots：{front} 不是戰線")
+        for side, slot in by_side.items():
+            where = f"orders.json 的 slots.{front}.{side}"
+            need(side in factions, f"{where}：陣營 {side} 不在劇本裡")
+            known(where, [slot.intercept, *slot.escort], c.locations, "地點")
+            if slot.intercept in c.locations:
+                region = region_of(c, slot.intercept)
+                need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
+                from . import territory  # noqa: PLC0415  延後 import（同 check_territory）
+
+                # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點。出陣的開關就是地盤的（sortie.on＝territory.on）：
+                # 讀 territory，核心的 content.py 不 import 出陣包（開發規範手冊 3.4；主動搬六包第 1 批）
+                if territory.on(c):
+                    need(territory.line_of(c, slot.intercept) == front,
+                         f"{where}：截糧的地點 {slot.intercept} 不是這條戰線的戰線地點（出陣開著時那裡沒有出陣）")
+            if side in factions:
+                need(slot.escort[1] in factions[side].join_at, f"{where}：護糧的終點 {slot.escort[1]} 不是這個陣營的據點")
+    known("orders.json 的 duties", o.duties, factions, "陣營")
+    for side, squad_id in o.convoy_squads.items():
+        squad = c.squads.get(squad_id)
+        need(squad is not None and squad.faction == side, f"orders.json 的 convoy_squads：{side} 的糧隊 {squad_id} 不存在或不屬於這個陣營")
+    known("orders.json 的 callers", [x.figure for x in o.callers if x.figure is not None], c.figures, "人物")

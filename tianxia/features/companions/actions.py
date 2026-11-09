@@ -2,14 +2,14 @@
 第一個參數是 ctx（第一階就是 Game）。Game 留一行的委派給 server、核心原位、假人與測試；招募那一段選單、同步的書信那一格、`errand` 的標題原本寫在
 Game._everyday_options、sync、_action_title，也搬進來。
 
-包裡叫回 Game 的都在服務清單（tianxia/core/services.py）。這一批互相叫直接叫函式（沒有測試換掉這幾個；手冊第十五節「包裡叫回 Game 的方法經不經 ctx」）。
+包裡叫回 Game 的都在服務清單（tianxia/core/services_list.md）。這一批互相叫直接叫函式（沒有測試換掉這幾個；手冊第十五節「包裡叫回 Game 的方法經不經 ctx」）。
 """
 from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import figures  # 共用規則層（人物表 figures，第 40 批收進）
 from tianxia import roster, team, zh
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import Effect
 from tianxia.rules import rate_words
@@ -58,6 +58,17 @@ def recruitable_here(ctx) -> bool:
     """此地有人招得了你（recruit_targets 裡陣營對、名下沒滿的）：h_recruit 照它說，灰掉的鈕不算（黃巾的人在涿郡不說）。"""
     s, c = ctx.state, ctx.content
     return any(roster.recruit_problem(s, c, ctx.world, cid) is None for cid in recruit_targets(ctx))
+
+
+def stale_cell(ctx, option: Option | None, option_id: str) -> Refused | None:
+    """stale/recruit 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。FB-363：兩個分頁搶，慢的那一頁的招募鈕還在、他已經被別人招走了：
+    同懸賞榜 FB-162 回那一句（Refused，網頁跳提示），不扣體力、不寫江湖紀錄。不在這裡、陣營不合這類原因照舊「此刻無法這麼做」（回 None）。"""
+    if option is None and option_id.startswith("act:recruit:"):
+        cid = option_id.removeprefix("act:recruit:")
+        owner = roster.owned_by(ctx.world, cid) if cid in ctx.content.characters else None
+        if owner is not None and not roster.owns(owner, ctx.state.player.name):
+            return Refused(ctx._log([roster.TAKEN.format(name=ctx.content.characters[cid].name, owner=owner)]))
+    return None
 
 
 def recruit_options(ctx) -> list[Option]:
@@ -376,6 +387,11 @@ def deliver_mail(ctx, now: float) -> None:
     mail += letters.deliver(ctx.state, ctx.content, now)
     if mail:
         ctx._write(letters.TITLE, mail)
+
+
+def mail_day_at(ctx, now: float) -> int | None:
+    """這個現實時刻算哪一個送信日（letters.mail_day）；這一季沒開 morning_mail 回 None。手機通知的看守鎖內叫，不寫東西。"""
+    return letters.mail_day(ctx.content, ctx.state.world, now)
 
 
 def morning_mail(ctx, now: float) -> bool:

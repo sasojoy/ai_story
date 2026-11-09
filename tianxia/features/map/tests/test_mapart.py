@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from tianxia.mapart import (
+from tianxia.features.map.mapart import (
     ICON_BOX, ICON_COLORS, PAPER, bezier_point, bezier_tail, catmull_rom, chaikin, fmt, icon, icon_svg, mix, road_control,
 )
 

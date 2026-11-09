@@ -1,6 +1,6 @@
 """簽到包的動作（全部拆包第 30 批：原本 Game 上的 3 個方法，計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.1）。
 Game 留 3 個一行委派（server 的 MAIN_ACTIONS["checkin"]、假人 bot.check_in、核心原位 sync 與 status_data 在叫的；check_in 的裝飾器 @_not_while_preparing 留在委派上）。
-第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的。"""
+第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

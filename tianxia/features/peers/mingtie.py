@@ -98,7 +98,7 @@ def _board_titles(state: GameState, board: dict | None) -> list[str]:
     """榜單：這一季前十名寫「某某榜第N」（榜單由呼叫端給：伺服器的快取 boards_now、假人自己掃一次；沒給就沒有這幾個）。"""
     if not board:
         return []
-    from tianxia.leaderboard import BOARDS  # noqa: PLC0415  過渡：待搬（賽季榜單；leaderboard → team → …，延後 import）
+    from tianxia.leaderboard import BOARDS  # noqa: PLC0415  共用規則層（賽季榜單；leaderboard → team → …，延後 import）
 
     me, out = name_key(state.player.name), []
     for kind, label, _ in BOARDS:
@@ -122,6 +122,8 @@ def earned(state: GameState, content: Content, world=None, board: dict | None = 
     本命武學是誰親傳、神器與本命兵器、情誼最深的人物、名望最高的帖友，再加上過去幾季記下的（title_book）。
     world 是 WorldStateStore（解武學的名字用不到，留著給之後的頭銜）；沒有的那幾樣就不寫。"""
     p, c = state.player, content
+    if c.config.titles.enabled:
+        return _earned_titles(state, c)
     out: list[str] = []
     out += renown.titles(state, c)
     factions = {f.id: f.name for f in c.scenario.factions}
@@ -167,12 +169,45 @@ def earned(state: GameState, content: Content, world=None, board: dict | None = 
     return uniq
 
 
+def _earned_titles(state: GameState, c: Content) -> list[str]:
+    """稱號與官職（features/titles，設計稿 v5）開著：尋常的不印，小字只從官職（第 2 階起）、親傳、本命兵器、神器、名號簿裡挑；
+    戴著的那一個是名帖上的大印（face 的 seal），不在這一串裡。"""
+    p = state.player
+    out: list[str] = []
+    factions = {f.id: f.name for f in c.scenario.factions}
+    rank = ranks.title(c, state) if ranks.rank_of(state) >= 2 else None
+    if rank and p.faction in factions:
+        out.append(f"{factions[p.faction]}・{rank}")
+    owned = set(library.owned_arts(state))
+    for ch in c.characters.values():
+        if set(tactics.figure_arts(c, ch)) & owned:
+            out.append(f"{ch.name}親傳")
+    for item in [p.weapon, p.armor, *p.rack]:
+        if item is None:
+            continue
+        if item.signature and item.signature in c.characters:
+            out.append(f"{c.characters[item.signature].name}的本命兵器")
+        elif item.original and item.secret and "無名" not in item.name:
+            out.append(f"神器【{item.name}】之主")
+    out += p.title_book
+    return list(dict.fromkeys(t for t in out if t))
+
+
+def seal_of(state: GameState, content: Content) -> dict | None:
+    """名帖上的大印：稱號與官職開著時此刻戴的那一個（{"id","name","grade"}）；關著或沒戴是 None。"""
+    worn = state.player.titles_worn if content.config.titles.enabled else {}
+    return dict(worn) if worn.get("name") else None
+
+
 def _count(n: int) -> str:
     return _cn(n) if 0 < n <= 10 else str(n)
 
 
 def season_book(state: GameState, content: Content, season: int, board: dict | None = None) -> list[str]:
-    """換季時記進 title_book 的：這一季掙到的頭銜裡值得留名的（名聲、擂台、榜單、首功、絕學、神器），前面寫第幾季。"""
+    """換季時記進 title_book 的：這一季掙到的頭銜裡值得留名的（名聲、擂台、榜單、首功、絕學、神器），前面寫第幾季。
+    稱號與官職開著時是空的：名號拿到的那一刻就收進名號簿了（features/titles），尋常的不收。"""
+    if content.config.titles.enabled:
+        return []
     keep = earned(state.model_copy(update={"player": state.player.model_copy(update={"title_book": [], "mingtie_box": []})}),
                   content, board=board)
     lasting = [t for t in keep if not t.endswith("的知交") and not t.endswith("門下") and "・" not in t]

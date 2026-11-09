@@ -19,7 +19,7 @@ def check_explore_one(c: Content, need) -> None:
     每個地點都靠自己的標籤歸得到一張探索表（explore_rules.match；拼錯的標籤會靜靜掉進最後一張）；城裡換上的地痞是認得的隊伍、
     沒有陣營（不然會被當成自己人）；標了「旅人」的事件至少 content_mod.TRAVELER_MIN 則抽得到、而且都在野類的地點。
     四欄加起來 100、標籤只落一張表在數字模型（jianfa_numbers）自己驗。"""
-    from tianxia.events import event_matches_location  # noqa: PLC0415  過渡：待搬（events → rules → …：在函式裡 import）
+    from tianxia.events import event_matches_location  # noqa: PLC0415  共用規則層（events → rules → …：在函式裡 import）
 
     cfg = c.config.jianfa
     if not (cfg.enabled and cfg.explore_one):

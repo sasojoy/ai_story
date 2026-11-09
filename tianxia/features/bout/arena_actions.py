@@ -3,7 +3,7 @@ self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3）；名字
 包裡有模組也叫 arena_crowd）。加上原位接上第 11 批掛鉤的那幾段（1.4）：坐在擂台邊的選單（店面登記 Shop.menu → arena_options）、
 「此地還能做」裡那一顆（Shop.entry → entry_option）、收起來（Shop.close → close）、打開擂台與那一下的標題（act 子動詞 Verb → arena_open、
 arena_sign）、報名與挑擂的標題（choose 掛鉤 → arena_title）、打到一半的三招與認輸（menu 掛鉤 → fight_menu）；choose 那一下灰掉的挑擂鈕
-回原因（arena_fight_problem：Game 原位叫一行委派）。
+回原因（arena_fight_problem，stale_cell 叫：MENU_ORDER 的 stale/arena，第二輪第 92 批）。
 
 - 快照：arena_side、arena_bare、arena_arts、arena_power、arena_left；入口與選單：arena_entry、arena_options；分派：arena_choice、
   arena_join、arena_start；動畫：arena_move_art、arena_burst；場景：arena_scene、arena_last_round；場邊事件：roll_crowd、
@@ -22,7 +22,7 @@ from tianxia.core import battle_base as battle_instance
 from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
-from tianxia.core.option import Option
+from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import MOVES, Squad
 from tianxia.rules import add_rumor
@@ -509,11 +509,21 @@ def arena_title(ctx, arg: str) -> str:
 
 
 def arena_fight_problem(ctx, option_id: str) -> str | None:
-    """按到灰掉的挑擂鈕（原本 Game.choose 查完選單之後那一段；兩個分頁、畫面還沒重抓）：為什麼挑不了、還要等多久；Game 原位照它回 Refused。
+    """按到灰掉的挑擂鈕（原本 Game.choose 查完選單之後那一段；兩個分頁、畫面還沒重抓）：為什麼挑不了、還要等多久；stale_cell 照它回 Refused。
     守擂的人不在榜上是 None（照原本的 foe and …）。"""
     foe = ctx.state.world.arena.get(option_id.removeprefix("arena:fight:"))
     return foe and arena.challenge_problem(ctx.state.world, ctx.state.player.name, foe, ctx.content.config.arena,
                                            arena_left(ctx), ctx.content.config.time_scale)
+
+
+def stale_cell(ctx, option: Option | None, option_id: str) -> Refused | None:
+    """stale/arena 那一格（第二輪第 92 批；原本在 Game.choose 查完選單之後）。Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）
+    回為什麼不成、還要等多久，**不寫江湖紀錄**（這一支不叫 _log，別的幾格有叫）。沒有原因回 None，照舊「此刻無法這麼做」。"""
+    if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
+        problem = arena_fight_problem(ctx, option_id)
+        if problem:
+            return Refused([f"（{problem}。）"])
+    return None
 
 
 def travel_block(state, content) -> TravelBlock | None:

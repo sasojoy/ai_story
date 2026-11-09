@@ -1,4 +1,4 @@
-"""content/heroines.json 的檢查（content.validate 照 FEATURES 叫，關著的包照驗）。"""
+"""tianxia/features/heroines/content/heroines.json 的檢查（content.validate 照 FEATURES 叫，關著的包照驗）。"""
 from __future__ import annotations
 
 from . import rules

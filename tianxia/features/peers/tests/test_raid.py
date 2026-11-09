@@ -10,9 +10,12 @@ import random
 import pytest
 
 from conftest import install_season_one
-from tianxia import calendar, encounter, roster, rules, social, team
+from tianxia import calendar, encounter, roster, rules
+from tianxia.features.peers import social
+from tianxia import team
 from tianxia.characters import CharacterStore
-from tianxia.engine import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON, Game
+from tianxia.engine import Game
+from tianxia.features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON
 from tianxia.models import FactionDef
 from tianxia.state import BotProfile
 
@@ -293,7 +296,8 @@ def test_cooldowns_for_the_same_target_and_for_anyone_after_a_raid(pair):
     assert not button["enabled"] and "剛被人截殺過" in button["note"]
     world.mutate_season(lambda season: setattr(season, "time", season.time + cfg.shield_seconds))
     assert _raid_buttons(content, world, "丙", "乙")[0]["enabled"]
-    assert not _raid_buttons(content, world, "甲", "乙")[0]["enabled"]  # 甲對乙的冷卻比較長
+    # 甲對乙另有一對的冷卻：比護身長才還擋著（2026-11-09 起護身跟這一對的冷卻都是 3 小時，一到就一起開）
+    assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"] == (cfg.pair_cooldown_seconds <= cfg.shield_seconds)
     world.mutate_season(lambda season: setattr(season, "time", season.time + cfg.pair_cooldown_seconds))
     assert _raid_buttons(content, world, "甲", "乙")[0]["enabled"]
 

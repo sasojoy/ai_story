@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 BLOCKED = "這話說得太難聽，江湖人也聽不下去。換句話吧。"  # 待 joy 潤
 TOO_LONG = "最多 {n} 個字。"
-TAUNT, MOTTO = "taunt", "motto"
-Kind = Literal["taunt", "motto"]
+TAUNT, MOTTO, LETTER = "taunt", "motto", "letter"
+Kind = Literal["taunt", "motto", "letter"]
 JUDGE_PREDICT = 16  # {"ok": false} 不到十個 token，多留一點不被截斷
 _STRIP = re.compile(r"[\s\W_]+", re.UNICODE)
 _URLISH = re.compile(r"(https?|www\.|\.com|\.tw|\.net|\bline\b|\big\b|@)", re.IGNORECASE)
@@ -48,6 +48,13 @@ PROMPT = {
         "詩句、自述、江湖氣的豪語、玩笑都可以。不可以的是：髒話、辱罵或嘲笑別人、歧視、色情、"
         "廣告、聯絡方式（電話、帳號、群組）、網址。諧音、拆字、注音、英文縮寫的髒話也算。"
         "只回 JSON：{\"ok\": true} 表示可以，{\"ok\": false} 表示要擋下。"
+    ),
+    # 帖友書信（features/mail；Joy 2026-11-07「信能寫聯絡方式、網址嗎？不擋」）：只有收信的那一個人看得到，聯絡方式與網址不擋
+    LETTER: (
+        "你是一個武俠網路遊戲的審核員。玩家寫一封私信給另一個玩家（兩人交換過名帖，只有收信的人看得到）。"
+        "問候、閒聊、約戰、江湖嗆聲、互留聯絡方式都可以。不可以的是：髒話、罵人祖宗親屬、針對現實的人身攻擊、"
+        "性別或族群歧視、性騷擾、色情、威脅現實中的人身安全。諧音、拆字、注音、英文縮寫的髒話也算。"
+        "只回 JSON：{\"ok\": true} 表示可以送出，{\"ok\": false} 表示要擋下。"
     ),
 }
 

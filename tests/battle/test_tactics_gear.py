@@ -7,7 +7,9 @@ from types import SimpleNamespace
 import pytest
 from conftest import real_content
 
-from tianxia import armor, battle_instance, tactics, team, traits, weapons
+from tianxia import armor
+from tianxia.features.battle import instance as battle_instance
+from tianxia import tactics, team, traits, weapons
 from tianxia.engine import Game
 from tianxia.state import PLAYER, Equipment
 

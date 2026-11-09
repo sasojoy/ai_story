@@ -4,6 +4,7 @@
 - rules.py：純規則（她出不出現、隱線端不端得出來、給模型的那幾行、過濾）。
 - actions.py：「此地還能做」的那一顆、端在眼前時的選單、成人內容開關、換季。
 - routes.py：設定頁的成人內容開關（/api/heroines/adult）。
+- web/heroines.js：那一格的畫法與確認卡的兩顆鈕（架構收尾第 105 批從 app.js 切出來）；呼叫與 change 留殼。
 - 接在別處的：figures.placed_characters（還不出現的女子不在任何地方）、companion_agent（提示多幾行、扮演誰、寫回來的過濾）。
 """
 from __future__ import annotations
@@ -18,6 +19,7 @@ class HeroinesFeature(Feature):
     prefix = PREFIX  # heroines:open:<人物>、heroines:yes、heroines:no
     # 這一包 content/ 底下：三位女子的設定與她們三條奇事的段落事件檔（content.py 照它到這一包的 content/ 載；線本身在根上的 content/storylines.json）
     content = ("heroines.json", "events/story_yesanniang.json", "events/story_sugu.json", "events/story_duruo.json")
+    web = ("heroines.js",)  # 設定頁成人內容那一格
     player_fields: tuple[str, ...] = ("heroines", "heroines_adult")
     carried: tuple[str, ...] = ("heroines_adult",)  # 成人內容的開關換季照帶（on_season_start 抄過去）；隱線換季重來
 

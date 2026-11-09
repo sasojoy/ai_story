@@ -3,7 +3,7 @@ import random
 from unittest import mock
 import pytest
 from conftest import walk_to
-from tianxia import library, skillview, team, traits
+from tianxia import library, art_cards, team, traits
 from tianxia.engine import Game
 from tianxia.martial_arts import MartialArt
 from engine_kit import _a_fused_art, _practice_step_game, _reload, _wear, ids  # noqa: F401
@@ -12,7 +12,7 @@ pytestmark = pytest.mark.whole_content
 
 
 def test_the_menxia_pages_get_their_rows_from_the_game_facade(game):
-    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 skillview）。"""
+    """修練與煉製兩頁的資料都從 Game 這個門面拿（伺服器不直接碰 art_view、forge_view）。"""
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.arts = ["lake_kick"]
     game.state.player.insights = ["feng"]
@@ -140,10 +140,10 @@ def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
     game.state.player.art_slots[stored.id] = ["shui"]
     stored = team.player_art(game.state, game.content, game.world, stored.id)
     line = traits.card_line(game.content, stored)  # 功法卡多一行功效（計畫六 Task 4）
-    assert game.art_detail(stored.id) == skillview.art_card(stored, 1, trait_line=line)
+    assert game.art_detail(stored.id) == art_cards.art_card(stored, 1, trait_line=line)
     game.state.player.art_levels[stored.id] = 4
     card = game.art_detail(stored.id)
-    assert card == skillview.art_card(stored, 4, trait_line=line)
+    assert card == art_cards.art_card(stored, 4, trait_line=line)
     assert "\n功效：〔化勁〕" in card and card.endswith("以柔勁纏住兵刃，借力卸力。")  # 在來源那一行之後、說明之前
 
 

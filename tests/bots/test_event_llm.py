@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from tianxia import event_llm as eg
-from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
+from tianxia.features.battle.instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
 from tianxia.models import Choice, Event
 
 

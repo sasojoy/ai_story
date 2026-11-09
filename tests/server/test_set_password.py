@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import set_password  # noqa: E402
 from conftest import real_content  # noqa: E402
 
-from tianxia import howto  # noqa: E402
+from tianxia.features.guide import howto as guide_howto  # noqa: E402
 from tianxia.accounts import AccountStore  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import profile_line  # noqa: E402
@@ -64,11 +64,11 @@ def test_a_character_it_creates_gets_the_same_profile_as_the_server(tmp_path, ca
     monkeypatch.setenv("TIANXIA_PROFILE", "week7")
     assert _run(tmp_path, "Rayal", "--character", "Rayal") == 0
     assert profile_line(weekend, "week7") in capsys.readouterr().out  # 跟伺服器啟動時印的同一行
-    assert howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
+    assert guide_howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
     monkeypatch.delenv("TIANXIA_PROFILE")  # 沒帶就是 season21（週末設定關門）
     assert _run(tmp_path, "other", "--character", "沈青衫") == 0
     assert profile_line(plain, "season21") in capsys.readouterr().out
-    assert howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines
+    assert guide_howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines
 
 
 def test_running_again_replaces_the_password(tmp_path):
@@ -112,3 +112,48 @@ def test_refuses_a_bad_login(tmp_path, capsys):
     assert _run(tmp_path, "有中文") == 1
     assert "帳號只能用英文字母、數字、底線，3～20 字。" in capsys.readouterr().out
     assert not (tmp_path / "local").exists()
+
+
+def test_set_password_script_refuses_id_keys(tmp_path, capsys):
+    """沒有密碼的帳號鍵 id:<n>（帳號與客服第 201 批）：帳號格式不收冒號，這支碰不到、也不另建帳號。"""
+    key = _store(tmp_path).create_without_password("line", "U1", "LINE")
+    assert _run(tmp_path, key) == 1
+    assert capsys.readouterr().out.strip() == "帳號只能用英文字母、數字、底線，3～20 字。"
+    with _db(tmp_path).snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+    assert not (tmp_path / "local").exists()
+
+
+def _identity_on(monkeypatch, tmp_path, content, admins):
+    """帳號與客服第 207 批：identity 開著（金鑰在、開關開著）、管理者名單是 admins。內容檔換成測試內容那一份。"""
+    import json
+
+    from tianxia.core import identity_base
+
+    key = tmp_path / "identity.json"
+    key.write_text(json.dumps({"key": "k" * 32}), encoding="utf-8")
+    monkeypatch.setattr(identity_base, "KEY_FILE", key)
+    content.config.identity.enabled = True
+    content.config.admins = admins
+    monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
+
+
+def test_set_password_script_needs_12_when_on(tmp_path, capsys, monkeypatch, content):
+    from tianxia import accounts
+
+    _identity_on(monkeypatch, tmp_path, content, ["Rayal"])
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "short-pw")  # 8 字
+    assert _run(tmp_path, "Rayal") == 1
+    assert capsys.readouterr().out.strip() == accounts.STRICT_SHORT_PASSWORD
+    assert _store(tmp_path).get("rayal") is None and not (tmp_path / "local").exists()
+    assert _run(tmp_path, "someone") == 1  # 第 209 批：名單外也要 12 字、同一句
+    assert capsys.readouterr().out.strip() == accounts.STRICT_SHORT_PASSWORD
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "a-long-password")
+    assert _run(tmp_path, "Rayal") == 0
+
+
+def test_set_password_script_off_ignores_the_floor(tmp_path, monkeypatch, content):
+    monkeypatch.setattr(set_password.secrets, "token_urlsafe", lambda n: "short-pw")
+    content.config.admins = ["Rayal"]
+    monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
+    assert _run(tmp_path, "Rayal") == 0  # identity 關著：一個字不變

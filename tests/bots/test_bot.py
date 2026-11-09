@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from tianxia import insight_fx, arts as arts_mod, bot, fusion, library, team
+from tianxia.features.craft import bots as craft_bots
 from tianxia.state import InsightFx
 from test_cultivation import STRONG
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
@@ -473,12 +474,12 @@ def test_forge_and_cultivate_does_not_forge_when_every_try_is_rejected(content, 
 
 
 def test_pick_forge_reads_the_shares_when_it_is_called(content, world, monkeypatch):
-    """份額在呼叫的當下才讀模組常數：改 bot.MERGE_SHARE（量平衡的腳本會這樣掃）要有效，不是定義函式時就綁死。"""
+    """份額在呼叫的當下才讀模組常數：改 craft/bots.py 的 MERGE_SHARE（量平衡的腳本會這樣掃）要有效，不是定義函式時就綁死。"""
     game = armed(content, world)
     game.state.player.insights = ["feng", "huo"]
-    monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)  # 擲不出合併：沒爐可開
+    monkeypatch.setattr(craft_bots, "MERGE_SHARE", 0.0)  # 擲不出合併：沒爐可開
     assert bot.pick_forge(game, Fixed(0.5)) is None
-    monkeypatch.setattr(bot, "MERGE_SHARE", 0.9)  # 0.5 < 0.9：開一爐意境
+    monkeypatch.setattr(craft_bots, "MERGE_SHARE", 0.9)  # 0.5 < 0.9：開一爐意境
     assert len(bot.pick_forge(game, Fixed(0.5)).insight_ids) == 2
 
 

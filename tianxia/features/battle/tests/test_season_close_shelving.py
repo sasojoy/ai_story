@@ -15,7 +15,8 @@ import pytest
 
 from conquest_kit import announce, conquest_game, go, join
 
-from tianxia import battle_instance, siege
+from tianxia.features.battle import instance as battle_instance
+from tianxia import siege
 from tianxia.engine import Game
 
 NOW = 1_792_000_000.0

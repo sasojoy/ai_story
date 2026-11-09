@@ -6,13 +6,15 @@ import random
 import pytest
 
 from test_seal import SALT, put_shards
-from tianxia import duel as duel_rules
-from tianxia import seal, seal_duel
+from tianxia.features.bout import duel_rules
+from tianxia.features.seal import seal, duel_rules as seal_duel
 from tianxia.models import BattleTuning, DuelTuning, SealTuning
 from tianxia.state import WorldState
 from tianxia.world_state import SealDuel, SealSide, SharedWorldState
 from test_seal import sealed  # noqa: F401（fixture）
-from tianxia import atlas, fusion, seal, social
+from tianxia import atlas, fusion
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
 
 
 def _side(name, power=80.0, scores=None, role="", seen=None):
@@ -284,7 +286,7 @@ def test_fb174_a_side_that_played_some_rounds_is_not_written_as_absent(content):
     from test_seal import put_shards
     from test_seal_duel import _duel, _shared
 
-    from tianxia import seal_duel
+    from tianxia.features.seal import duel_rules as seal_duel
 
     put_shards(content)
     st = _shared(content, _duel(phase="muster", starts_real=0.0))
@@ -418,8 +420,8 @@ def test_a_failed_gamble_in_the_seal_duel_does_not_eat_the_armor(content):
 def test_a_participant_carries_the_cut_into_both_kinds_of_duel_sides(content):
     from test_engine import _install_battle_def
 
-    from tianxia import battle_instance
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.features.battle import instance as battle_instance
+    from tianxia.features.battle.instance import BattleInstance
 
     definition = _install_battle_def(content)
     b = BattleInstance(battle_id="changshe_fire")

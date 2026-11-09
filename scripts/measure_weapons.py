@@ -33,7 +33,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_weapons_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, naming, rules, smithing, weapons  # noqa: E402
+from tianxia import bot, database, naming, rules  # noqa: E402
+from tianxia.features.smithy import smithing  # noqa: E402
+from tianxia import weapons  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -48,7 +50,7 @@ def _cleanup() -> None:
 atexit.register(_cleanup)
 
 
-def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
+def run(seed: int, profile: str | None, weapons_on: bool, max_steps: int | None = None) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.weapons.enabled = weapons_on
     content.config.armor.enabled = False  # 兵器量表只比兵器：防具固定關著，數字才跟兵器第一、二批量的對得上（防具開著的整季看 measure_gear）
@@ -101,7 +103,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
             mock.patch.object(weapons, "buy", spent(weapons.buy)), mock.patch.object(weapons, "repair", spent(weapons.repair)), \
             mock.patch.object(smithing, "forge", spent(smithing.forge)), mock.patch.object(smithing, "temper", spent(smithing.temper)):
-        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(weapons_on)}.db"), observe=observe)
+        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(weapons_on)}.db"), observe=observe, **({"max_steps": max_steps} if max_steps else {}))
     p = game.state.player
     tiers = {1: 0, 2: 0, 3: 0, 4: 0}  # 四階：挑戰本人首勝、決戰得勝也會給（正式季整合第 4 批）
     for mid, n in p.materials.items():
@@ -128,11 +130,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--profile", default=None)
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     print(profile_line(load_content(ROOT / "content", profile=args.profile), args.profile), flush=True)
     for seed in args.seeds:
         for on in (False, True):
-            r = run(seed, args.profile, on)
+            r = run(seed, args.profile, on, args.max_steps)
             edge = "—" if r["edge_avg"] is None else round(r["edge_avg"])
             share = f"{r['smith_silver'] / r['income']:.0%}" if r["income"] else "—"
             print(f"種子 {seed} 兵器{'開' if on else '關'}：等級 {r['level']}、遊歷勝率 {r['win']:.0%}（{r['fights']} 場）、"

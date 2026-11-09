@@ -2,7 +2,7 @@
 同步時補護衛擋下挑戰的名望與心得。原本 Game 上的 3 個方法，名字去掉前導底線、第一個參數是 ctx。會改狀態。規則在同包的 figure_aid.py。
 
 `aid:` 的 choose 接掛鉤（標題一起給，在動作之前拿）；`options` 與 `deliver_guard_credits` 的位置算行為（選單末段護衛這一串在包選項之前、同步時夾在
-_deliver_echoes 與 deliver_notices 之間），所以 Game 留一行委派原位叫。
+煉製包的 deliver_echoes 與 deliver_notices 之間），所以 Game 留一行委派原位叫。
 """
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def act(ctx, arg: str) -> list[str]:
 
 def deliver_guard_credits(ctx) -> None:
     """護衛替人物擋下的挑戰（figure_aid.contest 記在 WorldState.guard_credits）：自己同步時補名望 guard_fame、心得 guard_xinde
-    （每擋一次），一則紀錄。做法同 _deliver_echoes：擋下的那一下不動護衛的角色。"""
+    （每擋一次），一則紀錄。做法同煉製包的 deliver_echoes：擋下的那一下不動護衛的角色。"""
     s, c = ctx.state, ctx.content
     lines = s.world.guard_credits.pop(s.player.name, None)
     if not lines:

@@ -5,7 +5,9 @@ import pytest
 from conftest import walk_to
 from test_bot import armed
 from test_engine import _open_three_move_battle, _warlord_in_battle
-from tianxia import battle_instance, bot, bot_policy, fusion, insight_fx, library, naming
+from tianxia.features.battle import instance as battle_instance
+from tianxia import bot, bot_policy, fusion, insight_fx, library, naming
+from tianxia.features.craft import bots as craft_bots
 from tianxia.engine import Option
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Effect, FactionDef, Location,
@@ -531,7 +533,7 @@ def test_a_bot_never_knocks_on_the_single_audience_button_even_though_it_always_
 def arts_only(monkeypatch):
     """這幾個測試只看合成：每輪必合（有兩個意境、體力有餘時必開一爐），不修練。"""
     monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
-    monkeypatch.setattr(bot, "MERGE_SHARE", 1.0)
+    monkeypatch.setattr(craft_bots, "MERGE_SHARE", 1.0)
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
 
 
@@ -837,7 +839,7 @@ def _forbid_the_new_shop_actions(monkeypatch):
 def test_the_whole_season_bot_still_repairs_and_tempers_through_the_step_by_step_menu(content, world, monkeypatch):
     """鐵匠鋪與合成流程 B 批新開的 repair_item／temper_item／dismantle_many／smith_furnace 只給網頁；整季機器人照舊按選單上的
     smith:repair、smith:temper（店面設計 6.6：不替它們改）：選項 id、鈕上的字、做完的結果一個字不變。"""
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _smith_with_a_dull_blade(content, world, "整季", armor_on=False)  # 防具開著機器人還會順便買一件甲：這一條只看兵器頁
     ids = {o.id: o for o in game.options(odds=False)}
@@ -853,7 +855,7 @@ def test_the_whole_season_bot_still_repairs_and_tempers_through_the_step_by_step
 
 
 def test_the_server_bot_still_repairs_through_the_menu_and_never_tempers(content, world, monkeypatch):
-    from tianxia import smithing
+    from tianxia.features.smithy import smithing
 
     game = _smith_with_a_dull_blade(content, world, "假人")
     _forbid_the_new_shop_actions(monkeypatch)

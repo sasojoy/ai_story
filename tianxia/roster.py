@@ -34,7 +34,7 @@ def left_behind(state: GameState, content: Content, world: WorldStateStore, side
         return []
     return [
         cid for cid in owned_companions(world, state.player.name)
-        if cid in content.characters and content.characters[cid].side not in (None, side)
+        if cid in content.characters and content.characters[cid].side_in(state.world) not in (None, side)
     ]
 
 
@@ -76,8 +76,9 @@ def recruit_problem(state: GameState, content: Content, world: WorldStateStore, 
     """歷史武將同行：招不了他的原因（照陣營、名下滿了）；招得了是 None。有沒有主、在不在這裡由呼叫端看。
     陣營照自己投靠的那一個（豪強分屬兩軍時照舊算豪強，p.faction）。"""
     ch = content.characters[companion_id]
-    if ch.side is not None and state.player.faction != ch.side:
-        return SIDE_ONLY.format(side=content.scenario.faction_name(ch.side, ch.side))
+    side = ch.side_in(state.world)  # 拿掉豪強的季：許褚歸官軍（side_two_sides）
+    if side is not None and state.player.faction != side:
+        return SIDE_ONLY.format(side=content.scenario.faction_name(side, side))
     n = len(owned_companions(world, state.player.name))
     return FULL.format(n=n) if n >= cap(content) else None
 
@@ -245,7 +246,7 @@ def roster_lines(state: GameState, content: Content, world: WorldStateStore) -> 
     for cid in owned_companions(world, state.player.name):
         ch = content.characters[cid]
         progress = world.get_companion(cid)
-        status = "出戰" if cid in state.player.team else "在門下"
+        status = "出戰" if cid in state.player.team else "候命"
         lines.append((f"{ch.name}　第 {progress.level} 級　{status}", cid))
     lines += [(f"部下・{follower.name}", key) for key, follower in team.follower_rows(state, content)]  # 計畫 T5
     return lines

@@ -21,14 +21,14 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 
 - 現在有哪幾條功能分支、各自推到哪，看交接〔`docs/superpowers/handoff/2026-10-30-主機側交接.md`〕第六節（這裡不列，免得過期）。
 - **功能分支照功能包開**（手冊第五節）：`feature/<包名>`；一個包同一時間只有一條功能分支，兩條線不碰同一包。跨包的功能開一條線、在線上一次改兩包。還沒搬成包的功能用 `Game` 方法前綴當名字（`feature/tavern`、`feature/sortie`），撞線照方法前綴群看。**現有的分支名不改**（`feature/formal-season`、`feature/map-view`、`feature/smithing-flow`、`feature/core-hooks`）。
-- **並行拆包**（第 45 批起照手冊 4.2「波次模式」，下面這一條是之前的做法；全部拆包總表 5.0，企劃者 10/31「趕快拆」）：不同包、彼此不等（總表「等什麼」欄裡沒有對方）、都不是核心批的，最多三～四條同時跑（看機器負載）；核心批（總表 5.2 第 3 條列的）單獨跑。同時跑的測試最多兩份、各 `-n 4`，合併閘門排在另一條沒在跑測試的時候。共用的登記檔（`services.py`、`FEATURES`、邊界測試的名單、`same_behavior.py` 的 `PHASES`、`conftest`、`docs/guide`）每條線把自己加的集中成一段、前面一行 `# <包>`；契約測試 `_dirty` 一律 cherry-pick 第 2 批那一筆。先做完的先合；後合的先把 develop 合進來、重跑 Task 1 的核心測試與那一包的測試、用新的 develop 當 base 重比前後對照，才合。同一包相鄰、合計約 900 行內的批併成一批；工作流程跑完就合、合完就派下一批。（第 45 批起照手冊 4.2「波次模式：一波一驗」，線怎麼排、什麼時候合寫在那一張，跟這一條不同時照那一張；這一條寫的 develop，拆分時是 `split/trunk`。）
+- **並行拆包**（第 45 批起照手冊 4.2「波次模式」，下面這一條是之前的做法；全部拆包總表 5.0，企劃者 10/31「趕快拆」）：不同包、彼此不等（總表「等什麼」欄裡沒有對方）、都不是核心批的，最多三～四條同時跑（看機器負載）；核心批（總表 5.2 第 3 條列的）單獨跑。同時跑的測試最多兩份、各 `-n 4`，合併閘門排在另一條沒在跑測試的時候。共用的登記檔（`services_list.md`、`FEATURES`、邊界測試的名單、`same_behavior.py` 的 `PHASES`、`conftest`、`docs/guide`）每條線把自己加的集中成一段、前面一行 `# <包>`；契約測試 `_dirty` 一律 cherry-pick 第 2 批那一筆。先做完的先合；後合的先把 develop 合進來、重跑 Task 1 的核心測試與那一包的測試、用新的 develop 當 base 重比前後對照，才合。同一包相鄰、合計約 900 行內的批併成一批；工作流程跑完就合、合完就派下一批。（第 45 批起照手冊 4.2「波次模式：一波一驗」，線怎麼排、什麼時候合寫在那一張，跟這一條不同時照那一張；這一條寫的 develop，拆分時是 `split/trunk`。）
 - **誰合進 `develop`、`main`**（企劃者 2026-10-30「只要符合開發規範，不管是本機還是雲端都沒差」；2026-10-31 照現況定；2026-11-05 企劃者答了 Joy 直推 `main`、雲端改核心誰點頭、哪些 PR 附對照證明、PR 範本，手冊第十五節「11/05 企劃者答」）：
   - **主機側的子代理**推 `dev/`、`qa/` 分支，PM 在本機 `git merge --no-ff` 合進功能分支、再合進 `develop`，推上去（不經 PR；這台沒有 `gh`）。
-  - **雲端 session 與 Joy 的 Claude**（規矩在 `CLAUDE.md`「工作目錄與分支」）：在自己的分支（`claude/<名字>`）做，開 PR 到 `develop`，**由 Joy 在 GitHub 合**。PR 說明照 PR 範本（`.github/pull_request_template.md`；企劃者 2026-11-05「可以，連 PR 範本一起」）寫：改了哪一包（或 `Game` 哪一群方法）、跑了哪些測試幾條過（寫跑的是哪一筆）、〈退版風險〉五件逐條（下面「照舊的規矩」）、這一批新寫「待 joy 潤」的字（沒有就寫沒有新字）、改了導覽哪一節（沒改寫為什麼）。**改核心檔、開新的核心掛鉤、加共用層登記**由企劃者或 Joy 代點頭（企劃者 11/05「你（企劃者）或 Joy 代點頭，PR 寫原話」）：PR 說明寫明誰點頭、哪一天、原話，沒有紀錄不准寫「PM 同意」；PM 每週收進手冊第十五節。**掛開關的新功能**附 `scripts/same_behavior.py compare`（所有軌、三種設定：`season21`、`week7`、`test`）全部一樣的結果；改內容與平衡數字的 PR 不強制附（企劃者 11/05「只有掛開關的新功能要」）。**不用避開搬包中的包**（企劃者 2026-11-05「照現在這樣，不管」；合回之後 PM 11/06 定照舊）：照常改，PM 合的時候照新位置搬；還沒搬的批看交接第三節，正在搬的看第一節「現在在跑」。已經搬進 `tianxia/features/<包>/` 的改包裡的檔，舊名 `tianxia/<模組>.py` 檔裡只有 `sys.modules[__name__] = …` 的是別名、要改它指到的那一份，`Game` 上的一行委派不加邏輯；新功能用 `scripts/new_feature.py`；回饋單號用 8000～8999。主機側 PM 不先 QA，第二天早上照每日整套（`latest.txt` 的新紅與 develop 新進的提交）事後驗，紅了開單交回那一線，新紅三天沒修 PM revert 那一筆合併。
-  - **上 `main`** 一律從 `develop` 合、合之前跑整套含 slow（下面「上 main」）。**Joy 本人（Joy 自己推，或 Joy 當下明說要推的那一次；雲端 session 不自己決定直推）可以直推 `main`**：推什麼由 Joy 決定，修線上問題以外的新功能、新商品也可以（企劃者 2026-11-05「照現在，Joy 決定」；以前只限維運與緊急修正）；推完照舊跟企劃者說一聲（哪一筆、改了哪個方法）。PM 下一次合併照舊先把 `main` 合進 `develop`，改到已經搬走的方法就照抄進包（搬包中的那一批重跑前後對照），之後照舊追進拆分主幹（`split/trunk`）。
+  - **雲端 session 與 Joy 的 Claude**（規矩在 `CLAUDE.md`「工作目錄與分支」）：在自己的分支（`claude/<名字>`）做，開 PR 到 `develop`，**由 Joy 在 GitHub 合**。PR 說明照 PR 範本（`.github/pull_request_template.md`；企劃者 2026-11-05「可以，連 PR 範本一起」）寫：改了哪一包（或 `Game` 哪一群方法）、跑了哪些測試幾條過（寫跑的是哪一筆）、〈退版風險〉五件逐條（下面「照舊的規矩」）、這一批新寫「待 joy 潤」的字（沒有就寫沒有新字）、改了導覽哪一節（沒改寫為什麼）。**改核心檔、開新的核心掛鉤、加共用層登記**由企劃者或 Joy 代點頭（企劃者 11/05「你（企劃者）或 Joy 代點頭，PR 寫原話」）：PR 說明寫明誰點頭、哪一天、原話，沒有紀錄不准寫「PM 同意」；PM 每週收進手冊第十五節。**掛開關的新功能**附 `scripts/same_behavior.py compare --new <包>[,<包>]`（所有軌、三種設定：`season21`、`week7`、`test`）：新包帶來的 js、css、帶包名前綴的表（`<包>` 或 `<包>_*`）、op 與管理者動作在 head 扣掉、比完印成清單，**清單貼進 PR，其餘全部一樣**（企劃者 11/08 選「新東西列出來，其餘一樣」；不帶前綴的表、新 css 蓋到舊選擇器照紅，base 已有的包不准當新包；手冊第十五節「架構收尾 H 波」第 4 條）；改內容與平衡數字的 PR 不強制附（企劃者 11/05「只有掛開關的新功能要」）。**不用避開搬包中的包**（企劃者 2026-11-05「照現在這樣，不管」；合回之後 PM 11/06 定照舊）：照常改，PM 合的時候照新位置搬；還沒搬的批看交接第三節，正在搬的看第一節「現在在跑」。已經搬進 `tianxia/features/<包>/` 的改包裡的檔（舊名別名第 103 批收掉了，`from tianxia import duel` 會 `ImportError`，舊名對照看 `docs/guide/核心與存檔.md`），`game_api.py` 的表不加邏輯；新功能用 `scripts/new_feature.py`；回饋單號用 8000～8999。主機側 PM 不先 QA，第二天早上照每日整套（`latest.txt` 的新紅與 develop 新進的提交）事後驗，紅了開單交回那一線，新紅三天沒修 PM revert 那一筆合併。
+  - **上 `main`** 一律從 `develop` 合、合之前跑整套含 slow（下面「上 main」）。**Joy 本人（Joy 自己推，或 Joy 當下明說要推的那一次；雲端 session 不自己決定直推）可以直推 `main`**：推什麼由 Joy 決定，修線上問題以外的新功能、新商品也可以（企劃者 2026-11-05「照現在，Joy 決定」；以前只限維運與緊急修正）；推完照舊跟企劃者說一聲（哪一筆、改了哪個方法）。PM 下一次合併照舊先把 `main` 合進 `develop`，改到已經搬走的方法就照抄進包（搬包中的那一批重跑前後對照），（拆分 11/08 做完，`split/trunk` 不再追。）
   - `develop`、`main` **不開** GitHub 分支保護，照規矩口頭遵守（企劃者 10/31，手冊第十一節第 1 題）。
 - 流向只有一條：批的工作樹分支 → 功能分支 → `develop` →（內測）→ `main`。**不要從功能分支或工作樹直接合 `main`。**
-- **架構拆分繼續在 `split/trunk` 上做，每一波同步回 `develop`**（企劃者 2026-11-06 問了合回之後在哪裡拆，選「繼續在 split/trunk 拆」；`CLAUDE.md`「工作目錄與分支」）：主幹在 tag `develop-merge-back-20261106` 合回 `develop`，從這一筆起 `develop` 就是新架構。剩下的批走 `dev/<x>` → `wave/<波>` → `split/trunk`（手冊 4.2「波次模式：一波一驗」），每一波進主幹之後 PM 整包同步回 `develop` 一次；沒過閘門的不進 `split/trunk`、也不進 `develop`。總表、交接、手冊跟著每一波回來，兩波之間最新的那一份在 `split/trunk`。
+- **架構拆分做完了**（第一輪 68 批、第二輪 34 批、收尾 H 波 2 批，2026-11-08 進 `develop`；手冊第十五節「架構收尾 H 波」第 5 條）：之後主機側的批照手冊 4.2 波次模式從最新 `develop` 開 `dev/<x>` → `wave/<波>`，閘門綠就進 `develop`；沒過閘門的不進 `develop`。`split/trunk` 停在 H 波那一筆不再動（PM 定）。派工的模型：開發 Opus 5.5、測試與審查 Sonnet（企劃者 11/08「你是PM 後續的任務你整理好規格跟開發方式就指派opus5.5開發, sonnet測試」）。（以前：主幹在 tag `develop-merge-back-20261106` 合回 `develop`，之後每一波進 `split/trunk` 再同步回 `develop`。）
 - `main` 有新東西（Joy 推的）時，下一次合併的人先把 `main` 合進 `develop`、再把 `develop` 合進功能分支（`git merge --no-ff`，不 rebase 已經推上去的分支）。衝突照「程式為準」解，解不了的問 PM。
 - 每次推上去都確認推到了：`git merge-base --is-ancestor HEAD origin/<分支>`（別的 session 也會動同一份 clone）。
 - 線上伺服器照舊跑 `main`（Joy 部署）。**內測 `develop` 在這台主機跑**（企劃者 2026-10-31，手冊第十一節第 5 題）：另一個資料庫、另一個埠，不碰線上那一份；先開一次 21 天的季（`season21`）試玩。程式只從 `origin/develop` 更新、換到每日整套綠的那一筆。對外網址、埠、叫不叫模型**待定**（企劃者還沒定）。做法在 `docs/superpowers/feedback/beta-主機端操作.md`「內測 develop」；開季、收季、換程式都記進交接第一節。
@@ -41,14 +41,14 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 |---|---|---|
 | 開發中 | 那一包自己的測試（單元、功能包兩級）；還沒搬成包的照 `scripts/test_for.py` 挑的 | 開發自己 |
 | QA 驗收 | **不重跑開發跑過的測試**，只在實機上驗畫面與手感；只能靠引擎驗的照 `tianxia-qa/引擎驗收.md` | QA |
-| 合進功能分支 | 企劃者 2026-10-31 定照舊：動到 `tianxia/`、`content/`、`server.py` 跑不含 slow 的整套＋那一包相關的 slow；只動 `web/`、文件、測試跑 `test_for` 挑的（下面「合併時跑哪一種」）。手冊 4.2 原本提的「只跑三級」作廢 | 合併的人（PM） |
+| 合進功能分支 | 企劃者 2026-10-31 定照舊：動到 `tianxia/`、`content/`、`server.py` 跑不含 slow 的整套＋那一包相關的 slow；改到 `web/app.js`、`web/main.js` 比照，加不含 slow 的整套（PM 11/07）；其他只動 `web/`、文件、測試跑 `test_for` 挑的（下面「合併時跑哪一種」）。手冊 4.2 原本提的「只跑三級」作廢 | 合併的人（PM） |
 | 合進 develop | 同上；內容跟測過的一樣（`git diff --quiet`）就不再跑 | 合併的人（PM） |
 | 每天一次 | 整套含 slow（`scripts/nightly.ps1`，每天 03:30——企劃者 10/30「03:30，PM 註冊」；結果在 `.local/nightly/latest.txt`，有新紅、舊紅、轉綠三段；紅了開 FB 交回那一線，新紅三天沒修 PM revert 那一線的合併；develop 上的紅不擋開工，只擋上 main） | 排程（手冊 4.4） |
 | 上 main 前 | 整套含 slow | 合進 main 的人 |
 
 - pytest 一律 `-n 4`（同一台同時最多兩份測試；不寫 `-n auto`）。
 - **`scripts/test_for.py` 照手冊 4.3 挑**（第 0 階 2026-10-31 合進 develop；手冊最後一節寫了落地時跟原文不同的地方）：
-  - 照改到的檔挑，「import 了 engine」不算相關：`engine.py` 的一行委派照那一包挑，其餘方法跑核心測試＋`-m smoke`＋內文寫到那個方法名的檔（第 61 批拿掉了照方法名分功能群）；`models.py`、`state.py`、核心模組跑核心測試＋`-m smoke`（約 1,650 條，11/07 量）；`server.py` 再加 `tests/server/test_server.py` 與全部 `test_*_shell.py`；`tianxia/features/<包>/` 跑那一包的 `tests/`＋核心契約。
+  - 照改到的檔挑，「import 了 engine」不算相關：`engine.py` 的方法跑核心測試＋`-m smoke`＋內文寫到那個方法名的檔（第 61 批拿掉了照方法名分功能群）；`models.py`、`state.py`、核心模組跑核心測試＋`-m smoke`（約 1,650 條，11/07 量）；`server.py` 再加 `tests/server/test_server.py` 與全部 `test_*_shell.py`；`tianxia/features/<包>/` 跑那一包的 `tests/`＋核心契約（`test_contract_features` 逐包那幾條只跑 `[<包>]`；`game_api.py` 再併上寫到那個名字的檔）。
   - **slow 不自動跟，`--slow` 才加**；改到的測試檔本身照舊連 slow。開跑前會列出「整個檔標 slow、這一次不跑」的檔：那些正是你這一包的，加 `--slow`。
   - 預設 `-n 4`，`--` 之後給的 `-n X` 照給的；`--list` 每一段寫為什麼挑，`--count` 數條數。
 - **開發中**：只跑跟這一次改動直接相關的測試，**不跑整套**。（**QA 不重跑開發跑過的測試**，只在實機驗畫面與手感；派工單點名的才跑：手冊 4.2、`tianxia-qa`。）
@@ -56,13 +56,15 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - QA 不重跑；派工單點名要跑的那幾個檔才跑，其餘靠實機（瀏覽器）驗；不要為了「保險」跑整套。純搬、`web/` 沒動的批，QA 改成兩台真伺服器逐位元組比（總表 5.0，`tianxia-qa`）。
   - 修回饋單的測試寫進那個模組的測試檔，不開 `test_fb…` 新檔（2026-10-27 測試整理 1b 併掉了 53 個）；派工單寫「測試寫進 `tests/test_<模組>.py`」。
   - 改到 `tests/conftest.py` 的批：`test_for` 照改到的 fixture、函式挑用到它的測試檔；autouse 的、最外層的、或用到它的超過 50 個檔就跑煙霧。改 `tests/fixtures/`、`pyproject.toml` 時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
-- **拆分主幹 `split/trunk` 不照下面這一條**（企劃者 2026-11-04「不要一直測試變成高度重複測試，這就是拆分的精神」）：照手冊 4.2「同一件事只驗一次」，第 45 批起照 4.2「波次模式：一波一驗」（企劃者 2026-11-06「火力全開，用最快速度把分批作業想辦法弄好」：波末合一次、閘門 `docs/superpowers/pm-workflows/wave_gate.py` 一次、每條線審查一位、修一輪）；下面這一條與「唯讀審查」寫的審查員自己重跑，只管 `develop`。
+- **拆分主幹 `split/trunk` 不照下面這一條**（企劃者 2026-11-04「不要一直測試變成高度重複測試，這就是拆分的精神」）：照手冊 4.2「同一件事只驗一次」，第 45 批起照 4.2「波次模式：一波一驗」（企劃者 2026-11-06「火力全開，用最快速度把分批作業想辦法弄好」：波末合一次、閘門 `docs/superpowers/pm-workflows/wave_gate.py` 一次、每條線審查一位、修一輪）；下面這一條與「唯讀審查」寫的審查員自己重跑，只管 `develop`。拆分 11/08 做完之後，主機側的波（`wave/<波>` → `develop`）照舊用波次模式與 `wave_gate.py` 的閘門。**I 波起（企劃者 11/08 四題都選建議，手冊 4.2 新表）**：波末用 `wave_gate.py --changed`（pytest 先跑不含 slow＋一條整季冒煙 `test_bot_plays_a_full_season[1]`，再照 diff 挑軌〔各軌 `covers`＋`ALWAYS_TRACKS`〕、設定〔`season21`＋`test`，季長相關才加 `week7`〕、半舊半新〔`state.py`、`models.py`、存檔欄位、`database.py` 才跑〕、網頁〔動到 `web/` 才跑，照對照表挑回合〕；改到 `tianxia/core/`、共用層、`engine.py`、`content/` 頂層、`scripts/sb/` 或拿不準的退回全軌）；每日 03:30 與上 `main` 前用 `--full`。`covers` 第 109 批用 `scripts/sb/covers_measure.py` 重量過（小包挑得掉、大包仍 59～76 軌）：新功能波照 `--changed` 挑軌加 `--new <包>`，不再只跑 `ALWAYS_TRACKS`；只改軌檔只比那一軌與 import 它的軌（`result.json` 的 `decision` 是 `mode: "tracks"`，多一欄 `track_files_tracks`）；核心退回全軌不再帶動網頁全回合（手冊第十五節「N 波」）。
 - **合併時跑哪一種**（企劃者 2026-10-31 定「照舊」，手冊第十一節第 3 題；手冊原本提的「合併只跑三級」作廢。Joy 2026-10-26「只有上 main 跑整套 slow」、10-27「改UI也需要跑那麼多那麼久是不是有什麼問題？」之後 PM 收的這一套照用，另加那一包相關的 slow）：
   - **批合進功能分支、功能分支合進 `develop`、`main` 合回 `develop`／功能分支**：
-    - 只動 `web/`、文件、測試：只跑 `scripts/test_for.py --base origin/<要合進去的分支>` 挑的相關測試，**不跑整套**。
-    - 動到 `tianxia/`、`content/`、`server.py`：相關測試＋**不含 slow 的整套** `.venv/Scripts/python.exe -m pytest -q -n 4`（`pyproject.toml` 預設就擋掉 slow；約 3～4 分鐘）＋**那一包相關的 slow**（包的 README 列的那幾個檔、批次表第二節：例如出陣的 `test_bot_policy_conquest`、`test_conquest_flip`、`test_core_loop_web`、`test_econ_gather_sortie`）。
+    - 只動 `web/`（`app.js`、`main.js` 除外）、文件、測試：只跑 `scripts/test_for.py --base origin/<要合進去的分支>` 挑的相關測試，**不跑整套**。
+    - 改到 `web/app.js`、`web/main.js`：比照動到 `tianxia/`，相關測試＋**不含 slow 的整套**（PM 11/07，手冊第十五節「第二輪 G 波」第 2 條：`test_for` 只照名字挑之後這兩個檔的閘門變薄；改頂層 `const` 的字，寫死那句字的測試挑不到）。
+    - 動到 `tianxia/`、`content/`、`server.py`：相關測試＋**不含 slow 的整套** `.venv/Scripts/python.exe -m pytest -q -n 4`（`pyproject.toml` 預設就擋掉 slow；約 8～9 分鐘）＋**那一包相關的 slow**（包的 README 列的那幾個檔、批次表第二節：例如出陣的 `test_bot_policy_conquest`、`test_conquest_flip`、`test_core_loop_web`、`test_econ_gather_sortie`）。
     - 整套含 slow 每天 03:30 由排程跑一次（`scripts/nightly.ps1`，上面那張表）。
-  - **`develop` 合進 `main`（上線）之前一定跑整套含 slow**：`.venv/Scripts/python.exe -m pytest -q -n 4 -m "slow or not slow"`（或 `scripts/test_for.py --all`；不寫 `-m ""`；約 15～19 分鐘）。
+  - **`develop` 合進 `main`（上線）之前一定跑整套含 slow 與全軌比對**（11/08：全軌三設定四趟只在上 main 前）：`docs/superpowers/pm-workflows/wave_gate.py --full`（裡面就是 `.venv/Scripts/python.exe -m pytest -q -n 4 -m "slow or not slow"` 加全軌三設定＋`--crossover`＋網頁全回合；只要整套也可以 `scripts/test_for.py --all`；不寫 `-m ""`；整套含 slow 單獨跑約 10 分、跟比對同時跑 17～19 分）。
+  - **網頁閘門**由 `wave_gate.py --web` 叫 `scripts/webqa/gate.py`（`--changed` 時帶 `--changed-files`，照 `scripts/webqa/coverage.json` 只走碰得到的回合，殼的檔或對不到的一律全走；挑出空的是 exit 0；包的檔沒有回合走到時看 `gate.NOT_ON_TABLE`，寫了理由的不走、report 寫 NOT WALKED；帶 `--new <包>` 時 `wave_gate` 會轉過去，新包自己的 css 差異列成 NEW）；先自測用 `scripts/webqa/selftest.py --sha <x> --out <夾>`（base 對 base 綠、跑兩次 fingerprint 全同、兩個正控制都紅）。UI 改了（Joy 的 PR 合進 develop 之後尤其）要跑一次 `python scripts/webqa/gate.py --base X --head X --jobs 4`（不帶 `--quick`）看 `must_reach`，點不到的 flow 跟著改，不然下一波網頁閘門結束碼 2（第 111 批）。
   - 都由做合併的人跑，`TIANXIA_DB` 設到 repo 外的暫存檔。綠了才推；紅了把失敗的那幾條交回開發，修好之後再跑那幾條就好，推之前再跑一次同一種。
 - 不要為了預先判斷平衡跑模擬或量表（企劃者 2026-10-14「給玩家實際體驗回饋最準」）；計畫本身寫了要量的照量。
 - 開發、QA 自己不再開多代理工作流程（Workflow），也不一項一個子代理（PM 派出來的那一個子代理就是開發或 QA 本人）。
@@ -129,7 +131,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - **開了 PR 之後再推提交**（進 `develop` 與上 `main` 的 PR 都一樣），就把說明改到最新那一筆：改了哪些、測試（寫跑的是哪一筆）、退版風險都照最新那一筆寫。
   - 這一次要拿掉某一樣，才照下面 10/21 的做法開上線分支。
 - **上 main 要拿掉某一樣時用上線分支**（10/21）：從 develop 開 `release/<日期>`，企劃者說「這一樣不放」就在上線分支 `git revert -m 1 <那個合併>`；合 main 之前每次 `ls-remote origin main`，Joy 又推了就先合進上線分支、整套。合進 main 之後把 main 合回 develop，再在 develop `git revert <那筆 revert>` 把功能還回來，整套、推，接著 develop 合進功能分支。合進 main 的時機跟部署一起排：一進 main，Joy 下一次照常部署就會換上它（資料庫改版回不去、季中換季曆會跳）。部署說明寫在 `docs/superpowers/feedback/`，經企劃者同意、由企劃者轉給 Joy。
-- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n 4 -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`（不含 slow，動到 `tianxia/`、`content/`、`server.py` 時才跑，另跑那一包相關的 slow；上 main 之前加 `-m "slow or not slow"`），背景跑，看最後那一行「N passed」與 EXIT 再推。
+- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n 4 -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`（不含 slow，動到 `tianxia/`、`content/`、`server.py`、`web/app.js`、`web/main.js` 時才跑，動到包的另跑那一包相關的 slow；上 main 之前加 `-m "slow or not slow"`），背景跑，看最後那一行「N passed」與 EXIT 再推。
 - **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
 
 ## 流程
@@ -138,7 +140,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 2. **開發做完**：回報 commit、跑了哪些測試。不跑整套。
 3. **唯讀審查**（2026-10-30 起 PM 的做法，手冊第十五節）：PM 派兩三位唯讀審查員（證明誠實度〔自己重跑〕、照不照手冊與批次表、回歸與相關 slow；300 行以下的純搬批兩位）。有 blocker／should 就派一個修的，修完才派 QA。審查員不改檔、不推。搬包的批用 `scripts/same_behavior.py` 證明行為一個字不變（`selftest --base`、`compare --base --head`；用法在腳本開頭的 docstring）。
 4. **PM 派 QA**：只驗這一批，不重跑開發跑過的測試；純搬、`web/` 沒動的批改成兩台真伺服器逐位元組比（總表 5.0）；回饋單編號 PM 派工時給。
-5. **QA 過了**：PM 把批合進功能分支 → 相關測試（動到 `tianxia/`、`content/`、`server.py` 再加不含 slow 的整套＋那一包相關的 slow）→ 綠了推上 → 更新架構圖（`docs/superpowers/architecture/三國篇架構.html`，重新發佈 artifact）。
+5. **QA 過了**：PM 把批合進功能分支 → 相關測試（動到 `tianxia/`、`content/`、`server.py` 再加不含 slow 的整套＋那一包相關的 slow；改到 `web/app.js`、`web/main.js` 再加不含 slow 的整套）→ 綠了推上 → 更新架構圖（`docs/superpowers/architecture/三國篇架構.html`，重新發佈 artifact）。
 6. **功能做完（或企劃者說要內測的一段）**：PM 合進 `develop` → 同上的閘門（內容跟測過的一樣〔`git diff --quiet`〕就不再跑）→ 推上；要內測就照「內測 develop」在這台主機換上那一筆。
 7. **企劃者說可以上線**：PM 把 `develop` 合進 `main` → 整套含 slow（綠的 SHA＝合的那一筆）→ 推上 → 寫部署說明給 Joy（含〈退版風險〉），經企劃者給 Joy。
 

@@ -8,7 +8,7 @@
 從問句裡的名號載入，這裡不碰資料庫。秘密（配方、口訣、鑄譜、誰是假人）照舊不在清單裡（tavern.SECRET_WORDS 在 A 段就擋了）。"""
 from __future__ import annotations
 
-from tianxia import calendar, rules
+from tianxia import allied, calendar, rules
 from tianxia.characters import name_key
 from tianxia.models import Content
 from tianxia.state import GameState
@@ -143,7 +143,7 @@ def place_lines(state: GameState, content: Content, loc_id: str) -> list[str]:
     if mats:
         lines.append(f"{loc.name}" + PLACE_MATS.format(mats="、".join(mats)))
     for sect in content.sects.values():
-        if sect.location == loc_id:
+        if sect.location == loc_id and allied.sect_open(content, state.world, sect.id) and content.sect_open(sect.id):
             lines.append(PLACE_SECT.format(sect=sect.name))
     return lines
 
@@ -280,7 +280,7 @@ def topics(state: GameState, content: Content, question: str, players: dict[str,
             facts += skill_lines(state, content, sid)
             kinds.append("skill")
     for sect in content.sects.values():
-        if _mentions(q, {sect.name}) and sect.location in content.locations:
+        if _mentions(q, {sect.name}) and sect.location in content.locations and allied.sect_open(content, state.world, sect.id) and content.sect_open(sect.id):
             facts.append(SECT_LINE.format(name=sect.name, place=content.locations[sect.location].name, align=sect.alignment, desc=sect.desc))
             kinds.append("sect")
     for key, label, words in SHOPS:

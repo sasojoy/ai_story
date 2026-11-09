@@ -1,6 +1,6 @@
 """出陣的動作（功能包 tianxia/features/sortie/；原本是 Game 上出陣本體、混戰、出陣回報的 21 個方法，開發規範手冊 3.2、主動搬六包第 1 批）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_mode(loc)` 是 `sortie_mode_of`（跟 `sortie_mode()` 分開）、`_clash` 是 `do_clash`
 （`sortie` 裡有區域變數叫 clash）。Game 上留一行委派（server、假人、測試、腳本與核心原位還在叫：`_squad_encounter` 的 as_sortie、
 輿圖……；第 11 批起行動列那一格與底下那一行、按下去、紀錄標題走 act 子動詞的掛鉤〔下面的 train_*〕，第 17 批起舊遊歷、操練、守勢也在

@@ -5,7 +5,9 @@ import time
 from unittest import mock
 import pytest
 from conftest import at, idle_step
-from tianxia import atlas, battle_instance, front_lines
+from tianxia import atlas
+from tianxia.features.battle import instance as battle_instance
+from tianxia import front_lines
 from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.martial_arts import MartialArt
@@ -375,7 +377,7 @@ def test_with_factions_a_free_agent_who_joined_a_faction_joins_its_side(content,
 
 def _drifter_busy_with(game, busy):
     """散人眼前有事（FB-109 的四種）：擺好，回傳那件事寫在場景上、一定看得到的一句。"""
-    from tianxia import sensing
+    from tianxia.features.sense import sensing
     from tianxia.models import InsightScene, SenseMethod
 
     s, c = game.state, game.content

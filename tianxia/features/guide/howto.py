@@ -4,7 +4,7 @@
 這裡只把事實寫成字：數字一律讀 Config（或內容、規則模組的常數），不改狀態、不擲骰、不讀時鐘。所有句子待 joy 潤。"""
 from __future__ import annotations
 
-from tianxia import calendar, conquest, figures, precise, renown, rules, territory, timetable
+from tianxia import allied, calendar, conquest, figures, precise, renown, rules, territory, timetable
 from tianxia.core import features as features_core
 from tianxia.core.howto_base import SOME_PLACES
 from tianxia.core.howto_base import order_pushers as _order_pushers
@@ -138,13 +138,13 @@ def _tenths(p: float) -> str:
     return f"{_count(round(p * 10))}成"
 
 
-def season_line(content: Content) -> str:
+def season_line(content: Content, season: WorldState | None = None) -> str:
     """這一季在打什麼（第一季設計第一、四節）：劇本名、官軍與黃巾爭的幾條戰線、豪強依附其中一邊（豪強分屬兩軍，allied.on；
-    第一季才寫，2026-10-31 豪強割據的那一句連豪強第三方的季一起拿掉）。"""
+    第一季才寫，2026-10-31 豪強割據的那一句連豪強第三方的季一起拿掉）。拿掉豪強的季（allied.gentry_on，企劃者 2026-11-07）不寫豪強那一句。"""
     fronts = [rules.trend_name(content, f) for f in rules.front_ids(content)]
     guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
-    tail = f"地方{hao}依附其中一邊。"
-    return f"這一季是{content.scenario.name}：{guan}與{huang}在{_count(len(fronts))}條戰線上爭（{'、'.join(fronts)}），{tail}"
+    head = f"這一季是{content.scenario.name}：{guan}與{huang}在{_count(len(fronts))}條戰線上爭（{'、'.join(fronts)}）"
+    return f"{head}，地方{hao}依附其中一邊。" if allied.gentry_on(content, season) else f"{head}。"
 
 
 # 亂局帶與態勢的規則各只寫一次（審查 Minor 7）：態勢、戰況圖卡、玩法說明「這一季在打什麼」都拿這兩句，改一處三處一起變
@@ -159,16 +159,18 @@ def front_rule(content: Content, card: bool = True) -> str:
 
 # 豪強分屬兩軍：態勢那一句（豪強割據的那一句 geju_rule 2026-10-31 拿掉）
 ALLIED_RULE = "{guan}、{huang}的態勢是{n}條戰線合起來的；地方{hao}依附其中一邊，算那一邊的人，沒有自己的態勢。"
+TWO_SIDES_RULE = "{guan}、{huang}的態勢是{n}條戰線合起來的。"  # 拿掉豪強的季（企劃者 2026-11-07）；ALLIED_RULE 去掉豪強那半句
 
 
-def allied_rule(content: Content) -> str:
+def allied_rule(content: Content, season: WorldState | None = None) -> str:
     guan, huang, hao = (STANCE_NAMES[k] for k in ("guan", "huang", "haoqiang"))
-    return ALLIED_RULE.format(guan=guan, huang=huang, hao=hao, n=_count(len(rules.front_ids(content))))
+    text = ALLIED_RULE if allied.gentry_on(content, season) else TWO_SIDES_RULE
+    return text.format(guan=guan, huang=huang, hao=hao, n=_count(len(rules.front_ids(content))))
 
 
-def stance_help(content: Content) -> list[str]:
-    """態勢小標點開的說明：這一季在打什麼、兩方的態勢怎麼算、豪強依附一邊。"""
-    return [season_line(content), allied_rule(content)]
+def stance_help(content: Content, season: WorldState | None = None) -> list[str]:
+    """態勢小標點開的說明：這一季在打什麼、兩方的態勢怎麼算、豪強依附一邊（拿掉豪強的季不寫）。"""
+    return [season_line(content, season), allied_rule(content, season)]
 
 
 SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"  # 出陣開著時（出陣探索與地盤設計第二節）；待 joy 潤
@@ -215,10 +217,11 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     chaos = [rules.trend_name(content, f) for f in rules.chaos_fronts(state, content)]
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     on = territory.on(content)
+    gentry = allied.gentry_on(content, state.world)  # 拿掉豪強的季不寫括號裡豪強那一句
     if on:  # 領地爭奪：出陣不直接推線，戰線照佔領算（設計 3.7、3.8）
-        parts = [f"{CONQUEST_FRONTS}（地方豪強算依附的那一邊）；{CONQUEST_PLACES}，大事、事件、大勢人物照舊推線"]
+        parts = [f"{CONQUEST_FRONTS}{'（地方豪強算依附的那一邊）' if gentry else ''}；{CONQUEST_PLACES}，大事、事件、大勢人物照舊推線"]
     else:
-        parts = [f"{SOME_PLACES}，往你陣營那一邊推（地方豪強往依附的那一邊）"]
+        parts = [f"{SOME_PLACES}，往你陣營那一邊推{'（地方豪強往依附的那一邊）' if gentry else ''}"]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
@@ -268,7 +271,7 @@ def quest_help(content: Content, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強照依附的那一邊，散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（軍令每天發的季〔21 天季、7 天濃縮季〕「每天」，FB-501、FB-502）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
-    aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"  # 豪強分屬兩軍：沒有第三方
+    aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；" if allied.gentry_on(content, season) else ""  # 豪強分屬兩軍：沒有第三方；拿掉豪強的季不寫
     return [
         f"你能做的：{_sortie_places(content, season)}；"
         f"投靠陣營之後{calendar.week_word('order_each', content, season)}有軍令，照做記功，全陣營湊滿額度就一起見效；"
@@ -279,7 +282,7 @@ def quest_help(content: Content, season: WorldState | None = None) -> list[str]:
 def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
     """江湖頁四個地方點開的說明（status.war_help）：stance＝態勢小標、fronts＝戰況圖卡、board＝大事小標、quest＝主線小標。"""
     return {  # 第一季才有（Game.status），豪強分屬兩軍（設計第十四節）
-        "stance": stance_help(content),
+        "stance": stance_help(content, state.world),
         "fronts": fronts_help(state, content),
         "board": board_help(content),
         "quest": quest_help(content, state.world),
@@ -287,7 +290,7 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
 
 
 # ── 名望怎麼來（explain-2 第二項，FB-100「名望不知道怎麼來」）──────────────────────────
-# 引擎裡真的給名望的只有四條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（Game._deliver_echoes，
+# 引擎裡真的給名望的只有四條路：事件的效果（rules.apply_effect，內容寫的 stats.fame）、第一季的首創回饋（煉製包 actions.deliver_echoes，
 # Config.first_echo）、決戰最有戲的那一搏（Game._file_showdown，BattleTuning.highlight_fame）、打贏頭目（Game._duel_finish，DuelBoss.fame）、
 # 奪璽單挑（Game._file_seal，Config.seal.fame；玉璽碎片設計 5.9）。事件照種類分三堆、照內容算出範圍（一個一個列出來沒有用）；這一季關掉的 beta 事件（season_one_off）不算。
 
@@ -310,7 +313,7 @@ def fame_ranges(content: Content, season: WorldState) -> dict[str, FameRange]:
     - "big"：動手打贏的（劇情戰）、一次性與奇遇（events.is_rare）、新立門戶福緣；
     - "loss"：任何一個效果扣的（檢定失手、做了丟臉的事；寫成負數，(最多扣, 最少扣)）。
     每堆（最小, 最大）；這一堆沒有就不在回傳裡。"""
-    from tianxia.events import is_rare  # noqa: PLC0415  過渡：待搬（events → rules → …：只有這裡用到）
+    from tianxia.events import is_rare  # noqa: PLC0415  共用規則層（events → rules → …：只有這裡用到）
 
     off = rules.season_one_off(content, season, "events")
     piles: dict[str, list[int]] = {"common": [], "big": [], "loss": []}
@@ -466,7 +469,7 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     rules.stance_rule_note，呼叫端照這一季算好）。第一季才有。"""
     if not calendar.season_one_on(season, content):
         return []
-    lines = [season_line(content), front_rule(content, card=False), allied_rule(content), *board_help(content)]
+    lines = [season_line(content, season), front_rule(content, card=False), allied_rule(content, season), *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
     lines += quest_help(content, season)

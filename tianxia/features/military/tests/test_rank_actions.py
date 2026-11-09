@@ -10,7 +10,9 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from tianxia import calendar, events, models, opportunities, rank_actions, rules, seats
+from tianxia import calendar, events, models
+from tianxia.features.military import opp_rules as opportunities, rank_rules as rank_actions
+from tianxia import rules, seats
 from tianxia.content import ContentError, validate
 from tianxia.engine import RANK_ACTION_PREFIX, Game
 from tianxia.models import Check, OrdersContent, RankAction
@@ -543,6 +545,7 @@ def test_a_failed_check_on_a_gentry_action_pushes_nothing_credits_nothing_and_st
 def test_defecting_keeps_the_counter_but_the_old_actions_do_not_follow(on):
     """叛投不清 rank_action_weeks（行動 id 跟陣營綁，同 rank2_days）：黃巾第 3 階這週用過煽動起事，叛去豪強——
     身份歸零（第 1 階）沒有任何第 3、4 階行動；之後長到第 3 階，修築塢堡是自己的一份次數，不吃煽動起事的。"""
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _game(on, "huang", "runan")
     with _always(True):
         game.choose("act:rank:incite")

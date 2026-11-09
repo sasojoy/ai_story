@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import storyline
+from tianxia.features.story import storyline
 from tianxia.rules import day_seconds, fill_marks
 
 pytestmark = pytest.mark.slow

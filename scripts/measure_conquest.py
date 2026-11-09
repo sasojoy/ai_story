@@ -35,7 +35,8 @@ from tianxia import ollama_client  # noqa: E402
 
 ollama_client.OllamaClient.from_config = classmethod(lambda cls, cfg: None)  # 擋模型：一個都不叫
 
-from tianxia import bot_policy, conquest, server_bots, sortie_duel  # noqa: E402
+from tianxia import bot_policy, conquest, server_bots  # noqa: E402
+from tianxia.features.sortie import duel_rules as sortie_duel  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402

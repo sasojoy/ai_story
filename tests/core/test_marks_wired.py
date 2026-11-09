@@ -8,7 +8,8 @@ import pytest
 
 from conftest import FixedRandom
 from outcomes_kit import RULES, answer, branch_game
-from tianxia import annals, xingshi
+from tianxia.features.zhuan import standing as annals
+from tianxia.features.territory_acts import xingshi
 from tianxia.characters import CharacterStore
 from tianxia.rules import add_marks
 from tianxia.state import WorldState

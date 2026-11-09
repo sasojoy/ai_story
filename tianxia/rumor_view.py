@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import calendar, deeds, orders
+from . import calendar, deeds, journal, orders
 from .core import omen_base  # 聽過的伏筆片段與機緣線索：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow、opportunities 讀軍情包）
 from .models import Content
-from .rules import Ears, audible, ears_of
-from .state import GameState, Rumor
+from .rules import Ears, audible, ears_of, season_one
+from .state import GameState, JournalEntry, Rumor
 from .world_state import WorldStateStore
 
 LAYER_LIMIT = 30  # 每一層列最近幾則（跟以前那一條清單一樣）
@@ -108,7 +108,7 @@ def away_lines(
     state: GameState, content: Content, since: float | None, when: Callable[[float], str],
 ) -> tuple[list[str], int]:
     """「你不在的時候」那一份（傳聞分層設計第八節）：since（世界秒；None＝這一季從頭）之後、現在聽得到的
-    1. 天下大事，全部——時刻表的大事除外（Game._deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
+    1. 天下大事，全部——時刻表的大事除外（timetable.deliver_big_events 已經補成「江湖大事」那一則，不寫兩次）；
     2. 陣營軍情的要點（FACTION_KEYS 開頭的）；
     3. 你所在大區的地方傳聞（傳聞板上的；地方摘要是傳聞分層第二份計畫的事，有了之後放摘要）。
     每一段照時間先後，三段照這個順序接起來。先去掉不用再看的（最終審查 I1：週末一週是現實 5 小時，離開一晚就是好幾週的軍令）：
@@ -208,3 +208,24 @@ def gazette_lines(
     if total:
         lines.append(GAZETTE_MORE.format(n=total))
     return lines, count + total
+
+
+def deliver_away(state: GameState, content: Content, now: float, away_from: float | None, stamp: Callable[[float], str]) -> None:
+    """「你不在的時候」（傳聞分層設計第八節）：上次同步到這一次隔了 Config.away_hours 個「現實」小時以上（PM 2026-10-06：
+    這一項看現實時間；網頁開著時每 10 秒同步一次，所以這就是沒開著畫面的時間），江湖紀錄最前面放一則摘要——這段期間
+    聽得到的天下大事、陣營軍情的要點、所在大區的地方傳聞（rumor_view.away_lines，最多 away_max 則）。時刻表大事照舊由
+    _deliver_big_events 補成「江湖大事」那一則，摘要不寫第二次。什麼都沒有就不寫。
+    只在第一季的規則開著時；伺服器假人不寫（沒有人看，畫面上也不會出現）；剛建好的角色（還沒同步過）不寫。
+    不管寫不寫，都記下這一刻的賽季時間（GameState.last_world），下一次從這裡往後算。"""
+    s, c = state, content
+    since, s.last_world = s.last_world, s.world.time
+    if away_from is None or s.player.bot is not None or not season_one(c, s.world):
+        return
+    if now - away_from < c.config.away_hours * calendar.HOUR:
+        return
+    gazette = gazette_on(c)  # 世界活起來第二批：上線邸報（你去過的地方、你認識的人、誰提起了你）；關著照舊那一長串
+    lines, total = (gazette_lines if gazette else away_lines)(s, c, since, stamp)
+    if lines:
+        tag = AWAY_TAG.format(n=total)
+        title = journal.GAZETTE if gazette else journal.AWAY
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=title, tag=tag, lines=lines))

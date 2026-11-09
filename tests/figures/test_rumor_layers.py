@@ -13,9 +13,13 @@ import pytest
 
 import server
 from conftest import no_plans, no_territory, real_content
-from tianxia import (
-    calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
-)
+from tianxia import calendar
+from tianxia.features.faction import defection
+from tianxia.features.military import fs_rules as foreshadow
+from tianxia import journal
+from tianxia.features.map import mapview
+from tianxia.features.military import opp_rules as opportunities
+from tianxia import orders, ranks, rules, rumor_view, timetable
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層、詳情那一半；同檔有區域變數叫 layers
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -575,9 +579,9 @@ def _js_function(js: str, header: str) -> str:
 def test_the_page_draws_the_layers_when_the_server_sends_them():
     """網頁沒有測試框架：擋住「伺服器送了四層、網頁卻還畫一整張」與「每次輪詢都重畫」。"""
     js = webharness.app_source()
-    assert "m.rumor_layers ? rumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
-    layers = _js_function(js, "function rumorLayersHtml(")
-    assert "esc(l.title)" in layers and "${l.body}" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
+    assert "m.rumor_layers ? newsRumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
+    layers = _js_function(js, "function newsRumorLayersHtml(")  # 見聞改版（news 包）：天下大事搬去江湖史，其餘照遠近排、每層收合
+    assert "esc(NEWS_LAYER_NAME[l.id] || l.title)" in layers and "l.body" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
     refresh = _js_function(js, "async function refreshPage(")
     assert 'rumors: ["rumors", "rumor_layers"]' in refresh and "JSON.stringify(old[k])" in refresh
 
@@ -999,7 +1003,7 @@ def test_an_anonymous_player_is_named_in_the_promotion_summary(on):
 def test_the_settings_say_where_walking_anonymously_applies():
     """設定頁的匿名開關寫清楚只在地方傳聞裡有用（網頁沒有測試框架，讀 app.js）。"""
     js = webharness.app_source()
-    assert "匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）" in js
+    assert "<b>匿名行走</b><small>只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫</small>" in js  # 戊批：名字一行、說明一小行
     assert "江湖傳聞中不顯示名號" not in js
 
 

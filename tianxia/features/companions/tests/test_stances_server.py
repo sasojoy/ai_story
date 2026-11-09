@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import server
-from tianxia import errands
+from tianxia.features.companions import errands
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

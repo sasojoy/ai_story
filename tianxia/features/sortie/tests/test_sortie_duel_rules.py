@@ -11,7 +11,8 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from tianxia import conquest, sortie, sortie_duel
+from tianxia import conquest
+from tianxia.features.sortie import rules as sortie, duel_rules as sortie_duel
 from tianxia.models import MOVES, SortieRules
 from tianxia.sqlite_world import open_world
 from tianxia.world_state import SharedWorldState, SortieDuel, SortieResult, SortieSide

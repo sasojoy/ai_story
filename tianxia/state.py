@@ -11,6 +11,15 @@ from .tactics import Bout, BoutSide
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
 
+# 「空的、0 的時候不寫進存檔」的欄位標這個：`x: int = Field(0, json_schema_extra=QUIET)`；QUIET_DEFAULTS、WORLD_QUIET_DEFAULTS 照它算。
+# 不能用 Annotated：這個模組是 from __future__ import annotations，型別定義在類別後面的欄位，模組層算的時候標記還解不開（會多寫鍵）
+QUIET = {"quiet": True}
+
+
+def _quiet_fields(model: type[BaseModel]) -> tuple[str, ...]:
+    """標了 QUIET 的欄位名字，照欄位先後。用 == 不用 is：Pydantic 第一次建物件時會換一批 FieldInfo。"""
+    return tuple(name for name, field in model.model_fields.items() if field.json_schema_extra == QUIET)
+
 
 class Member(BaseModel):
     """玩家本人的角色表：等級/氣血/內功/武學。同伴不再用這個模型——他們全服唯一，等級/
@@ -722,7 +731,7 @@ class PlayerState(BaseModel):
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     # 深交名單（減法季批 7b 的深交上限用的）：上限企劃者 2026-10-28 拿掉了，沒有人再讀寫這一欄；留著只為了舊存檔讀得進來。
     # 空的時候不寫進存檔（QUIET_DEFAULTS）
-    deep_order: list[str] = Field(default_factory=list)
+    deep_order: list[str] = Field(default_factory=list, json_schema_extra=QUIET)
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
     hearsay: dict[str, list[str]] = Field(default_factory=dict)
@@ -806,8 +815,8 @@ class PlayerState(BaseModel):
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
-    shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
-    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；shopview.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
+    shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，core/shop_base.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
+    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；鐵匠鋪包 shop_view.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
     # 的位置，講完一輪從頭）。換季時新角色本來就是空的
     smith_rule: str = ""
     smith_rules_told: list[int] = Field(default_factory=list)
@@ -821,6 +830,10 @@ class PlayerState(BaseModel):
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # 武學打了才升（Config.arts.fight_practice，季上蓋章才有）：每門功法這一成已經累積的熟練、這一個遊戲日每門已經長了多少、那是第幾天。空的不寫進存檔
+    art_exp: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    art_exp_today: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    art_exp_day: int = Field(0, json_schema_extra=QUIET)
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
@@ -832,10 +845,10 @@ class PlayerState(BaseModel):
     own_serial: int = 0  # 私有意境的流水號
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
     # ── 五項屬性（屬性與跨季架構 v2 第三節；attrset，新的季才用）──
-    growth_preset: str | None = None  # 這一季挑的成長配比（Config.attributes.v2.presets 的 key，或 "custom"）；None 照預設那一套
-    growth_custom: dict[str, int] = Field(default_factory=dict)  # 自己配的每級成長（growth_preset 是 "custom" 時）
-    attr_event: dict[str, int] = Field(default_factory=dict)  # 這一季從事件歷練得來的（新的鍵 → 點數，attrset.grant_event；合計最多 Config.attributes.v2.event_cap）
-    attr_alloc: dict[str, int] = Field(default_factory=dict)  # 送點自己配到哪幾項（鍵 → 點數）
+    growth_preset: str | None = Field(None, json_schema_extra=QUIET)  # 這一季挑的成長配比（Config.attributes.v2.presets 的 key，或 "custom"）；None 照預設那一套
+    growth_custom: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)  # 自己配的每級成長（growth_preset 是 "custom" 時）
+    attr_event: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)  # 這一季從事件歷練得來的（新的鍵 → 點數，attrset.grant_event；合計最多 Config.attributes.v2.event_cap）
+    attr_alloc: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)  # 送點自己配到哪幾項（鍵 → 點數）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
@@ -863,12 +876,12 @@ class PlayerState(BaseModel):
     sorties_today: int = 0
     # 出陣約戰（減法季批 3b，tianxia/sortie_duel.py）：應戰記在哪一天（同 pill_day 的換日，0 是沒應過）與那一天應了幾次；下一次出陣（貼、同去）
     # 與下一次應戰要等到的現實秒（None 是不必等）；巡哨、傳道、保境安民那一點貢獻記在哪一天、那一天記了幾次。都在 QUIET_DEFAULTS：沒用到不寫進存檔
-    answer_day: int = 0
-    answers_today: int = 0
-    sortie_cooldown_until: float | None = None
-    answer_cooldown_until: float | None = None
-    duty_day: int = 0
-    duties_today: int = 0
+    answer_day: int = Field(0, json_schema_extra=QUIET)
+    answers_today: int = Field(0, json_schema_extra=QUIET)
+    sortie_cooldown_until: float | None = Field(None, json_schema_extra=QUIET)
+    answer_cooldown_until: float | None = Field(None, json_schema_extra=QUIET)
+    duty_day: int = Field(0, json_schema_extra=QUIET)
+    duties_today: int = Field(0, json_schema_extra=QUIET)
     # 城裡操練（Config.training，新手引導重做 2026-10-22）：上次操練是哪一天（同 pill_day 的換日）與那一天練了幾次；跨季保留
     drill_day: int = -1
     drills_today: int = 0
@@ -925,11 +938,11 @@ class PlayerState(BaseModel):
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
     explore_seq: int = 0  # 這一季第幾次探索（探索包 rng_for、find_rng 的種子；角色每季重來）
     # 減法季批 2（Config.jianfa；整合設計 4.1、4.2、4.5）。四個都是 0／空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
-    fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
-    fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
-    milestone_due: int = 0  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
-    outing: Outing | None = None  # 走一趟（tianxia/outing.py）：這一趟走到哪、沿路發生了什麼；走完留著給結算卡，下一趟出發才換掉
-    outing_last: str = ""  # 探索一顆（explore_one）上一趟要選的那件事（事件或感悟）：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
+    fights_today: int = Field(0, json_schema_extra=QUIET)  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
+    fight_day: int = Field(0, json_schema_extra=QUIET)  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
+    milestone_due: int = Field(0, json_schema_extra=QUIET)  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
+    outing: Outing | None = Field(None, json_schema_extra=QUIET)  # 走一趟（tianxia/outing.py）：這一趟走到哪、沿路發生了什麼；走完留著給結算卡，下一趟出發才換掉
+    outing_last: str = Field("", json_schema_extra=QUIET)  # 探索一顆（explore_one）上一趟要選的那件事（事件或感悟）：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
     # 舊角色沒這欄是男、gender_chosen 是 False：設定頁給一次改的機會（Game.set_gender，改完記 True）；建角色時選過的直接是 True
@@ -993,7 +1006,7 @@ class PlayerState(BaseModel):
     # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
     showdowns: int = 0
     top_merits: int = 0
-    # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
+    # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 timetable.deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
     # 已經通知過（或不必通知）的絕學定名（FB-083，修練包 actions.deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
@@ -1007,7 +1020,7 @@ class PlayerState(BaseModel):
     annals_mark: dict | None = None
     # 列傳為終點（減法季批 7b，annals.xingshi_notes）：〈天下形勢〉看到第幾篇了（之後收下、寫到你名號的那幾篇各記一則行狀）。
     # 0 的時候不寫進存檔（QUIET_DEFAULTS）；角色每季重來
-    xingshi_seen: int = 0
+    xingshi_seen: int = Field(0, json_schema_extra=QUIET)
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     # 遊俠名號（ranger.py；散人的成長階梯）：散人時攢的善名、惡名（只算加的）與懸賞的功績；投靠了陣營就不再記（凍結）
@@ -1027,25 +1040,25 @@ class PlayerState(BaseModel):
     # 三陣營四勝利（減法季整合設計 3.2；wins.credit）：豪強替哪一軍出的力各記一本（「guan」「huang」→ 貢獻），contrib 照樣加總數。
     # 「此刻幫誰」就是 ally（wins.lean_of）；換邊不清帳。lean_changed 是這一季換了幾次邊（wins.set_lean；投靠那一下的預設不算）。
     # 兩個都是空的、0 的時候不寫進存檔（_drop_quiet_defaults）：兩軍的人、關著的季 JSON 一個鍵都不多
-    ledgers: dict[str, int] = Field(default_factory=dict)
-    lean_changed: int = 0
+    ledgers: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    lean_changed: int = Field(0, json_schema_extra=QUIET)
     # 減法季批 4（整合設計 5.3）：分岔的後果記進陣營帳的貢獻，一天（季曆日）最多 Config.jianfa.deed_contribution_cap；記在哪一天、那一天記了多少。
     # 預設值時不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多。季曆日從 1 起，0 是還沒記過
-    deed_day: int = 0
-    deed_today: int = 0
+    deed_day: int = Field(0, json_schema_extra=QUIET)
+    deed_today: int = Field(0, json_schema_extra=QUIET)
     # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
-    stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
-    persona_notes: dict[str, PersonaNote] = Field(default_factory=dict)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
-    heroines: HeroineNotes = Field(default_factory=lambda: HeroineNotes())  # 女子與隱線（features/heroines）：隱線走到哪，換季重來
-    heroines_adult: bool = False  # 女子與隱線：設定頁的「成人內容」（預設關，打開前確認年滿十八歲；換季照帶）
-    errands: list[ErrandState] = Field(default_factory=list)
+    stance_notes: dict[str, StanceNote] = Field(default_factory=dict, json_schema_extra=QUIET)
+    persona_notes: dict[str, PersonaNote] = Field(default_factory=dict, json_schema_extra=QUIET)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
+    heroines: HeroineNotes = Field(default_factory=lambda: HeroineNotes(), json_schema_extra=QUIET)  # 女子與隱線（features/heroines）：隱線走到哪，換季重來
+    heroines_adult: bool = Field(False, json_schema_extra=QUIET)  # 女子與隱線：設定頁的「成人內容」（預設關，打開前確認年滿十八歲；換季照帶）
+    errands: list[ErrandState] = Field(default_factory=list, json_schema_extra=QUIET)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
-    season_title: str = ""
+    season_title: str = Field("", json_schema_extra=QUIET)
     # 本週卡「你這一步」（減法季批 3c，step.py）：「換一件事」記在哪一天（同 pill_day）、那一天換了幾次；都是 0 時不寫進存檔
-    step_day: int = 0
-    step_skip: int = 0
+    step_day: int = Field(0, json_schema_extra=QUIET)
+    step_skip: int = Field(0, json_schema_extra=QUIET)
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -1117,19 +1130,23 @@ class PlayerState(BaseModel):
     gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
     # 一條線（特殊事件與特殊頓悟，tianxia/storyline.py）：這一季開過的線（線 id → 進度；收了的也留著，一季一條線只開一次）、
     # 正在答題的那一條（quiz 的選單）、等著跳出來的卡（開頭、此事未了、入傳）。都在 QUIET_DEFAULTS：沒用到不寫進存檔；角色每季重來
-    storylines: dict[str, StoryProgress] = Field(default_factory=dict)
-    story_open: str | None = None
-    story_cards: list[StoryCard] = Field(default_factory=list)
+    storylines: dict[str, StoryProgress] = Field(default_factory=dict, json_schema_extra=QUIET)
+    story_open: str | None = Field(None, json_schema_extra=QUIET)
+    story_cards: list[StoryCard] = Field(default_factory=list, json_schema_extra=QUIET)
     # 特殊頓悟（tianxia/epiphany.py）：這一季開過幾次頓悟、擲中感悟幾次都沒頓悟（保底，只管第一次）、心魔過了等著取名的那一個神品。都在 QUIET_DEFAULTS
-    epiphanies: int = 0
-    epiphany_dry: int = 0
-    god_naming: GodNaming | None = None
+    epiphanies: int = Field(0, json_schema_extra=QUIET)
+    epiphany_dry: int = Field(0, json_schema_extra=QUIET)
+    god_naming: GodNaming | None = Field(None, json_schema_extra=QUIET)
     # 長篇奇事（企劃者 2026-10-27）：紀念物（沒有效果、不能賣，跨季跟著角色）、跨季的旗標（換季時再立進新角色的 flags）。都在 QUIET_DEFAULTS
-    keepsakes: list[str] = Field(default_factory=list)
-    lasting: list[str] = Field(default_factory=list)
+    keepsakes: list[str] = Field(default_factory=list, json_schema_extra=QUIET)
+    lasting: list[str] = Field(default_factory=list, json_schema_extra=QUIET)
     # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
     # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
-    legacy: LegacyBook | None = None
+    legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
+    # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
+    # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
+    titles_pin: str = Field("", json_schema_extra=QUIET)
+    titles_worn: dict[str, str] = Field(default_factory=dict, json_schema_extra=QUIET)
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1143,22 +1160,8 @@ class PlayerState(BaseModel):
         return data
 
 
-# PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = (
-    "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
-    "fights_today", "fight_day", "milestone_due", "outing_last", "outing",  # 批 2、走一趟
-    "stance_notes", "errands",  # 批 6
-    "xingshi_seen", "deep_order",  # 批 7b
-    # 出陣約戰（減法季批 3b）
-    "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
-    "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
-    "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
-    "keepsakes", "lasting",  # 長篇奇事
-    "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
-    "legacy",  # 傳承（features/legacy）
-    "persona_notes",  # 人物性子（features/persona）
-    "heroines", "heroines_adult",  # 女子與隱線（features/heroines）
-)
+# PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，欄位標 `json_schema_extra=QUIET`
+QUIET_DEFAULTS = _quiet_fields(PlayerState)
 
 
 class TierResult(BaseModel):
@@ -1676,7 +1679,7 @@ class DayNote(BaseModel):
     reason: str = ""
     # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是下戰書那一筆
     void: str = ""
-    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。下戰書的那一筆與作罷的那一筆這幾欄是空的 ──
+    # ── 第三批 A：收場那一下另記一筆（決戰包 siege_rules.settle；〈天下形勢〉讀）。下戰書的那一筆與作罷的那一筆這幾欄是空的 ──
     result: str = ""  # taken 攻方拿下、held 守住、stalemate 兩軍相持（沒有守將的中立地停在中線）
     taken: str = ""  # 拿下的那一方（陣營 id）；沒易手是空的
     margin: str = ""  # 大勝／險勝（戰場上贏的那一方）
@@ -1869,30 +1872,30 @@ class WorldState(BaseModel):
     final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
     # 三陣營四勝利（減法季設計 3.3；wins.settle）：收季那一刻每個投靠了陣營的人的階（名號 → TierResult；沒到門檻是第 0 階）。
     # 結局卡、下一季的起手資源與稱號讀它；四勝利關著的季是空的、不寫進 JSON（_drop_empty_marks_fired）
-    final_tiers: dict[str, TierResult] = Field(default_factory=dict)
+    final_tiers: dict[str, TierResult] = Field(default_factory=dict, json_schema_extra=QUIET)
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
     marks: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：「地點 id:痕跡名」→ 累積次數（全服共用，換季整個重來）
     # 地方痕跡過門檻（減法季批 4，marks.fire_due）：「地點 id:痕跡名」→ 過門檻那一刻的世界秒（只發一次；〈天下形勢〉照它挑上一篇以後的）。
     # 空的時候不寫進 JSON（_drop_empty_marks_fired）：沒有痕跡過門檻的季存檔一個鍵都不多
-    marks_fired: dict[str, float] = Field(default_factory=dict)
+    marks_fired: dict[str, float] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 替有痕跡規則的痕跡出過力的人（減法季批 4，rules.add_marks 在痕跡看得見開著時記；過了門檻就不再記）：「地點 id:痕跡名」→ 名號。
-    # 過了門檻之後每個人下一次同步記一則行狀（Game._mark_credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
-    mark_helpers: dict[str, list[str]] = Field(default_factory=dict)
+    # 過了門檻之後每個人下一次同步記一則行狀（marks.credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
+    mark_helpers: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 人物心意（減法季批 6，tianxia/stances.py；整合設計 5.4）：這一週全服記了幾筆（人物表 id → 心意 id → 筆數）、記的是哪一週（季曆週，
     # 7 天的季是段；週初掛鉤歸零）、此刻照哪一個心意做事（人物表 id → StanceOn，到門檻那一刻起到週初）。空的、0 的時候不寫進 JSON
-    stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
-    stance_week: int = 0
-    stance_active: dict[str, StanceOn] = Field(default_factory=dict)
+    stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    stance_week: int = Field(0, json_schema_extra=QUIET)
+    stance_active: dict[str, StanceOn] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 人物性子（功能包 features/persona）：這一季每一條性子此刻的值（對話人物 id → 性子 id → -100～100；沒寫的照史實的起點）、
     # 結算到第幾個遊戲日、今天記下的淨推力與總份數（往 ends[1] 是正）、上一次結算時在拉鋸的那幾條、換段的紀錄。換季整個重來（Joy 11/6「全部歸回本性」）
-    persona: dict[str, dict[str, int]] = Field(default_factory=dict)
-    persona_day: int = 0
-    persona_push: dict[str, dict[str, int]] = Field(default_factory=dict)
-    persona_tug: dict[str, dict[str, int]] = Field(default_factory=dict)
-    persona_torn: dict[str, list[str]] = Field(default_factory=dict)
-    persona_log: list[PersonaShift] = Field(default_factory=list)
+    persona: dict[str, dict[str, int]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    persona_day: int = Field(0, json_schema_extra=QUIET)
+    persona_push: dict[str, dict[str, int]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    persona_tug: dict[str, dict[str, int]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    persona_torn: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    persona_log: list[PersonaShift] = Field(default_factory=list, json_schema_extra=QUIET)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1917,8 +1920,8 @@ class WorldState(BaseModel):
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
     # 章回主線（tianxia/chapters.py）：大事 id → 陣營 → 做成那一回的份量合計（改那一骰、決戰的起點）；線 id → 做成的人數（章回卡寫）。
     # 空的時候不寫進 JSON（_drop_empty_marks_fired）
-    chapter_weights: dict[str, dict[str, float]] = Field(default_factory=dict)
-    chapter_done: dict[str, int] = Field(default_factory=dict)
+    chapter_weights: dict[str, dict[str, float]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    chapter_done: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
     schedule: dict[str, float] = Field(default_factory=dict)  # 決戰 id 與 "finale" → 世界秒；開季時填預設、管理者可改
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
@@ -1944,8 +1947,8 @@ class WorldState(BaseModel):
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     # 特殊頓悟（tianxia/epiphany.py）：這一季全服神品意境的名字 → 悟的人（名字全服不重複）；模板 id → 這一季第一個悟出它的「名字|名號」
-    god_names: dict[str, str] = Field(default_factory=dict)
-    god_firsts: dict[str, str] = Field(default_factory=dict)
+    god_names: dict[str, str] = Field(default_factory=dict, json_schema_extra=QUIET)
+    god_firsts: dict[str, str] = Field(default_factory=dict, json_schema_extra=QUIET)
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
 
     @field_validator("bounties", mode="after")
@@ -1957,14 +1960,11 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired、mark_helpers（批 4）、final_tiers（批 3c）與心意那三欄（批 6）是空的、0 的時候不寫這個鍵
+        """標了 QUIET 的欄位（WORLD_QUIET_DEFAULTS：marks_fired、mark_helpers〔批 4〕、final_tiers〔批 3c〕、心意那三欄〔批 6〕……）是空的、0 的時候不寫這個鍵
         （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
-                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq", "places",
-                        "inscriptions", "inscription_seq", "attrs_v2",
-                        "persona", "persona_day", "persona_push", "persona_tug", "persona_torn", "persona_log"):
+            for key in WORLD_QUIET_DEFAULTS:
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1974,15 +1974,15 @@ class WorldState(BaseModel):
     feasts: list[Feast] = Field(default_factory=list)
     feast_seq: int = 0
     # 世界活起來（tianxia/plans.py、deeds.py）：盤算（開著的與這一季結算過的）、行程每一站做完了沒（站 id → 成不成；一般的一站記 True）、世界記事
-    plans: list[Plan] = Field(default_factory=list)
-    stops_done: dict[str, bool] = Field(default_factory=dict)
-    deeds: list[Deed] = Field(default_factory=list)
-    deed_seq: int = 0
+    plans: list[Plan] = Field(default_factory=list, json_schema_extra=QUIET)
+    stops_done: dict[str, bool] = Field(default_factory=dict, json_schema_extra=QUIET)
+    deeds: list[Deed] = Field(default_factory=list, json_schema_extra=QUIET)
+    deed_seq: int = Field(0, json_schema_extra=QUIET)
     # 地點會變樣（tianxia/place_state.py）：地點 id → 此刻的樣子；沒寫的地點是太平。換季整個重來
-    places: dict[str, PlaceMark] = Field(default_factory=dict)
+    places: dict[str, PlaceMark] = Field(default_factory=dict, json_schema_extra=QUIET)
     # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（sqlite_world.next_season）
-    inscriptions: list[Inscription] = Field(default_factory=list)
-    inscription_seq: int = 0
+    inscriptions: list[Inscription] = Field(default_factory=list, json_schema_extra=QUIET)
+    inscription_seq: int = Field(0, json_schema_extra=QUIET)
     yuedan: list[YuedanEntry] = Field(default_factory=list)
     yuedan_week: int = 0  # 月旦評評到第幾週了
     rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）
@@ -2039,8 +2039,14 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 舊的開季章（領地爭奪 2026-10-27 起沒有開關、不看章，conquest.on）；只留著讓舊存檔讀得進來
-    attrs_v2: bool = False  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
+    # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
+    titles_week: int = Field(0, json_schema_extra=QUIET)
+    titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
+    attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
+    # 這一季開季時地方豪強已經拿掉了（Config.gentry 關著；allied.gentry_on）：只剩官軍、黃巾、散人。舊季讀檔是 False（豪強照舊），False 不寫進存檔
+    no_gentry: bool = Field(False, json_schema_extra=QUIET)
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
     # 上一篇讀到哪裡（None＝這一季還沒記過起點）
@@ -2062,6 +2068,10 @@ class WorldState(BaseModel):
     tavern_chatter: dict[str, tuple[float, list[str]]] = Field(default_factory=dict)  # 地點 id →（寫成的世界秒, 鄰桌閒談幾句）
     # 玉璽碎片改版第 2 批：這一季起用過的獨門行動（seal_acts.py；換季整個重來，改版關著一直是空的）
     seal_acts: list[SealAct] = Field(default_factory=list)
+
+
+# WorldState 裡「沒用到就不寫進存檔」的欄位（_drop_empty_marks_fired）：同 QUIET_DEFAULTS，欄位標 `json_schema_extra=QUIET`
+WORLD_QUIET_DEFAULTS = _quiet_fields(WorldState)
 
 
 class Fighter(BaseModel):
@@ -2108,7 +2118,7 @@ class BattleRecord(BaseModel):
     narration: str = ""
     guarded: bool = False  # 護命把落敗改判成僵持（武學與成長設計 13.4）；那一句演出寫在 notes 裡（跟 DODGE_NOTE 一樣，結果那一段）
     gauge: dict | None = None  # 決戰收場那一刻的戰局條（battle_instance.gauge，站在自己那一邊看）；不是決戰、舊戰報是 None
-    # 功效的演出句（13.6，content/trait_lines.json）：一句一行、前面標〔功效名〕，只在功效真的改到結果時才有（engine.Game._trait_lines）。
+    # 功效的演出句（13.6，content/trait_lines.json）：一句一行、前面標〔功效名〕，只在功效真的改到結果時才有（core/combat.py 的 trait_lines）。
     # 放在「過程」裡回合（或大場面模型那一段）的前與後
     trait_before: list[str] = Field(default_factory=list)  # 開打前：先手、穩、破甲、險、連環、借力
     trait_after: list[str] = Field(default_factory=list)  # 受傷、結果出來、戰鬥外：化勁、厚、不動、乘勝、吸取、悟招、回春、輕身
@@ -2176,7 +2186,7 @@ class GameState(BaseModel):
     log: list[str] = Field(default_factory=list)  # 原始訊息，每次行動之間夾一個 journal.LOG_BREAK
     journal: list[JournalEntry] = Field(default_factory=list)  # 江湖紀錄，最新的在前，最多 journal.MAX_ENTRIES 則
     last_real: float | None = None  # 上次同步的現實時間（time.time()）
-    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（Game._deliver_away）。None＝還沒記過（舊存檔、
+    # 上次同步時的賽季時間（世界秒）：「你不在的時候」從這一刻之後算（rumor_view.deliver_away）。None＝還沒記過（舊存檔、
     # 換季重來的角色），那一次從這一季開頭算
     last_world: float | None = None
 

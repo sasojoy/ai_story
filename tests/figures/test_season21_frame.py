@@ -227,7 +227,7 @@ def test_the_stance_note_says_no_early_end_and_only_a_mandate_season_says_mandat
 
 
 def test_the_season21_ending_hints_drop_week_ten():
-    from tianxia import guide
+    from tianxia.features.guide import rules as guide
 
     c21 = real_content("season21")
     _, vehicle = _late(c21, 1, 50, now=MON)

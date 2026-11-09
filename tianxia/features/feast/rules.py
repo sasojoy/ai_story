@@ -10,7 +10,7 @@ https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2「多人同
 - 散席（settle，world.advance_world_state 每一步叫）：分數最高的那一句（一樣高看誰先說）上天下大事，那個人同步時名望 +feast_fame
   （deliver）。
 只 import models、state、rules、figure_life、zh、gender；engine、world、server、letters 呼叫它。
-功能包 tianxia/features/feast/ 的純規則（開發規範手冊 3.2；原本是 tianxia/feasts.py，那一個名字留成指到這裡的別名）。"""
+功能包 tianxia/features/feast/ 的純規則（開發規範手冊 3.2；原本是 tianxia/feasts.py）。"""
 from __future__ import annotations
 
 import random
@@ -222,7 +222,7 @@ SCORE_PREDICT = 24
 def request(state: GameState, content: Content, f: Feast, text: str) -> ToastRequest:
     ch = content.characters.get(f.host)
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
-    host_side = figure_life.side_of(content, f.host)
+    host_side = figure_life.side_of(content, f.host, state.world)
     p = state.player
     side = p.ally or p.faction
     return ToastRequest(

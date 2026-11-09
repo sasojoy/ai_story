@@ -77,7 +77,7 @@ def test_fb167_the_early_end_time_is_one_unbreakable_block_like_the_status_bar()
     from conftest import real_content
 
     from tianxia import calendar
-    from tianxia.guide import quest_text
+    from tianxia.features.guide.rules import quest_text
     from tianxia.state import new_game_state
     from tianxia.world import early_end_note
     from tianxia.world_state import fresh_season

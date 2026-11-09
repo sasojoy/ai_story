@@ -16,7 +16,7 @@ from tianxia.engine import Game
 from conftest import classic_rules, real_content
 from jianfa_kit import no_jianfa
 from test_prologue_web import run as run_prologue_web
-from tianxia import sortie
+from tianxia.features.sortie import rules as sortie
 from tianxia.sqlite_world import open_world
 from jianghu_kit import (  # noqa: F401
     BATTLE, CLICK, MUSTER_SCENE, ROOT, ROW_ATTRS, SHOWDOWN_BOX, _bar, _cell, _consts, _face, _fight_round, _folded, _game,

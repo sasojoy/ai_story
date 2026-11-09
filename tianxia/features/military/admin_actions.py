@@ -1,10 +1,12 @@
 """管理者的軍令與召見（功能包 military；全部拆包第 33 批）：立刻發本週軍令、立刻輪替第 4 階席次、立刻替人發召見（與管理者玩家選單共用的召見規劃）。
 原本 Game 上的 4 個方法（admin_issue_orders、admin_rotate_seats、_summons_plan、admin_summon）與回話用的五個常數；名字去掉前導的 admin_ 與底線。
 第一個參數是 ctx。會改狀態。/api/do 的 issue_orders、rotate_seats、summon 三顆鈕在這一包的 routes.py（全部拆包第 68 批）。
+player_choices（Game.admin_player_choices，/api/admin/player 的那一份；只讀）第二輪第 90 批從 Game 搬來，路由在管理者包。
 """
 from __future__ import annotations
 
 from tianxia import allied, calendar, gender, seats
+from tianxia import ranger, renown  # 共用規則層（管理者的玩家選單，第二輪第 90 批）
 from tianxia import orders, ranks  # 共用規則層（軍令 orders、階級 ranks，第 40 批收進）
 from tianxia.core.services import NO_SUCH_PLAYER
 from tianxia.models import PromotionDef
@@ -123,3 +125,30 @@ def summon(ctx, name: str) -> list[str]:
     msg = f"已替{target.state.player.name}發第 {promo.rank} 階的召見：{lines[0]}"
     ctx._write("發召見", [msg], tag="管理者")
     return ctx._log([msg])
+
+
+def player_choices(ctx, name: str) -> dict:
+    """管理者區「玩家個人劇情」查一個名號：他是誰（陣營・頭銜，在哪裡）、能不能替他發召見（不能的話為什麼）、能給他的機緣與伏筆片段
+    （從內容裡挑此刻給得了的：他那一方、他的階、還沒完成也還沒給過）。只讀：不補算、不存檔。查不到回 {"refusal": …}。"""
+    if not ctx.is_admin():
+        return {"refusal": "（只有管理者能查玩家。）"}
+    target = ctx._admin_target(name, sync=False)
+    if target is None:
+        return {"refusal": NO_SUCH_PLAYER.format(name=name.strip())}
+    s, c, p = target.state, ctx.content, target.state.player
+    if season_one(c, s.world):
+        why, promo = summons_plan(ctx, target)
+    else:
+        why, promo = "（這一季沒有陣營的階級，發不了召見。）", None
+    parts = [allied.label_of(s, c) if p.faction else "散人"]
+    title = ranks.title(c, s) or ranger.title(c, s) or "・".join(renown.titles(s, c))  # 名聲開著時寫兩個稱號
+    if title:
+        parts.append(title)
+    place = c.locations[p.location].name if p.location in c.locations else p.location
+    return {
+        "name": p.name,
+        "line": f"{p.name}：{'・'.join(parts)}，在{place}",
+        "summons": {"ok": why is None, "note": why or f"會發第 {promo.rank} 階的召見"},
+        # note：確認框多問的那一句（情誼型補的是真的情誼，審查 M-5）；其他種類是空字串
+        **ctx._admin_omen_choices(s),  # opportunities（可以給的機緣）、fragments（可以給的伏筆片段）兩鍵，軍情（第 34 批）
+    }

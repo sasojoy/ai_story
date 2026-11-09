@@ -14,12 +14,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
+- **比畫面先用 `scripts/webqa/gate.py`**（第二輪第 77 批；用法在 `docs/guide/量表與教訓.md`）：兩邊走同一批流程、比 DOM、樣式、截圖、`/api/main`，人工走只補工具走不到的（`report.txt` 的 not reached）。
 - **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30；`tianxia-flow` 同一句）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q -n 4 -m "slow or not slow" tests/a.py tests/b.py`（點名的檔照字面跑，連 slow）。不跑整套、不跑 `test_for`；派工單沒點名就一條都不跑。
 - **純搬的批：兩台真伺服器逐位元組比**（全部拆包總表 5.0，PM 2026-10-31；第 5 批起）：派工單寫「純搬、`web/` 一個字沒動」的批，實機 QA 改成這樣做，不拍整套截圖：
   - BASE（這一批開出來的那一點，派工單給 SHA）與 HEAD 各 `git archive` 解一份（只要 `tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`），各開一台真伺服器：各自的埠與 `<名字>.localhost`、各自的新暫存資料庫、同一個 `TIANXIA_PROFILE`、`ollama_url` 指死埠。
   - 同一串步驟用真的 HTTP 打兩台（建帳號與角色、管理者開季、這一批搬的那幾個動作；步驟照派工單與那一區調查的 `same_behavior` 清單），每個回應存下來，逐位元組比；收場後兩邊的資料庫轉成文字（每張表、每一列照 repr 排序，帳號的 salt／hash 與 `sessions.token_hash` 抹掉）逐位元組比。
-  - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
+  - 兩台都要先固定亂數與時鐘，照 `scripts/sb/harness.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
   - 啟動外殼要固定的另外四樣（2026-11-04 第 17 批 QA；現成的外殼在舊 PM scratchpad 的 `b17-chk\s\serve.py`、`drive.py`）：
     - **玉璽密鹽**：`seal.ensure_salt` 用 `secrets`，每次開都不一樣，資料庫的 world 表會差 salt 和由它算出的快取。外殼裡把 `seal.secrets.token_hex` 換成回固定值。
     - **進鎖的種子帶上凍住的時刻**（固定種子＋`int(假時鐘)`）：種子每一步都一樣的話，有兩路可挑的地方永遠挑同一路，走不到另一路。
@@ -120,7 +121,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
 - **時刻表決戰的開法**（2026-10-22 長社火攻）：每一場一季只開得了一次，取消了也不能再開（`showdowns_opened`）——同一季要看第二種佔領就用新的資料庫，或 `end_season`＋`next_season`；`start_showdown` 的 id 是時刻表那一列（`changshe_fire`、`wancheng`、`guangzong`、`tianming`），宛城要第 3 週那件已結算；`tianming` 先 `seal_mandate when=now`（回「蓋上天命之季的章」）否則回「時刻表上沒有這一場決戰」。要驗「時間到了自己開」：`schedule {id, at}` 只會對齊到季曆整點，之後 `fast_forward hours=1` 推過去。排在後面的攻城戰書不會被 `cancel_battle` 一起取消，取消一場後下一場馬上開，連按到「沒有進行中的決戰」。
-- **`/api/do/<op>` 先查管理者那兩張**（先後：各包的管理者工具 `server.FEATURE_ADMIN_ACTIONS` → `ADMIN_ACTIONS` → 鎖外三段式 `OUTLOCK_OPS` → `MAIN_ACTIONS`）：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & (set(server.ADMIN_ACTIONS) | set(server.FEATURE_ADMIN_ACTIONS))`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
+- **`/api/do/<op>` 先查管理者那一張**（先後：各包的管理者工具 `server.FEATURE_ADMIN_ACTIONS` → 鎖外三段式 `OUTLOCK_OPS` → `MAIN_ACTIONS`；`ADMIN_ACTIONS` 第二輪第 90 批拿掉）：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.FEATURE_ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
 
@@ -228,7 +229,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **城裡操練（`act:drill`）第 13 批拿掉了，直叫回「（此刻無法這麼做。）」**：只有操練會叫的事件型提示（`h_drill_done`）玩不到，只能用 `hints.note_for(state, content, id)` 驗字（四種身分、六種季各印一次，兩版逐字比），可達性另外按按看。
   - **開實機看**：`/api/main` 有 `mostly` 與 `options`（`act:explore` 的 `label`＝「探索（體力 18・野外多料）」），行動列的格子是 `button.act-ink`（小字在 `small`），「剛剛」那張卡是 `.now-one`（拿 `innerText` 就有「得：…」那一行與底下的標籤）；讓角色在同一個頁面按鈕、用頁面自己的 `fetch('/api/main')` 前後各讀 `status.xinde`／`status.exp.have` 對帳，不必再用 `requests` 登入（再登入同一帳號會把分頁的 session 踢掉）。出門一趟抽到「有悟」那一拍會把選單換成 `sense:0..3`，要先按掉才能再按探索。
 - **列傳、評曰、商城的票**（2026-10-26 批 7b，`cb202c8c` 對 `9f68f257`；範本 scratchpad `qajf7b\`：`kit.py`、`v2_annals.py`、`v3_mall.py`、`cmpq\cmp_qa.py`）：
-  - **腳本 `import server` 之後先 `server.CONTENT = c`**：`server.zhuan_extras`（公開頁的紀念印與插畫）照模組層的 `CONTENT` 判開關，那一份照啟動時的環境變數載；腳本沒設 `TIANXIA_PROFILE` 就是不帶設定、減法季關著，回 `{}`，看起來像「公開頁沒蓋印」。
+  - **腳本 `import server` 之後先 `server.CONTENT = c`**：`features/zhuan/routes.py` 的 `zhuan_extras(shell, store, row)`（公開頁的紀念印與插畫）照殼模組層的 `CONTENT` 判開關，那一份照啟動時的環境變數載；腳本沒設 `TIANXIA_PROFILE` 就是不帶設定、減法季關著，回 `{}`，看起來像「公開頁沒蓋印」。
   - **收季要哪一軍贏就自己給結局**：`store.mutate_season(lambda s: end_season(_season_vehicle(c, s), c, store, ending=<scenario.endings 裡 winner 是那一軍的>))`（`from tianxia.world import end_season, _season_vehicle`），角色要先存進資料庫（論功讀 `CharacterStore.books`）；之後每人同步一次才記論功的行狀。
   - **假模型**：一個物件有 `chat_structured(messages, schema, **kw)`，照系統提示第一句裡的人物名回 `schema(verdict="…")` 或丟例外；`game.client = fake`、`server.QUEUE = None` 再叫 `server.verdict_text(game, job)`，B 段清理（假名、數字、太長、簡轉繁）都驗得到。實機模型擋掉時 `/api/zhuan/write` 背景十幾秒照備援寫成（`by: rule`、評曰全照固定句），輪詢 `/api/zhuan?season=N` 的 `written`。
   - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `mall_actions.moment(g)` 與 `mall_actions.view(g)`（`from tianxia.features.mall import actions as mall_actions`；`Game.mall_*` 第 58 批拿掉了）；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。

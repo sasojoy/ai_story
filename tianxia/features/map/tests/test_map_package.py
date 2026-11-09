@@ -1,18 +1,11 @@
-"""輿圖包的接縫（全部拆包第 49 批）：舊名是指到同一個模組的別名、殼留的是同一個物件、三條路由掛上了、
+"""輿圖包的接縫（全部拆包第 49 批）：殼留的是同一個物件、三條路由掛上了、
 搬到核心服務檔的小函式兩邊是同一個物件。行為本身（畫法、資料、疊層）由同一個資料夾裡搬進來的整檔測試守。"""
 import server
-from tianxia import mapart, mapdata, mapview, worldgeo
+from tianxia.features.map import mapdata
 from tianxia.core import explore_base
 from tianxia.features.explore import explore_rules
-from tianxia.features.map import mapart as pkg_mapart
-from tianxia.features.map import mapdata as pkg_mapdata
-from tianxia.features.map import mapview as pkg_mapview
-from tianxia.features.map import views, worldgeo as pkg_worldgeo
+from tianxia.features.map import views
 from tianxia.features.sense import sensing
-
-
-def test_the_old_module_names_are_the_package_modules():
-    assert mapview is pkg_mapview and mapart is pkg_mapart and mapdata is pkg_mapdata and worldgeo is pkg_worldgeo
 
 
 def test_the_shell_keeps_the_same_cache_and_the_same_default_layer():

@@ -143,3 +143,24 @@
     S.annals = await api("/api/annals");
     if (S.tab === "news") renderPage();
   }
+  async function zhuanClick(act, el, ev) {
+    switch (act) {
+        case "zhuan-open":
+          S.bookFrom = window.scrollY; S.zhuan = { season: Number(el.dataset.season), view: null }; render();
+          await loadZhuan();
+          break;
+        case "zhuan-close": S.zhuan = null; clearTimeout(zhuanTimer); render(); window.scrollTo(0, S.bookFrom || 0); break;
+        case "zhuan-write": await zhuanPost("/api/zhuan/write", { rewrite: false }); break;
+        case "zhuan-rewrite":
+          ask("請史官重寫一次：只能重寫一次，寫好之後換掉現在這一篇（公開的網址不變），確定？", "重寫", () => zhuanPost("/api/zhuan/write", { rewrite: true }));
+          break;
+        case "zhuan-share": await zhuanPost("/api/zhuan/share", { public: el.dataset.public === "1" }); break;
+        case "zhuan-send": await zhuanSend(); break;
+        case "zhuan-vertical":
+          S.zhuanVertical = !zhuanVertical();
+          try { localStorage.setItem(ZHUAN_VERTICAL, S.zhuanVertical ? "1" : "0"); } catch (e) { /* 存不了：只在這一頁有效 */ }
+          render();
+          break;
+    } // zhuanClick
+  } // zhuanClick
+  registerClicks(zhuanClick, ["zhuan-open", "zhuan-close", "zhuan-write", "zhuan-rewrite", "zhuan-share", "zhuan-send", "zhuan-vertical"]);

@@ -13,7 +13,7 @@ from tianxia import journal, precise, renown, roster
 from tianxia.core.services import SNUB_NOTE
 from tianxia.core import xinshen  # 心神（核心的資源）：長滿情誼的那一輪多一句
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
-from tianxia.events import pick_event  # 過渡：待搬（事件：抽一則）
+from tianxia.events import pick_event  # 共用規則層（事件：抽一則）
 from tianxia.journal import Draft
 from tianxia.rules import audience_hint, game_day, season_one
 

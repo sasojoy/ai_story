@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 import server
 from conftest import at
-from tianxia import battle_instance
+from tianxia.core import battle_base as battle_instance  # 第二輪第 102 批：bout.routes 讀核心那一格
 from tianxia.sqlite_world import open_world
 # autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
 from server_kit import (  # noqa: F401
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.whole_content
 
 def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
     """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
-    from tianxia import duel
+    from tianxia.features.bout import duel_rules as duel
 
     game.client = None
     game.state.player.location = "changshe"

@@ -1,4 +1,4 @@
-"""全服決戰的規則那一半（全部拆包第 54 批）：原本在 tianxia/battle_instance.py，逐字搬來，舊名是指到這個模組的別名（程式裡新寫的一律 import 包；別的包、核心、共用規則層讀 tianxia/core/battle_base.py）。
+"""全服決戰的規則那一半（全部拆包第 54 批）：原本在 tianxia/battle_instance.py，逐字搬來（別的包、核心、共用規則層讀 tianxia/core/battle_base.py）。
 資料型別與核心、共用規則層、舊模組、別的包非讀不可的判定（63 個名字）在 tianxia/core/battle_base.py，這裡 re-export 同一批物件：bi.BattleInstance、bi.merit 這些經舊名照舊拿得到。
 
 全服共用的即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步→打完最後一回合、或戰局一面倒時
@@ -136,12 +136,22 @@ def role_text(tuning: BattleTuning, role: str) -> str:
     return f"{name}（{does}）"
 
 
+# 戴名號（金、朱）的人第一次加入一場決戰：戰報一句（稱號與官職設計稿 v5 第五節做法乙；待 joy 潤）
+TITLE_ENTRANCE = "「{title}」{name}親臨陣前，眾人一陣譁然。"
+
+
+def _title_entrance(instance: BattleInstance, name: str, title: dict | None) -> None:
+    if title and title.get("grade") in ("gold", "zhu") and name not in instance.participants:
+        instance.narrative_log.append(TITLE_ENTRANCE.format(title=title.get("name", ""), name=name))
+
+
 def join_faction(
     instance: BattleInstance, name: str, faction: str, neili_cap: float, power: float = 0.0, is_bot: bool = False,
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
     kit: tactics.BoutSide | None = None, renown: list[str] | None = None, escort: Escort | None = None,
     seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
+    title: dict | None = None,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。escort 是隨他上陣的歷史武將（沒給＝沒派）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
@@ -150,11 +160,12 @@ def join_faction(
     seal_bare 是不含玉璽碎片戰力的那一份（改版；沒給＝沒有碎片）。cut 是加入那一刻的防具減損（鐵匠鋪與合成流程 3.9；沒給＝沒穿）。"""
     if instance.phase != "muster":
         return
+    _title_entrance(instance, name, title)
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare, cut=cut, card=card,
+        escort=escort, seal_bare=seal_bare, cut=cut, card=card, title=dict(title or {}),
     )
 
 
@@ -182,6 +193,7 @@ def auto_assign_latecomer(
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
     escort: Escort | None = None, seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
+    title: dict | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare、cut
@@ -190,11 +202,12 @@ def auto_assign_latecomer(
         armies = sides(definition)
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
+    _title_entrance(instance, name, title)
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare, cut=cut, card=card,
+        escort=escort, seal_bare=seal_bare, cut=cut, card=card, title=dict(title or {}),
     )
 
 
@@ -1441,7 +1454,8 @@ def merit_board(
     board: dict = {"me": None}
     for key, side in (("left", left), ("right", right)):
         ranking = merit_ranking(instance, tuning, side)
-        board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer, "renown": list(p.renown)}
+        board[key] = [{"name": p.name, "merit": m, "mine": p.name == viewer, "renown": list(p.renown),
+                       **({"title": dict(p.title)} if p.title else {})}  # 稱號與官職：加入時戴的那一個（沒戴不寫這個鍵）
                       for p, m in ranking[:MERIT_TOP] if m > 0]
         for rank, (p, m) in enumerate(ranking, 1):
             if p.name == viewer:
@@ -1516,7 +1530,23 @@ def gauge(
         "lean": now, "start": lean(start), "decisive": decisive, "zones": zones, "rounds": rounds,
         "caption": caption,
         "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer),
+        **({"flags": flags} if (flags := title_flags(instance, left, right)) else {}),  # 稱號與官職的將旗：沒有人戴頭銜不寫這個鍵
     }
+
+
+FLAG_TOP = 5  # 將旗：兩軍各列幾個（稱號與官職設計稿 v5 做法乙）
+_GRADE_RANK = {"gold": 0, "zhu": 1, "ink": 2}
+
+
+def title_flags(instance: BattleInstance, left: str, right: str) -> dict:
+    """集結與戰局條上的將旗：兩軍各列戴頭銜的人（名號在前、官職在後，一樣高照加入時的戰力），最多 FLAG_TOP 個；都沒有是 {}。"""
+    out = {}
+    for key, side in (("left", left), ("right", right)):
+        worn = [p for p in instance.participants.values() if p.faction == side and p.title.get("name")]
+        worn.sort(key=lambda p: (_GRADE_RANK.get(p.title.get("grade", "ink"), 2), -p.power, p.name))
+        if worn:
+            out[key] = [{"name": p.name, "title": dict(p.title)} for p in worn[:FLAG_TOP]]
+    return out
 
 
 def overruled_reason(instance: BattleInstance, definition: BattleDef, lock_side: str | None, defender: str) -> str:

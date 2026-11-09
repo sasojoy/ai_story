@@ -1,7 +1,7 @@
 """修練（改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點、拜師學藝）。功能包，開發規範手冊 3.2；全部拆包第 23 批搬進來
 （計畫 docs/superpowers/plans/2026-11-01-修練包-第1批.md）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- cultivation.py、chuangong.py、ascend.py：純規則（原 tianxia/ 底下同名的三個模組；那三個名字留成指到這裡的別名）——絕學的契機與服丹衝關、
+- cultivation.py、chuangong.py、ascend.py：純規則（原 tianxia/ 底下同名的三個模組）——絕學的契機與服丹衝關、
   舊存檔的絕學定名；傳功門下；破境（破境卡與卡上那一句的三段式）
 - actions.py：原本 Game 上修練頁的動作與拜師學藝（learn:；Game 留一行委派給 server、假人、測試與核心原位）
 - view.py：修練頁的唯讀資料（server.menxia_view 叫的那幾個；Game 留一行委派）
@@ -18,10 +18,18 @@ class CultivationFeature(Feature):
     # （落到最後的 return None），拿了前綴之後 bot_pick 照預設回 None＝不按，跟原本一樣；學藝是 bot_policy.tend_arts 的 _learn_here
     # 直接 choose 的。不開 bots.py
     prefix = "learn"
-    web = ("cultivation.js", "cultivation.css")  # 俠客頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。熔煉的問句與樣子第 67 批從 main.js、style.css 切出來（卷軸卡與功法庫跟引導的 .onb-dim 同權重，留 style.css）
+    web = ("cultivation.js", "cultivation.css")  # 俠客頁的畫法（全部拆包第 64 批從 app.js 切出來）。熔煉的問句與樣子第 67 批從 main.js、style.css 切出來（卷軸卡與功法庫跟引導的 .onb-dim 同權重，留 style.css）
     # 等著定名的那一門、定名通知過的、剛破境還沒看過的破境卡、每一門服丹沒衝開幾次、境界卡記的那一級：換季都跟著新角色重來
     player_fields = ("naming", "renames_told", "ascension", "legend_fails", "milestone_due")
     carried: tuple[str, ...] = ()
+
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            "forged": False,  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
+            "forged_thing": None,  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
+            "secret_solved": None,  # 上一次開爐或裝意境這一季第一次參透一條秘方：跳的那個視窗（secret_recipes.solved_card）
+        }
 
     def enabled(self, ctx) -> bool:
         """一直開著：修練頁與拜師學藝每一季都有（沒有自己的開關；傳功、破境丹、境界卡各自先問自己的設定）。"""

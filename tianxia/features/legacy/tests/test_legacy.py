@@ -258,7 +258,7 @@ class _Rng:
 
 def test_luck_rolls_the_epiphany_once_more():
     """機緣的第一道門路（Config.legacy.doors["epiphany"]）：頓悟沒中再擲一次；沒有那道門路、或開關關著，照舊只擲一次。"""
-    from tianxia import epiphany
+    from tianxia.features.sense import epiphany
 
     game, _ = god_game()
     s, c = game.state, game.content
@@ -347,7 +347,8 @@ def test_the_third_doors_warm_up_the_figures_who_care():
 
 
 def test_luck_weighs_the_qiyu_and_rolls_long_tales_again():
-    from tianxia import events, storyline
+    from tianxia import events
+    from tianxia.features.story import storyline
 
     game, _ = god_game()
     s, c = game.state, game.content

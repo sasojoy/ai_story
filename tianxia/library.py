@@ -94,7 +94,8 @@ def _taught_here(state: GameState, content: Content) -> list[SkillDef]:
     lessons = renown.on(content, "lessons")
     return [
         skill for skill in content.skills.values()
-        if (skill.learn is not None and skill.learn.at == here.id and (lessons or skill.learn.title is None)) or skill.id in starters
+        if (skill.learn is not None and skill.learn.at == here.id and (lessons or skill.learn.title is None)
+            and (skill.learn.sect is None or content.sect_open(skill.learn.sect))) or skill.id in starters
     ]
 
 
@@ -177,7 +178,7 @@ SIGNATURE_KEPT = "本命武學是那位人物親傳的，熔不得。"  # Joy 20
 def melt_problem(
     state: GameState, art_id: str, name: str | None = None, only: str | None = None, content: Content | None = None,
 ) -> str | None:
-    """熔不掉的原因；None＝可以熔。熔煉鈕亮不亮（skillview.art_rows）與 melt_art 的拒絕走同一個判斷，
+    """熔不掉的原因；None＝可以熔。熔煉鈕亮不亮（art_view.art_rows）與 melt_art 的拒絕走同一個判斷，
     兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。
     only：序章（新手引導計畫一）只准熔師父說的那一門，空字串是這一步一門都不准熔；None＝不限。
     由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。
@@ -199,7 +200,7 @@ def melt_problem(
 
 
 def melt_value(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
-    """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（skillview.art_rows）與 melt_art 真的退的
+    """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（art_view.art_rows）與 melt_art 真的退的
     共用這一個數：武學重構之後品級不靠修練衝，所以只退練成花的八成；品質加給只剩全服登記的那一階之上（絕學契機那一階）。
     FB-068 的基本值（Config.melt_min_refund）只給全服登記的武學（合成出來的；art_id 不是內容裡的武學）：
     內容裡的基礎武學有的免費教、學藝也不花體力，給了基本值就是「學、熔、再學」的無本迴圈。"""
@@ -226,7 +227,7 @@ def melt_note(value: int) -> str:
 
 def melt_confirm(name: str, value: int, relearn: str | None = None) -> str:
     """熔煉鈕按下去的確認框，整句只在這裡寫（W9 與 FB-081 合成一句，待 joy 潤）：有心得的寫退多少；退 0 心得的直說只空出一格
-    （熔掉仍空出一格，所以照樣准熔，不騙人說退了什麼）。relearn 是 skillview.relearn_note 給的「熔了去哪裡再學」那一句
+    （熔掉仍空出一格，所以照樣准熔，不騙人說退了什麼）。relearn 是 art_view.relearn_note 給的「熔了去哪裡再學」那一句
     （開局送的基礎武學在城鎮免費重學、各地教的回教它的地方；合成的與內容直接給的沒有），有就接在後面，所以「免費重學」只說一次；
     有心得又沒有重學的地方才說「熔掉就沒了」。"""
     if value > 0:

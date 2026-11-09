@@ -8,7 +8,9 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import battle_instance, bot, bot_policy, defection
+from tianxia.features.battle import instance as battle_instance
+from tianxia import bot, bot_policy
+from tianxia.features.faction import defection
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import FactionDef

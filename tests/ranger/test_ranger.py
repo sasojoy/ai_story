@@ -6,7 +6,8 @@ import random
 import pytest
 
 from conftest import install_season_one, real_content
-from tianxia import ranger, roster, rules, social
+from tianxia import ranger, roster, rules
+from tianxia.features.peers import social
 from tianxia.engine import Game
 from tianxia.models import Condition, Effect, FactionDef
 

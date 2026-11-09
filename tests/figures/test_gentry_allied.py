@@ -18,6 +18,7 @@ def wk():
     c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     return c
 
 
@@ -153,7 +154,7 @@ def test_roster_text(wk):
 
 
 def test_affiliation_names_the_side(wk):
-    from tianxia import social
+    from tianxia.features.peers import social
 
     game = _game(wk, faction="haoqiang", ally="guan")
     assert social.affiliation(game.state, wk).startswith("地方豪強（依附官軍）")
@@ -264,7 +265,7 @@ def test_donate_goes_to_the_side_stock(wk):
 
 
 def _settled(game):
-    """開季那一刻的結算（第 1 週的週初掛鉤：軍令、懸賞），同 Game._settle_season_start。"""
+    """開季那一刻的結算（第 1 週的週初掛鉤：軍令、懸賞），同 features/admin/actions.py 的 _settle_season_start。"""
     from tianxia.world import settle_season_start
 
     settle_season_start(game.state.world, game.content, random.Random(0))
@@ -282,7 +283,7 @@ def test_orders_skip_the_gentry_and_follow_the_side(wk):
 
 
 def test_give_bounties_skip_the_gentry(wk):
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _settled(_game(wk))
     game.state.world.time = calendar.day_start(2, wk, game.state.world)  # 7 天季的求兵在雙數天 00:00 掛（bounties.issue_day）
@@ -292,7 +293,7 @@ def test_give_bounties_skip_the_gentry(wk):
 
 
 def test_bounties_take_the_sides(wk):
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _settled(_game(wk, faction="haoqiang", ally="huang"))
     open_ones = [b for b in game.state.world.bounties if b.kind not in bounties.GIVE_KINDS]
@@ -331,7 +332,7 @@ def test_challenge_only_the_other_side(wk):
 
 
 def test_foreshadow_chains_follow_the_side(wk):
-    from tianxia import foreshadow
+    from tianxia.features.military import fs_rules as foreshadow
 
     game = _game(wk, faction="haoqiang", ally="guan")
     sides = {c.side for c in wk.foreshadows.chains if foreshadow.capable(game.state, wk, c)}
@@ -509,7 +510,7 @@ def test_season_bot_menu_has_a_side_pick(wk):
 
 
 def test_recruiter_has_an_allied_version(wk):
-    from tianxia import enlist
+    from tianxia.features.guide import enlist
 
     game = _game(wk, faction="haoqiang", ally="guan")
     who = enlist.recruiter(game.state, wk)
@@ -520,7 +521,7 @@ def test_recruiter_has_an_allied_version(wk):
 
 
 def test_hints_have_an_allied_version(wk):
-    from tianxia import hints as hint_rules
+    from tianxia.features.guide import hints as hint_rules
 
     game = _game(wk, faction="haoqiang", ally="guan")
     note = hint_rules.note_for(game.state, wk, "h_showdown")

@@ -1,9 +1,9 @@
 """新手引導（功能包；開發規範手冊 3.2）：草廬之後的引導框、碰到才說的提示、新手目標、開局第一分鐘、入伍段。全部拆包第 22 批（引導一）
 搬進來；玩法說明（howto）是第 59 批（引導二）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- rules.py：說書人的步驟與任務卡（原 tianxia/guide.py；那個名字留成指到這裡的別名）
+- rules.py：說書人的步驟與任務卡（原 tianxia/guide.py）
 - hints.py：碰到才說（原 tianxia/hints.py）；newbie.py：新手目標（原 tianxia/newbie.py）；opening.py：開局第一分鐘（原 tianxia/opening.py）；
-  enlist.py：入伍段（原 tianxia/enlist.py）——舊名都留成別名
+  enlist.py：入伍段（原 tianxia/enlist.py）
 - actions.py：原本 Game 上的 31 個方法（Game 留 24 個一行委派）與核心原位叫的 12 個服務的本體
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
 - howto.py：玩法說明的底與組裝（第 59 批：原 tianxia/howto.py 拆進 17 包，各節在各包的 howto.py，順序在核心 HOWTO_ORDER）；routes.py：/api/howto

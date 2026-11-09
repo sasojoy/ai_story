@@ -1,5 +1,5 @@
 """全服決戰「打」那一半之一：攻城（全部拆包第 6 批；計畫 docs/superpowers/plans/2026-11-01-決戰包-第2批.md）。原本 Game 上的 7 個方法，
-本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3）。攻城的規則本身在 tianxia/siege.py（共用規則層，總表附錄甲：不搬）；
+本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3）。攻城的規則在 siege_rules.py（誰站哪一格、收場）與 tianxia/siege.py（共用規則層：開集結、留守、名字；第二輪第 97 批切兩半）；
 這裡是 Game 那一側——好幾場並存時的那一串、推一場、收兵、取消、收場。Game 留 6 個一行委派（核心原位在叫：_battle_status 每一場推一次、
 收季與開下一季收兵、取消一場攻城、收場分進攻城那一支、選單與「我在哪一場」問定義），siege_guards 只有這裡叫。第 8 批推進與結算搬進
 progress.py、收季的收兵換成接縫掛鉤之後，_shelve_siege 沒人叫了、拿掉，Game 上剩 5 個（_sieges、_definition_of、_tick_siege、
@@ -9,7 +9,7 @@ _cancel_siege、_settle_siege：核心不再叫它，可是 tianxia/features/bat
 - definition_of：這一場的定義（決戰照內容；攻城戰是那個大區的範本，名字換成「攻城・地點」）——view.py 與這裡都經 ctx 叫（測試直接叫）
 - tick_siege：推一場（集結截止、回合逾時、補位、結算），剛收場就套結果（ctx._apply_battle_outcome：測試換掉它）
 - shelve_siege、cancel_siege：季終或管理者取消時收起來（不算勝負、不發軍餉、不易手），參戰者補一則交代
-- settle_siege、siege_guards：剛收場（只做一次）——龍頭敗走、最有戲與首功兩則天下大事、守城軍令（FB-605）、易手或守住（siege.settle）、
+- settle_siege、siege_guards：剛收場（只做一次）——龍頭敗走、最有戲與首功兩則天下大事、守城軍令（FB-605）、易手或守住（siege_rules.settle）、
   戰鬥那一列寫上結果、補送給自己
 
 包裡叫 definition_of 經 ctx（測試直接叫 Game._definition_of）、補送經 ctx._deliver_battle_results（test_renown_cross 換掉它）；「打」那一半
@@ -25,7 +25,7 @@ from tianxia.models import BattleDef
 from tianxia.state import Rumor, WorldState
 from tianxia.world import _season_vehicle  # 核心本體：季的事用的空殼玩家
 
-from . import generals, progress  # 龍頭上陣、推進與結算（第 8 批搬進這一包；progress 也 import 這一檔，都在函式裡用）
+from . import generals, progress, siege_rules  # 龍頭上陣、推進與結算（第 8 批搬進這一包；progress 也 import 這一檔，都在函式裡用）
 
 
 def sieges(ctx) -> list[battle_instance.BattleInstance]:
@@ -80,7 +80,7 @@ def settle_siege(ctx, battle: battle_instance.BattleInstance) -> None:
     """攻城戰剛收場（_apply_battle_outcome 分進來；只做一次，SiegeInfo.settled）：龍頭上陣的留守敗走扣聲威（守將是隊伍，不扣）；
     最有戲的一搏與兩軍首功照決戰上天下大事；易手（conquest.flip：分紅、冷卻、「落入／收復」）、守住各一句天下大事（作罷不發，攻方沒人到記
     day_log，裁決 19）、打輸攻方的條砍半、時程表記 done 或 void
-    （siege.settle）；戰鬥那一列寫上結果（贏的一方、大勝或險勝、「某某大勝，拿下某地」）；參戰者照決戰補戰報與軍餉（軍餉、貢獻乘
+    （siege_rules.settle）；戰鬥那一列寫上結果（贏的一方、大勝或險勝、「某某大勝，拿下某地」）；參戰者照決戰補戰報與軍餉（軍餉、貢獻乘
     Config.conquest.pay_share，_showdown_pay）。隨行同伴不放回江湖（裁決 14）。收場的那一場留在共用狀態裡到每天結算才拿掉
     （最後一回合的放手一搏劇情收場之後才寫好）。"""
     if battle.siege is None or battle.siege.settled:
@@ -100,11 +100,11 @@ def settle_siege(ctx, battle: battle_instance.BattleInstance) -> None:
     guards = siege_guards(ctx, battle, definition)
 
     def _season(season: WorldState) -> None:
-        if guards:  # FB-605：守方守住，替每一個守方的人記一次守城——那一塊還凍結著（siege.settle 之前），守城的清單照樣列它
+        if guards:  # FB-605：守方守住，替每一個守方的人記一次守城——那一塊還凍結著（siege_rules.settle 之前），守城的清單照樣列它
             vehicle, line = _season_vehicle(c, season), conquest.line_of(season, c, battle.siege.loc)
             for name, side in guards:
                 orders.credit(vehicle, c, side, name, kind=orders.SIEGE_GUARD, location=battle.siege.loc, front=line)
-        result.update(siege.settle(season, c, battle, definition))
+        result.update(siege_rules.settle(season, c, battle, definition))
 
     ctx.world.mutate_season(_season)
 
@@ -130,7 +130,7 @@ def siege_guards(ctx, battle: battle_instance.BattleInstance, definition: Battle
     info_ = battle.siege
     if info_ is None or battle.unfinished or info_.void or info_.holder not in conquest.SIDES:
         return []
-    if siege.verdict(info_, battle, definition)[0] is not None:
+    if siege_rules.verdict(info_, battle, definition)[0] is not None:
         return []
     out: list[tuple[str, str]] = []
     for name, p in battle.participants.items():

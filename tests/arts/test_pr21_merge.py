@@ -10,7 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import insight_fx, library, prologue, sensing, skillview, team
+from tianxia import insight_fx, library, prologue
+from tianxia.features.sense import sensing
+from tianxia.features.cultivation import art_view
+from tianxia import team
 from tianxia.content import load_content
 from tianxia.engine import Game
 
@@ -34,7 +37,7 @@ def test_m1_a_valued_art_that_can_also_be_learned_again_says_both(content, world
     state.player.member.wugong_id = "sword"  # 欄位有人佔著，下面的才在功法庫裡
     state.player.arts = ["basic_fist", "lake_kick"]
     state.player.art_levels.update({"basic_fist": 4, "lake_kick": 5})
-    rows = {r["id"]: r for r in skillview.art_rows(state, content, world)}
+    rows = {r["id"]: r for r in art_view.art_rows(state, content, world)}
     assert rows["basic_fist"]["melt"]["note"] == "退回心得 4"
     assert rows["basic_fist"]["melt"]["confirm"] == (
         "把【粗淺拳腳】熔成心得？退回心得 4。熔了還能免費重學：這裡就是城鎮，到江湖頁「此地還能做」找「學粗淺拳腳」。"
@@ -52,7 +55,7 @@ def test_m3_away_from_a_town_the_confirm_names_the_nearest_one(content, world, s
     state.player.arts = ["basic_fist"]
     state.player.art_levels["basic_fist"] = 4
     state.player.location = "lake"  # 湖邊不是城鎮；夾具裡離它最近的城鎮是小鎮
-    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist"]
+    (row,) = [r for r in art_view.art_rows(state, content, world) if r["id"] == "basic_fist"]
     assert row["melt"]["confirm"] == (
         "把【粗淺拳腳】熔成心得？退回心得 4。熔了還能免費重學：到任何城鎮（離你最近的是小鎮），在江湖頁「此地還能做」找「學粗淺拳腳」。"
     )
@@ -120,7 +123,7 @@ def test_the_hut_rows_carry_the_server_glow_lists_and_the_forge_page_the_pick_cu
     別的武學都不帶、意境也不亮（爐子是揣摩那一步才用）；裝好了（第 5 步）提示就沒有了。（review-ap3 M2：以前這條只看 glow 這個鍵在不在。）"""
     game = _hut_up_to_the_fusion(real, world)
     assert game.state.player.tutorial_step == 3
-    rows = skillview.art_rows(game.state, real, game.world)
+    rows = art_view.art_rows(game.state, real, game.world)
     assert [r["id"] for r in rows if "slot" in r["glow"]] == ["jichu_quanjiao"]  # 基礎拳腳；內功基礎吐納不點名
     assert all(r["glow"] == [] for r in rows if r["id"] != "jichu_quanjiao")  # 這一步別的武學不亮（沒有修練、熔煉可按）
     assert all("forge_odds" not in row for row in rows)  # 序章沒有機率條
@@ -128,7 +131,7 @@ def test_the_hut_rows_carry_the_server_glow_lists_and_the_forge_page_the_pick_cu
     assert ins and not any(r.get("glow") for r in ins)  # 意境不亮：這一步不開爐
     game.slot_insight("jichu_quanjiao", game.state.player.insights[0])  # 裝進槽：這一步做完
     assert game.state.player.tutorial_step == 4
-    assert not any("slot" in r["glow"] for r in skillview.art_rows(game.state, real, game.world))
+    assert not any("slot" in r["glow"] for r in art_view.art_rows(game.state, real, game.world))
 
 
 # ── W6、W8 拿掉了（武學重構）：合成不再擲品質（武學合成整個拿掉了）、修練不再衝品

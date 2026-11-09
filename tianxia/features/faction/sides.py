@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import prologue as prologue_rules
-from tianxia import rules, wins
+from tianxia import allied, rules, wins
 from tianxia.rules import STANCE_NAMES
 
 from . import ending_actions
@@ -63,14 +63,14 @@ def sides_card(game: Game) -> dict | None:
     四勝利開著的季（批 3c）：每一欄多 join_at、gives 照四階寫、豪強那一欄的 now 寫兩本帳；lean 是豪強此刻幫的那一軍 id；
     投靠了的人多 tier_hint（「第三階・還差 40」）、豪強多 ledger（{"guan": 120, "huang": 40}）。"""
     s, c = game.state, game.content
-    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：先不畫（批 7）；經 ctx（services.py 有寫）
+    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：先不畫（批 7）；經 ctx（services_list.md 有寫）
         return None
     four = rules.jianfa(c, s.world)
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
     mine = s.player.faction
     extra = ending_actions.sides_card(game) if four else None  # 批 3c（ending_actions.sides_card）：豪強那一格的「現在」、贏了給（照 Config.jianfa.tiers）、投靠點的分鐘
     cols = []
-    for f in c.scenario.factions:
+    for f in allied.factions_of(c, s.world):  # 拿掉豪強的季（企劃者 2026-11-07）只剩官軍、黃巾兩欄
         if f.id in ("guan", "huang"):
             other = "huang" if f.id == "guan" else "guan"
             now = f"態勢 {standing[f.id]}" if standing is not None else ""

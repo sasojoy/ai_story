@@ -42,7 +42,7 @@ def targets_here(state: GameState, content: Content, battle: BattleInstance | No
     if not can_defect(state, content, battle):
         return []
     p = state.player
-    return [f for f in content.scenario.factions if f.id != p.faction and p.location in f.join_at]
+    return [f for f in allied.factions_of(content, state.world) if f.id != p.faction and p.location in f.join_at]  # 拿掉豪強的季不能叛投豪強
 
 
 def _slot(state: GameState, content: Content) -> tuple[str | None, str | None]:
@@ -61,7 +61,7 @@ def slots_here(
         return [(f, None) for f in targets_here(state, content, battle)]
     if not can_defect(state, content, battle):
         return []
-    here = [f for f in content.scenario.factions if state.player.location in f.join_at]
+    here = [f for f in allied.factions_of(content, state.world) if state.player.location in f.join_at]  # 拿掉豪強的季不列豪強
     mine = _slot(state, content)
     out: list[tuple[FactionDef, str | None]] = []
     for f in here:
@@ -102,13 +102,16 @@ def refusal(
         return wins.LEAN_NOT_DEFECT
     if (target.id, ally) == _slot(state, content) or p.location not in target.join_at:
         return "你已經不在叛投的地方了。"
+    if not allied.faction_open(content, state.world, target.id):  # 拿掉豪強的季：舊的確認畫面不算數（slots_here 已經不列）
+        return "現在不能叛投。"
     return None
 
 
 def _sect_left(p: PlayerState, old: FactionDef, content: Content) -> Sect | None:
     """叛投時會一起離開的門派：玩家拜的是舊陣營的門派（拜入門派等於加入陣營，第一季設計 5.1）；不是就沒有。"""
     sect = content.sects.get(p.sect) if p.sect else None
-    return sect if sect is not None and sect.id in old.sects else None
+    owner = content.sect_faction(sect.id) if sect is not None else None  # 門派包開著時門派不綁勢力：叛投不帶走門派
+    return sect if owner is not None and owner.id == old.id else None
 
 
 def prompt(

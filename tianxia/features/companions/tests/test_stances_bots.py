@@ -7,7 +7,8 @@ import random
 
 
 from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
-from tianxia import bot_policy, stances
+from tianxia import bot_policy
+from tianxia.features.companions import stances
 from tianxia.state import BotProfile
 
 

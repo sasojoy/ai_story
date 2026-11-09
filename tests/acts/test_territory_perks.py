@@ -6,7 +6,10 @@ import random
 import pytest
 
 from conftest import classic_rules, real_content
-from tianxia import mapview, mounts, rules, smithing, team
+from tianxia.features.map import mapview
+from tianxia import mounts, rules
+from tianxia.features.smithy import smithing
+from tianxia import team
 from tianxia.features.map import layers
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game

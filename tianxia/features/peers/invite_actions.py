@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import journal
 from tianxia.characters import CharacterStore
+from tianxia.core import identity_base  # 綁手機才能答應切磋、論武（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core.option import Option
 from tianxia.journal import Draft
 
@@ -85,6 +86,9 @@ def answer_invite(
     """答應（yes）、婉拒（no）、收回（cancel）一張邀請。other 是另一個人那一份（_peer；他不在這裡了是 None）；
     呼叫端負責把 other 存回去（玩家卡走 peer_act，選單走 _invite）。論武答應時 item 是你出的那一樣，proposed 是鎖外取好的名字
     （discuss_request 的 C 段；沒給才在鎖裡叫模型，整季腳本與測試）。"""
+    if verb == "yes" and inv.kind in ("spar", "discuss") and not identity_base.phone_ok(ctx, inv.kind):
+        # 綁手機才能答應切磋、論武（第 205 批）：邀請留著、不存檔、不通知，發起的人看到的跟沒人理一樣
+        return [identity_base.PHONE_NEEDED]
     s = ctx.state
     what = invites.kind_name(inv.kind)
     if verb == "yes" and inv.kind == "discuss" and other is not None and discuss_actions.invite_problem(ctx, inv, other) is None:

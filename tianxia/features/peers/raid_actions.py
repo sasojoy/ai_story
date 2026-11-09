@@ -1,5 +1,5 @@
 """截殺的動作（功能包 tianxia/features/peers/；原本是 Game 上的 raid_shown、raid_refusal、raid_odds、raid_targets、raid、raid_flee_odds、_raid_fled、
-_raid_spoils、_raid_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
+_raid_spoils、_raid_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services_list.md 那張清單上的方法。
 
 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意。每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；
 Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。兩個人都投靠了陣營、而且是不同陣營時才有；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
 from tianxia.core import bounty_base
+from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.characters import name_key
 from tianxia.core import annal_base as annals
 from tianxia.core import presence
@@ -102,6 +103,8 @@ def raid(ctx, other: Game) -> list[str]:
     """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
     與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
     雙方各一份戰報與一則江湖紀錄。被截殺的人騎的馬比較快時，開打之前先擲策馬脫身（raid_flee_odds、_raid_fled）。"""
+    if not identity_base.phone_ok(ctx, "raid"):  # 只問動手的人（第 205 批）
+        return [identity_base.PHONE_NEEDED]
     problem = refusal(ctx, other)
     if problem is not None:
         return [problem]

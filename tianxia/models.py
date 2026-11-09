@@ -7,6 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, Private
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
+from .core.tuning.identity import IdentityTuning  # 帳號綁定
+from .core.tuning.support import SupportTuning  # 客服
+from .core.tuning.titles import TitlesTuning  # 稱號與官職
+from .core.tuning.terms import TermsTuning  # 條款
+from .core.tuning.jieyi import JieyiTuning  # 結義
+from .core.tuning.mail import MailTuning  # 帖友書信
+from .core.tuning.zongmen import ZongmenTuning  # 門派
+# ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
@@ -111,6 +119,9 @@ class Condition(_Strict):
     story_marks: dict[str, int] = Field(default_factory=dict)
     story_marks_max: dict[str, int] = Field(default_factory=dict)  # 同上，至多到幾（寫 0 是「沒記過」：例 沒跟蘇掌櫃交心的人才要檢定）
     level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
+    # 這一季有沒有地方豪強（allied.gentry_on；拿掉豪強的季 WorldState.no_gentry）要等於它：曹氏莊院的拜入試煉寫 true，
+    # 下一季起曹氏莊院不再是門派（企劃者 2026-11-07「曹氏莊院 不適合當門派」）；None 是不看
+    gentry: bool | None = None
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -170,7 +181,7 @@ class Effect(_Strict):
     promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
     followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
     affinity: dict[str, int] = Field(default_factory=dict)  # 人物 id → 情誼增減（夾在 0～100，訊息「皇甫嵩情誼 +10」）
-    # ── 第 3、4 階晉升（正式版丙一）：同樣只寫在晉升奇遇的選項上，各自的規則見 content.check_promotions ──
+    # ── 第 3、4 階晉升（正式版丙一）：同樣只寫在晉升奇遇的選項上，各自的規則見 features/military/checks.py 的 check_promotions ──
     summons_next: str | None = None  # 寫這一則事件自己的 id：演完這一段，召見往下一段（只有最後一段以前的奇遇可以）
     event_mods: list[EventMod] = Field(default_factory=list)  # 一般伏筆：某件擲骰大事的成功率修正（暗中的，不寫字）
     patron: Literal["yuan", "cao", "self"] | None = None  # 豪強升第 3 階時記下的靠山（PlayerState.patron）
@@ -189,7 +200,10 @@ class Effect(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("contribution", "story"))
+        return _drop_unset(handler(self), (
+            "contribution",
+            "story",
+        ))
 
 
 class Material(_Strict):
@@ -289,7 +303,11 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats", "shift", "v2"))
+        data = _drop_unset(handler(self), (
+            "stats",
+            "shift",
+            "v2",
+        ))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
         if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
@@ -475,7 +493,10 @@ class FreeTextChoice(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("outcomes", "outcomes_only"))
+        return _drop_unset(handler(self), (
+            "outcomes",
+            "outcomes_only",
+        ))
 
 
 class Event(_Strict):
@@ -803,7 +824,10 @@ class Location(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("desc_marks", "explore_mix"))
+        return _drop_unset(handler(self), (
+            "desc_marks",
+            "explore_mix",
+        ))
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -1076,6 +1100,9 @@ class Sect(_Strict):
     location: str
     alignment: Literal["正", "邪", "中"]
     desc: str = ""
+    # 掛在哪個功能包的開關後面（Config.<switch>.enabled）：關著時這一門不存在於玩家看得到的任何地方（拜不了、問路不提、不教它的武學；
+    # Content.sect_open）。空的＝一直都在（潁川書院、曹氏莊院）。門派包（features/zongmen，設計稿 v6，Joy 2026-11-08「按照設計稿動工」）
+    switch: str | None = None
 
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，不信任 LLM 自報數字）。目前是全部人物共用同一張表，
@@ -1126,6 +1153,8 @@ class CharacterDef(_Strict):
     haunts: list[str] = Field(default_factory=list)
     follows: str | None = None
     side: str | None = None
+    # 拿掉地方豪強的季（WorldState.no_gentry，企劃者 2026-11-07「按照建議改」）：side 寫豪強的人改站這一方（許褚歸官軍）；空的照 side
+    side_two_sides: str | None = None
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
@@ -1133,6 +1162,12 @@ class CharacterDef(_Strict):
     # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
     hire_type: str | None = None
     hire_at: str | None = None
+
+    def side_in(self, world=None) -> str | None:
+        """這一季（WorldState）他站哪一方：拿掉地方豪強的季（no_gentry）有 side_two_sides 的照它，其他照 side。"""
+        if world is not None and world.no_gentry and self.side_two_sides is not None:
+            return self.side_two_sides
+        return self.side
 
 
 class PlanContest(_Strict):
@@ -1402,12 +1437,32 @@ class TutorialGoal(_Strict):
 # 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
 REVEAL_KEYS = frozenset({
     "all",  # 全部亮齊（出師那一步）
-    "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
-    "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
+    "stamina",
+    "hp",
+    "silver",
+    "xinde",
+    "stats",
+    # 底下的分頁
+    "tab:jianghu",
+    "tab:practice",
+    "tab:craft",
+    "tab:map",
+    "tab:news",
     "tab:mall",  # 商城的兩個入口（底部第六格、齒輪旁的錠子鈕；網頁的 data-glow，商城開著才畫）：序章裡寫了才亮，出了草廬一律在（web/app.js 的 mallShown）
-    "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
+    # 江湖頁行動列的五格
+    "act:explore",
+    "act:train",
+    "act:rest",
+    "act:social",
+    "act:move",
     "act:practice",  # 行動列的操練／練功那一格（新手引導重做，Config.training）
-    "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    "board",
+    "quest",
+    "fronts",
+    "orders",
+    "minimap",
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
 })
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/guide.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
@@ -1426,7 +1481,15 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
 #   tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
 #   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
 ALLOW_FIXED = frozenset({
-    "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
+    "act:explore",
+    "act:train",
+    "act:socialize",
+    "act:rest",
+    "act:summons",
+    "act:call",
+    "act:recruit",
+    "act:duty",
+    "act:convoy",
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
@@ -1437,19 +1500,34 @@ ALLOW_FIXED = frozenset({
     "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
     "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "act:drill",  # 城裡操練（新手引導重做；tianxia/training.py）
-    "ambush:lift", "works:stockpile",  # 後期體力玩法：收伏、屯糧練兵
+    # 後期體力玩法：收伏、屯糧練兵
+    "ambush:lift",
+    "works:stockpile",
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
-    "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
+    "act:challenge:",
+    "act:rank:",
+    "call:",
+    "move:",
+    "learn:",
+    "faction:",
+    "defect:",
+    "opp:",
+    "fs:",
     "explore:",  # 探索三選一的三顆（第 13 批拿掉；初入江湖的 glow、allow 還寫到，第 14 批連這幾步一起清）
     "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
-    "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    "aid:guard:",
+    "aid:rally:",
+    "aid:visit:",
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
     "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
-    "plan:help:", "plan:block:",  # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
+    # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
+    "plan:help:",
+    "plan:block:",
 )
 
 
@@ -1478,6 +1556,8 @@ class TutorialStep(_Strict):
     # 五項屬性的季（attrset.on）改說的話與那一行（空的照 text、line）：配點那一步改成挑成長配比（每 10 級才送點，升一級沒有點可配）
     text_v2: str = ""
     line_v2: str = ""
+    # 拿掉地方豪強的季（allied.gentry_on 是 False，企劃者 2026-11-07）改說的話：空的照 text（師父送行、初入江湖那兩段講到豪強的才寫）
+    text_two_sides: str = ""
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
@@ -1619,6 +1699,7 @@ class Enlist(_Strict):
     steps: list[EnlistStep] = Field(default_factory=list)
     recruiters: dict[str, Recruiter] = Field(default_factory=dict)  # 陣營 id → 引薦人
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
+    drifter_line_two_sides: str = ""  # 拿掉地方豪強的季（allied.gentry_on 是 False）那一行：只寫兩軍；空的照 drifter_line
 
 
 class OpeningSender(_Strict):
@@ -1713,7 +1794,9 @@ class FactionDef(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("verdict_by",))
+        return _drop_unset(handler(self), (
+            "verdict_by",
+        ))
 
 
 class SeasonOneOff(_Strict):
@@ -2376,10 +2459,11 @@ class Raid(_Strict):
     - 發起的人花 stamina（10）體力：比一次遊歷（6）貴，截殺不能比遊歷更划算地刷。
     - 輸的一方失 silver_share（5%）的銀兩、最多 silver_cap（15）兩，贏的拿走其中 take_share（一半，進位）；其餘散落。
       週末設定每天大約收 100 兩，最多 15 兩約一兩場遊歷；照比例扣，身上越少扣得越少，永遠扣不光。
-    - 輸的一方扣氣血上限的 hp_loss（8%），不變成內傷（自己會回，不必花錢療傷）；遊歷落敗是 30%、其中兩成變內傷。
+    - 輸的一方扣氣血上限的 hp_loss（50%；Joy 2026-11-09 決策卡「狠一點但不打死：扣五成」，原本 8%），乘 1−防具減損、不變成內傷
+      （自己會回，不必花錢療傷）；遊歷落敗是 30%、其中兩成變內傷。打到只剩一口氣的是酒肆殺手那一條（企劃者 2026-10-27），不是截殺。
     - 平手（僵持）誰都不失什麼，發起的人的體力照付。
-    - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（1 小時）之內誰都不能再截殺他，
-      不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
+    - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（3 小時；同一張卡從 1 小時拉長，
+      扣得重了不能連著被截；設伏、殺手找人也看這一條）之內誰都不能再截殺他，不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
       截殺每季都有之後（懸賞榜設計 3.7）：14 天的季有 336 小時，保護時間照舊 1 小時，一季最多可能被截約 300 次；每小時的比例跟週末一樣，
       一季加起來的量多五倍多。要不要另一組數字等 sim_server_bots 量完再定（設計 14.2 第 12 條）。
     - 贏的一方記一點本季貢獻（contrib_per_push × win_contrib_push）：截殺是替陣營做事，但比推大勢一點還少，不會變成升階的捷徑。
@@ -2393,9 +2477,9 @@ class Raid(_Strict):
     silver_share: float = Field(default=0.05, ge=0, le=1)
     silver_cap: int = Field(default=15, ge=0)
     take_share: float = Field(default=0.5, ge=0, le=1)
-    hp_loss: float = Field(default=0.08, ge=0, le=1)
+    hp_loss: float = Field(default=0.5, ge=0, le=1)
     pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)
-    shield_seconds: float = Field(default=3600, ge=0)
+    shield_seconds: float = Field(default=3 * 3600, ge=0)
     win_contrib_push: int = Field(default=1, ge=0)
 
 
@@ -2891,6 +2975,28 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
+class FightPractice(_Strict):
+    """武學打了才升（Joy 2026-11-09「甲方案」「369成不卡手動用心得解 可以一路到10成」「悟性不加熟練」；設計稿 https://claude.ai/artifact/8H3CEY6TQCYy7jLQ4sW5t6）：
+    身上的內功、武學每打一場（core/combat.file_battle 歸檔的那一場）各長熟練，第 N 成升 N+1 成要 N × per_level；
+    也可以照舊在修練頁按練成，花「這一成還差的熟練 × xinde_per_point」點心得直接升（雲篆照打折），一路到第十成都行，沒有瓶頸。
+    一場給 win／draw／lose，再乘對手強弱：難度比（對手難度 ÷ 我方威力）低於 weak_ratio 不給、到 hard_ratio 以上 ×hard_scale；
+    kind 在 double_kinds 的（頭目、擂台、截殺、切磋……）再 ×double_scale。每門每個遊戲日最多長 daily_cap。
+    開關照開季蓋章（WorldState.fight_practice），正在跑的季一個字不變。數字全是【草】。"""
+
+    enabled: bool = False
+    per_level: int = Field(default=10, ge=1)
+    win: int = Field(default=5, ge=0)
+    draw: int = Field(default=3, ge=0)
+    lose: int = Field(default=2, ge=0)
+    weak_ratio: float = Field(default=0.15, ge=0)
+    hard_ratio: float = Field(default=0.3, ge=0)
+    hard_scale: float = Field(default=1.5, ge=0)
+    double_kinds: list[str] = Field(default_factory=lambda: ["duel", "arena", "spar", "raid", "seal", "ambush", "assassin", "siege"])
+    double_scale: float = Field(default=2.0, ge=0)
+    daily_cap: int = Field(default=40, ge=0)
+    xinde_per_point: float = Field(default=1.0, ge=0)
+
+
 class ArtsTuning(_Strict):
     """武學重構（Joy 2026-10-20；tianxia/arts.py）：品級只管威力上限（martial_arts.QUALITY_TOP_POWER）與意境槽數（slots）；
     意境就是技能，裝進槽生效。戰力＝威力 ×（1 ＋ Σ 權重）：一般功效每級 general_weight、高階 high_weight、特別功效 special_weight、
@@ -2928,6 +3034,7 @@ class ArtsTuning(_Strict):
     create_slot_odds: dict[str, float] = Field(default_factory=lambda: {"單": 55, "雙": 35, "全": 10})
     create_neutral_any_scale: float = Field(default=2.0, ge=1)
     create_redo: int = Field(default=1, ge=0)
+    fight_practice: FightPractice = Field(default_factory=FightPractice)  # 武學打了才升（Joy 2026-11-09）
     create_slots: int = Field(default=3, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；第一格也照 create_slot_odds 擲，單色雙色都以權重最高那一路打頭）
     # 以意成招（tianxia/moves.py）：意分 ≤ move_fire_cuts[0] 生、≤ [1] 熟、其餘透；生熟透照 move_fire 打折表上會長的數；
     # 稀有路數擲中的機會 move_rare_odds；一到 move_raw_levels 成招還生，再乘 move_raw_scale
@@ -3702,7 +3809,7 @@ class ConquestRules(_Strict):
     take_fame: int = Field(default=20, ge=0)  # 【預設】同上，名望總額
     faction_pool_share: float = Field(default=0.5, ge=0)  # 【預設】開季是陣營領地的塊，總額打幾成（設計 4.5「陣營區塊減半」）
     guard_pool_share: float = Field(default=0.5, ge=0)  # 【預設】守城功的總額是攻下的幾成（設計 4.5）
-    # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
+    # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，決戰包 siege_rules.size_melee_guard）。
     # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
     melee_pool_per_head: float = Field(default=30.0, gt=0)
 
@@ -4349,6 +4456,14 @@ class Config(_Strict):
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
     world_tick_seconds: float = Field(default=0, ge=0)
+    identity: IdentityTuning = Field(default_factory=IdentityTuning)  # 帳號綁定（tianxia/core/tuning/identity.py）
+    support: SupportTuning = Field(default_factory=SupportTuning)  # 客服（tianxia/core/tuning/support.py）
+    titles: TitlesTuning = Field(default_factory=TitlesTuning)  # 稱號與官職（tianxia/core/tuning/titles.py）
+    terms: TermsTuning = Field(default_factory=TermsTuning)  # 條款（tianxia/core/tuning/terms.py）
+    jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
+    mail: MailTuning = Field(default_factory=MailTuning)  # 帖友書信（tianxia/core/tuning/mail.py）
+    zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
+    # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
     @classmethod
@@ -4357,6 +4472,18 @@ class Config(_Strict):
         if 0 < seconds < 1:
             raise ValueError("world_tick_seconds 是 0（關）或至少 1 秒")
         return seconds
+
+    @model_serializer(mode="wrap")
+    def _drop_default_tuning(self, handler):
+        """新包的子模型（tianxia/core/tuning/<包>.py）整格還是預設值時不寫進序列化：開關關著，內容的鍵一個都不多（同 _drop_unset）。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for name, field in type(self).model_fields.items():
+                kind = field.annotation
+                if (name in data and isinstance(kind, type) and kind.__module__.startswith("tianxia.core.tuning.")
+                        and getattr(self, name) == kind()):
+                    del data[name]
+        return data
 
     # 伺服器主動推送（線上架構設計 5.3；用 SSE，server_push.py）：push_events 開著時，分頁開一條 /api/events，有變化才刷新、
     # 平常 60 秒才問一次；關著（預設）/api/events 是 404，分頁照舊每 10 秒輪詢。看守每 push_watch_seconds 秒比一次「公開的
@@ -4378,6 +4505,10 @@ class Config(_Strict):
     # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
     # 軍階，豪強版的只能升到三階」）：沒有開關，蓋了第一季章的季就是（allied.on）；沒有第一季規則的季（14 天）照舊是第三方豪強。
     # 2026-10-31 開關 haoqiang_allied 連豪強第三方的季（割據、攪局、第三方臨時投效）一起拿掉（T-05，企劃者「都照建議」）
+    # 地方豪強這個陣營（劇本寫了 allies 的陣營）還在不在（企劃者 2026-11-07 決策卡「下一季起整個拿掉」）：開季時蓋章
+    # （WorldState.no_gentry＝not gentry；allied.gentry_on），正在跑的季照它自己的章——章之前開的季（第 9 季）豪強照舊到季末。
+    # content/config.json 寫 false：下一季起只剩官軍、黃巾、散人。模型預設 true，測試內容與沒寫這個鍵的設定一個字都不變
+    gentry: bool = True
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
@@ -4503,7 +4634,7 @@ class Config(_Strict):
     # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
     event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
     seclusion_xinde_per_hour: int = 15
-    # 狀態列 💡 心得提示的下限（skillview.practice_hint）：心得至少這麼多、而且真的付得起又做得了一件事（練成下一成、或一次合成）才提示。
+    # 狀態列 💡 心得提示的下限（art_cards.practice_hint）：心得至少這麼多、而且真的付得起又做得了一件事（練成下一成、或一次合成）才提示。
     # explain-2（FB-100「心得到 34 也不知道要拿去哪裡用」）從 50 改成 0：只看「付得起、做得了」——最便宜那一件做得了的事就是門檻
     xinde_hint_threshold: int = Field(default=0, ge=0)
     # ── 探索三選一（探索三選一設計）──
@@ -4945,7 +5076,10 @@ class FigureDef(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("stances", "errands"))
+        return _drop_unset(handler(self), (
+            "stances",
+            "errands",
+        ))
 
 
 class TimetableOutcome(_Strict):
@@ -5668,10 +5802,29 @@ class Content(_Strict):
     # 不進序列化；pickle、deepcopy、model_copy 都帶著（測試的複本也擋得住）
     _only_pack: str | None = PrivateAttr(default=None)
 
+    def sect_open(self, sect_id: str | None) -> bool:
+        """這一門此刻在不在（Sect.switch 那個開關關著的不在）；不認得的 id 也不在。"""
+        sect = self.sects.get(sect_id) if sect_id else None
+        if sect is None:
+            return False
+        return sect.switch is None or bool(getattr(getattr(self.config, sect.switch, None), "enabled", False))
+
+    def sect_faction(self, sect_id: str | None) -> FactionDef | None:
+        """拜入這一門算不算投靠哪個陣營（rules 的 join_sect、bounty_base.join_note、叛投帶走門派共用）：門派包開著時門派不綁勢力
+        （設計稿 v6「門派不綁勢力」），一律 None；關著照劇本的 FactionDef.sects。"""
+        if not sect_id or self.config.zongmen.enabled:
+            return None
+        return self.scenario.sect_owner(sect_id)
+
     def banned_name_list(self) -> list[str]:
         """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""
         return self.banned_names if self.config.banned_names_on else []
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts", "storylines"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多
+        return _drop_unset(handler(self), (  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多
+            "mark_rules",
+            "outing_lines",
+            "verdicts",
+            "storylines",
+        ))

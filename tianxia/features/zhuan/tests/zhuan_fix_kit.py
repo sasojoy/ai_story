@@ -5,7 +5,8 @@ from __future__ import annotations
 import random
 
 from jianfa_kit import jianfa_game, ready
-from tianxia import annals, calendar
+from tianxia.features.zhuan import standing as annals
+from tianxia import calendar
 from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
 from tianxia.features.mall import actions as mall_actions

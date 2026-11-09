@@ -1,6 +1,6 @@
 """叛投的行動（全部拆包第 35 批；原本是 Game 上的 _defect_step、_left_names、_leave_behind、_defect_targets，本體一字沒改，self 換成 ctx；
-另加 scene：原本 Game._own_scene_text 叛投確認畫面那一段；defect_options：原本 Game._everyday_options 的叛投迴圈）。Game 留一行委派的：
-_defect_scene（場景原位在叫，本體是 scene；defect_options 第 56 批起是 here/defect 那一格，委派拿掉）；_left_names 只有包裡叫（defect_step 與 scene，沒有委派）；
+另加 scene：原本 Game._own_scene_text 叛投確認畫面那一段；defect_options：原本 Game._everyday_options 的叛投迴圈）。
+scene 第二輪第 91 批起是場景卡 own/defect 那一格（委派 _defect_scene 拿掉）；defect_options 第 56 批起是 here/defect 那一格，委派拿掉；_left_names 只有包裡叫（defect_step 與 scene，沒有委派）；
 _defect_step 只有包的 choose 掛鉤叫（沒有委派）；_leave_behind 改由包登記叛投 after 位置的 leave_behind 那一格（DEFECT_ORDER）。
 """
 from __future__ import annotations

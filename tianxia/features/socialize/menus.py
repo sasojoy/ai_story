@@ -8,10 +8,10 @@ from tianxia import figures, precise, prologue as prologue_rules, ranks, roster
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
-from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
+from tianxia.events import has_events_here  # 共用規則層（事件：這個地點有沒有）
 
 from . import howto, view
-from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK
+from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_LIST_TITLE, SOCIAL_TALK
 
 
 def precise_social_option(ctx, cost: int) -> Option:
@@ -81,6 +81,15 @@ def audience_intro(ctx) -> str:
     else:
         head = f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的會被打發。"
     return head + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
+
+
+def audience_scene(ctx) -> str | None:
+    """場景卡 own/audience 那一格（core_scene，第二輪第 91 批；原本 Game._own_scene_text 那一段）：求見名單打開時那一張；沒打開是 None。"""
+    s = ctx.state
+    if not s.player.picking_audience:
+        return None
+    title = SOCIAL_LIST_TITLE if precise.on(ctx.content, s.world) else "求見"
+    return f"**{title}**\n\n{audience_intro(ctx)}"
 
 
 def figures_here_view(ctx) -> list[dict]:

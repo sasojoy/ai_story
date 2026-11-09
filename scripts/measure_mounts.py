@@ -36,7 +36,9 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_mounts_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import atlas, bot, bot_policy, bounties, database, mounts, naming, orders  # noqa: E402
+from tianxia import atlas, bot, bot_policy  # noqa: E402
+from tianxia.features.bounties import rules as bounties  # noqa: E402
+from tianxia import database, mounts, naming, orders  # noqa: E402
 from tianxia.content import load_content, profile_line  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
@@ -79,7 +81,10 @@ def _steer(game, options, rng) -> str | None:
     return "act:train" if "act:train" in ids else None
 
 
-def run(seed: int, profile: str | None, mounts_on: bool, steer: bool, gait: str, season_one: bool) -> dict:
+def run(
+    seed: int, profile: str | None, mounts_on: bool, steer: bool, gait: str, season_one: bool,
+    max_steps: int | None = None,
+) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     content.config.mounts.enabled = mounts_on
     content.config.treasures.enabled = False  # 只比這一欄：寶物固定關著，數字才跟前幾批量的對得上（寶物看 measure_treasures）
@@ -155,7 +160,7 @@ def run(seed: int, profile: str | None, mounts_on: bool, steer: bool, gait: str,
             mock.patch.object(Game, "_depart", depart), mock.patch.object(Game, "_lose_silver", lose), \
             mock.patch.object(mounts, "hunger", hunger), mock.patch.object(mounts, "buy", buy), \
             mock.patch.object(mounts, "feed", feed), mock.patch.object(bot, "pick", pick):
-        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(mounts_on)}-{next(_RUNS)}.db"), observe=observe)
+        game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(mounts_on)}-{next(_RUNS)}.db"), observe=observe, **({"max_steps": max_steps} if max_steps else {}))
     p = game.state.player
     season = game.state.world
     rode = [v for v in cavalry.values() if v > 0]
@@ -183,6 +188,7 @@ def main() -> None:
     parser.add_argument("--steer", action="store_true", help="一半的時候照手上的懸賞、軍令走（週末那一組用，同 measure_gear）")
     parser.add_argument("--gait", choices=("walk", "mix"), default="walk", help="mix：每一步照種子擲一次走法（步行、疾行）")
     parser.add_argument("--season-one", action="store_true", help="打開第一季開關（14 天設定量決戰騎兵用）")
+    parser.add_argument("--max-steps", type=int, default=None, help="整季最多幾步（測試用；不給照 play_season 的預設）")
     args = parser.parse_args()
     content = load_content(ROOT / "content", profile=args.profile)
     extra = ("（照手上的事走）" if args.steer else "") + ("（走法混著用）" if args.gait == "mix" else "") \
@@ -190,7 +196,7 @@ def main() -> None:
     print(profile_line(content, args.profile) + extra, flush=True)
     for seed in args.seeds:
         for on in (False, True):
-            r = run(seed, args.profile, on, args.steer, args.gait, args.season_one)
+            r = run(seed, args.profile, on, args.steer, args.gait, args.season_one, args.max_steps)
             legs = r["legs"]
             cav = "—" if r["cavalry"] is None else "+" + mounts.pct(r["cavalry"])
             print(f"種子 {seed} 坐騎{'開' if on else '關'}：走了 {sum(legs.values())} 段（步行 {legs['walk']}、"

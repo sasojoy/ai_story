@@ -7,7 +7,8 @@ import pytest
 
 from conftest import FixedRandom, walk_to
 
-from tianxia import howto, journal
+from tianxia.features.guide import howto as guide_howto
+from tianxia import journal
 from tianxia.engine import LOG_BREAK, Game
 from tianxia.characters import name_key, open_characters
 from tianxia.models import ExploreMix
@@ -48,7 +49,7 @@ def test_new_game_opens_with_the_season_intro(game):
     entry = latest(game)
     assert (entry.title, entry.tag) == ("測試劇本", "賽季開始")
     # 地點描述留給場景，不寫進紀錄；開場之後一行是內測贈送的回體丹（explain-1）
-    assert entry.lines == ["測試開始。", howto.gift_line(game.content)]
+    assert entry.lines == ["測試開始。", guide_howto.gift_line(game.content)]
     assert entry.guide == ["【說書人】先探索一下。"]  # 說書人的第一句在對話框；江湖紀錄記在 guide（引導重做設計 8.1）
     assert (entry.changes, entry.battle_id, entry.time) == ([], None, 0.0)
 
@@ -131,7 +132,9 @@ def test_a_new_insight_or_art_line_gets_the_shine():
 
 def test_the_rework_lines_shine_only_when_something_new_arrives():
     """武學重構的新句子：自創成了（create.CREATED_LINE）拿到一門新武學，亮；把意境裝進槽、拆下來、揣摩加深強度都沒拿到新東西，不亮。"""
-    from tianxia import arts, create, fusion
+    from tianxia import arts
+    from tianxia.features.craft import create
+    from tianxia import fusion
 
     assert journal._line_class(create.CREATED_LINE.format(kind="武學", name="斷水刀", grade="中品")) == "tx-line tx-new"
     for line in (
@@ -149,7 +152,7 @@ def test_reaching_the_peerless_rank_shines():
 
 
 def test_the_create_cap_refusal_does_not_shine():
-    from tianxia import create
+    from tianxia.features.craft import create
 
     assert journal._line_class(create.CAP_LINE.format(n=3)) == "tx-line"
 

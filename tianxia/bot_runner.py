@@ -22,7 +22,14 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import bot_policy, epiphany, gender, insight_llm, naming, seal, server_bots, team
+from . import allied
+from . import bot_policy
+from .features.sense import epiphany
+from . import gender
+from .features.sense import insight_llm
+from . import naming
+from .features.seal import seal
+from . import server_bots, team
 from .core import battle_base as battle_instance
 from .characters import CharacterStore, open_characters
 from .engine import Game
@@ -340,11 +347,11 @@ class BotRunner:
                 # 攻城戰（領地爭奪第二批）：攻方、佔著的那一方，加上要依附別人的陣營（豪強分屬兩軍的季依附那一軍，到了照 rally_region 判）；
                 # 另一軍站不進守將那一格（裁決 8），不趕來
                 sides = set(battle.siege.attackers) | ({battle.siege.holder} if battle.siege.holder else set())
-                sides |= {f.id for f in self.content.scenario.factions if f.allies}
+                sides |= {f.id for f in allied.factions_of(self.content, self.world.get_season()) if f.allies}  # 拿掉豪強的季沒有
             else:
                 # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick；豪強分屬兩軍的季
                 # 站依附的那一軍，Game._free_agent）；散人不趕來
-                sides = set(battle_instance.sides(definition)) | {f.id for f in self.content.scenario.factions}
+                sides = set(battle_instance.sides(definition)) | {f.id for f in allied.factions_of(self.content, self.world.get_season())}
             rows.append((battle.muster_deadline_real, sides, out))
         return rows
 
@@ -362,7 +369,7 @@ class BotRunner:
             bot = state.player.bot
             if bot is not None and server_bots.active(bot, season) and state.player.faction is None:
                 counts[bot.faction] = counts.get(bot.faction, 0) + 1
-        for faction in self.content.scenario.factions:
+        for faction in allied.factions_of(self.content, self.world.get_season()):  # 拿掉豪強的季不補豪強
             if counts.get(faction.id, 0) >= cfg.bots_min_per_faction:
                 continue
             last = self.last_added.get(faction.id)
@@ -391,7 +398,7 @@ class BotRunner:
             if random.Random(f"{view.registry.salt}|{view.season}|seal-return|{state.player.name}").random() >= self.content.config.seal.bot_return_chance:
                 continue
             counts = self.world.faction_counts()
-            faction = min(self.content.scenario.factions, key=lambda f: (counts.get(f.id, 0), f.id))
+            faction = min(allied.factions_of(self.content, self.world.get_season()), key=lambda f: (counts.get(f.id, 0), f.id))
             bots = self._add_bot(faction.id, view.season, bots, now, state=state)
             report.added += 1
 

@@ -13,7 +13,10 @@ import pytest
 
 import server
 from conftest import real_content
-from tianxia import leaderboard, seal, social, tavern
+from tianxia import leaderboard
+from tianxia.features.seal import seal
+from tianxia.features.peers import social
+from tianxia.features.tavern import rules as tavern
 from tianxia.features.seal import acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game

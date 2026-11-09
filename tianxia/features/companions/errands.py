@@ -17,7 +17,7 @@
 開關是 rules.jianfa(content, world, "errands")（加上書信本身的開關 letters.on）；關著每個函式都當沒有這回事。
 狀態只在 PlayerState.errands（與那封信）；不碰季。只 import models、state、rules、calendar、gender、figures、atlas／conquest／territory（延後）；
 letters、這一包的 actions 與 __init__（「你這一步」的 errand 那一格）、server 叫它。字待 joy 潤。
-功能包 tianxia/features/companions/ 的純規則（全部拆包第 19 批；原本是 tianxia/errands.py，那一個名字留成指到這裡的別名）。"""
+功能包 tianxia/features/companions/ 的純規則（全部拆包第 19 批；原本是 tianxia/errands.py）。"""
 from __future__ import annotations
 
 import random

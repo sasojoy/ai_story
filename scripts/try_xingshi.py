@@ -25,7 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp(prefix="try-xingshi-")) / "tianxia.db"))  # 不碰這份 clone 的 saves/
 
-from tianxia import siege, territory, xingshi  # noqa: E402
+from tianxia import siege, territory  # noqa: E402
+from tianxia.features.territory_acts import xingshi  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402

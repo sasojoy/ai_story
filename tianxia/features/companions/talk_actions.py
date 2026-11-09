@@ -1,18 +1,18 @@
 """人物對話（功能包；全部拆包第 20 批，計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）：原本 Game 上的 9 個方法（對話的 A 段 dialogue_request、
 C 段進鎖後重驗 checked_prepared、開口 open_dialogue、一輪 talk、帶路的路上說一句 road_say……），名字去掉前導底線、第一個參數是 ctx（第一階就是 Game）。
-Game 留一行的委派給 server（dialogue_request、say_max）、核心原位（choose 前段、交友與求見開口、場景文字）與測試；談著的時候的選單（Game._everyday_options
+Game 留一行的委派給 server（dialogue_request、say_max）、核心原位（choose 前段、交友與求見開口）與測試；場景文字與人像第二輪第 91 批起是場景卡的格（talk_scene、talk_art）；談著的時候的選單（Game._everyday_options
 裡 pending_companion 那一段）也搬進來（talk_options）。
 
 鎖外三段式：A（鎖內很快）dialogue_request 開單、B（鎖外慢）server.prepare_dialogue 叫 companion_agent.prepare_turn 請模型、C（鎖內）Game.choose 的
 checked_prepared 重驗再套用；模型不在鎖裡，server 留的殼不動。NPC 智能 2.0 的部分在 parley_actions。
 
-包裡叫回 Game 的都在服務清單（tianxia/core/services.py）。這一批互相叫直接叫函式（沒有測試換掉這幾個）。
+包裡叫回 Game 的都在服務清單（tianxia/core/services_list.md）。這一批互相叫直接叫函式（沒有測試換掉這幾個）。
 """
 from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
-from tianxia import figures, precise, roster
+from tianxia import figures, precise, roster, secret_recipes  # 共用規則層（秘方：人物引出口訣）
 from tianxia.core import xinshen  # 心神（核心的資源）：心神開著時對話扣它、不扣體力
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
@@ -115,7 +115,14 @@ def open_dialogue(ctx, companion_id: str, prepared: companion_agent.PreparedTurn
         ctx.state.player.stamina += ctx.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
         return dialogue_unavailable(ctx, companion_id)
     ctx._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（features/guide/actions.hint_box）
-    return msgs + ctx._overhear(companion_id, msgs)
+    return msgs + overhear(ctx, companion_id, msgs)
+
+
+def overhear(ctx, companion_id: str, msgs: list[str]) -> list[str]:
+    """人物這一輪原字原句引出了他知道的那句口訣：記進武學譜，多一句提醒（第一次聽到才寫）。"""
+    if secret_recipes.overheard(ctx.state, ctx.content, ctx.world, companion_id, "\n".join(msgs)):
+        return [ctx.content.config.secrets.overheard]
+    return []
 
 
 def last_talk_line(ctx, companion_id: str) -> str:
@@ -126,6 +133,30 @@ def last_talk_line(ctx, companion_id: str) -> str:
     loc = ctx.content.locations.get(memo.place)
     where = f"・{loc.name}" if loc is not None else ""
     return f"*上回（{ctx.stamp(memo.at)}{where}）：{memo.text}*\n\n"
+
+
+def talk_scene(ctx) -> str | None:
+    """場景卡 own/talk 那一格（core_scene，第二輪第 91 批；原本 Game._own_scene_text 談著那一段）：沒談著是 None。"""
+    s, c = ctx.state, ctx.content
+    if not s.player.pending_companion:
+        return None
+    character = c.characters[s.player.pending_companion]
+    history = s.player.dialogue_history.get(s.player.pending_companion, [])
+    last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
+    # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）；上回見面談過的事多一行（Joy 2026-10-23）
+    return f"**{character.name}**（{affinity_text(ctx, s.player.pending_companion)}）\n\n{last_talk_line(ctx, s.player.pending_companion)}{last}"
+
+
+def talk_art(ctx) -> dict | None:
+    """場景卡 art/talk 那一格（core_scene，第二輪第 91 批；原本 Game.scene_art 談著那一段）：沒談著是 None；談著的人沒有像是 {}（這個畫面是我的，沒有圖）。"""
+    s, c = ctx.state, ctx.content
+    if not s.player.pending_companion:
+        return None
+    character = c.characters[s.player.pending_companion]
+    if not character.image:
+        return {}
+    sub = affinity_text(ctx, s.player.pending_companion)
+    return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
 
 
 def dialogue_unavailable(ctx, companion_id: str) -> list[str]:
@@ -178,7 +209,7 @@ def talk(ctx, arg: str, prepared: companion_agent.PreparedTurn | None = None, sa
     if not idle:
         actions.stance_credit(ctx, companion_id, heard)
     annal_talk(ctx, companion_id, ctx.state.player.affinities.get(companion_id, 0) - affinity, said)
-    msgs += ctx._overhear(companion_id, msgs)
+    msgs += overhear(ctx, companion_id, msgs)
     if on:  # 心神（Joy 2026-11-06）：要叫模型的這一輪不扣體力；生成不出來的那輪不扣
         ctx.xinshen_spend(cost)
     else:

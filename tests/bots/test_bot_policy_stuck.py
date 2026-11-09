@@ -11,7 +11,8 @@ import random
 import pytest
 
 from conquest_kit import conquest_game, go, join
-from tianxia import bot_policy, bounties
+from tianxia import bot_policy
+from tianxia.features.bounties import rules as bounties
 from tianxia.engine import Game, Option
 from tianxia.state import Bounty, BotProfile
 

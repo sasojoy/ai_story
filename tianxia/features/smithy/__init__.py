@@ -2,7 +2,7 @@
 素材頁的收購與升階，爐火的看火候）。功能包，開發規範手冊 3.2；全部拆包第 41 批搬進來（引擎那一半）；網頁的畫法在 web/smithy.js（第 65 批）。
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- smithing.py：打造與淬煉的規則（原 tianxia/smithing.py；那個名字留成指到這裡的別名）
+- smithing.py：打造與淬煉的規則（原 tianxia/smithing.py）
 - shelf_actions.py：架上的選單與選單上按下去的一下（原本 Game 上的 8 個方法）
 - forge_actions.py：開爐一次、店面打造頁的預覽、直接開爐、看火候（4 個）
 - trade_actions.py：素材頁的收購與升階（5 個）
@@ -22,7 +22,7 @@ from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHoo
 
 class SmithyFeature(Feature):
     name = "smithy"
-    web = ("smithy.js", "smithy.css")  # 鐵匠鋪的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。合成流程的樣子第 67 批從 style.css 切出來；架上的樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
+    web = ("smithy.js", "smithy.css")  # 鐵匠鋪的畫法（全部拆包第 65 批從 app.js 切出來）。合成流程的樣子第 67 批從 style.css 切出來；架上的樣子在 shop.css（第 86 批切出來）
     prefix = "smith"  # smith:buy:<種類>、smith:repair、smith:forge-go:…、smith:page:<頁>、smith:back 等；入口 act:smith 是核心的前綴
     content = ("forge_secrets.json", "tier4_named.json")  # content.py 照它到這一包的 content/ 載（打造的隱藏配方與神器譜、四階名器名字表）
     # 鐵匠鋪開著沒、停在哪一頁、一步一步的單子、鐵匠這一季講過神器的規矩沒有（smith_rule 是這一次進門要講的那一句）：換季全部跟著新角色重來
@@ -30,6 +30,12 @@ class SmithyFeature(Feature):
     bot_always = ("smith:page:",)  # 切頁一直按得下去、不花體力：整季機器人不按（原本寫在 bot.py 的排除清單，拿掉，只剩這裡）
     player_fields = ("picking_smith", "smith_page", "smith_draft", "smith_rule", "smith_rules_told")
     carried: tuple[str, ...] = ()
+
+    def scratch(self) -> dict:
+        """寄放在 Game 上的旗標（第二輪第 92 批；原本在 Game.__init__：核心建 Game 時照 registry.DECLARED 擺上去〔features.scratch_init〕，不進存檔）。"""
+        return {
+            "smith_result": None,  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        }
 
     def enabled(self, ctx) -> bool:
         """武器或防具開著（跟 equipment.smith_open 同一個條件，不看第一季開關），或此刻還坐在鐵匠鋪裡：開關在坐著的時候被關掉（沒經過 sync 收店）
@@ -39,12 +45,15 @@ class SmithyFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """smith:*（鐵匠鋪第二層選單上的每一顆）：標題照 smithing.title（打造的每一步「打造」、淬煉「淬煉」，其餘「鐵匠鋪」；原 Game._action_title 的 smith 那一支），
-        動作照原 Game._smith（做完擲一次鐵匠順口）。choose 後半「打造那幾步併成一則」、切頁不寫紀錄仍在核心原位讀 smithing 的三個名字。"""
+        動作照原 Game._smith（做完擲一次鐵匠順口）。這一則紀錄怎麼落（切頁不寫、打造那幾步併成一則、開爐成了只留結果）由 Outcome 的三格給（原本在 Game.choose 後半，第二輪第 92 批）。"""
         if kind != self.prefix:
             return None
         from . import shelf_actions, smithing  # noqa: PLC0415
 
-        return Outcome(title=smithing.title(arg), run=lambda: shelf_actions.smith(ctx, arg))
+        return Outcome(
+            title=smithing.title(arg), run=lambda: shelf_actions.smith(ctx, arg), quiet=lambda entry: shelf_actions.page_quiet(arg, entry),
+            merge=shelf_actions.forge_merges(arg), fold=lambda: shelf_actions.forged_fold(ctx, arg),
+        )
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415
@@ -52,6 +61,14 @@ class SmithyFeature(Feature):
         return bots.score(ctx, option)
 
     # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接寫的那兩行；不問 enabled，原位本來就不看開關）──
+
+    def shop_view(self, ctx, shop) -> dict | None:
+        """店面那一頁（core/features.shop_page 問；一間店只有一包認，開頭先認店、不看 ctx；第二輪第 93 批）：鐵匠鋪。組法在 shop_view.page。"""
+        if shop != "smith":
+            return None
+        from . import shop_view as page  # noqa: PLC0415
+
+        return page.page(ctx)
 
     _verbs: tuple[Verb, ...] | None = None
 

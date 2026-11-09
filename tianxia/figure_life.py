@@ -11,9 +11,9 @@
 
 只 import models、state、figures、rules、calendar、push、atlas（延後）；engine、world、team、companion_agent 呼叫它。
 
-共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
 設宴是世界層 life 那一格（core/features.py 的 WORLD_ORDER；宴客包登記，tick 每一輪每一位對話人物叫一次、在求援之前）。讀璽效 seal_acts、
-輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；求援與人物懸賞（post_rally、post_figure、RALLY_POSTED、how、enemy_name）讀核心 core/bounty_base（第 45 批）。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
+輿圖的大區 atlas 第 50 批進了這一層；求援與人物懸賞（post_rally、post_figure、RALLY_POSTED、how、enemy_name）讀核心 core/bounty_base（第 45 批）。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
 test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tianxia/features/seal/tests/test_seal_acts.py、
 tianxia/features/companions/tests/ 的 test_companions、test_parley_schema、test_parley_two、test_relations_letters、tianxia/features/feast/tests/test_feast.py；
 世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
@@ -79,13 +79,13 @@ def where(state: GameState, content: Content, cid: str) -> str | None:
     return state.world.whereabouts.get(cid) or home_of(content, cid)
 
 
-def side_of(content: Content, cid: str) -> str | None:
-    """站哪一方：大勢人物照人物表的陣營，其他人照 CharacterDef.side。"""
+def side_of(content: Content, cid: str, world=None) -> str | None:
+    """站哪一方：大勢人物照人物表的陣營，其他人照 CharacterDef.side（world 是這一季：拿掉豪強的季照 side_two_sides，CharacterDef.side_in）。"""
     fid = figures.of_character(content, cid)
     if fid is not None:
         return content.figures[fid].faction
     ch = content.characters.get(cid)
-    return ch.side if ch is not None else None
+    return ch.side_in(world) if ch is not None else None
 
 
 def _region(content: Content, loc: str | None) -> str | None:
@@ -367,7 +367,7 @@ def _post(state: GameState, content: Content, cid: str, motive: str, region: str
           fallen: str, posted: set[str]) -> list[str]:
     from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
-    side = side_of(content, cid)
+    side = side_of(content, cid, state.world)
     if side is None or side in posted:
         return []
     made = bounty_base.post_figure(state, content, cid, motive, region, spot)
@@ -402,7 +402,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
     for cid, ch in content.characters.items():
         if not ch.deep_interaction or cid == victim:
             continue
-        mine = side_of(content, cid)
+        mine = side_of(content, cid, state.world)
         if mine is None or region is None or _region(content, where(state, content, cid)) != region:
             continue
         if kind == "beat":

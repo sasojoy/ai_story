@@ -18,7 +18,11 @@ import server
 from conftest import no_week_unlock, real_content
 from test_seal import _ended, _registry, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import battle_instance, battlelog, leaderboard, seal, seal_duel, social, tavern
+from tianxia.features.battle import instance as battle_instance
+from tianxia import battlelog, leaderboard
+from tianxia.features.seal import seal, duel_rules as seal_duel
+from tianxia.features.peers import social
+from tianxia.features.tavern import rules as tavern
 from tianxia import world as world_rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
@@ -171,6 +175,7 @@ def _side_world(holder: str, *, on: bool = True, v2: bool = True):
     c.config.seal.revamp.enabled = on
     c.config.attributes.v2.enabled = v2  # season21 2026-11-05 起是五項屬性；守門那一條的強度是照舊的五屬性挑的
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 不等新手期（截殺要兩邊都過了）
+    c.config.arts.fight_practice.enabled = False  # 武學打了才升：前面幾場的勝負本來就隨誰持有而不同，熟練會把成數帶開；這條只比碎片
     c.config.arena.enabled = True
     no_week_unlock(c)  # 開季第一天就要上擂台（減法季第 2 週才開）
     w = open_world(Path(tempfile.mkdtemp(prefix="seal1s-")) / "t.db")

@@ -1,5 +1,5 @@
 """懸賞榜「別人讀」的那一半（全部拆包第 45 批；照 smith_base、convoy_base、omen_base、seal_base）：懸賞榜包 features/bounties/rules.py 的純函式與字句原樣搬來，
-包 re-export 同一批物件。誰讀：核心的事件檢定（join_note）、Game 原位（收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）、共用規則層的 figure_life（求援與人物懸賞）、
+包 re-export 同一批物件。誰讀：核心的事件檢定（join_note）、Game 原位（收店、榜的入口、投靠那一下作廢、第 2 週才開）、共用規則層的 figure_life（求援與人物懸賞）、
 讀懸賞榜的包（人物情誼、陣營、探索、新手引導、輿圖、玩家互動、體力玩法、酒肆、移動；要寫交差的走事件與 ctx 的委派）。只靠核心與共用規則層就跑得起來，不 import 包。
 
 - 字句：KIND_NAMES、OFFICIAL、ENEMY、BOARD、SEASON_END、BROWSE_VERBS、PICKED、UNPICKED、RALLY_AID、RALLY_POSTED、STRIKE_* 六句、LAPSED_SIDE、LAPSED_LEAN、STRANDED_JOIN、
@@ -9,6 +9,7 @@
 - 掛單的地點：_opened、_strike_spots。
 - 人物掛的（寫季）：post_rally、post_figure（figure_life 的 _maybe_rally 一處、on_fall 每一位各叫一次；只寫 state.py 定義的 w.rallies、w.bounties、w.bounty_seq，不讀包）。
 - commission_line：委託的賞那一句（書信那張卡與懸賞卡同一句；ask_text 是「他兌現」的字，呼叫端問人物情誼包要好傳進來）。
+- 假人往哪裡走（第二輪第 89 批從包 rules.py 搬來）：targets、它讀的 rallies、army_of。移動包 bots._bounty_hop 讀 targets，共用層 bot_base._bounty_here 讀 mine，包不必為了這個碰懸賞榜包。
 
 `how` 原本問 sortie.on，出陣包不能讀，換成它的本體 territory.on（同第 49、50 批）。同 event_check 不進 MODULES。
 改這一份 scripts/test_for.py 照名字挑寫到它的測試檔（core/*_base 那一條）；懸賞榜包 README「另外要跑的」那一串另外跑。
@@ -20,13 +21,13 @@ from __future__ import annotations
 import math
 import random
 
-from .. import calendar, territory, weapons
+from .. import allied, calendar, territory, weapons
 from ..characters import name_key
 from ..models import Choice, Content, Location
 from ..state import Bounty, GameState, PlayerState, WorldState
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "arms": "求兵"}
-# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（Game.choose）；交出每一張各一則、各寫各的得失（FB-161：
+# 挑一件、回到懸賞榜只是在榜上翻頁：只有這一句回話時不寫江湖紀錄（包的 Outcome.quiet）；交出每一張各一則、各寫各的得失（FB-161：
 # 以前挑、回、交併成一則，連交幾張時得失加總在一起，分不出哪一張給了多少）
 BROWSE_VERBS = ("pick", "unpick")
 PICKED = "你替「{what}」挑一件要交的東西。"  # 待 joy 潤：按了 bounty:pick 的回話（pick_line）
@@ -271,7 +272,7 @@ def join_note(state: GameState, content: Content, choice: Choice) -> str:
     if state.player.faction is not None:
         return ""
     for effect in (choice.effect, choice.fail_effect):
-        owner = content.scenario.sect_owner(effect.join_sect) if effect.join_sect else None
+        owner = content.sect_faction(effect.join_sect)
         held = stranded(state, content, owner.id) if owner is not None else []
         if held:
             return f"（{STRANDED_JOIN.format(n=len(held))}）"
@@ -379,7 +380,7 @@ def hunting(state: GameState, content: Content, target: str) -> bool:
 
 
 def is_browse_line(line: str) -> bool:
-    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：Game.choose 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
+    """這一行是不是挑一件、回到懸賞榜的回話（pick_line、UNPICKED）：包的 Outcome.quiet 照它判斷這一下只是翻頁、不寫紀錄（FB-161）。"""
     head, _, tail = PICKED.partition("{what}")
     return line == UNPICKED or (len(line) > len(head) + len(tail) and line.startswith(head) and line.endswith(tail))
 
@@ -409,7 +410,7 @@ def post_figure(state: GameState, content: Content, cid: str, motive: str, regio
     from tianxia import atlas  # noqa: PLC0415  atlas → world → rules：延後載入
     from tianxia.relations import side_of  # noqa: PLC0415
 
-    side = side_of(content, cid)
+    side = side_of(content, cid, state.world)
     if not active(state, content) or side not in ENEMY or region is None:
         return None
     w, cfg, tuning = state.world, content.config.bounties, content.config.figure_life
@@ -446,3 +447,33 @@ def commission_line(content: Content, b: Bounty, ask_text: str) -> str:
     if b.parley_ask:
         parts.append(f"他兌現：{ask_text}")
     return "・".join(parts)
+
+
+def army_of(state: GameState, content: Content) -> str | None:
+    """站哪一軍（名聲 4.6）：照 rules.side_of（就是 allied.side_of；豪強分屬兩軍的季，依附官軍或黃巾的豪強是那一軍），
+    只認官軍、黃巾；散人、沒有依附的第三方豪強（14 天的季）是 None。"""
+    side = allied.side_of(state, content)
+    return side if side in ENEMY else None
+
+
+def rallies(state: GameState, content: Content) -> list[Bounty]:
+    """我看得到、還辦得了的求援委託（WorldState.rallies；大勢人物擴充第三批）：掛單的是我這一邊（army_of：官軍、黃巾，依附的豪強
+    照依附那一軍）、沒過期、還有名額、我還沒辦過。不用揭，辦成了前 quota 個有賞。懸賞榜關著、休季沒有。"""
+    w = state.world
+    side = army_of(state, content)
+    if not active(state, content) or side is None:
+        return []
+    me = name_key(state.player.name)
+    return [b for b in w.rallies
+            if b.faction == side and b.expires > w.time and _left(b) > 0 and me not in (name_key(t) for t in b.done_by)]
+
+
+def targets(state: GameState, content: Content) -> list[str]:
+    """假人往哪裡走：手上每一張要去的地點（討伐、打探：那裡；護送：終點）。"""
+    out = []
+    for b in mine(state, content) + open_commissions(state, content) + rallies(state, content):  # 委託、求援也去（擴充第二、三批）
+        if b.kind == "escort":
+            out.append(b.end)
+        elif b.kind in ("strike", "scout"):
+            out.append(b.location)
+    return [loc for loc in out if loc in content.locations]

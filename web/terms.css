@@ -1,0 +1,16 @@
+/* 使用條款與隱私權（功能包 terms）：登入頁、設定頁底下兩個連結，與同意那一層 */
+.terms-links { text-align: center; font-size: 13px; color: var(--ink-2); margin: 14px 0 4px; }
+.terms-links a { color: var(--ink-2); }
+.terms-layer { position: fixed; inset: 0; z-index: 1000; background: rgba(20, 14, 8, 0.55); display: flex; align-items: center; justify-content: center; padding: calc(16px + var(--top)) 16px calc(16px + var(--bottom)); }
+.terms-card { width: 100%; max-width: 440px; max-height: 100%; overflow: auto; }
+.terms-card h3 { margin: 0 0 8px; }
+.terms-card ul { margin: 4px 0 8px; padding-left: 20px; }
+.terms-card .btn.primary { width: 100%; margin-top: 8px; white-space: normal; line-height: 1.4; }
+.terms-row { display: flex; gap: 8px; margin-top: 8px; }
+.terms-row .btn { flex: 1; }
+.terms-out { width: 100%; margin-top: 8px; }
+.terms-card [hidden] { display: none !important; }
+/* 第 206 批：註冊頁與建角色頁的兩個勾選 */
+.terms-check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.terms-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
+.terms-check a { color: inherit; }

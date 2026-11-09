@@ -451,3 +451,108 @@ def test_restore_main(tmp_path, capsys):
     assert "已還原" in capsys.readouterr().out
     assert restore_db.main([str(tmp_path / "nope.db"), "--db", str(src)]) == 1
     assert "找不到備份檔" in capsys.readouterr().err
+
+
+# ── 旁檔（帳號與客服第 201 批：<db>-identity.sqlite、<db>-support.sqlite，第 206 批加 <db>-terms.sqlite，跟主檔同一個時間戳）────────
+
+
+def _side(db: Path, side: str, rows=("a",)) -> Path:
+    path = db.with_name(f"{db.stem}-{side}.sqlite")
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("CREATE TABLE IF NOT EXISTS t (v TEXT)")
+    conn.execute("DELETE FROM t")
+    conn.executemany("INSERT INTO t VALUES (?)", [(r,) for r in rows])
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _rows(path: Path) -> list[str]:
+    conn = sqlite3.connect(path)
+    try:
+        return [r[0] for r in conn.execute("SELECT v FROM t ORDER BY v")]
+    finally:
+        conn.close()
+
+
+def test_backup_and_restore_carry_side_files(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    _side(src, "identity", ("甲",))
+    _side(src, "support", ("單一",))
+    _side(src, "terms", ("同意一",))  # 條款旁檔（第 206 批起註冊也寫）
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    out = capsys.readouterr().out
+    main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
+    sides = {s: main.with_name(f"{main.stem}-{s}.sqlite") for s in ("identity", "support", "terms")}
+    assert all(p.is_file() for p in sides.values()) and _rows(sides["identity"]) == ["甲"]
+    assert _rows(sides["terms"]) == ["同意一"]
+    assert f"已備份旁檔：{sides['identity']}" in out and f"已備份旁檔：{sides['support']}" in out
+    assert f"已備份旁檔：{sides['terms']}" in out
+    for p in sides.values():
+        conn = sqlite3.connect(p)
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+        conn.close()
+    close_all()
+    _side(src, "identity", ("乙",))  # 備份之後又動了
+    _side(src, "support", ("單二",))
+    _side(src, "terms", ("同意二",))
+    assert restore_db.main([str(main), "--db", str(src)]) == 0
+    said = capsys.readouterr().out
+    assert _rows(src.with_name("tianxia-identity.sqlite")) == ["甲"] and _rows(src.with_name("tianxia-support.sqlite")) == ["單一"]
+    assert _rows(src.with_name("tianxia-terms.sqlite")) == ["同意一"]
+    olds = sorted(p.name for p in src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
+    assert len(olds) == 1 and _rows(src.parent / olds[0]) == ["乙"]  # 還原前的旁檔留著
+    assert "還原了旁檔" in said
+
+
+def test_backup_without_side_files_is_unchanged(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    assert "旁檔" not in capsys.readouterr().out
+    assert [p.suffix for p in (tmp_path / "backups").iterdir()] == [".db"]
+    main = next((tmp_path / "backups").glob("*.db"))
+    close_all()
+    assert restore_db.main([str(main), "--db", str(src)]) == 0
+    assert "旁檔" not in capsys.readouterr().out + capsys.readouterr().err
+
+
+def test_a_broken_side_file_keeps_the_main_backup(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    src.with_name("tianxia-identity.sqlite").write_bytes(b"not a database at all" * 100)
+    _side(src, "support")
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    io = capsys.readouterr()
+    main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
+    assert backup_db.verify(main)["characters"] == 2  # 主檔照留
+    assert not main.with_name(f"{main.stem}-identity.sqlite").exists()
+    assert main.with_name(f"{main.stem}-support.sqlite").is_file()
+    assert "旁檔" in io.err and "identity" in io.err
+
+
+def test_prune_removes_side_files_with_their_backup(tmp_path):
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    old = _touch_daily(folder, NOW - dt.timedelta(days=100))
+    _touch_daily(folder, NOW - dt.timedelta(days=99))
+    new = _touch_daily(folder, NOW)
+    for path in (old, new):
+        for side in ("identity", "support"):
+            path.with_name(f"{path.stem}-{side}.sqlite").write_bytes(b"x")
+    removed = backup_db.prune(folder, NOW)
+    assert old in removed
+    assert not old.with_name(f"{old.stem}-identity.sqlite").exists() and not old.with_name(f"{old.stem}-support.sqlite").exists()
+    assert new.with_name(f"{new.stem}-identity.sqlite").exists()
+
+
+def test_restore_without_matching_side_file_sets_the_current_one_aside(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)  # 備份那時還沒有旁檔
+    close_all()
+    _side(src, "identity", ("後來的",))
+    assert restore_db.main([str(out), "--db", str(src)]) == 0
+    err = capsys.readouterr().err
+    assert not src.with_name("tianxia-identity.sqlite").exists()
+    olds = list(src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
+    assert len(olds) == 1 and _rows(olds[0]) == ["後來的"]
+    assert "identity" in err and "改名留著" in err

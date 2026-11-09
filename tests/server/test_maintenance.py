@@ -56,7 +56,7 @@ def test_the_page_says_what_a_player_needs_to_know(serving):
     assert maintenance.HEAD in body
     assert "賽季時鐘已經暫停" in body  # 停機不算進賽季：玩家最在意的就是進度會不會少
     assert "換電腦，約一小時" in body  # --note 寫得進去
-    assert "/api/main" in body  # 自己探、伺服器回來就跳回遊戲
+    assert f'<script src="{maintenance.PROBE_PATH}"></script>' in body  # 自己探、伺服器回來就跳回遊戲（第 209 批：探測搬成外部檔）
 
 
 def test_every_path_gets_the_page(serving):
@@ -109,3 +109,26 @@ def test_main_says_why_when_the_port_is_taken(serving, capsys):
     with pytest.raises(SystemExit) as exit_info:
         maintenance.main(["--port", str(port)])
     assert "綁不上" in str(exit_info.value) and "先把伺服器停掉" in str(exit_info.value)
+
+
+# ── 第 209 批：inline 的 <script> 搬成維修頁自己回的外部檔（CSP 的 script-src 不准 inline），頁面照舊每 RETRY 秒探一次 ──
+
+
+def test_page_has_no_inline_script(serving):
+    import re
+
+    _, body, _ = fetch(serving + "/")
+    tags = re.findall(r"<script\b[^>]*>", body)
+    assert tags == [f'<script src="{maintenance.PROBE_PATH}">']
+    assert re.search(r"<script[^>]*>\s*[^<\s]", body) is None  # script 裡沒有內文
+    assert re.search(r"\son[a-z]+=", body) is None  # 也沒有 on*= 屬性
+
+
+def test_probe_script_polls_main(serving):
+    status, body, headers = fetch(serving + maintenance.PROBE_PATH)
+    assert status == 200  # 503 的 classic script 瀏覽器照規格不執行
+    assert headers["Content-Type"] == "text/javascript; charset=utf-8" and headers["Cache-Control"] == "no-store"
+    assert '"/api/main"' in body and "r.status !== 503" in body and f"{maintenance.RETRY} * 1000" in body
+    assert "location.reload()" in body
+    for path in ("/", "/_maintenance/other.js", "/api/main"):
+        assert fetch(serving + path)[0] == 503  # 其他路徑照舊 503

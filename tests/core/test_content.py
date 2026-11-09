@@ -1659,7 +1659,7 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
     real = load_content(ROOT / "content")
     basics = [s for s in real.skills.values() if s.quality == "下品" and s.id not in ("manniu_quan", "zhuifeng")]  # 蠻牛拳是序章專用的雜學；追風步是事件教的（2026-10-14 改下品）
-    assert len(basics) == 21  # 名聲 5.1 加了四門正邪武學（守義劍、養浩訣、剪徑刀、嘯林功）
+    assert len(basics) == 26  # 名聲 5.1 加了四門正邪武學（守義劍、養浩訣、剪徑刀、嘯林功）；門派包加了新五門的第一式（伏魔棍、步虛掌、嵩陽劍、開山刀、穿楊弓）
     assert all(loc.insights for loc in real.locations.values())
 
 
@@ -2003,7 +2003,7 @@ def test_a_prologue_scene_whose_method_the_hut_cannot_give_is_refused(prologue_r
 
 @pytest.mark.parametrize("field, label", [("title", "標題"), ("text", "場景"), ("method", "做法")])
 def test_a_blank_line_in_an_insight_scene_is_refused(prologue_root, field, label):
-    """有所感的場景：標題、場景、每個做法都不能是空白的句子（content._check_line 的第一條；整併最終審查 area 8 M5 要釘住，
+    """有所感的場景：標題、場景、每個做法都不能是空白的句子（core/content_base.py 的 check_line 第一條；整併最終審查 area 8 M5 要釘住，
     以前只有心裡話與戰況變化的空白有測試）。"""
     def blank(scenes):
         if field == "method":

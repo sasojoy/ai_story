@@ -11,15 +11,21 @@ import random
 import pytest
 
 from conftest import FixedRandom, install_season_one
-from tianxia import bot_policy, engine, fusion, invites, library, naming, social
+from tianxia import bot_policy, engine, fusion
+from tianxia.features.peers import invites
+from tianxia import library, naming
+from tianxia.features.peers import social
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
+from tianxia.features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY
 from tianxia.martial_arts import Insight
 import json
 from test_prologue_web import DRIVER as BASE_DRIVER
 import server
 import webharness
-from tianxia import discuss, engine, social
+from tianxia.features.peers import discuss
+from tianxia import engine
+from tianxia.features.peers import social
 from tianxia.features.peers import discuss_actions
 
 pytestmark = pytest.mark.whole_content
@@ -320,7 +326,7 @@ def test_fb245_a_lapsed_invitation_is_refused_without_the_model(pair, no_ollama,
     assert calls == 0 and msgs == [mine]
     assert world.get_season().invites == []
     head = _load(world, "甲").journal[0]
-    assert (head.title, head.lines) == ("論武不成・乙", [engine.INVITE_LAPSED.format(who="乙", what="論武"), theirs])
+    assert (head.title, head.lines) == ("論武不成・乙", [INVITE_LAPSED.format(who="乙", what="論武"), theirs])
     assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None
 
 
@@ -570,7 +576,7 @@ def test_a_lapsed_discussion_tells_the_sender(twins):
     assert world.get_season().invites == []
     head = _load(world, "甲").journal[0]
     assert head.title == "論武不成・乙"
-    assert head.lines == [engine.INVITE_LAPSED.format(who="乙", what="論武"), "你身上已經沒有要出的那一樣了。"]
+    assert head.lines == [INVITE_LAPSED.format(who="乙", what="論武"), "你身上已經沒有要出的那一樣了。"]
 
 
 def test_a_lapsed_spar_tells_the_sender(pair):
@@ -593,7 +599,7 @@ def test_an_answer_after_he_left_tells_him_later(pair):
     _do(content, world, "乙", lambda g: g.answer_invite(g.state.world.invites[0], None, "yes"))
     assert not any(i.id == iid for i in world.get_season().invites)
     head = _load(world, "甲").journal[0]
-    assert head.title == "切磋不成・乙" and head.lines == [engine.INVITE_LAPSED.format(who="乙", what="切磋"), engine.INVITE_LAPSED_AWAY]
+    assert head.title == "切磋不成・乙" and head.lines == [INVITE_LAPSED.format(who="乙", what="切磋"), INVITE_LAPSED_AWAY]
 
 
 def test_a_bot_answers_with_one_that_fits(twins):
@@ -639,7 +645,7 @@ def test_his_mingtie_shows_answer_and_decline_on_his_card(pair):
     content, world = pair
     _card_for(content, world, "甲")
     _do(content, world, "甲", lambda g: g.peer_act("乙", "mingtie", {"arg": "send"}))
-    from tianxia import mingtie
+    from tianxia.features.peers import mingtie
     assert _row(_card(content, world, "乙", "甲"), "mingtie") == [("回帖", "yes", mingtie.NO_CARD, False), ("婉拒", "no", "", True)]
     assert _row(_card(content, world, "甲", "乙"), "mingtie")[0][2] == "等他回帖"  # 發的那一方
     _card_for(content, world, "乙")

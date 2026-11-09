@@ -62,7 +62,7 @@ def test_unstamped_season_keeps_the_old_rules():
 
 def test_season21_boss_is_twice_a_week():
     from tianxia import calendar
-    from tianxia import duel as duel_rules
+    from tianxia.features.bout import duel_rules
 
     game = _game("season21", at="julu_altar", faction="huang")
     s, c = game.state, game.content
@@ -187,7 +187,8 @@ def test_no_after_fight_event_needs_a_fight_any_more():
 
 
 def test_a_wrong_way_of_sensing_gives_xinde_and_does_not_lock():
-    from tianxia import insights, sensing
+    from tianxia import insights
+    from tianxia.features.sense import sensing
 
     game = _game(at="yingshui")
     s, c = game.state, game.content
@@ -278,7 +279,7 @@ def _strike(game, at="changshe"):
 
 def test_a_strike_bounty_says_practice_where_precise_is_on():
     """FB-420：找素材不打仗了，討伐的說明寫練功（懸賞卡、告示、紙上都是這一句）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _game()
     b = _strike(game)
@@ -326,7 +327,7 @@ def test_a_pool_of_only_the_borrowed_ones_is_not_capped():
 
 def test_a_ranger_reads_only_practice_on_a_strike_bounty():
     """散人不出陣：討伐只寫練功（STRIKE_PRACTICE）；投靠了陣營的人寫練功或出陣（FB-420 之後 QA）。"""
-    from tianxia import bounties
+    from tianxia.features.bounties import rules as bounties
 
     game = _game()
     b = _strike(game)
@@ -338,15 +339,15 @@ def test_a_ranger_reads_only_practice_on_a_strike_bounty():
 
 def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
     """FB-422：一類一顆生效的季，玩法說明的交友、意境、名望、情誼照新規則寫；沒蓋章的季跟以前一字不差。"""
-    from tianxia import howto
+    from tianxia.features.guide import howto as guide_howto
     from tianxia.world_state import fresh_season
 
     c = classic_explore(renown_unscaled(real_content("week7")))
     season = fresh_season(c)
     stamp_season(season, c)
-    text = howto.page(c, season, recruitable=False)
+    text = guide_howto.page(c, season, recruitable=False)
     assert "會打發你" not in text and "過一陣子才悟得出" not in text and "求見名單" not in text
     assert f"選錯了得 {c.config.sense_miss_xinde} 心得" in text and "交友名單上也有" in text and "不夠的見不到" in text
     season.precise_actions = False
-    old = howto.page(c, season, recruitable=False)
+    old = guide_howto.page(c, season, recruitable=False)
     assert "會打發你" in old and "過一陣子才悟得出" in old and "求見名單上也有" in old

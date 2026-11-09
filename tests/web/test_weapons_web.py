@@ -31,7 +31,7 @@ def _row(**over):
 
 
 def _gear(weapon=None, armor=None, cap=100, used=None):
-    """修練頁「裝備」那一塊的資料（server.menxia_view 的 gear，skillview.gear_rows）：開著的欄位一段一段；used 沒給就是各段裝備庫的件數合計。"""
+    """修練頁「裝備」那一塊的資料（server.menxia_view 的 gear，art_cards.gear_rows）：開著的欄位一段一段；used 沒給就是各段裝備庫的件數合計。"""
     slots = []
     if weapon is not None:
         slots.append({"slot": "weapon", "label": "武器", "empty": "手上沒有兵器。", "note": "城裡的鐵匠鋪打得出、買得到、修得好，也淬得了；用不上的拆了換素材。", **weapon})
@@ -84,7 +84,7 @@ def test_nothing_is_drawn_without_gear(views):
 
 
 def _where_gear():
-    """身上什麼裝備都沒有的新角色：四欄都開著、都空著（server.menxia_view 的 gear，每一段多 where：skillview.gear_rows）。"""
+    """身上什麼裝備都沒有的新角色：四欄都開著、都空著（server.menxia_view 的 gear，每一段多 where：art_cards.gear_rows）。"""
     return {"cap": 100, "used": 0, "held_note": "", "slots": [
         {"slot": "weapon", "label": "武器", "empty": "手上沒有兵器。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
         {"slot": "armor", "label": "防具", "empty": "身上沒有防具。", "note": "", "where": "城鎮裡的鐵匠鋪買得到。此地就有。", "worn": None, "rack": []},
@@ -275,7 +275,7 @@ def test_an_empty_armor_slot_says_so_and_an_unknown_slot_is_skipped(views):
 
 
 def _mount_gear(worn=None, rack=()):
-    """修練頁「裝備」只有坐騎那一段（server.menxia_view 的 gear，skillview.gear_rows）。"""
+    """修練頁「裝備」只有坐騎那一段（server.menxia_view 的 gear，art_cards.gear_rows）。"""
     return {"cap": 100, "used": len(rack), "slots": [{
         "slot": "mount", "label": "坐騎", "empty": "身上沒有坐騎。", "note": "城裡的馬市買得到駑馬；一個一階素材就餵得飽。",
         "worn": worn, "rack": list(rack),
@@ -362,7 +362,7 @@ def test_the_feed_button_calls_the_feed_action(views):
 
 
 def _treasure_gear(worn=None, rack=(), held_note=""):
-    """修練頁「裝備」只有寶物那一段（server.menxia_view 的 gear，skillview.gear_rows）。"""
+    """修練頁「裝備」只有寶物那一段（server.menxia_view 的 gear，art_cards.gear_rows）。"""
     return {"cap": 100, "used": len(rack), "held_note": held_note, "slots": [{
         "slot": "treasure", "label": "寶物", "empty": "身上沒有寶物。", "note": "寶物買不到、打不出。",
         "worn": worn, "rack": list(rack),

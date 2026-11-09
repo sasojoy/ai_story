@@ -12,7 +12,9 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import bot, bot_policy, calendar, events, figures, opportunities, push, rules, timetable
+from tianxia import bot, bot_policy, calendar, events, figures
+from tianxia.features.military import opp_rules as opportunities
+from tianxia import push, rules, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition, OppDef
@@ -204,7 +206,7 @@ def test_switch_off_dialogue_menu_unchanged(real):
 
 
 def test_defection_clears_opportunities(on):
-    from tianxia import defection
+    from tianxia.features.faction import defection
 
     game = _game(on, faction="guan", at="huangjin_camp")
     game.state.player.opp_done = ["guan_zhujun"]
@@ -448,6 +450,7 @@ def test_talisman_not_deliverable_off_base(on):
 
 
 def test_refugees_roll_after_duty(on):
+    on.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     game = _game(on, faction="haoqiang", at="cao_manor")
     game.state.player.stamina = 100
     _opp(on, "hao_refugees").accumulate.chance = 1.0  # 每次都遇到流民
