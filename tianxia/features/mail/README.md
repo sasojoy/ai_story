@@ -13,6 +13,8 @@
 | `routes.py` | `GET /api/mail`、`GET /api/mail/thread?name=&before=`、`POST /api/mail/{send,block,report}`；管理者工具 `mail_remove`、`mail_keep`、`mail_mute` |
 | `tests/` | `test_mail.py`（10 條，1 條 smoke）、`test_mail_smoke.py`（1 條 smoke）、`mail_stage.py` |
 
+same_behavior 一軌 letter（`scripts/sb/tracks/letter.py`）。
+
 **規則**：兩邊的名帖匣都收著對方那一張才寫得了（名帖跨季，帖友也跨季）。一封最多 `max_chars`（200）字；一天 `per_day`（10）封（回體丹那一套的 00:00 換日）；對方沒回之前同一個人最多連寄 `unanswered`（3）封。內容過 `speech` 的 LETTER（字表＋鎖外模型；聯絡方式與網址不擋）。
 **沒有已讀**：寄的人只看得到自己寫的時刻與地點（假人永遠不讀信，有已讀就看得出來）。假人不寄信、照樣收信，寄給假人與寄給真人回的話、畫面一樣。
 **不收他的信**：他照常寄、照常看到寄出去了，信記成 dropped、收件人永遠看不到（解開也不補）。**檢舉**：那一封從收件人的信匣收起來，管理頁「書信檢舉」看得到那一封（只看得到被檢舉的）；撤下（兩邊都看不到）、沒事（清掉檢舉）、停寄 1／3／7 天（`mute_days`）。
