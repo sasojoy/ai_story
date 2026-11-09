@@ -8,10 +8,10 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 
 用法（python 不加 -I：-I 會連 PYTHONHASHSEED 一起忽略；子行程自己帶 PYTHONHASHSEED=0）：
   python scripts/same_behavior.py compare --base <根> --head <根> --tmp <暫存資料夾> [--profiles none,weekend,...] [--tracks sortie,duel]
-      [--jobs 4] [--no-bots] [--cache <資料夾>] [--new <包>[,<包>]]
+      [--jobs 4] [--no-bots] [--cache <資料夾>] [--new <包>[,<包>]] [--bot-covers <包>[,<包>]]
   python scripts/same_behavior.py selftest --base <根> --tmp <暫存資料夾> [--tracks ...] [--cache <資料夾>]   同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到
       [--covers <包>[,<包>]] [--crossover]
-  python scripts/same_behavior.py pick --covers <包>[,<包>] [--tracks ...]   只印會挑到的軌（wave_gate --dry-run 用）
+  python scripts/same_behavior.py pick --covers <包>[,<包>] [--tracks ...] [--seats]   只印會挑到的軌（wave_gate --dry-run 用）；--seats 第二行印座位
   python scripts/same_behavior.py run <根> <設定> <輸出檔> --tmp <暫存資料夾> [--track sortie|duel] [--part all|first|second] [--db <資料庫檔>]
       [--snapshot <前半資料庫> --snapshot-out <前半輸出檔>]
   python scripts/same_behavior.py bots <根> <設定> <輸出檔> --tmp <暫存資料夾> [--seats sortie|duel]
@@ -44,6 +44,7 @@ main.prep 就照預設配比按 growth:、識海按 legacy:skip（clear_prep，�
 跑到切點時寫 .state.json、前半輸出與資料庫快照（harness.snapshot_db），head 後半從快照接；整段同一軌的（full_same_as）照舊另開 base 前半。
 切點要不在請求中間（Scenario.call 進出記深度，不是 0 就丟例外）。selftest：a 那一趟帶快照、後半從快照接，b 不帶，a＝b 證明快照不擾動。
 --covers（第 107 批）：只比 covers（各軌 register_track 寫死的、走到的包）跟這幾包有交集的軌加上 harness.ALWAYS_TRACKS。
+--bot-covers（第 112 批）：假人座位照 register_bots 的 covers 挑（harness.pick_seats：ALWAYS、座位名在軌清單上、covers 有交集，三者聯集）；不帶照舊。
 
 檔案（第二輪第 70 批）：這支只留入口，路徑與指令不變。調度與固定層在 scripts/sb/harness.py；Scenario、DuelScenario、它們的假人在 scripts/sb/base.py；
 其餘每段軌一檔 scripts/sb/tracks/<軌>.py。新軌只加檔：檔尾 register_track(...)（有假人再 register_bots，新子命令登記 SUBCOMMANDS）；軌名重複載入時就擋。
@@ -99,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     k = sub.add_parser("pick")
     k.add_argument("--covers", required=True, help="改到的包（逗號隔開）：印 covers 有交集的軌加上 ALWAYS_TRACKS")
     k.add_argument("--tracks", default="")
+    k.add_argument("--seats", action="store_true", help="第 112 批：另印第二行，compare --bot-covers 同一組包會跑的假人座位（harness.pick_seats）")
     b = sub.add_parser("bots")
     b.add_argument("root")
     b.add_argument("profile", choices=PROFILES)
@@ -117,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
                            help="跟 --new 一起用：base 已經有這一包（同一包的後續批）也收，扣法一樣；不帶照舊拒絕")
             x.add_argument("--covers", default="", help="改到的包（逗號隔開）：只比 covers 有交集的軌加上 ALWAYS_TRACKS；--tracks 同時給取交集")
             x.add_argument("--crossover", action="store_true", help="比半舊半新（base 前半＋head 後半）；不帶就不跑那一串")
+            x.add_argument("--bot-covers", default=None, help="第 112 批：改到的包（逗號隔開，空的寫 ,）：假人座位照 harness.pick_seats 挑"
+                           "（ALWAYS、座位名在軌清單上、座位 covers 有交集，三者聯集）；不帶照舊（座位名在軌清單上才跑）")
         x.add_argument("--tmp", required=True)
         x.add_argument("--profiles", default=",".join(PROFILES))
         x.add_argument("--tracks", default=",".join(harness.TRACK_NAMES))
@@ -146,7 +150,11 @@ def main(argv: list[str] | None = None) -> int:
         os._exit(0)
     sys.stdout.reconfigure(encoding="utf-8")
     if a.cmd == "pick":  # wave_gate --dry-run 用：只印軌名，不碰任何根
-        print(",".join(harness.pick_tracks([c for c in a.covers.split(",") if c], [t for t in a.tracks.split(",") if t] or None)))
+        covers, given = [c for c in a.covers.split(",") if c], [t for t in a.tracks.split(",") if t]
+        picked = harness.pick_tracks(covers, given or None)
+        print(",".join(picked))
+        if a.seats:  # 座位照 compare --tracks <給的> --bot-covers <包> 會跑的算（給的軌整串都算數，不只交集）
+            print(",".join(harness.pick_seats(covers, picked + given)))
         return 0
     profiles = [p for p in a.profiles.split(",") if p]
     asked = [t for t in a.tracks.split(",") if t]
@@ -160,7 +168,8 @@ def main(argv: list[str] | None = None) -> int:
     cache_dir = Path(a.cache).resolve() if a.cache else None
     if a.cmd == "compare":
         ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir,
-                     new=tuple(n for n in a.new.split(",") if n), crossover=a.crossover, also_existing=a.also_existing)
+                     new=tuple(n for n in a.new.split(",") if n), crossover=a.crossover, also_existing=a.also_existing,
+                     bot_packages=None if a.bot_covers is None else [c for c in a.bot_covers.split(",") if c])
     else:
         ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks, cache_dir=cache_dir)
     print("全部一樣" if ok else "有不一樣的")

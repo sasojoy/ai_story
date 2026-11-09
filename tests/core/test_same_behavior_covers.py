@@ -103,6 +103,67 @@ def test_write_replaces_covers_and_drops_the_hand_written_note(measure_tool):
                    '               covers=("r",))\n')
 
 
+def test_seat_covers_subtract_the_track_common_set(measure_tool):
+    """第 112 批：座位扣掉同一設定**軌**的共同組（座位自己不算進共同組），各設定取聯集。"""
+    hook, a1, b1 = "features/a/x.py:hook:1", "features/a/x.py:only:9", "features/b/y.py:f:3"
+    tracks = {"week7": {"t1": _row(hook), "t2": _row(hook), "t3": _row(hook, a1)}, "season21": {"t1": _row(b1), "t2": _row(b1)}}
+    seats = {"week7": {"duel": _row(hook, a1), "arts": _row(hook)}, "season21": {"duel": _row(b1, hook)}}
+    covers = measure_tool.seat_covers(tracks, seats, {"a", "b"}, 0.9)
+    assert covers == {"arts": [], "duel": ["a"]}, "week7 的 hook 是軌的共同組；season21 的 b1 是、hook 不是"
+
+
+def test_pick_seats_union(sb, monkeypatch):
+    monkeypatch.setattr(sb, "BOT_SEATS", {"always": ((), None), "named": ((), None), "covered": ((), None), "other": ((), None)})
+    monkeypatch.setattr(sb, "SEAT_COVERS", {"always": ("z",), "named": ("z",), "covered": ("x",), "other": ("y",)})
+    monkeypatch.setattr(sb, "ALWAYS_TRACKS", ("always",))
+    assert sb.pick_seats(["x"], ["named"]) == ["always", "named", "covered"], "ALWAYS、軌名、covers 交集三者聯集"
+    assert sb.pick_seats([], []) == ["always"]
+    assert [s for s, _ in sb._bot_runs(["named"])] == [], "沒給包照舊：座位名在軌清單上才跑（這裡的座位沒有設定）"
+
+
+def test_compare_bot_covers_adds_the_covered_seats(sb, monkeypatch, tmp_path):
+    seen = []
+
+    def grab(chains, workers):
+        seen.extend(chains)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(sb, "_run_set", grab)
+    for packages in (None, ["nothing-here"], [sb.SEAT_COVERS["duel"][0]]):
+        seen.clear()
+        with pytest.raises(KeyboardInterrupt):
+            sb.compare(ROOT, ROOT, tmp_path, ["season21"], 1, True, tracks=["facade"], bot_packages=packages)
+        seats = {c[0][0][c[0][0].index("--seats") + 1] for c in seen if c[0][0][0] == "bots"}
+        assert seats == ({"duel"} if packages and packages[0] != "nothing-here" else set()), (packages, seats)  # season21 只有 duel 這個座位
+
+
+def test_every_seat_has_covers(sb):
+    packages = _packages()
+    assert sb.BOT_SEATS, "一個座位都沒登記"
+    for s in sb.BOT_SEATS:
+        assert sb.SEAT_COVERS.get(s), f"座位 {s} 沒寫 covers（register_bots 的 covers=，量法見 covers_measure.py）"
+        unknown = set(sb.SEAT_COVERS[s]) - packages
+        assert not unknown, f"座位 {s} 的 covers 有不存在的包 {sorted(unknown)}"
+
+
+def test_rewrite_covers_handles_register_bots(measure_tool):
+    text = ('register_track("a", A, ((), ("x", "y")), "season21")\n'
+            'register_bots("duel", P, run)  # 約戰的假人\n'
+            'register_bots("arts", P, run,\n'
+            '              covers=("old",))\n')
+    covers = {"a": ["p"], "bots:duel": ["q", "r"], "bots:arts": ["s"]}
+    out, done = measure_tool.rewrite_covers(text, covers)
+    assert sorted(done) == ["a", "bots:arts", "bots:duel"]
+    assert out == ('register_track("a", A, ((), ("x", "y")), "season21",\n'
+                   '               covers=("p",))\n'
+                   'register_bots("duel", P, run,\n'
+                   '              covers=("q", "r"))  # 約戰的假人\n'
+                   'register_bots("arts", P, run,\n'
+                   '              covers=("s",))\n')
+    only, done = measure_tool.rewrite_covers(text, {"bots:duel": ["q"], "bots:arts": ["s"]}, ("register_bots",))
+    assert sorted(done) == ["bots:arts", "bots:duel"] and only.startswith('register_track("a", A, ((), ("x", "y")), "season21")\n'), "--seats-only 不動軌"
+
+
 def _chains(sb, monkeypatch, tmp_path, crossover: bool, tracks: list[str]) -> list[list]:
     seen = []
 

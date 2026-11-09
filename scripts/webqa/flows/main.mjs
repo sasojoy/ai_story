@@ -269,16 +269,28 @@ export const flows = [
     ["tavern", async (c) => {
       await enterShop(c, "tavern", "wan_city", "act:tavern");
       await c.crawl("tv", () => c.load("/"), SHOP_UI, { depth: 2, total: 24, cap: 3 });
+      // batch 112: 打聽 and 題壁 have no tav-do button, they are forms (web/tavern.js #tav-ask, #tav-wall); 暗處's 查到過的 names (tav-hit-name)
+      // only fill the box, and 招募 (tav-hire, web/hire.js) walks out of the tavern first, so the name chip and 出店 come before it
+      const SEND = { ask: [["seek", "#tav-ask", "朱儁"], ["ties", "#tav-ask", "白飛"]], wall: [[null, "#tav-wall", "酒好，下回再來"], [null, "#tav-wall", "再飲一杯"]] };
       for (const tab of ["news", "ask", "wall", "shade"]) {
         await c.load("/");
         await c.click(`[data-act="tav-tab"][data-tab="${tab}"]`);
-        for (let i = 0; i < 2; i++) await c.step(ACT("tav-do"), `tv_${tab}_do${i}`, { who: "p1" });
+        for (let i = 0; i < 2; i++) {
+          if (!SEND[tab]) { await c.step(ACT("tav-do"), `tv_${tab}_do${i}`, { who: "p1" }); continue; }
+          const [mode, form, text] = SEND[tab][i];
+          if (mode) await c.click(`[data-act="tav-mode"][data-mode="${mode}"]`);
+          const sent = await c.fillAndSend(`${form} input`, text);
+          if (sent !== "sent") { c.log("skip", form, sent); continue; }
+          await c.settle(600);
+          await c.shoot(`tv_${tab}_do${i}`, { who: "p1" });
+        }
       }
-      await c.load("/");
-      await c.step(ACT("tav-hire"), "tv_hire", { who: "p1" });
       await c.step(ACT("tav-hit-name"), "tv_hit", {});
       await c.load("/");
       await leave(c, "tavern", "tavern:back");
+      await c.api("p1", "/api/choose", { id: "act:tavern" });
+      await c.load("/");
+      await c.step(ACT("tav-hire"), "tv_hire", { who: "p1" });
     }],
     ["bounties", async (c) => {
       await enterShop(c, "board", "wan_city", "act:bounties");
@@ -289,8 +301,13 @@ export const flows = [
       await c.load("/");
       await c.click('.shop-layer .note:not(.dim):not(.held)[data-act="board-zoom"]');
       await c.step(`.board-sheet ${CHP("bounty:take:")}`, "bd_take", { who: "p1" });
-      await c.step(`.board-sheet ${CHP("bounty:pick")}`, "bd_pick", { who: "p1" });
-      await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" });
+      // batch 112: 交出… is only on a 求兵 paper (k-arms, nothing to 揭), lit when something on you fits: stage one that fits the first 求兵 here
+      if (await c.py("out = stage.arms_fit(chars, content, world, '沈浪')")) {
+        await c.load("/");
+        await c.click('.shop-layer .note.k-arms:not(.dim)[data-act="board-zoom"]');
+        await c.step(`.board-sheet ${CHP("bounty:pick")}`, "bd_pick", { who: "p1" });
+        if (await c.step(`.board-sheet ${CHP("bounty:give:")}`, "bd_give", { who: "p1" }) === "ok") await c.step('[data-act="ask-yes"]', "bd_given", { who: "p1" });
+      }
       await c.load("/");
       await c.click('.shop-layer .slot[data-act="board-zoom"]');
       await c.step('.board-sheet [data-act="shop-ask"][data-id^="bounty:drop"]', "bd_drop_ask", { light: true });
@@ -359,13 +376,16 @@ export const flows = [
       if (await c.click(`.act-move ${CH("act:call")}`) === "ok") await c.step(CH("call:zhujun"), "call_zhujun", { who: "p1" });
       else await c.step('.act-move [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
       await c.crawl("cl", () => c.load("/"), [...UI, "fig-close", "fig-log-close", "letter-read"], { total: 10, cap: 2 });
-      await c.load("/");
-      await c.step(ACT("fig-log"), "call_log");
-      await c.load("/");
-      await c.step(ACT("fig-talk"), "call_talk", { wait: 1800 });
-      await c.load("/");
-      await c.step(ACT("fig-act"), "call_act", { who: "p1" });
-      await c.step(ACT("fig-close"), "call_close", { who: "p1" });
+      // batch 112: 往來紀錄, 交談, 護衛 and × are on the figure's own layer (web/companions.js figPickHtml, .vn-layer.pick), which the 此地人物
+      // chip opens (fig-open); a reload closes it, so open it again before each.
+      // × (call_close) and 護衛 (call_act) are not walked: walked base = head, they came out different in two of four main rounds
+      // (BODY.layer-open 1280px vs 1265px, the scrollbar taken away or not at the moment of the picture), so they would only add noise
+      const PICK = ".vn-layer.pick";
+      const pick = async () => { await c.load("/"); await c.click('.people-row [data-act="fig-open"][data-id="zhujun"]'); };
+      await pick();
+      await c.step(`${PICK} ${ACT("fig-log")}`, "call_log");
+      await pick();
+      await c.step(`${PICK} ${ACT("fig-talk")}`, "call_talk", { wait: 1800 });
       await c.api("p1", "/api/choose", { id: "call:back" });
       await c.load("/");
       await c.step(ACT("letter-open"), "letter_open", {});
@@ -420,6 +440,9 @@ chars.save(st); out = 1`);
       await c.load("/");
       await c.shoot("sense_draw_card", { who: "p1" });
       await c.step(CH("sense:draw"), "sense_pad", {});
+      // batch 112: the sheets that pop on entering the game (改版資訊 .patch-pop, news.js, Joy 11/09; 簽到 .ck-pop, checkin.js) sit over the
+      // canvas until closed, so the mouse stroke never reached it; a player closes them first
+      for (let i = 0; i < 4 && await c.click(".sheet-bg[data-act]") === "ok"; i++);
       await c.drawOn("#sense-canvas");
       await c.shoot("sense_pad_drawn", {});
       await c.step(ACT("sense-clear"), "sense_pad_clear", {});

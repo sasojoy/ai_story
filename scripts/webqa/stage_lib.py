@@ -57,6 +57,27 @@ def rich(chars, content, name, loc, level=30, gear=False):
     return {"silver": p.stats["silver"], "level": level}
 
 
+def arms_fit(chars, content, world, name):
+    """batch 112: the first 求兵 (kind arms) this one sees on the board gets a fitting weapon in the rack (kind and attribute, not an original),
+    so 交出… lights. Returns that bounty's id, or None when there is none (or the commit has no bounty_base). The saved state carries no
+    board: the season's world (world.get_season(), as Game.sync puts it on the state) is what the board lists."""
+    try:
+        base = importlib.import_module("tianxia.core.bounty_base")
+    except ImportError:
+        return None
+    st = chars.load(name)
+    saved, st.world = st.world, world.get_season()
+    b = next((x for x in base.visible(st, content) if x.kind == "arms"), None)
+    st.world = saved
+    if b is None:
+        return None
+    Equipment = _state().Equipment
+    st.player.rack = [e for e in st.player.rack if e.id != "兵:11"] + [Equipment(id="兵:11", name="試用兵器", kind=b.weapon_kind, attribute=b.attribute, tier=1, quality="下品", edge=100)]
+    st.player.weapon_serial = max(st.player.weapon_serial, 11)
+    chars.save(st)
+    return b.id
+
+
 def place(chars, name, loc, **fields):
     st = chars.load(name)
     p = st.player
