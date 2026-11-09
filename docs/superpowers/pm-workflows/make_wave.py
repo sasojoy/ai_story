@@ -994,6 +994,33 @@ WAVES["Q"] = dict(
 )
 
 
+def b210():
+    return jb(210, "帳號十：驗證碼頁的個資告知短文、管理頁的「請用密碼重新登入」、解綁與重設密碼的通知搬出行動鎖、註冊頁的條款版號重問", "identity", "dev/acct-10", "8405", [
+        "- 範圍照計畫第 210 批那一節（PM 2026-11-09 把帳號留下的小件歸成一批）；依據：企劃者 2026-11-09 對 PM 列的「帳號留下的小件一批：驗證碼頁的個資告知、管理頁的重新登入提示、解綁通知搬出行動鎖，加上面兩條 nit」答「2. ok」。五項都小，一段一筆 commit、測試先行。這一批准碰 `web/identity.js`、`web/terms.js`（Joy 的條款包那一支，只動第 4、5 項那幾行）、identity 包、核心 `tianxia/core/features.py` 的 `AdminTool` 與 `server.py` 的 `api_do`（只第 3 項那幾行）；**不碰** `web/admin.js`、admin 包、`app.js`、`main.js`、`accounts.py`、`engine.py`、`shell_tables.py`（沒有新路由）。",
+        "- **第 1 項 驗證碼輸入處的個資告知短文連 `/privacy`**（第 203、206 批留下；設計第五節、個資法第 8 條）：`web/identity.js` 的 `identityCodeHtml` **寄碼前那一張**（輸入 Email、手機號碼的地方；登入 `login`、綁定 `bind` 兩種用途都要，`reauth` 也照畫）畫 `codes.NOTICE`（第 49 句，新字清單已有）加「隱私權說明」連結（沿用 `IDENTITY_PRIVACY_LINK` 那幾個字；`href` 照 `Config.identity.privacy_url`，新分頁 `rel=\"noopener\"`）。字與網址怎麼到畫面：identity 自己的 `GET /api/identity/gate`（`gate_info`）多帶 `notice`、`privacy` 兩鍵（關著照舊 404），設定抽屜綁定那一邊用它既有的回應帶同樣兩鍵；**不加新字、不改殼**。寄出之後那一張照舊（`st.notice` 現在放的是「已寄出」那一句，不動）。node 測試：寄碼前有短文與連結、連結指 `/privacy`；關著不畫。",
+        "- **第 2 項 管理頁的「請用密碼重新登入」**（第 209 批留下）：`/admin` 跟江湖頁是同一張頁（admin 包 `routes.py` 回 `shell.current_page()`），`web/identity.js` 已經有 `IDP_RELOGIN`（第 17x 句）與問 `GET /api/identity/session` 的那一段（約 478～490 行，只在設定抽屜畫）。加：在 `/admin` 路徑、管理頁畫出來之後（`web/admin.js` 的 `.ad-head`／`.ad-wait` 出現時，用 MutationObserver 或殼既有的 render 事件，**不改 `web/admin.js`**）也問一次 `relogin`，真就在管理頁標題下補同一句（同一個 class `idp-relogin`，不另造字）；名單外的人、關著、404 什麼都不多畫；一頁只畫一次。node 測試：relogin 真在 `/admin` 有那一行、假沒有；江湖頁那一行照舊。admin 包一個字不動（admin 不能 import identity；這是 identity 包自己的畫面）。",
+        "- **第 3 項 管理者解綁、管理者重設密碼的通知搬出行動鎖**（第 209 批留下；企劃者 11/09「2. ok」）：現在 `identity_unbind` 是 `AdminTool`，在 `server.py` `api_do` 的 `act()` 裡跑，`admin.unbind` 最後那一行 `contacts.send_all` 在鎖裡寄；`reset_password`（admin 包 `routes.py` 176 行 `identity_base.notify`）看它是不是也在鎖裡（`/api/admin/reset_password` 那條路有沒有進 `act()`／`action_lock`）。真的簡訊、Email 是 HTTP 呼叫，卡在全服的行動鎖裡會讓所有人等。**PM 傾向的做法**：核心 `tianxia/core/features.py` 的 `AdminTool` 加一個可選欄 `after: Callable[[], None] | None = None`（預設 None，現有的包一個字不改），`run` 在鎖裡做完、把要寄的（account_id、那一句、extra／skip）記在 game 的暫存或 closure；`server.py` `api_do` 在 `act()` 回來、放鎖之後叫 `tool.after()`（例外只記 log，不影響回話）；identity 的 `identity_unbind` 改成 `run` 不寄、`after` 寄。`reset_password` 在鎖裡的話也改成放鎖之後寄（admin 包經核心 `identity_base.notify` 的既有掛鉤，看怎麼延後最小）；不在鎖裡就寫一句不動。另一種做法是改走既有的 outlock 三段式（要自己做 `is_admin` 與 `admin_session_ok` 的檢查、關著 404），比較大，不選的話寫 decided 為什麼。玩家與管理者看到的回話一個字不變；寄的對象與內容照第 209 批。測試：假 sender 記下「寄的那一刻鎖有沒有被握著」（例：sender 在 `send` 裡試 `WorldStateStore.action_lock` 拿不拿得到，或 `act` 包一層記順序），解綁那一則要在放鎖之後；`test_identity_notify.py` 的 `test_admin_unbind_notifies_rest` 照過；`tests/core` 契約測試對 `AdminTool` 新欄位（有 `after` 的工具 `after` 被叫一次、沒有的照舊）一條。`core_changes` 逐條列（`core/features.py` 一欄、`server.py` 三行上下、identity `admin.py`／`routes.py`、admin 包要是改了寫哪一行），寫企劃者原話「2. ok」（2026-11-09，對 PM 列的那一句）。",
+        "- **第 4 項 註冊頁的條款版號重問**（Q 波審查 nit）：`web/terms.js` 的 `termsVersion()` 把版號快取一整頁；條款改版後沒重新整理的註冊頁帶舊版號送出，被 `REGISTER_NEED` 同一句擋住、重勾也沒用。改成**送出前重問一次**：`termsBlockSubmit` 兩個勾選都勾了之後，capture 攔下這一次 submit、重新 fetch `/api/terms/version`、更新 hidden `terms_version`、再 `form.requestSubmit()`（或等值做法）放行一次（用旗標避免無窮攔；fetch 失敗照舊版號送、讓伺服器那一句擋）；不透露版本、不加新字；關著照舊不插不擋。node 測試：版號改了再送一次就過；改之前那條（沒勾擋）照過。這一支是 Joy 的條款包的檔，只動這一段，其他一行不碰。",
+        "- **第 5 項 順手核對**：terms 關著時 `terms.js` 每次畫註冊表單多打一次 `/api/terms/version`（404）。能用頁面上現成的資訊判斷關著就不問（例：殼已經有的某個旗標、或 404 之後記住這一頁不再問——現在已經是 null 就不再問，看還有沒有多打的情形），沒有乾淨的做法就寫理由不做，不加路由、不改殼。",
+        "- 測試：identity 包 `tests/`（py 與 node）；terms 包 node 測試；`tests/core/test_contract_features.py`（`AdminTool` 新欄位）；identity 關著時 `/api/identity/gate` 404 照舊、`web/identity.js` 不畫；terms 關著位元組一樣。每一條先紅後綠。`new_strings`：預期沒有（短文是第 49 句、提示是第 209 批那一句、連結字沿用）；真的要新字每句旁 `待 joy 潤`。",
+        "- **不做**：管理者刪帳號照舊不寄；維修頁的標頭；自建形象與招式下單的 `phone_ok` 入口；IPv6 /64；金流（企劃者 11/09「先不動」）；第 113 批（測試工具）的東西。資料庫第 9 版不動；旁檔不改表、不加欄。退版：換回舊程式只是短文與提示不見、通知回到鎖裡寄、版號照舊快取，什麼都不丟；季中能換；緊急開關 `Config.identity.enabled`、`Config.terms.enabled`。",
+    ])
+
+
+WEB_R = "**這一波一線：帳號十（帳號留下的小件：驗證碼頁的個資告知短文、管理頁的「請用密碼重新登入」、解綁與重設的通知搬出行動鎖、註冊頁的條款版號重問；開關預設關）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空。\n2. **開關開著**（head 的設定覆寫檔把 `identity.enabled`、`support.enabled`、`terms.enabled` 打開，只開 head；`fake_services: true`；`.local/identity.json` 放測試金鑰與 `notify_key`）：實機走——登入頁按 Email（或手機）：輸入號碼那一張看得到個資告知短文與「隱私權說明」連結，點開是 `/privacy`；設定抽屜的綁定那一邊按綁 Email 也看得到同一段；名單上的帳號（`config.json` 的 `admins` 裡的 `Rayal`）用 Email 驗證碼登入後開 `/admin`：看得到「請用密碼重新登入」那一句、不是只有「管理資料沒拿到」；不在名單上的人用驗證碼登入開 `/admin`：沒有那一句（看到什麼照實寫）；管理者用密碼登入，管理頁解綁某人一支 Email：回話照舊、伺服器 log 有寄給剩下那一支的通知（假寄送印的那一行），而且回應先回、寄送在後（看 log 時間或順序；量不到就寫量不到）；主控台 0 錯誤、沒有 `Refused to`；網路沒有 4xx／5xx（刻意的 401、404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 註冊頁的版號重問不用實機改條款版本，看開發的 node 測試有沒有那一條、`terms.js` 送出前有沒有重問（網路面板看第二次 `/api/terms/version`）。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 60 分鐘**，到了就交，沒走到的寫清楚。"
+
+
+WAVES["R"] = dict(
+    round2=True, feature=True, design=J_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text=WAVES["J"]["extra_lenses"][0]["text"].replace("第 201、211 批", "第 210 批").replace("照設計 4.1、4.2、6.1、6.2", "照設計第五節、4.3、6.5 與計畫第 210 批那一節（PM 11/09 歸成一批）") + " **另外**：identity 關著時 `/api/identity/gate` 404、`web/identity.js` 不畫短文與管理頁提示、對 base 位元組一樣；terms 關著 `terms.js` 不插不擋；開著時寄碼前那一張有 `codes.NOTICE` 與連到 `/privacy` 的連結（登入與綁定兩種用途）、管理頁的提示只有名單上非密碼 session 的本人拿得到、名單外永遠沒有；管理者解綁與重設密碼的通知在放鎖之後才寄（看測試怎麼證明，不是只看有寄）、回話一個字不變；`AdminTool` 新欄位預設 None、現有的包一個字不改；註冊頁送出前重問版號、改版後再送一次就過、不透露版本；沒有新路由、`shell_tables` 不動；`web/admin.js` 與 admin 包不動（第 3 項 reset_password 那一行除外，動了要寫理由）；新字每句旁有 `待 joy 潤`（預期沒有新字）。"),
+    ],
+    lines=[dict(name="帳號十", batches=[b210])],
+    merge_port=8406, fix_port=8407,
+    web_check=dict(ports="8408、8409", steps=WEB_R),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
