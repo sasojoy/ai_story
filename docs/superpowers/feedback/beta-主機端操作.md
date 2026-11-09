@@ -379,7 +379,7 @@ Joy：「這可以線上不要 502，顯示伺服器維修中嗎」。做法是 
 
 - 狀態碼是 **503 ＋ Retry-After**，不是 200：這才是「暫時不能服務」，瀏覽器與爬蟲不會把它當成正式內容。
 - `/api/` 回 JSON（`{"maintenance": true}`），其餘回那一頁：網頁每 10 秒打 `/api/main` 並解析 JSON，回 HTML 會在那邊炸開。
-- 頁面每 30 秒自己探一次，伺服器一回來就跳回江湖，玩家不必自己重整。
+- 頁面每 30 秒自己探一次，伺服器一回來就跳回江湖，玩家不必自己重整。第 209 批起維修頁的探測程式改成外部檔 `/_maintenance/probe.js`（回 200，其他路徑照舊 503；回 503 的 script 瀏覽器不執行），頁面沒有 inline script。
 - `--note "換電腦，約一小時"` 多寫一句給玩家看。
 - **埠被佔著它就起不來**（`allow_reuse_address = False`）：Windows 的 SO_REUSEADDR 允許綁上一個已經有人在聽的埠、
   兩個行程分著收請求——維修頁要是這樣綁上 7861，玩家的請求會一半進遊戲、一半看到「維修中」（實機踩到：
@@ -580,7 +580,7 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **identity 開著時管理者要用密碼登入（M 波第 207 批）**：管理者要**用帳號密碼登入、6 小時內登入或重驗過**才有管理者權限；用驗證碼或 LINE、Google 進來的、或密碼登入超過 6 小時的，管理頁與管理者工具都當成不是管理者（回話一模一樣，不會提示原因）。用驗證碼進來的事後在設定裡重驗也拿不回，要登出、用密碼重新登入。名單上的帳號（管理者、客服名單）**密碼至少 12 字**（註冊、改密碼、補設、忘記密碼、管理頁重設、`scripts/set_password.py` 都要；現有的短密碼照樣登得進去，但開 identity 之前最好先用 `set_password.py` 換成 12 字以上）。identity 關著時一個字不變。管理者幫人重設密碼之後，identity 開著時那個帳號 72 小時（`identity.reset_hold_hours`）不能花元寶、贈物、上架或買市集、綁新的登入方式，遊戲紀錄會寫一則給本人看；回給管理者的字不變。
 
-**CSP 標頭（L 波第 213 批，整站、不是開關）**：伺服器每個回應都帶 `Content-Security-Policy`（只准載自己網域與 Cloudflare Turnstile 的 script、不准 inline 的程式）。線上要是哪一頁被擋（主控台有 `Refused to …`、按鈕沒反應），緊急做法是 **revert 那一筆**（`efe6ac12b`，`server.py` 的 `CSP` 常數與那一個 middleware）再重開兩個程式；`web/battle.js` 與兩支公開頁 script（`web/zhuan_page.js`、`web/tale_page.js`）的搬家留著也沒事。資料庫、存檔、旁檔都不動，季中能換。維修頁（`scripts/maintenance.py`）是另一支行程，不帶這個標頭。
+**CSP 標頭（L 波第 213 批，整站、不是開關）**：伺服器每個回應都帶 `Content-Security-Policy`（只准載自己網域與 Cloudflare Turnstile 的 script、不准 inline 的程式）。線上要是哪一頁被擋（主控台有 `Refused to …`、按鈕沒反應），緊急做法是 **revert 那一筆**（`efe6ac12b`，`server.py` 的 `CSP` 常數與那一個 middleware）再重開兩個程式；`web/battle.js` 與兩支公開頁 script（`web/zhuan_page.js`、`web/tale_page.js`）的搬家留著也沒事。資料庫、存檔、旁檔都不動，季中能換。維修頁（`scripts/maintenance.py`）是另一支行程，不帶這個標頭。第 209 批起同一個 middleware 多送 HSTS（`max-age=31536000; includeSubDomains`，不加 preload）、`Referrer-Policy`、`nosniff`，CSP 多 `frame-ancestors 'none'`；要退就 revert `4cac6269c` 那一筆裡 `server.py` 的 CSP 段（維修頁的探測檔是同一筆的 `scripts/maintenance.py`），HSTS 瀏覽器已經記住的一年內照樣只走 https。
 
 **客服人員名單怎麼設**：客服認帳號（登入名或 `accounts.id`），不認名號。三個來源合起來：
 - `.local/support.txt`：一行一個帳號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
