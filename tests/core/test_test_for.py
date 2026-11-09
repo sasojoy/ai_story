@@ -1142,6 +1142,7 @@ STAGE_PACKAGES += ["identity"]  # 帳號綁定（scripts/new_feature.py 生的 i
 STAGE_PACKAGES += ["support"]  # 客服（scripts/new_feature.py 生的 support_stage.py）
 STAGE_PACKAGES += ["news"]  # 見聞（scripts/new_feature.py 生的 news_stage.py）
 STAGE_PACKAGES += ["titles"]  # 稱號與官職（scripts/new_feature.py 生的 titles_stage.py）
+STAGE_PACKAGES += ["terms"]  # 條款（scripts/new_feature.py 生的 terms_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

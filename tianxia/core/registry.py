@@ -82,6 +82,7 @@ from ..features import identity  # 帳號綁定
 from ..features import support  # 客服（帳號與客服第 211 批；開關 Config.support.enabled 預設關。只接 routes、on_own_turn、status_slots，路徑 /api/support/* 不跟別的重疊，順序不影響結果）
 from ..features import news  # 見聞
 from ..features import titles  # 稱號與官職
+from ..features import terms  # 條款
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -162,6 +163,7 @@ FEATURES: list[Feature] = [
     support.FEATURE,
     news.FEATURE,
     titles.FEATURE,
+    terms.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
