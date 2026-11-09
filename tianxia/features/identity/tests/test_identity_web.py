@@ -3,9 +3,12 @@
 回呼 auth=new 切到建角色頁、表單改名、送 /api/identity/character，回登入頁或送成功都忘掉 pending。renderGate 是 app.js 那一支原文，identity.js 整支載進來。"""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from webharness import WEB, run
+
+from tianxia.features.identity import codes
 
 DRIVER = r"""
 const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
@@ -297,6 +300,12 @@ async function main() {
   out.codeFirst = k.identityCodeHtml({ way: "email", purpose: "bind" }, "0x4AAA", NOW);
   out.codeNoKey = k.identityCodeHtml({ way: "phone", purpose: "reauth" }, "", NOW);
   out.codeStale = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: 0, stale: "太久沒驗證了" }, "", NOW);
+  // 第 210 批：寄碼前那一張的個資告知短文（info 是 /api/identity/gate 或 /api/identity/me 的回應）
+  const INFO = { notice: input.notice, privacy: "/privacy" };
+  out.noticeFirst = ["login", "bind", "reauth"].map((purpose) => k.identityCodeHtml({ way: "phone", purpose }, "", NOW, INFO));
+  out.noticeSent = k.identityCodeHtml({ way: "phone", purpose: "login", sent: true, until: 0, notice: "已寄出" }, "", NOW, INFO);
+  out.noticeNone = [k.identityCodeHtml({ way: "email", purpose: "login" }, "", NOW, { turnstile: "" }),
+    k.identityCodeHtml({ way: "email", purpose: "login" }, "", NOW)];
   // 驗證碼登入：按 Email 換成表單；已登入先問一次（{ask}），要換才帶 switch: true 再送
   const flow = kit({ S: { identity: true }, replies: [{ ask: "要換帳號嗎？" }, { message: "驗證碼已寄出" }, { stage: "create", pending: true }] });
   await flow.k.identityClick("identity-way", { dataset: { way: "email" } }, {});
@@ -321,7 +330,26 @@ finish(main());
 
 
 def _run_204():
-    return run(DRIVER_204, {"identity": str(WEB / "identity.js")})
+    return run(DRIVER_204, {"identity": str(WEB / "identity.js"), "notice": codes.NOTICE})
+
+
+def test_code_form_before_send_has_notice_and_link():
+    """第 210 批（設計第五節、個資法第 8 條）：寄碼前那一張畫 codes.NOTICE，句裡的「隱私權說明」連到 privacy、開新分頁；三種用途都有。"""
+    link = '<a href="/privacy" target="_blank" rel="noopener">隱私權說明</a>'
+    for html in _run_204()["noticeFirst"]:
+        at = html.index('<p class="idp-fine idp-notice">')
+        line = html[at:html.index("</p>", at) + 4]
+        assert link in line and re.sub(r"<[^>]+>", "", line) == codes.NOTICE  # 字一個不多：連結就是句裡那幾個字
+        assert at < html.index('data-act="identity-code-back"') and html.index('name="to"') < at < html.index('value="send"')
+
+
+def test_code_form_after_send_keeps_sent_line_only():
+    sent = _run_204()["noticeSent"]
+    assert "idp-notice" not in sent and '<p class="idp-fine">已寄出</p>' in sent
+
+
+def test_code_form_without_notice_draws_none():
+    assert all("idp-notice" not in html and "/privacy" not in html for html in _run_204()["noticeNone"])  # 舊伺服器、沒傳 info
 
 
 def test_fold_html_closed_line_and_dots():

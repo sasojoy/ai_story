@@ -11,6 +11,7 @@ import server
 from tianxia import database
 from tianxia.accounts import NAME_TAKEN, AccountStore
 from tianxia.core import identity_base
+from tianxia.features.identity import codes
 
 
 @pytest.fixture(autouse=True)
@@ -61,12 +62,22 @@ def test_gate_is_404_without_the_key(monkeypatch, tmp_path):
 def test_gate_lists_ready_ways_and_turnstile(monkeypatch, key_file):
     """line、google 要備好（oauth.ready：金鑰兩欄、redirect_base）才列；email、phone 照設定列（按了照舊尚未開放）。不帶客服信箱（第 202 批）。"""
     _turn_on(monkeypatch)
-    want = {"ways": ["line", "email", "phone"], "turnstile": "0x4AAA", "pw_min": 12}  # google 的金鑰沒寫；pw_min 第 209 批
+    want = {"ways": ["line", "email", "phone"], "turnstile": "0x4AAA", "pw_min": 12,  # google 的金鑰沒寫；pw_min 第 209 批
+            "notice": codes.NOTICE, "privacy": "/privacy"}  # 第 210 批：寄碼前那一張的個資告知短文與連結
     anon = TestClient(server.app).get("/api/identity/gate")
     assert anon.status_code == 200 and anon.json() == want
     player = TestClient(server.app)
     player.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     assert player.get("/api/identity/gate").content == anon.content  # 跟誰來問無關
+
+
+def test_gate_info_carries_notice_and_privacy(monkeypatch, key_file):
+    """第 210 批：寄碼前那一張畫個資告知短文（codes.NOTICE）連隱私權說明；網址照 Config.identity.privacy_url。"""
+    _turn_on(monkeypatch)
+    got = TestClient(server.app).get("/api/identity/gate").json()
+    assert got["notice"] == codes.NOTICE and got["privacy"] == "/privacy"
+    monkeypatch.setattr(server.CONTENT.config.identity, "privacy_url", "/privacy#codes")
+    assert TestClient(server.app).get("/api/identity/gate").json()["privacy"] == "/privacy#codes"
 
 
 def _flow() -> list[tuple[int, str]]:

@@ -240,6 +240,14 @@ def test_me_has_phone_missing(clock, monkeypatch):
     assert c.get("/api/main").json()["identity"]["phone_missing"] is False
 
 
+def test_me_carries_notice_and_privacy(clock):
+    """第 210 批：設定抽屜綁定那一張寄碼前也畫個資告知短文，/api/identity/me 帶同樣兩鍵（同 /api/identity/gate）。"""
+    c = TestClient(server.app)
+    _pw(c)
+    me = c.get("/api/identity/me").json()
+    assert me["notice"] == codes.NOTICE and me["privacy"] == server.CONTENT.config.identity.privacy_url == "/privacy"
+
+
 # ── 第 209 批：寄碼、開單之後才被重設的，驗碼與第三方回呼那一步也擋（同一句；重驗不受影響）──
 
 

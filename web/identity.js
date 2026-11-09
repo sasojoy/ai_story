@@ -169,14 +169,25 @@
 
   // 驗證碼表單（第 204 批）：st = {way, purpose, sent, to, until, notice, stale}；now 是毫秒。寄碼前：號碼、Turnstile（有網站金鑰才有那一格）、寄碼；
   // 寄出後：輸碼、錯 5 次作廢的提示、重寄倒數；門號過期（stale）多一顆「這不是我的帳號」。登入、綁定、重驗三種用途共用，只換標題
-  function identityCodeHtml(st, siteKey, now) {
+  // 第 210 批：寄碼前那一張的個資告知（設計第五節、個資法第 8 條）。info 是 /api/identity/gate 或 /api/identity/me 的回應，
+  // 沒有 notice 就不畫（舊伺服器）；句裡的「隱私權說明」那幾個字做成連結（不多加字），句裡沒有才接在句尾
+  function identityNoticeHtml(info) {
+    if (!info || !info.notice) return "";
+    const text = String(info.notice);
+    const link = `<a href="${esc(info.privacy || "/privacy")}" target="_blank" rel="noopener">${esc(IDENTITY_PRIVACY_LINK)}</a>`;
+    const at = text.lastIndexOf(IDENTITY_PRIVACY_LINK);
+    const body = at < 0 ? esc(text) + link : esc(text.slice(0, at)) + link + esc(text.slice(at + IDENTITY_PRIVACY_LINK.length));
+    return `<p class="idp-fine idp-notice">${body}</p>`;
+  }
+
+  function identityCodeHtml(st, siteKey, now, info) {
     const way = st.way;
     const title = (st.purpose === "bind" ? IDP_CODE_BIND_TITLE : st.purpose === "reauth" ? IDP_CODE_REAUTH_TITLE : IDP_CODE_TITLE)[way];
     const left = Math.max(0, Math.ceil(((st.until || 0) - now) / 1000));
     const body = !st.sent
       ? `<label class="field"><span>${esc(IDP_CODE_TO[way])}</span><input class="input" name="to" value="${esc(st.to || "")}" ${
           way === "phone" ? 'inputmode="tel" autocomplete="tel"' : 'type="email" autocomplete="email"'}></label>${
-          siteKey ? `<div class="cf-turnstile" data-sitekey="${esc(siteKey)}" data-action="identity_code"></div>` : ""}
+          siteKey ? `<div class="cf-turnstile" data-sitekey="${esc(siteKey)}" data-action="identity_code"></div>` : ""}${identityNoticeHtml(info)}
         <input type="hidden" name="phase" value="send"><button class="btn" type="submit">${esc(IDP_CODE_SEND)}</button>`
       : `${st.notice ? `<p class="idp-fine">${esc(st.notice)}</p>` : ""}
         <label class="field"><span>${esc(IDP_CODE_INPUT)}</span><input class="input" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
@@ -239,7 +250,7 @@
     }
     const mode = IDENTITY_MODES.includes(S.gateMode) ? S.gateMode : "login";
     identityRemember(mode);
-    const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now()) : "";
+    const code = mode === "quick" && S.identityCode ? identityCodeHtml(S.identityCode, info.turnstile, Date.now(), info) : "";
     const drawn = identityGateHtml(gate.innerHTML, info, mode, identityEnvNow(), code);
     const html = mode === "register" ? identityPwHint(drawn, info.pw_min) : drawn;
     if (html !== gate.innerHTML) gate.innerHTML = html;
@@ -389,7 +400,7 @@
       const reset = me.has_password && me.reset > 0 ? `<form class="stack idp-reset" id="idp-reset-form"><p class="label">${esc(IDP_RESET_TITLE)}</p>
           <p class="idp-fine">${esc(IDP_RESET_LEFT(Math.max(1, Math.ceil(me.reset / 60))))}</p>${pwFields}
           <p class="form-msg" role="alert"></p><button class="btn" type="submit">${esc(IDP_RESET_GO)}</button></form>` : "";
-      const code = st.code ? identityCodeHtml(st.code, me.turnstile, now) : "";
+      const code = st.code ? identityCodeHtml(st.code, me.turnstile, now, me) : "";
       body = `${rows}${binds}${me.hold ? `<p class="form-msg">${esc(IDP_HOLD)}</p>` : ""}${recheck}${code}${reset}${setpw}<p class="idp-fine">${esc(IDP_STAFF)}</p>`;
     }
     return `<details class="fold idp-fold"${st.open ? " open" : ""}><summary>${esc(IDP_FOLD_TITLE)}${dot}<span class="idp-line">${esc(line)}</span></summary><div class="fold-body">${body}</div></details>`;

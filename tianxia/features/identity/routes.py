@@ -50,7 +50,12 @@ def gate_info(content) -> dict:
     cfg = content.config.identity
     ways = [w for w in cfg.ways if w not in oauth.PROVIDERS or oauth.ready(content, w)]
     # pw_min（第 209 批）：identity 開著時全體密碼的下限，註冊格那一行提示照它寫（這條路關著 404，關著拿不到）
-    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN}
+    return {"ways": ways, "turnstile": cfg.turnstile_site_key, "pw_min": shell_accounts.STRICT_PASSWORD_MIN, **notice_info(content)}
+
+
+def notice_info(content) -> dict:
+    """第 210 批（設計第五節、個資法第 8 條）：驗證碼寄碼前那一張的個資告知短文與隱私權頁網址（同 codes.send 寄出後回的那兩鍵）。"""
+    return {"notice": codes.NOTICE, "privacy": content.config.identity.privacy_url}
 
 
 def _digest(value: str) -> str:
@@ -533,7 +538,8 @@ def router(shell) -> APIRouter:
                 "reset": reset_left, "hold": binding.held(side.hold_until(account.id), now),
                 "turnstile": cfg.turnstile_site_key,
                 # 第 208 批：⚙ 的紅點與摺疊列照它即時更新（web/identity.js identitySyncDot；同 notes.main_slot 的判斷）
-                "phone_missing": bool(cfg.phone_gate) and "phone" not in have}
+                "phone_missing": bool(cfg.phone_gate) and "phone" not in have,
+                **notice_info(shell.CONTENT)}  # 第 210 批：抽屜綁定那一張寄碼前的個資告知
 
     @r.get("/api/identity/me")
     def api_me(request: Request):
