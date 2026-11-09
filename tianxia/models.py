@@ -2459,10 +2459,11 @@ class Raid(_Strict):
     - 發起的人花 stamina（10）體力：比一次遊歷（6）貴，截殺不能比遊歷更划算地刷。
     - 輸的一方失 silver_share（5%）的銀兩、最多 silver_cap（15）兩，贏的拿走其中 take_share（一半，進位）；其餘散落。
       週末設定每天大約收 100 兩，最多 15 兩約一兩場遊歷；照比例扣，身上越少扣得越少，永遠扣不光。
-    - 輸的一方扣氣血上限的 hp_loss（8%），不變成內傷（自己會回，不必花錢療傷）；遊歷落敗是 30%、其中兩成變內傷。
+    - 輸的一方扣氣血上限的 hp_loss（50%；Joy 2026-11-09 決策卡「狠一點但不打死：扣五成」，原本 8%），乘 1−防具減損、不變成內傷
+      （自己會回，不必花錢療傷）；遊歷落敗是 30%、其中兩成變內傷。打到只剩一口氣的是酒肆殺手那一條（企劃者 2026-10-27），不是截殺。
     - 平手（僵持）誰都不失什麼，發起的人的體力照付。
-    - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（1 小時）之內誰都不能再截殺他，
-      不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
+    - 同一個人截殺同一個目標要隔 pair_cooldown_seconds（3 小時）；被截殺過的人 shield_seconds（3 小時；同一張卡從 1 小時拉長，
+      扣得重了不能連著被截；設伏、殺手找人也看這一條）之內誰都不能再截殺他，不論上一場誰贏。一季（週末 60 小時）一個人最多被截殺約 60 次，每次最多 15 兩、照比例扣，加起來扣不光。
       截殺每季都有之後（懸賞榜設計 3.7）：14 天的季有 336 小時，保護時間照舊 1 小時，一季最多可能被截約 300 次；每小時的比例跟週末一樣，
       一季加起來的量多五倍多。要不要另一組數字等 sim_server_bots 量完再定（設計 14.2 第 12 條）。
     - 贏的一方記一點本季貢獻（contrib_per_push × win_contrib_push）：截殺是替陣營做事，但比推大勢一點還少，不會變成升階的捷徑。
@@ -2476,9 +2477,9 @@ class Raid(_Strict):
     silver_share: float = Field(default=0.05, ge=0, le=1)
     silver_cap: int = Field(default=15, ge=0)
     take_share: float = Field(default=0.5, ge=0, le=1)
-    hp_loss: float = Field(default=0.08, ge=0, le=1)
+    hp_loss: float = Field(default=0.5, ge=0, le=1)
     pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)
-    shield_seconds: float = Field(default=3600, ge=0)
+    shield_seconds: float = Field(default=3 * 3600, ge=0)
     win_contrib_push: int = Field(default=1, ge=0)
 
 
