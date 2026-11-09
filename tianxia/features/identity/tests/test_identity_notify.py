@@ -282,6 +282,84 @@ def test_admin_unbind_notifies_rest(notify):
     assert len(senders.FAKES.sms.outbox) == sms  # 被拿掉的那一支不寄
 
 
+# ── 第 210 批：管理者解綁的通知搬出行動鎖（企劃者 2026-11-09「2. ok」）；重設密碼本來就不在鎖裡，釘住現狀 ──
+
+class _Seat:
+    """代替那一份 Game（_LATER 照物件本身當鍵：要能 hash、能弱參照；SimpleNamespace 不能 hash）。"""
+
+
+def _held_when_sent(monkeypatch) -> list[tuple[str, bool]]:
+    """假寄送每寄一則記下那一刻這條執行緒握不握著行動鎖（寫入交易；寫法照 tests/server/test_outlock.py）。"""
+    seen: list[tuple[str, bool]] = []
+    for kind in ("sms", "mail"):
+        box = getattr(senders.FAKES, kind)
+        real = box.send
+
+        def send(*args, _real=real, _kind=kind):
+            seen.append((_kind, database.open_database().writing()))
+            return _real(*args)
+
+        monkeypatch.setattr(box, "send", send)
+    return seen
+
+
+def test_admin_unbind_sends_after_the_lock(notify, monkeypatch):
+    from test_identity_admin import _admin, _do, _say
+
+    boss = _admin(monkeypatch)
+    c = TestClient(server.app)
+    _pw(c)
+    bind(c)
+    bind(c, MAIL, "email")
+    sms = len(senders.FAKES.sms.outbox)
+    seen = _held_when_sent(monkeypatch)
+    r = _do(boss, "identity_unbind", target="shen_01", provider="phone")
+    assert _say(r) == idadmin.ADMIN_UNBOUND.format(who="shen_01", kind="手機")  # 回給管理者的字不變
+    assert seen == [("mail", False)]  # 寄的那一刻鎖已經放了；被拿掉的那一支不寄（第 209 批）
+    assert senders.FAKES.mail.outbox[-1] == (MAIL, binding.MAIL_ADMIN_UNBOUND.format(kind="手機"))
+    assert len(senders.FAKES.sms.outbox) == sms
+    from tianxia.features.identity import routes as idroutes
+
+    assert not idroutes._LATER  # 寄完就清掉
+
+
+def test_admin_unbind_rolled_back_sends_nothing(notify, monkeypatch):
+    """動作丟例外、交易撤回：鎖內記下的那一則留著也不寄（start 寄之前再查一次那一種已經不在帳號上）。"""
+    from tianxia.features.identity import routes as idroutes
+
+    c = TestClient(server.app)
+    aid = _pw(c)
+    bind(c)
+    bind(c, MAIL, "email")
+    game = _Seat()
+    idroutes._LATER[game] = [(aid, "shen_01", "phone", "那一則")]
+    seen = _held_when_sent(monkeypatch)
+    job = [j for j in server.OUTLOCK_JOBS if j.slot == "identity_notify"][0]
+    got = job.waiting(game)
+    assert got
+    job.start(game, got)
+    assert seen == [] and game not in idroutes._LATER
+
+
+def test_identity_notify_slot_at_the_tail(clock):
+    job = server.OUTLOCK_JOBS[-1]
+    assert job.slot == "identity_notify"
+    assert job.waiting.__module__ == job.start.__module__ == "tianxia.features.identity.routes"
+    assert not job.waiting(_Seat())  # 沒記下東西（關著、別的動作）：不開
+
+
+def test_admin_reset_notifies_outside_the_lock(notify, monkeypatch):
+    """/api/admin/reset_password 不經 act()，通知寫在交易外面（admin 包 routes.py）：寄的那一刻鎖沒握著。"""
+    c = TestClient(server.app)
+    _pw(c)
+    bind(c)
+    boss = _boss_client()
+    monkeypatch.setattr(server.CONTENT.config, "admins", ["段青山"])
+    seen = _held_when_sent(monkeypatch)
+    assert boss.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass-1234"}).status_code == 200
+    assert seen == [("sms", False)]
+
+
 def test_not_mine_notifies_old_account_rest(notify):
     c = TestClient(server.app)
     phone_account(c)

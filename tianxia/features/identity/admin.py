@@ -72,7 +72,9 @@ def view(shell, game, body: dict) -> list[str]:
     return out
 
 
-def unbind(shell, game, body: dict, now: float) -> list[str]:
+def unbind(shell, game, body: dict, now: float, *, later: list | None = None) -> list[str]:
+    """later（第 210 批）：給了 list 就只把要寄的那一則記進去（account_id、帳號鍵、拿掉的那一種、那一句），由 routes 的 identity_notify
+    在放掉行動鎖之後寄；None（直接叫，測試）照舊當場寄。"""
     key, account = _target(shell, body)
     if account is None:
         return [NOT_FOUND]
@@ -90,7 +92,11 @@ def unbind(shell, game, body: dict, now: float) -> list[str]:
     side.drop_contacts(account.id, provider)  # 第 208 批：通知用的加密號碼一起刪
     notes.add(side, account.id, binding.NOTE_ADMIN_UNBOUND.format(kind=binding.kind_name(provider)), now)
     # 第 209 批（PM 11/09 定寄）：寄給剩下綁著的 Email、手機（被拿掉的那一支上面已刪）；沒有可寄的只寫上面那則紀錄
-    contacts.send_all(shell, side, account.id, binding.MAIL_ADMIN_UNBOUND.format(kind=binding.kind_name(provider)))
+    text = binding.MAIL_ADMIN_UNBOUND.format(kind=binding.kind_name(provider))
+    if later is None:
+        contacts.send_all(shell, side, account.id, text)
+    else:
+        later.append((account.id, key, provider, text))
     return [ADMIN_UNBOUND.format(who=account.login, kind=binding.kind_name(provider))]
 
 

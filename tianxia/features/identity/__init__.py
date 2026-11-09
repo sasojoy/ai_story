@@ -80,6 +80,12 @@ class IdentityFeature(Feature):
 
         return routes.admin_tools(shell)
 
+    def outlock(self, shell):
+        """放鎖之後的背景格 identity_notify（第 210 批：管理者解綁的通知放鎖之後寄；接在 OUTLOCK_ORDER 表尾）。"""
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
     def threads(self, shell) -> None:
         """不開執行緒：伺服器啟動時（start_threads 只在 server.main 叫）fake_services 開著一律印一行警告給主機看；
         公開網址（TIANXIA_PUBLIC_URL）是正式網域才拒絕啟動（L 波 PM 定：season21 的測試環境要能用假寄送驗驗證碼登入，
