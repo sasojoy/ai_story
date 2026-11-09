@@ -377,17 +377,15 @@ export const flows = [
       else await c.step('.act-move [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
       await c.crawl("cl", () => c.load("/"), [...UI, "fig-close", "fig-log-close", "letter-read"], { total: 10, cap: 2 });
       // batch 112: 往來紀錄, 交談, 護衛 and × are on the figure's own layer (web/companions.js figPickHtml, .vn-layer.pick), which the 此地人物
-      // chip opens (fig-open); a reload closes it, so open it again before each. fig-act closes the layer itself, so × comes before it
+      // chip opens (fig-open); a reload closes it, so open it again before each.
+      // × (call_close) and 護衛 (call_act) are not walked: walked base = head, they came out different in two of four main rounds
+      // (BODY.layer-open 1280px vs 1265px, the scrollbar taken away or not at the moment of the picture), so they would only add noise
       const PICK = ".vn-layer.pick";
       const pick = async () => { await c.load("/"); await c.click('.people-row [data-act="fig-open"][data-id="zhujun"]'); };
       await pick();
       await c.step(`${PICK} ${ACT("fig-log")}`, "call_log");
       await pick();
       await c.step(`${PICK} ${ACT("fig-talk")}`, "call_talk", { wait: 1800 });
-      await pick();
-      await c.step(`${PICK} ${ACT("fig-close")}`, "call_close", { who: "p1" });
-      await pick();
-      await c.step(`${PICK} ${ACT("fig-act")}`, "call_act", { who: "p1" });
       await c.api("p1", "/api/choose", { id: "call:back" });
       await c.load("/");
       await c.step(ACT("letter-open"), "letter_open", {});
