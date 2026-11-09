@@ -27,7 +27,11 @@ export const flows = [
     // only story-ok and the check-in sheet, so the pop stayed over the lower half of every page until the sense pad closed it (128 of 237
     // main scenes in batch 113's walk), and its .sheet kept body.layer-open on under the figure layer. Take it once, then close it like a
     // player: 知道了 remembers it in this browser's localStorage, so it stays closed for the rest of the round
+    // It is also the browser's first page in the game: the web fonts' glyph subsets (fonts.googleapis.com, unicode-range) were still
+    // arriving for one of four walks' 1280 picture (a 36-level difference along one line). Load the page once more, from cache, before it
+    if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) await c.load("/");
     if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) {
+      await c.settle(600);
       await c.shoot("patch_pop", { who: "p3" });
       await c.click('.sheet.patch-pop [data-act="patch-close"]');
       await c.settle(260);
