@@ -34,6 +34,19 @@ RENAMED = "從今天起，{pron}叫「{name}」。"
 RENAME_ONCE = "名字已經改過一次了。"
 ALONG_ON = "出門帶著{name}。"
 ALONG_OFF = "出門讓{name}留在住處。"
+# 第二批（待 joy 潤）
+STUDY_LABEL = "{name}該出去學點本事了"
+STUDY_TEXT = "{name}長高了，也該出去學點本事。你想送{pron}去哪裡？"
+STAY = "再等等"
+STAY_TEXT = "你說再等等。{name}點點頭，看起來有點失望，又有點高興。"
+SILVER_SHORT = "銀兩不夠，還差 {n} 兩。"
+SENT_MEMO = "你送{pron}去了{school}。"
+OPEN_LABELS = {"letter": "{name}來信了", "trial": "{name}學成回來了", "oath": "{name}跪在你面前"}
+SETTLING = "{name}站在那裡，像是長大了。（{pron}會成為什麼樣的人，過一會兒就知道）"
+GRADUATED_MEMO = "出師了，成了{path}，人稱「{title}」。"
+SWORN = "從今天起，{name}是你的親衛隊長。{pron}成了{path}，江湖上叫{pron}「{title}」。"
+STAGE_TEXT = {"grow": "跟著你長大", "study": "在外求學", "trial": "學成回來", "settle": "學成回來", "oath": "跪在你面前",
+              "sworn": "親衛隊長"}
 
 
 def tuning(content):
@@ -88,15 +101,86 @@ def clamp_choice(t, choice: GuardChoice) -> GuardChoice:
                        qing=max(-t.step_cap, min(t.step_cap, int(choice.qing))), tags=tags[:t.tag_cap])
 
 
+def school_name(key: str) -> str:
+    return texts.SCHOOLS.get(key, {}).get("name", "")
+
+
+def _fill_school(text: str, b: GuardBook) -> str:
+    return fill(text.replace("{school}", school_name(b.school)), b)
+
+
 def fixed_event(t, b: GuardBook, kind: str, day: int, salt: str) -> GuardEvent:
-    """固定事件（模型壞了、假人）：照種類挑一件這一陣子沒出過的（紀事裡沒有那一件的 fixed 標記就算沒出過）。"""
-    pool = texts.ROAD if kind == "road" else texts.HOME
-    seen = {e.text for e in b.log}
-    fresh = [e for e in pool if fill(e["choices"][0]["memo"], b) not in seen] or pool
-    raw = fresh[seed("固定", salt, b.seq, day) % len(fresh)]
-    choices = [clamp_choice(t, GuardChoice(label=fill(c["label"], b), reaction=fill(c["reaction"], b), memo=fill(c["memo"], b),
-                                           qing=c["qing"], tags=list(c["tags"]))) for c in raw["choices"]]
-    return GuardEvent(seq=b.seq + 1, kind=kind, day=day, text=fill(raw["text"], b), choices=choices, fixed=raw["id"])
+    """固定事件（模型壞了、假人）：家裡、路上、信照種類挑一件這一陣子沒出過的（紀事裡有它第一個做法的那一句就算出過）；
+    出師考驗照分數最高的出路出題；立誓那一段是結算寫好的 b.oath。"""
+    if kind == "trial":
+        raw = {"id": "trial", "text": texts.TRIALS.get(top_paths(t, b)[0], texts.TRIALS["遊俠"]), "choices": texts.TRIAL_CHOICES}
+    elif kind == "oath":
+        raw = {"id": "oath", "text": b.oath or texts.OATHS[band(t, b.qing)], "choices": texts.OATH_CHOICES}
+    else:
+        pool = texts.ROAD if kind == "road" else texts.LETTERS if kind == "letter" else texts.HOME
+        seen = {e.text for e in b.log}
+        fresh = [e for e in pool if _fill_school(e["choices"][0]["memo"], b) not in seen] or pool
+        raw = fresh[seed("固定", salt, b.seq, day) % len(fresh)]
+    choices = [clamp_choice(t, GuardChoice(label=_fill_school(c["label"], b), reaction=_fill_school(c["reaction"], b),
+                                           memo=_fill_school(c["memo"], b), qing=c["qing"], tags=list(c["tags"]))) for c in raw["choices"]]
+    return GuardEvent(seq=b.seq + 1, kind=kind, day=day, text=_fill_school(raw["text"], b), choices=choices, fixed=raw["id"])
+
+
+# ── 出師結算（第二批）─────────────────────────────────────────────────
+
+def top_paths(t, b: GuardBook) -> list[str]:
+    """照性向分數挑出路（設計稿第三節）：一條出路看它那幾種性向的平均；同分照名字與名號的雜湊排，前 path_options 條交給模型挑。"""
+    def score(item):
+        name, tags = item
+        return (-sum(b.tags.get(k, 0) for k in tags) / max(1, len(tags)), seed("出路", b.name, name))
+    return [name for name, _ in sorted(t.paths, key=score)[:t.path_options]]
+
+
+def fixed_title(path: str, salt: str) -> str:
+    pool = texts.TITLES.get(path) or ["無名"]
+    return pool[seed("稱號", salt, path) % len(pool)]
+
+
+def fixed_bio(t, b: GuardBook, path: str, title: str) -> str:
+    memos = [e.text.rstrip("。") for e in b.log[1:] if e.text][-3:]
+    opening = opening_of(b)
+    text = texts.BIO.replace("{opening}", opening).replace("{memos}", ("他記得：" + "；".join(memos) + "。") if memos else "")
+    text = text.replace("{school}", school_name(b.school) or "江湖").replace("{path}", path).replace("{title}", title)
+    text = text.replace("{end}", texts.BIO_END[band(t, b.qing)])
+    return fill(text.replace("他記得", "{pron}記得"), b)[:t.bio_max]
+
+
+def opening_of(b: GuardBook) -> str:
+    """開場那一句的短版（生平開頭用）：救下他那一段的第一句。"""
+    head = re.split(r"[。！？]", opening(b.opening)["text"], maxsplit=1)[0]
+    return head[:40] + "時，"
+
+
+@dataclass(frozen=True)
+class Settled:
+    """出師結算的結果（B 段回的；C 段夾過再寫回）。"""
+
+    path: str
+    title: str
+    bio: str
+    oath: str
+
+
+def fixed_settle(t, b: GuardBook, salt: str) -> Settled:
+    path = top_paths(t, b)[0]
+    title = fixed_title(path, salt)
+    return Settled(path=path, title=title, bio=fixed_bio(t, b, path, title), oath=fill(texts.OATHS[band(t, b.qing)], b))
+
+
+def clamp_settled(t, b: GuardBook, got: Settled, options: tuple[str, ...], salt: str, name_ok) -> Settled:
+    """引擎再夾一次：出路只能是交給模型的那幾條，不是就拿第一條；稱號過名字規則（name_ok 回 None 才收），不行換固定的；字數截斷。"""
+    path = got.path if got.path in options else (options[0] if options else top_paths(t, b)[0])
+    title = re.sub(r"\s", "", got.title or "")
+    if not 2 <= len(title) <= 4 or name_ok(title) is not None:
+        title = fixed_title(path, salt)
+    bio = (got.bio or "").strip()[:t.bio_max] or fixed_bio(t, b, path, title)
+    oath = (got.oath or "").strip()[:160] or fill(texts.OATHS[band(t, b.qing)], b)
+    return Settled(path=path, title=title, bio=bio, oath=oath)
 
 
 def apply(t, b: GuardBook, choice: GuardChoice, day: int, stamp: str) -> list[str]:
@@ -161,6 +245,8 @@ class EventRequest:
     memos: tuple[str, ...]
     tags: tuple[str, ...]
     tag_list: tuple[str, ...]
+    school: str = ""  # 求學的去處（名字；信與出師時才有）
+    paths: tuple[str, ...] = ()  # 出師考驗、結算：交給模型挑的出路
     say: str = ""  # 自己寫的那一句（評一句時才有）
     event: str = ""  # 眼前那一件（評一句時才有）
     extra: dict = field(default_factory=dict)
@@ -184,6 +270,8 @@ def _context(req: EventRequest) -> str:
         lines.append("孩子記得的事（由舊到新）：\n" + "\n".join(f"- {_safe(m)}" for m in req.memos))
     if req.tags:
         lines.append("孩子這陣子的性子偏向：" + "、".join(req.tags))
+    if req.school:
+        lines.append(f"孩子被送去{req.school}求學。")
     return "\n".join(lines)
 
 
@@ -201,14 +289,19 @@ def write_event(client, req: EventRequest, t) -> GuardEvent | None:
     """B 段：生一件事＋三個做法（溫、嚴、狠各一，各附他的反應、紀事一句、情分、性向）。寫不出來回 None（C 段換固定事件）。"""
     if client is None:
         return None
-    where = "收養人帶他出門（出陣、遊歷、截殺這一類）時，路上剛發生的事" if req.kind == "road" else "住處、街坊、日常裡的一件小事"
+    what = {
+        "road": "寫一件收養人帶他出門（出陣、遊歷、截殺這一類）時，路上剛發生的事。",
+        "letter": f"孩子在{req.school}求學，寫一封信回來給收養人：寫他在那裡的一件事、一個心事或一個請求，用孩子的口吻。",
+        "trial": f"孩子學成回來，寫他的出師考驗：照他可能走的路（{'、'.join(req.paths)}）出一道題，寫到他要動手、收養人在旁邊為止。",
+    }.get(req.kind, "寫一件住處、街坊、日常裡的一件小事。")
+    how = "收養人怎麼回信" if req.kind == "letter" else "收養人在考驗時怎麼做" if req.kind == "trial" else "收養人怎麼做"
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": (
             _context(req) + "\n\n"
-            f"寫一件{where}。最好接著他記得的事往下走（上一件的後續、他提起你做過的事），不要重複舊事。\n"
+            f"{what}最好接著他記得的事往下走（上一件的後續、他提起你做過的事），不要重複舊事。\n"
             "回 JSON：text 是這件事（60~140 字，寫到孩子在等收養人反應為止）；choices 三個做法，"
-            "第一個溫和善待、第二個嚴厲或冷淡、第三個狠心虐待。每個做法：label（收養人怎麼做，24 字內）、"
+            f"第一個溫和善待、第二個嚴厲或冷淡、第三個狠心虐待。每個做法：label（{how}，24 字內）、"
             "reaction（孩子的反應，40~80 字）、memo（孩子記住的那一句，20 字內，用「你」稱呼收養人）、"
             "qing（孩子對收養人的感情變化，-2~2 的整數）、tags（這件事讓孩子的性子偏向哪裡，從「"
             + "、".join(req.tag_list) + "」挑一到兩個）。"
@@ -248,3 +341,36 @@ def judge_say(client, req: EventRequest, t) -> GuardChoice | None:
     if not got.relevant or not got.reaction:
         return GuardChoice(label="", reaction="", memo="", qing=0, tags=[])
     return clamp_choice(t, GuardChoice(label=req.say[:30], reaction=got.reaction, memo=got.memo or req.say[:20], qing=_model_qing(got.qing), tags=got.tags))
+
+
+class _Settle(BaseModel):
+    path: str = ""
+    title: str = ""
+    bio: str = ""
+    oath: str = ""
+
+
+def settle(client, req: EventRequest, t) -> Settled | None:
+    """B 段：出師結算。從交給它的幾條出路挑一條、取稱號、讀紀事寫生平、寫立誓那一段；數字一概不寫（C 段 clamp_settled 夾）。
+    叫不到、寫不出來回 None（C 段換 fixed_settle）。"""
+    if client is None:
+        return None
+    hate = req.band in ("怨懟", "恨極")
+    messages = [
+        {"role": "system", "content": SYSTEM.replace("寫這孩子成長路上的一件小事", "寫這孩子長大出師、成了什麼人")},
+        {"role": "user", "content": (
+            _context(req) + "\n\n"
+            f"他學成了。從這幾條路挑一條他最像的：{'、'.join(req.paths)}。不管他心裡怎麼看收養人，他都會成為收養人最忠誠的親衛隊長，永遠不背叛。"
+            + ("他心裡恨收養人，跟著是為了親眼看收養人倒下；寫得冷、寫得病，但不寫血腥細節。" if hate else "") + "\n"
+            f"回 JSON：path（挑的那一條，照抄上面的字）、title（江湖上叫他的稱號，2~4 個字，不用真實歷史人物或武俠小說裡的名字）、"
+            f"bio（他的生平，150~{t.bio_max} 字，第三人稱，一定要提到他記得的兩三件事）、"
+            "oath（他跪在收養人面前立誓的那一段，用他的口吻，40~100 字）。"
+        )},
+    ]
+    try:
+        got = client.chat_structured(messages, _Settle, temperature=0.9, num_predict=1200, required_fields=["path", "title", "bio", "oath"], require_in_schema=True)
+    except Exception:
+        return None
+    if not got.bio or not got.oath:
+        return None
+    return Settled(path=got.path.strip(), title=got.title.strip(), bio=got.bio, oath=got.oath)

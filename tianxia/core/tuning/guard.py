@@ -7,13 +7,39 @@ from pydantic import BaseModel, ConfigDict, Field
 # 性向九種（設計稿第二節）：模型只能從這裡挑；出師時照分數挑出路（第二批）
 TAGS = ("勇", "謀", "俠", "巧", "耕", "市", "暗", "準", "仁")
 
+# 求學的七處去處（設計稿第一節「求學」）：id → 要花的銀兩、推的性向、動的情分（丟著不管的往下）。名字與信在 features/guard/texts.py
+SCHOOLS = {
+    "shuyuan": {"silver": 200, "tags": {"謀": 3, "仁": 1}, "qing": 1},
+    "wuguan": {"silver": 150, "tags": {"勇": 3, "俠": 1}, "qing": 1},
+    "junying": {"silver": 100, "tags": {"勇": 2, "準": 2}, "qing": 0},
+    "tiepu": {"silver": 80, "tags": {"巧": 3, "耕": 1}, "qing": 0},
+    "yiguan": {"silver": 150, "tags": {"仁": 3, "巧": 1}, "qing": 1},
+    "gensui": {"silver": 0, "tags": {"俠": 1, "市": 1, "準": 1}, "qing": 2},
+    "buguan": {"silver": 0, "tags": {"市": 2, "暗": 2}, "qing": -3},
+}
+
+# 出路十種（設計稿第三節）：名字 → 看哪幾種性向（取平均）。出師時照分數挑前三交給模型；專長是第三批
+PATHS = (
+    ("將軍", ("勇", "謀")), ("謀士", ("謀",)), ("遊俠", ("俠", "勇")), ("鐵匠", ("巧",)), ("農夫", ("耕",)),
+    ("乞丐", ("市",)), ("殺手", ("暗",)), ("弓箭手", ("準",)), ("醫者", ("仁",)), ("斥候", ("市", "準")),
+)
+
 
 class GuardTuning(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
     meet_level: int = Field(default=10, ge=1)  # 幾級撞見那個孩子（7 天季同）
-    study_level: int = Field(default=20, ge=1)  # 幾級送去求學（第二批；7 天季 15）
+    study_level: int = Field(default=20, ge=1)  # 幾級送去求學（Joy 2026-11-09「20級求學後，是看時間而不是等級」；7 天季照 week7_study_level）
+    week7_study_level: int = Field(default=15, ge=1)
+    study_days: float = Field(default=3, gt=0)  # 求學幾天（季曆的天；7 天季照 week7_study_days）
+    week7_study_days: float = Field(default=1, gt=0)
+    letters: int = Field(default=2, ge=0)  # 求學期間寫幾封信回來（平均排在求學那幾天裡）
+    schools: dict[str, dict] = Field(default_factory=lambda: {k: {"silver": v["silver"], "tags": dict(v["tags"]), "qing": v["qing"]} for k, v in SCHOOLS.items()})
+    paths: list[tuple[str, tuple[str, ...]]] = Field(default_factory=lambda: list(PATHS))
+    path_options: int = Field(default=3, ge=1)  # 出師時交給模型挑的出路有幾條
+    bio_max: int = Field(default=300, ge=50)  # 生平最多幾個字
+    settle_budget_seconds: float = Field(default=60, gt=0)  # 出師結算（稱號、生平、立誓那一段）模型的時間預算
     qing_cap: int = Field(default=20, ge=1)  # 情分上下限
     step_cap: int = Field(default=3, ge=1)  # 一件事最多動多少情分（模型評 −2～+2，固定事件寫死的也夾這個）
     tags: list[str] = Field(default_factory=lambda: list(TAGS))

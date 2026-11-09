@@ -369,7 +369,9 @@ class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
     10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
 
-    stage: str = "met"  # met（眼前有個孩子）／saved（救下了，收不收）／left（救了沒收，他留在當地）／grow（收養了，成長期）
+    # met（眼前有個孩子）／saved（救下了，收不收）／left（救了沒收，他留在當地）／grow（收養了，成長期）／study（送去求學）
+    # ／trial（學成回來，出師考驗）／settle（等結算他成了什麼人）／oath（跪在你面前立誓）／sworn（投效了，親衛隊長）
+    stage: str = "met"
     opening: str = ""  # 開場的 id（content/guard.json 的 openings）
     place: str = ""  # 在哪裡遇見的（沒收的話他留在這裡）
     name: str = ""
@@ -389,6 +391,17 @@ class GuardBook(BaseModel):
     along: bool = True  # 出門帶著他（帶著才會冒出路上的事）
     stamina_seen: float | None = None  # 這一下動作之前的體力（同步時抄、做完一件事時比：花了體力才是出門）
     adopted_season: int = 0
+    # 第二批：求學、出師、投效
+    picking: bool = False  # 正在挑去處（選單換成七處）
+    school: str = ""  # 求學去處的 id（Config.guard.schools）
+    study_from: float = 0.0  # 世界秒：哪時送去的
+    study_until: float = 0.0  # 世界秒：哪時學成
+    letters: int = 0  # 寫回來幾封信了
+    path: str = ""  # 出路（Config.guard.paths 的名字；出師結算定，之後不再改）
+    title: str = ""  # 稱號（模型取、過名字規則；不行換固定的）
+    bio: str = ""  # 生平（模型讀紀事寫；別人看不到）
+    oath: str = ""  # 立誓那一段
+    sworn_season: int = 0  # 哪一季投效的
 
 
 class LegacyBook(BaseModel):

@@ -1,5 +1,5 @@
 """親衛隊長的假人分數（bot_policy.score 問 bot_pick）：假人也養一個（設計稿第八節：別人看得到他，假人沒有會被看出來）。
-假人不叫模型：事件一律是固定事件（actions._modelless）。救、收、挑做法照名號雜湊，善待居多、也有狠心的，跟真人一樣什麼樣的都有。"""
+假人不叫模型：事件與出師結算一律是固定的（actions._modelless）。救、收、挑做法、求學去處照名號雜湊，善待居多、也有狠心的，跟真人一樣什麼樣的都有。"""
 from __future__ import annotations
 
 from . import rules
@@ -11,8 +11,13 @@ def score(ctx, option) -> float | None:
         return None
     head, _, rest = oid[len("guard:"):].partition(":")
     name = ctx.state.player.name
-    if head in ("meet", "open", "back"):
+    if head in ("meet", "open", "back", "study"):
         return 55.0
+    if head == "stay":
+        return 1.0
+    if head == "school":  # 每個假人一處偏好的去處（照名號雜湊）；錢不夠那一顆按不下去，就挑別處
+        keys = list(rules.texts.SCHOOLS)
+        return 50.0 if keys[rules.seed("去處", name) % len(keys)] == rest else 10.0
     if head == "save":
         return 60.0
     if head in ("leave", "part", "later"):

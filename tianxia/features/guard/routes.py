@@ -5,7 +5,7 @@
 - /api/do/guard_say {text}：自己寫的那一句，三段：A actions.say_request（鎖內只讀）→ B 鎖外 rules.judge_say（預算 Config.guard.budget_seconds）
   → C actions.apply_say 重驗同一件才記。
 - 背景寫字 guard（表外的格，接在 OUTLOCK_ORDER 表尾）：有一件事要生（want）時放鎖之後開一條執行緒：A actions.event_request → B rules.write_event
-  → C actions.apply_event（寫不出來換固定事件）。
+  （出師結算是 rules.settle，預算 Config.guard.settle_budget_seconds）→ C actions.apply_event（寫不出來換固定的）。
 關著的時候每一條都回 rules.NO_SUCH（不叫模型、不動帳）。"""
 from __future__ import annotations
 
@@ -70,15 +70,17 @@ def event_once(shell, game) -> bool:
         return False
     t = game.content.config.guard
     started = shell._monotonic()
+    budget = t.settle_budget_seconds if request.kind == "settle" else t.budget_seconds
+    write = rules.settle if request.kind == "settle" else rules.write_event  # 出師結算或生一件事（家裡、路上、信、出師考驗）
 
     def ask():
-        return rules.write_event(shell.within_budget(game.client, t.budget_seconds - (shell._monotonic() - started)), request, t)
+        return write(shell.within_budget(game.client, budget - (shell._monotonic() - started)), request, t)
 
     if shell.QUEUE is None:
         event = ask()
     else:
         try:
-            event = shell.QUEUE.run(shell.TALE_OWNER, ask, fallback=None, bot=True, wait=t.budget_seconds)
+            event = shell.QUEUE.run(shell.TALE_OWNER, ask, fallback=None, bot=True, wait=budget)
         except (shell.Busy, shell.QueueTimeout):
             event = None
     with shell._locked(game):

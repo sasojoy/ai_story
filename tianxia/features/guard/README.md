@@ -1,6 +1,6 @@
 # 親衛隊長（`tianxia/features/guard/`）
 
-- 做什麼：取代酒肆招募的同伴系統（Joy 2026-11-09）。10 級那一路撞見一個快死的孩子，救下、收養，之後一件一件的事由玩家決定怎麼待他；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。最後他一定成為你的親衛隊長，被虐待大的帶著恨追隨（第二批起）。
+- 做什麼：取代酒肆招募的同伴系統（Joy 2026-11-09）。10 級那一路撞見一個快死的孩子，救下、收養，之後一件一件的事由玩家決定怎麼待他；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。最後他一定成為你的親衛隊長，被虐待大的帶著恨追隨。
 - 導覽：`docs/guide/大勢人物與賽季.md` 的「親衛隊長」那一節
 - 設計稿：https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su（源檔在專案資料夾 `design/親衛隊長/設計稿v1.html`；Joy 2026-11-09「其他都按照建議」）
 - 開關：`Config.guard.enabled`（預設關；數字在 `tianxia/core/tuning/guard.py`，全是【草】）
@@ -9,7 +9,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記：options、menu、choose（`guard:`）、status（`main.guard`）、on_sync、after_action（自己問 enabled）、on_season_start、bot_pick、main_actions、outlock、scratch（`_guard_stamina`） |
+| `__init__.py` | 登記：options、menu、choose（`guard:`）、status（`main.guard`）、on_sync、after_action（自己問 enabled）、on_season_start、bot_pick、outlock、seams（`season.carry` 的 `guard` 那一格） |
 | `rules.py` | 純規則：心性五檔（`band`）、夾法（`clamp_choice`：情分 ±step_cap、模型的 ±2、性向只留清單上的）、固定事件（`fixed_event`）、記帳（`apply`）、給模型的提示（`write_event` 生一件事＋溫嚴狠三個做法、`judge_say` 評自己寫的那一句） |
 | `texts.py` | 固定的字：六種開場、男女名字表、八件家裡的事、四件路上的事（模型壞了與假人用；全部待 joy 潤） |
 | `actions.py` | 「此地還能做」那幾顆、接管的選單、每天保底的家裡的事（on_sync）、帶他出門花了體力那一下冒出的路上的事（after_action）、三段式的 A、C 段、改名、出門帶不帶、養成冊那一份、換季照帶 |
@@ -22,12 +22,21 @@
 - 自己寫的那一句：A `say_request` → B `judge_say`（跟這件事無關的回 relevant=false，C 段回「沒聽懂」不算這一次）→ C `apply_say` 重驗同一件。
 - 數字由引擎定：模型評的情分夾到 ±2，固定事件寫死的最多 ±`step_cap`，總帳夾在 ±`qing_cap`；畫面不露數字（心性一檔、墨線位置）。
 
-**認領的欄位**：`PlayerState.guard`（`GuardBook`、`GuardEvent`、`GuardChoice`、`GuardEntry`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：第一批在 `on_season_start`（開關開著時）；開關關著的換季帶不過去，第四批補 `season.carry` 那一格（核心表，要點頭）。資料庫不升版。
+**認領的欄位**：`PlayerState.guard`（`GuardBook`、`GuardEvent`、`GuardChoice`、`GuardEntry`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：`season.carry` 的 `guard` 那一格整份照帶（不看開關），`on_season_start` 收拾眼前那一件、天的帳，求學剩下的時間照帶。資料庫不升版。
+
+## 第二批：求學、出師、投效
+
+- 流程接著 `grow`：到了求學的等級（`study_level` 20，7 天季 `week7_study_level` 15）出現「{name}該出去學點本事了」→ `picking`（選單換成七處去處＋再等等；錢不夠那幾顆按不下去）→ `study`（花 `schools[去處].silver`、推那一處的性向、動情分；學 `study_days` 天，7 天季 `week7_study_days`，看時間不看等級）。
+- 求學期間寫 `letters`（2）封信回來（kind `letter`，平均排在求學那幾天裡；回信也是三個做法或自己寫）；家裡、路上的事停掉。
+- 期滿 → `trial`：出師考驗一件（kind `trial`，照分數最高的出路出題）。答了 → `settle`：出師結算。
+- 結算（`rules.top_paths` 照性向平均挑前 `path_options` 條出路）：模型挑一條、取稱號、讀紀事寫生平（`bio_max` 字內）與立誓那一段（`rules.settle`，鎖外背景寫字，預算 `settle_budget_seconds`）；C 段 `clamp_settled` 夾：出路只能是交出去的那幾條、稱號 2～4 字且過 `naming.name_problem`，不行換固定的（`texts.TITLES`）。叫不到模型、假人、等太久一律 `fixed_settle`。
+- → `oath`：跪誓那一件（字是結算寫好的 `oath`，三個做法固定：扶起來、受這一拜、轉身就走）。答了 → `sworn`：親衛隊長。養成冊名帖旁寫出路與稱號，多一段只有自己看得到的生平。
+- 恨線：心性照情分，立誓那一段照心性寫；恨極的照樣立誓投效（永遠不背叛），專長與台詞是第三批。
 
 ## 還沒做（設計稿第十節）
 
-第二批求學、出師結算、投效；第三批投效之後；第四批同服互動、跨季那一格、列傳、名帖、關酒肆招募；第五批圖。江湖頁有事時要一條提示列（`main.js` 的 `jhHintsHtml`，殼）要 Joy 點頭才加，現在是「此地還能做」裡那一顆。
+第三批投效之後（隊上的位子、專長、恩線恨線的戰鬥與台詞、量平衡）；第四批同服互動、列傳、名帖、關酒肆招募；第五批圖（清單 https://claude.ai/artifact/46RRJCExUY8pZReoW1hayp）。江湖頁有事時要一條提示列（`main.js` 的 `jhHintsHtml`，殼）要 Joy 點頭才加，現在是「此地還能做」裡那一顆。
 
 ## 測試
 
-- `tests/test_guard.py`（14 條）、`tests/test_guard_smoke.py`（1 條 smoke）。
+- `tests/test_guard.py`（14 條）、`tests/test_guard_study.py`（12 條，第二批）、`tests/test_guard_smoke.py`（1 條 smoke）。
