@@ -45,7 +45,7 @@ ANNAL_OTHER_LEFT = "{who}割袍斷義，離開了{bond}。"
 ANNAL_ENDED = "{bond}只剩你一人，就此散了。"
 # 義聚（第二批）
 GATHER = "義聚"
-GATHER_LABEL = "義聚・{names}也在此（體力 +{n}）"
+GATHER_LABEL = "義聚"  # 此地可為的圓章底下只放得下兩三個字；誰在、回多少寫在名帖匣的金蘭帖上
 GATHER_DONE = "你與{names}在{place}義聚，把酒敘舊，體力 +{n}。"
 GATHER_AGAIN = "今天已經義聚過了，明天再來。"
 GATHER_ALONE = "要有兄弟跟你在同一個地方才能義聚。"
