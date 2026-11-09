@@ -40,7 +40,7 @@ def test_an_art_goes_into_the_book_and_is_learned_one_grade_lower():
     assert entry.status == "in" and entry.art.name == "寒江劍" and entry.art_quality == "絕學"
     d = _again(c, d, NOW + 20)
     row = actions.view(d)["entries"][0]
-    assert row["kind"] == "武學" and "上品" in row["fx"]
+    assert row["kind"] == "武學" and row["fx"] == "學到的是上品"
     assert actions.learn(d, entry.id) == [B.LEARNED.format(sect="白馬寺", num="一", name="寒江劍")]
     assert art.id in d.state.player.arts and team.art_quality(d.state, art) == "上品"
     assert actions.learn(d, entry.id) == [B.HAVE + "。"]

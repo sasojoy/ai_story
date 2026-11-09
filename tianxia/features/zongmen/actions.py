@@ -367,10 +367,13 @@ def page_learn(ctx: Game, sect_id: str, entry_id: str) -> list[str]:
     return [B.PAGE_LEARNED.format(sect=sect.name, num=B.num(entry.number), name=name)]
 
 
+LEARN_AS = "學到的是{quality}"  # 待 joy 潤
+
+
 def _row(ctx: Game, e, problem: str) -> dict:
     c = ctx.content
     if e.art is not None:
-        fx, effects, note = f"{e.art.kind}・學到的是{B.art_learn_quality(e)}", [], e.art.note
+        fx, effects, note = LEARN_AS.format(quality=B.art_learn_quality(e)), [], e.art.note
     else:
         fx = insight_fx.label(c, B.learn_copy(e)[1])
         effects = [f"{x['name']}：{x['desc']}" for x in insight_fx.effects(c, B.learn_copy(e)[1]) if x["desc"]]

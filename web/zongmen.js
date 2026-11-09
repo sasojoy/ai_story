@@ -19,7 +19,7 @@
   const ZM_OFFER_NOTE = "獻上去自己那一份不少；同門試練夠了就入譜，刻上你的名字，換季也在。";
   const ZM_GATE = "回{place}才能獻式、學式、試練";
   const ZM_COST = "學一式心得 {learn}・試練一次心得 {trial}";
-  const ZM_HALF = "學過，重學心得 {n}";
+  const ZM_HALF = "重學・心得 {n}";
   const ZM_INNER = "親傳";
   const ZM_PAGES = "殘頁";
   const ZM_PAGES_NOTE = "截殺打贏別門親傳撿來的。照殘頁偷學只學得到入門（下品），心得 {n}，學了殘頁就沒了。";
@@ -30,11 +30,10 @@
     const row = (e) => {
       const btn = e.learned ? `<span class="zm-tag">${ZM_LEARNED}</span>`
         : e.problem ? `<small class="muted">${esc(e.problem)}</small>`
-        : `<button class="btn small primary" data-act="zm-learn" data-id="${esc(e.id)}">${ZM_LEARN}</button>`;
-      const half = e.price && !e.learned && !e.problem ? `<small class="muted">${ZM_HALF.replace("{n}", e.price)}</small>` : "";
+        : `<button class="btn small primary" data-act="zm-learn" data-id="${esc(e.id)}">${e.price ? ZM_HALF.replace("{n}", e.price) : ZM_LEARN}</button>`;
       return `<li class="zm-entry"><div class="zm-line"><span class="zm-num">第${esc(e.num)}式</span><b>【${esc(e.name)}】</b><small class="muted">${esc(e.kind || "意境")}${e.attr ? `・屬${esc(e.attr)}` : ""}</small></div>
         <div class="zm-fx">${esc(e.fx)}</div>${(e.effects || []).map((t) => `<div class="zm-desc muted">${esc(t)}</div>`).join("")}${e.note ? `<div class="zm-note muted">${esc(e.note)}</div>` : ""}
-        <div class="zm-foot"><small class="zm-carve">${esc(e.carve)}</small>${half}${btn}</div></li>`;
+        <div class="zm-foot"><small class="zm-carve">${esc(e.carve)}</small>${btn}</div></li>`;
     };
     const page = (e) => {
       const btn = e.learned || e.problem ? `<small class="muted">${esc(e.learned ? ZM_LEARNED : e.problem)}</small>`
