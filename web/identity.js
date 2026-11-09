@@ -61,6 +61,7 @@
   const IDP_RESEND_SECONDS = 60; // = Config.identity.resend_seconds
   // 設定抽屜「帳號綁定」（B 版；每句待 joy 潤）
   const IDP_FOLD_TITLE = "帳號綁定"; // 待 joy 潤
+  const IDP_RELOGIN = "管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。"; // 待 joy 潤（第 209 批）
   const IDP_KIND_NAMES = { password: "密碼", line: "LINE", google: "Google", email: "Email", phone: "手機" }; // 待 joy 潤
   const IDP_FOLD_LINE = (names) => `已綁：${names}`; // 待 joy 潤
   const IDP_FOLD_NO_PHONE = "・還沒綁手機"; // 待 joy 潤
@@ -471,6 +472,20 @@
     S.idp = S.idp || {};
     fold.insertAdjacentHTML("afterend", identityFoldHtml(info, S.idp, Date.now()));
     identityLoadMe();
+    if (!S.main.admin) identityRelogin(); // 已經是管理者（夠格）不問
+  }
+
+  // 第 209 批「請用密碼重新登入」：名單上、這次登入不夠格的本人，「帳號綁定」上方多一行（/api/identity/session 的 relogin）；假、404 不畫
+  function identityReloginHtml() {
+    return `<p class="form-msg idp-relogin">${esc(IDP_RELOGIN)}</p>`;
+  }
+  async function identityRelogin() {
+    let got = null;
+    try { got = await api("/api/identity/session"); } catch (e) { return; }
+    if (!got || got.relogin !== true || typeof document === "undefined") return;
+    const el = document.querySelector(".idp-fold");
+    if (!el || document.querySelector(".idp-relogin")) return;
+    el.insertAdjacentHTML("beforebegin", identityReloginHtml());
   }
 
   function identityWatch() {

@@ -116,7 +116,8 @@ def test_switch_off_routes_404_and_pages_do_not_move(monkeypatch, key_file):
     c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-12", "again": "secret-pw-12"})
     c.post("/api/character", json={"name": "沈青衫"})
     routes = sorted((m, p) for p, ms in server.app.openapi()["paths"].items() if p.startswith(("/api/identity", "/auth/")) for m in ms)
-    assert routes == [("get", "/api/identity/gate"), ("get", "/api/identity/me"), ("get", "/auth/{provider}/callback"),
+    assert routes == [("get", "/api/identity/gate"), ("get", "/api/identity/me"), ("get", "/api/identity/session"),  # 第 209 批
+                      ("get", "/auth/{provider}/callback"),
                       ("post", "/api/identity/admin/accounts"), ("post", "/api/identity/character"), ("post", "/api/identity/code/release"),
                       ("post", "/api/identity/code/send"), ("post", "/api/identity/code/verify"), ("post", "/api/identity/password/reset"),
                       ("post", "/api/identity/password/set"), ("post", "/api/identity/reauth"), ("post", "/api/identity/start"),

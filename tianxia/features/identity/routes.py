@@ -538,6 +538,16 @@ def router(shell) -> APIRouter:
         gate()
         return me_info(request, token, account, shell.time.time())
 
+    @r.get("/api/identity/session")
+    def api_session(request: Request):
+        """第 209 批「請用密碼重新登入」：先 401 再 gate（同 /api/identity/me）。relogin 只有這個帳號在名單上（管理者、客服）而且
+        這次 session 不夠格（admin_session_ok 假：驗證碼、第三方、密碼登入超過 staff_hours）才真；名單外永遠假、同一個形狀。
+        只讀自己的帳號（試不出別人）；不拿行動鎖、不寫東西。"""
+        token, account = logged_in(request)
+        gate()
+        listed = identity_base.listed(shell.CONTENT, login=account.login, character=account.character, account_id=account.id)
+        return {"relogin": bool(listed and not identity_base.admin_session_ok(shell.CONTENT, token, shell.time.time))}
+
     @r.post("/api/identity/reauth")
     async def api_reauth(request: Request):
         logged_in(request)
