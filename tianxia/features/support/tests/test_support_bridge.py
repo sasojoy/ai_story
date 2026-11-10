@@ -179,3 +179,177 @@ def test_bridge_does_not_repost_after_restart(tmp_path):
     again = bridge.load_state(path)
     assert again == json.loads(path.read_text(encoding="utf-8"))
     assert _scan(again, now + 600) == []
+
+
+# ── task 2：貼與重試（main 一輪一輪跑；post_fn 換成假的，絕不打 Discord）──
+
+HOOK = "https://discord.invalid/api/webhooks/1/SECRET-hook-part"  # 測試自造的假網址（不是真的 webhook）
+
+
+class _Resp:
+    def __init__(self, code: int):
+        self.status_code = code
+
+
+class _Poster:
+    """假的 requests.post：照順序回（數字＝狀態碼，例外類別＝丟出來），用完了一律 200；記下每一次的 payload_json 與檔名。"""
+
+    def __init__(self, *script):
+        self.script = list(script)
+        self.calls: list[dict] = []
+
+    def __call__(self, url, files=None, timeout=None):
+        assert url == HOOK and timeout == 20
+        self.calls.append({"payload": json.loads(files["payload_json"][1]),
+                           "files": [v[0] for k, v in files.items() if k.startswith("files[")]})
+        step = self.script.pop(0) if self.script else 200
+        if isinstance(step, type):
+            raise step("boom " + url)
+        return _Resp(step)
+
+
+class _Stop(Exception):
+    pass
+
+
+def _cfg(tmp_path, **cfg) -> Path:
+    path = tmp_path / "support.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    return path
+
+
+def _args(tmp_path, cfg: Path, *more) -> list[str]:
+    return ["--db", str(database.default_path()), "--config", str(cfg), "--state", str(tmp_path / "state.json"),
+            "--log", str(tmp_path / "bridge.log"), *more]
+
+
+def _log(tmp_path) -> list[str]:
+    path = tmp_path / "bridge.log"
+    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+
+def _state(tmp_path):
+    path = tmp_path / "state.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _with_file(c, body="帳號登不進去") -> int:
+    tid = ticket(c, body).json()["id"]
+    _up(c, tid)  # 有圖：馬上貼，不用等 60 秒
+    return tid
+
+
+@pytest.mark.parametrize("fail", ["timeout", 429, 503, "locked"])
+def test_bridge_retries_without_advancing_state(tmp_path, monkeypatch, capsys, fail):
+    import requests
+
+    c = player()
+    tid = _with_file(c)
+    cfg = _cfg(tmp_path, discord_webhook=HOOK)
+    poster = _Poster({"timeout": requests.Timeout, 429: 429, 503: 503}.get(fail, 200))
+    if fail == "locked":
+        real = bridge._open_ro
+
+        def locked(path):
+            raise sqlite3.OperationalError("database is locked")
+        monkeypatch.setattr(bridge, "_open_ro", locked)
+    assert bridge.main(_args(tmp_path, cfg, "--once"), post_fn=poster) == 1
+    assert _state(tmp_path) is None and _log(tmp_path) == []  # 這一輪不前進、不記
+    if fail == "locked":
+        monkeypatch.setattr(bridge, "_open_ro", real)
+    assert bridge.main(_args(tmp_path, cfg, "--once"), post_fn=poster) == 0
+    assert _state(tmp_path)["new"] == [tid] and _log(tmp_path) == [f"NEW {tid}"]
+    out = capsys.readouterr()
+    assert "SECRET" not in out.out + out.err and "boom" not in out.out + out.err  # 例外的字（帶網址）不印
+
+
+def test_bridge_keeps_going_and_warns_every_ten_failed_rounds(tmp_path, capsys):
+    c = player()
+    _with_file(c)
+    poster = _Poster(*([503] * 30))
+    naps: list[float] = []
+
+    def sleep(seconds):
+        naps.append(seconds)
+        if len(naps) >= 12:
+            raise _Stop
+
+    with pytest.raises(_Stop):
+        bridge.main(_args(tmp_path, _cfg(tmp_path, discord_webhook=HOOK)), post_fn=poster, sleep=sleep)
+    assert len(poster.calls) == 12 and naps == [15.0] * 12  # 沒停：一輪一輪照試
+    err = capsys.readouterr().err
+    assert err.count(bridge.STUCK.format(n=10)) == 1 and _state(tmp_path) is None
+
+
+def test_bridge_skips_a_dead_webhook_reply(tmp_path, capsys):
+    c = player()
+    tid = _with_file(c)
+    poster = _Poster(404)
+    assert bridge.main(_args(tmp_path, _cfg(tmp_path, discord_webhook=HOOK), "--once"), post_fn=poster) == 0
+    assert _state(tmp_path)["new"] == [tid] and _log(tmp_path) == [f"NEW {tid}"]  # 印警告、照樣前進
+    out = capsys.readouterr()
+    assert bridge.DEAD_WARN.format(code=404) in out.err
+    assert HOOK not in out.out + out.err and "SECRET" not in out.out + out.err
+
+
+def test_bridge_payload_never_lets_the_player_mention_anyone(tmp_path):
+    c = player()
+    tid = _with_file(c, "@everyone 看這裡 <@123> <@&9>")
+    assert c.post("/api/support/reply", json={"id": tid, "body": "@here <@456>"}).status_code == 200
+    assert c.post("/api/support/human", json={"id": tid}).status_code == 200
+    poster = _Poster()
+    cfg = _cfg(tmp_path, discord_webhook=HOOK, mention=["111", "222"])
+    assert bridge.main(_args(tmp_path, cfg, "--once"), post_fn=poster) == 0
+    assert len(poster.calls) == 3
+    new, reply, human = (call["payload"] for call in poster.calls)
+    for payload in (new, reply):
+        assert payload["allowed_mentions"] == {"parse": []} and "users" not in payload["allowed_mentions"]
+    assert "@everyone" in new["content"]  # 字照貼，只是點不到人
+    assert human["allowed_mentions"] == {"parse": [], "users": ["111", "222"]}
+    assert "<@111>" in human["content"] and "<@222>" in human["content"]
+    assert poster.calls[0]["files"] == ["1.png"] and poster.calls[2]["files"] == []
+
+
+def test_bridge_dry_run_logs_but_does_not_post(tmp_path, capsys):
+    c = player()
+    tid = _with_file(c)
+    poster = _Poster()
+    assert bridge.main(_args(tmp_path, _cfg(tmp_path, discord_webhook=HOOK), "--once", "--dry-run"), post_fn=poster) == 0
+    assert poster.calls == [] and _log(tmp_path) == [f"NEW {tid}"] and _state(tmp_path)["new"] == [tid]
+    assert HOOK not in capsys.readouterr().out
+
+
+def test_bridge_without_webhook_logs_only_and_advances(tmp_path, capsys):
+    c = player()
+    tid = _with_file(c)
+    poster = _Poster()
+    assert bridge.main(_args(tmp_path, _cfg(tmp_path, mention=["111"]), "--once"), post_fn=poster) == 0
+    assert poster.calls == [] and _log(tmp_path) == [f"NEW {tid}"] and _state(tmp_path)["new"] == [tid]
+    assert bridge.NO_HOOK in capsys.readouterr().err
+    assert bridge.main(_args(tmp_path, _cfg(tmp_path, discord_webhook=HOOK), "--once"), post_fn=poster) == 0
+    assert poster.calls == []  # 之後補上 webhook 也不補貼舊的
+
+
+def test_bridge_log_lines_are_machine_readable(tmp_path, monkeypatch, capsys):
+    c = player()
+    s = staffer(monkeypatch)
+    t1 = _with_file(c)
+    poster = _Poster()
+    cfg = _cfg(tmp_path, discord_webhook=HOOK, mention=["111", "222"])
+    assert bridge.main(_args(tmp_path, cfg, "--once"), post_fn=poster) == 0
+    assert c.post("/api/support/reply", json={"id": t1, "body": "還在嗎"}).status_code == 200
+    assert s.post("/api/support/answer", json={"id": t1, "body": "在", "then": "wait"}).status_code == 200
+    assert c.post("/api/support/human", json={"id": t1}).status_code == 200
+    _up(c, t1, PNG + b"2")
+    assert bridge.main(_args(tmp_path, cfg, "--once"), post_fn=poster) == 0
+    lines = _log(tmp_path)
+    assert lines == [f"NEW {t1}", f"REPLY {t1}", f"HUMAN {t1}", f"FILE {t1}"]
+    assert all(re.fullmatch(r"(NEW|REPLY|HUMAN|FILE) \d+", line) for line in lines)
+    out = capsys.readouterr()
+    assert "ALIVE " in out.out and leaks(out.out + out.err) == []
+    texts = "\n".join(call["payload"]["content"] for call in poster.calls)
+    assert leaks(texts) == [] and "shen_01" not in texts
+    # 沒有旁檔的資料庫：空的一輪、結束碼 0
+    other = tmp_path / "nothing" / "tianxia.db"
+    assert bridge.main(["--db", str(other), "--config", str(cfg), "--state", str(tmp_path / "s2.json"),
+                        "--log", str(tmp_path / "b2.log"), "--once"], post_fn=poster) == 0

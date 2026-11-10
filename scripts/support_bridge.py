@@ -22,6 +22,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import requests
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # 類別 id → 顯示的字（同 tianxia/features/support/rules.py 的 CATEGORIES；這支不能 import 包，測試釘死兩份一樣）
@@ -181,3 +183,156 @@ def save_state(path: Path, state: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def log_line(path: Path, text: str) -> None:
+    """--log 檔附加一行（utf-8、馬上 flush）：只有 NEW 12、REPLY 12、HUMAN 12、FILE 12 四種，客服官的 Monitor 每一行都醒。"""
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(text + "\n")
+        f.flush()
+
+
+MIME = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+DEAD_WARN = "webhook 回 {code}：這一則跳過不貼（webhook 壞了或被刪了？看一下 .local/support.json）。"  # 待 joy 潤
+
+
+def post(webhook: str, content: str, files: list[Path], mention_ids: list[str], post_fn=requests.post) -> str:
+    """貼一則（multipart：payload_json＋files[i]）。payload_json 一律帶 allowed_mentions：一般 {"parse": []}（單裡寫 @everyone、<@某人> 也點不到）、
+    要點人時 {"parse": [], "users": mention_ids}。回 "ok"（2xx）／"retry"（逾時、連不上、429、5xx：這一輪停、下一輪再來）／
+    "dead"（其他 4xx：印一句警告、照樣前進，不然永遠卡在同一則）。例外的字不印（requests 的例外字串帶 webhook 網址＝金鑰）。"""
+    allowed: dict = {"parse": []}
+    if mention_ids:
+        allowed["users"] = [str(i) for i in mention_ids]
+    parts: dict = {"payload_json": (None, json.dumps({"content": content, "allowed_mentions": allowed}, ensure_ascii=False), "application/json")}
+    for i, p in enumerate(files):
+        try:
+            data = Path(p).read_bytes()
+        except OSError:
+            continue  # 列在、檔不見了：不貼那一張（遊戲那邊看圖也是 404）
+        kind = Path(p).suffix.lstrip(".")
+        parts[f"files[{i}]"] = (Path(p).name, data, MIME.get(kind, "application/octet-stream"))
+    try:
+        r = post_fn(webhook, files=parts, timeout=20)
+    except requests.RequestException:
+        return "retry"
+    code = int(r.status_code)
+    if 200 <= code < 300:
+        return "ok"
+    if code == 429 or code >= 500:
+        return "retry"
+    print(DEAD_WARN.format(code=code), file=sys.stderr)
+    return "dead"
+
+
+NO_HOOK = "金鑰檔沒有 discord_webhook：只記 log、不貼 Discord（進度照樣往前）。"  # 待 joy 潤
+BAD_CONFIG = "金鑰檔讀不到或格式不對：當成沒有 webhook，只記不貼。"  # 待 joy 潤
+BAD_STATE = "進度檔讀不到或格式不對：先停下來（不然會把舊單全部重貼一次）；修好或刪掉再開。"  # 待 joy 潤
+STUCK = "已經連續 {n} 輪沒貼成（旁檔讀不到或 Discord 沒回）；照樣繼續試。"  # 待 joy 潤
+DRY = "（只記不貼）"  # 待 joy 潤
+ALIVE_EVERY = 300
+
+
+def _open_ro(sidecar: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect("file:" + Path(sidecar).as_posix() + "?mode=ro", uri=True, timeout=5, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _config(path: Path) -> dict:
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        print(BAD_CONFIG, file=sys.stderr)
+        return {}
+    if not isinstance(data, dict):
+        print(BAD_CONFIG, file=sys.stderr)
+        return {}
+    return data
+
+
+def _round(db: Path, state: dict, state_path: Path, log: Path, webhook: str | None, mention: list[str], grace: float,
+           post_fn, now: float) -> bool:
+    """一輪。回 False＝這一輪沒做完（旁檔讀不到、Discord 要再試）：停在那一則，進度不越過。"""
+    sidecar, _ = paths(db)
+    if not sidecar.exists():
+        return True
+    try:
+        conn = _open_ro(sidecar)
+        try:
+            conn.execute("BEGIN")  # 四張表同一個快照
+            events = scan(conn, state, now, grace)
+            rows = {}
+            for tid in {e.ticket_id for e in events}:
+                row = conn.execute("SELECT id, category, character, version, created, body FROM tickets WHERE id = ?", (tid,)).fetchone()
+                rows[tid] = dict(row)
+            conn.execute("ROLLBACK")
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+    for e in events:
+        ids = list(mention) if e.mention else []
+        if webhook:
+            got = post(webhook, render(e, rows[e.ticket_id], ids), e.files, ids, post_fn)
+            if got == "retry":
+                return False
+        advance(state, e)
+        save_state(state_path, state)
+        log_line(log, f"{e.kind} {e.ticket_id}")
+        print(f"{e.kind} {e.ticket_id}" + ("" if webhook else DRY), flush=True)
+    return True
+
+
+def main(argv=None, *, post_fn=None, clock=time.time, sleep=time.sleep) -> int:
+    """post_fn、clock、sleep 給測試注入（預設 requests.post、time.time、time.sleep）。"""
+    p = argparse.ArgumentParser(description="客服的橋：新單、玩家再回、找真人、補圖貼到 #客服。")  # 待 joy 潤
+    p.add_argument("--db", default=os.environ.get("TIANXIA_DB") or str(ROOT / "saves" / "tianxia.db"))
+    p.add_argument("--config", default=str(ROOT / ".local" / "support.json"))
+    p.add_argument("--state", default=str(ROOT / ".local" / "support_bridge.json"))
+    p.add_argument("--log", required=True)
+    p.add_argument("--interval", type=float, default=15.0)
+    p.add_argument("--grace", type=float, default=60.0)
+    p.add_argument("--once", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    try:
+        opts = p.parse_args(argv)
+    except SystemExit as e:
+        return int(e.code or 0)
+    post_fn = post_fn or requests.post
+    cfg = _config(Path(opts.config))
+    hook = cfg.get("discord_webhook")
+    webhook = None if opts.dry_run or not isinstance(hook, str) or not hook.strip() else hook.strip()
+    mention = [str(i) for i in cfg.get("mention", []) if str(i).isdigit()] if isinstance(cfg.get("mention"), list) else []
+    if webhook is None and not opts.dry_run:
+        print(NO_HOOK, file=sys.stderr)
+    state_path = Path(opts.state)
+    try:
+        state = load_state(state_path)
+    except (OSError, ValueError, TypeError):
+        print(BAD_STATE, file=sys.stderr)
+        return 2
+    log = Path(opts.log)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    fails = 0
+    alive = None
+    while True:
+        now = clock()
+        if alive is None or now - alive >= ALIVE_EVERY:
+            alive = now
+            print(f"ALIVE {_when(now)}", flush=True)
+        ok = _round(Path(opts.db), state, state_path, log, webhook, mention, opts.grace, post_fn, now)
+        fails = 0 if ok else fails + 1
+        if fails and fails % 10 == 0:
+            print(STUCK.format(n=fails), file=sys.stderr, flush=True)
+        if opts.once:
+            return 0 if ok else 1
+        sleep(opts.interval)
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    raise SystemExit(main())
