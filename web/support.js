@@ -4,6 +4,7 @@
  * 開關關著時伺服器的 /api/main 沒有 support_unread、support_staff：這裡每一個畫法都回空字串，設定抽屜與管理頁一個位元組都不變。
  * 畫面照企劃者 2026-11-08 挑的：抽屜 C（一行「客服 ›」，點了自己一頁，分段「我的單／寫新單」），管理頁 B（寬版左清單、右單＋帳號卡；窄版照清單頁）。
  * 換版只換 supportPageHtml、supportDeskHtml 兩個函式；帳號卡（第 212 批：點開單直接帶出、查別的帳號查到的）只換 supportCardHtml。
+ * 截圖（客服自動受理第 215 批，A 版）：寫單多一格挑圖（supportPickHtml，registerChanges 認 file input）、送單之後逐張上傳；看單與客服頁在內文下面一列縮圖（supportShotsHtml）。
  * 登入頁的客服信箱那一行（第 214 批）：registerGateSlot(supportGate)，只換 supportGateHtml；/api/me 沒帶 identity 旗標時不問、不畫。玩家與客服寫的字一律只過 esc，不經 markdown。字待 joy 潤。
  */
 "use strict";
@@ -13,6 +14,14 @@
   const SUPPORT_STATUS = { open: "處理中", answered: "已回覆", closed: "已結" }; // 待 joy 潤
   const SUPPORT_NOTE = "同時最多 3 張沒結的單，一天最多送 5 張。帳號、名號、時間、版本會自動附上。"; // 待 joy 潤
   const SUPPORT_ADMIN_NOTE = "要補發、退款、重設密碼、解綁、刪帳號：在單上註記，請管理者做。"; // 待 joy 潤
+
+  // 截圖（客服自動受理第 215 批；設計 5.1、5.5）：張數與大小跟伺服器的 Config.support 預設一樣（伺服器另外再擋一次）；只收這三種
+  const SUPPORT_FILES_MAX = 3;
+  const SUPPORT_FILE_BYTES = 3000000;
+  const SUPPORT_ACCEPT = "image/png,image/jpeg,image/webp";
+  const SUPPORT_FILE_NOTE = "最多 3 張、每張 3 MB 以內（PNG、JPEG、WebP）"; // 待 joy 潤
+  const SUPPORT_FILE_BIG = "圖太大了：一張最多 3 MB。"; // 待 joy 潤
+  const SUPPORT_FILE_FULL = "一張單最多附 3 張圖。"; // 待 joy 潤
 
   function supportOn() { return !!(S.main && "support_unread" in S.main); }
 
@@ -68,9 +77,75 @@
     return `<a class="btn small ghost ad-entry" href="/admin">客服單 ›</a>`; // 待 joy 潤
   }
 
+  // ── 截圖（第 215 批）：單上的縮圖列（看單、客服頁同一支），寫單的挑圖格，看單的補圖表單 ──
+  function supportShotsHtml(id, files) { // 縮圖連到看圖的路由、新分頁開（rel="noopener"）；沒有 files（舊的回應）不畫
+    const list = Array.isArray(files) ? files : [];
+    if (!list.length) return "";
+    return `<div class="sup-shots">${list.map((f) => {
+      const url = `/api/support/file/${Number(id)}/${Number(f.seq)}`;
+      return `<a class="sup-shot" href="${url}" target="_blank" rel="noopener"><img loading="lazy" src="${url}" alt="截圖 ${Number(f.seq)}"></a>`; // 待 joy 潤
+    }).join("")}</div>`;
+  }
+  function supportPickedHtml() { // 寫單時挑好的圖（S.supportPicks），沒滿的格畫虛線空位
+    const picks = S.supportPicks || [];
+    const shots = picks.map((p, i) => `<span class="sup-shot">${p.url ? `<img src="${esc(p.url)}" alt="截圖 ${i + 1}">` : ""}</span>`).join(""); // 待 joy 潤
+    const slots = `<span class="sup-slot"></span>`.repeat(Math.max(0, SUPPORT_FILES_MAX - picks.length));
+    return shots + slots;
+  }
+  function supportPickHtml() {
+    return `<div class="sup-pick">
+        <label class="btn ghost sup-pick-btn">附截圖<input type="file" id="support-new-files" name="files" accept="${SUPPORT_ACCEPT}" multiple></label>
+        <span class="muted sup-fine">${SUPPORT_FILE_NOTE}</span>
+        <div class="sup-shots" id="support-shots">${supportPickedHtml()}</div>
+        <p class="sup-pick-msg" id="support-pick-msg">${esc(S.supportPickMsg || "")}</p></div>`; // 待 joy 潤
+  }
+  function supportAddHtml(t) { // 看單：沒結、張數少於上限才給補圖（一次一張）
+    const files = Array.isArray(t.files) ? t.files : null;
+    if (t.status === "closed" || !files || files.length >= SUPPORT_FILES_MAX) return "";
+    const pick = S.supportAddPick && S.supportAddPick.id === Number(t.id) ? S.supportAddPick.file : null;
+    return `<form id="support-file-form" class="sup-pick sup-add" data-id="${Number(t.id)}">
+        <label class="btn ghost sup-pick-btn">補一張圖<input type="file" id="support-add-file" name="file" accept="${SUPPORT_ACCEPT}" data-id="${Number(t.id)}"></label>
+        <span class="muted sup-fine" id="support-add-name">${pick ? esc(pick.name) : SUPPORT_FILE_NOTE}</span>
+        <button class="btn sup-up" type="submit">傳上去</button><p class="form-msg"></p></form>`; // 待 joy 潤
+  }
+  async function supportUpload(id, file) { // 一張圖：內文就是檔本身（api() 只送 JSON，這裡自己打）。回 { ok, data }，連不上也是 ok: false
+    try {
+      const res = await fetch(`/api/support/file?id=${Number(id)}`, { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      const data = await res.json().catch(() => ({}));
+      return { ok: !!res.ok, data };
+    } catch (e) { return { ok: false, data: {} }; }
+  }
+  function supportSetFiles(id, files) { // 上傳的回應帶整張單的 files：換進 S.supportMine 那一張
+    const t = ((S.supportMine && S.supportMine.tickets) || []).find((x) => x.id === Number(id));
+    if (t && Array.isArray(files)) t.files = files;
+  }
+  function supportPick(input) { // 寫單挑圖：第 4 張起不收、單張超過 3 MB 不收；直接改那一格（重畫會清掉 file input，挑的檔記在 S.supportPicks）
+    const picks = S.supportPicks = S.supportPicks || [];
+    let msg = "";
+    for (const file of Array.from(input.files || [])) {
+      if (picks.length >= SUPPORT_FILES_MAX) { msg = SUPPORT_FILE_FULL; break; }
+      if (Number(file.size) > SUPPORT_FILE_BYTES) { msg = SUPPORT_FILE_BIG; continue; }
+      picks.push({ file, url: typeof URL !== "undefined" && URL.createObjectURL ? URL.createObjectURL(file) : "" });
+    }
+    S.supportPickMsg = msg;
+    try { input.value = ""; } catch (e) { /* 有的瀏覽器不准改：下次挑同一張不觸發 change，不影響送出 */ }
+    const box = document.getElementById("support-shots"), line = document.getElementById("support-pick-msg");
+    if (box) box.innerHTML = supportPickedHtml();
+    if (line) line.textContent = msg;
+  }
+  function supportAddPick(input) { // 補圖挑一張：太大的當場擋
+    const file = (input.files || [])[0];
+    const id = Number((input.dataset && input.dataset.id) || S.supportTicket);
+    S.supportAddPick = file && Number(file.size) <= SUPPORT_FILE_BYTES ? { id, file } : null;
+    const name = document.getElementById("support-add-name");
+    if (name) name.textContent = file ? (S.supportAddPick ? file.name : SUPPORT_FILE_BIG) : SUPPORT_FILE_NOTE;
+  }
+
   // ── 客服自己一頁（S.supportPage 時設定抽屜整個換成它）──
-  function supportTicketHtml(t) { // 點開一張單：對話與「再回一句」
-    const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(t.created)}</span>${esc(t.body)}</div>`]
+  function supportTicketHtml(t) { // 點開一張單：對話、截圖與「再回一句」
+    const lost = S.supportFileMsg && S.supportFileMsg.id === Number(t.id) ? `<p class="form-msg sup-file-msg">${esc(S.supportFileMsg.text)}</p>` : "";
+    const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(t.created)}</span>${esc(t.body)}</div>${supportShotsHtml(t.id, t.files)}${lost}${supportAddHtml(t)}`]
       .concat((t.replies || []).map((r) => r.staff
         ? `<div class="sup-msg sup-cs"><span class="sup-who">客服・回覆　${supportWhen(r.created)}</span>${esc(r.body)}</div>` // 待 joy 潤
         : `<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(r.created)}</span>${esc(r.body)}</div>`));
@@ -96,6 +171,7 @@
         <h4>寫一張單</h4>
         <label>類別：<select name="category">${SUPPORT_CATS.map(([k, name]) => `<option value="${k}">${name}</option>`).join("")}</select></label>
         <textarea class="input" name="body" maxlength="1000" placeholder="想說的事（1,000 字內）"></textarea>
+        ${supportPickHtml()}
         <p class="muted sup-fine">${SUPPORT_NOTE}</p>
         <p class="form-msg"></p><button class="btn primary" type="submit">送出</button></form>`; // 待 joy 潤
   }
@@ -170,7 +246,7 @@
 
   function supportDeskTicketHtml(t) {
     const acct = t.account || {};
-    const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">玩家 ${esc(acct.character)}・${supportWhen(t.created)}</span>${esc(t.body)}</div>`]
+    const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">玩家 ${esc(acct.character)}・${supportWhen(t.created)}</span>${esc(t.body)}</div>${supportShotsHtml(t.id, t.files)}`]
       .concat((t.replies || []).map((r) => `<div class="sup-msg ${r.staff ? (r.internal ? "sup-note" : "sup-cs") : "sup-me"}"><span class="sup-who">${r.staff ? (r.internal ? "請管理者處理" : "客服・回覆") : "玩家"}　${supportWhen(r.created)}</span>${esc(r.body)}</div>`)); // 待 joy 潤
     const id = Number(t.id);
     const form = t.status === "closed" ? `<p class="muted">${supportStatus("closed")}</p>` : `<div class="stack sup-answer">
@@ -241,6 +317,25 @@
         S.supportMine = r.mine;
         S.supportTab = "mine";
         S.supportTicket = r.id;
+        const picks = S.supportPicks || []; // 單送出了才逐張傳圖（第 215 批）：一張失敗就停、單留著、寫哪一張沒傳上
+        S.supportPicks = [];
+        S.supportPickMsg = "";
+        S.supportFileMsg = null;
+        for (let i = 0; i < picks.length; i++) {
+          const up = await supportUpload(r.id, picks[i].file);
+          if (!up.ok) { S.supportFileMsg = { id: Number(r.id), text: `單送出了，第 ${i + 1} 張圖沒傳上，可以在單上補。` }; break; } // 待 joy 潤
+          supportSetFiles(r.id, up.data.files);
+        }
+        renderKeepingSheet();
+      } else if (form.id === "support-file-form") { // 看單補一張圖（第 215 批）：挑的檔記在 S.supportAddPick（重畫會清掉 file input）
+        const id = Number(form.dataset.id);
+        const pick = S.supportAddPick && S.supportAddPick.id === id ? S.supportAddPick.file : null;
+        if (!pick) throw new Error("先挑一張圖。"); // 待 joy 潤
+        const up = await supportUpload(id, pick);
+        if (!up.ok) throw new Error(up.data.error || up.data.detail || "圖沒傳上，請再試一次。"); // 待 joy 潤
+        S.supportAddPick = null;
+        S.supportFileMsg = null;
+        supportSetFiles(id, up.data.files);
         renderKeepingSheet();
       } else if (form.id === "support-reply-form") {
         const r = await api("/api/support/reply", { id: Number(form.dataset.id), body: data.body || "" });
@@ -255,5 +350,11 @@
         renderKeepingSheet();
       } // supportForm
   } // supportForm
-  registerForms(supportForm, ["support-new-form", "support-reply-form", "support-lookup-form"]);
+  registerForms(supportForm, ["support-new-form", "support-file-form", "support-reply-form", "support-lookup-form"]);
+
+  async function supportChange(ev) {
+    if (ev.target.id === "support-new-files") supportPick(ev.target); // 寫單挑圖（第 215 批）
+    if (ev.target.id === "support-add-file") supportAddPick(ev.target); // 看單補一張
+  } // supportChange
+  registerChanges(supportChange);
   registerGateSlot(supportGate);
