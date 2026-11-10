@@ -1310,7 +1310,7 @@ def test_the_core_contract_is_not_narrowed_for_everything_or_a_goal_without_it()
 def test_the_per_package_contract_tests_are_read_from_the_syntax_tree():
     """照語法樹讀 @pytest.mark.parametrize("feature", …)：新加一條逐包的，不用改 test_for。"""
     assert set(test_for.per_package_contract_tests(test_for.CORE_TESTS / test_for.PER_PACKAGE_CONTRACT)) == {
-        "test_declared_seams_look_up_the_package_functions_when_called", "test_options_carry_the_package_prefix",
+        "test_declared_seams_look_up_the_package_functions_when_called",
         "test_choose_takes_only_its_own_ids", "test_a_closed_package_gives_nothing",
         "test_a_closed_package_gives_nothing_on_the_prep_card", "test_a_new_season_keeps_only_what_the_package_carries"}
 

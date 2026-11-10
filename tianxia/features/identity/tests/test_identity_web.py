@@ -3,6 +3,7 @@
 回呼 auth=new 切到建角色頁、表單改名、送 /api/identity/character，回登入頁或送成功都忘掉 pending。renderGate 是 app.js 那一支原文，identity.js 整支載進來。"""
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -149,8 +150,16 @@ finish(main());
 """
 
 
+@functools.cache
+def _run_default():
+    """沒給 path 的那一份只跑一次、各條共用（第 221 批）：回傳的 dict 各條只讀不改。"""
+    return run(DRIVER, {"identity": str(WEB / "identity.js")})
+
+
 def _run(path: Path | None = None):
-    return run(DRIVER, {"identity": str(path or WEB / "identity.js")})
+    if path is None:
+        return _run_default()
+    return run(DRIVER, {"identity": str(path)})
 
 
 def test_gate_does_not_fetch_without_flag():
