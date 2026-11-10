@@ -1,0 +1,777 @@
+{
+ "base_best": {
+  "陽": 0.5187196279278179,
+  "陰": 0.5166416033239265,
+  "虛": 0.5011178185153432,
+  "實": 0.5174993039426201
+ },
+ "base_random": {
+  "陽": 0.6712367014515572,
+  "陰": 0.6716840524576124,
+  "虛": 0.6614665401062155,
+  "實": 0.6699249326113006
+ },
+ "runs": 1000,
+ "verify": 1000,
+ "rows": [
+  {
+   "id": "he_yang_gong_gang",
+   "path": "陽",
+   "form": "攻",
+   "main": "剛",
+   "from": "god_gang_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_yang_gong_gang",
+    "timing": "乘勢",
+    "kind": "chase_disarm",
+    "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。",
+    "rate": 0.1332,
+    "params": {
+     "turns": 1.0
+    }
+   },
+   "best": 0.5138845593356482,
+   "best_min": 0.47685683530678147,
+   "best_max": 0.5566037735849056,
+   "random": 0.6645529892037917,
+   "best_vs_base": -0.004835068592169645,
+   "random_vs_base": -0.006683712247765539
+  },
+  {
+   "id": "he_yang_gong_kuai",
+   "path": "陽",
+   "form": "攻",
+   "main": "快",
+   "from": "god_kuai_gong",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_yang_gong_kuai",
+    "timing": "乘勢",
+    "kind": "swift",
+    "desc": "剋中對手後這一回合連環，另有 {stun_pct} 的機會讓他定身 {turns} 回合。",
+    "rate": 0.0695,
+    "params": {
+     "stun_pct": 0.3,
+     "turns": 1.0
+    }
+   },
+   "best": 0.512739384488579,
+   "best_min": 0.4804917156600748,
+   "best_max": 0.5588853838065194,
+   "random": 0.66507540478473,
+   "best_vs_base": -0.005980243439238864,
+   "random_vs_base": -0.006161296666827187
+  },
+  {
+   "id": "he_yang_shou_gang",
+   "path": "陽",
+   "form": "守",
+   "main": "剛",
+   "from": "god_gang_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yang_shou_gang",
+    "timing": "心法",
+    "kind": "hold_city",
+    "desc": "固守的推力 +{guard_pct}；對手強攻你時，他吃自己那一下的 {share_pct}。",
+    "params": {
+     "guard_pct": 0.0582,
+     "share_pct": 0.0873
+    }
+   },
+   "best": 0.5144818235035558,
+   "best_min": 0.4789108382274426,
+   "best_max": 0.5652637187000533,
+   "random": 0.6668487551446651,
+   "best_vs_base": -0.004237804424262137,
+   "random_vs_base": -0.004387946306892099
+  },
+  {
+   "id": "he_yang_shou_kuai",
+   "path": "陽",
+   "form": "守",
+   "main": "快",
+   "from": "god_kuai_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yang_shou_kuai",
+    "timing": "應招",
+    "kind": "elude",
+    "desc": "對手這一擊打空（推不動你、你不掉氣血）。",
+    "rate": 0.0637
+   },
+   "best": 0.512826339424287,
+   "best_min": 0.470873786407767,
+   "best_max": 0.5700586041555674,
+   "random": 0.6693724214778782,
+   "best_vs_base": -0.00589328850353088,
+   "random_vs_base": -0.001864279973678995
+  },
+  {
+   "id": "he_yang_bian_gang",
+   "path": "陽",
+   "form": "變",
+   "main": "剛",
+   "from": "god_gang_bian",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_yang_bian_gang",
+    "timing": "出招",
+    "kind": "reinforce",
+    "desc": "出手連珠：這一回合多推一擊。",
+    "rate": 0.0389,
+    "params": {
+     "chance_pct": 1.0,
+     "strikes": 1.0
+    }
+   },
+   "best": 0.5131640537917761,
+   "best_min": 0.46702702702702703,
+   "best_max": 0.5629984051036683,
+   "random": 0.6695227988381158,
+   "best_vs_base": -0.0055555741360417965,
+   "random_vs_base": -0.0017139026134413982
+  },
+  {
+   "id": "he_yang_bian_kuai",
+   "path": "陽",
+   "form": "變",
+   "main": "快",
+   "from": "god_kuai_bian",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yang_bian_kuai",
+    "timing": "乘勢",
+    "kind": "flash",
+    "desc": "這一回合連環、無隙（出招不會被剋）。",
+    "rate": 0.0777
+   },
+   "best": 0.5141038016656344,
+   "best_min": 0.4780042918454936,
+   "best_max": 0.5578338590956887,
+   "random": 0.6662812884310957,
+   "best_vs_base": -0.004615826262183487,
+   "random_vs_base": -0.004955413020461541
+  },
+  {
+   "id": "he_yang_xin_gang",
+   "path": "陽",
+   "form": "心",
+   "main": "剛",
+   "from": "god_gang_xin",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_yang_xin_gang",
+    "timing": "乘勢",
+    "kind": "tiger",
+    "desc": "每剋中一次疊一層，推力每層 +{stack_pct}，最多 {stacks} 層，不會散；氣勢落後時一次疊兩層。",
+    "params": {
+     "stack_pct": 0.0057,
+     "stacks": 5.0
+    }
+   },
+   "best": 0.5140958360214688,
+   "best_min": 0.4791220556745182,
+   "best_max": 0.5600419507079182,
+   "random": 0.6700089344150586,
+   "best_vs_base": -0.004623791906349095,
+   "random_vs_base": -0.0012277670364986282
+  },
+  {
+   "id": "he_yang_xin_kuai",
+   "path": "陽",
+   "form": "心",
+   "main": "快",
+   "from": "god_kuai_xin",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_yang_xin_kuai",
+    "timing": "心法",
+    "kind": "streak",
+    "desc": "連贏 {wins} 回合，接著無隙 {turns} 回合（出招不會被剋）。",
+    "rate": 0.6,
+    "params": {
+     "wins": 2.0,
+     "turns": 1.0
+    }
+   },
+   "best": 0.519454719838246,
+   "best_min": 0.48845947396672035,
+   "best_max": 0.581713084603258,
+   "random": 0.6309562560759933,
+   "best_vs_base": 0.0007350919104280873,
+   "random_vs_base": -0.04028044537556397
+  },
+  {
+   "id": "he_yin_gong_rou",
+   "path": "陰",
+   "form": "攻",
+   "main": "柔",
+   "from": "god_rou_gong",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_yin_gong_rou",
+    "timing": "乘勢",
+    "kind": "swift",
+    "desc": "剋中對手後這一回合連環，另有 {stun_pct} 的機會讓他定身 {turns} 回合。",
+    "rate": 0.0695,
+    "params": {
+     "stun_pct": 0.3,
+     "turns": 1.0
+    }
+   },
+   "best": 0.512739384488579,
+   "best_min": 0.4804917156600748,
+   "best_max": 0.5588853838065194,
+   "random": 0.66507540478473,
+   "best_vs_base": -0.0039022188353474707,
+   "random_vs_base": -0.006608647672882384
+  },
+  {
+   "id": "he_yin_gong_man",
+   "path": "陰",
+   "form": "攻",
+   "main": "慢",
+   "from": "god_man_gong",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yin_gong_man",
+    "timing": "出招",
+    "kind": "reinforce",
+    "desc": "穩紮穩打：這一回合多推一擊。",
+    "rate": 0.0605,
+    "params": {
+     "chance_pct": 1.0,
+     "strikes": 1.0
+    }
+   },
+   "best": 0.5111295806154996,
+   "best_min": 0.46016260162601624,
+   "best_max": 0.5594666666666667,
+   "random": 0.6681385236706299,
+   "best_vs_base": -0.005512022708426878,
+   "random_vs_base": -0.0035455287869825547
+  },
+  {
+   "id": "he_yin_shou_rou",
+   "path": "陰",
+   "form": "守",
+   "main": "柔",
+   "from": "god_rou_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yin_shou_rou",
+    "timing": "應招",
+    "kind": "elude",
+    "desc": "卸開對手這一擊：打空（推不動你、你不掉氣血）。",
+    "rate": 0.0637
+   },
+   "best": 0.512826339424287,
+   "best_min": 0.470873786407767,
+   "best_max": 0.5700586041555674,
+   "random": 0.6693724214778782,
+   "best_vs_base": -0.003815263899639487,
+   "random_vs_base": -0.0023116309797341916
+  },
+  {
+   "id": "he_yin_shou_man",
+   "path": "陰",
+   "form": "守",
+   "main": "慢",
+   "from": "god_man_shou",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_yin_shou_man",
+    "timing": "心法",
+    "kind": "hold_city",
+    "desc": "固守的推力 +{guard_pct}；對手強攻你時，他吃自己那一下的 {share_pct}。",
+    "params": {
+     "guard_pct": 0.0998,
+     "share_pct": 0.1496
+    }
+   },
+   "best": 0.5121150782730134,
+   "best_min": 0.4770053475935829,
+   "best_max": 0.5637619553666312,
+   "random": 0.6649168976262182,
+   "best_vs_base": -0.0045265250509131105,
+   "random_vs_base": -0.006767154831394229
+  },
+  {
+   "id": "he_yin_bian_rou",
+   "path": "陰",
+   "form": "變",
+   "main": "柔",
+   "from": "god_rou_bian",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_yin_bian_rou",
+    "timing": "起手",
+    "kind": "roar",
+    "desc": "第 1 回合先聲奪人：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。",
+    "rate": 0.411,
+    "rounds": 1,
+    "params": {
+     "stun_pct": 0.5,
+     "turns": 1.0
+    }
+   },
+   "best": 0.5155366306154482,
+   "best_min": 0.4722524483133841,
+   "best_max": 0.589171974522293,
+   "random": 0.6689076991216214,
+   "best_vs_base": -0.0011049727084783134,
+   "random_vs_base": -0.002776353335991022
+  },
+  {
+   "id": "he_yin_bian_man",
+   "path": "陰",
+   "form": "變",
+   "main": "慢",
+   "from": "god_man_bian",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_yin_bian_man",
+    "timing": "乘勢",
+    "kind": "foresight",
+    "desc": "黏住對手：剋中他之後，下一回合一定再出剋他的那一招。",
+    "rate": 0.0542
+   },
+   "best": 0.5117051264266563,
+   "best_min": 0.4777718264595608,
+   "best_max": 0.5551470588235294,
+   "random": 0.6655500870315196,
+   "best_vs_base": -0.00493647689727017,
+   "random_vs_base": -0.006133965426092791
+  },
+  {
+   "id": "he_yin_xin_rou",
+   "path": "陰",
+   "form": "心",
+   "main": "柔",
+   "from": "god_rou_xin",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_yin_xin_rou",
+    "timing": "心法",
+    "kind": "streak",
+    "desc": "連贏 {wins} 回合，接著無隙 {turns} 回合（出招不會被剋）。",
+    "rate": 0.6,
+    "params": {
+     "wins": 2.0,
+     "turns": 1.0
+    }
+   },
+   "best": 0.519454719838246,
+   "best_min": 0.48845947396672035,
+   "best_max": 0.581713084603258,
+   "random": 0.6309562560759933,
+   "best_vs_base": 0.0028131165143194803,
+   "random_vs_base": -0.040727796381619163
+  },
+  {
+   "id": "he_yin_xin_man",
+   "path": "陰",
+   "form": "心",
+   "main": "慢",
+   "from": "god_man_xin",
+   "k": 0.107,
+   "tactic": {
+    "name": "he_yin_xin_man",
+    "timing": "心法",
+    "kind": "sacrifice",
+    "desc": "每贏一回合疊一層，推力每層 +{stack_pct}；疊滿 {stacks} 層，下一回合連環，然後重來。",
+    "params": {
+     "stack_pct": 0.0128,
+     "stacks": 4.0
+    }
+   },
+   "best": 0.5101207509907318,
+   "best_min": 0.47188002142474555,
+   "best_max": 0.5620010643959553,
+   "random": 0.6687415761706466,
+   "best_vs_base": -0.00652085233319466,
+   "random_vs_base": -0.002942476286965867
+  },
+  {
+   "id": "he_xu_gong_kuai",
+   "path": "虛",
+   "form": "攻",
+   "main": "快",
+   "from": "god_kuai_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_xu_gong_kuai",
+    "timing": "乘勢",
+    "kind": "swift",
+    "desc": "剋中對手後這一回合連環，另有 {stun_pct} 的機會讓他定身 {turns} 回合。",
+    "rate": 0.1854,
+    "params": {
+     "stun_pct": 0.3,
+     "turns": 1.0
+    }
+   },
+   "best": 0.5049621739846644,
+   "best_min": 0.46986666666666665,
+   "best_max": 0.5560796645702306,
+   "random": 0.6546478604066093,
+   "best_vs_base": 0.003844355469321159,
+   "random_vs_base": -0.006818679699606256
+  },
+  {
+   "id": "he_xu_gong_rou",
+   "path": "虛",
+   "form": "攻",
+   "main": "柔",
+   "from": "god_yin_gong",
+   "k": 1.65,
+   "tactic": {
+    "name": "he_xu_gong_rou",
+    "timing": "出招",
+    "kind": "night_raid",
+    "desc": "這一回合出奇襲，推力 ×{mult}；夜裡必定發動。",
+    "rate": 0.3795,
+    "params": {
+     "mult": 1.8
+    }
+   },
+   "best": 0.506083007037275,
+   "best_min": 0.46257404415724285,
+   "best_max": 0.55863539445629,
+   "random": 0.6575437902206972,
+   "best_vs_base": 0.00496518852193184,
+   "random_vs_base": -0.0039227498855183285
+  },
+  {
+   "id": "he_xu_shou_kuai",
+   "path": "虛",
+   "form": "守",
+   "main": "快",
+   "from": "god_kuai_shou",
+   "k": 1.3,
+   "tactic": {
+    "name": "he_xu_shou_kuai",
+    "timing": "應招",
+    "kind": "elude",
+    "desc": "對手這一擊打空（推不動你、你不掉氣血）。",
+    "rate": 0.2366
+   },
+   "best": 0.4973881866127581,
+   "best_min": 0.4524838012958963,
+   "best_max": 0.5534290271132376,
+   "random": 0.6591480272515875,
+   "best_vs_base": -0.0037296319025851288,
+   "random_vs_base": -0.00231851285462803
+  },
+  {
+   "id": "he_xu_shou_rou",
+   "path": "虛",
+   "form": "守",
+   "main": "柔",
+   "from": "god_yin_xin",
+   "k": 1.3,
+   "tactic": {
+    "name": "he_xu_shou_rou",
+    "timing": "心法",
+    "kind": "waver",
+    "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。",
+    "params": {
+     "up_pct": 0.4584,
+     "down_pct": 0.1527
+    }
+   },
+   "best": 0.5022742421910916,
+   "best_min": 0.46733935209771643,
+   "best_max": 0.56567242281528,
+   "random": 0.6506926683316409,
+   "best_vs_base": 0.0011564236757484192,
+   "random_vs_base": -0.010773871774574673
+  },
+  {
+   "id": "he_xu_bian_kuai",
+   "path": "虛",
+   "form": "變",
+   "main": "快",
+   "from": "god_kuai_bian",
+   "k": 1.3,
+   "tactic": {
+    "name": "he_xu_bian_kuai",
+    "timing": "乘勢",
+    "kind": "flash",
+    "desc": "這一回合連環、無隙（出招不會被剋）。",
+    "rate": 0.2886
+   },
+   "best": 0.5040170035701743,
+   "best_min": 0.46260683760683763,
+   "best_max": 0.5483870967741935,
+   "random": 0.6522710590822496,
+   "best_vs_base": 0.0028991850548311104,
+   "random_vs_base": -0.009195481023965946
+  },
+  {
+   "id": "he_xu_bian_rou",
+   "path": "虛",
+   "form": "變",
+   "main": "柔",
+   "from": "god_rou_bian",
+   "k": 0.55,
+   "tactic": {
+    "name": "he_xu_bian_rou",
+    "timing": "起手",
+    "kind": "roar",
+    "desc": "第 1 回合先聲奪人：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。",
+    "rate": 0.3768,
+    "rounds": 1,
+    "params": {
+     "stun_pct": 0.25,
+     "turns": 2.0
+    }
+   },
+   "best": 0.502935092644529,
+   "best_min": 0.4625,
+   "best_max": 0.5843949044585988,
+   "random": 0.6702536319962467,
+   "best_vs_base": 0.001817274129185753,
+   "random_vs_base": 0.008787091890031129
+  },
+  {
+   "id": "he_xu_xin_kuai",
+   "path": "虛",
+   "form": "心",
+   "main": "快",
+   "from": "god_gang_xin",
+   "k": 1.65,
+   "tactic": {
+    "name": "he_xu_xin_kuai",
+    "timing": "乘勢",
+    "kind": "tiger",
+    "desc": "每剋中一次疊一層，推力每層 +{stack_pct}，最多 {stacks} 層，不會散；氣勢落後時一次疊兩層。",
+    "params": {
+     "stack_pct": 0.0421,
+     "stacks": 5.0
+    }
+   },
+   "best": 0.5058580927904972,
+   "best_min": 0.4667738478027867,
+   "best_max": 0.5538057742782152,
+   "random": 0.6577996177277778,
+   "best_vs_base": 0.0047402742751539995,
+   "random_vs_base": -0.003666922378437687
+  },
+  {
+   "id": "he_xu_xin_rou",
+   "path": "虛",
+   "form": "心",
+   "main": "柔",
+   "from": "god_man_xin",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_xu_xin_rou",
+    "timing": "心法",
+    "kind": "sacrifice",
+    "desc": "每贏一回合疊一層，推力每層 +{stack_pct}；疊滿 {stacks} 層，下一回合連環，然後重來。",
+    "params": {
+     "stack_pct": 0.0372,
+     "stacks": 3.0
+    }
+   },
+   "best": 0.5055039800038473,
+   "best_min": 0.46802794196668457,
+   "best_max": 0.5560253699788583,
+   "random": 0.6600130605278102,
+   "best_vs_base": 0.004386161488504126,
+   "random_vs_base": -0.001453479578405359
+  },
+  {
+   "id": "he_shi_gong_gang",
+   "path": "實",
+   "form": "攻",
+   "main": "剛",
+   "from": "god_gang_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_shi_gong_gang",
+    "timing": "乘勢",
+    "kind": "chase_disarm",
+    "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。",
+    "rate": 0.1332,
+    "params": {
+     "turns": 1.0
+    }
+   },
+   "best": 0.5138845593356482,
+   "best_min": 0.47685683530678147,
+   "best_max": 0.5566037735849056,
+   "random": 0.6645529892037917,
+   "best_vs_base": -0.0036147446069718647,
+   "random_vs_base": -0.005371943407508906
+  },
+  {
+   "id": "he_shi_gong_man",
+   "path": "實",
+   "form": "攻",
+   "main": "慢",
+   "from": "god_zheng_gong",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_shi_gong_man",
+    "timing": "乘勢",
+    "kind": "oath",
+    "desc": "剋中對手後蓄勢待發：下一回合連環、無隙。",
+    "rate": 0.0648,
+    "params": {
+     "cost_pct": 0.0
+    }
+   },
+   "best": 0.5130928447721039,
+   "best_min": 0.48102618920363444,
+   "best_max": 0.5560796645702306,
+   "random": 0.6617331514655975,
+   "best_vs_base": -0.004406459170516186,
+   "random_vs_base": -0.00819178114570307
+  },
+  {
+   "id": "he_shi_shou_gang",
+   "path": "實",
+   "form": "守",
+   "main": "剛",
+   "from": "god_gang_shou",
+   "k": 0.6,
+   "tactic": {
+    "name": "he_shi_shou_gang",
+    "timing": "心法",
+    "kind": "hold_city",
+    "desc": "固守的推力 +{guard_pct}；對手強攻你時，他吃自己那一下的 {share_pct}。",
+    "params": {
+     "guard_pct": 0.0998,
+     "share_pct": 0.1496
+    }
+   },
+   "best": 0.5121150782730134,
+   "best_min": 0.4770053475935829,
+   "best_max": 0.5637619553666312,
+   "random": 0.6649168976262182,
+   "best_vs_base": -0.005384225669606724,
+   "random_vs_base": -0.005008034985082399
+  },
+  {
+   "id": "he_shi_shou_man",
+   "path": "實",
+   "form": "守",
+   "main": "慢",
+   "from": "god_xie_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_shi_shou_man",
+    "timing": "心法",
+    "kind": "waver",
+    "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。",
+    "params": {
+     "up_pct": 0.1234,
+     "down_pct": 0.0411
+    }
+   },
+   "best": 0.5136382449041403,
+   "best_min": 0.48183760683760685,
+   "best_max": 0.5766002098635886,
+   "random": 0.6646469576847787,
+   "best_vs_base": -0.003861059038479775,
+   "random_vs_base": -0.005277974926521933
+  },
+  {
+   "id": "he_shi_bian_gang",
+   "path": "實",
+   "form": "變",
+   "main": "剛",
+   "from": "god_gang_bian",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_shi_bian_gang",
+    "timing": "出招",
+    "kind": "reinforce",
+    "desc": "出手連珠：這一回合多推一擊。",
+    "rate": 0.0389,
+    "params": {
+     "chance_pct": 1.0,
+     "strikes": 1.0
+    }
+   },
+   "best": 0.5131640537917761,
+   "best_min": 0.46702702702702703,
+   "best_max": 0.5629984051036683,
+   "random": 0.6695227988381158,
+   "best_vs_base": -0.004335250150844017,
+   "random_vs_base": -0.0004021337731847652
+  },
+  {
+   "id": "he_shi_bian_man",
+   "path": "實",
+   "form": "變",
+   "main": "慢",
+   "from": "god_man_bian",
+   "k": 0.35,
+   "tactic": {
+    "name": "he_shi_bian_man",
+    "timing": "乘勢",
+    "kind": "foresight",
+    "desc": "黏住對手：剋中他之後，下一回合一定再出剋他的那一招。",
+    "rate": 0.0542
+   },
+   "best": 0.5117051264266563,
+   "best_min": 0.4777718264595608,
+   "best_max": 0.5551470588235294,
+   "random": 0.6655500870315196,
+   "best_vs_base": -0.005794177515963783,
+   "random_vs_base": -0.0043748455797809616
+  },
+  {
+   "id": "he_shi_xin_gang",
+   "path": "實",
+   "form": "心",
+   "main": "剛",
+   "from": "god_gang_xin",
+   "k": 0.225,
+   "tactic": {
+    "name": "he_shi_xin_gang",
+    "timing": "乘勢",
+    "kind": "tiger",
+    "desc": "每剋中一次疊一層，推力每層 +{stack_pct}，最多 {stacks} 層，不會散；氣勢落後時一次疊兩層。",
+    "params": {
+     "stack_pct": 0.0057,
+     "stacks": 5.0
+    }
+   },
+   "best": 0.5140958360214688,
+   "best_min": 0.4791220556745182,
+   "best_max": 0.5600419507079182,
+   "random": 0.6700089344150586,
+   "best_vs_base": -0.0034034679211513152,
+   "random_vs_base": 8.400180375800481e-05
+  },
+  {
+   "id": "he_shi_xin_man",
+   "path": "實",
+   "form": "心",
+   "main": "慢",
+   "from": "god_man_xin",
+   "k": 0.107,
+   "tactic": {
+    "name": "he_shi_xin_man",
+    "timing": "心法",
+    "kind": "sacrifice",
+    "desc": "每贏一回合疊一層，推力每層 +{stack_pct}；疊滿 {stacks} 層，下一回合連環，然後重來。",
+    "params": {
+     "stack_pct": 0.0128,
+     "stacks": 4.0
+    }
+   },
+   "best": 0.5101207509907318,
+   "best_min": 0.47188002142474555,
+   "best_max": 0.5620010643959553,
+   "random": 0.6687415761706466,
+   "best_vs_base": -0.007378552951888273,
+   "random_vs_base": -0.0011833564406540376
+  }
+ ]
+}
