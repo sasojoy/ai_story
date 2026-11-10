@@ -120,6 +120,7 @@ _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
     "raid_win": {},
     "aid": {},
     "battle_end": {},
+    "showdown_pay": {},
 }
 
 # core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 一、三、六）：補算與換季由核心代叫的格
