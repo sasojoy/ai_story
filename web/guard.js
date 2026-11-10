@@ -3,6 +3,7 @@
  * 設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su（Joy 2026-11-09「其他都按照建議」）。照 docs/superpowers/specs/2026-11-09-介面設計規範.md 畫：
  * 頂上院子一張圖淡進卡色、他的直排名帖與心性的朱印；一條情分墨線（不露數字）；眼前那一件事（三個做法、自己寫）；
  * 底下撕紙的紀事。第二批：求學時寫他在哪、哪時回來（信也是眼前那一件），出師以後名帖旁寫出路與稱號、多一段只有你看得到的生平。
+ * 11/10：他的事都在這一頁按（Joy「後面對小明做的決定如果不是觸發類的也應該在同伴頁面」）：攤開、挑做法、等一下、送去求學、挑去處；撞見是探索時觸發。
  * 第四批：頁首換成 Joy 畫的圖（main.guard.art：hero 橫幅、face 立繪，照階段、出路與心性挑；web/img/guard/）。
  * 伺服器收養了才給 main.guard；沒有就不畫。
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
@@ -34,6 +35,9 @@
   const GD_BIO = "生平";
   const GD_BIO_SUB = "只有你看得到";
   const GD_YARD = "/static/img/guard/story/yard.webp";
+  const GD_PICK_SCHOOL = "{name}長高了，也該出去學點本事。你想送{pron}去哪裡？";
+  const GD_STAY = "再等等";
+  const GD_LATER = "先擱著";
   const GD_KIND = { letter: "來信", trial: "出師考驗", oath: "立誓" };
 
   const gdFill = (s, g) => s.replace(/\{name\}/g, g.name).replace(/\{pron\}/g, g.pron)
@@ -58,14 +62,19 @@
     let now;
     const idle = g.stage === "study" ? GD_AWAY : g.stage === "settle" || g.stage === "trial" ? GD_SETTLING : g.stage === "sworn" ? GD_SWORN : GD_QUIET;
     const kind = ev && GD_KIND[ev.kind] ? `<small>${GD_KIND[ev.kind]}</small>` : "";
-    if (!ev) now = `<p class="gd-quiet">${esc(gdFill(idle, g))}</p>`
+    if (g.schools && g.schools.length) {
+      const picks = g.schools.map((c, i) => `<button class="gd-opt" data-act="choose" data-id="${esc(c.id)}"${c.enabled ? "" : " disabled"}><span class="gd-dot t${i % 3}" aria-hidden="true"></span>${esc(c.label)}</button>`).join("");
+      now = `<p class="gd-scene">${esc(gdFill(GD_PICK_SCHOOL, g))}</p><div class="gd-opts">${picks}</div>
+        <button class="btn ghost gd-open" data-act="choose" data-id="guard:stay">${GD_STAY}</button>`;
+    } else if (!ev) now = `<p class="gd-quiet">${esc(gdFill(idle, g))}</p>`
       + (g.can_study ? `<button class="btn primary gd-open" data-act="choose" data-id="guard:study">${esc(gdFill(GD_STUDY, g))}</button>` : "");
     else if (!ev.shown) now = `<button class="btn primary gd-open" data-act="choose" data-id="guard:open">${esc(gdFill(GD_OPEN, g))}</button>`;
     else {
       const picks = ev.choices.map((c, i) => `<button class="gd-opt" data-act="choose" data-id="guard:pick:${i}"><span class="gd-dot t${i}" aria-hidden="true"></span>${esc(c)}</button>`).join("");
       now = `<p class="gd-scene">${esc(ev.text)}</p><div class="gd-opts">${picks}</div>
         <div class="gd-own"><input class="input" id="gd-say" maxlength="${g.say_max | 0}" placeholder="${esc(GD_OWN)}" aria-label="${esc(GD_OWN)}">
-        <button class="btn primary" data-act="gd-say">${GD_SAY}</button></div>`;
+        <button class="btn primary" data-act="gd-say">${GD_SAY}</button></div>
+        <button class="btn ghost gd-later" data-act="choose" data-id="guard:later">${GD_LATER}</button>`;
     }
     const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}</h4>${kind}</div>${now}</section>`;
     const bioSec = g.bio ? `<section class="gd-sec" aria-label="${GD_BIO}"><div class="gd-sec-hd"><h4>${GD_BIO}</h4><small>${GD_BIO_SUB}</small></div>

@@ -14,7 +14,8 @@ def sworn(game):
     game.state.player.member.level = t.meet_level
     game.client = None
     game.sync(game.now)
-    for oid in ("guard:meet", "guard:save", "guard:adopt:男"):
+    actions.meet_on_explore(game, game.state.player.location)
+    for oid in ("guard:save", "guard:adopt:男"):
         game.choose(oid)
     game.state.player.member.level = t.study_level
     game.state.player.stats["silver"] = 500
@@ -35,7 +36,7 @@ def test_after_swearing_he_still_has_daily_things(sworn):
     b.home_day = 0
     sworn.sync(sworn.now)
     assert b.event is not None and b.event.kind == "home"
-    assert "guard:open" in [o.id for o in sworn.options(odds=False)]
+    assert actions.status(sworn)["guard"]["event"]["shown"] is False
 
 
 def test_the_band_moves_at_most_one_step_a_season(sworn):

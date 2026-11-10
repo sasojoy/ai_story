@@ -56,6 +56,8 @@
   border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font: 15px/1.5 var(--sans); cursor: pointer;
 }
 .guard .gd-opt:active { background: var(--card-2); }
+.guard .gd-opt:disabled { opacity: .5; }
+.guard .gd-later { align-self: flex-start; }
 .guard .gd-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-2); }
 .guard .gd-dot.t0 { background: var(--accent); }
 .guard .gd-dot.t1 { background: var(--gold); }

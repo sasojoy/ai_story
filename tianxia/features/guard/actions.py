@@ -90,23 +90,64 @@ def _can_study(ctx, b) -> bool:
 
 # ── 選單 ───────────────────────────────────────────────────────────────
 
+PAGE_HEADS = ("open", "later", "pick", "study", "school", "stay")  # 親衛隊長那一頁上的鈕（不在此地可為；Joy 2026-11-10）
+
+
 def options(ctx) -> list[Option]:
-    if not _free(ctx):
+    """此地可為不放他的事（Joy 2026-11-10「後面對小明做的決定如果不是觸發類的也應該在同伴頁面」）：撞見是探索時觸發（meet_on_explore），
+    其餘在親衛隊長那一頁按（choose_unlisted 接走）。只有假人照舊從選單上按（假人只透過 Game 的公開行動做事，看不到網頁）。"""
+    if not ctx.state.player.bot or not _free(ctx):
+        return []
+    b = rules.book(ctx.state)
+    if b is None:
+        return []
+    out = []
+    if b.stage in EVENT_STAGES and b.event is not None and not b.event.shown:
+        out.append(Option(id=f"{PREFIX}:open", label=rules.fill(rules.EVENT_LABEL, b).replace("{peek}", rules.peek(b.event))))
+    if _can_study(ctx, b):
+        out.append(Option(id=f"{PREFIX}:study", label=rules.fill(rules.STUDY_LABEL, b)))
+    return out
+
+
+def meet_on_explore(ctx, loc_id: str) -> list[str]:
+    """探索那一下撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）：到了等級、還沒遇過的，第一次探索就撞見；
+    當初沒救、沒收的，回到撞見他的那一處再探索，又遇上他（接著是收不收的那一段）。接下來救不救、收不收是選單接管的那一刻（menu）。"""
+    if not ctx.content.config.guard.enabled or not _free(ctx):  # 這一趟撞上頭目、事件攤開了：他下一趟再遇
         return []
     p, b, t = ctx.state.player, rules.book(ctx.state), _t(ctx)
     if b is None:
         if p.member.level < t.meet_level:
             return []
-        return [Option(id=f"{PREFIX}:meet", label=rules.pick_opening(p.name, _season(ctx))["label"])]
+        o = rules.pick_opening(p.name, _season(ctx))
+        p.guard = GuardBook(stage="met", opening=o["id"], place=p.location)
+        return [o["text"]]
     if b.stage == "left" and p.location == b.place:
-        return [Option(id=f"{PREFIX}:back", label=rules.BACK_LABEL)]
+        b.stage = "saved"
+        return [rules.BACK_TEXT.replace("{place}", _place_name(ctx, b.place))]
+    return []
+
+
+def page_choice(ctx, option_id: str) -> list[str] | None:
+    """親衛隊長那一頁的鈕（不在選單上；Game.choose 查選單之前經 choose_unlisted 接走）：攤開眼前那一件、挑做法、等一下再說、送去求學。"""
+    arg = option_id[len(PREFIX) + 1:]
+    head = arg.partition(":")[0]
+    if head not in PAGE_HEADS:
+        return None
+    if not _free(ctx):
+        return ctx._log([rules.NO_SUCH])
+    return ctx._log(act(ctx, arg))
+
+
+def _school_picks(ctx, b) -> list[dict]:
+    """挑去處那一刻（送去求學按下去之後）：親衛隊長那一頁畫的那幾顆（id、字、錢夠不夠）。"""
+    if b is None or b.stage != "grow" or not b.picking:
+        return []
+    t, silver = _t(ctx), _silver(ctx)
     out = []
-    if b.stage in EVENT_STAGES and b.event is not None and not b.event.shown:
-        head = rules.OPEN_LABELS.get(b.event.kind)
-        label = rules.fill(head, b) if head else rules.fill(rules.EVENT_LABEL, b).replace("{peek}", rules.peek(b.event))
-        out.append(Option(id=f"{PREFIX}:open", label=label))
-    if _can_study(ctx, b):
-        out.append(Option(id=f"{PREFIX}:study", label=rules.fill(rules.STUDY_LABEL, b)))
+    for key, info in rules.texts.SCHOOLS.items():
+        cost = int(t.schools.get(key, {}).get("silver", 0))
+        out.append({"id": f"{PREFIX}:school:{key}", "label": rules.fill(info["label"], b) + (f"（銀兩 {cost}）" if cost else ""),
+                    "enabled": silver >= cost})
     return out
 
 
@@ -120,6 +161,8 @@ def menu(ctx) -> list[Option] | None:
     if b.stage == "saved":
         return [Option(id=f"{PREFIX}:adopt:男", label=rules.ADOPT_BOY), Option(id=f"{PREFIX}:adopt:女", label=rules.ADOPT_GIRL),
                 Option(id=f"{PREFIX}:part", label=rules.PART_LABEL)]
+    if not ctx.state.player.bot:  # 挑去處、挑做法都在親衛隊長那一頁（status 給 schools、event.choices）；只有撞見、救不救、收不收接管選單
+        return None
     if b.stage == "grow" and b.picking:
         t, silver = _t(ctx), _silver(ctx)
         out = []
@@ -143,12 +186,6 @@ def act(ctx, arg: str) -> list[str]:
     s, t = ctx.state, _t(ctx)
     p, b = s.player, rules.book(s)
     head, _, rest = arg.partition(":")
-    if head == "meet":
-        if b is not None or p.member.level < t.meet_level or not _free(ctx):
-            return [rules.NO_SUCH]
-        o = rules.pick_opening(p.name, _season(ctx))
-        p.guard = GuardBook(stage="met", opening=o["id"], place=p.location)
-        return [o["text"]]
     if b is None:
         return [rules.NO_SUCH]
     if head == "save" and b.stage == "met":
@@ -157,9 +194,6 @@ def act(ctx, arg: str) -> list[str]:
     if head in ("leave", "part") and b.stage in ("met", "saved"):
         b.stage = "left"
         return [rules.LEFT_HIM if head == "leave" else rules.PARTED]
-    if head == "back" and b.stage == "left" and p.location == b.place:
-        b.stage = "saved"
-        return [rules.BACK_TEXT.replace("{place}", _place_name(ctx, b.place))]
     if head == "adopt" and b.stage == "saved" and rest in ("男", "女"):
         b.stage, b.sex = "grow", rest
         b.name = rules.pick_name(rest, p.name)
@@ -454,6 +488,7 @@ def status(ctx) -> dict:
         "bio": b.bio if b.stage == "sworn" else "",
         "meter": round((b.qing + t.qing_cap) / (2 * t.qing_cap), 3), "can_rename": not b.renamed, "along": b.along,
         "can_study": _can_study(ctx, b) and _free(ctx),
+        "schools": _school_picks(ctx, b),
         "say_max": t.say_max,
         "art": rules.art(t, b),
         "event": None if ev is None else {"text": ev.text, "shown": ev.shown, "kind": ev.kind, "choices": [c.label for c in ev.choices]},

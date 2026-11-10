@@ -15,7 +15,7 @@ def grown(game):
     game.state.player.member.level = t.meet_level
     game.client = None
     game.sync(game.now)
-    game.choose("guard:meet")
+    actions.meet_on_explore(game, game.state.player.location)
     game.choose("guard:save")
     game.choose("guard:adopt:女")
     game.state.player.member.level = t.study_level
@@ -42,20 +42,20 @@ def _to_school(game, key="shuyuan"):
 
 def test_study_shows_up_at_the_study_level_and_not_before(grown):
     b = grown.state.player.guard
-    assert "guard:study" in _ids(grown)
+    assert actions.status(grown)["guard"]["can_study"]
     grown.state.player.member.level = grown.content.config.guard.study_level - 1
-    assert "guard:study" not in _ids(grown)
+    assert not actions.status(grown)["guard"]["can_study"]
     assert b.stage == "grow"
 
 
 def test_picking_a_school_costs_silver_and_pushes_the_tags(grown):
     b, t = grown.state.player.guard, grown.content.config.guard
     grown.choose("guard:study")
-    menu = {o.id: o for o in grown.options(odds=False)}
-    assert set(menu) == {f"guard:school:{k}" for k in texts.SCHOOLS} | {"guard:stay"}
+    menu = {o["id"]: o for o in actions.status(grown)["guard"]["schools"]}
+    assert set(menu) == {f"guard:school:{k}" for k in texts.SCHOOLS}
     grown.state.player.stats["silver"] = 120
-    menu = {o.id: o for o in grown.options(odds=False)}
-    assert not menu["guard:school:shuyuan"].enabled and menu["guard:school:junying"].enabled and menu["guard:school:gensui"].enabled
+    menu = {o["id"]: o for o in actions.status(grown)["guard"]["schools"]}
+    assert not menu["guard:school:shuyuan"]["enabled"] and menu["guard:school:junying"]["enabled"] and menu["guard:school:gensui"]["enabled"]
     grown.state.player.stats["silver"] = 500
     before = b.tags.get("謀", 0)
     msgs = grown.choose("guard:school:shuyuan")
@@ -68,7 +68,7 @@ def test_stay_backs_out_of_the_menu(grown):
     b = grown.state.player.guard
     grown.choose("guard:study")
     grown.choose("guard:stay")
-    assert not b.picking and b.stage == "grow" and "guard:study" in _ids(grown)
+    assert not b.picking and b.stage == "grow" and actions.status(grown)["guard"]["can_study"]
 
 
 def test_letters_come_while_studying_then_the_trial_settle_and_oath(grown):
@@ -88,7 +88,7 @@ def test_letters_come_while_studying_then_the_trial_settle_and_oath(grown):
     assert b.letters == t.letters
     grown.sync(b.study_until + 1)  # 看時間不看等級
     assert b.stage == "trial" and b.event is not None and b.event.kind == "trial"
-    assert "guard:open" in _ids(grown)
+    assert actions.status(grown)["guard"]["event"]["shown"] is False
     grown.choose("guard:open")
     grown.choose("guard:pick:0")
     # 沒有模型：當場固定結算，接著跪誓

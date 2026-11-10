@@ -20,8 +20,13 @@ def _ids(game):
     return [o.id for o in game.options(odds=False)]
 
 
+def _meet(game):
+    """探索那一下撞見（BUS outing／explore 的 guard 那一格）；整條探索走一遍的在 test_exploring_is_where_you_meet_him。"""
+    return actions.meet_on_explore(game, game.state.player.location)
+
+
 def _adopt(game, sex="女"):
-    game.choose("guard:meet")
+    _meet(game)
     game.choose("guard:save")
     game.choose(f"guard:adopt:{sex}")
     return game.state.player.guard
@@ -39,13 +44,26 @@ class FakeClient:
 def test_the_child_shows_up_at_level_ten_and_not_before(game):
     game.content.config.guard.enabled = True
     game.state.player.member.level = 9
-    assert not any(i.startswith("guard:") for i in _ids(game))
+    assert _meet(game) == [] and game.state.player.guard is None
     game.state.player.member.level = 10
-    assert "guard:meet" in _ids(game)
+    assert _meet(game) and game.state.player.guard.stage == "met"
+
+
+def test_exploring_is_where_you_meet_him(on):
+    """撞見是探索時觸發，不在此地可為（Joy 2026-11-10）。"""
+    assert not any(i.startswith("guard:") for i in _ids(on))
+    explore = next(i for i in _ids(on) if i == "act:explore")
+    for _ in range(6):  # 這一趟撞上事件或頭目就下一趟再遇
+        on.state.pending_event = None
+        on.state.player.stamina = 999
+        on.choose(explore)
+        if on.state.player.guard is not None:
+            break
+    assert on.state.player.guard is not None and on.state.player.guard.stage == "met"
 
 
 def test_meet_save_adopt_names_the_child_and_writes_the_first_memory(on):
-    msgs = on.choose("guard:meet")
+    msgs = _meet(on)
     b = on.state.player.guard
     assert b.stage == "met" and any(rules.opening(b.opening)["text"] in m for m in msgs)
     assert [o.id for o in on.options(odds=False)] == ["guard:save", "guard:leave"]
@@ -54,19 +72,31 @@ def test_meet_save_adopt_names_the_child_and_writes_the_first_memory(on):
     on.choose("guard:adopt:女")
     assert b.stage == "grow" and b.sex == "女" and b.name in texts.NAMES["女"]
     assert len(b.log) == 1 and "她" in b.log[0].text and b.qing == 1
+    assert not any(i.startswith("guard:") for i in _ids(on))  # 收了之後他的事都在親衛隊長那一頁
 
 
-def test_walking_away_leaves_him_there_and_you_can_go_back(on):
-    on.choose("guard:meet")
+def test_walking_away_leaves_him_there_and_exploring_there_again_finds_him(on):
+    _meet(on)
     on.choose("guard:leave")
     b = on.state.player.guard
-    assert b.stage == "left" and "guard:meet" not in _ids(on)
-    assert "guard:back" in _ids(on)
-    on.state.player.location = next(k for k in on.content.locations if k != b.place)
-    assert "guard:back" not in _ids(on)
-    on.state.player.location = b.place
-    on.choose("guard:back")
-    assert b.stage == "saved"
+    assert b.stage == "left" and not any(i.startswith("guard:") for i in _ids(on))
+    place = b.place
+    on.state.player.location = next(k for k in on.content.locations if k != place)
+    assert _meet(on) == [] and b.stage == "left"
+    on.state.player.location = place
+    assert _meet(on) and b.stage == "saved"
+
+
+def test_page_buttons_work_without_being_on_the_menu(on):
+    """親衛隊長那一頁的鈕（攤開、挑做法、求學）不在選單上，照樣按得到。"""
+    b = _adopt(on)
+    b.home_day = 0
+    on.sync(on.now + 1)
+    assert b.event is not None and not any(i.startswith("guard:") for i in _ids(on))
+    on.choose("guard:open")
+    assert b.event.shown and not any(i.startswith("guard:") for i in _ids(on))
+    on.choose("guard:pick:0")
+    assert b.event is None and len(b.log) == 2
 
 
 def test_without_a_model_the_daily_thing_is_a_fixed_event_once_a_day(on):
@@ -75,9 +105,9 @@ def test_without_a_model_the_daily_thing_is_a_fixed_event_once_a_day(on):
     b.home_day = 0
     on.sync(on.now)
     assert b.event is not None and b.event.fixed and len(b.event.choices) == 3
-    assert any(i == "guard:open" for i in _ids(on))
+    assert actions.status(on)["guard"]["event"]["shown"] is False
     on.choose("guard:open")
-    assert _ids(on) == ["guard:pick:0", "guard:pick:1", "guard:pick:2", "guard:later"]
+    assert len(actions.status(on)["guard"]["event"]["choices"]) == 3 and not any(i.startswith("guard:") for i in _ids(on))
     before, harsh = b.qing, b.event.choices[2]
     on.choose("guard:pick:2")
     assert b.event is None and b.qing == before + harsh.qing and b.log[-1].text == harsh.memo
@@ -206,3 +236,14 @@ def test_the_fixed_texts_are_complete():
     b = GuardBook(stage="grow", name="小禾", sex="女")
     ev = rules.fixed_event(type("T", (), {"step_cap": 3, "tags": list("勇謀俠巧耕市暗準仁"), "tag_cap": 2})(), b, "home", 1, "x")
     assert "{name}" not in ev.text and all(isinstance(c, GuardChoice) for c in ev.choices)
+
+
+def test_bots_still_find_his_things_on_their_menu(on):
+    """假人只透過 Game 的公開行動做事、看不到網頁：攤開那一件、挑做法照舊在假人的選單上。"""
+    b = _adopt(on)
+    b.home_day = 0
+    on.sync(on.now + 1)
+    on.state.player.bot = True
+    assert "guard:open" in _ids(on)
+    on.choose("guard:open")
+    assert _ids(on) == ["guard:pick:0", "guard:pick:1", "guard:pick:2", "guard:later"]
