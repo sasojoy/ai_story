@@ -96,29 +96,36 @@ def test_timing_must_name_its_place_and_front(real):
         validate(real)
 
 
-def test_a_timing_item_needs_its_delivery_lines(real):
-    courier = _opp(real, "guan_courier").timing
+@pytest.fixture(scope="module")
+def broken_opportunities_text():
+    """下面三條的五筆突變（各在不同的欄位、訊息彼此不是子字串）一起套上、validate 一次（第 223 批）。
+    內容跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    courier = _opp(c, "guan_courier").timing
     courier.deliver_label = ""
-    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 deliver_label"):
-        validate(real)
-    courier.deliver_label, courier.done = "把密信交給{主將}", ""
-    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 done"):
-        validate(real)
+    courier.done = ""
+    del c.orders.rank2["huang"]
+    _opp(c, "guan_zhujun").bond.text = "朱儁说起自己寒门出身"
+    c.orders.rank2["guan"].ok = "你放出话去"
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    return str(caught.value)
 
 
-def test_accumulate_source_must_exist_for_the_faction(real):
-    del real.orders.rank2["huang"]
-    with pytest.raises(ContentError, match="huang_talisman：來源是第 2 階行動"):
-        validate(real)
+def test_a_timing_item_needs_its_delivery_lines(broken_opportunities_text):
+    assert "guan_courier：有 item 就要寫 deliver_label" in broken_opportunities_text
+    assert "guan_courier：有 item 就要寫 done" in broken_opportunities_text
 
 
-def test_opportunity_text_must_be_traditional(real):
-    _opp(real, "guan_zhujun").bond.text = "朱儁说起自己寒门出身"
-    with pytest.raises(ContentError, match="guan_zhujun：文字只能用繁體中文"):
-        validate(real)
-    real.orders.rank2["guan"].ok = "你放出话去"
-    with pytest.raises(ContentError, match="rank2.guan：文字只能用繁體中文"):
-        validate(real)
+def test_accumulate_source_must_exist_for_the_faction(broken_opportunities_text):
+    assert "huang_talisman：來源是第 2 階行動" in broken_opportunities_text
+
+
+def test_opportunity_text_must_be_traditional(broken_opportunities_text):
+    assert "guan_zhujun：文字只能用繁體中文" in broken_opportunities_text
+    assert "rank2.guan：文字只能用繁體中文" in broken_opportunities_text
 
 
 # ── Task 2：機緣的核心與情誼型 ─────────────────────────────────
