@@ -68,6 +68,15 @@
 - 畫面（A 版）：玩家看單時自動回覆署名「客服（自動回覆）・回覆」；單沒結、有自動回覆、還沒按過，對話最下面、回覆表單上方一顆「找真人」（44px）；按過畫膠囊籤「已請真人處理」。客服頁：「系統」「客服官・自動回覆」兩種署名，單的標題旁與清單列有同一個籤。
 - 這一批不做：橋、CLI、Discord（第 217 批）；真人客服頁的轉達鈕；客服官的動作上限（伺服器既有的字數、單數、狀態就是上限）。
 
+## 主機端（客服自動受理第 217 批；設計 6.1、6.2、第七節）
+
+兩支主機上的腳本，**都不 import `tianxia`**、不在遊戲的程式路徑上；預設路徑一律從腳本所在的 repo 根算（從 `C:\Ray\tianxia-support\` 啟動也一樣）。
+
+- **橋** `scripts/support_bridge.py`：唯讀開旁檔（`mode=ro`，不建表、不寫），每 15 秒看 `tickets`、`replies`（只看玩家的）、`flags`（只看 `human`）、`files`，有新的就貼到 Discord 的 #客服（webhook，圖一起上），並在 `--log` 檔記一行（只有 `NEW 12`、`REPLY 12`、`HUMAN 12`、`FILE 12` 四種；`ALIVE` 每 5 分鐘印到 stdout，不進 log）。新單等 60 秒（`--grace`）或已有一張圖才貼，之後補的圖另貼 `FILE`；還在等的單，它的再回、找真人也先停著。貼的字不帶帳號（login）、Email、手機；`payload_json` 一律帶 `allowed_mentions`（找真人只點 `mention` 那兩個 ID，單裡寫 `@everyone` 點不到人）。進度逐張記在 `--state`（預設 `.local/support_bridge.json`）；逾時、429、5xx、旁檔被鎖這一輪不前進、下一輪再試（連續 10 輪印一行警告、不停）；400、401、403、404 等其他 4xx 印警告並前進。參數：`--db`（預設 `TIANXIA_DB`，再 `saves/tianxia.db`）、`--config`、`--state`、`--log`（必填）、`--interval 15`、`--grace 60`、`--once`、`--dry-run`。金鑰檔沒有 `discord_webhook` 等同 `--dry-run`：只記 log、進度照前進（之後補上 webhook 不補貼舊的）。
+- **客服官的手** `scripts/support_cli.py`：只打 HTTP（`Authorization: Bearer <bot_token>`）。`queue`（先 `POST sweep` 再看清單；標籤 請管理者／等真人／等玩家／待客服官，最後一行四個數）、`ticket <n>`（單、每一則誰回的、帳號卡只印綁了哪幾種、截圖存到 `--inbox\<n>\<seq>.<副檔名>` 並印路徑）、`answer <n> [--close] [--human <Discord ID>]`、`note <n>`（請管理者處理的內部註記）、`close <n>`。**回覆與註記的字從 stdin 讀**，沒有 `--file`；stdin 空的不送（結束碼 1）。伺服器拒絕的句子原樣印（結束碼 1）；token 沒設、不對、或客服關著（404）印 token 那一句（結束碼 2）。**鎖定模式**：環境變數 `TIANXIA_SUPPORT_LOCKED=1` 時 `--config`、`--url`、`--inbox` 只照 `TIANXIA_SUPPORT_CONFIG`、`TIANXIA_SUPPORT_URL`、`TIANXIA_SUPPORT_INBOX`，命令列上帶了一律拒絕（結束碼 2）。永遠不印 token、帳號、Email、手機。
+- **`.local/support.json` 的四個鍵**（不進版控，值不寫在任何文件裡）：`bot_token`（核心 `identity_base.support_bot_token()` 也讀這一個）、`discord_webhook`（可省：省了橋只記不貼）、`server_url`（CLI 用，預設 `http://127.0.0.1:7861`）、`mention`（找真人要點的 Discord ID，字串陣列）。
+- 怎麼開、停：主機端操作文件「帳號綁定與客服」的「客服的橋（第 217 批）」。客服官 session 與 `cli.cmd` 是第 218 批。
+
 ## 掛鉤與檔
 
 - `routes`：`routes.py`，十三條 `/api/support/*`，全是 `async def`、第一行 `_gate_off`（關著 404）；`mailbox`（第 214 批）不用登入、直接回設定裡的字，其餘再自己解 JSON（截圖上傳除外），同步的本體丟執行緒池（sqlite 與 `shell._account` 都在那裡）。客服回覆（不是內部註記）經 `shell.WEB_PUSH` 推一則，`WEB_PUSH` 是 None、帳號關掉「客服」那一種都不送；自動結單不推。
@@ -83,6 +92,7 @@
 
 資料庫第 9 版不動；沒有存檔欄位。旁檔多 `lookups`、`pending_notes` 兩張表（舊程式不讀，檔留著）；第 215 批再多 `files` 表與 `<db stem>-support-files/` 資料夾。換回第 214 批：`files` 表沒人讀、截圖的資料夾留著沒人看、兩條新路由不在（看單的回應少 `files`）；只停截圖不停客服：`files_max` 設 0。換回第 211 批：還在 pending 的回覆舊程式當沒寫過，最多各補寫一則「客服」紀錄；查帳紀錄留著沒人讀；`id:<n>` 的帳號又送不了單（401）；易名帖不再擋客服。季中能換、不必休季。緊急開關 `Config.support.enabled`。
 第 216 批：旁檔多 `flags` 表（換回第 215 批沒人讀，單與回覆照讀）；換回後 token 路 404、`auto` 看不出來（自動回覆與系統回覆都顯示成「客服・回覆」）、`admin_flag` 又只設不清、兩條新路由不在。季中能換、不必休季。只停客服官：拿掉 `.local/support.json` 的 `bot_token`（或清 `bot_account`），再不行關 `Config.support.enabled`。
+第 217 批：只多兩支主機腳本（`scripts/support_bridge.py`、`scripts/support_cli.py`）與主機上的 `.local/support_bridge.json`（橋的進度）、`.local/support-inbox/`（CLI 存的截圖）；資料庫、存檔、旁檔都不動，刪掉兩支腳本就沒了，季中能換、不必休季。只停貼 Discord：停橋（`taskkill /PID <pid> /T /F`）或拿掉 `discord_webhook`（只記不貼）；只停 CLI：拿掉 `bot_token`（全部 404）。
 
 ## 另外要跑的
 
@@ -90,4 +100,5 @@
 - 第 215 批：`tests/server/test_backup_db.py`（截圖的資料夾跟著備份、還原、輪替）、`tests/web/test_shell_web.py`（`supportChange` 的框照字面）。
 - 第 216 批：`tests/core/test_identity_base.py`（`support_bot_token`）、`tests/core/test_shell_stays_thin.py`（`NO_LOGIN_ROUTES` 兩條）、`tests/bots/test_server_bots.py`（`web/support.js` 新字）、`tests/web/test_shell_web.py`（`support-human` 的點擊清單照字面）。
 - 情境：`scripts/same_behavior.py` 的 `petition` 軌（客服關著時登入的人打十三條、沒登入的人打 `mailbox`、`/api/main`、`/api/push`）；比對帶 `--new support`；第 212 批起 base 已經有這一包，要再加 `--also-existing`（K 波，PM 核對）。
+- 第 217 批：改 `scripts/support_bridge.py`、`scripts/support_cli.py` 時 `test_for` 只帶邊界，另跑 `tianxia/features/support/tests/test_support_bridge.py`、`test_support_cli.py`；改了旁檔的表或欄位（`store.py` 的 `SCHEMA`）、`rules.CATEGORIES`、`/api/support/*` 的回應長相時，這兩個檔也要跑（兩支腳本自己照欄位與鍵讀，不 import 包）。
 - `test_for` 自己會帶、不用另外跑（PM J 波核對）：`tests/core/test_contract_features.py`（改包的檔帶核心契約 `[support]`）、`tests/core/test_shell_stays_thin.py`（改 `web/` 帶）。

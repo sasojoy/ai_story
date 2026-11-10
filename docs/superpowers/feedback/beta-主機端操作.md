@@ -591,6 +591,19 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到現在的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。
 
+### 客服的橋（第 217 批）
+
+橋把新單、玩家再回、找真人、補的截圖貼到 Discord 的 #客服（只讀客服旁檔、不寫；規則見 `tianxia/features/support/README.md`「主機端」）。要先在 `.local/support.json` 寫好 `discord_webhook`（與找真人要點的 `mention`）；沒寫就只記 log、不貼。跟 `server.py` 用同一個 `TIANXIA_DB`。
+
+1. **第一次開之前先試一輪、把舊單記成貼過**（進度檔不在時會把現有的單全部當新單貼一次）：
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --log C:\Ray\tianxia-support\bridge.log`
+   印出的 `NEW 12（只記不貼）` 那幾行就是記成貼過的；進度在 `.local/support_bridge.json`。
+2. **分離開**（跟伺服器一樣用 `Start-Process`、一定加 `-u`、記下 PID）：
+   `$p = Start-Process -PassThru -WindowStyle Hidden -FilePath "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -ArgumentList "-u","C:\Ray\專案\天下大勢\scripts\support_bridge.py","--log","C:\Ray\tianxia-support\bridge.log" -WorkingDirectory C:\Ray\tianxia-support -RedirectStandardOutput C:\Ray\tianxia-support\bridge-out.log -RedirectStandardError C:\Ray\tianxia-support\bridge-err.log; $p.Id`
+   `bridge-out.log` 每 5 分鐘一行 `ALIVE`（橋還活著）；`bridge.log` 只有 `NEW`、`REPLY`、`HUMAN`、`FILE` 四種行。貼不出去連續 10 輪會在 `bridge-err.log` 寫一行，webhook 壞了（4xx）也寫在那裡。
+3. **停**：`taskkill /PID <上面那個 PID> /T /F`。停了遊戲照常，玩家照樣送單；再開會從進度檔接著貼（停著的那段時間的單會補貼）。
+- 緊急開關：停橋；或拿掉 `discord_webhook`（只記不貼、進度照走，之後補上也不補貼舊的）。資料庫、存檔、旁檔都不動，季中能換。
+
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 
 商城（元寶、回體丹、月卡；規則見 `docs/guide/商城.md`）是這一版的程式第一次改資料庫結構：新程式第一次打開資料庫（伺服器、假人程式、`set_password.py` 誰先開都一樣），會把第 5 版的檔就地升到第 6 版——多三張表：元寶的帳 `mall_ledger`、購買紀錄 `mall_purchases`、月卡 `mall_entitlements`。升級在同一筆交易裡做完，中途出錯整筆撤回、檔還是第 5 版。原本的角色、帳號、江湖史一筆都不動。
