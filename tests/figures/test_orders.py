@@ -884,20 +884,22 @@ def _week_orders(game, faction, week):
     return [o for o in game.state.world.orders if o.faction == faction]
 
 
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-@pytest.mark.parametrize("week", [3, 5, 7, 9])
-def test_odd_weeks_reserve_one_slot_for_a_siege(crowded, faction, week):
-    got = _week_orders(crowded, faction, week)
-    kinds = [o.template for o in got]
-    assert len(got) == 3 and kinds.count("siege") == 1 and "strike" not in kinds
+# 奇數週、偶數週、兩種退而求其次、都沒有對象這五條的陣營 × 週在同一條裡跑完（第 223 批；以前 parametrize，一組開一局）：_week_orders 每次先清空軍令、走到那一週再發，
+# 順序照以前 parametrize 展開的順序；跑在同一局上跟每組一局新的結果一樣（正序、倒序都量過）。紅的時候訊息寫是哪一組。
+def test_odd_weeks_reserve_one_slot_for_a_siege(crowded):
+    for week in (3, 5, 7, 9):
+        for faction in ("guan", "huang"):
+            got = _week_orders(crowded, faction, week)
+            kinds = [o.template for o in got]
+            assert len(got) == 3 and kinds.count("siege") == 1 and "strike" not in kinds, (faction, week)
 
 
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-@pytest.mark.parametrize("week", [2, 4, 6, 8])
-def test_even_weeks_reserve_one_slot_for_a_strike(crowded, faction, week):
-    got = _week_orders(crowded, faction, week)
-    kinds = [o.template for o in got]
-    assert len(got) == 3 and kinds.count("strike") == 1 and "siege" not in kinds
+def test_even_weeks_reserve_one_slot_for_a_strike(crowded):
+    for week in (2, 4, 6, 8):
+        for faction in ("guan", "huang"):
+            got = _week_orders(crowded, faction, week)
+            kinds = [o.template for o in got]
+            assert len(got) == 3 and kinds.count("strike") == 1 and "siege" not in kinds, (faction, week)
 
 
 def test_the_other_two_slots_keep_their_priority_order(crowded):
@@ -912,31 +914,31 @@ def test_the_other_two_slots_keep_their_priority_order(crowded):
             assert len(rest) == 2 and rest == plain[:2]
 
 
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-def test_a_missing_strike_target_falls_back_to_a_siege(crowded, faction):
+def test_a_missing_strike_target_falls_back_to_a_siege(crowded):
     """偶數週偏好打擊；沒有打擊的對象就改發攻城。"""
     with mock.patch.object(orders, "strike_target", return_value=None):
-        kinds = [o.template for o in _week_orders(crowded, faction, 4)]
-    assert len(kinds) == 3 and kinds.count("siege") == 1 and "strike" not in kinds
+        for faction in ("guan", "huang"):
+            kinds = [o.template for o in _week_orders(crowded, faction, 4)]
+            assert len(kinds) == 3 and kinds.count("siege") == 1 and "strike" not in kinds, faction
 
 
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-def test_a_missing_siege_target_falls_back_to_a_strike(crowded, faction):
+def test_a_missing_siege_target_falls_back_to_a_strike(crowded):
     """奇數週偏好攻城；沒有打得到敵方隊伍的戰線就改發打擊。"""
     with mock.patch.object(orders, "siege_places", return_value=[]):
-        kinds = [o.template for o in _week_orders(crowded, faction, 3)]
-    assert len(kinds) == 3 and kinds.count("strike") == 1 and "siege" not in kinds
+        for faction in ("guan", "huang"):
+            kinds = [o.template for o in _week_orders(crowded, faction, 3)]
+            assert len(kinds) == 3 and kinds.count("strike") == 1 and "siege" not in kinds, faction
 
 
-@pytest.mark.parametrize("week", [3, 4])
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-def test_with_no_offense_at_all_the_slot_goes_back_to_priority(crowded, faction, week):
+def test_with_no_offense_at_all_the_slot_goes_back_to_priority(crowded):
     """兩種進攻都沒有對象：那一格照原本的優先序給下一道，三格還是滿的。"""
     with mock.patch.object(orders, "strike_target", return_value=None), \
             mock.patch.object(orders, "siege_places", return_value=[]):
-        got = _week_orders(crowded, faction, week)
-    assert len(got) == 3 and not any(o.template in OFFENSE for o in got)
-    assert {o.template for o in got} <= {"defend", "intercept", "escort"}
+        for faction in ("guan", "huang"):
+            for week in (3, 4):
+                got = _week_orders(crowded, faction, week)
+                assert len(got) == 3 and not any(o.template in OFFENSE for o in got), (faction, week)
+                assert {o.template for o in got} <= {"defend", "intercept", "escort"}, (faction, week)
 
 
 @pytest.fixture
@@ -949,15 +951,16 @@ def pressed(on):
         yield game
 
 
-@pytest.mark.parametrize("faction", ["guan", "huang"])
-@pytest.mark.parametrize("week, supply", [(3, "intercept"), (5, "intercept"), (4, "escort"), (6, "escort")])
-def test_the_supply_slot_alternates_between_intercept_and_escort(pressed, faction, week, supply):
-    """守城、進攻之外只剩一格優先序 2 時，截糧與護糧輪流：奇數週截糧、偶數週護糧（不然同優先序的平手永遠是截糧贏，護糧一道都發不出）。"""
-    got = _week_orders(pressed, faction, week)
-    kinds = [o.template for o in got]
-    assert kinds.count("defend") >= 1 and sum(k in OFFENSE for k in kinds) == 1
-    supplies = [k for k in kinds if k in ("intercept", "escort")]
-    assert supplies == [supply]
+def test_the_supply_slot_alternates_between_intercept_and_escort(pressed):
+    """守城、進攻之外只剩一格優先序 2 時，截糧與護糧輪流：奇數週截糧、偶數週護糧（不然同優先序的平手永遠是截糧贏，護糧一道都發不出）。
+    週 × 陣營在同一條裡跑完（第 223 批，同奇數週那幾條）。"""
+    for week, supply in ((3, "intercept"), (5, "intercept"), (4, "escort"), (6, "escort")):
+        for faction in ("guan", "huang"):
+            got = _week_orders(pressed, faction, week)
+            kinds = [o.template for o in got]
+            assert kinds.count("defend") >= 1 and sum(k in OFFENSE for k in kinds) == 1, (faction, week)
+            supplies = [k for k in kinds if k in ("intercept", "escort")]
+            assert supplies == [supply], (faction, week)
 
 
 def test_the_supply_alternation_only_breaks_ties_within_one_priority(pressed):

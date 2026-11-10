@@ -233,25 +233,53 @@ def test_real_foreshadows_valid(fs_content):
     assert fs.guanyin.regions == ["jizhou", "yingru"] and fs.guanyin.text
 
 
-@pytest.mark.parametrize("where", ["chain", "event", "figure"])
-def test_front_must_be_a_front_not_just_a_region(where):
-    """front 寫的是戰線（大勢線 yingru／nanyang／jizhou），不是大區：幽州是一個大區、它的戰線是冀州，寫 youzhou
-    讀戰況時會讀到固定的 50。載入時就擋下（地圖擴充 T1 總審查提的漏洞）。"""
+@pytest.fixture(scope="module")
+def wrong_front_texts():
+    """同一份內容先驗原樣是對的，再依序寫壞一處、validate、還原（第 223 批：三種只載一次內容）。
+    回 {where: (validate 丟出的訊息, 那一句該有的全句)}；寫壞了卻沒丟錯，訊息是 None。"""
     from tianxia.content import ContentError, validate
     from tianxia.models import FigureChange
 
     c = renown_unscaled(real_content("week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     validate(c)  # 原樣是對的
-    if where == "chain":
-        c.foreshadows.chains[0].front = "youzhou"
-    elif where == "event":
-        next(e for e in c.timetable if e.front is not None).front = "luoyang"
+
+    def text():
+        try:
+            validate(c)
+        except ContentError as e:
+            return str(e)
+        return None
+
+    out = {}
+    chain = c.foreshadows.chains[0]
+    old = chain.front
+    chain.front = "youzhou"
+    out["chain"] = (text(), f"伏筆 {chain.id}：未知的戰線 youzhou")
+    chain.front = old
+    event = next(e for e in c.timetable if e.front is not None)
+    old = event.front
+    event.front = "luoyang"
+    out["event"] = (text(), f"時刻表 {event.id}：未知的戰線 luoyang")
+    event.front = old
+    event, key, outcome = next((e, k, o) for e in c.timetable for k, o in e.outcomes.items() if o.figures)
+    old = outcome.figures.get("huangfusong")
+    outcome.figures["huangfusong"] = FigureChange(fate="重挫", front="youzhou", location="luzhi_camp")
+    out["figure"] = (text(), f"時刻表 {event.id} 結果 {key}：未知的戰線 youzhou")
+    if old is None:
+        del outcome.figures["huangfusong"]
     else:
-        outcome = next(o for e in c.timetable for o in e.outcomes.values() if o.figures)
-        outcome.figures["huangfusong"] = FigureChange(fate="重挫", front="youzhou", location="luzhi_camp")
-    with pytest.raises(ContentError, match="戰線"):
-        validate(c)
+        outcome.figures["huangfusong"] = old
+    return out
+
+
+@pytest.mark.parametrize("where", ["chain", "event", "figure"])
+def test_front_must_be_a_front_not_just_a_region(wrong_front_texts, where):
+    """front 寫的是戰線（大勢線 yingru／nanyang／jizhou），不是大區：幽州是一個大區、它的戰線是冀州，寫 youzhou
+    讀戰況時會讀到固定的 50。載入時就擋下（地圖擴充 T1 總審查提的漏洞）。"""
+    text, sentence = wrong_front_texts[where]
+    assert text is not None, f"{where} 寫壞了，validate 卻沒丟錯"
+    assert "戰線" in text and sentence in text
 
 
 @pytest.mark.smoke
