@@ -1,16 +1,19 @@
 """客服單的旁檔（帳號與客服第 211 批；設計 6.1、第七節）：遊戲資料庫旁邊、同名多「-support.sqlite」（TIANXIA_DB 換了檔，它跟著換；
 同 notify 包的 push_store_path）。不進資料庫第 9 版、沒有存檔欄位。開關關著時沒有人建這個檔（open_store(create=False) 不建）。
 
-四張表：
+五張表（第 215 批起；另有一個截圖資料夾，見 files_dir）：
 - tickets：一張單。account_id、account_created、login、character、version 是送單那一下伺服器填的（不收客戶端的）。
 - replies：單上的每一則（玩家再回一句、客服回覆、請管理者處理的內部註記）。seen：玩家看過了沒；journaled：確定存進存檔的「客服」紀錄了沒。
 - lookups（第 212 批）：客服查帳號與看單帶出帳號卡，每一次一列（含查無、超過次數）。只有 INSERT，沒有任何路由改或刪（客服改不到）。
   shown：帳號存正規化後的，Email、手機只存遮好的字（不存明碼、不存雜湊）。counted 1 才算進每小時的次數（看單帶卡、超過次數那一下是 0）。
 - pending_notes（第 212 批）：寫進存檔、還沒確定存成的「客服」紀錄（reply_id、ticket_id、at＝寫進去那一下的遊戲時間）；notes.py 下一輪對存檔確認。
+- files（客服自動受理第 215 批）：單上的截圖，一張一列（seq 從 1 起、kind＝副檔名 png／jpg／webp、bytes、sha256）；檔在 files_dir 的 <單號>/<seq>.<kind>，
+  先寫 .part、在 add_file 的交易裡換名（先檔後列）。有列無檔時看圖回 404。
 純 sqlite3；「檢查並記一筆」在同一筆 BEGIN IMMEDIATE 裡（兩個分頁同時送單也不會超過上限）。時間一律由呼叫端傳進來。"""
 from __future__ import annotations
 
 import contextlib
+import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -32,6 +35,10 @@ SCHEMA = (
     "kind TEXT NOT NULL, shown TEXT NOT NULL, found_account_id INTEGER, outcome TEXT NOT NULL, counted INTEGER NOT NULL, created REAL NOT NULL)",
     "CREATE INDEX IF NOT EXISTS lookups_staff ON lookups (staff_account_id, created)",
     "CREATE TABLE IF NOT EXISTS pending_notes (reply_id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, at REAL NOT NULL)",
+    # 客服自動受理第 215 批：截圖（第 214 批的舊檔打開時補上，舊的四張表不 ALTER）
+    "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, seq INTEGER NOT NULL, kind TEXT NOT NULL, "
+    "bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, created REAL NOT NULL, UNIQUE (ticket_id, seq))",
+    "CREATE INDEX IF NOT EXISTS files_ticket ON files (ticket_id)",
 )
 
 
@@ -42,6 +49,12 @@ class Refused(ValueError):
 def store_path(db_path: Path) -> Path:
     db = Path(db_path)
     return db.with_name(f"{db.stem}-support.sqlite")
+
+
+def files_dir(db_path: Path) -> Path:
+    """截圖的資料夾（第 215 批）：<db stem>-support-files/<單號>/<seq>.<png|jpg|webp>，跟旁檔並排、跟著 TIANXIA_DB。"""
+    db = Path(db_path)
+    return db.with_name(f"{db.stem}-support-files")
 
 
 def open_store(path: Path, create: bool) -> SupportStore | None:
@@ -169,6 +182,43 @@ class SupportStore:
             conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created) VALUES (?, ?, 0, 0, ?, ?)",
                          (ticket_id, account_id, body, now))
             conn.execute("UPDATE tickets SET status = ?, updated = ? WHERE id = ?", (rules.after_player_reply(t["status"]), now, ticket_id))
+
+    # ── 截圖（第 215 批）──
+
+    def add_file(self, ticket_id: int, account_id: int, account_created: float, kind: str, size: int, sha256: str, now: float,
+                 files_max: int, *, part: Path | None = None) -> dict:
+        """單在、是主人、沒結、張數 < files_max 才記一列（同一筆 BEGIN IMMEDIATE）：seq＝這張單現有最大的＋1（從 1 起）。
+        part 是已經寫好的 .part：在交易裡換名成同一個資料夾的 <seq>.<kind>，換名丟錯整筆 rollback（.part 由呼叫端刪）。拒絕丟 Refused。"""
+        with self._write() as conn:
+            t = _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
+            if t is None or not rules.owns(t, account_id, account_created):
+                raise Refused(rules.NOT_FOUND)
+            if t["status"] == rules.CLOSED:
+                raise Refused(rules.CLOSED_ALREADY)
+            count, top = conn.execute("SELECT COUNT(*), COALESCE(MAX(seq), 0) FROM files WHERE ticket_id = ?", (ticket_id,)).fetchone()
+            if count >= files_max:
+                raise Refused(rules.FILES_FULL.format(n=files_max))
+            seq = int(top) + 1
+            cur = conn.execute("INSERT INTO files (ticket_id, seq, kind, bytes, sha256, created) VALUES (?, ?, ?, ?, ?, ?)",
+                               (ticket_id, seq, kind, size, sha256, now))
+            if part is not None:
+                os.replace(part, Path(part).with_name(f"{seq}.{kind}"))
+            return _row(conn.execute("SELECT * FROM files WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+    def files(self, ticket_id: int) -> list[dict]:
+        with contextlib.closing(self._conn()) as conn:
+            return [dict(r) for r in conn.execute("SELECT * FROM files WHERE ticket_id = ? ORDER BY seq", (ticket_id,))]
+
+    def queue_extras(self, ids: list[int]) -> dict[int, dict]:
+        """客服頁清單每一列多的東西，一次查齊（這一批只有 file_count；第 216 批再加鍵）。"""
+        out = {int(i): {"file_count": 0} for i in ids}
+        if not out:
+            return out
+        marks = ", ".join("?" for _ in out)
+        with contextlib.closing(self._conn()) as conn:
+            for tid, n in conn.execute(f"SELECT ticket_id, COUNT(*) FROM files WHERE ticket_id IN ({marks}) GROUP BY ticket_id", list(out)):
+                out[int(tid)]["file_count"] = int(n)
+        return out
 
     # ── 客服 ──
 
