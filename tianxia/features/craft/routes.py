@@ -130,31 +130,14 @@ def forge(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str] 
     （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = shell.prepare_forge(game, art_id, insight_ids)
-    pour, intent = bool(getattr(insight_ids, "pour", False)), str(getattr(insight_ids, "intent", "") or "")
-    if pour or intent:  # 合成改版：傾注、立意（引擎在改版沒開的季拒絕傾注、不理立意）
-        return shell.act(game, lambda g: g.forge(art_id, list(insight_ids), proposed=proposed, pour=pour, intent=intent or None))
     return shell.act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
-
-
-class ForgePicks(list):
-    """爐裡的意境 id 們（就是一個 list，殼照舊當 list 傳）；另帶網頁勾的傾注 pour 與立意 intent（意境合成改版）。
-    殼的 forge(game, *forge_args(body)) 不必改：這兩個跟著清單走到 forge、預覽（forge_view.forge_preview 用 getattr 讀）。"""
-
-    pour: bool = False
-    intent: str = ""
-
-
-INTENT_MAX = 20  # 立意 2～20 字（同自創）
 
 
 def forge_args(shell, body: dict) -> tuple[str | None, list[str]]:
     """煉製頁送來的東西：意境 id 們（爐裡只合意境）；舊網頁送來的武學 id 照傳，引擎回「爐裡只合意境」那一句。body 是客戶端寫的：
-    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。pour（真假）、intent（字串，夾在 INTENT_MAX 字）跟著清單走（ForgePicks）。"""
+    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。"""
     art, picked = body.get("art"), body.get("insights")
-    out = ForgePicks(str(i) for i in picked) if isinstance(picked, list) else ForgePicks()
-    out.pour = body.get("pour") is True
-    out.intent = str(body.get("intent") or "")[:INTENT_MAX] if isinstance(body.get("intent"), str) else ""
-    return str(art) if art else None, out
+    return str(art) if art else None, [str(i) for i in picked] if isinstance(picked, list) else []
 
 
 def _forge_without_naming(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str]:

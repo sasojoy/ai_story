@@ -13,16 +13,27 @@ from tianxia.state import GuardBook
 def armed(game):
     t = game.content.config.guard
     t.enabled = True
+    t.perks = {k: dict.fromkeys(v, 0.0) for k, v in t.perks.items()}  # 各原位的測試從 0 起算（正式數字由下面那一條守）
+    t.band_perks = {k: dict.fromkeys(v, 0.0) for k, v in t.band_perks.items()}
     game.state.player.guard = GuardBook(stage="sworn", name="阿牛", sex="男", path="醫者", title="回春", qing=8, along=True)
     return game
 
 
-def test_every_default_is_zero(armed):
-    t = armed.content.config.guard
-    assert all(v == 0.0 for table in (*t.perks.values(), *t.band_perks.values()) for v in table.values())
+def test_the_measured_numbers_stay_under_half_a_seal_shard(game):
+    """第四批（Joy 2026-11-10「全部做完一起上」）照 scripts/measure_guard.py 量過填：人人養得到，一格不超過玉璽碎片的一半
+    （碎片威力 ×1.10、閃避 +0.03）。改數字先重跑量表。"""
+    t = game.content.config.guard
+    flat = {k: v for table in t.perks.values() for k, v in table.items()}
+    assert all(v > 0 for v in flat.values())
+    assert flat["raid"] <= 0.05 and flat["ambush"] <= 0.05  # 威力倍數：碎片 0.10 的一半
+    assert flat["fight_pp"] <= 3 and flat["big_fight"] <= 3
+    assert flat["toll_cut"] <= 0.05
+    assert all(0 < table["dodge"] <= 0.02 for table in t.band_perks.values())  # 碎片金角 0.03
     for path in t.perks:
-        armed.state.player.guard.path = path
-        assert all(guard_base.perk(armed.state, armed.content, k) == 0.0 for k in t.perks[path])
+        b = GuardBook(stage="sworn", name="阿牛", sex="男", path=path, title="試", qing=0, along=True)
+        game.state.player.guard = b
+        t.enabled = True
+        assert all(guard_base.perk(game.state, game.content, k) == t.perks[path][k] for k in t.perks[path])
 
 
 def test_every_path_has_a_perk_and_only_known_keys(game):

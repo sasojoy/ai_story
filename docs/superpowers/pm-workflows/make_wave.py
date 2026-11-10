@@ -1203,6 +1203,58 @@ WAVES["V"] = dict(
 )
 
 
+# ── W 波：測試去重 B 批 223～225（企劃者 2026-11-10 深夜看 A 批數字選「三項全做」）──
+W_BRIEF = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\tq\b_batch_brief.md"
+W_NOTE = [
+    "- **測試去重 B 批這一波**：範圍照盤點 `" + V_SURVEY + "` 第三節 3.2～3.4 與這一批的派工單；每一筆候選的查案原文、證據、懷疑者的核對與改法在 `" + W_BRIEF + "`（只讀，派工單引用的 id 都在裡面），動手前先讀自己那幾筆。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。**不動 `tianxia/`、`web/`、`content/`、`server.py`、`scripts/`、`tests/conftest.py`、`tests/kit/`**，只改派工單點名的測試檔；不改任何斷言的意思（併是把同樣的斷言放在一起，不是放寬）；清單外的測試一條都不刪、不併。",
+    "- **每一項量秒數**：改前改後各量一次（`.venv/Scripts/python.exe -m pytest --durations=0 -p no:xdist <檔>` 整檔，含 slow 的加 `-m \"slow or not slow\"`），寫進回報的 `decided`（表：檔、改前、改後、條數改前改後）。各包 README、`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 `docs`。V 波（A 批）11/10 深夜已進 develop：正式內容一律 `conftest.real_content(profile)`、harness 不等長計時器、預設資料庫從模板抄，寫新 fixture 照這些。",
+]
+
+
+def wb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-10-測試去重-第{n}批.md"
+    return batch(n, f"測試去重第 {n} 批：{title}", "core_shared", dev, plan, ports, body + W_NOTE, custom=True)
+
+
+def b223():
+    return wb(223, "「改一個欄位、整份 validate(正式內容)、斷 ContentError」的突變測試併組：figures 與 military 九筆（MIL-01、FIG-04、FIG-01、FIG-03、MIL-02、MIL-03、MIL-05、MIL-04、FIG-05）", "dev/test-mutations-223", "8435", [
+        "- 範圍：盤點 3.2 的九筆，照懷疑者「縮小」後的做法（brief 裡每一筆的「懷疑者改成」為準，查案人原本的做法只當背景）：MIL-01 `military/tests/test_opportunities_two.py` 38 組突變分組、FIG-04 `tests/figures/test_figures.py` 13 組分 3～4 組、FIG-01 `tests/figures/test_promotions_high.py` 只動兩處（free_text 五欄位併一條、event_mods 那一處）、FIG-03 `tests/figures/test_promotions_huang.py` 只併 donate_grain 兩條與 fs_fragments 一條（共 8 組）、MIL-02 `military/tests/test_rank_actions.py` 只併訊息彼此不同的約 2 組、MIL-03 與 MIL-05（brief 列的檔與條）、MIL-04 夜晨 35 組改成一條雙迴圈、FIG-05 faction×week 改成條內雙迴圈。每一筆的測試名、行號、要留哪些 parametrize id 都在 brief。這一批擁有 `tests/figures/*.py` 與 `tianxia/features/military/tests/*.py`，別批不碰。",
+        "- **懷疑者定的規矩（照抄、逐條遵守）**：①`validate` 只丟前 20 筆錯（`content.py` 的 `errors[:20]`），一組最多約 8 個突變；②裸字串 `match`（`nowhere`、`nobody`、`ghost`、`13`、`fail`、`rank_actions`、`bad`）併組之前一律補成帶機緣／人物 id 與欄位的全句，同一組裡任何兩個 `match` 都不可以是對方的子字串；③正向「不丟錯」的 validate 不可併進會丟錯的組；④同一個欄位的突變分開放（會互踩）；⑤只有模組範圍 fixture 真的避開每條的 `real` 複本（50 ms）與 setup 才有省——每組套上突變後只 `validate` 一次、收下 `ContentError` 的訊息，原本的 parametrize 保留，每個 id 只對該組的訊息斷 `message in text`，紅的時候還看得出是哪一條。",
+        "- **證明**：每一組併好之後做一次「少一個突變」的注入——把組裡任一個突變拿掉（或把它的 match 改成別的字），對應那個 id 的斷言要紅、別的 id 要綠；抽每一筆至少一組寫進回報（id、拿掉哪個、紅在哪一句）。`test_rank_four_needs_legs_too`（斷言不得多出別的錯誤）不在併的範圍。",
+        "- **量**：`test_promotions_high.py`（改前 48 秒／161 條）、`test_promotions_huang.py`（22 秒／77 條）、`test_opportunities_two.py`（40 秒／126 條）、`test_figures.py`（16 秒／76 條）、`test_rank_actions.py`（20 秒／84 條）與 MIL-03、MIL-04、MIL-05、FIG-05 所在的檔，改前改後整檔秒數與條數（條數會因為 parametrize 保留而幾乎不變，省的是 validate 次數：改前改後各數一次 `validate(` 真的被叫幾次，用 monkeypatch 包一層計數寫進回報）。**全跑**：改到的檔整檔含 slow、`scripts/test_for.py` 挑的。**不做**：FIG-02（懷疑者駁回）、改成直接叫 `check_figures` 不走整份 validate（駁回）、`test_promotions_high` 與 `test_promotions_huang` 之外的檔。退版：只影響測試。",
+    ])
+
+
+def b224():
+    return wb(224, "bounties 的整季併進 `test_bot_plays_a_full_season[1]`（S3／ARM-4）：先用一次性腳本比對同種子兩種夾具是不是同一季，一樣才併，不一樣就放棄", "dev/test-season-224", "8436", [
+        "- 範圍：盤點 3.3 的 S3（＝artsgear 的 ARM-4，同一件事）。`tianxia/features/bounties/tests/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week`（20 秒 slow）跟 `tests/season/test_real_content.py::test_bot_plays_a_full_season[1]`（閘門的整季冒煙，21 秒）都跑種子 1 的一整季，只差觀察器與斷言。這一批擁有這兩個檔，別批不碰。",
+        "- **第一步，一次性比對（不進版控）**：`TIANXIA_DB` 設到暫存檔，照兩條測試各自的內容與夾具（bounties 那條的 content 設定、`test_real_content` 的 `season_of(1)`／`_real_s1()`）各跑一季種子 1，逐項比：結局、結束時間、江湖紀錄的標題清單、`world.bounties`（每週貼的那一批）、玩家最後的等級與地點。**一樣**才做第二步；**不一樣**（連一欄都算）就不併：把比對結果（哪一欄、兩邊各是什麼）寫進回報的 `decided` 與 `stopped`，這一批到此為止、什麼都不改。",
+        "- **第二步（只在一樣時）**：把 bounties 的 observe（與 `_batch` 之類的輔助，連同 import）與斷言併進 `test_bot_plays_a_full_season[1]` 本體（照第 108 批把 `_idle_observer` 併進種子 2 的做法；`play_season` 的 `observe` 介面），保證併入後那一季的 `step` 計數、結局、紀錄跟併之前一模一樣（比對腳本再跑一次）；刪 bounties 那條整季；bounties 包的 README「另外要跑的」若列了它，句子放 `docs`。`tests/core/test_test_for.py` 若數 smoke 或 slow 的條數，照改。",
+        "- **量**：併之前 `test_bot_plays_a_full_season[1]` 單跑秒數、併之後單跑秒數（它是閘門的冒煙，變慢多少寫清楚）、bounties 整檔含 slow 改前改後。**全跑**：`test_real_content.py` 整檔含 slow（約 5 分）、`test_bounties.py` 整檔含 slow、`scripts/test_for.py` 挑的。**不做**：別的整季（faction 豪強假人、sortie 假人、bot_runner 整季：設定不同，不併）、量表腳本。退版：只影響測試。",
+    ])
+
+
+def b225():
+    return wb(225, "核心契約逐包三條共用一個 game（CORE-02）：先對 28 個有 stage 檔的包確認輸出沒變，有一包變了就整條放棄", "dev/test-contract-225", "8437", [
+        "- 範圍：盤點 3.4 的 CORE-02（CORE-01 第 221 批做完了：`options_carry` 已併進 `test_choose_takes_only_its_own_ids`）。`tests/core/test_contract_features.py` 逐包的 `_game()`（`real_content('week7')` 複本加 `Game.new` 加 skip_tutorial 加 sync 加三選一迴圈）在 `test_choose_takes_only_its_own_ids` 與 `test_a_closed_package_gives_nothing`（含 prep card 那條）各建一次：改成每包只建一個 game，先 `own = _own_ids(feature, game)`，再取 shown 與做關閉斷言（brief 的 CORE-02）。這一批只擁有 `tests/core/test_contract_features.py`（與 `tests/core/test_test_for.py` 若名單要改；不改名就不碰）。",
+        "- **先驗再改**：一次性腳本（不進版控）對 28 個有 stage 檔的包各算一次改前的 `own`、`shown`、關閉後的選項集合，改完再算一次，逐包逐集合比對；**有一包任何一個集合變了就整條放棄**，寫進 `decided` 與 `stopped`，程式退回不改。`_ids_on_a_fresh_game` 這種行程內快取照舊（xdist 每個 worker 各算一遍是已知、不在這一批）。",
+        "- **量**：整檔 `-p no:xdist --durations=0` 改前（25 秒／256 條）改後；`_game()` 被叫的次數改前改後（計數寫進回報）。**全跑**：`tests/core/test_contract_features.py`、`test_contract_core.py`、`test_feature_boundaries.py`、`test_test_for.py` 整檔，`scripts/test_for.py` 挑的。**不做**：改契約驗的東西、改 `_game()` 建法、動 `test_for` 的挑法。退版：只影響測試。",
+    ])
+
+
+WEB_W = "**這一波沒動 `web/`，改的是測試。這一關不比畫面**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 閘門帶 `--changed` 的決定應該是只改測試、不比對、不走網頁；真的有跑就看 real（有就是 blocker）。\n2. 用 head 的測試：`tests/figures/test_promotions_high.py`、`tianxia/features/military/tests/test_opportunities_two.py` 各量一次整檔 `--durations=0 -p no:xdist`，跟回報的改後秒數對；`tests/core/test_contract_features.py` 整檔一次全綠。\n3. 第 224 批若併了：`tests/season/test_real_content.py::test_bot_plays_a_full_season[1]` 單跑一次，秒數跟回報對、全綠；沒併（比對不同）就看 `stopped` 寫了哪一欄不同。\n4. 整套不含 slow 的牆鐘（閘門 `-n 8`）跟 V 波閘門 `edd4826f` 的 206 秒比，寫進回報。"
+
+WAVES["W"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**併測試，保護面不能掉**。第 223～225 批（盤點 " + V_SURVEY + " 3.2～3.4；候選原文 " + W_BRIEF + "）。親自驗：①第 223 批：每一組併進同一次 validate 的突變不超過約 8 個、同組 match 互不為子字串、裸字串 match 都補成了帶 id 的全句、正向 validate 沒跟會丟錯的併在一起、同欄位的突變沒放同組；parametrize 的 id 還在、每個 id 的斷言只對自己那句訊息；回報有「少一個突變」的注入證明（每一筆至少一組）；`test_rank_four_needs_legs_too` 沒被動；只改了 `tests/figures/` 與 `military/tests/` 的檔。②第 224 批：回報的 `decided` 有逐欄的比對結果；併了的話 `test_bot_plays_a_full_season[1]` 的 step 計數、結局、紀錄跟併前一樣（回報要有再跑一次比對的證據）、bounties 的斷言一句沒少地搬過去；沒併的話程式一行沒改。③第 225 批：回報有 28 包改前改後三個集合逐包比對的結果；`_own_ids` 在 shown 之前算；契約驗的東西沒變。④三批都沒碰 `tianxia/`、`web/`、`content/`、`server.py`、`scripts/`、`tests/conftest.py`、`tests/kit/`；清單外沒有刪、沒有併（`git diff --stat` 對清單）。⑤每一批的 before／after 秒數表都在。"),
+    ],
+    lines=[dict(name="突變併組", batches=[b223]), dict(name="整季共乘", batches=[b224]), dict(name="契約", batches=[b225])],
+    merge_port=8438, fix_port=8439,
+    web_check=dict(ports="8440、8441", steps=WEB_W),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}

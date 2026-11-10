@@ -332,10 +332,7 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob | Ep
     if isinstance(job, ForgeJob):
         if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
             return []  # 取新名字的那一爐沒有名字可用：不開，不用字表名字搶下首創（見下面的說明）
-        extra = {"pour": True} if getattr(job, "pour", False) else {}  # 意境合成改版：傾注、立意（bot_base.PourJob；改版沒開的季是舊的 ForgeJob）
-        if getattr(job, "intent", None):
-            extra["intent"] = job.intent
-        return game.forge(None, list(job.insight_ids), proposed=proposed, **extra)
+        return game.forge(None, list(job.insight_ids), proposed=proposed)
     if state.player.naming != job.art_id:
         return []
     old = team.resolve_art(job.art_id, content, world)
