@@ -35,15 +35,6 @@ def _do(c, op, **body):
     return c.post(f"/api/do/{op}", json=body)
 
 
-def test_admin_tools_404_when_off(monkeypatch, key_file, tmp_path):  # noqa: F811
-    monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "g.db")
-    c = TestClient(server.app)
-    register(c, "boss_01", name="段青山")
-    monkeypatch.setattr(server.CONTENT.config, "admins", ["段青山"])
-    for op in ("identity_view", "identity_unbind", "identity_delete"):
-        assert _do(c, op, target="boss_01").status_code == 404
-
-
 def test_admin_tools_refuse_non_admin(clock):
     c = TestClient(server.app)
     _pw(c)

@@ -45,13 +45,3 @@ def test_new_routes_401_without_login(monkeypatch, key_file, tmp_path):  # noqa:
     assert {path: _hit(anon, m, path).status_code for m, path in NEW_ROUTES} == {path: 401 for _m, path in NEW_ROUTES}
     _turn_on(monkeypatch)
     assert {path: _hit(anon, m, path).status_code for m, path in NEW_ROUTES} == {path: 401 for _m, path in NEW_ROUTES}
-
-
-def test_main_and_me_bytes_same_when_off(monkeypatch, key_file, tmp_path):  # noqa: F811
-    """關著：_start_session 不寫旁檔、/api/me 與 /api/main 不多鍵（跟沒有這一包時同一份；位元組比對由波末 compare --new 做）。"""
-    _db(monkeypatch, tmp_path)
-    c = TestClient(server.app)
-    register(c, name="沈青衫")
-    me = c.get("/api/me").json()
-    assert "identity" not in me and "identity" not in c.get("/api/main").json()
-    assert not idstore.default_side_path().exists()

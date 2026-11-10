@@ -57,16 +57,6 @@ def test_allocate_through_the_main_actions(client):
     ]  # 網頁的配點鈕送的鍵就是這個鍵，要跟 Config.stat_names 對得上
 
 
-def test_a_point_goes_into_lore_through_the_server(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.stat_points = 1
-    open_characters().save(game.state)
-    r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
-    assert r["main"]["status"]["stat_points"] == 0
-    assert open_characters().load("沈青衫").player.stats["lore"] == 6
-
-
 def test_an_old_save_stored_without_lore_reads_as_five_through_the_server(client):
     """舊存檔（博聞加進來之前存的）：_reload 讀回來的是資料庫裡原樣的那一列、沒經過 Game 的建構，所以進鎖重讀之後也要
     照開局的 5 補上（計畫 2-2 Review Focus 1）：唯讀的 look、會存檔的 act（/api/main）、＋博聞都照常，不是 KeyError。"""
@@ -81,6 +71,7 @@ def test_an_old_save_stored_without_lore_reads_as_five_through_the_server(client
     status = client.get("/api/main").json()["status"]
     assert status["attrs"][-1][1:] == [5, "lore"]
     r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
+    assert r["main"]["status"]["stat_points"] == 0
     assert r["main"]["status"]["attrs"][-1][1:] == [6, "lore"]
     assert open_characters().load("沈青衫").player.stats["lore"] == 6
 
