@@ -1046,6 +1046,74 @@ WAVES["S"] = dict(
 )
 
 
+# ── T 波：客服自動受理（客服官）215～218（企劃者 2026-11-10「照計畫繼續」）──
+T_DESIGN = "docs/superpowers/specs/2026-11-09-客服自動受理-design.md"
+T_PLAN = "docs/superpowers/plans/2026-11-10-客服自動受理-計畫.md"
+T_NOTE = [
+    "- **客服自動受理這一波**：規格是設計 `" + T_DESIGN + "`（企劃者 11/10「照計畫繼續」），做法、介面、測試名與不做的照 `" + T_PLAN + "` 這一批那一節（**計畫跟設計稿對不上時照計畫**，計畫開頭「跟設計稿對不上的」列了四條）。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批**不做**計畫裡別批的事，碰到了寫 leftovers。四批是同一條鏈（後一批從前一批的 head 開）：前一批做好的介面照計畫的 Interfaces 用、不重做；對不上以程式為準並寫進 decided。",
+    "- **畫面照 `docs/superpowers/specs/2026-11-09-介面設計規範.md`**（Joy 11/09）：只用 `web/style.css` 的 `:root` 色票、44px、第五節的元件先挑；給人看截圖前照第八節自己驗（375 淺、375 深、1280）。設計 5.6 的對比圖：程式只做計畫寫的 A 版，B、C 兩版用暫時改 css 拍完就還原（不提交），截圖存計畫寫的暫存夾、路徑寫進回報；**不等企劃者挑才做**。只動 `web/support.js`、`web/support.css`，`app.js`、`main.js`、`admin.js`、`index.html` 不碰。",
+    "- **各包 README 自己填**；`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 docs。新字每一句旁 `待 joy 潤`，`new_strings` 逐句列。token、webhook、Discord ID 只在 `.local/support.json`，測試自己造暫存的金鑰檔（`support_kit.support_isolated` 已把 `LOCAL_DIR` 指到暫存夾）；回報與 commit 裡不出現任何真的 token。",
+]
+
+
+def tb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-10-客服自動受理-第{n}批.md"
+    return batch(n, f"客服自動受理第 {n} 批：{title}", "support", dev, plan, ports, body + T_NOTE, custom=True)
+
+
+def b215():
+    return tb(215, "客服四：截圖（上傳、看圖、files 表、資料夾、備份還原、三句拒絕的字；畫面①③）", "dev/support-4", "8415", [
+        "- 範圍照計畫第 215 批那一節（九個 task 逐個做、測試名照計畫）：`tuning/support.py` 加 `files_max` 3、`file_bytes_max` 3,000,000；`rules.image_kind`（只看檔頭：PNG、JPEG、WebP）與 `CONTENT_TYPES`、三句字；旁檔 `files` 表（`CREATE TABLE IF NOT EXISTS`，欄位照計畫）、`store.files_dir`、`add_file`（`BEGIN IMMEDIATE` 裡查主人、沒結、`< files_max`，seq 從 1）、`files`；`POST /api/support/file?id=<單號>`（內文就是位元組：async 處理函式先 `_gate_off`、再 `shell._account(request)` 認登入，然後 `async for chunk in request.stream()` **串流累計**，超過 `file_bytes_max` 立刻停止讀、拒絕；`Content-Length` 說超過的提早拒、說不超過的不信）與 `GET /api/support/file/{tid}/{seq}`（主人、客服名單上的人〔照 `_staff` 的條件〕，其他人與不存在 404 同一句；`Content-Type` 照檔頭、`Content-Disposition: inline`）；檔落地 `<db stem>-support-files/<單號>/<seq>.<png|jpg|webp>`：**先寫 `.upload-<uuid>.part`，再在 `add_file` 的交易裡算 seq、INSERT、`os.replace`**，replace 失敗 rollback；有列無檔看圖回 404 不 500；看圖路由先試主人、再試客服（第 216 批起也認 Bearer），其餘一律 `HTTPException(404, rules.NOT_FOUND)`；`_player_ticket`、`_staff_ticket` 多 `files`、`_queue` 多 `file_count`；`shell_tables.NO_LOGIN_ROUTES` 加這兩條（理由照 support 既有那幾列「關著 404、連登入都不問」——**計畫開頭第 1 條**：設計第八節寫「不進名單」是錯的，照程式）；`support_kit.ROUTES` 加看圖那一條、上傳那一條放新的 `RAW_POSTS`（現行 gate 測試對每條 POST 送壞 JSON 預期 422，上傳不解 JSON）；`backup_db.py`／`restore_db.py` 連 `<db stem>-support-files/` 一起備份、還原、輪替（`SIDE_DIRS`），主機端操作文件加一句。",
+        "- 畫面：`supportNewHtml` 的表單多截圖那一格（file input 收三種格式、縮圖列、第 4 張不收、單張超過 3 MB 當場擋）；`supportForm` 先送單再**逐張** `POST /api/support/file?id=…`（一張失敗就停、單留著、訊息寫哪一張沒傳上）；`supportTicketHtml` 內文下面一列縮圖（連到看圖路由、新分頁 `rel=\"noopener\"`，`loading=\"lazy\"`）、沒結且不滿 3 張多一個補圖表單（一次一張）；`supportDeskTicketHtml` 同一列縮圖。樣式只寫 `web/support.css`（`.sup-` 前綴）。node 測試照計畫 task 6。",
+        "- 測試先紅後綠，名字照計畫：`test_support_files.py`（新）九條、`test_support_web.py` 加四條、備份測試加一條（找 `test_backup_and_restore_carry_side_files` 所在的檔）。**Review Focus 1、2 那三條測試一定要有**（`test_file_too_big_is_refused_by_real_size`：假 `Content-Length: 1` 加 17 位元組對 `file_bytes_max=16`；`test_oversized_upload_stops_reading_early`：產生器內文第 3 塊會 raise、沒被讀到；`test_kind_is_by_magic_bytes_only`：`MZ` 檔頭加 `image/png` 被拒、PNG 檔頭加 `text/plain` 收）。",
+        "- 對比圖①③照計畫 task 7 拍六張存 `C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\waveT\\b215\\shots\\`，檔名寫 A／B／C 與寬度、淺深。",
+        "- **不做**：壓縮、縮圖、EXIF、回覆表單附圖、客服官（216）。退版：換回第 214 批 `files` 表沒人讀、資料夾留著、新路由不在；資料庫第 9 版不動；季中能換。",
+    ])
+
+
+def b216():
+    return tb(216, "客服五：客服官的 token 身分、自動回覆標示、「找真人」、自動結單（sweep）；畫面②", "dev/support-5", "8416", [
+        "- 範圍照計畫第 216 批那一節（十個 task）。核心只動兩處：`tianxia/core/identity_base.py` 加 `SUPPORT_BOT_FILE = \"support.json\"`、`support_bot_file()`、`support_bot_token()`（只讀 `bot_token`、少於 32 字或檔壞一律 None、mtime 快取；`tests/core/test_identity_base.py` 加一條）；`tuning/support.py` 加 `bot_account` 空字串、`auto_close_days` 3。依據：設計第八節（企劃者 11/10「照計畫繼續」）。`core_changes` 逐條列、寫這一句原話與日期。",
+        "- `staff.bot_account_id(config, db)`；`routes._staff(shell, request, *, allow_bot=True)`：有 `Authorization: Bearer` 就以它為準（`hmac.compare_digest` **兩邊都轉 bytes 再比**，非 ASCII 的 token 也要 404 不能 500；token 沒設、不對、`allow_bot=False`、`bot_account` 沒設或帳號不在 → 404 同一句；對了回 `by_id(bot_id)`、不看 cookie、不看 `staff_session_ok`）；`_lookup` 用 `allow_bot=False`。其他路由（`/api/do`、`/api/main`、`/api/me`、`/api/admin*`）Bearer 本來就不認——**契約測試** `test_bot_token_rejected_by_every_admin_api_and_the_shell` 照 `test_staff_rejected_by_every_admin_api` 的掃法用 Bearer 打一遍，全部不是 2xx；`test_bearer_wins_on_support_and_is_ignored_elsewhere`（Review Focus 3）。",
+        "- `rules.SYSTEM_ACCOUNT = 0`、`reply_auto(reply, bot_id, relayed)`、`after_human`、字 `AUTO_CLOSED`（帶 `{days}`）；旁檔 `flags` 表（`id, ticket_id, kind, ref, created`；`human` 與 `relay`）；`store.add_human`（主人、沒結、冪等、`answered → open`）、`has_human`、`flags`；`staff_reply(..., relay_from=None)`（**`admin_flag` 改成設值：內部註記 1、否則 0**；`relay_from` 有值時同一筆交易多插一列 `flags(relay)` 與一則 `internal=1` 的「轉達自 <ID>」註記，**不經 `then='admin'`、`admin_flag` 不動**），`close` 也清 `admin_flag`；`store.sweep(now, max_age, body)`（`BEGIN IMMEDIATE` 裡重讀：只結 `answered` **且 `admin_flag = 0`** 且最後一則早於 `now - max_age` 的單，插一則 `by_account_id=0, staff=1, seen=0, journaled=1` 的系統回覆、`admin_flag=0`；**Review Focus 4** `test_sweep_rechecks_inside_the_write_lock`）。路由 `POST /api/support/human {id}`（主人）、`POST /api/support/sweep`（客服或 token；旁檔不在回空）；`_player_ticket`／`_staff_ticket` 每則多 `auto`、單多 `human`，`_staff_ticket` 與 `_queue` 多 `last_by`（值 `player`／`staff`／`desk`／`system`／null，**不用 `bot` 這個字**；`store.queue_extras` 一次查齊）、`_staff_ticket` 每則多 `system`；`answer` 在 token 身分收 `relay_from`（cookie 身分忽略）。`_staff` 怎麼告訴 `_answer` 這次是 token 身分（`request.state` 或回兩個值）寫進 decided。`NO_LOGIN_ROUTES` 加 `human`、`sweep`；`support_kit.ROUTES` 加兩條。推播照舊只在 `answer`，`sweep` 不推。",
+        "- 畫面：`supportTicketHtml` 的署名（`auto` → 「客服（自動回覆）・回覆」）、「找真人」鈕（`data-act=\"support-human\"`：單沒結、有 `auto` 回覆、`!human` 才畫；按了打 `POST /api/support/human` 重畫）、`human` 的籤「已請真人處理」；`supportDeskTicketHtml` 的「客服官・自動回覆」（`system` 那一則標「系統」）與籤；清單列籤；`supportDeskReload` 先 `POST /api/support/sweep`（失敗不擋）再 `GET queue`。node 測試照計畫 task 8。對比圖②三版照 task 9 存 `…\\scratchpad\\waveT\\b216\\shots\\`，程式只做 A。",
+        "- 測試名照計畫 task 1～7（`test_support_bot.py`、`test_support_flags.py` 新；`test_support_staff.py` 裡 `admin_flag` 的斷言改成「回覆就清」；另加 `test_support_json_never_contains_bot_word`、sweep 那條多「answered 但 `admin_flag=1` 的 10 天不結」）。`new_strings` 列計畫 task 10 那六句加「系統」。",
+        "- **不做**：橋、CLI、Discord（217）；真人客服頁的轉達鈕；客服官的動作上限（伺服器既有的就是上限）。退版：換回第 215 批 token 路 404、`flags` 沒人讀、`auto` 看不出來、`admin_flag` 又只設不清；資料庫第 9 版不動；季中能換；緊急開關拿掉 `.local/support.json` 的 `bot_token`。",
+    ])
+
+
+def b217():
+    return tb(217, "橋 scripts/support_bridge.py 與客服官的手 scripts/support_cli.py", "dev/support-bridge", "8417", [
+        "- 範圍照計畫第 217 批那一節（四個 task）。兩支都**不 import `tianxia`**：橋照 `scripts/monitor.py` 的做法唯讀開旁檔（`sqlite3.connect(\"file:\" + path + \"?mode=ro\", uri=True)`；旁檔與圖的資料夾照 `<db stem>-support.sqlite`、`<db stem>-support-files/` 自己算），CLI 只打 HTTP（`requests`）。參數、子命令、純函式的名字與簽名照計畫的 Interfaces（`scan`、`render`、`post`、`advance`、`log_line`；CLI `main(argv, session=None)`，`session` 只用 `.request(method, url, headers=, json=)`、注入 `TestClient` 時 `--url http://testserver` 且是沒有 cookie 的新 client）。**預設路徑一律以腳本所在的 repo 根算**（兩支都從 `C:\\Ray\\tianxia-support\\` 啟動）。",
+        "- 橋：每 15 秒掃 `tickets`、`replies`（只看 `staff = 0`）、`flags`（`human`）、`files`；進度 `.local/support_bridge.json` **逐張記**（`new` 是貼過的單號集合，`reply`、`flag`、`file` 是最大 id；單 12 還在等 60 秒、單 13 先貼，12 之後照樣貼）；新單等 60 秒或已有一張圖才貼，之後到的圖當補貼（`FILE`，只對貼過 `NEW` 的單）；貼 `discord_webhook`（multipart、圖一起，`payload_json` 一律帶 `allowed_mentions`：一般 `{\"parse\": []}`、`HUMAN` 只列 `mention` 兩個 ID）；**不貼 `login`、Email、手機**；`--log` 檔只有四種行（`NEW 12`、`REPLY 12`、`HUMAN 12`、`FILE 12`），`ALIVE` 每 300 秒印到 stdout 不進 log；沒有 `discord_webhook` 等同 `--dry-run`、進度照前進；貼失敗（逾時、429、5xx、`database is locked`）這一輪不前進、下一輪再試，連續 10 輪印警告不停（**Review Focus 5** `test_bridge_retries_without_advancing_state`），400／401／403／404 印警告並前進；`--once`、`--dry-run`。",
+        "- CLI：`queue`（先 `POST sweep` 再 `GET queue`；標籤 `請管理者`／`等真人`／`等玩家`／`待客服官` 照計畫的順序判）、`ticket <n>`（單、每一則誰回的、帳號卡、圖存 `--inbox\\<n>\\<seq>.<ext>` 印路徑）、`answer <n> [--close] [--human <ID>]`、`note <n>`（**回覆與註記的字從 stdin 讀，沒有 `--file`**——客服官沒有寫檔權限；stdin 空的不送）、`close <n>`；**鎖定模式** `TIANXIA_SUPPORT_LOCKED=1` 時 `--config`、`--url`、`--inbox` 只從環境變數讀、命令列帶了一律拒絕結束碼 2；伺服器拒絕的句子原樣印結束碼 1、token 沒設或 404 印那一句結束碼 2；**永遠不印 token、不印 `bot`**。",
+        "- 測試照計畫 task 1～3 的名字（含 `test_bridge_does_not_skip_a_ticket_still_in_grace`、`test_bridge_payload_never_lets_the_player_mention_anyone`、`test_bridge_skips_a_dead_webhook_reply`、`test_bridge_without_webhook_logs_only_and_advances`、`test_cli_locked_mode_refuses_path_flags`、`test_bridge_and_cli_do_not_import_tianxia`），放 `tianxia/features/support/tests/test_support_bridge.py`、`test_support_cli.py`（用 `support_kit` 開著的伺服器造真的旁檔與單；CLI 注入 `TestClient`）；所有輸出過 `tests/bots/test_server_bots.py` 的 `leaks()`。README 加「主機端」一節（兩支怎麼開、`.local/support.json` 的四個鍵，值不寫）；主機端操作文件加橋怎麼開、停。",
+        "- **不做**：客服官 session、FAQ（218）；伺服器貼 Discord；橋寫旁檔。退版：兩支腳本刪掉就沒了，遊戲不受影響。",
+    ])
+
+
+def b218():
+    return tb(218, "客服官 session 的範本與 init、知識匯出、FAQ 初稿、排練清單（本機那一半）", "dev/support-desk", "8418", [
+        "- 範圍照計畫第 218 批那一節（五個 task）。範本進版控 `docs/support/session/`（`CLAUDE.md`：設計 6.3 的七條規矩逐條寫、頻道 ID 與白名單 ID 留 `<填>`；`settings.local.json`：`enabledPlugins` 同 `C:\\Ray\\tianxia-liaison\\.claude\\settings.local.json`，`permissions.allow` 只放 Discord 外掛的 `reply`、`cli.cmd` 的 Bash 規則、工作夾內的 Read、盯 `bridge.log` 的 Monitor 那一條；**沒有** `download_attachment`（截圖從遊戲經 CLI 來）、**沒有** `dangerously`、沒有 Edit、Write。**規則的寫法要實跑驗**：暫存夾放這份 settings，用 `claude -p` 各跑「`cli.cmd queue`」（要跑得了）、「`cli.cmd queue & dir`」與「`cli.cmd queue; dir`」（要被擋）、「讀工作夾的檔」（要讀得了）、「讀專案的 CLAUDE.md」「寫一個檔」（要被擋），結果與最後的規則字串寫進 decided；跑不起來就照 settings 文件寫、標「沒實跑」。`CLAUDE.md` 七條之外再加：醒來先 `cli.cmd queue`、每做完一張在 `#客服` 貼 `#單號・做了什麼`、要管理者時貼兩個 `<@ID>`、回覆用 `cli.cmd answer <n> <<'EOF' … EOF` 從 stdin 進。`start.cmd`：照聯絡官抄 bun 的 PATH 與 `cd /d`、`chcp 65001`、`DISCORD_STATE_DIR=%USERPROFILE%\\.claude\\channels\\discord-support`、用 `powershell -NoProfile -Command \"Start-Process …\"` 分離啟動橋（`--log %~dp0bridge.log`，stdout 導到 `bridge-out.log`、PID 記 `bridge.pid`）、再開 `claude --channels plugin:discord@claude-plugins-official`；另一支 `stop.cmd`。`cli.cmd`：`chcp 65001`、設 `TIANXIA_SUPPORT_LOCKED=1` 與 `TIANXIA_SUPPORT_CONFIG`／`URL`／`INBOX` 三個環境變數、參數含 `& | < > ^` 任何一個就拒絕、再叫那份 clone 的 venv 跑 `scripts/support_cli.py %*`）；`scripts/support_session_init.py <工作夾>` 冪等抄過去（不蓋已存在的）；`scripts/support_knowledge.py <工作夾>` 匯出 `content/patch_notes.json` 複本、`Game.howto_text()` 成 `knowledge\\howto.md`（照 `scripts/sb/base.py` 開世界的做法，`TIANXIA_DB` 先設到暫存檔）、抄 `docs/support/FAQ.md`，輸出過 `leaks()`。",
+        "- `docs/support/FAQ.md` 初稿：只寫玩家看得到的（登入與帳號、體力與行動、商城與元寶、換季、常見誤會），一問一答，不寫機率、戰況、假人；每條旁 `<!-- 待 joy 潤 -->`。`docs/superpowers/discord/客服官-設定.md`：照 `中間bot-設定.md` 的寫法列企劃者要自己做的五樣（設計第十一節）與 `.local/support.json` 的格式（值用 `<填>`）。",
+        "- 排練 `docs/support/排練.md`：本機那一半這一批就走（開著 support 的測試伺服器、init 到暫存夾、knowledge、橋 `--once --dry-run` 看四種行、CLI 走一張帶圖的單、玩家看到「客服（自動回覆）」、找真人後 `queue` 標等真人），結果寫進回報；Discord 那一半列成清單留給 PM 與企劃者。",
+        "- 測試照計畫 task 1、2 的名字（`test_support_session.py` 新：含 `test_session_claude_md_has_the_rules` 的十個關鍵詞、`test_cli_cmd_locks_paths_and_rejects_shell_metachars`）。**不做**：真的 Discord 排練；聯絡官的任何改動；`#beta-回報`。退版：都是文件與主機腳本。",
+    ])
+
+
+WEB_T = "**這一波一線四批：客服的截圖、客服官的 token 身分與自動回覆標示與找真人與自動結單、橋與 CLI、客服官 session 的範本（開關預設關；`web/support.js`、`support.css` 動了）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空。\n2. **開關開著**（head 的設定覆寫檔把 `support.enabled` 打開，只開 head；`.local/support.json` 在 head 複本放一個 32 字以上的測試 token，`Config.support.bot_account` 指到你用 `scripts/set_password.py` 建的帳號；客服身分用 `TIANXIA_SUPPORT=<你建的另一個帳號>`）：實機走——玩家在設定抽屜寫一張單附 2 張截圖（PNG 與 JPEG）、看單看得到兩張縮圖、點開是圖；客服身分進 `/admin` 的客服頁看得到同兩張；用 `python scripts/support_cli.py --config <那份 json> queue`、`ticket <n>`（圖存到 inbox）、`answer <n>`（一句從 stdin 餵進去）：玩家那一側那一則署名「客服（自動回覆）」、按「找真人」後籤出現、CLI `queue` 標 `等真人`；`python scripts/support_bridge.py --once --dry-run --db <head 的 db> --config <json> --log <暫存>` 印出 `NEW`、`FILE`、`HUMAN` 幾行、不貼；用錯的 token 打 `GET /api/support/queue` 是 404、用對的 token 打 `/api/main` 不是 2xx；主控台 0 錯誤、沒有 `Refused to`；網路沒有 4xx／5xx（刻意的 401、404、400 除外）；375 淺、375 深、1280 各一張，存進回報。\n3. 看三處對比圖的截圖在不在暫存夾（`scratchpad\\waveT\\b215\\shots\\`、`b216\\shots\\`），列出檔名。\n4. 收之前 `grep` 兩台伺服器的 log 有沒有 `ImportError`、`ModuleNotFoundError`、`AttributeError`，有就是 blocker。\n**不修工具、不修程式，整關不超過 75 分鐘**，到了就交，沒走到的寫清楚。"
+
+WAVES["T"] = dict(
+    round2=True, feature=True, design=T_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text="**新功能掛開關、關著一個字不變、開著照設計、看不出假人**。第 215～218 批（計畫 " + T_PLAN + "）。親自驗：①開關關著：四條新路由 404 先於登入與參數解析、`/api/me`、`/api/main`、設定抽屜與客服頁的 HTML 對 base 位元組一樣；`compare --new support --also-existing` 其餘一樣（閘門跑，你只看結果）。②token 的邊界：`test_bot_token_rejected_by_every_admin_api_and_the_shell` 真的掃到 `FEATURE_ADMIN_ACTIONS`、`PLAYER_ADMIN_ACTIONS`、每條 `/api/admin*`、`/api/main`、`/api/me`；token 打 `lookup` 404；Bearer 與 cookie 同時帶的那一條。③假人：帳號卡、CLI 輸出、橋的字、Discord 的字都過 `leaks()`；用假人名號打新路由回話同不存在的人。④上傳：量真的位元組不信 `Content-Length`、檔頭認種類、路徑只用伺服器算的 `seq`。⑤橋：不重貼、60 秒、失敗不前進、`render` 不含 `login`；CLI 不印 token。⑥客服官 session 範本的 `settings.local.json` 沒有 `dangerously`、沒有 Edit／Write，allow 規則寫法成立。⑦殼：`shell_tables.NO_LOGIN_ROUTES` 只多四條、理由照既有；`core_changes` 只在 `identity_base.py` 與 `tuning/support.py`；包沒有 import 別包；橋與 CLI 沒有 import `tianxia`。⑧新字每一句旁有 `待 joy 潤`。**全程只讀 repo，實驗在暫存複本做。**"),
+    ],
+    lines=[dict(name="客服官", batches=[b215, b216, b217, b218])],
+    merge_port=8419, fix_port=8420,
+    web_check=dict(ports="8421、8422", steps=WEB_T),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
