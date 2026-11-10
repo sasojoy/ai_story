@@ -773,7 +773,6 @@ LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_gear_measure_script_prints_one_line_with_and_one_without_armor",
     "tests/season/test_real_content.py::test_bot_plays_a_full_season",
     "tests/bots/test_bot_runner.py::test_a_season_of_server_bots_runs_to_the_end_and_both_sides_fight",
-    "tests/acts/test_conquest_flip.py::test_bots_never_press_it_off_own_ground",
     "tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows",
     "tests/season/test_sim_season_one.py",
     "tianxia/features/explore/tests/test_explore_one_fix.py::test_the_boss_chance_follows_the_renown_multiplier",
