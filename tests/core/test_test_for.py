@@ -1221,6 +1221,14 @@ def test_the_web_compare_tool_picks_its_own_test(path):
     assert not picked.core and not picked.smoke
 
 
+@pytest.mark.parametrize("path", ["scripts/support_bridge.py", "scripts/support_cli.py", "scripts/support_session_init.py", "scripts/support_knowledge.py"])
+def test_the_support_host_scripts_pick_their_own_tests(path):
+    """客服的主機端四支（T 波，PM）：測試在 support 包裡，照檔名字根挑不到。"""
+    picked = test_for.pick([path])
+    assert {p.name for p in picked.files} == {"test_support_bridge.py", "test_support_cli.py", "test_support_session.py", "test_feature_boundaries.py"}
+    assert not picked.core and not picked.smoke
+
+
 def test_a_package_tuning_file_picks_only_that_package():
     """tianxia/core/tuning/<包>.py 是那一包的 Config 子模型，不走核心測試＋煙霧（第 74 批留的）。"""
     picked = test_for.pick(["tianxia/core/tuning/tavern.py"])

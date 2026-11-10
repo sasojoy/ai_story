@@ -109,6 +109,7 @@ REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow�
 PACK_CONTENT_TEST = "test_content_packs.py"  # 內容改了也跟：包裡新檔忘了宣告（Feature.content）時載入不報錯、事件靜靜少掉，只有這支抓得到，新檔名又不會寫在它裡面
 SERVER_TEST = "test_server.py"
 WEBQA_TEST = "test_webqa.py"  # scripts/webqa/** 的工具自測
+SUPPORT_HOST_TESTS = ("test_support_bridge.py", "test_support_cli.py", "test_support_session.py")  # scripts/support_*.py 的測試（T 波，PM）
 SHELL_TEST = re.compile(r"test_\w+_shell\.py")  # 第 61 批從 test_server 拆進各包的路由與殼的測試
 
 CORE_INIT = ROOT / "tianxia" / "core" / "__init__.py"
@@ -1324,6 +1325,10 @@ def pick(files: list[str], base: str | None = None,
         if f.startswith("scripts/sb/"):  # 情境（第二輪第 70 批）：照下面的檔名字根挑會挑到 198 個不相干的檔，它們都不讀這些檔
             result.files |= {t for t in tests if t.name == BOUNDARY_TEST}
             result.why.append(f"{f}：情境 → 邊界測試；情境改了跑那一軌的 same_behavior selftest")
+            continue
+        if f.startswith("scripts/support_"):  # 客服的主機端四支（T 波，PM）：橋、CLI、session 初始化、知識庫，測試在 support 包裡
+            result.files |= {FEATURES / "support" / "tests" / name for name in SUPPORT_HOST_TESTS} | {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：客服的主機端腳本 → 那三個檔＋邊界")
             continue
         if f.startswith("scripts/webqa/"):  # 網頁比對工具（第二輪第 77 批）：有 .mjs、.txt，下面 .py 那一條接不到
             result.files |= {t for t in tests if t.name == WEBQA_TEST}
