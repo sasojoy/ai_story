@@ -548,9 +548,8 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
     from fastapi.testclient import TestClient
 
     import server
-    from tianxia.content import load_content
 
-    content = load_content(server.ROOT / "content")
+    content = real_content()
     content.config.auto_open_first_season = True
     content.config.beta_free_refill = refill  # 2026-10-12 起沒有設定開著它，開關照舊管用
     monkeypatch.setattr(server, "CONTENT", content)

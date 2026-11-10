@@ -9,16 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import database, insights
 from tianxia.characters import open_characters
-from tianxia.content import load_content
 from tianxia.database import SCHEMA_VERSION, open_database
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, MartialArt
 from tianxia.sqlite_world import open_world
 from tianxia.state import GameState, WeaponRecipe
 
-ROOT = Path(__file__).resolve().parents[2]
 OLD = json.loads((Path(__file__).parents[1] / "fixtures" / "old_saves" / "v2_main_b8a388c.json").read_text(encoding="utf-8"))
 
 
@@ -77,8 +76,8 @@ def test_a_version_two_file_with_an_old_save_upgrades_and_plays(tmp_path):
     world = open_world(path)
     for ins in OLD["insights"]:
         assert world.get_insight(ins["id"]).name == ins["name"]
-        assert insights.resolve(ins["id"], load_content(ROOT / "content"), world, loaded) is not None
-    game = Game(load_content(ROOT / "content"), loaded, world=world)
+        assert insights.resolve(ins["id"], real_content(), world, loaded) is not None
+    game = Game(real_content(), loaded, world=world)
     assert game.options()  # 讀回來的角色照樣有事可做
 
 

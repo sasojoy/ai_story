@@ -5,6 +5,7 @@ import random
 
 from test_social import NOW, _as, _done, _player
 
+from conftest import real_content
 from tianxia.features.peers import mingtie
 from tianxia import speech
 from tianxia.engine import Game
@@ -162,9 +163,7 @@ def test_a_bot_makes_a_card_from_presets(content):
 
 
 def test_real_mottos_and_presets_pass_their_own_checks():
-    from tianxia.content import load_content
-
-    real = load_content("content")
+    real = real_content()
     assert real.mingtie.arts and real.mingtie.mottos
     for art in real.mingtie.arts:
         assert mingtie.parse_strokes(art.strokes, real) == art.strokes, art.id

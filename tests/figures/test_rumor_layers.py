@@ -21,14 +21,12 @@ from tianxia.features.map import mapview
 from tianxia.features.military import opp_rules as opportunities
 from tianxia import orders, ranks, rules, rumor_view, timetable
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層、詳情那一半；同檔有區域變數叫 layers
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
 from tianxia.models import Effect
 from tianxia.state import BotProfile, Lock, Order, Rumor, TimelineResult
 import webharness
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 @pytest.fixture
@@ -897,7 +895,7 @@ def test_asking_along_the_road_can_pick_a_fresh_region_tagged_world_rumor(on, mo
 def test_a_faction_or_personal_rumor_without_an_owner_is_heard_by_nobody(on):
     """fail closed：寫成陣營軍情卻沒寫是哪個陣營、寫成個人線索卻沒寫是誰，沒有人聽得到（不會人人都聽見）。"""
     orphans = [Rumor(time=0.0, text="沒寫陣營的軍情。", layer="faction"), Rumor(time=0.0, text="沒寫給誰的線索。", layer="personal")]
-    beta = load_content(CONTENT_DIR)  # on 是開關打開的那一份：另外載一份開關關著的
+    beta = real_content()  # on 是開關打開的那一份：另外載一份開關關著的
     beta.config.auto_open_first_season = True
     for content in (on, beta):  # 兩種季都一樣
         for game in (_game(content, "甲", "guan"), _game(content, "乙", "huang"), _game(content, "丙")):

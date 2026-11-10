@@ -15,7 +15,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, real_content
 from tianxia import team
 from tianxia.engine import Game
 
@@ -86,11 +86,10 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     """整條接線：假人程式用假的取名（不叫模型），一小段時間內 forge 那一欄有東西、各項數字對得上。
     不驗平衡，只驗量測有接上（開爐的種類、首創、模型呼叫數、輪不到取名都記得到）。"""
     from tianxia import database
-    from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.3)
-    content = load_content(ROOT / "content")
+    content = real_content()
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）：這條只驗量測接線，照舊的陣營數跑，種子 1 在 0.3 天內才有首創
     try:
@@ -112,11 +111,10 @@ def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path
     依附在投靠那一刻就挑好；第 108 批從 0.4 縮，0.1 天就有投靠豪強的假人）。"""
     from tianxia import database
     from tianxia.characters import open_characters
-    from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.1)
-    content = load_content(ROOT / "content", profile="week7")
+    content = real_content("week7")
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     content.config.gentry = True  # 有地方豪強的季（第 9 季那種，Config.gentry；2026-11-07 起新開的季拿掉）
     try:

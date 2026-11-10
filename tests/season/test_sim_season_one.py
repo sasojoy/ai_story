@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 
 pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
@@ -23,7 +23,7 @@ FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "end
 
 
 def _content(days: float = 0.25):
-    c = load_content(ROOT / "content", profile="week7")
+    c = real_content("week7")
     c.config.season_days = days
     return c
 
