@@ -2067,6 +2067,7 @@ MENXIA_ACTION_ORDER = (
     "practice", "heal", "forge", "switch", "slot", "unslot", "create_begin", "create_pose", "create_back", "create_name", "create_cancel", "create_reroll",
     "ascend_dismiss", "cultivate", "melt", "melt_insight", "melt_many", "name", "name_divine", "bind_art", "join", "leave", "release",
     "wield", "dismantle", "feed", "repair_item", "temper_item", "dismantle_many", "chuangong",
+    "infuse",  # 化入（意境合成改版，craft 包；改版沒開的季回一句話）
 )
 MENXIA_ACTIONS = features_core.action_table(MENXIA_ACTION_ORDER, {
     "heal": lambda g, b: g.heal(),

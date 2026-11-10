@@ -714,8 +714,8 @@
       </div>`;
     };
     // 寶物（裝備四欄設計第六節）：一件一種效果、不分階品、不磨損；身上那件寫效果，裝備庫裡的只有「換上」（寶物不能拆，4.8，不用 rowButtons）。
-    // 寶物隨時能換（2.3【定】，企劃者 2026-10-11），「換上」不灰掉。這一行的寫法待 joy 潤
-    const treasureRow = (t, wornNow) => `<div class="wrow">
+    // 寶物隨時能換（2.3【定】，企劃者 2026-10-11），「換上」不灰掉。有水墨圖時左邊一張小圖（gear.js 的 gearImg，Joy 2026-11-10）。這一行的寫法待 joy 潤
+    const treasureRow = (t, wornNow) => `<div class="wrow">${gearImg("treasure", t.art, "gear-thumb")}
         <div class="winfo"><b>【${esc(t.name)}】</b><span>${esc(t.effect_text)}</span>${wornNow ? "" : mightTag(t)}</div>
         ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(t.id)}">換上</button></div>`}
       </div>`;

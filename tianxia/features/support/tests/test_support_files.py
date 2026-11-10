@@ -230,6 +230,18 @@ def test_view_file_owner_staff_and_nobody_else(support_on, monkeypatch):
     assert anon.get(f"/api/support/file/{tid}/1").status_code == 401
 
 
+def test_file_response_says_nosniff(support_on, monkeypatch):
+    """第 219 批：看圖的回應帶 X-Content-Type-Options: nosniff（瀏覽器不准猜種類），inline 照舊。
+    全站 middleware（第 209 批的 SECURITY_HEADERS）本來就加；這裡把它清空，確認路由自己也帶（middleware 哪天改了也還在）。"""
+    monkeypatch.setattr(server, "SECURITY_HEADERS", {})
+    c = player()
+    tid = ticket(c).json()["id"]
+    assert _up(c, tid, PNG + os.urandom(30)).status_code == 200
+    r = c.get(f"/api/support/file/{tid}/1")
+    assert r.status_code == 200
+    assert (r.headers.get("x-content-type-options"), r.headers["content-disposition"]) == ("nosniff", "inline")
+
+
 def test_missing_file_on_disk_is_404_not_500(support_on):
     c = player()
     tid = ticket(c).json()["id"]

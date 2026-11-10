@@ -1143,6 +1143,66 @@ WAVES["U"] = dict(
 )
 
 
+# ── V 波：測試去重 A 批 220～222（企劃者 2026-11-10 夜：「全做，含刪那 20 條」；閘門 8 個 worker、每日 4；B 批等 A 批量到數字）──
+V_SURVEY = "docs/superpowers/plans/2026-11-10-測試去重-盤點.md"
+V_NOTE = [
+    "- **測試去重 A 批這一波**：範圍照盤點 `" + V_SURVEY + "` 第三、四節（A 批）這一批列的項目，每一項的證據（引用的斷言、蓋住它的那一條）都在盤點裡，動手前先打開那兩條再動。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。**不動 `tianxia/`、`web/`、`content/`、`server.py`、`scripts/`**，只改測試與 `tests/kit/`；不改任何斷言的意思（刪與併只照清單）；清單外的測試一條都不刪、不併。",
+    "- **PM 已經改好、波末一起合的**：`dev/test-fixtures-pm`（`1302241f1`）改了 `tests/conftest.py`（每條測試從建好表的模板抄一份資料庫、複製內容時關 GC）與 `tests/server/test_backup_db.py` 一句；**這三批都不碰這兩個檔**，碰到要改寫進 leftovers。",
+    "- **每一項量秒數**：改前改後各量一次（`.venv/Scripts/python.exe -m pytest --durations=0 -p no:xdist <檔>::<條>` 或整檔），寫進回報的 `decided`（表：項目、改前、改後）；刪的每一條寫「刪了哪條、蓋住它的是哪一檔哪一行」。各包 README、`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 `docs`。",
+]
+
+
+def vb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-10-測試去重-第{n}批.md"
+    return batch(n, f"測試去重第 {n} 批：{title}", "core_shared", dev, plan, ports, body + V_NOTE, custom=True)
+
+
+def b220():
+    return vb(220, "網頁 harness 不再白等 app.js 的長計時器（toast 3200 ms、慢提示 12000 ms、佇列 2000 ms）；量過之後拿掉只因為等計時器才標的 slow", "dev/test-harness-220", "8428", [
+        "- 範圍：盤點 3.1。**只改 `tests/kit/webharness.py` 常駐 node 的 SERVER 字串**（第 120～270 行那一段 JS）：`track()` 記下每個計時器的延遲，等待迴圈判斷「還在等」時不算延遲 ≥1000 ms 的 `setTimeout`（照排、請求結束照清；`setInterval` 與短計時器照舊）。`TIANXIA_WEB_HARNESS=process`（每請求各開一個真 node）那條路不改，寫進 decided。三位查案各自找到同一件事（webA W1、webB WB-01、artsgear ARM-1），做法照 W1。",
+        "- **動手前先 grep** 全部驅動程式（`tests/**/*.py`、`tianxia/features/*/tests/*.py` 裡的 JS 字串）確認沒有測試靠 ≥1 秒的 app.js 計時器真的跑完才產生輸出或改變斷言（例：等 toast 消失、等 `busy()` 的慢提示出現、等 `watchQueue` 輪詢打到 `/api/queue`）；有就把門檻調到比那個計時器大，或在那條測試裡自己等，寫進回報。`tests/kit/jianghu_kit.py` 的 `T.ctx.setTimeout = () => 0` 留著。",
+        "- **證明**：`tests/web/test_webharness.py` 加一條「長計時器不擋結束、短計時器照等」（排一個 50 ms 與一個 3000 ms 的計時器，50 ms 那個要跑到、程式在 3 秒前結束）；兩種模式（常駐、process）既有的條都過。先注入一處壞法（例：把門檻設成 0 讓短計時器也不等，那條新測試要紅）再還原，寫進回報。",
+        "- **量**：改前改後各量這五條（`--durations=0 -p no:xdist`）：`tests/web/test_prologue_web.py::test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page`（14.3 秒）、`tianxia/features/smithy/tests/test_shop_web.py::test_a_refused_forge_keeps_the_pot`（4.2）、`tianxia/features/outlets/tests/test_econ_web.py::test_a_greyed_cell_only_says_why`（3.6）、`tianxia/features/peers/tests/test_discuss.py::test_a_reply_after_the_card_was_closed_does_not_reopen_it`（3.3）、`tianxia/features/notify/tests/test_push_how_web.py::test_allowing_on_an_iphone_subscribes_and_ticks_the_box`（3.3）。",
+        "- **slow 標記**：只因為等計時器才標 slow 的網頁測試（smithy `test_shop_web`、mall `test_mall_web`、seal `test_seal_acts_web` 約 18 條；自己 `grep -n \"mark.slow\"` 加旁註找）量到 <0.5 秒才拿掉標記與旁註，沒量到的留著；拿掉幾條、各幾秒寫進回報。",
+        "- **全跑**：所有 import webharness 的測試檔含 slow（`grep -l webharness` 的清單，約 100 檔，`-n 4`）、`tests/web/test_webharness.py`、`tests/server/test_server.py`。**不做**：改 `web/app.js` 的 3200 ms；改任何驅動程式；動 `scripts/webqa/`（那是閘門的網頁比對，跟這個 harness 無關）。退版：只影響測試，退回就是照舊等 3.3 秒。",
+    ])
+
+
+def b221():
+    return vb(221, "25 處沒走快取的 `load_content(正式內容)` 換成 `conftest.real_content()`；`test_set_password` 不再每條載正式內容；契約 options_carry 併進 choose；identity `_run()` 快取；刪週末設定那一條", "dev/test-cache-221", "8429", [
+        "- 範圍：盤點 3.4 與 3.5 的一小部分。①全 repo 直接 `load_content(ROOT / \"content\")`／`load_content(CONTENT_DIR)`／`load_content(REAL_CONTENT)`（含帶 profile 的）換成 `conftest.real_content()`、`real_content(\"week7\")` 或 `classic_rules(real_content())`，**只換沒 patch 載入路徑的**（那條測試或它的 fixture 有 `monkeypatch`／`mock.patch` 到 `content`、`load_content`、`validate`、`_locate`、設定覆寫檔、`ADMINS_FILE` 的不換；要抄一份改檔再載入的不換）。起點清單：`tests/battle/test_followers_matter.py`、`tests/battle/test_team.py`（AB-03）、`tests/core/` 13 處（CORE-05、06、07：查案人在 `tests/core` 數到的）、`tests/arts/test_pr21_merge.py`、`tests/battle/test_trait_numbers.py`、`tests/bots/test_stamina*.py`、`tianxia/features/battle/tests/test_measure_battle.py`（4 處）；**`tests/season/test_real_content.py` 的 19 處歸第 222 批，不碰**；全 repo `grep -n \"load_content(\" tests tianxia/features/*/tests` 一次，每一處寫進回報（檔、行、換成什麼、或為什麼不能換）。",
+        "- ②server S1：`tests/server/test_set_password.py` 七條各載一次正式內容（整檔 8.5 秒）：autouse fixture 或逐條 `monkeypatch.setattr(set_password, \"load_content\", lambda *a, **k: content)` 換成測試內容，只有 `test_a_character_it_creates_gets_the_same_profile_as_the_server` 不套（它要驗 week7／season21 真內容）；先確認 `set_password.py` 是從模組層的名字叫 `load_content`。",
+        "- ③CORE-01：`tests/core/test_contract_features.py` 的 `test_options_carry_the_package_prefix` 三行斷言併進 `test_choose_takes_only_its_own_ids`（assert 訊息各帶標籤、保留 `[<包>]` 的 parametrize id），`tests/core/test_test_for.py` 那份逐包契約名單跟著改、`scripts/test_for.py` 若寫死這個名字也改（grep；`scripts/` 只准改這一個名字）。CORE-02（共用一個 game）**不做**，B 批。",
+        "- ④WB-02：`tianxia/features/identity/tests/test_identity_web.py` 無參數的 `_run()` 加 `functools.cache`（有傳 path 的不快取），先確認各測試沒有改回傳的 dict。⑤AB-07：刪 `tests/bots/test_stamina_pill.py::test_the_weekend_profile_no_longer_refills_for_free`（週末設定 2026-10-31 第 14 批關門，`weekend` 起不來）。",
+        "- **量**：每個改到的檔改前改後整檔秒數（`--durations=0 -p no:xdist`）寫進回報。**全跑**：改到的檔整檔含 slow、`scripts/test_for.py` 挑的（含 `tests/core/test_test_for.py`）。退版：只影響測試。",
+    ])
+
+
+def b222():
+    return vb(222, "刪約 20 條確認重複的測試、slow 側六條縮短、`test_conquest_siege` 的整檔 autouse 拿掉與喊話句式縮例", "dev/test-prune-222", "8430", [
+        "- 範圍：盤點 3.3 不用比對的六條、3.5 的刪除清單、AB-02、AB-04。**每一刪先打開蓋住它的那一條確認還在、斷言真的蓋住**，不在就不刪、寫進回報。這一批擁有 `tests/season/test_real_content.py`、`tests/acts/test_conquest_siege.py`、`tests/acts/test_conquest_flip.py`、`tests/season/test_sim_scripts.py`、`tests/bots/test_bot.py`、`tests/season/test_sim_season_one.py` 與下面點名的 identity、guide、admin、travel、arts 檔；第 220、221 批不碰這些檔。",
+        "- slow 側：AB-01 刪 `tests/acts/test_conquest_flip.py::test_bots_never_press_it_off_own_ground`（18.5 秒；同檔與 sortie 包的假人測試蓋住）連同沒人用的 import。S1 `tests/season/test_sim_scripts.py` sanren（season_one 關）那條 argv 補 `--max-steps`、`300`（照同檔其他六支量表腳本的寫法；39.8 秒），斷言照舊、不併進第二條。S2 `tests/bots/test_bot.py` 第 973 行附近 `range(200)` 縮成 `range(5)`，斷言與 pick 呼叫的形式不變（17 秒）。S5 `tests/season/test_sim_season_one.py` 第一條 hours=8 改 6、第三條的邊界說明移到第一條 docstring、刪第三條（9 秒）。",
+        "- `tests/season/test_real_content.py`：S7 `test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start` 對 enemies 層的勝算算一次快取（`functools.cache` 或預先算一張表）再傳給 `render_map`（13.7 秒 → 應跟 routes 層差不多）；S10 迴圈內改成直接建 `GameState(player=PlayerState(name=\"\", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))`、不再叫 `_real_s1()`（4 秒）；同檔 19 處 `load_content(CONTENT_DIR…)` 與 `_real_s1()`／`_announce()` 各自重載正式內容的，沒 patch 載入路徑的換成 `conftest.real_content(profile)` 複本（規矩同第 221 批第 ① 點），每一處寫進回報。",
+        "- `tests/acts/test_conquest_siege.py`：AB-02 第 1663 行附近 `conquest_server` 的 `autouse=True` 拿掉（105 條都付、2 條要用；要用的兩條已收參數）；AB-04 NAMED 只留「一槍直取劫道響馬的咽喉」三種 build 各一例（共 3）、NOT_NAMED 只留「先斬響馬頭目」`_melee` 與 `_lone` 各一例（共 2），其餘句子由 `test_find_commander_takes_the_squad_name_and_the_full_name` 負責；NOT_NAMED 那條原有的 slow 標記留；`_single` 這個 build 維持原樣沒有 NOT_NAMED 端對端。",
+        "- 刪除清單（3.5）：R-01 `tianxia/features/identity/tests/test_identity_admin_session.py` 的 `test_register_listed_login_needs_12`、`test_change_password_listed_needs_12`、`test_admin_reset_listed_needs_12`、`test_listed_short_password_still_logs_in`，與 `test_identity_password.py` 重複 12 字規則那一條（蓋住它們的是 `test_identity_strict_password.py`，第 209 批六條路一次）；R-02 `test_identity_gate_off.py::test_main_and_me_bytes_same_when_off`、`test_identity_admin.py::test_admin_tools_404_when_off`（後者是推論：非管理者已先 404；刪完跑 identity 全包）；R-03 `tianxia/features/guide/tests/test_enlist.py::test_acknowledging_the_enlistment_ending_closes_the_box`；R-04 `test_explain.py` 的 `test_the_full_stamina_note_shows_when_nearly_full_and_not_below`、`test_the_full_stamina_note_shows_when_nearly_full`（留 `test_the_full_stamina_note_says_why`）；S6 `tianxia/features/admin/tests/test_admin_routes.py::test_each_tool_lives_here_with_no_gate_and_stays_open_while_paused`（含 parametrize；`TOOLS` 常數別人還用、留）；S8 刪 `test_a_point_goes_into_lore_through_the_server`、在 `test_an_old_save_stored_without_lore_reads_as_five_through_the_server` 的 allocate 之後補 `assert r[\"main\"][\"status\"][\"stat_points\"] == 0`（檔用 grep 找）；S10 `tianxia/features/travel/tests/test_travel_routes.py::test_dashing_goes_through_the_same_door`；ARM-6 `test_practice_hardening.py`（grep 找檔）的 `test_a_hard_win_at_the_peak_can_break_through`、`test_a_missed_chance_leaves_a_soft_hint`（被 `test_cultivation.py` 逐句蓋住，其餘四條留）。",
+        "- 併一條：R-07／S4 管理者路由拒絕玩家——`test_api_admin_refuses_a_player`、`test_api_admin_player_refuses_a_player`、`test_api_admin_accounts_refuses_a_player` 與 `test_each_tool_refuses_a_player[13 個 op]` 併成一條：開一個玩家後迴圈打三個路由與 13 個 `/api/do/<op>`，assert 訊息帶路由或 op；`reset_password` 那條有登入密碼的副作用，不併（檔在 `tests/server/` 或 admin 包，grep）。",
+        "- **量**：AB-01、AB-02、AB-04、S1、S2、S5、S7、S10 改前改後秒數。**全跑**：改到的檔整檔含 slow（`test_sim_scripts`、`test_real_content` 含 slow 約 5 分）、identity 全包、`scripts/test_for.py` 挑的。**不做**：S3／ARM-4 bounties 併整季（要先比對，B 批）；突變併組（B 批）；`test_backup_db` 那條 33 秒的（交接留給下一個測試流程批，要先量時間花在哪）。退版：只影響測試。",
+    ])
+
+
+WEB_V = "**這一波沒動 `web/`，改的是測試與測試的 harness。這一關不比畫面**。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. 閘門帶 `--changed` 的決定（`result.json` 的 `decision`）應該是只改測試、不比對、不走網頁回合；真的有跑就看 real（有就是 blocker）。\n2. 用 head 的 `tests/kit/webharness.py`：挑三條改前 3.3 秒的網頁測試（盤點 3.1 列的）各量一次 `--durations=0 -p no:xdist`，要掉到 0.5 秒以下；`tests/web/test_webharness.py` 兩種模式各跑一次全綠。\n3. 整套不含 slow 的 CPU 秒數（閘門 `suite.xml` 加總）跟 U 波閘門 `4f09702e` 的 1,356 秒比，寫進回報；`-n 8` 的牆鐘也寫（第一次用 8 個 worker 的閘門）。"
+
+WAVES["V"] = dict(
+    round2=True,
+    extra_lenses=[
+        dict(key="proof", text="**刪測試與改 harness，保護面不能掉**。第 220～222 批（盤點 " + V_SURVEY + " 第三、四節）。親自驗：①第 220 批：harness 的改動只在 `tests/kit/webharness.py` 的 SERVER 字串，門檻是延遲 ≥1000 ms 的 `setTimeout` 不等、仍照排照清，`setInterval` 與短的照舊；新加的 harness 測試兩種模式都在；拿掉的 slow 標記每一條都有量到的秒數（<0.5 秒）；沒有任何驅動程式被改。②第 221 批：每一處換成 `real_content()` 的都沒有 patch 載入路徑（對照回報的表逐處看那條測試與它的 fixture）；`test_set_password` 留下真內容那一條；契約併進去的三行斷言一行沒少、逐包 id 還在；`test_test_for.py` 的名單跟著改。③第 222 批：刪的每一條在回報寫了蓋住它的那一條哪一檔哪一行，打開看斷言真的蓋住（12 字密碼的六條路、identity 關著、guide 兩條、admin 工具、lore、travel、practice_hardening）；`test_conquest_siege` 的 NAMED／NOT_NAMED 縮例後三種 build 都還有一例；S1 只補參數沒改斷言；S2 只改 range；沒有清單外的刪除（`git diff --stat` 對清單）。④三批都沒碰 `tests/conftest.py`、`tests/server/test_backup_db.py`（PM 的分支 `dev/test-fixtures-pm` 波末合）、沒碰 `tianxia/`、`web/`、`content/`、`server.py`；第 221 批 `scripts/test_for.py` 只改契約名單那一個名字。⑤回報的 before／after 秒數表都在。"),
+    ],
+    lines=[dict(name="harness", batches=[b220]), dict(name="快取", batches=[b221]), dict(name="刪與縮", batches=[b222])],
+    merge_port=8431, fix_port=8432,
+    web_check=dict(ports="8433、8434", steps=WEB_V),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}

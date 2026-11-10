@@ -25,6 +25,7 @@ MENXIA_OWNERS = {
     "ascend_dismiss": "cultivation", "cultivate": "cultivation", "melt": "cultivation", "melt_insight": "cultivation", "melt_many": "cultivation",
     "name": "cultivation", "name_divine": "smithy", "bind_art": "smithy", "join": "companions", "leave": "companions", "release": "companions",
     "wield": "gear", "dismantle": "gear", "feed": "gear", "repair_item": "smithy", "temper_item": "smithy", "dismantle_many": "gear", "chuangong": "cultivation",
+    "infuse": "craft",
 }
 # 搬之前 ADMIN_ACTIONS 的 33 個名字，照原本的先後（第二輪第 90 批最後 13 個進管理者包，殼的那一張拿掉了）
 ADMIN_OWNERS = {

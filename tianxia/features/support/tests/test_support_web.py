@@ -459,7 +459,9 @@ def test_auto_reply_label_and_the_ask_a_human_button(main):
     m = {**main, "support_unread": 0}
     page = _page(m, _ticket(replies=[_auto(), {"staff": False, "body": "不行", "created": 1762585300, "auto": False}], human=False))
     assert "客服（自動回覆）・回覆" in page and 'data-act="support-human"' in page and 'data-id="7"' in page and "找真人" in page
-    assert page.index('data-act="support-human"') < page.index('id="support-reply-form"')  # A 版：表單上方
+    box = _ask_box(page)  # 第 219 批 C 版：鈕在自動回覆的框裡，不在對話尾巴
+    assert box.startswith('<div class="sup-msg sup-cs">') and "客服（自動回覆）・回覆" in box
+    assert "sup-ask-row" not in page and page.index('data-act="support-human"') < page.index("不行")
     human = _page(m, _ticket(replies=[_auto()], human=True))
     assert "已請真人處理" in human and 'data-act="support-human"' not in human
     person = _page(m, _ticket(replies=[_auto(auto=False)], human=False))
@@ -468,6 +470,34 @@ def test_auto_reply_label_and_the_ask_a_human_button(main):
     assert 'data-act="support-human"' not in closed  # 結了：不畫
     old = _page(m, _ticket())  # 第 215 批的回應（沒有 auto、human）：跟以前一樣
     assert "客服・回覆" in old and "support-human" not in old and "已請真人處理" not in old
+
+
+def _ask_box(page):
+    """「找真人」那顆鈕的父層：鈕前面最近的一個 sup-msg 框，從它的開頭到它的 </div>（框裡只有署名的 span、內文與鈕，沒有別的 div）。"""
+    at = page.index('data-act="support-human"')
+    start = page.rindex('<div class="sup-msg', 0, at)
+    end = page.index("</div>", at)
+    assert "<div" not in page[start + 1:at] and "</div>" not in page[start:at]
+    return page[start:end + len("</div>")]
+
+
+def test_ask_human_button_sits_inside_the_last_auto_reply(main):
+    """第 219 批（企劃者 11/10 挑 C）：鈕只畫一顆，在玩家看到的最後一則自動回覆的框裡（右下）；鈕緊貼內文，沒有多一行空白（框是 pre-wrap）。"""
+    m = {**main, "support_unread": 0}
+    replies = [_auto(body="第一則自動"), {"staff": True, "body": "真人說", "created": 1762585250, "auto": False},
+               {"staff": False, "body": "還是不行", "created": 1762585300, "auto": False}, _auto(body="第二則自動", created=1762585400),
+               {"staff": False, "body": "好", "created": 1762585500, "auto": False}]
+    page = _page(m, _ticket(replies=replies, human=False))
+    assert page.count('data-act="support-human"') == 1 and page.count("sup-ask") == 1
+    box = _ask_box(page)
+    assert box.startswith('<div class="sup-msg sup-cs">') and "第二則自動<button " in box and "第一則自動" not in box
+    assert 'data-id="7"' in box and box.endswith("找真人</button></div>")
+    assert page.index('data-act="support-human"') < page.index(">好</div>") < page.index('id="support-reply-form"')
+    src = (webharness.WEB / "support.js").read_text(encoding="utf-8")
+    clicks = next(line for line in src.splitlines() if line.strip().startswith("registerClicks(supportClick"))
+    assert '"support-human"' in clicks
+    css = (webharness.WEB / "support.css").read_text(encoding="utf-8")
+    assert ".sup-ask-row" not in css and "min-height: 44px" in css.split(".sup-ask")[1].split("}")[0]
 
 
 def test_ask_a_human_hits_the_route_and_redraws(main):

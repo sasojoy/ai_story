@@ -51,6 +51,8 @@ class CraftFeature(Feature):
             self._status_slots = (
                 # 自創武學那一塊（煉製頁）
                 StatusHook("status", "create", lambda ctx, frame: {"create": actions.view(ctx)}),
+                # 意境合成改版的化入要的（表外的格接在表尾；改版沒開回 {}，一個鍵都不多）
+                StatusHook("status", "fusion", lambda ctx, frame: actions.status_fusion(ctx)),
             )
         return self._status_slots
 

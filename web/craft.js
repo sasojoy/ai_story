@@ -118,9 +118,16 @@
   }
 
   // 爐裡放的東西 → 送給伺服器的 body：只有意境（武學不再拿來合，Joy 2026-10-21）
+  // 意境合成改版開著時多帶傾注（S.forgePour）與立意（S.forgeIntent，第一次合這一對才問）；關著時兩個都不會有
   function forgeBody() {
-    return { insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
+    const out = { insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
+    if (S.forgePour) out.pour = true;
+    const intent = String(S.forgeIntent || "").trim();
+    if (intent) out.intent = intent;
+    return out;
   }
+  // 爐裡換了東西：傾注與立意歸零（下一對自己決定）
+  function heReset() { S.forgePour = false; S.forgeIntent = ""; }
   // 兩個意境才放得滿（不同的合併、同一種的兩份揣摩）
   function forgeReady() {
     return forgeBody().insights.length === 2;
@@ -142,6 +149,7 @@
     const no = pickMark(type, id);
     if (no) { toast(no.why); return; } // 跟爐裡那一樣合不了（伺服器照開爐時的判斷算好的）：說為什麼，不放進去
     S.forgeSel.push({ type, id });
+    heReset();
     if (forgeReady()) S.craftPick = false; // 兩格放滿：抽屜收起，看預覽
     S.potFlash = S.forgeSel.findIndex((p) => p.type === type && p.id === id); // 剛放進去的那一格閃一下（固定列上看得到，不必捲回爐子）
     renderPage();
@@ -212,10 +220,12 @@
   function kilnPeek(v) {
     const merge = v.kind === "合併";
     const badge = merge ? '<span class="qseal qi">意</span>' : v.quality ? seal(v.quality) : '<span class="qseal q1">？</span>';
-    const head = [v.made, v.attribute ? `屬${v.attribute}` : "", merge ? v.depth : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean).map(esc).join("・");
+    const head = [v.made, v.attribute ? `屬${v.attribute}` : "", v.he ? "" : merge ? v.depth : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean).map(esc).join("・");
     const tags = (v.traits || []).map((t) => `${esc(t.name)}${t.layers > 1 ? ` ×${t.layers}` : ""}`);
-    const line2 = [tags.length ? `功效 ${tags.join("、")}` : "", v.slots, v.near].filter(Boolean).map(esc).join("・");
-    return `<button type="button" class="kiln-peek" data-act="peek" aria-label="看整張預覽卡">${badge}<span><b>${head}</b>${line2 ? `<small>${line2}</small>` : ""}</span>${fireHtml(v.fire, true)}</button>
+    const he = v.he; // 改版：縮起來的那一行寫火候與主料定的功效（待 joy 潤）
+    const line2 = (he ? [`火候 ${he.heat | 0}／${he.need | 0}`, he.general ? `功效 ${he.general}` : "", he.god ? "四條都齊" : ""]
+      : [tags.length ? `功效 ${tags.join("、")}` : "", v.slots, v.near]).filter(Boolean).map(esc).join("・");
+    return `<button type="button" class="kiln-peek" data-act="peek" aria-label="看整張預覽卡">${badge}<span><b>${head}</b>${line2 ? `<small>${line2}</small>` : ""}</span>${he ? "" : fireHtml(v.fire, true)}</button>
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}`;
   }
   function kilnHtml(slots, ready) {
@@ -306,21 +316,93 @@
     const verdict = pair ? `${fireHtml(v.fire, false, grand)}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
       : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
       : `品質看造化：${esc(v.odds || "")}`;
-    const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>真意</small></i>`
+    // 改版開著（v.he）：火候、功效、真意都寫在 heHtml 那一塊，舊的爐火與功效籤（舊規則算的）不畫，免得兩套對不上
+    const tags = v.he ? [] : (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>真意</small></i>`
       : t.special ? `<i class="tr sp">${esc(t.name)}</i>`
       : `<i class="tr${t.maybe ? " maybe" : ""}">${esc(t.name)}${t.maybe ? "" : lvHtml(t.layers)}</i>`); // 待 joy 潤
-    if (v.slots) tags.push(`<i class="tr off">${esc(v.slots)}</i>`);
+    if (v.slots && !v.he) tags.push(`<i class="tr off">${esc(v.slots)}</i>`);
     const notes = [merge ? "" : v.depth, v.keep, v.attribute_why, v.known].filter(Boolean);
     return `<div class="made-card preview">
       <div class="mc-head">${badge}<div><b>${esc(v.made)}</b><small>${sub.map(esc).join("・")}</small></div>
         ${v.level > 1 ? `<span class="mc-power">一上手<b>${v.level}<small>成</small></b></span>` : ""}</div>
-      <p class="mc-verdict">${verdict}</p>
+      ${v.he ? heHtml(v.he) : `<p class="mc-verdict">${verdict}</p>`}
       ${tags.length ? `<div class="mc-tags">${tags.join("")}</div>` : ""}
       ${notes.length ? `<p class="mc-note">${notes.map((n) => esc(n.replace(/。$/, ""))).join("。")}。</p>` : ""}
       <p class="mc-cost">${esc(v.cost)}</p>
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}
     </div>`;
   }
+  // 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」）：預覽卡多一塊——火候（差一點寫「差一點」）、主料定的一般功效、
+  // 真意（熟 3 次前「未看破」）、第一次合問一句立意、傾注、成神四條（墨點＋缺什麼）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
+  // 改版沒開的季 v.he 不存在，這裡回空字串。字待 joy 潤
+  function heHtml(h) {
+    if (!h) return "";
+    const fire = `<span class="he-heat${h.heat >= h.need ? " full" : h.near ? " near" : ""}">火候 <b>${h.heat | 0}</b><small>／${h.need | 0}</small></span>`; // 待 joy 潤
+    const near = h.heat >= h.need ? "火候夠，帶得出真意" : h.near ? "差一點：有機會自己湊足" : "火候不足，不帶真意"; // 待 joy 潤
+    const grand = h.grand ? `<span class="he-grand${h.grand === "未看破" ? " unseen" : ""}">${esc(h.grand)}</span>` : "";
+    const rows = [
+      `<div class="he-row">${fire}<span class="he-sub">${esc(near)}</span></div>`,
+      h.general || grand ? `<div class="he-row">${h.general ? `<span class="he-k">功效</span><span class="he-gen">${esc(h.general)}</span>` : ""}${grand ? `<span class="he-k">真意</span>${grand}` : ""}</div>` : "",
+      h.grand_desc ? `<p class="he-desc">${esc(h.grand_desc)}</p>` : "",
+      h.form ? `<p class="he-desc">爐譜記著：${esc(h.form)}型・熟 ${h.uses | 0}</p>` : "", // 待 joy 潤
+    ];
+    const intent = h.ask_intent ? `<label class="he-intent"><span>立意</span><input id="he-intent" class="input" maxlength="20" placeholder="一句話：攻、守、變、心由你定" value="${esc(S.forgeIntent || "")}" autocomplete="off"></label>
+      <p class="he-desc">第一次合這一對才問；定了型，之後照爐譜走。</p>` : ""; // 待 joy 潤
+    const pour = h.can_pour ? `<button type="button" class="he-pour${S.forgePour ? " on" : ""}" data-act="he-pour" aria-pressed="${!!S.forgePour}">
+      <i aria-hidden="true"></i><span><b>傾注</b><small>${S.forgePour ? "兩份都會用掉，承襲兩邊的層數" : "兩份都用掉，換承襲層數；成神少不了它"}</small></span></button>` : ""; // 待 joy 潤
+    const conds = h.conds || [];
+    const done = conds.filter((c) => c.ok).length;
+    const road = conds.length ? `<button type="button" class="he-road${S.heRoad ? " open" : ""}" data-act="he-road" aria-expanded="${!!S.heRoad}">
+        <span>${h.god ? "四條都齊：這一爐合璧成神" : "成神之路"}</span><span class="he-dots" aria-label="${done}／4">${conds.map((c) => `<i class="${c.ok ? "on" : ""}"></i>`).join("")}</span><em aria-hidden="true">▾</em></button>
+      ${S.heRoad ? `<ul class="he-conds">${conds.map((c) => `<li class="${c.ok ? "ok" : ""}"><i aria-hidden="true"></i><span><b>${esc(c.label)}</b>${c.miss ? `<small>${esc(c.miss)}</small>` : ""}</span></li>`).join("")}
+        ${h.hint ? `<li class="hint"><span><small>${esc(h.hint)}</small></span></li>` : ""}</ul>` : ""}` : ""; // 待 joy 潤
+    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${intent}${pour}${road}</div>`;
+  }
+
+  // 化入（意境合成改版）：同一路、不帶真意、沒裝在槽上的弱意境化成意蘊（凡 1、佳 2、珍 3），攢滿 per_layer 點本體加一重。
+  // 改版沒開的季狀態列沒有 fusion 那一格，整塊不畫；手上湊不出一對也不畫。挑到一半記在 S.infuse，輪詢重畫不掉。字待 joy 潤
+  function infuseHtml(x) {
+    const fu = S.main && S.main.status && S.main.status.fusion;
+    if (!fu || pro()) return "";
+    const all = x.insights || [];
+    const fodder = (b) => all.filter((i) => i.id !== b.id && i.attribute === b.attribute && !i.grand && !i.slotted && i.look !== "神");
+    const bodies = all.filter((i) => i.look !== "神" && (i.strength | 0) < 3 && fodder(i).length);
+    if (!bodies.length) return "";
+    const st = S.infuse = S.infuse || { open: false, body: "", others: [] };
+    const head = `<button type="button" class="he-road inf-head${st.open ? " open" : ""}" data-act="inf-open" aria-expanded="${st.open}">
+      <span><b>化入</b><small>同一路的弱意境化成意蘊，攢滿 ${fu.per_layer | 0} 點加深一層</small></span><em aria-hidden="true">▾</em></button>`; // 待 joy 潤
+    const note = S.infuseNote ? `<div class="msg mx-note">${S.infuseNote}</div>` : "";
+    if (!st.open) return `<div class="card inf">${head}${note}</div>`;
+    const body = bodies.find((b) => b.id === st.body);
+    const yun = (id) => (fu.yun || {})[id] | 0;
+    const pts = (i) => (fu.points || {})[i.look] | 0 || 1;
+    const chip = (i, on, sub, act) => `<button type="button" class="chip inf-chip${on ? " on" : ""}" data-act="${act}" data-id="${esc(i.id)}" aria-pressed="${on}"><b>${esc(i.name)}</b><small>${esc(sub)}</small></button>`;
+    const picks = body ? fodder(body).filter((i) => st.others.includes(i.id)) : [];
+    const got = picks.reduce((n, i) => n + pts(i), 0);
+    const total = body ? yun(body.id) + got : 0;
+    const layers = Math.floor(total / Math.max(1, fu.per_layer | 0));
+    return `<div class="card inf">${head}
+      <div class="label">本體 <small class="muted">要加深的那一份</small></div>
+      <div class="chips">${bodies.map((b) => chip(b, b.id === st.body, `${b.look ? `${b.look}品・` : ""}${b.mark || ""}${yun(b.id) ? `・意蘊 ${yun(b.id)}／${fu.per_layer}` : ""}`, "inf-body")).join("")}</div>
+      ${body ? `<div class="label">化進去 <small class="muted">同屬${esc(body.attribute)}、不帶真意、沒裝著的</small></div>
+      <div class="chips">${fodder(body).map((i) => chip(i, st.others.includes(i.id), `${i.look ? `${i.look}品・` : ""}+${pts(i)} 點`, "inf-pick")).join("")}</div>
+      <p class="inf-sum">意蘊 <b>${total}</b>／${fu.per_layer}${layers ? `・<span class="up">加深 ${layers} 層</span>` : got ? `・還差 ${(fu.per_layer | 0) - total} 點` : ""}</p>
+      <button type="button" class="btn primary inf-go" data-act="inf-go"${picks.length ? "" : " disabled"}>化入${picks.length ? ` ${picks.length} 份` : ""}<small>化掉的就沒了</small></button>` : ""}
+      ${note}</div>`; // 待 joy 潤
+  }
+  async function infuseGo() {
+    const st = S.infuse || {};
+    const names = (S.menxia?.insights || []).filter((i) => (st.others || []).includes(i.id)).map((i) => i.name);
+    if (!st.body || !names.length) return;
+    ask(`把${names.map((n) => `「${n}」`).join("")}化進去？化掉的就沒了。`, "化入", async () => { // 待 joy 潤
+      await mx("infuse", { body: st.body, others: st.others });
+      S.infuseNote = S.message;
+      S.message = "";
+      S.infuse = { open: true, body: st.body, others: [] };
+      keepPlace(() => renderPage(), ".card.inf");
+    });
+  }
+
   // 爐子底下那一格：有預覽卡畫卡，否則畫說明那一行（空爐、只放一樣、不是你的東西）
   function forgeLineHtml(x) {
     return S.forgePreview ? previewCardHtml(S.forgePreview) : `<div class="card">${S.forgeLine || x.forge_line}</div>`;
@@ -380,6 +462,7 @@
       <div id="forge-line">${forgeLineHtml(x)}</div>
       ${ready ? "" : `<button type="button" class="btn pot-open" data-act="pot-open">${S.forgeSel.length ? "再放一樣進爐" : "挑東西放進爐"}<small>意境的清單</small></button>`}
       ${result}
+      ${infuseHtml(x)}
       ${attrNoteHtml(x)}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
@@ -754,7 +837,7 @@
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
-        if (r.made) S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : [];
+        if (r.made) { S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : []; S.forgePour = false; S.forgeIntent = ""; } // 傾注、立意跟著這一爐歸零
         trimForgeSel();
         S.forgeLine = "";
         S.forgePreview = null;
@@ -886,7 +969,7 @@
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
-        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
+        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); heReset(); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
         case "pot-lock": if (S.busy) break; toggleLock(Number(el.dataset.i)); break;
         case "forge": await forge(); break;
         case "craft-all": craftView().all = true; renderPage(); break;
@@ -897,9 +980,17 @@
           if (forgeReady()) await forge();
           else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
           break;
+        case "he-pour": if (S.busy) break; S.forgePour = !S.forgePour; updateForgeLine(); break; // 傾注：重問一次預覽（成神四條跟著變）
+        case "he-road": { S.heRoad = !S.heRoad; const el2 = document.getElementById("forge-line"); if (el2) el2.innerHTML = forgeLineHtml(S.menxia || {}); break; }
+        case "inf-open": { const st = S.infuse = S.infuse || { open: false, body: "", others: [] }; st.open = !st.open; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
+        case "inf-body": { const st = S.infuse; st.body = st.body === el.dataset.id ? "" : el.dataset.id; st.others = []; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
+        case "inf-pick": { const st = S.infuse, id = el.dataset.id; st.others = st.others.includes(id) ? st.others.filter((o) => o !== id) : [...st.others, id]; keepPlace(() => renderPage(), ".card.inf"); break; }
+        case "inf-go": if (!S.busy) await infuseGo(); break;
     } // craftClick
   } // craftClick
-  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub"]);
+  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "he-pour", "he-road", "inf-open", "inf-body", "inf-pick", "inf-go"]);
+  // 立意那一格：打字只記下來（S.forgeIntent），不重畫——游標留著；輪詢重畫時從 S.forgeIntent 畫回去
+  document.addEventListener("input", (ev) => { if (ev.target && ev.target.id === "he-intent") S.forgeIntent = ev.target.value; });
   async function craftChange(ev) {
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();

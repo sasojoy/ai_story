@@ -6,6 +6,28 @@
  */
 "use strict";
 
+  // 裝備、素材、寶物、碎片的水墨圖（Joy 2026-11-10「UI優化跟畫圖也進來」）：圖放在 web/img/gear/，還沒畫好的不放。
+  // 伺服器不列有哪些圖（殼不再長），所以第一次用到時在背景試載一次，載得到記下、下一次重畫才放圖；載不到記下不再試，照舊畫原本的樣子
+  const GEAR_ART = {};
+  function gearArt(src) {
+    if (GEAR_ART[src] === true) return true;
+    if (!(src in GEAR_ART) && typeof Image === "function") {
+      GEAR_ART[src] = null;
+      const im = new Image();
+      im.onload = () => { GEAR_ART[src] = true; };
+      im.onerror = () => { GEAR_ART[src] = false; };
+      im.src = src;
+    }
+    return false;
+  }
+  const GEAR_ART_DIR = "/static/img/gear/";
+  // 有圖回一張 <img>（cls 是樣子），沒有回空字串；kind 是 mat（素材 id）、treasure（寶物 template）、seal（碎片 id）、scene（場景）
+  function gearImg(kind, key, cls) {
+    if (!key) return "";
+    const src = `${GEAR_ART_DIR}${kind}-${encodeURIComponent(key)}.webp`;
+    return gearArt(src) ? `<img class="${cls}" src="${src}" alt="" loading="lazy">` : "";
+  }
+
   // 「裝備」那一段的一格（gearBlock）：圖示、欄名、階品；裝了什麼、一句效果；武器、防具、坐騎多一條還剩幾成（鋒利、耐久、飽足）；
   // 裝備庫裡同一欄還有幾件。空的那一格虛線框，寫空著的那一句與哪裡拿得到。點了開那一欄的抽屜（hero-node，同人像四角）
   function gearEffect(slot, w) {
@@ -20,9 +42,11 @@
     const heir = g.heirloom ? `<small class="gc-more">傳承【${esc(g.heirloom.name)}】</small>` : "";
     const more = (g.rack.length ? `<small class="gc-more">裝備庫還有 ${g.rack.length} 件</small>` : "") + (w ? heir : "");
     const icon = `<svg viewBox="0 0 24 24" aria-hidden="true">${GEAR_ICONS[g.slot] || ""}</svg>`;
+    // 寶物與傳承那一格有圖時，右下角墊一張淡淡的水墨小圖（不擠字；沒有圖照舊）
+    const pic = g.slot === "treasure" ? (w ? gearImg("treasure", w.art, "gc-pic") : g.heirloom ? gearImg("seal", g.heirloom.art, "gc-pic") : "") : "";
     if (!w && g.heirloom) {
       return `<button class="gear-cell ${esc(g.slot)}" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：${esc(g.heirloom.name)}">
-        <span class="gc-hd"><svg viewBox="0 0 24 24" aria-hidden="true">${GEAR_ICONS[g.slot] || ""}</svg><em>${esc(label)}</em><small>傳承</small></span><b class="gc-name">【${esc(g.heirloom.name)}】</b><small class="gc-fx">${esc(g.heirloom.effect_text || "")}</small>${more}</button>`;
+        <span class="gc-hd"><svg viewBox="0 0 24 24" aria-hidden="true">${GEAR_ICONS[g.slot] || ""}</svg><em>${esc(label)}</em><small>傳承</small></span><b class="gc-name">【${esc(g.heirloom.name)}】</b><small class="gc-fx">${esc(g.heirloom.effect_text || "")}</small>${more}${pic}</button>`;
     }
     if (!w) {
       return `<button class="gear-cell empty" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：空著">
@@ -31,7 +55,7 @@
     const edge = g.slot === "treasure" ? "" : `<span class="gc-edge" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${w.edge | 0}" aria-label="${esc(w.wear_word || "鋒利度")}"><i style="width:${Math.max(0, Math.min(100, w.edge | 0))}%"></i></span><small class="gc-edgen">${esc(w.wear_word || "鋒利度")} ${w.edge | 0}</small>`;
     const off = g.slot === "weapon" && !w.bonus;
     return `<button class="gear-cell ${esc(g.slot)}${off ? " off" : ""}" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：${esc(w.name)}">
-        <span class="gc-hd">${icon}<em>${esc(label)}</em>${w.grade ? `<small>${esc(w.grade)}</small>` : ""}</span><b class="gc-name">【${esc(w.name)}】</b><small class="gc-fx">${esc(gearEffect(g.slot, w))}</small>${edge}${more}</button>`;
+        <span class="gc-hd">${icon}<em>${esc(label)}</em>${w.grade ? `<small>${esc(w.grade)}</small>` : ""}</span><b class="gc-name">【${esc(w.name)}】</b><small class="gc-fx">${esc(gearEffect(g.slot, w))}</small>${edge}${more}${pic}</button>`;
   }
 
   // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
@@ -41,6 +65,9 @@
     return key && ((S.main && S.main.horse_art) || []).includes(key)
       ? `<img class="${cls}" src="/static/horse-${encodeURIComponent(key)}.webp" alt="" loading="lazy">` : "";
   }
+  const MARKET_PLAQUE = "馬市"; // 待 joy 潤
+  const MARKET_SEAL = "馬販"; // 待 joy 潤
+  const MARKET_STALLS = "馬廄"; // 待 joy 潤
   function marketHtml(shop) {
     const live = shop.stalls.filter((h) => !h.empty);
     const pick = live.find((h) => h.id === S.shopHorse) || live.find((h) => h.id === shop.focus) || live[0];
@@ -48,7 +75,11 @@
       ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
       : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
           <span class="who">${esc(h.who)}</span>${horseImg(h.art, "horse-pic") || `<i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i>`}<b>${esc(h.name)}</b><small>${dealHtml(h.sub)}</small></button>`);
-    return `<div class="shop-body"><div class="shop-col"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
+    // 翻新（Joy 2026-11-10「馬市酒肆也要翻」，照鐵匠鋪那一套）：頁首一張市集的水墨圖、右上直書匾額「馬市」、朱印「馬販」＋馬販那一句
+    // （同一句殼也畫在招牌底下，有頁首時 shop.css 把那一行收起來）
+    const hero = `<div class="mk-hero"><div class="mk-art" aria-hidden="true"></div><span class="mk-plaque" aria-hidden="true">${MARKET_PLAQUE}</span>
+      <div class="mk-text"><span class="mk-seal">${MARKET_SEAL}</span><p class="mk-say">${esc(shop.line || "")}</p></div></div>`;
+    return `<div class="shop-body"><div class="shop-col">${hero}<h4 class="mk-sec">${MARKET_STALLS}</h4><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
       ${pick ? horseCard(pick) : ""}</div></div>`;
   }
 

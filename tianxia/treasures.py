@@ -337,7 +337,8 @@ def _row(content: Content, item: Equipment) -> dict:
     """修練頁寶物那一段的一列：名字、效果（effect 是鍵、effect_text 是給人看的那一句）。寶物隨時能換（2.3【定】），沒有「能不能換」
     的旗標；寶物不能拆，沒有拆解。"""
     key = effect_of(content, item)
-    return {"id": item.id, "name": item.name, "effect": key or "", "effect_text": effect_text(content, key) if key else LOST}
+    return {"id": item.id, "name": item.name, "effect": key or "", "effect_text": effect_text(content, key) if key else LOST,
+            "art": item.template or ""}  # 水墨小圖的鍵（web/img/gear/treasure-<template>.webp；圖還沒畫好網頁照舊不放）
 
 
 def rows(state: GameState, content: Content) -> dict:
@@ -348,7 +349,8 @@ def rows(state: GameState, content: Content) -> dict:
     out = {"worn": None, "rack": [], "heirloom": None}
     if heir is not None:
         shard = content.seal[heir.template]
-        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": heirloom_text(content, shard)}
+        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": heirloom_text(content, shard),
+                           "art": heir.template}  # 碎片的水墨圖（web/img/gear/seal-<碎片 id>.webp）
     if on(content):
         out["worn"] = _row(content, p.treasure) if p.treasure is not None else None
         out["rack"] = [_row(content, t) for t in equipment.in_slot(p, "treasure")]
@@ -419,7 +421,7 @@ def arena_prize(state: GameState, content: Content, season: int, place: int) -> 
 def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[str] = frozenset()) -> list[str]:
     """名將贈禮（6.4）：跟哪一位名將的情誼到了 gift_affinity、這一季他還沒送過人（WorldState.general_gifts），就把贈禮交給你，記下給了誰
     （呼叫端那一下動作最後 _save_season 存回去）。贈禮是名駒時看坐騎的開關、是寶物時看寶物的開關；那一欄關著不送也不記（開了之後
-    照樣送得出去）。裝備庫滿了寄放。名將贈禮與名駒本來就一人一件（6.5），不用查重複。Game.choose／answer_event 最後各叫一次：
+    照樣送得出去）。裝備庫滿了寄放。名將贈禮與名駒本來就一人一件（6.5）；贈禮也在掉落池裡、手上已經有同一件時改給 dup_silver 兩。Game.choose／answer_event 最後各叫一次：
     情誼從對話、事件、隨口應對來都走得到。present 是此刻站在你身邊的人物：他在就當面交給你，不在就託人送來（FB-139）。"""
     p, w, cfg = state.player, state.world, content.config.treasures
     lines: list[str] = []
@@ -430,8 +432,12 @@ def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[
         if not equipment.on(content, "mount" if steed is not None else "treasure"):
             continue
         w.general_gifts[gift.character] = p.name
-        item = new_steed(state, steed) if steed is not None else new_treasure(state, content, gift.gear)
         general = content.characters[gift.character].name
+        if steed is None and gift.gear in owned_templates(p):  # 也在掉落池裡的贈禮（門第名帖、檀木念珠，Joy 2026-11-10）：已經打到同一件就改給銀兩（6.5）
+            tdef = content.gear.treasures[gift.gear]
+            lines += _silver(state, content, DUP.format(name=tdef.name, silver=cfg.dup_silver))
+            continue
+        item = new_steed(state, steed) if steed is not None else new_treasure(state, content, gift.gear)
         line = (gift.line or GIFT_LINE) if gift.character in present else GIFT_SENT_LINE
         lines.append(line.format(general=general, gift=item.name))
         lines += deliver(state, content, item, hold=True)

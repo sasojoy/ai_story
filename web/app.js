@@ -234,7 +234,7 @@
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
-    if (main.mail && main.mail.unread) paintNewsDot(); // 信匣有沒看的信：輪詢拿到的也補一顆紅點
+    if ((main.mail && main.mail.unread) || (typeof guardDot === "function" && guardDot())) paintNewsDot(); // 信匣有沒看的信、親衛隊長有一件事等你（Joy 2026-11-10「要加」）：輪詢拿到的也補一顆紅點
     // 自建形象的圖版本（main.looks_ver）：那幾支組圖網址時接成 ?v=，圖一換網址就換，手機不必清快取
     window.LOOKS_VER = main.looks_ver || "";
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
@@ -262,7 +262,7 @@
     const tab = document.querySelector('.tabs .tab[data-tab="news"]');
     if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
     const hero = document.querySelector('.tabs .tab[data-tab="practice"]');
-    if (hero && typeof mailDot === "function" && mailDot() && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
+    if (hero && ((typeof mailDot === "function" && mailDot()) || (typeof guardDot === "function" && guardDot())) && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
   }
 
   // ── 整體 ──
@@ -351,7 +351,7 @@
     const glow = (t) => [t.id, ...(on(t) ? [] : t.also || [])].map((id) => `tab:${id}`).join(" ");
     return `${typeof bpMiniHtml === "function" ? bpMiniHtml() : ""}<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${on(t) ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="${glow(t)}">
-          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && S.unseen && S.tab !== "news") || (t.id === "practice" && typeof mailDot === "function" && mailDot()) ? '<i class="dot"></i>' : ""}
+          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && S.unseen && S.tab !== "news") || (t.id === "practice" && ((typeof mailDot === "function" && mailDot()) || (typeof guardDot === "function" && guardDot()))) ? '<i class="dot"></i>' : ""}
         </button>`).join("")}${mall ? `
         <button class="tab tab-mall" data-act="mall-open" data-tab="mall" data-glow="tab:mall" aria-label="商城，元寶 ${S.main.mall.balance | 0}"><span class="ico">寶</span>商城</button>` : ""}</div></nav>`;
   }

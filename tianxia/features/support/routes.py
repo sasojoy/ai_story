@@ -363,6 +363,8 @@ def _close(shell, request: Request, body: dict) -> dict:
     if sidecar is None:
         raise HTTPException(404, rules.NOT_FOUND)
     tid = _int(body.get("id"))
+    if request.state.support_desk and sidecar.has_human(tid):
+        raise shell.GameError(rules.HUMAN_WAITING)  # 第 219 批：客服官也不准結找真人的單（同 _answer 那一擋）；cookie 客服照舊
     try:
         sidecar.close(tid, shell.time.time())
     except Refused:
@@ -458,7 +460,7 @@ def _view_file(shell, request: Request, text_tid: str, text_seq: str) -> Respons
         data = (files_path() / str(tid) / f"{seq}.{row['kind']}").read_bytes()
     except OSError:
         raise HTTPException(404, rules.NOT_FOUND) from None
-    return Response(data, media_type=rules.CONTENT_TYPES[row["kind"]], headers={"Content-Disposition": "inline"})
+    return Response(data, media_type=rules.CONTENT_TYPES[row["kind"]], headers={"Content-Disposition": "inline", "X-Content-Type-Options": "nosniff"})
 
 
 def router(shell) -> APIRouter:

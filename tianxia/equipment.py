@@ -110,7 +110,32 @@ def temper_cap(item: Equipment, content: Content) -> int:
     神器原品、仿品與名將本命兵器打出來就是上品（smithing.forge 寫死、signature_arms.new_arm），名器是擲到的品質，所以只讀 item.quality。
     smithing.temper_problem、鐵匠鋪選單、店面與修練頁寫的「N／M」、整季機器人都讀這一支（smithing.temper_cap 是同一個），不另算一份。"""
     rule = _rules_of(content, item)
+    if rule.temper_risk_max > 0:
+        return rule.temper_risk_max  # 淬煉衝階開著：上限一律是它，品質只定安全線（temper_chance）
     return rule.temper_max_by_quality.get(item.quality, rule.temper_max)
+
+
+def temper_safe(item: Equipment, content: Content) -> int:
+    """這一件淬到幾層以內必成（淬煉衝階，Joy 2026-11-10）：衝階關著就是上限（每一層都必成）。"""
+    rule = _rules_of(content, item)
+    if rule.temper_risk_max <= 0:
+        return temper_cap(item, content)
+    return min(rule.temper_safe_by_quality.get(item.quality, 0), rule.temper_risk_max)
+
+
+def temper_chance(item: Equipment, content: Content) -> float:
+    """下一次淬煉成功的機會（0～1）：安全線以內 1；過了安全線照 temper_odds 一層一層往下（第一個是安全線＋1 那一層，用完沿用最後一個）。
+    smithing.temper 擲、店面寫幾成、整季機器人讀的都是這一支。淬滿了是 0。"""
+    target = item.tempers + 1
+    if target > temper_cap(item, content):
+        return 0.0
+    safe = temper_safe(item, content)
+    if target <= safe:
+        return 1.0
+    odds = _rules_of(content, item).temper_odds
+    if not odds:
+        return 1.0
+    return max(0.0, min(1.0, odds[min(target - safe - 1, len(odds) - 1)]))
 
 
 def wear_amount(base: int, item: Equipment, content: Content) -> int:

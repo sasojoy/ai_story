@@ -75,6 +75,15 @@ def forge_line(state: GameState, content: Content, world: WorldStateStore, insig
 
 
 def forge_preview(state: GameState, content: Content, world: WorldStateStore, insight_ids: list[str]) -> dict | None:
+    """預覽卡；合成改版開著時多一個 he（fusion.v2_preview：火候、真意、成神四條），關著一個鍵都不多。
+    insight_ids 是 routes.ForgePicks 時帶著網頁勾的傾注（pour）。"""
+    card = _forge_preview(state, content, world, insight_ids)
+    if card is not None and fusion.v2_on(content, state):
+        card["he"] = fusion.v2_preview(state, content, world, *insight_ids, pour=bool(getattr(insight_ids, "pour", False)))
+    return card
+
+
+def _forge_preview(state: GameState, content: Content, world: WorldStateStore, insight_ids: list[str]) -> dict | None:
     """煉製頁的預覽卡（合成前就看得到合出來的樣子，跟出爐卡同一個形狀）。兩格都放好、而且都是你的意境時才給；
     其餘是 None，網頁照舊畫 forge_line 那一行。每一格都跟 forge_line 同一套函式算。
     鍵：kind（合併／揣摩）、made、attribute、attribute_why、gen、depth、quality、why、near、odds、slots、

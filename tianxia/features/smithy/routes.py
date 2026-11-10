@@ -16,7 +16,8 @@ def main_actions(shell) -> dict:
         "smith_forge": lambda g, b: forge_actions.smith_forge(g, str(b.get("kind", "")), str(b.get("main", "")), str(b.get("aux", ""))),
         # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
         "smith_sell": lambda g, b: trade_actions.smith_sell(g, str(b.get("material", "")), max(1, shell._int(b.get("count"), 1))),
-        "smith_upgrade": lambda g, b: trade_actions.smith_upgrade(g, str(b.get("attribute", "")), shell._int(b.get("tier"), 0)),
+        # count：一次熬到底（Config.economy.upgrade_batch）連換幾個，沒給是 1（舊網頁一字不變）
+        "smith_upgrade": lambda g, b: trade_actions.smith_upgrade(g, str(b.get("attribute", "")), shell._int(b.get("tier"), 0), max(1, shell._int(b.get("count"), 1))),
         # 打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2）：叫同一支 silver.furnace；店開著時選單上沒有 act:furnace，所以另開這一個
         "smith_furnace": lambda g, b: forge_actions.smith_furnace(g),
     }

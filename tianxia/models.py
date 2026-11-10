@@ -14,7 +14,9 @@ from .core.tuning.terms import TermsTuning  # 條款
 from .core.tuning.jieyi import JieyiTuning  # 結義
 from .core.tuning.mail import MailTuning  # 帖友書信
 from .core.tuning.zongmen import ZongmenTuning  # 門派
+from .core.tuning.craft import CraftTuning  # 意境合成改版
 from .core.tuning.guard import GuardTuning  # 親衛隊長
+from .core.tuning.horses import HorsesTuning  # 馬的來路
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -1045,6 +1047,9 @@ class TraitBook(_Strict):
     special: list[SpecialTrait] = Field(default_factory=list)
     high: list[HighTrait] = Field(default_factory=list)
     god: list[GodTrait] = Field(default_factory=list)  # 神品意境模板（特殊頓悟）
+    # 合璧真意（意境合成改版，Joy 2026-11-10「好」）：陽陰虛實四路 × 攻守變心十六道，合成改版開著的季，合出來的那一路照「路 × 立意的型」
+    # 對到其中一道（fusion.grand_for）；強度量到跟那一路原本的真意同級（scripts/measure_merged_grand.py）。id 是 he_ 開頭，不算頓悟神品
+    merged: list[GodTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -2369,7 +2374,7 @@ class TavernTuning(_Strict):
     ties_price: int = Field(default=20, ge=0)  # 打聽交情
     material_prices: dict[int, int] = Field(default_factory=lambda: {1: 5, 2: 10, 3: 25, 4: 40})  # 打聽素材：照階
     wall_price: int = Field(default=5, ge=0)  # 題壁
-    wall_keep: int = Field(default=12, ge=1)  # 每間酒肆的牆留最近幾句
+    wall_keep: int = Field(default=24, ge=1)  # 每間酒肆的牆留最近幾句（換季照帶，一間跨季合計；Joy 2026-11-10 跨季後 12 → 24）
     wall_chars: int = Field(default=20, ge=1)  # 一句最多幾個字
     treat_price: int = Field(default=30, ge=0)  # 請全店喝酒（一天一次）
     treat_fame: int = Field(default=1, ge=0)
@@ -2569,6 +2574,13 @@ class WeaponRules(_Strict):
     wear_less_by_quality: dict[str, int] = Field(default_factory=dict)
     temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階，一次一個（鐵匠鋪與合成流程 3.7；佔位值一階，寫在 content/config.json）
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（3.7；以前照用的那個素材的階，4.7、正式季整合 5.3）
+    # 淬煉衝階（Joy 2026-11-10「像天堂衝階才有那個稀有度」，失敗選「退一級」）：temper_risk_max 大於 0 時開著——上限一律是它（不再照品質），
+    # 照品質的安全線（temper_safe_by_quality）以內必成，過了每一層照 temper_odds 擲（第一個是安全線＋1 那一層，用完沿用最後一個）；
+    # 失敗料錢照收、淬煉次數退一（equipment.temper_chance、smithing.temper）。0 是舊規則：照品質上限、每次必成
+    temper_risk_max: int = Field(default=0, ge=0)
+    temper_safe_by_quality: dict[str, int] = Field(default_factory=dict)
+    temper_odds: list[float] = Field(default_factory=list)
+    temper_rumor_from: int = Field(default=0, ge=0)  # 淬到這一層以上（含）天下大事寫一筆；0 不寫
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
@@ -2602,6 +2614,11 @@ class ArmorRules(_Strict):
     wear_less_by_quality: dict[str, int] = Field(default_factory=dict)  # 每場少扣幾點耐久度（同兵器 3.6）：本來會扣的那一場才套、最少扣 1
     temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階（同兵器，鐵匠鋪與合成流程 3.7）
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（同兵器 3.7）
+    # 淬煉衝階（同兵器，Joy 2026-11-10）
+    temper_risk_max: int = Field(default=0, ge=0)
+    temper_safe_by_quality: dict[str, int] = Field(default_factory=dict)
+    temper_odds: list[float] = Field(default_factory=list)
+    temper_rumor_from: int = Field(default=0, ge=0)
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
     original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
@@ -2699,6 +2716,9 @@ class SealCacheTuning(_Strict):
     # 權重 3＝核心三處合起來約佔四成多（中原十二處＋核心三處），每一處的機率是中原每一處的三倍【暫，待企劃者看過量表】
     core_regions: list[str] = Field(default_factory=lambda: ["core"])
     core_weight: float = Field(default=3.0, ge=1)
+    # 開季藏了一片時，天下大事放一則只說哪一州（藏處所屬大區的名字，atlas.region_of）的傳聞（Joy 2026-11-10「先這樣改」：
+    # 第 7～9 季沒人知道有藏、藏在哪）。區塊、地點照舊不公開。正式內容開，hide_chance 正式內容一併改成 1（每季必藏）
+    hint_region: bool = False
 
 
 class SealActsTuning(_Strict):
@@ -3957,6 +3977,13 @@ class EconomyRules(_Strict):
     # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
     # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
     upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
+    # 一次熬到底（Joy 2026-11-10「先這樣改」：主機普查第 7～9 季真人一季按升階 200～380 下）：素材頁每一格多一顆「全熬 ×N」、
+    # 打造頁就地熬的小單多一顆，連換到料或銀兩或上限用完為止（economy.upgrade_max／upgrade_many）；每一個照舊各擲各的。正式內容開
+    upgrade_batch: bool = False
+    # 季末沒用完的素材折成下一季的盤纏（同上）：上一季背包裡每一階一個幾兩（空的＝不折），一人最多 leftover_cap 兩（0＝不設）；
+    # 開季那一刻（鐵匠鋪包的 on_season_start）加進新角色的銀兩、寫一則紀錄。正式內容照收購價、四階 54
+    leftover_silver: dict[int, int] = Field(default_factory=dict)
+    leftover_cap: int = Field(default=0, ge=0)
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
@@ -4464,7 +4491,9 @@ class Config(_Strict):
     jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     mail: MailTuning = Field(default_factory=MailTuning)  # 帖友書信（tianxia/core/tuning/mail.py）
     zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
+    craft: CraftTuning = Field(default_factory=CraftTuning)  # 意境合成改版（tianxia/core/tuning/craft.py；開季蓋章 WorldState.craft_v2）
     guard: GuardTuning = Field(default_factory=GuardTuning)  # 親衛隊長（tianxia/core/tuning/guard.py）
+    horses: HorsesTuning = Field(default_factory=HorsesTuning)  # 馬的來路（tianxia/core/tuning/horses.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")

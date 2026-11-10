@@ -141,7 +141,7 @@ def test_no_gear_json_means_an_empty_table(content):
     (lambda d: d["treasures"][0].update(name="韓鐵"), "命名過濾"),  # 跟人物同名
     (lambda d: d["treasures"][0].update(effect="power"), "effect"),  # 不是八種之一
     (lambda d: d["gifts"][0].update(character="ghost"), "ghost"),
-    (lambda d: d["gifts"][1].update(gear="mingci"), "贈禮"),  # 掉落池的寶物不能當贈禮
+    (lambda d: d["gifts"][1].update(gear="nope"), "贈禮"),  # 贈禮要是寶物或名駒（掉落池的寶物 Joy 2026-11-10 起也可以）
     (lambda d: d["gifts"].append({"character": "mate", "gear": "tashuang"}), "兩次"),
     (lambda d: d["treasures"][0].update(pool=False), "掉落池"),  # 掉落池一件都沒有
     (lambda d: d["steeds"].append({"id": "good_horse", "name": "雪蹄駒"}), "good_horse"),
@@ -153,10 +153,12 @@ def test_bad_gear_tables_are_rejected(tmp_path, edit, match):
         load_content(_gear_root(tmp_path, edit))
 
 
-def test_the_real_gear_table_has_eight_pool_treasures_and_seven_gifts():
+def test_the_real_gear_table_has_ten_pool_treasures_and_seven_gifts():
     c = real_content()
     pool = [t for t in c.gear.treasures.values() if t.pool]
-    assert len(pool) == 8 and {t.effect for t in pool} == set(TREASURE_EFFECTS)
+    # 門第名帖、檀木念珠第 7～9 季沒人拿過（只有袁紹、陶謙送），Joy 2026-11-10 起也進掉落池
+    assert len(pool) == 10 and {t.effect for t in pool} == set(TREASURE_EFFECTS)
+    assert {"mendi_mingtie", "tanmu_nianzhu"} <= {t.id for t in pool}
     assert {g.character for g in c.gear.gifts} == {"caocao", "sunjian", "liubei", "guanyu", "zhangfei", "yuanshao", "taoqian"}
     assert sorted(c.gear.steeds[g.gear].name for g in c.gear.gifts if g.gear in c.gear.steeds) == ["破浪駒", "踏霜駒"]
 
@@ -540,7 +542,7 @@ def test_gear_rows_have_a_treasure_slot_with_effects(content, world):
     assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("treasure", "寶物", treasures.EMPTY, treasures.RACK_NOTE)
     assert slot["worn"]["effect_text"] == treasures.effect_text(content, "audience")
     assert [(r["id"], r["effect"]) for r in slot["rack"]] == [("寶:2", "win_material")]
-    assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text", "might"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）；might 是換上後的戰力
+    assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text", "might", "art"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）；might 是換上後的戰力；art 是水墨圖的鍵（template）
     assert gear["held_note"] == ""
     p.held_gear = [_item("seclusion", "寶:3")]
     assert "【入定蒲團】" in art_cards.gear_rows(game.state, content, world)["held_note"]
@@ -768,6 +770,21 @@ def test_a_gift_with_no_room_is_held(content, world):
     msgs = idle_step(game)
     assert [i.template for i in p.held_gear] == ["caoxie"] and treasures.HELD.format(name="舊草鞋") in msgs
     assert world.get_season().general_gifts == {"mate": "寶客"}  # 寄放了也算送出去了
+
+
+def test_a_pool_treasure_gift_you_already_have_turns_into_silver(content, world):
+    """贈禮也在掉落池裡（正式內容的門第名帖、檀木念珠，Joy 2026-11-10）：已經打到同一件，名將照樣算送過、改給 dup_silver 兩，不給第二件。"""
+    _book(content)
+    content.gear.gifts[0] = GiftDef(character="mate", gear="audience")
+    game = _game(content, world)
+    p = game.state.player
+    p.treasure = _item("audience")
+    p.affinities["mate"] = 60
+    silver = p.stats.get("silver", 0)
+    msgs = idle_step(game)
+    assert treasures.DUP.format(name=NAMES["audience"], silver=content.config.treasures.dup_silver) in msgs
+    assert p.stats["silver"] == silver + content.config.treasures.dup_silver and p.rack == [] and p.held_gear == []
+    assert world.get_season().general_gifts == {"mate": "寶客"}
 
 
 # ── Task 7：挑戰本人掉落 ──

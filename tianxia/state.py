@@ -324,6 +324,13 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class FusionNote(BaseModel):
+    """爐譜的一列（意境合成改版，tianxia/fusion.py）：這個配方你第一次合時立意定的型（攻守變心）、合過幾次（熟）。"""
+
+    form: str = "攻"
+    uses: int = 0
+
+
 class ShihaiSeal(BaseModel):
     """識海裡封著的那一份神品意境（傳承，tianxia/features/legacy；架構方向 v2 第七節）：上一季季末自己選的，換季那一刻抄下整份。
     解封之前不在自己的意境裡、裝不上；解封那一刻名字才照這一季登記（撞名就從 names 挑一個）。"""
@@ -406,6 +413,12 @@ class GuardBook(BaseModel):
     season_qing: int | None = None  # 這一季開始（或投效那一刻）的情分：心性一季最多換 band_steps_per_season 檔，照它夾
     hp_seen: float | None = None  # 這一下動作之前的氣血比例（同步時抄、做完一件事時比：掉到 hurt_ratio 以下他說一句）
     hurt_day: int = 0  # 他上一次開口是第幾天（一天一次）
+    # 成長期三段（Joy 2026-11-10 設計稿 GzVzRd…「好」）：0 初來、1 相熟、2 長成、3 三段走完（他想出去學本事）
+    phase: int = 0
+    phase_day: int = 0  # 這一段最後看到的是第幾天（換日一次 phase_days 加一；換季歸零、不算一天）
+    phase_days: int = 0  # 這一段一起過了幾天
+    phase_n: int = 0  # 這一段一起經歷了幾件事
+    teach_day: int = 0  # 哪一天教過他了（一天一次；換季歸零）
 
 
 class LegacyBook(BaseModel):
@@ -524,11 +537,20 @@ class Whisper(BaseModel):
 
 
 class WallNote(BaseModel):
-    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。"""
+    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。換季照帶（酒肆包登記的世界層 next/tavern_walls，Joy 2026-11-10
+    「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」）。"""
 
     who: str
     text: str
     time: float
+    season: int = 0  # 前幾季題的：第幾季（換季帶過來那一下蓋上）；這一季題的是 0，0 的時候不寫這個鍵（舊程式讀得回去）
+
+    @model_serializer(mode="wrap")
+    def _drop_this_season(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("season"):
+            data.pop("season", None)
+        return data
 
 
 class TavernWatch(BaseModel):
@@ -931,6 +953,9 @@ class PlayerState(BaseModel):
     insight_strength: dict[str, int] = Field(default_factory=dict)  # 舊存檔：意境 id → 強度 2 或 3（沒記是 1）；第二批起照 insight_fx
     # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
+    # 意境合成改版（Config.craft，季上蓋章才有；tianxia/fusion.py）：爐譜（配方鍵 → 立意的型與熟）、化入攢的意蘊（那一份的 id → 點數）。空的不寫進存檔
+    fusion_book: dict[str, FusionNote] = Field(default_factory=dict, json_schema_extra=QUIET)
+    fusion_yun: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
     create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；換季帶著走（同回體丹）
@@ -963,6 +988,12 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    temper_seq: int = Field(0, json_schema_extra=QUIET)  # 這一季過了安全線的淬煉擲了幾次：衝階成敗的種子（smithing.temper_rng），換季跟著新角色歸零
+    # 馬的來路（features/horses，Joy 2026-11-10）：這一季奪了幾匹、馴成幾匹、馴到第幾步與在哪裡馴（離開那裡就從頭來）；換季跟著新角色歸零
+    horses_seized: int = Field(0, json_schema_extra=QUIET)
+    horses_tamed: int = Field(0, json_schema_extra=QUIET)
+    horses_tame: int = Field(0, json_schema_extra=QUIET)
+    horses_tame_at: str = Field("", json_schema_extra=QUIET)
     # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
     tier4_upgrades: int = 0
     # 每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：這一季簽過的是第幾天（開季那一天是第 1 天）；換季跟著新角色清空
@@ -2098,6 +2129,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift，2026-10-21 跟著求藝拿掉）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 馬的來路（features/horses，Joy 2026-11-10）：野馬群這一季被馴走幾匹（「週次|地點 id」→ 匹數）、這一季哪幾匹名駒有主了；換季整個重來
+    horses_herds: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    horses_steeds: list[str] = Field(default_factory=list, json_schema_extra=QUIET)  # 這一季有主的名駒（gear.json 的 id）
     # 武學重構：「裝滿」那種秘方（kind fuse）這一季第一個暗合的人：秘方 id → 寫給別人看的名號（換季整個重來；小的整份覆寫，
     # 跟 general_gifts 一樣走這一下動作最後的 _save_season）
     secret_sets: dict[str, str] = Field(default_factory=dict)
@@ -2118,6 +2152,7 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False

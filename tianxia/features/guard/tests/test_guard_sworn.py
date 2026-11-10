@@ -14,9 +14,10 @@ def sworn(game):
     game.state.player.member.level = t.meet_level
     game.client = None
     game.sync(game.now)
-    for oid in ("guard:meet", "guard:save", "guard:adopt:男"):
+    actions.meet_on_explore(game, game.state.player.location)
+    for oid in ("guard:save", "guard:adopt:男"):
         game.choose(oid)
-    game.state.player.member.level = t.study_level
+    game.state.player.guard.phase = 3  # 成長期三段走完（test_guard_grow.py 一段一段走）
     game.state.player.stats["silver"] = 500
     game.choose("guard:study")
     game.choose("guard:school:gensui")
@@ -35,7 +36,7 @@ def test_after_swearing_he_still_has_daily_things(sworn):
     b.home_day = 0
     sworn.sync(sworn.now)
     assert b.event is not None and b.event.kind == "home"
-    assert "guard:open" in [o.id for o in sworn.options(odds=False)]
+    assert actions.status(sworn)["guard"]["event"]["shown"] is False
 
 
 def test_the_band_moves_at_most_one_step_a_season(sworn):
@@ -104,8 +105,10 @@ def test_his_picture_follows_stage_path_and_heart(sworn):
     assert rules.art(t, b)["face"].endswith("-leng.webp")
     b.stage = "oath"
     assert rules.art(t, b)["hero"].endswith("story/oath-leng.webp")
-    b.stage, b.sex = "grow", "女"
+    b.stage, b.sex, b.phase = "grow", "女", 1  # 成長期：相熟那一段是 grown，長成那一段換 teen（第五批）
     assert rules.art(t, b)["face"].endswith("child/f-grown.webp")
+    b.phase = 2
+    assert rules.art(t, b)["face"].endswith("child/f-teen.webp")
     b.stage, b.opening = "met", "river"
     assert rules.art(t, b) == {"hero": "/static/img/guard/story/meet-river.webp", "face": ""}
     for sx in "mf":  # 每一種組合的檔都在
@@ -114,5 +117,7 @@ def test_his_picture_follows_stage_path_and_heart(sworn):
                 assert (root / f"img/guard/grown/{sx}-{code}-{look}.webp").exists()
         for school in t.schools:
             assert (root / f"img/guard/study/{sx}-{school}.webp").exists()
+        for kid in ("saved", "grown", "teen"):
+            assert (root / f"img/guard/child/{sx}-{kid}.webp").exists()
     for key in rules.MEET_ART:
         assert (root / f"img/guard/story/meet-{key}.webp").exists()
