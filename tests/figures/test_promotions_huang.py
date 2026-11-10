@@ -10,7 +10,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import real_content
+from conftest import no_territory, real_content
 from tianxia import calendar, figures
 from tianxia.features.military import fs_rules as foreshadow
 from tianxia import materials, ranks, rules
@@ -222,31 +222,54 @@ def test_grain_min_cannot_be_negative():
         Condition(grain_min=-1)
 
 
-@pytest.mark.parametrize("amount", [0, -1])
-def test_donate_grain_amounts_must_be_more_than_zero(on, amount):
-    """份量 0 或負的：換算出 0 份，拿得到 0 份糧、還記一筆貢獻。載入時擋下。"""
-    on.events["promo_huang_2"].choices[0].effect.donate_grain = {"nanyang_huangjin_camp": amount}
-    with pytest.raises(ContentError, match="donate_grain 的份量要大於 0"):
-        validate(on)
-
-
-def test_donate_grain_must_name_a_location(on):
-    on.events["promo_huang_2"].choices[0].effect.donate_grain = {"nowhere": 2}
-    with pytest.raises(ContentError, match="nowhere"):
-        validate(on)
-
-
-@pytest.mark.parametrize("ref", [
+_BAD_FRAGMENTS = [
     "fs_zhangjiao_huang:9",  # 片段沒有那麼多
     "fs_zhangjiao_huang:-1",  # 序號不能是負的
     "no_such_chain:0",  # 沒有這條鏈
     "fs_zhangjiao_huang",  # 沒寫序號
     "fs_zhangjiao_huang:x",  # 序號不是數字
-])
-def test_fs_fragments_must_name_a_fragment_that_exists(on, ref):
-    on.events["promo_huang_2"].choices[0].effect.fs_fragments = [ref]
-    with pytest.raises(ContentError, match="fs_fragments 的 .* 不存在"):
-        validate(on)
+]
+# 份量 0 寫在選項 0、份量 -1 寫在選項 1（兩筆是同一句，分選項才分得出是哪一筆紅）
+_DONATE_CHOICE = {0: 0, -1: 1}
+
+
+def _on():
+    """跟這檔的 on 同一份：conftest 的 real、這檔的 real 那一行、conftest 的 on（module 範圍的 fixture 拿不到 function 範圍的 on）。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    c.config.affinity_gain_scale = 1.0
+    c.config.season_one, c.config.season_days, c.config.server_max_players = True, 2.5, 2
+    return no_territory(c)
+
+
+@pytest.fixture(scope="module")
+def grain_and_fragments_text():
+    """下面三條的八筆突變一起寫在 promo_huang_2 上、validate 一次（第 223 批）。"""
+    c = _on()
+    choices = c.events["promo_huang_2"].choices
+    for amount, i in _DONATE_CHOICE.items():
+        choices[i].effect.donate_grain = {"nanyang_huangjin_camp": amount}
+    choices[0].effect.donate_grain["nowhere"] = 2
+    choices[0].effect.fs_fragments = list(_BAD_FRAGMENTS)
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    return str(caught.value)
+
+
+@pytest.mark.parametrize("amount", [0, -1])
+def test_donate_grain_amounts_must_be_more_than_zero(grain_and_fragments_text, amount):
+    """份量 0 或負的：換算出 0 份，拿得到 0 份糧、還記一筆貢獻。載入時擋下。"""
+    assert f"事件 promo_huang_2 選項{_DONATE_CHOICE[amount]}：donate_grain 的份量要大於 0" in grain_and_fragments_text
+
+
+def test_donate_grain_must_name_a_location(grain_and_fragments_text):
+    assert "事件 promo_huang_2 選項0：未知的地點 nowhere" in grain_and_fragments_text
+
+
+@pytest.mark.parametrize("ref", _BAD_FRAGMENTS)
+def test_fs_fragments_must_name_a_fragment_that_exists(grain_and_fragments_text, ref):
+    assert f"事件 promo_huang_2 選項0：fs_fragments 的 {ref} 不存在" in grain_and_fragments_text
 
 
 def test_a_real_fragment_reference_passes(on):
