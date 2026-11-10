@@ -40,6 +40,11 @@
   const GD_LATER = "先擱著";
   const GD_KIND = { letter: "來信", trial: "出師考驗", oath: "立誓" };
 
+  // 俠客分頁的紅點（app.js tabsHtml、paintNewsDot 問；Joy 2026-11-10「要加」）：他有一件事還沒攤開、或等你挑去處；人在俠客頁時不亮
+  const guardDot = () => {
+    const g = S.main && S.main.guard;
+    return !!g && S.tab !== "practice" && ((!!g.event && !g.event.shown) || (!!g.schools && g.schools.length > 0));
+  };
   const gdFill = (s, g) => s.replace(/\{name\}/g, g.name).replace(/\{pron\}/g, g.pron)
     .replace(/\{school\}/g, g.school || "").replace(/\{until\}/g, g.study_until || "");
 
