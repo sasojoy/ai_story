@@ -48,8 +48,9 @@ def check_gear(c: Content, need, known) -> None:
             except (KeyError, IndexError, ValueError):
                 need(False, f"{where}：送禮那一句只能用 {{general}}、{{gift}}")
     sent = {gift.gear for gift in book.gifts}
+    sent |= set(c.config.horses.named_steeds)  # 馬的來路（Joy 2026-11-10「名駒專屬名字和圖(4 匹)」）：馴出來、論功第一的名駒從這幾匹給
     for item_id in [t.id for t in book.treasures.values() if not t.pool] + list(book.steeds):
-        need(item_id in sent, f"裝備表 {item_id}：沒有人送（pool 為 false 的寶物與名駒只從名將贈禮來）")
+        need(item_id in sent, f"裝備表 {item_id}：沒有人送（pool 為 false 的寶物與名駒只從名將贈禮或馬的來路來）")
 
 
 def check_signature_arms(c: Content, need, known) -> None:

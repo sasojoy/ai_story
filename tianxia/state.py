@@ -2028,9 +2028,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift，2026-10-21 跟著求藝拿掉）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
-    # 馬的來路（features/horses，Joy 2026-11-10）：野馬群這一季被馴走幾匹（「週次|地點 id」→ 匹數）、全服馴出幾匹名駒；換季整個重來
+    # 馬的來路（features/horses，Joy 2026-11-10）：野馬群這一季被馴走幾匹（「週次|地點 id」→ 匹數）、這一季哪幾匹名駒有主了；換季整個重來
     horses_herds: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
-    horses_steeds: int = Field(0, json_schema_extra=QUIET)
+    horses_steeds: list[str] = Field(default_factory=list, json_schema_extra=QUIET)  # 這一季有主的名駒（gear.json 的 id）
     # 武學重構：「裝滿」那種秘方（kind fuse）這一季第一個暗合的人：秘方 id → 寫給別人看的名號（換季整個重來；小的整份覆寫，
     # 跟 general_gifts 一樣走這一下動作最後的 _save_season）
     secret_sets: dict[str, str] = Field(default_factory=dict)

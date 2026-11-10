@@ -24,10 +24,10 @@ class HorsesTuning(BaseModel):
     tame_cap: int = Field(default=1, ge=0)  # 一人一季最多馴成幾匹
     herd_per_week: int = Field(default=2, ge=0)  # 每一處每一週全服馴得走幾匹（被別人馴走就沒了）
     wild_steed_chance: float = Field(default=0.05, ge=0, le=1)  # 馴成時是名駒的機會
-    wild_steed_cap: int = Field(default=3, ge=0)  # 全服一季最多馴出幾匹名駒
-    wild_steed_quality: str = "中品"
+    # 名駒有專名與專圖（Joy 2026-11-10 選「名駒專屬名字和圖(4 匹)」）：馴出來的、論功第一的都從這幾匹裡給（gear.json 的 steeds，不放進名將贈禮），
+    # 全服一季每一匹只有一個主人；都有人了，馴馬改給良駒、論功第一改給良駒上品
+    named_steeds: list[str] = Field(default_factory=lambda: ["liyun_ju", "benlei_ju", "yinxue_ju", "xiaoyuan_ju"])
     # ── 論功賜馬：全服決戰（不含攻城）得勝那一方，自己出手過、戰功前幾名 ──
     merit_steed_top: int = Field(default=1, ge=0)  # 第 1 名到第幾名賜名駒
     merit_horse_top: int = Field(default=3, ge=0)  # 再往下到第幾名賜良駒
     merit_horse_quality: str = "上品"
-    merit_steed_quality: str = "中品"

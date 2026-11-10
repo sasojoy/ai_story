@@ -3,9 +3,9 @@
 - 奪馬：事件 win 的 horses 那一格。打贏 Config.horses.seize_squads 列的那幾路（騎馬的），照那一路的機率牽走一匹良駒；一人一季最多 seize_cap 匹。
   種子「奪馬|季數|名號|地點|隊伍|四欄共用的流水號」，不碰 Game.rng。拿不下（裝備庫滿）就不擲、不記。
 - 馴野馬：pastures 那幾處有野馬群，連 tame_steps 步，每步花 tame_stamina 體力與一個一階素材（背包裡最多的那一種，同餵馬）；最後一步擲 tame_chance，
-  成了給一匹良駒（品質照 Config.treasures.horse_quality），wild_steed_chance 是名駒（全服一季最多 wild_steed_cap 匹，上天下大事）；不成野馬跑掉、從頭來。
+  成了給一匹良駒（品質照 Config.treasures.horse_quality），wild_steed_chance 是名駒（named_steeds 那幾匹專名的，全服一季每匹一個主人，上天下大事）；不成野馬跑掉、從頭來。
   每一處每一週全服只馴得走 herd_per_week 匹（WorldState.horses_herds，被別人馴走就沒了）；一人一季最多 tame_cap 匹。走開了就從頭來。
-- 論功賜馬：事件 showdown_pay 的 horses 那一格。決戰（不含攻城）得勝那一方、自己出手過的人，照戰功排名：第 1 名名駒、第 2～3 名良駒上品。
+- 論功賜馬：事件 showdown_pay 的 horses 那一格。決戰（不含攻城）得勝那一方、自己出手過的人，照戰功排名：第 1 名名駒（同上那幾匹，都有主了改良駒上品）、第 2～3 名良駒上品。
 """
 from __future__ import annotations
 
@@ -64,6 +64,32 @@ def win(ctx: Game, loc_id: str, squad_id: str) -> list[str]:
     return [rules.SEIZE_LINE.format(foe=foe, grade=mounts.grade(item), name=item.name), *treasures.deliver(s, ctx.content, item, hold=True)]
 
 
+def free_steed(ctx: Game, rng: random.Random) -> str | None:
+    """還沒有主人的那幾匹名駒裡挑一匹（排序後再挑，同一個種子永遠同一匹）；都有主了是 None。"""
+    taken = set(ctx.state.world.horses_steeds)
+    free = sorted(i for i in _cfg(ctx).named_steeds if i not in taken and i in ctx.content.gear.steeds)
+    return rng.choice(free) if free else None
+
+
+def claim_steed(ctx: Game, steed_id: str, *, shared: bool) -> bool:
+    """記下這一匹有主了。shared（收場補送那一條：同步時不會寫回共用賽季）走 world.mutate_season 原子地搶，手上那一份也跟著記；
+    動作裡（馴馬）只改手上那一份，動作最後的 _save_season 寫回。搶輸（別人剛拿走）回 False。"""
+    if not shared:
+        ctx.state.world.horses_steeds.append(steed_id)
+        return True
+    won: list[bool] = []
+
+    def _claim(season) -> None:
+        won.append(steed_id not in season.horses_steeds)
+        if won[0]:
+            season.horses_steeds.append(steed_id)
+
+    ctx.world.mutate_season(_claim)
+    if won and won[0] and steed_id not in ctx.state.world.horses_steeds:
+        ctx.state.world.horses_steeds.append(steed_id)
+    return bool(won and won[0])
+
+
 # ── 論功賜馬（事件 showdown_pay）──
 
 def merit_rank(battle, tuning, me) -> int | None:
@@ -85,7 +111,11 @@ def showdown_pay(ctx: Game, battle, me, lines: list[str]) -> list[str]:
     if tier is None:
         return []
     rng = random.Random(f"論功賜馬|{battle.record_id}|{s.player.name}")
-    item = _new_horse(ctx, rng, tier, cfg.merit_steed_quality if tier == 3 else cfg.merit_horse_quality)
+    steed_id = free_steed(ctx, rng) if tier == 3 else None
+    if steed_id is not None and claim_steed(ctx, steed_id, shared=True):
+        item = treasures.new_steed(s, ctx.content.gear.steeds[steed_id])
+    else:  # 不是第一名，或四匹名駒這一季都有主了：良駒上品
+        item = _new_horse(ctx, rng, 2, cfg.merit_horse_quality)
     lines.append(rules.MERIT_LINE.format(rank=rank, grade=mounts.grade(item), name=item.name))
     lines += treasures.deliver(s, ctx.content, item, hold=True)
     return [rules.MERIT_GAIN.format(name=item.name)]
@@ -158,13 +188,13 @@ def choose(ctx: Game, arg: str) -> list[str]:
     w = s.world
     key = rules.herd_key(_week(ctx), p.location)
     w.horses_herds[key] = w.horses_herds.get(key, 0) + 1
-    steed = w.horses_steeds < cfg.wild_steed_cap and rng.random() < cfg.wild_steed_chance
-    item = _new_horse(ctx, rng, 3 if steed else 2, cfg.wild_steed_quality if steed else None)
+    steed_id = free_steed(ctx, rng) if rng.random() < cfg.wild_steed_chance else None
+    steed = steed_id is not None and claim_steed(ctx, steed_id, shared=False)
+    item = treasures.new_steed(s, c.gear.steeds[steed_id]) if steed else _new_horse(ctx, rng, 2)
     p.horses_tamed += 1
     out = [rules.TAME_DONE.format(material=materials_name, grade=mounts.grade(item), name=item.name)]
     out += treasures.deliver(s, c, item)
     if steed:
-        w.horses_steeds += 1
         place = c.locations[p.location].name
         add_rumor(s, rules.TAME_STEED.format(who=p.name, place=place, name=item.name), p.location, content=c, named=True)
     out.append(f"體力 -{cfg.tame_stamina}")

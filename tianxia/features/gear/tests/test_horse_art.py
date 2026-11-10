@@ -14,7 +14,7 @@ def _horse(name, template=None):
 
 def test_every_coat_and_named_steed_has_its_own_picture():
     assert set(mounts.COAT_ART) == set(mounts.COATS)
-    assert len(set(mounts.COAT_ART.values()) | set(mounts.STEED_ART.values())) == 8
+    assert len(set(mounts.COAT_ART.values()) | set(mounts.STEED_ART.values())) == 12  # 馬的來路多四匹專名名駒（Joy 2026-11-10）
     assert mounts.art_of(_horse("青驄駒")) == "qingcong"
     assert mounts.art_of(_horse("踏霜駒", "tashuang_ju")) == "tashuang"
     assert mounts.art_of(_horse("無名")) == ""

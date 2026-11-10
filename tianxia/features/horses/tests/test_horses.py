@@ -81,11 +81,12 @@ def test_the_herd_is_shared_and_runs_out_for_the_week():
 
 
 def test_a_wild_steed_is_capped_server_wide_and_makes_news():
-    c = _content(tame_chance=1.0, wild_steed_chance=1.0, wild_steed_cap=1)
+    c = _content(tame_chance=1.0, wild_steed_chance=1.0, named_steeds=["liyun_ju"])
     g = _game(c)
     for _ in range(3):
         g.choose("horses:tame")
-    assert _horses(g)[0].tier == 3 and g.state.world.horses_steeds == 1
+    steed = _horses(g)[0]
+    assert steed.tier == 3 and steed.name == "裂雲駒" and steed.template == "liyun_ju" and g.world.get_season().horses_steeds == ["liyun_ju"]
     assert any("名駒" in r.text for r in g.state.world.rumors)
 
 
@@ -140,3 +141,25 @@ def test_bots_tame_only_without_a_good_horse():
     opt = actions.options(g)[0]
     s = bots.score(g, opt)
     assert s in (None, bots.TAME_SCORE)
+
+
+def test_each_named_steed_has_one_owner_a_season_then_it_is_a_good_horse():
+    c = _content(named_steeds=["liyun_ju"])
+    battle = _battle([("甲", 9)])
+    a = _game(c, "甲")
+    actions.showdown_pay(a, battle, battle.participants["甲"], [])
+    assert _horses(a)[0].name == "裂雲駒" and a.world.get_season().horses_steeds == ["liyun_ju"]
+    other = _battle([("乙", 9)])
+    other.record_id = 8
+    b = _game(c, "乙")
+    b.state.world = b.world.get_season()
+    actions.showdown_pay(b, other, other.participants["乙"], [])
+    got = _horses(b)[0]
+    assert got.tier == 2 and got.quality == "上品"
+
+
+def test_the_named_steeds_have_their_art_keys():
+    from tianxia import mounts
+
+    for steed_id in real_content("week7").config.horses.named_steeds:
+        assert steed_id in mounts.STEED_ART

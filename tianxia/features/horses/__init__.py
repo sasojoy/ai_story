@@ -53,6 +53,10 @@ class HorsesFeature(Feature):
             need(squad_id in content.squads, f"Config.horses.seize_squads：沒有 {squad_id} 這一路")
         for loc_id in cfg.pastures:
             need(loc_id in content.locations, f"Config.horses.pastures：沒有 {loc_id} 這個地點")
+        gifted = {gift.gear for gift in content.gear.gifts}
+        for steed_id in cfg.named_steeds:
+            need(steed_id in content.gear.steeds, f"Config.horses.named_steeds：gear.json 沒有 {steed_id} 這匹名駒")
+            need(steed_id not in gifted, f"Config.horses.named_steeds：{steed_id} 是名將贈禮，不能再從馴馬、論功給")
 
 
 FEATURE = HorsesFeature()

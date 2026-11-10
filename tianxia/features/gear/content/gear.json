@@ -16,7 +16,11 @@
   ],
   "steeds": [
     {"id": "tashuang_ju", "name": "踏霜駒"},
-    {"id": "polang_ju", "name": "破浪駒"}
+    {"id": "polang_ju", "name": "破浪駒"},
+    {"id": "liyun_ju", "name": "裂雲駒", "quality": "中品"},
+    {"id": "benlei_ju", "name": "奔雷駒", "quality": "中品"},
+    {"id": "yinxue_ju", "name": "飲雪駒", "quality": "中品"},
+    {"id": "xiaoyuan_ju", "name": "嘯原駒", "quality": "中品"}
   ],
   "gifts": [
     {"character": "caocao", "gear": "tashuang_ju"},
