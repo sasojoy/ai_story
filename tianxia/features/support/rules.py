@@ -51,6 +51,24 @@ LOOKUP_BAD_EMAIL = "Email 的寫法不對。"  # 待 joy 潤
 LOOKUP_BAD_PHONE = "只收台灣手機門號（09 開頭十碼）。"  # 待 joy 潤
 LOOKUP_BAD_KIND = "只能照帳號、Email 或手機查。"  # 待 joy 潤
 
+# ── 截圖（客服自動受理第 215 批；設計 5.1）：只看檔頭認種類（不信副檔名、不信 Content-Type、不驗整張圖），種類就是存檔的副檔名 ──
+CONTENT_TYPES: dict[str, str] = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+FILE_TOO_BIG = "圖太大了：一張最多 {mb} MB。"  # 待 joy 潤
+FILE_NOT_IMAGE = "只收 PNG、JPEG、WebP 的圖。"  # 待 joy 潤
+FILES_FULL = "一張單最多附 {n} 張圖。"  # 待 joy 潤
+
+
+def image_kind(head: bytes) -> str | None:
+    """前 12 位元組認種類：PNG 89 50 4E 47 0D 0A 1A 0A、JPEG FF D8 FF、WebP RIFF＋4 位元組＋WEBP；其他回 None。"""
+    head = bytes(head[:12])
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if len(head) == 12 and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
+
 # 帳號卡「綁了」那一格（logins.provider → 字；先後就是畫面上的先後）
 PROVIDER_NAMES: dict[str, str] = {
     "password": "密碼",  # 待 joy 潤
