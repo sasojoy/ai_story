@@ -17,6 +17,8 @@
     <svg class="tav-jars" viewBox="0 0 150 66"><g fill="#0e0805"><path d="M8 64 Q2 40 14 26 L14 18 L30 18 L30 26 Q42 40 36 64 Z"/><path d="M46 64 Q40 44 50 32 L50 26 L62 26 L62 32 Q72 44 66 64 Z"/><path d="M78 64 Q70 36 86 20 L86 10 L104 10 L104 20 Q120 36 112 64 Z"/><path d="M120 64 Q116 48 124 40 L124 34 L134 34 L134 40 Q142 48 138 64 Z"/></g><rect x="88" y="34" width="14" height="18" fill="#7a2014" opacity=".85"/><text x="95" y="47" text-anchor="middle" font-size="11" fill="#e8c27a">酒</text></svg>
     <i class="tav-table"></i></div>`;
 
+  const TAV_PLAQUE = "酒肆"; // 待 joy 潤
+  const TAV_SEAL = "酒家"; // 待 joy 潤
   function tavTab() { return TAV_TABS.some(([k]) => k === S.tavTab) ? S.tavTab : "news"; }
 
   // 打聽到的一則（聽消息、下落、交情、素材、反查）：小標、時刻，一行一句
@@ -109,7 +111,11 @@
     const tab = tavTab();
     const body = { news: tavNewsHtml, ask: tavAskHtml, wall: tavWallHtml, shade: tavShadeHtml }[tab](shop);
     // 燈籠那一幅畫在捲的那一層裡：四頁的框一樣高，換頁時底下的格子不上下跳（Joy 2026-10-19「視窗大小跳來跳去」）
-    return `<div class="shop-body"><div class="shop-col">${tab === "news" ? TAV_HERO : ""}${body}</div></div>
+    // 翻新（Joy 2026-11-10「馬市酒肆也要翻」）：聽消息那一頁頂上是一張頁首卡——酒肆的水墨圖墊底、燈籠照舊搖，右上直書匾額、朱印「酒家」＋酒家那一句
+    // （同一句殼畫在招牌底下，有頁首時 tavern.css 收起來）
+    const hero = tab === "news" ? `<div class="tav-card">${TAV_HERO}<span class="tav-plaque" aria-hidden="true">${TAV_PLAQUE}</span>
+      <div class="tav-text"><span class="tav-seal2">${TAV_SEAL}</span><p class="tav-say">${esc(shop.line || "")}</p></div></div>` : "";
+    return `<div class="shop-body"><div class="shop-col">${hero}${body}</div></div>
       <nav class="shop-tabs">${TAV_TABS.map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="tav-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
   }
 

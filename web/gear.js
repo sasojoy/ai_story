@@ -65,6 +65,9 @@
     return key && ((S.main && S.main.horse_art) || []).includes(key)
       ? `<img class="${cls}" src="/static/horse-${encodeURIComponent(key)}.webp" alt="" loading="lazy">` : "";
   }
+  const MARKET_PLAQUE = "馬市"; // 待 joy 潤
+  const MARKET_SEAL = "馬販"; // 待 joy 潤
+  const MARKET_STALLS = "馬廄"; // 待 joy 潤
   function marketHtml(shop) {
     const live = shop.stalls.filter((h) => !h.empty);
     const pick = live.find((h) => h.id === S.shopHorse) || live.find((h) => h.id === shop.focus) || live[0];
@@ -72,7 +75,11 @@
       ? `<div class="stall empty"><span class="who">${esc(h.who)}</span><i class="horse"></i><b>${esc(h.name)}</b></div>`
       : `<button class="stall r-${esc(h.role)}${pick && h.id === pick.id ? " on" : ""}" data-act="shop-horse" data-id="${esc(h.id)}">
           <span class="who">${esc(h.who)}</span>${horseImg(h.art, "horse-pic") || `<i class="horse ${h.coat >= 0 ? `c${h.coat | 0}` : "cx"}"></i>`}<b>${esc(h.name)}</b><small>${dealHtml(h.sub)}</small></button>`);
-    return `<div class="shop-body"><div class="shop-col"><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
+    // 翻新（Joy 2026-11-10「馬市酒肆也要翻」，照鐵匠鋪那一套）：頁首一張市集的水墨圖、右上直書匾額「馬市」、朱印「馬販」＋馬販那一句
+    // （同一句殼也畫在招牌底下，有頁首時 shop.css 把那一行收起來）
+    const hero = `<div class="mk-hero"><div class="mk-art" aria-hidden="true"></div><span class="mk-plaque" aria-hidden="true">${MARKET_PLAQUE}</span>
+      <div class="mk-text"><span class="mk-seal">${MARKET_SEAL}</span><p class="mk-say">${esc(shop.line || "")}</p></div></div>`;
+    return `<div class="shop-body"><div class="shop-col">${hero}<h4 class="mk-sec">${MARKET_STALLS}</h4><div class="stalls${shop.stalls.length > 3 ? " many" : ""}">${shop.stalls.map(stall).join("")}</div>
       ${pick ? horseCard(pick) : ""}</div></div>`;
   }
 

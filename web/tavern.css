@@ -83,3 +83,60 @@
 /* 介面重整：酒肆裡的招募（暗底上的鈕） */
 .tav-hire .btn{background:rgba(255,240,210,.07);color:#efe3c8;border:1px solid rgba(239,227,200,.28);box-shadow:none}
 .tav-hire .btn:disabled{opacity:.5}
+
+/* ── 酒肆翻新（Joy 2026-11-10「馬市酒肆也要翻」，照鐵匠鋪那一套與介面設計規範）：宣紙底、色票（深色跟著走）；聽消息頂上一張頁首卡——
+   酒肆的水墨圖墊底、燈籠照舊搖、右上直書匾額、朱印「酒家」＋酒家那一句。夜燈的氛圍留在頁首那一張圖裡，其餘照紙與墨 ── */
+.shop-layer.shop-tavern { background-color: var(--paper); background-image: none; color: var(--ink); }
+.shop-layer.shop-tavern .shop-bar { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.shop-layer.shop-tavern .shop-back, .shop-layer.shop-tavern .shop-silver { color: var(--ink); }
+.shop-layer.shop-tavern .shop-back { min-height: 44px; }
+.shop-layer.shop-tavern .shop-sign { border: 0; background: transparent; color: var(--ink); font: 700 1.13em var(--kai); letter-spacing: 0.2em; padding: 0; }
+.shop-layer.shop-tavern .shop-line { margin: 8px 14px 4px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
+  background: var(--card); color: var(--ink); font: 400 0.95em/1.7 var(--kai); height: auto; }
+.shop-layer.shop-tavern:has(.tav-card) > .shop-line { display: none; }
+.shop-layer.shop-tavern .tav-card { position: relative; margin: 6px 0 6px; border-radius: var(--radius); overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.shop-layer.shop-tavern .tav-card .tav-hero { height: 10.5em; background: url("/static/img/events/tavern.webp") center 40% / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.shop-layer.shop-tavern .tav-card .tav-jars, .shop-layer.shop-tavern .tav-card .tav-table, .shop-layer.shop-tavern .tav-card .tav-bowl { display: none; }
+.shop-layer.shop-tavern .tav-card .tav-hang.r { right: 22%; }
+.shop-layer.shop-tavern .tav-plaque { position: absolute; top: 12px; right: 14px; padding: 0.55em 0.32em; writing-mode: vertical-rl; font: 700 1.4em/1 var(--kai); letter-spacing: 0.28em;
+  color: #f1dfae; background: linear-gradient(160deg, #3a2a1c, #22180f); border: 2px solid #9c7a3c; border-radius: 3px; box-shadow: 0 4px 12px rgba(30, 18, 8, 0.35), inset 0 0 0 2px #22180f; }
+.shop-layer.shop-tavern .tav-text { position: relative; margin-top: -34px; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.shop-layer.shop-tavern .tav-seal2 { align-self: flex-start; padding: 0.1em 0.5em; border: 2px solid var(--accent); border-radius: 4px; background: var(--card); color: var(--accent);
+  font: 700 0.93em/1.3 var(--kai); letter-spacing: 0.2em; transform: rotate(-4deg); }
+.shop-layer.shop-tavern .tav-say { margin: 0; font: 400 1em/1.7 var(--kai); color: var(--ink); }
+.shop-layer.shop-tavern .gl, .shop-layer.shop-tavern .more { color: var(--ink-2); }
+.shop-layer.shop-tavern .tav-chip { min-height: 2.2em; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-treat { color: var(--gold); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-listen { min-height: 3.4em; border: 0; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); font: 700 1.25em var(--kai); }
+.shop-layer.shop-tavern .tav-h { margin: 1.1em 2px 0.5em; padding-left: 10px; border-left: 3px solid var(--ink); color: var(--ink); font: 700 1.1em/1.2 var(--kai); letter-spacing: 0.12em; }
+.shop-layer.shop-tavern .tav-h small { color: var(--ink-2); }
+.shop-layer.shop-tavern .tav-talk { border: 1px dashed var(--line); background: var(--card); }
+.shop-layer.shop-tavern .tav-talk li { color: var(--ink); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-talk .who { color: var(--ink-2); }
+.shop-layer.shop-tavern .tav-act { min-height: 3.4em; border: 1.5px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); }
+.shop-layer.shop-tavern .tav-act b { font: 700 1.05em var(--kai); }
+.shop-layer.shop-tavern .tav-act small { color: var(--ink-2); }
+.shop-layer.shop-tavern .shop-pages .shop-page { min-height: 44px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); }
+.shop-layer.shop-tavern .shop-pages .shop-page.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.shop-layer.shop-tavern .tav-form .input { background: var(--card); border-color: var(--line); color: var(--ink); }
+.shop-layer.shop-tavern .tav-form .btn:not(.primary) { background: var(--card); border-color: var(--line); color: var(--ink); }
+.shop-layer.shop-tavern .tav-note { border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.shop-layer.shop-tavern .tav-note .tag b { color: var(--accent); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-note .tag span { color: var(--ink-2); }
+.shop-layer.shop-tavern .tav-note p { color: var(--ink); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-whispers li { border-left-color: var(--line); background: var(--card); color: var(--ink); font-family: var(--kai); }
+.shop-layer.shop-tavern .tav-whispers li.named { border-left-color: var(--accent); color: var(--ink); }
+.shop-layer.shop-tavern .tav-tier { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }
+.shop-layer.shop-tavern .tav-tier small { color: var(--ink-2); }
+.shop-layer.shop-tavern .tav-tier.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); color: var(--ink); box-shadow: none; }
+.shop-layer.shop-tavern .tav-tier.on small { color: var(--accent); }
+.shop-layer.shop-tavern .tav-hush { color: var(--ink-2); }
+.shop-layer.shop-tavern .shop-empty, .shop-layer.shop-tavern .shop-cap, .shop-layer.shop-tavern .shop-note { color: var(--ink-2); }
+.shop-layer.shop-tavern .shop-tabs { border-top: 1px solid var(--line); background: var(--card); }
+.shop-layer.shop-tavern .shop-tab { min-height: 3.4em; color: var(--ink-2); font: 700 0.97em var(--kai); letter-spacing: 0.08em; }
+.shop-layer.shop-tavern .shop-tab.on { color: var(--accent); background: transparent; box-shadow: inset 0 3px 0 var(--accent); }
+.shop-layer.shop-tavern .tav-hire .btn { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+.shop-layer.shop-tavern .shop-done { border: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); color: var(--ink); }
+@media (prefers-color-scheme: dark) { .shop-layer.shop-tavern .tav-card .tav-hero { filter: brightness(0.78) saturate(0.85); } }
+.shop-layer.shop-tavern .btn.ghost { color: var(--ink); border-color: var(--line); }
