@@ -336,6 +336,22 @@ class SupportStore:
                 conn.execute("UPDATE tickets SET status = ?, updated = ? WHERE id = ?", (rules.after_human(t["status"]), now, ticket_id))
             return _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
 
+    def sweep(self, now: float, max_age: float, body: str) -> list[int]:
+        """自動結單（第 216 批；設計 5.4）：在同一筆 BEGIN IMMEDIATE 裡才讀（拿到寫入鎖之前別人改的都看得到）：已回覆（等玩家）、沒掛請管理者
+        （admin_flag 0）、最後一則（含內部註記：有人動過就不算沒動）早於 now - max_age 的單，各記一則系統回覆（SYSTEM_ACCOUNT、玩家看得到、
+        seen 0 有紅點、journaled 1 不寫江湖紀錄）並結掉。回結掉的單號（舊的在前）。推播由呼叫端決定（不推）。"""
+        cutoff = now - max_age
+        with self._write() as conn:
+            ids = [int(r[0]) for r in conn.execute(
+                "SELECT t.id FROM tickets t WHERE t.status = ? AND t.admin_flag = 0 "
+                "AND COALESCE((SELECT MAX(r.created) FROM replies r WHERE r.ticket_id = t.id), t.updated) < ? ORDER BY t.id",
+                (rules.ANSWERED, cutoff))]
+            for tid in ids:
+                conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created, seen, journaled) "
+                             "VALUES (?, ?, 1, 0, ?, ?, 0, 1)", (tid, rules.SYSTEM_ACCOUNT, body, now))
+                conn.execute("UPDATE tickets SET status = ?, admin_flag = 0, updated = ? WHERE id = ?", (rules.CLOSED, now, tid))
+        return ids
+
     def has_human(self, ticket_id: int) -> bool:
         with contextlib.closing(self._conn()) as conn:
             return conn.execute("SELECT 1 FROM flags WHERE ticket_id = ? AND kind = 'human'", (ticket_id,)).fetchone() is not None

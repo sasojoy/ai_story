@@ -230,7 +230,7 @@ def test_no_route_changes_the_log():
         (("POST",), "/api/support/close"), (("POST",), "/api/support/lookup"),
         (("GET",), "/api/support/mailbox"),  # 第 214 批：只回設定裡的信箱，不碰旁檔
         (("POST",), "/api/support/file"), (("GET",), "/api/support/file/{tid}/{seq}"),  # 第 215 批：截圖只碰 files 表
-        (("POST",), "/api/support/human"),  # 第 216 批：只碰 flags 與單的狀態
+        (("POST",), "/api/support/human"), (("POST",), "/api/support/sweep"),  # 第 216 批：只碰 flags、replies 與單的狀態
     ])
     rsrc = inspect.getsource(routes)
     assert rsrc.count("sidecar.lookup(") == 1 and rsrc.count("sidecar.log_card(") == 1

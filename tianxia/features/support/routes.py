@@ -383,6 +383,16 @@ def _human(shell, request: Request, body: dict) -> dict:
     return _player_view(sidecar, t, _bot_id(shell))
 
 
+def _sweep(shell, request: Request) -> dict:
+    """自動結單（第 216 批；設計 5.4）：客服（cookie 或客服官的 token）叫；玩家 404 同一句。旁檔不在回空的、不建檔；不推播。回 {closed: [單號]}。"""
+    _staff(shell, request)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        return {"closed": []}
+    days = shell.CONTENT.config.support.auto_close_days
+    return {"closed": sidecar.sweep(shell.time.time(), days * rules.DAY_SECONDS, rules.AUTO_CLOSED.format(days=days))}
+
+
 # ── 截圖（客服自動受理第 215 批；設計 5.1、5.5）──
 
 def _mb(n: int) -> str:
@@ -502,6 +512,12 @@ def router(shell) -> APIRouter:
         _gate_off(shell)
         body = await _json(request)
         return await run_in_threadpool(_human, shell, request, body)
+
+    @r.post("/api/support/sweep")
+    async def api_support_sweep(request: Request):
+        _gate_off(shell)
+        await _json(request)  # 內文不用，壞的照樣 422（同別條）
+        return await run_in_threadpool(_sweep, shell, request)
 
     @r.post("/api/support/file")
     async def api_support_file(request: Request):

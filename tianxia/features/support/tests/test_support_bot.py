@@ -63,6 +63,7 @@ def test_bearer_token_is_staff_on_support_routes(monkeypatch, support_isolated):
     assert pic.status_code == 200 and pic.content == PNG
     out = desk.post("/api/support/answer", json={"id": tid, "body": "已收到", "then": "wait"}, headers=h)
     assert out.status_code == 200 and out.json()["status"] == "answered"
+    assert desk.post("/api/support/sweep", json={}, headers=h).json() == {"closed": []}  # 剛回的不結
     me = accounts_view.by_key(open_database(), "desk_01")
     replies = store.open_store(support_kit.sidecar(), create=False).replies(tid, internal=True)
     assert [r["by_account_id"] for r in replies] == [me.id]  # 記在客服官的帳號上

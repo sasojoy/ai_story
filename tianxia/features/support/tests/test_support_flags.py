@@ -86,6 +86,111 @@ def test_human_shows_in_queue_and_last_by(monkeypatch, support_isolated):
     assert {t["id"]: t["last_by"] for t in s.get("/api/support/queue").json()["tickets"]}[d] == "staff"  # 沒設客服官就認不出自動的
 
 
+DAY = rules.DAY_SECONDS
+
+
+def _sql(sql: str, args=()) -> None:
+    with contextlib.closing(sqlite3.connect(sidecar(), isolation_level=None)) as conn:
+        conn.execute(sql, args)
+
+
+def _age(tid: int, days: float) -> None:
+    """把這張單每一則回覆（與單）往前推 days 天。"""
+    _sql("UPDATE replies SET created = created - ? WHERE ticket_id = ?", (days * DAY, tid))
+    _sql("UPDATE tickets SET updated = updated - ? WHERE id = ?", (days * DAY, tid))
+
+
+class _Push:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, *a, **k):
+        self.sent.append(a)
+        return 1
+
+
+def test_sweep_closes_only_answered_older_than_days(monkeypatch):
+    c = player()
+    s = staffer(monkeypatch)
+    push = _Push()
+    a, b, d = (ticket(c).json()["id"] for _ in range(3))
+    for tid in (a, b, d):
+        s.post("/api/support/answer", json={"id": tid, "body": "試試看", "then": "wait"})
+    _age(a, 4)  # answered、4 天：結
+    _age(b, 2)  # answered、2 天：不結
+    _sql("UPDATE tickets SET admin_flag = 1 WHERE id = ?", (d,))
+    _age(d, 10)  # answered 但掛著請管理者、10 天：不結
+    s.post("/api/support/close", json={"id": b})
+    e = ticket(c).json()["id"]
+    _age(e, 10)  # open（等客服）、10 天：不結
+    _sql("UPDATE tickets SET status = 'answered' WHERE id = ?", (b,))
+    monkeypatch.setattr(server, "WEB_PUSH", push)
+    sc = _sc()
+    owner = (sc.ticket(a)["account_id"], sc.ticket(a)["account_created"])
+    before = sc.unread(*owner)
+    got = s.post("/api/support/sweep", json={})
+    assert got.status_code == 200 and got.json() == {"closed": [a]}
+    assert push.sent == []  # 不推播
+    assert [sc.ticket(t)["status"] for t in (a, b, d, e)] == ["closed", "answered", "answered", "open"]
+    last = sc.replies(a, internal=True)[-1]
+    assert (last["by_account_id"], last["staff"], last["internal"], last["seen"], last["journaled"]) == (rules.SYSTEM_ACCOUNT, 1, 0, 0, 1)
+    assert last["body"] == rules.AUTO_CLOSED.format(days=3)
+    assert sc.unread(*owner) == before + 1  # 紅點有
+    assert all(r["id"] != last["id"] for r in sc.take_unjournaled(*owner, 1.0))  # 江湖紀錄沒有
+    view = s.get(f"/api/support/ticket/{a}").json()
+    assert (view["replies"][-1]["auto"], view["replies"][-1]["system"], view["last_by"], view["admin_flag"]) == (True, True, "system", False)
+    assert c.get("/api/support/mine").json()["tickets"][-1]["replies"][-1]["auto"] is True
+    assert s.post("/api/support/sweep", json={}).json() == {"closed": []}  # 再掃一次沒有了
+    monkeypatch.setattr(server.CONTENT.config.support, "auto_close_days", 1)
+    assert s.post("/api/support/sweep", json={}).json() == {"closed": [b]}  # 天數照設定
+    assert sc.replies(b, internal=True)[-1]["body"] == rules.AUTO_CLOSED.format(days=1)
+
+
+def test_sweep_rechecks_inside_the_write_lock(monkeypatch, tmp_path):
+    """Review Focus 4：sweep 在 BEGIN IMMEDIATE 裡才讀要結哪幾張；別人先拿著寫入鎖、在鎖裡讓玩家回了一句（單回到處理中），sweep 等到鎖之後就不結它。"""
+    import threading
+
+    sc = store.SupportStore(tmp_path / "s.sqlite")
+    tid = sc.add_ticket(account_id=1, account_created=1.0, login="x", character="x", version="v", category="account", body="b", now=100.0,
+                        open_max=3, daily_max=5)
+    sc.staff_reply(tid, 2, "試試看", "wait", 100.0)
+    holder = sqlite3.connect(tmp_path / "s.sqlite", isolation_level=None)
+    holder.execute("BEGIN IMMEDIATE")
+    out = {}
+    worker = threading.Thread(target=lambda: out.setdefault("closed", sc.sweep(100.0 + 10 * DAY, 3 * DAY, "結了")))
+    worker.start()
+    worker.join(0.3)
+    assert worker.is_alive()  # 等著鎖
+    holder.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created) VALUES (?, 1, 0, 0, '還不行', ?)",
+                   (tid, 100.0 + 10 * DAY))
+    holder.execute("UPDATE tickets SET status = 'open' WHERE id = ?", (tid,))
+    holder.execute("COMMIT")
+    holder.close()
+    worker.join(5)
+    assert out["closed"] == [] and sc.ticket(tid)["status"] == "open"
+
+
+def test_sweep_route_for_staff_and_token_not_players(monkeypatch, support_isolated):
+    c = player()
+    s = staffer(monkeypatch)
+    player("desk_01", "青鸞")
+    h = bot_setup(monkeypatch, support_isolated)
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    desk = TestClient(server.app, raise_server_exceptions=False)
+    assert not sidecar().exists()
+    assert s.post("/api/support/sweep", json={}).json() == {"closed": []}  # 旁檔不在
+    assert desk.post("/api/support/sweep", json={}, headers=h).json() == {"closed": []}
+    assert not sidecar().exists()  # 不建檔
+    got = c.post("/api/support/sweep", json={})
+    assert (got.status_code, got.json()) == (404, {"detail": "Not Found"})  # 玩家跟沒有這條路同一句
+    tid = ticket(c).json()["id"]
+    desk.post("/api/support/answer", json={"id": tid, "body": "自動的", "then": "wait"}, headers=h)
+    _age(tid, 5)
+    got = desk.post("/api/support/sweep", json={}, headers=h)
+    assert (got.status_code, got.json()) == (200, {"closed": [tid]})
+
+
 def test_old_sidecar_without_flags_opens(monkeypatch):
     """第 215 批建的舊旁檔（沒有 flags 表）照讀：打開時補表、舊單 human 是 false。"""
     c = player()
