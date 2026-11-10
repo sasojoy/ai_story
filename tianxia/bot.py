@@ -97,8 +97,8 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     infuse_spare(game)  # 意境合成改版：同一路的凡、佳化進最深的一份（不擲亂數；改版沒開什麼都不做）
     plan = pick_forge(game, rng)
     if plan is not None:
-        extra = {"pour": True} if plan.pour else {}  # 改版：傾注、立意（沒開時 plan 上一定是空的，照舊那一行）
-        if plan.intent:
+        extra = {"pour": True} if getattr(plan, "pour", False) else {}  # 改版：傾注、立意（PourPlan；沒開時是 ForgePlan，照舊那一行）
+        if getattr(plan, "intent", None):
             extra["intent"] = plan.intent
         game.forge(None, list(plan.insight_ids), **extra)
     create_art(game, rng)
