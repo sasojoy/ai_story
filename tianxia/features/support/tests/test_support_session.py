@@ -121,6 +121,57 @@ def test_start_and_stop_cmd_detach_the_bridge():
     assert "/T /F" in stop and "bridge.pid" in stop
 
 
+def test_faq_is_player_facing_and_marked_for_joy():
+    from test_server_bots import leaks
+
+    text = (ROOT / "docs" / "support" / "FAQ.md").read_text(encoding="utf-8")
+    for section in ("## 登入與帳號", "## 體力與行動", "## 商城與元寶", "## 換季", "## 常見誤會"):
+        assert section in text, section
+    questions = [line for line in text.splitlines() if line.startswith("**問：")]
+    assert len(questions) >= 10
+    for line in questions:
+        assert line.endswith("<!-- 待 joy 潤 -->"), line
+    assert text.count("答：") == len(questions)
+    assert not leaks(text)
+    for word in ("機率", "勝算", "docs/guide", "Config."):
+        assert word not in text, word
+
+
+def test_knowledge_export_writes_three_files_without_leaks(tmp_path, monkeypatch):
+    from test_server_bots import FORBIDDEN, leaks
+
+    knowledge = _load(KNOWLEDGE, "support_knowledge_t")
+    assert [p.pattern for p in knowledge.FORBIDDEN] == [p.pattern for p in FORBIDDEN]  # 跟 web/ 的掃描同一張字表
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "should-not-be-touched.db"))
+    desk = tmp_path / "desk"
+    code = knowledge.main([str(desk), "--content", str(ROOT / "tests" / "fixtures" / "content")])
+    assert code == 0
+    out = desk / "knowledge"
+    howto = (out / "howto.md").read_text(encoding="utf-8")
+    assert howto.strip()
+    assert (out / "FAQ.md").read_bytes() == (ROOT / "docs" / "support" / "FAQ.md").read_bytes()
+    assert json.loads((out / "patch_notes.json").read_text(encoding="utf-8")) == json.loads(
+        (ROOT / "content" / "patch_notes.json").read_text(encoding="utf-8"))
+    for name in ("howto.md", "FAQ.md", "patch_notes.json"):
+        text = (out / name).read_text(encoding="utf-8")
+        assert not leaks(text), name
+        assert "docs/guide" not in text, name
+    assert not (tmp_path / "should-not-be-touched.db").exists()  # 開的是自己的暫存檔
+    import os
+    assert os.environ["TIANXIA_DB"] == str(tmp_path / "should-not-be-touched.db")  # 用完還原
+
+
+def test_knowledge_export_refuses_a_leaking_file(tmp_path, monkeypatch):
+    knowledge = _load(KNOWLEDGE, "support_knowledge_t2")
+    faq = tmp_path / "FAQ.md"
+    faq.write_text("問：同行的人是不是假人？\n", encoding="utf-8")
+    monkeypatch.setattr(knowledge, "FAQ", faq)
+    desk = tmp_path / "desk"
+    code = knowledge.main([str(desk), "--content", str(ROOT / "tests" / "fixtures" / "content")])
+    assert code == 1
+    assert not (desk / "knowledge" / "FAQ.md").exists() and not (desk / "knowledge" / "howto.md").exists()
+
+
 def test_session_scripts_do_not_import_tianxia_at_top():
     def top_imports(path: Path) -> set[str]:
         names = set()
@@ -141,4 +192,5 @@ def test_session_scripts_do_not_import_tianxia_at_top():
         return names
 
     assert "tianxia" not in all_imports(INIT)
-    assert "tianxia" not in top_imports(INIT)
+    assert "tianxia" not in top_imports(KNOWLEDGE)
+    assert "tianxia" in all_imports(KNOWLEDGE)  # 設好 TIANXIA_DB 之後才在函式裡 import
