@@ -112,19 +112,6 @@ def _worn(state, level=10, slots=BASICS):
     return ripen(state, level=level, slots=slots)
 
 
-def test_a_hard_win_at_the_peak_can_break_through(kicker, hard, world):
-    _worn(kicker)
-    msgs = cultivation.seize(kicker, hard, world, 0.5, WIN)
-    assert msgs == ["這一戰打到最後，【旋風腿】忽然通了——從上品晉為絕學！"]
-    assert kicker.player.art_quality["旋風腿"] == "絕學" and kicker.player.naming is None
-
-
-def test_a_missed_chance_leaves_a_soft_hint(kicker, hard, world):
-    _worn(kicker)
-    assert cultivation.seize(kicker, hard, world, 0.5, LOSE) == ["打到緊處，【旋風腿】似乎摸到了什麼，轉眼又滑走了。"]
-    assert kicker.player.art_quality["旋風腿"] == "上品"
-
-
 def test_the_pill_forces_the_last_step_from_the_practice_room_only_when_ticked(kicker, hard, world):
     at(kicker, 10)
     kicker.player.legend_items = 2

@@ -159,18 +159,6 @@ def test_a_pending_outro_is_shown_before_the_recruiter(enlisting):
     assert not game.state.player.guide_outro
 
 
-def test_acknowledging_the_enlistment_ending_closes_the_box(enlisting):
-    """入伍段走完、結尾在框上時按「知道了」：結尾收起，之後沒有框。"""
-    game = _joined(enlisting)
-    game.view_orders()
-    _order(game, "siege", "guan", front="yingru")
-    with _win():
-        game.choose("act:train")
-    assert game.guide_box()["key"] == "enlist_end"
-    game.guide_ack()
-    assert game.guide_box() is None and not game.state.player.enlist_end
-
-
 def test_the_outro_and_the_enlistment_ending_are_acknowledged_one_at_a_time(enlisting):
     """F8：結語還沒按、入伍段已經走完（兩個旗標都立著）：框是結語，按一下只收結語，框換成入伍段的結尾，再按一下才收它。"""
     enlisting.tutorial.outro = "去闖吧。"

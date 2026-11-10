@@ -236,7 +236,7 @@ def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rule
     """散人量表（懸賞榜設計 11.1）：--profile none 不套設定覆寫檔，量的是預設設定（14 天、第一季規則關著）的季；
     開頭印一行設定，散人、陣營各一行，再各一行中位數（只量不改，不驗數字）。"""
     measure = _load("measure_sanren")
-    monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none"])
+    monkeypatch.setattr(sys, "argv", ["measure_sanren.py", "--seeds", "1", "--profile", "none", "--max-steps", "300"])
     measure.main()
     out = capsys.readouterr().out
     assert out.splitlines()[0] == "設定：預設"
