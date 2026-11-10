@@ -96,7 +96,8 @@ def test_add_file_numbers_and_limits(tmp_path):
     zero = _new_ticket(s, account_id=3)
     with pytest.raises(store.Refused):
         _add(s, zero, account_id=3, files_max=0)  # 主機把截圖關成 0 張
-    assert s.files(other) == [] and s.queue_extras([tid, other]) == {tid: {"file_count": 3}, other: {"file_count": 0}}
+    none = {"human": False, "last_by": None}  # 第 216 批多的兩鍵
+    assert s.files(other) == [] and s.queue_extras([tid, other]) == {tid: {"file_count": 3, **none}, other: {"file_count": 0, **none}}
     # .part 在交易裡換成 <seq>.<kind>；replace 丟錯就 rollback、不留列
     assert store.files_dir(tmp_path / "x.db") == tmp_path / "x-support-files"
     folder = store.files_dir(tmp_path / "x.db") / str(zero)

@@ -213,15 +213,28 @@ class SupportStore:
         with contextlib.closing(self._conn()) as conn:
             return [dict(r) for r in conn.execute("SELECT * FROM files WHERE ticket_id = ? ORDER BY seq", (ticket_id,))]
 
-    def queue_extras(self, ids: list[int]) -> dict[int, dict]:
-        """客服頁清單每一列多的東西，一次查齊（這一批只有 file_count；第 216 批再加鍵）。"""
-        out = {int(i): {"file_count": 0} for i in ids}
+    def queue_extras(self, ids: list[int], *, bot_id: int | None = None) -> dict[int, dict]:
+        """客服頁清單每一列多的東西，一次查齊：張數 file_count（第 215 批）；human、last_by（第 216 批：最後一則看得到的回覆是誰寫的）。"""
+        out = {int(i): {"file_count": 0, "human": False, "last_by": None} for i in ids}
         if not out:
             return out
         marks = ", ".join("?" for _ in out)
         with contextlib.closing(self._conn()) as conn:
             for tid, n in conn.execute(f"SELECT ticket_id, COUNT(*) FROM files WHERE ticket_id IN ({marks}) GROUP BY ticket_id", list(out)):
                 out[int(tid)]["file_count"] = int(n)
+            for (tid,) in conn.execute(f"SELECT DISTINCT ticket_id FROM flags WHERE kind = 'human' AND ticket_id IN ({marks})", list(out)):
+                out[int(tid)]["human"] = True
+            last = [dict(r) for r in conn.execute(
+                f"SELECT * FROM replies WHERE id IN (SELECT MAX(id) FROM replies WHERE internal = 0 AND ticket_id IN ({marks}) GROUP BY ticket_id)",
+                list(out))]
+            refs = [r["id"] for r in last]
+            relayed: frozenset[int] = frozenset()
+            if refs:
+                rmarks = ", ".join("?" for _ in refs)
+                relayed = frozenset(int(x[0]) for x in conn.execute(
+                    f"SELECT ref FROM flags WHERE kind = 'relay' AND ref IN ({rmarks})", refs))
+        for r in last:
+            out[int(r["ticket_id"])]["last_by"] = rules.last_by([r], bot_id, relayed)
         return out
 
     # ── 客服 ──
@@ -308,6 +321,24 @@ class SupportStore:
     def flags(self, ticket_id: int) -> list[dict]:
         with contextlib.closing(self._conn()) as conn:
             return [dict(r) for r in conn.execute("SELECT * FROM flags WHERE ticket_id = ? ORDER BY id", (ticket_id,))]
+
+    def add_human(self, ticket_id: int, account_id: int, account_created: float, now: float) -> dict:
+        """玩家按了找真人：單在、是主人才行（不然 Refused(NOT_FOUND)）、結了的 Refused(CLOSED_ALREADY)；已經按過就什麼都不做（冪等）；
+        第一次按記一列 flags(human)、已回覆的單回到處理中（同一筆 BEGIN IMMEDIATE）。不要求單上已有自動回覆（畫面才看）。回單。"""
+        with self._write() as conn:
+            t = _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
+            if t is None or not rules.owns(t, account_id, account_created):
+                raise Refused(rules.NOT_FOUND)
+            if t["status"] == rules.CLOSED:
+                raise Refused(rules.CLOSED_ALREADY)
+            if conn.execute("SELECT 1 FROM flags WHERE ticket_id = ? AND kind = 'human'", (ticket_id,)).fetchone() is None:
+                conn.execute("INSERT INTO flags (ticket_id, kind, ref, created) VALUES (?, 'human', NULL, ?)", (ticket_id, now))
+                conn.execute("UPDATE tickets SET status = ?, updated = ? WHERE id = ?", (rules.after_human(t["status"]), now, ticket_id))
+            return _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
+
+    def has_human(self, ticket_id: int) -> bool:
+        with contextlib.closing(self._conn()) as conn:
+            return conn.execute("SELECT 1 FROM flags WHERE ticket_id = ? AND kind = 'human'", (ticket_id,)).fetchone() is not None
 
     def relayed(self, ticket_id: int) -> frozenset[int]:
         """客服官轉達真人的那幾則的 replies.id（這幾則不算自動回覆）。"""

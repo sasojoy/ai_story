@@ -194,3 +194,22 @@ def reply_auto(reply: dict, bot_id: int | None, relayed: frozenset[int]) -> bool
     if reply["by_account_id"] == SYSTEM_ACCOUNT:
         return True
     return bot_id is not None and reply["by_account_id"] == bot_id and reply["id"] not in relayed
+
+
+def after_human(status: str) -> str:
+    """玩家按了找真人：已回覆（等玩家）回到處理中；處理中照舊（結了的呼叫端先擋）。"""
+    return OPEN if status == ANSWERED else status
+
+
+def last_by(replies: list[dict], bot_id: int | None, relayed: frozenset[int]) -> str | None:
+    """最後一則玩家看得到的回覆是誰寫的（客服頁的清單與單用）：system 系統／desk 自動回覆／staff 真人客服／player 玩家；沒有回覆 None。
+    內部註記不算。值裡不寫 bot 這個字（任何回應都不透露）。"""
+    shown = [r for r in replies if not r["internal"]]
+    if not shown:
+        return None
+    r = shown[-1]
+    if not r["staff"]:
+        return "player"
+    if r["by_account_id"] == SYSTEM_ACCOUNT:
+        return "system"
+    return "desk" if reply_auto(r, bot_id, relayed) else "staff"

@@ -148,19 +148,22 @@ def _bot_id(shell) -> int | None:
 
 
 def _player_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,
-                   relayed: frozenset[int] = frozenset()) -> dict:
-    """玩家看的一張單：不含內部註記、不含誰回的帳號；客服那一側只寫「客服」。第 216 批：每則多 auto（自動回覆）。"""
+                   relayed: frozenset[int] = frozenset(), human: bool = False) -> dict:
+    """玩家看的一張單：不含內部註記、不含誰回的帳號；客服那一側只寫「客服」。第 216 批：每則多 auto（自動回覆）、單多 human（按過找真人）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "created": t["created"], "updated": t["updated"],
         "replies": [{"staff": bool(r["staff"]), "body": r["body"], "created": r["created"], "auto": rules.reply_auto(r, bot_id, relayed)}
                     for r in replies if rules.visible_to_player(r)],
         "files": _files(files),
+        "human": human,
     }
 
 
 def _player_view(sidecar: store.SupportStore, t: dict, bot_id: int | None) -> dict:
-    return _player_ticket(t, sidecar.replies(t["id"], internal=False), sidecar.files(t["id"]), bot_id=bot_id, relayed=sidecar.relayed(t["id"]))
+    tid = t["id"]
+    return _player_ticket(t, sidecar.replies(tid, internal=False), sidecar.files(tid), bot_id=bot_id, relayed=sidecar.relayed(tid),
+                          human=sidecar.has_human(tid))
 
 
 def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> dict:
@@ -172,9 +175,9 @@ def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> 
 
 
 def _staff_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,
-                  relayed: frozenset[int] = frozenset()) -> dict:
+                  relayed: frozenset[int] = frozenset(), human: bool = False) -> dict:
     """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）＋截圖（第 215 批）。
-    第 216 批：每則多 auto（自動回覆）、system（系統回覆）。"""
+    第 216 批：每則多 auto（自動回覆）、system（系統回覆）；單多 human、last_by（rules.last_by）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "admin_flag": bool(t["admin_flag"]), "created": t["created"], "updated": t["updated"], "version": t["version"],
@@ -183,12 +186,15 @@ def _staff_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: in
                      "auto": rules.reply_auto(r, bot_id, relayed), "system": bool(r["staff"]) and r["by_account_id"] == rules.SYSTEM_ACCOUNT}
                     for r in replies],
         "files": _files(files),
+        "human": human,
+        "last_by": rules.last_by(replies, bot_id, relayed),
     }
 
 
 def _staff_view(shell, sidecar: store.SupportStore, t: dict) -> dict:
     tid = t["id"]
-    return _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid), bot_id=_bot_id(shell), relayed=sidecar.relayed(tid))
+    return _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid), bot_id=_bot_id(shell), relayed=sidecar.relayed(tid),
+                         human=sidecar.has_human(tid))
 
 
 def _push(shell, ticket: dict, now: float) -> None:
@@ -270,7 +276,7 @@ def _queue(shell, request: Request) -> dict:
     q["tickets"] = [{"id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]),
                      "body": t["body"], "status": t["status"], "admin_flag": bool(t["admin_flag"]), "character": t["character"],
                      "login": t["login"], "created": t["created"], "updated": t["updated"]} for t in q["tickets"]]
-    extras = sidecar.queue_extras([t["id"] for t in q["tickets"]])  # 第 215 批：每一列多張數 file_count
+    extras = sidecar.queue_extras([t["id"] for t in q["tickets"]], bot_id=_bot_id(shell))  # 第 215 批 file_count；第 216 批 human、last_by
     for t in q["tickets"]:
         t.update(extras[t["id"]])
     q["categories"] = rules.CATEGORIES
@@ -360,6 +366,21 @@ def _close(shell, request: Request, body: dict) -> dict:
     except Refused:
         raise HTTPException(404, rules.NOT_FOUND) from None
     return _staff_view(shell, sidecar, sidecar.ticket(tid))
+
+
+def _human(shell, request: Request, body: dict) -> dict:
+    """玩家按「找真人」：{id}（第 216 批；設計 5.4）。別人的、不存在的 404 同一句；結了回那一句；按過再按照舊（冪等）。回這一張單（玩家看的）。"""
+    who = _me(shell, _gate(shell, request))
+    sidecar = store.open_store(sidecar_path(), create=False)
+    if sidecar is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    try:
+        t = sidecar.add_human(_int(body.get("id")), who.id, who.created, shell.time.time())
+    except Refused as e:
+        if str(e) == rules.NOT_FOUND:
+            raise HTTPException(404, rules.NOT_FOUND) from None
+        raise _refused(shell, e) from None
+    return _player_view(sidecar, t, _bot_id(shell))
 
 
 # ── 截圖（客服自動受理第 215 批；設計 5.1、5.5）──
@@ -475,6 +496,12 @@ def router(shell) -> APIRouter:
         _gate_off(shell)
         body = await _json(request)
         return await run_in_threadpool(_lookup, shell, request, body)
+
+    @r.post("/api/support/human")
+    async def api_support_human(request: Request):
+        _gate_off(shell)
+        body = await _json(request)
+        return await run_in_threadpool(_human, shell, request, body)
 
     @r.post("/api/support/file")
     async def api_support_file(request: Request):
