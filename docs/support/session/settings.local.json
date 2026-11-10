@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "discord@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__plugin_discord_discord__reply",
+      "Bash(./cli.cmd *)",
+      "Read({{READ}}/**)",
+      "Monitor(tail -n 0 -f bridge.log)"
+    ]
+  }
+}
