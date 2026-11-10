@@ -170,6 +170,24 @@ def test_relay_reply_is_not_auto_and_notes_who(monkeypatch, support_isolated):
     assert out["replies"][-1]["auto"] is True and len(sc.flags(tid)) == 1  # 空白當沒有
 
 
+def test_support_json_never_contains_bot_word(monkeypatch, support_isolated):
+    """假人看不出來：客服的每一條回應（清單、單、自己的單、找真人、自動結單、回覆）整串都沒有 bot 這個字（大小寫都不行）。"""
+    c = player()
+    tid = ticket(c).json()["id"]
+    s = staffer(monkeypatch)
+    desk, h = _desk(monkeypatch, support_isolated)
+    bodies = [
+        desk.post("/api/support/answer", json={"id": tid, "body": "自動的", "then": "wait", "relay_from": "77"}, headers=h),
+        desk.post("/api/support/answer", json={"id": tid, "body": "再一則", "then": "wait"}, headers=h),
+        desk.get("/api/support/queue", headers=h), s.get("/api/support/queue"), s.get(f"/api/support/ticket/{tid}"),
+        c.get("/api/support/mine"), c.post("/api/support/human", json={"id": tid}), s.post("/api/support/sweep", json={}),
+        desk.post("/api/support/sweep", json={}, headers=h), c.get("/api/main"), s.get("/api/main"),
+    ]
+    for r in bodies:
+        assert r.status_code == 200, r.request.url
+        assert b"bot" not in r.content.lower(), r.request.url
+
+
 def _admin_paths() -> list[tuple[str, str]]:
     out = []
     for path, methods in server.app.openapi()["paths"].items():
