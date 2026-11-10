@@ -912,7 +912,7 @@ WORLD_ORDER: dict[str, tuple[str, ...]] = {
     "muster": ("front", "works", "seal", "generals"),
     "open": ("divine", "seal.cache"),
     "retire": ("seal",),
-    "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+    "next": ("inscriptions", "tavern_walls", "divine", "seal.mandate", "seal.cache"),  # tavern_walls：酒肆題壁跨季（Joy 2026-11-10「可以 按照建議」）
     "life": ("feast",),  # core_world2（全部拆包第 40 批）：設宴，宴客包登記；核心不代叫
 }
 

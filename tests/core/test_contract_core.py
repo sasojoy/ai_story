@@ -574,7 +574,7 @@ def test_the_world_order_is_the_table_in_the_plan():
         "muster": ("front", "works", "seal", "generals"),
         "open": ("divine", "seal.cache"),
         "retire": ("seal",),
-        "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+        "next": ("inscriptions", "tavern_walls", "divine", "seal.mandate", "seal.cache"),  # tavern_walls：酒肆題壁跨季（Joy 2026-11-10「可以 按照建議」）
         "life": ("feast",),  # core_world2（全部拆包第 40 批）：figure_life.tick 每一輪每一位對話人物設宴
     }
     assert Feature().world() == ()

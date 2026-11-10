@@ -537,11 +537,20 @@ class Whisper(BaseModel):
 
 
 class WallNote(BaseModel):
-    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。"""
+    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。換季照帶（酒肆包登記的世界層 next/tavern_walls，Joy 2026-11-10
+    「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」）。"""
 
     who: str
     text: str
     time: float
+    season: int = 0  # 前幾季題的：第幾季（換季帶過來那一下蓋上）；這一季題的是 0，0 的時候不寫這個鍵（舊程式讀得回去）
+
+    @model_serializer(mode="wrap")
+    def _drop_this_season(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("season"):
+            data.pop("season", None)
+        return data
 
 
 class TavernWatch(BaseModel):
