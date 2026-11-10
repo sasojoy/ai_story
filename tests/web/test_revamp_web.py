@@ -187,3 +187,19 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     hejin["intro"].update(now="如今的樣子", history=["第 1 週・週五 起，沒那麼優柔了"])
     pick = run(m, 'H.S.fig = "hejin"; return H.pageJianghu();').split('class="vn-layer pick"')[1]
     assert '<p class="vi-now"><b>如今</b><span>如今的樣子</span></p>' in pick and "<li>第 1 週・週五 起，沒那麼優柔了</li>" in pick
+
+
+def test_same_kind_actions_fold_into_one_seal_that_opens_a_picker(wan):
+    """此地可為：同一類一個目標一顆的（設伏每條路一顆）收成一顆圓章，點開才挑哪一條（Joy 2026-11-10「同類型的 例如設伏 應該只有一個按鈕，點開才選設伏在哪」）。"""
+    wan.state.player.location = "yingshui"
+    wan.state.player.joined_at = -10.0 ** 7  # 過了新手期，設得了伏
+    m = server.main_view(wan)
+    roads = [o["id"] for o in m["options"] if o["id"].startswith("ambush:set:")]
+    assert len(roads) >= 2
+    row = run(m, "return H.pageJianghu();").split('class="here-row"')[1].split("</section>")[0]
+    assert row.count('data-ids="') == 1 and f'data-ids="{" ".join(roads)}"' in row and 'data-title="設伏"' in row
+    assert 'data-id="ambush:set:' not in row  # 一條路一顆的那幾顆不畫了
+    sheet = run(m, f'H.S.hereAll = {{ ids: {roads!r}, title: "設伏" }}; return H.pageJianghu();').split('class="sheet here-all"')[1]
+    assert sheet.count('data-act="choose"') == len(roads) and all(f'data-id="{r}"' in sheet for r in roads)
+    assert "<h3 style=\"flex:1\">設伏</h3>" in sheet and "設伏・" not in sheet  # 標題寫一次，每一條只寫往哪裡
+    assert 'data-id="act:arena"' not in sheet  # 只列這一類

@@ -1750,7 +1750,7 @@
           break;
         case "toggle-more": toggleMore(); break;
         // 介面重整（main.js 檔尾）：此地可為的「全部」、要事清單、點人物之後、往來紀錄、場景文字攤開
-        case "here-all": S.hereAll = true; renderPage(); break;
+        case "here-all": S.hereAll = el.dataset.ids ? { ids: el.dataset.ids.split(" "), title: el.dataset.title } : true; renderPage(); break; // 收成一顆的那一類：只列那一類
         case "here-all-close": S.hereAll = false; renderPage(); break;
         case "duty-open": S.dutyOpen = true; renderPage(); break;
         case "duty-close": S.dutyOpen = false; renderPage(); break;

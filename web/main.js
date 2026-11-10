@@ -1081,23 +1081,47 @@
     if (!list.length) return "";
     const glow = guideGlow();
     const peers = callPeers(m); // 論武的「答應」：引擎不收那一顆，點了打開對方的玩家卡（同「全部」那一串，FB-117）
-    const row = hereSort(list, glow, peers); // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
+    // 同一類一個目標一顆的（設伏每條路一顆、投靠每一軍一顆……）收成一顆圓章，點開才挑哪一個（Joy 2026-11-10「同類型的 例如設伏 應該只有一個按鈕，
+    // 點開才選設伏在哪」）。只有一顆的照舊直接按。挑的那一層借「全部」那張抽屜，只列這一類（S.hereAll 是 { ids, title }）
+    const FAMILIES = [[/^ambush:set:/, "設伏"], [/^faction:(?!ally:|lean:|confirm$|cancel$)/, "投靠"], [/^faction:ally:/, "依附"], // 待 joy 潤
+      [/^defect:(?!confirm$|cancel$)/, "叛投"], [/^feast:join:/, "赴宴"], [/^aid:visit:/, "探望"], [/^plan:help:/, "助一臂"], [/^plan:block:/, "壞他的事"],
+      [/^battle:enlist:/, "投效"], [/^invite:yes:/, "應邀"]];
+    const famOf = (o) => FAMILIES.findIndex(([re]) => re.test(o.id));
+    const grouped = [];
+    for (const o of hereSort(list, glow, peers)) {
+      const f = peers[o.id] ? -1 : famOf(o);
+      const same = f < 0 ? [] : list.filter((x) => famOf(x) === f);
+      if (same.length < 2) grouped.push(o);
+      else if (!grouped.some((g) => g.family === f)) { // 這一類第一次碰到（照排過的順序）：放一顆，其餘併進去
+        const on = same.filter((x) => x.enabled);
+        grouped.push({ family: f, id: o.id, label: FAMILIES[f][1], enabled: on.length > 0, ids: same.map((x) => x.id), n: on.length || same.length });
+      }
+    }
+    const row = grouped; // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
     const seal = (o) => {
+      if (o.family != null) {
+        const art = hereArt(o.id);
+        return `<button class="here-seal${o.enabled ? "" : " off"}" data-act="here-all" data-ids="${esc(o.ids.join(" "))}" data-title="${esc(o.label)}" aria-label="${esc(o.label)}，${o.n} 處可選">`
+          + `<span class="hs-tile${art ? "" : " ink"}">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(o.label.slice(0, 1))}</i>`}<b class="hs-n">${o.n}</b></span><span class="hs-name">${esc(o.label)}</span></button>`;
+      }
       const [label, detail] = optParts(o);
       const art = hereArt(o.id);
       const n = /^(\d+) 張$/.exec(detail);
       const attrs = peers[o.id] ? `data-act="peer-answer" data-name="${esc(peers[o.id])}"` : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : o.note || detail ? `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || `${detail}。`)}" aria-disabled="true"` : "disabled";
       return `<button class="here-seal${o.enabled || peers[o.id] ? "" : " off"}" ${attrs}><span class="hs-tile${art ? "" : " ink"}">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(label.slice(0, 1))}</i>`}${n ? `<b class="hs-n">${n[1]}</b>` : ""}</span><span class="hs-name">${esc(label.replace(/^(.{0,5}).*$/, "$1"))}</span></button>`;
     };
-    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${list.length > HERE_ROW || list.some((o) => optParts(o)[0].length > 5)
+    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${row.length > HERE_ROW || row.some((o) => o.family == null && optParts(o)[0].length > 5)
       ? `<button class="linkish" data-act="here-all">${HERE_ALL} ${list.length} ›</button>` : ""}</div><div class="hr-seals">${row.map(seal).join("")}</div></section>`;
   }
   function hereAllHtml(m, extras) {
     const tavernHere = extras.some((o) => o.id === "act:tavern"); // 此地沒有酒肆（或酒肆關著）時招募留在全部裡，不會找不到
-    const list = extras.filter((o) => !FIG_ACT.test(o.id) && (!HIRE.test(o.id) || !tavernHere));
+    const pick = S.hereAll && S.hereAll.ids; // 點的是收成一顆的那一類（設伏……）：只列那一類，標題寫那一類的名字，選項去掉開頭重複的那幾個字
+    const list = extras.filter((o) => !FIG_ACT.test(o.id) && (!HIRE.test(o.id) || !tavernHere) && (!pick || pick.includes(o.id)))
+      .map((o) => (pick ? { ...o, label: o.label.replace(new RegExp(`^${S.hereAll.title}[・：]?`), "") } : o));
     const peers = callPeers(m);
-    return `<div class="sheet-bg" data-act="here-all-close"></div><div class="sheet here-all" role="dialog" aria-label="${HERE_HEAD}"><div class="grip"></div>
-      <div class="top-row"><h3 style="flex:1">${HERE_HEAD}</h3><button class="btn small ghost" data-act="here-all-close">關閉</button></div>
+    const head = pick ? esc(S.hereAll.title) : HERE_HEAD;
+    return `<div class="sheet-bg" data-act="here-all-close"></div><div class="sheet here-all" role="dialog" aria-label="${head}"><div class="grip"></div>
+      <div class="top-row"><h3 style="flex:1">${head}</h3><button class="btn small ghost" data-act="here-all-close">關閉</button></div>
       <div class="options">${hereSort(list, guideGlow(), peers).map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id]
         ? `<button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>`
         : `<button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></div>`;
