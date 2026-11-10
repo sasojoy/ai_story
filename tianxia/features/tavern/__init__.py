@@ -13,7 +13,7 @@ on_away、deliver_notices、after_action，下面）。這一包另接 tavern:* 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, Shop, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, Shop, Verb, WorldHook
 
 
 class TavernFeature(Feature):
@@ -115,6 +115,16 @@ class TavernFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.tavern_hit_check(ctx)
+
+    # core_world：世界層 next 的 tavern_walls 那一格（題壁跨季，Joy 2026-11-10）；不問 enabled（同題壁墨）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        if self._world is None:
+            from . import rules  # noqa: PLC0415
+
+            self._world = (WorldHook("next", "tavern_walls", lambda *args: rules.world_next(*args)),)
+        return self._world
 
     # core_seams（全部拆包第 56 批「選單收接縫」）
     _menus: tuple[MenuHook, ...] | None = None

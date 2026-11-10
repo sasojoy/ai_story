@@ -408,7 +408,9 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
                       ("muster", "seal"): "seal", ("open", "seal.cache"): "seal", ("next", "seal.mandate"): "seal",
                       ("next", "seal.cache"): "seal", ("retire", "seal"): "seal",
                       # 全部拆包第 45 批：懸賞榜包登記四格（原本核心代叫 world._STEP_CORE、_WEEK_CORE、_DAY_CORE、_START_CORE 那幾格）
-                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties"}
+                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties",
+                          # 酒肆題壁跨季（Joy 2026-11-10「可以 按照建議」）
+                          ("next", "tavern_walls"): "tavern"}
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))
