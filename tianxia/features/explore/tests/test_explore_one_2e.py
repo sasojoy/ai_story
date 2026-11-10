@@ -42,6 +42,7 @@ def _hopeless_game(loc: str = "yingchuan_wilds"):
     """沒裝武學的 20 級官軍站潁川郊野：威力 0，對這裡的每一路都是必敗。"""
     game = ready(jianfa_game(), side="guan", loc=loc, level=20)
     game.state.player.member.wugong_id = None
+    game.content.config.guard.enabled = False  # 親衛隊長：十級以後第一趟探索會撞見那個孩子、接管選單，這裡連著出門好幾趟
     return game
 
 
