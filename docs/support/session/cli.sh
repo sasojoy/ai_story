@@ -8,6 +8,8 @@ export TIANXIA_SUPPORT_CONFIG='{{CONFIG}}'
 export TIANXIA_SUPPORT_URL='{{URL}}'
 export TIANXIA_SUPPORT_INBOX='{{DIR}}\inbox'
 export PYTHONIOENCODING=utf-8
+# 下面只擋得到原樣傳進來的特殊字：$(...) 與反引號在叫到這一支之前就被 Git Bash 展開，這裡看到的是展開後的結果。
+# 擋命令替換靠 Claude Code 的許可比對不把夾帶 $(...)、反引號的指令當成符合 Bash(./cli.sh *)；排練表 Discord 那一半先補這兩條實跑。
 for arg in "$@"; do
   case "$arg" in
     *[\&\|\<\>^!]*)
