@@ -244,19 +244,14 @@ def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
 
 
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
-def test_options_carry_the_package_prefix(feature):
-    game = _game()
-    ids = _own_ids(feature, game)
-    if feature.prefix is None:
-        assert ids == []
-    assert all(_starts(i, feature) for i in ids), ids
-    assert all(_starts(p, feature) for p in feature.bot_always), feature.bot_always
-
-
-@pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
 def test_choose_takes_only_its_own_ids(feature):
+    """選項帶這一包的前綴（第 221 批併進來的 test_options_carry_the_package_prefix，同一份 own），choose 只收自己的。"""
     game = _game()
     own = _own_ids(feature, game)
+    if feature.prefix is None:
+        assert own == [], ("no prefix", own)
+    assert all(_starts(i, feature) for i in own), ("prefix", own)
+    assert all(_starts(p, feature) for p in feature.bot_always), ("bot_always", feature.bot_always)
     others = [i for f in FEATURES if f is not feature for i in _ids_on_a_fresh_game(f.name)]
     for option_id in CORE_IDS + others:
         kind, _, arg = option_id.partition(":")

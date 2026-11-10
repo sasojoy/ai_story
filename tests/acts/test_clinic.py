@@ -2,20 +2,19 @@
 測試內容把 Config.heal_at_clinic 關著，這裡用正式內容。"""
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import atlas, bot, clinic, art_cards, team
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 @pytest.fixture(scope="module")
 def real():
-    content = load_content(CONTENT_DIR)
+    content = real_content()
     content.config.auto_open_first_season = True
     return content
 

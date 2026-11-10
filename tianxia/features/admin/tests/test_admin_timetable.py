@@ -6,14 +6,12 @@ from __future__ import annotations
 
 import math
 import random
-from pathlib import Path
 
 import pytest
 
 from conftest import real_content
 from tianxia import calendar, rules, timetable
 from tianxia.characters import open_characters
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.features.admin import routes as admin_routes
 from tianxia.state import Lock, TimelineResult
@@ -31,7 +29,6 @@ from tianxia import rules
 from tianxia.features.sense import sensing
 from tianxia.models import TimetableEvent
 
-CONTENT_DIR = Path(__file__).parents[4] / "content"
 NOW = 1000.0
 
 
@@ -324,7 +321,7 @@ def test_cutover_sequence(real):
     chars.save(admin.state)
     assert admin.world.season_phase() == "resting"
 
-    on = load_content(CONTENT_DIR)  # 3. 設 TIANXIA_PROFILE=week7、重開
+    on = real_content()  # 3. 設 TIANXIA_PROFILE=week7、重開
     on.config.auto_open_first_season, on.config.admins = True, ["管"]
     on.config.season_one, on.config.season_days, on.config.server_max_players = True, 2.5, 2
     admin, player = _restart(on, "管", "乙")

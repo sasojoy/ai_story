@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from conftest import real_content
 import server
-from tianxia.content import load_content
 
 
 def test_the_howto_route_lives_in_the_guide_package_and_serves_the_page(monkeypatch):
-    content = load_content(server.ROOT / "content")
+    content = real_content()
     content.config.auto_open_first_season = True
     monkeypatch.setattr(server, "CONTENT", content)
     client = TestClient(server.app)

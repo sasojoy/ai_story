@@ -4,22 +4,21 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
-from tianxia.content import content_path, load_content
+from conftest import real_content
+from tianxia.content import content_path
 from tianxia.models import Condition
 from grade_kit import raw_difficulty
 
 pytestmark = pytest.mark.whole_content
 
-CONTENT_DIR = Path(__file__).parents[4] / "content"
 
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
 
 
 def _general_train_events(content):

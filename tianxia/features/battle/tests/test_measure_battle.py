@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 
 pytestmark = [pytest.mark.slow, pytest.mark.whole_content]  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
@@ -30,7 +30,7 @@ def _load():
 
 def test_a_small_fight_runs_to_the_end_and_the_numbers_make_sense():
     m = _load()
-    content = load_content(ROOT / "content")
+    content = real_content()
     definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
     tuning = content.config.battle
     trend, pushes, rounds = m.run(definition, tuning, 30, 10, m.best, m.anything, seed=1)
@@ -46,7 +46,7 @@ def test_a_small_fight_runs_to_the_end_and_the_numbers_make_sense():
 
 def test_every_strategy_picks_a_real_move():
     m = _load()
-    content = load_content(ROOT / "content")
+    content = real_content()
     definition = content.battles["changshe_fire"]
     from tianxia.features.battle import instance as bi
     from tianxia.models import MOVES
@@ -63,7 +63,7 @@ def test_every_strategy_picks_a_real_move():
 def test_the_server_bot_measurement_runs_on_a_temporary_database(tmp_path, monkeypatch, capsys):
     """量伺服器假人那一段：用暫存資料庫、不碰 saves/；印出新手起手的份量與三招各出幾成。"""
     m = _load()
-    content = load_content(ROOT / "content")
+    content = real_content()
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     monkeypatch.setattr(m.tempfile, "tempdir", str(scratch))  # 暫存資料夾都開在這裡，才看得出有沒有留下來
@@ -78,7 +78,7 @@ def test_the_server_bot_measurement_runs_on_a_temporary_database(tmp_path, monke
 def test_the_generals_mode_runs_and_commanders_carry_weight():
     """--generals（龍頭上陣）：同一個種子兩次一樣；人物上陣那一邊的份量佔比落在兩到四成之間。"""
     m = _load()
-    content = load_content(ROOT / "content", profile="week7")
+    content = real_content("week7")
     definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
     from tianxia.features.battle import generals
     from tianxia.state import GameState, PlayerState

@@ -4,21 +4,19 @@
 寫 factions: ["huang"] 的選項；散人兩邊都看得到。不掛在第一季開關後面，現在跑的這一季就生效。"""
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import rules
-from tianxia.content import load_content
 from tianxia.models import FRONT_KEY, Condition
 from tianxia.state import GameState, PlayerState
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
 
 
 def _state(faction):

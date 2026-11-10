@@ -5,20 +5,18 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from conftest import classic_rules, idle_step, no_territory, real_content
 from tianxia import bot_policy, calendar, encounter, figures, ranks, team
-from tianxia.content import ContentError, load_content, validate
+from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Config, Effect, FigureChange
 from tianxia.state import BotProfile, Member, PlayerState, Summons, WorldState
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 @pytest.fixture
@@ -274,7 +272,7 @@ def test_affinity_clamps_and_needs_a_character(on):
     game.state.player.affinities["huangfusong"] = 1
     game.choose("act:summons")
     assert "皇甫嵩情誼 -1" in game.choose("choice:2") and game.state.player.affinities["huangfusong"] == 0
-    bad = load_content(CONTENT_DIR)
+    bad = real_content()
     bad.events["promo_guan_2"].choices[0].effect.affinity = {"ghost": 3}
     with pytest.raises(ContentError, match="ghost"):
         validate(bad)

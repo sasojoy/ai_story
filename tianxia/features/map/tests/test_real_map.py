@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia.atlas import leg_minutes, region_of, shortest_routes
-from tianxia.content import load_content
 from tianxia.events import event_matches_location
 from tianxia.state import new_game_state
 import random
@@ -17,7 +16,6 @@ from tianxia.features.seal import seal
 from tianxia.features.peers import social
 from tianxia.engine import Game
 
-CONTENT_DIR = Path(__file__).parents[4] / "content"  # 全部拆包第 49 批整檔搬進包（原本 tests/season/ 是 parents[2]）
 
 REGIONS = {
     "youzhou": {"zhuo_county", "market_town", "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot"},
@@ -49,7 +47,7 @@ CROSS_ROADS = {  # 設計第五節：跨大區的路 → （路的種類, 步行
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
 
 
 def _detail(content, state, loc_id: str) -> str:

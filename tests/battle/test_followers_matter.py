@@ -2,25 +2,22 @@
 角色卡寫部下的威力、全服決戰裡每名部下讓強攻與奇襲多份量（加入時快照）；頭目戰只算本人。"""
 
 import random
-from pathlib import Path
 
 import pytest
 
-from conftest import at
+from conftest import at, real_content
 from tianxia.features.battle import instance as battle_instance
 from tianxia import battlelog, encounter
 from tianxia.features.cultivation import art_view
 from tianxia import team
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.features.battle.rules import TROOPS_LINE, TROOPS_REPORT
 from tianxia.models import BattleTuning, FollowerDef
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 def _real_game(level=1, followers=("follower_guan_spear", "follower_guan_crossbow")):
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
@@ -60,7 +57,7 @@ def test_the_follower_card_shows_his_power_and_grown_art():
 # ── 戰報那一句 ──
 
 def test_names_of_the_same_template_are_counted():
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     spear, bow = real.followers["follower_guan_spear"], real.followers["follower_guan_crossbow"]
     assert team.troop_names([spear]) == "持矛鄉勇"
     assert team.troop_names([spear, bow, spear]) == "兩名持矛鄉勇、弩手鄉勇"

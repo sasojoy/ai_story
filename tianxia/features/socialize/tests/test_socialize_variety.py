@@ -8,18 +8,17 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 from tianxia.events import event_matches_location
 from tianxia.models import Condition
 from grade_kit import raw_difficulty
 
-CONTENT_DIR = Path(__file__).parents[4] / "content"
 SOCIAL_FILES = sorted((Path(__file__).parents[1] / "content" / "events").glob("social_*.json"))  # 這一包的內容檔（全部拆包第 62 批搬進包）
 
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
 
 
 def _always_available(content, loc_id):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 
 import pytest
-from conftest import next_season
+from conftest import next_season, real_content
 
 from tianxia.characters import CharacterStore
 from tianxia.core.registry import FEATURES
@@ -112,10 +112,8 @@ def test_every_look_in_the_real_content_has_all_sheets():
     「全有或全無」是因為少一張跟少六張畫面一樣（都退回預設），卻會讓人以為補齊了。"""
     from pathlib import Path
 
-    from tianxia.content import load_content
-
     root = Path(__file__).resolve().parents[4]
-    content = load_content(root / "content")
+    content = real_content()
     assert len(orders.ARENA) == 10 and len(orders.OUTING) == 6
     for look in content.looks:
         have = {p.stem for p in (root / "web/img/looks" / look).glob("hero_*.webp")}

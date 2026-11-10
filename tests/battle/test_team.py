@@ -2,20 +2,18 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from conftest import real_content
 from tianxia import encounter, team, traits
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 from tianxia.sqlite_world import open_world
 from tianxia.state import PLAYER, Member
 
 LOW_ONLY = {"下品": 100, "中品": 0, "上品": 0, "絕學": 0}
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 def _claim_whirlwind(world):
@@ -94,7 +92,7 @@ def test_team_arts_keep_the_companions_content_arts(state, content, world):
 
 def test_team_arts_keep_the_followers_arts():
     """審查裁示 F6：部下的武學要留在 team_arts 裡，不然部下的威力悄悄變成 0（encounter 查不到那門武學）。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
@@ -390,7 +388,7 @@ def test_a_fight_gives_each_of_them_their_own_boost(state, content, world):
 
 def test_followers_fight_beside_the_player_with_their_own_strength():
     """計畫二 G1／F17：加成的清單跟陣容一樣長，部下照樣上陣、照樣算進勝算，吃自己模板的臂力（14.3）。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.terrain_arts.enabled = False  # 手算的威力不含地利（武學隨地理環境；部下不吃地利在 test_terrain_arts）
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
@@ -415,7 +413,7 @@ def test_followers_fight_beside_the_player_with_their_own_strength():
 
 def test_a_weak_follower_hits_a_little_softer_but_never_below_the_floor():
     """Review Focus 1：屬性比 5 低是負加成（弩手鄉勇臂力 4：−3%），再低也不會讓威力變成負的或 0。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     assert team.follower_boost(real, real.followers["follower_guan_crossbow"]).outer == pytest.approx(-0.03)
     weak = real.followers["follower_guan_crossbow"].model_copy(update={"stats": {"str": -100}})
     boost = team.follower_boost(real, weak)
@@ -426,7 +424,7 @@ def test_a_weak_follower_hits_a_little_softer_but_never_below_the_floor():
 
 def test_boosts_line_up_with_companions_and_followers():
     """Review Focus 5：帶同伴又帶部下，加成一人一份、順序同陣容：本人、同伴、部下。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
@@ -678,7 +676,7 @@ def test_a_fight_gives_the_resonance_to_the_player_only(state, content, world):
 
 def test_followers_fight_beside_a_resonating_player_without_the_factor():
     """計畫二 G12／F17：部下照樣上陣，只是不吃本人的搭配與共鳴。真實內容、兩個部下。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.terrain_arts.enabled = False  # 手算的威力不含地利（武學隨地理環境）
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
@@ -723,7 +721,7 @@ def test_the_narrated_lineup_is_the_player_then_the_companions_with_their_arts(s
 
 def test_the_narrated_lineup_includes_the_followers():
     """部下也上陣（F17）：照模板的稱呼與武學排在同伴後面，跟算威力的 _fighters 是同一份名冊。真實內容、兩個部下。"""
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
