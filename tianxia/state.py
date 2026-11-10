@@ -324,6 +324,13 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class FusionNote(BaseModel):
+    """爐譜的一列（意境合成改版，tianxia/fusion.py）：這個配方你第一次合時立意定的型（攻守變心）、合過幾次（熟）。"""
+
+    form: str = "攻"
+    uses: int = 0
+
+
 class ShihaiSeal(BaseModel):
     """識海裡封著的那一份神品意境（傳承，tianxia/features/legacy；架構方向 v2 第七節）：上一季季末自己選的，換季那一刻抄下整份。
     解封之前不在自己的意境裡、裝不上；解封那一刻名字才照這一季登記（撞名就從 names 挑一個）。"""
@@ -857,6 +864,9 @@ class PlayerState(BaseModel):
     insight_strength: dict[str, int] = Field(default_factory=dict)  # 舊存檔：意境 id → 強度 2 或 3（沒記是 1）；第二批起照 insight_fx
     # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
+    # 意境合成改版（Config.craft，季上蓋章才有；tianxia/fusion.py）：爐譜（配方鍵 → 立意的型與熟）、化入攢的意蘊（那一份的 id → 點數）。空的不寫進存檔
+    fusion_book: dict[str, FusionNote] = Field(default_factory=dict, json_schema_extra=QUIET)
+    fusion_yun: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
     create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；換季帶著走（同回體丹）
@@ -2042,6 +2052,7 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False

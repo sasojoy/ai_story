@@ -2362,4 +2362,5 @@ def test_the_fixture_traits_are_the_real_ones():
                 t.pop("ultimate_bond", None)
             real.pop("high", None)  # 武學技能分檔的高階技能：夾具沒有（技能分檔在測試內容關著）
             real.pop("god", None)  # 神品意境（特殊頓悟）：夾具沒有
+            real.pop("merged", None)  # 合璧真意（意境合成改版）：夾具沒有
         assert json.loads((FIXTURE / name).read_text(encoding="utf-8")) == real

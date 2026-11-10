@@ -364,9 +364,15 @@ OWN_IN_DISCUSS = "心裡那份自己悟的意境，說不出口，論武時拿�
 
 def merge_problem(
     state: GameState, content: Content, world: WorldStateStore, a: str, b: str, partner: Partner | None = None,
+    pour: bool = False,
 ) -> str | None:
-    """不能合併的原因；None＝可以。同一個意境合自己是加深強度（到頂不准）；不同的合出來的你已經悟得了也不准。"""
+    """不能合併的原因；None＝可以。同一個意境合自己是加深強度（到頂不准）；不同的合出來的你已經悟得了也不准。
+    pour 是合成改版的傾注（兩份都用掉）：論武不行、改版沒開不行；傾注不佔持有（兩份換一份），持有滿了照樣能合。"""
     held = state.player.insights
+    if pour and partner is not None:
+        return _refuse(POUR_WITH_PARTNER, "論武")
+    if pour and not v2_on(content, state):
+        return _refuse("這一季還不能傾注。", "還沒開")  # 待 joy 潤
     if (a not in held and not _lent(partner, a)) or (b not in held and not _lent(partner, b)):
         return "兩個意境都要是你悟得的。"
     if partner is not None and (insights.is_own(a) or insights.is_own(b)):
@@ -398,7 +404,7 @@ def merge_problem(
             if known is not None and not insight_fx.room_for(state, content, known.id):
                 n = len(insight_fx.pieces(state, known.id))
                 return _refuse(PIECE_FULL.format(name=known.name, n=n), "已經夠了")
-        if library.full(state, content):
+        if library.full(state, content) and not pour:
             return _full_line(state, content)
     xinde, stamina = _price(content, partner, "merge")
     problem = _xinde_line(state, xinde, "合併")
@@ -428,10 +434,12 @@ def _merge_messages(a: Insight, b: Insight) -> list[dict[str, str]]:
 def merge(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, a: str, b: str,
     proposed: tuple[str | None, str] | None = None, partner: Partner | None = None,
+    intent: str | None = None, pour: bool = False,
 ) -> tuple[Insight | None, list[str]]:
     """意境＋意境：同一個合自己 → 強度升一級；兩個不同的 → 一個複合的新意境（高階技能）。回（那一個, 訊息）；
-    不能合時回 (None, [原因])，什麼都不收。屬性與正邪在取名之前就照配方定好（設計 12.6）。"""
-    problem = merge_problem(state, content, world, a, b, partner)
+    不能合時回 (None, [原因])，什麼都不收。屬性與正邪在取名之前就照配方定好（設計 12.6）。
+    合成改版開著（v2_on）：a 是左格主料；intent 是第一次合這個配方時寫的立意（挑型）；pour 是傾注。見「意境合成改版」那一段。"""
+    problem = merge_problem(state, content, world, a, b, partner, pour)
     if problem is not None:
         return None, [problem]
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
@@ -442,7 +450,7 @@ def merge(
     attribute, lean = merge_shape(world, ia, ib)
     secret = secret_recipes.match_merge(content, world, ia, ib)  # 秘方（照左右兩格；私有意境照屬性認）先於私有的合併
     if secret is None and (insights.is_own(a) or insights.is_own(b)):
-        return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed)
+        return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed, intent, pour)
     if secret is not None:
         key = secret_recipes.key(secret)
     result, first = world.lookup_insight_recipe(key), False
@@ -469,7 +477,12 @@ def merge(
     piece = insight_fx.new_piece_id(state, result.id)  # 合出來的也一份一份的（再合一次是第二份）
     quality = insight_fx.better(insight_fx.quality_of(state, a), insight_fx.quality_of(state, b))
     state.player.insights.append(piece)
-    fx = insight_fx.roll(state, content, world, piece, quality=quality, compound=True)
+    v2_lines: list[str] = []
+    if v2_on(content, state):
+        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, piece, key, intent, pour, partner.lent if partner else None)
+        state.player.insight_fx[piece] = fx
+    else:
+        fx = insight_fx.roll(state, content, world, piece, quality=quality, compound=True)
     head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{insight_fx.look(fx)}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
@@ -486,7 +499,7 @@ def merge(
         annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)
     extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first, result)
     mine = result if piece == result.id else result.model_copy(update={"id": piece})
-    return mine, [head] + extra + _charge(state, *_price(content, partner, "merge"))
+    return mine, [head] + v2_lines + extra + _charge(state, *_price(content, partner, "merge"))
 
 
 def _god(state: GameState, content: Content, name: str, fx, *before) -> None:
@@ -505,7 +518,11 @@ def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insi
     fa = insight_fx.record(state, content, world, keep.id, keep)
     fb = insight_fx.record(state, content, world, gone.id, gone)
     before = insight_fx.strength(state, keep.id)
-    merged = insight_fx.deepen(content, fa, fb, insight_fx.deepen_rng(state, world, keep.id, gone.id))
+    v2_lines: list[str] = []
+    if v2_on(content, state):
+        merged, v2_lines = _v2_deepen(state, content, world, keep, fa, fb)
+    else:
+        merged = insight_fx.deepen(content, fa, fb, insight_fx.deepen_rng(state, world, keep.id, gone.id))
     p.insight_fx[keep.id] = merged
     p.insight_strength.pop(keep.id, None)
     where = arts_mod.where_slotted(state, gone.id)
@@ -518,7 +535,8 @@ def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insi
     head = DEEPEN_LINE.format(name=keep.name, mark=arts_mod.strength_mark(after)) if after > before else MIXED_LINE.format(name=keep.name)
     lines = [head, PIECE_LINE.format(look=insight_fx.look(merged), label=insight_fx.label(content, merged))]
     _god(state, content, keep.name, merged, fa, fb)
-    if merged.grand and not fa.grand and not fb.grand:
+    lines += v2_lines
+    if merged.grand and not fa.grand and not fb.grand and not v2_lines:
         g = insight_fx.grand(content, merged.grand)
         lines.append(GRAND_LINE.format(name=g.name if g else merged.grand))
     cfg = content.config
@@ -528,6 +546,7 @@ def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insi
 def _merge_own(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, ia: Insight, ib: Insight,
     attribute: str, lean: str, key: str, proposed: tuple[str | None, str] | None,
+    intent: str | None = None, pour: bool = False,
 ) -> tuple[Insight | None, list[str]]:
     """有私有意境的合併（悟意境設計 0.2b）：合出來的也是私有的——不登記、每次都叫模型取名，名字只跟自己手上的比。"""
     if proposed is None:
@@ -539,14 +558,367 @@ def _merge_own(
         parents=sorted([ia.id, ib.id]), place=ia.place or ib.place,
     ))
     quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
-    fx = insight_fx.roll(state, content, world, result.id, quality=quality, compound=True)
+    v2_lines: list[str] = []
+    if v2_on(content, state):
+        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, result.id, key, intent, pour, None)
+        state.player.insight_fx[result.id] = fx
+    else:
+        fx = insight_fx.roll(state, content, world, result.id, quality=quality, compound=True)
     head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{insight_fx.look(fx)}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
     head += "\n這份領悟是你自己的，江湖上沒有第二份。"
     _god(state, content, result.name, fx)
     cfg = content.config
-    return result, [head] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
+    return result, [head] + v2_lines + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
+
+
+# ── 意境合成改版（Config.craft；設計稿 https://claude.ai/artifact/G4m44hK3At7x2bmqoAbceu ，Joy 2026-11-10「好」）──────────
+# 開關開著、而且這一季開季時蓋了章（WorldState.craft_v2）才走這一段；關著一個字都不變。
+# 合成（兩個不同的）：一般功效照左格主料那一路對到的那一個（不擲）；真意照「路 × 立意的型」對到合璧真意（traits.merged），
+# 有沒有看火候（兩份層數＋上品 1＋地利 1，到 Config.craft.heat_need 就有；差一有 near_chance 自足）；每爐 bonus_chance 多帶一個一重。
+# 傾注（pour）：兩份都用掉，新的一份承襲較淺的層數。合璧成神：兩份三重、傾注、那一路最濃之地、這一季的秘訣，四條齊了一定是神品。
+# 神品只從合璧成神來：合成路（陽陰虛實）的一份帶真意時最多二重、一個一般功效（clamp）。揣摩也照火候，不擲。
+# 化入（infuse）：同一路的其他份化成意蘊，攢滿加一重；不給真意、不算成神、不加熟。立意挑型第四批接模型，這一批照關鍵字。
+
+PAIR_ORDER: dict[str, tuple[str, str]] = {"陽": ("剛", "快"), "陰": ("柔", "慢"), "虛": ("快", "柔"), "實": ("剛", "慢")}
+FORMS = ("攻", "守", "變", "心")
+FORM_WORDS = {  # 立意那一句的關鍵字（模型叫不動或第四批之前照這張；同自創的偏向表做法）待 joy 潤
+    "攻": ("攻", "殺", "破", "斬", "焚", "燒", "擊", "衝", "猛", "盡", "滅", "劈"),
+    "守": ("守", "護", "擋", "固", "穩", "盾", "防", "不退", "不動", "堅", "壁"),
+    "變": ("變", "奇", "幻", "詭", "閃", "巧", "化", "轉", "影", "迷", "亂"),
+    "心": ("心", "意", "念", "靜", "忍", "恨", "魂", "神", "志", "定"),
+}
+SECRETS = ("zishi", "maoshi", "calm", "main_top")  # 這一季每一路的秘訣照天機挑一條（secret_of）
+SECRET_HINTS = {  # 熟到 Config.craft.hint_at 給的那一句（待 joy 潤）
+    "zishi": "爐火最旺在夜半子時。",
+    "maoshi": "天將亮未亮的卯時，兩股意念最肯相合。",
+    "calm": "閉關出來，心還靜著的時候開爐。",
+    "main_top": "主料要是上品的那一份。",
+}
+HE_GOD_LINE = "四條齊了：兩股意念擰成一線，合璧成神，悟出真意〔{grand}〕！"  # 待 joy 潤
+HE_GOD_DEED = "在{place}合璧成神：「{name}」悟出真意〔{grand}〕。"  # 待 joy 潤
+HE_GRAND_LINE = "火候到了，帶出真意〔{grand}〕。"  # 待 joy 潤
+HE_NEAR_LINE = "火候差一分，爐火卻自己湊足了：帶出真意〔{grand}〕！"  # 待 joy 潤
+HE_BONUS_LINE = "意外之喜：多悟出一個「{name}」。"  # 待 joy 潤
+HE_POUR_LINE = "你把兩份全數傾注進去，兩個來源都化進了這一份。"  # 待 joy 潤
+POUR_WITH_PARTNER = "論武時不能傾注：另一份不是你的。"  # 待 joy 潤
+INFUSE_LINE = "你把 {n} 份化進「{name}」，攢了 {got} 點意蘊。"  # 待 joy 潤
+INFUSE_UP = "「{name}」又深了一層（{mark}）。"  # 待 joy 潤
+INFUSE_LEFT = "再 {left} 點意蘊加一重。"  # 待 joy 潤
+
+
+def v2_on(content: Content, state: GameState) -> bool:
+    """合成改版在這一季開了沒：主機的開關開著，而且這一季開季時也蓋了章（WorldState.craft_v2）。"""
+    return content.config.craft.enabled and state.world.craft_v2
+
+
+def main_general(content: Content, path: str, main_attribute: str) -> str | None:
+    """合出來那一路的一般功效照主料（左格）定：陽是剛＋快，主剛 → 陽的第一個（乘勝），主快 → 第二個（朝陽）。
+    主料不在那一對裡（浩然、血煞、第二層合成塌回來源的）照那一路第一個。沒有功效表是 None（測試內容）。"""
+    pool = insight_fx.generals(content, path)
+    if not pool:
+        return None
+    order = PAIR_ORDER.get(path)
+    if order is not None and main_attribute in order and len(pool) > order.index(main_attribute):
+        return pool[order.index(main_attribute)].key
+    return pool[0].key
+
+
+def form_from_intent(intent: str | None, key: str) -> str:
+    """立意那一句挑型：照關鍵字表，出現最多的那一型；一個都沒有（或沒寫）照配方鍵的雜湊挑一型，同一個配方一定一樣。"""
+    text = (intent or "").strip()
+    counts = {form: sum(text.count(w) for w in words) for form, words in FORM_WORDS.items()}
+    best = max(FORMS, key=lambda f: (counts[f], -FORMS.index(f)))
+    if counts[best] > 0:
+        return best
+    import hashlib  # noqa: PLC0415
+
+    return FORMS[hashlib.sha256(key.encode("utf-8")).digest()[0] % len(FORMS)]
+
+
+def note_of(state: GameState, key: str):
+    return state.player.fusion_book.get(key)
+
+
+def form_of(state: GameState, key: str, intent: str | None = None) -> str:
+    """這個配方的型：爐譜上記過的照用（想換第四批用重悟帖）；第一次照這一次的立意。"""
+    note = note_of(state, key)
+    return note.form if note is not None else form_from_intent(intent, key)
+
+
+def _remember(state: GameState, key: str, form: str) -> None:
+    """合了一次：爐譜記下型、熟 +1（論武合的也算）。"""
+    from .state import FusionNote  # noqa: PLC0415
+
+    note = state.player.fusion_book.get(key)
+    if note is None:
+        note = state.player.fusion_book[key] = FusionNote(form=form)
+    note.uses += 1
+
+
+def grand_for(content: Content, path: str, form: str) -> str | None:
+    """這一路、這一型的真意：陽陰虛實對到合璧真意（traits.merged）；基本四路照原本那一路的真意（崩山……）。"""
+    if path in PAIR_ORDER:
+        hit = next((g for g in content.traits.merged if g.attribute == path and g.form == form), None)
+        if hit is not None:
+            return hit.id
+    top = insight_fx.grand_of(content, path)
+    return top.id if top is not None else None
+
+
+def strongest_here(state: GameState, content: Content, path: str) -> bool:
+    """地利：人在那一路最濃的地方。基本四路是此地最濃的意境就是那一路；陽陰虛實是此地最濃的是那一對的其中一路，
+    而且那一對在這裡都悟得到（正式內容每一路兩三處）。"""
+    here = content.locations.get(state.player.location)
+    strong = insights.strong_of(here, content)
+    if here is None or strong is None or strong not in content.insights:
+        return False
+    top = content.insights[strong].attribute
+    pair = PAIR_ORDER.get(path)
+    if pair is None:
+        return top == path
+    gives = {content.insights[i].attribute for i in insights.explore_gives(here, content) if i in content.insights}
+    return top in pair and set(pair) <= gives
+
+
+def heat(state: GameState, content: Content, a: str, b: str, path: str) -> int:
+    """火候：兩份最深的一般功效層數相加，品質（兩份較好的）是上品 +1，在那一路最濃之地 +1。"""
+    quality = insight_fx.better(insight_fx.quality_of(state, a), insight_fx.quality_of(state, b))
+    return (
+        insight_fx.strength(state, a) + insight_fx.strength(state, b)
+        + (1 if quality == "上品" else 0) + (1 if strongest_here(state, content, path) else 0)
+    )
+
+
+def secret_of(world: WorldStateStore, path: str) -> str:
+    """這一季這一路的秘訣：照天機與路挑一條（同一季全服一樣，換季換）。"""
+    import hashlib  # noqa: PLC0415
+
+    seed = f"合璧|{secret_recipes.tianji_of(world)}|{path}".encode("utf-8")
+    return SECRETS[hashlib.sha256(seed).digest()[0] % len(SECRETS)]
+
+
+def secret_met(state: GameState, content: Content, world: WorldStateStore, path: str, main: str) -> bool:
+    """這一季的秘訣這一刻湊到了沒（main 是主料那一份的 id）。"""
+    which = secret_of(world, path)
+    if which in ("zishi", "maoshi"):
+        hour = calendar.point(state.world.time, content, state.world).hour
+        return hour in ((23, 0) if which == "zishi" else (5, 6))
+    if which == "calm":
+        return calm_now(state, content.config.craft.calm_hours)
+    return insight_fx.quality_of(state, main) == "上品"
+
+
+def secret_hint(state: GameState, content: Content, world: WorldStateStore, key: str, path: str) -> str | None:
+    """熟到 hint_at 的配方，秘訣給一句提示；不到是 None。"""
+    note = note_of(state, key)
+    if note is None or note.uses < content.config.craft.hint_at:
+        return None
+    return SECRET_HINTS[secret_of(world, path)]
+
+
+def god_conditions(
+    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, path: str, pour: bool,
+) -> dict[str, bool]:
+    """合璧成神的四條（a 是主料）：兩份都三重、傾注、那一路最濃之地、這一季的秘訣。只有陽陰虛實四路有合璧。"""
+    if path not in PAIR_ORDER:
+        return {"layers": False, "pour": pour, "place": False, "secret": False}
+    deep = insight_fx.MAX_LAYERS
+    return {
+        "layers": insight_fx.strength(state, a) >= deep and insight_fx.strength(state, b) >= deep,
+        "pour": pour,
+        "place": strongest_here(state, content, path),
+        "secret": secret_met(state, content, world, path, a),
+    }
+
+
+def _clamp(fx, compound: bool):
+    """神品只從合璧成神來：合成路的一份帶真意時，最多二重、一個一般功效（照層數最深的留）。"""
+    from .state import InsightFx  # noqa: PLC0415
+
+    if not compound or fx.grand is None or not fx.general:
+        return fx
+    keep = max(fx.general, key=lambda k: fx.general[k])
+    return InsightFx(quality=fx.quality, general={keep: min(fx.general[keep], insight_fx.MAX_LAYERS - 1)}, grand=fx.grand)
+
+
+def _bonus(content: Content, fx, path: str, rng: random.Random) -> str | None:
+    """意外之喜：還有空位時 bonus_chance 多帶一個一重的一般功效（那一路另一個）。回它的鍵，沒帶是 None。"""
+    room = content.config.arts.insight_max_effects - len(fx.general) - (1 if fx.grand else 0)
+    if room <= 0 or rng.random() >= content.config.craft.bonus_chance:
+        return None
+    other = next((t for t in insight_fx.generals(content, path) if t.key not in fx.general), None)
+    if other is None:
+        return None
+    fx.general[other.key] = 1
+    return other.key
+
+
+def _bonus_line(content: Content, fx, extra: str | None) -> list[str]:
+    """意外之喜那一句：多帶的那一個還留著才寫（被「神品只從合璧成神來」收掉的不寫）。"""
+    t = insight_fx.general(content, extra) if extra is not None and extra in fx.general else None
+    return [HE_BONUS_LINE.format(name=t.name)] if t is not None else []
+
+
+def _fired(content: Content, h: int, rng: random.Random) -> str | None:
+    """火候到了是 "full"；差一擲 near_chance 中了是 "near"；其餘 None。"""
+    need = content.config.craft.heat_need
+    if h >= need:
+        return "full"
+    if h == need - 1 and rng.random() < content.config.craft.near_chance:
+        return "near"
+    return None
+
+
+def _drop_piece(state: GameState, piece: str) -> None:
+    """一份用掉（傾注、化入）：從槽上拆下、拿出持有、紀錄跟著清掉。"""
+    p = state.player
+    where = arts_mod.where_slotted(state, piece)
+    if where is not None:
+        p.art_slots[where] = [None if i == piece else i for i in p.art_slots[where]]
+    if piece in p.insights:
+        p.insights.remove(piece)
+    insight_fx.drop(state, piece)
+    p.own_insights.pop(piece, None)
+
+
+def _v2_compound(
+    state: GameState, content: Content, world: WorldStateStore, ia: Insight, ib: Insight, result: Insight, piece: str,
+    key: str, intent: str | None, pour: bool, lent: str | None,
+) -> tuple[object, list[str]]:
+    """合成改版的一份合成：回 (那一份的效果, 多寫的幾行)。見這一段的開頭。"""
+    from .state import InsightFx  # noqa: PLC0415
+
+    path = result.attribute
+    quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
+    form = form_of(state, key, intent)
+    _remember(state, key, form)
+    general = main_general(content, path, ia.attribute)
+    grand_id = grand_for(content, path, form)
+    top = insight_fx.grand(content, grand_id)
+    gname = top.name if top is not None else ""
+    conds = god_conditions(state, content, world, ia.id, ib.id, path, pour)
+    lines: list[str] = []
+    if all(conds.values()) and general is not None and grand_id is not None:
+        fx = InsightFx(quality=quality, general={general: insight_fx.MAX_LAYERS}, grand=grand_id)
+        lines.append(HE_GOD_LINE.format(grand=gname))
+        here = content.locations.get(state.player.location)
+        annals.note(state, content, annals.DEED, HE_GOD_DEED.format(place=here.name if here else "爐前", name=result.name, grand=gname), 3)
+    else:
+        layers = min(insight_fx.strength(state, ia.id), insight_fx.strength(state, ib.id)) if pour else 1
+        fx = InsightFx(quality=quality, general={general: layers} if general is not None else {})
+        rng = insight_fx._rng(state, world, piece, "合璧")
+        fired = _fired(content, heat(state, content, ia.id, ib.id, path), rng) if grand_id is not None else None
+        if fired is not None:
+            fx.grand = grand_id
+            lines.append((HE_GRAND_LINE if fired == "full" else HE_NEAR_LINE).format(grand=gname))
+        extra = _bonus(content, fx, path, rng)
+        fx = _clamp(fx, True)
+        lines += _bonus_line(content, fx, extra)
+    if pour:
+        for gone in (ia.id, ib.id):
+            if gone != lent:
+                _drop_piece(state, gone)
+        lines.insert(0, HE_POUR_LINE)
+    return fx, lines
+
+
+def _v2_deepen(state: GameState, content: Content, world: WorldStateStore, keep: Insight, fa, fb) -> tuple[object, list[str]]:
+    """合成改版的揣摩：層數相加（最多三重）、品質取好的；沒有真意時看火候（不擲），差一有自足；也有意外之喜。"""
+    merged = insight_fx.deepen(content, fa, fb, None)
+    compound = arts_mod.is_compound(content, keep)
+    path = keep.attribute
+    lines: list[str] = []
+    rng = insight_fx.deepen_rng(state, world, keep.id, "合璧")
+    if merged.grand is None:
+        key = (secret_recipes.PREFIX + keep.secret if keep.secret else MERGE_PREFIX + "+".join(keep.parents)) if compound else ""
+        grand_id = grand_for(content, path, form_of(state, key) if compound else "攻")
+        room = content.config.arts.insight_max_effects - len(merged.general)
+        layers = max([0, *fa.general.values()]) + max([0, *fb.general.values()])
+        quality_bonus = 1 if merged.quality == "上品" else 0
+        h = layers + quality_bonus + (1 if strongest_here(state, content, path) else 0)
+        fired = _fired(content, h, rng) if grand_id is not None and room > 0 else None
+        if fired is not None:
+            merged.grand = grand_id
+            top = insight_fx.grand(content, grand_id)
+            lines.append((HE_GRAND_LINE if fired == "full" else HE_NEAR_LINE).format(grand=top.name if top else grand_id))
+    extra = _bonus(content, merged, path, rng)
+    already = insight_fx.look(fa) == "神" or insight_fx.look(fb) == "神"
+    if not already:
+        merged = _clamp(merged, compound)
+    lines += _bonus_line(content, merged, extra)
+    return merged, lines
+
+
+def infuse_problem(state: GameState, content: Content, world: WorldStateStore, body: str, others: list[str]) -> str | None:
+    """化入不行的原因；None＝可以。本體要是你的、不是頓悟神品、有一般功效、還沒到頂；化掉的那幾份要同一路、
+    不帶真意、沒裝在槽上、不是頓悟神品。"""
+    if not v2_on(content, state):
+        return _refuse("這一季還不能化入。", "還沒開")  # 待 joy 潤
+    held = state.player.insights
+    if body not in held:
+        return "本體要是你手上的一份。"  # 待 joy 潤
+    if insight_fx.is_god(state, body):
+        return _refuse(GOD_KEPT, "神品")
+    ib = insights.resolve(body, content, world, state)
+    fb = insight_fx.record(state, content, world, body, ib)
+    if ib is None or not fb.general:
+        return _refuse("這一份沒有能加深的功效。", "加不深")  # 待 joy 潤
+    if insight_fx.strength(state, body) >= _cap(content, ib, fb):
+        return _refuse(DEEPEST.format(name=ib.name, mark=arts_mod.strength_mark(insight_fx.strength(state, body))), "已到極處")
+    if not others or len(set(others)) != len(others) or body in others:
+        return "挑幾份要化進去的。"  # 待 joy 潤
+    for other in others:
+        io = insights.resolve(other, content, world, state) if other in held else None
+        if io is None:
+            return "要化的那幾份都要是你手上的。"  # 待 joy 潤
+        if io.attribute != ib.attribute:
+            return _refuse(f"「{io.name}」跟本體不是同一路，只能熔掉。", "不同路")  # 待 joy 潤
+        fo = insight_fx.record(state, content, world, other, io)
+        if insight_fx.is_god(state, other) or fo.grand is not None:
+            return _refuse(f"「{io.name}」帶著真意，化不得。", "有真意")  # 待 joy 潤
+        if arts_mod.where_slotted(state, other) is not None:
+            return _refuse(f"「{io.name}」還裝在槽上，先拆下來。", "裝著")  # 待 joy 潤
+    return None
+
+
+def _cap(content: Content, ins: Insight, fx) -> int:
+    """化入加得到幾重：三重；合成路帶真意的那一份二重（神品只從合璧成神來）。"""
+    return insight_fx.MAX_LAYERS - (1 if fx.grand is not None and arts_mod.is_compound(content, ins) else 0)
+
+
+def infuse(state: GameState, content: Content, world: WorldStateStore, body: str, others: list[str]) -> tuple[bool, list[str]]:
+    """化入：others 那幾份化成意蘊（凡 1、佳 2、珍 3），攢滿 yun_per_layer 點本體最深的一般功效加一重（到頂為止）。
+    被化的用掉；不收錢、不給真意、不加熟、不擲骰。回 (做了沒, 訊息)。"""
+    problem = infuse_problem(state, content, world, body, others)
+    if problem is not None:
+        return False, [problem]
+    cfg = content.config.craft
+    p = state.player
+    ib = insights.resolve(body, content, world, state)
+    fb = insight_fx.record(state, content, world, body, ib).model_copy(deep=True)
+    got = sum(cfg.yun_points.get(insight_fx.look(insight_fx.record(state, content, world, o)), 0) for o in others)
+    for other in others:
+        _drop_piece(state, other)
+    total = p.fusion_yun.get(body, 0) + got
+    lines = [INFUSE_LINE.format(n=len(others), name=ib.name, got=got)]
+    key = max(fb.general, key=lambda k: fb.general[k])
+    cap = _cap(content, ib, fb)
+    while total >= cfg.yun_per_layer and fb.general[key] < cap:
+        total -= cfg.yun_per_layer
+        fb.general[key] += 1
+        lines.append(INFUSE_UP.format(name=ib.name, mark=arts_mod.strength_mark(fb.general[key])))
+    if fb.general[key] >= cap:
+        total = 0
+    p.insight_fx[body] = fb
+    p.insight_strength.pop(body, None)
+    if total > 0:
+        p.fusion_yun[body] = total
+        lines.append(INFUSE_LEFT.format(left=cfg.yun_per_layer - total))
+    else:
+        p.fusion_yun.pop(body, None)
+    return True, lines
 
 
 # ── A 段 ─────────────────────────────────────────────────

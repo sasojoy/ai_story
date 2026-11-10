@@ -14,6 +14,7 @@ from .core.tuning.terms import TermsTuning  # 條款
 from .core.tuning.jieyi import JieyiTuning  # 結義
 from .core.tuning.mail import MailTuning  # 帖友書信
 from .core.tuning.zongmen import ZongmenTuning  # 門派
+from .core.tuning.craft import CraftTuning  # 意境合成改版
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -1044,6 +1045,9 @@ class TraitBook(_Strict):
     special: list[SpecialTrait] = Field(default_factory=list)
     high: list[HighTrait] = Field(default_factory=list)
     god: list[GodTrait] = Field(default_factory=list)  # 神品意境模板（特殊頓悟）
+    # 合璧真意（意境合成改版，Joy 2026-11-10「好」）：陽陰虛實四路 × 攻守變心十六道，合成改版開著的季，合出來的那一路照「路 × 立意的型」
+    # 對到其中一道（fusion.grand_for）；強度量到跟那一路原本的真意同級（scripts/measure_merged_grand.py）。id 是 he_ 開頭，不算頓悟神品
+    merged: list[GodTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -4463,6 +4467,7 @@ class Config(_Strict):
     jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     mail: MailTuning = Field(default_factory=MailTuning)  # 帖友書信（tianxia/core/tuning/mail.py）
     zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
+    craft: CraftTuning = Field(default_factory=CraftTuning)  # 意境合成改版（tianxia/core/tuning/craft.py；開季蓋章 WorldState.craft_v2）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
