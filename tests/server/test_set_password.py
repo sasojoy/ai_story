@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -34,6 +36,14 @@ def _save(tmp_path, state):
 
 def _password(tmp_path, login):
     return (tmp_path / "local" / f"{login}_password.txt").read_text(encoding="utf-8").strip()
+
+
+@pytest.fixture(autouse=True)
+def _test_content_for_the_script(request, monkeypatch, content):
+    """腳本建角色、看 identity 時載的內容換成測試內容（每條各載一次正式內容是整檔大半的時間，第 221 批）；
+    只有驗「設定照伺服器那一份」的那一條要真的 week7／season21，不換。"""
+    if request.node.name != "test_a_character_it_creates_gets_the_same_profile_as_the_server":
+        monkeypatch.setattr(set_password, "load_content", lambda *a, **k: content)
 
 
 def test_creates_the_account_binds_the_character_and_only_writes_the_password_to_a_file(tmp_path, capsys, content):

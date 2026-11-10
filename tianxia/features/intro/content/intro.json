@@ -1,0 +1,19 @@
+{
+  "_說明": "開局前導畫本（Joy 2026-11-10「這種形式可以 想壓在60秒內」）：新角色取完名號、站到潁川城門口之前演一次。一幕一張圖（web/img/ 底下的相對路徑）、兩句字、最多兩位人物（web/img/figures/full/<id>.webp；名字與身分寫在 tag）。pan 是圖從哪裡推到哪裡（圖寬的百分比，-25 是靠左、-75 是靠右）；seconds 是這一幕停多久，全部加起來不超過 60。字待 joy 潤。",
+  "scenes": [
+    {"image": "places/luoyang.webp", "pan": [-30, -58], "seconds": 8.2, "lines": ["漢朝傳了四百年。", "到了這一代，宮裡宦官當家，", "宮外年年荒旱。"]},
+    {"image": "events/refugees.webp", "pan": [-62, -40], "seconds": 7.0, "lines": ["官道上走的，", "都是吃不上飯的人。"]},
+    {"image": "events/altar.webp", "pan": [-40, -55], "seconds": 8.2, "lines": ["鉅鹿人張角，用符水替窮人治病。", "信他的人，八州都有。"],
+     "figures": [{"id": "zhangjiao", "side": "r", "tag": "黃巾之首"}]},
+    {"image": "places/jizhou.webp", "pan": [-55, -38], "seconds": 8.2, "lines": ["甲子年春，幾十萬人頭纏黃巾，", "同一天起事。"], "cry": ["蒼天已死", "黃天當立"]},
+    {"image": "events/camp.webp", "pan": [-45, -60], "seconds": 8.2, "lines": ["朝廷急了，", "派皇甫嵩、朱儁領兵平亂。"],
+     "figures": [{"id": "huangfusong", "side": "l", "tag": "官軍主帥"}, {"id": "zhujun", "side": "r", "tag": "官軍大將"}]},
+    {"image": "places/yingru.webp", "pan": [-30, -52], "seconds": 8.2, "lines": ["潁川的黃巾頭領波才，", "一路打到長社城下。"],
+     "figures": [{"id": "bocai", "side": "r", "tag": "潁川渠帥"}]},
+    {"image": "events/town.webp", "pan": [-62, -48], "seconds": 7.0, "lines": ["就在這一年，", "你背著包袱，走到潁川城門口。"]}
+  ],
+  "go": "進城",
+  "skip": "跳過",
+  "again": "再看一次",
+  "replay": "重看開場"
+}

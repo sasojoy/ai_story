@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import functools
 import html
 import math
 import random
@@ -29,6 +30,7 @@ from tianxia.features.map.mapart import BANNER_BOX, FRAME_INSIDE
 from tianxia.features.map.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
 from tianxia.ollama_client import OllamaClient
 from tianxia.team import fight
+from test_bounties import _batch  # 第 224 批：懸賞每週一批那條併進整季 [1]，每週上限照它算
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 
@@ -65,7 +67,7 @@ def no_real_ollama():
 
 @pytest.fixture(scope="module")
 def content():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True  # 這個檔案測的是開打後的內容；正式設定另有一個測試檢查
     return c
 
@@ -75,21 +77,21 @@ def content():
 
 @pytest.mark.smoke
 def test_real_content_loads():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou"}  # 割據 2026-10-31 拿掉
 
 
 def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
     """濃縮版做到一半時 main 也會換上試玩伺服器：開關關著、季長照舊，正在跑的那一季才不會被提早收掉或套上半套規則。"""
-    config = load_content(CONTENT_DIR).config
+    config = real_content().config
     assert config.season_one is False
     assert config.season_days == 14
 
 
 @pytest.mark.smoke
 def test_real_content_waits_for_the_admin_to_open_the_season():
-    assert load_content(CONTENT_DIR).config.auto_open_first_season is False
+    assert real_content().config.auto_open_first_season is False
 
 
 def test_travel_settings_follow_the_map_design(content):
@@ -834,7 +836,9 @@ def season_of(content, tmp_path_factory):
     現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。
     第 108 批：「學會悟、合、修」那四句併進整季 [1]（-n 4 下兩條分到不同 worker 就各跑一季）；閒著的選單那一條
     第一季規則關著的那一半併進種子 2 這一季（_idle_observer 只讀不改：帶不帶它，種子 2 這一季的結局、看過的事件、
-    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。"""
+    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。
+    第 224 批：懸賞每週一批那條（以前 bounties 包另跑一季種子 1）併進種子 1 這一季（_bounty_observer 只讀不改：帶不帶它、
+    跟原本那條的夾具比，結局、時間、江湖紀錄、懸賞、等級與地點都一樣，一次性腳本比過），存在 season.bounty_seen、season.at_600。"""
     from tianxia.sqlite_world import open_world
 
     games, worlds = {}, []
@@ -843,6 +847,8 @@ def season_of(content, tmp_path_factory):
         if seed not in games:
             worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
             observe = None
+            if seed == 1:
+                observe = _bounty_observer(season.bounty_seen, season.at_600)
             if seed == 2:
                 season.idle_seen[seed] = set()
                 observe = _idle_observer(season.idle_seen[seed])
@@ -850,6 +856,8 @@ def season_of(content, tmp_path_factory):
         return games[seed]
 
     season.idle_seen = {}
+    season.bounty_seen = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
+    season.at_600 = []  # 第 600 步之後那一刻的江湖紀錄標題（開局那一次 observe 也算，所以是第 601 次）
     yield season
     for world in worlds:
         world.db.close()
@@ -857,7 +865,7 @@ def season_of(content, tmp_path_factory):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("seed", [1, 2, 3])
-def test_bot_plays_a_full_season(season_of, seed):
+def test_bot_plays_a_full_season(season_of, content, seed):
     game = season_of(seed)
     assert game.state.world.ended
     assert game.state.world.ending_title
@@ -868,6 +876,7 @@ def test_bot_plays_a_full_season(season_of, seed):
         assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
         assert p.art_quality or p.art_mastery, "整季都沒修練過"
         assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+        _assert_one_bounty_batch_a_week(game, content, season_of.bounty_seen, season_of.at_600)
     if seed == 2:  # 閒著的選單、第一季規則關著（以前 test_every_idle_menu_id…[False] 跑 700 步，現在看整季）
         _assert_idle_ids_known(season_of.idle_seen[seed])
 
@@ -1138,8 +1147,9 @@ def _minimap_window(svg: str) -> Box:
 def test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start(content, layer):
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     canvas = (0, 0, content.map.width, content.map.height)
+    odds = functools.cache(game.odds) if layer == "enemies" else None  # 迴圈裡 state 不變：每格勝算算一次
     for selected in [None, *(loc_id for _, loc_id in game.map_places())]:
-        svg = render_map(game.state, content, layer, selected, game.odds if layer == "enemies" else None)
+        svg = render_map(game.state, content, layer, selected, odds)
         assert _collisions(svg, canvas) == [], selected
 
 
@@ -1394,7 +1404,7 @@ def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties
 def test_real_timetable_matches_settlement_doc():
     """12 件大事照結算文件第五節的週次；固定 3 件、決戰 3 件、最後是季末。照原本的 12 週週次載入（預設設定；7 天、21 天季
     另外照 real7／real 欄換算到季曆的天，見 tests/figures/test_week7_season.py、test_season21_frame.py）。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     events = {e.id: e for e in c.timetable}
     assert len(c.timetable) == 12
     assert [(e.week, e.kind) for e in c.timetable] == [
@@ -1478,7 +1488,7 @@ def test_real_timetable_runs_a_whole_condensed_season():
     from tianxia.world import advance_world_state
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
@@ -1535,7 +1545,7 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), commander=None
     from tianxia.state import GameState, Lock, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     if version:  # 宛城的版本看「張曼成攻殺南陽太守」那件的結果
@@ -1553,7 +1563,7 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), commander=None
 
 def test_every_locked_showdown_cell_is_the_named_part_plus_that_tiers_result_sentence():
     """長社四格、宛城八格：locked_text ＝ 具名的一段＋這一檔的結果句，只有贏家那一方有；搶輸的一筆照表，乙版沒有。"""
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     events = {e.id: e for e in c.timetable}
     assert len(SHOWDOWN_CELLS) == 12
     for eid, ver, side, tier in SHOWDOWN_CELLS:
@@ -1565,7 +1575,7 @@ def test_every_locked_showdown_cell_is_the_named_part_plus_that_tiers_result_sen
 
 def test_no_locked_announcement_is_left_with_an_ellipsis():
     """S1 節錄時的「……」不是定稿；真實內容所有具名公告與搶輸的一筆都寫完整。"""
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     for e in c.timetable:
         for key, o in e.outcomes.items():
             for text in [*o.locked_text.values(), *o.loser_text.values(), o.text, o.note]:
@@ -1816,7 +1826,7 @@ def _real_s1():
 
 
 def test_section_eight_cells_are_in_the_timetable_word_for_word():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     events = {e.id: e for e in c.timetable}
     for (event_id, key, field), expected in SECTION_EIGHT.items():
         outcome = events[event_id].outcomes[key]
@@ -1841,7 +1851,7 @@ PLAIN_KEYS_KEPT = {("changshe_fire", "huang:大勝", "zhujun"), ("changshe_fire"
 def test_the_this_time_half_names_nobody_directly():
     """FB-042：「這一次」那半句、江湖史、note、搶輸的一句都不寫死人名（人物被挑戰打到退場之後就會寫錯人）——一律是
     {人物:<id>} 或 {官軍主將}。人物效果的鍵也一樣是 @人物 或 @commander；照寫人物 id 的只剩第八節列明的三筆。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     banned = [fig.name for fig in c.figures.values()] + list(FIGURE_TITLES)
     for e in c.timetable:
         if e.id in NAMES_KEPT:
@@ -1910,7 +1920,7 @@ def test_luzhi_jailed_is_skipped_once_luzhi_is_out():
 def test_qinjie_no_longer_names_the_heir():
     """S1 第 3 項：秦頡斬張曼成不寫「推趙弘為帥」——趙弘可能早就被挑戰打到退場，接手的是韓忠；誰接手由接手那則
     天下大事講。"""
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     qinjie = next(e for e in c.timetable if e.id == "qinjie_slays_zhangmancheng")
     for o in qinjie.outcomes.values():
         assert "趙弘" not in o.text + o.chronicle and "推趙弘為帥" not in o.text
@@ -1921,12 +1931,15 @@ def test_every_person_slot_resolves_whoever_is_left():
     """真實時刻表每一格（季末除外）都結算得了：人物都在時寫名字；人物全都不在時寫泛稱、@人物 的效果略過、不丟例外。
     兩種情形都沒有沒填的欄位留在公告、傳聞與江湖史裡。"""
     from tianxia import timetable
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
 
     c, _ = _real_s1()
     for e in c.timetable:
         for key in e.outcomes:
             for everyone_out in (False, True):
-                _, s = _real_s1()
+                s = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
+                              world=fresh_season(c))
                 if everyone_out:
                     for figure in s.world.figures.values():
                         figure.status = "retired"
@@ -1948,7 +1961,7 @@ def test_the_timetable_never_runs_with_the_switch_off():
     from tianxia.world import advance_world_state
     from tianxia.world_state import fresh_season, season_length_days
 
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     assert not c.config.season_one
     c.config.figure_life.enabled = False  # 人物的每日行事會把走動寫進 w.figures；這裡只看時刻表
     w = fresh_season(c)
@@ -1991,7 +2004,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     from tianxia.features.guide.rules import quest_text
     from tianxia.world import check_thresholds
 
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     off = c.scenario.season_one_off
     # 玉璽一把舊玉璽鏈的門檻與支線也關掉（玉璽碎片設計 11.2 第 1 條；整份清單在 test_seal 鎖）
     assert (off.thresholds[:4], off.storylines[0], off.battles) == (
@@ -2018,7 +2031,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     assert game.admin_start_battle("huangjin_showdown", now=0.0) == ["（沒有這場戰鬥。）"]
     assert game.world.get_battle() is None
 
-    beta = load_content(CONTENT_DIR)  # 開關關著：beta 那一季照舊
+    beta = real_content()  # 開關關著：beta 那一季照舊
     game = _beta_season(beta, tmp_path, "off")
     w = game.state.world
     assert not w.season_one and "黃巾之亂" in quest_text(game.state, beta)
@@ -2144,7 +2157,7 @@ def test_server_bots_play_the_real_showdowns_by_move_not_at_random(tmp_path):
     from tianxia.models import MOVES
     from tianxia.state import BotProfile
 
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.bot_strength = 1.0
     profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
     assert set(MOVES) == set(CODES)
@@ -2192,7 +2205,7 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
     from tianxia.rules import trend_value
     from tianxia.sqlite_world import open_world
 
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     world = open_world(tmp_path / "weekend.db")
     game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
@@ -2221,7 +2234,7 @@ def test_real_showdowns_start_from_the_opening_fronts():
     from tianxia.world import showdown_battle, showdown_start
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="week7")
+    c = real_content("week7")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
     starts = {
         e.id: showdown_start(state, c, showdown_battle(state, c, e)) for e in c.timetable if e.kind == "showdown"
@@ -2238,6 +2251,47 @@ def _idle_observer(seen: set[str]):
             seen.update(oid for oid in ids if not oid.startswith("battle:"))
 
     return observe
+
+
+def _bounty_observer(seen: dict[str, tuple[int, int]], at_600: list[list[str]]):
+    """第 224 批從 bounties 包的「整季每週一批」搬來：每一步記第一次看到的懸賞（通緝不算）與第 601 次 observe 那一刻的
+    江湖紀錄標題。只讀，不改那一季。"""
+    step = [0]
+
+    def observe(game):
+        step[0] += 1
+        for b in game.state.world.bounties:
+            if b.kind != "wanted":
+                seen.setdefault(b.id, (step[0], b.week))
+        if step[0] == 601:
+            at_600.append([e.title for e in game.state.journal])
+
+    return observe
+
+
+def _assert_one_bounty_batch_a_week(game, content, seen: dict[str, tuple[int, int]], at_600: list[list[str]]) -> None:
+    """正式內容、預設設定（第一季規則關著）的整季（懸賞榜設計 10.2 的 slow；第 224 批從 bounties 包併進來）：一直到收季那一週，
+    每週剛好一批（同一週的單在同一步一起出現），bounty_week 最後是收季那一週、hooked_week 一直是 0。大勢門檻可能讓季提早收
+    （黃巾稱霸，最早第 decisive_from_week 週；FB-184 多了官軍大營之後，種子 1 這一季在第 11 週收），所以不寫死 12 週。
+    門檻在第 decisive_from_week 週以前就到了的季，一到那一週的週一 00:00 就收：那一週一刻都沒跑、掛不出那一週的單，
+    最後一批是前一週（意境提示改了內容之後種子 1 就是這樣：第 10 週週一 00:00 收、最後一批第 9 週）。"""
+    assert not content.config.season_one and content.config.bounties.enabled
+    # 整季機器人照出陣走（出陣探索與地盤設計第七節；以前 tests/season/test_core_loop_bots.py 另跑 600 步，第 108 批併進這一季：
+    # play_season 的迴圈不看 max_steps，第 601 次 observe 那一刻的江湖紀錄就是跑 600 步的那一份，一次性腳本比過）：前 600 步有探索
+    assert at_600 and any(t.startswith("探索") for t in at_600[0])
+    season = game.state.world
+    batches: dict[int, set[int]] = {}
+    for at, week in seen.values():
+        batches.setdefault(week, set()).add(at)
+    last = max(batches)
+    assert season.ended and sorted(batches) == list(range(1, last + 1))
+    end = calendar.point(season.time, content, season).week  # 收季那一週
+    ran = end - 1 if season.time == calendar.week_start(end, content, season) else end  # 正好在週一 00:00 收：那一週沒跑
+    assert content.config.decisive_from_week <= end <= content.config.season_weeks and last == ran
+    assert all(len(steps) == 1 for steps in batches.values())
+    sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, last + 1)]
+    assert all(0 < n <= _batch(content, allied=False) for n in sizes)
+    assert season.bounty_week == last and season.hooked_week == 0
 
 
 def _assert_idle_ids_known(seen: set[str]) -> None:

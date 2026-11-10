@@ -69,7 +69,7 @@
 
 - 這一包的 `tests/`：`test_rank_actions.py`（第 3、4 階行動：內容表、選單、做一次、做滿、推滿，67 個函式，原 `tests/core/`，整檔搬）、
   `test_military_smoke.py`（煙霧三條：黃巾第 3 階煽動起事；`opp:`、`fs:` 歸這一包、按下去走掛鉤；管理者兩個工具回拒絕）。
-  第 34 批整檔搬進來的（只改路徑字串）：`test_opportunities.py`（93，六種機緣、第 2 階行動、密謀；原 `tests/figures/`）、`test_opportunities_two.py`（89，第二批的拼圖、推理、密謀、線索；原 `tests/figures/`）、`test_foreshadow.py`（37，片段、最後一步、鎖定、天機、官銀；原 `tests/figures/`）、`test_item7_foreshadow_cooldown.py`（4，答錯的冷卻）、`test_real_foreshadows.py`（27，真實內容的鏈每一條做得完；原 `tests/season/`，沒標 slow）。沒有 `military_stage.py`：這一包沒有掛鉤給選項，契約測試擺「平常」就夠（`STAGE_PACKAGES` 只列有擺局面檔的包）。
+  第 34 批整檔搬進來的（只改路徑字串）：`test_opportunities.py`（93，六種機緣、第 2 階行動、密謀；原 `tests/figures/`）、`test_opportunities_two.py`（89，第二批的拼圖、推理、密謀、線索；原 `tests/figures/`）、`test_foreshadow.py`（37，片段、最後一步、鎖定、天機、官銀；原 `tests/figures/`）、`test_item7_foreshadow_cooldown.py`（4，答錯的冷卻）、`test_real_foreshadows.py`（27，真實內容的鏈每一條做得完；原 `tests/season/`，沒標 slow）。第 223 批：`test_rank_actions`、`test_opportunities` 的突變測試改讀 module fixture（`broken_row`、`broken_opportunities_text`），`test_real_foreshadows` 的錯戰線三種只載一次 week7 內容（`wrong_front_texts`）；`test_opportunities_two` 的 `_BROKEN_GROUPS` 是全 repo 的範例（突變併組的寫法見〈量表與教訓〉「測試怎麼寫」）。沒有 `military_stage.py`：這一包沒有掛鉤給選項，契約測試擺「平常」就夠（`STAGE_PACKAGES` 只列有擺局面檔的包）。
 - `test_admin_triggers.py`（31 個函式）**留在 `tests/figures/`**：14 個是管理者的軍令、席次、召見，13 個是給機緣、給片段（這一包），其餘是開戰，混合檔不拆。
 
 ## 另外要跑的混合檔

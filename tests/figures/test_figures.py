@@ -60,8 +60,7 @@ SQUAD_TABLE = {
 }
 
 
-@pytest.fixture
-def real():
+def _real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
     c = no_plans(real_content())  # 盤算會推線、搬人（世界活起來）：這裡寫死人物在哪、大勢線的數字
     c.config.auto_open_first_season = True
@@ -69,6 +68,11 @@ def real():
     c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻
     c.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）
     return c
+
+
+@pytest.fixture
+def real():
+    return _real()
 
 
 @pytest.fixture
@@ -117,25 +121,52 @@ def test_figure_settings_defaults():
             cfg.snub_hours, cfg.figure_difficulty_floor) == (15, 2.0, 5, 5, 2.0, 0.5)
 
 
-@pytest.mark.parametrize(("edit", "message"), [
-    (lambda c: setattr(c.figures["bocai"], "character", "ghost"), "ghost"),
-    (lambda c: setattr(c.figures["zhujun"], "character", "huangfusong"), "huangfusong"),  # 一個對話人物只能是一位
-    (lambda c: setattr(c.figures["bocai"], "character", "caocao"), "bocai：對話人物要跟人物 id 一樣"),  # 伏筆用人物 id 找他的狀態
-    (lambda c: setattr(c.figures["bocai"], "faction", "nobody"), "nobody"),
-    (lambda c: setattr(c.figures["bocai"], "front", "youzhou"), "youzhou"),  # 戰線 id，不是大區
-    (lambda c: setattr(c.figures["bocai"], "location", "nowhere"), "nowhere"),
-    (lambda c: setattr(c.figures["bocai"], "squad", "ghost_squad"), "ghost_squad"),
-    (lambda c: setattr(c.figures["bocai"], "squad", "figure_luzhi"), "陣營"),  # 隊伍跟人物同一個陣營
-    (lambda c: setattr(c.figures["bocai"], "successor", "ghost"), "ghost"),
-    (lambda c: setattr(c.figures["bocai"], "successor", "zhujun"), "同一個陣營"),
-    (lambda c: setattr(c.figures["pengtuo"], "successor", "bocai"), "接位鏈"),  # 繞回來
-    (lambda c: setattr(c.figures["bocai"], "active_from_week", 13), "13"),
-    (lambda c: setattr(c.figures["bocai"], "name", "张曼成"), "繁體"),
-])
-def test_validate_checks_the_figures(real, edit, message):
-    edit(real)
-    with pytest.raises(ContentError, match=message):
-        validate(real)
+# 一筆一個突變，訊息寫帶人物 id 的全句。`_EDIT_GROUPS` 把互不干擾的突變併成一組、整組套上去只 validate 一次
+# （第 223 批：同一個欄位的突變分在不同組、組裡沒有哪一句是另一句的子字串）。每一筆照舊是自己的 id。
+_EDITS = [
+    (lambda c: setattr(c.figures["bocai"], "character", "ghost"), "大勢人物 bocai：未知的人物 ghost"),
+    (lambda c: setattr(c.figures["zhujun"], "character", "huangfusong"), "大勢人物 zhujun：人物 huangfusong 已經是 huangfusong 了"),  # 一個對話人物只能是一位
+    (lambda c: setattr(c.figures["bocai"], "character", "caocao"), "大勢人物 bocai：對話人物要跟人物 id 一樣（現在是 caocao）"),  # 伏筆用人物 id 找他的狀態
+    (lambda c: setattr(c.figures["bocai"], "faction", "nobody"), "大勢人物 bocai：未知的陣營 nobody"),
+    (lambda c: setattr(c.figures["bocai"], "front", "youzhou"), "大勢人物 bocai：未知的戰線 youzhou"),  # 戰線 id，不是大區
+    (lambda c: setattr(c.figures["bocai"], "location", "nowhere"), "大勢人物 bocai：未知的地點 nowhere"),
+    (lambda c: setattr(c.figures["bocai"], "squad", "ghost_squad"), "大勢人物 bocai：未知的敵方隊伍 ghost_squad"),
+    (lambda c: setattr(c.figures["bocai"], "squad", "figure_luzhi"), "大勢人物 bocai：隊伍 figure_luzhi 的陣營要跟人物一樣"),  # 隊伍跟人物同一個陣營
+    (lambda c: setattr(c.figures["bocai"], "successor", "ghost"), "大勢人物 bocai：未知的大勢人物 ghost"),
+    (lambda c: setattr(c.figures["bocai"], "successor", "zhujun"), "大勢人物 bocai：接位的 zhujun 要跟他同一個陣營"),
+    (lambda c: setattr(c.figures["pengtuo"], "successor", "bocai"), "大勢人物 pengtuo：接位鏈繞回來了"),  # 繞回來
+    (lambda c: setattr(c.figures["bocai"], "active_from_week", 13), "大勢人物 bocai：第 13 週超出季曆的 12 週"),
+    (lambda c: setattr(c.figures["bocai"], "name", "张曼成"), "大勢人物 bocai：名字只能用繁體中文（张曼成）"),
+
+]
+_EDIT_GROUPS = [[0, 3, 6], [2, 7, 8, 12], [1, 5, 9, 11], [4, 10]]
+
+
+@pytest.fixture(scope="module")
+def edited_text():
+    """一筆突變 → 它那一組整組套上後 validate 丟出的訊息（懶算：用到那一組才建內容，一組只 validate 一次）。"""
+    cache = {}
+
+    def text(edit):
+        i = next(i for i, (f, _) in enumerate(_EDITS) if f is edit)
+        group = next(tuple(g) for g in _EDIT_GROUPS if i in g)
+        if group not in cache:
+            c = _real()
+            for j in group:
+                _EDITS[j][0](c)
+            try:
+                validate(c)
+                cache[group] = None
+            except ContentError as e:
+                cache[group] = str(e)
+        assert cache[group] is not None, f"第 {list(group)} 組改壞了，validate 卻沒丟錯"
+        return cache[group]
+    return text
+
+
+@pytest.mark.parametrize(("edit", "message"), _EDITS)
+def test_validate_checks_the_figures(edited_text, edit, message):
+    assert message in edited_text(edit)
 
 
 def test_timetable_figures_are_checked_against_the_figure_table(real):

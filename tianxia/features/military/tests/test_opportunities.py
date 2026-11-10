@@ -96,29 +96,36 @@ def test_timing_must_name_its_place_and_front(real):
         validate(real)
 
 
-def test_a_timing_item_needs_its_delivery_lines(real):
-    courier = _opp(real, "guan_courier").timing
+@pytest.fixture(scope="module")
+def broken_opportunities_text():
+    """下面三條的五筆突變（各在不同的欄位、訊息彼此不是子字串）一起套上、validate 一次（第 223 批）。
+    內容跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    courier = _opp(c, "guan_courier").timing
     courier.deliver_label = ""
-    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 deliver_label"):
-        validate(real)
-    courier.deliver_label, courier.done = "把密信交給{主將}", ""
-    with pytest.raises(ContentError, match="guan_courier：有 item 就要寫 done"):
-        validate(real)
+    courier.done = ""
+    del c.orders.rank2["huang"]
+    _opp(c, "guan_zhujun").bond.text = "朱儁说起自己寒门出身"
+    c.orders.rank2["guan"].ok = "你放出话去"
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    return str(caught.value)
 
 
-def test_accumulate_source_must_exist_for_the_faction(real):
-    del real.orders.rank2["huang"]
-    with pytest.raises(ContentError, match="huang_talisman：來源是第 2 階行動"):
-        validate(real)
+def test_a_timing_item_needs_its_delivery_lines(broken_opportunities_text):
+    assert "guan_courier：有 item 就要寫 deliver_label" in broken_opportunities_text
+    assert "guan_courier：有 item 就要寫 done" in broken_opportunities_text
 
 
-def test_opportunity_text_must_be_traditional(real):
-    _opp(real, "guan_zhujun").bond.text = "朱儁说起自己寒门出身"
-    with pytest.raises(ContentError, match="guan_zhujun：文字只能用繁體中文"):
-        validate(real)
-    real.orders.rank2["guan"].ok = "你放出话去"
-    with pytest.raises(ContentError, match="rank2.guan：文字只能用繁體中文"):
-        validate(real)
+def test_accumulate_source_must_exist_for_the_faction(broken_opportunities_text):
+    assert "huang_talisman：來源是第 2 階行動" in broken_opportunities_text
+
+
+def test_opportunity_text_must_be_traditional(broken_opportunities_text):
+    assert "guan_zhujun：文字只能用繁體中文" in broken_opportunities_text
+    assert "rank2.guan：文字只能用繁體中文" in broken_opportunities_text
 
 
 # ── Task 2：機緣的核心與情誼型 ─────────────────────────────────
@@ -815,16 +822,18 @@ def test_full_length_hours_are_pinned_as_before(full):
     assert _open_hours(rite, "huang_dawn") == [5, 6]  # 卯時 05:00～06:59
 
 
-@pytest.mark.parametrize("days", [84, 14, 7, 5, 2.5, 1, 0.5])
-@pytest.mark.parametrize("minutes", [0, 10, 15, 20, 45])
-def test_night_and_dawn_never_overlap(real, days, minutes):
-    win, _ = _windows(real, days, minutes)
-    night = {(win.night_from + i) % 24 for i in range(win.night_hours)}
-    dawn = {(win.dawn_from + i) % 24 for i in range(win.dawn_hours)}
-    assert not night & dawn
-    assert win.dawn_from == calendar.NIGHT_UNTIL  # 黎明接在夜裡結束的那一刻，往後長
-    assert (win.night_from + win.night_hours) % 24 == calendar.NIGHT_UNTIL  # 夜裡在同一刻結束，往前長
-    assert {23, 0, 1, 2, 3, 4} <= night and {5, 6} <= dawn  # 只放寬、不縮
+def test_night_and_dawn_never_overlap(real):
+    """季長 7 種 × 最短分鐘數 5 種在同一條裡跑完（第 223 批；以前 35 條 parametrize）：每一種照舊開一局新的，
+    _windows 每次都把季長與分鐘數重設，跑在同一份內容上跟每種一份新內容結果一樣。紅的時候訊息寫是哪一種。"""
+    for days in [84, 14, 7, 5, 2.5, 1, 0.5]:
+        for minutes in [0, 10, 15, 20, 45]:
+            win, _ = _windows(real, days, minutes)
+            night = {(win.night_from + i) % 24 for i in range(win.night_hours)}
+            dawn = {(win.dawn_from + i) % 24 for i in range(win.dawn_hours)}
+            assert not night & dawn, (days, minutes)
+            assert win.dawn_from == calendar.NIGHT_UNTIL, (days, minutes)  # 黎明接在夜裡結束的那一刻，往後長
+            assert (win.night_from + win.night_hours) % 24 == calendar.NIGHT_UNTIL, (days, minutes)  # 夜裡在同一刻結束，往前長
+            assert {23, 0, 1, 2, 3, 4} <= night and {5, 6} <= dawn, (days, minutes)  # 只放寬、不縮
 
 
 def test_a_very_short_season_caps_each_window_at_half_a_day(real):

@@ -1236,6 +1236,7 @@ def _gamble_hits(game, battle, text, who="甲"):
 
 
 # ── FB-542 ──
+# 端對端（下面兩條）各取清單第一句；整張清單由 test_find_commander_takes_the_squad_name_and_the_full_name 逐句驗。
 
 NAMED = [
     "一槍直取劫道響馬的咽喉",  # 修前：只當沒點名
@@ -1256,7 +1257,7 @@ NOT_NAMED = [
 
 
 @pytest.mark.parametrize("build", [_melee, _lone, _single])
-@pytest.mark.parametrize("text", NAMED)
+@pytest.mark.parametrize("text", NAMED[:1])
 def test_naming_the_guard_by_its_own_name_hits_the_guard(build, text):
     game, battle = build()
     hp = _gamble_hits(game, battle, text)
@@ -1266,7 +1267,7 @@ def test_naming_the_guard_by_its_own_name_hits_the_guard(build, text):
 
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 @pytest.mark.parametrize("build", [_melee, _lone])
-@pytest.mark.parametrize("text", NOT_NAMED)
+@pytest.mark.parametrize("text", NOT_NAMED[:1])
 def test_not_naming_the_guard_does_not_hit_the_guard(build, text):
     game, battle = build()
     assert _gamble_hits(game, battle, text) == pytest.approx(0.0)  # 沒點名：推戰線，守將的池子不動
@@ -1660,7 +1661,7 @@ PLAYER = "沈青衫"
 SPECIAL_OPS = {"battle_text", "seal_text", "duel_text", "tavern_ask", "feast_text"}
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def conquest_server(monkeypatch):
     content = conquest_rules(real_content("season21"))
     content.config.auto_open_first_season = True

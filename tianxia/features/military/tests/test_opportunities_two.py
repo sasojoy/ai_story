@@ -36,12 +36,16 @@ def with_gentry_rank4(c):
     return c
 
 
-@pytest.fixture
-def real():
+def _real():
     c = with_gentry_rank4(real_content())
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
+
+
+@pytest.fixture
+def real():
+    return _real()
 
 
 @pytest.fixture
@@ -178,51 +182,80 @@ def test_new_season_resets_the_new_fields(on):
 # ── 載入時的檢查 ─────────────────────────────────
 
 
-@pytest.mark.parametrize("break_it, message", [
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "front", None), "yingru 是 ask，要寫 front、figure、topic"),
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "topic", ""), "yingru 是 ask，要寫 front、figure、topic"),
-    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[0], "at", None), "land 要寫 at"),
-    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[1], "check", None), "people 是 check，要寫 check"),
-    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[0], "at", "nowhere"), "地點 nowhere"),
-    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces[0].lines.update({"nobody": "他說。"}), "人物 nobody"),
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.present, "at", "nowhere"), "地點 nowhere"),
-    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.present.patrons["cao"], "character", "nobody"), "人物 nobody"),
-    (lambda c: setattr(_opp(c, "huang_mole").deduce, "tianji", "ghost"), "天機 ghost 不存在"),
-    (lambda c: _opp(c, "huang_mole").deduce.suspects.pop(), "嫌疑人要跟天機 mole 的候選一樣"),
-    (lambda c: _opp(c, "huang_mole").deduce.traits.pop(0), "嫌疑人有沒寫片段的特徵"),
-    (lambda c: setattr(_opp(c, "huang_mole").deduce.traits[0], "region", "moon"), "特徵有不存在的大區"),
-    (lambda c: setattr(_opp(c, "huang_mole").deduce.askers[0], "figure", "nobody"), "人物 nobody"),
-    (lambda c: setattr(_opp(c, "huang_mole").deduce.askers[0], "at", "nowhere"), "地點 nowhere"),
-    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "check", None), "check 類要寫 check"),
-    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[0], "at", "changshe"), "每一處寫 front 或 at 其中一個"),
-    (lambda c: setattr(_opp(c, "huang_jiazi").plot.parts[0], "at", None), "每一處寫 front 或 at 其中一個"),
-    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "need_parts", 6), "need_parts 超出處數"),
-    (lambda c: setattr(_opp(c, "huang_jiazi").plot.parts[0], "at", "nowhere"), "地點 nowhere"),
-    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "done_text", "各地的牆上同时冒出甲子"), "文字只能用繁體中文"),
-    (lambda c: setattr(_opp(c, "huang_mole").deduce, "right", "他沉着脸听完"), "文字只能用繁體中文"),
-    (lambda c: c.orders.petition.update({"pirates": c.orders.petition["guan"]}), "沒有陣營 pirates"),
-    (lambda c: c.orders.petition["haoqiang"].characters.append("nobody"), "人物 nobody"),
+# 一筆一個突變，訊息寫帶機緣 id 的全句。`_BROKEN_GROUPS` 把互不干擾的突變併成一組、整組套上去只 validate 一次
+# （第 223 批：同一組最多 8 筆、同一個欄位的突變分在不同組、組裡沒有哪一句是另一句的子字串；清掉整張表或
+# 少一筆的六筆會把別的錯一起帶走，各自一組）。每一筆照舊是自己的 id，紅的時候看得出是哪一筆。
+_BROKEN = [
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "front", None), "機緣 guan_three_plans：yingru 是 ask，要寫 front、figure、topic"),
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "topic", ""), "機緣 guan_three_plans：yingru 是 ask，要寫 front、figure、topic"),
+    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[0], "at", None), "機緣 hao_land_people_name：land 要寫 at"),
+    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[1], "check", None), "機緣 hao_land_people_name：people 是 check，要寫 check"),
+    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.pieces[0], "at", "nowhere"), "機緣 hao_land_people_name：未知的地點 nowhere"),
+    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces[0].lines.update({"nobody": "他說。"}), "機緣 guan_three_plans：未知的人物 nobody"),
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.present, "at", "nowhere"), "機緣 guan_three_plans：未知的地點 nowhere"),
+    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.present.patrons["cao"], "character", "nobody"), "機緣 hao_land_people_name：未知的人物 nobody"),
+    (lambda c: setattr(_opp(c, "huang_mole").deduce, "tianji", "ghost"), "機緣 huang_mole：天機 ghost 不存在"),
+    (lambda c: _opp(c, "huang_mole").deduce.suspects.pop(), "機緣 huang_mole：嫌疑人要跟天機 mole 的候選一樣"),
+    (lambda c: _opp(c, "huang_mole").deduce.traits.pop(0), "機緣 huang_mole：嫌疑人有沒寫片段的特徵"),
+    (lambda c: setattr(_opp(c, "huang_mole").deduce.traits[0], "region", "moon"), "機緣 huang_mole：特徵有不存在的大區"),
+    (lambda c: setattr(_opp(c, "huang_mole").deduce.askers[0], "figure", "nobody"), "機緣 huang_mole：未知的人物 nobody"),
+    (lambda c: setattr(_opp(c, "huang_mole").deduce.askers[0], "at", "nowhere"), "機緣 huang_mole：未知的地點 nowhere"),
+    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "check", None), "機緣 huang_jiazi：check 類要寫 check"),
+    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[0], "at", "changshe"), "機緣 guan_three_roads：每一處寫 front 或 at 其中一個"),
+    (lambda c: setattr(_opp(c, "huang_jiazi").plot.parts[0], "at", None), "機緣 huang_jiazi：每一處寫 front 或 at 其中一個"),
+    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "need_parts", 6), "機緣 huang_jiazi：need_parts 超出處數"),
+    (lambda c: setattr(_opp(c, "huang_jiazi").plot.parts[0], "at", "nowhere"), "機緣 huang_jiazi：未知的地點 nowhere"),
+    (lambda c: setattr(_opp(c, "huang_jiazi").plot, "done_text", "各地的牆上同时冒出甲子"), "機緣 huang_jiazi：文字只能用繁體中文"),
+    (lambda c: setattr(_opp(c, "huang_mole").deduce, "right", "他沉着脸听完"), "機緣 huang_mole：文字只能用繁體中文"),
+    (lambda c: c.orders.petition.update({"pirates": c.orders.petition["guan"]}), "orders.json petition：沒有陣營 pirates"),
+    (lambda c: c.orders.petition["haoqiang"].characters.append("nobody"), "orders.json petition.haoqiang：未知的人物 nobody"),
     # 計畫沒寫、這裡多擋的：寫壞了在載入當下就報，不要到玩的時候才發現
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "front", "nowhere"), "戰線 nowhere"),
-    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[0], "front", "nowhere"), "戰線 nowhere"),
-    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"nowhere": 1}), "大勢線 nowhere"),
-    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"huangjin": 1}), "trend 不能推衍生線"),
-    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces[0].lines.pop("*"), "的 lines 要有"),
-    (lambda c: setattr(c.orders.petition["guan"], "label", "请命"), "petition.guan：文字只能用繁體中文"),
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[1], "key", "yingru"), "東西 key 重複"),
-    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[1], "key", "yingru"), "各處的 key 重複"),
-    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces.clear(), "至少要有一樣東西"),
-    (lambda c: _opp(c, "huang_mole").deduce.askers.clear(), "至少要有一位指認的人"),
-    (lambda c: _opp(c, "guan_three_roads").plot.parts.clear(), "至少要有一處"),
-    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.present, "figure", None), "官軍的交付要寫 figure"),
-    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.present, "patrons", {}), "要寫 at 或 patrons"),
-    (lambda c: setattr(_opp(c, "hao_alliance").plot, "how", "win"), "win 類每一處都要寫 front"),
-    (lambda c: setattr(_opp(c, "guan_three_roads").plot, "how", "check"), "check 類每一處都要寫 at"),
-])
-def test_validate_catches_broken_new_content(real, break_it, message):
-    break_it(real)
-    with pytest.raises(ContentError, match=message):
-        validate(real)
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[0], "front", "nowhere"), "機緣 guan_three_plans：未知的戰線 nowhere"),
+    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[0], "front", "nowhere"), "機緣 guan_three_roads：未知的戰線 nowhere"),
+    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"nowhere": 1}), "機緣 huang_mole：未知的大勢線 nowhere"),
+    (lambda c: _opp(c, "huang_mole").deduce.trend.update({"huangjin": 1}), "機緣 huang_mole：trend 不能推衍生線"),
+    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces[0].lines.pop("*"), "機緣 guan_three_plans：yingru 的 lines 要有"),
+    (lambda c: setattr(c.orders.petition["guan"], "label", "请命"), "orders.json petition.guan：文字只能用繁體中文"),
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.pieces[1], "key", "yingru"), "機緣 guan_three_plans：東西 key 重複"),
+    (lambda c: setattr(_opp(c, "guan_three_roads").plot.parts[1], "key", "yingru"), "機緣 guan_three_roads：各處的 key 重複"),
+    (lambda c: _opp(c, "guan_three_plans").puzzle.pieces.clear(), "機緣 guan_three_plans：拼圖至少要有一樣東西"),
+    (lambda c: _opp(c, "huang_mole").deduce.askers.clear(), "機緣 huang_mole：至少要有一位指認的人"),
+    (lambda c: _opp(c, "guan_three_roads").plot.parts.clear(), "機緣 guan_three_roads：集體密謀至少要有一處"),
+    (lambda c: setattr(_opp(c, "guan_three_plans").puzzle.present, "figure", None), "機緣 guan_three_plans：官軍的交付要寫 figure"),
+    (lambda c: setattr(_opp(c, "hao_land_people_name").puzzle.present, "patrons", {}), "機緣 hao_land_people_name：交給誰要寫 at 或 patrons"),
+    (lambda c: setattr(_opp(c, "hao_alliance").plot, "how", "win"), "機緣 hao_alliance：win 類每一處都要寫 front"),
+    (lambda c: setattr(_opp(c, "guan_three_roads").plot, "how", "check"), "機緣 guan_three_roads：check 類每一處都要寫 at"),
+
+]
+_BROKEN_GROUPS = [[0, 2, 8, 14, 21, 25, 30, 36], [1, 3, 6, 15, 17, 22, 29, 34], [4, 12, 16, 19, 24, 28, 35, 37],
+                  [5, 7, 11, 13, 18, 20, 23, 26], [9], [10], [27], [31], [32], [33]]
+
+
+@pytest.fixture(scope="module")
+def broken_text():
+    """一筆突變 → 它那一組整組套上後 validate 丟出的訊息（懶算：用到那一組才建內容，一組只 validate 一次）。"""
+    cache = {}
+
+    def text(break_it):
+        i = next(i for i, (f, _) in enumerate(_BROKEN) if f is break_it)
+        group = next(tuple(g) for g in _BROKEN_GROUPS if i in g)
+        if group not in cache:
+            c = _real()
+            for j in group:
+                _BROKEN[j][0](c)
+            try:
+                validate(c)
+                cache[group] = None
+            except ContentError as e:
+                cache[group] = str(e)
+        assert cache[group] is not None, f"第 {list(group)} 組改壞了，validate 卻沒丟錯"
+        return cache[group]
+    return text
+
+
+@pytest.mark.parametrize("break_it, message", _BROKEN)
+def test_validate_catches_broken_new_content(broken_text, break_it, message):
+    assert message in broken_text(break_it)
 
 
 def test_a_deduction_may_push_any_real_trend_line(real):

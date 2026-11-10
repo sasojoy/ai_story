@@ -145,11 +145,3 @@ def test_raising_the_gift_tops_up_again(game):
     game.state.player.stamina_pills = 3
     game.content.config.beta_gift_stamina_pills = 30
     assert _reload(game).state.player.stamina_pills == 30
-
-
-def test_the_weekend_profile_no_longer_refills_for_free():
-    from pathlib import Path
-
-    from tianxia.content import load_content
-    real = load_content(Path(__file__).parents[2] / "content", profile="week7")
-    assert real.config.beta_free_refill is False

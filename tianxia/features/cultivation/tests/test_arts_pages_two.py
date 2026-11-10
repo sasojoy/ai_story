@@ -8,22 +8,19 @@ from __future__ import annotations
 import json
 import random
 import re
-from pathlib import Path
 
 import pytest
 
 import webharness
+from conftest import real_content
 from tianxia import fusion, journal, library, art_cards
 from tianxia.features.craft import forge_view
 from tianxia.features.cultivation import art_view
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 
 pytestmark = pytest.mark.whole_content
 
-ROOT = Path(__file__).parents[4]
-CONTENT_DIR = ROOT / "content"
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
@@ -59,7 +56,7 @@ def run(script: str, *, S=None, consts=(), fns=(), stubs=""):
 
 @pytest.fixture(scope="module")
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     return c
 
@@ -497,9 +494,9 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];'  # 自己頁底下的入口（自創、行狀）這裡不看
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", HE_HUE = {};'  # 自創那一頁的入口（自創單獨一頁）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
-             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "heHtml", "infuseHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
+             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "heHtml", "heLine", "heMood", "infuseHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
 
 

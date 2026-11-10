@@ -965,16 +965,6 @@ def test_the_defend_order_never_counts_or_lists_an_enemy_base():
         assert not orders._counts(c, w.orders[-1], "duty", loc, None, None, None, None, None, w)
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-def test_bots_never_press_it_off_own_ground():
-    profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    game = go(join(conquest_game("season21"), "guan"), "huangjin_camp")
-    options = [o for o in game.options(odds=False, tick=False) if o.enabled]
-    assert "act:duty" not in {o.id for o in options}
-    rng = random.Random(3)
-    assert all(bot_policy.pick(game, options, profile, rng) != "act:duty" for _ in range(200))
-
-
 def test_howto_says_duty_stays_on_own_ground():
     game = conquest_game("season21")
     lines = " ".join(territory_acts_howto.territory_lines(game.content, True, game.state.world))

@@ -1,13 +1,11 @@
 import random
 from math import isclose
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, real_content
 from tianxia.features.battle import instance as bi
-from tianxia.content import load_content
 from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, BattleTuning,
     FreeTextGamble,
@@ -1527,7 +1525,6 @@ def test_round_progress_counts_who_has_sent_among_those_present(three):
 # ── 放手一搏只小小影響大局、主要傷自己（試玩回饋 2026-10-08）────────────────
 
 
-CONTENT_DIR = Path(__file__).resolve().parents[4] / "content"
 
 
 def _gamblers(n_guan, n_huang, cap=300.0):
@@ -1636,7 +1633,7 @@ def test_the_playtest_battle_replayed_is_no_longer_a_rout_for_the_yellow_turbans
     黃巾的固定招跟官軍不相上下（每回合只動 ±1 上下）。舊公式累計 −45、戰局 50→5、黃巾得勢；現在五次失手一共倒退 5，
     失手的人氣血變少、之後固守的份量變弱，戰局滑到 45，兩軍膠著。"""
     gamble, battle = _gamblers(12, 12)
-    real = load_content(CONTENT_DIR).battles["huangjin_showdown"]
+    real = real_content().battles["huangjin_showdown"]
     gamble.free_text_gamble = real.free_text_gamble  # 照正式內容的數值
     rates = [45, 5, 0, 0, 0]
     for r in range(9):

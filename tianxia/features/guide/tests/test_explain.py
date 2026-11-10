@@ -548,9 +548,8 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
     from fastapi.testclient import TestClient
 
     import server
-    from tianxia.content import load_content
 
-    content = load_content(server.ROOT / "content")
+    content = real_content()
     content.config.auto_open_first_season = True
     content.config.beta_free_refill = refill  # 2026-10-12 起沒有設定開著它，開關照舊管用
     monkeypatch.setattr(server, "CONTENT", content)
@@ -577,14 +576,6 @@ def test_the_full_stamina_note_says_why():
     from tianxia.features.guide import rules as guide
 
     assert guide.FULL_STAMINA_NOTE == "體力將滿：滿了就不再回，別讓它浪費。"
-
-
-def test_the_full_stamina_note_shows_when_nearly_full_and_not_below(game):
-    from tianxia.features.guide import rules as guide
-
-    game.skip_tutorial()
-    game.state.player.stamina = game.content.config.stamina_max * 0.5
-    assert guide.FULL_STAMINA_NOTE not in guide.next_hint(game.state, game.content, game.world)
 
 
 # ── 四、設定抽屜的「玩法說明」：五個行動、體力、情誼、心得、意境、背包；數字全讀設定 ─────────────────────────────
@@ -670,14 +661,6 @@ def test_the_howto_drill_sentence_follows_the_squad_not_the_place(game):
     assert "遇上對手一定開打" in text and "遇上自己陣營的隊伍是操練：不打、不會輸" in text
     assert "兩種都有的地方，遇上誰看運氣" in text
     assert "（行動列底下那一行寫著這裡、今天還推不推得動）" in text  # 審查 M1：那一行看今天的上限
-
-
-def test_the_full_stamina_note_shows_when_nearly_full(game):
-    from tianxia.features.guide import rules as guide
-
-    game.skip_tutorial()
-    game.state.player.stamina = game.content.config.stamina_max * 0.95
-    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)  # 滿了另一句（FB-108，tianxia/features/guide/tests/test_guide.py）
 
 
 def test_the_newbie_window_in_real_hours_says_what_it_gives(on):

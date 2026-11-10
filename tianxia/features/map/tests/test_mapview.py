@@ -1,12 +1,11 @@
 import html
 import math
 import re
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia.atlas import location_view
-from tianxia.content import load_content
 from tianxia.features.map.mapart import bezier_point, bezier_tail, fmt, icon_kind, icon_svg, mix, road_control, terrain
 from tianxia.features.map.mapview import (
     LEGEND_ICONS, LEGEND_LAYERS, LEGEND_RING, LEGEND_STATES, LEGEND_STRIKE, MINI_HEIGHT, ROUTE_STROKE, SELECT_STROKE, YOU_SIZE,
@@ -430,7 +429,7 @@ WOODS = Terrain(kind="forest", points=[[10, 40], [390, 40], [390, 190], [10, 190
 
 @pytest.fixture(scope="module")
 def real():
-    return load_content(Path(__file__).parents[4] / "content")  # 全部拆包第 49 批整檔搬進包（原本 tests/map/ 是 parents[2]）
+    return real_content()  # 全部拆包第 49 批整檔搬進包（原本 tests/map/ 是 parents[2]）
 
 
 def trampled(pieces, content) -> list[str]:

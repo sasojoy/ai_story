@@ -5,22 +5,20 @@ from __future__ import annotations
 
 import json
 import random
-from pathlib import Path
 
 import pytest
 
 import webharness
+from conftest import real_content
 from tianxia.features.craft import create
 from tianxia import moves
-from tianxia.content import load_content
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[4]  # 全部拆包第 44 批整檔搬進 tianxia/features/craft/tests/（原本 tests/arts/ 是 parents[2]）
 
 
 @pytest.fixture(scope="module")
 def real():
-    c = load_content(ROOT / "content")
+    c = real_content()
     c.config.auto_open_first_season = True
     return c
 

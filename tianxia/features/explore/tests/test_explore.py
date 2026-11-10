@@ -7,14 +7,12 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, real_content
 from tianxia import journal, rules, team
-from tianxia.content import load_content
 from tianxia.engine import FREE_TEXT_OPTION
 from tianxia.models import Condition, ExploreMix, FactionDef, FreeTextChoice
 
@@ -455,6 +453,6 @@ def test_a_zero_chance_draws_no_random_number_so_seeded_runs_do_not_shift(game):
 
 def test_the_real_places_split_into_the_designed_kinds():
     """規格第三節的地點數：營寨 6、城鎮 17、荒野 17；FB-184 多一處官軍大營（營寨 7）；名聲 5.1 多一處綠林山寨（荒野 18）。"""
-    content = load_content(Path(__file__).resolve().parents[4] / "content")
+    content = real_content()
     kinds = Counter(content.config.explore_mix_of(loc.tags).kind for loc in content.locations.values() if not loc.prologue_only)
     assert kinds == Counter(camp=7, town=17, wild=18)

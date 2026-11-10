@@ -6,17 +6,14 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import walk_to
+from conftest import real_content, walk_to
 from tianxia import battlelog, encounter, team, traits
-from tianxia.content import load_content
 from tianxia.martial_arts import generate_from_name
 
-ROOT = Path(__file__).parents[2]
 
 # 規則自己的說法：玩家不該在功效說明裡讀到它們（FB-084 列的「門檻」「下限」「起伏」，加上同一類）
 JARGON = ("門檻", "下限", "起伏", "掛點", "判定", "擲", "當作", "層")
@@ -24,7 +21,7 @@ JARGON = ("門檻", "下限", "起伏", "掛點", "判定", "擲", "當作", "�
 
 @pytest.fixture(scope="module")
 def real():
-    return load_content(ROOT / "content")
+    return real_content()
 
 
 def test_no_trait_description_uses_the_rules_own_words(real):

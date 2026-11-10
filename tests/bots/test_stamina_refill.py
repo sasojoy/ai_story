@@ -20,7 +20,6 @@ import webharness
 from conftest import real_content
 from tianxia import bot, bot_policy, engine, journal
 from tianxia.features.cultivation import art_view
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.models import Config
 from tianxia.state import BotProfile
@@ -356,7 +355,7 @@ def test_clicking_the_refill_button_posts_to_the_same_route_as_the_pill(game):
 def test_the_pill_route_refills_to_the_top_under_the_weekend_profile(monkeypatch):
     from tianxia.characters import open_characters  # noqa: PLC0415
 
-    weekend = load_content(server.ROOT / "content", profile="week7")
+    weekend = real_content("week7")
     weekend.config.auto_open_first_season = True
     weekend.config.beta_free_refill = True  # 週末設定不再開它（2026-10-12）；開關照舊管用
     monkeypatch.setattr(server, "CONTENT", weekend)

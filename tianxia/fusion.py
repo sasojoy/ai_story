@@ -364,15 +364,10 @@ OWN_IN_DISCUSS = "心裡那份自己悟的意境，說不出口，論武時拿�
 
 def merge_problem(
     state: GameState, content: Content, world: WorldStateStore, a: str, b: str, partner: Partner | None = None,
-    pour: bool = False,
 ) -> str | None:
     """不能合併的原因；None＝可以。同一個意境合自己是加深強度（到頂不准）；不同的合出來的你已經悟得了也不准。
-    pour 是合成改版的傾注（兩份都用掉）：論武不行、改版沒開不行；傾注不佔持有（兩份換一份），持有滿了照樣能合。"""
+    合成改版合璧成神的那一爐（god_ready）兩份換一份，持有滿了照樣能合。"""
     held = state.player.insights
-    if pour and partner is not None:
-        return _refuse(POUR_WITH_PARTNER, "論武")
-    if pour and not v2_on(content, state):
-        return _refuse("這一季還不能傾注。", "還沒開")  # 待 joy 潤
     if (a not in held and not _lent(partner, a)) or (b not in held and not _lent(partner, b)):
         return "兩個意境都要是你悟得的。"
     if partner is not None and (insights.is_own(a) or insights.is_own(b)):
@@ -404,7 +399,7 @@ def merge_problem(
             if known is not None and not insight_fx.room_for(state, content, known.id):
                 n = len(insight_fx.pieces(state, known.id))
                 return _refuse(PIECE_FULL.format(name=known.name, n=n), "已經夠了")
-        if library.full(state, content) and not pour:
+        if library.full(state, content) and not god_ready(state, content, world, a, b, partner):
             return _full_line(state, content)
     xinde, stamina = _price(content, partner, "merge")
     problem = _xinde_line(state, xinde, "合併")
@@ -434,14 +429,14 @@ def _merge_messages(a: Insight, b: Insight) -> list[dict[str, str]]:
 def merge(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, a: str, b: str,
     proposed: tuple[str | None, str] | None = None, partner: Partner | None = None,
-    intent: str | None = None, pour: bool = False,
 ) -> tuple[Insight | None, list[str]]:
     """意境＋意境：同一個合自己 → 強度升一級；兩個不同的 → 一個複合的新意境（高階技能）。回（那一個, 訊息）；
     不能合時回 (None, [原因])，什麼都不收。屬性與正邪在取名之前就照配方定好（設計 12.6）。
-    合成改版開著（v2_on）：a 是左格主料；intent 是第一次合這個配方時寫的立意（挑型）；pour 是傾注。見「意境合成改版」那一段。"""
-    problem = merge_problem(state, content, world, a, b, partner, pour)
+    合成改版開著（v2_on）：a 是左格主料（定功效）、b 是右格輔料（定型）；三條齊了自動合璧成神（god_ready，兩份都用掉）。見「意境合成改版」那一段。"""
+    problem = merge_problem(state, content, world, a, b, partner)
     if problem is not None:
         return None, [problem]
+    god = god_ready(state, content, world, a, b, partner)
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
     if same_kind(state, ia, ib):
         return _deepen(state, content, world, ia, ib)
@@ -450,7 +445,7 @@ def merge(
     attribute, lean = merge_shape(world, ia, ib)
     secret = secret_recipes.match_merge(content, world, ia, ib)  # 秘方（照左右兩格；私有意境照屬性認）先於私有的合併
     if secret is None and (insights.is_own(a) or insights.is_own(b)):
-        return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed, intent, pour)
+        return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed, god)
     if secret is not None:
         key = secret_recipes.key(secret)
     result, first = world.lookup_insight_recipe(key), False
@@ -479,7 +474,7 @@ def merge(
     state.player.insights.append(piece)
     v2_lines: list[str] = []
     if v2_on(content, state):
-        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, piece, key, intent, pour, partner.lent if partner else None)
+        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, piece, key, god, partner.lent if partner else None)
         state.player.insight_fx[piece] = fx
     else:
         fx = insight_fx.roll(state, content, world, piece, quality=quality, compound=True)
@@ -546,7 +541,7 @@ def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insi
 def _merge_own(
     state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None, ia: Insight, ib: Insight,
     attribute: str, lean: str, key: str, proposed: tuple[str | None, str] | None,
-    intent: str | None = None, pour: bool = False,
+    god: bool = False,
 ) -> tuple[Insight | None, list[str]]:
     """有私有意境的合併（悟意境設計 0.2b）：合出來的也是私有的——不登記、每次都叫模型取名，名字只跟自己手上的比。"""
     if proposed is None:
@@ -560,7 +555,7 @@ def _merge_own(
     quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
     v2_lines: list[str] = []
     if v2_on(content, state):
-        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, result.id, key, intent, pour, None)
+        fx, v2_lines = _v2_compound(state, content, world, ia, ib, result, result.id, key, god, None)
         state.player.insight_fx[result.id] = fx
     else:
         fx = insight_fx.roll(state, content, world, result.id, quality=quality, compound=True)
@@ -577,17 +572,19 @@ def _merge_own(
 # 開關開著、而且這一季開季時蓋了章（WorldState.craft_v2）才走這一段；關著一個字都不變。
 # 合成（兩個不同的）：一般功效照左格主料那一路對到的那一個（不擲）；真意照「路 × 立意的型」對到合璧真意（traits.merged），
 # 有沒有看火候（兩份層數＋上品 1＋地利 1，到 Config.craft.heat_need 就有；差一有 near_chance 自足）；每爐 bonus_chance 多帶一個一重。
-# 傾注（pour）：兩份都用掉，新的一份承襲較淺的層數。合璧成神：兩份三重、傾注、那一路最濃之地、這一季的秘訣，四條齊了一定是神品。
+# 合璧成神：兩份三重、那一路最濃之地、這一季的秘訣，三條齊了開爐一定是神品，兩份都用掉（Joy 2026-11-10「傾注好複雜」：拿掉傾注那一勾，
+# 成神那一爐自動用掉兩份；其他時候照平常合，什麼都不用掉）。程式裡的 god 就是「這一爐成神、兩份用掉」。
 # 神品只從合璧成神來：合成路（陽陰虛實）的一份帶真意時最多二重、一個一般功效（clamp）。揣摩也照火候，不擲。
-# 化入（infuse）：同一路的其他份化成意蘊，攢滿加一重；不給真意、不算成神、不加熟。立意挑型第四批接模型，這一批照關鍵字。
+# 化入（infuse）：同一路的其他份化成意蘊，攢滿加一重；不給真意、不算成神、不加熟。
+# 型照輔料（右格）定（Joy 2026-11-10 決策卡「輔料定型」，拿掉立意）：輔料身上最深的那個一般功效對到攻守變心（FORM_BY_AUX）。
 
 PAIR_ORDER: dict[str, tuple[str, str]] = {"陽": ("剛", "快"), "陰": ("柔", "慢"), "虛": ("快", "柔"), "實": ("剛", "慢")}
 FORMS = ("攻", "守", "變", "心")
-FORM_WORDS = {  # 立意那一句的關鍵字（模型叫不動或第四批之前照這張；同自創的偏向表做法）待 joy 潤
-    "攻": ("攻", "殺", "破", "斬", "焚", "燒", "擊", "衝", "猛", "盡", "滅", "劈"),
-    "守": ("守", "護", "擋", "固", "穩", "盾", "防", "不退", "不動", "堅", "壁"),
-    "變": ("變", "奇", "幻", "詭", "閃", "巧", "化", "轉", "影", "迷", "亂"),
-    "心": ("心", "意", "念", "靜", "忍", "恨", "魂", "神", "志", "定"),
+FORM_BY_AUX: dict[str, dict[str, str]] = {  # 輔料最深的一般功效（鍵同 InsightFx.general）→ 型；每一路四個功效各對一型，主輔換一換四型都合得到
+    "陽": {"剛": "攻", "chenjin": "心", "快": "變", "lueying": "守"},  # 破甲攻、沉勁心、先手變、掠影守
+    "陰": {"柔": "攻", "huilan": "心", "慢": "變", "shouzhuo": "守"},  # 化勁攻、回瀾心、穩變、守拙守
+    "虛": {"快": "攻", "lueying": "變", "柔": "守", "huilan": "心"},  # 先手攻、掠影變、化勁守、回瀾心
+    "實": {"剛": "攻", "chenjin": "心", "慢": "變", "shouzhuo": "守"},  # 破甲攻、沉勁心、穩變、守拙守
 }
 SECRETS = ("zishi", "maoshi", "calm", "main_top")  # 這一季每一路的秘訣照天機挑一條（secret_of）
 SECRET_HINTS = {  # 熟到 Config.craft.hint_at 給的那一句（待 joy 潤）
@@ -596,13 +593,12 @@ SECRET_HINTS = {  # 熟到 Config.craft.hint_at 給的那一句（待 joy 潤）
     "calm": "閉關出來，心還靜著的時候開爐。",
     "main_top": "主料要是上品的那一份。",
 }
-HE_GOD_LINE = "四條齊了：兩股意念擰成一線，合璧成神，悟出真意〔{grand}〕！"  # 待 joy 潤
+HE_GOD_LINE = "三條齊了：兩股意念擰成一線，合璧成神，悟出真意〔{grand}〕！"  # 待 joy 潤
 HE_GOD_DEED = "在{place}合璧成神：「{name}」悟出真意〔{grand}〕。"  # 待 joy 潤
 HE_GRAND_LINE = "火候到了，帶出真意〔{grand}〕。"  # 待 joy 潤
 HE_NEAR_LINE = "火候差一分，爐火卻自己湊足了：帶出真意〔{grand}〕！"  # 待 joy 潤
 HE_BONUS_LINE = "意外之喜：多悟出一個「{name}」。"  # 待 joy 潤
-HE_POUR_LINE = "你把兩份全數傾注進去，兩個來源都化進了這一份。"  # 待 joy 潤
-POUR_WITH_PARTNER = "論武時不能傾注：另一份不是你的。"  # 待 joy 潤
+HE_POUR_LINE = "兩份意境全數化進爐裡，擰成了這一份。"  # 待 joy 潤
 INFUSE_LINE = "你把 {n} 份化進「{name}」，攢了 {got} 點意蘊。"  # 待 joy 潤
 INFUSE_UP = "「{name}」又深了一層（{mark}）。"  # 待 joy 潤
 INFUSE_LEFT = "再 {left} 點意蘊加一重。"  # 待 joy 潤
@@ -625,35 +621,45 @@ def main_general(content: Content, path: str, main_attribute: str) -> str | None
     return pool[0].key
 
 
-def form_from_intent(intent: str | None, key: str) -> str:
-    """立意那一句挑型：照關鍵字表，出現最多的那一型；一個都沒有（或沒寫）照配方鍵的雜湊挑一型，同一個配方一定一樣。"""
-    text = (intent or "").strip()
-    counts = {form: sum(text.count(w) for w in words) for form, words in FORM_WORDS.items()}
-    best = max(FORMS, key=lambda f: (counts[f], -FORMS.index(f)))
-    if counts[best] > 0:
-        return best
+def _hash_form(key: str) -> str:
+    """對不到表的（輔料沒有一般功效、或功效不是那一路的）照配方鍵的雜湊挑一型：同一個配方一定一樣。"""
     import hashlib  # noqa: PLC0415
 
     return FORMS[hashlib.sha256(key.encode("utf-8")).digest()[0] % len(FORMS)]
+
+
+def aux_effect(state: GameState, content: Content, world: WorldStateStore, aux: Insight) -> str | None:
+    """輔料身上最深的一般功效的鍵（一樣深照功效的先後）；沒有一般功效是 None。"""
+    fx = insight_fx.record(state, content, world, aux.id, aux)
+    if not fx.general:
+        return None
+    keys = list(fx.general)
+    return max(keys, key=lambda k: (fx.general[k], -keys.index(k)))
+
+
+def form_for(state: GameState, content: Content, world: WorldStateStore, path: str, aux: Insight, key: str) -> str:
+    """這一爐的型：輔料（右格）最深的那個一般功效對到哪一型（FORM_BY_AUX）；對不到照配方鍵雜湊。"""
+    return FORM_BY_AUX.get(path, {}).get(aux_effect(state, content, world, aux) or "", "") or _hash_form(key)
 
 
 def note_of(state: GameState, key: str):
     return state.player.fusion_book.get(key)
 
 
-def form_of(state: GameState, key: str, intent: str | None = None) -> str:
-    """這個配方的型：爐譜上記過的照用（想換第四批用重悟帖）；第一次照這一次的立意。"""
+def form_of(state: GameState, key: str) -> str:
+    """揣摩一份合成路的意境時用的型：爐譜記著上一次合出來的型；沒記過照配方鍵雜湊。"""
     note = note_of(state, key)
-    return note.form if note is not None else form_from_intent(intent, key)
+    return note.form if note is not None else _hash_form(key)
 
 
 def _remember(state: GameState, key: str, form: str) -> None:
-    """合了一次：爐譜記下型、熟 +1（論武合的也算）。"""
+    """合了一次：爐譜記下這一次的型、熟 +1（論武合的也算）。"""
     from .state import FusionNote  # noqa: PLC0415
 
     note = state.player.fusion_book.get(key)
     if note is None:
         note = state.player.fusion_book[key] = FusionNote(form=form)
+    note.form = form  # 型跟著這一次的輔料走：記最近一次
     note.uses += 1
 
 
@@ -718,16 +724,28 @@ def secret_hint(state: GameState, content: Content, world: WorldStateStore, key:
     return SECRET_HINTS[secret_of(world, path)]
 
 
+def god_ready(
+    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, partner: Partner | None = None,
+) -> bool:
+    """這一爐會不會合璧成神（三條都齊；論武、改版沒開、揣摩、基本四路都不會）。成神那一爐兩份都用掉。"""
+    if partner is not None or not v2_on(content, state) or a == b:
+        return False
+    ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
+    if ia is None or ib is None or same_kind(state, ia, ib):
+        return False
+    path, _ = merge_shape(world, ia, ib, content, state)
+    return path in PAIR_ORDER and all(god_conditions(state, content, world, a, b, path).values())
+
+
 def god_conditions(
-    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, path: str, pour: bool,
+    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, path: str,
 ) -> dict[str, bool]:
-    """合璧成神的四條（a 是主料）：兩份都三重、傾注、那一路最濃之地、這一季的秘訣。只有陽陰虛實四路有合璧。"""
+    """合璧成神的三條（a 是主料）：兩份都三重、那一路最濃之地、這一季的秘訣。只有陽陰虛實四路有合璧。"""
     if path not in PAIR_ORDER:
-        return {"layers": False, "pour": pour, "place": False, "secret": False}
+        return {"layers": False, "place": False, "secret": False}
     deep = insight_fx.MAX_LAYERS
     return {
         "layers": insight_fx.strength(state, a) >= deep and insight_fx.strength(state, b) >= deep,
-        "pour": pour,
         "place": strongest_here(state, content, path),
         "secret": secret_met(state, content, world, path, a),
     }
@@ -772,7 +790,7 @@ def _fired(content: Content, h: int, rng: random.Random) -> str | None:
 
 
 def _drop_piece(state: GameState, piece: str) -> None:
-    """一份用掉（傾注、化入）：從槽上拆下、拿出持有、紀錄跟著清掉。"""
+    """一份用掉（合璧成神、化入）：從槽上拆下、拿出持有、紀錄跟著清掉。"""
     p = state.player
     where = arts_mod.where_slotted(state, piece)
     if where is not None:
@@ -785,29 +803,27 @@ def _drop_piece(state: GameState, piece: str) -> None:
 
 def _v2_compound(
     state: GameState, content: Content, world: WorldStateStore, ia: Insight, ib: Insight, result: Insight, piece: str,
-    key: str, intent: str | None, pour: bool, lent: str | None,
+    key: str, god: bool, lent: str | None,
 ) -> tuple[object, list[str]]:
     """合成改版的一份合成：回 (那一份的效果, 多寫的幾行)。見這一段的開頭。"""
     from .state import InsightFx  # noqa: PLC0415
 
     path = result.attribute
     quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
-    form = form_of(state, key, intent)
+    form = form_for(state, content, world, path, ib, key)
     _remember(state, key, form)
     general = main_general(content, path, ia.attribute)
     grand_id = grand_for(content, path, form)
     top = insight_fx.grand(content, grand_id)
     gname = top.name if top is not None else ""
-    conds = god_conditions(state, content, world, ia.id, ib.id, path, pour)
     lines: list[str] = []
-    if all(conds.values()) and general is not None and grand_id is not None:
+    if god and general is not None and grand_id is not None:
         fx = InsightFx(quality=quality, general={general: insight_fx.MAX_LAYERS}, grand=grand_id)
         lines.append(HE_GOD_LINE.format(grand=gname))
         here = content.locations.get(state.player.location)
         annals.note(state, content, annals.DEED, HE_GOD_DEED.format(place=here.name if here else "爐前", name=result.name, grand=gname), 3)
     else:
-        layers = min(insight_fx.strength(state, ia.id), insight_fx.strength(state, ib.id)) if pour else 1
-        fx = InsightFx(quality=quality, general={general: layers} if general is not None else {})
+        fx = InsightFx(quality=quality, general={general: 1} if general is not None else {})
         rng = insight_fx._rng(state, world, piece, "合璧")
         fired = _fired(content, heat(state, content, ia.id, ib.id, path), rng) if grand_id is not None else None
         if fired is not None:
@@ -816,7 +832,7 @@ def _v2_compound(
         extra = _bonus(content, fx, path, rng)
         fx = _clamp(fx, True)
         lines += _bonus_line(content, fx, extra)
-    if pour:
+    if god:
         for gone in (ia.id, ib.id):
             if gone != lent:
                 _drop_piece(state, gone)
@@ -921,8 +937,8 @@ def infuse(state: GameState, content: Content, world: WorldStateStore, body: str
     return True, lines
 
 
-COND_LABELS = {"layers": "兩份都三重", "pour": "傾注", "place": "在{path}最濃之地", "secret": "這一季的秘訣"}  # 待 joy 潤
-COND_MISS = {"layers": "兩份都要揉到三重", "pour": "勾「傾注」", "place": "到{places}開爐", "secret": "還差一樣，江湖上有人知道"}  # 待 joy 潤
+COND_LABELS = {"layers": "兩份都三重", "place": "在{path}最濃之地", "secret": "這一季的秘訣"}  # 待 joy 潤
+COND_MISS = {"layers": "兩份都要揉到三重", "place": "到{places}開爐", "secret": "還差一樣，江湖上有人知道"}  # 待 joy 潤
 UNSEEN = "未看破"  # 熟 3 之前真意寫這個（待 joy 潤）
 SEE_AT = 3  # 熟到這個數，預覽寫得出這一型對到哪一道真意
 
@@ -943,12 +959,12 @@ def places_of(content: Content, path: str) -> list[str]:
 
 
 def v2_preview(
-    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, pour: bool = False,
+    state: GameState, content: Content, world: WorldStateStore, a: str, b: str,
 ) -> dict | None:
     """合成改版的預覽（煉製頁的預覽卡多一塊；改版沒開是 None）。跟 merge 同一套函式算：
-    kind（合併／揣摩）、heat、need、near（差一）、general（主料定的一般功效名）、form（型；第一次合、還沒寫立意是 None）、
-    ask_intent（要不要問立意）、grand（真意名；熟 3 前、沒有真意是 UNSEEN 或 None）、grand_desc、uses（熟）、
-    conds（成神四條：[{key, label, ok, miss}]，揣摩沒有）、god（四條都齊）、hint（熟 15 的秘訣提示）、can_pour。"""
+    kind（合併／揣摩）、path（這一爐的路，爐子照它上色）、heat、need、near（差一）、general（主料定的一般功效名）、form（型：輔料定；揣摩是 None）、
+    aux（輔料最深的一般功效名，定型的那一個）、grand（真意名；熟 3 前是 UNSEEN、沒有真意是 None）、grand_desc、uses（熟）、
+    conds（成神三條：[{key, label, ok, miss}]，揣摩沒有）、god（三條都齊：開爐就成神、兩份用掉）、hint（熟 15 的秘訣提示）。"""
     if not v2_on(content, state):
         return None
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
@@ -967,23 +983,30 @@ def v2_preview(
         if secret is not None:
             key = secret_recipes.key(secret)
     note = note_of(state, key) if key else None
-    form = note.form if note is not None else None
     uses = note.uses if note is not None else 0
-    grand_id = grand_for(content, path, form or "攻") if (form or deepen) else None
+    aux = None
+    if deepen:
+        form = form_of(state, key) if compound else "攻"
+    else:
+        form = form_for(state, content, world, path, ib, key)
+        ak = aux_effect(state, content, world, ib)
+        at = insight_fx.general(content, ak) if ak else None
+        aux = at.name if at else None
+    grand_id = grand_for(content, path, form)
     top = insight_fx.grand(content, grand_id) if grand_id else None
     seen = deepen or uses >= SEE_AT
     general = None if deepen else main_general(content, path, ia.attribute)
     gt = insight_fx.general(content, general) if general else None
     h = heat(state, content, a, b, path)
     out = {
-        "kind": "揣摩" if deepen else "合併", "heat": h, "need": cfg.heat_need, "near": h == cfg.heat_need - 1,
-        "general": gt.name if gt else None, "form": form, "ask_intent": not deepen and form is None,
-        "grand": (top.name if seen else UNSEEN) if top is not None else (UNSEEN if not deepen and form is None else None),
+        "kind": "揣摩" if deepen else "合併", "path": path, "heat": h, "need": cfg.heat_need, "near": h == cfg.heat_need - 1,
+        "general": gt.name if gt else None, "form": None if deepen else form, "aux": aux,
+        "grand": (top.name if seen else UNSEEN) if top is not None else None,
         "grand_desc": top.desc if top is not None and seen else None, "uses": uses,
-        "conds": [], "god": False, "hint": None, "can_pour": not deepen and path in PAIR_ORDER,
+        "conds": [], "god": False, "hint": None,
     }
     if not deepen and path in PAIR_ORDER:
-        conds = god_conditions(state, content, world, a, b, path, pour)
+        conds = god_conditions(state, content, world, a, b, path)
         names = "、".join(places_of(content, path)) or "那一路最濃的地方"
         out["conds"] = [
             {"key": k, "label": COND_LABELS[k].format(path=path), "ok": ok,

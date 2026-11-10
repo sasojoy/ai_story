@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 from pydantic import ValidationError
@@ -20,13 +21,17 @@ from tianxia.models import Check, Config, Effect, EventMod, PatronLine, Promotio
 from tianxia.state import PlayerState, Summons, TimelineResult
 
 
-@pytest.fixture
-def real():
+def _real():
     c = classic_rules(real_content())  # 晉升奇遇的推力照出陣探索與地盤之前的規則量（事件推戰線不打五折、不打盡頭阻力）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tianxia/features/companions/tests/test_companions.py）
     return c
+
+
+@pytest.fixture
+def real():
+    return _real()
 
 
 @pytest.fixture
@@ -250,12 +255,38 @@ def test_patron_lines_name_known_characters(real):
         validate(real)
 
 
+def _fixed_big_event(content):
+    return next(e.id for e in content.timetable if e.roll_side is None)
+
+
+# 下面兩條（event_mods 寫錯的三種）的突變併成一組、整組套上去只 validate 一次（第 223 批）。訊息只帶事件 id、不帶寫在哪一格，
+# 所以三筆各寫在不同的事件或選項：effect 寫 promo_guan_2 選項 0、fail_effect 寫 promo_guan_4 選項 0、
+# 固定的大事寫 promo_guan_2 選項 1，紅的時候分得出是哪一筆。
+_EVENT_MODS_BROKEN = {
+    "effect": lambda c: setattr(c.events["promo_guan_2"].choices[0], "effect",
+                                Effect(event_mods=[EventMod(event="no_such_big_event", side="guan", amount=0.05)])),
+    "fail_effect": lambda c: setattr(c.events["promo_guan_4"].choices[0], "fail_effect",
+                                     Effect(event_mods=[EventMod(event="no_such_big_event", side="guan", amount=0.05)])),
+    "rolled": lambda c: setattr(c.events["promo_guan_2"].choices[1].effect, "event_mods",
+                                [EventMod(event=_fixed_big_event(c), side="guan", amount=0.05)]),
+}
+
+
+@pytest.fixture(scope="module")
+def event_mods_text():
+    """三筆 event_mods 突變一起套上、validate 一次：回（訊息, 那個固定大事的 id）。"""
+    c = _real()
+    for break_it in _EVENT_MODS_BROKEN.values():
+        break_it(c)
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    return str(caught.value), _fixed_big_event(c)
+
+
 @pytest.mark.parametrize("slot", ["effect", "fail_effect"])
-def test_event_mods_name_a_timetable_event(real, slot):
-    choice = real.events["promo_guan_2"].choices[0]
-    setattr(choice, slot, Effect(event_mods=[EventMod(event="no_such_big_event", side="guan", amount=0.05)]))
-    with pytest.raises(ContentError, match="event_mods 的 no_such_big_event"):
-        validate(real)
+def test_event_mods_name_a_timetable_event(event_mods_text, slot):
+    event = {"effect": "promo_guan_2", "fail_effect": "promo_guan_4"}[slot]
+    assert f"事件 {event}：event_mods 的 no_such_big_event" in event_mods_text[0]
 
 
 def test_event_mods_on_a_rolled_event_are_valid(real):
@@ -264,12 +295,10 @@ def test_event_mods_on_a_rolled_event_are_valid(real):
     validate(real)
 
 
-def test_event_mods_need_an_event_that_is_rolled(real):
+def test_event_mods_need_an_event_that_is_rolled(event_mods_text):
     """固定、決戰、季末的大事沒有「成」對誰有利，event_mods 在那裡什麼都不做（timetable.add_mod）：寫了就是寫錯。"""
-    fixed = next(e.id for e in real.timetable if e.roll_side is None)
-    real.events["promo_guan_2"].choices[0].effect.event_mods = [EventMod(event=fixed, side="guan", amount=0.05)]
-    with pytest.raises(ContentError, match=f"event_mods 的 {fixed}"):
-        validate(real)
+    text, fixed = event_mods_text
+    assert f"事件 promo_guan_2：event_mods 的 {fixed} 不是擲骰的大事" in text
 
 
 @pytest.mark.parametrize("slot", ["effect", "fail_effect"])
@@ -305,16 +334,28 @@ def test_patron_is_only_for_promotion_events(real):
         validate(real)
 
 
-@pytest.mark.parametrize("field, value", [
+_FREE_TEXT_BROKEN = [
     ("summons_next", "x"), ("patron", "yuan"), ("promote", 3), ("followers", ["follower_guan_spear"]),
     ("event_mods", [EventMod(event="luzhi_jailed", side="guan", amount=0.05)]),
-])
-def test_a_free_text_reward_cannot_carry_promotion_effects(real, field, value):
+]
+
+
+@pytest.fixture(scope="module")
+def free_text_text():
+    """五個欄位寫在同一則隨口應對的 effect 上、validate 一次（第 223 批：訊息是同一行，五個欄位各自找得到）。"""
+    c = _real()
+    event = next(e for e in c.events.values() if e.free_text is not None)
+    for field, value in _FREE_TEXT_BROKEN:
+        setattr(event.free_text.effect, field, value)
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    return str(caught.value)
+
+
+@pytest.mark.parametrize("field, value", _FREE_TEXT_BROKEN)
+def test_a_free_text_reward_cannot_carry_promotion_effects(free_text_text, field, value):
     """隨口應對的獎勵不能串劇情：新的三種（summons_next、event_mods、patron）與晉升的兩種（promote、followers）都擋。"""
-    event = next(e for e in real.events.values() if e.free_text is not None)
-    setattr(event.free_text.effect, field, value)
-    with pytest.raises(ContentError, match=f"隨口應對 effect：不能有.*{field}"):
-        validate(real)
+    assert re.search(f"隨口應對 effect：不能有.*{field}", free_text_text)
 
 
 # ── Task 2：多段召見、提示、晉升到第 3 階與第 4 階資格 ─────────

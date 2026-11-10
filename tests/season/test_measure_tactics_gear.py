@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 from tianxia.models import TREASURE_EFFECTS
 
 pytestmark = pytest.mark.slow  # 每一條都載正式內容（超過一秒）；gear 那一條跑整段
@@ -36,7 +36,7 @@ def m():
 def content():
     """正式內容、玉璽碎片改版（Config.seal.revamp，預設開）關掉：--gear 量的是舊的七個效果（gear 自己跑的時候也暫時關掉改版）；
     改版的效果鍵照樣要分類（下一條）。"""
-    c = load_content(ROOT / "content")
+    c = real_content()
     c.config.seal.revamp.enabled = False
     return c
 
@@ -132,7 +132,7 @@ def test_ring_share_without_the_new_arguments_is_unchanged(m, content):
 
 
 def test_gear_runs_to_the_end_and_names_every_effect(m):
-    content = load_content(ROOT / "content")  # gear 會暫時打開兩個開關，用自己的一份
+    content = real_content()  # gear 會暫時打開兩個開關，用自己的一份
     out = io.StringIO()
     with mock.patch.object(sys, "stdout", out):
         m.gear(content, 10, 2)

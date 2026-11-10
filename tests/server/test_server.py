@@ -18,7 +18,7 @@ import llm_queue
 import server
 import server_push
 import webharness
-from conftest import at, old_explore, season_one_events
+from conftest import at, old_explore, real_content, season_one_events
 from tianxia import atlas
 from tianxia.features.battle import instance as battle_instance
 from tianxia import calendar
@@ -2724,15 +2724,13 @@ def test_server_prints_the_profile_at_startup(capsys, monkeypatch):
     """跟資料庫路徑一起印出用的是哪一份設定（計畫 T2）：TIANXIA_PROFILE 設錯時一眼看得出來。"""
     import uvicorn
 
-    from tianxia.content import load_content
-
     monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
     monkeypatch.setattr(server, "PROFILE", None)
     server.main([])
     out = capsys.readouterr().out
     assert "設定：預設" in out and str(database.default_path().resolve()) in out
     monkeypatch.setattr(server, "PROFILE", "week7")
-    monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="week7"))
+    monkeypatch.setattr(server, "CONTENT", real_content("week7"))
     server.main([])
     assert "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）" in capsys.readouterr().out
 
@@ -4851,6 +4849,7 @@ NOT_IN_THE_FINGERPRINT = {
         "attrs_v2": "開季時蓋的章（五項屬性），開季之後不變",
         "fight_practice": "開季時蓋的章（武學打了才升），開季之後不變",
         "craft_v2": "開季時蓋的章（意境合成改版），開季之後不變",
+        "guard_on": "開季時蓋的章（親衛隊長取代酒肆招募），開季之後不變",
         "no_gentry": "開季時蓋的章（拿掉地方豪強），開季之後不變",
         "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",
         "titles_holders": "名號結算的那一下寫江湖傳聞（傳聞流水號已在指紋裡）；各人戴哪一個是自己存檔的事，下次輪詢才補也不礙事",

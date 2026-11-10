@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
 from tianxia.core import bounty_base
-from tianxia.core import guard_base  # 親衛隊長（殺手，第三批 Joy 2026-11-09「好」）：截殺時本人的威力 ×(1+Config.guard.perks)，預設 0
+from tianxia.core import guard_base  # 親衛隊長（殺手，第三批 Joy 2026-11-09「好」）：截殺時本人的威力 ×(1+Config.guard.perks)；第四批起也寫他在一旁的那一句（raid_lines）
 from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import jieyi_base  # 結義第一批（Joy 2026-11-09）：義不相殘、替兄出頭；開關 Config.jieyi.enabled 關著時一個字不變
 from tianxia.characters import name_key
@@ -244,10 +244,12 @@ def raid_record(
         story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
             f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
     record.notes.append(story)
+    guarded = guard_base.raid_lines(s, c, rival_game.state, "even" if spoils is None else "won" if won else "lost")  # 親衛隊長第四批：他在一旁的那一句
+    record.notes += guarded
     annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])  # 行狀：截殺與被截殺（兩邊各記自己的；對手的名號原樣留，FB-9020）
     ctx._play_rounds(record, squad, result.tier, hp_lost)
     line = ctx._file_battle(record)
-    msgs = [line, story, *battlelog.gains_list(record), *ctx._last_wear]
+    msgs = [line, story, *guarded, *battlelog.gains_list(record), *ctx._last_wear]
     if attacker:
         msgs.insert(0, f"體力 -{c.config.raid.stamina}")
     if ctx._draft is None:

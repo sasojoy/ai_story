@@ -106,6 +106,10 @@ if OUTBOX:
         print("webqa: outbox off (identity off)", flush=True)
 
 assert server.CONTENT.config.ollama_url == "http://127.0.0.1:9", server.CONTENT.config.ollama_url
+# The 開場 layer (intro package) covers the whole page the first time a new character reaches the 城門口, and every walk
+# account is new: it would sit over the clicks. The walk is about the game under it, so the layer stays off here.
+if getattr(server.CONTENT.config, "intro", None) is not None:
+    server.CONTENT.config.intro.enabled = False
 server._monotonic = lambda: CLOCK["now"]
 server.narration_round = lambda *a, **k: None
 # The world only moves on requests. The scheduler ticks on the wall clock, so whether a tick lands before or after the walk's next

@@ -48,7 +48,7 @@ ROOT = Path(__file__).parents[2]
 WEB = ROOT / "web"
 # 網頁分三個檔（減法季批 0）：index.html 照這個順序載入，頂層的名字同在一個全域裡；商城的 mall.js（功能包，開發規範手冊 3.7）排在 app.js 前面
 # 全部拆包第 64 批起 / 的 script 由伺服器照 features_core.web_scripts() 生成；這裡手寫成跟它一樣（tests/core/test_contract_features.py 對）
-APP_FILES = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "state.js", "fit.js", "explore.js", "tavern.js", "sortie.js", "battle.js", "looks.js", "guide.js", "companions.js", "sense.js", "cultivation.js", "story.js", "checkin.js", "figure_acts.js", "zhuan.js", "military.js", "outlets.js", "craft.js", "smithy.js", "territory_acts.js", "bout.js", "hire.js", "peers.js", "travel.js", "faction.js", "gear.js", "seal.js", "bounties.js", "tale.js", "notify.js", "heroines.js", "identity.js", "support.js", "news.js", "titles.js", "terms.js", "jieyi.js", "mail.js", "zongmen.js", "guard.js", "app.js")
+APP_FILES = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "state.js", "fit.js", "explore.js", "tavern.js", "sortie.js", "battle.js", "looks.js", "guide.js", "companions.js", "sense.js", "cultivation.js", "story.js", "checkin.js", "figure_acts.js", "zhuan.js", "military.js", "outlets.js", "craft.js", "smithy.js", "territory_acts.js", "bout.js", "hire.js", "peers.js", "travel.js", "faction.js", "gear.js", "seal.js", "bounties.js", "tale.js", "notify.js", "heroines.js", "identity.js", "support.js", "news.js", "titles.js", "terms.js", "jieyi.js", "mail.js", "zongmen.js", "guard.js", "intro.js", "app.js")
 
 
 def app_source() -> str:
@@ -153,13 +153,20 @@ function runOne(req) {
     const out = [], err = [];
     const timers = new Map(); // 這個請求排下、還沒跑也沒清掉的計時器 → 清掉它的函式
     const byId = new Map(); // 計時器的數字 id（+timeout）→ 計時器：clearTimeout(+t) 跟 node 一樣清得掉
-    let code = null, wake = null;
+    // 延遲 ≥ LONG_MS 的 setTimeout（app.js 的提示泡泡 3200、慢提示 12000、佇列輪詢 2000……）照排，但不算「還在等」：
+    // 沒有測試要等它們跑完才有輸出（第 220 批 grep 過驅動程式）；最長的短計時器是鐵匠鋪爐火 900，所以門檻是 1000。
+    // 各開一個真 node（TIANXIA_WEB_HARNESS=process）那條路照舊等到它們跑完。
+    const LONG_MS = 1000;
+    const longs = new Set(); // timers 裡的長計時器
+    const waiting = () => timers.size - longs.size; // 還在等的計時器個數（不算長的）
+    let code = null, wake = null, ended = false;
     const poke = () => { if (wake) { const w = wake; wake = null; w(); } };
     const stop = (c) => {
       if (code !== null) return;
       code = c;
       for (const [handle, clear] of timers) clear(handle);
       timers.clear();
+      longs.clear();
       poke();
     };
     const fail = (e) => { if (code === null) err.push(describe(e) + "\n"); stop(1); };
@@ -189,21 +196,27 @@ function runOne(req) {
         timers.set(handle, clear);
         if (typeof handle[Symbol.toPrimitive] === "function") byId.set(+handle, handle);
         const unref = handle.unref;
-        if (typeof unref === "function") handle.unref = function () { timers.delete(handle); poke(); return unref.call(this); };
+        if (typeof unref === "function") handle.unref = function () { timers.delete(handle); longs.delete(handle); poke(); return unref.call(this); };
         return handle;
       };
       const guard = (f, args, once, get) => () => {
-        if (once) timers.delete(get());
-        if (code !== null) return;
+        if (once) { timers.delete(get()); longs.delete(get()); }
+        if (code !== null || ended) return;
         try { f(...args); } catch (e) { if (e !== EXIT) fail(e); }
         poke();
       };
-      const later = (f, ms, ...args) => { let h = null; h = setTimeout(guard(f, args, true, () => h), ms); return track(h, clearTimeout); };
+      const later = (f, ms, ...args) => {
+        let h = null;
+        h = setTimeout(guard(f, args, true, () => h), ms);
+        track(h, clearTimeout);
+        if (Number(ms) >= LONG_MS) longs.add(h); // NaN、undefined 算短
+        return h;
+      };
       const every = (f, ms, ...args) => { let h = null; h = setInterval(guard(f, args, false, () => h), ms); return track(h, clearInterval); };
       const soon = (f, ...args) => { let h = null; h = setImmediate(guard(f, args, true, () => h)); return track(h, clearImmediate); };
       const unset = (hostClear) => (h) => {
         const handle = typeof h === "number" || typeof h === "string" ? byId.get(Number(h)) : h;
-        if (handle && timers.delete(handle)) poke();
+        if (handle && timers.delete(handle)) { longs.delete(handle); poke(); }
         hostClear(h);
       };
 
@@ -229,13 +242,17 @@ function runOne(req) {
         for (;;) {
           await new Promise((r) => setImmediate(r));
           if (code !== null) break;
-          if (timers.size === 0) {
+          if (waiting() === 0) {
             await new Promise((r) => setImmediate(r));
-            if (code !== null || timers.size === 0) break;
+            if (code !== null || waiting() === 0) break;
             continue;
           }
           await new Promise((r) => { wake = r; });
         }
+        ended = true; // 還排著的長計時器清掉：不在請求結束後跑、不算到下一個請求頭上
+        for (const [handle, clear] of timers) clear(handle);
+        timers.clear();
+        longs.clear();
         active = null;
         resolve({ code: code === null ? exitCode() : code, stdout: out.join(""), stderr: err.join("") });
       })().catch((e) => { active = null; resolve(broken(e)); });

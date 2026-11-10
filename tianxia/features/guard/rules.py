@@ -44,6 +44,8 @@ SENT_MEMO = "你送{pron}去了{school}。"
 OPEN_LABELS = {"letter": "{name}來信了", "trial": "{name}學成回來了", "oath": "{name}跪在你面前"}
 SETTLING = "{name}站在那裡，像是長大了。（{pron}會成為什麼樣的人，過一會兒就知道）"
 GRADUATED_MEMO = "出師了，成了{path}，人稱「{title}」。"
+ANNAL_ADOPT = "你在{place}救下一個孩子，收養了{pron}，取名{name}。"  # 列傳那一則（第四批；待 joy 潤）
+ANNAL_SWORN = "{name}學成歸來，跪在你面前立誓，從此是你的親衛隊長，江湖上叫{pron}「{title}」。"  # 待 joy 潤
 SWORN = "從今天起，{name}是你的親衛隊長。{pron}成了{path}，江湖上叫{pron}「{title}」。"
 # 成長期三段（Joy 2026-11-10 設計稿 GzVzRd…「好」）
 PHASE_TEXT = "{phase}・{age}"
@@ -322,6 +324,12 @@ def hurt_line(t, b: GuardBook, salt) -> str:
     """你重傷時他說的那一句：照心性，同一天同一個人固定。"""
     pool = texts.HURT_LINES[band(t, b.qing)]
     return fill(pool[seed("重傷", b.name, salt) % len(pool)], b)
+
+
+def fell_line(t, b: GuardBook, salt) -> str:
+    """你在決戰裡倒下時他的那一句：照心性，同一場同一個人固定（第四批）。"""
+    pool = texts.FELL_LINES[band(t, b.qing)]
+    return fill(pool[seed("倒下", b.name, salt) % len(pool)], b)
 
 
 def peek(event: GuardEvent, n: int = 14) -> str:

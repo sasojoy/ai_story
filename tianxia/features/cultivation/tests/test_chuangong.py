@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import bot
 from tianxia.features.cultivation import chuangong
 from tianxia import encounter
 from tianxia.features.cultivation import art_view
 from tianxia import team
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
 
-CONTENT_DIR = Path(__file__).parents[4] / "content"  # 全部拆包第 23 批整檔搬進 tianxia/features/cultivation/tests/（原本 tests/arts/ 是 parents[2]）
 
 
 def _with_mate(game, xinde=10_000):
@@ -31,7 +29,7 @@ def _with_mate(game, xinde=10_000):
 
 
 def _real_game(xinde=10_000, followers=("follower_guan_spear", "follower_guan_crossbow")):
-    real = load_content(CONTENT_DIR)
+    real = real_content()
     real.config.auto_open_first_season = True
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))

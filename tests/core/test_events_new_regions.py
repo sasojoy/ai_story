@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
@@ -22,7 +22,7 @@ REGION_IDS = [row[0] for row in REGIONS]
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(CONTENT_DIR)
+    return real_content()
 
 
 def _events(region: str) -> list[dict]:

@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import random
+import re
 from unittest import mock
 
 import pytest
 from pydantic import ValidationError
 
+from conftest import real_content
 from tianxia import calendar, events, models
 from tianxia.features.military import opp_rules as opportunities, rank_rules as rank_actions
 from tianxia import rules, seats
@@ -68,16 +70,70 @@ def test_the_real_texts_name_the_place(real):
     assert "{地點}" in by_id["incite"].fail and by_id["fortify"].fail == ""
 
 
-def test_rank_action_faction_must_exist(real):
-    real.orders.rank_actions[0].faction = "nobody"
-    with pytest.raises(ContentError, match="rank_actions"):
-        validate(real)
+def _incite(content):
+    return next(a for a in content.orders.rank_actions if a.id == "incite")
 
 
-def test_rank_action_ids_must_not_repeat(real):
-    real.orders.rank_actions.append(real.orders.rank_actions[0].model_copy())
-    with pytest.raises(ContentError, match="rank_actions.*id 重複"):
-        validate(real)
+def _fortify(content):
+    return next(a for a in content.orders.rank_actions if a.id == "fortify")
+
+
+# 下面幾條「改一個欄位、validate、斷錯」的突變分四組，一組整組套上去只 validate 一次（第 223 批）。同一個欄位的突變
+# （tags、fail、fortify 的 id）分在不同組；id 重複先 append（複本照原樣抄）。每一條照舊是自己的測試，斷自己那一組訊息裡的全句。
+_BROKEN_ROWS = {
+    "R1": [
+        lambda c: c.orders.rank_actions.append(c.orders.rank_actions[0].model_copy()),  # id 重複
+        lambda c: setattr(c.orders.rank_actions[0], "faction", "nobody"),
+        lambda c: setattr(_incite(c).check, "stat", "luck"),
+        lambda c: setattr(_incite(c), "tags", ["城池村"]),
+        lambda c: setattr(_incite(c), "fail", ""),
+        lambda c: setattr(_fortify(c), "id", ""),
+    ],
+    "R2": [
+        lambda c: setattr(_incite(c), "tags", ["城鎮", "城池村"]),
+        lambda c: setattr(_incite(c), "fail", "  "),
+        lambda c: setattr(_incite(c), "ok", "你振臂一呼，幾十個鄉民扯下了頭巾。"),
+        lambda c: setattr(_fortify(c), "id", "a:b"),
+    ],
+    "R3": [lambda c: setattr(_fortify(c), "id", ":x")],
+    "R4": [lambda c: setattr(_fortify(c), "id", "x:")],
+}
+
+
+def _real():
+    """跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）。"""
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    return c
+
+
+@pytest.fixture(scope="module")
+def broken_row():
+    """組名 → 那一組整組套上後 validate 丟出的訊息（懶算：用到那一組才建內容，一組只 validate 一次）。"""
+    cache = {}
+
+    def text(row):
+        if row not in cache:
+            c = _real()
+            for break_it in _BROKEN_ROWS[row]:
+                break_it(c)
+            try:
+                validate(c)
+                cache[row] = None
+            except ContentError as e:
+                cache[row] = str(e)
+        assert cache[row] is not None, f"{row} 那一組改壞了，validate 卻沒丟錯"
+        return cache[row]
+    return text
+
+
+def test_rank_action_faction_must_exist(broken_row):
+    assert "orders.json rank_actions.incite：沒有陣營 nobody" in broken_row("R1")
+
+
+def test_rank_action_ids_must_not_repeat(broken_row):
+    assert "orders.json rank_actions：id 重複" in broken_row("R1")
 
 
 @pytest.mark.parametrize("field", ["name", "ok", "fail"])
@@ -88,25 +144,20 @@ def test_rank_action_text_must_be_traditional(real, field):
         validate(real)
 
 
-def test_a_check_needs_a_fail_text(real):
+def test_a_check_needs_a_fail_text(broken_row):
     """有檢定就會有失敗：fail 空著，每次失敗第一句是空的。"""
-    next(a for a in real.orders.rank_actions if a.id == "incite").fail = ""
-    with pytest.raises(ContentError, match="fail"):
-        validate(real)
+    assert "orders.json rank_actions.incite：有檢定就要寫 fail" in broken_row("R1")
 
 
-def test_a_blank_fail_text_does_not_count(real):
-    next(a for a in real.orders.rank_actions if a.id == "incite").fail = "  "
-    with pytest.raises(ContentError, match="fail"):
-        validate(real)
+def test_a_blank_fail_text_does_not_count(broken_row):
+    assert "orders.json rank_actions.incite：有檢定就要寫 fail" in broken_row("R2")
 
 
 @pytest.mark.parametrize("tags", [["城池村"], ["城鎮", "城池村"]])
-def test_tags_must_be_tags_some_location_carries(real, tags):
+def test_tags_must_be_tags_some_location_carries(broken_row, tags):
     """拼錯的標籤：那個行動在哪裡都不會出現，載入時就擋；好幾個標籤裡有一個拼錯也擋（不是有一個對就放行）。"""
-    next(a for a in real.orders.rank_actions if a.id == "incite").tags = tags
-    with pytest.raises(ContentError, match="tags.*城池村"):
-        validate(real)
+    row = {("城池村",): "R1", ("城鎮", "城池村"): "R2"}[tuple(tags)]
+    assert "orders.json rank_actions.incite：tags 裡有的標籤，沒有任何地點帶：['城池村']" in broken_row(row)
 
 
 def test_tags_may_mix_known_tags(real):
@@ -114,10 +165,8 @@ def test_tags_may_mix_known_tags(real):
     validate(real)
 
 
-def test_the_check_stat_must_be_a_known_stat(real):
-    next(a for a in real.orders.rank_actions if a.id == "incite").check.stat = "luck"
-    with pytest.raises(ContentError, match="未知的屬性 luck"):
-        validate(real)
+def test_the_check_stat_must_be_a_known_stat(broken_row):
+    assert "orders.json rank_actions.incite：未知的屬性 luck" in broken_row("R1")
 
 
 @pytest.mark.parametrize(
@@ -467,18 +516,15 @@ def test_rank_action_weeks_survive_a_save_and_load(on):
 
 
 @pytest.mark.parametrize("bad_id", ["", "a:b", ":x", "x:"])
-def test_a_rank_action_id_is_not_empty_and_has_no_colon(real, bad_id):
+def test_a_rank_action_id_is_not_empty_and_has_no_colon(broken_row, bad_id):
     """id 是選項 act:rank:<id> 的尾巴（_rank_action_id 照前綴切）、也是軍令記功的 kind：空的或帶冒號都會切錯。"""
-    next(a for a in real.orders.rank_actions if a.id == "fortify").id = bad_id
-    with pytest.raises(ContentError, match="id 不能"):
-        validate(real)
+    row = {"": "R1", "a:b": "R2", ":x": "R3", "x:": "R4"}[bad_id]
+    assert f"orders.json rank_actions.{bad_id}：id 不能是空的、也不能有冒號" in broken_row(row)
 
 
-def test_the_success_text_must_name_the_place(real):
+def test_the_success_text_must_name_the_place(broken_row):
     """成功的那一句要有 {地點}：玩家看到的是「你在汝南…」，沒寫就不知道在哪裡做的。"""
-    next(a for a in real.orders.rank_actions if a.id == "incite").ok = "你振臂一呼，幾十個鄉民扯下了頭巾。"
-    with pytest.raises(ContentError, match="rank_actions.incite.*ok.*地點"):
-        validate(real)
+    assert "orders.json rank_actions.incite：ok 要寫 {地點}" in broken_row("R2")
 
 
 def test_a_good_id_with_an_underscore_or_digits_loads(real):
@@ -486,10 +532,8 @@ def test_a_good_id_with_an_underscore_or_digits_loads(real):
     validate(real)
 
 
-def test_the_tags_error_says_which_tags_no_location_carries(real):
-    next(a for a in real.orders.rank_actions if a.id == "incite").tags = ["城鎮", "城池村"]
-    with pytest.raises(ContentError, match=r"tags 裡有的標籤，沒有任何地點帶：\['城池村'\]"):
-        validate(real)
+def test_the_tags_error_says_which_tags_no_location_carries(broken_row):
+    assert re.search(r"tags 裡有的標籤，沒有任何地點帶：\['城池村'\]", broken_row("R2"))
 
 
 @pytest.mark.parametrize("state", ["resting", "preparing", "paused"])

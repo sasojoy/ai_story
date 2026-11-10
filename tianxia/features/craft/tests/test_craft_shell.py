@@ -431,37 +431,33 @@ def test_the_preview_has_no_he_block_while_the_overhaul_is_off(client):
     game = server.game_for("沈青衫")
     game.state.player.insights = ["feng", "huo"]
     open_characters().save(game.state)
-    out = client.post("/api/forge_line", json={"insights": ["huo", "feng"], "pour": True, "intent": "燒"}).json()
+    out = client.post("/api/forge_line", json={"insights": ["huo", "feng"]}).json()
     assert out["preview"] is not None and "he" not in out["preview"]
     assert "fusion" not in client.get("/api/main").json()["status"]
 
 
-def test_the_preview_carries_heat_the_four_conditions_and_the_pour_toggle(client, monkeypatch):
+def test_the_preview_carries_heat_the_path_and_the_three_conditions(client, monkeypatch):
     _craft_v2_on(monkeypatch)
     _player(client)
     game = server.game_for("沈青衫")
     game.state.player.insights = ["feng", "huo"]
     open_characters().save(game.state)
     he = client.post("/api/forge_line", json={"insights": ["huo", "feng"]}).json()["preview"]["he"]
-    assert he["kind"] == "合併" and he["ask_intent"] and he["grand"] == fusion.UNSEEN and he["can_pour"]
-    assert [c["key"] for c in he["conds"]] == ["layers", "pour", "place", "secret"]
-    assert next(c for c in he["conds"] if c["key"] == "pour")["ok"] is False
-    poured = client.post("/api/forge_line", json={"insights": ["huo", "feng"], "pour": True}).json()["preview"]["he"]
-    assert next(c for c in poured["conds"] if c["key"] == "pour")["ok"] is True
-    assert client.post("/api/forge_line", json={"insights": ["huo", "feng"], "pour": "yes"}).json()["preview"]["he"]["conds"][1]["ok"] is False  # 只認 true
+    assert he["kind"] == "合併" and he["form"] == "變" and he["aux"] and he["grand"] == fusion.UNSEEN and he["path"] == "陽"
+    assert [c["key"] for c in he["conds"]] == ["layers", "place", "secret"] and he["god"] is False and "can_pour" not in he
 
 
-def test_forging_with_an_intent_writes_the_form_into_the_furnace_book(client, monkeypatch):
+def test_forging_writes_the_aux_form_into_the_furnace_book(client, monkeypatch):
     _craft_v2_on(monkeypatch)
     _player(client)
     game = server.game_for("沈青衫")
     game.state.player.insights = ["feng", "huo"]
     game.state.player.stats["xinde"] = 500
     open_characters().save(game.state)
-    out = client.post("/api/menxia/forge", json={"insights": ["huo", "feng"], "intent": "守住不退" * 10})
+    out = client.post("/api/menxia/forge", json={"insights": ["huo", "feng"], "intent": "守住不退"})  # 舊網頁多送的立意不理
     assert out.status_code == 200, out.text
     book = open_characters().load("沈青衫").player.fusion_book
-    assert book[fusion.merge_key("huo", "feng")].form == "守" and book[fusion.merge_key("huo", "feng")].uses == 1
+    assert book[fusion.merge_key("huo", "feng")].form == "變" and book[fusion.merge_key("huo", "feng")].uses == 1
 
 
 def test_infuse_goes_through_the_menxia_table_and_refuses_when_off(client, monkeypatch):
@@ -479,25 +475,27 @@ def test_infuse_goes_through_the_menxia_table_and_refuses_when_off(client, monke
     assert saved.insights == ["feng"] and "化進" in on["message"]
 
 
-def test_the_he_block_draws_what_the_server_said_and_nothing_when_absent():
-    """預覽卡的改版那一塊（craft.js heHtml）：沒有 v.he 一個字都不畫；有的話火候、未看破、立意、傾注、成神墨點照伺服器給的畫。"""
+def test_the_he_block_is_one_line_of_fire_and_no_rules():
+    """預覽卡的改版那一塊（craft.js heHtml）：沒有 v.he 一個字都不畫；有的話只寫一句爐火的樣子，認得的真意蓋一顆印。
+    主料、輔料、型、火候數字、成神幾條都不寫（Joy 2026-11-10「字要少 形象要具體」）。"""
     js = (server.ROOT / "web" / "craft.js").read_text(encoding="utf-8")
     script = "\n".join([
         'const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;"}[c]));',
+        _js_function(js, "function heLine(") + "\n  }",
         _js_function(js, "function heHtml(") + "\n  }",
     ]) + """
-    let S = { forgePour: true, heRoad: true, forgeIntent: "燒<盡>" };
-    const he = { kind: "合併", heat: 5, need: 6, near: true, general: "乘勝", form: null, ask_intent: true, grand: "未看破", grand_desc: null, uses: 0,
-      conds: [{ key: "layers", label: "兩份都三重", ok: false, miss: "再深一點" }, { key: "pour", label: "傾注", ok: true, miss: null }],
-      god: false, hint: null, can_pour: true };
-    console.log(JSON.stringify({ none: heHtml(undefined), html: heHtml(he) }));
+    const he = { kind: "合併", heat: 5, need: 6, near: true, general: "乘勝", form: "變", aux: "先手", grand: "未看破", uses: 0,
+      conds: [{ key: "layers", label: "兩份都三重", ok: false, miss: "再深一點" }], god: false, hint: null };
+    console.log(JSON.stringify({ none: heHtml(undefined), html: heHtml(he),
+      seen: heHtml({ ...he, heat: 6, near: false, grand: "斬<月>" }), god: heHtml({ ...he, god: true }) }));
     """
     done = webharness.node(script)
     assert done.returncode == 0, done.stderr
     out = json.loads(done.stdout)
     assert out["none"] == ""
     html = out["html"]
-    assert "he-heat near" in html and "差一點" in html and "未看破" in html and "unseen" in html
-    assert 'id="he-intent"' in html and "燒&lt;盡&gt;" in html
-    assert 'data-act="he-pour"' in html and 'aria-pressed="true"' in html
-    assert html.count('<i class="on">') == 1 and "再深一點" in html
+    assert "只差一口氣" in html
+    for word in ("乘勝", "先手", "變", "未看破", "火候", "三重", "主料", "輔料"):
+        assert word not in html, word
+    assert "斬&lt;月&gt;" in out["seen"] and "he-grand" in out["seen"]
+    assert "金光" in out["god"] and 'class="he god"' in out["god"]
