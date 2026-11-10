@@ -6,6 +6,9 @@
 （跟沒有這條路同一句，不透露有客服頁）。例外是 GET /api/support/mailbox（第 214 批）：gate 之後直接回設定裡的信箱與那一行字，不認登入、不開旁檔。不走 AdminTool、不放寬 /api/admin、is_admin 不動。
 截圖（客服自動受理第 215 批）：POST /api/support/file?id=<單號> 的內文就是圖的位元組（gate 之後先認登入、再串流累計，超過 file_bytes_max 就停止讀）；
 GET /api/support/file/{tid}/{seq} 主人與客服看得到，其他一律 404「找不到這張單。」。
+客服官（客服自動受理第 216 批；設計 5.2、5.3、第八節）：客服的路由帶 Authorization: Bearer 就以它為準（不看 cookie、不看 staff_session_ok）：
+.local/support.json 的 bot_token 對、Config.support.bot_account 的帳號在才算，回那個帳號；token 沒設、不對、帳號不在、查帳號那一條，
+一律 404 Not Found（跟不是客服同一句）。沒有 Bearer 照舊 cookie。別的路由（/api/do、/api/main、/api/me、/api/admin*）不認 Bearer。
 
 殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；現在時間照 shell.time.time()（路由是殼，規則層 rules.py 不讀時鐘）。
 玩家寫的字原樣存、原樣回（畫面只過 esc，不經 markdown）；單上的帳號、名號、時間、版本由伺服器填，不收客戶端的。
@@ -13,6 +16,7 @@ GET /api/support/file/{tid}/{seq} 主人與客服看得到，其他一律 404「
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import uuid
 
@@ -69,7 +73,37 @@ def _me(shell, key: str) -> accounts_view.Who:
     return who
 
 
-def _staff(shell, request: Request) -> accounts_view.Who:
+BEARER = "Bearer"
+
+
+def _bearer(request: Request) -> str | None:
+    """Authorization 的方案是 Bearer 就回空白之後那一段（可能是空字串：伺服器會吃掉尾巴的空白）；沒有或別的方案回 None（走 cookie）。"""
+    auth = request.headers.get("authorization")
+    if auth is None:
+        return None
+    scheme, _, rest = auth.partition(" ")
+    return rest if scheme == BEARER else None
+
+
+def _desk_who(shell, given: str, allow_bot: bool) -> accounts_view.Who:
+    """token 路：對了回客服官的帳號；其他一律 404 Not Found（同不是客服）。標頭是 latin-1 解的字串：兩邊轉 bytes 再比（非 ASCII 也不 500）。"""
+    token = identity_base.support_bot_token()
+    if token is None or not hmac.compare_digest(given.encode("latin-1"), token.encode("utf-8")) or not allow_bot:
+        raise HTTPException(404)
+    db = open_database()
+    bot_id = staff.bot_account_id(shell.CONTENT.config, db)
+    who = None if bot_id is None else accounts_view.by_id(db, bot_id)
+    if who is None:
+        raise HTTPException(404)
+    return who
+
+
+def _staff(shell, request: Request, *, allow_bot: bool = True) -> accounts_view.Who:
+    """客服身分。帶 Bearer 走 token 路（第 216 批；request.state.support_desk 記成真，_answer 才收 relay_from）；沒帶照舊 cookie。"""
+    given = _bearer(request)
+    request.state.support_desk = given is not None
+    if given is not None:
+        return _desk_who(shell, given, allow_bot)
     who = _me(shell, _gate(shell, request))
     if not staff.is_staff(shell.CONTENT.config, who):
         raise HTTPException(404)  # 跟沒有這條路同一句
@@ -242,8 +276,9 @@ def _view_ticket(shell, request: Request, text: str) -> dict:
 
 def _lookup(shell, request: Request, body: dict) -> dict:
     """查別的帳號：{id（單號）, kind（login|email|phone）, text}。單不存在 404（不算、不留：沒帶單就不是一次查詢）；寫法不對回那一句
-    （不算、不留）；這一小時滿了記一筆 limit、回那一句；否則查、記一筆（查無也算一次）。回 {found, card, left, message}。"""
-    who = _staff(shell, request)
+    （不算、不留）；這一小時滿了記一筆 limit、回那一句；否則查、記一筆（查無也算一次）。回 {found, card, left, message}。
+    客服官的 token 不能查（第 216 批；設計 5.3）：allow_bot=False，404 同一句、不留紀錄。"""
+    who = _staff(shell, request, allow_bot=False)
     cfg = shell.CONTENT.config.support
     sidecar = store.open_store(sidecar_path(), create=False)
     tid = _int(body.get("id"))
@@ -344,8 +379,10 @@ def _upload(shell, request: Request, text_id: str, raw: bytes) -> dict:
 
 def _view_file(shell, request: Request, text_tid: str, text_seq: str) -> Response:
     """看一張截圖：登入（沒登入 401）→ 單的主人給；不是主人就看是不是客服（照 _staff 的兩個條件，不丟、只判斷）→ 給；
-    其他人、單或序號不存在、不是數字、列在而磁碟上的檔不見了，一律 404「找不到這張單。」（同一句、不 500）。種類照存的檔頭。"""
-    who = _me(shell, _gate(shell, request))
+    其他人、單或序號不存在、不是數字、列在而磁碟上的檔不見了，一律 404「找不到這張單。」（同一句、不 500）。種類照存的檔頭。
+    帶 Bearer 的（第 216 批）走 _staff 的 token 路：對了當客服看、錯了 404 Not Found，不看 cookie。"""
+    desk_token = _bearer(request) is not None
+    who = _staff(shell, request) if desk_token else _me(shell, _gate(shell, request))
     if not (text_seq.isascii() and text_seq.isdigit()):
         raise HTTPException(404, rules.NOT_FOUND)
     tid, seq = _tid(text_tid), int(text_seq)
@@ -353,7 +390,7 @@ def _view_file(shell, request: Request, text_tid: str, text_seq: str) -> Respons
     t = sidecar.ticket(tid) if sidecar is not None else None
     if t is None:
         raise HTTPException(404, rules.NOT_FOUND)
-    if not rules.owns(t, who.id, who.created):
+    if not desk_token and not rules.owns(t, who.id, who.created):
         desk = staff.is_staff(shell.CONTENT.config, who) and identity_base.staff_session_ok(
             open_database(), shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time())
         if not desk:
