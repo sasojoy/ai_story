@@ -5,7 +5,7 @@
   "permissions": {
     "allow": [
       "mcp__plugin_discord_discord__reply",
-      "Bash(./cli.cmd *)",
+      "Bash(./cli.sh *)",
       "Read({{READ}}/**)",
       "Monitor(tail -n 0 -f bridge.log)"
     ]
