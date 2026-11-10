@@ -30,6 +30,10 @@ class ForgePlan(NamedTuple):
     pour: bool = False
     intent: str | None = None
 
+    def __repr__(self) -> str:  # 改版沒開時（兩格都是預設）照舊只寫 insight_ids：比對工具與紀錄看到的字一個不變
+        extra = "".join(f", {k}={getattr(self, k)!r}" for k in ("pour", "intent") if getattr(self, k) != self._field_defaults[k])
+        return f"ForgePlan(insight_ids={self.insight_ids!r}{extra})"
+
 
 # 意境合成改版：第一次合一對時的立意，一型一句（照 fusion.FORM_WORDS 的關鍵字讀得出那一型）
 V2_INTENTS = {"攻": "一往無前，焚盡一切", "守": "守住不退", "變": "詭變如影", "心": "心定如山"}
@@ -171,7 +175,8 @@ def _forge(game: Game, plan: ForgePlan, slot: bot_base.NamingSlot | None) -> lis
     if request is None:
         return game.forge(None, insight_ids, proposed=bot_base.NO_NAME, **extra)
     if slot is not None and slot.open and slot.job is None:
-        slot.job = bot_base.ForgeJob(plan.insight_ids, request, pour=plan.pour, intent=plan.intent)
+        slot.job = (bot_base.PourJob(plan.insight_ids, request, pour=plan.pour, intent=plan.intent) if plan.pour or plan.intent
+                    else bot_base.ForgeJob(plan.insight_ids, request))
     elif slot is not None:
         slot.skipped += 1
     return []
