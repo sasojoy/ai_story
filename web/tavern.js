@@ -77,7 +77,7 @@
 
   function tavAskHtml(shop) {
     const mode = ["ties", "q"].includes(S.tavAsk) ? S.tavAsk : "seek";
-    const modes = [["seek", "查下落", shop.prices.seek], ["ties", "問交情", shop.prices.ties], ["q", "問酒家", shop.prices.ask]]
+    const modes = [["seek", "查下落", shop.prices.seek], ["ties", "問情誼", shop.prices.ties], ["q", "問酒家", shop.prices.ask]]
       .map(([k, name, price]) => `<button class="tv-mode${mode === k ? " on" : ""}" data-act="tav-mode" data-mode="${k}" aria-pressed="${mode === k}"><b>${name}</b><small>${price | 0} 兩</small></button>`).join("");
     const w = shop.watch || { price: 0, mine: [] };
     const names = [...shop.guests, ...shop.known.filter((n) => !shop.guests.includes(n))].slice(0, 10); // 座上客在前、問過的在後，同一個名字只寫一次
