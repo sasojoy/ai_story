@@ -20,7 +20,7 @@ JOB_OWNERS = {  # 照 act 原本那六行的先後
 OP_OWNERS = {
     "outing_say": "explore", "outing_tale": "explore", "battle_text": "battle", "seal_text": "seal", "duel_text": "bout",
     "create_intent": "craft", "create_reread": "craft", "ascend_line": "cultivation", "tavern_ask": "tavern", "feast_text": "feast",
-    "persuade_text": "companions",
+    "persuade_text": "companions", "guard_say": "guard", "guard_rename": "guard", "guard_along": "guard",
 }
 
 
@@ -63,7 +63,7 @@ ASKED_THEN_STARTED = [
 ]
 
 
-TAIL_OWNERS = {"identity_notify": "identity"}  # 包自己接在表尾的格（OUTLOCK_ORDER 外；帳號與客服第 210 批：管理者解綁的通知放鎖之後寄）
+TAIL_OWNERS = {"identity_notify": "identity", "guard": "guard"}  # 包自己接在表尾的格（OUTLOCK_ORDER 外；帳號與客服第 210 批：管理者解綁的通知放鎖之後寄）
 
 
 def test_the_six_slots_keep_the_written_order_and_each_lives_in_its_package():

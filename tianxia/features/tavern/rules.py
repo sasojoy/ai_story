@@ -24,6 +24,7 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import atlas  # 共用規則層（大區：遠近；第 50 批收進）
 from tianxia import figures  # 共用規則層（大勢人物：名氣、心事；第 40 批收進）
 from tianxia import gender
+from tianxia.core import guard_base  # 親衛隊長（乞丐，第三批 Joy 2026-11-09「好」）：一天多問酒家幾次（Config.guard.perks，預設 0）
 from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）
 from tianxia.core import xinshen  # 心神（核心的資源）：開著才限次數
 from tianxia import renown  # 共用規則層（名望段、善惡稱號）
@@ -625,6 +626,20 @@ def write_wall(world: WorldState, content: Content, loc_id: str, who: str, text:
     del notes[:-content.config.tavern.wall_keep]
 
 
+def world_next(state, content: Content, now: float, old) -> None:
+    """開下一季（世界層 next 的 tavern_walls 那一格；state 是全服狀態 SharedWorldState、old 是剛結束那一季的 WorldState）：牆上的題字
+    跟著到新的一季（Joy 2026-11-10「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」），上一季題的蓋上那一季的季數
+    （season_number 這時已經 +1），一間照舊只留最近 Config.tavern.wall_keep 句。不問酒肆開關（同題壁墨：寫上去的字不因為關店就擦掉）。"""
+    was = state.season_number - 1
+    keep = content.config.tavern.wall_keep
+    walls: dict[str, list[WallNote]] = {}
+    for loc_id, notes in old.tavern_walls.items():
+        moved = [n.model_copy(update={"season": n.season or was}) for n in notes[-keep:]]
+        if moved:
+            walls[loc_id] = moved
+    state.season.tavern_walls = walls
+
+
 def treat_shown(world: WorldState, content: Content, loc_id: str) -> str | None:
     treat = world.tavern_treats.get(loc_id)
     if treat is None or world.time - treat[1] > content.config.tavern.treat_hours * 3600:
@@ -954,6 +969,7 @@ def asks_left(state: GameState, content: Content, day: int) -> int | None:
     cap = content.config.xinshen.ask_per_day
     if not xinshen.on(content) or cap <= 0:
         return None
+    cap += int(guard_base.perk(state, content, "tavern_asks"))
     rec = state.player.tavern_asks
     used = rec[1] if len(rec) == 2 and rec[0] == day else 0
     return max(0, cap - used)

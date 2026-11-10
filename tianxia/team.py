@@ -19,6 +19,7 @@ from collections.abc import Callable
 from . import armor, attrset, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
 from . import growth  # 減法季三道閘、屬性五段的純規則（growth 只在函式裡反過來 import team）
 from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
+from .core import guard_base  # 親衛隊長的專長（第三批，Joy 2026-11-09「好」）：弓箭手、醫者、恩線的擋刀（Config.guard，預設 0）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, InsightDef, Squad, TacticBond, TacticDef
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
@@ -1372,7 +1373,7 @@ def dodge_chance(state: GameState, content: Content) -> float:
             for row in content.config.attributes.effects if row.hook == "dodge"}
     v2 = _v2_effect(state, content, None, PLAYER, "dodge", None)  # 五項屬性的季：身法對身法（本人不經 world）
     return min(1.0, max(0.0, (v2 if v2 is not None else hook_effect(content, "dodge", mine, season=getattr(state, "world", None)))
-                        + treasures.amount(state, content, "dodge")))
+                        + treasures.amount(state, content, "dodge") + guard_base.perk(state, content, "dodge")))  # 親衛隊長恩深、敬重：替你擋一下
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
@@ -1420,7 +1421,8 @@ def take_encounter_toll(
         if key == PLAYER:
             lo = traits.loadout(state, content, world)
             # 化勁（13.2）＋防具（裝備四欄 4.3），合計夾在 total_cap；防具關著時 armor_cut 是 0、化勁上限 50% 本來就低於 60%，數字不變
-            cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world))
+            cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world)
+                      + guard_base.perk(state, content, "toll_cut"))  # 親衛隊長（醫者）：併進同一個上限
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut) * (1 - guard),
                 agi=v1_stat(state, content, "agi"), con=con_of(state, content, world, PLAYER),
@@ -1513,6 +1515,9 @@ def _fight(
     結果定了（優勢平移也算進去）之後，本人的身法才有機會把落敗閃成僵持（dodge_chance，人物資質設計 14.4）；
     dodge=False 不擲閃避、也不動那一次亂數——劇情戰的勝敗是人寫好的（僵持也算敗），閃了只會自相矛盾（最終審查 I1）。"""
     squad = content.squads[squad_id]
+    pp = guard_base.perk(state, content, "fight_pp")  # 親衛隊長（弓箭手）：第一回合先放一箭，換成判定差距的平移（0 不動）
+    if pp:
+        shift += encounter.advantage_shift(squad.difficulty if difficulty is None else difficulty, pp)
     arts = team_arts(state, content, world)
     power = encounter.team_power(*_with_attribute(_styled_fighters(state, content, world, arts, squad), arts, squad.attribute))
     lo = traits.loadout(state, content, world)

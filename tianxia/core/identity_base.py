@@ -290,6 +290,9 @@ def blocked_name(name: str | None, content) -> bool:
 # 環境變數 TIANXIA_SUPPORT（逗號分開）。每一筆是 accounts.id 的數字，或登入名（accounts.normalize：不分大小寫）。
 SUPPORT_ENV = "TIANXIA_SUPPORT"
 SUPPORT_FILE = "support.txt"
+# 客服官的金鑰檔（客服自動受理第 216 批；設計第八節，企劃者 2026-11-10「照計畫繼續」）：.local/support.json，核心只讀 bot_token 一鍵
+SUPPORT_BOT_FILE = "support.json"
+SUPPORT_BOT_TOKEN_MIN = 32  # 少於這麼多字一律當沒設
 
 _support_cache: dict = {"path": None, "mtime": None, "names": frozenset()}  # support/staff.py 的 _cache 是同一個 dict
 
@@ -314,6 +317,36 @@ def _support_file_names(path: Path) -> frozenset[str]:
     names = frozenset(normalize(line) for line in lines if line.strip() and not line.strip().startswith("#"))
     _support_cache.update(path=path, mtime=mtime, names=names)
     return names
+
+
+_support_bot_cache: dict = {"path": None, "mtime": None, "token": None}
+
+
+def support_bot_file() -> Path:
+    from tianxia import content as content_module  # noqa: PLC0415  同 support_file
+
+    return content_module.LOCAL_DIR / SUPPORT_BOT_FILE
+
+
+def support_bot_token() -> str | None:
+    """客服官的 token（第 216 批）：.local/support.json 的 bot_token。沒檔、讀不到、壞 json、不是物件、不是字串、少於 32 字一律 None；
+    照檔的修改時間快取（改了不必重開伺服器）。其他鍵不讀（第 217 批的事）。"""
+    path = support_bot_file()
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    if _support_bot_cache["path"] == path and _support_bot_cache["mtime"] == mtime:
+        return _support_bot_cache["token"]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        data = None
+    token = data.get("bot_token") if isinstance(data, dict) else None
+    if not isinstance(token, str) or len(token) < SUPPORT_BOT_TOKEN_MIN:
+        token = None
+    _support_bot_cache.update(path=path, mtime=mtime, token=token)
+    return token
 
 
 def support_names(config) -> frozenset[str]:

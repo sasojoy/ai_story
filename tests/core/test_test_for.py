@@ -1146,6 +1146,7 @@ STAGE_PACKAGES += ["terms"]  # 條款（scripts/new_feature.py 生的 terms_stag
 STAGE_PACKAGES += ["jieyi"]  # 結義（scripts/new_feature.py 生的 jieyi_stage.py）
 STAGE_PACKAGES += ["mail"]  # 帖友書信（scripts/new_feature.py 生的 mail_stage.py）
 STAGE_PACKAGES += ["zongmen"]  # 門派（scripts/new_feature.py 生的 zongmen_stage.py）
+STAGE_PACKAGES += ["guard"]  # 親衛隊長（scripts/new_feature.py 生的 guard_stage.py）
 STAGE_PACKAGES += ["horses"]  # 馬的來路（scripts/new_feature.py 生的 horses_stage.py）
 
 
@@ -1219,6 +1220,14 @@ def test_the_scenarios_pick_only_the_boundary_test_and_point_at_the_selftest(pat
 def test_the_web_compare_tool_picks_its_own_test(path):
     picked = test_for.pick([path])
     assert {p.name for p in picked.files} == {"test_webqa.py"}
+    assert not picked.core and not picked.smoke
+
+
+@pytest.mark.parametrize("path", ["scripts/support_bridge.py", "scripts/support_cli.py", "scripts/support_session_init.py", "scripts/support_knowledge.py"])
+def test_the_support_host_scripts_pick_their_own_tests(path):
+    """客服的主機端四支（T 波，PM）：測試在 support 包裡，照檔名字根挑不到。"""
+    picked = test_for.pick([path])
+    assert {p.name for p in picked.files} == {"test_support_bridge.py", "test_support_cli.py", "test_support_session.py", "test_feature_boundaries.py"}
     assert not picked.core and not picked.smoke
 
 

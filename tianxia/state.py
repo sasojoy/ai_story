@@ -324,6 +324,13 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class FusionNote(BaseModel):
+    """爐譜的一列（意境合成改版，tianxia/fusion.py）：這個配方你第一次合時立意定的型（攻守變心）、合過幾次（熟）。"""
+
+    form: str = "攻"
+    uses: int = 0
+
+
 class ShihaiSeal(BaseModel):
     """識海裡封著的那一份神品意境（傳承，tianxia/features/legacy；架構方向 v2 第七節）：上一季季末自己選的，換季那一刻抄下整份。
     解封之前不在自己的意境裡、裝不上；解封那一刻名字才照這一季登記（撞名就從 names 挑一個）。"""
@@ -332,6 +339,80 @@ class ShihaiSeal(BaseModel):
     fx: InsightFx
     season: int  # 從第幾季帶來的
     names: list[str] = Field(default_factory=list)  # 解封時名字這一季已經有人先取了：換的候選（空的是還沒撞名）
+
+
+class GuardChoice(BaseModel):
+    """親衛隊長（features/guard）：眼前那一件事的一個做法。情分、性向照模型寫的、引擎夾過（或固定事件寫死的）；reaction 是他的反應，memo 是記進紀事的那一句。"""
+
+    label: str
+    reaction: str = ""
+    memo: str = ""
+    qing: int = 0
+    tags: list[str] = Field(default_factory=list)
+
+
+class GuardEvent(BaseModel):
+    """親衛隊長：眼前那一件事（家裡的事，或帶他出門冒出來的）。模型照紀事生；模型壞了換固定事件（fixed 是那一件的 id）。"""
+
+    seq: int  # 第幾件（自己寫的那一句回來時照它認是不是同一件）
+    kind: str = "home"  # home／road
+    day: int = 0  # 第幾個遊戲日生的
+    text: str
+    choices: list[GuardChoice] = Field(default_factory=list)
+    fixed: str = ""
+    shown: bool = False  # 攤開在眼前了（選單換成三個做法）
+
+
+class GuardEntry(BaseModel):
+    """親衛隊長：紀事的一行（他記得的事）。"""
+
+    day: int
+    stamp: str = ""
+    text: str
+    qing: int = 0  # 這一筆動了多少情分（畫面不露數字，只拿來上色）
+
+
+class GuardBook(BaseModel):
+    """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
+    10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
+
+    # met（眼前有個孩子）／saved（救下了，收不收）／left（救了沒收，他留在當地）／grow（收養了，成長期）／study（送去求學）
+    # ／trial（學成回來，出師考驗）／settle（等結算他成了什麼人）／oath（跪在你面前立誓）／sworn（投效了，親衛隊長）
+    stage: str = "met"
+    opening: str = ""  # 開場的 id（content/guard.json 的 openings）
+    place: str = ""  # 在哪裡遇見的（沒收的話他留在這裡）
+    name: str = ""
+    sex: str = ""  # 男／女（少年／少女）
+    renamed: bool = False  # 取過名字了（收養時先照名字表給一個，親衛隊長那一頁上能改一次）
+    qing: int = 0  # 情分（−qing_cap～qing_cap）
+    tags: dict[str, int] = Field(default_factory=dict)  # 性向 → 分數
+    log: list[GuardEntry] = Field(default_factory=list)
+    event: GuardEvent | None = None
+    seq: int = 0  # 事件流水號
+    home_day: int = 0  # 最後一件家裡的事是第幾天的
+    home_n: int = 0  # 那一天生了幾件家裡的事
+    road_day: int = 0  # 出門冒出來的那幾件是第幾天的
+    road_n: int = 0  # 那一天冒出來幾件了
+    want: str = ""  # 等背景寫字生的那一件：home／road；空的是沒在等
+    want_at: float = 0.0  # 開始等的世界秒（等太久換固定事件）
+    along: bool = True  # 出門帶著他（帶著才會冒出路上的事）
+    stamina_seen: float | None = None  # 這一下動作之前的體力（同步時抄、做完一件事時比：花了體力才是出門）
+    adopted_season: int = 0
+    # 第二批：求學、出師、投效
+    picking: bool = False  # 正在挑去處（選單換成七處）
+    school: str = ""  # 求學去處的 id（Config.guard.schools）
+    study_from: float = 0.0  # 世界秒：哪時送去的
+    study_until: float = 0.0  # 世界秒：哪時學成
+    letters: int = 0  # 寫回來幾封信了
+    path: str = ""  # 出路（Config.guard.paths 的名字；出師結算定，之後不再改）
+    title: str = ""  # 稱號（模型取、過名字規則；不行換固定的）
+    bio: str = ""  # 生平（模型讀紀事寫；別人看不到）
+    oath: str = ""  # 立誓那一段
+    sworn_season: int = 0  # 哪一季投效的
+    # 第三批：投效之後
+    season_qing: int | None = None  # 這一季開始（或投效那一刻）的情分：心性一季最多換 band_steps_per_season 檔，照它夾
+    hp_seen: float | None = None  # 這一下動作之前的氣血比例（同步時抄、做完一件事時比：掉到 hurt_ratio 以下他說一句）
+    hurt_day: int = 0  # 他上一次開口是第幾天（一天一次）
 
 
 class LegacyBook(BaseModel):
@@ -450,11 +531,20 @@ class Whisper(BaseModel):
 
 
 class WallNote(BaseModel):
-    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。"""
+    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。換季照帶（酒肆包登記的世界層 next/tavern_walls，Joy 2026-11-10
+    「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」）。"""
 
     who: str
     text: str
     time: float
+    season: int = 0  # 前幾季題的：第幾季（換季帶過來那一下蓋上）；這一季題的是 0，0 的時候不寫這個鍵（舊程式讀得回去）
+
+    @model_serializer(mode="wrap")
+    def _drop_this_season(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("season"):
+            data.pop("season", None)
+        return data
 
 
 class TavernWatch(BaseModel):
@@ -857,6 +947,9 @@ class PlayerState(BaseModel):
     insight_strength: dict[str, int] = Field(default_factory=dict)  # 舊存檔：意境 id → 強度 2 或 3（沒記是 1）；第二批起照 insight_fx
     # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
+    # 意境合成改版（Config.craft，季上蓋章才有；tianxia/fusion.py）：爐譜（配方鍵 → 立意的型與熟）、化入攢的意蘊（那一份的 id → 點數）。空的不寫進存檔
+    fusion_book: dict[str, FusionNote] = Field(default_factory=dict, json_schema_extra=QUIET)
+    fusion_yun: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
     create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；換季帶著走（同回體丹）
@@ -1149,6 +1242,8 @@ class PlayerState(BaseModel):
     # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
     # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
+    # 親衛隊長（tianxia/features/guard）：遇見、收養、養成的帳。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）
+    guard: GuardBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)
@@ -2051,6 +2146,7 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False

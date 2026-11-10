@@ -53,6 +53,27 @@
 @media (min-width: 900px) {
   .sup-split.sup-has-one { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
 }
+/* 截圖（客服自動受理第 215 批；A 版：縮圖列在文字框下面、三格虛線空位）：寫單的挑圖格、看單與客服頁的縮圖、看單的補圖表單 */
+.sup-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 2px 0; }
+.sup-pick-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: auto; min-height: 44px; padding: 0 16px; cursor: pointer; }
+.sup-pick-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.sup-pick-btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sup-pick .sup-shots { flex-basis: 100%; }
+.sup-pick-msg { flex-basis: 100%; margin: 0; color: var(--bad); font-size: 13px; }
+.sup-pick-msg:empty { display: none; }
+.sup-add .form-msg { flex-basis: 100%; margin: 0; }
+.sup-shots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.sup-shot, .sup-slot { display: block; width: 72px; height: 72px; flex: none; border-radius: 8px; overflow: hidden; }
+.sup-shot { border: 1px solid var(--line); background: var(--card-2); }
+.sup-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sup-slot { border: 1px dashed var(--line); }
+.sup-add { margin: 0 0 10px; }
+.sup-up { width: auto; min-height: 44px; padding: 0 18px; }
+.sup-file-msg { margin: 0 0 8px; }
+/* 客服官（客服自動受理第 216 批；第 219 批改 C 版）：「找真人」在最後一則自動回覆的框裡右下、獨佔一行不蓋字；「已請真人處理」的膠囊籤 */
+.sup-msg .btn.small.sup-ask { display: block; width: auto; min-height: 44px; margin: 8px 0 0 auto; padding: 0 18px; white-space: nowrap; } /* .btn.small 是 38px：規範第 44px，這一顆另外撐高 */
+.sup-human { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 400; vertical-align: middle;
+  color: var(--gold); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
 /* 登入頁的客服信箱那一行（第 214 批）：改版資訊前面、小字置中；信箱整段可選取 */
 .sup-gate { margin: 16px 2px 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); text-align: center; }
 .sup-mail { user-select: all; -webkit-user-select: all; color: var(--ink); font-weight: 600; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }

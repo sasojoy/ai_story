@@ -35,7 +35,7 @@ const parts = [
   // gearEffect、gearCell：第 65 批切去 web/gear.js，不在上面那一段裡了
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["gearEffect", "gearCell", "forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
-    "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
+    "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "heHtml", "infuseHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
   // createSub、SELF_NEWS：自己頁底下通往自創、行狀的入口（減法季批 1），這裡不看；shown：序章一塊一塊亮起來，這裡全亮
   `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];`,
   input.stubs || "",

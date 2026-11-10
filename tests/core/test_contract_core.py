@@ -574,7 +574,7 @@ def test_the_world_order_is_the_table_in_the_plan():
         "muster": ("front", "works", "seal", "generals"),
         "open": ("divine", "seal.cache"),
         "retire": ("seal",),
-        "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+        "next": ("inscriptions", "tavern_walls", "divine", "seal.mandate", "seal.cache"),  # tavern_walls：酒肆題壁跨季（Joy 2026-11-10「可以 按照建議」）
         "life": ("feast",),  # core_world2（全部拆包第 40 批）：figure_life.tick 每一輪每一位對話人物設宴
     }
     assert Feature().world() == ()
@@ -1457,7 +1457,7 @@ def test_the_seam_order_is_the_table_in_the_plan():
         "advance.held": ("held_gear",),
         "tick": ("conquest", "battle", "seal"),
         "own_turn": ("bounties",),
-        "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy"),
+        "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy", "guard"),
         "season.grant": ("faction",),
         "stale.first": ("guide",),
         "stale.early": ("cultivation", "resting", "sense", "companions"),
@@ -1576,6 +1576,7 @@ def test_the_core_and_the_packages_take_every_seam_slot_exactly_once():
         "outlets": [("season.carry", "outlets")],
         "peers": [("season.carry", "peers")],
         "legacy": [("season.carry", "legacy")],
+        "guard": [("season.carry", "guard")],  # 親衛隊長跟著帳號走
         "craft": [("sync.deliver", "echoes")],  # core_rest
     }
 

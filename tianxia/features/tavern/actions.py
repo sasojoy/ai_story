@@ -853,7 +853,7 @@ def tavern_view(ctx: Game) -> dict:
         "more_guests": max(0, len(guests) - 6),
         "treat": tavern_rules.TREAT_SEEN.format(name=treat) if treat else "",
         "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour, s.world)],
-        "walls": [{"who": w.who, "text": w.text, "when": ctx.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
+        "walls": [{"who": w.who, "text": w.text, "season": w.season} for w in reversed(s.world.tavern_walls.get(loc, []))],  # 不寫時刻（Joy 11/10）；前幾季題的帶季數
         "wall_chars": cfg.wall_chars,
         "ask_chars": cfg.ask_chars,
         **({"asks_left": left} if (left := tavern_rules.asks_left(s, c, ctx._pill_day())) is not None else {}),  # 問酒家今天還能問幾次（心神開著才有這個鍵）

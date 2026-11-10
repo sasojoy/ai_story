@@ -114,6 +114,7 @@ def check_signature_arts(c: Content, need) -> None:
     own += [(f"名將本命兵器 {a.character}", a.tactic) for a in c.gear.signature_arms if a.tactic is not None]
     own += [(f"高階技能 {h.id}", h.tactic) for h in c.traits.high]  # 武學技能分檔
     own += [(f"神品意境 {g.id}", g.tactic) for g in c.traits.god]  # 特殊頓悟
+    own += [(f"合璧真意 {g.id}", g.tactic) for g in c.traits.merged]  # 意境合成改版
     for where, tactic in own:
         first = seen.setdefault(tactic.name, where)
         need(first == where or (where.startswith("特別功效") and tactic.name in trait_names and first.startswith("特別功效")),

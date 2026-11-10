@@ -330,7 +330,7 @@ EMPTY_LINE = "功效：（意境槽空著，到煉製頁裝意境）"  # 待 joy
 def high(content: Content, high_id: str | None):
     if not high_id:
         return None
-    return next((h for h in (*content.traits.high, *content.traits.god) if h.id == high_id), None)
+    return next((h for h in (*content.traits.high, *content.traits.god, *content.traits.merged) if h.id == high_id), None)
 
 
 def fixed_art(content: Content, art: MartialArt) -> bool:
@@ -410,6 +410,17 @@ def check_traits(c: Content, need) -> None:
             need(g.tactic.name == g.name, f"content/traits.json：神品意境 {g.id} 的戰法名字要跟模板名字一樣")
             need(g.general in generals and generals[g.general].attribute == g.attribute, f"content/traits.json：神品意境 {g.id} 帶的一般功效 {g.general} 要是{g.attribute}的")
             need(g.lean == "無" or (g.lean, g.attribute) in (("正", "陽"), ("邪", "陰")), f"content/traits.json：神品意境 {g.id} 正路要是陽、邪路要是陰")
+    if book.merged:  # 合璧真意（意境合成改版）：陽陰虛實 × 攻守變心一格一道，id he_ 開頭、跟高階技能、神品、一般功效都不撞
+        need(len({g.id for g in book.merged}) == len(book.merged), "content/traits.json：合璧真意的 id 不能重複")
+        taken = {h.id for h in book.high} | {g.id for g in book.god} | {t.key for t in book.general}
+        need(not {g.id for g in book.merged} & taken, "content/traits.json：合璧真意的 id 跟高階技能、神品意境或一般功效撞了")
+        slots = [(g.attribute, g.form) for g in book.merged]
+        need(len(slots) == len(set(slots)), "content/traits.json：合璧真意一路一型只能有一道")
+        generals = {t.key: t for t in book.general}
+        for g in book.merged:
+            need(g.id.startswith("he_"), f"content/traits.json：合璧真意 {g.id} 的 id 要 he_ 開頭")
+            need(g.tactic.name == g.name, f"content/traits.json：合璧真意 {g.id} 的戰法名字要跟名字一樣")
+            need(g.general in generals and generals[g.general].attribute == g.attribute, f"content/traits.json：合璧真意 {g.id} 帶的一般功效 {g.general} 要是{g.attribute}的")
     owners: dict[str, list[str]] = {}
     for skill in c.skills.values():
         need(skill.kind == "武學" or skill.weapon is None, f"內功 {skill.id} 不能有兵器種類（兵器設計 2.3）")

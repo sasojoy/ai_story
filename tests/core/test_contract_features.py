@@ -361,6 +361,8 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
     c.config.auto_open_first_season = True
     # 傳承（week7 2026-11-05 起打開）換季那一刻會結算、改寫帶著的那一份：這裡只驗「帶不帶」，結算本身在 features/legacy/tests
     c.config.legacy.enabled = False
+    # 親衛隊長（week7 2026-11-10 起打開）：還沒救下、還沒收養的那一段換季重新遇見（features/guard actions.on_season_start，設計稿照推薦）；這裡只驗「帶不帶」，清掉那一段在 features/guard/tests
+    c.config.guard.enabled = False
     world = open_world()
     game = Game.new(c, "換季客", rng=random.Random(0), world=world)
     game.skip_tutorial()
@@ -406,7 +408,9 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
                       ("muster", "seal"): "seal", ("open", "seal.cache"): "seal", ("next", "seal.mandate"): "seal",
                       ("next", "seal.cache"): "seal", ("retire", "seal"): "seal",
                       # 全部拆包第 45 批：懸賞榜包登記四格（原本核心代叫 world._STEP_CORE、_WEEK_CORE、_DAY_CORE、_START_CORE 那幾格）
-                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties"}
+                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties",
+                          # 酒肆題壁跨季（Joy 2026-11-10「可以 按照建議」）
+                          ("next", "tavern_walls"): "tavern"}
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))

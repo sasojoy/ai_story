@@ -180,6 +180,44 @@ def test_wall_treat_hide_and_their_limits():
     assert game.tavern_do("hide")[0].startswith("已經打點過了")
 
 
+def test_the_wall_carries_into_the_next_season_with_its_season():
+    """題壁跨季（Joy 2026-11-10「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」）：換季牆上的字照帶，上一季題的蓋上
+    那一季的季數、這一季題的不帶；畫面不寫時刻；一間照舊只留最近 wall_keep 句；季數是 0 的不寫進存檔。"""
+    game = _game(silver=5000)
+    c = game.content
+    game.choose("act:tavern")
+    game.tavern_do("wall", text="黃巾未平，且飲此杯。")
+    was = game.world.get_shared().season_number if hasattr(game.world, "get_shared") else None
+    old = game.world.get_season()
+    assert '"season"' not in old.tavern_walls["wan_city"][0].model_dump_json()
+    c.config.admins = [game.state.player.name]
+    game.admin_end_season(now=game.now)
+    assert game.world.next_season(c, game.now + 60)
+    walls = game.world.get_season().tavern_walls["wan_city"]
+    assert [(w.who, w.text) for w in walls] == [("沈浪", "黃巾未平，且飲此杯。")]
+    assert walls[0].season >= 1 and (was is None or walls[0].season == was)
+    # 再換一季：已經蓋過的季數不變
+    first = walls[0].season
+    game.admin_end_season(now=game.now + 120)
+    assert game.world.next_season(c, game.now + 180)
+    assert game.world.get_season().tavern_walls["wan_city"][0].season == first
+
+
+def test_the_wall_keeps_only_the_latest_lines_across_seasons():
+    from types import SimpleNamespace
+    from tianxia.state import WallNote, WorldState
+
+    c = _content()
+    keep = c.config.tavern.wall_keep
+    old = WorldState()
+    old.tavern_walls = {"wan_city": [WallNote(who="甲", text=f"第{i}句", time=i, season=(3 if i < 5 else 0)) for i in range(keep + 5)]}
+    shared = SimpleNamespace(season_number=8, season=WorldState())
+    tavern.world_next(shared, c, 0.0, old)
+    walls = shared.season.tavern_walls["wan_city"]
+    assert len(walls) == keep and walls[-1].text == f"第{keep + 4}句"
+    assert {w.season for w in walls} == {7}  # 前五句（第三季）被擠掉了，剩下的都是剛結束的第七季
+
+
 def test_hiding_makes_you_harder_to_find():
     world = open_world()
     c = _content()

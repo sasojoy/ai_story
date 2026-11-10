@@ -24,6 +24,8 @@ TABLE = {
     # 煉製頁的開爐（煉製包 actions.forge）：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩）。proposed 是鎖外先取好的（名字, 說明）（C 段）。
     "forge": actions.forge,
     "forge_line": actions.forge_line,
+    # 化入（意境合成改版，煉製包 actions.infuse）：others 化進 body；改版沒開的季回一句話。
+    "infuse": actions.infuse,
     # 兩格都放好時煉製頁的預覽卡（煉製包 actions.forge_preview）。只讀。
     "forge_preview": actions.forge_preview,
     # 爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（煉製包 actions.forge_picks）。只讀。

@@ -14,6 +14,8 @@ from .core.tuning.terms import TermsTuning  # 條款
 from .core.tuning.jieyi import JieyiTuning  # 結義
 from .core.tuning.mail import MailTuning  # 帖友書信
 from .core.tuning.zongmen import ZongmenTuning  # 門派
+from .core.tuning.craft import CraftTuning  # 意境合成改版
+from .core.tuning.guard import GuardTuning  # 親衛隊長
 from .core.tuning.horses import HorsesTuning  # 馬的來路
 # ── tuning import（new_feature.py 接在這一行前面）──
 
@@ -1045,6 +1047,9 @@ class TraitBook(_Strict):
     special: list[SpecialTrait] = Field(default_factory=list)
     high: list[HighTrait] = Field(default_factory=list)
     god: list[GodTrait] = Field(default_factory=list)  # 神品意境模板（特殊頓悟）
+    # 合璧真意（意境合成改版，Joy 2026-11-10「好」）：陽陰虛實四路 × 攻守變心十六道，合成改版開著的季，合出來的那一路照「路 × 立意的型」
+    # 對到其中一道（fusion.grand_for）；強度量到跟那一路原本的真意同級（scripts/measure_merged_grand.py）。id 是 he_ 開頭，不算頓悟神品
+    merged: list[GodTrait] = Field(default_factory=list)
 
 
 class InsightGrant(_Strict):
@@ -2369,7 +2374,7 @@ class TavernTuning(_Strict):
     ties_price: int = Field(default=20, ge=0)  # 打聽交情
     material_prices: dict[int, int] = Field(default_factory=lambda: {1: 5, 2: 10, 3: 25, 4: 40})  # 打聽素材：照階
     wall_price: int = Field(default=5, ge=0)  # 題壁
-    wall_keep: int = Field(default=12, ge=1)  # 每間酒肆的牆留最近幾句
+    wall_keep: int = Field(default=24, ge=1)  # 每間酒肆的牆留最近幾句（換季照帶，一間跨季合計；Joy 2026-11-10 跨季後 12 → 24）
     wall_chars: int = Field(default=20, ge=1)  # 一句最多幾個字
     treat_price: int = Field(default=30, ge=0)  # 請全店喝酒（一天一次）
     treat_fame: int = Field(default=1, ge=0)
@@ -4486,6 +4491,8 @@ class Config(_Strict):
     jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     mail: MailTuning = Field(default_factory=MailTuning)  # 帖友書信（tianxia/core/tuning/mail.py）
     zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
+    craft: CraftTuning = Field(default_factory=CraftTuning)  # 意境合成改版（tianxia/core/tuning/craft.py；開季蓋章 WorldState.craft_v2）
+    guard: GuardTuning = Field(default_factory=GuardTuning)  # 親衛隊長（tianxia/core/tuning/guard.py）
     horses: HorsesTuning = Field(default_factory=HorsesTuning)  # 馬的來路（tianxia/core/tuning/horses.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 

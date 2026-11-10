@@ -124,7 +124,7 @@ from tianxia.sqlite_world import open_world  # noqa: E402
 
 
 # Writers a request kicks off and leaves running: the next request would see their work on one side and not on the other.
-WRITERS = ("xingshi", "event-flavor", "battle-tales", "arena-crowd", "letter", "yuedan", "tavern-chatter")
+WRITERS = ("xingshi", "event-flavor", "battle-tales", "arena-crowd", "letter", "yuedan", "tavern-chatter", "guard-event")
 WRITER_PREFIXES = ("zhuan-",)  # one thread a season: zhuan-1, zhuan-2
 
 

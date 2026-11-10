@@ -199,6 +199,14 @@ class ForgeJob:
 
 
 @dataclass(frozen=True)
+class PourJob(ForgeJob):
+    """意境合成改版：帶著傾注、立意的那一爐（改版沒開時不會開這種單，舊的 ForgeJob 一個欄位不多）。C 段照樣交給 Game.forge。"""
+
+    pour: bool = False
+    intent: str | None = None
+
+
+@dataclass(frozen=True)
 class MasterJob:
     """要請模型另取新名字的絕學定名（企劃者 2026-10-06：不沿用原名）：A 段在鎖內開的單，交給 bot_runner。"""
 
