@@ -11,7 +11,7 @@ from server_kit import (  # noqa: F401
     _no_landing, _no_preset_recipes, cheap_password_hashing, fresh_server_memory, model_breaker_closed, save_dir, scheduler_off,
     season_already_open,
 )
-from support_kit import ROUTES, hit, player, sidecar, staffer, support_isolated, support_on  # noqa: F401
+from support_kit import RAW_POSTS, ROUTES, hit, player, sidecar, staffer, support_isolated, support_on  # noqa: F401
 
 from tianxia.features import support as package
 from tianxia.features.support import rules
@@ -32,7 +32,7 @@ def test_off_every_route_404_before_login_and_parsing():
     assert nowhere.status_code == 404 and nowhere.json() == {"detail": "Not Found"}
     c = player()
     for who in (anon, c):
-        for method, path, body in ROUTES:
+        for method, path, body in ROUTES + RAW_POSTS:
             r = hit(who, method, path, body)
             assert (r.status_code, r.content) == (404, nowhere.content), (method, path)
         for _, path in POSTS:
@@ -60,7 +60,7 @@ def test_off_me_and_main_same_bytes_as_without_the_package(monkeypatch):
 def test_on_without_login_401(support_on):
     """取代第 211 批的 test_routes_401_without_login_either_way：關著是 404（上一條），開著沒登入才是 401。"""
     anon = TestClient(server.app, raise_server_exceptions=False)
-    assert {path: hit(anon, method, path, body).status_code for method, path, body in ROUTES} == {path: 401 for _, path, _ in ROUTES}
+    assert {path: hit(anon, method, path, body).status_code for method, path, body in ROUTES + RAW_POSTS} == {path: 401 for _, path, _ in ROUTES + RAW_POSTS}
 
 
 def test_on_bad_ticket_id_404_and_bad_json_422(support_on, monkeypatch):

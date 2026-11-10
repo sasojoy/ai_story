@@ -58,7 +58,11 @@ ROUTES = (
     ("POST", "/api/support/close", {"id": 1}),
     ("POST", "/api/support/lookup", {"id": 1, "kind": "login", "text": "x"}),  # 第 212 批
 )
+# 第 215 批：截圖上傳的內文是位元組、不解 JSON（gate 測試的「壞 JSON 422」不走它，「關著 404」「沒登入 401」走）
+RAW_POSTS = (("POST", "/api/support/file?id=1", b"x"),)
 
 
 def hit(c: TestClient, method: str, path: str, body):
+    if isinstance(body, bytes):
+        return c.request(method, path, content=body)
     return c.request(method, path, json=body) if method == "POST" else c.get(path)

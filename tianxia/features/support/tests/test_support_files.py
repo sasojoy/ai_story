@@ -1,11 +1,25 @@
 """客服單的截圖（客服自動受理第 215 批；設計 5.1、5.5）：檔頭認種類、旁檔的 files 表、上傳（串流累計、超過就停）、看圖（主人與客服，其他人 404 同一句）。"""
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
+import os
 import sqlite3
 
 import pytest
+import server
+from fastapi.testclient import TestClient
+# autouse 的 fixture 要明列（第 61 批）
+from server_kit import (  # noqa: F401
+    _no_landing, _no_preset_recipes, cheap_password_hashing, fresh_server_memory, model_breaker_closed, save_dir, scheduler_off,
+    season_already_open,
+)
+from support_kit import player, sidecar, staffer, support_isolated, support_on, ticket  # noqa: F401
 
-from tianxia.features.support import rules, store
+from tianxia.features.support import routes, rules, store
+
+pytestmark = pytest.mark.whole_content
 
 PNG = b"\x89PNG\r\n\x1a\n"
 JPG = b"\xff\xd8\xff\xe0"
@@ -94,3 +108,124 @@ def test_add_file_numbers_and_limits(tmp_path):
     with pytest.raises(OSError):
         _add(s, zero, account_id=3, part=folder / ".upload-gone.part")
     assert [f["seq"] for f in s.files(zero)] == [1]
+
+
+# ── 上傳（task 3）：POST /api/support/file?id=<單號>，內文就是圖的位元組 ──
+NOWHERE = "/api/support-no-such-route"
+
+
+def _up(c, tid, data: bytes, content_type="image/png", **headers):
+    return c.post(f"/api/support/file?id={tid}", content=data, headers={"Content-Type": content_type, **headers})
+
+
+def _folder(tid=None):
+    base = routes.files_path()
+    return base if tid is None else base / str(tid)
+
+
+def test_upload_png_jpg_webp_lands_on_disk(support_on):
+    c = player()
+    tid = ticket(c).json()["id"]
+    sent = []
+    for head, ext in ((PNG, "png"), (JPG, "jpg"), (WEBP, "webp")):
+        data = head + os.urandom(200)
+        r = _up(c, tid, data)
+        assert r.status_code == 200, r.text
+        out = r.json()
+        sent.append(data)
+        assert (out["id"], out["seq"], out["kind"], out["bytes"]) == (tid, len(sent), ext, len(data))
+        assert len(out["files"]) == len(sent)
+        assert (_folder(tid) / f"{len(sent)}.{ext}").read_bytes() == data
+    rows = store.open_store(sidecar(), create=False).files(tid)
+    assert [r["sha256"] for r in rows] == [hashlib.sha256(d).hexdigest() for d in sent]
+    assert not list(_folder(tid).glob("*.part")) and not list(_folder(tid).glob(".upload-*"))
+    mine = c.get("/api/support/mine").json()["tickets"][0]
+    assert mine["files"] == [{"seq": i + 1, "kind": k, "bytes": len(d)} for i, (k, d) in enumerate(zip(("png", "jpg", "webp"), sent))]
+    r = _up(c, tid, PNG + b"4")
+    assert r.status_code == 400 and r.json() == {"error": rules.FILES_FULL.format(n=3)}
+    assert not list(_folder(tid).glob(".upload-*"))  # 滿了：.part 刪掉
+
+
+def test_file_too_big_is_refused_by_real_size(support_on, monkeypatch):
+    """Review Focus 1：Content-Length 說 1、實際送 17 位元組（上限 16）：照實際累計拒絕，檔不落地、files 表不多列。"""
+    monkeypatch.setattr(server.CONTENT.config.support, "file_bytes_max", 16)
+    c = player()
+    tid = ticket(c).json()["id"]
+    r = _up(c, tid, PNG + b"x" * 9, **{"Content-Length": "1"})
+    assert r.status_code == 400 and r.json() == {"error": rules.FILE_TOO_BIG.format(mb=routes._mb(16))}
+    assert not _folder().exists() and store.open_store(sidecar(), create=False).files(tid) == []
+    told = _up(c, tid, PNG, **{"Content-Length": "17"})  # 說超過的：不讀就拒
+    assert told.status_code == 400 and told.json() == r.json()
+    ok = _up(c, tid, PNG + b"x" * 8)  # 剛好 16：收
+    assert ok.status_code == 200 and ok.json()["bytes"] == 16
+
+
+def test_oversized_upload_stops_reading_early(support_on, monkeypatch):
+    """Review Focus 1：沒有 Content-Length、一塊一塊送：累到超過就停止讀（第 3 塊不會被要）。TestClient 會先把整個內文讀完，所以直接打 ASGI。"""
+    chunk = 9
+    monkeypatch.setattr(server.CONTENT.config.support, "file_bytes_max", 2 * chunk - 1)
+    c = player()
+    tid = ticket(c).json()["id"]
+    cookie = c.cookies.get(server.COOKIE)
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http", "path": "/api/support/file",
+             "raw_path": b"/api/support/file", "root_path": "", "query_string": f"id={tid}".encode(), "server": ("testserver", 80),
+             "client": ("testclient", 50000),
+             "headers": [(b"host", b"testserver"), (b"content-type", b"image/png"), (b"cookie", f"{server.COOKIE}={cookie}".encode())]}
+    pulls, sent = [], []
+
+    async def receive():
+        pulls.append(1)
+        if len(pulls) >= 3:
+            raise AssertionError("第 3 塊被要了")
+        return {"type": "http.request", "body": (PNG + b"x")[:chunk], "more_body": True}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(server.app(scope, receive, send))
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    assert start["status"] == 400 and json.loads(body) == {"error": rules.FILE_TOO_BIG.format(mb=routes._mb(2 * chunk - 1))}
+    assert len(pulls) == 2 and not _folder().exists()
+
+
+def test_kind_is_by_magic_bytes_only(support_on):
+    """Review Focus 2：照檔頭，不照 Content-Type。MZ（執行檔）說是 image/png → 不收；PNG 檔頭說是 text/plain → 收、存成 png。"""
+    c = player()
+    tid = ticket(c).json()["id"]
+    r = _up(c, tid, b"MZ\x90\x00" + os.urandom(64), "image/png")
+    assert r.status_code == 400 and r.json() == {"error": rules.FILE_NOT_IMAGE}
+    assert not _folder().exists()
+    data = PNG + b"not really an image"
+    r = _up(c, tid, data, "text/plain")
+    assert r.status_code == 200 and r.json()["kind"] == "png"
+    assert (_folder(tid) / "1.png").read_bytes() == data
+
+
+def test_upload_needs_owner_and_open_ticket(support_on, monkeypatch):
+    c = player()
+    tid = ticket(c).json()["id"]
+    other = player("li_02", "李白衣")
+    stranger, missing = _up(other, tid, PNG), _up(other, tid + 50, PNG)
+    assert (stranger.status_code, stranger.content) == (missing.status_code, missing.content) == (404, missing.content)
+    assert missing.json() == {"detail": rules.NOT_FOUND}
+    assert _up(c, "abc", PNG).json() == {"detail": rules.NOT_FOUND}
+    s = staffer(monkeypatch)
+    assert s.post("/api/support/close", json={"id": tid}).status_code == 200
+    r = _up(c, tid, PNG)
+    assert r.status_code == 400 and r.json() == {"error": rules.CLOSED_ALREADY}
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    assert _up(anon, tid, PNG).status_code == 401
+    assert not _folder().exists()
+
+
+def test_off_file_routes_404_before_login(monkeypatch):
+    """關著：兩條都跟沒有這條路逐位元組一樣（沒登入、壞單號、超大 Content-Length 都一樣），不建資料夾、不建旁檔。"""
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    nowhere = anon.get(NOWHERE)
+    c = player()
+    for who in (anon, c):
+        for r in (_up(who, 1, PNG), _up(who, "abc", PNG), _up(who, 1, b"MZ"), _up(who, 1, PNG, **{"Content-Length": "999999999"}),
+                  who.get("/api/support/file/1/1"), who.get("/api/support/file/abc/x")):
+            assert (r.status_code, r.content) == (404, nowhere.content)
+    assert not _folder().exists() and not sidecar().exists()

@@ -10,7 +10,9 @@
 這個檔只在殼掛路由時才 import（要 fastapi）。"""
 from __future__ import annotations
 
+import hashlib
 import json
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -27,6 +29,11 @@ PUSH_TEXT = "客服回覆了你的單。"  # 待 joy 潤
 
 def sidecar_path():
     return store.store_path(default_path())
+
+
+def files_path():
+    """截圖的資料夾（第 215 批）：跟旁檔並排，跟著 TIANXIA_DB。只有上傳那一支建它。"""
+    return store.files_dir(default_path())
 
 
 def _gate_off(shell) -> None:
@@ -94,29 +101,36 @@ def _version(shell) -> str:
     return notes[0]["date"] if notes else ""
 
 
-def _player_ticket(t: dict, replies: list[dict]) -> dict:
+def _files(files: list[dict]) -> list[dict]:
+    """單上的截圖（第 215 批）：只給序號、種類、大小（看圖走 GET /api/support/file/<單號>/<seq>）。"""
+    return [{"seq": f["seq"], "kind": f["kind"], "bytes": f["bytes"]} for f in files]
+
+
+def _player_ticket(t: dict, replies: list[dict], files: list[dict]) -> dict:
     """玩家看的一張單：不含內部註記、不含誰回的帳號；客服那一側只寫「客服」。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "created": t["created"], "updated": t["updated"],
         "replies": [{"staff": bool(r["staff"]), "body": r["body"], "created": r["created"]} for r in replies if rules.visible_to_player(r)],
+        "files": _files(files),
     }
 
 
 def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> dict:
     if sidecar is None:
         return {"tickets": [], "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
-    tickets = [_player_ticket(t, sidecar.replies(t["id"], internal=False)) for t in sidecar.mine(who.id, who.created)]
+    tickets = [_player_ticket(t, sidecar.replies(t["id"], internal=False), sidecar.files(t["id"])) for t in sidecar.mine(who.id, who.created)]
     return {"tickets": tickets, "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
 
 
-def _staff_ticket(t: dict, replies: list[dict]) -> dict:
-    """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）。"""
+def _staff_ticket(t: dict, replies: list[dict], files: list[dict]) -> dict:
+    """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）＋截圖（第 215 批）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "admin_flag": bool(t["admin_flag"]), "created": t["created"], "updated": t["updated"], "version": t["version"],
         "account": {"id": t["account_id"], "login": t["login"], "character": t["character"], "created": t["account_created"]},
         "replies": [{"staff": bool(r["staff"]), "internal": bool(r["internal"]), "body": r["body"], "created": r["created"]} for r in replies],
+        "files": _files(files),
     }
 
 
@@ -199,6 +213,9 @@ def _queue(shell, request: Request) -> dict:
     q["tickets"] = [{"id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]),
                      "body": t["body"], "status": t["status"], "admin_flag": bool(t["admin_flag"]), "character": t["character"],
                      "login": t["login"], "created": t["created"], "updated": t["updated"]} for t in q["tickets"]]
+    extras = sidecar.queue_extras([t["id"] for t in q["tickets"]])  # 第 215 批：每一列多張數 file_count
+    for t in q["tickets"]:
+        t.update(extras[t["id"]])
     q["categories"] = rules.CATEGORIES
     q["lookups_left"] = sidecar.lookups_left(who.id, now, hourly)
     return q
@@ -213,7 +230,7 @@ def _view_ticket(shell, request: Request, text: str) -> dict:
     t = sidecar.ticket(tid) if sidecar is not None else None
     if t is None:
         raise HTTPException(404, rules.NOT_FOUND)
-    out = _staff_ticket(t, sidecar.replies(tid, internal=True))
+    out = _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid))
     out["card"] = lookup.card(open_database(), t["account_id"], ledger_rows=shell.CONTENT.config.support.ledger_rows,
                               created_must=t["account_created"])
     found = None if out["card"].get("gone") else t["account_id"]
@@ -268,7 +285,7 @@ def _answer(shell, request: Request, body: dict) -> dict:
         raise _refused(shell, e) from None
     if then != "admin":
         _push(shell, t, now)
-    return _staff_ticket(t, sidecar.replies(tid, internal=True))
+    return _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid))
 
 
 def _close(shell, request: Request, body: dict) -> dict:
@@ -282,7 +299,45 @@ def _close(shell, request: Request, body: dict) -> dict:
         sidecar.close(tid, shell.time.time())
     except Refused:
         raise HTTPException(404, rules.NOT_FOUND) from None
-    return _staff_ticket(sidecar.ticket(tid), sidecar.replies(tid, internal=True))
+    return _staff_ticket(sidecar.ticket(tid), sidecar.replies(tid, internal=True), sidecar.files(tid))
+
+
+# ── 截圖（客服自動受理第 215 批；設計 5.1、5.5）──
+
+def _mb(n: int) -> str:
+    """位元組 → 拒絕那一句的 MB（3,000,000 → 「3」）。"""
+    return f"{n / 1_000_000:g}"
+
+
+def _upload(shell, request: Request, text_id: str, raw: bytes) -> dict:
+    """讀完內文之後的同步本體：單號 → 檔頭 → 登入 → 單在、是自己的、沒結 → 寫 .part → add_file（交易裡算 seq、記一列、換名）。
+    別人的單、不存在的單 404 同一句（同 _player_reply）；不是圖、結了、滿了回那一句。失敗一律刪 .part。"""
+    tid = _tid(text_id)
+    kind = rules.image_kind(raw[:12])
+    if kind is None:
+        raise shell.GameError(rules.FILE_NOT_IMAGE)
+    who = _me(shell, _gate(shell, request))
+    cfg = shell.CONTENT.config.support
+    sidecar = store.open_store(sidecar_path(), create=False)
+    t = sidecar.ticket(tid) if sidecar is not None else None
+    if t is None or not rules.owns(t, who.id, who.created):
+        raise HTTPException(404, rules.NOT_FOUND)
+    if t["status"] == rules.CLOSED:
+        raise shell.GameError(rules.CLOSED_ALREADY)
+    folder = files_path() / str(tid)
+    folder.mkdir(parents=True, exist_ok=True)
+    part = folder / f".upload-{uuid.uuid4().hex}.part"
+    try:
+        part.write_bytes(raw)
+        row = sidecar.add_file(tid, who.id, who.created, kind, len(raw), hashlib.sha256(raw).hexdigest(), shell.time.time(), cfg.files_max,
+                               part=part)
+    except Refused as e:
+        if str(e) == rules.NOT_FOUND:
+            raise HTTPException(404, rules.NOT_FOUND) from None
+        raise _refused(shell, e) from None
+    finally:
+        part.unlink(missing_ok=True)
+    return {"id": tid, "seq": row["seq"], "kind": row["kind"], "bytes": row["bytes"], "files": _files(sidecar.files(tid))}
 
 
 def router(shell) -> APIRouter:
@@ -332,6 +387,23 @@ def router(shell) -> APIRouter:
         _gate_off(shell)
         body = await _json(request)
         return await run_in_threadpool(_lookup, shell, request, body)
+
+    @r.post("/api/support/file")
+    async def api_support_file(request: Request):
+        """截圖（第 215 批）：內文就是圖的位元組（不解 JSON）。gate → 認登入（只查記憶體的 SESSIONS，在讀內文之前）→ Content-Length 說超過的
+        提早拒（說不超過的不信）→ 串流累計、超過 file_bytes_max 立刻停止讀、拒絕 → 同步的本體丟執行緒池。"""
+        _gate_off(shell)
+        shell._account(request)
+        cap = shell.CONTENT.config.support.file_bytes_max
+        told = request.headers.get("content-length", "")
+        if told.isascii() and told.isdigit() and int(told) > cap:
+            raise shell.GameError(rules.FILE_TOO_BIG.format(mb=_mb(cap)))
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > cap:
+                raise shell.GameError(rules.FILE_TOO_BIG.format(mb=_mb(cap)))
+        return await run_in_threadpool(_upload, shell, request, request.query_params.get("id", ""), bytes(raw))
 
     @r.get("/api/support/mailbox")
     async def api_support_mailbox():
