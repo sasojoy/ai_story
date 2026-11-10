@@ -16,6 +16,8 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
   font: 700 13px/1.5 var(--kai); letter-spacing: 0.08em; color: var(--accent); background: var(--card);
 }
 .peer-title .peer-seg { white-space: nowrap; }
+/* 親衛隊長第四批：他身邊的那一位（「親衛隊長小明（將軍）」），楷書一行、金色細線起頭 */
+.peer-guard { font: 14px/1.6 var(--kai); color: var(--ink); letter-spacing: 0.04em; padding-left: 8px; border-left: 2px solid var(--gold); margin-top: 4px; }
 .peer-arts { display: grid; gap: 8px; margin: 14px 0; }
 .peer-art { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 .peer-art small { color: var(--ink-2); flex: none; }

@@ -19,6 +19,7 @@ from tianxia import four_tiers, gender, renown, team
 from tianxia.characters import name_key
 from tianxia.core import jieyi_base  # 名分（結義第一批）：玩家卡上的義名排行
 from tianxia.core import identity_base  # 綁手機才能贈物（帳號與客服第 205 批；核心，phone_gate 預設關）
+from tianxia.core import guard_base  # 親衛隊長第四批：玩家卡上那一行「親衛隊長小明（將軍）」
 from tianxia.core.cards import ACTIONS, CardAction, CardButton, register  # noqa: F401  玩家卡的登記表搬進核心（第 45 批）：舊名照舊拿得到同一批物件
 from tianxia.core.presence import GONE, affiliation, here, side, visible  # noqa: F401  「此地還有」的判斷與身分字搬進核心（第 37 批）：舊名照舊拿得到同一批函式物件
 from tianxia.rules import day_turn
@@ -84,6 +85,8 @@ def card(game: Game, other: Game) -> dict:
         **({"title": dict(o.player.titles_worn)} if other.content.config.titles.enabled else {}),
         # 名分（結義第一批）：他的義名與排行（「潁川三義・行二」）；沒結義、開關關著沒有這個鍵
         **({"jieyi": tag} if (tag := jieyi_base.card_tag(game.content, game.world, o.player.name)) else {}),
+        # 親衛隊長第四批（Joy 2026-11-10「全部做完一起上」；設計稿第六節）：「親衛隊長小明（將軍）」；沒投效、開關關著沒有這個鍵
+        **({"guard": line} if (line := guard_base.card_line(o, other.content)) else {}),
     }
 
 
