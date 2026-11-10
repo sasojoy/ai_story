@@ -72,7 +72,7 @@
 .sup-file-msg { margin: 0 0 8px; }
 /* 客服官（客服自動受理第 216 批；A 版）：「找真人」在對話最下面、回覆表單上方；「已請真人處理」的膠囊籤 */
 .sup-ask-row { display: flex; justify-content: flex-end; margin: 0 0 10px; }
-.sup-ask { width: auto; min-height: 44px; padding: 0 18px; }
+.btn.small.sup-ask { width: auto; min-height: 44px; padding: 0 18px; } /* .btn.small 是 38px：規範第 44px，這一顆另外撐高 */
 .sup-human { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 400; vertical-align: middle;
   color: var(--gold); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
 /* 登入頁的客服信箱那一行（第 214 批）：改版資訊前面、小字置中；信箱整段可選取 */
