@@ -15,6 +15,13 @@ import load_engine  # noqa: E402
 pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
 
+@pytest.fixture(autouse=True)
+def _empty_workdir(tmp_path, isolated_database):
+    """壓測要一個沒有 tianxia.db 的資料夾（check_workdir 擋的就是它）。conftest 的 isolated_database 第 V 波起會先抄一份模板
+    到 tmp_path/tianxia.db，這裡拿掉：壓測自己開 load.db，用不到那一份。"""
+    (tmp_path / "tianxia.db").unlink(missing_ok=True)
+
+
 def test_small_run_reports_every_number(tmp_path):
     report = load_engine.run(characters=5, actions=40, seed=1, workdir=tmp_path, end_season=True)
     assert len(report["locked"]) == 40 and len(report["total"]) == 40
