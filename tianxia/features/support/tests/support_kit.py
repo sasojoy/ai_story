@@ -2,12 +2,15 @@
 server_kit 的 autouse fixture 由各測試檔自己明列 import（少一個就會在沒有關排程、沒換雜湊參數之下跑：第 61 批）。"""
 from __future__ import annotations
 
+import json
+
 import pytest
 import server
 from fastapi.testclient import TestClient
 from server_kit import _player
 
 from tianxia import content as content_module
+from tianxia.core import identity_base
 from tianxia.features.support import routes, staff
 
 
@@ -19,6 +22,7 @@ def support_isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(content_module, "LOCAL_DIR", local)
     monkeypatch.delenv(staff.ENV_VAR, raising=False)
     staff._cache.update(path=None, mtime=None, names=frozenset())
+    identity_base._support_bot_cache.update(path=None, mtime=None, token=None)
     yield local
 
 
@@ -38,6 +42,19 @@ def staffer(monkeypatch, login="kefu_01", name="青衣") -> TestClient:
     c = player(login, name)
     monkeypatch.setattr(server.CONTENT.config.support, "staff", [login])
     return c
+
+
+FAKE_TOKEN = "test-desk-token-" + "0123456789abcdef01234567"  # 測試自造的 40 字假 token（不是真的金鑰）
+
+
+def bot_setup(monkeypatch, local, login="desk_01", *, token=FAKE_TOKEN) -> dict:
+    """客服官（第 216 批）：暫存的 .local/support.json 寫假 token、設 bot_account、清 token 的快取；回帶 Bearer 的標頭。
+    login 那個帳號要測試自己建（player(login, ...)）；token=None 不寫金鑰檔。"""
+    if token is not None:
+        (local / identity_base.SUPPORT_BOT_FILE).write_text(json.dumps({"bot_token": token}), encoding="utf-8")
+    monkeypatch.setattr(server.CONTENT.config.support, "bot_account", login)
+    identity_base._support_bot_cache.update(path=None, mtime=None, token=None)
+    return {"Authorization": f"Bearer {FAKE_TOKEN}"}
 
 
 def sidecar():
