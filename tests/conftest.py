@@ -761,7 +761,6 @@ LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",
     "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry",
-    "tianxia/features/bounties/tests/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week",
     "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off",
     "tianxia/features/sortie/tests/test_sortie_duel_bots.py::test_a_bots_only_server_clears_every_duel_within_a_day",
     "tests/season/test_sim_scripts.py::test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts",
