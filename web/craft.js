@@ -32,8 +32,10 @@
             <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name"${fit}>${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.sub)}</text></g>${pin}`
         : `<g class="w-slot" data-act="pot-open"${potGlow()} role="button" aria-label="放一樣進爐"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入</text></g>`;
     };
+    const mood = heMood();
     return `<g class="w-hub w-furnace${ready ? " ready" : ""}" data-act="forge-hub" role="button" aria-label="太極火爐，開爐">
       <g class="w-shake">
+        <circle r="${r + 14}" class="w-aura"/>
         <g class="w-flames${ready ? " hot" : ""}">${flames}</g>
         <circle r="${r + 3}" class="w-hub-rim"/>
         <g class="w-spin w-taichi${ready ? " hot" : ""}" style="${spinAt(ready ? 3 : 28)}">
@@ -42,9 +44,31 @@
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
           <circle r="${r}" class="w-seam"/>
         </g>
+        <text y="-24" class="w-form">${esc(mood && mood.form || "")}</text>
         ${slot(slots[0], 0)}${slot(slots[1], 1)}
-        <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
+        <text y="${r - 12}" class="w-furnace-lab">${ready ? (mood && mood.god ? "合璧成神" : "點爐開火") : "太極火爐"}</text>
       </g></g>`;
+  }
+  // 爐子自己說話（Joy 2026-11-10「料放進去就開始發光或是出現什麼意象」）：放一樣進去爐子就照那一路的顏色亮一點；
+  // 兩樣放好照伺服器的預覽（v.he）：火候越足越亮（lvl 1～3）、爐心浮出這一爐的型字、三條都齊整圈金光（god）。網頁一個數字不算
+  const HE_HUE = { "陽": "var(--gang)", "陰": "var(--kuai)", "虛": "var(--he-xu)", "實": "var(--gold)", "剛": "var(--gang)", "快": "var(--kuai)", "柔": "var(--rou)", "慢": "var(--man)" };
+  function heMood() {
+    const h = S.forgePreview && S.forgePreview.he;
+    if (h) return { hue: HE_HUE[h.path] || "var(--gold)", lvl: h.heat >= h.need ? 3 : h.near ? 2 : 1, form: h.form || "", god: !!h.god };
+    const one = S.forgeSel.length === 1 && S.forgeSel[0].type === "ins" && ((S.menxia || {}).insights || []).find((i) => i.id === S.forgeSel[0].id);
+    return one && S.main && S.main.status && S.main.status.fusion ? { hue: HE_HUE[one.attribute] || "var(--gold)", lvl: 1, form: "", god: false } : null;
+  }
+  // 爐子那一格（.kiln）掛上 data-lvl、data-god 與 --he-c；預覽晚到時只改這幾個屬性與型字，不重畫爐子（火舌不從頭竄）
+  function applyMood() {
+    const kiln = document.getElementById("kiln");
+    if (!kiln || !kiln.style) return;
+    const m = heMood();
+    if (m) { kiln.dataset.lvl = String(m.lvl); kiln.style.setProperty("--he-c", m.hue); } else { delete kiln.dataset.lvl; kiln.style.removeProperty("--he-c"); }
+    if (m && m.god) kiln.dataset.god = "1"; else delete kiln.dataset.god;
+    const form = kiln.querySelector(".w-form");
+    if (form) form.textContent = m && m.form || "";
+    const lab = kiln.querySelector(".w-furnace-lab");
+    if (lab && forgeReady()) lab.textContent = m && m.god ? "合璧成神" : "點爐開火";
   }
   // 煉製頁的太極火爐自己一張圖：外面不圍東西，挑武學與意境在下面的清單
   function furnaceSvg(slots, ready) {
@@ -118,14 +142,9 @@
   }
 
   // 爐裡放的東西 → 送給伺服器的 body：只有意境（武學不再拿來合，Joy 2026-10-21）
-  // 意境合成改版開著時多帶傾注（S.forgePour）；關著時不會有
   function forgeBody() {
-    const out = { insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
-    if (S.forgePour) out.pour = true;
-    return out;
+    return { insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
   }
-  // 爐裡換了東西：傾注歸零（下一對自己決定）
-  function heReset() { S.forgePour = false; }
   // 兩個意境才放得滿（不同的合併、同一種的兩份揣摩）
   function forgeReady() {
     return forgeBody().insights.length === 2;
@@ -147,7 +166,6 @@
     const no = pickMark(type, id);
     if (no) { toast(no.why); return; } // 跟爐裡那一樣合不了（伺服器照開爐時的判斷算好的）：說為什麼，不放進去
     S.forgeSel.push({ type, id });
-    heReset();
     if (forgeReady()) S.craftPick = false; // 兩格放滿：抽屜收起，看預覽
     S.potFlash = S.forgeSel.findIndex((p) => p.type === type && p.id === id); // 剛放進去的那一格閃一下（固定列上看得到，不必捲回爐子）
     renderPage();
@@ -221,7 +239,7 @@
     const head = [v.made, v.attribute ? `屬${v.attribute}` : "", v.he ? "" : merge ? v.depth : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean).map(esc).join("・");
     const tags = (v.traits || []).map((t) => `${esc(t.name)}${t.layers > 1 ? ` ×${t.layers}` : ""}`);
     const he = v.he; // 改版：縮起來的那一行寫火候與主料定的功效（待 joy 潤）
-    const line2 = (he ? [`火候 ${he.heat | 0}／${he.need | 0}`, he.general ? `功效 ${he.general}` : "", he.god ? "四條都齊" : ""]
+    const line2 = (he ? [`火候 ${he.heat | 0}／${he.need | 0}`, he.general ? `功效 ${he.general}` : "", he.god ? "開爐就成神" : ""]
       : [tags.length ? `功效 ${tags.join("、")}` : "", v.slots, v.near]).filter(Boolean).map(esc).join("・");
     return `<button type="button" class="kiln-peek" data-act="peek" aria-label="看整張預覽卡">${badge}<span><b>${head}</b>${line2 ? `<small>${line2}</small>` : ""}</span>${he ? "" : fireHtml(v.fire, true)}</button>
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}`;
@@ -236,7 +254,9 @@
     const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="26.5" class="kiln-ember"/><circle r="24.2" class="kiln-ring"/><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
       <circle r="${r}" class="w-yang"/><path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
       <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/><circle r="${r}" class="w-seam"/></g></svg>`;
-    return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln">
+    const mood = heMood();
+    const moodAttrs = mood ? ` data-lvl="${mood.lvl}"${mood.god ? ' data-god="1"' : ""} style="--he-c:${mood.hue}"` : "";
+    return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln"${moodAttrs}>
       <div class="kiln-big">${furnaceSvg(slots, ready)}</div>
       <div class="kiln-mini">
         <div class="kiln-row">${cell(slots[0], 0)}
@@ -331,7 +351,7 @@
     </div>`;
   }
   // 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」）：預覽卡多一塊——火候（差一點寫「差一點」）、主料定的一般功效、
-  // 型（看輔料，Joy 2026-11-10「輔料定型」）、真意（熟 3 次前「未看破」）、傾注、成神四條（墨點＋缺什麼）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
+  // 型（看輔料，Joy 2026-11-10「輔料定型」）、真意（熟 3 次前「未看破」）、成神三條（墨點＋缺什麼；Joy 2026-11-10「傾注好複雜」拿掉傾注，三條齊了開爐就成神、兩份用掉）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
   // 改版沒開的季 v.he 不存在，這裡回空字串。字待 joy 潤
   function heHtml(h) {
     if (!h) return "";
@@ -344,15 +364,13 @@
       grand ? `<div class="he-row"><span class="he-k">真意</span>${grand}${h.form ? `<span class="he-sub">熟 ${h.uses | 0}</span>` : ""}</div>` : "", // 待 joy 潤
       h.grand_desc ? `<p class="he-desc">${esc(h.grand_desc)}</p>` : "",
     ];
-    const pour = h.can_pour ? `<button type="button" class="he-pour${S.forgePour ? " on" : ""}" data-act="he-pour" aria-pressed="${!!S.forgePour}">
-      <i aria-hidden="true"></i><span><b>傾注</b><small>${S.forgePour ? "兩份都會用掉，承襲兩邊的層數" : "兩份都用掉，換承襲層數；成神少不了它"}</small></span></button>` : ""; // 待 joy 潤
     const conds = h.conds || [];
     const done = conds.filter((c) => c.ok).length;
     const road = conds.length ? `<button type="button" class="he-road${S.heRoad ? " open" : ""}" data-act="he-road" aria-expanded="${!!S.heRoad}">
-        <span>${h.god ? "四條都齊：這一爐合璧成神" : "成神之路"}</span><span class="he-dots" aria-label="${done}／4">${conds.map((c) => `<i class="${c.ok ? "on" : ""}"></i>`).join("")}</span><em aria-hidden="true">▾</em></button>
+        <span>${h.god ? "三條都齊：開爐就成神" : "成神之路"}</span><span class="he-dots" aria-label="${done}／${conds.length}">${conds.map((c) => `<i class="${c.ok ? "on" : ""}"></i>`).join("")}</span><em aria-hidden="true">▾</em></button>
       ${S.heRoad ? `<ul class="he-conds">${conds.map((c) => `<li class="${c.ok ? "ok" : ""}"><i aria-hidden="true"></i><span><b>${esc(c.label)}</b>${c.miss ? `<small>${esc(c.miss)}</small>` : ""}</span></li>`).join("")}
         ${h.hint ? `<li class="hint"><span><small>${esc(h.hint)}</small></span></li>` : ""}</ul>` : ""}` : ""; // 待 joy 潤
-    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${pour}${road}</div>`;
+    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${road}</div>`;
   }
 
   // 化入（意境合成改版）：同一路、不帶真意、沒裝在槽上的弱意境化成意蘊（凡 1、佳 2、珍 3），攢滿 per_layer 點本體加一重。
@@ -790,6 +808,7 @@
       if (el) el.innerHTML = forgeLineHtml(S.menxia || {});
       const warn = document.getElementById("kiln-warn");
       if (warn) warn.innerHTML = kilnWarn();
+      applyMood();
     } catch (e) { /* 提示過 */ }
   }
 
@@ -833,7 +852,7 @@
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
-        if (r.made) { S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : []; S.forgePour = false; } // 傾注跟著這一爐歸零
+        if (r.made) { S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : []; }
         trimForgeSel();
         S.forgeLine = "";
         S.forgePreview = null;
@@ -965,7 +984,7 @@
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
-        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); heReset(); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
+        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
         case "pot-lock": if (S.busy) break; toggleLock(Number(el.dataset.i)); break;
         case "forge": await forge(); break;
         case "craft-all": craftView().all = true; renderPage(); break;
@@ -976,7 +995,6 @@
           if (forgeReady()) await forge();
           else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
           break;
-        case "he-pour": if (S.busy) break; S.forgePour = !S.forgePour; updateForgeLine(); break; // 傾注：重問一次預覽（成神四條跟著變）
         case "he-road": { S.heRoad = !S.heRoad; const el2 = document.getElementById("forge-line"); if (el2) el2.innerHTML = forgeLineHtml(S.menxia || {}); break; }
         case "inf-open": { const st = S.infuse = S.infuse || { open: false, body: "", others: [] }; st.open = !st.open; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
         case "inf-body": { const st = S.infuse; st.body = st.body === el.dataset.id ? "" : el.dataset.id; st.others = []; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
@@ -984,7 +1002,7 @@
         case "inf-go": if (!S.busy) await infuseGo(); break;
     } // craftClick
   } // craftClick
-  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "he-pour", "he-road", "inf-open", "inf-body", "inf-pick", "inf-go"]);
+  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "he-road", "inf-open", "inf-body", "inf-pick", "inf-go"]);
   async function craftChange(ev) {
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();

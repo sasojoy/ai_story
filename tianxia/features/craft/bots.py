@@ -29,15 +29,7 @@ class ForgePlan(NamedTuple):
     insight_ids: tuple[str, ...]
 
 
-class PourPlan(NamedTuple):
-    """意境合成改版開著時挑的一爐：另帶傾注。另開一型、不在 ForgePlan 上加欄位：改版沒開時挑出來的照舊是 ForgePlan，
-    比對工具與紀錄看到的一個字不變。讀的人一律 getattr(plan, "pour", False)。"""
-
-    insight_ids: tuple[str, ...]
-    pour: bool = False
-
-
-def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | PourPlan | None:
+def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | None:
     """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、手上不到兩個意境、或什麼都合不了就是 None。
     只挑、不開爐，什麼都不改。merge_share 沒給就在呼叫的當下讀模組常數 MERGE_SHARE（量平衡的腳本改它要有效）。"""
     merge_share = MERGE_SHARE if merge_share is None else merge_share
@@ -55,9 +47,9 @@ def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None)
     return None
 
 
-def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
+def _pick_v2(game: Game, rng: random.Random) -> ForgePlan | None:
     """意境合成改版的挑法（真人看得到的同一張預覽：fusion.v2_preview）：
-    1. 手上兩份三重湊得成一對、四條都齊（在那一路最濃的地方、這一季的秘訣也對上）：傾注、合璧成神；
+    1. 手上兩份三重湊得成一對、三條都齊（在那一路最濃的地方、這一季的秘訣也對上）：開爐就合璧成神；
     2. 兩份三重湊得成一對但還差地方或秘訣：這一對留著不合（等走到地方、等時辰），其餘照舊隨機挑；
     型照輔料（右格）定，挑法不管型。"""
     state, content, world = game.state, game.content, game.world
@@ -66,13 +58,13 @@ def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
     held: set[str] = set()
     for i, a in enumerate(deep):
         for b in deep[i + 1:]:
-            if fusion.merge_problem(state, content, world, a, b, pour=True) is not None:
+            if fusion.merge_problem(state, content, world, a, b) is not None:
                 continue
-            look = fusion.v2_preview(state, content, world, a, b, pour=True)
-            if not look or not look["can_pour"]:
+            look = fusion.v2_preview(state, content, world, a, b)
+            if not look or not look["conds"]:
                 continue
             if look["god"]:
-                return PourPlan((a, b), pour=True)
+                return ForgePlan((a, b))
             held.update((a, b))
     loose = [i for i in p.insights if i not in held]
     if len(loose) < 2:
@@ -81,7 +73,7 @@ def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
         a = rng.choice(loose)
         b = rng.choice([i for i in loose if i != a])
         if fusion.merge_problem(state, content, world, a, b) is None:
-            return PourPlan((a, b))
+            return ForgePlan((a, b))
     return None
 
 
@@ -156,19 +148,16 @@ def _name_draft(game: Game) -> bool:
     return False
 
 
-def _forge(game: Game, plan: ForgePlan | PourPlan, slot: bot_base.NamingSlot | None) -> list[str]:
+def _forge(game: Game, plan: ForgePlan, slot: bot_base.NamingSlot | None) -> list[str]:
     """開一爐。要模型取名（或挑）的：輪得到就開單交給假人程式（B、C 段在 bot_runner），輪不到這一爐不開——
     用字表的名字搶下首創，名字的樣子看得出是假人（企劃者 2026-10-05）。不必叫模型的（配方有了、只有一個候選）照開，
     給 NO_NAME，鎖內一定不叫模型。"""
     insight_ids = list(plan.insight_ids)
     request = game.forge_request(None, insight_ids, named_outside=True)
-    pour = getattr(plan, "pour", False)
-    extra = {"pour": True} if pour else {}
     if request is None:
-        return game.forge(None, insight_ids, proposed=bot_base.NO_NAME, **extra)
+        return game.forge(None, insight_ids, proposed=bot_base.NO_NAME)
     if slot is not None and slot.open and slot.job is None:
-        slot.job = (bot_base.PourJob(plan.insight_ids, request, pour=True) if pour
-                    else bot_base.ForgeJob(plan.insight_ids, request))
+        slot.job = bot_base.ForgeJob(plan.insight_ids, request)
     elif slot is not None:
         slot.skipped += 1
     return []

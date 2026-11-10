@@ -1,5 +1,5 @@
 """意境合成改版（Config.craft；設計稿 https://claude.ai/artifact/G4m44hK3At7x2bmqoAbceu ，Joy 2026-11-10「好」）的規則：
-主料定一般功效、輔料定型、火候帶真意、兩個小驚喜、傾注、合璧成神四條、熟、化入、開季蓋章。規則在 tianxia/fusion.py「意境合成改版」那一段。"""
+主料定一般功效、輔料定型、火候帶真意、兩個小驚喜、合璧成神三條（齊了自動用掉兩份；Joy 2026-11-10「傾注好複雜」拿掉傾注）、熟、化入、開季蓋章。規則在 tianxia/fusion.py「意境合成改版」那一段。"""
 import pytest
 
 from conftest import real_content
@@ -99,15 +99,14 @@ def test_the_preview_shows_the_form_from_the_aux(rc, me, world):
     assert look["form"] == "變" and look["aux"] and look["grand"] == fusion.UNSEEN and "ask_intent" not in look
 
 
-def test_without_the_four_conditions_a_true_meaning_stops_short_of_god(rc, me, world):
+def test_without_the_three_conditions_a_true_meaning_stops_short_of_god(rc, me, world):
     no_luck(rc)
     give(me, "huo", "剛", 3)
     give(me, "feng", "快", 3)
-    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), pour=True)
+    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))
     fx = me.player.insight_fx[made.id]
-    assert fx.grand is not None and max(fx.general.values()) == 2  # 傾注承襲三重，但沒合璧：帶真意最多二重
-    assert insight_fx.look(fx) == "珍"
-    assert "huo" not in me.player.insights and "feng" not in me.player.insights  # 傾注：兩份都用掉
+    assert fx.grand is not None and max(fx.general.values()) == 1 and insight_fx.look(fx) != "神"  # 不在地方：平常合，一重帶真意
+    assert "huo" in me.player.insights and "feng" in me.player.insights  # 平常合：兩份都留著
 
 
 def test_low_heat_gives_no_true_meaning_and_near_heat_can_fill_itself(rc, me, world):
@@ -139,19 +138,21 @@ def test_the_bonus_general_never_makes_god(rc, me, world):
     assert fx.grand is not None and len(fx.general) == 1 and insight_fx.look(fx) != "神"
 
 
-def test_four_conditions_make_god_in_one_furnace(rc, me, world, monkeypatch):
+def test_three_conditions_make_god_in_one_furnace_and_use_both(rc, me, world, monkeypatch):
     no_luck(rc)
     give(me, "huo", "剛", 3)
     give(me, "feng", "快", 3)
     me.player.location = "changshe"  # 陽最濃之地之一（此地最濃是剛或快，剛快兩路都悟得到）
     assert fusion.strongest_here(me, rc, "陽")
     monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
-    conds = fusion.god_conditions(me, rc, world, "huo", "feng", "陽", True)
-    assert all(conds.values())
-    made, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), pour=True)
+    conds = fusion.god_conditions(me, rc, world, "huo", "feng", "陽")
+    assert all(conds.values()) and list(conds) == ["layers", "place", "secret"]
+    assert fusion.god_ready(me, rc, world, "huo", "feng")
+    made, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))
     fx = me.player.insight_fx[made.id]
     assert fx.general == {"陽": 3} and fx.grand == "he_yang_bian" and insight_fx.look(fx) == "神"
     assert any("合璧成神" in m for m in msgs)
+    assert "huo" not in me.player.insights and "feng" not in me.player.insights  # 成神那一爐兩份都用掉
 
 
 def test_missing_one_condition_is_an_ordinary_merge(rc, me, world, monkeypatch):
@@ -159,9 +160,9 @@ def test_missing_one_condition_is_an_ordinary_merge(rc, me, world, monkeypatch):
     give(me, "huo", "剛", 3)
     give(me, "feng", "快", 3)
     me.player.location = "changshe"
-    monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
-    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))  # 沒傾注
-    assert insight_fx.look(me.player.insight_fx[made.id]) == "珍"
+    monkeypatch.setattr(fusion, "secret_met", lambda *a: False)  # 秘訣沒對上
+    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))
+    assert insight_fx.look(me.player.insight_fx[made.id]) != "神" and "huo" in me.player.insights
 
 
 def test_the_season_secret_is_one_per_path_and_a_hint_needs_mastery(rc, me, world):
@@ -175,13 +176,16 @@ def test_the_season_secret_is_one_per_path_and_a_hint_needs_mastery(rc, me, worl
     assert fusion.secret_hint(me, rc, world, key, "陽") == fusion.SECRET_HINTS[fusion.secret_of(world, "陽")]
 
 
-def test_pouring_is_not_for_discussion_or_switched_off_seasons(rc, me, world):
-    give(me, "huo", "剛", 1)
-    give(me, "feng", "快", 1)
+def test_no_god_in_discussion_or_switched_off_seasons(rc, me, world, monkeypatch):
+    give(me, "huo", "剛", 3)
+    give(me, "feng", "快", 3)
+    me.player.location = "changshe"
+    monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
+    assert fusion.god_ready(me, rc, world, "huo", "feng")
     partner = fusion.Partner(lent="feng", name="乙", price=(3, 3))
-    assert fusion.merge_problem(me, rc, world, "huo", "feng", partner, pour=True) is not None
+    assert not fusion.god_ready(me, rc, world, "huo", "feng", partner)
     me.world.craft_v2 = False
-    assert fusion.merge_problem(me, rc, world, "huo", "feng", None, pour=True) is not None
+    assert not fusion.god_ready(me, rc, world, "huo", "feng")
 
 
 def test_deepening_follows_heat_and_never_reaches_god_on_a_compound_path(rc, me, world):
@@ -244,7 +248,7 @@ def _bot_game(rc, world):
     return game
 
 
-def test_the_bot_pours_a_ready_pair_and_holds_it_until_the_place_is_right(rc, world, monkeypatch):
+def test_the_bot_forges_a_ready_pair_and_holds_it_until_the_place_is_right(rc, world, monkeypatch):
     import random as _r
 
     from tianxia.features.craft import bots
@@ -261,13 +265,13 @@ def test_the_bot_pours_a_ready_pair_and_holds_it_until_the_place_is_right(rc, wo
     assert plan is None or set(plan.insight_ids) != {"huo", "feng"}  # 地方不對：這一對留著
     game.state.player.location = "changshe"
     plan = bots.pick_forge(game, _r.Random(0), merge_share=1.0)
-    assert plan is not None and set(plan.insight_ids) == {"huo", "feng"} and plan.pour
+    assert plan is not None and set(plan.insight_ids) == {"huo", "feng"}
     from tianxia import bot_base
     from tianxia.bot_policy import apply_job
 
     slot = bot_base.NamingSlot(open=True)
-    bots._forge(game, plan, slot)  # 首創的一爐：開單交給假人程式取名，傾注跟著單子走
-    assert slot.job.pour
+    bots._forge(game, plan, slot)  # 首創的一爐：開單交給假人程式取名
+    assert slot.job is not None
     assert any("合璧成神" in m for m in apply_job(game, slot.job, ("燼風", "火借風勢")))
     made = [i for i in game.state.player.insights if game.state.player.insight_fx[i].grand and insight_fx.look(game.state.player.insight_fx[i]) == "神"]
     assert made and "huo" not in game.state.player.insights

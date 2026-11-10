@@ -130,25 +130,14 @@ def forge(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str] 
     （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = shell.prepare_forge(game, art_id, insight_ids)
-    if getattr(insight_ids, "pour", False):  # 合成改版：傾注（引擎在改版沒開的季拒絕傾注）
-        return shell.act(game, lambda g: g.forge(art_id, list(insight_ids), proposed=proposed, pour=True))
     return shell.act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
-
-
-class ForgePicks(list):
-    """爐裡的意境 id 們（就是一個 list，殼照舊當 list 傳）；另帶網頁勾的傾注 pour（意境合成改版）。
-    殼的 forge(game, *forge_args(body)) 不必改：它跟著清單走到 forge、預覽（forge_view.forge_preview 用 getattr 讀）。"""
-
-    pour: bool = False
 
 
 def forge_args(shell, body: dict) -> tuple[str | None, list[str]]:
     """煉製頁送來的東西：意境 id 們（爐裡只合意境）；舊網頁送來的武學 id 照傳，引擎回「爐裡只合意境」那一句。body 是客戶端寫的：
-    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。pour（真假）跟著清單走（ForgePicks）。"""
+    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。"""
     art, picked = body.get("art"), body.get("insights")
-    out = ForgePicks(str(i) for i in picked) if isinstance(picked, list) else ForgePicks()
-    out.pour = body.get("pour") is True
-    return str(art) if art else None, out
+    return str(art) if art else None, [str(i) for i in picked] if isinstance(picked, list) else []
 
 
 def _forge_without_naming(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str]:

@@ -50,7 +50,6 @@ def forge_request(
 @not_while_preparing
 def forge(
     ctx: Game, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
-    pour: bool = False,
 ) -> list[str]:
     """煉製頁的開爐：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩；見 fusion.py）。武學＋武學、武學＋意境 Joy 2026-10-21
     拿掉了：art_id 有就回 ART_IN_FURNACE（意境到修練頁裝進武學的槽）。
@@ -71,7 +70,7 @@ def forge(
     xinde, stamina = ctx._xinde(), ctx.state.player.stamina
     solved = ctx._solved_secrets()
     mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
-    insight, msgs = fusion.merge(ctx.state, ctx.content, ctx.world, ctx._quick_client(), *insight_ids, proposed=proposed, pour=pour)
+    insight, msgs = fusion.merge(ctx.state, ctx.content, ctx.world, ctx._quick_client(), *insight_ids, proposed=proposed)
     tag = f"合併「{insight.name}」" if insight is not None else None
     if insight is not None:
         ctx.forged_thing = ("ins", insight.id)
