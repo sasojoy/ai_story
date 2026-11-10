@@ -62,6 +62,7 @@
 - token 打得到：清單、看單（含帳號卡）、看圖、回覆（`answer`）、結單、自動結單；**打不到查帳號**（`_lookup` 用 `allow_bot=False`，404、不留紀錄）。別的路由（`/api/do`、`/api/main`、`/api/me`、`/api/admin*`）根本不讀 Bearer（`test_support_bot.py::test_bot_token_rejected_by_every_admin_api_and_the_shell` 守）。
 - **自動回覆的標示**：`rules.reply_auto`：系統回覆一律是；客服官的帳號回的、又不是轉達真人的才是。玩家的單每則多 `auto`、單多 `human`；客服的單每則多 `auto`、`system`，單多 `human`、`last_by`（最後一則看得到的回覆是誰：`player`／`staff`／`desk`／`system`／null；內部註記不算）；`queue` 每列多 `human`、`last_by`（`store.queue_extras` 一次查齊）。回應裡不出現 bot 這個字。沒設 `bot_account` 時只剩系統回覆認得出來。
 - **轉達**：`answer` 在 token 身分收 `relay_from`（轉字串、去空白，空的當沒有；cookie 身分帶了不看；`then=admin` 不收）：那一則不算自動，同一筆交易多一列 `flags(relay)` 與一則內部註記「轉達自 <ID>」（不經 `then=admin`）。
+- **找真人的單客服官不准回**（T 波合併時 PM 加）：token 身分對玩家按過「找真人」的單 `answer` 回 400「`rules.HUMAN_WAITING`」；`then=admin`（請管理者的內部註記）與帶 `relay_from` 的轉達照舊（`test_support_bot.py`）。
 - **admin_flag**：第 216 批起每次回覆設值（請管理者 1、其他 0），結單也清（以前只設不清，自動結單會永遠跳過它）。
 - **找真人** `POST /api/support/human {id}`：主人才行（別人的、不存在 404「找不到這張單。」），結了回「這張單已經結了。」，按過再按照舊（冪等）；第一次按記一列 `flags(human)`、已回覆的單回到處理中。伺服器不要求單上已有自動回覆（畫面才看）。回這一張單（玩家看的）。
 - **自動結單** `POST /api/support/sweep {}`：客服（cookie）或 token 叫，玩家 404 同一句；旁檔不在回 `{"closed": []}`、不建檔。`store.sweep` 在 `BEGIN IMMEDIATE` 裡才讀：已回覆、`admin_flag = 0`、最後一則（含內部註記）早於 `auto_close_days` 天的單，各記一則系統回覆「N 天沒再回，單自動結了。」並結掉；不推播。客服頁每次重讀清單前先打一次（失敗不擋）。
@@ -102,6 +103,6 @@
 - 第 215 批：`tests/server/test_backup_db.py`（截圖的資料夾跟著備份、還原、輪替）、`tests/web/test_shell_web.py`（`supportChange` 的框照字面）。
 - 第 216 批：`tests/core/test_identity_base.py`（`support_bot_token`）、`tests/core/test_shell_stays_thin.py`（`NO_LOGIN_ROUTES` 兩條）、`tests/bots/test_server_bots.py`（`web/support.js` 新字）、`tests/web/test_shell_web.py`（`support-human` 的點擊清單照字面）。
 - 情境：`scripts/same_behavior.py` 的 `petition` 軌（客服關著時登入的人打十三條、沒登入的人打 `mailbox`、`/api/main`、`/api/push`）；比對帶 `--new support`；第 212 批起 base 已經有這一包，要再加 `--also-existing`（K 波，PM 核對）。
-- 第 217 批：改 `scripts/support_bridge.py`、`scripts/support_cli.py` 時 `test_for` 只帶邊界，另跑 `tianxia/features/support/tests/test_support_bridge.py`、`test_support_cli.py`；改了旁檔的表或欄位（`store.py` 的 `SCHEMA`）、`rules.CATEGORIES`、`/api/support/*` 的回應長相時，這兩個檔也要跑（兩支腳本自己照欄位與鍵讀，不 import 包）。
-- 第 218 批：改 `docs/support/session/` 的範本、`docs/support/FAQ.md`、`scripts/support_session_init.py`、`scripts/support_knowledge.py` 時 `test_for` 只帶邊界（範本與 FAQ 是文件，挑不到），另跑 `tianxia/features/support/tests/test_support_session.py`；改 `content/patch_notes.json`、玩法說明（guide 包的 `howto`）時也跑它（匯出過 leaks 字表）。
+- 第 217 批：改 `scripts/support_bridge.py`、`scripts/support_cli.py` 時 `test_for` 帶邊界與 `tianxia/features/support/tests/test_support_bridge.py`、`test_support_cli.py`、`test_support_session.py`（T 波合併時 PM 加；以前只帶邊界）；改了旁檔的表或欄位（`store.py` 的 `SCHEMA`）、`rules.CATEGORIES`、`/api/support/*` 的回應長相時，這兩個檔也要跑（兩支腳本自己照欄位與鍵讀，不 import 包）。
+- 第 218 批：改 `docs/support/session/` 的範本、`docs/support/FAQ.md`、`scripts/support_session_init.py`、`scripts/support_knowledge.py` 時：兩支腳本 `test_for` 會挑到主機端三個測試檔（T 波合併時 PM 加）；範本與 FAQ 是文件、挑不到，另跑 `tianxia/features/support/tests/test_support_session.py`；改 `content/patch_notes.json`、玩法說明（guide 包的 `howto`）時也跑它（匯出過 leaks 字表）。
 - `test_for` 自己會帶、不用另外跑（PM J 波核對）：`tests/core/test_contract_features.py`（改包的檔帶核心契約 `[support]`）、`tests/core/test_shell_stays_thin.py`（改 `web/` 帶）。
