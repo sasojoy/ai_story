@@ -323,7 +323,7 @@
         }
     } // supportClick
   } // supportClick
-  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-answer", "support-human"]);
+  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-human", "support-answer"]);
 
   async function supportForm(form, data) {
       if (form.id === "support-new-form") {
