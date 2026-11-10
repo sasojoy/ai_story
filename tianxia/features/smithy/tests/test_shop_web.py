@@ -455,7 +455,6 @@ def test_the_framed_cell_is_scrolled_above_the_sheet(content, world, top, bottom
     assert out == scrolled
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_a_refused_brew_still_unframes_the_cell(content, world):
     """伺服器拒了（例：今天熬滿了；api() 提示原因、shopDo 不重畫）：小單已經收了，那一格也不能一直框著。"""
     game = _brewing(content, world, {"gang_1": 4})
@@ -604,7 +603,6 @@ def test_the_tag_hangs_on_the_fire():
     assert re.search(r"font: 600 [0-9.]+em", tag.group(1))
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_looking_posts_the_op_and_asks_the_line_again():
     game, m = _fired()
     after = server.main_view(game)
@@ -652,7 +650,6 @@ def test_a_poll_with_a_new_smith_line_puts_it_back_after_a_brew(m):
     assert same_line["note"] == "熬出來了"
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_tapping_a_furnace_that_cannot_look_says_the_whole_line_and_sends_nothing():
     """看過了還沒開爐、今天用掉了：小籤只寫幾個字，點那一團火用提示泡泡講整句（原本爐子底下那一行），不送。"""
     for state, line in ((dict(looked=True), "火候看過了，下一爐照新基準。"), (dict(used=True), "今天看過了，明日再來。")):
@@ -752,7 +749,6 @@ def test_each_rack_row_has_a_box_and_four_buttons_with_their_small_print(content
     assert "shop-dismantle" not in kept and rows["兵:3"]["keep"] in _text(kept)  # 原品：拆解灰掉寫原因、不給勾
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_repair_and_temper_go_through_menxia_with_the_item_id(content, world):
     m = server.main_view(_racked(content, world))
     reply = {"menxia": None, "main": m, "message": "<p>修好了。</p>"}
@@ -794,7 +790,6 @@ _MELT = """return (async () => {
 })();"""
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_ticking_rows_lights_the_batch_button_and_it_asks_with_one_line_each(content, world):
     m = server.main_view(_racked(content, world))
     rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}

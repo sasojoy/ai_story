@@ -26,7 +26,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import BotProfile
 
-pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow, pytest.mark.whole_content]
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
@@ -79,6 +79,7 @@ def _rows(html):
     return rows
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 220 批量的）
 def test_the_heirloom_row_gets_a_button_and_the_card_a_line():
     """修練頁傳承那一列：「引將・剩 2 次」一顆（data-act="seal-act"）；江湖頁碎片卡多一行「獨門行動・引將：這一季還能起用 2 次」（按了跳修練頁）。"""
     c, w, m = _view()
