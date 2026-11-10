@@ -4,6 +4,8 @@
 （壞的或不是物件 422）、單號在 gate 之後轉數字（不是數字 404「找不到這張單。」），再把同步的本體丟進執行緒池（sqlite 與 shell._account
 都在那裡，不卡事件迴圈；server.api_events 的前例）。本體第一步 _gate 認登入（沒登入 401）。客服那幾條再過 _staff：不是名單上的帳號一律 404
 （跟沒有這條路同一句，不透露有客服頁）。例外是 GET /api/support/mailbox（第 214 批）：gate 之後直接回設定裡的信箱與那一行字，不認登入、不開旁檔。不走 AdminTool、不放寬 /api/admin、is_admin 不動。
+截圖（客服自動受理第 215 批）：POST /api/support/file?id=<單號> 的內文就是圖的位元組（gate 之後先認登入、再串流累計，超過 file_bytes_max 就停止讀）；
+GET /api/support/file/{tid}/{seq} 主人與客服看得到，其他一律 404「找不到這張單。」。
 
 殼的東西照 shell.<名字> 當下讀（測試換掉的也看得到）；現在時間照 shell.time.time()（路由是殼，規則層 rules.py 不讀時鐘）。
 玩家寫的字原樣存、原樣回（畫面只過 esc，不經 markdown）；單上的帳號、名號、時間、版本由伺服器填，不收客戶端的。
@@ -14,7 +16,7 @@ import hashlib
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from starlette.concurrency import run_in_threadpool
 
 from tianxia.core import identity_base
@@ -340,6 +342,32 @@ def _upload(shell, request: Request, text_id: str, raw: bytes) -> dict:
     return {"id": tid, "seq": row["seq"], "kind": row["kind"], "bytes": row["bytes"], "files": _files(sidecar.files(tid))}
 
 
+def _view_file(shell, request: Request, text_tid: str, text_seq: str) -> Response:
+    """看一張截圖：登入（沒登入 401）→ 單的主人給；不是主人就看是不是客服（照 _staff 的兩個條件，不丟、只判斷）→ 給；
+    其他人、單或序號不存在、不是數字、列在而磁碟上的檔不見了，一律 404「找不到這張單。」（同一句、不 500）。種類照存的檔頭。"""
+    who = _me(shell, _gate(shell, request))
+    if not (text_seq.isascii() and text_seq.isdigit()):
+        raise HTTPException(404, rules.NOT_FOUND)
+    tid, seq = _tid(text_tid), int(text_seq)
+    sidecar = store.open_store(sidecar_path(), create=False)
+    t = sidecar.ticket(tid) if sidecar is not None else None
+    if t is None:
+        raise HTTPException(404, rules.NOT_FOUND)
+    if not rules.owns(t, who.id, who.created):
+        desk = staff.is_staff(shell.CONTENT.config, who) and identity_base.staff_session_ok(
+            open_database(), shell.CONTENT, request.cookies.get(shell.COOKIE), shell.time.time())
+        if not desk:
+            raise HTTPException(404, rules.NOT_FOUND)
+    row = next((f for f in sidecar.files(tid) if f["seq"] == seq), None)
+    if row is None or row["kind"] not in rules.CONTENT_TYPES:
+        raise HTTPException(404, rules.NOT_FOUND)
+    try:
+        data = (files_path() / str(tid) / f"{seq}.{row['kind']}").read_bytes()
+    except OSError:
+        raise HTTPException(404, rules.NOT_FOUND) from None
+    return Response(data, media_type=rules.CONTENT_TYPES[row["kind"]], headers={"Content-Disposition": "inline"})
+
+
 def router(shell) -> APIRouter:
     r = APIRouter()
 
@@ -404,6 +432,11 @@ def router(shell) -> APIRouter:
             if len(raw) > cap:
                 raise shell.GameError(rules.FILE_TOO_BIG.format(mb=_mb(cap)))
         return await run_in_threadpool(_upload, shell, request, request.query_params.get("id", ""), bytes(raw))
+
+    @r.get("/api/support/file/{tid}/{seq}")
+    async def api_support_file_view(tid: str, seq: str, request: Request):
+        _gate_off(shell)
+        return await run_in_threadpool(_view_file, shell, request, tid, seq)
 
     @r.get("/api/support/mailbox")
     async def api_support_mailbox():

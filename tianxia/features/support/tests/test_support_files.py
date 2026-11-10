@@ -200,6 +200,42 @@ def test_kind_is_by_magic_bytes_only(support_on):
     r = _up(c, tid, data, "text/plain")
     assert r.status_code == 200 and r.json()["kind"] == "png"
     assert (_folder(tid) / "1.png").read_bytes() == data
+    seen = c.get(f"/api/support/file/{tid}/1")
+    assert seen.status_code == 200 and seen.headers["content-type"] == "image/png" and seen.content == data
+    assert seen.headers["x-content-type-options"] == "nosniff"  # 全站已有：檔頭是 PNG、內容不是圖，瀏覽器只會畫成破圖
+
+
+# ── 看圖（task 4）：GET /api/support/file/{tid}/{seq} ──
+
+def test_view_file_owner_staff_and_nobody_else(support_on, monkeypatch):
+    c = player()
+    tid = ticket(c).json()["id"]
+    data = JPG + os.urandom(50)
+    assert _up(c, tid, data, "image/jpeg").status_code == 200
+    mine = c.get(f"/api/support/file/{tid}/1")
+    assert (mine.status_code, mine.content, mine.headers["content-type"]) == (200, data, "image/jpeg")
+    assert mine.headers["content-disposition"] == "inline"
+    s = staffer(monkeypatch)
+    desk = s.get(f"/api/support/file/{tid}/1")
+    assert (desk.status_code, desk.content, desk.headers["content-type"]) == (200, data, "image/jpeg")
+    assert s.get(f"/api/support/ticket/{tid}").json()["files"] == [{"seq": 1, "kind": "jpg", "bytes": len(data)}]
+    assert s.get("/api/support/queue").json()["tickets"][0]["file_count"] == 1
+    other = player("li_02", "李白衣")
+    replies = [other.get(f"/api/support/file/{tid}/1"), c.get(f"/api/support/file/{tid}/2"), c.get(f"/api/support/file/{tid + 9}/1"),
+               c.get(f"/api/support/file/{tid}/x"), c.get("/api/support/file/abc/1"), s.get(f"/api/support/file/{tid}/7")]
+    assert {(r.status_code, r.content) for r in replies} == {(404, replies[0].content)}
+    assert replies[0].json() == {"detail": rules.NOT_FOUND}
+    anon = TestClient(server.app, raise_server_exceptions=False)
+    assert anon.get(f"/api/support/file/{tid}/1").status_code == 401
+
+
+def test_missing_file_on_disk_is_404_not_500(support_on):
+    c = player()
+    tid = ticket(c).json()["id"]
+    assert _up(c, tid, WEBP + b"zz").status_code == 200
+    (_folder(tid) / "1.webp").unlink()
+    r = c.get(f"/api/support/file/{tid}/1")
+    assert r.status_code == 404 and r.json() == {"detail": rules.NOT_FOUND}
 
 
 def test_upload_needs_owner_and_open_ticket(support_on, monkeypatch):
