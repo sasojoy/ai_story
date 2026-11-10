@@ -50,6 +50,7 @@ def forge_request(
 @not_while_preparing
 def forge(
     ctx: Game, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
+    pour: bool = False, intent: str | None = None,
 ) -> list[str]:
     """煉製頁的開爐：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩；見 fusion.py）。武學＋武學、武學＋意境 Joy 2026-10-21
     拿掉了：art_id 有就回 ART_IN_FURNACE（意境到修練頁裝進武學的槽）。
@@ -70,7 +71,7 @@ def forge(
     xinde, stamina = ctx._xinde(), ctx.state.player.stamina
     solved = ctx._solved_secrets()
     mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
-    insight, msgs = fusion.merge(ctx.state, ctx.content, ctx.world, ctx._quick_client(), *insight_ids, proposed=proposed)
+    insight, msgs = fusion.merge(ctx.state, ctx.content, ctx.world, ctx._quick_client(), *insight_ids, proposed=proposed, intent=intent, pour=pour)
     tag = f"合併「{insight.name}」" if insight is not None else None
     if insight is not None:
         ctx.forged_thing = ("ins", insight.id)
@@ -87,6 +88,21 @@ def forge(
         )
         ctx._note_solved(solved)
     return out
+
+
+@not_while_preparing
+def infuse(ctx: Game, body: str, others: list[str]) -> list[str]:
+    """化入（意境合成改版，fusion.infuse）：others 化進 body。不收錢；做成了寫一則煉製的紀錄。"""
+    ok, msgs = fusion.infuse(ctx.state, ctx.content, ctx.world, body, others)
+    out = ctx._log(msgs)
+    if ok:
+        out += ctx._menxia_entry("化入", ctx._xinde(), guide=False, title=journal.CRAFT, lines=out[:1])
+    return out
+
+
+def status_fusion(ctx: Game) -> dict:
+    """狀態列的 fusion 格（煉製頁的化入要的；改版沒開是 {}）。"""
+    return fusion.status(ctx.state, ctx.content)
 
 
 def forge_line(ctx: Game, insight_ids: list[str]) -> str:

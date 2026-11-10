@@ -236,3 +236,63 @@ svg.fig .blade.bow { stroke-width: 3; }
 
 /* 煉製頁合併的預覽卡（3.5）：火候字後面「真意 N%」（爐火那一排的一格，間距照那一排），金字、不拆行 */
 .made-card .mc-grand { font-weight: 600; color: var(--gold); white-space: nowrap; }
+
+/* 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」；照介面設計規範：色票、楷書名字、44px、說明收起來）：
+   預覽卡裡的火候、功效與真意、立意、傾注、成神之路（墨點）；煉製頁的化入。改版沒開的季這些 class 一個都不會出現 */
+.made-card .he { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 8px; }
+.he-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.he-heat { font: 400 13px var(--sans); color: var(--ink-2); }
+.he-heat b { font: 700 20px var(--serif); color: var(--ink); margin-left: 2px; }
+.he-heat small { font-size: 12px; }
+.he-heat.near b { color: var(--gold); }
+.he-heat.full b { color: var(--accent); }
+.he-sub { font-size: 13px; color: var(--ink-2); }
+.he-k { font-size: 12px; color: var(--ink-2); }
+.he-gen, .he-grand { font: 700 16px var(--kai); color: var(--ink); }
+.he-grand { padding: 0 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); transform: rotate(-3deg); display: inline-block; line-height: 1.5; }
+.he-grand.unseen { border-style: dashed; border-color: var(--line); color: var(--ink-2); transform: none; font-weight: 400; }
+.he-desc { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.he-intent { display: flex; align-items: center; gap: 8px; }
+.he-intent > span { flex: none; font: 700 15px var(--kai); color: var(--ink); }
+.he-intent .input { flex: 1; min-width: 0; min-height: 44px; font-size: 16px; } /* 16px：iOS 一點不放大整頁 */
+.he-pour { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card-2); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.he-pour > i { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink-2); }
+.he-pour.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.he-pour.on > i { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--card); }
+.he-pour > span { display: flex; flex-direction: column; }
+.he-pour b { font: 700 15px var(--kai); }
+.he-pour small { font-size: 12px; color: var(--ink-2); }
+.he-road { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink); text-align: left; font: 700 15px var(--kai); cursor: pointer; }
+.he-road > span:first-child { flex: 1; min-width: 0; }
+.he-road em { font-style: normal; color: var(--ink-2); transition: transform 0.15s; }
+.he-road.open em { transform: rotate(180deg); }
+.he-dots { display: flex; gap: 5px; }
+.he-dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink-2); }
+.he-dots i.on { background: var(--ink); border-color: var(--ink); }
+
+.he.god .he-road { color: var(--accent); }
+.he.god .he-dots i.on { background: var(--accent); border-color: var(--accent); }
+.he-conds { list-style: none; margin: -4px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--card-2); display: flex; flex-direction: column; gap: 8px; }
+.he-conds li { display: flex; gap: 8px; align-items: flex-start; }
+.he-conds li > i { flex: none; margin-top: 4px; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink-2); }
+.he-conds li.ok > i { background: var(--ink); border-color: var(--ink); }
+.he-conds li > span { display: flex; flex-direction: column; }
+.he-conds b { font: 400 14px var(--sans); color: var(--ink); }
+.he-conds li.ok b { color: var(--ink-2); }
+.he-conds small { font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+.he-conds li.hint small { color: var(--gold); font-family: var(--kai); font-size: 13px; }
+/* 化入：一張卡、一顆主鈕；攤開與挑到一半記在 S.infuse */
+.card.inf { margin: 0 0 12px; }
+.inf-head > span { display: flex; flex-direction: column; }
+.inf-head b { font: 700 17px var(--kai); letter-spacing: 0.08em; }
+.inf-head small { font: 400 12px var(--sans); color: var(--ink-2); }
+.card.inf .label { margin-top: 10px; }
+.chip.inf-chip { min-height: 48px; }
+.chip.inf-chip b { font-family: var(--kai); font-size: 15px; }
+.chip.inf-chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--card)); box-shadow: inset 0 0 0 1px var(--accent); }
+.inf-sum { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+.inf-sum b { font: 700 18px var(--serif); color: var(--ink); }
+.inf-sum .up { color: var(--accent); font-weight: 600; }
+.btn.inf-go { width: 100%; margin-top: 10px; }
+.card.inf .mx-note { margin: 10px 0 0; }

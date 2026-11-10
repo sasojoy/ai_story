@@ -84,7 +84,7 @@ def is_god(state: GameState, insight_id: str) -> bool:
 def grand(content: Content, grand_id: str | None) -> HighTrait | None:
     if not grand_id:
         return None
-    return next((h for h in (*content.traits.high, *content.traits.god) if h.id == grand_id), None)
+    return next((h for h in (*content.traits.high, *content.traits.god, *content.traits.merged) if h.id == grand_id), None)
 
 
 # ── 一份意境的效果 ────────────────────────────────────────
@@ -277,3 +277,4 @@ def drop(state: GameState, insight_id: str) -> None:
     """這一份不在手上了（熔掉、揣摩用掉）：紀錄跟著拿掉。"""
     state.player.insight_fx.pop(insight_id, None)
     state.player.insight_strength.pop(insight_id, None)
+    state.player.fusion_yun.pop(insight_id, None)  # 化入攢的意蘊（意境合成改版）跟著那一份走

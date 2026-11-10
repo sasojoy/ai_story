@@ -1,0 +1,436 @@
+{
+ "base_best": {
+  "陽": 0.5187196279278179,
+  "陰": 0.5166416033239265,
+  "虛": 0.5011178185153432,
+  "實": 0.5174993039426201
+ },
+ "base_random": {
+  "陽": 0.6712367014515572,
+  "陰": 0.6716840524576124,
+  "虛": 0.6614665401062155,
+  "實": 0.6699249326113006
+ },
+ "runs": 1000,
+ "verify": 1000,
+ "note": "Joy 2026-11-10「好多好複雜 而且名字一點都不帥」→ 砍成 16 道（路×型，主料不分），每格挑 32 道裡最貼基準的那一道、心型避開連贏無隙；名字 Joy 07:44「好」。32 道原表在 scripts/measure_merged_grand.py 重跑可得。",
+ "rows": [
+  {
+   "id": "he_yang_gong",
+   "path": "陽",
+   "form": "攻",
+   "main": "剛",
+   "from": "god_gang_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "焚城",
+    "timing": "乘勢",
+    "kind": "chase_disarm",
+    "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。",
+    "rate": 0.1332,
+    "params": {
+     "turns": 1.0
+    }
+   },
+   "best": 0.5138845593356482,
+   "best_min": 0.47685683530678147,
+   "best_max": 0.5566037735849056,
+   "random": 0.6645529892037917,
+   "best_vs_base": -0.004835068592169645,
+   "random_vs_base": -0.006683712247765539,
+   "name": "焚城",
+   "line": "一擊之後再追一擊，打散他的勁。"
+  },
+  {
+   "id": "he_yang_shou",
+   "path": "陽",
+   "form": "守",
+   "main": "剛",
+   "from": "god_gang_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "赤甲",
+    "timing": "心法",
+    "kind": "hold_city",
+    "desc": "固守的推力 +{guard_pct}；對手強攻你時，他吃自己那一下的 {share_pct}。",
+    "params": {
+     "guard_pct": 0.0582,
+     "share_pct": 0.0873
+    }
+   },
+   "best": 0.5144818235035558,
+   "best_min": 0.4789108382274426,
+   "best_max": 0.5652637187000533,
+   "random": 0.6668487551446651,
+   "best_vs_base": -0.004237804424262137,
+   "random_vs_base": -0.004387946306892099,
+   "name": "赤甲",
+   "line": "死守不退，硬攻你的人自己吃反震。"
+  },
+  {
+   "id": "he_yang_bian",
+   "path": "陽",
+   "form": "變",
+   "main": "快",
+   "from": "god_kuai_bian",
+   "k": 0.35,
+   "tactic": {
+    "name": "流火",
+    "timing": "乘勢",
+    "kind": "flash",
+    "desc": "這一回合連環、無隙（出招不會被剋）。",
+    "rate": 0.0777
+   },
+   "best": 0.5141038016656344,
+   "best_min": 0.4780042918454936,
+   "best_max": 0.5578338590956887,
+   "random": 0.6662812884310957,
+   "best_vs_base": -0.004615826262183487,
+   "random_vs_base": -0.004955413020461541,
+   "name": "流火",
+   "line": "偶爾一口氣連出兩招，這一下剋不到你。"
+  },
+  {
+   "id": "he_yang_xin",
+   "path": "陽",
+   "form": "心",
+   "main": "剛",
+   "from": "god_gang_xin",
+   "k": 0.225,
+   "tactic": {
+    "name": "焚野",
+    "timing": "乘勢",
+    "kind": "tiger",
+    "desc": "每剋中一次疊一層，推力每層 +{stack_pct}，最多 {stacks} 層，不會散；氣勢落後時一次疊兩層。",
+    "params": {
+     "stack_pct": 0.0057,
+     "stacks": 5.0
+    }
+   },
+   "best": 0.5140958360214688,
+   "best_min": 0.4791220556745182,
+   "best_max": 0.5600419507079182,
+   "random": 0.6700089344150586,
+   "best_vs_base": -0.004623791906349095,
+   "random_vs_base": -0.0012277670364986282,
+   "name": "焚野",
+   "line": "越打越旺，每剋中一次火勢加一層。"
+  },
+  {
+   "id": "he_yin_gong",
+   "path": "陰",
+   "form": "攻",
+   "main": "柔",
+   "from": "god_rou_gong",
+   "k": 0.225,
+   "tactic": {
+    "name": "霜刃",
+    "timing": "乘勢",
+    "kind": "swift",
+    "desc": "剋中對手後這一回合連環，另有 {stun_pct} 的機會讓他定身 {turns} 回合。",
+    "rate": 0.0695,
+    "params": {
+     "stun_pct": 0.3,
+     "turns": 1.0
+    }
+   },
+   "best": 0.512739384488579,
+   "best_min": 0.4804917156600748,
+   "best_max": 0.5588853838065194,
+   "random": 0.66507540478473,
+   "best_vs_base": -0.0039022188353474707,
+   "random_vs_base": -0.006608647672882384,
+   "name": "霜刃",
+   "line": "剋中他就再出一招，還可能把他凍住。"
+  },
+  {
+   "id": "he_yin_shou",
+   "path": "陰",
+   "form": "守",
+   "main": "柔",
+   "from": "god_rou_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "凝霜",
+    "timing": "應招",
+    "kind": "elude",
+    "desc": "卸開對手這一擊：打空（推不動你、你不掉氣血）。",
+    "rate": 0.0637
+   },
+   "best": 0.512826339424287,
+   "best_min": 0.470873786407767,
+   "best_max": 0.5700586041555674,
+   "random": 0.6693724214778782,
+   "best_vs_base": -0.003815263899639487,
+   "random_vs_base": -0.0023116309797341916,
+   "name": "凝霜",
+   "line": "卸掉他這一擊，讓他打空。"
+  },
+  {
+   "id": "he_yin_bian",
+   "path": "陰",
+   "form": "變",
+   "main": "柔",
+   "from": "god_rou_bian",
+   "k": 0.6,
+   "tactic": {
+    "name": "鎖魂",
+    "timing": "起手",
+    "kind": "roar",
+    "desc": "第 1 回合先聲奪人：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。",
+    "rate": 0.411,
+    "rounds": 1,
+    "params": {
+     "stun_pct": 0.5,
+     "turns": 1.0
+    }
+   },
+   "best": 0.5155366306154482,
+   "best_min": 0.4722524483133841,
+   "best_max": 0.589171974522293,
+   "random": 0.6689076991216214,
+   "best_vs_base": -0.0011049727084783134,
+   "random_vs_base": -0.002776353335991022,
+   "name": "鎖魂",
+   "line": "一開場就讓他定住，或者失神。"
+  },
+  {
+   "id": "he_yin_xin",
+   "path": "陰",
+   "form": "心",
+   "main": "慢",
+   "from": "god_man_xin",
+   "k": 0.107,
+   "tactic": {
+    "name": "冥潮",
+    "timing": "心法",
+    "kind": "sacrifice",
+    "desc": "每贏一回合疊一層，推力每層 +{stack_pct}；疊滿 {stacks} 層，下一回合連環，然後重來。",
+    "params": {
+     "stack_pct": 0.0128,
+     "stacks": 4.0
+    }
+   },
+   "best": 0.5101207509907318,
+   "best_min": 0.47188002142474555,
+   "best_max": 0.5620010643959553,
+   "random": 0.6687415761706466,
+   "best_vs_base": -0.00652085233319466,
+   "random_vs_base": -0.002942476286965867,
+   "name": "冥潮",
+   "line": "贏一回合漲一層潮，漲滿四層連出一招。"
+  },
+  {
+   "id": "he_xu_gong",
+   "path": "虛",
+   "form": "攻",
+   "main": "快",
+   "from": "god_kuai_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "斬月",
+    "timing": "乘勢",
+    "kind": "swift",
+    "desc": "剋中對手後這一回合連環，另有 {stun_pct} 的機會讓他定身 {turns} 回合。",
+    "rate": 0.1854,
+    "params": {
+     "stun_pct": 0.3,
+     "turns": 1.0
+    }
+   },
+   "best": 0.5049621739846644,
+   "best_min": 0.46986666666666665,
+   "best_max": 0.5560796645702306,
+   "random": 0.6546478604066093,
+   "best_vs_base": 0.003844355469321159,
+   "random_vs_base": -0.006818679699606256,
+   "name": "斬月",
+   "line": "剋中他就再出一招，還可能把他定住。"
+  },
+  {
+   "id": "he_xu_shou",
+   "path": "虛",
+   "form": "守",
+   "main": "柔",
+   "from": "god_yin_xin",
+   "k": 1.3,
+   "tactic": {
+    "name": "鬼步",
+    "timing": "心法",
+    "kind": "waver",
+    "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。",
+    "params": {
+     "up_pct": 0.4584,
+     "down_pct": 0.1527
+    }
+   },
+   "best": 0.5022742421910916,
+   "best_min": 0.46733935209771643,
+   "best_max": 0.56567242281528,
+   "random": 0.6506926683316409,
+   "best_vs_base": 0.0011564236757484192,
+   "random_vs_base": -0.010773871774574673,
+   "name": "鬼步",
+   "line": "虛實難測，一半大進一步、一半小退半步。"
+  },
+  {
+   "id": "he_xu_bian",
+   "path": "虛",
+   "form": "變",
+   "main": "柔",
+   "from": "god_rou_bian",
+   "k": 0.55,
+   "tactic": {
+    "name": "落星",
+    "timing": "起手",
+    "kind": "roar",
+    "desc": "第 1 回合先聲奪人：對手定身 {turns} 回合（{stun_pct}）或失神 {turns} 回合。",
+    "rate": 0.3768,
+    "rounds": 1,
+    "params": {
+     "stun_pct": 0.25,
+     "turns": 2.0
+    }
+   },
+   "best": 0.502935092644529,
+   "best_min": 0.4625,
+   "best_max": 0.5843949044585988,
+   "random": 0.6702536319962467,
+   "best_vs_base": 0.001817274129185753,
+   "random_vs_base": 0.008787091890031129,
+   "name": "落星",
+   "line": "開場一下，讓他兩回合定身或失神。"
+  },
+  {
+   "id": "he_xu_xin",
+   "path": "虛",
+   "form": "心",
+   "main": "柔",
+   "from": "god_man_xin",
+   "k": 0.6,
+   "tactic": {
+    "name": "照夜",
+    "timing": "心法",
+    "kind": "sacrifice",
+    "desc": "每贏一回合疊一層，推力每層 +{stack_pct}；疊滿 {stacks} 層，下一回合連環，然後重來。",
+    "params": {
+     "stack_pct": 0.0372,
+     "stacks": 3.0
+    }
+   },
+   "best": 0.5055039800038473,
+   "best_min": 0.46802794196668457,
+   "best_max": 0.5560253699788583,
+   "random": 0.6600130605278102,
+   "best_vs_base": 0.004386161488504126,
+   "random_vs_base": -0.001453479578405359,
+   "name": "照夜",
+   "line": "贏一回合積一分，積滿三分連出一招。"
+  },
+  {
+   "id": "he_shi_gong",
+   "path": "實",
+   "form": "攻",
+   "main": "剛",
+   "from": "god_gang_gong",
+   "k": 0.6,
+   "tactic": {
+    "name": "撼嶽",
+    "timing": "乘勢",
+    "kind": "chase_disarm",
+    "desc": "追加一擊（這一回合連環），並使對手卸勁 {turns} 回合。",
+    "rate": 0.1332,
+    "params": {
+     "turns": 1.0
+    }
+   },
+   "best": 0.5138845593356482,
+   "best_min": 0.47685683530678147,
+   "best_max": 0.5566037735849056,
+   "random": 0.6645529892037917,
+   "best_vs_base": -0.0036147446069718647,
+   "random_vs_base": -0.005371943407508906,
+   "name": "撼嶽",
+   "line": "一擊之後再追一擊，打散他的勁。"
+  },
+  {
+   "id": "he_shi_shou",
+   "path": "實",
+   "form": "守",
+   "main": "慢",
+   "from": "god_xie_shou",
+   "k": 0.35,
+   "tactic": {
+    "name": "定山",
+    "timing": "心法",
+    "kind": "waver",
+    "desc": "每回合擲一次：一半推力 +{up_pct}、一半 −{down_pct}。",
+    "params": {
+     "up_pct": 0.1234,
+     "down_pct": 0.0411
+    }
+   },
+   "best": 0.5136382449041403,
+   "best_min": 0.48183760683760685,
+   "best_max": 0.5766002098635886,
+   "random": 0.6646469576847787,
+   "best_vs_base": -0.003861059038479775,
+   "random_vs_base": -0.005277974926521933,
+   "name": "定山",
+   "line": "穩住陣腳，大多時候多推一分。"
+  },
+  {
+   "id": "he_shi_bian",
+   "path": "實",
+   "form": "變",
+   "main": "剛",
+   "from": "god_gang_bian",
+   "k": 0.225,
+   "tactic": {
+    "name": "斷川",
+    "timing": "出招",
+    "kind": "reinforce",
+    "desc": "出手連珠：這一回合多推一擊。",
+    "rate": 0.0389,
+    "params": {
+     "chance_pct": 1.0,
+     "strikes": 1.0
+    }
+   },
+   "best": 0.5131640537917761,
+   "best_min": 0.46702702702702703,
+   "best_max": 0.5629984051036683,
+   "random": 0.6695227988381158,
+   "best_vs_base": -0.004335250150844017,
+   "random_vs_base": -0.0004021337731847652,
+   "name": "斷川",
+   "line": "偶爾多推一擊，勢如截江。"
+  },
+  {
+   "id": "he_shi_xin",
+   "path": "實",
+   "form": "心",
+   "main": "剛",
+   "from": "god_gang_xin",
+   "k": 0.225,
+   "tactic": {
+    "name": "磐心",
+    "timing": "乘勢",
+    "kind": "tiger",
+    "desc": "每剋中一次疊一層，推力每層 +{stack_pct}，最多 {stacks} 層，不會散；氣勢落後時一次疊兩層。",
+    "params": {
+     "stack_pct": 0.0057,
+     "stacks": 5.0
+    }
+   },
+   "best": 0.5140958360214688,
+   "best_min": 0.4791220556745182,
+   "best_max": 0.5600419507079182,
+   "random": 0.6700089344150586,
+   "best_vs_base": -0.0034034679211513152,
+   "random_vs_base": 8.400180375800481e-05,
+   "name": "磐心",
+   "line": "每剋中一次穩一層，最多五層，不會散。"
+  }
+ ]
+}
