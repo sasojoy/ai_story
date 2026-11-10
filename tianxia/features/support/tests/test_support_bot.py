@@ -129,6 +129,46 @@ def test_bearer_wins_on_support_and_is_ignored_elsewhere(monkeypatch, support_is
     assert me == c.get("/api/me").json() and me.get("stage") != "login"
 
 
+def test_bot_replies_are_auto_for_player_and_staff(monkeypatch, support_isolated):
+    c = player()
+    tid = ticket(c).json()["id"]
+    s = staffer(monkeypatch)
+    desk, h = _desk(monkeypatch, support_isolated)
+    desk.post("/api/support/answer", json={"id": tid, "body": "自動的", "then": "wait"}, headers=h)
+    c.post("/api/support/reply", json={"id": tid, "body": "還是不行"})
+    s.post("/api/support/answer", json={"id": tid, "body": "真人的", "then": "wait"})
+    mine = c.get("/api/support/mine").json()["tickets"][0]["replies"]
+    assert [(r["body"], r["staff"], r["auto"]) for r in mine] == [("自動的", True, True), ("還是不行", False, False), ("真人的", True, False)]
+    one = s.get(f"/api/support/ticket/{tid}").json()["replies"]
+    assert [(r["body"], r["auto"], r["system"]) for r in one] == [("自動的", True, False), ("還是不行", False, False), ("真人的", False, False)]
+    monkeypatch.setattr(server.CONTENT.config.support, "bot_account", "")  # 沒設客服官：看不出哪一則是自動的
+    assert [r["auto"] for r in c.get("/api/support/mine").json()["tickets"][0]["replies"]] == [False, False, False]
+
+
+def test_relay_reply_is_not_auto_and_notes_who(monkeypatch, support_isolated):
+    """客服官轉達真人的話（relay_from）：那一則玩家看不是自動的；客服頁多一則內部註記「轉達自 <ID>」；flags 記一列 relay；admin_flag 不動。
+    cookie 身分帶 relay_from 一律不看。"""
+    c = player()
+    tid = ticket(c).json()["id"]
+    s = staffer(monkeypatch)
+    desk, h = _desk(monkeypatch, support_isolated)
+    out = desk.post("/api/support/answer", json={"id": tid, "body": "真人說可以了", "then": "wait", "relay_from": " 4242 "}, headers=h).json()
+    assert out["admin_flag"] is False
+    # 轉達的那一則是真人的話（不是自動）；「轉達自」那則註記是客服官自己寫的（客服頁標自動）
+    assert [(r["body"], r["internal"], r["auto"]) for r in out["replies"]] == [("真人說可以了", False, False), ("轉達自 4242", True, True)]
+    mine = c.get("/api/support/mine").json()["tickets"][0]["replies"]
+    assert [(r["body"], r["auto"]) for r in mine] == [("真人說可以了", False)]
+    sc = store.open_store(support_kit.sidecar(), create=False)
+    first = sc.replies(tid, internal=True)[0]
+    assert [(f["kind"], f["ref"]) for f in sc.flags(tid)] == [("relay", first["id"])]
+    assert sc.relayed(tid) == frozenset({first["id"]})
+    out = s.post("/api/support/answer", json={"id": tid, "body": "我自己回", "then": "wait", "relay_from": "4242"}).json()
+    assert [r["body"] for r in out["replies"]][-1] == "我自己回" and len(out["replies"]) == 3  # cookie 身分：沒有多一則註記
+    assert [f["kind"] for f in sc.flags(tid)] == ["relay"] and out["admin_flag"] is False
+    out = desk.post("/api/support/answer", json={"id": tid, "body": "x", "then": "wait", "relay_from": "  "}, headers=h).json()
+    assert out["replies"][-1]["auto"] is True and len(sc.flags(tid)) == 1  # 空白當沒有
+
+
 def _admin_paths() -> list[tuple[str, str]]:
     out = []
     for path, methods in server.app.openapi()["paths"].items():

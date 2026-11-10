@@ -142,32 +142,53 @@ def _files(files: list[dict]) -> list[dict]:
     return [{"seq": f["seq"], "kind": f["kind"], "bytes": f["bytes"]} for f in files]
 
 
-def _player_ticket(t: dict, replies: list[dict], files: list[dict]) -> dict:
-    """玩家看的一張單：不含內部註記、不含誰回的帳號；客服那一側只寫「客服」。"""
+def _bot_id(shell) -> int | None:
+    """客服官的帳號 id（第 216 批；沒設是 None）：認哪一則是自動回覆用。"""
+    return staff.bot_account_id(shell.CONTENT.config, open_database())
+
+
+def _player_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,
+                   relayed: frozenset[int] = frozenset()) -> dict:
+    """玩家看的一張單：不含內部註記、不含誰回的帳號；客服那一側只寫「客服」。第 216 批：每則多 auto（自動回覆）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "created": t["created"], "updated": t["updated"],
-        "replies": [{"staff": bool(r["staff"]), "body": r["body"], "created": r["created"]} for r in replies if rules.visible_to_player(r)],
+        "replies": [{"staff": bool(r["staff"]), "body": r["body"], "created": r["created"], "auto": rules.reply_auto(r, bot_id, relayed)}
+                    for r in replies if rules.visible_to_player(r)],
         "files": _files(files),
     }
+
+
+def _player_view(sidecar: store.SupportStore, t: dict, bot_id: int | None) -> dict:
+    return _player_ticket(t, sidecar.replies(t["id"], internal=False), sidecar.files(t["id"]), bot_id=bot_id, relayed=sidecar.relayed(t["id"]))
 
 
 def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> dict:
     if sidecar is None:
         return {"tickets": [], "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
-    tickets = [_player_ticket(t, sidecar.replies(t["id"], internal=False), sidecar.files(t["id"])) for t in sidecar.mine(who.id, who.created)]
+    bot_id = _bot_id(shell)
+    tickets = [_player_view(sidecar, t, bot_id) for t in sidecar.mine(who.id, who.created)]
     return {"tickets": tickets, "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
 
 
-def _staff_ticket(t: dict, replies: list[dict], files: list[dict]) -> dict:
-    """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）＋截圖（第 215 批）。"""
+def _staff_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,
+                  relayed: frozenset[int] = frozenset()) -> dict:
+    """客服看的一張單：全部回覆（含內部註記）＋單上已有的帳號（帳號、名號、建帳號日）＋截圖（第 215 批）。
+    第 216 批：每則多 auto（自動回覆）、system（系統回覆）。"""
     return {
         "id": t["id"], "category": t["category"], "category_name": rules.CATEGORIES.get(t["category"], t["category"]), "body": t["body"],
         "status": t["status"], "admin_flag": bool(t["admin_flag"]), "created": t["created"], "updated": t["updated"], "version": t["version"],
         "account": {"id": t["account_id"], "login": t["login"], "character": t["character"], "created": t["account_created"]},
-        "replies": [{"staff": bool(r["staff"]), "internal": bool(r["internal"]), "body": r["body"], "created": r["created"]} for r in replies],
+        "replies": [{"staff": bool(r["staff"]), "internal": bool(r["internal"]), "body": r["body"], "created": r["created"],
+                     "auto": rules.reply_auto(r, bot_id, relayed), "system": bool(r["staff"]) and r["by_account_id"] == rules.SYSTEM_ACCOUNT}
+                    for r in replies],
         "files": _files(files),
     }
+
+
+def _staff_view(shell, sidecar: store.SupportStore, t: dict) -> dict:
+    tid = t["id"]
+    return _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid), bot_id=_bot_id(shell), relayed=sidecar.relayed(tid))
 
 
 def _push(shell, ticket: dict, now: float) -> None:
@@ -266,7 +287,7 @@ def _view_ticket(shell, request: Request, text: str) -> dict:
     t = sidecar.ticket(tid) if sidecar is not None else None
     if t is None:
         raise HTTPException(404, rules.NOT_FOUND)
-    out = _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid))
+    out = _staff_view(shell, sidecar, t)
     out["card"] = lookup.card(open_database(), t["account_id"], ledger_rows=shell.CONTENT.config.support.ledger_rows,
                               created_must=t["account_created"])
     found = None if out["card"].get("gone") else t["account_id"]
@@ -300,8 +321,10 @@ def _lookup(shell, request: Request, body: dict) -> dict:
 
 
 def _answer(shell, request: Request, body: dict) -> dict:
-    """客服回一則：{id, body, then: wait|close|admin}。回覆並等玩家／回覆並結單／請管理者處理（內部註記，玩家看不到，不推播）。"""
+    """客服回一則：{id, body, then: wait|close|admin}。回覆並等玩家／回覆並結單／請管理者處理（內部註記，玩家看不到，不推播）。
+    第 216 批：token 身分（request.state.support_desk）才收 relay_from（轉 str、去空白，空的當沒有）；cookie 身分帶了也不看。"""
     who = _staff(shell, request)
+    relay = str(body.get("relay_from") or "").strip() if request.state.support_desk else ""
     then = str(body.get("then", ""))
     if then not in rules.THEN:
         raise shell.GameError(rules.BAD_THEN)
@@ -315,14 +338,14 @@ def _answer(shell, request: Request, body: dict) -> dict:
     now = shell.time.time()
     tid = _int(body.get("id"))
     try:
-        t = sidecar.staff_reply(tid, who.id, text.strip(), then, now)
+        t = sidecar.staff_reply(tid, who.id, text.strip(), then, now, relay_from=relay or None)
     except Refused as e:
         if str(e) == rules.NOT_FOUND:
             raise HTTPException(404, rules.NOT_FOUND) from None
         raise _refused(shell, e) from None
     if then != "admin":
         _push(shell, t, now)
-    return _staff_ticket(t, sidecar.replies(tid, internal=True), sidecar.files(tid))
+    return _staff_view(shell, sidecar, t)
 
 
 def _close(shell, request: Request, body: dict) -> dict:
@@ -336,7 +359,7 @@ def _close(shell, request: Request, body: dict) -> dict:
         sidecar.close(tid, shell.time.time())
     except Refused:
         raise HTTPException(404, rules.NOT_FOUND) from None
-    return _staff_ticket(sidecar.ticket(tid), sidecar.replies(tid, internal=True), sidecar.files(tid))
+    return _staff_view(shell, sidecar, sidecar.ticket(tid))
 
 
 # ── 截圖（客服自動受理第 215 批；設計 5.1、5.5）──

@@ -39,6 +39,10 @@ SCHEMA = (
     "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, seq INTEGER NOT NULL, kind TEXT NOT NULL, "
     "bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, created REAL NOT NULL, UNIQUE (ticket_id, seq))",
     "CREATE INDEX IF NOT EXISTS files_ticket ON files (ticket_id)",
+    # 客服自動受理第 216 批：單上的記號（kind='human' 玩家按了找真人，ref NULL、一張單最多一列；kind='relay' 客服官轉達真人的那一則，ref＝replies.id）。
+    # 第 215 批的舊檔打開時補上，舊的五張表不 ALTER
+    "CREATE TABLE IF NOT EXISTS flags (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, kind TEXT NOT NULL, ref INTEGER, created REAL NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS flags_ticket ON flags (ticket_id, kind)",
 )
 
 
@@ -235,19 +239,26 @@ class SupportStore:
             "tickets": rows,
         }
 
-    def staff_reply(self, ticket_id: int, by_account_id: int, body: str, then: str, now: float) -> dict:
-        """客服回一則：then 是 wait（回覆並等玩家）、close（回覆並結單）、admin（請管理者處理：內部註記、單上記一個旗）。回更新後的單。"""
+    def staff_reply(self, ticket_id: int, by_account_id: int, body: str, then: str, now: float, *, relay_from: str | None = None) -> dict:
+        """客服回一則：then 是 wait（回覆並等玩家）、close（回覆並結單）、admin（請管理者處理：內部註記、單上記一個旗）。回更新後的單。
+        第 216 批：admin_flag 改成設值（請管理者 1、其他回覆 0：管理者那邊處理完、客服回了，旗就放下）。relay_from 有值（客服官轉達真人的話；
+        請管理者那一種不收）時同一筆交易多記一列 flags(relay, ref＝這一則) 與一則內部註記「轉達自 <ID>」（不經 then='admin'，旗不因它而動）。"""
         internal = then == "admin"
+        relay = None if internal else relay_from
         with self._write() as conn:
             t = _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
             if t is None:
                 raise Refused(rules.NOT_FOUND)
             if t["status"] == rules.CLOSED:
                 raise Refused(rules.CLOSED_ALREADY)
-            conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created) VALUES (?, ?, 1, ?, ?, ?)",
-                         (ticket_id, by_account_id, int(internal), body, now))
+            cur = conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created) VALUES (?, ?, 1, ?, ?, ?)",
+                               (ticket_id, by_account_id, int(internal), body, now))
+            if relay:
+                conn.execute("INSERT INTO flags (ticket_id, kind, ref, created) VALUES (?, 'relay', ?, ?)", (ticket_id, cur.lastrowid, now))
+                conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created) VALUES (?, ?, 1, 1, ?, ?)",
+                             (ticket_id, by_account_id, rules.RELAY_NOTE.format(who=relay), now))
             status = rules.after_staff(then, t["status"])
-            conn.execute("UPDATE tickets SET status = ?, admin_flag = MAX(admin_flag, ?), updated = ? WHERE id = ?",
+            conn.execute("UPDATE tickets SET status = ?, admin_flag = ?, updated = ? WHERE id = ?",
                          (status, int(internal), now, ticket_id))
             return _row(conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone())
 
@@ -290,4 +301,15 @@ class SupportStore:
             t = conn.execute("SELECT status FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
             if t is None:
                 raise Refused(rules.NOT_FOUND)
-            conn.execute("UPDATE tickets SET status = ?, updated = ? WHERE id = ?", (rules.CLOSED, now, ticket_id))
+            conn.execute("UPDATE tickets SET status = ?, admin_flag = 0, updated = ? WHERE id = ?", (rules.CLOSED, now, ticket_id))
+
+    # ── 記號（第 216 批）──
+
+    def flags(self, ticket_id: int) -> list[dict]:
+        with contextlib.closing(self._conn()) as conn:
+            return [dict(r) for r in conn.execute("SELECT * FROM flags WHERE ticket_id = ? ORDER BY id", (ticket_id,))]
+
+    def relayed(self, ticket_id: int) -> frozenset[int]:
+        """客服官轉達真人的那幾則的 replies.id（這幾則不算自動回覆）。"""
+        with contextlib.closing(self._conn()) as conn:
+            return frozenset(int(r[0]) for r in conn.execute("SELECT ref FROM flags WHERE ticket_id = ? AND kind = 'relay'", (ticket_id,)))

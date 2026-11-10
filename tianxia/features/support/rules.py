@@ -38,6 +38,12 @@ JOURNAL_TITLE = "客服"  # 待 joy 潤
 JOURNAL_TAG = "回覆了你的單"  # 待 joy 潤
 JOURNAL_LINE = "客服回覆了你的第 {id} 號單，到「設定 › 客服」看。"  # 待 joy 潤
 
+# ── 客服官（客服自動受理第 216 批；設計 5.2～5.4）──
+SYSTEM_ACCOUNT = 0  # 系統回覆（自動結單那一則）記在這個帳號 id 上（accounts.id 從 1 起，不會撞）
+AUTO_CLOSED = "{days} 天沒再回，單自動結了。"  # 待 joy 潤
+HUMAN_ASKED = "已請真人處理"  # 待 joy 潤
+RELAY_NOTE = "轉達自 {who}"  # 待 joy 潤
+
 
 # ── 查帳號（第 212 批；設計 6.3）：只收完整帳號、Email、手機，不收名號、不做模糊搜尋 ──
 HOUR_SECONDS = 3600.0
@@ -178,3 +184,13 @@ def after_staff(then: str, status: str) -> str:
 def visible_to_player(reply: dict) -> bool:
     """內部註記（請管理者處理）玩家看不到。"""
     return not reply["internal"]
+
+
+def reply_auto(reply: dict, bot_id: int | None, relayed: frozenset[int]) -> bool:
+    """這一則是不是自動回覆（第 216 批）：系統回覆（SYSTEM_ACCOUNT）一律是；客服官的帳號回的、又不是轉達真人的話（relayed 是那幾則的 id）才是。
+    玩家的、真人客服的都不是；沒設客服官（bot_id None）只剩系統回覆。"""
+    if not reply["staff"]:
+        return False
+    if reply["by_account_id"] == SYSTEM_ACCOUNT:
+        return True
+    return bot_id is not None and reply["by_account_id"] == bot_id and reply["id"] not in relayed
