@@ -46,11 +46,11 @@
         </g>
         <text y="-24" class="w-form">${esc(mood && mood.form || "")}</text>
         ${slot(slots[0], 0)}${slot(slots[1], 1)}
-        <text y="${r - 12}" class="w-furnace-lab">${ready ? (mood && mood.god ? "合璧成神" : "點爐開火") : "太極火爐"}</text>
+        <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
       </g></g>`;
   }
   // 爐子自己說話（Joy 2026-11-10「料放進去就開始發光或是出現什麼意象」）：放一樣進去爐子就照那一路的顏色亮一點；
-  // 兩樣放好照伺服器的預覽（v.he）：火候越足越亮（lvl 1～3）、爐心浮出這一爐的型字、三條都齊整圈金光（god）。網頁一個數字不算
+  // 兩樣放好照伺服器的預覽（v.he）：火候越足越亮（lvl 1～3）、爐心浮出這一爐的型字、成神那一爐整圈金光（god）。網頁一個數字不算
   const HE_HUE = { "陽": "var(--gang)", "陰": "var(--kuai)", "虛": "var(--he-xu)", "實": "var(--gold)", "剛": "var(--gang)", "快": "var(--kuai)", "柔": "var(--rou)", "慢": "var(--man)" };
   function heMood() {
     const h = S.forgePreview && S.forgePreview.he;
@@ -67,8 +67,6 @@
     if (m && m.god) kiln.dataset.god = "1"; else delete kiln.dataset.god;
     const form = kiln.querySelector(".w-form");
     if (form) form.textContent = m && m.form || "";
-    const lab = kiln.querySelector(".w-furnace-lab");
-    if (lab && forgeReady()) lab.textContent = m && m.god ? "合璧成神" : "點爐開火";
   }
   // 煉製頁的太極火爐自己一張圖：外面不圍東西，挑武學與意境在下面的清單
   function furnaceSvg(slots, ready) {
@@ -238,8 +236,8 @@
     const badge = merge ? '<span class="qseal qi">意</span>' : v.quality ? seal(v.quality) : '<span class="qseal q1">？</span>';
     const head = [v.made, v.attribute ? `屬${v.attribute}` : "", v.he ? "" : merge ? v.depth : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean).map(esc).join("・");
     const tags = (v.traits || []).map((t) => `${esc(t.name)}${t.layers > 1 ? ` ×${t.layers}` : ""}`);
-    const he = v.he; // 改版：縮起來的那一行寫火候與主料定的功效（待 joy 潤）
-    const line2 = (he ? [`火候 ${he.heat | 0}／${he.need | 0}`, he.general ? `功效 ${he.general}` : "", he.god ? "開爐就成神" : ""]
+    const he = v.he; // 改版：縮起來的那一行只寫爐火的樣子（heLine）
+    const line2 = (he ? [heLine(he)]
       : [tags.length ? `功效 ${tags.join("、")}` : "", v.slots, v.near]).filter(Boolean).map(esc).join("・");
     return `<button type="button" class="kiln-peek" data-act="peek" aria-label="看整張預覽卡">${badge}<span><b>${head}</b>${line2 ? `<small>${line2}</small>` : ""}</span>${he ? "" : fireHtml(v.fire, true)}</button>
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}`;
@@ -350,27 +348,16 @@
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}
     </div>`;
   }
-  // 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」）：預覽卡多一塊——火候（差一點寫「差一點」）、主料定的一般功效、
-  // 型（看輔料，Joy 2026-11-10「輔料定型」）、真意（熟 3 次前「未看破」）、成神三條（墨點＋缺什麼；Joy 2026-11-10「傾注好複雜」拿掉傾注，三條齊了開爐就成神、兩份用掉）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
-  // 改版沒開的季 v.he 不存在，這裡回空字串。字待 joy 潤
+  // 意境合成改版（設計稿 G4m44hK3…）：預覽卡只多一句爐火的樣子，認過的真意蓋一顆印。Joy 2026-11-10「什麼主料屬什麼輔料屬 連我開發人員看了都覺得煩
+  // 可以不要顯示讓玩家用行動去認識他們嗎…字要少 形象要具體」：主料、輔料、型、火候數字、成神幾條都不寫，爐子的光（heMood）自己說。
+  // 資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。改版沒開的季 v.he 不存在，這裡回空字串
+  function heLine(h) {
+    return h.god ? "爐中金光翻湧，兩道意將擰成一線。" : h.heat >= h.need ? "爐火熾白，隱隱有光。" : h.near ? "火苗竄動，只差一口氣。" : "爐火溫吞。"; // 待 joy 潤
+  }
   function heHtml(h) {
     if (!h) return "";
-    const fire = `<span class="he-heat${h.heat >= h.need ? " full" : h.near ? " near" : ""}">火候 <b>${h.heat | 0}</b><small>／${h.need | 0}</small></span>`; // 待 joy 潤
-    const near = h.heat >= h.need ? "火候夠，帶得出真意" : h.near ? "差一點：有機會自己湊足" : "火候不足，不帶真意"; // 待 joy 潤
-    const grand = h.grand ? `<span class="he-grand${h.grand === "未看破" ? " unseen" : ""}">${esc(h.grand)}</span>` : "";
-    const rows = [
-      `<div class="he-row">${fire}<span class="he-sub">${esc(near)}</span></div>`,
-      h.general || h.form ? `<div class="he-row">${h.general ? `<span class="he-k">主料</span><span class="he-gen">${esc(h.general)}</span>` : ""}${h.form ? `<span class="he-k">輔料</span><span class="he-gen">${h.aux ? `${esc(h.aux)}<small class="he-to">→</small>` : ""}${esc(h.form)}型</span>` : ""}</div>` : "", // 待 joy 潤
-      grand ? `<div class="he-row"><span class="he-k">真意</span>${grand}${h.form ? `<span class="he-sub">熟 ${h.uses | 0}</span>` : ""}</div>` : "", // 待 joy 潤
-      h.grand_desc ? `<p class="he-desc">${esc(h.grand_desc)}</p>` : "",
-    ];
-    const conds = h.conds || [];
-    const done = conds.filter((c) => c.ok).length;
-    const road = conds.length ? `<button type="button" class="he-road${S.heRoad ? " open" : ""}" data-act="he-road" aria-expanded="${!!S.heRoad}">
-        <span>${h.god ? "三條都齊：開爐就成神" : "成神之路"}</span><span class="he-dots" aria-label="${done}／${conds.length}">${conds.map((c) => `<i class="${c.ok ? "on" : ""}"></i>`).join("")}</span><em aria-hidden="true">▾</em></button>
-      ${S.heRoad ? `<ul class="he-conds">${conds.map((c) => `<li class="${c.ok ? "ok" : ""}"><i aria-hidden="true"></i><span><b>${esc(c.label)}</b>${c.miss ? `<small>${esc(c.miss)}</small>` : ""}</span></li>`).join("")}
-        ${h.hint ? `<li class="hint"><span><small>${esc(h.hint)}</small></span></li>` : ""}</ul>` : ""}` : ""; // 待 joy 潤
-    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${road}</div>`;
+    const seal = h.grand && h.grand !== "未看破" ? `<span class="he-grand">${esc(h.grand)}</span>` : ""; // 合過幾次認得了，才蓋這一顆印
+    return `<div class="he${h.god ? " god" : ""}"><p class="he-line">${esc(heLine(h))}${seal}</p></div>`;
   }
 
   // 化入（意境合成改版）：同一路、不帶真意、沒裝在槽上的弱意境化成意蘊（凡 1、佳 2、珍 3），攢滿 per_layer 點本體加一重。
@@ -995,14 +982,13 @@
           if (forgeReady()) await forge();
           else toast("放一門武學和一個意境，或兩門武學，或兩個意境。");
           break;
-        case "he-road": { S.heRoad = !S.heRoad; const el2 = document.getElementById("forge-line"); if (el2) el2.innerHTML = forgeLineHtml(S.menxia || {}); break; }
         case "inf-open": { const st = S.infuse = S.infuse || { open: false, body: "", others: [] }; st.open = !st.open; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
         case "inf-body": { const st = S.infuse; st.body = st.body === el.dataset.id ? "" : el.dataset.id; st.others = []; S.infuseNote = null; keepPlace(() => renderPage(), ".card.inf"); break; }
         case "inf-pick": { const st = S.infuse, id = el.dataset.id; st.others = st.others.includes(id) ? st.others.filter((o) => o !== id) : [...st.others, id]; keepPlace(() => renderPage(), ".card.inf"); break; }
         case "inf-go": if (!S.busy) await infuseGo(); break;
     } // craftClick
   } // craftClick
-  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "he-road", "inf-open", "inf-body", "inf-pick", "inf-go"]);
+  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "inf-open", "inf-body", "inf-pick", "inf-go"]);
   async function craftChange(ev) {
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();

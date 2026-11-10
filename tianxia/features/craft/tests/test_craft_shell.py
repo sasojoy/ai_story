@@ -475,25 +475,27 @@ def test_infuse_goes_through_the_menxia_table_and_refuses_when_off(client, monke
     assert saved.insights == ["feng"] and "化進" in on["message"]
 
 
-def test_the_he_block_draws_what_the_server_said_and_nothing_when_absent():
-    """預覽卡的改版那一塊（craft.js heHtml）：沒有 v.he 一個字都不畫；有的話火候、型（看輔料）、未看破、成神墨點照伺服器給的畫。"""
+def test_the_he_block_is_one_line_of_fire_and_no_rules():
+    """預覽卡的改版那一塊（craft.js heHtml）：沒有 v.he 一個字都不畫；有的話只寫一句爐火的樣子，認得的真意蓋一顆印。
+    主料、輔料、型、火候數字、成神幾條都不寫（Joy 2026-11-10「字要少 形象要具體」）。"""
     js = (server.ROOT / "web" / "craft.js").read_text(encoding="utf-8")
     script = "\n".join([
         'const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;"}[c]));',
+        _js_function(js, "function heLine(") + "\n  }",
         _js_function(js, "function heHtml(") + "\n  }",
     ]) + """
-    let S = { heRoad: true };
-    const he = { kind: "合併", heat: 5, need: 6, near: true, general: "乘勝", form: "變", aux: "先<手>", grand: "未看破", grand_desc: null, uses: 0,
-      conds: [{ key: "layers", label: "兩份都三重", ok: false, miss: "再深一點" }, { key: "place", label: "在陽最濃之地", ok: true, miss: null }],
-      god: false, hint: null };
-    console.log(JSON.stringify({ none: heHtml(undefined), html: heHtml(he) }));
+    const he = { kind: "合併", heat: 5, need: 6, near: true, general: "乘勝", form: "變", aux: "先手", grand: "未看破", uses: 0,
+      conds: [{ key: "layers", label: "兩份都三重", ok: false, miss: "再深一點" }], god: false, hint: null };
+    console.log(JSON.stringify({ none: heHtml(undefined), html: heHtml(he),
+      seen: heHtml({ ...he, heat: 6, near: false, grand: "斬<月>" }), god: heHtml({ ...he, god: true }) }));
     """
     done = webharness.node(script)
     assert done.returncode == 0, done.stderr
     out = json.loads(done.stdout)
     assert out["none"] == ""
     html = out["html"]
-    assert "he-heat near" in html and "差一點" in html and "未看破" in html and "unseen" in html
-    assert "先&lt;手&gt;" in html and "變型" in html and "he-intent" not in html
-    assert "he-pour" not in html and "／2" in html
-    assert html.count('<i class="on">') == 1 and "再深一點" in html
+    assert "只差一口氣" in html
+    for word in ("乘勝", "先手", "變", "未看破", "火候", "三重", "主料", "輔料"):
+        assert word not in html, word
+    assert "斬&lt;月&gt;" in out["seen"] and "he-grand" in out["seen"]
+    assert "金光" in out["god"] and 'class="he god"' in out["god"]
