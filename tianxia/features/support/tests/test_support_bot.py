@@ -170,6 +170,28 @@ def test_relay_reply_is_not_auto_and_notes_who(monkeypatch, support_isolated):
     assert out["replies"][-1]["auto"] is True and len(sc.flags(tid)) == 1  # 空白當沒有
 
 
+def test_bot_cannot_answer_a_ticket_waiting_for_a_human(monkeypatch, support_isolated):
+    """T 波（PM）：玩家按了找真人，客服官（token）回覆並等、回覆並結單一律被拒、不寫任何東西；
+    內部註記（then=admin）與帶 relay_from 的轉達照舊；cookie 的真人客服不受影響。"""
+    from tianxia.features.support import rules
+    c = player()
+    tid = ticket(c).json()["id"]
+    s = staffer(monkeypatch)
+    desk, h = _desk(monkeypatch, support_isolated)
+    assert c.post("/api/support/human", json={"id": tid}).status_code == 200
+    sc = store.open_store(support_kit.sidecar(), create=False)
+    before = (len(sc.replies(tid, internal=True)), sc.flags(tid))
+    for then in ("wait", "close"):
+        r = desk.post("/api/support/answer", json={"id": tid, "body": "我來回", "then": then}, headers=h)
+        assert (r.status_code, r.json()) == (400, {"error": rules.HUMAN_WAITING})
+    assert (len(sc.replies(tid, internal=True)), sc.flags(tid)) == before
+    assert desk.post("/api/support/answer", json={"id": tid, "body": "請真人看", "then": "admin"}, headers=h).status_code == 200
+    out = desk.post("/api/support/answer", json={"id": tid, "body": "真人說可以了", "then": "wait", "relay_from": "4242"}, headers=h)
+    assert out.status_code == 200 and "真人說可以了" in [r["body"] for r in out.json()["replies"]]
+    out = s.post("/api/support/answer", json={"id": tid, "body": "我是真人", "then": "close"})
+    assert out.status_code == 200 and out.json()["replies"][-1]["body"] == "我是真人"
+
+
 def test_support_json_never_contains_bot_word(monkeypatch, support_isolated):
     """假人看不出來：客服的每一條回應（清單、單、自己的單、找真人、自動結單、回覆）整串都沒有 bot 這個字（大小寫都不行）。"""
     c = player()

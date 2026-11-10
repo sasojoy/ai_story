@@ -343,6 +343,8 @@ def _answer(shell, request: Request, body: dict) -> dict:
         raise HTTPException(404, rules.NOT_FOUND)
     now = shell.time.time()
     tid = _int(body.get("id"))
+    if request.state.support_desk and then != "admin" and not relay and sidecar.has_human(tid):
+        raise shell.GameError(rules.HUMAN_WAITING)  # T 波（PM）：客服官不准自己回找真人的單；內部註記、轉達照舊
     try:
         t = sidecar.staff_reply(tid, who.id, text.strip(), then, now, relay_from=relay or None)
     except Refused as e:

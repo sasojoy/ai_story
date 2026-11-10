@@ -32,6 +32,7 @@ TOO_MANY_TODAY = "一天最多送 {n} 張單，明天再送。"  # 待 joy 潤
 CLOSED_ALREADY = "這張單已經結了。"  # 待 joy 潤
 NOT_FOUND = "找不到這張單。"  # 待 joy 潤
 BAD_THEN = "不知道回完要怎麼辦。"  # 待 joy 潤
+HUMAN_WAITING = "這張單玩家要找真人：等真人回了再轉達（--human），不要自己回。"  # 待 joy 潤
 
 # 「客服」紀錄（on_own_turn 寫進江湖紀錄；標題就是設計 6.6 的「客服」）
 JOURNAL_TITLE = "客服"  # 待 joy 潤
