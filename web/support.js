@@ -144,22 +144,25 @@
 
   // ── 客服自己一頁（S.supportPage 時設定抽屜整個換成它）──
   const SUPPORT_HUMAN_TAG = `<span class="sup-human">已請真人處理</span>`; // 待 joy 潤
-  function supportAskHtml(t) { // 「找真人」（客服自動受理第 216 批，A 版：對話最下面、回覆表單上方）：沒結、有自動回覆、還沒按過才畫
+  function supportAskHtml(t) { // 「找真人」（第 216 批；第 219 批改 C 版：畫在最後一則自動回覆的框裡右下）：沒結、有自動回覆、還沒按過才畫
     if (t.status === "closed" || t.human || !(t.replies || []).some((r) => r.staff && r.auto)) return "";
-    return `<div class="sup-ask-row"><button class="btn small ghost sup-ask" data-act="support-human" data-id="${Number(t.id)}">找真人</button></div>`; // 待 joy 潤
+    return `<button class="btn small ghost sup-ask" data-act="support-human" data-id="${Number(t.id)}">找真人</button>`; // 待 joy 潤
   }
   function supportTicketHtml(t) { // 點開一張單：對話、截圖與「再回一句」
     const lost = S.supportFileMsg && S.supportFileMsg.id === Number(t.id) ? `<p class="form-msg sup-file-msg">${esc(S.supportFileMsg.text)}</p>` : "";
+    const replies = t.replies || [];
+    let ask = -1; // 最後一則玩家看得到的自動回覆：「找真人」緊貼它的內文（框是 pre-wrap，中間不留空白）
+    replies.forEach((r, i) => { if (r.staff && r.auto && !r.internal) ask = i; });
     const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(t.created)}</span>${esc(t.body)}</div>${supportShotsHtml(t.id, t.files)}${lost}${supportAddHtml(t)}`]
-      .concat((t.replies || []).map((r) => r.staff
-        ? `<div class="sup-msg sup-cs"><span class="sup-who">${r.auto ? "客服（自動回覆）・回覆" : "客服・回覆"}　${supportWhen(r.created)}</span>${esc(r.body)}</div>` // 待 joy 潤
+      .concat(replies.map((r, i) => r.staff
+        ? `<div class="sup-msg sup-cs"><span class="sup-who">${r.auto ? "客服（自動回覆）・回覆" : "客服・回覆"}　${supportWhen(r.created)}</span>${esc(r.body)}${i === ask ? supportAskHtml(t) : ""}</div>` // 待 joy 潤
         : `<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(r.created)}</span>${esc(r.body)}</div>`));
     const form = t.status === "closed" ? "" : `<form id="support-reply-form" class="stack" data-id="${Number(t.id)}">
         <textarea class="input" name="body" maxlength="1000" placeholder="再回一句（1,000 字內）"></textarea>
         <p class="form-msg"></p><button class="btn" type="submit">送出</button></form>`; // 待 joy 潤
     return `<div class="top-row"><button class="btn small ghost" data-act="support-list">‹ 回客服</button><h3 style="flex:1">#${Number(t.id)}・${supportCat(t)}</h3></div>
       <p class="sup-meta">${supportStatus(t.status)}　送出 ${supportWhen(t.created)}${t.human ? SUPPORT_HUMAN_TAG : ""}</p>
-      ${msgs.join("")}${supportAskHtml(t)}${form}`; // 待 joy 潤
+      ${msgs.join("")}${form}`; // 待 joy 潤
   }
   function supportListHtml(mine) {
     const list = (mine && mine.tickets) || [];
