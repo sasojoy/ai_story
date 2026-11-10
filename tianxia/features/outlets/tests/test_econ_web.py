@@ -79,11 +79,14 @@ def test_the_smith_has_a_fifth_tab_only_while_trading_is_on(smith):
 def test_the_materials_page_puts_upgrades_above_selling(smith):
     m = server.main_view(smith)
     trade = m["shop"]["trade"]
-    html = run(m, 'H.S.shopTab = "trade"; H.render(); return T.els.app.innerHTML;')
+    # 翻新（Joy 2026-11-10）：升階的規矩收進「？」（攤開才有），一屬性一條熬煉鏈、底下「熬一個」寫用幾個什麼與工錢、機率那一句
+    html = run(m, 'H.S.shopTab = "trade"; H.S.tradeHelp = true; H.render(); return T.els.app.innerHTML;')
     assert trade["up_cap"] in html and trade["sell_cap"] in html
     assert html.index(trade["up_cap"]) < html.index(trade["sell_cap"])  # 上半升階、下半收購（企劃者 2026-10-15）
-    assert 'data-act="trade-up" data-attr="柔" data-tier="2"' in html and "五成・其餘隨機" in html
-    assert "柳絲綿×3 →" in html and "5 兩" in html
+    assert 'data-act="trade-up" data-attr="柔" data-tier="2"' in html and "五成出" in html
+    assert "3 個柳絲綿" in html and "5 兩" in html
+    folded = run(m, 'H.S.shopTab = "trade"; H.render(); return T.els.app.innerHTML;')
+    assert trade["up_cap"] not in folded and 'data-act="trade-help"' in folded
     assert 'data-act="trade-sell" data-id="rou_1" data-n="1"' in html and "全賣 14 兩" in html
     assert 'class="shop-pages"' not in html  # 素材頁不分兵器、防具
     assert "smith-hero" not in html  # 爐火只在架上頁

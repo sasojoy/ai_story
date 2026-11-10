@@ -1343,6 +1343,21 @@ def test_hide_chance_gates_the_whole_season():
     assert _cache(_game_seal(hide=0.0)) is None
 
 
+def test_the_hidden_shard_is_rumored_by_region_only():
+    """Joy 2026-11-10「先這樣改」：開季藏了一片，天下大事放一則只說哪一州（藏處的大區名，seal.hide_region），不寫區塊與地點；
+    hint_region 關著不放，沒藏不放。"""
+    game = _game_seal(find=0.0)
+    cache = _cache(game)
+    region = atlas.region_of(game.content, cache.loc).name
+    texts = [r.text for r in game.world.get_season().rumors]
+    hint = [t for t in texts if t == seal.HIDE_HINT.format(region=region)]
+    assert len(hint) == 1 and game.content.locations[cache.loc].name not in hint[0]
+    off = _content(find=0.0)
+    off.config.seal.cache.hint_region = False
+    assert not any("傳國玉璽流落" in r.text for r in _game_seal(content=off).world.get_season().rumors)
+    assert not any("傳國玉璽流落" in r.text for r in _game_seal(hide=0.0).world.get_season().rumors)
+
+
 def test_hide_skips_when_nothing_is_left_to_hide():
     """這一輪七片都現世過、不在「未現世」了：沒有可藏的；這一季已經現世過一片也不再藏。"""
     c = _content()

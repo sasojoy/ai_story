@@ -55,6 +55,12 @@ class SmithyFeature(Feature):
             merge=shelf_actions.forge_merges(arg), fold=lambda: shelf_actions.forged_fold(ctx, arg),
         )
 
+    def on_season_start(self, ctx, old) -> None:
+        """季末沒用完的素材折成這一季的盤纏（Config.economy.leftover_silver；Joy 2026-11-10「先這樣改」）：trade_actions.leftover。"""
+        from . import trade_actions  # noqa: PLC0415
+
+        trade_actions.leftover(ctx, old)
+
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415
 

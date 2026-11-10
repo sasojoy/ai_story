@@ -39,7 +39,7 @@ def test_the_three_for_four_line_breaks_only_between_its_pieces():
     各包成不折行的小段（同 FB-132、FB-297 的 .nb），要斷只斷在「・」後面。"""
     game = _smithy({"gang_3": 5})
     html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;", S={"shopTab": "trade"})
-    cell = html[html.index('data-tier="4"'):]
+    cell = html[html.index('data-act="trade-up" data-attr="剛" data-tier="4"'):]
     cell = cell[:cell.index("</button>")]
     assert '<span class="nb">150 兩</span>' in cell and '・<span class="nb">這一季還能 2 個</span>' in cell
 

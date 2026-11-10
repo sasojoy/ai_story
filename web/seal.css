@@ -12,3 +12,7 @@
 @media (min-width: 641px) {
   .shop-layer.shop-seal { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat; }
 }
+
+/* 持有者的碎片卡：碎片的水墨圖（web/img/gear/seal-<id>.webp；Joy 2026-11-10）靠右一張方圖，深色模式墊宣紙色 */
+.seal-card .seal-pic { float: right; width: 72px; height: 72px; margin: 0 0 6px 10px; object-fit: contain; border-radius: 10px; background: var(--card-2); }
+@media (prefers-color-scheme: dark) { .seal-card .seal-pic { background: #efe6d2; filter: brightness(.86); } }

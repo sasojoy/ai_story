@@ -162,3 +162,60 @@ def test_leaving_the_smith_resets_the_page():
     game.choose("act:smith")
     assert any(i.startswith("smith:buy:") for i in _ids(game))  # 進門照舊停在兵器頁
     assert engine_mod  # noqa: B018
+
+
+# ── 一次熬到底、季末素材折銀兩（Joy 2026-11-10「先這樣改」）──────────────────
+
+
+def test_one_press_upgrades_as_many_as_the_bag_allows():
+    game = _game(bag={"rou_1": 10}, silver=500)
+    game.choose("act:smith")
+    up = {(r["attribute"], r["tier"]): r for r in game.shop_view()["trade"]["upgrade"]}
+    assert up[("柔", 2)]["batch"] == 3  # 10 個一階、一爐 3 個
+    msgs = game.smith_upgrade("柔", 2, 99)
+    p = game.state.player
+    assert p.materials.get("rou_1") == 1 and sum(n for mid, n in p.materials.items() if mid.endswith("_2")) == 3
+    assert p.stats["silver"] == 500 - 15 and p.upgrade_seq == 3
+    assert "分 3 爐熬煉" in msgs[0] and "銀兩 -15" in msgs
+    assert game.state.journal[0].title.startswith("鐵匠鋪")
+
+
+def test_the_batch_is_the_same_as_pressing_one_by_one():
+    one, many = _game(bag={"gang_1": 9}), _game(bag={"gang_1": 9})
+    for g in (one, many):
+        g.choose("act:smith")
+    for _ in range(3):
+        one.smith_upgrade("剛", 2)
+    many.smith_upgrade("剛", 2, 3)
+    assert one.state.player.materials == many.state.player.materials
+    assert one.state.player.stats["silver"] == many.state.player.stats["silver"]
+
+
+def test_the_batch_stops_at_silver_and_the_switch():
+    game = _game(bag={"rou_1": 30}, silver=12)
+    game.choose("act:smith")
+    assert economy.upgrade_max(game.state, game.content, "柔", 2, game._pill_day()) == 2  # 一爐 5 兩
+    game.smith_upgrade("柔", 2, 10)
+    assert game.state.player.materials["rou_1"] == 24 and game.state.player.stats["silver"] == 2
+    off = _game(bag={"rou_1": 30}, upgrade_batch=False)
+    off.choose("act:smith")
+    assert all(r["batch"] == 0 for r in off.shop_view()["trade"]["upgrade"])
+    off.smith_upgrade("柔", 2, 10)
+    assert off.state.player.materials["rou_1"] == 27  # 關著照舊一次一個
+
+
+def test_leftover_materials_become_next_seasons_silver():
+    from tianxia.features.smithy import trade_actions
+
+    game = _game(bag={"rou_1": 10, "rou_2": 2, "rou_4": 1}, silver=0)
+    old = game.state.model_copy(deep=True)
+    game.state.player.materials = {}
+    msgs = trade_actions.leftover(game, old)
+    assert game.state.player.stats["silver"] == 10 * 2 + 2 * 6 + 54
+    assert msgs[-1] == "銀兩 +86" and "一階 10 個" in msgs[0] and game.state.journal[0].title == trade_actions.LEFTOVER_TITLE
+    rich = _game(bag={"gang_3": 40}, silver=0)
+    old = rich.state.model_copy(deep=True)
+    trade_actions.leftover(rich, old)
+    assert rich.state.player.stats["silver"] == rich.content.config.economy.leftover_cap == 300
+    plain = _game(bag={"rou_1": 10}, silver=0, leftover_silver={})
+    assert trade_actions.leftover(plain, plain.state.model_copy(deep=True)) == [] and plain.state.player.stats["silver"] == 0

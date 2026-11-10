@@ -26,7 +26,9 @@ COATS = ("棗騮", "青驄", "黑鬃", "白蹄", "花斑", "黃棕")  # 待 joy 
 # 馬的圖（Joy 2026-10-17「我要真的水墨畫」，圖由她另外產）：每種毛色一張、兩匹名駒各一張，檔名 web/horse-<鍵>.webp；
 # 鍵照毛色的拼音、名駒照 template。圖還沒放進 web/ 的鍵，網頁照舊畫原本的色塊（server.horse_art() 只列真的有檔的）
 COAT_ART = {"棗騮": "zaoliu", "青驄": "qingcong", "黑鬃": "heizong", "白蹄": "baiti", "花斑": "huaban", "黃棕": "huangzong"}
-STEED_ART = {"tashuang_ju": "tashuang", "polang_ju": "polang"}
+STEED_ART = {"tashuang_ju": "tashuang", "polang_ju": "polang",
+              # 馬的來路（features/horses）：馴出來與論功賜的四匹名駒（Joy 2026-11-10 選「名駒專屬名字和圖(4 匹)」），圖等主機畫
+              "liyun_ju": "liyun", "benlei_ju": "benlei", "yinxue_ju": "yinxue", "xiaoyuan_ju": "xiaoyuan"}
 WEAR_WORD = equipment.WEAR_WORDS["mount"]  # 「飽足度」：寫到它的地方都讀這個，不寫死（3.1、2.5）
 HUNGRY_WARNING = "你的{name}餓得直打響鼻，餵牠一把料吧。"  # 待 joy 潤（5.4）
 NO_MOUNT = "身上沒有坐騎"  # 待 joy 潤：「餵」灰掉時的原因

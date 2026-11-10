@@ -81,3 +81,241 @@
 
 .shop-layer .rk-go { margin-top: 10px; }
 .shop-layer .rk-go.live { position: sticky; bottom: 0; padding: 18px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), #1e130c 40%); }
+/* 水墨圖與一次熬到底（Joy 2026-11-10「先這樣改 UI優化跟畫圖也進來」；介面設計規範第五節）：
+   - 頁首圖：鐵匠鋪內景（web/img/gear/scene-smithy.webp）168px 高、往下淡進店面的底色，右上直書的匾額；圖還沒畫好照舊是 CSS 的爐子。
+   - 素材的小圖（mat-<id>.webp）取代屬性色點；升階格子頂上一張大一點的。圖是去背的墨色，店面是暗底，墊一塊宣紙色的圓角方。
+   - 「全熬 ×N」：升階格子底下一顆金框小鈕（44px 高），連換得了兩個以上才有。 */
+.shop-layer .smith-head { position: relative; margin: 0 -16px 4px; height: 168px; overflow: hidden; }
+.shop-layer .smith-head .smith-scene { width: 100%; height: 100%; object-fit: cover; filter: brightness(.78) saturate(.85);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+.shop-layer .smith-plaque { position: absolute; top: 12px; right: 18px; padding: 0.5em 0.35em; writing-mode: vertical-rl; letter-spacing: 0.3em;
+  font: 700 1.2em var(--kai); color: #f2c46a; background: linear-gradient(#4a3020, #2a1a10); border: 2px solid #b7862b; border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.shop-layer .mat-pic { width: 1.5em; height: 1.5em; margin-right: 0.3em; flex: none; object-fit: contain; border-radius: 0.3em; background: #efe6d2; }
+.shop-layer .up-box { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.shop-layer .up-box .up-pic { width: 2.4em; height: 2.4em; object-fit: contain; border-radius: 0.4em; background: #efe6d2; }
+.shop-layer .up-all { min-height: 44px; padding: 0.3em 0.4em; border: 1px solid #f2c46a; border-radius: 10px; background: rgba(242, 196, 106, 0.12);
+  color: #f2c46a; font: 600 0.87em var(--sans); white-space: nowrap; cursor: pointer; }
+.shop-layer .up-all:active { background: rgba(242, 196, 106, 0.25); }
+
+/* ── 鐵匠鋪翻新（Joy 2026-11-10「整個鐵匠鋪的介面可以翻新嗎」；翻新稿 9RrHPAD6，介面設計規範）：
+   店面那一層本來是固定的暗紅爐火底，鐵匠鋪改成宣紙底、照色票（深色模式跟著色票走），名字楷書、朱印、頁首圖。
+   字級一律 em（店面那一層手機 15px、電腦寬 19.5px，跟著放大）；選擇器都掛在 .shop-layer.shop-smith，比店面共用那一套重，馬市、酒肆照舊暗底。 ── */
+.shop-layer.shop-smith { background: var(--paper); color: var(--ink); }
+.shop-layer.shop-smith .shop-bar { border-bottom: 1px solid var(--line); background: var(--paper); padding-bottom: 6px; }
+.shop-layer.shop-smith .shop-back { color: var(--ink); min-height: 44px; }
+.shop-layer.shop-smith .shop-sign { border: 0; background: transparent; color: var(--ink); font: 700 1.13em var(--kai); letter-spacing: 0.2em; padding: 0; }
+.shop-layer.shop-smith .shop-silver { color: var(--ink); }
+.shop-layer.shop-smith .shop-line { margin: 8px 14px 4px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px;
+  background: var(--card); color: var(--ink); font: 400 0.95em/1.7 var(--kai); }
+.shop-layer.shop-smith .shop-line.rule { border-color: var(--gold); border-left-color: var(--gold); background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
+.shop-layer.shop-smith .shop-line.brewed { border-left-color: var(--gold); color: var(--ink); }
+.shop-layer.shop-smith .shop-pages { margin: 8px 14px 4px; padding: 3px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 12px;
+  background: var(--card-2); border: 1px solid var(--line); }
+.shop-layer.shop-smith .shop-page { min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font: 700 1.05em var(--kai); letter-spacing: 0.2em; }
+.shop-layer.shop-smith .shop-page.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+.shop-layer.shop-smith .shop-tabs { border-top: 1px solid var(--line); background: var(--card); }
+.shop-layer.shop-smith .shop-tab { min-height: 3.4em; color: var(--ink-2); font: 700 0.97em var(--kai); letter-spacing: 0.08em; position: relative; }
+.shop-layer.shop-smith .shop-tab.on { color: var(--accent); background: transparent; box-shadow: inset 0 3px 0 var(--accent); }
+.shop-layer.shop-smith .shop-note, .shop-layer.shop-smith .shop-empty, .shop-layer.shop-smith .shop-cap { color: var(--ink-2); }
+.shop-layer.shop-smith .shop-empty { padding: 1em; border: 1px dashed var(--line); border-radius: 10px; font-family: var(--kai); text-align: center; }
+.shop-layer.shop-smith .shop-warn { color: var(--bad); }
+.shop-layer.shop-smith .btn.ghost { color: var(--ink); border-color: var(--line); background: transparent; }
+.shop-layer.shop-smith .btn.ghost:disabled { color: var(--ink-2); }
+.shop-layer.shop-smith .sm-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 16px 2px 8px; padding-left: 10px;
+  border-left: 3px solid var(--ink); font: 700 1.15em/1.2 var(--kai); letter-spacing: 0.12em; color: var(--ink); }
+.shop-layer.shop-smith .sm-sec small { font: 400 0.7em var(--sans); letter-spacing: 0; color: var(--ink-2); }
+
+/* 頁首（架上頁）：圖 168px 往下淡進卡色、右上直書匾額、朱印「鐵匠」＋鐵匠那一句；沒有圖時是 CSS 的爐子在暖暗底上 */
+.shop-layer.shop-smith .smith-hero { position: relative; display: block; margin: 10px 14px 6px; border-radius: var(--radius); overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.shop-layer.shop-smith .sh-art { height: 168px; display: grid; place-items: center; align-content: center; gap: 4px;
+  background: radial-gradient(ellipse 40% 55% at 50% 70%, #6a3018 0%, #3a2418 55%, #241a13 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent); mask-image: linear-gradient(to bottom, #000 58%, transparent); }
+.shop-layer.shop-smith .sh-art .forge-mouth { width: 132px; height: 92px; }
+.shop-layer.shop-smith .sh-art .forge-anvil { width: 96px; height: 16px; }
+.shop-layer.shop-smith .sh-art .smith-scene { width: 100%; height: 100%; object-fit: cover; }
+.shop-layer.shop-smith .smith-plaque { top: 12px; right: 14px; padding: 0.55em 0.32em; color: #f1dfae; background: linear-gradient(160deg, #3a2a1c, #22180f);
+  border: 2px solid #9c7a3c; border-radius: 3px; box-shadow: 0 4px 12px rgba(30, 18, 8, 0.35), inset 0 0 0 2px #22180f; font: 700 1.4em/1 var(--kai); letter-spacing: 0.28em; }
+.shop-layer.shop-smith .sh-text { position: relative; margin-top: -38px; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.shop-layer.shop-smith .sh-seal { align-self: flex-start; padding: 0.1em 0.5em; border: 2px solid var(--accent); border-radius: 4px; background: var(--card);
+  color: var(--accent); font: 700 0.93em/1.3 var(--kai); letter-spacing: 0.2em; transform: rotate(-4deg); }
+.shop-layer.shop-smith .sh-text .shop-line { margin: 0; padding: 0; border: 0; background: transparent; min-height: 0; font: 400 1em/1.7 var(--kai); }
+@media (prefers-color-scheme: dark) { .shop-layer.shop-smith .sh-art .smith-scene { filter: brightness(0.78) saturate(0.85); } }
+.shop-layer.shop-smith .dv-link { display: flex; align-items: center; min-height: 3.2em; margin: 4px 14px 6px; padding: 0 14px; border: 1px dashed var(--gold); border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 7%, var(--card)); color: var(--ink); font: 400 1em var(--kai); }
+
+/* 架上：一件一張橫卡（器名印｜名字與數字｜價錢與「買」），配得上的左上角一枚朱印「配」 */
+.shop-layer.shop-smith .shop-grid { grid-template-columns: 1fr; gap: 10px; }
+.shop-layer.shop-smith .shop-item { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: var(--shadow); font: 0.83em/1.5 var(--sans); }
+.shop-layer.shop-smith .shop-item.fit { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.shop-layer.shop-smith .shop-item b { font: 700 1.45em/1.3 var(--kai); color: var(--ink); letter-spacing: 0.04em; }
+.shop-layer.shop-smith .si-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--ink-2); }
+.shop-layer.shop-smith .shop-item .fit-note { color: var(--accent); font-family: var(--kai); }
+.shop-layer.shop-smith .si-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.shop-layer.shop-smith .shop-item .price { margin: 0; color: var(--ink); font: 700 1.15em var(--sans); white-space: nowrap; }
+.shop-layer.shop-smith .shop-item:disabled .price { color: var(--bad); font: 400 0.95em var(--sans); white-space: normal; text-align: right; }
+.shop-layer.shop-smith .si-go { min-width: 3.4em; min-height: 44px; display: grid; place-items: center; border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--card); color: var(--ink); font: 700 1.2em var(--kai); }
+.shop-layer.shop-smith .shop-item.fit .si-go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.shop-layer.shop-smith .si-stamp { position: absolute; top: -6px; left: -4px; padding: 0 0.35em; border: 2px solid var(--accent); border-radius: 4px; background: var(--card);
+  color: var(--accent); font: 700 0.95em/1.3 var(--kai); transform: rotate(-8deg); }
+.shop-layer.shop-smith .si-mark { flex: none; width: 3.7em; height: 3.7em; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card-2); color: var(--ink-2); font: 700 1.6em/1 var(--kai); }
+.shop-layer.shop-smith .shop-item:disabled { opacity: 0.62; }
+.shop-layer.shop-smith .plus { margin-left: 0.3em; padding: 0 0.35em; border-radius: 5px; background: var(--accent); color: var(--accent-ink); font: 700 0.75em/1.5 var(--sans); font-style: normal; vertical-align: 0.15em; }
+
+/* 打造：器種一排六格、爐子是一張卡、火苗一直輕輕晃（減少動態效果的人不晃）、出爐預測墊一層卡色 */
+.shop-layer.shop-smith .shop-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(3.2em, 1fr)); gap: 5px; margin: 10px 0 8px; }
+.shop-layer.shop-smith .shop-kinds .kind { min-height: 44px; padding: 0 2px; border: 1.5px solid var(--line); border-radius: 22px; background: var(--card); color: var(--ink);
+  font: 700 1.05em var(--kai); white-space: nowrap; }
+.shop-layer.shop-smith .shop-kinds .kind.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.shop-layer.shop-smith .shop-kinds .kind sup { position: absolute; top: -7px; right: -3px; margin: 0; padding: 0 3px; border-radius: 4px; background: var(--accent);
+  color: var(--accent-ink); font: 700 0.65em/1.45 var(--kai); }
+.shop-layer.shop-smith .shop-kinds .kind.on sup { color: var(--accent-ink); }
+.shop-layer.shop-smith .furnace { border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 14px 12px 22px;
+  background: radial-gradient(ellipse 45% 70% at 50% 45%, color-mix(in srgb, #e0773f 16%, var(--card)) 0%, var(--card) 70%); }
+.shop-layer.shop-smith .furnace.hot { background: radial-gradient(ellipse 50% 75% at 50% 45%, color-mix(in srgb, #e0773f 30%, var(--card)) 0%, var(--card) 72%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e0773f 40%, var(--line)), var(--shadow); }
+.shop-layer.shop-smith .pot-slot { min-height: 6em; border: 1.5px dashed var(--line); background: var(--card-2); color: var(--ink-2); font: 0.8em var(--sans); }
+.shop-layer.shop-smith .pot-slot b { color: var(--ink); font: 700 1.3em/1.3 var(--kai); }
+.shop-layer.shop-smith .pot-slot:not(:disabled) { border-style: solid; border-color: color-mix(in srgb, #e0773f 50%, var(--line)); background: var(--card); }
+.shop-layer.shop-smith .fu-tag { border-color: var(--gold); background: var(--card); color: var(--ink); }
+.shop-layer.shop-smith .fu-tag.hot { background: var(--gold); color: #1e1510; }
+.shop-layer.shop-smith .fu-tag.off { border-color: var(--line); background: var(--card-2); color: var(--ink-2); }
+.shop-layer.shop-smith .flame svg { overflow: visible; }
+.shop-layer.shop-smith .flame .fl-out { transform-origin: 50% 95%; animation: sm-flick 1.6s ease-in-out infinite; }
+.shop-layer.shop-smith .flame .fl-in { transform-origin: 50% 95%; animation: sm-flick-in 1.1s ease-in-out infinite; }
+@keyframes sm-flick { 0%, 100% { transform: scale(1, 1) skewX(0); } 25% { transform: scale(0.95, 1.06) skewX(2deg); } 50% { transform: scale(1.03, 0.96) skewX(-1deg); } 75% { transform: scale(0.97, 1.08) skewX(-2deg); } }
+@keyframes sm-flick-in { 0%, 100% { transform: scale(1, 1); } 40% { transform: scale(0.9, 1.12); } 70% { transform: scale(1.05, 0.92); } }
+@media (prefers-reduced-motion: reduce) { .shop-layer.shop-smith .flame .fl-out, .shop-layer.shop-smith .flame .fl-in { animation: none; } }
+.shop-layer.shop-smith .pot-out { margin: 4px 0 6px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); color: var(--ink-2); font: 0.87em var(--sans); }
+.shop-layer.shop-smith .pot-out b { color: var(--ink); font: 700 1.25em var(--kai); }
+.shop-layer.shop-smith .pot-head, .shop-layer.shop-smith .pot-why { color: var(--ink-2); font-family: var(--kai); }
+.shop-layer.shop-smith .odds { height: 1.75em; border-radius: 7px; border: 1px solid var(--line); font-size: 0.8em; }
+.shop-layer.shop-smith .odds i { color: #fff; font-weight: 700; }
+.shop-layer.shop-smith .odds .q-下品 { background: #8a7d6b; }
+.shop-layer.shop-smith .odds .q-中品 { background: #2f7d5c; }
+.shop-layer.shop-smith .odds .q-上品 { background: #b7862b; }
+.shop-layer.shop-smith .shop-go { min-height: 3.4em; font: 700 1.2em var(--kai); letter-spacing: 0.3em; }
+.shop-layer.shop-smith .row-attr { font: 700 1.2em var(--kai); }
+.shop-layer.shop-smith .cell { border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 0.95em var(--kai); min-height: 4.2em; justify-content: center; }
+.shop-layer.shop-smith .cell .n { color: var(--ink-2); font: 700 0.8em var(--sans); }
+.shop-layer.shop-smith .cell small { color: var(--ink-2); font-family: var(--sans); font-weight: 400; }
+.shop-layer.shop-smith .cell.used { border: 2px solid #c4552a; background: color-mix(in srgb, #c4552a 12%, var(--card)); box-shadow: none; }
+.shop-layer.shop-smith .cell .why { color: var(--bad); }
+.shop-layer.shop-smith .cell.brew { border-style: dashed; background: transparent; color: var(--ink-2); }
+.shop-layer.shop-smith .cell.brew:not(.off):not(.none) { border-color: var(--gold); color: var(--gold); }
+.shop-layer.shop-smith .cell.brew.on { border-style: solid; border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.shop-layer.shop-smith .mat-pic, .shop-layer.shop-smith .up-box .up-pic { background: var(--card-2); }
+
+/* 裝備庫：身上那件是一頁譜（左邊朱紅直條直書「身上」）、淬煉格安全線以內金框、過了朱框；一件一張卡，點了才攤開四顆鈕 */
+.shop-layer.shop-smith .shop-worn { display: flex; gap: 0; padding: 0; overflow: hidden; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--card); box-shadow: var(--shadow); margin-top: 10px; }
+.shop-layer.shop-smith .sw-spine { flex: none; width: 2.3em; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink);
+  writing-mode: vertical-rl; font: 700 1em/1.2 var(--kai); letter-spacing: 0.3em; }
+.shop-layer.shop-smith .sw-in { flex: 1; min-width: 0; display: grid; gap: 8px; padding: 12px; }
+.shop-layer.shop-smith .sw-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.shop-layer.shop-smith .sw-hd b { font: 700 1.25em/1.3 var(--kai); }
+.shop-layer.shop-smith .sw-hd span { color: var(--ink-2); font-size: 0.83em; }
+.shop-layer.shop-smith .shop-wear, .shop-layer.shop-smith .tempers { color: var(--ink-2); font-size: 0.83em; }
+.shop-layer.shop-smith .wear-bar { background: var(--card-2); border: 1px solid var(--line); }
+.shop-layer.shop-smith .wear-bar i { background: var(--ink); }
+.shop-layer.shop-smith .wear-bar i.low { background: var(--bad); }
+.shop-layer.shop-smith .tempers { flex-wrap: wrap; }
+.shop-layer.shop-smith .tempers i { width: 0.85em; height: 0.85em; border: 1.5px solid var(--gold); border-radius: 3px; }
+.shop-layer.shop-smith .tempers i.risk { border-color: var(--accent); }
+.shop-layer.shop-smith .tempers i.on { background: var(--gold); }
+.shop-layer.shop-smith .tempers i.on.risk { background: var(--accent); }
+.shop-layer.shop-smith .shop-bigs { margin-top: 2px; }
+.shop-layer.shop-smith .shop-big { min-height: 3.6em; padding: 6px 8px; }
+.shop-layer.shop-smith .shop-big b { font: 700 1.15em var(--kai); }
+.shop-layer.shop-smith .rk-list { display: grid; gap: 8px; }
+.shop-layer.shop-smith .rk-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card); align-items: stretch; }
+.shop-layer.shop-smith .rk-row.open { border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); }
+.shop-layer.shop-smith .rk-row.on { background: color-mix(in srgb, var(--accent) 7%, var(--card)); box-shadow: inset 3px 0 0 var(--accent); }
+.shop-layer.shop-smith .rk-row .winfo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 3.9em; width: 100%;
+  padding: 10px 12px; border: 0; background: transparent; color: var(--ink); text-align: left; font: 0.8em/1.45 var(--sans); cursor: pointer; }
+.shop-layer.shop-smith .rk-row .wi-txt { display: grid; gap: 2px; min-width: 0; color: var(--ink-2); }
+.shop-layer.shop-smith .rk-row .wi-txt b { font: 700 1.3em/1.3 var(--kai); color: var(--ink); }
+.shop-layer.shop-smith .rk-row .rwhy { color: var(--bad); }
+.shop-layer.shop-smith .rk-row .wi-chev { color: var(--ink-2); }
+.shop-layer.shop-smith .rk-row .si-mark { width: 2.4em; height: 2.4em; border-radius: 9px; font-size: 1.3em; }
+.shop-layer.shop-smith .rk-btns { display: none; grid-column: 1; grid-row: auto; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 0 12px 12px; }
+.shop-layer.shop-smith .rk-row.open .rk-btns { display: grid; }
+.shop-layer.shop-smith .rk-btn { min-height: 3.3em; }
+.shop-layer.shop-smith .rk-btns .rk-btn:first-child:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.shop-layer.shop-smith .rk-pick { display: none; }
+.shop-layer.shop-smith .rk-list.picking .rk-row { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding-left: 12px; }
+.shop-layer.shop-smith .rk-list.picking .rk-pick { display: block; width: 1.8em; height: 1.8em; border: 2px solid var(--line); border-radius: 7px; }
+.shop-layer.shop-smith .rk-list.picking .rk-pick.on { background: var(--accent); border-color: var(--accent); }
+.shop-layer.shop-smith .rk-pick.on::after { border-color: var(--accent-ink); }
+.shop-layer.shop-smith .rk-list.picking .wi-chev { visibility: hidden; }
+.shop-layer.shop-smith .rk-go { display: flex; gap: 8px; margin-top: 12px; }
+.shop-layer.shop-smith .rk-go .btn { flex: 1; min-height: 44px; }
+.shop-layer.shop-smith .rk-go.live { background: linear-gradient(to bottom, transparent, var(--paper) 40%); }
+.shop-layer.shop-smith .shop-more { width: 100%; min-height: 44px; }
+
+/* 素材：一屬性一條熬煉鏈（描金的那一格熬得出來、點了選它），底下「全熬」主鈕＋「熬一個」；規矩收進「？」 */
+.shop-layer.shop-smith .shop-done { border: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); color: var(--ink); font: 400 0.95em/1.6 var(--kai); }
+.shop-layer.shop-smith .shop-done.hint { background: transparent; color: var(--ink-2); }
+.shop-layer.shop-smith .shop-done.hint:empty { display: none; }
+.shop-layer.shop-smith .up-rows { display: grid; gap: 10px; margin: 10px 0 4px; }
+.shop-layer.shop-smith .chain { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); }
+.shop-layer.shop-smith .ch-hd .row-attr { justify-content: flex-start; }
+.shop-layer.shop-smith .links { display: grid; grid-template-columns: minmax(0, 1fr) 0.9em minmax(0, 1fr) 0.9em minmax(0, 1fr); align-items: center; gap: 2px; }
+.shop-layer.shop-smith .up-rows.four .links { grid-template-columns: minmax(0, 1fr) 0.9em minmax(0, 1fr) 0.9em minmax(0, 1fr) 0.9em minmax(0, 1fr); }
+.shop-layer.shop-smith .lk { display: grid; justify-items: center; gap: 1px; min-height: 44px; padding: 6px 2px; border: 1.5px solid transparent; border-radius: 9px;
+  background: var(--card-2); color: var(--ink); font: inherit; text-align: center; }
+.shop-layer.shop-smith .lk b { font: 700 0.9em/1.25 var(--kai); }
+.shop-layer.shop-smith .lk small { font: 700 0.8em var(--sans); color: var(--ink-2); }
+.shop-layer.shop-smith .lk.zero b { color: var(--ink-2); }
+.shop-layer.shop-smith .lk.can { border-color: var(--gold); cursor: pointer; }
+.shop-layer.shop-smith .lk.pick { background: color-mix(in srgb, var(--gold) 18%, var(--card)); }
+.shop-layer.shop-smith .lk .lk-pic { width: 1.8em; height: 1.8em; object-fit: contain; }
+.shop-layer.shop-smith .arw { text-align: center; color: var(--ink-2); }
+.shop-layer.shop-smith .ups { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shop-layer.shop-smith .ups.one { grid-template-columns: 1fr; }
+.shop-layer.shop-smith .ups .btn { flex-direction: column; gap: 0; min-height: 3.5em; padding: 4px 6px; white-space: normal; }
+.shop-layer.shop-smith .ups .btn b { font: 700 1em var(--sans); }
+.shop-layer.shop-smith .ups .btn small { font: 400 0.77em var(--sans); opacity: 0.9; }
+.shop-layer.shop-smith .up-all { border-radius: 12px; }
+.shop-layer.shop-smith .up-short, .shop-layer.shop-smith .up-odds { margin: 0; color: var(--ink-2); font: 400 0.9em/1.6 var(--kai); }
+.shop-layer.shop-smith .sm-help { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; background: transparent;
+  color: var(--ink-2); font: 400 0.93em var(--kai); cursor: pointer; }
+.shop-layer.shop-smith .sm-help .q { width: 1.45em; height: 1.45em; display: grid; place-items: center; border: 1.5px solid var(--ink-2); border-radius: 50%; font: 700 0.8em var(--sans); }
+.shop-layer.shop-smith .sm-rules { margin: 0 0 8px; padding: 10px 12px 10px 28px; border-radius: 10px; background: var(--card-2); color: var(--ink-2); font-size: 0.87em; display: grid; gap: 3px; }
+.shop-layer.shop-smith .sell-rows { gap: 8px; }
+.shop-layer.shop-smith .sell-row { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.shop-layer.shop-smith .sell-row .nm b { color: var(--ink); font: 700 1.05em var(--kai); }
+.shop-layer.shop-smith .sell-row .nm small { color: var(--ink-2); white-space: normal; }
+.shop-layer.shop-smith .sell-row .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shop-layer.shop-smith .sell-row .btn { min-height: 44px; }
+
+/* 神器：江湖已見一件一張卡、你手上有的蓋朱印；收藏冊是宣紙上的朱印，有的實心朱紅、沒人打出過的虛線「？」 */
+.shop-layer.shop-smith .dv-h { margin: 16px 2px 8px; padding-left: 10px; border-left: 3px solid var(--ink); color: var(--ink); font: 700 1.15em/1.2 var(--kai); letter-spacing: 0.12em; }
+.shop-layer.shop-smith .dv-row { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 10px 12px; }
+.shop-layer.shop-smith .dv-row b { color: var(--ink); font: 700 1.05em var(--kai); }
+.shop-layer.shop-smith .dv-row.mine { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.shop-layer.shop-smith .dv-who small, .shop-layer.shop-smith .dv-row.solved small { color: var(--ink-2); }
+.shop-layer.shop-smith .dv-tag { border: 1px solid var(--line); border-radius: 4px; color: var(--ink-2); font-family: var(--kai); }
+.shop-layer.shop-smith .dv-tag.on { border: 2px solid var(--accent); background: var(--card); color: var(--accent); transform: rotate(-4deg); }
+.shop-layer.shop-smith .dv-album { padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); }
+.shop-layer.shop-smith .dv-cell { border: 2px solid var(--line); background: transparent; color: var(--ink-2); font: 700 0.85em/1.15 var(--kai); opacity: 1; }
+.shop-layer.shop-smith .dv-cell.have { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.shop-layer.shop-smith button.dv-cell:not(.have) { border-color: var(--accent); color: var(--accent); }
+.shop-layer.shop-smith .dv-cell.dv-now { border-width: 3px; }
+.shop-layer.shop-smith .dv-cell.on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 60%, transparent); }
+.shop-layer.shop-smith .dv-cell.unknown { border-style: dashed; opacity: 0.7; }
+.shop-layer.shop-smith .dv-line { border-left-color: var(--accent); border-radius: 0 8px 8px 0; background: var(--card-2); color: var(--ink); font-family: var(--kai); }
+.shop-layer.shop-smith .smith-hero .sh-art { width: 100%; }
+.shop-layer.shop-smith .ups .btn { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }
+.shop-layer.shop-smith .ups .btn.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+/* 電腦寬：店面那一層的底色照遊戲那一欄（同 mall.css；tests/core/test_shop_width.py） */
+@media (min-width: 641px) {
+  .shop-layer.shop-smith {
+    background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
+  }
+}

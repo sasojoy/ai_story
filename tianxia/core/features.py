@@ -1105,14 +1105,16 @@ class BusHook:
 # raid_win    懸賞榜包 actions.raid_bounty（截殺、設伏打贏；Game._raid_bounty 留一行委派）              (ctx, target)                      接
 # aid         大勢人物包 aid_actions（護衛、犒軍辦成：他發的求援委託算辦成；第 45 批開的）              (ctx, cid)                         接
 # battle_end  決戰包 progress.settle_showdown（時刻表決戰收場，讀回季之前）                         (ctx, battle, definition, result)  不接（None）
+# showdown_pay 決戰包 view.showdown_pay（收場的決戰補到自己手上、軍餉發完；攻城也走這裡）             (ctx, battle, me, lines)           接 list[str]（得失那一格）
 BUS_ORDER: dict[str, tuple[str, ...]] = {
-    "win": ("bounties",),
+    "win": ("bounties", "horses"),  # horses（馬的來路：打贏騎馬的那幾路奪馬；Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
     "outing": ("bounties", "seal", "guard"),  # guard（親衛隊長：探索時撞見那個孩子；Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）
     "explore": ("bounties", "guard"),
     "arrive": ("convoy", "bounties"),
     "raid_win": ("bounties", "zongmen"),  # zongmen（門派第三批：截殺打贏親傳撿殘頁；Joy 2026-11-08「不錯，按照設計稿動工」，設計稿 v6 卷二）
     "aid": ("bounties",),  # bounties（全部拆包第 45 批：人物託付開成事件，PM 點頭，只加這一列）
     "battle_end": ("seal",),
+    "showdown_pay": ("horses",),  # horses（馬的來路：論功賜馬；Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
 }
 
 

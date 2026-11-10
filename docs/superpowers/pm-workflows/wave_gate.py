@@ -3,7 +3,7 @@
 開發不再逐批比對、逐批合併；一波的每條線合起來之後，這裡一次驗完，不花 token：
 1. 未定義名稱掃一次（tianxia、server.py、scripts、tests）。
 2. 三種設定（season21、week7、不帶）各起一次伺服器，GET / 要 200。
-3. --head 跑 pytest（-n 4，每條測試的秒數在 suite.xml〔junit〕），等它跑完才開比對（第 107 批：不再跟比對同時跑）。
+3. --head 跑 pytest（-n 8；企劃者 2026-11-10「閘門 8、每日 4」，V 波起；每條測試的秒數在 suite.xml〔junit〕），等它跑完才開比對（第 107 批：不再跟比對同時跑）。
    預設跑不含 slow 的一趟，再跑一條冒煙（SMOKE，整季機器人一個種子，不 -n，smoke.xml）；--full 才跑整套含 slow（不另跑冒煙）。
 4. same_behavior、explore-compare：--base 對 --head（兩者同時跑）。每軌每設定的秒數在 compare.txt，最慢十格進 result.json。
    不帶 --changed：所有軌、三種設定、--crossover（跟以前一樣）。--changed：照 decide() 挑（下面），只比改到的包走到的軌。
@@ -552,7 +552,7 @@ def main() -> int:
     if not a.no_suite:  # 第 107 批：pytest 先跑完，才開比對
         suite_env = {**env, "TIANXIA_DB": str(work / "tmp" / "suite.db")}
         marks = "slow or not slow" if a.full else "not slow"
-        suites["suite"] = start([py, "-m", "pytest", "-q", "-n", "4", "-m", marks, "-p", "no:cacheprovider", f"--junitxml={out / 'suite.xml'}"],
+        suites["suite"] = start([py, "-m", "pytest", "-q", "-n", "8", "-m", marks, "-p", "no:cacheprovider", f"--junitxml={out / 'suite.xml'}"],
                                 root, suite_env, out / "suite.txt")
         wait(suites, result, time.monotonic())
         if not a.full:

@@ -337,7 +337,7 @@ def showdown_pay(
             changes.append(f"貢獻 +{contrib}")
     if changes:
         lines.append(f"{'得勝的' if won else ''}軍餉發下來了。")
-    return changes + showdown_tier4(ctx, battle, me, lines)
+    return changes + showdown_tier4(ctx, battle, me, lines) + ctx.publish("showdown_pay", battle, me, lines)  # 事件 showdown_pay：論功賜馬（馬的來路包）
 
 
 def showdown_credits(ctx, me: battle_instance.BattleParticipant) -> bool:

@@ -80,6 +80,11 @@
   },
   "weapons": {
     "temper_max_by_quality": {"下品": 5, "中品": 6, "上品": 7},
+    "temper_risk_max": 10,
+    "temper_safe_by_quality": {"下品": 3, "中品": 4, "上品": 5},
+    "temper_odds": [0.75, 0.6, 0.45, 0.35, 0.25, 0.18, 0.12],
+    "temper_rumor_from": 9,
+    "temper_step": 0.007,
     "wear_less_by_quality": {"上品": 1},
     "temper_material_tier": 1,
     "quality": {
@@ -91,6 +96,11 @@
   },
   "armor": {
     "temper_max_by_quality": {"下品": 5, "中品": 6, "上品": 7},
+    "temper_risk_max": 10,
+    "temper_safe_by_quality": {"下品": 3, "中品": 4, "上品": 5},
+    "temper_odds": [0.75, 0.6, 0.45, 0.35, 0.25, 0.18, 0.12],
+    "temper_rumor_from": 9,
+    "temper_step": 0.007,
     "wear_less_by_quality": {"上品": 1},
     "temper_material_tier": 1,
     "quality": {
@@ -116,9 +126,13 @@
     "scrap_chance": 0.04,
     "challenge_tier3": 1,
     "tier3_per_figure": 1,
-    "big_tier3": 0.25,
+    "big_tier3": 0.35,
     "rotation": true
   },
+  "economy": {"upgrade_batch": true, "leftover_silver": {"1": 2, "2": 6, "3": 18, "4": 54}, "leftover_cap": 300},
+  "four_tiers": {"challenge_chance": 0.25},
+  "season21_daily": {"strike_tier3_chance": 0.15},
+  "seal": {"cache": {"hide_chance": 1.0, "hint_region": true}},
   "ambush": {"enabled": true},
   "stockpile": {"enabled": false},
   "parley": {"enabled": true},

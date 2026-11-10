@@ -11,12 +11,16 @@
     {"id": "jiu_caoxie", "name": "舊草鞋", "effect": "win_material", "pool": false},
     {"id": "yedu_zhujian", "name": "夜讀竹簡", "effect": "seclusion", "pool": false},
     {"id": "yandi_jiunang", "name": "燕地酒囊", "effect": "legend", "pool": false},
-    {"id": "mendi_mingtie", "name": "門第名帖", "effect": "audience", "pool": false},
-    {"id": "tanmu_nianzhu", "name": "檀木念珠", "effect": "cultivate", "pool": false}
+    {"id": "mendi_mingtie", "name": "門第名帖", "effect": "audience"},
+    {"id": "tanmu_nianzhu", "name": "檀木念珠", "effect": "cultivate"}
   ],
   "steeds": [
     {"id": "tashuang_ju", "name": "踏霜駒"},
-    {"id": "polang_ju", "name": "破浪駒"}
+    {"id": "polang_ju", "name": "破浪駒"},
+    {"id": "liyun_ju", "name": "裂雲駒", "quality": "中品"},
+    {"id": "benlei_ju", "name": "奔雷駒", "quality": "中品"},
+    {"id": "yinxue_ju", "name": "飲雪駒", "quality": "中品"},
+    {"id": "xiaoyuan_ju", "name": "嘯原駒", "quality": "中品"}
   ],
   "gifts": [
     {"character": "caocao", "gear": "tashuang_ju"},
