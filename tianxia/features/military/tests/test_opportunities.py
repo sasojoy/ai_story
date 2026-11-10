@@ -822,16 +822,18 @@ def test_full_length_hours_are_pinned_as_before(full):
     assert _open_hours(rite, "huang_dawn") == [5, 6]  # 卯時 05:00～06:59
 
 
-@pytest.mark.parametrize("days", [84, 14, 7, 5, 2.5, 1, 0.5])
-@pytest.mark.parametrize("minutes", [0, 10, 15, 20, 45])
-def test_night_and_dawn_never_overlap(real, days, minutes):
-    win, _ = _windows(real, days, minutes)
-    night = {(win.night_from + i) % 24 for i in range(win.night_hours)}
-    dawn = {(win.dawn_from + i) % 24 for i in range(win.dawn_hours)}
-    assert not night & dawn
-    assert win.dawn_from == calendar.NIGHT_UNTIL  # 黎明接在夜裡結束的那一刻，往後長
-    assert (win.night_from + win.night_hours) % 24 == calendar.NIGHT_UNTIL  # 夜裡在同一刻結束，往前長
-    assert {23, 0, 1, 2, 3, 4} <= night and {5, 6} <= dawn  # 只放寬、不縮
+def test_night_and_dawn_never_overlap(real):
+    """季長 7 種 × 最短分鐘數 5 種在同一條裡跑完（第 223 批；以前 35 條 parametrize）：每一種照舊開一局新的，
+    _windows 每次都把季長與分鐘數重設，跑在同一份內容上跟每種一份新內容結果一樣。紅的時候訊息寫是哪一種。"""
+    for days in [84, 14, 7, 5, 2.5, 1, 0.5]:
+        for minutes in [0, 10, 15, 20, 45]:
+            win, _ = _windows(real, days, minutes)
+            night = {(win.night_from + i) % 24 for i in range(win.night_hours)}
+            dawn = {(win.dawn_from + i) % 24 for i in range(win.dawn_hours)}
+            assert not night & dawn, (days, minutes)
+            assert win.dawn_from == calendar.NIGHT_UNTIL, (days, minutes)  # 黎明接在夜裡結束的那一刻，往後長
+            assert (win.night_from + win.night_hours) % 24 == calendar.NIGHT_UNTIL, (days, minutes)  # 夜裡在同一刻結束，往前長
+            assert {23, 0, 1, 2, 3, 4} <= night and {5, 6} <= dawn, (days, minutes)  # 只放寬、不縮
 
 
 def test_a_very_short_season_caps_each_window_at_half_a_day(real):
