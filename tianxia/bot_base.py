@@ -196,6 +196,8 @@ class ForgeJob:
 
     insight_ids: tuple[str, ...]
     request: naming.NamingRequest
+    pour: bool = False  # 意境合成改版：傾注、立意跟著單子走到 C 段
+    intent: str | None = None
 
 
 @dataclass(frozen=True)

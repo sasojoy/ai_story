@@ -7,7 +7,8 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, NamedTuple
 
-from tianxia import bot_base, naming, team, weapons
+from tianxia import arts as arts_mod
+from tianxia import bot_base, insight_fx, insights, naming, team, weapons
 from tianxia import fusion  # 共用規則層（合成與揣摩，第 87 批登記）
 
 from . import create
@@ -23,9 +24,15 @@ CREATE_INTENTS = ("風過林梢，影不留痕", "山不動而勢壓人", "一�
 
 
 class ForgePlan(NamedTuple):
-    """挑好的一爐（還沒開）：兩個意境（煉製只剩意境＋意境，Joy 2026-10-21）。"""
+    """挑好的一爐（還沒開）：兩個意境（煉製只剩意境＋意境，Joy 2026-10-21）；意境合成改版開著時另帶傾注與立意。"""
 
     insight_ids: tuple[str, ...]
+    pour: bool = False
+    intent: str | None = None
+
+
+# 意境合成改版：第一次合一對時的立意，一型一句（照 fusion.FORM_WORDS 的關鍵字讀得出那一型）
+V2_INTENTS = {"攻": "一往無前，焚盡一切", "守": "守住不退", "變": "詭變如影", "心": "心定如山"}
 
 
 def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | None:
@@ -36,12 +43,73 @@ def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None)
     p = state.player
     if len(p.insights) < 2 or p.stamina < FORGE_RESERVE or rng.random() >= merge_share:
         return None
+    if fusion.v2_on(content, state):
+        return _pick_v2(game, rng)
     for _ in range(FORGE_TRIES):
         a = rng.choice(p.insights)  # 意境效果池：同一份放兩次合不了，第二格從其餘的挑（同一種的另一份就是揣摩）
         b = rng.choice([i for i in p.insights if i != a])
         if fusion.merge_problem(state, content, world, a, b) is None:
             return ForgePlan((a, b))
     return None
+
+
+def _pick_v2(game: Game, rng: random.Random) -> ForgePlan | None:
+    """意境合成改版的挑法（真人看得到的同一張預覽：fusion.v2_preview）：
+    1. 手上兩份三重湊得成一對、四條都齊（在那一路最濃的地方、這一季的秘訣也對上）：傾注、合璧成神；
+    2. 兩份三重湊得成一對但還差地方或秘訣：這一對留著不合（等走到地方、等時辰），其餘照舊隨機挑；
+    3. 第一次合的一對寫一句立意（型隨機）。"""
+    state, content, world = game.state, game.content, game.world
+    p = state.player
+    deep = [i for i in p.insights if insight_fx.strength(state, i) >= insight_fx.MAX_LAYERS and not insight_fx.is_god(state, i)]
+    held: set[str] = set()
+    for i, a in enumerate(deep):
+        for b in deep[i + 1:]:
+            if fusion.merge_problem(state, content, world, a, b, pour=True) is not None:
+                continue
+            look = fusion.v2_preview(state, content, world, a, b, pour=True)
+            if not look or not look["can_pour"]:
+                continue
+            if look["god"]:
+                return ForgePlan((a, b), pour=True, intent=_intent(rng) if look["ask_intent"] else None)
+            held.update((a, b))
+    loose = [i for i in p.insights if i not in held]
+    if len(loose) < 2:
+        return None
+    for _ in range(FORGE_TRIES):
+        a = rng.choice(loose)
+        b = rng.choice([i for i in loose if i != a])
+        if fusion.merge_problem(state, content, world, a, b) is None:
+            look = fusion.v2_preview(state, content, world, a, b)
+            return ForgePlan((a, b), intent=_intent(rng) if look and look["ask_intent"] else None)
+    return None
+
+
+def _intent(rng: random.Random) -> str:
+    return V2_INTENTS[rng.choice(fusion.FORMS)]
+
+
+def infuse_spare(game: Game) -> list[str]:
+    """意境合成改版：同一路的凡、佳（不帶真意、沒裝著）化進那一路最深的一份，攢著加深；不擲亂數，改版沒開什麼都不做。
+    珍品留著（三重的珍品是合璧成神要的料）。一次只化一路。"""
+    state, content, world = game.state, game.content, game.world
+    if not fusion.v2_on(content, state):
+        return []
+    p = state.player
+    by_path: dict[str, list[str]] = {}
+    for i in p.insights:
+        ins = insights.resolve(i, content, world, state)
+        if ins is not None:
+            by_path.setdefault(ins.attribute, []).append(i)
+    for ids in by_path.values():
+        bodies = sorted((i for i in ids if not insight_fx.is_god(state, i)), key=lambda i: -insight_fx.strength(state, i))
+        for body in bodies:
+            spare = [
+                i for i in ids if i != body and insight_fx.look(insight_fx.record(state, content, world, i, None)) in ("凡", "佳")
+                and insight_fx.strength(state, i) <= insight_fx.strength(state, body) and arts_mod.where_slotted(state, i) is None
+            ]
+            if spare and fusion.infuse_problem(state, content, world, body, spare) is None:
+                return game.infuse(body, spare)
+    return []
 
 
 def create_art(game: Game, rng: random.Random) -> bool:
@@ -97,10 +165,13 @@ def _forge(game: Game, plan: ForgePlan, slot: bot_base.NamingSlot | None) -> lis
     給 NO_NAME，鎖內一定不叫模型。"""
     insight_ids = list(plan.insight_ids)
     request = game.forge_request(None, insight_ids, named_outside=True)
+    extra = {"pour": True} if plan.pour else {}
+    if plan.intent:
+        extra["intent"] = plan.intent
     if request is None:
-        return game.forge(None, insight_ids, proposed=bot_base.NO_NAME)
+        return game.forge(None, insight_ids, proposed=bot_base.NO_NAME, **extra)
     if slot is not None and slot.open and slot.job is None:
-        slot.job = bot_base.ForgeJob(plan.insight_ids, request)
+        slot.job = bot_base.ForgeJob(plan.insight_ids, request, pour=plan.pour, intent=plan.intent)
     elif slot is not None:
         slot.skipped += 1
     return []

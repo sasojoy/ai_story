@@ -30,7 +30,7 @@ from .bot_base import CLINIC_MIN_SILVER, CLINIC_URGENT, TRADE_KEEP, TRADE_MOVES,
 from .features.battle.bots import enlist_pick  # noqa: F401
 from .features.bounties.bots import take_bounties  # noqa: F401
 from .features.checkin.bots import check_in  # noqa: F401
-from .features.craft.bots import CREATE_INTENTS, CREATE_RESERVE, FORGE_RESERVE, FORGE_TRIES, MERGE_SHARE, ForgePlan, _name_draft, create_art, pick_forge  # noqa: F401
+from .features.craft.bots import CREATE_INTENTS, CREATE_RESERVE, FORGE_RESERVE, FORGE_TRIES, MERGE_SHARE, ForgePlan, _name_draft, create_art, infuse_spare, pick_forge  # noqa: F401
 from .features.cultivation.bots import (  # noqa: F401
     CULTIVATE_RESERVE, TEACH_MAX, TEACH_RESERVE, TRAIT_WEIGHT, _worth, allocate_points, awaits_chance, break_way, growth_key, melt_the_weakest, slot_insights,
     switch_to_the_strongest, takes_the_pill, teach, worn_first,
@@ -94,9 +94,13 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
         game.name_mastered(naming.fallback_name(content, f"定名|{p.naming}", "武學", salt=rng.randint(0, 99)))
     if library.full(state, content):
         melt_the_weakest(game)
+    infuse_spare(game)  # 意境合成改版：同一路的凡、佳化進最深的一份（不擲亂數；改版沒開什麼都不做）
     plan = pick_forge(game, rng)
     if plan is not None:
-        game.forge(None, list(plan.insight_ids))
+        extra = {"pour": True} if plan.pour else {}  # 改版：傾注、立意（沒開時 plan 上一定是空的，照舊那一行）
+        if plan.intent:
+            extra["intent"] = plan.intent
+        game.forge(None, list(plan.insight_ids), **extra)
     create_art(game, rng)
     switch_to_the_strongest(game)
     slot_insights(game)  # 武學重構：悟到的意境裝進身上兩門的空槽

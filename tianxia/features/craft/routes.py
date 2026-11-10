@@ -22,7 +22,14 @@ def menxia_actions(shell) -> dict:
         # 一武學＋一意境、兩武學＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名或挑 → C 鎖內登記），不走這一條；
         # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
         "forge": lambda g, b: _forge_without_naming(shell, g, *shell.forge_args(b)),
+        # 化入（意境合成改版）：本體 body、要化進去的 others；改版沒開的季回一句話
+        "infuse": lambda g, b: actions.infuse(g, str(b.get("body") or ""), _ids(b.get("others"))),
     }
+
+
+def _ids(value) -> list[str]:
+    """網頁送來的一串 id：只收字串串列，其他一律當空的（同殼的 _id_list）。"""
+    return [str(v) for v in value if isinstance(v, str)][:12] if isinstance(value, list) else []
 
 
 def router(shell) -> APIRouter:
@@ -123,14 +130,31 @@ def forge(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str] 
     （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = shell.prepare_forge(game, art_id, insight_ids)
+    pour, intent = bool(getattr(insight_ids, "pour", False)), str(getattr(insight_ids, "intent", "") or "")
+    if pour or intent:  # 合成改版：傾注、立意（引擎在改版沒開的季拒絕傾注、不理立意）
+        return shell.act(game, lambda g: g.forge(art_id, list(insight_ids), proposed=proposed, pour=pour, intent=intent or None))
     return shell.act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+
+
+class ForgePicks(list):
+    """爐裡的意境 id 們（就是一個 list，殼照舊當 list 傳）；另帶網頁勾的傾注 pour 與立意 intent（意境合成改版）。
+    殼的 forge(game, *forge_args(body)) 不必改：這兩個跟著清單走到 forge、預覽（forge_view.forge_preview 用 getattr 讀）。"""
+
+    pour: bool = False
+    intent: str = ""
+
+
+INTENT_MAX = 20  # 立意 2～20 字（同自創）
 
 
 def forge_args(shell, body: dict) -> tuple[str | None, list[str]]:
     """煉製頁送來的東西：意境 id 們（爐裡只合意境）；舊網頁送來的武學 id 照傳，引擎回「爐裡只合意境」那一句。body 是客戶端寫的：
-    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。"""
+    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。pour（真假）、intent（字串，夾在 INTENT_MAX 字）跟著清單走（ForgePicks）。"""
     art, picked = body.get("art"), body.get("insights")
-    return str(art) if art else None, [str(i) for i in picked] if isinstance(picked, list) else []
+    out = ForgePicks(str(i) for i in picked) if isinstance(picked, list) else ForgePicks()
+    out.pour = body.get("pour") is True
+    out.intent = str(body.get("intent") or "")[:INTENT_MAX] if isinstance(body.get("intent"), str) else ""
+    return str(art) if art else None, out
 
 
 def _forge_without_naming(shell, game, art_id: str | None, insight_ids: list[str]) -> list[str]:

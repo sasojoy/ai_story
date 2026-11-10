@@ -209,3 +209,60 @@ def test_every_path_and_form_has_a_merged_true_meaning(rc):
             gid = fusion.grand_for(rc, path, form)
             assert gid.startswith("he_") and insight_fx.grand(rc, gid).attribute == path
     assert fusion.grand_for(rc, "剛", "攻") == "bengshan"  # 基本四路照原本的真意
+
+
+def _bot_game(rc, world):
+    import random as _r
+
+    from tianxia.engine import Game
+
+    rc.config.auto_open_first_season = True  # 真實內容預設要管理者開季：籌備中什麼都按不下去
+    game = Game.new(rc, "韓霜", rng=_r.Random(0), world=world)
+    game.state.world.craft_v2 = True
+    game.state.player.stamina = 500
+    game.state.player.stats["xinde"] = 500
+    return game
+
+
+def test_the_bot_pours_a_ready_pair_and_holds_it_until_the_place_is_right(rc, world, monkeypatch):
+    import random as _r
+
+    from tianxia.features.craft import bots
+
+    no_luck(rc)
+    game = _bot_game(rc, world)
+    give(game.state, "huo", "剛", 3)
+    give(game.state, "feng", "快", 3)
+    give(game.state, "shui", "柔", 1)
+    monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
+    game.state.player.location = "luoyang"
+    assert not fusion.strongest_here(game.state, rc, "陽")
+    plan = bots.pick_forge(game, _r.Random(0), merge_share=1.0)
+    assert plan is None or set(plan.insight_ids) != {"huo", "feng"}  # 地方不對：這一對留著
+    game.state.player.location = "changshe"
+    plan = bots.pick_forge(game, _r.Random(0), merge_share=1.0)
+    assert plan is not None and set(plan.insight_ids) == {"huo", "feng"} and plan.pour and plan.intent in bots.V2_INTENTS.values()
+    from tianxia import bot_base
+    from tianxia.bot_policy import apply_job
+
+    slot = bot_base.NamingSlot(open=True)
+    bots._forge(game, plan, slot)  # 首創的一爐：開單交給假人程式取名，傾注與立意跟著單子走
+    assert slot.job.pour and slot.job.intent == plan.intent
+    assert any("合璧成神" in m for m in apply_job(game, slot.job, ("燼風", "火借風勢")))
+    made = [i for i in game.state.player.insights if game.state.player.insight_fx[i].grand and insight_fx.look(game.state.player.insight_fx[i]) == "神"]
+    assert made and "huo" not in game.state.player.insights
+
+
+def test_the_bot_infuses_plain_pieces_into_the_deepest_one(rc, world):
+    from tianxia.features.craft import bots
+
+    game = _bot_game(rc, world)
+    give(game.state, "feng", "快", 2)
+    give(game.state, "feng~2", "快", 1)
+    give(game.state, "feng~3", "快", 1)
+    give(game.state, "feng~4", "快", 1)  # 三份凡品＝3 點：加一重
+    bots.infuse_spare(game)
+    assert game.state.player.insights == ["feng"] and game.state.player.insight_fx["feng"].general == {"快": 3}
+    game.state.world.craft_v2 = False
+    give(game.state, "feng~2", "快", 1)
+    assert bots.infuse_spare(game) == [] and "feng~2" in game.state.player.insights

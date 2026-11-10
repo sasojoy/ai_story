@@ -921,6 +921,87 @@ def infuse(state: GameState, content: Content, world: WorldStateStore, body: str
     return True, lines
 
 
+COND_LABELS = {"layers": "兩份都三重", "pour": "傾注", "place": "在{path}最濃之地", "secret": "這一季的秘訣"}  # 待 joy 潤
+COND_MISS = {"layers": "兩份都要揉到三重", "pour": "勾「傾注」", "place": "到{places}開爐", "secret": "還差一樣，江湖上有人知道"}  # 待 joy 潤
+UNSEEN = "未看破"  # 熟 3 之前真意寫這個（待 joy 潤）
+SEE_AT = 3  # 熟到這個數，預覽寫得出這一型對到哪一道真意
+
+
+def places_of(content: Content, path: str) -> list[str]:
+    """那一路最濃之地的名字（預覽「到哪裡開爐」那一句；跟 strongest_here 同一個判斷）。"""
+    out = []
+    for loc in content.locations.values():
+        strong = insights.strong_of(loc, content)
+        if strong is None or strong not in content.insights:
+            continue
+        top = content.insights[strong].attribute
+        pair = PAIR_ORDER.get(path)
+        gives = {content.insights[i].attribute for i in insights.explore_gives(loc, content) if i in content.insights}
+        if (pair is None and top == path) or (pair is not None and top in pair and set(pair) <= gives):
+            out.append(loc.name)
+    return out
+
+
+def v2_preview(
+    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, pour: bool = False,
+) -> dict | None:
+    """合成改版的預覽（煉製頁的預覽卡多一塊；改版沒開是 None）。跟 merge 同一套函式算：
+    kind（合併／揣摩）、heat、need、near（差一）、general（主料定的一般功效名）、form（型；第一次合、還沒寫立意是 None）、
+    ask_intent（要不要問立意）、grand（真意名；熟 3 前、沒有真意是 UNSEEN 或 None）、grand_desc、uses（熟）、
+    conds（成神四條：[{key, label, ok, miss}]，揣摩沒有）、god（四條都齊）、hint（熟 15 的秘訣提示）、can_pour。"""
+    if not v2_on(content, state):
+        return None
+    ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
+    if ia is None or ib is None:
+        return None
+    cfg = content.config.craft
+    deepen = same_kind(state, ia, ib)
+    if deepen:
+        path, key, compound = ia.attribute, "", arts_mod.is_compound(content, ia)
+        if compound:
+            key = secret_recipes.PREFIX + ia.secret if ia.secret else MERGE_PREFIX + "+".join(ia.parents)
+    else:
+        path, _ = merge_shape(world, ia, ib, content, state)
+        key, compound = merge_key(a, b), True
+        secret = secret_recipes.match_merge(content, world, ia, ib)
+        if secret is not None:
+            key = secret_recipes.key(secret)
+    note = note_of(state, key) if key else None
+    form = note.form if note is not None else None
+    uses = note.uses if note is not None else 0
+    grand_id = grand_for(content, path, form or "攻") if (form or deepen) else None
+    top = insight_fx.grand(content, grand_id) if grand_id else None
+    seen = deepen or uses >= SEE_AT
+    general = None if deepen else main_general(content, path, ia.attribute)
+    gt = insight_fx.general(content, general) if general else None
+    h = heat(state, content, a, b, path)
+    out = {
+        "kind": "揣摩" if deepen else "合併", "heat": h, "need": cfg.heat_need, "near": h == cfg.heat_need - 1,
+        "general": gt.name if gt else None, "form": form, "ask_intent": not deepen and form is None,
+        "grand": (top.name if seen else UNSEEN) if top is not None else (UNSEEN if not deepen and form is None else None),
+        "grand_desc": top.desc if top is not None and seen else None, "uses": uses,
+        "conds": [], "god": False, "hint": None, "can_pour": not deepen and path in PAIR_ORDER,
+    }
+    if not deepen and path in PAIR_ORDER:
+        conds = god_conditions(state, content, world, a, b, path, pour)
+        names = "、".join(places_of(content, path)) or "那一路最濃的地方"
+        out["conds"] = [
+            {"key": k, "label": COND_LABELS[k].format(path=path), "ok": ok,
+             "miss": None if ok else COND_MISS[k].format(places=names)} for k, ok in conds.items()
+        ]
+        out["god"] = all(conds.values())
+        out["hint"] = secret_hint(state, content, world, key, path)
+    return out
+
+
+def status(state: GameState, content: Content) -> dict:
+    """煉製頁要的（狀態列的 fusion 格）：改版沒開是 {}（不多一個鍵）。化入的價碼與每一份攢了多少意蘊。"""
+    if not v2_on(content, state):
+        return {}
+    cfg = content.config.craft
+    return {"fusion": {"per_layer": cfg.yun_per_layer, "points": dict(cfg.yun_points), "yun": dict(state.player.fusion_yun)}}
+
+
 # ── A 段 ─────────────────────────────────────────────────
 
 # 爐裡只合意境（Joy 2026-10-21 拿掉武學＋武學、武學＋意境）：放了武學、放不到兩個意境、論武拿武學出來時的那一句（待 joy 潤）
