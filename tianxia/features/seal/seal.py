@@ -209,7 +209,24 @@ def stamp_cache(shared: SharedWorldState, content: Content) -> SealCache | None:
         return None  # 沒蓋領地爭奪章的季：連七片的登記都不碰（舊的季一個字不變）
     reg = filled(shared.seal, content)
     reg.cache = hide(reg, content, shared.season_number, shared.tianji, hide_spots(content, shared.season))
+    if reg.cache is not None and content.config.seal.cache.hint_region:
+        region = hide_region(content, reg.cache.loc)
+        if region:
+            rumor(shared.season, HIDE_HINT.format(region=region))
     return reg.cache
+
+
+HIDE_HINT = "坊間傳言：一角傳國玉璽流落在{region}一帶，不知落在誰的腳下。"  # 待 joy 潤：開季藏了一片時天下大事只說哪一州（Config.seal.cache.hint_region）
+
+
+def hide_region(content: Content, loc: str) -> str:
+    """藏處所屬大區的名字（atlas.region_of：幽州、冀州、洛陽……）；地點不在內容裡、地圖沒有大區是空字串。區塊與地點照舊不公開。"""
+    from tianxia import atlas  # noqa: PLC0415  共用層；同上面 conquest、atlas 延後 import 的理由
+
+    if loc not in content.locations:
+        return ""
+    region = atlas.region_of(content, loc)
+    return region.name if region is not None else ""
 
 
 def weighted_pick(rows: list[tuple[str, int]], rng: random.Random, pool: int, prefer: str | None = None) -> str | None:

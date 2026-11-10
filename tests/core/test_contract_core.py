@@ -923,13 +923,14 @@ def test_the_bus_order_is_the_table_in_the_plan():
     """順序就是行為：每一種事件的格照換成事件之前一行裡的呼叫先後（計畫 1.2），一格不挪——同一下兩個訂閱者的先後就是回話與存檔寫入的先後
     （outing：打探懸賞→撿玉璽碎片；arrive：交糧車→護送懸賞；計畫 1.9 調了就抓得到）。改這張表先過 PM。"""
     assert features_core.BUS_ORDER == {
-        "win": ("bounties",),
+        "win": ("bounties", "horses"),  # 馬的來路（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
         "outing": ("bounties", "seal"),
         "explore": ("bounties",),
         "arrive": ("convoy", "bounties"),
         "raid_win": ("bounties", "zongmen"),
         "aid": ("bounties",),  # 全部拆包第 45 批：人物託付開成事件（PM 點頭，只加這一列）
         "battle_end": ("seal",),
+        "showdown_pay": ("horses",),  # 馬的來路：論功賜馬（同上）
     }
     assert Feature().bus() == ()
 
@@ -1039,7 +1040,7 @@ def test_the_core_publish_points_ask_the_bus(game, monkeypatch):
         game._squad_encounter("thug", wild=True)
         assert calls == []
         game._squad_encounter("thug")
-    assert calls == [("win", "bounties", (game, "lake", "thug"))]
+    assert calls == [("win", "bounties", (game, "lake", "thug")), ("win", "horses", (game, "lake", "thug"))]
     calls.clear()
     assert game._raid_bounty("某人") == ["raid_win/bounties", "raid_win/zongmen"]
     assert calls == [("raid_win", "bounties", (game, "某人")), ("raid_win", "zongmen", (game, "某人"))]
@@ -1076,7 +1077,8 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
     with mock.patch.object(explore_one, "draw", return_value="encounter"), _won():
         got = explore_actions.explore_one(game)
     here = ("yingchuan_wilds",)
-    assert calls == [("win", "bounties", (game, *here, plan.foe.id)), ("outing", "bounties", (game, *here)), ("outing", "seal", (game, *here))]
+    assert calls == [("win", "bounties", (game, *here, plan.foe.id)), ("win", "horses", (game, *here, plan.foe.id)),
+                     ("outing", "bounties", (game, *here)), ("outing", "seal", (game, *here))]
     lines = [line for line in got if line in ("outing/bounties", "outing/seal")]
     assert lines == ["outing/bounties", "outing/seal"]
 
@@ -1097,7 +1099,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
         # 全部拆包第 45 批：懸賞榜包登記六格（原本 engine._BUS_CORE 那五格，加 aid），_BUS_CORE 每一列都空了
         "bounties": [("win", "bounties"), ("outing", "bounties"), ("explore", "bounties"), ("arrive", "bounties"), ("raid_win", "bounties"), ("aid", "bounties")],
         # 門派第三批：截殺打贏親傳撿殘頁（Joy 2026-11-08「不錯，按照設計稿動工」）
-        "zongmen": [("raid_win", "zongmen")]}
+        "zongmen": [("raid_win", "zongmen")],
+        # 馬的來路：奪馬、論功賜馬（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
+        "horses": [("win", "horses"), ("showdown_pay", "horses")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):

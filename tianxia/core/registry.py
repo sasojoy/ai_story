@@ -87,6 +87,7 @@ from ..features import jieyi  # 結義
 from ..features import mail  # 帖友書信
 from ..features import zongmen  # 門派
 from ..features import guard  # 親衛隊長
+from ..features import horses  # 馬的來路
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -172,6 +173,7 @@ FEATURES: list[Feature] = [
     mail.FEATURE,
     zongmen.FEATURE,
     guard.FEATURE,
+    horses.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

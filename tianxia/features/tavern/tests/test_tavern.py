@@ -74,6 +74,7 @@ def test_news_charges_once_and_does_not_repeat():
     game = _game()
     w = game.state.world
     from tianxia.rules import add_rumor
+    w.rumors.clear()  # 開季的傳聞（玉璽藏在哪一州，Config.seal.cache.hint_region）先清掉：這一條只看酒家說的那一則
     add_rumor(game.state, "皇甫嵩移往長社，黃巾聲勢稍退。", "changshe", content=game.content, layer="world")
     game.choose("act:tavern")
     before = game.state.player.stats["silver"]

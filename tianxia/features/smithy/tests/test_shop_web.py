@@ -704,7 +704,8 @@ def _row_of(html, item_id):
 
 
 def _rack_page(m, script="H.render(); return T.els.app.innerHTML;", S=None, responses=None):
-    return run(m, 'H.S.shopTab = "rack";' + script, S=S, responses=responses)
+    # 翻新（Joy 2026-11-10）：勾選與「拆解勾選的 N 件」只在「挑幾件拆」的時候有；這一組測勾選的，預設就在挑的模式（S 給了 rackPicking 照它）
+    return run(m, 'H.S.shopTab = "rack"; if (H.S.rackPicking === undefined) H.S.rackPicking = true;' + script, S=S, responses=responses)
 
 
 def test_the_old_temper_page_opens_the_rack(m):
@@ -718,7 +719,19 @@ def test_the_rack_page_has_the_worn_card_on_top_with_its_two_big_buttons(content
     worn = m["shop"]["worn"]
     assert html.index('class="shop-worn"') < html.index(f'data-id="{worn["repair"]["id"]}"') < html.index("rk-cap")
     assert f'data-act="choose" data-id="{worn["temper"]["id"]}"' in html  # 身上那件照舊送原本的選項 id（smith:repair／smith:temper）
-    assert f"裝備庫 {m['shop']['rack']['used']}／{m['shop']['rack']['cap']}" in html
+    assert f"裝備庫<small>{m['shop']['rack']['used']}／{m['shop']['rack']['cap']}</small>" in html
+
+
+def test_the_rack_rows_fold_until_tapped_and_ticks_wait_for_pick_mode(content, world):
+    """翻新（Joy 2026-11-10）：平常一件只露名字與數字、點了才攤開四顆鈕；勾選框與「拆解勾選的 N 件」要先按「挑幾件拆成素材」。"""
+    m = server.main_view(_racked(content, world))
+    plain = _rack_page(m, S={"rackPicking": False})
+    assert 'data-act="rack-picking" data-on="1"' in plain and 'data-act="rack-melt"' not in plain
+    assert 'class="rk-list"' in plain and 'rk-row open' not in plain
+    opened = _rack_page(m, S={"rackPicking": False, "rackOpen": "兵:1"})
+    assert 'rk-row open' in _row_of(opened, "兵:1") and 'aria-expanded="true"' in _row_of(opened, "兵:1")
+    picking = _rack_page(m, S={"rackPicking": True})
+    assert 'class="rk-list picking"' in picking and 'data-act="rack-melt" disabled' in picking
 
 
 def test_each_rack_row_has_a_box_and_four_buttons_with_their_small_print(content, world):

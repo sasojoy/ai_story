@@ -46,7 +46,7 @@
   function sealHtml(s) {
     const key = sealCardKey(s);
     return `<details class="card seal-card" data-key="${esc(key)}" ${S.sealShut.card === key ? "" : "open"}><summary>傳承・『${esc(s.name)}』</summary>
-      <p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
+      ${gearImg("seal", s.art, "seal-pic")}<p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
       ${s.stir ? `<p class="turn">${esc(s.stir)}</p>` : ""}
       ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}${sealActLine(s.act)}</details>`;
   }
@@ -81,7 +81,7 @@
     const notes = a ? [a.ok ? "" : a.why, a.live].filter(Boolean) : [];
     const look = sealBrowse(a); // FB-645：只能看、按不下去：不是 primary，打得開那一層
     const btn = a ? `<div class="wbtns"><button class="btn small${look ? "" : " primary"}" data-act="seal-act"${a.ok || look ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
-    return `<div class="wrow heirloom"><div class="winfo"><b>【${esc(h.name)}】</b><span>傳承・${esc(h.effect_text)}</span>${notes.map((t) => `<small class="rwhy">${esc(t)}</small>`).join("")}</div>${btn}</div>`;
+    return `<div class="wrow heirloom">${gearImg("seal", h.art, "gear-thumb")}<div class="winfo"><b>【${esc(h.name)}】</b><span>傳承・${esc(h.effect_text)}</span>${notes.map((t) => `<small class="rwhy">${esc(t)}</small>`).join("")}</div>${btn}</div>`;
   }
 
   // 選目標的那一層：店面的框（招牌、收起、右上剩幾次、說明那一句），捲的那一層一人一列。散人還沒挑邊時：不分軍的（傳檄的戰線）每一列都灰著、

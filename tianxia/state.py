@@ -982,6 +982,12 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    temper_seq: int = Field(0, json_schema_extra=QUIET)  # 這一季過了安全線的淬煉擲了幾次：衝階成敗的種子（smithing.temper_rng），換季跟著新角色歸零
+    # 馬的來路（features/horses，Joy 2026-11-10）：這一季奪了幾匹、馴成幾匹、馴到第幾步與在哪裡馴（離開那裡就從頭來）；換季跟著新角色歸零
+    horses_seized: int = Field(0, json_schema_extra=QUIET)
+    horses_tamed: int = Field(0, json_schema_extra=QUIET)
+    horses_tame: int = Field(0, json_schema_extra=QUIET)
+    horses_tame_at: str = Field("", json_schema_extra=QUIET)
     # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
     tier4_upgrades: int = 0
     # 每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：這一季簽過的是第幾天（開季那一天是第 1 天）；換季跟著新角色清空
@@ -2117,6 +2123,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift，2026-10-21 跟著求藝拿掉）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 馬的來路（features/horses，Joy 2026-11-10）：野馬群這一季被馴走幾匹（「週次|地點 id」→ 匹數）、這一季哪幾匹名駒有主了；換季整個重來
+    horses_herds: dict[str, int] = Field(default_factory=dict, json_schema_extra=QUIET)
+    horses_steeds: list[str] = Field(default_factory=list, json_schema_extra=QUIET)  # 這一季有主的名駒（gear.json 的 id）
     # 武學重構：「裝滿」那種秘方（kind fuse）這一季第一個暗合的人：秘方 id → 寫給別人看的名號（換季整個重來；小的整份覆寫，
     # 跟 general_gifts 一樣走這一下動作最後的 _save_season）
     secret_sets: dict[str, str] = Field(default_factory=dict)

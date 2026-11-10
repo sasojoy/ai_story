@@ -111,13 +111,18 @@ def _worn(state: GameState, content: Content, world: WorldStateStore, slot: str,
     return {
         "item": {"id": item.id, "name": item.name, "grade": equipment.grade(item), "wear_word": equipment.WEAR_WORDS[slot],
                  "wear": item.edge, "tempers": item.tempers, "temper_max": equipment.temper_cap(item, content),  # 照這一件的品質（3.6）
-                 "wear_note": equipment.wear_note(item, content)},
+                 "wear_note": equipment.wear_note(item, content), **_temper_odds(item, content)},
         "empty": "",
         "repair": {"id": rid, "use": _repair_use(state, content, slot), "enabled": problem is None, "why": problem},
         "temper": {"id": smithing.ARMOR_TEMPER if slot == "armor" else smithing.TEMPER, "use": _temper_use(state, content, slot),
                    "enabled": tproblem is None, "why": tproblem},
         "unfit": unfit,
     }
+
+
+def _temper_odds(item, content: Content) -> dict:
+    """淬煉衝階（Joy 2026-11-10）那兩格：temper_safe 淬到幾層以內必成、temper_pct 下一次成功幾成（0～100；必成 100，淬滿 0）。"""
+    return {"temper_safe": equipment.temper_safe(item, content), "temper_pct": round(equipment.temper_chance(item, content) * 100)}
 
 
 def _repair_use(state: GameState, content: Content, slot: str) -> str:
@@ -163,7 +168,7 @@ def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str,
         return {**row,
                 "repair": {"ok": repair is None, "why": repair, "use": _repair_use(state, content, slot)},
                 "temper": {"ok": temper is None, "why": temper, "use": _temper_use(state, content, slot, item.id)},
-                "into": into}
+                "into": into, **_temper_odds(item, content)}
 
     rows = [buttons(row) for row in (block["rack"] if block is not None else [])]
     rows.sort(key=lambda row: (row["divine"] is None, -fresh(row)))
@@ -386,6 +391,8 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
                 "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
                 "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
+                # 一次熬到底（Config.economy.upgrade_batch）：連換得了幾個；關著或換不了是 0（網頁 2 個以上才畫「全熬」）
+                "batch": economy.upgrade_max(state, content, attribute, tier, day) if econ.upgrade_batch else 0,
             })
     return {"sell": sell, "upgrade": upgrade, **_trade_captions(content, state)}
 

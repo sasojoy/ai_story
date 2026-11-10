@@ -36,7 +36,7 @@ def view(ctx) -> dict | None:
         if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
     ] if season_one(c, w) else []
     out = {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": seal.card_state(c, state),
-           "stir": stir, "dates": dates}
+           "stir": stir, "dates": dates, "art": shard.id}  # art：碎片的水墨圖（web/img/gear/seal-<id>.webp，圖還沒畫好網頁照舊不放）
     if seal_acts.on(c):  # 獨門行動（改版第 2、3 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動是 None
         out["act"] = acts.view(ctx.state, c, seal.filled(view.registry, c), view.season, **act_season(ctx))
     return out

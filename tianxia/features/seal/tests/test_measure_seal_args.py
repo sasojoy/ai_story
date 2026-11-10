@@ -63,14 +63,14 @@ def test_the_flags_parse_and_fall_back_to_the_config(measure):
     assert measure.cache_args(parser.parse_args(["--mandate-mc", "--hide", "0.5"]), content)[2] == [150, 300, 600, 1000]
 
 
-def test_the_config_defaults_land_in_sixteen_to_twenty_seasons(measure):
-    """企劃者 2026-10-20：湊滿七片平均約 16～20 季。21 天的季一塊中立地一季被探索「約幾百次」：200～1000 次都在範圍裡
-    （藏的機率 hide_chance 是速度的上限：7 ÷ hide_chance 就是探索再多也快不過的季數）。"""
+def test_the_config_defaults_land_in_about_seven_seasons(measure):
+    """企劃者 2026-10-20 原本定湊滿七片平均約 16～20 季（藏 40%）；主機普查第 7～9 季三季沒人拿到，Joy 2026-11-10「先這樣改」：
+    每季必藏一片（hide_chance 1），藏處一季被探索 200 次以上就是 7～8 季湊齊（7 ÷ hide_chance 是快不過的季數）。"""
     cfg = real_content("season21").config.seal.cache
+    assert cfg.hide_chance == 1.0
     rows = measure.cache_rows(cfg.hide_chance, cfg.find_chance, [200, 300, 600, 1000], 0.5, cfg.own_scale, trials=4000, seed=1)
     for row in rows:
-        assert 16 <= row["mean"] <= 20, (row["explores"], row["mean"])
-    assert 7 / cfg.hide_chance >= 16  # 就算每個人都撿得到，也不會快過 16 季
+        assert 7 <= row["mean"] <= 8, (row["explores"], row["mean"])
 
 
 def test_the_cache_table_prints_each_row(measure, capsys):
