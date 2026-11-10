@@ -5,6 +5,8 @@
  * 底下撕紙的紀事。第二批：求學時寫他在哪、哪時回來（信也是眼前那一件），出師以後名帖旁寫出路與稱號、多一段只有你看得到的生平。
  * 11/10：他的事都在這一頁按（Joy「後面對小明做的決定如果不是觸發類的也應該在同伴頁面」）：攤開、挑做法、等一下、送去求學、挑去處；撞見是探索時觸發。
  * 第四批：頁首換成 Joy 畫的圖（main.guard.art：hero 橫幅、face 立繪，照階段、出路與心性挑；web/img/guard/）。
+ * 第五批：成長期三段（初來、相熟、長成；Joy 11/10 設計稿 GzVzRd…「好」）：墨線底下一行「最近：…」與這一段走到哪，
+ * 「今天教{pron}什麼」一排八顆（一天一次）；大事也是眼前那一件。
  * 伺服器收養了才給 main.guard；沒有就不畫。
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  */
@@ -38,7 +40,12 @@
   const GD_PICK_SCHOOL = "{name}長高了，也該出去學點本事。你想送{pron}去哪裡？";
   const GD_STAY = "再等等";
   const GD_LATER = "先擱著";
-  const GD_KIND = { letter: "來信", trial: "出師考驗", oath: "立誓" };
+  const GD_KIND = { letter: "來信", trial: "出師考驗", oath: "立誓", milestone: "大事" };
+  const GD_TEACH = "今天教{pron}什麼";
+  const GD_TEACH_SUB = "一天一樣";
+  const GD_LOOK = "最近：";
+  const GD_GROW = "{phase} 第 {days} 天・一起經歷 {n}／{need} 件";
+  const GD_GROWN = "{name}長大了，說想出去學本事。";
 
   // 俠客分頁的紅點（app.js tabsHtml、paintNewsDot 問；Joy 2026-11-10「要加」）：他有一件事還沒攤開、或等你挑去處；人在俠客頁時不亮
   const guardDot = () => {
@@ -63,9 +70,13 @@
     const meter = `<div class="gd-meter" role="img" aria-label="${esc(gdFill(GD_METER, g))}：${esc(g.band)}">
       <div class="gd-bar"><i style="left:${pct.toFixed(1)}%"></i></div>
       <div class="gd-lbl"><span>${GD_HATE}</span><span>${esc(gdFill(GD_METER, g))}</span><span>${GD_LOVE}</span></div></div>`;
+    const gr = g.grow;
+    const growLine = (g.look || gr) ? `<div class="gd-grow">${g.look ? `<span class="gd-look">${GD_LOOK}${esc(g.look)}</span>` : ""}${gr
+      ? `<span class="gd-step">${esc(GD_GROW.replace("{phase}", gr.phase).replace("{days}", String((gr.days | 0) + 1)).replace("{n}", String(Math.min(gr.n | 0, gr.need_n | 0))).replace("{need}", String(gr.need_n | 0)))}</span>
+        <span class="gd-prog" aria-hidden="true"><i style="width:${(Math.max(0, Math.min(1, Number(gr.pct) || 0)) * 100).toFixed(1)}%"></i></span>` : ""}</div>` : "";
     const ev = g.event;
     let now;
-    const idle = g.stage === "study" ? GD_AWAY : g.stage === "settle" || g.stage === "trial" ? GD_SETTLING : g.stage === "sworn" ? GD_SWORN : GD_QUIET;
+    const idle = g.can_study ? GD_GROWN : g.stage === "study" ? GD_AWAY : g.stage === "settle" || g.stage === "trial" ? GD_SETTLING : g.stage === "sworn" ? GD_SWORN : GD_QUIET;
     const kind = ev && GD_KIND[ev.kind] ? `<small>${GD_KIND[ev.kind]}</small>` : "";
     if (g.schools && g.schools.length) {
       const picks = g.schools.map((c, i) => `<button class="gd-opt" data-act="choose" data-id="${esc(c.id)}"${c.enabled ? "" : " disabled"}><span class="gd-dot t${i % 3}" aria-hidden="true"></span>${esc(c.label)}</button>`).join("");
@@ -82,6 +93,8 @@
         <button class="btn ghost gd-later" data-act="choose" data-id="guard:later">${GD_LATER}</button>`;
     }
     const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}</h4>${kind}</div>${now}</section>`;
+    const teachSec = g.lessons && g.lessons.length ? `<section class="gd-sec" aria-label="${esc(gdFill(GD_TEACH, g))}"><div class="gd-sec-hd"><h4>${esc(gdFill(GD_TEACH, g))}</h4><small>${GD_TEACH_SUB}</small></div>
+      <div class="gd-teach">${g.lessons.map((c) => `<button class="gd-lesson" data-act="choose" data-id="${esc(c.id)}">${esc(c.label)}</button>`).join("")}</div></section>` : "";
     const bioSec = g.bio ? `<section class="gd-sec" aria-label="${GD_BIO}"><div class="gd-sec-hd"><h4>${GD_BIO}</h4><small>${GD_BIO_SUB}</small></div>
       <p class="gd-bio">${esc(g.bio)}</p></section>` : "";
     const log = g.log.length
@@ -92,7 +105,7 @@
     const rename = !g.can_rename ? "" : S.gdRename
       ? `<div class="gd-own"><input class="input" id="gd-name" maxlength="6" value="${esc(g.name)}" aria-label="${esc(gdFill(GD_RENAME, g))}"><button class="btn primary" data-act="gd-rename-go">${GD_RENAME_GO}</button></div><p class="gd-note">${GD_RENAME_NOTE}</p>`
       : `<button class="btn ghost" data-act="gd-rename">${esc(gdFill(GD_RENAME, g))}</button>`;
-    return `<div class="guard">${hero}${meter}${nowSec}${bioSec}<div class="gd-tools">${along}${rename}</div>${logSec}</div>`;
+    return `<div class="guard">${hero}${meter}${growLine}${nowSec}${teachSec}${bioSec}<div class="gd-tools">${along}${rename}</div>${logSec}</div>`;
   }
 
   async function guardClick(act, el, ev) {

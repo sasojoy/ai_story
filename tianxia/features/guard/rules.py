@@ -45,6 +45,10 @@ OPEN_LABELS = {"letter": "{name}來信了", "trial": "{name}學成回來了", "o
 SETTLING = "{name}站在那裡，像是長大了。（{pron}會成為什麼樣的人，過一會兒就知道）"
 GRADUATED_MEMO = "出師了，成了{path}，人稱「{title}」。"
 SWORN = "從今天起，{name}是你的親衛隊長。{pron}成了{path}，江湖上叫{pron}「{title}」。"
+# 成長期三段（Joy 2026-11-10 設計稿 GzVzRd…「好」）
+PHASE_TEXT = "{phase}・{age}"
+TEACH_DONE = "今天已經教過{name}了，明天再說。"
+GROWN_UP = "{name}已經長大了，想出去學本事。"
 STAGE_TEXT = {"grow": "跟著你長大", "study": "在外求學", "trial": "學成回來", "settle": "學成回來", "oath": "跪在你面前",
               "sworn": "親衛隊長"}
 
@@ -127,13 +131,71 @@ def art(t, b: GuardBook) -> dict:
     face = ""
     if b.stage in ("saved", "left"):
         face = f"child/{sx}-saved"
-    elif b.stage == "grow":
-        face = f"child/{sx}-grown"
+    elif b.stage == "grow":  # 初來是剛救下那張、相熟是現在那張、長成換少年少女那張（主機畫好放上來才換；沒有就照相熟那張）
+        face = f"child/{sx}-saved" if b.phase <= 0 else f"child/{sx}-teen" if b.phase >= 2 and teen_art(sx) else f"child/{sx}-grown"
     elif b.stage in ("study", "trial", "settle") and b.school:
         face = f"study/{sx}-{b.school}"
     elif b.stage in ("oath", "sworn") and b.path in PATH_ART:
         face = f"grown/{sx}-{PATH_ART[b.path]}-{look}"
     return {"hero": f"{ART}story/{hero}.webp", "face": f"{ART}{face}.webp" if face else ""}
+
+
+_WEB = __import__("pathlib").Path(__file__).resolve().parents[3] / "web" / "img" / "guard"
+
+
+def teen_art(sx: str) -> bool:
+    """長成那一段的少年、少女立繪畫好了沒（web/img/guard/child/<m|f>-teen.webp；主機本機畫，推上來就換）。"""
+    return (_WEB / "child" / f"{sx}-teen.webp").is_file()
+
+
+# ── 成長期（第五批：三段長大、每天教他）─────────────────────────────────
+
+def phase_label(b: GuardBook) -> str:
+    i = max(0, min(len(texts.PHASES) - 1, b.phase))
+    return PHASE_TEXT.replace("{phase}", texts.PHASES[i]).replace("{age}", texts.PHASE_AGE[i])
+
+
+def top_tags(b: GuardBook, n: int) -> list[str]:
+    """分數最重的 n 種性向（大於 0 的；同分照性向表的先後）。"""
+    order = {k: i for i, k in enumerate(texts.LOOKS)}
+    return [k for k, v in sorted(b.tags.items(), key=lambda kv: (-kv[1], order.get(kv[0], 99))) if v > 0][:n]
+
+
+def look(b: GuardBook) -> str:
+    """「最近：愛讀書・心軟」：最重的兩種性向換成白話；還看不出來是空的。"""
+    return "・".join(texts.LOOKS[k] for k in top_tags(b, 2) if k in texts.LOOKS)
+
+
+def phase_ready(t, b: GuardBook, days: int, events: int) -> bool:
+    """這一段過夠了日子、經歷夠了事：該來這一段的大事了（三段都走完的不再來）。"""
+    return b.stage == "grow" and b.phase < len(texts.PHASES) and b.phase_days >= days and b.phase_n >= events
+
+
+def lesson_tags(t, b: GuardBook, key: str) -> list[str]:
+    if key == "free":  # 讓他自己玩：心性好的往俠，壞的往暗
+        return ["俠"] if band_index(t, b.qing) <= 2 else ["暗"]
+    return [g for g in t.lessons.get(key, {}).get("tags", []) if g in t.tags][:t.tag_cap]
+
+
+def teach(t, b: GuardBook, key: str, day: int, stamp: str, salt: str) -> list[str]:
+    """今天教他什麼（一天一次，算這一段經歷的一件事）：推性向、動情分、記一行紀事，回他的反應。不收眼前那一件（跟事件無關）。"""
+    info = texts.LESSONS[key]
+    reaction, memo = info["lines"][seed("教", salt, b.name, day) % len(info["lines"])]
+    qing = max(-t.step_cap, min(t.step_cap, int(t.lessons.get(key, {}).get("qing", 0))))
+    b.qing = max(-t.qing_cap, min(t.qing_cap, b.qing + qing))
+    for tag in lesson_tags(t, b, key):
+        b.tags[tag] = b.tags.get(tag, 0) + 1
+    b.log.append(GuardEntry(day=day, stamp=stamp, text=fill(memo, b), qing=qing))
+    del b.log[:-t.log_cap]
+    b.teach_day = day
+    b.phase_n += 1
+    return [fill(reaction, b)]
+
+
+def grew(b: GuardBook, day: int) -> None:
+    """答了這一段的大事：長到下一段，日子與件數重新數。"""
+    b.phase += 1
+    b.phase_days, b.phase_n, b.phase_day = 0, 0, day
 
 
 def _fill_school(text: str, b: GuardBook) -> str:
@@ -147,6 +209,10 @@ def fixed_event(t, b: GuardBook, kind: str, day: int, salt: str) -> GuardEvent:
         raw = {"id": "trial", "text": texts.TRIALS.get(top_paths(t, b)[0], texts.TRIALS["遊俠"]), "choices": texts.TRIAL_CHOICES}
     elif kind == "oath":
         raw = {"id": "oath", "text": b.oath or texts.OATHS[band(t, b.qing)], "choices": texts.OATH_CHOICES}
+    elif kind == "milestone":
+        raw = texts.MILESTONES[max(0, min(len(texts.MILESTONES) - 1, b.phase))]
+        want = texts.WANTS.get((top_tags(b, 1) or ["俠"])[0], texts.WANTS["俠"])
+        raw = {**raw, "text": raw["text"].replace("{want}", want)}
     elif kind == "season":
         raw = {"id": "season", "text": texts.SEASON_LETTERS[band(t, b.qing)], "choices": texts.SEASON_CHOICES}
     else:
@@ -313,6 +379,7 @@ class EventRequest:
     paths: tuple[str, ...] = ()  # 出師考驗、結算：交給模型挑的出路
     say: str = ""  # 自己寫的那一句（評一句時才有）
     event: str = ""  # 眼前那一件（評一句時才有）
+    phase: int = 0  # 成長期第幾段（0 初來、1 相熟、2 長成；大事照它寫）
     extra: dict = field(default_factory=dict)
 
 
@@ -325,7 +392,7 @@ SYSTEM = (
 
 def _context(req: EventRequest) -> str:
     who = "女" if req.sex == "女" else "男"
-    grown = f"已經長大出師，成了{req.path}，人稱「{_safe(req.title)}」，是收養人的親衛隊長" if req.path else ("少女" if req.sex == "女" else "少年") + "，還小"
+    grown = f"已經長大出師，成了{req.path}，人稱「{_safe(req.title)}」，是收養人的親衛隊長" if req.path else ("少女" if req.sex == "女" else "少年") + f"，{texts.PHASE_AGE[max(0, min(2, req.phase))]}"
     lines = [
         f"孩子：{_safe(req.name)}（{who}，{grown}），被{_safe(req.master)}救下收養。救下時：{req.opening}",
         f"收養人：{_safe(req.master)}（{'女' if req.master_sex == '女' else '男'}），此刻在{req.place}。",
@@ -338,6 +405,17 @@ def _context(req: EventRequest) -> str:
     if req.school:
         lines.append(f"孩子被送去{req.school}求學。")
     return "\n".join(lines)
+
+
+# 成長期每一段的大事（模型照這個寫；叫不到換 texts.MILESTONES）
+MILESTONE_ASK = (
+    "他剛被收養，十二三歲，戒心還很重，不太說話。寫這一段的大事：他半夜發高燒（或類似的病痛、驚嚇），強忍著不吭聲，看收養人怎麼對他。"
+    "善待的那個做法，反應要寫到他第一次肯開口叫收養人。",
+    "他十三四歲，跟收養人熟了，也會闖禍。寫這一段的大事：他跟人打了一架，起因牽扯到他死去的爹娘或家裡出事以前的身世，對方的人找上門來。"
+    "善待的那個做法，反應要寫到他說起自己的身世。",
+    "他十五六歲，有主見了。寫這一段的大事：他跟收養人說出往後想做什麼樣的人（照他的性子偏向），等收養人表態。"
+    "三個做法的反應最後都要寫到他說想出去學本事。",
+)
 
 
 MODEL_QING = 2  # 模型評的情分只到 ±2（固定事件寫死的可以到 step_cap）
@@ -358,6 +436,7 @@ def write_event(client, req: EventRequest, t) -> GuardEvent | None:
         "road": "寫一件收養人帶他出門（出陣、遊歷、截殺這一類）時，路上剛發生的事。",
         "letter": f"孩子在{req.school}求學，寫一封信回來給收養人：寫他在那裡的一件事、一個心事或一個請求，用孩子的口吻。",
         "season": "新的一季開始了。寫他在這一季的頭一天跟收養人說的話或做的事（照他心裡怎麼看收養人）。",
+        "milestone": MILESTONE_ASK[max(0, min(len(MILESTONE_ASK) - 1, req.phase))],
         "trial": f"孩子學成回來，寫他的出師考驗：照他可能走的路（{'、'.join(req.paths)}）出一道題，寫到他要動手、收養人在旁邊為止。",
     }.get(req.kind, "寫一件住處、街坊、日常裡的一件小事。")
     how = "收養人怎麼回信" if req.kind == "letter" else "收養人在考驗時怎麼做" if req.kind == "trial" else "收養人怎麼做"

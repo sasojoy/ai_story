@@ -18,6 +18,13 @@ SCHOOLS = {
     "buguan": {"silver": 0, "tags": {"市": 2, "暗": 2}, "qing": -3},
 }
 
+# 每天教他什麼（成長期一天一次；設計稿 GzVzRd… 第三節）：id → 推的性向、動的情分。「讓他自己玩」的性向照心性挑（恩深、敬重、淡然往俠，怨懟、恨極往暗），寫在 features/guard/rules.py
+LESSONS = {
+    "read": {"tags": ["謀"], "qing": 0}, "fist": {"tags": ["勇"], "qing": 0}, "work": {"tags": ["巧", "耕"], "qing": 0},
+    "errand": {"tags": ["市"], "qing": 0}, "herb": {"tags": ["仁"], "qing": 0}, "hunt": {"tags": ["準"], "qing": 0},
+    "play": {"tags": [], "qing": 1}, "free": {"tags": [], "qing": 0},
+}
+
 # 出路十種（設計稿第三節）：名字 → 看哪幾種性向（取平均）。出師時照分數挑前三交給模型；專長是第三批
 PATHS = (
     ("將軍", ("勇", "謀")), ("謀士", ("謀",)), ("遊俠", ("俠", "勇")), ("鐵匠", ("巧",)), ("農夫", ("耕",)),
@@ -30,8 +37,13 @@ class GuardTuning(BaseModel):
 
     enabled: bool = False
     meet_level: int = Field(default=10, ge=1)  # 幾級撞見那個孩子（7 天季同）
-    study_level: int = Field(default=20, ge=1)  # 幾級送去求學（Joy 2026-11-09「20級求學後，是看時間而不是等級」；7 天季照 week7_study_level）
-    week7_study_level: int = Field(default=15, ge=1)
+    # 成長期三段（初來、相熟、長成；Joy 2026-11-10「沒有跟他互動幾次就要把她送出去求學」「我們收留他的時候已經12-13歲」→ 設計稿
+    # https://claude.ai/artifact/GzVzRdBgshFJpvYsNd8E91「好」）：看一起過的日子與經歷的事，不看等級。每一段兩樣都到了才來那一段的大事；三段走完他開口想去求學
+    phase_days: int = Field(default=3, ge=0)  # 每一段要一起過幾天（換日才算一天；7 天季照 week7_phase_days）
+    week7_phase_days: int = Field(default=1, ge=0)
+    phase_events: int = Field(default=8, ge=0)  # 每一段要一起經歷幾件事（家裡、路上的事答了、每天教他的那一下都算；7 天季照 week7_phase_events）
+    week7_phase_events: int = Field(default=4, ge=0)
+    lessons: dict[str, dict] = Field(default_factory=lambda: {k: {"tags": list(v["tags"]), "qing": v["qing"]} for k, v in LESSONS.items()})
     study_days: float = Field(default=3, gt=0)  # 求學幾天（季曆的天；7 天季照 week7_study_days）
     week7_study_days: float = Field(default=1, gt=0)
     letters: int = Field(default=2, ge=0)  # 求學期間寫幾封信回來（平均排在求學那幾天裡）

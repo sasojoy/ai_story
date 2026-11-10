@@ -18,7 +18,7 @@ def grown(game):
     actions.meet_on_explore(game, game.state.player.location)
     game.choose("guard:save")
     game.choose("guard:adopt:女")
-    game.state.player.member.level = t.study_level
+    game.state.player.guard.phase = 3  # 成長期三段走完（test_guard_grow.py 一段一段走）
     game.state.player.stats["silver"] = 500
     return game
 
@@ -40,10 +40,12 @@ def _to_school(game, key="shuyuan"):
     return game.choose(f"guard:school:{key}")
 
 
-def test_study_shows_up_at_the_study_level_and_not_before(grown):
+def test_study_shows_up_once_he_has_grown_up_and_not_before(grown):
+    """看成長期三段走完沒有，不看等級（Joy 2026-11-10）。"""
     b = grown.state.player.guard
     assert actions.status(grown)["guard"]["can_study"]
-    grown.state.player.member.level = grown.content.config.guard.study_level - 1
+    b.phase = 2
+    grown.state.player.member.level = 99
     assert not actions.status(grown)["guard"]["can_study"]
     assert b.stage == "grow"
 

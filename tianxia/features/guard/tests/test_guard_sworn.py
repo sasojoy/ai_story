@@ -17,7 +17,7 @@ def sworn(game):
     actions.meet_on_explore(game, game.state.player.location)
     for oid in ("guard:save", "guard:adopt:男"):
         game.choose(oid)
-    game.state.player.member.level = t.study_level
+    game.state.player.guard.phase = 3  # 成長期三段走完（test_guard_grow.py 一段一段走）
     game.state.player.stats["silver"] = 500
     game.choose("guard:study")
     game.choose("guard:school:gensui")

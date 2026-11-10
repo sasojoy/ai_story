@@ -6,7 +6,9 @@
   模型叫得到就排給背景寫字（routes 的 OutlockJob，鎖外生）；叫不到、假人、等太久都換固定事件（rules.fixed_event）。
 - 自己寫的那一句走鎖外三段式（routes.guard_say：say_request → judge_say → apply_say）。
 - rename、set_along：親衛隊長那一頁上的改名（一次）與出門帶不帶他。
-- 求學（20 級起，7 天季 15 級；之後看時間不看等級）：挑七處之一（花銀兩、推性向），這幾天寫信回來；期滿回來考驗（trial），
+- 成長期三段（初來、相熟、長成；Joy 2026-11-10 設計稿 GzVzRd…「好」）：每一段一起過夠了日子（phase_days）、經歷夠了事（phase_events）
+  就來那一段的大事（kind milestone），答了長到下一段；每天能教他一樣（teach，算一件事）。三段走完他開口想去求學。
+- 求學（三段走完；之後看時間不看等級）：挑七處之一（花銀兩、推性向），這幾天寫信回來；期滿回來考驗（trial），
   答了就結算（settle：模型從前三條出路挑一條、取稱號、寫生平與立誓，鎖外；叫不到換固定的），然後跪誓（oath），答了就投效（sworn）。
 - on_season_start：跟著帳號走，換季照帶（眼前那一件收掉、天的帳歸零、求學剩下的時間照帶）。"""
 from __future__ import annotations
@@ -69,9 +71,10 @@ def _week7(ctx) -> bool:
     return calendar.week7_on(ctx.state.world, ctx.content)
 
 
-def _study_level(ctx) -> int:
+def _phase_need(ctx) -> tuple[int, int]:
+    """每一段要一起過幾天、經歷幾件事（7 天季另一組）。"""
     t = _t(ctx)
-    return t.week7_study_level if _week7(ctx) else t.study_level
+    return (t.week7_phase_days, t.week7_phase_events) if _week7(ctx) else (t.phase_days, t.phase_events)
 
 
 def _study_seconds(ctx) -> float:
@@ -84,13 +87,24 @@ def _silver(ctx) -> int:
 
 
 def _can_study(ctx, b) -> bool:
-    return b is not None and b.stage == "grow" and not b.picking and ctx.state.player.member.level >= _study_level(ctx) \
+    return b is not None and b.stage == "grow" and not b.picking and b.phase >= len(rules.texts.PHASES) \
         and (b.event is None or not b.event.shown)
+
+
+def _can_teach(ctx, b) -> bool:
+    return b is not None and b.stage == "grow" and not b.picking and b.phase < len(rules.texts.PHASES) and b.teach_day != _today(ctx)
+
+
+def _lessons(ctx, b) -> list[dict]:
+    """今天教他什麼（親衛隊長那一頁那一排）：今天教過了、長大了、正在挑去處就沒有。"""
+    if not _can_teach(ctx, b):
+        return []
+    return [{"id": f"{PREFIX}:teach:{k}", "label": rules.fill(v["label"], b)} for k, v in rules.texts.LESSONS.items()]
 
 
 # ── 選單 ───────────────────────────────────────────────────────────────
 
-PAGE_HEADS = ("open", "later", "pick", "study", "school", "stay")  # 親衛隊長那一頁上的鈕（不在此地可為；Joy 2026-11-10）
+PAGE_HEADS = ("open", "later", "pick", "study", "school", "stay", "teach")  # 親衛隊長那一頁上的鈕（不在此地可為；Joy 2026-11-10）
 
 
 def options(ctx) -> list[Option]:
@@ -106,6 +120,7 @@ def options(ctx) -> list[Option]:
         out.append(Option(id=f"{PREFIX}:open", label=rules.fill(rules.EVENT_LABEL, b).replace("{peek}", rules.peek(b.event))))
     if _can_study(ctx, b):
         out.append(Option(id=f"{PREFIX}:study", label=rules.fill(rules.STUDY_LABEL, b)))
+    out.extend(Option(id=x["id"], label=x["label"]) for x in _lessons(ctx, b))
     return out
 
 
@@ -200,6 +215,7 @@ def act(ctx, arg: str) -> list[str]:
         b.adopted_season = _season(ctx)
         b.home_day = _today(ctx)  # 收養那一天不再另生一件家裡的事
         b.home_n = _home_quota(ctx)
+        b.phase, b.phase_day, b.phase_days, b.phase_n = 0, _today(ctx), 0, 0
         rules.apply(t, b, rules.GuardChoice(label="", memo=rules.fill("你救下了{pron}，收養了{pron}。", b), qing=1), _today(ctx), ctx.stamp(s.world.time))
         return [rules.fill(rules.ADOPTED, b)]
     if head == "study" and _can_study(ctx, b):
@@ -210,6 +226,10 @@ def act(ctx, arg: str) -> list[str]:
         return [rules.fill(rules.STAY_TEXT, b)]
     if head == "school" and b.stage == "grow" and b.picking and rest in rules.texts.SCHOOLS:
         return _send_to_school(ctx, b, rest)
+    if head == "teach" and rest in rules.texts.LESSONS and b.stage == "grow":
+        if not _can_teach(ctx, b):
+            return [rules.fill(rules.TEACH_DONE if b.teach_day == _today(ctx) else rules.NO_SUCH, b)]
+        return rules.teach(t, b, rest, _today(ctx), ctx.stamp(s.world.time), p.name)
     if b.stage not in EVENT_STAGES or b.event is None:
         return [rules.NO_SUCH]
     if head == "open":
@@ -229,6 +249,10 @@ def _answer(ctx, b: GuardBook, choice) -> list[str]:
     out = rules.apply(_t(ctx), b, choice, _today(ctx), ctx.stamp(ctx.state.world.time))
     if b.stage == "sworn" and b.season_qing is not None:  # 投效之後一季最多換一檔
         b.qing = rules.season_clamp(_t(ctx), b.season_qing, b.qing)
+    if b.stage == "grow" and kind in ("home", "road"):
+        b.phase_n += 1
+    elif kind == "milestone":
+        rules.grew(b, _today(ctx))
     if kind == "letter":
         b.letters += 1
     elif kind == "trial":
@@ -320,6 +344,11 @@ def on_sync(ctx, elapsed: float) -> None:
         b.stamina_seen = ctx.state.player.stamina  # 這一下動作之前的體力（after_action 比）
         if b.stage == "sworn":
             b.hp_seen = _hp_ratio(ctx)  # 這一下動作之前的氣血（after_action 比：重傷時他說一句）
+    if b is not None and b.stage == "grow":  # 一起過的日子：換日一次算一天（收養那一天、換季後第一次看到的那一天不算）
+        today = _today(ctx)
+        if b.phase_day != today:
+            b.phase_days += 1 if b.phase_day else 0
+            b.phase_day = today
     if b is not None and b.stage == "study" and b.event is None and not b.want and ctx.state.world.time >= b.study_until:
         b.stage = "trial"  # 學成回來（看時間不看等級）
     if not _waiting(b):
@@ -329,7 +358,9 @@ def on_sync(ctx, elapsed: float) -> None:
         if ctx.state.world.time - b.want_at >= t.wait_seconds:  # 背景寫字一直沒回來：換固定的
             _fallback(ctx, b, b.want)
         return
-    if b.stage in ("grow", "sworn"):
+    if b.stage == "grow" and rules.phase_ready(t, b, *_phase_need(ctx)):  # 這一段過夠了：來這一段的大事
+        _ask(ctx, b, "milestone")
+    elif b.stage in ("grow", "sworn"):
         today = _today(ctx)
         done = b.home_n if b.home_day == today else 0
         if done < _home_quota(ctx):
@@ -403,7 +434,7 @@ def _request(ctx, b: GuardBook, kind: str, seq: int, **extra) -> rules.EventRequ
         memos=tuple(e.text for e in b.log[-t.prompt_memos:]),
         tags=tuple(k for k, _ in sorted(b.tags.items(), key=lambda kv: -kv[1])[:3]), tag_list=tuple(t.tags),
         school=rules.school_name(b.school) if b.stage != "grow" else "", path=b.path if b.stage == "sworn" else "", title=b.title if b.stage == "sworn" else "",
-        paths=tuple(rules.top_paths(t, b)) if kind in ("trial", "settle") else (), **extra)
+        paths=tuple(rules.top_paths(t, b)) if kind in ("trial", "settle") else (), phase=b.phase, **extra)
 
 
 def event_request(ctx) -> rules.EventRequest | None:
@@ -482,19 +513,32 @@ def status(ctx) -> dict:
     t = _t(ctx)
     ev = b.event
     return {"guard": {
-        "name": b.name, "sex": b.sex, "pron": rules.pron(b), "stage": b.stage, "stage_text": rules.fill(rules.STAGE_TEXT[b.stage], b),
+        "name": b.name, "sex": b.sex, "pron": rules.pron(b), "stage": b.stage,
+        "stage_text": rules.phase_label(b) if b.stage == "grow" else rules.fill(rules.STAGE_TEXT[b.stage], b),
         "band": rules.band(t, b.qing), "school": rules.school_name(b.school) if b.school else "",
         "study_until": ctx.stamp(b.study_until) if b.stage == "study" else "", "path": b.path, "title": b.title,
         "bio": b.bio if b.stage == "sworn" else "",
         "meter": round((b.qing + t.qing_cap) / (2 * t.qing_cap), 3), "can_rename": not b.renamed, "along": b.along,
         "can_study": _can_study(ctx, b) and _free(ctx),
         "schools": _school_picks(ctx, b),
+        "look": rules.look(b),
+        "lessons": _lessons(ctx, b) if _free(ctx) else [],
+        "grow": _grow_status(ctx, b),
         "say_max": t.say_max,
         "art": rules.art(t, b),
         "event": None if ev is None else {"text": ev.text, "shown": ev.shown, "kind": ev.kind, "choices": [c.label for c in ev.choices]},
         "log": [{"stamp": e.stamp, "text": e.text, "tone": (e.qing > 0) - (e.qing < 0)} for e in reversed(b.log[-12:])],
         "count": len(b.log),
     }}
+
+
+def _grow_status(ctx, b) -> dict | None:
+    """成長期這一段走到哪（頁上那一行「相熟 第 2 天・一起經歷 4／8 件」）；三段走完、不在成長期是 None。"""
+    if b.stage != "grow" or b.phase >= len(rules.texts.PHASES):
+        return None
+    days, events = _phase_need(ctx)
+    return {"phase": rules.texts.PHASES[b.phase], "days": b.phase_days, "need_days": days, "n": b.phase_n, "need_n": events,
+            "pct": round(min(1.0, (min(b.phase_days, days) / max(1, days) + min(b.phase_n, events) / max(1, events)) / 2), 3)}
 
 
 def on_season_start(ctx, old) -> None:
@@ -507,6 +551,7 @@ def on_season_start(ctx, old) -> None:
         b.study_from, b.study_until = now - max(0.0, then - b.study_from), now + max(0.0, b.study_until - then)
     b.event, b.want, b.want_at, b.stamina_seen, b.picking, b.hp_seen = None, "", 0.0, None, False, None
     b.home_day = b.home_n = b.road_day = b.road_n = b.hurt_day = 0
+    b.phase_day = b.teach_day = 0  # 季的天重新數：成長期的日子與件數照帶
     if b.stage == "sworn":  # 投效了：這一季從這裡算心性能換幾檔；開季那一天先來一封（這一季的他）
         b.season_qing = b.qing
         b.home_day, b.home_n = _today(ctx), _home_quota(ctx)

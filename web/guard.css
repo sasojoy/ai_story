@@ -86,3 +86,16 @@
   margin: 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   font: 15px/1.9 var(--kai); color: var(--ink); white-space: pre-wrap;
 }
+
+/* ── 成長期（第五批）：墨線底下「最近：…」與這一段走到哪；今天教他什麼一排八顆（窄的時候兩欄） ── */
+.guard .gd-grow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 0 2px; font: 14px/1.5 var(--kai); color: var(--ink-2); }
+.guard .gd-look { color: var(--ink); }
+.guard .gd-prog { flex: 1 1 100%; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.guard .gd-prog i { display: block; height: 100%; background: var(--ink); }
+.guard .gd-teach { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.guard .gd-lesson {
+  min-height: 48px; padding: 6px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink);
+  font: 14px/1.35 var(--kai); text-align: center; cursor: pointer;
+}
+.guard .gd-lesson:active { background: var(--card-2); }
+@media (max-width: 520px) { .guard .gd-teach { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
