@@ -67,5 +67,5 @@ def test_an_action_keeps_the_tavern_scrolled_where_it_was(m):
 
 def test_the_keepers_line_has_a_fixed_height():
     css = (ROOT / "web" / "tavern.css").read_text(encoding="utf-8")
-    rule = re.search(r"\.shop-tavern \.shop-line \{([^}]*)\}", css).group(1)
-    assert "height: calc(3.2em" in rule and "line-clamp: 2" in rule
+    rule = re.search(r"\.shop-tavern \.tv-say \{([^}]*)\}", css).group(1)  # 2026-11-10 翻新：酒家那一句搬進頁首的畫底下
+    assert "height: 3.2em" in rule and "line-clamp: 2" in rule

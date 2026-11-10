@@ -626,6 +626,20 @@ def write_wall(world: WorldState, content: Content, loc_id: str, who: str, text:
     del notes[:-content.config.tavern.wall_keep]
 
 
+def world_next(state, content: Content, now: float, old) -> None:
+    """開下一季（世界層 next 的 tavern_walls 那一格；state 是全服狀態 SharedWorldState、old 是剛結束那一季的 WorldState）：牆上的題字
+    跟著到新的一季（Joy 2026-11-10「要不要跨季也在 讓那邊更豐富 更有歷史記憶」→「可以 按照建議」），上一季題的蓋上那一季的季數
+    （season_number 這時已經 +1），一間照舊只留最近 Config.tavern.wall_keep 句。不問酒肆開關（同題壁墨：寫上去的字不因為關店就擦掉）。"""
+    was = state.season_number - 1
+    keep = content.config.tavern.wall_keep
+    walls: dict[str, list[WallNote]] = {}
+    for loc_id, notes in old.tavern_walls.items():
+        moved = [n.model_copy(update={"season": n.season or was}) for n in notes[-keep:]]
+        if moved:
+            walls[loc_id] = moved
+    state.season.tavern_walls = walls
+
+
 def treat_shown(world: WorldState, content: Content, loc_id: str) -> str | None:
     treat = world.tavern_treats.get(loc_id)
     if treat is None or world.time - treat[1] > content.config.tavern.treat_hours * 3600:

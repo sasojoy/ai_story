@@ -2373,7 +2373,7 @@ class TavernTuning(_Strict):
     ties_price: int = Field(default=20, ge=0)  # 打聽交情
     material_prices: dict[int, int] = Field(default_factory=lambda: {1: 5, 2: 10, 3: 25, 4: 40})  # 打聽素材：照階
     wall_price: int = Field(default=5, ge=0)  # 題壁
-    wall_keep: int = Field(default=12, ge=1)  # 每間酒肆的牆留最近幾句
+    wall_keep: int = Field(default=24, ge=1)  # 每間酒肆的牆留最近幾句（換季照帶，一間跨季合計；Joy 2026-11-10 跨季後 12 → 24）
     wall_chars: int = Field(default=20, ge=1)  # 一句最多幾個字
     treat_price: int = Field(default=30, ge=0)  # 請全店喝酒（一天一次）
     treat_fame: int = Field(default=1, ge=0)
