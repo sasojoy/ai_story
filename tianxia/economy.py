@@ -258,6 +258,47 @@ def upgrade(state: GameState, content: Content, attribute: str, tier: int, day: 
     return msgs + ([got] if got else []) + ([f"銀兩 -{cost}"] if cost else [])
 
 
+def upgrade_max(state: GameState, content: Content, attribute: str, tier: int, day: int) -> int:
+    """一次熬到底（Config.economy.upgrade_batch；Joy 2026-11-10「先這樣改」：升階一次升到夠）最多能連換幾個：手上的料夠幾次、
+    銀兩夠幾次、上限還剩幾個，取最小；換一個都不行（upgrade_problem 有原因）是 0。熬出來的料偏到別的屬性也不會補回這一種的低一階，
+    工錢每一個一樣，所以這個數就是真的換得了的次數。"""
+    if upgrade_problem(state, content, attribute, tier, day) is not None:
+        return 0
+    low = _of(content, attribute, tier - 1)
+    n = materials.held(state, low.id) // upgrade_needs(content)[tier]
+    cost = upgrade_cost(state, content, tier)
+    if cost > 0:
+        n = min(n, state.player.stats.get("silver", 0) // cost)
+    left = upgrade_left(state, content, tier, day)
+    return max(0, min(n, left) if left is not None else n)
+
+
+UPGRADE_BATCH = "鐵匠把 {count} 個{low}分 {n} 爐熬煉，煉出{got}。"  # 待 joy 潤：一次熬到底的那一句
+
+
+def upgrade_many(state: GameState, content: Content, attribute: str, tier: int, day: int, count: int) -> list[str]:
+    """連換 count 個（夾在 upgrade_max）：每一個照 upgrade 擲自己的那一下（upgrade_seq 一個一個往上），訊息併成一句「熬出【A】×3、【B】」
+    加上背包與銀兩的變化。count 是 1 或夾完只剩 1 時就是 upgrade（訊息一字不變）；一個都不行時什麼都不動、只回原因。"""
+    n = min(max(1, int(count)), upgrade_max(state, content, attribute, tier, day))
+    if n <= 1:
+        return upgrade(state, content, attribute, tier, day)
+    need = upgrade_needs(content)[tier]
+    low = _of(content, attribute, tier - 1)
+    got: dict[str, int] = {}
+    silver = 0
+    for _ in range(n):
+        before = state.player.stats.get("silver", 0)
+        mid = roll_upgrade(state, content, attribute, tier).id  # 跟 upgrade 裡擲的是同一下（決定性，照 upgrade_seq）
+        upgrade(state, content, attribute, tier, day)
+        silver += before - state.player.stats.get("silver", 0)
+        got[mid] = got.get(mid, 0) + 1
+    order = {m.id: i for i, m in enumerate(content.materials.values())}
+    text = "、".join(f"【{content.materials[mid].name}】" + (f"×{k}" if k > 1 else "") for mid, k in sorted(got.items(), key=lambda kv: order[kv[0]]))
+    lines = [UPGRADE_BATCH.format(count=need * n, low=low.name, n=n, got=text)]
+    lines += [materials.grant_line(materials.item_text(content, mid, k)) for mid, k in sorted(got.items(), key=lambda kv: order[kv[0]])]
+    return lines + ([f"銀兩 -{silver}"] if silver else [])
+
+
 # ── 捐軍備（第六節）──────────────────────────────────────────
 
 

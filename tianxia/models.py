@@ -2698,6 +2698,9 @@ class SealCacheTuning(_Strict):
     # 權重 3＝核心三處合起來約佔四成多（中原十二處＋核心三處），每一處的機率是中原每一處的三倍【暫，待企劃者看過量表】
     core_regions: list[str] = Field(default_factory=lambda: ["core"])
     core_weight: float = Field(default=3.0, ge=1)
+    # 開季藏了一片時，天下大事放一則只說哪一州（藏處所屬大區的名字，atlas.region_of）的傳聞（Joy 2026-11-10「先這樣改」：
+    # 第 7～9 季沒人知道有藏、藏在哪）。區塊、地點照舊不公開。正式內容開，hide_chance 正式內容一併改成 1（每季必藏）
+    hint_region: bool = False
 
 
 class SealActsTuning(_Strict):
@@ -3956,6 +3959,13 @@ class EconomyRules(_Strict):
     # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
     # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
     upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
+    # 一次熬到底（Joy 2026-11-10「先這樣改」：主機普查第 7～9 季真人一季按升階 200～380 下）：素材頁每一格多一顆「全熬 ×N」、
+    # 打造頁就地熬的小單多一顆，連換到料或銀兩或上限用完為止（economy.upgrade_max／upgrade_many）；每一個照舊各擲各的。正式內容開
+    upgrade_batch: bool = False
+    # 季末沒用完的素材折成下一季的盤纏（同上）：上一季背包裡每一階一個幾兩（空的＝不折），一人最多 leftover_cap 兩（0＝不設）；
+    # 開季那一刻（鐵匠鋪包的 on_season_start）加進新角色的銀兩、寫一則紀錄。正式內容照收購價、四階 54
+    leftover_silver: dict[int, int] = Field(default_factory=dict)
+    leftover_cap: int = Field(default=0, ge=0)
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）

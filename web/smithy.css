@@ -81,3 +81,19 @@
 
 .shop-layer .rk-go { margin-top: 10px; }
 .shop-layer .rk-go.live { position: sticky; bottom: 0; padding: 18px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), #1e130c 40%); }
+/* 水墨圖與一次熬到底（Joy 2026-11-10「先這樣改 UI優化跟畫圖也進來」；介面設計規範第五節）：
+   - 頁首圖：鐵匠鋪內景（web/img/gear/scene-smithy.webp）168px 高、往下淡進店面的底色，右上直書的匾額；圖還沒畫好照舊是 CSS 的爐子。
+   - 素材的小圖（mat-<id>.webp）取代屬性色點；升階格子頂上一張大一點的。圖是去背的墨色，店面是暗底，墊一塊宣紙色的圓角方。
+   - 「全熬 ×N」：升階格子底下一顆金框小鈕（44px 高），連換得了兩個以上才有。 */
+.shop-layer .smith-head { position: relative; margin: 0 -16px 4px; height: 168px; overflow: hidden; }
+.shop-layer .smith-head .smith-scene { width: 100%; height: 100%; object-fit: cover; filter: brightness(.78) saturate(.85);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+.shop-layer .smith-plaque { position: absolute; top: 12px; right: 18px; padding: 0.5em 0.35em; writing-mode: vertical-rl; letter-spacing: 0.3em;
+  font: 700 1.2em var(--kai); color: #f2c46a; background: linear-gradient(#4a3020, #2a1a10); border: 2px solid #b7862b; border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.shop-layer .mat-pic { width: 1.5em; height: 1.5em; margin-right: 0.3em; flex: none; object-fit: contain; border-radius: 0.3em; background: #efe6d2; }
+.shop-layer .up-box { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.shop-layer .up-box .up-pic { width: 2.4em; height: 2.4em; object-fit: contain; border-radius: 0.4em; background: #efe6d2; }
+.shop-layer .up-all { min-height: 44px; padding: 0.3em 0.4em; border: 1px solid #f2c46a; border-radius: 10px; background: rgba(242, 196, 106, 0.12);
+  color: #f2c46a; font: 600 0.87em var(--sans); white-space: nowrap; cursor: pointer; }
+.shop-layer .up-all:active { background: rgba(242, 196, 106, 0.25); }

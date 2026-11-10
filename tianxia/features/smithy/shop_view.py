@@ -386,6 +386,8 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
                 "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
                 "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
+                # 一次熬到底（Config.economy.upgrade_batch）：連換得了幾個；關著或換不了是 0（網頁 2 個以上才畫「全熬」）
+                "batch": economy.upgrade_max(state, content, attribute, tier, day) if econ.upgrade_batch else 0,
             })
     return {"sell": sell, "upgrade": upgrade, **_trade_captions(content, state)}
 

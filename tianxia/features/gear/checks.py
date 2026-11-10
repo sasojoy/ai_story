@@ -11,7 +11,7 @@ from tianxia.zh import to_traditional
 def check_gear(c: Content, need, known) -> None:
     """寶物表、名駒、名將贈禮（content/gear.json，裝備四欄 6.3、5.7）與 Config.treasures：效果的數字剛好八種；良駒的品質權重只寫
     三個品質、不是負的、加起來大於 0。有表時：掉落池至少一件；名字不重複、過得了命名過濾、id 不叫 good_horse、寶物與名駒的 id 不重複；
-    贈禮的人物存在、一位只寫一次、送的是名駒或 pool 為 false 的寶物，送禮那一句是繁體、只用 {general}、{gift}；
+    贈禮的人物存在、一位只寫一次、送的是名駒或寶物（也在掉落池裡的可以，拿過了改給銀兩），送禮那一句是繁體、只用 {general}、{gift}；
     pool 為 false 的寶物與名駒都要有人送（不然永遠拿不到）。沒有 gear.json（測試內容）就只查設定。"""
     cfg, book = c.config.treasures, c.gear
     need(set(cfg.effects) == set(TREASURE_EFFECTS), f"Config.treasures.effects 要剛好寫八種效果：{sorted(cfg.effects)}")
@@ -40,7 +40,7 @@ def check_gear(c: Content, need, known) -> None:
         need(gift.character not in given, f"{where}：同一位人物寫了兩次")
         given.add(gift.character)
         tdef = book.treasures.get(gift.gear)
-        need(gift.gear in book.steeds or (tdef is not None and not tdef.pool), f"{where}：贈禮 {gift.gear} 要是名駒或 pool 為 false 的寶物")
+        need(gift.gear in book.steeds or tdef is not None, f"{where}：贈禮 {gift.gear} 要是名駒或寶物")  # 也在掉落池裡的可以（Joy 2026-11-10：門第名帖、檀木念珠）
         if gift.line:
             need(to_traditional(gift.line) == gift.line, f"{where}：送禮那一句只能用繁體中文")
             try:

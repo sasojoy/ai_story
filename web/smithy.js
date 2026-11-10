@@ -36,7 +36,7 @@
     const pages = shop.pages.length > 1 && tab !== "trade" && tab !== "divine" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
     const body = { shelf: shelfHtml, forge: forgePageHtml, rack: rackHtml, trade: tradeHtml, divine: divineHtml }[tab];
     // 架上頁鐵匠那一句底下一行連到神器頁（3.8：輪替季才有）
-    return `${tab === "shelf" ? SMITH_HERO + line + (shop.divine ? divineLinkHtml(shop.divine) : "") : ""}${pages}
+    return `${tab === "shelf" ? smithHeroHtml() + line + (shop.divine ? divineLinkHtml(shop.divine) : "") : ""}${pages}
       <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
       <nav class="shop-tabs">${smithTabs(shop).map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
@@ -45,6 +45,7 @@
   // 素材頁（素材與經濟設計第四、五節；企劃者 2026-10-15：上半升階、下半收購）。升階一屬性一列、二階三階各一格（拿什麼換、偏向出哪一種、
   // 幾成、工錢、今天還能換幾個；按不下去的灰掉、格子上寫短的原因，點了說整句）；收購一種一列（賣一個、全賣先問一次）。
   // 升階出來的屬性隨機（企劃者 2026-10-15「屬性隨機、偏向投入的」），格子上照伺服器寫「五成・其餘隨機」。字待 joy 潤
+  const UP_ALL = "全熬 ×{n}"; // 待 joy 潤
   function tradeHtml(shop) {
     const t = shop.trade;
     let ups = "";
@@ -55,15 +56,18 @@
         if (last && last.attribute === r.attribute) last.cells.push(r);
         else rows.push({ attribute: r.attribute, cells: [r] });
       }
-      const cell = (r) => `<button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
-          <span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
-          <small>${r.problem ? esc(r.short) : `<span class="nb">${r.cost | 0} 兩</span>${dealHtml(r.cost_note || "")}${r.left_text ? `・<span class="nb">${esc(r.left_text)}</span>` : ""}`}</small></button>`; // 上限字照伺服器給（FB-342：三換四是這一季的） // 價錢後面寫原因（名聲 4.1，FB-296）
+      // 一次熬到底（Joy 2026-11-10：真人一季按升階兩三百下）：連換得了兩個以上時格子底下多一顆「全熬 ×N」，一下熬到料、錢或上限用完
+      const all = (r) => (r.batch >= 2 && !r.problem
+        ? `<button class="up-all" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-n="${r.batch | 0}">${UP_ALL.replace("{n}", r.batch | 0)}</button>` : "");
+      const cell = (r) => `<div class="up-box"><button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
+          ${gearImg("mat", r.id, "up-pic")}<span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
+          <small>${r.problem ? esc(r.short) : `<span class="nb">${r.cost | 0} 兩</span>${dealHtml(r.cost_note || "")}${r.left_text ? `・<span class="nb">${esc(r.left_text)}</span>` : ""}`}</small></button>${all(r)}</div>`; // 上限字照伺服器給（FB-342：三換四是這一季的） // 價錢後面寫原因（名聲 4.1，FB-296）
       // 價錢與「這一季還能 N 個」各是不折行的小段（FB-410：375 寬一格約 103px，斷成「這一季還／能 2 個」），要斷只斷在「・」後面
       ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows${shop.four ? " four" : ""}">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
     }
     let sells = "";
     if (t.sell_cap) {
-      const row = (r) => `<div class="sell-row"><span class="nm"><b><i class="dot ${SHOP_ATTR[r.attribute] || ""}"></i>${esc(r.name)}</b><small>${esc(r.tier_word)}・手上 ${r.have | 0}・一個 ${r.price | 0} 兩${r.dark ? esc(r.dark) : ""}</small></span>
+      const row = (r) => `<div class="sell-row"><span class="nm"><b>${matIcon(r.id, r.attribute)}${esc(r.name)}</b><small>${esc(r.tier_word)}・手上 ${r.have | 0}・一個 ${r.price | 0} 兩${r.dark ? esc(r.dark) : ""}</small></span>
           <span class="acts"><button class="btn small" data-act="trade-sell" data-id="${esc(r.id)}" data-n="1">賣 1 個</button>${r.have > 1
             ? `<button class="btn small ghost" data-act="trade-sell" data-id="${esc(r.id)}" data-n="${r.have | 0}" data-confirm="${esc(`把 ${r.have | 0} 個${r.name}都賣了，換 ${(r.have * r.price) | 0} 兩？`)}">全賣 ${(r.have * r.price) | 0} 兩</button>` : ""}</span></div>`;
       sells = `<p class="shop-cap">${esc(t.sell_cap)}</p>${t.sell.length ? `<div class="sell-rows">${t.sell.map(row).join("")}</div>` : `<p class="shop-empty">${esc(t.sell_empty)}</p>`}`;
@@ -75,6 +79,17 @@
   // 架上那一頁最上面的爐火與鐵砧（企劃者 2026-10-14，照草圖 container.html 的 A）：一大團發亮的橘色圓頂爐口、火光往外暈，底下鐵砧；
   // 純 CSS 畫（style.css 的 .forge-mouth、.forge-anvil）；Joy 之後有正式的圖可以換
   const SMITH_HERO = '<div class="smith-hero" aria-hidden="true"><div class="forge-mouth"><i class="flame"></i></div><div class="forge-anvil"></div></div>';
+  // 鐵匠鋪內景的水墨圖畫好了（web/img/gear/scene-smithy.webp，gear.js 的 gearImg）就換成頁首圖：圖往下淡進店面的底色、右上直書的匾額
+  // （介面設計規範第五節「頁首圖」；Joy 2026-11-10）。還沒有圖照舊畫上面那座純 CSS 的爐子
+  const SMITH_PLAQUE = "鐵匠鋪"; // 待 joy 潤
+  function smithHeroHtml() {
+    const pic = gearImg("scene", "smithy", "smith-scene");
+    return pic ? `<div class="smith-head" aria-hidden="true">${pic}<span class="smith-plaque">${SMITH_PLAQUE}</span></div>` : SMITH_HERO;
+  }
+  // 素材的小圖（web/img/gear/mat-<id>.webp）：有圖放圖，沒有照舊一顆屬性色點
+  function matIcon(id, attribute) {
+    return gearImg("mat", id, "mat-pic") || `<i class="dot ${SHOP_ATTR[attribute] || ""}"></i>`;
+  }
 
   function shelfHtml(shop) {
     // 這一段的變數不用單字母 x：tests/server/test_server.py 把修練頁到輿圖之間那個變數讀的欄位都當成 menxia_view 的欄位查
@@ -327,7 +342,7 @@
     const slot = (role, id) => {
       const mat = id && mats.get(id);
       return `<button class="pot-slot ${role}" data-act="shop-slot" data-role="${role}" ${mat ? "" : "disabled"}><small>${role === "main" ? "主料" : "輔料"}</small>${mat
-        ? `<b><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</b><small>${esc(mat.tier_word)}</small>` : "<span>點素材放進來</span>"}</button>`;
+        ? `<b>${matIcon(mat.id, mat.attribute)}${esc(mat.name)}</b><small>${esc(mat.tier_word)}</small>` : "<span>點素材放進來</span>"}</button>`;
     };
     const kinds = f.kinds.length
       ? `<div class="shop-kinds">${f.kinds.map((k) => `<button class="kind${k.kind === pot.kind ? " on" : ""}${k.fit ? " fit" : ""}" data-act="shop-kind" data-kind="${esc(k.kind)}">${esc(k.label)}${k.fit ? "<sup>配</sup>" : ""}</button>`).join("")}</div>`
@@ -347,7 +362,7 @@
     for (const mat of f.materials) {
       const c = fits.get(mat.id) || { id: mat.id, ok: true, why: "" };
       const cell = `<button class="cell t${mat.tier | 0}${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
-        <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
+        <span class="n">${mat.count | 0}</span><span class="nm">${matIcon(mat.id, mat.attribute)}${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
       const last = rows[rows.length - 1];
       if (last && last.attribute === mat.attribute) last.cells.push([mat.tier | 0, cell]);
       else rows.push({ attribute: mat.attribute, cells: [[mat.tier | 0, cell]] });
@@ -537,9 +552,9 @@
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
         case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; S.shopBrew = null; S.divinePick = null; renderShop(false); break;
         // 鐵匠鋪素材頁（素材與經濟 B6）：升一個（灰掉的只說原因）、賣一個、全賣（先問一次）
-        case "trade-up":
+        case "trade-up": // 「全熬 ×N」多送 count（伺服器再夾一次，Config.economy.upgrade_batch）
           if (el.dataset.why) toast(el.dataset.why);
-          else await shopDo("smith_upgrade", { attribute: el.dataset.attr, tier: Number(el.dataset.tier) });
+          else await shopDo("smith_upgrade", { attribute: el.dataset.attr, tier: Number(el.dataset.tier), ...(Number(el.dataset.n) > 1 ? { count: Number(el.dataset.n) } : {}) });
           break;
         case "trade-sell":
           if (el.dataset.confirm) ask(el.dataset.confirm, "賣掉", () => shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) }));
