@@ -244,6 +244,44 @@ def test_listed_matches_admins_and_support(content, monkeypatch):
     assert ib.listed(content) is False
 
 
+def test_support_bot_token_reads_only_a_long_token(monkeypatch, tmp_path):
+    """客服自動受理第 216 批（設計第八節）：.local/support.json 只讀 bot_token 一鍵；沒檔、少於 32 字、壞 json、不是字串、不是物件一律 None；
+    照修改時間重讀。"""
+    import os
+
+    from tianxia import content as content_module
+
+    monkeypatch.setattr(content_module, "LOCAL_DIR", tmp_path)
+    ib._support_bot_cache.update(path=None, mtime=None, token=None)
+    path = tmp_path / ib.SUPPORT_BOT_FILE
+    assert ib.support_bot_file() == path
+    assert ib.support_bot_token() is None  # 沒檔
+
+    def write(text: str, bump: int) -> None:
+        path.write_text(text, encoding="utf-8")
+        st = path.stat()
+        os.utime(path, (st.st_atime, st.st_mtime + bump))
+
+    write(json.dumps({"bot_token": "x" * 31}), 1)
+    assert ib.support_bot_token() is None  # 短
+    write("{not json", 2)
+    assert ib.support_bot_token() is None  # 壞 json
+    write(json.dumps({"bot_token": 12345678901234567890123456789012345}), 3)
+    assert ib.support_bot_token() is None  # 不是字串
+    write(json.dumps(["x" * 40]), 4)
+    assert ib.support_bot_token() is None  # 不是物件
+    path.write_bytes(b"\xff\xfe\x00bad")
+    st = path.stat()
+    os.utime(path, (st.st_atime, st.st_mtime + 5))
+    assert ib.support_bot_token() is None  # 解碼錯
+    write(json.dumps({"bot_token": "a" * 32, "other": "ignored"}), 6)
+    assert ib.support_bot_token() == "a" * 32
+    write(json.dumps({"bot_token": "b" * 40}), 7)
+    assert ib.support_bot_token() == "b" * 40  # mtime 變了就重讀
+    path.unlink()
+    assert ib.support_bot_token() is None
+
+
 def test_check_password_strict_needs_12():
     from tianxia import accounts
 

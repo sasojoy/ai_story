@@ -1114,6 +1114,35 @@ WAVES["T"] = dict(
 )
 
 
+# ── U 波：客服自動受理第 219 批（企劃者 2026-11-10 下午看三處對比圖答「AAC」：只有「找真人」鈕改 C 版）──
+U_NOTE = [T_NOTE[1], T_NOTE[2],
+          "- **這一批只改畫面**：規格是企劃者 11/10 下午的選擇「AAC」（寫單附截圖 A、客服頁的截圖 A 就是現在的程式；自動回覆署名與「找真人」挑 C）；C 版長什麼樣看第 216 批拍的對比圖 `C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\waveT\\b216\\shots\\b216-ticket-C-375-light.png`（與 `-375-dark`、`-1280`）：鈕在玩家看到的那一則自動回覆**框裡右下**。上面「計畫不超過 120 行」照舊、寫在 `plan` 那個路徑；這一批不做別的事，碰到了寫 leftovers。"]
+
+
+def b219():
+    plan = "docs/superpowers/plans/2026-11-10-客服自動受理-第219批.md"
+    return batch(219, "客服自動受理第 219 批：「找真人」鈕改 C 版（放進自動回覆框裡右下；企劃者 11/10 挑的）；客服官不准結找真人的單；看圖加 nosniff", "support", "dev/support-6", plan, "8423", [
+        "- **伺服器兩小處（T 波合併助手與審查留下的）**：①`tianxia/features/support/routes.py::_close`：`_staff` 之後，`request.state.support_desk` 為真而且 `sidecar.has_human(tid)` 為真 → `raise shell.GameError(rules.HUMAN_WAITING)`、什麼都不寫（跟 T 波合併時加在 `_answer` 的擋同一句、同一個條件；cookie 的真人客服照舊；單不存在照舊 404）；測試加在 `tianxia/features/support/tests/test_support_bot.py`：`test_bot_cannot_close_a_ticket_waiting_for_a_human`（token 身分 close 回 400 加那一句、單還是沒結；cookie 客服 close 200；沒按找真人的單 token close 照舊 200）。②`_view_file` 回的 `Response` 加標頭 `X-Content-Type-Options: nosniff`（`test_support_files.py` 加一條 `test_file_response_says_nosniff`，順便斷 `Content-Disposition: inline` 還在）。這兩處不改 API 的長相、不加給玩家看的字、不動 `NO_LOGIN_ROUTES`、不動 rules／store／staff。",
+        "- 畫面：只動 `web/support.js` 與 `web/support.css`。現況（A 版，第 216 批）：`supportAskHtml(t)`（`web/support.js` 第 147～149 行）把 `<div class=\"sup-ask-row\"><button class=\"btn small ghost sup-ask\" data-act=\"support-human\" data-id=…>找真人</button></div>` 畫在對話最下面、回覆表單上方（`supportTicketHtml` 第 162 行 `${msgs.join(\"\")}${supportAskHtml(t)}${form}`）；css 第 74～75 行 `.sup-ask-row`、`.btn.small.sup-ask`。改成 C 版：鈕畫在玩家看到的**最後一則自動回覆**（`auto` 為真、`internal` 不是）那一則的框裡右下角——鈕的 DOM 父層是那一則的框（讀 `supportTicketHtml` 裡每一則的畫法，找出框的 class 再決定插在哪），框的內距留夠、鈕不蓋到字；畫的條件一個字不變（單沒結、有自動回覆、`!t.human`），`data-act=\"support-human\"`、`data-id`、`registerClicks` 的清單、點了打 `POST /api/support/human` 重畫、按過換成 `sup-meta` 裡的「已請真人處理」籤都照舊。鈕 44px（`.btn.small.sup-ask` 那一條留著或改名，量過三個寬度都是 44）。對話最下面那一列 `.sup-ask-row` 拿掉（沒有別人用才拿；grep 一次）。",
+        "- 測試先紅後綠：`tianxia/features/support/tests/test_support_web.py` 現有「找真人」那幾條照字面改（鈕的父層是最後一則自動回覆的框、不在對話尾巴；沒有自動回覆或按過就沒有鈕；點擊清單不變），新加一條 `test_ask_human_button_sits_inside_the_last_auto_reply`。`tests/bots/test_server_bots.py`、`tests/core/test_shell_stays_thin.py`、`tests/web/test_shell_web.py` 照 `scripts/test_for.py` 挑的跑。**沒有新字**（鈕的字「找真人」照舊；`HUMAN_WAITING` 是 T 波合併時加的、重用；`new_strings` 寫沒有）。`same_behavior` 自己不跑（動到 `routes.py`，閘門會照 `covers` 挑 support 的軌加網頁回合）；`scripts/test_for.py` 挑的（包的測試、`test_action_tables`、`test_outlock`、`test_server_bots`、`test_shell_stays_thin`）全綠。",
+        "- 拍圖：暫存資料庫起 8423、客服開著、模型網址 127.0.0.1:9，造一張有自動回覆的單（照第 216 批拍圖的做法：`.local` 指到暫存夾、金鑰檔自造 40 字假 token、用 token 身分回一則），拍玩家看單 375 淺、375 深、1280 三張加按過之後 375 淺一張，存 `C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\waveU\\b219\\shots\\`；照介面規範第八節自驗（沒有橫向捲動、44px、色票），跟第 216 批的 C 版對比圖對一眼、差在哪寫進回報。拍完 `taskkill /T`、刪暫存。",
+        "- **不做**：寫單附截圖、客服頁的截圖（企劃者挑 A，就是現在的）；`routes.py` 只動 `_close`、`_view_file` 那兩處，rules、store、staff、橋、CLI、範本不動；前端 3 張、3 MB 跟設定走（留下）；`app.js`、`main.js`、`style.css`、`index.html` 不碰。退版：`web/` 兩個檔退回就是 A 版；`routes.py` 兩處退回就是 T 波的行為（客服官能結找真人的單、看圖沒 nosniff）；資料庫第 9 版不動、沒有新欄位、沒有新表、季中能換；緊急開關照舊 `Config.support.enabled`。",
+    ] + U_NOTE, custom=True)
+
+
+WEB_U = "**這一波只有一批、只動 `web/support.js`、`web/support.css`：「找真人」鈕搬進最後一則自動回覆的框裡右下（企劃者挑的 C 版）**。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空。\n2. **開關開著**（base 與 head 的設定覆寫檔都把 `support.enabled` 打開；`.local/support.json` 兩邊都放同一個 32 字以上的測試 token、`support.bot_account` 指到同一個帳號；兩邊同樣的步驟：玩家送一張單、用 token 身分 `POST /api/support/answer` 回一則 `then=wait`、玩家點開那張單）：並排截 375 淺、375 深、1280——**唯一該有的差**是「找真人」鈕的位置（base 在對話最下面一列、head 在最後一則自動回覆框裡右下）；鈕的字、44px、籤、其他每一個像素都要一樣；按下去兩邊都要變成「已請真人處理」、鈕消失。主控台 0 錯誤、網路沒有 4xx／5xx。差在別處就是 blocker。"
+
+WAVES["U"] = dict(
+    round2=True, feature=True, design=T_DESIGN, new_packages="support", new_existing=True,
+    extra_lenses=[
+        dict(key="feature", text="**一小批：開關關著一個字不變、開著只差鈕的位置加兩處伺服器的擋**。第 219 批（計畫 docs/superpowers/plans/2026-11-10-客服自動受理-第219批.md）。親自驗：①`git diff <base>..<head> --stat` 只有 `web/support.js`、`web/support.css`、`tianxia/features/support/routes.py`（只有 `_close` 與 `_view_file`）、`tianxia/features/support/tests/test_support_web.py`、`test_support_bot.py`、`test_support_files.py`、計畫檔與 README；`_close` 的擋條件跟 `_answer` 那一道一樣（`support_desk`、`has_human`）、cookie 客服不受影響；`_view_file` 多的只有 `X-Content-Type-Options: nosniff` 這一個標頭；②`supportAskHtml` 的三個條件（沒結、有自動回覆、沒按過）一個都沒掉、`data-act`／`data-id` 沒變、`registerClicks` 清單沒變；③鈕的父層真的是最後一則自動回覆的框（讀 DOM 字串或 node 測試的斷言），不是第一則、不是內部註記、不是玩家自己那一則；④`.btn.small.sup-ask` 還是 44px（讀 css）；⑤`web/support.js` 裡沒有 `bot`、`假人`、`機器人`（`tests/bots/test_server_bots.py` 的字表）；⑥沒有新字（`// 待 joy 潤` 的句子沒有新增）。"),
+    ],
+    lines=[dict(name="找真人鈕", batches=[b219])],
+    merge_port=8424, fix_port=8425,
+    web_check=dict(ports="8426、8427", steps=WEB_U),
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}

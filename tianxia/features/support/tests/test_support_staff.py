@@ -114,6 +114,17 @@ def test_staff_asks_an_admin(monkeypatch):
     assert out["admin_flag"] is True and out["status"] == "open" and out["replies"][0]["internal"] is True
 
 
+def test_staff_reply_and_close_clear_admin_flag(monkeypatch):
+    """第 216 批：admin_flag 改成設值（請管理者 1、其他回覆 0），結單也清；不然自動結單永遠跳過它、也永遠掛著旗。"""
+    c = player()
+    s = staffer(monkeypatch)
+    tid = ticket(c).json()["id"]
+    assert s.post("/api/support/answer", json={"id": tid, "body": "請管理者", "then": "admin"}).json()["admin_flag"] is True
+    assert s.post("/api/support/answer", json={"id": tid, "body": "處理好了", "then": "wait"}).json()["admin_flag"] is False
+    assert s.post("/api/support/answer", json={"id": tid, "body": "再請一次", "then": "admin"}).json()["admin_flag"] is True
+    assert s.post("/api/support/close", json={"id": tid}).json()["admin_flag"] is False
+
+
 def test_answer_refuses_a_bad_then_and_an_empty_body(monkeypatch):
     c = player()
     s = staffer(monkeypatch)

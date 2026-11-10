@@ -8,6 +8,8 @@
 
 旁檔（帳號與客服第 201 批）：主檔旁邊的 <主檔名去掉副檔名>-identity.sqlite、-support.sqlite 有就一起備份成 <主備份檔名去掉副檔名>-<side>.sqlite
 （同一個時間戳；只驗 integrity_check；壞了留成 .bad、印警告，主檔照留），保留規則刪主檔時一起刪。
+資料夾（客服自動受理第 215 批）：主檔旁邊的 <主檔名去掉副檔名>-support-files/（客服單的截圖）有就整夾複製成 <主備份檔名去掉副檔名>-support-files/，
+保留規則刪主檔時一起刪。
 刻意不用 tianxia.database.open_database 打開來源：它會照 MIGRATIONS 升級結構，不能替線上那個檔升級。
 
 手動：.venv/Scripts/python.exe scripts/backup_db.py --dest <資料夾>          （資料庫照 TIANXIA_DB，沒設是 saves/tianxia.db）
@@ -19,6 +21,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import os
+import shutil
 import sqlite3
 import sys
 from pathlib import Path
@@ -83,6 +86,7 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
         raise
     os.replace(partial, final)
     backup_sides(src, final)
+    backup_side_dirs(src, final)
     return final
 
 
@@ -183,6 +187,37 @@ KEEP_DAILY = 14  # 最近幾個日曆日每天留最新的一份（設計 8.5【
 KEEP_WEEKLY = 8  # 再加最近幾個 ISO 週每週留最新的一份
 
 
+# support（客服自動受理第 215 批）：主檔旁邊的資料夾 <主檔名去掉副檔名>-<side>/（客服單的截圖）跟主檔同一個時間戳整夾複製、還原、輪替。
+# 不存在就跳過；複製失敗印警告、不擋主檔（先複製成 .partial 夾，做完才換名）
+SIDE_DIRS = ("support-files",)
+
+
+def side_dir_of(db: Path, side: str) -> Path:
+    db = Path(db)
+    return db.with_name(f"{db.stem}-{side}")
+
+
+def backup_side_dirs(src: Path, final: Path) -> list[Path]:
+    """主檔與旁檔備份好之後，旁邊的資料夾整夾複製成 <主備份檔名去掉副檔名>-<side>/；回傳做成的。失敗的印警告，主檔照留。"""
+    done = []
+    for side in SIDE_DIRS:
+        source = side_dir_of(src, side)
+        if not source.is_dir():
+            continue
+        out = side_dir_of(final, side)
+        partial = out.with_name(out.name + ".partial")
+        try:
+            shutil.rmtree(partial, ignore_errors=True)
+            shutil.copytree(source, partial)
+            os.replace(partial, out)
+        except OSError as e:
+            shutil.rmtree(partial, ignore_errors=True)
+            print(f"資料夾 {side} 沒有備份成（主檔照留）：{source}（{e}）", file=sys.stderr)
+            continue
+        done.append(out)
+    return done
+
+
 def _daily_backups(dest_dir: Path) -> list[tuple[dt.datetime, Path]]:
     """資料夾裡認得出來的每日備份（照檔名的時間）；認不出時間的、.partial、.bad、手動的都不算。"""
     found = []
@@ -237,6 +272,13 @@ def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, kee
                     side_of(path, side).unlink(missing_ok=True)
                 except OSError as e:
                     failed.append((side_of(path, side), e))
+            for side in SIDE_DIRS:  # support（第 215 批）：同名的資料夾跟著刪
+                folder = side_dir_of(path, side)
+                if folder.is_dir():
+                    try:
+                        shutil.rmtree(folder)
+                    except OSError as e:
+                        failed.append((folder, e))
     if failed:
         raise PruneError(removed, failed)
     return removed
@@ -267,6 +309,9 @@ def main(argv: list[str] | None = None) -> int:
     for side in SIDE_FILES:  # identity：做成了的旁檔一個一行
         if side_of(out, side).is_file():
             print(f"已備份旁檔：{side_of(out, side)}")
+    for side in SIDE_DIRS:  # support（第 215 批）：做成了的資料夾一個一行
+        if side_dir_of(out, side).is_dir():
+            print(f"已備份資料夾：{side_dir_of(out, side)}")
     if args.prune:
         try:
             removed = prune(Path(args.dest), dt.datetime.now())
