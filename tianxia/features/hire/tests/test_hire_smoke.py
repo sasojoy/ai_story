@@ -12,9 +12,10 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def hire_game(on: bool = True, profile: str = "week7") -> Game:
+def hire_game(on: bool = True, profile: str = "week7", guard: bool = False) -> Game:
     c = real_content(profile)
     c.config.attributes.v2.enabled = on
+    c.config.guard.enabled = guard  # 親衛隊長開著的季（開季蓋 WorldState.guard_on）酒肆不招，這裡的測試照關著
     c.config.auto_open_first_season = True
     world = open_world(Path(tempfile.mkdtemp(prefix="hire-")) / "tianxia.db")
     g = Game.new(c, "沈浪", rng=random.Random(0), world=world)
@@ -70,3 +71,12 @@ def test_sitting_in_the_tavern_lists_the_hires_for_the_page():
     hires = g.feature_status()["hires"]
     assert len(hires) == len(g.content.config.hire.types)
     assert all(h["id"].startswith("hire:") and h["enabled"] for h in hires)
+
+
+def test_the_guard_season_stops_tavern_hires():
+    """親衛隊長第四批（Joy 2026-11-10「全部做完一起上」）：開季時親衛隊長開著，這一季酒肆不招；正在跑的季（沒蓋章）照招。"""
+    g = hire_game(guard=True)
+    assert g.state.world.guard_on
+    assert not any(o.id.startswith("hire:") for o in g.options())
+    g.state.world.guard_on = False  # 開關打開之前就開的季
+    assert any(o.id.startswith("hire:") for o in g.options())

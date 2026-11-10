@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from tianxia import naming
 from tianxia import rules as core_rules
+from tianxia.core import annal_base
 from tianxia.core.option import Option
 from tianxia.state import GuardBook
 
@@ -217,6 +218,7 @@ def act(ctx, arg: str) -> list[str]:
         b.home_n = _home_quota(ctx)
         b.phase, b.phase_day, b.phase_days, b.phase_n = 0, _today(ctx), 0, 0
         rules.apply(t, b, rules.GuardChoice(label="", memo=rules.fill("你救下了{pron}，收養了{pron}。", b), qing=1), _today(ctx), ctx.stamp(s.world.time))
+        annal_base.note(s, ctx.content, annal_base.DEED, rules.fill(rules.ANNAL_ADOPT, b).replace("{place}", _place_name(ctx, b.place) or "路上"), 2)  # 第四批：寫進列傳
         return [rules.fill(rules.ADOPTED, b)]
     if head == "study" and _can_study(ctx, b):
         b.picking = True
@@ -263,6 +265,7 @@ def _answer(ctx, b: GuardBook, choice) -> list[str]:
     elif kind == "oath":
         b.stage, b.sworn_season, b.season_qing = "sworn", _season(ctx), b.qing
         out.append(rules.fill(rules.SWORN, b).replace("{path}", b.path).replace("{title}", b.title))
+        annal_base.note(ctx.state, ctx.content, annal_base.DEED, rules.fill(rules.ANNAL_SWORN, b).replace("{title}", b.title), 4)  # 第四批：寫進列傳
     return out
 
 
@@ -398,7 +401,7 @@ def after_action(ctx) -> list[str]:
         return []
     p = ctx.state.player
     before, b.stamina_seen = b.stamina_seen, p.stamina
-    said = _hurt(ctx, b)
+    said = _fell(ctx, b) or _hurt(ctx, b)
     if b.stage not in ("grow", "sworn") or not _waiting(b) or b.want or not b.along or before is None or p.stamina >= before:
         return said
     t, today = _t(ctx), _today(ctx)
@@ -409,6 +412,21 @@ def after_action(ctx) -> list[str]:
         return []
     _ask(ctx, b, "road")
     return said + ([rules.fill("（{name}在一旁看著。）", b)] if b.event is not None and b.stage == "grow" else [])
+
+
+def _fell(ctx, b: GuardBook) -> list[str]:
+    """投效之後帶在身邊，你在決戰（或攻城戰）裡倒下：他照心性說一句，同一場一次（第四批，Joy 2026-11-10「全部做完一起上」）。"""
+    if b.stage != "sworn" or not b.along:
+        return []
+    battle = ctx._battle_now()
+    part = battle.participants.get(ctx.state.player.name) if battle is not None else None
+    if part is None or not part.eliminated:
+        return []
+    key = f"{battle.battle_id}#{battle.record_id}"
+    if b.fell_battle == key:
+        return []
+    b.fell_battle = key
+    return [rules.fell_line(_t(ctx), b, key)]
 
 
 def _hurt(ctx, b: GuardBook) -> list[str]:

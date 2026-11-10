@@ -38,15 +38,26 @@
 - 投效以後（`sworn`）照樣有家裡、路上的事（他已長大，提示裡寫出路與稱號）；心性一季最多換 `band_steps_per_season` 檔（`rules.season_clamp`，照 `season_qing`：這一季開始或投效那一刻的情分）。
 - 你做完一件事氣血掉到 `hurt_ratio` 以下、而且比做之前少：他照心性說一句（`texts.HURT_LINES`，一天一次；留在住處的不說）。
 - 每季開季先來一段（kind `season`，模型寫；固定的照心性 `texts.SEASON_LETTERS`）。
-- 專長走核心唯讀掛鉤 `tianxia/core/guard_base.py`（Joy 2026-11-09「好」）：`perk(state, content, key)` 只讀 `PlayerState.guard` 與 `Config.guard.perks`（照出路）、`band_perks`（照心性），開關關著、沒投效、沒帶在身邊是 0。各原位問一次、夾一次；鍵與原位對照在 `guard_base` 的檔頭。**數字全是 0**（行為不變），假人照平衡清單量過再另開一筆填。農夫回體力在這一包的 `on_day`。
+- 專長走核心唯讀掛鉤 `tianxia/core/guard_base.py`（Joy 2026-11-09「好」）：`perk(state, content, key)` 只讀 `PlayerState.guard` 與 `Config.guard.perks`（照出路）、`band_perks`（照心性），開關關著、沒投效、沒帶在身邊是 0。各原位問一次、夾一次；鍵與原位對照在 `guard_base` 的檔頭。數字第三批全是 0，第四批量過才填（見第四批）。農夫回體力在這一包的 `on_day`。
 
-## 還沒做（設計稿第十節）
+## 第四批：別人看得見他（Joy 2026-11-10「全部做完一起上」）
 
-第四批：隊上的位子（照資質進 team 的名冊，動 team.py）、全服決戰倒下那一句、列傳最後一行、同服互動、名帖、關酒肆招募；量專長的數字；第五批圖（清單 https://claude.ai/artifact/46RRJCExUY8pZReoW1hayp）。江湖頁有事時要一條提示列（`main.js` 的 `jhHintsHtml`，殼）要 Joy 點頭才加，現在是「此地還能做」裡那一顆。
+- 酒肆不再招同伴：開季那一刻 `Config.guard.enabled` 開著就蓋章 `WorldState.guard_on`（`world_state.stamp_season`），hire 包的 `on` 看它；正在跑的那一季照招到收季。
+- 你在決戰（或攻城戰）裡倒下：帶在身邊、投效了的他照心性說一句（`texts.FELL_LINES`），同一場一次（`GuardBook.fell_battle`；讀 `ctx._battle_now()`，邊界名單 `("guard", "battle")`）。
+- 截殺：戰報裡多他的那一句（核心 `guard_base.raid_lines`：自己帶著的照心性、照勝負；對手帶著的寫「某某身邊跟著親衛隊長…」），peers 包 `raid_record` 讀。
+- 名帖與玩家卡：「親衛隊長小明（將軍）」（`guard_base.card_line`）：玩家卡多一個 `guard` 鍵（`web/peers.js` 畫 `.peer-guard`），名帖頭銜池（`mingtie.earned`）多這一條。
+- 列傳：收養、投效各記一則行狀（`annal_base.DEED`），季末的傳照行事寫。
+- 上陣：照設計稿是專長＋台詞，不佔隊上的位子、不進 team 的名冊（打法不變）。
+- 專長的數字照 `scripts/measure_guard.py` 量過填進 `core/tuning/guard.py`：人人養得到，一格不超過玉璽碎片（威力 ×1.10、閃避 +0.03）的一半。將軍大場面 +3 個百分點、謀士與殺手威力 ×1.05、遊俠賞銀 +10%、鐵匠造化分 +4、農夫每天 +24 體力、乞丐問酒家多 1 次、弓箭手 +3 個百分點、醫者少扣 +5%、斥候破境丹機會 ×1.25；恩深擋刀 +0.02、敬重 +0.01。
+- 比對軌 `scripts/sb/tracks/guard.py`（`--track guard`）。
+
+## 還沒做
+
+酒肆裡別人親衛的傳聞、切磋論武時他在旁邊說一句、決戰兩邊的親衛隔陣相望（設計稿第五節後三條）；hire 包整包刪掉（關掉一季沒事之後）。江湖頁有事時要一條提示列（`main.js` 的 `jhHintsHtml`，殼）要 Joy 點頭才加，現在是「此地還能做」裡那一顆。
 
 ## 測試
 
-- `tests/test_guard.py`（14 條）、`tests/test_guard_study.py`（12 條，第二批）、`tests/test_guard_sworn.py`（7 條）與 `tests/test_guard_perks.py`（9 條，第三批）、`tests/test_guard_smoke.py`（1 條 smoke）。
+- `tests/test_guard_seen.py`（第四批）、`tests/test_guard.py`（14 條）、`tests/test_guard_study.py`（12 條，第二批）、`tests/test_guard_sworn.py`（7 條）與 `tests/test_guard_perks.py`（9 條，第三批）、`tests/test_guard_smoke.py`（1 條 smoke）。
 
 ## 第五批：成長期三段與每天教他（Joy 2026-11-10 設計稿 https://claude.ai/artifact/GzVzRdBgshFJpvYsNd8E91「好」）
 

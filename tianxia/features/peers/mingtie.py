@@ -17,6 +17,7 @@ from tianxia import calendar, library, renown, tactics
 from tianxia import ranks  # 共用規則層（階級的稱號；第 40 批收進）
 from tianxia.characters import name_key
 from tianxia.core import arena_ranks  # 擂台的稱號（核心的查詢服務；擂台本身在單挑包）
+from tianxia.core import guard_base  # 親衛隊長第四批：名帖上那一行「親衛隊長小明（將軍）」
 from tianxia.models import Content
 from tianxia.state import GameState, Mingtie, MingtieCopy
 
@@ -160,6 +161,7 @@ def earned(state: GameState, content: Content, world=None, board: dict | None = 
     friends = sorted(p.mingtie_box, key=lambda x: (-x.fame, x.when))
     if friends:
         out.append(f"{friends[0].name}的帖友")
+    out.append(guard_base.card_line(state, c))  # 親衛隊長第四批（Joy 2026-11-10「全部做完一起上」）：別人在名帖上看得到他
     out += p.title_book
     seen, uniq = set(), []
     for t in out:
@@ -189,6 +191,7 @@ def _earned_titles(state: GameState, c: Content) -> list[str]:
             out.append(f"{c.characters[item.signature].name}的本命兵器")
         elif item.original and item.secret and "無名" not in item.name:
             out.append(f"神器【{item.name}】之主")
+    out.append(guard_base.card_line(state, c))  # 親衛隊長第四批
     out += p.title_book
     return list(dict.fromkeys(t for t in out if t))
 

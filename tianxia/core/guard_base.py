@@ -18,6 +18,11 @@
   toll_cut        醫者      team.take_encounter_toll 本人那一份：少扣幾成氣血              成數（併進化勁＋防具，照舊夾 total_cap）
   explore_legend  斥候      explore 包 explore_base：探索撿破境丹的門檻                   倍數加成（×(1+值)）
   dodge           恩深、敬重 team.dodge_chance：落敗閃成僵持（band_perks）                 機會（加在身法上，照舊夾 0～1）
+
+第四批（Joy 2026-11-10「全部做完一起上」）：別人看得見他。
+- card_line(state, content)：名帖、玩家卡上那一行「親衛隊長小明（將軍）」（peers 包 mingtie.earned 讀）；開關關著、沒投效是空的。
+- raid_lines(state, content, rival_state, outcome)：截殺那一場戰報裡他的那一句（peers 包 raid_actions.raid_record 讀）：
+  自己帶在身邊的照心性說一句，對手帶著的也寫一句（兩邊各看到各自的）。outcome 是 won／lost／even。
 """
 from __future__ import annotations
 
@@ -44,3 +49,41 @@ def perk(state: GameState, content: Content, key: str) -> float:
     if b is None or not b.along:
         return 0.0
     return float(t.perks.get(b.path, {}).get(key, 0.0)) + float(t.band_perks.get(band(content, b.qing), {}).get(key, 0.0))
+
+
+def _along(state: GameState, content: Content) -> GuardBook | None:
+    b = of(state) if content.config.guard.enabled else None
+    return b if b is not None and b.along else None
+
+
+def card_line(state: GameState, content: Content) -> str:
+    b = of(state) if content.config.guard.enabled else None
+    return f"親衛隊長{b.name}（{b.path}）" if b is not None and b.name else ""  # 設計稿第六節「親衛隊長 小明（將軍）」；待 joy 潤
+
+
+# 截殺那一場他的那一句（待 joy 潤）：恩深、敬重的拚命，淡然的盡本分，怨懟、恨極的袖手
+RAID_OWN = {
+    "won": {"恩深": "{name}護在你身側，替你封住了退路。", "敬重": "{name}在一旁掠陣，對手幾次想走都被{pron}攔回來。",
+            "淡然": "{name}在一旁看著，等你收了手才走過來。", "怨懟": "{name}站得遠遠的，像是在看別人的事。", "恨極": "{name}在一旁看完，什麼也沒說。"},
+    "lost": {"恩深": "{name}搶上來架開對手，硬把你拖了出來。", "敬重": "{name}擋在你前面斷後，你才脫得了身。",
+             "淡然": "{name}拉了你一把，兩人一起退開。", "怨懟": "{name}沒有上前，看著你丟下銀兩。", "恨極": "{name}在一旁看著你輸，嘴角動了一下。"},
+    "even": {"恩深": "{name}一直守在你背後，對手始終繞不過去。", "敬重": "{name}在一旁按著兵器，對手不敢戀戰。",
+             "淡然": "{name}在一旁等著，沒有插手。", "怨懟": "{name}抱著手看，沒有插手。", "恨極": "{name}抱著手看，沒有插手。"},
+}
+RAID_RIVAL = "{rival}身邊跟著{gname}，一路盯著你。"  # {gname}＝card_line  # 待 joy 潤
+
+
+def _pron(b: GuardBook) -> str:
+    return "她" if b.sex == "女" else "他"
+
+
+def raid_lines(state: GameState, content: Content, rival_state: GameState | None, outcome: str) -> list[str]:
+    out: list[str] = []
+    own = _along(state, content)
+    if own is not None:
+        pool = RAID_OWN.get(outcome, RAID_OWN["even"])
+        out.append(pool.get(band(content, own.qing), pool["淡然"]).replace("{name}", own.name).replace("{pron}", _pron(own)))
+    theirs = _along(rival_state, content) if rival_state is not None else None
+    if theirs is not None:
+        out.append(RAID_RIVAL.replace("{rival}", rival_state.player.name).replace("{gname}", card_line(rival_state, content)))
+    return out
