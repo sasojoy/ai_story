@@ -52,6 +52,8 @@ def howto_markdown(content_root: Path, profile: str | None) -> str:
     tmp = Path(tempfile.mkdtemp(prefix="support-knowledge-"))
     old = os.environ.get("TIANXIA_DB")
     os.environ["TIANXIA_DB"] = str(tmp / "knowledge.db")
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))  # 當主程式跑時 sys.path 只有 scripts/
     try:
         from tianxia import ollama_client
         from tianxia.content import load_content, serving_profile
