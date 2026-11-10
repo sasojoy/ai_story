@@ -413,6 +413,12 @@ class GuardBook(BaseModel):
     season_qing: int | None = None  # 這一季開始（或投效那一刻）的情分：心性一季最多換 band_steps_per_season 檔，照它夾
     hp_seen: float | None = None  # 這一下動作之前的氣血比例（同步時抄、做完一件事時比：掉到 hurt_ratio 以下他說一句）
     hurt_day: int = 0  # 他上一次開口是第幾天（一天一次）
+    # 成長期三段（Joy 2026-11-10 設計稿 GzVzRd…「好」）：0 初來、1 相熟、2 長成、3 三段走完（他想出去學本事）
+    phase: int = 0
+    phase_day: int = 0  # 這一段最後看到的是第幾天（換日一次 phase_days 加一；換季歸零、不算一天）
+    phase_days: int = 0  # 這一段一起過了幾天
+    phase_n: int = 0  # 這一段一起經歷了幾件事
+    teach_day: int = 0  # 哪一天教過他了（一天一次；換季歸零）
 
 
 class LegacyBook(BaseModel):

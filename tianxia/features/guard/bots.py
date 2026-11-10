@@ -13,6 +13,10 @@ def score(ctx, option) -> float | None:
     name = ctx.state.player.name
     if head in ("meet", "open", "back", "study"):
         return 55.0
+    if head == "teach":  # 每個假人一天挑一樣教（照名號與天雜湊），偏好的那一樣多一點
+        keys = list(rules.texts.LESSONS)
+        day = ctx.state.player.guard.phase_day if ctx.state.player.guard is not None else 0
+        return 45.0 if keys[rules.seed("教", name, day) % len(keys)] == rest else 12.0
     if head == "stay":
         return 1.0
     if head == "school":  # 每個假人一處偏好的去處（照名號雜湊）；錢不夠那一顆按不下去，就挑別處

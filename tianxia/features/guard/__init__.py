@@ -11,12 +11,12 @@ README.md 寫這一包做什麼、導覽與設計稿。第一批：遇見與成�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import BusHook, Feature, Outcome
 
 
 class GuardFeature(Feature):
     name = "guard"
-    prefix = "guard"  # guard:meet、save、leave、part、back、adopt:<男|女>、open、pick:<i>、later
+    prefix = "guard"  # guard:save、leave、part、adopt:<男|女>（撞見那一刻接管選單）；open、pick:<i>、later、study、school:<id>、stay（親衛隊長那一頁）
     web = ("guard.js", "guard.css")  # 俠客頁「同伴」最上面的親衛隊長那一頁（cultivation.js 的同伴那一頁叫 guardHtml）
     content: tuple[str, ...] = ()  # 第一批的固定字在 texts.py
     player_fields: tuple[str, ...] = ("guard",)  # PlayerState.guard（GuardBook）
@@ -41,6 +41,25 @@ class GuardFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return Outcome(title=actions.title(ctx, arg), run=lambda: actions.act(ctx, arg))
+
+    def choose_unlisted(self, ctx, option_id):
+        """親衛隊長那一頁的鈕（open、later、pick、study、school、stay）不在此地可為（Joy 2026-11-10），在這裡接走；其餘照舊查選單。"""
+        if not option_id.startswith(self.prefix + ":") or not self.enabled(ctx):
+            return None
+        from . import actions  # noqa: PLC0415
+
+        return actions.page_choice(ctx, option_id)
+
+    # core_eventbus：探索那一下撞見他（BUS_ORDER 的 outing、explore 那兩列；Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）
+    _bus = None
+
+    def bus(self):
+        if self._bus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._bus = (BusHook("outing", "guard", lambda ctx, loc_id: actions.meet_on_explore(ctx, loc_id)),
+                         BusHook("explore", "guard", lambda ctx, loc_id: actions.meet_on_explore(ctx, loc_id)))
+        return self._bus
 
     def status(self, ctx):
         from . import actions  # noqa: PLC0415
