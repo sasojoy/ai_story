@@ -143,18 +143,23 @@
   }
 
   // ── 客服自己一頁（S.supportPage 時設定抽屜整個換成它）──
+  const SUPPORT_HUMAN_TAG = `<span class="sup-human">已請真人處理</span>`; // 待 joy 潤
+  function supportAskHtml(t) { // 「找真人」（客服自動受理第 216 批，A 版：對話最下面、回覆表單上方）：沒結、有自動回覆、還沒按過才畫
+    if (t.status === "closed" || t.human || !(t.replies || []).some((r) => r.staff && r.auto)) return "";
+    return `<div class="sup-ask-row"><button class="btn small ghost sup-ask" data-act="support-human" data-id="${Number(t.id)}">找真人</button></div>`; // 待 joy 潤
+  }
   function supportTicketHtml(t) { // 點開一張單：對話、截圖與「再回一句」
     const lost = S.supportFileMsg && S.supportFileMsg.id === Number(t.id) ? `<p class="form-msg sup-file-msg">${esc(S.supportFileMsg.text)}</p>` : "";
     const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(t.created)}</span>${esc(t.body)}</div>${supportShotsHtml(t.id, t.files)}${lost}${supportAddHtml(t)}`]
       .concat((t.replies || []).map((r) => r.staff
-        ? `<div class="sup-msg sup-cs"><span class="sup-who">客服・回覆　${supportWhen(r.created)}</span>${esc(r.body)}</div>` // 待 joy 潤
+        ? `<div class="sup-msg sup-cs"><span class="sup-who">${r.auto ? "客服（自動回覆）・回覆" : "客服・回覆"}　${supportWhen(r.created)}</span>${esc(r.body)}</div>` // 待 joy 潤
         : `<div class="sup-msg sup-me"><span class="sup-who">你・${supportWhen(r.created)}</span>${esc(r.body)}</div>`));
     const form = t.status === "closed" ? "" : `<form id="support-reply-form" class="stack" data-id="${Number(t.id)}">
         <textarea class="input" name="body" maxlength="1000" placeholder="再回一句（1,000 字內）"></textarea>
         <p class="form-msg"></p><button class="btn" type="submit">送出</button></form>`; // 待 joy 潤
     return `<div class="top-row"><button class="btn small ghost" data-act="support-list">‹ 回客服</button><h3 style="flex:1">#${Number(t.id)}・${supportCat(t)}</h3></div>
-      <p class="sup-meta">${supportStatus(t.status)}　送出 ${supportWhen(t.created)}</p>
-      ${msgs.join("")}${form}`; // 待 joy 潤
+      <p class="sup-meta">${supportStatus(t.status)}　送出 ${supportWhen(t.created)}${t.human ? SUPPORT_HUMAN_TAG : ""}</p>
+      ${msgs.join("")}${supportAskHtml(t)}${form}`; // 待 joy 潤
   }
   function supportListHtml(mine) {
     const list = (mine && mine.tickets) || [];
@@ -247,13 +252,13 @@
   function supportDeskTicketHtml(t) {
     const acct = t.account || {};
     const msgs = [`<div class="sup-msg sup-me"><span class="sup-who">玩家 ${esc(acct.character)}・${supportWhen(t.created)}</span>${esc(t.body)}</div>${supportShotsHtml(t.id, t.files)}`]
-      .concat((t.replies || []).map((r) => `<div class="sup-msg ${r.staff ? (r.internal ? "sup-note" : "sup-cs") : "sup-me"}"><span class="sup-who">${r.staff ? (r.internal ? "請管理者處理" : "客服・回覆") : "玩家"}　${supportWhen(r.created)}</span>${esc(r.body)}</div>`)); // 待 joy 潤
+      .concat((t.replies || []).map((r) => `<div class="sup-msg ${r.staff ? (r.internal ? "sup-note" : "sup-cs") : "sup-me"}"><span class="sup-who">${r.system ? "系統" : r.auto ? "客服官・自動回覆" : r.staff ? (r.internal ? "請管理者處理" : "客服・回覆") : "玩家"}　${supportWhen(r.created)}</span>${esc(r.body)}</div>`)); // 待 joy 潤
     const id = Number(t.id);
     const form = t.status === "closed" ? `<p class="muted">${supportStatus("closed")}</p>` : `<div class="stack sup-answer">
         <textarea class="input" id="support-answer-body" maxlength="1000" placeholder="回覆（1,000 字內）"></textarea>
         <div class="row"><button class="btn small" data-act="support-answer" data-id="${id}" data-then="wait">回覆並等玩家</button><button class="btn small" data-act="support-answer" data-id="${id}" data-then="close">回覆並結單</button><button class="btn small ghost" data-act="support-answer" data-id="${id}" data-then="admin">請管理者處理</button></div>
         <p class="muted sup-fine">${SUPPORT_ADMIN_NOTE}</p></div>`; // 待 joy 潤
-    return `<section class="card"><div class="sup-title">#${Number(t.id)}・${supportCat(t)}<span class="muted">${supportWhen(t.created)}・${esc(t.version)}</span></div>${msgs.join("")}${form}</section>
+    return `<section class="card"><div class="sup-title">#${Number(t.id)}・${supportCat(t)}<span class="muted">${supportWhen(t.created)}・${esc(t.version)}</span>${t.human ? SUPPORT_HUMAN_TAG : ""}</div>${msgs.join("")}${form}</section>
       ${supportCardHtml(t.card || { login: acct.login, created: acct.created, character: acct.character })}`;
   }
   function supportDeskHtml() {
@@ -264,7 +269,7 @@
     const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤
     const rows = (q.tickets || []).map((t) => `<button class="sup-row-tk${S.supportDeskPick === t.id ? " sel" : ""}" data-act="support-desk-pick" data-id="${Number(t.id)}">
         <span class="sup-n">#${Number(t.id)}</span><span class="sup-s">${supportStatus(t.status)}<span class="sup-cat">${supportCat(t)}</span> ${esc(t.body)}</span>
-        <span class="sup-p">${esc(t.character)}${t.login ? `（帳號 ${esc(t.login)}）` : ""}${t.admin_flag ? "・請管理者處理" : ""}</span></button>`).join("") || `<p class="muted">沒有沒結的單。</p>`; // 待 joy 潤
+        <span class="sup-p">${esc(t.character)}${t.login ? `（帳號 ${esc(t.login)}）` : ""}${t.admin_flag ? "・請管理者處理" : ""}${t.human ? SUPPORT_HUMAN_TAG : ""}</span></button>`).join("") || `<p class="muted">沒有沒結的單。</p>`; // 待 joy 潤
     const list = `<div>${tiles}<section class="card"><div class="sup-title">客服單</div>${rows}</section>${supportLookupHtml()}</div>`; // 待 joy 潤
     const one = S.supportDeskTicket ? `<div>${supportDeskTicketHtml(S.supportDeskTicket)}</div>` : "";
     return `${head}<div class="sup-split${one ? " sup-has-one" : ""}">${list}${one}</div>`;
@@ -276,6 +281,7 @@
   }
   async function supportDeskReload() {
     S.supportDeskLoading = true;
+    try { await api("/api/support/sweep", {}); } catch (e) { /* 先自動結單（第 216 批）；失敗不擋清單 */ }
     try {
       S.supportDesk = await api("/api/support/queue");
       if (S.supportDeskPick != null) S.supportDeskTicket = await api(`/api/support/ticket/${Number(S.supportDeskPick)}`);
@@ -298,6 +304,14 @@
           S.supportDeskTicket = await api(`/api/support/ticket/${S.supportDeskPick}`);
           renderKeepingSheet();
           break;
+        case "support-human": { // 玩家按「找真人」（第 216 批）：回的是這一張單，換進我的單、重畫
+          const t = await api("/api/support/human", { id: Number(el.dataset.id) });
+          const list = (S.supportMine && S.supportMine.tickets) || [];
+          const i = list.findIndex((x) => Number(x.id) === Number(t.id));
+          if (i >= 0) list[i] = t;
+          renderKeepingSheet();
+          break;
+        }
         case "support-answer": { // 客服回一則：回覆並等玩家／回覆並結單／請管理者處理
           const box = document.getElementById("support-answer-body");
           const was = S.supportDeskTicket;
@@ -309,7 +323,7 @@
         }
     } // supportClick
   } // supportClick
-  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-answer"]);
+  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-answer", "support-human"]);
 
   async function supportForm(form, data) {
       if (form.id === "support-new-form") {

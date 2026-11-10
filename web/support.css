@@ -70,6 +70,11 @@
 .sup-add { margin: 0 0 10px; }
 .sup-up { width: auto; min-height: 44px; padding: 0 18px; }
 .sup-file-msg { margin: 0 0 8px; }
+/* 客服官（客服自動受理第 216 批；A 版）：「找真人」在對話最下面、回覆表單上方；「已請真人處理」的膠囊籤 */
+.sup-ask-row { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.sup-ask { width: auto; min-height: 44px; padding: 0 18px; }
+.sup-human { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 400; vertical-align: middle;
+  color: var(--gold); border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
 /* 登入頁的客服信箱那一行（第 214 批）：改版資訊前面、小字置中；信箱整段可選取 */
 .sup-gate { margin: 16px 2px 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); text-align: center; }
 .sup-mail { user-select: all; -webkit-user-select: all; color: var(--ink); font-weight: 600; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }

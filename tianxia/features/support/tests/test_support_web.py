@@ -18,7 +18,7 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES = '"bookHtml", "peerHtml"]'
-SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate", "supportChange"]')
+SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate", "supportChange", "supportDeskReload"]')
 assert SUPPORT_DRIVER != DRIVER
 
 XSS = ('<img src=x onerror="globalThis.__pwned=1">', "<script>globalThis.__pwned=1</script>", '"><svg onload=alert(1)>')
@@ -441,6 +441,75 @@ def test_ticket_shows_shots_and_closed_has_no_add_form(main):
                  S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [two]}, "supportTicket": 7},
                  replies={"/api/support/file": {"id": 7, "seq": 3, "kind": "jpg", "bytes": 100, "files": _files(3)}}, m=m)
     assert out == {"sent": [["/api/support/file?id=7", "POST", "image/jpeg", "c.jpg"]], "files": 3}
+
+
+# ── 客服官（客服自動受理第 216 批；畫面② A 版：「找真人」在對話最下面、回覆表單上方）──
+
+def _auto(**over):
+    r = {"staff": True, "body": "先試試重新登入", "created": 1762585200, "auto": True}
+    r.update(over)
+    return r
+
+
+def _page(m, t):
+    return run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [t]}, "supportTicket": 7})
+
+
+def test_auto_reply_label_and_the_ask_a_human_button(main):
+    m = {**main, "support_unread": 0}
+    page = _page(m, _ticket(replies=[_auto(), {"staff": False, "body": "不行", "created": 1762585300, "auto": False}], human=False))
+    assert "客服（自動回覆）・回覆" in page and 'data-act="support-human"' in page and 'data-id="7"' in page and "找真人" in page
+    assert page.index('data-act="support-human"') < page.index('id="support-reply-form"')  # A 版：表單上方
+    human = _page(m, _ticket(replies=[_auto()], human=True))
+    assert "已請真人處理" in human and 'data-act="support-human"' not in human
+    person = _page(m, _ticket(replies=[_auto(auto=False)], human=False))
+    assert "客服・回覆" in person and "自動回覆" not in person and 'data-act="support-human"' not in person  # 沒有自動回覆：不畫
+    closed = _page(m, _ticket(status="closed", replies=[_auto()], human=False))
+    assert 'data-act="support-human"' not in closed  # 結了：不畫
+    old = _page(m, _ticket())  # 第 215 批的回應（沒有 auto、human）：跟以前一樣
+    assert "客服・回覆" in old and "support-human" not in old and "已請真人處理" not in old
+
+
+def test_ask_a_human_hits_the_route_and_redraws(main):
+    m = {**main, "support_unread": 0}
+    t = _ticket(replies=[_auto()], human=False)
+    out = run(m, """return (async () => {
+        await H.supportClick("support-human", { dataset: { id: "7" } });
+        return { calls: T.calls, human: H.S.supportMine.tickets[0].human, html: H.sheetHtml() };
+      })();""", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [t]}, "supportTicket": 7},
+        responses={"/api/support/human": {**t, "human": True, "status": "open"}})
+    assert out["calls"] == [["/api/support/human", {"id": 7}]]
+    assert out["human"] is True and "已請真人處理" in out["html"] and 'data-act="support-human"' not in out["html"]
+
+
+def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, "return (async () => { await H.supportDeskReload(); return T.calls; })();", S={"adminPage": True},
+              responses={"/api/support/sweep": {"closed": []}, "/api/support/queue": q})
+    assert out[:2] == [["/api/support/sweep", {}], ["/api/support/queue", None]]
+    failed = run(m, """return (async () => {
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => url === "/api/support/sweep" ? Promise.reject(new Error("down")) : real(url, opts);
+        await H.supportDeskReload();
+        return { calls: T.calls.map((c) => c[0]), tickets: H.S.supportDesk.tickets.length };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q})
+    assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
+
+
+def test_desk_labels_system_auto_and_human(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    state = _desk_state(_card())
+    state["supportDeskTicket"].update(human=True, last_by="system", replies=[
+        {"staff": True, "internal": False, "body": "先重登", "created": 1762585200, "auto": True, "system": False},
+        {"staff": True, "internal": False, "body": "真人", "created": 1762585300, "auto": False, "system": False},
+        {"staff": True, "internal": False, "body": "3 天沒再回，單自動結了。", "created": 1762585400, "auto": True, "system": True}])
+    state["supportDesk"]["tickets"][0].update(human=True, last_by="system")
+    desk = run(m, "return H.supportDeskHtml();", S=state)
+    assert "客服官・自動回覆" in desk and "客服・回覆" in desk and ">系統　" in desk
+    assert desk.count("已請真人處理") == 2  # 單的標題旁、清單那一列
+    plain = run(m, "return H.supportDeskHtml();", S=_desk_state(_card()))
+    assert "已請真人處理" not in plain and "客服官" not in plain and "系統" not in plain
 
 
 def test_desk_ticket_shows_shots(main):
