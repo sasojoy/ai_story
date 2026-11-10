@@ -264,6 +264,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `auto_checkin`、`checkin_view` 問）
 - 共用的字與小函式（從這個模組 import，簽到包 re-export）：`PILL_FOUND`（找素材、練功掉回體丹那一句）、`checkin_on(content, world)`（簽到開著沒；
   探索包的 `explore_actions.pill_find` 掉回體丹也問（第二輪第 99 批搬的），回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
+# intro（開局前導畫本，Joy 2026-11-10；主人：開局前導包）
+- `ctx._opening_pending()`（主人新手引導：城門口三選一還沒選）：`intro.rules.pending` 問，還停在城門口、沒看過才自動播畫本
 # figure_acts（全部拆包第 31 批「大勢人物」；主人：大勢人物的行動包。計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.3）
 - `ctx._snubbed_character(companion_id)`（這位對話人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。總表附錄甲把挑戰本人 13 個
   〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物；本體在 `features/figure_acts/challenge.py`，Game 留一行委派回答別的包。原本列在三、過渡 socialize 那一段）

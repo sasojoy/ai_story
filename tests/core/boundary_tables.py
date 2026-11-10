@@ -309,6 +309,7 @@ CROSS_PACKAGE_CALLS = {
     ("explore", "story"): {"_story_begin"},
     ("faction", "battle"): {"_ally_follows_battle", "_battle_now"},
     ("faction", "guide"): {"_nearest_to", "_note_action", "_opening_pending"},
+    ("intro", "guide"): {"_opening_pending"},  # 開局前導畫本（Joy 2026-11-10）：還停在城門口才自動播
     ("figure_acts", "gear"): {"_signature_arms"},
     ("figure_acts", "military"): {"_order_credit"},
     ("guide", "battle"): {"_at_battle", "_battle_status", "_watching_battle"},
