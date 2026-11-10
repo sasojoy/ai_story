@@ -118,16 +118,14 @@
   }
 
   // 爐裡放的東西 → 送給伺服器的 body：只有意境（武學不再拿來合，Joy 2026-10-21）
-  // 意境合成改版開著時多帶傾注（S.forgePour）與立意（S.forgeIntent，第一次合這一對才問）；關著時兩個都不會有
+  // 意境合成改版開著時多帶傾注（S.forgePour）；關著時不會有
   function forgeBody() {
     const out = { insights: S.forgeSel.filter((p) => p.type === "ins").map((p) => p.id) };
     if (S.forgePour) out.pour = true;
-    const intent = String(S.forgeIntent || "").trim();
-    if (intent) out.intent = intent;
     return out;
   }
-  // 爐裡換了東西：傾注與立意歸零（下一對自己決定）
-  function heReset() { S.forgePour = false; S.forgeIntent = ""; }
+  // 爐裡換了東西：傾注歸零（下一對自己決定）
+  function heReset() { S.forgePour = false; }
   // 兩個意境才放得滿（不同的合併、同一種的兩份揣摩）
   function forgeReady() {
     return forgeBody().insights.length === 2;
@@ -333,7 +331,7 @@
     </div>`;
   }
   // 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」）：預覽卡多一塊——火候（差一點寫「差一點」）、主料定的一般功效、
-  // 真意（熟 3 次前「未看破」）、第一次合問一句立意、傾注、成神四條（墨點＋缺什麼）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
+  // 型（看輔料，Joy 2026-11-10「輔料定型」）、真意（熟 3 次前「未看破」）、傾注、成神四條（墨點＋缺什麼）。資料全是伺服器的 v.he（fusion.v2_preview），網頁一個字不算。
   // 改版沒開的季 v.he 不存在，這裡回空字串。字待 joy 潤
   function heHtml(h) {
     if (!h) return "";
@@ -342,12 +340,10 @@
     const grand = h.grand ? `<span class="he-grand${h.grand === "未看破" ? " unseen" : ""}">${esc(h.grand)}</span>` : "";
     const rows = [
       `<div class="he-row">${fire}<span class="he-sub">${esc(near)}</span></div>`,
-      h.general || grand ? `<div class="he-row">${h.general ? `<span class="he-k">功效</span><span class="he-gen">${esc(h.general)}</span>` : ""}${grand ? `<span class="he-k">真意</span>${grand}` : ""}</div>` : "",
+      h.general || h.form ? `<div class="he-row">${h.general ? `<span class="he-k">主料</span><span class="he-gen">${esc(h.general)}</span>` : ""}${h.form ? `<span class="he-k">輔料</span><span class="he-gen">${h.aux ? `${esc(h.aux)}<small class="he-to">→</small>` : ""}${esc(h.form)}型</span>` : ""}</div>` : "", // 待 joy 潤
+      grand ? `<div class="he-row"><span class="he-k">真意</span>${grand}${h.form ? `<span class="he-sub">熟 ${h.uses | 0}</span>` : ""}</div>` : "", // 待 joy 潤
       h.grand_desc ? `<p class="he-desc">${esc(h.grand_desc)}</p>` : "",
-      h.form ? `<p class="he-desc">爐譜記著：${esc(h.form)}型・熟 ${h.uses | 0}</p>` : "", // 待 joy 潤
     ];
-    const intent = h.ask_intent ? `<label class="he-intent"><span>立意</span><input id="he-intent" class="input" maxlength="20" placeholder="一句話：攻、守、變、心由你定" value="${esc(S.forgeIntent || "")}" autocomplete="off"></label>
-      <p class="he-desc">第一次合這一對才問；定了型，之後照爐譜走。</p>` : ""; // 待 joy 潤
     const pour = h.can_pour ? `<button type="button" class="he-pour${S.forgePour ? " on" : ""}" data-act="he-pour" aria-pressed="${!!S.forgePour}">
       <i aria-hidden="true"></i><span><b>傾注</b><small>${S.forgePour ? "兩份都會用掉，承襲兩邊的層數" : "兩份都用掉，換承襲層數；成神少不了它"}</small></span></button>` : ""; // 待 joy 潤
     const conds = h.conds || [];
@@ -356,7 +352,7 @@
         <span>${h.god ? "四條都齊：這一爐合璧成神" : "成神之路"}</span><span class="he-dots" aria-label="${done}／4">${conds.map((c) => `<i class="${c.ok ? "on" : ""}"></i>`).join("")}</span><em aria-hidden="true">▾</em></button>
       ${S.heRoad ? `<ul class="he-conds">${conds.map((c) => `<li class="${c.ok ? "ok" : ""}"><i aria-hidden="true"></i><span><b>${esc(c.label)}</b>${c.miss ? `<small>${esc(c.miss)}</small>` : ""}</span></li>`).join("")}
         ${h.hint ? `<li class="hint"><span><small>${esc(h.hint)}</small></span></li>` : ""}</ul>` : ""}` : ""; // 待 joy 潤
-    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${intent}${pour}${road}</div>`;
+    return `<div class="he${h.god ? " god" : ""}">${rows.join("")}${pour}${road}</div>`;
   }
 
   // 化入（意境合成改版）：同一路、不帶真意、沒裝在槽上的弱意境化成意蘊（凡 1、佳 2、珍 3），攢滿 per_layer 點本體加一重。
@@ -837,7 +833,7 @@
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
-        if (r.made) { S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : []; S.forgePour = false; S.forgeIntent = ""; } // 傾注、立意跟著這一爐歸零
+        if (r.made) { S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : []; S.forgePour = false; } // 傾注跟著這一爐歸零
         trimForgeSel();
         S.forgeLine = "";
         S.forgePreview = null;
@@ -989,8 +985,6 @@
     } // craftClick
   } // craftClick
   registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "he-pour", "he-road", "inf-open", "inf-body", "inf-pick", "inf-go"]);
-  // 立意那一格：打字只記下來（S.forgeIntent），不重畫——游標留著；輪詢重畫時從 S.forgeIntent 畫回去
-  document.addEventListener("input", (ev) => { if (ev.target && ev.target.id === "he-intent") S.forgeIntent = ev.target.value; });
   async function craftChange(ev) {
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();

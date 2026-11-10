@@ -238,7 +238,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .made-card .mc-grand { font-weight: 600; color: var(--gold); white-space: nowrap; }
 
 /* 意境合成改版（設計稿 G4m44hK3…，Joy 2026-11-10「好」；照介面設計規範：色票、楷書名字、44px、說明收起來）：
-   預覽卡裡的火候、功效與真意、立意、傾注、成神之路（墨點）；煉製頁的化入。改版沒開的季這些 class 一個都不會出現 */
+   預覽卡裡的火候、功效、型與真意、傾注、成神之路（墨點）；煉製頁的化入。改版沒開的季這些 class 一個都不會出現 */
 .made-card .he { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 8px; }
 .he-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
 .he-heat { font: 400 13px var(--sans); color: var(--ink-2); }
@@ -252,9 +252,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .he-grand { padding: 0 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); transform: rotate(-3deg); display: inline-block; line-height: 1.5; }
 .he-grand.unseen { border-style: dashed; border-color: var(--line); color: var(--ink-2); transform: none; font-weight: 400; }
 .he-desc { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
-.he-intent { display: flex; align-items: center; gap: 8px; }
-.he-intent > span { flex: none; font: 700 15px var(--kai); color: var(--ink); }
-.he-intent .input { flex: 1; min-width: 0; min-height: 44px; font-size: 16px; } /* 16px：iOS 一點不放大整頁 */
+.he-to { margin: 0 4px; font: 400 12px var(--sans); color: var(--ink-2); }
 .he-pour { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--card-2); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
 .he-pour > i { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink-2); }

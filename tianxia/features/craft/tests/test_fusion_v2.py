@@ -1,5 +1,5 @@
 """意境合成改版（Config.craft；設計稿 https://claude.ai/artifact/G4m44hK3At7x2bmqoAbceu ，Joy 2026-11-10「好」）的規則：
-主料定一般功效、立意定型、火候帶真意、兩個小驚喜、傾注、合璧成神四條、熟、化入、開季蓋章。規則在 tianxia/fusion.py「意境合成改版」那一段。"""
+主料定一般功效、輔料定型、火候帶真意、兩個小驚喜、傾注、合璧成神四條、熟、化入、開季蓋章。規則在 tianxia/fusion.py「意境合成改版」那一段。"""
 import pytest
 
 from conftest import real_content
@@ -64,26 +64,46 @@ def test_the_left_slot_is_the_main_ingredient_and_fixes_the_general(rc, me, worl
     assert list(me.player.insight_fx[b.id].general) == ["zhaoyang"]  # 主快 → 朝陽
 
 
-def test_the_intent_picks_the_form_once_and_the_recipe_keeps_it(rc, me, world):
+def test_the_right_slot_is_the_aux_and_fixes_the_form(rc, me, world):
+    """輔料定型（Joy 2026-11-10 決策卡）：右格那份最深的一般功效對到攻守變心；主輔對調換一型，同一配方換了輔料就換型。"""
     no_luck(rc)
     give(me, "huo", "剛", 3)
     give(me, "feng", "快", 3)
-    first, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), intent="借風勢燒盡一切")
+    first, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))
     key = fusion.merge_key("huo", "feng")
-    assert me.player.fusion_book[key].form == "攻" and me.player.fusion_book[key].uses == 1
     fx = me.player.insight_fx[first.id]
-    assert fx.grand == "he_yang_gong"  # 火候 3＋3＝6：帶真意，陽 × 攻＝焚城
-    assert any("焚城" in m for m in msgs)
-    again, _ = fusion.merge(me, rc, world, None, "huo", "feng", intent="守住不退")
-    assert me.player.insight_fx[again.id].grand == "he_yang_gong"  # 型記在爐譜上，之後照用
-    assert me.player.fusion_book[key].uses == 2
+    assert fx.grand == "he_yang_bian"  # 火候 3＋3＝6 帶真意；輔料是先手（快）→ 陽 × 變
+    assert me.player.fusion_book[key].form == "變" and me.player.fusion_book[key].uses == 1
+    give(me, "huo", "剛", 3)
+    give(me, "feng", "快", 3)
+    swapped, _ = fusion.merge(me, rc, world, None, "feng", "huo")
+    assert me.player.insight_fx[swapped.id].grand == "he_yang_gong"  # 輔料換成破甲（剛）→ 攻
+    give(me, "huo", "剛", 3)
+    me.player.insight_fx["feng"] = InsightFx(quality="中品", general={"快": 1, "lueying": 3})
+    deep, _ = fusion.merge(me, rc, world, None, "huo", "feng")
+    assert me.player.insight_fx[deep.id].grand == "he_yang_shou"  # 輔料最深的是掠影 → 守
+
+
+def test_every_pair_path_reaches_all_four_forms_by_swapping(rc):
+    for path, (x, y) in fusion.PAIR_ORDER.items():
+        table = fusion.FORM_BY_AUX[path]
+        assert sorted(table.values()) == sorted(fusion.FORMS)
+        ids = {"剛": "chenjin", "快": "lueying", "柔": "huilan", "慢": "shouzhuo"}
+        assert set(table) == {x, ids[x], y, ids[y]}
+
+
+def test_the_preview_shows_the_form_from_the_aux(rc, me, world):
+    give(me, "huo", "剛", 3)
+    give(me, "feng", "快", 3)
+    look = fusion.v2_preview(me, rc, world, "huo", "feng")
+    assert look["form"] == "變" and look["aux"] and look["grand"] == fusion.UNSEEN and "ask_intent" not in look
 
 
 def test_without_the_four_conditions_a_true_meaning_stops_short_of_god(rc, me, world):
     no_luck(rc)
     give(me, "huo", "剛", 3)
     give(me, "feng", "快", 3)
-    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), intent="燒", pour=True)
+    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), pour=True)
     fx = me.player.insight_fx[made.id]
     assert fx.grand is not None and max(fx.general.values()) == 2  # 傾注承襲三重，但沒合璧：帶真意最多二重
     assert insight_fx.look(fx) == "珍"
@@ -128,9 +148,9 @@ def test_four_conditions_make_god_in_one_furnace(rc, me, world, monkeypatch):
     monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
     conds = fusion.god_conditions(me, rc, world, "huo", "feng", "陽", True)
     assert all(conds.values())
-    made, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), intent="守", pour=True)
+    made, msgs = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), pour=True)
     fx = me.player.insight_fx[made.id]
-    assert fx.general == {"陽": 3} and fx.grand == "he_yang_shou" and insight_fx.look(fx) == "神"
+    assert fx.general == {"陽": 3} and fx.grand == "he_yang_bian" and insight_fx.look(fx) == "神"
     assert any("合璧成神" in m for m in msgs)
 
 
@@ -140,7 +160,7 @@ def test_missing_one_condition_is_an_ordinary_merge(rc, me, world, monkeypatch):
     give(me, "feng", "快", 3)
     me.player.location = "changshe"
     monkeypatch.setattr(fusion, "secret_met", lambda *a: True)
-    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""), intent="守")  # 沒傾注
+    made, _ = fusion.merge(me, rc, world, None, "huo", "feng", proposed=("焚風", ""))  # 沒傾注
     assert insight_fx.look(me.player.insight_fx[made.id]) == "珍"
 
 
@@ -241,13 +261,13 @@ def test_the_bot_pours_a_ready_pair_and_holds_it_until_the_place_is_right(rc, wo
     assert plan is None or set(plan.insight_ids) != {"huo", "feng"}  # 地方不對：這一對留著
     game.state.player.location = "changshe"
     plan = bots.pick_forge(game, _r.Random(0), merge_share=1.0)
-    assert plan is not None and set(plan.insight_ids) == {"huo", "feng"} and plan.pour and plan.intent in bots.V2_INTENTS.values()
+    assert plan is not None and set(plan.insight_ids) == {"huo", "feng"} and plan.pour
     from tianxia import bot_base
     from tianxia.bot_policy import apply_job
 
     slot = bot_base.NamingSlot(open=True)
-    bots._forge(game, plan, slot)  # 首創的一爐：開單交給假人程式取名，傾注與立意跟著單子走
-    assert slot.job.pour and slot.job.intent == plan.intent
+    bots._forge(game, plan, slot)  # 首創的一爐：開單交給假人程式取名，傾注跟著單子走
+    assert slot.job.pour
     assert any("合璧成神" in m for m in apply_job(game, slot.job, ("燼風", "火借風勢")))
     made = [i for i in game.state.player.insights if game.state.player.insight_fx[i].grand and insight_fx.look(game.state.player.insight_fx[i]) == "神"]
     assert made and "huo" not in game.state.player.insights

@@ -200,10 +200,9 @@ class ForgeJob:
 
 @dataclass(frozen=True)
 class PourJob(ForgeJob):
-    """意境合成改版：帶著傾注、立意的那一爐（改版沒開時不會開這種單，舊的 ForgeJob 一個欄位不多）。C 段照樣交給 Game.forge。"""
+    """意境合成改版：帶著傾注的那一爐（改版沒開時不會開這種單，舊的 ForgeJob 一個欄位不多）。C 段照樣交給 Game.forge。"""
 
     pour: bool = False
-    intent: str | None = None
 
 
 @dataclass(frozen=True)

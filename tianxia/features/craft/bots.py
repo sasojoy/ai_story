@@ -30,16 +30,11 @@ class ForgePlan(NamedTuple):
 
 
 class PourPlan(NamedTuple):
-    """意境合成改版開著時挑的一爐：另帶傾注與立意。另開一型、不在 ForgePlan 上加欄位：改版沒開時挑出來的照舊是 ForgePlan，
+    """意境合成改版開著時挑的一爐：另帶傾注。另開一型、不在 ForgePlan 上加欄位：改版沒開時挑出來的照舊是 ForgePlan，
     比對工具與紀錄看到的一個字不變。讀的人一律 getattr(plan, "pour", False)。"""
 
     insight_ids: tuple[str, ...]
     pour: bool = False
-    intent: str | None = None
-
-
-# 意境合成改版：第一次合一對時的立意，一型一句（照 fusion.FORM_WORDS 的關鍵字讀得出那一型）
-V2_INTENTS = {"攻": "一往無前，焚盡一切", "守": "守住不退", "變": "詭變如影", "心": "心定如山"}
 
 
 def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | PourPlan | None:
@@ -64,7 +59,7 @@ def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
     """意境合成改版的挑法（真人看得到的同一張預覽：fusion.v2_preview）：
     1. 手上兩份三重湊得成一對、四條都齊（在那一路最濃的地方、這一季的秘訣也對上）：傾注、合璧成神；
     2. 兩份三重湊得成一對但還差地方或秘訣：這一對留著不合（等走到地方、等時辰），其餘照舊隨機挑；
-    3. 第一次合的一對寫一句立意（型隨機）。"""
+    型照輔料（右格）定，挑法不管型。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
     deep = [i for i in p.insights if insight_fx.strength(state, i) >= insight_fx.MAX_LAYERS and not insight_fx.is_god(state, i)]
@@ -77,7 +72,7 @@ def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
             if not look or not look["can_pour"]:
                 continue
             if look["god"]:
-                return PourPlan((a, b), pour=True, intent=_intent(rng) if look["ask_intent"] else None)
+                return PourPlan((a, b), pour=True)
             held.update((a, b))
     loose = [i for i in p.insights if i not in held]
     if len(loose) < 2:
@@ -86,13 +81,8 @@ def _pick_v2(game: Game, rng: random.Random) -> PourPlan | None:
         a = rng.choice(loose)
         b = rng.choice([i for i in loose if i != a])
         if fusion.merge_problem(state, content, world, a, b) is None:
-            look = fusion.v2_preview(state, content, world, a, b)
-            return PourPlan((a, b), intent=_intent(rng) if look and look["ask_intent"] else None)
+            return PourPlan((a, b))
     return None
-
-
-def _intent(rng: random.Random) -> str:
-    return V2_INTENTS[rng.choice(fusion.FORMS)]
 
 
 def infuse_spare(game: Game) -> list[str]:
@@ -172,14 +162,12 @@ def _forge(game: Game, plan: ForgePlan | PourPlan, slot: bot_base.NamingSlot | N
     給 NO_NAME，鎖內一定不叫模型。"""
     insight_ids = list(plan.insight_ids)
     request = game.forge_request(None, insight_ids, named_outside=True)
-    pour, intent = getattr(plan, "pour", False), getattr(plan, "intent", None)
+    pour = getattr(plan, "pour", False)
     extra = {"pour": True} if pour else {}
-    if intent:
-        extra["intent"] = intent
     if request is None:
         return game.forge(None, insight_ids, proposed=bot_base.NO_NAME, **extra)
     if slot is not None and slot.open and slot.job is None:
-        slot.job = (bot_base.PourJob(plan.insight_ids, request, pour=pour, intent=intent) if pour or intent
+        slot.job = (bot_base.PourJob(plan.insight_ids, request, pour=True) if pour
                     else bot_base.ForgeJob(plan.insight_ids, request))
     elif slot is not None:
         slot.skipped += 1
