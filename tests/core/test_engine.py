@@ -1,12 +1,11 @@
 import random
 import re
 import time
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import FixedRandom, at, classic_rules, install_season_one, walk_to
+from conftest import FixedRandom, at, classic_rules, install_season_one, real_content, walk_to
 from tianxia import atlas
 from tianxia.features.battle import instance as battle_instance
 from tianxia import battlelog, calendar
@@ -14,7 +13,6 @@ from tianxia.features.companions import companion_agent
 from tianxia import encounter, fight_llm, library, rules, team, traits
 from tianxia.features.map import layers
 from tianxia.characters import open_characters
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import Condition, Effect
@@ -30,7 +28,6 @@ from engine_kit import (  # noqa: F401
     _south_cave, _spy_battle_status, _stand_by_one_figure, _strip_scores, _three_round_showdown, _to_showdown,
     _training_factions, _warlord_in_battle, _wear, _wugong_step_game, ids,
 )
-ROOT = Path(__file__).resolve().parents[2]
 
 
 # ── 新遊戲與選項 ─────────────────────────────────────────
@@ -74,7 +71,7 @@ def test_there_is_no_self_created_art_any_more(game):
 
 def test_real_content_starts_with_enough_xinde_for_the_first_level():
     """Review Focus 第 5 條：新角色照新手引導按「練成」，第一成一定練得起。"""
-    real = load_content(ROOT / "content")
+    real = real_content()
     first = [real.skills[s] for s in real.config.starter_skills]
     assert len(first) == 2
     assert real.config.start_stats["xinde"] >= 2 * real.config.practice_xinde_per_level  # 兩門各練一成
@@ -1811,7 +1808,7 @@ class _Recording(random.Random):
 def test_a_real_trip_still_draws_its_foe_from_the_rng():
     """正式內容沒有一個地點的遊歷池子裡有大場面的對手，所以每一處遊歷照舊用 Game.rng 從池子裡挑（亂數序列、整季模擬、
     好玩度量表的對手組成都不變）：潁川郊野打的就是 rng.choice 挑到的那一路。測的是舊遊歷（散人在出陣開著時沒有出陣鈕）。"""
-    real = classic_rules(load_content(ROOT / "content"))
+    real = classic_rules(real_content())
     real.config.auto_open_first_season = True
     real.config.train_event_chance = 0.0
     game = Game.new(real, "甲", rng=_Recording(0))
@@ -2918,7 +2915,7 @@ def test_the_stat_note_says_four_until_an_event_checks_lore():
     把 art_cards.STAT_CHECK_NOTE 改回「事件的檢定也看這五項。」、這條跟著改（PM 2026-10-05）。"""
     from tianxia import art_cards
 
-    real = load_content(ROOT / "content")
+    real = real_content()
     stats = {ch.check.stat for e in real.events.values() for ch in e.choices if ch.check is not None}
     stats |= {e.free_text.stat for e in real.events.values() if e.free_text is not None}
     assert stats and "lore" not in stats
@@ -3254,9 +3251,8 @@ def test_the_bottom_line_of_thick_is_marked_in_the_real_content():
     """「氣血見底」是引擎認的暗號（battlelog.LOW_HP_MARKS）：S1 的三句厚裡剛好一句有它——內容改掉那一句的話這條會失敗，
     不會悄悄讓見底的句子變成誰都能抽。"""
     from tianxia import battlelog
-    from tianxia.content import load_content
 
-    real = load_content(ROOT / "content")
+    real = real_content()
     marked = [line for line in real.trait_lines["厚"] if battlelog.LOW_HP_MARKS["厚"] in line]
     assert len(real.trait_lines["厚"]) == 3 and len(marked) == 1
 

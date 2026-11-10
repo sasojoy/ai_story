@@ -6,12 +6,11 @@ auto_open_first_season 開出來的季照當下的 Config 蓋章（world_state.s
 from __future__ import annotations
 
 import random
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from conftest import classic_rules
+from conftest import classic_rules, real_content
 from tianxia import atlas, calendar
 from tianxia.features.guide import enlist
 from tianxia import figures, front_lines
@@ -19,13 +18,11 @@ from tianxia.features.map import mapview
 from tianxia import orders, rules, team, timetable
 from tianxia.features.military import order_cards
 from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層那一半（strike_marks、STRIKE_MARK）；同檔有區域變數叫 layers
-from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Config
 from tianxia.state import Convoy, Order, PlayerState, WorldState
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 
 # fixture real、on（真實內容，開關關著／照週末設定打開）在 tests/conftest.py：test_enlist、test_enlist_web 也用同一份
@@ -588,7 +585,7 @@ def test_enlistment_after_joining_only_in_season_one(on):
 
     game = _game(on, at="changshe")
     game.set_hints_off(True)  # 這個測試看入伍段的框：長社站著大勢人物，真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）
-    off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
+    off = real_content()  # 同一份存檔，開關關著的內容
     assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步加初入江湖四步
     game.state.player.tutorial_step = BASE  # 序章與初入江湖都做完了
     game.choose("faction:guan")

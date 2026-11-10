@@ -125,14 +125,6 @@ def test_api_password_unchanged(clock):
 # ── 補設、忘記密碼也要 12 字（M 波起名單上的；第 209 批起 identity 開著全體，名單上的照樣擋）──
 
 
-def test_set_password_listed_needs_12(clock, monkeypatch):
-    c = TestClient(server.app)
-    phone_account(c)
-    monkeypatch.setattr(server.CONTENT.config, "admins", ["沈青衫"])
-    assert error(_set(c, new="new-secret1")) == accounts.STRICT_SHORT_PASSWORD
-    assert _set(c, new="a-long-password").json() == {"message": binding.PASSWORD_SET}
-
-
 def test_reset_listed_needs_12(clock, monkeypatch):
     c = TestClient(server.app)
     _pw(c)

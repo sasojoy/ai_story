@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.content import load_content
+from conftest import real_content
 
 pytestmark = pytest.mark.slow  # 跑整個腳本：合併前的整套才跑（pytest -m "slow or not slow"）
 
@@ -23,13 +23,15 @@ FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "end
 
 
 def _content(days: float = 0.25):
-    c = load_content(ROOT / "content", profile="week7")
+    c = real_content("week7")
     c.config.season_days = days
     return c
 
 
 def test_a_short_season_runs_to_the_end_with_every_field(tmp_path):
-    result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=8, tick=120)
+    """季長剛好等於 hours：最後一輪要落在 hours 那一刻（上限含頭含尾），不然停在差一輪就收季的地方、被誤標成卡住。
+    0.25 天＝6 現實小時。"""
+    result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=6, tick=120)
     assert FIELDS <= set(result)
     assert result["ended"] and not result["stuck"] and result["ending"]
     assert result["events"]["uprising"]["result"] == "fixed"
@@ -45,13 +47,6 @@ def test_reports_stuck_when_out_of_time(tmp_path):
     """RF1：給的時間不夠一季：停在上限、標成卡住，不無限跑。"""
     result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=0.5, tick=120)
     assert (result["ended"], result["stuck"]) == (False, True)
-
-
-def test_a_season_exactly_as_long_as_hours_still_ends(tmp_path):
-    """季長剛好等於 hours：最後一輪要落在 hours 那一刻（上限含頭含尾），不然停在差一輪就收季的地方、被誤標成卡住。
-    0.25 天＝6 現實小時。"""
-    result = sim.run_season(_content(), tmp_path / "sim.db", seed=1, targets=ONE_EACH, hours=6, tick=120)
-    assert (result["ended"], result["stuck"]) == (True, False)
 
 
 def test_acceptance_flags():

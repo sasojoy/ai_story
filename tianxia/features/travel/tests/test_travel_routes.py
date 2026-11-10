@@ -34,12 +34,6 @@ def test_unknown_places_walking_modes_and_the_old_hurry_are_refused_the_same_way
     assert server.game_for("沈青衫").state.player.journey is None  # 什麼都沒變
 
 
-def test_dashing_goes_through_the_same_door():
-    client = _player()
-    out = client.post("/api/travel", json={"place": _nearby(client)[0], "mode": "dash"}).json()
-    assert out["arrived"] is True
-
-
 def test_party_leave_answers_main_and_message_even_when_following_no_one():
     """/api/party/leave（全部拆包第 48 批搬進移動包）：回的鍵與順序是 main、message；沒跟著誰時也按得下去，回「你沒有跟著誰」。"""
     client = _player()

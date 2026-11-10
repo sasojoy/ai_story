@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from conftest import FIXTURE, copy_real_content, copy_test_content
+from conftest import FIXTURE, copy_real_content, copy_test_content, real_content
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
@@ -552,7 +552,7 @@ def test_a_battle_no_longer_needs_its_tags_in_action_tags(tmp_path):
 
 def test_each_battle_act_offers_each_side_the_three_moves():
     """戰鬥系統 3.4：每一幕、每一邊剛好強攻、固守、奇襲各一個固定選項（讀真實內容再改壞一個）。"""
-    real = load_content(ROOT / "content")
+    real = real_content()
     battle = real.battles["changshe_fire"]
     fixed = [o for o in battle.acts[0].options if not o.free_text and o.faction == "guan"]
     assert sorted(o.move for o in fixed) == sorted(MOVES)
@@ -581,7 +581,7 @@ def test_a_side_with_a_fourth_fixed_option_is_rejected(tmp_path):
 
 
 def test_a_fixed_battle_option_must_name_its_move():
-    real = load_content(ROOT / "content")
+    real = real_content()
     option = next(o for o in real.battles["guangzong"].acts[0].options if not o.free_text)
     option.move = None
     with pytest.raises(ContentError, match="move"):
@@ -1204,8 +1204,8 @@ def test_a_profile_that_does_not_exist_fails_to_load(tmp_path):
 
 
 def test_the_profile_line_says_what_the_profile_turns_on():
-    assert profile_line(load_content(CONTENT_DIR), None) == "設定：預設"
-    assert profile_line(load_content(CONTENT_DIR, profile="week7"), "week7") == (
+    assert profile_line(real_content(), None) == "設定：預設"
+    assert profile_line(real_content("week7"), "week7") == (
         "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）"
     )
 
@@ -1256,9 +1256,9 @@ def _schedule_switched_on(root: Path) -> list[str]:
 def test_world_tick_is_on_in_the_real_content():
     """伺服器排程在正式內容打開（減法季批 0）：不帶設定與每一份設定（weekend、season21、week7……）都每 10 秒推一次，
     世界時間、時刻表、決戰逾時、季末不再等有人連線。測試內容照 Config 的預設關著（伺服器的測試自己開）。"""
-    assert load_content(CONTENT_DIR).config.world_tick_seconds == SCHEDULE_SECONDS
+    assert real_content().config.world_tick_seconds == SCHEDULE_SECONDS
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.world_tick_seconds == SCHEDULE_SECONDS, path.stem
+        assert real_content(path.stem).config.world_tick_seconds == SCHEDULE_SECONDS, path.stem
     assert load_content(FIXTURE).config.world_tick_seconds == 0
 
 
@@ -1293,10 +1293,10 @@ ONLINE_PROFILES = ("week7", "season21")  # 線上會開的那兩份設定：推�
 def test_llm_queue_is_off_by_default():
     """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與 weekend 不打開；
     線上的 week7、season21 開一格（主機的 Ollama 一次服務一件），排隊上限 45 秒（人物對話平均 19 秒，20 秒會擋掉排第二的人）。"""
-    config = load_content(CONTENT_DIR).config
+    config = real_content().config
     assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        cfg = load_content(CONTENT_DIR, profile=path.stem).config
+        cfg = real_content(path.stem).config
         want = (1, 45) if path.stem in ONLINE_PROFILES else (0, 20)
         assert (cfg.llm_queue_slots, cfg.llm_queue_wait_seconds) == want, path.stem
 
@@ -1320,7 +1320,7 @@ def test_the_queue_wait_has_an_upper_bound():
 def test_every_model_call_outside_the_lock_has_a_total_budget():
     """鎖外四種模型呼叫（開爐取名、大場面判讀、對話生成、隨口應對評分）各有一份總預算，預設都是 60 秒：試玩走 trycloudflare，
     一個請求約 100 秒就被切斷，60 秒留下 A、C 兩段等行動鎖與排模型佇列的餘裕。"""
-    config = load_content(CONTENT_DIR).config
+    config = real_content().config
     assert (
         config.naming_budget_seconds, config.big_fight_budget_seconds,
         config.dialogue_budget_seconds, config.free_text_budget_seconds,
@@ -1337,10 +1337,10 @@ def test_every_model_call_outside_the_lock_has_a_total_budget():
 def test_push_is_off_by_default():
     """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與 weekend 不打開；
     線上的 week7、season21 打開（在線分頁有變化才刷新、平常 60 秒問一次）。"""
-    config = load_content(CONTENT_DIR).config
+    config = real_content().config
     assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
+        assert real_content(path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
 
 
 def test_push_timings_must_make_sense():
@@ -1657,7 +1657,7 @@ def test_starter_skills_are_one_inner_and_one_outer_art(content):
 
 
 def test_real_content_has_seventeen_basic_arts_and_every_location_an_insight():
-    real = load_content(ROOT / "content")
+    real = real_content()
     basics = [s for s in real.skills.values() if s.quality == "下品" and s.id not in ("manniu_quan", "zhuifeng")]  # 蠻牛拳是序章專用的雜學；追風步是事件教的（2026-10-14 改下品）
     assert len(basics) == 26  # 名聲 5.1 加了四門正邪武學（守義劍、養浩訣、剪徑刀、嘯林功）；門派包加了新五門的第一式（伏魔棍、步虛掌、嵩陽劍、開山刀、穿楊弓）
     assert all(loc.insights for loc in real.locations.values())
@@ -1808,7 +1808,7 @@ def test_a_missing_or_malformed_combat_lines_is_a_content_error_that_names_the_f
 def test_the_real_combat_lines_are_the_designers_table():
     """正式的句型照設計 session 的內容表（打發話與回合句型 §二，PM 2026-10-05 定）：我方每種屬性五句、對手每種屬性三句、
     沒學武學與沒有屬性的對手各三句；測試夾具留著計畫起手那一組。"""
-    lines = load_content(ROOT / "content").combat_lines
+    lines = real_content().combat_lines
     attributes = {"陰", "陽", "剛", "柔", "快", "慢", "虛", "實"}
     assert set(lines.ours) == attributes and all(len(v) == 5 for v in lines.ours.values())
     assert set(lines.theirs) == attributes and all(len(v) == 3 for v in lines.theirs.values())
@@ -2265,7 +2265,7 @@ def test_a_malformed_placeholder_is_a_content_error_naming_the_file_and_the_trai
 
 def test_every_line_of_the_real_trait_lines_formats_with_the_three_placeholders():
     """正式的 45 句真的能 format：載入時的檢查跟之後的用法對得上。"""
-    content = load_content(ROOT / "content")
+    content = real_content()
     for name, lines in content.trait_lines.items():
         for line in lines:
             line.format(who="沈浪", art="粗淺拳腳", foe="黃巾散兵")
@@ -2336,7 +2336,7 @@ def test_content_without_traits_still_loads(tmp_path):
 def test_the_real_traits_are_the_designed_table():
     """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設），意境效果池每一路多一個一般功效（寫 id）；
     演出句每個功效三句。"""
-    content = load_content(ROOT / "content")
+    content = real_content()
     book = content.traits
     assert [t.name for t in book.general] == [
         "先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚", "掠影", "沉勁", "回瀾", "守拙", "朝陽", "陰勁", "料敵", "鐵壁",

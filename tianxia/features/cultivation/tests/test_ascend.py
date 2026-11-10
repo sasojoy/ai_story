@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia.features.cultivation import ascend
 from tianxia.features.craft import create
 from tianxia.features.cultivation import cultivation
@@ -122,7 +123,7 @@ def test_the_row_shows_the_fifth_ring_and_the_ripe_marks(content):
 
 def test_the_after_blow_follows_the_slots():
     """後勁要內容寫了絕招（測試內容沒寫）：用正式內容。"""
-    content = load_content(ROOT / "content")
+    content = real_content()
     content.config.auto_open_first_season = True
     game = _made(content, "後勁人")
     s, w = game.state, game.world

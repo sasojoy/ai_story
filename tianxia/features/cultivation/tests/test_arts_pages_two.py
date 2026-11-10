@@ -8,22 +8,19 @@ from __future__ import annotations
 import json
 import random
 import re
-from pathlib import Path
 
 import pytest
 
 import webharness
+from conftest import real_content
 from tianxia import fusion, journal, library, art_cards
 from tianxia.features.craft import forge_view
 from tianxia.features.cultivation import art_view
-from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
 
 pytestmark = pytest.mark.whole_content
 
-ROOT = Path(__file__).parents[4]
-CONTENT_DIR = ROOT / "content"
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
@@ -59,7 +56,7 @@ def run(script: str, *, S=None, consts=(), fns=(), stubs=""):
 
 @pytest.fixture(scope="module")
 def real():
-    c = load_content(CONTENT_DIR)
+    c = real_content()
     c.config.auto_open_first_season = True
     return c
 

@@ -12,6 +12,7 @@ import pytest
 from test_battle_gauge import node, showdown  # noqa: F401（showdown 是 fixture）
 from test_prologue_web import run
 
+from conftest import real_content
 import server
 from tianxia.core.battle_base import Commander
 from tianxia.engine import Game
@@ -170,9 +171,7 @@ def test_the_week_strip_drops_its_two_army_numbers_during_a_battle(showdown):
 
 def test_every_free_text_move_is_called_the_same(on):
     """同一個輸入框只用一個名字（PM 2026-11-06：「開打」那張寫放手一搏、「回合中」那張寫孤注一擲）。"""
-    from tianxia.content import load_content
-
-    for content in (on, load_content(server.ROOT / "content")):
+    for content in (on, real_content()):
         texts = {o.text for b in content.battles.values() for act in b.acts for o in act.options if o.free_text}
         assert texts and all(t.startswith("放手一搏") for t in texts), texts
 

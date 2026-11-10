@@ -6,23 +6,21 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
 
 import pytest
 
+from conftest import real_content
 from tianxia import insight_fx, library, prologue
 from tianxia.features.sense import sensing
 from tianxia.features.cultivation import art_view
 from tianxia import team
-from tianxia.content import load_content
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[2]
 
 
 @pytest.fixture(scope="module")
 def real():
-    c = load_content(ROOT / "content")
+    c = real_content()
     c.config.auto_open_first_season = True
     return c
 

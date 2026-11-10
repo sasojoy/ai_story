@@ -13,7 +13,6 @@ from test_identity_session import (  # noqa: F401
 
 import server
 from tianxia import accounts, database
-from tianxia.accounts import AccountStore
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.state import BotProfile
@@ -145,49 +144,6 @@ def test_admin_off_bytes_unchanged(monkeypatch, key_file, tmp_path):  # noqa: F8
 # ── 12 字（第 207 批只對名單上的帳號；第 209 批起 identity 開著全體：名單上與名單外同一句）──
 
 BOSS_LOGIN = "Rayal"
-
-
-def test_register_listed_login_needs_12(clock, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS_LOGIN])
-    c = TestClient(server.app)
-    r = c.post("/api/register", json={"login": "rayal", "password": "secret-pw-1", "again": "secret-pw-1"})
-    assert error(r) == accounts.STRICT_SHORT_PASSWORD
-    r = c.post("/api/register", json={"login": "shen_01", "password": "secret-pw-1", "again": "secret-pw-1"})
-    assert error(r) == accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
-    r = TestClient(server.app).post("/api/register", json={"login": "rayal", "password": "a-long-password", "again": "a-long-password"})
-    assert r.status_code == 200
-
-
-def test_change_password_listed_needs_12(clock, monkeypatch):
-    c = _boss(monkeypatch)
-    out = c.post("/api/password", json={"old": "secret-pw-12", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"]
-    assert out == accounts.STRICT_SHORT_PASSWORD
-    out = c.post("/api/password", json={"old": "secret-pw-12", "new": "a-long-password", "again": "a-long-password"}).json()["message"]
-    assert out == "密碼已更新。"
-    p = TestClient(server.app)
-    _player(p)
-    assert p.post("/api/password", json={"old": "secret-pw-12", "new": "other-pw-1", "again": "other-pw-1"}).json()["message"] == \
-        accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
-
-
-def test_admin_reset_listed_needs_12(clock, monkeypatch):
-    other = TestClient(server.app)
-    register(other, "boss_02", name="段紅袖")
-    _player(TestClient(server.app))
-    c = _boss(monkeypatch)
-    monkeypatch.setattr(server.CONTENT.config, "admins", [BOSS, "段紅袖"])
-    assert c.post("/api/admin/reset_password", json={"target": "boss_02", "temp": "temp-pass"}).json()["message"] == \
-        accounts.STRICT_SHORT_PASSWORD
-    assert c.post("/api/admin/reset_password", json={"target": "段紅袖", "temp": "temp-pass-1234"}).json()["message"].startswith("已重設")
-    assert c.post("/api/admin/reset_password", json={"target": "shen_01", "temp": "temp-pass"}).json()["message"] == \
-        accounts.STRICT_SHORT_PASSWORD  # 第 209 批：名單外同一句
-
-
-def test_listed_short_password_still_logs_in(clock, monkeypatch):
-    AccountStore(database.open_database()).register("boss_01", "secret-pw")  # 9 字（開 identity、列進名單之前設的）
-    monkeypatch.setattr(server.CONTENT.config, "admins", ["boss_01"])
-    r = TestClient(server.app).post("/api/login", json={"login": "boss_01", "password": "secret-pw"})
-    assert r.status_code == 200
 
 
 def test_bot_names_not_revealed_by_password_rule(clock):

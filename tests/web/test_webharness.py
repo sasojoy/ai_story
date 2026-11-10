@@ -123,3 +123,19 @@ def test_a_nonzero_exit_code_fails_the_request_and_stays_with_it(mode):
     assert (done.returncode, done.stdout) == (3, "set")
     after = webharness.node("process.stdout.write(String(process.exitCode));")
     assert (after.returncode, after.stdout) == (0, "undefined")
+
+
+def test_a_long_timer_does_not_hold_the_request_but_a_short_one_does(monkeypatch):
+    """常駐的 node 等短計時器跑完，不等延遲 ≥1 秒的 setTimeout（app.js 的提示泡泡 3200 ms 這種）；長的在請求結束時清掉，不跑、也不留給下一個請求（第 220 批）。"""
+    monkeypatch.delenv(webharness.MODE_ENV, raising=False)  # 只測常駐：process 模式是真 node，照等到 3 秒是預期
+    webharness.node("process.stdout.write('warm');")  # 先把常駐的 node 開起來，下面量的只有這一個請求
+    started = time.monotonic()
+    done = webharness.node(
+        "setTimeout(() => process.stdout.write('short'), 50);"
+        "setTimeout(() => process.stdout.write('long'), 3000);"
+    )
+    elapsed = time.monotonic() - started
+    assert (done.returncode, done.stdout, done.stderr) == (0, "short", "")
+    assert elapsed < 3, elapsed
+    after = webharness.node("process.stdout.write('next');")
+    assert (after.returncode, after.stdout, after.stderr) == (0, "next", "")

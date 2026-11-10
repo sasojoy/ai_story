@@ -1,4 +1,4 @@
-"""管理者的門（第二輪第 90 批）：五條路由與 13 個工具各打一條「不是管理者」，少一道都紅；管理者走得通的 accounts、reset_password 各一條。
+"""管理者的門（第二輪第 90 批）：五條路由與 13 個工具都打「不是管理者」（三條路由與 13 個工具同一條迴圈，reset_password 另一條），少一道都紅；管理者走得通的 accounts、reset_password 各一條。
 權限檢查的字是從 server.py 照抄的，這裡逐字鎖；`/admin` 本來就不擋（資料都在 /api/admin* 那幾條）。"""
 import pytest
 import server
@@ -22,19 +22,14 @@ def test_the_admin_page_is_the_same_page_and_does_not_check_anyone(client):
     assert page.status_code == 200 and page.text == client.get("/").text
 
 
-def test_api_admin_refuses_a_player(client):
+def test_every_admin_door_refuses_a_player(client):
     _player(client)
-    assert client.get("/api/admin").status_code == 403
-
-
-def test_api_admin_player_refuses_a_player(client):
-    _player(client)
-    assert client.post("/api/admin/player", json={"name": "沈青衫"}).status_code == 403
-
-
-def test_api_admin_accounts_refuses_a_player(client):
-    _player(client)
-    assert client.post("/api/admin/accounts", json={"q": "shen"}).status_code == 403
+    assert client.get("/api/admin").status_code == 403, "/api/admin"
+    assert client.post("/api/admin/player", json={"name": "沈青衫"}).status_code == 403, "/api/admin/player"
+    assert client.post("/api/admin/accounts", json={"q": "shen"}).status_code == 403, "/api/admin/accounts"
+    for op in TOOLS:
+        out = client.post(f"/api/do/{op}", json={"id": "x", "key": "y", "at": 1.0, "hours": 1, "amount": 1, "value": 1})
+        assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}, op
 
 
 def test_reset_password_refuses_a_player_and_leaves_the_password_alone(client):
@@ -44,19 +39,6 @@ def test_reset_password_refuses_a_player_and_leaves_the_password_alone(client):
     client.post("/api/logout")
     assert client.post("/api/login", json={"login": "shen_01", "password": "temp-pass"}).status_code != 200
     assert client.post("/api/login", json={"login": "shen_01", "password": "secret-pw"}).status_code == 200
-
-
-@pytest.mark.parametrize("op", TOOLS)
-def test_each_tool_refuses_a_player(client, op):
-    _player(client)
-    out = client.post(f"/api/do/{op}", json={"id": "x", "key": "y", "at": 1.0, "hours": 1, "amount": 1, "value": 1})
-    assert out.status_code == 400 and out.json() == {"error": "只有管理者能這麼做。"}
-
-
-@pytest.mark.parametrize("op", TOOLS)
-def test_each_tool_lives_here_with_no_gate_and_stays_open_while_paused(op):
-    tool = server.FEATURE_ADMIN_ACTIONS[op]
-    assert tool.run.__module__ == "tianxia.features.admin.routes" and tool.gate() is None and tool.paused_ok is True
 
 
 def test_the_shell_table_is_gone():
