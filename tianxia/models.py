@@ -14,6 +14,7 @@ from .core.tuning.terms import TermsTuning  # 條款
 from .core.tuning.jieyi import JieyiTuning  # 結義
 from .core.tuning.mail import MailTuning  # 帖友書信
 from .core.tuning.zongmen import ZongmenTuning  # 門派
+from .core.tuning.guard import GuardTuning  # 親衛隊長
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4463,6 +4464,7 @@ class Config(_Strict):
     jieyi: JieyiTuning = Field(default_factory=JieyiTuning)  # 結義（tianxia/core/tuning/jieyi.py）
     mail: MailTuning = Field(default_factory=MailTuning)  # 帖友書信（tianxia/core/tuning/mail.py）
     zongmen: ZongmenTuning = Field(default_factory=ZongmenTuning)  # 門派（tianxia/core/tuning/zongmen.py）
+    guard: GuardTuning = Field(default_factory=GuardTuning)  # 親衛隊長（tianxia/core/tuning/guard.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")

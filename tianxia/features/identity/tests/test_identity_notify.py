@@ -20,6 +20,7 @@ from test_identity_session import (  # noqa: F401
 
 import server
 from tianxia import database
+from tianxia.core import features as features_core
 from tianxia.accounts import AccountStore
 from tianxia.features.identity import admin as idadmin
 from tianxia.features.identity import binding, contacts, senders
@@ -342,8 +343,8 @@ def test_admin_unbind_rolled_back_sends_nothing(notify, monkeypatch):
 
 
 def test_identity_notify_slot_at_the_tail(clock):
-    job = server.OUTLOCK_JOBS[-1]
-    assert job.slot == "identity_notify"
+    tail = server.OUTLOCK_JOBS[len(features_core.OUTLOCK_ORDER):]  # 表尾：包自己接的格照登記的先後（親衛隊長 guard 排在後面）
+    job = [j for j in tail if j.slot == "identity_notify"][0]
     assert job.waiting.__module__ == job.start.__module__ == "tianxia.features.identity.routes"
     assert not job.waiting(_Seat())  # 沒記下東西（關著、別的動作）：不開
 

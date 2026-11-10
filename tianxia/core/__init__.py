@@ -64,6 +64,10 @@
 - jieyi_base.py：結義「別人讀」的那一半——名號與排行（num、bond_of、rank_of、bond_name、bond_title、card_tag）、義不相殘（brothers、sworn）、替兄出頭（feud_against、record_feud、
   prune_feuds、avenge）與字句；玩家互動、懸賞榜、決戰、設伏幾包與 core/combat 讀它，結義包的 rules re-export 名號那一批。同 event_check 不進 MODULES。
 
+# guard（親衛隊長第三批，Joy 2026-11-09「好」：開核心唯讀掛鉤，各處套 Config.guard，數字先全 0）
+- guard_base.py：親衛隊長「別人讀」的那一點——投效了沒、哪一路、哪一檔心性（of、band），與這一位此刻給本人的加成 perk(state, content, key)：
+  只讀 PlayerState.guard 與 Config.guard（perks 照出路、band_perks 照心性），不 import 包。各原位問一次、夾一次（鍵與原位對照在 Config.guard.perks 的註）。同 event_check 不進 MODULES。
+
 # mall（全部拆包第 58 批：商城收尾）
 - name_base.py：保留的名號——FAMOUS_NAMES、reserved_names，與這一季效力中的 active（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名、出陣約戰補位共用，
   商城包、出陣包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。

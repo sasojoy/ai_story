@@ -27,6 +27,7 @@ from typing import NamedTuple
 
 from tianxia import allied, calendar, equipment, gender, materials, ranger, renown, roster, team, treasures, weapons
 from tianxia.core import bounty_base
+from tianxia.core import guard_base  # 親衛隊長（遊俠，第三批 Joy 2026-11-09「好」）：懸賞交差的賞銀 ×(1+Config.guard.perks)，預設 0
 from tianxia.core import jieyi_base  # 結義第一批（Joy 2026-11-09）：義不相殘，通緝的是結義兄弟不揭
 from tianxia.core.bounty_base import (  # noqa: F401  別人讀的那一半搬進核心（全部拆包第 45 批）：舊名照舊拿得到同一批物件；測試換掉的名字在這裡換這一份
     active, BEATEN_OFFICIAL, BOARD, board_here, BROWSE_VERBS, can_take, close_board, drop_stranded, due_text, ENEMY, _enemy_name,
@@ -354,6 +355,9 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     b.takers = [t for t in b.takers if name_key(t) != name]
     b.done_by.append(p.name)
     silver = _silver(state, content, b, base=silver)
+    bonus = guard_base.perk(state, content, "bounty_pct")
+    if bonus:
+        silver = int(round(silver * (1 + bonus)))
     p.stats["silver"] = p.stats.get("silver", 0) + silver
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]

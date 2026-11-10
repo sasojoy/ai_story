@@ -334,6 +334,80 @@ class ShihaiSeal(BaseModel):
     names: list[str] = Field(default_factory=list)  # 解封時名字這一季已經有人先取了：換的候選（空的是還沒撞名）
 
 
+class GuardChoice(BaseModel):
+    """親衛隊長（features/guard）：眼前那一件事的一個做法。情分、性向照模型寫的、引擎夾過（或固定事件寫死的）；reaction 是他的反應，memo 是記進紀事的那一句。"""
+
+    label: str
+    reaction: str = ""
+    memo: str = ""
+    qing: int = 0
+    tags: list[str] = Field(default_factory=list)
+
+
+class GuardEvent(BaseModel):
+    """親衛隊長：眼前那一件事（家裡的事，或帶他出門冒出來的）。模型照紀事生；模型壞了換固定事件（fixed 是那一件的 id）。"""
+
+    seq: int  # 第幾件（自己寫的那一句回來時照它認是不是同一件）
+    kind: str = "home"  # home／road
+    day: int = 0  # 第幾個遊戲日生的
+    text: str
+    choices: list[GuardChoice] = Field(default_factory=list)
+    fixed: str = ""
+    shown: bool = False  # 攤開在眼前了（選單換成三個做法）
+
+
+class GuardEntry(BaseModel):
+    """親衛隊長：紀事的一行（他記得的事）。"""
+
+    day: int
+    stamp: str = ""
+    text: str
+    qing: int = 0  # 這一筆動了多少情分（畫面不露數字，只拿來上色）
+
+
+class GuardBook(BaseModel):
+    """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
+    10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
+
+    # met（眼前有個孩子）／saved（救下了，收不收）／left（救了沒收，他留在當地）／grow（收養了，成長期）／study（送去求學）
+    # ／trial（學成回來，出師考驗）／settle（等結算他成了什麼人）／oath（跪在你面前立誓）／sworn（投效了，親衛隊長）
+    stage: str = "met"
+    opening: str = ""  # 開場的 id（content/guard.json 的 openings）
+    place: str = ""  # 在哪裡遇見的（沒收的話他留在這裡）
+    name: str = ""
+    sex: str = ""  # 男／女（少年／少女）
+    renamed: bool = False  # 取過名字了（收養時先照名字表給一個，親衛隊長那一頁上能改一次）
+    qing: int = 0  # 情分（−qing_cap～qing_cap）
+    tags: dict[str, int] = Field(default_factory=dict)  # 性向 → 分數
+    log: list[GuardEntry] = Field(default_factory=list)
+    event: GuardEvent | None = None
+    seq: int = 0  # 事件流水號
+    home_day: int = 0  # 最後一件家裡的事是第幾天的
+    home_n: int = 0  # 那一天生了幾件家裡的事
+    road_day: int = 0  # 出門冒出來的那幾件是第幾天的
+    road_n: int = 0  # 那一天冒出來幾件了
+    want: str = ""  # 等背景寫字生的那一件：home／road；空的是沒在等
+    want_at: float = 0.0  # 開始等的世界秒（等太久換固定事件）
+    along: bool = True  # 出門帶著他（帶著才會冒出路上的事）
+    stamina_seen: float | None = None  # 這一下動作之前的體力（同步時抄、做完一件事時比：花了體力才是出門）
+    adopted_season: int = 0
+    # 第二批：求學、出師、投效
+    picking: bool = False  # 正在挑去處（選單換成七處）
+    school: str = ""  # 求學去處的 id（Config.guard.schools）
+    study_from: float = 0.0  # 世界秒：哪時送去的
+    study_until: float = 0.0  # 世界秒：哪時學成
+    letters: int = 0  # 寫回來幾封信了
+    path: str = ""  # 出路（Config.guard.paths 的名字；出師結算定，之後不再改）
+    title: str = ""  # 稱號（模型取、過名字規則；不行換固定的）
+    bio: str = ""  # 生平（模型讀紀事寫；別人看不到）
+    oath: str = ""  # 立誓那一段
+    sworn_season: int = 0  # 哪一季投效的
+    # 第三批：投效之後
+    season_qing: int | None = None  # 這一季開始（或投效那一刻）的情分：心性一季最多換 band_steps_per_season 檔，照它夾
+    hp_seen: float | None = None  # 這一下動作之前的氣血比例（同步時抄、做完一件事時比：掉到 hurt_ratio 以下他說一句）
+    hurt_day: int = 0  # 他上一次開口是第幾天（一天一次）
+
+
 class LegacyBook(BaseModel):
     """傳承（tianxia/features/legacy）：正氣、邪氣、機緣只在換季那一刻結算一次（季中不動）、跨季帶著走；識海選了哪一份、封著的那一份。"""
 
@@ -1143,6 +1217,8 @@ class PlayerState(BaseModel):
     # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
     # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
+    # 親衛隊長（tianxia/features/guard）：遇見、收養、養成的帳。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）
+    guard: GuardBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)

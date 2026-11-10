@@ -19,6 +19,7 @@ from tianxia import forge_secrets, secret_recipes  # 共用規則層（殘譜、
 from tianxia import insights  # 共用規則層（這裡悟不悟得出）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬四景）
 from tianxia import renown, team, territory, training, treasures  # 核心、共用規則層
+from tianxia.core import guard_base  # 親衛隊長（斥候，第三批 Joy 2026-11-09「好」）：探索撿破境丹的門檻 ×(1+Config.guard.perks)，預設 0
 from tianxia.events import event_candidates, pick_event  # 共用規則層（事件：候選、抽一則）
 from tianxia.models import EXPLORE_BRANCHES, ExploreBranch, Location, Squad
 
@@ -57,7 +58,8 @@ def legend_find(ctx, rng: random.Random | None = None) -> list[str]:
     cfg = ctx.content.config
     # 寶物「探索撿破境丹」（裝備四欄 6.2）：只放大門檻（夾在 1 以下），擲的還是同一顆 ctx.rng.random()——帶不帶都只擲一次，
     # 序列不位移；基本機率是 0 照舊不擲（測試內容）
-    chance = min(1.0, cfg.explore_legend_chance * treasures.amount(ctx.state, ctx.content, "legend"))
+    chance = min(1.0, cfg.explore_legend_chance * treasures.amount(ctx.state, ctx.content, "legend")
+                 * (1 + guard_base.perk(ctx.state, ctx.content, "explore_legend")))
     if cfg.explore_legend_chance <= 0 or (rng or ctx.rng).random() >= chance:
         return []
     ctx.state.player.legend_items += 1

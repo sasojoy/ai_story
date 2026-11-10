@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
 from tianxia.core import bounty_base
+from tianxia.core import guard_base  # 親衛隊長（殺手，第三批 Joy 2026-11-09「好」）：截殺時本人的威力 ×(1+Config.guard.perks)，預設 0
 from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import jieyi_base  # 結義第一批（Joy 2026-11-09）：義不相殘、替兄出頭；開關 Config.jieyi.enabled 關著時一個字不變
 from tianxia.characters import name_key
@@ -128,6 +129,7 @@ def raid(ctx, other: Game) -> list[str]:
     if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
         return ctx._raid_fled(other)
     ours, theirs = ctx._spar_power(ctx, other), ctx._spar_power(other, ctx)
+    ours *= 1 + guard_base.perk(s, c, "raid")
     ours_shown, theirs_shown = ctx._spar_power(ctx, other, seal=False), ctx._spar_power(other, ctx, seal=False)  # 戰報給對方看的（FB-615）
     result = encounter.resolve_encounter(ours, theirs, ctx.rng)
     mirrored = ctx._spar_mirror(result, theirs)

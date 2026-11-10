@@ -3978,6 +3978,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 feast_text，模型只評那一句
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
+        "guard_say",  # 親衛隊長自己寫的那一句（features/guard）：三段同 feast_text
         "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
@@ -3993,6 +3994,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
                                          "flavor_once",  # 江湖大事的潤色（S-09）：觸發那一下寫固定的原文，放鎖之後背景請模型，當假人排，名號 FLAVOR_OWNER
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
+                                         "event_once",  # 親衛隊長的背景生事件（features/guard），同 chatter_once 當假人排
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
     importers = [  # 核心本體 tianxia/core/ 也掃（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
         p.name for p in [*(server.ROOT / "tianxia").glob("*.py"), *(server.ROOT / "tianxia" / "core").glob("*.py")]
