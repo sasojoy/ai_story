@@ -604,6 +604,21 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 3. **停**：`taskkill /PID <上面那個 PID> /T /F`。停了遊戲照常，玩家照樣送單；再開會從進度檔接著貼（停著的那段時間的單會補貼）。
 - 緊急開關：停橋；或拿掉 `discord_webhook`（只記不貼、進度照走，之後補上也不補貼舊的）。資料庫、存檔、旁檔都不動，季中能換。
 
+### 客服官（第 216、218 批）
+
+客服官是一個 Claude Code session，替客服先回單（自動回覆）、要真人的轉到 `#客服`；它的手只有 `scripts/support_cli.py`（打 Bearer）。規則見 `tianxia/features/support/README.md`「客服官、找真人、自動結單」與「主機端」。
+
+1. **開 token**：`.local/support.json` 寫 `{"bot_token": "<至少 32 字>"}`（跟 `discord_webhook`、`server_url`、`mention` 同一個檔；值不寫進任何文件、不貼進任何頻道），設定檔寫 `support.bot_account`（`accounts.id` 或登入名，名號不認）。`bot_token` 伺服器照檔的修改時間重讀；設定檔照舊要重開伺服器才讀得到。
+2. **建工作夾**：先建 `C:\Ray\tianxia-support`，再
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" "C:\Ray\專案\天下大勢\scripts\support_session_init.py" C:\Ray\tianxia-support`
+   （範本在 `docs/support/session/`；已經在的檔不蓋，重跑安全）。
+3. **匯出知識**（改版資訊、FAQ、玩法說明三樣；改版、改 FAQ 之後重跑）：
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" "C:\Ray\專案\天下大勢\scripts\support_knowledge.py" C:\Ray\tianxia-support`
+4. **填空**：工作夾裡 `CLAUDE.md` 的 `<填>`（頻道 ID、白名單的 Discord ID），與 `start.cmd` 的 `TIANXIA_DB`（線上那份資料庫的路徑，跟 `server.py` 同一個；沒填 `start.cmd` 會停下不開）。
+5. **開、停**：雙擊 `start.cmd` 開（橋在背景、PID 在 `bridge.pid`）；`stop.cmd` 停。企劃者要先做的五樣看 `docs/superpowers/discord/客服官-設定.md`。
+- **金鑰檔不能放進工作夾**：客服官讀得到工作夾裡每一個檔（Claude Code 本來就放行工作夾裡的唯讀指令）；`support_session_init.py` 遇到 `--config` 指進工作夾會拒絕。
+- 緊急停用：拿掉 `bot_token`，或清掉 `support.bot_account`（token 路一律 404，玩家照常送單、真人客服照常回）。資料庫、存檔都不動，季中能換。
+
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 
 商城（元寶、回體丹、月卡；規則見 `docs/guide/商城.md`）是這一版的程式第一次改資料庫結構：新程式第一次打開資料庫（伺服器、假人程式、`set_password.py` 誰先開都一樣），會把第 5 版的檔就地升到第 6 版——多三張表：元寶的帳 `mall_ledger`、購買紀錄 `mall_purchases`、月卡 `mall_entitlements`。升級在同一筆交易裡做完，中途出錯整筆撤回、檔還是第 5 版。原本的角色、帳號、江湖史一筆都不動。
