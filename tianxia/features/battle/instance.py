@@ -34,7 +34,7 @@ from tianxia.core.battle_base import (  # noqa: F401  核心那一半全部 63 �
     GambleMoment, GambleTale, Escort, SealBare, BattleParticipant, BattleRound, BattleMvp, BattleRoundRecord, RoundSwing, Commander,
     SiegeInfo, FrontNote, BattleInstance, SuccessRateJudgment, GambleVerdict, hollow, more_dramatic, standing_commanders, caller,
     call_orders, neutral_guard, melee, fields, side_names, start_muster, shift_deadlines, start_from_front, sides, role_for, role_name,
-    strength, move_scores, idle, _main_move, merit_counts, merit, outcome_reason, result_at, claims_a_kill, clean_story, assess_gamble,
+    strength, move_scores, idle, _main_move, merit_counts, merit, sworn_pct, note_sworn, outcome_reason, result_at, claims_a_kill, clean_story, assess_gamble,
     _real_name, Phase, UNFINISHED_TITLE, CENTER, BIG_WIN_MARGIN, DEFAULT_FREE_TEXT_SUCCESS_RATE, GAMBLE_WORDS, HOLLOW_BELOW, _NOT_WORDS,
     ORDER_MARK, GUARD_SUFFIX, GUARD, GUARD_SIDE, BLOW_REASON, BLOW_REASON_NOBODY, MELEE_HOLD_REASON, ROLE_MOVES, CAVALRY_MOVES, KEY_ROUNDS,
     STORY_LIMIT, _DIGITS, KILL_WORDS,
@@ -151,7 +151,7 @@ def join_faction(
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
     kit: tactics.BoutSide | None = None, renown: list[str] | None = None, escort: Escort | None = None,
     seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
-    title: dict | None = None,
+    title: dict | None = None, sworn: list[str] | None = None, sworn_step: int = 0, sworn_max: int = 0,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。escort 是隨他上陣的歷史武將（沒給＝沒派）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
@@ -166,6 +166,7 @@ def join_faction(
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
         escort=escort, seal_bare=seal_bare, cut=cut, card=card, title=dict(title or {}),
+        sworn=list(sworn or []), sworn_step=sworn_step, sworn_max=sworn_max,  # 並肩作戰（結義第二批）：加入那一刻的兄弟
     )
 
 
@@ -193,7 +194,7 @@ def auto_assign_latecomer(
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
     escort: Escort | None = None, seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
-    title: dict | None = None,
+    title: dict | None = None, sworn: list[str] | None = None, sworn_step: int = 0, sworn_max: int = 0,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare、cut
@@ -208,6 +209,7 @@ def auto_assign_latecomer(
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
         escort=escort, seal_bare=seal_bare, cut=cut, card=card, title=dict(title or {}),
+        sworn=list(sworn or []), sworn_step=sworn_step, sworn_max=sworn_max,  # 並肩作戰（結義第二批）：加入那一刻的兄弟
     )
 
 
@@ -885,6 +887,7 @@ def resolve_round(
         success_rates=dict(instance.round.success_rates), messages=list(msgs), trend_after=instance.trend,
     ))
     del instance.tales[:-TALES_KEPT]  # 沒有伺服器補劇情（假人程式、測試、腳本）時不會一直長
+    note_sworn(instance)  # 並肩作戰（結義第二批）：記下同一方出過手的兄弟；沒人結義什麼都不動
     instance.round = BattleRound(opened_real=now)
     call_orders(instance, definition, tuning)  # 下一回合的將令（收場了就清掉）
     return msgs

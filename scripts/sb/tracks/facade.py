@@ -221,6 +221,7 @@ MapScenario.web = _facade_map_web
 # 改一個字（selftest）：修練頁換一門的那一句（swapListHtml；第 64 批從 app.js 切到 cultivation.js，兩處找）
 register_track("facade", FacadeScenario, (("web/cultivation.js", "web/app.js"), ("功法庫裡沒有別的", "功法庫裡沒有其他的")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mall", "map",
-                       "military", "news", "notify", "outlets", "peers", "seal", "sense", "smithy", "sortie", "story",
-                       "support", "tale", "tavern", "territory_acts", "titles", "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "jieyi", "legacy", "looks", "mail",
+                       "mall", "map", "military", "news", "notify", "outlets", "peers", "seal", "sense", "smithy",
+                       "sortie", "story", "support", "tale", "tavern", "terms", "territory_acts", "titles", "travel", "zhuan",
+                       "zongmen"))

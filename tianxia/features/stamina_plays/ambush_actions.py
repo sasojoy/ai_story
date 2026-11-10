@@ -9,6 +9,8 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia.core import guard_base  # 親衛隊長（謀士、斥候，第三批 Joy 2026-11-09「好」）：伏兵的威力 ×(1+Config.guard.perks)，預設 0
+from tianxia.core import jieyi_base  # 結義第一批「替兄出頭」：伏兵打贏、被埋伏的人有結義兄弟就記一筆仇（開關關著不動）
 from tianxia import battlelog, calendar, encounter, four_tiers, gender, prologue, roster, team, wins
 from tianxia.characters import name_key
 from tianxia.core.services import RaidSpoils
@@ -107,6 +109,7 @@ def fight(ctx: Game, owner: Game, amb, when: float) -> list[str]:
     w.raided[name_key(me.name)] = max(w.raided.get(name_key(me.name), when), when)
     amb.caught += 1
     ours, theirs = ctx._spar_power(owner, ctx), ctx._spar_power(ctx, owner)
+    ours *= 1 + guard_base.perk(owner.state, owner.content, "ambush")
     ours_shown, theirs_shown = ctx._spar_power(owner, ctx, seal=False), ctx._spar_power(ctx, owner, seal=False)  # 戰報給對方看的（FB-615）
     result = encounter.resolve_encounter(ours, theirs, random.Random(f"設伏|{amb.owner}|{me.name}|{when}"))
     mirrored = ctx._spar_mirror(result, theirs)
@@ -128,6 +131,7 @@ def fight(ctx: Game, owner: Game, amb, when: float) -> list[str]:
            extra=[ambush_rules.BROKEN.format(rival=me.name, to=c.locations[amb.to].name)] if broke else [])
     msgs = record(ctx, mirrored, owner.state.player.name, ours, owner, got, as_owner=False, shown=ours_shown)
     if winner is owner:
+        jieyi_base.record_feud(owner, me.name, owner.state.player.name)
         owner._raid_bounty(me.name)  # 伏兵揭了通緝他：交差（寫在伏兵自己的紀錄）
     elif winner is ctx:
         msgs += ctx._raid_bounty(owner.state.player.name)

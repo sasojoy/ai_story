@@ -506,6 +506,37 @@ def test_backup_and_restore_carry_side_files(tmp_path, capsys):
     assert "還原了旁檔" in said
 
 
+def test_backup_and_restore_carry_the_files_dir(tmp_path, capsys):
+    """客服自動受理第 215 批：<db stem>-support-files/ 跟主檔同一個時間戳一起備份、還原（現有的改名留著），保留規則刪主檔時連資料夾一起刪。"""
+    src = _live_db(tmp_path)
+    shots = src.with_name(f"{src.stem}-support-files")
+    (shots / "3").mkdir(parents=True)
+    png = b"\x89PNG\r\n\x1a\n" + bytes(range(40))
+    (shots / "3" / "1.png").write_bytes(png)
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    out = capsys.readouterr().out
+    main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
+    copied = main.with_name(f"{main.stem}-support-files")
+    assert (copied / "3" / "1.png").read_bytes() == png and f"已備份資料夾：{copied}" in out
+    close_all()
+    (shots / "3" / "1.png").unlink()
+    (shots / "4").mkdir()
+    (shots / "4" / "1.png").write_bytes(b"later")
+    assert restore_db.main([str(main), "--db", str(src)]) == 0
+    said = capsys.readouterr().out
+    assert (shots / "3" / "1.png").read_bytes() == png and not (shots / "4").exists() and "還原了資料夾" in said
+    olds = list(src.parent.glob("tianxia-support-files.pre-restore-*"))
+    assert len(olds) == 1 and (olds[0] / "4" / "1.png").read_bytes() == b"later"  # 還原前的留著
+    folder = tmp_path / "daily"
+    folder.mkdir()
+    stale = _touch_daily(folder, NOW - dt.timedelta(days=400))
+    _touch_daily(folder, NOW)
+    stale_dir = stale.with_name(f"{stale.stem}-support-files")
+    (stale_dir / "1").mkdir(parents=True)
+    (stale_dir / "1" / "1.png").write_bytes(png)
+    assert backup_db.prune(folder, NOW) == [stale] and not stale_dir.exists()
+
+
 def test_backup_without_side_files_is_unchanged(tmp_path, capsys):
     src = _live_db(tmp_path)
     assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0

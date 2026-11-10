@@ -515,8 +515,8 @@ register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions.
                                         ("軍心為之一振。", "軍心為之一振！")), "week7",
                covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear", "guide",
                        "military", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "zhuan", "zongmen"))
 register_bots("train", TRAIN_BOT_PROFILES, train_bots_run,
               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
                       "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel"))  # 出陣三那一軌的假人（--seats train）
+                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 出陣三那一軌的假人（--seats train）

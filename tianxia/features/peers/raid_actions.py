@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
 from tianxia.core import bounty_base
+from tianxia.core import guard_base  # 親衛隊長（殺手，第三批 Joy 2026-11-09「好」）：截殺時本人的威力 ×(1+Config.guard.perks)，預設 0
 from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批；核心，phone_gate 預設關）
+from tianxia.core import jieyi_base  # 結義第一批（Joy 2026-11-09）：義不相殘、替兄出頭；開關 Config.jieyi.enabled 關著時一個字不變
 from tianxia.characters import name_key
 from tianxia.core import annal_base as annals
 from tianxia.core import presence
@@ -42,6 +44,11 @@ def is_shown(ctx, other: Game) -> bool:
     mine, theirs = ctx._side(), other._side()  # 豪強分屬兩軍：同一邊的不能截殺
     if not ctx.content.config.raid.enabled or ctx.state.world.ended:
         return False
+    them = other.state.player.name
+    if jieyi_base.sworn(ctx.content, ctx.world, ctx.state.player.name, them):  # 義不相殘：結義兄弟之間不畫截殺（通緝也揭不了）
+        return False
+    if jieyi_base.feud_against(ctx.content, ctx.world, ctx.state.player.name, them, ctx.now) is not None:  # 替兄出頭：不看陣營
+        return True
     if mine is not None and theirs is not None and mine != theirs:
         return True
     return bounty_base.hunting(ctx.state, ctx.content, other.state.player.name)
@@ -52,6 +59,8 @@ def refusal(ctx, other: Game) -> str | None:
     你上一次截殺他已經過了冷卻、他沒有剛被人截殺過。對方忙不忙不看（截殺不必他同意）。"""
     s, c, cfg = ctx.state, ctx.content, ctx.content.config.raid
     if not is_shown(ctx, other):
+        if cfg.enabled and jieyi_base.sworn(c, ctx.world, s.player.name, other.state.player.name):
+            return jieyi_base.SWORN_NO  # 卡上不畫，直接打 API 才看得到
         return "（此刻無法這麼做。）"
     loc = c.locations[s.player.location]
     if c.config.explore_mix_of(loc.tags).kind == "town":
@@ -72,7 +81,8 @@ def refusal(ctx, other: Game) -> str | None:
             return RAID_AFTER_CLASH.format(them=them)
         return f"你不久前才截殺過{them}，過一陣子再說。"
     hit = w.raided.get(name_key(them))
-    if hit is not None and w.time - hit < cfg.shield_seconds:
+    avenging = jieyi_base.feud_against(c, ctx.world, s.player.name, them, ctx.now) is not None  # 替兄出頭不看他剛被截過的護身
+    if hit is not None and w.time - hit < cfg.shield_seconds and not avenging:
         if w.clashed.get(name_key(them)) == hit:
             return RAID_SHIELD_CLASH.format(them=them)
         return f"{them}剛被人截殺過，元氣未復，這時下手太不講江湖道義。"
@@ -110,6 +120,7 @@ def raid(ctx, other: Game) -> list[str]:
         return [problem]
     s, c, cfg = ctx.state, ctx.content, ctx.content.config.raid
     me, them = s.player, other.state.player
+    feud = jieyi_base.feud_against(c, ctx.world, me.name, them.name, ctx.now)  # 替兄出頭（結義第一批）：打之前先認這一筆
     me.stamina -= cfg.stamina
     s.world.raids[ctx._raid_key(me.name, them.name)] = s.world.time
     s.world.raided[name_key(them.name)] = s.world.time
@@ -118,6 +129,7 @@ def raid(ctx, other: Game) -> list[str]:
     if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
         return ctx._raid_fled(other)
     ours, theirs = ctx._spar_power(ctx, other), ctx._spar_power(other, ctx)
+    ours *= 1 + guard_base.perk(s, c, "raid")
     ours_shown, theirs_shown = ctx._spar_power(ctx, other, seal=False), ctx._spar_power(other, ctx, seal=False)  # 戰報給對方看的（FB-615）
     result = encounter.resolve_encounter(ours, theirs, ctx.rng)
     mirrored = ctx._spar_mirror(result, theirs)
@@ -133,6 +145,10 @@ def raid(ctx, other: Game) -> list[str]:
     ctx.touched.add(them.name)
     other._raid_record(mirrored, me.name, ours, ctx, spoils, attacker=False, shown=ours_shown)
     msgs = ctx._raid_record(result, them.name, theirs, other, spoils, attacker=True, shown=theirs_shown)
+    if winner is ctx and feud is not None:  # 替兄出頭打贏：贏到的那一份轉給受害的兄弟，仇結清；這一下不再記成新的仇
+        msgs += jieyi_base.avenge(ctx, them.name, spoils.taken)
+    elif winner is ctx:
+        jieyi_base.record_feud(ctx, them.name, me.name)  # 他有結義兄弟：記一筆仇
     if winner is ctx:
         msgs += ctx._raid_bounty(them.name)
         heard = figure_life.spread(s, c, "raid", name_key(them.name), at=me.location, side=them.faction,

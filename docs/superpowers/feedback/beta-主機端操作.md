@@ -438,7 +438,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 每日備份只留最近 14 天每天一份，加最近 8 週每週一份，其餘自動刪掉；最新的一份不管多舊都會留著。手動備份和資料夾裡別的檔都不會被刪。
 - 某一份舊備份刪不掉（被別的程式開著）時，其他能刪的照刪，腳本最後把刪不掉的檔一份一份列出來、印「刪舊備份失敗」，「上次執行結果」會是 `0x1`；今天的備份已經做好，隔天會再試。
 - 資料夾裡有 `.bad` 結尾的檔，是驗證沒通過的備份，留著給人查原因（把檔案和那次印出的訊息給開發的人），不會被自動刪。資料庫自己壞掉時（腳本印「資料庫本身壞了」），複製到一半的檔也會留成 `.bad`，每天跑一次就多一份，壞掉修好之後記得自己清掉。
-- **旁檔**（J 波，2026-11-08）：資料庫旁邊有 `<db>-identity.sqlite`（帳號綁定）、`<db>-support.sqlite`（客服單）時，`backup_db.py` 驗過主檔之後把它們一起備份成 `<備份檔名>-identity.sqlite`、`-support.sqlite`（同一個時間戳，例 `tianxia-daily-20261108-050000-identity.sqlite`；每做成一份多印一行「已備份旁檔：…」）。旁檔壞了留成 `.bad`、印警告，主檔照留、結果照樣成功。刪舊備份時一起刪同名的旁檔。兩個開關都關著時這兩個檔不會出現，什麼都不多印。`<db>-terms.sqlite`（條款同意紀錄，Joy 的條款包；第 206 批起註冊也寫它）也一起備份與還原（第 206 批合併時補進 `backup_db.py` 的名單 `SIDE_FILES`，`restore_db.py` 用同一個名單），備份檔名 `-terms.sqlite`；條款開關關著時不會出現。
+- **旁檔**（J 波，2026-11-08）：資料庫旁邊有 `<db>-identity.sqlite`（帳號綁定）、`<db>-support.sqlite`（客服單）時，`backup_db.py` 驗過主檔之後把它們一起備份成 `<備份檔名>-identity.sqlite`、`-support.sqlite`（同一個時間戳，例 `tianxia-daily-20261108-050000-identity.sqlite`；每做成一份多印一行「已備份旁檔：…」）。旁檔壞了留成 `.bad`、印警告，主檔照留、結果照樣成功。刪舊備份時一起刪同名的旁檔。兩個開關都關著時這兩個檔不會出現，什麼都不多印。`<db>-terms.sqlite`（條款同意紀錄，Joy 的條款包；第 206 批起註冊也寫它）也一起備份與還原（第 206 批合併時補進 `backup_db.py` 的名單 `SIDE_FILES`，`restore_db.py` 用同一個名單），備份檔名 `-terms.sqlite`；條款開關關著時不會出現。客服單的截圖（客服自動受理第 215 批）放在資料庫旁邊的資料夾 `<db>-support-files/`（`<單號>/<序號>.png` 這種），`backup_db.py` 有就整夾複製成 `<備份檔名>-support-files/`（多印一行「已備份資料夾：…」）、刪舊備份時連資料夾一起刪；`restore_db.py` 一起還原，現有的改名成 `.pre-restore-<時間>` 留著。客服關著、沒人傳過圖時這個資料夾不會出現。
 - 遊戲的資料庫換了位置（例如換到線上版資料夾），第 1 步要重貼一次，`/F` 會蓋掉舊的。
 - 備份和遊戲資料在同一顆硬碟：硬碟壞掉時兩份一起沒。在還沒上雲之前，偶爾把 `C:\Ray\tianxia-play\backup` 整個資料夾複製到隨身碟或別台電腦。
 
@@ -590,6 +590,34 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 客服登入之後進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過；管理者本人不自動算客服，要列在名單上才是。L 波第 204 批起客服要**用帳號密碼登入、登入 6 小時內**（`identity.staff_hours`）才有客服權限：用驗證碼或 LINE、Google 進來的不算，超過 6 小時重新登入一次就好。客服單存在 `<db>-support.sqlite`（有人送單才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
 
 **緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到現在的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。
+
+### 客服的橋（第 217 批）
+
+橋把新單、玩家再回、找真人、補的截圖貼到 Discord 的 #客服（只讀客服旁檔、不寫；規則見 `tianxia/features/support/README.md`「主機端」）。要先在 `.local/support.json` 寫好 `discord_webhook`（與找真人要點的 `mention`）；沒寫就只記 log、不貼。跟 `server.py` 用同一個 `TIANXIA_DB`。
+
+1. **第一次開之前先試一輪、把舊單記成貼過**（進度檔不在時會把現有的單全部當新單貼一次）：
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --log C:\Ray\tianxia-support\bridge.log`
+   印出的 `NEW 12（只記不貼）` 那幾行就是記成貼過的；進度在 `.local/support_bridge.json`。
+2. **分離開**（跟伺服器一樣用 `Start-Process`、一定加 `-u`、記下 PID）：
+   `$p = Start-Process -PassThru -WindowStyle Hidden -FilePath "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -ArgumentList "-u","C:\Ray\專案\天下大勢\scripts\support_bridge.py","--log","C:\Ray\tianxia-support\bridge.log" -WorkingDirectory C:\Ray\tianxia-support -RedirectStandardOutput C:\Ray\tianxia-support\bridge-out.log -RedirectStandardError C:\Ray\tianxia-support\bridge-err.log; $p.Id`
+   `bridge-out.log` 每 5 分鐘一行 `ALIVE`（橋還活著）；`bridge.log` 只有 `NEW`、`REPLY`、`HUMAN`、`FILE` 四種行。貼不出去連續 10 輪會在 `bridge-err.log` 寫一行，webhook 壞了（4xx）也寫在那裡。
+3. **停**：`taskkill /PID <上面那個 PID> /T /F`。停了遊戲照常，玩家照樣送單；再開會從進度檔接著貼（停著的那段時間的單會補貼）。
+- 緊急開關：停橋；或拿掉 `discord_webhook`（只記不貼、進度照走，之後補上也不補貼舊的）。資料庫、存檔、旁檔都不動，季中能換。
+
+### 客服官（第 216、218 批）
+
+客服官是一個 Claude Code session，替客服先回單（自動回覆）、要真人的轉到 `#客服`；它的手只有 `scripts/support_cli.py`（打 Bearer）。規則見 `tianxia/features/support/README.md`「客服官、找真人、自動結單」與「主機端」。
+
+1. **開 token**：`.local/support.json` 寫 `{"bot_token": "<至少 32 字>"}`（跟 `discord_webhook`、`server_url`、`mention` 同一個檔；值不寫進任何文件、不貼進任何頻道），設定檔寫 `support.bot_account`（`accounts.id` 或登入名，名號不認）。`bot_token` 伺服器照檔的修改時間重讀；設定檔照舊要重開伺服器才讀得到。
+2. **建工作夾**：先建 `C:\Ray\tianxia-support`，再
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" "C:\Ray\專案\天下大勢\scripts\support_session_init.py" C:\Ray\tianxia-support`
+   （範本在 `docs/support/session/`；已經在的檔不蓋，重跑安全）。
+3. **匯出知識**（改版資訊、FAQ、玩法說明三樣；改版、改 FAQ 之後重跑）：
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" "C:\Ray\專案\天下大勢\scripts\support_knowledge.py" C:\Ray\tianxia-support`
+4. **填空**：工作夾裡 `CLAUDE.md` 的 `<填>`（頻道 ID、白名單的 Discord ID），與 `start.cmd` 的 `TIANXIA_DB`（線上那份資料庫的路徑，跟 `server.py` 同一個；沒填 `start.cmd` 會停下不開）。
+5. **開、停**：雙擊 `start.cmd` 開（橋在背景、PID 在 `bridge.pid`）；`stop.cmd` 停。企劃者要先做的五樣看 `docs/superpowers/discord/客服官-設定.md`。
+- **金鑰檔不能放進工作夾**：客服官讀得到工作夾裡每一個檔（Claude Code 本來就放行工作夾裡的唯讀指令）；`support_session_init.py` 遇到 `--config` 指進工作夾會拒絕。
+- 緊急停用：拿掉 `bot_token`，或清掉 `support.bot_account`（token 路一律 404，玩家照常送單、真人客服照常回）。資料庫、存檔都不動，季中能換。
 
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 

@@ -78,7 +78,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
             why = None if items else (bounties.only_original(state, b).strip("（）") or NO_FIT)
             note["action"] = {"id": f"bounty:pick:{b.id}", "verb": "pick", "enabled": bool(items), "why": why}
         else:
-            problem = bounties.take_problem(state, content, b)
+            problem = bounties.take_problem(state, content, b, world)
             note["action"] = {"id": f"bounty:take:{b.id}", "verb": "take", "enabled": problem is None, "why": problem}
         ranked.append((rank, order, note))
     hand_in = []

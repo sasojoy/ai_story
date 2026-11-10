@@ -27,6 +27,8 @@ from typing import NamedTuple
 
 from tianxia import allied, calendar, equipment, gender, materials, ranger, renown, roster, team, treasures, weapons
 from tianxia.core import bounty_base
+from tianxia.core import guard_base  # 親衛隊長（遊俠，第三批 Joy 2026-11-09「好」）：懸賞交差的賞銀 ×(1+Config.guard.perks)，預設 0
+from tianxia.core import jieyi_base  # 結義第一批（Joy 2026-11-09）：義不相殘，通緝的是結義兄弟不揭
 from tianxia.core.bounty_base import (  # noqa: F401  別人讀的那一半搬進核心（全部拆包第 45 批）：舊名照舊拿得到同一批物件；測試換掉的名字在這裡換這一份
     active, BEATEN_OFFICIAL, BOARD, board_here, BROWSE_VERBS, can_take, close_board, drop_stranded, due_text, ENEMY, _enemy_name,
     enemy_name, how, hunting, is_browse_line, is_town, issuer, join_note, KIND_NAMES, LAPSED_LEAN, LAPSED_SIDE, _left, _loc_name,
@@ -142,8 +144,8 @@ def stale_line(state: GameState, content: Content, world: WorldStateStore, arg: 
     return STALE
 
 
-def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
-    """「接下」按不按得下去（拒絕的話）。"""
+def take_problem(state: GameState, content: Content, b: Bounty, world=None) -> str | None:
+    """「接下」按不按得下去（拒絕的話）。world 有給才看結義（義不相殘：通緝的是你結義兄弟，不揭；結義開關關著不動）。"""
     if b.kind in GIVE_KINDS:  # 不擋的話整季機器人會把它們揭滿 max_taken 的格子，擋掉討伐與打探（懸賞榜設計 4.3）
         return NO_TAKE
     p = state.player
@@ -157,6 +159,8 @@ def take_problem(state: GameState, content: Content, b: Bounty) -> str | None:
         return OFFICIAL_GATE.format(title=renown.named(renown.VIRTUE_TITLES["俠"][rule.official_hunter_tier], state))
     if renown.on(content, "prize_gate") and has_prize(content, b) and renown.fame_tier(state, content) < rule.prize_tier:
         return PRIZE_GATE  # 名聲 4.2：重賞給出去之後就是一般的單（has_prize 看 done_by），手上揭著的不收回
+    if b.kind == "wanted" and b.target and world is not None and jieyi_base.sworn(content, world, p.name, b.target):
+        return jieyi_base.SWORN_BOUNTY
     if b.kind == "wanted" and roster.raid_newbie(state, content):  # 通緝只能靠截殺交差，自己還在新手期就截殺不了（Game.raid_refusal）：揭了白佔一格（FB-154）
         return WANTED_NEWBIE
     held = len(mine(state, content))
@@ -322,11 +326,11 @@ def _attached(state: GameState, content: Content, world: WorldStateStore, b: Bou
     return msgs
 
 
-def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
+def take(state: GameState, content: Content, bounty_id: str, world=None) -> list[str]:
     b = next((x for x in open_bounties(state, content) if x.id == bounty_id), None)
     if b is None:
         return ["這張懸賞已經揭下了。"]
-    problem = take_problem(state, content, b)
+    problem = take_problem(state, content, b, world)
     if problem is not None:
         return [problem]
     if name_key(state.player.name) not in (name_key(t) for t in b.takers):
@@ -351,6 +355,9 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     b.takers = [t for t in b.takers if name_key(t) != name]
     b.done_by.append(p.name)
     silver = _silver(state, content, b, base=silver)
+    bonus = guard_base.perk(state, content, "bounty_pct")
+    if bonus:
+        silver = int(round(silver * (1 + bonus)))
     p.stats["silver"] = p.stats.get("silver", 0) + silver
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]

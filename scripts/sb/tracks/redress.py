@@ -114,4 +114,4 @@ class RedressScenario(Scenario):
 register_track("redress", RedressScenario, (("tianxia/core/services.py", "tianxia/features/sortie/rules.py"),
                                             ('PROLOGUE_FIGHT = "雪恥"', 'PROLOGUE_FIGHT = "雪恨"')), "season21",
                covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "gear", "guide", "map",
-                       "military", "seal", "sortie", "zhuan"))
+                       "military", "seal", "sortie", "zhuan", "zongmen"))

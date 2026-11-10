@@ -191,4 +191,4 @@ class LevyScenario(CompanionsScenario):
 register_track("levy", LevyScenario, (("tianxia/engine.py", "tianxia/features/companions/__init__.py"), ("招募・{c", "招募！{c")), "season21",
                covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
                        "gear", "guide", "looks", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy",
-                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))

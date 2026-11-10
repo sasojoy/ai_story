@@ -516,6 +516,6 @@ class TalkScenario(CompanionsScenario):
 register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py",),
                                       ('SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻。"', 'SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻！"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military", "outlets",
-                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
-                       "travel", "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
+                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "travel", "zhuan", "zongmen"))

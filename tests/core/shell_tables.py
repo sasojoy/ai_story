@@ -291,6 +291,12 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/support/close"): "support：同上",
     ("POST", "/api/support/lookup"): "support：同上",
     ("GET", "/api/support/mailbox"): "登入頁的客服信箱（第 214 批）：登不進去的人才看這一行，本來就沒登入；關著 404（gate 先於一切），只回設定裡公開的信箱字串，不看 cookie、不開旁檔、回應不因人而異（設計第七節給信箱的那一條，J 波 PM 認定②改歸 support）",
+    # support（客服自動受理第 215 批：截圖；計畫「跟設計稿對不上的」第 1 條：設計第八節寫不進名單是錯的，照 support 既有那幾條）
+    ("POST", "/api/support/file"): "support：同上（關著 404、連登入都不問；開著先認登入再讀內文）",
+    ("GET", "/api/support/file/{tid}/{seq}"): "support：同上（開著只給單的主人與客服，其他一律 404 同一句）",
+    # support（客服自動受理第 216 批；計畫「跟設計稿對不上的」第 1 條，同第 215 批那兩條）
+    ("POST", "/api/support/human"): "support：同上（關著 404、連登入都不問；開著要登入、只認單的主人）",
+    ("POST", "/api/support/sweep"): "support：同上（關著 404、連登入都不問；開著只給客服與客服官的 token，其他一律 404 同一句）",
 }
 
 # ── 開關關著，路由還是不回 404 的（方法, 路徑）→ 理由：現況，不改程式 ──

@@ -26,6 +26,7 @@ from typing import Literal, NamedTuple
 from pydantic import BaseModel, Field, model_serializer
 
 from .. import gender, tactics, zh
+from ..characters import name_key as _key
 from ..models import BEATS, MOVES, BattleAct, BattleDef, BattleTuning
 from ..ollama_client import OllamaClient
 
@@ -138,6 +139,12 @@ class BattleParticipant(BaseModel):
     # 1 以上就是掛機：下一回合起不等他（其他人送齊就結算，他照舊被代選固守）。固守的份量與戰功照常算、也不撤下陣
     # （Joy：「固守就別打折了 他進戰場已經很有心 戰功正常算」）
     idle_streak: int = 0
+    # 並肩作戰（結義第二批，Joy 2026-11-09「第二批也繼續做」）：加入那一刻的結義兄弟（名號鍵）、每多一位兄弟同一方出過手戰功加幾成、最多加幾成；
+    # 開關關著、沒結義全是空的（舊資料沒有這幾欄也是空的）。sworn_mates 是這一場真的同一方出過手的兄弟（每回合結算後 note_sworn 更新）
+    sworn: list[str] = Field(default_factory=list)
+    sworn_step: int = 0
+    sworn_max: int = 0
+    sworn_mates: list[str] = Field(default_factory=list)
     held_rounds: int = 0  # 逾時被系統代為出手（固守）的回合數：不算自己出手（acted_rounds），戰功照一樣算
     # 以下是裝備二（坐騎）加的（舊資料沒有這兩欄就是預設值）
     mount: str = ""  # 加入時騎的馬名（裝備四欄 5.9：決戰畫面、戰報寫）；沒騎馬是空的
@@ -173,6 +180,9 @@ class BattleParticipant(BaseModel):
         data = handler(self)
         if isinstance(data, dict) and data.get("title") == {}:
             del data["title"]
+        if isinstance(data, dict) and not data.get("sworn"):  # 並肩作戰（結義第二批）：沒結義的不寫這四鍵，JSON 跟加這幾欄之前一樣
+            for k in ("sworn", "sworn_step", "sworn_max", "sworn_mates"):
+                data.pop(k, None)
         return data
 
 
@@ -545,8 +555,26 @@ def merit_counts(p: BattleParticipant) -> dict[str, int]:
 
 
 def merit(tuning: BattleTuning, p: BattleParticipant) -> int:
-    """個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項照 BattleTuning.merit_points 記分。"""
-    return sum(tuning.merit_points.get(key, 0) * n for key, n in merit_counts(p).items())
+    """個人戰功（Joy 2026-10-10：「戰線推進是陣營，個人的部分有辦法做出戰績跟區別嗎」）：每一項照 BattleTuning.merit_points 記分。
+    並肩作戰（結義第二批）：同一方出過手的兄弟每多一位加 sworn_step 成、最多 sworn_max（百分比，無條件捨去）；不動推力、不動勝負。"""
+    base = sum(tuning.merit_points.get(key, 0) * n for key, n in merit_counts(p).items())
+    pct = sworn_pct(p)
+    return base + base * pct // 100 if pct else base
+
+
+def sworn_pct(p: BattleParticipant) -> int:
+    """並肩作戰這一場給 p 的戰功加成（百分比）；沒有是 0。"""
+    return min(p.sworn_max, p.sworn_step * len(p.sworn_mates)) if p.sworn_mates and p.sworn_step > 0 else 0
+
+
+def note_sworn(instance: BattleInstance) -> None:
+    """每回合結算後（features/battle/instance.resolve_round）：每個人記下這一場同一方出過手的結義兄弟（加入時的快照，不讀全服的結義帳）。"""
+    for p in instance.participants.values():
+        if not p.sworn:
+            continue
+        keys = set(p.sworn)
+        p.sworn_mates = sorted(q.name for q in instance.participants.values()
+                               if q.name != p.name and q.faction == p.faction and q.acted_rounds > 0 and _key(q.name) in keys)
 
 
 KEY_ROUNDS = 2  # 敗因最多舉幾個回合

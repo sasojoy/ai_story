@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender, mounts
 from tianxia.core import identity_base  # 綁手機才能截殺（帳號與客服第 205 批）：灰鈕寫同一句
+from tianxia.core import jieyi_base  # 替兄出頭（結義第一批）：有仇可報時鈕名與確認句換掉
 
 from . import raid_actions, social
 
@@ -21,16 +22,18 @@ KIND = "raid"
 def buttons(game: Game, other: Game) -> list[social.CardButton]:
     if not raid_actions.is_shown(game, other):
         return []
+    name = other.state.player.name
+    feud = jieyi_base.feud_against(game.content, game.world, game.state.player.name, name, game.now)
+    label = jieyi_base.AVENGE_LABEL if feud is not None else "截殺"
     problem = identity_base.PHONE_NEEDED if not identity_base.phone_ok(game, "raid") else raid_actions.refusal(game, other)
     if problem is not None:
-        return [social.CardButton(action=KIND, label="截殺", note=problem, enabled=False)]
+        return [social.CardButton(action=KIND, label=label, note=problem, enabled=False)]
     cost = game.content.config.raid.stamina
-    name = other.state.player.name
-    confirm = f"真的要對{name}下手？輸了要丟銀兩、掉氣血。"
+    confirm = jieyi_base.AVENGE_CONFIRM.format(raider=name, victim=feud.victim) if feud is not None else f"真的要對{name}下手？輸了要丟銀兩、掉氣血。"
     flee = game.raid_flee_odds(other)
     if flee > 0:  # 他的馬比你快（裝備四欄 5.10）：人就在眼前，看得到他騎什麼；幾成跟 raid() 擲的同一個數
         confirm += mounts.RAID_FLEE_ASK.format(odds=mounts.odds_text(flee), him=gender.pronoun(other.state))
-    return [social.CardButton(action=KIND, label="截殺", note=f"體力 {cost}・勝算 {raid_actions.odds_word(game, other)}", confirm=confirm)]
+    return [social.CardButton(action=KIND, label=label, note=f"體力 {cost}・勝算 {raid_actions.odds_word(game, other)}", confirm=confirm)]
 
 
 def run(game: Game, other: Game, params: dict) -> list[str]:

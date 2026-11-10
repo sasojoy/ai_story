@@ -22,6 +22,7 @@ from collections.abc import Callable
 from tianxia import armor, equipment, forge_secrets, four_tiers, library, naming, silver, team, traits, weapons
 from tianxia import fusion  # 共用規則層（合成與揣摩）
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二；第 41 批 PM 認定第 10 條）
+from tianxia.core import guard_base  # 親衛隊長（鐵匠，第三批 Joy 2026-11-09「好」）：這一爐多幾點造化（Config.guard.perks，預設 0 不加這一項）
 from tianxia.fusion import QualityOdds  # 共用規則層（合成與揣摩）
 from tianxia.insights import merged_attribute
 from tianxia.core.smith_base import (  # noqa: F401  打造單子「讀」的那一小半在核心（全部拆包第 40 批），re-export 同一批
@@ -146,6 +147,9 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
         ("practice", min(rule.practice_cap, rule.practice_point * done)),
     ]
     scored += setting_points(state, content, attribute_of(world, content, kind, main, aux), slot_of(kind))
+    helper = guard_base.perk(state, content, "forge_points")
+    if helper:
+        scored.append(("guard", helper))
     return fusion.odds_from_points(scored, rule, silver.furnace_base(state, content, rule.odds))  # 看火候（銀兩出口）換基準
 
 

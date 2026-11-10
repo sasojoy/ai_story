@@ -26,11 +26,11 @@ def test_a_package_file_compares_only_that_package(gate):
     assert (d["mode"], d["packages"], d["profiles"], d["crossover"], d["web"]) == ("packages", ["seal"], ["season21", "test"], False, False)
 
 
-def test_tuning_file_counts_as_its_package(gate):  # 第 112 批：tuning/<包>.py 照包挑軌（jieyi 只有自己讀 Config.jieyi）
-    d = gate.decide(["tianxia/core/tuning/jieyi.py"], _diff("tianxia/core/tuning/jieyi.py", "-    log_cap: int = 30", "+    log_cap: int = 31"), ROOT)
-    assert (d["mode"], d["packages"], d["profiles"], d["crossover"]) == ("packages", ["jieyi"], ["season21", "test"], False)
-    assert any("tuning，照包 jieyi" in r for r in d["reasons"])
-    field = gate.decide(["tianxia/core/tuning/jieyi.py"], _diff("tianxia/core/tuning/jieyi.py", "+    x: int = Field(0, json_schema_extra=QUIET)"), ROOT)
+def test_tuning_file_counts_as_its_package(gate):  # 第 112 批：tuning/<包>.py 照包挑軌（mail 只有自己讀 Config.mail；jieyi 第二批起核心 combat 也讀，換成 mail）
+    d = gate.decide(["tianxia/core/tuning/mail.py"], _diff("tianxia/core/tuning/mail.py", "-    per_day: int = 10", "+    per_day: int = 11"), ROOT)
+    assert (d["mode"], d["packages"], d["profiles"], d["crossover"]) == ("packages", ["mail"], ["season21", "test"], False)
+    assert any("tuning，照包 mail" in r for r in d["reasons"])
+    field = gate.decide(["tianxia/core/tuning/mail.py"], _diff("tianxia/core/tuning/mail.py", "+    x: int = Field(0, json_schema_extra=QUIET)"), ROOT)
     assert field["mode"] == "packages" and field["crossover"], "Field( 那一行照舊開半舊半新"
 
 

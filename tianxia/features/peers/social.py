@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import four_tiers, gender, renown, team
 from tianxia.characters import name_key
+from tianxia.core import jieyi_base  # 名分（結義第一批）：玩家卡上的義名排行
 from tianxia.core import identity_base  # 綁手機才能贈物（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core.cards import ACTIONS, CardAction, CardButton, register  # noqa: F401  玩家卡的登記表搬進核心（第 45 批）：舊名照舊拿得到同一批物件
 from tianxia.core.presence import GONE, affiliation, here, side, visible  # noqa: F401  「此地還有」的判斷與身分字搬進核心（第 37 批）：舊名照舊拿得到同一批函式物件
@@ -81,6 +82,8 @@ def card(game: Game, other: Game) -> dict:
         "actions": buttons,
         # 稱號與官職（features/titles）開著：他此刻戴的那一個（{"id","name","grade"}，沒戴是 {}）；關著沒有這個鍵
         **({"title": dict(o.player.titles_worn)} if other.content.config.titles.enabled else {}),
+        # 名分（結義第一批）：他的義名與排行（「潁川三義・行二」）；沒結義、開關關著沒有這個鍵
+        **({"jieyi": tag} if (tag := jieyi_base.card_tag(game.content, game.world, o.player.name)) else {}),
     }
 
 

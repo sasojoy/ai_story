@@ -40,7 +40,7 @@ def takeable(game) -> bool:
     下一輪又打開（2026-10-22 量 7 天季：前三天十三個假人開了又關上九十到一百四十次，每一次白花兩輪）。"""
     s, c = game.state, game.content
     held = {b.id for b in rules.mine(s, c)}
-    if any(b.id not in held and rules.can_take(s, b) and rules.take_problem(s, c, b) is None for b in rules.open_bounties(s, c)):
+    if any(b.id not in held and rules.can_take(s, b) and rules.take_problem(s, c, b, game.world) is None for b in rules.open_bounties(s, c)):
         return True
     return rules.give_choice(s, c, game.world) is not None
 
@@ -56,7 +56,7 @@ def take_bounties(game: Game) -> None:
 
     if s.pending_event or not rules.board_here(s, c):
         return
-    takeable = any(rules.can_take(s, b) and rules.take_problem(s, c, b) is None for b in rules.open_bounties(s, c))
+    takeable = any(rules.can_take(s, b) and rules.take_problem(s, c, b, game.world) is None for b in rules.open_bounties(s, c))
     if not takeable and rules.give_choice(s, c, game.world) is None:
         return  # 沒得揭，也沒得交
     if "act:bounties" not in enabled():

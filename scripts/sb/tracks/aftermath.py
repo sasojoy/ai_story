@@ -314,6 +314,6 @@ class AftermathScenario(EventScenario):
 register_track("aftermath", AftermathScenario, (("tianxia/core/combat.py", "tianxia/engine.py"),
                                                  ("你離開了，這一仗沒打成。", "你離開了，這一仗沒打成！")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "legacy", "looks", "mall", "military", "outlets",
-                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan"))
+                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "travel", "zhuan", "zongmen"))

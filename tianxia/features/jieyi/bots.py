@@ -23,6 +23,11 @@ def _roll(name: str, offer_id: str) -> float:
 
 def score(ctx: Game, option: Option) -> float | None:
     verb, _, offer_id = option.id.partition(":")[2].partition(":")
+    if verb == "gather":  # 義聚（第二批）：體力缺得夠多才按（同真人：滿的時候按了白按）
+        bk = actions.book(ctx)
+        g = actions.gather_view(ctx, bk) if bk is not None else None
+        short = ctx.content.config.stamina_max - ctx.state.player.stamina
+        return ANSWER_SCORE if g and g["ready"] and short >= g["n"] else None
     bk = actions.book(ctx)
     offer = rules.find(bk, offer_id, ctx.now) if bk is not None else None
     if offer is None:

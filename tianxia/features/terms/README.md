@@ -13,7 +13,7 @@
 | `store.py` | 同意紀錄的小檔 `<db>-terms.sqlite`（只加不刪；同手機通知的 `<db>-push.sqlite`，不進遊戲資料庫、資料庫不升版） |
 | `pages.py` | 兩頁的 HTML |
 | `routes.py` | `/terms`、`/privacy`、`/api/terms`、`/api/terms/agree`；`record_consent(shell, account_key, version, source="register")` 給註冊那一邊叫 |
-| `tests/` | `test_terms.py`（規則、小檔、API）、`test_terms_register.py`（第 206 批：殼的註冊兩個勾選、記 `register`、`/api/terms/version`）、`test_terms_web.py`（第 206 批：`terms.js` 插勾選與擋送出，node 假 DOM）、煙霧 |
+| `tests/` | `test_terms.py`（規則、小檔、API）、`test_terms_register.py`（第 206 批：殼的註冊兩個勾選、記 `register`、`/api/terms/version`）、`test_terms_web.py`（第 206 批：`terms.js` 插勾選與擋送出，node 假 DOM）、煙霧；same_behavior 一軌 charter（`scripts/sb/tracks/charter.py`） |
 
 **給註冊那一邊（第 206 批接好了）**：註冊有兩條路——殼的 `/api/register`（`server.register`）與 identity 包建角色那一步（`/api/identity/character`，第三方、驗證碼第一次進來才開帳號）。包不准互相 import，所以經核心接縫 `tianxia/core/terms_base.py`：`router(shell)` 開頭 `terms_base.set_hook(_Hook(shell))`（`version()` 讀 `rules.load()["version"]`、`record` 叫 `record_consent`）。開新帳號之前 `terms_base.register_problem(CONTENT, body)`：開著時 `age_ok`、`terms_agree` 都要勾（認 `true`、`"on"`）、`terms_version` 要等於現行版，不然回同一句 `REGISTER_NEED`（不透露版本、不透露帳號在不在），殼與 identity 自己丟 `GameError`；被擋下的不算一次註冊。帳號建好之後 `terms_base.record(CONTENT, key, 表單帶的版號)` 記一筆 `source=register`（記玩家勾過的那一版；剛好改版丟的 `ValueError(STALE)` 吞掉，登入後同意層補問）。所以註冊時勾過的人進遊戲 `/api/terms` 的 `need` 是空字串、不跳層。關著（或包沒掛）兩個函式直接 return，註冊與建角色跟沒有這一包一樣。
 - `GET /api/terms/version`（第 206 批）：不用登入（`NO_LOGIN_ROUTES` 寫了理由：還沒有帳號的人要拿得到）、第一行 gate、關著 404，只回 `{version}`。

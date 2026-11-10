@@ -439,9 +439,10 @@ register_track("here", HereScenario, (("tianxia/engine.py", "tianxia/features/so
                                       ('"先按「交友」"', '"先按下「交友」"')), "week7",
                covers=("admin", "battle", "bounties", "bout", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
                        "gear", "guide", "heroines", "legacy", "mall", "map", "military", "outlets", "peers", "seal",
-                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
+                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
+                       "zongmen"))
 register_track("places", PlacesScenario, (("tianxia/place_state.py",), ("這一帶剛打過仗，焦土還沒冷", "這一帶剛打過仗，焦土還未冷")), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
                        "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military",
                        "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan"))
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
