@@ -594,6 +594,18 @@ def temper_problem(state: GameState, content: Content, slot: str = "weapon", ite
     return f"還差 {short} 兩" if short > 0 else None
 
 
+TEMPER_UP = "火星四濺，鐵匠把【{name}】淬上了 +{n}。"  # 待 joy 潤：過了安全線淬成
+TEMPER_DOWN = "淬火時「嗤」的一聲，【{name}】的火候退了一層，回到 +{n}。"  # 待 joy 潤：過了安全線失敗（料錢照收）
+TEMPER_ODDS = "・成功 {pct}%"  # 待 joy 潤：過了安全線，選單那一行多寫這一下的機會
+TEMPER_RUMOR = "鐵匠鋪傳出消息：{who}把【{name}】淬到了 +{n}。"  # 待 joy 潤：淬到 temper_rumor_from 以上，天下大事寫一筆
+
+
+def temper_rng(state: GameState) -> random.Random:
+    """過了安全線那一下淬煉擲成敗的亂數：季數｜名號｜這一季第幾次衝階（PlayerState.temper_seq＋1）。決定性，不動 Game.rng（同 economy.upgrade_rng）。"""
+    p = state.player
+    return random.Random(f"淬煉|{p.season_number}|{p.name}|{p.temper_seq + 1}")
+
+
 def temper(state: GameState, content: Content, slot: str = "weapon", item_id: str | None = None) -> list[str]:
     """淬煉身上那一件（兵器 4.7、防具 4.1）：用一個一階素材（temper_material_tier）＋這一件的階的工錢（3.7），淬煉次數 +1（兵器的加成、防具的減損每次
     +temper_step，都是現算）。item_id 是裝備庫那一件的 id 時淬那一件（淬完還在裝備庫、不換上；鐵匠鋪與合成流程 3.4）。"""
@@ -609,8 +621,21 @@ def temper(state: GameState, content: Content, slot: str = "weapon", item_id: st
     if not p.materials[mid]:
         del p.materials[mid]
     p.stats["silver"] -= cost
-    item.tempers += 1
-    msgs = [f"鐵匠拿{material.name}把【{item.name}】淬了一回，這是第 {item.tempers} 次。"]  # 待 joy 潤
+    chance = equipment.temper_chance(item, content)
+    if chance >= 1.0:
+        item.tempers += 1
+        msgs = [f"鐵匠拿{material.name}把【{item.name}】淬了一回，這是第 {item.tempers} 次。"]  # 待 joy 潤
+    elif temper_rng(state).random() < chance:  # 過了安全線（淬煉衝階，Joy 2026-11-10）：照這一層的機會擲
+        p.temper_seq += 1
+        item.tempers += 1
+        msgs = [TEMPER_UP.format(name=item.name, n=item.tempers)]
+        rule = rules_of(content, slot)
+        if rule.temper_rumor_from and item.tempers >= rule.temper_rumor_from:
+            add_rumor(state, TEMPER_RUMOR.format(who=p.name, name=item.name, n=item.tempers), None, content=content, named=True)
+    else:
+        p.temper_seq += 1
+        item.tempers = max(0, item.tempers - 1)  # 失敗退一層（Joy 2026-11-10 選「退一級」）：東西還在，料錢照收
+        msgs = [TEMPER_DOWN.format(name=item.name, n=item.tempers)]
     if cost:
         msgs.append(f"銀兩 -{cost}")
     return msgs + [f"{material.name} -1"]
@@ -632,6 +657,9 @@ def temper_option(state: GameState, content: Content, slot: str = "weapon"):
         m = content.materials[temper_material(state, content, slot)]
         cost = temper_price(state, content, slot)
         note = f"{m.name}×1" + (f"＋{cost} 兩" if cost else "")
+        chance = equipment.temper_chance(item, content)
+        if chance < 1.0:
+            note += TEMPER_ODDS.format(pct=round(chance * 100))  # 過了安全線（淬煉衝階）：寫這一下幾成
     else:
         note = problem
     return Option(id=oid, label=f"淬煉【{item.name}】（第 {item.tempers + 1}/{cap} 次・{note}）", enabled=problem is None)

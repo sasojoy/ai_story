@@ -36,7 +36,7 @@
     const pages = shop.pages.length > 1 && tab !== "trade" && tab !== "divine" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
     const body = { shelf: shelfHtml, forge: forgePageHtml, rack: rackHtml, trade: tradeHtml, divine: divineHtml }[tab];
     // 架上頁鐵匠那一句底下一行連到神器頁（3.8：輪替季才有）
-    return `${tab === "shelf" ? smithHeroHtml() + line + (shop.divine ? divineLinkHtml(shop.divine) : "") : ""}${pages}
+    return `${tab === "shelf" ? smithHeroHtml(line) + (shop.divine ? divineLinkHtml(shop.divine) : "") : ""}${pages}
       <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
       <nav class="shop-tabs">${smithTabs(shop).map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
@@ -46,6 +46,45 @@
   // 幾成、工錢、今天還能換幾個；按不下去的灰掉、格子上寫短的原因，點了說整句）；收購一種一列（賣一個、全賣先問一次）。
   // 升階出來的屬性隨機（企劃者 2026-10-15「屬性隨機、偏向投入的」），格子上照伺服器寫「五成・其餘隨機」。字待 joy 潤
   const UP_ALL = "全熬 ×{n}"; // 待 joy 潤
+  const UP_ONE = "熬一個"; // 待 joy 潤
+  const UP_USE = "{need} 個{from}・{cost} 兩"; // 待 joy 潤：熬一個那一顆的小字
+  const UP_ALL_USE = "{n} 個{from}・{cost} 兩"; // 待 joy 潤：全熬那一顆的小字（一次用掉幾個、幾兩）
+  const UP_LINK_COUNT = "{n}"; // 熬煉鏈一格底下的件數
+  const TRADE_RULES = "熬煉的規矩"; // 待 joy 潤：「？」摺疊的那一行
+  // 熬煉鏈（Joy 2026-11-10 翻新，翻新稿 9RrHPAD6）：一屬性一張卡，一階到最高階排成一條「精鐵砂 › 玄鋼骨 › 隕鐵膽 › 熔星髓」，每一格底下手上幾個；
+  // 熬得出來的那一格描金、點了選它（S.tradePick[屬性]＝階，預設第一個熬得出來的），卡底下「全熬 ×N」（主鈕，連換得了兩個以上才有）與「熬一個」；
+  // 一格都熬不了寫最近那一格的短原因（「手上 2／3」）。規矩（升階比例、隨機、四階上限）收進「？」。按鈕照舊送 trade-up（attr、tier、n）
+  function tradeCounts(shop) {
+    const have = new Map();
+    for (const m of (shop.forge && shop.forge.materials) || []) have.set(m.id, m.count | 0);
+    for (const r of shop.trade.upgrade) if (!have.has(r.from_id)) have.set(r.from_id, r.have | 0);
+    return have;
+  }
+  function tradeChainHtml(attribute, cells, have) {
+    const can = cells.filter((r) => !r.problem);
+    const pickTier = (S.tradePick || {})[attribute];
+    const pick = can.find((r) => r.tier === pickTier) || can[0] || null;
+    const first = cells[0];
+    const link = (id, name, tier, row) => {
+      const n = have.get(id) || 0;
+      const ok = row && !row.problem;
+      const tag = ok ? "button" : "span";
+      return `<${tag} class="lk${n ? "" : " zero"}${ok ? " can" : ""}${pick && row === pick ? " pick" : ""}"${ok ? ` data-act="trade-pick" data-attr="${esc(attribute)}" data-tier="${tier}"` : ""}>${gearImg("mat", id, "lk-pic")}<b>${esc(name)}</b><small>${UP_LINK_COUNT.replace("{n}", n)}</small></${tag}>`;
+    };
+    const links = [link(first.from_id, first.from, first.tier - 1, null), ...cells.map((r) => link(r.id, r.name, r.tier, r))].join('<span class="arw" aria-hidden="true">›</span>');
+    let acts;
+    if (!pick) {
+      const near = cells[0];
+      acts = `<p class="up-short">${esc(near.short || near.problem || "")}</p>`;
+    } else {
+      const r = pick;
+      const oneBtn = `<button class="btn up-cell${r.batch >= 2 ? "" : " primary"}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why=""><b>${UP_ONE}${esc(r.name)}</b><small>${UP_USE.replace("{need}", r.need | 0).replace("{from}", esc(r.from)).replace("{cost} 兩", `<span class="nb">${r.cost | 0} 兩</span>`)}${dealHtml(r.cost_note || "")}${r.left_text ? `・<span class="nb">${esc(r.left_text)}</span>` : ""}</small></button>`;
+      const all = r.batch >= 2
+        ? `<button class="btn primary up-all" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-n="${r.batch | 0}"><b>${UP_ALL.replace("{n}", r.batch | 0)}</b><small>${UP_ALL_USE.replace("{n}", (r.batch * r.need) | 0).replace("{from}", esc(r.from)).replace("{cost}", (r.batch * r.cost) | 0)}</small></button>` : "";
+      acts = `<div class="ups${all ? "" : " one"}">${oneBtn}${all}</div>${r.lean ? `<p class="up-odds">${esc(r.odds || "")}</p>` : ""}`;
+    }
+    return `<div class="chain"><div class="ch-hd"><span class="row-attr ${SHOP_ATTR[attribute] || ""}">${esc(attribute)}</span></div><div class="links">${links}</div>${acts}</div>`;
+  }
   function tradeHtml(shop) {
     const t = shop.trade;
     let ups = "";
@@ -56,14 +95,9 @@
         if (last && last.attribute === r.attribute) last.cells.push(r);
         else rows.push({ attribute: r.attribute, cells: [r] });
       }
-      // 一次熬到底（Joy 2026-11-10：真人一季按升階兩三百下）：連換得了兩個以上時格子底下多一顆「全熬 ×N」，一下熬到料、錢或上限用完
-      const all = (r) => (r.batch >= 2 && !r.problem
-        ? `<button class="up-all" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-n="${r.batch | 0}">${UP_ALL.replace("{n}", r.batch | 0)}</button>` : "");
-      const cell = (r) => `<div class="up-box"><button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
-          ${gearImg("mat", r.id, "up-pic")}<span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
-          <small>${r.problem ? esc(r.short) : `<span class="nb">${r.cost | 0} 兩</span>${dealHtml(r.cost_note || "")}${r.left_text ? `・<span class="nb">${esc(r.left_text)}</span>` : ""}`}</small></button>${all(r)}</div>`; // 上限字照伺服器給（FB-342：三換四是這一季的） // 價錢後面寫原因（名聲 4.1，FB-296）
-      // 價錢與「這一季還能 N 個」各是不折行的小段（FB-410：375 寬一格約 103px，斷成「這一季還／能 2 個」），要斷只斷在「・」後面
-      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows${shop.four ? " four" : ""}">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
+      const have = tradeCounts(shop);
+      const help = `<button class="sm-help" data-act="trade-help" aria-expanded="${!!S.tradeHelp}"><span class="q" aria-hidden="true">？</span>${TRADE_RULES} ${S.tradeHelp ? "▴" : "▾"}</button>${S.tradeHelp ? `<ul class="sm-rules"><li>${esc(t.up_cap)}</li><li>${esc(t.hint || "")}</li></ul>` : ""}`;
+      ups = `<div class="up-rows${shop.four ? " four" : ""}">${rows.map((row) => tradeChainHtml(row.attribute, row.cells.sort((a, b) => a.tier - b.tier), have)).join("")}</div>${help}`;
     }
     let sells = "";
     if (t.sell_cap) {
@@ -72,46 +106,70 @@
             ? `<button class="btn small ghost" data-act="trade-sell" data-id="${esc(r.id)}" data-n="${r.have | 0}" data-confirm="${esc(`把 ${r.have | 0} 個${r.name}都賣了，換 ${(r.have * r.price) | 0} 兩？`)}">全賣 ${(r.have * r.price) | 0} 兩</button>` : ""}</span></div>`;
       sells = `<p class="shop-cap">${esc(t.sell_cap)}</p>${t.sell.length ? `<div class="sell-rows">${t.sell.map(row).join("")}</div>` : `<p class="shop-empty">${esc(t.sell_empty)}</p>`}`;
     }
-    return `${shopNoteHtml(t.hint)}${ups}${sells}`;
+    return `${shopNoteHtml(t.upgrade.length ? "" : t.hint)}${ups}${sells}`;
   }
 
   // 架上（2.1）：一件一格；配得上的標出來，買不了的灰掉寫原因
   // 架上那一頁最上面的爐火與鐵砧（企劃者 2026-10-14，照草圖 container.html 的 A）：一大團發亮的橘色圓頂爐口、火光往外暈，底下鐵砧；
   // 純 CSS 畫（style.css 的 .forge-mouth、.forge-anvil）；Joy 之後有正式的圖可以換
-  const SMITH_HERO = '<div class="smith-hero" aria-hidden="true"><div class="forge-mouth"><i class="flame"></i></div><div class="forge-anvil"></div></div>';
+  const SMITH_HERO = '<div class="forge-mouth"><i class="flame"></i></div><div class="forge-anvil"></div>';
   // 鐵匠鋪內景的水墨圖畫好了（web/img/gear/scene-smithy.webp，gear.js 的 gearImg）就換成頁首圖：圖往下淡進店面的底色、右上直書的匾額
   // （介面設計規範第五節「頁首圖」；Joy 2026-11-10）。還沒有圖照舊畫上面那座純 CSS 的爐子
   const SMITH_PLAQUE = "鐵匠鋪"; // 待 joy 潤
-  function smithHeroHtml() {
+  // 鐵匠鋪翻新（Joy 2026-11-10「整個鐵匠鋪的介面可以翻新嗎」，翻新稿 9RrHPAD6）：頁首一張卡——上面是圖（還沒有圖是 CSS 的爐子），
+  // 右上直書匾額，底下朱印「鐵匠」＋鐵匠那一句（line，殼交過來的 .shop-line）；介面設計規範第五節「頁首圖」
+  const SMITH_SEAL = "鐵匠"; // 待 joy 潤
+  function smithHeroHtml(line = "") {
     const pic = gearImg("scene", "smithy", "smith-scene");
-    return pic ? `<div class="smith-head" aria-hidden="true">${pic}<span class="smith-plaque">${SMITH_PLAQUE}</span></div>` : SMITH_HERO;
+    return `<div class="smith-hero"><div class="sh-art" aria-hidden="true">${pic || SMITH_HERO}</div><span class="smith-plaque" aria-hidden="true">${SMITH_PLAQUE}</span>
+      <div class="sh-text"><span class="sh-seal">${SMITH_SEAL}</span>${line}</div></div>`;
+  }
+  // 器物沒有圖之前的那一枚器名印（劍、刀、拳……照種類的第一個字）；防具一律「甲」
+  function wareMark(kind) {
+    return `<span class="si-mark" aria-hidden="true">${esc([...String(kind || "甲")][0])}</span>`;
+  }
+  // 淬煉幾層（淬煉衝階）：名字旁邊的「+N」；沒淬過不寫
+  function plusHtml(n) {
+    return n > 0 ? `<em class="plus">+${n | 0}</em>` : "";
   }
   // 素材的小圖（web/img/gear/mat-<id>.webp）：有圖放圖，沒有照舊一顆屬性色點
   function matIcon(id, attribute) {
     return gearImg("mat", id, "mat-pic") || `<i class="dot ${SHOP_ATTR[attribute] || ""}"></i>`;
   }
 
+  const SHELF_BUY = "買"; // 待 joy 潤
   function shelfHtml(shop) {
     // 這一段的變數不用單字母 x：tests/server/test_server.py 把修練頁到輿圖之間那個變數讀的欄位都當成 menxia_view 的欄位查
+    // 翻新（Joy 2026-11-10）：一件一張橫卡——左邊器名印，中間名字（楷書）與「種類・屬性・階」、效果、配得上那一句，右邊價錢與一顆「買」。
+    // 整張卡就是那一顆鈕（一張卡一顆主鈕）；配得上的左上角蓋一枚「配」
     return `<div class="shop-grid">${shop.shelf.map((ware) => `<button class="shop-item${ware.fit ? " fit" : ""}" data-act="choose" data-id="${esc(ware.id)}" ${ware.enabled ? "" : "disabled"}>
+        ${ware.fit ? '<span class="si-stamp" aria-hidden="true">配</span>' : ""}${wareMark(ware.kind)}<span class="si-info">
         <b>${esc(ware.name)}</b><span>${esc(ware.kind)}・屬${esc(ware.attribute)}・${esc(ware.tier)}</span>${ware.value ? `<span>${esc(ware.value)}</span>` : ""}
-        ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}<span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span></button>`).join("")}</div>`;
+        ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}</span><span class="si-buy"><span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span>${ware.enabled ? `<span class="si-go">${SHELF_BUY}</span>` : ""}</span></button>`).join("")}</div>`;
   }
 
   // 裝備庫頁最上面身上那件的卡（原本「淬煉與修」那一頁，2.4；鐵匠鋪與合成流程 3.4 搬到這裡）：鋒利度或耐久度的長條、淬煉幾格，
   // 「修」「淬煉」兩顆大鈕送原本的選項 id（smith:repair、smith:temper、smith:armor-repair、smith:armor-temper）；做不了照伺服器的原因寫
+  const WORN_SPINE = "身上"; // 待 joy 潤
+  const TEMPER_PCT = "・成功 {pct}%"; // 待 joy 潤：過了安全線，淬煉鈕的小字多寫這一下幾成
   function smithWornHtml(shop) {
     const w = shop.worn;
     if (!w.item) return `<p class="shop-empty">${esc(w.empty)}</p>`;
     const it = w.item;
-    const pips = Array.from({ length: it.temper_max | 0 }, (_, i) => `<i class="${i < it.tempers ? "on" : ""}"></i>`).join("");
-    const big = (b, name) => `<button class="btn shop-big" data-act="choose" data-id="${esc(b.id)}" ${b.enabled ? "" : "disabled"}><b>${name}</b><small>${esc(b.enabled ? b.use : b.why)}</small></button>`;
-    // 淬煉幾格照這一件的上限（3.6：上品 7 格），旁邊寫「N/M」；上品多一句磨得慢（wear_note）。待 joy 潤
-    return `<div class="shop-worn"><b>【${esc(it.name)}】</b><span>${esc(it.grade)}${it.wear_note ? `・${esc(it.wear_note)}` : ""}</span>
-        <div class="shop-wear"><span>${esc(it.wear_word)} ${it.wear | 0}</span><div class="wear-bar"><i style="width:${Math.max(0, Math.min(100, it.wear | 0))}%"></i></div></div>
-        <div class="tempers"><span>淬煉 ${it.tempers | 0}/${it.temper_max | 0}</span>${pips}</div></div>
-      <div class="shop-bigs">${big(w.repair, "修")}${big(w.temper, "淬煉")}</div>
-      ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}`;
+    // 淬煉衝階（Joy 2026-11-10）：安全線以內的格子金框，過了安全線的朱框（淬那幾格會失敗、退一層）；淬煉鈕的小字多寫這一下幾成
+    const safe = it.temper_safe == null ? it.temper_max | 0 : it.temper_safe | 0;
+    const pips = Array.from({ length: it.temper_max | 0 }, (_, i) => `<i class="${i < it.tempers ? "on" : ""}${i >= safe ? " risk" : ""}"></i>`).join("");
+    const odds = (b) => (b.enabled && it.temper_pct != null && it.temper_pct < 100 ? TEMPER_PCT.replace("{pct}", it.temper_pct | 0) : "");
+    // 一張卡一顆主鈕：要修（鋒利度掉到一半以下）時「修」是主鈕，不然是「淬煉」
+    const lead = w.repair.enabled && (it.wear | 0) < 50 ? "repair" : "temper";
+    const big = (b, name, key) => `<button class="btn shop-big${lead === key && b.enabled ? " primary" : ""}" data-act="choose" data-id="${esc(b.id)}" ${b.enabled ? "" : "disabled"}><b>${name}</b><small>${esc(b.enabled ? b.use : b.why)}${key === "temper" ? odds(b) : ""}</small></button>`;
+    // 淬煉幾格照這一件的上限（3.6：上品 7 格；衝階開著一律 10 格），旁邊寫「N/M」；上品多一句磨得慢（wear_note）。待 joy 潤
+    return `<div class="shop-worn"><span class="sw-spine" aria-hidden="true">${WORN_SPINE}</span><div class="sw-in">
+        <div class="sw-hd"><b>【${esc(it.name)}】</b>${plusHtml(it.tempers)}<span>${esc(it.grade)}${it.wear_note ? `・${esc(it.wear_note)}` : ""}</span></div>
+        <div class="shop-wear"><span>${esc(it.wear_word)} ${it.wear | 0}</span><div class="wear-bar"><i class="${(it.wear | 0) < 50 ? "low" : ""}" style="width:${Math.max(0, Math.min(100, it.wear | 0))}%"></i></div></div>
+        <div class="tempers"><span>淬煉 ${it.tempers | 0}/${it.temper_max | 0}</span>${pips}</div>
+      <div class="shop-bigs">${big(w.repair, "修", "repair")}${big(w.temper, "淬煉", "temper")}</div>
+      ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}</div></div>`;
   }
 
   // 裝備庫（2.5；鐵匠鋪與合成流程 3.4 併進淬煉與修）：最上面身上那件的卡，底下「裝備庫 N／100」每件一列——勾選框、名字、一行數字、
@@ -120,6 +178,8 @@
   // 不給勾；等著定名的原品那一列底下一張定名表單；先列 8 件，其餘按「再列 N 件」。最底下「拆解勾選的 N 件」先問一次（一件一行拆成什麼）。
   // 四顆鈕在名字右邊排成二乘二（企劃者 2026-11-03 挑「乙 右邊二乘二」；320 寬放不下改排在名字底下，style.css）；小字都切成不折行的小段。字待 joy 潤
   const RACK_MELT_GO = "拆解勾選的 {n} 件"; // 待 joy 潤
+  const RACK_PICK_ON = "挑幾件拆成素材"; // 待 joy 潤
+  const RACK_PICK_OFF = "不拆了"; // 待 joy 潤
   const RACK_MELT_ASK = "拆掉這 {n} 件？拆了就沒了。"; // 待 joy 潤
   const RACK_MELT_LINE = "【{name}】→ {into} ×{count}"; // 待 joy 潤：確認框一件一行（素材與件數照伺服器那一列的 into）
   const RACK_MELT_TEMPERED = "（淬過 {n} 次一起沒了）"; // 待 joy 潤
@@ -146,9 +206,14 @@
     const melt = r.keep
       ? `<button class="btn small ghost rk-btn" disabled><b>拆解</b>${note(r.keep)}</button>`
       : `<button class="btn small ghost rk-btn" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}"><b>拆解</b></button>`;
-    return `<div class="shop-row rk-row${on ? " on" : ""}">${box}
-        <div class="winfo"><b>【${esc(r.name)}】</b><span>${nbHtml(line)}</span>${r.wield_ok === false ? `<small class="rwhy">${esc(r.wield_note || "")}</small>` : ""}</div>
-        <div class="rk-btns">${wield}${work("rack-repair", r.repair, "修")}${work("rack-temper", r.temper, "淬煉")}${melt}</div>
+    // 翻新（Joy 2026-11-10）：一件一張卡，平常只露名字與那一行數字，點了才攤開「換上／修／淬煉／拆解」（S.rackOpen，輪詢重畫不收）；
+    // 勾選框只在「挑幾件拆」的時候露出來（S.rackPicking）。四顆鈕與勾選框都照舊畫在列上，攤不攤開、露不露由 class 決定
+    const open = !S.rackPicking && S.rackOpen === r.id;
+    const pct = r.temper && r.temper.ok && r.temper_pct != null && r.temper_pct < 100 ? TEMPER_PCT.replace("{pct}", r.temper_pct | 0) : "";
+    const workT = pct ? work("rack-temper", { ...r.temper, use: `${r.temper.use || ""}${pct}` }, "淬煉") : work("rack-temper", r.temper, "淬煉");
+    return `<div class="shop-row rk-row${on ? " on" : ""}${open ? " open" : ""}">${box}
+        <button type="button" class="winfo" data-act="rack-open" data-id="${esc(r.id)}" aria-expanded="${open}">${wareMark(r.noun || r.kind)}<span class="wi-txt"><b>【${esc(r.name)}】${plusHtml(r.tempers)}</b><span>${nbHtml(line)}</span>${r.wield_ok === false ? `<small class="rwhy">${esc(r.wield_note || "")}</small>` : ""}</span><span class="wi-chev" aria-hidden="true">${open ? "▴" : "▾"}</span></button>
+        <div class="rk-btns">${wield}${work("rack-repair", r.repair, "修")}${workT}${melt}</div>
       </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true, r.divine.unit) : ""}`;
   }
   function rackHtml(shop) {
@@ -158,9 +223,12 @@
     const shown = rackShown(shop);
     const more = rows.length - shown.length;
     const n = rackPicks(shop).length;
-    const go = rows.some((r) => r.into)
-      ? `<div class="rk-go${n ? " live" : ""}"><button class="btn primary" data-act="rack-melt"${n ? "" : " disabled"}>${RACK_MELT_GO.replace("{n}", n)}</button></div>` : "";
-    return `${worn}<p class="shop-cap rk-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => rackRowHtml(shop, r)).join("")}
+    // 拆解改成「挑幾件」：平常最底下一顆淡框鈕，按了才露出勾選框與「拆解勾選的 N 件」（旁邊一顆取消）
+    const go = !rows.some((r) => r.into) ? ""
+      : S.rackPicking
+        ? `<div class="rk-go${n ? " live" : ""}"><button class="btn ghost" data-act="rack-picking" data-on="">${RACK_PICK_OFF}</button><button class="btn primary" data-act="rack-melt"${n ? "" : " disabled"}>${RACK_MELT_GO.replace("{n}", n)}</button></div>`
+        : `<div class="rk-go"><button class="btn ghost" data-act="rack-picking" data-on="1">${RACK_PICK_ON}</button></div>`;
+    return `${worn}<h4 class="sm-sec rk-cap">裝備庫<small>${shop.rack.used | 0}／${shop.rack.cap | 0}</small></h4><div class="rk-list${S.rackPicking ? " picking" : ""}">${shown.map((r) => rackRowHtml(shop, r)).join("")}</div>
       ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}${go}`;
   }
   // 拆解勾選的：先問一次（ask），一件一行「【名字】→ 素材 ×1」、淬過的多寫幾次一起沒了（素材與淬煉次數照伺服器那一列，網頁不剖確認句）；
@@ -173,7 +241,7 @@
     const lines = picks.map((r) => RACK_MELT_LINE.replace("{name}", r.name).replace("{into}", r.into.name).replace("{count}", r.into.count | 0)
       + (r.tempers ? RACK_MELT_TEMPERED.replace("{n}", r.tempers | 0) : ""));
     ask(RACK_MELT_ASK.replace("{n}", picks.length), "拆掉", () => {
-      S.rackPick = {};
+      S.rackPick = {}; S.rackPicking = false;
       return shopMx("dismantle_many", { items: picks.map((r) => r.id) });
     }, { lines });
   }
@@ -561,6 +629,8 @@
           else await shopDo("smith_sell", { material: el.dataset.id, count: Number(el.dataset.n) || 1 });
           break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "trade-pick": S.tradePick = { ...(S.tradePick || {}), [el.dataset.attr]: Number(el.dataset.tier) }; renderShop(); break;
+        case "trade-help": S.tradeHelp = !S.tradeHelp; renderShop(); break;
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
         case "shop-brew": shopBrew(el.dataset.attr, Number(el.dataset.tier), el.dataset.why); break; // 打造頁的灰格（3.3）：點了從底下浮小單
@@ -578,12 +648,17 @@
         case "rack-repair": await shopMx("repair_item", { item: el.dataset.id }); break;
         case "rack-temper": await shopMx("temper_item", { item: el.dataset.id }); break;
         case "rack-pick": rackPick(el.dataset.id); break;
+        case "rack-open": // 點一件：挑著拆的時候是勾選，平常是攤開／收起那一件的四顆鈕
+          if (S.rackPicking) { const row = (S.main.shop.rack.rows || []).find((r) => r.id === el.dataset.id); if (row && row.into) rackPick(el.dataset.id); }
+          else { S.rackOpen = S.rackOpen === el.dataset.id ? null : el.dataset.id; renderShop(); }
+          break;
+        case "rack-picking": S.rackPicking = !!el.dataset.on; S.rackPick = {}; renderShop(); break;
         case "rack-melt": rackMelt(); break;
         case "dv-cell": await divinePick(el.dataset.id); break; // 神器頁收藏冊的一格（3.8）：翻出神器譜那一行
         case "shop-divine-keep": await shopMx("name_divine", { weapon: el.dataset.id, keep: true }); break;
     } // smithyClick
   } // smithyClick
-  registerClicks(smithyClick, ["divine-keep", "shop-tab", "trade-up", "trade-sell", "shop-more", "shop-kind", "shop-cell", "shop-brew", "shop-slot", "shop-go", "shop-furnace", "shop-unwrap", "shop-keep", "shop-wield", "shop-dismantle", "rack-repair", "rack-temper", "rack-pick", "rack-melt", "dv-cell", "shop-divine-keep"]);
+  registerClicks(smithyClick, ["divine-keep", "shop-tab", "trade-up", "trade-sell", "shop-more", "trade-pick", "trade-help", "shop-kind", "shop-cell", "shop-brew", "shop-slot", "shop-go", "shop-furnace", "shop-unwrap", "shop-keep", "shop-wield", "shop-dismantle", "rack-repair", "rack-temper", "rack-pick", "rack-open", "rack-picking", "rack-melt", "dv-cell", "shop-divine-keep"]);
   async function smithyForm(form, data) {
       if (form.dataset && form.dataset.op === "shop-name-divine") {
         // 店面上替神器原品定名（店面獨立介面設計 2.3、2.5）：同修練頁那一張；被拒了剛打的字放回去（id 帶冒號，用 getElementById）

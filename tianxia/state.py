@@ -889,6 +889,7 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    temper_seq: int = Field(0, json_schema_extra=QUIET)  # 這一季過了安全線的淬煉擲了幾次：衝階成敗的種子（smithing.temper_rng），換季跟著新角色歸零
     # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
     tier4_upgrades: int = 0
     # 每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：這一季簽過的是第幾天（開季那一天是第 1 天）；換季跟著新角色清空

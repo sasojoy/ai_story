@@ -2568,6 +2568,13 @@ class WeaponRules(_Strict):
     wear_less_by_quality: dict[str, int] = Field(default_factory=dict)
     temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階，一次一個（鐵匠鋪與合成流程 3.7；佔位值一階，寫在 content/config.json）
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（3.7；以前照用的那個素材的階，4.7、正式季整合 5.3）
+    # 淬煉衝階（Joy 2026-11-10「像天堂衝階才有那個稀有度」，失敗選「退一級」）：temper_risk_max 大於 0 時開著——上限一律是它（不再照品質），
+    # 照品質的安全線（temper_safe_by_quality）以內必成，過了每一層照 temper_odds 擲（第一個是安全線＋1 那一層，用完沿用最後一個）；
+    # 失敗料錢照收、淬煉次數退一（equipment.temper_chance、smithing.temper）。0 是舊規則：照品質上限、每次必成
+    temper_risk_max: int = Field(default=0, ge=0)
+    temper_safe_by_quality: dict[str, int] = Field(default_factory=dict)
+    temper_odds: list[float] = Field(default_factory=list)
+    temper_rumor_from: int = Field(default=0, ge=0)  # 淬到這一層以上（含）天下大事寫一筆；0 不寫
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
@@ -2601,6 +2608,11 @@ class ArmorRules(_Strict):
     wear_less_by_quality: dict[str, int] = Field(default_factory=dict)  # 每場少扣幾點耐久度（同兵器 3.6）：本來會扣的那一場才套、最少扣 1
     temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階（同兵器，鐵匠鋪與合成流程 3.7）
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（同兵器 3.7）
+    # 淬煉衝階（同兵器，Joy 2026-11-10）
+    temper_risk_max: int = Field(default=0, ge=0)
+    temper_safe_by_quality: dict[str, int] = Field(default_factory=dict)
+    temper_odds: list[float] = Field(default_factory=list)
+    temper_rumor_from: int = Field(default=0, ge=0)
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
     original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
