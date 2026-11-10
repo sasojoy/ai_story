@@ -57,7 +57,7 @@
   沒有差、落在名字以外的程式行、任一個名字超過 SHELL_NAME_CAP 個檔寫到（choose、pageJianghu 這種）→ 上面的原挑法。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
-  （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
+  （webharness）跑整支頁面、真的執行它的網頁測試（例：sense 的 test_epiphany_name_web；第 220 批之後 mall 的網頁測試不再是 slow）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - 第 106 批，上面每一條都再帶：tianxia/、scripts/、根目錄的 .py、.mjs（/tests/ 底下不算；docs、內容不算）跑舊名掃描 test_every_tianxia_import_resolves 那一條（Pick.nodes，連 slow、另一條指令）；
   包的 routes.py 帶 test_action_tables.py、test_outlock.py；web/ 帶 test_server_bots.py（FB-673）與 test_shell_stays_thin.py；scripts/*.py 帶邊界測試；content/ 也帶 test_shell_stays_thin.py（它守 content/ 的名單）；
   核心測試與核心契約（CORE_GLOBS、CONTRACT_GLOBS）都含 test_shell_stays_thin.py。
@@ -1448,7 +1448,7 @@ def pick(files: list[str], base: str | None = None,
             result.files |= named_it
             others = sorted(t.name for t in named_it if not t.is_relative_to(pkg_tests))
             # 包的 js 只有包裡用假瀏覽器（webharness 載入 APP_FILES）跑整支頁面的測試會真的執行它，而那種測試常整個檔標 slow
-            # （test_mall_web）：照「不含 slow」挑等於沒有一條在跑它（10/31 審查：插一行 function ((( 照預設 134 passed）。
+            # （例：sense 的 test_epiphany_name_web；第 220 批之後 mall 的網頁測試不再是 slow）：照「不含 slow」挑等於沒有一條在跑它（10/31 審查：插一行 function ((( 照預設 134 passed）。
             # 那幾個連 slow 一起跑，跟改到的測試檔一樣；樣式表不是 webharness 跑的，照舊。
             runs_js = {t for t in pkg_files if "webharness" in reached(t)} if path.suffix == ".js" else set()
             result.runs_js |= runs_js
