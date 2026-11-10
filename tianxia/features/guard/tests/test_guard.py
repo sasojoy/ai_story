@@ -174,6 +174,15 @@ def test_he_follows_you_into_the_next_season(on):
     assert rules.band(on.content.config.guard, carried.qing) == "恨極"
 
 
+def test_a_child_not_yet_taken_in_is_met_again_next_season(on):
+    """還沒救下、還沒決定收不收的那一段，換季重新遇見（契約測試只驗帶不帶，這一條守清掉）。"""
+    from tianxia.state import GuardBook
+    for stage in ("met", "saved"):
+        on.state.player.guard = GuardBook(stage=stage)
+        actions.on_season_start(on, on.state.model_copy(deep=True))
+        assert on.state.player.guard is None, stage
+
+
 def test_bands_cover_the_whole_range(game):
     t = game.content.config.guard
     assert [rules.band(t, q) for q in (20, 12, 4, 0, -3, -4, -11, -12, -20)] == ["恩深", "恩深", "敬重", "淡然", "淡然", "怨懟", "怨懟", "恨極", "恨極"]
