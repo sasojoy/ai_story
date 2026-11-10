@@ -30,6 +30,7 @@ from tianxia.features.map.mapart import BANNER_BOX, FRAME_INSIDE
 from tianxia.features.map.mapview import CURRENT_RING, NODE_SIZE, render_map, render_minimap, text_width
 from tianxia.ollama_client import OllamaClient
 from tianxia.team import fight
+from test_bounties import _batch  # 第 224 批：懸賞每週一批那條併進整季 [1]，每週上限照它算
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 
@@ -835,7 +836,9 @@ def season_of(content, tmp_path_factory):
     現在兩個測試看同一季，各自的檢查都照舊。每一季開自己的資料庫，模組結束時關掉。
     第 108 批：「學會悟、合、修」那四句併進整季 [1]（-n 4 下兩條分到不同 worker 就各跑一季）；閒著的選單那一條
     第一季規則關著的那一半併進種子 2 這一季（_idle_observer 只讀不改：帶不帶它，種子 2 這一季的結局、看過的事件、
-    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。"""
+    江湖紀錄、時間都一樣，一次性腳本比過），看到的 id 存在 season.idle_seen[seed]。
+    第 224 批：懸賞每週一批那條（以前 bounties 包另跑一季種子 1）併進種子 1 這一季（_bounty_observer 只讀不改：帶不帶它、
+    跟原本那條的夾具比，結局、時間、江湖紀錄、懸賞、等級與地點都一樣，一次性腳本比過），存在 season.bounty_seen、season.at_600。"""
     from tianxia.sqlite_world import open_world
 
     games, worlds = {}, []
@@ -844,6 +847,8 @@ def season_of(content, tmp_path_factory):
         if seed not in games:
             worlds.append(open_world(tmp_path_factory.mktemp(f"season-{seed}") / "world.db"))
             observe = None
+            if seed == 1:
+                observe = _bounty_observer(season.bounty_seen, season.at_600)
             if seed == 2:
                 season.idle_seen[seed] = set()
                 observe = _idle_observer(season.idle_seen[seed])
@@ -851,6 +856,8 @@ def season_of(content, tmp_path_factory):
         return games[seed]
 
     season.idle_seen = {}
+    season.bounty_seen = {}  # 懸賞 id → (第一次看到它的那一步, 它是第幾週掛的)
+    season.at_600 = []  # 第 600 步之後那一刻的江湖紀錄標題（開局那一次 observe 也算，所以是第 601 次）
     yield season
     for world in worlds:
         world.db.close()
@@ -858,7 +865,7 @@ def season_of(content, tmp_path_factory):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("seed", [1, 2, 3])
-def test_bot_plays_a_full_season(season_of, seed):
+def test_bot_plays_a_full_season(season_of, content, seed):
     game = season_of(seed)
     assert game.state.world.ended
     assert game.state.world.ending_title
@@ -869,6 +876,7 @@ def test_bot_plays_a_full_season(season_of, seed):
         assert game.world.merged_insights(), "整季都沒合成過（煉製只剩意境＋意境）"
         assert p.art_quality or p.art_mastery, "整季都沒修練過"
         assert p.member.wugong_level > 1 or p.member.neigong_level > 1, "整季都沒練成過"
+        _assert_one_bounty_batch_a_week(game, content, season_of.bounty_seen, season_of.at_600)
     if seed == 2:  # 閒著的選單、第一季規則關著（以前 test_every_idle_menu_id…[False] 跑 700 步，現在看整季）
         _assert_idle_ids_known(season_of.idle_seen[seed])
 
@@ -2243,6 +2251,47 @@ def _idle_observer(seen: set[str]):
             seen.update(oid for oid in ids if not oid.startswith("battle:"))
 
     return observe
+
+
+def _bounty_observer(seen: dict[str, tuple[int, int]], at_600: list[list[str]]):
+    """第 224 批從 bounties 包的「整季每週一批」搬來：每一步記第一次看到的懸賞（通緝不算）與第 601 次 observe 那一刻的
+    江湖紀錄標題。只讀，不改那一季。"""
+    step = [0]
+
+    def observe(game):
+        step[0] += 1
+        for b in game.state.world.bounties:
+            if b.kind != "wanted":
+                seen.setdefault(b.id, (step[0], b.week))
+        if step[0] == 601:
+            at_600.append([e.title for e in game.state.journal])
+
+    return observe
+
+
+def _assert_one_bounty_batch_a_week(game, content, seen: dict[str, tuple[int, int]], at_600: list[list[str]]) -> None:
+    """正式內容、預設設定（第一季規則關著）的整季（懸賞榜設計 10.2 的 slow；第 224 批從 bounties 包併進來）：一直到收季那一週，
+    每週剛好一批（同一週的單在同一步一起出現），bounty_week 最後是收季那一週、hooked_week 一直是 0。大勢門檻可能讓季提早收
+    （黃巾稱霸，最早第 decisive_from_week 週；FB-184 多了官軍大營之後，種子 1 這一季在第 11 週收），所以不寫死 12 週。
+    門檻在第 decisive_from_week 週以前就到了的季，一到那一週的週一 00:00 就收：那一週一刻都沒跑、掛不出那一週的單，
+    最後一批是前一週（意境提示改了內容之後種子 1 就是這樣：第 10 週週一 00:00 收、最後一批第 9 週）。"""
+    assert not content.config.season_one and content.config.bounties.enabled
+    # 整季機器人照出陣走（出陣探索與地盤設計第七節；以前 tests/season/test_core_loop_bots.py 另跑 600 步，第 108 批併進這一季：
+    # play_season 的迴圈不看 max_steps，第 601 次 observe 那一刻的江湖紀錄就是跑 600 步的那一份，一次性腳本比過）：前 600 步有探索
+    assert at_600 and any(t.startswith("探索") for t in at_600[0])
+    season = game.state.world
+    batches: dict[int, set[int]] = {}
+    for at, week in seen.values():
+        batches.setdefault(week, set()).add(at)
+    last = max(batches)
+    assert season.ended and sorted(batches) == list(range(1, last + 1))
+    end = calendar.point(season.time, content, season).week  # 收季那一週
+    ran = end - 1 if season.time == calendar.week_start(end, content, season) else end  # 正好在週一 00:00 收：那一週沒跑
+    assert content.config.decisive_from_week <= end <= content.config.season_weeks and last == ran
+    assert all(len(steps) == 1 for steps in batches.values())
+    sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, last + 1)]
+    assert all(0 < n <= _batch(content, allied=False) for n in sizes)
+    assert season.bounty_week == last and season.hooked_week == 0
 
 
 def _assert_idle_ids_known(seen: set[str]) -> None:
