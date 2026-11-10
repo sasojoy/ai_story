@@ -52,7 +52,7 @@
 ## 截圖（客服自動受理第 215 批；設計 5.1、5.5）
 
 - `POST /api/support/file?id=<單號>`：內文就是圖的位元組（不解 JSON）。gate 之後先認登入（`shell._account` 只查記憶體的 SESSIONS，在讀內文之前；沒登入 401），`Content-Length` 說超過 `file_bytes_max` 的不讀就拒、說不超過的不信：`request.stream()` 串流累計，超過就停止讀、回「圖太大了：一張最多 3 MB。」。讀完丟執行緒池：單號不是數字 404、檔頭不是 PNG／JPEG／WebP 回「只收 PNG、JPEG、WebP 的圖。」（**只看前 12 位元組**，不信 `Content-Type`、不驗整張圖；內容不是圖的照檔頭存、照檔頭回，瀏覽器在 `nosniff` 下只畫成破圖）、別人的單與不存在的單 404「找不到這張單。」同一句（同再回一句）、結了回「這張單已經結了。」、滿了回「一張單最多附 3 張圖。」。回 `{id, seq, kind, bytes, files}`。不壓縮、不縮圖、不清 EXIF；回覆表單不附圖（圖掛單）。
-- `GET /api/support/file/{tid}/{seq}`：沒登入 401；單的主人給，不是主人再看是不是客服（照 `_staff` 的兩個條件：名單上、這次是密碼登入且 6 小時內）；其他人、單或序號不存在、不是數字、列在而檔不見了一律 404「找不到這張單。」。`Content-Type` 照存的種類、`Content-Disposition: inline`。第 216 批起也認客服官的 Bearer。
+- `GET /api/support/file/{tid}/{seq}`：沒登入 401；單的主人給，不是主人再看是不是客服（照 `_staff` 的兩個條件：名單上、這次是密碼登入且 6 小時內）；其他人、單或序號不存在、不是數字、列在而檔不見了一律 404「找不到這張單。」。`Content-Type` 照存的種類、`Content-Disposition: inline`，第 219 批起路由自己也帶 `X-Content-Type-Options: nosniff`（全站 middleware 本來就加，這裡不靠它；`test_file_response_says_nosniff`）。第 216 批起也認客服官的 Bearer。
 - 看單（玩家 `mine`、客服 `ticket/{tid}`、`answer`、`close` 的回應）每張單多 `files: [{seq, kind, bytes}]`；`queue` 每一列多 `file_count`（`store.queue_extras` 一次查齊）。
 - 畫面（A 版）：寫單多一格「附截圖」（`web/support.js` 的 `supportPickHtml`；挑的檔記在 `S.supportPicks`，重畫會清掉 file input；第 4 張起不收、單張超過 3 MB 當場擋），單送出之後逐張上傳，一張失敗就停、單留著、寫「單送出了，第 N 張圖沒傳上，可以在單上補。」；看單在內文下面一列縮圖（新分頁、`rel="noopener"`、`loading="lazy"`），沒結又不滿 3 張多一個「補一張圖」表單（一次一張）；客服頁的單同一列縮圖。前端的 3 張、3 MB 是寫死的（同設定預設值），伺服器照設定另外再擋。
 
@@ -62,7 +62,7 @@
 - token 打得到：清單、看單（含帳號卡）、看圖、回覆（`answer`）、結單、自動結單；**打不到查帳號**（`_lookup` 用 `allow_bot=False`，404、不留紀錄）。別的路由（`/api/do`、`/api/main`、`/api/me`、`/api/admin*`）根本不讀 Bearer（`test_support_bot.py::test_bot_token_rejected_by_every_admin_api_and_the_shell` 守）。
 - **自動回覆的標示**：`rules.reply_auto`：系統回覆一律是；客服官的帳號回的、又不是轉達真人的才是。玩家的單每則多 `auto`、單多 `human`；客服的單每則多 `auto`、`system`，單多 `human`、`last_by`（最後一則看得到的回覆是誰：`player`／`staff`／`desk`／`system`／null；內部註記不算）；`queue` 每列多 `human`、`last_by`（`store.queue_extras` 一次查齊）。回應裡不出現 bot 這個字。沒設 `bot_account` 時只剩系統回覆認得出來。
 - **轉達**：`answer` 在 token 身分收 `relay_from`（轉字串、去空白，空的當沒有；cookie 身分帶了不看；`then=admin` 不收）：那一則不算自動，同一筆交易多一列 `flags(relay)` 與一則內部註記「轉達自 <ID>」（不經 `then=admin`）。
-- **找真人的單客服官不准回**（T 波合併時 PM 加）：token 身分對玩家按過「找真人」的單 `answer` 回 400「`rules.HUMAN_WAITING`」；`then=admin`（請管理者的內部註記）與帶 `relay_from` 的轉達照舊（`test_support_bot.py`）。
+- **找真人的單客服官不准回**（T 波合併時 PM 加）：token 身分對玩家按過「找真人」的單 `answer` 回 400「`rules.HUMAN_WAITING`」；`then=admin`（請管理者的內部註記）與帶 `relay_from` 的轉達照舊（`test_support_bot.py`）。第 219 批起**結單也擋**：token 身分 `close` 找真人的單同一句 400、什麼都不寫（旗標結了也還在，所以結過的找真人單 token 再結也是這一句）；cookie 的真人客服照舊結得了，單不存在照舊 404（`test_bot_cannot_close_a_ticket_waiting_for_a_human`）。
 - **admin_flag**：第 216 批起每次回覆設值（請管理者 1、其他 0），結單也清（以前只設不清，自動結單會永遠跳過它）。
 - **找真人** `POST /api/support/human {id}`：主人才行（別人的、不存在 404「找不到這張單。」），結了回「這張單已經結了。」，按過再按照舊（冪等）；第一次按記一列 `flags(human)`、已回覆的單回到處理中。伺服器不要求單上已有自動回覆（畫面才看）。回這一張單（玩家看的）。
 - **自動結單** `POST /api/support/sweep {}`：客服（cookie）或 token 叫，玩家 404 同一句；旁檔不在回 `{"closed": []}`、不建檔。`store.sweep` 在 `BEGIN IMMEDIATE` 裡才讀：已回覆、`admin_flag = 0`、最後一則（含內部註記）早於 `auto_close_days` 天的單，各記一則系統回覆「N 天沒再回，單自動結了。」並結掉；不推播。客服頁每次重讀清單前先打一次（失敗不擋）。

@@ -192,6 +192,28 @@ def test_bot_cannot_answer_a_ticket_waiting_for_a_human(monkeypatch, support_iso
     assert out.status_code == 200 and out.json()["replies"][-1]["body"] == "我是真人"
 
 
+def test_bot_cannot_close_a_ticket_waiting_for_a_human(monkeypatch, support_isolated):
+    """第 219 批：玩家按了找真人，客服官（token）結單也被拒、同一句 HUMAN_WAITING、什麼都不寫；
+    cookie 的真人客服照舊結得了；沒按找真人的單客服官照舊結得了。"""
+    from tianxia.features.support import rules
+    c = player()
+    tid = ticket(c).json()["id"]
+    other = ticket(c, body="另一件事").json()["id"]
+    s = staffer(monkeypatch)
+    desk, h = _desk(monkeypatch, support_isolated)
+    assert c.post("/api/support/human", json={"id": tid}).status_code == 200
+    sc = store.open_store(support_kit.sidecar(), create=False)
+    before = (sc.ticket(tid)["status"], len(sc.replies(tid, internal=True)), sc.flags(tid))
+    assert before[0] != rules.CLOSED
+    r = desk.post("/api/support/close", json={"id": tid}, headers=h)
+    assert (r.status_code, r.json()) == (400, {"error": rules.HUMAN_WAITING})
+    assert (sc.ticket(tid)["status"], len(sc.replies(tid, internal=True)), sc.flags(tid)) == before
+    out = s.post("/api/support/close", json={"id": tid})
+    assert out.status_code == 200 and sc.ticket(tid)["status"] == rules.CLOSED
+    out = desk.post("/api/support/close", json={"id": other}, headers=h)
+    assert out.status_code == 200 and sc.ticket(other)["status"] == rules.CLOSED
+
+
 def test_support_json_never_contains_bot_word(monkeypatch, support_isolated):
     """假人看不出來：客服的每一條回應（清單、單、自己的單、找真人、自動結單、回覆）整串都沒有 bot 這個字（大小寫都不行）。"""
     c = player()
