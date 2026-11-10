@@ -10,4 +10,5 @@
  "arts": {"create_first_xinde": 100, "fight_practice": {"enabled": true, "daily_cap": 40}},
  "guard": {"enabled": true},
  "craft": {"enabled": true},
- "horses": {"enabled": true}}
+ "horses": {"enabled": true},
+ "intro": {"enabled": true}}
