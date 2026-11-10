@@ -180,10 +180,12 @@ def test_cli_output_never_leaks(monkeypatch, support_isolated, capsys, tmp_path)
     c = player()
     tid = ticket(c).json()["id"]
     assert c.post(f"/api/support/file?id={tid}", content=PNG + b"x", headers={"Content-Type": "image/png"}).status_code == 200
-    assert c.post("/api/support/human", json={"id": tid}).status_code == 200
-    runs = [("queue",), ("--inbox", str(tmp_path / "in"), "ticket", str(tid)), ("note", str(tid)), ("answer", str(tid)),
-            ("--inbox", str(tmp_path / "in"), "ticket", str(tid)), ("close", str(tid)), ("queue",)]
+    runs = [("queue",), ("--inbox", str(tmp_path / "in"), "ticket", str(tid)), ("note", str(tid)), ("answer", str(tid))]
     for argv in runs:
+        _run(cfg, *argv, stdin="知道了", monkeypatch=monkeypatch)
+    # T 波（PM）：找真人的單客服官不准自己回，所以找真人放在客服官回過之後
+    assert c.post("/api/support/human", json={"id": tid}).status_code == 200
+    for argv in [("--inbox", str(tmp_path / "in"), "ticket", str(tid)), ("close", str(tid)), ("queue",)]:
         _run(cfg, *argv, stdin="知道了", monkeypatch=monkeypatch)
     out = capsys.readouterr()
     text = out.out + out.err
