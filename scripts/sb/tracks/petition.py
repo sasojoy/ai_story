@@ -16,13 +16,17 @@ SUPPORT_ROUTES = (
     ("POST", "/api/support/close", {"id": 1}),
     ("POST", "/api/support/lookup", {"id": 1, "kind": "login", "text": "zhuwuya"}),  # 第 212 批：客服二（查帳號）
     ("GET", "/api/support/mailbox", None),  # 第 214 批：登入頁的客服信箱（不用登入）
+    ("POST", "/api/support/file?id=1", {"x": 1}),  # 第 215 批：截圖上傳（關著 404 先於讀內文，帶 JSON 也一樣）
+    ("GET", "/api/support/file/1/1", None),  # 第 215 批：看圖
+    ("POST", "/api/support/human", {"id": 1}),  # 第 216 批：找真人
+    ("POST", "/api/support/sweep", {}),  # 第 216 批：自動結單
 )
 MAILBOX = "/api/support/mailbox"
 
 
 class PetitionScenario(Scenario):
     """客服的一軌（帳號與客服第 211 批；--track petition，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
-    三種設定的客服開關都關著（Config.support.enabled 預設 False）：登入的人（按過略過教學的祝無涯、沒按的練晚舟各一位）打九條 /api/support/*（第 212 批加查帳號那一條，第 214 批加 mailbox），
+    三種設定的客服開關都關著（Config.support.enabled 預設 False）：登入的人（按過略過教學的祝無涯、沒按的練晚舟各一位）打十三條 /api/support/*（第 212 批加查帳號那一條，第 214 批加 mailbox，第 215 批加截圖的上傳與看圖兩條，第 216 批加找真人與自動結單兩條），
     再讀 /api/main（列出 support 開頭的鍵）與 /api/push。base 沒有這幾條路由、head 有但關著：登入的人兩邊都是 404 {"detail": "Not Found"}。
     半舊半新：客服關著時不寫任何東西，切在前半打完之後；後半第一件事無條件重新登入，再打一輪。
     沒登入的人只打一次 mailbox（第 214 批：唯一不用登入的那一條；base 沒有這條路、head 關著，兩邊都是 404 Not Found），前半、後半各一次。

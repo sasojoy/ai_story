@@ -38,6 +38,12 @@ JOURNAL_TITLE = "客服"  # 待 joy 潤
 JOURNAL_TAG = "回覆了你的單"  # 待 joy 潤
 JOURNAL_LINE = "客服回覆了你的第 {id} 號單，到「設定 › 客服」看。"  # 待 joy 潤
 
+# ── 客服官（客服自動受理第 216 批；設計 5.2～5.4）──
+SYSTEM_ACCOUNT = 0  # 系統回覆（自動結單那一則）記在這個帳號 id 上（accounts.id 從 1 起，不會撞）
+AUTO_CLOSED = "{days} 天沒再回，單自動結了。"  # 待 joy 潤
+HUMAN_ASKED = "已請真人處理"  # 待 joy 潤
+RELAY_NOTE = "轉達自 {who}"  # 待 joy 潤
+
 
 # ── 查帳號（第 212 批；設計 6.3）：只收完整帳號、Email、手機，不收名號、不做模糊搜尋 ──
 HOUR_SECONDS = 3600.0
@@ -50,6 +56,24 @@ LOOKUP_EMPTY = "請輸入要查的帳號、Email 或手機。"  # 待 joy 潤
 LOOKUP_BAD_EMAIL = "Email 的寫法不對。"  # 待 joy 潤
 LOOKUP_BAD_PHONE = "只收台灣手機門號（09 開頭十碼）。"  # 待 joy 潤
 LOOKUP_BAD_KIND = "只能照帳號、Email 或手機查。"  # 待 joy 潤
+
+# ── 截圖（客服自動受理第 215 批；設計 5.1）：只看檔頭認種類（不信副檔名、不信 Content-Type、不驗整張圖），種類就是存檔的副檔名 ──
+CONTENT_TYPES: dict[str, str] = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+FILE_TOO_BIG = "圖太大了：一張最多 {mb} MB。"  # 待 joy 潤
+FILE_NOT_IMAGE = "只收 PNG、JPEG、WebP 的圖。"  # 待 joy 潤
+FILES_FULL = "一張單最多附 {n} 張圖。"  # 待 joy 潤
+
+
+def image_kind(head: bytes) -> str | None:
+    """前 12 位元組認種類：PNG 89 50 4E 47 0D 0A 1A 0A、JPEG FF D8 FF、WebP RIFF＋4 位元組＋WEBP；其他回 None。"""
+    head = bytes(head[:12])
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if len(head) == 12 and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
 
 # 帳號卡「綁了」那一格（logins.provider → 字；先後就是畫面上的先後）
 PROVIDER_NAMES: dict[str, str] = {
@@ -160,3 +184,32 @@ def after_staff(then: str, status: str) -> str:
 def visible_to_player(reply: dict) -> bool:
     """內部註記（請管理者處理）玩家看不到。"""
     return not reply["internal"]
+
+
+def reply_auto(reply: dict, bot_id: int | None, relayed: frozenset[int]) -> bool:
+    """這一則是不是自動回覆（第 216 批）：系統回覆（SYSTEM_ACCOUNT）一律是；客服官的帳號回的、又不是轉達真人的話（relayed 是那幾則的 id）才是。
+    玩家的、真人客服的都不是；沒設客服官（bot_id None）只剩系統回覆。"""
+    if not reply["staff"]:
+        return False
+    if reply["by_account_id"] == SYSTEM_ACCOUNT:
+        return True
+    return bot_id is not None and reply["by_account_id"] == bot_id and reply["id"] not in relayed
+
+
+def after_human(status: str) -> str:
+    """玩家按了找真人：已回覆（等玩家）回到處理中；處理中照舊（結了的呼叫端先擋）。"""
+    return OPEN if status == ANSWERED else status
+
+
+def last_by(replies: list[dict], bot_id: int | None, relayed: frozenset[int]) -> str | None:
+    """最後一則玩家看得到的回覆是誰寫的（客服頁的清單與單用）：system 系統／desk 自動回覆／staff 真人客服／player 玩家；沒有回覆 None。
+    內部註記不算。值裡不寫 bot 這個字（任何回應都不透露）。"""
+    shown = [r for r in replies if not r["internal"]]
+    if not shown:
+        return None
+    r = shown[-1]
+    if not r["staff"]:
+        return "player"
+    if r["by_account_id"] == SYSTEM_ACCOUNT:
+        return "system"
+    return "desk" if reply_auto(r, bot_id, relayed) else "staff"

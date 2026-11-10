@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from backup_db import BackupError, STAMP, describe, verify  # noqa: E402
 from backup_db import SIDE_FILES, side_of, verify_side  # noqa: E402  identity：旁檔跟主檔同一個時間戳
+from backup_db import SIDE_DIRS, side_dir_of  # noqa: E402  support（第 215 批）：截圖的資料夾也是
 from tianxia.database import default_path  # noqa: E402
 
 SIDECARS = ("-wal", "-shm", "-journal")
@@ -86,7 +87,7 @@ def restore(backup_file: Path, target: Path, *, now: dt.datetime) -> Path | None
                 f"要退回就把它們一起改名回去，名字去掉 .pre-restore-… 那一段（{e}）"
             ) from e
         raise
-    for note in restore_sides(backup_file, target, now=now):
+    for note in restore_sides(backup_file, target, now=now) + restore_side_dirs(backup_file, target, now=now):
         print(note, file=sys.stderr if note.startswith("警告") else sys.stdout)
     return aside
 
@@ -124,6 +125,32 @@ def restore_sides(backup_file: Path, target: Path, *, now: dt.datetime) -> list[
         except (OSError, BackupError) as e:
             current.with_name(current.name + ".restoring").unlink(missing_ok=True)
             notes.append(f"警告：旁檔 {side} 沒有還原成（主檔已經還原）：{current}（{e}）")
+    return notes
+
+
+def restore_side_dirs(backup_file: Path, target: Path, *, now: dt.datetime) -> list[str]:
+    """主檔與旁檔還原好之後（support，客服自動受理第 215 批）：備份旁邊同一個時間戳的資料夾整夾還原，現有的改名成 <資料夾名>.pre-restore-<時間> 留著；
+    備份旁邊沒有、可是現在有的，把現有的改名留著、印警告（同旁檔的規則）。回要印的話，一個資料夾一句。"""
+    notes = []
+    for side in SIDE_DIRS:
+        source, current = side_dir_of(backup_file, side), side_dir_of(target, side)
+        aside = current.with_name(f"{current.name}.pre-restore-{now.strftime(STAMP)}")
+        staged = current.with_name(current.name + ".restoring")
+        try:
+            if source.is_dir():
+                shutil.rmtree(staged, ignore_errors=True)
+                shutil.copytree(source, staged)
+                moved = current.exists()
+                if moved:
+                    _move(current, aside)
+                os.replace(staged, current)
+                notes.append(f"還原了資料夾：{current}" + (f"（還原前的留在 {aside}）" if moved else ""))
+            elif current.exists():
+                _move(current, aside)
+                notes.append(f"警告：備份旁邊沒有同一個時間的資料夾 {side}，現有的改名留著：{aside}")
+        except (OSError, BackupError) as e:
+            shutil.rmtree(staged, ignore_errors=True)
+            notes.append(f"警告：資料夾 {side} 沒有還原成（主檔已經還原）：{current}（{e}）")
     return notes
 
 
