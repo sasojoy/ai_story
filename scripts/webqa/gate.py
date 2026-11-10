@@ -63,6 +63,7 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/mail.js": "the mail package (Config.mail) is off in every profile the walk runs: no main.mail, so the 信匣 entry is not drawn and nothing calls into it",
     "web/zongmen.js": "the zongmen package (Config.zongmen) is off in every profile the walk runs: no main.zongmen, so nothing calls into it",
     "web/guard.js": "the guard package (Config.guard) is off in every profile the walk runs: no main.guard, so the 養成冊 is not drawn and nothing calls into it",
+    "web/intro.js": "the intro package (Config.intro) is off in every profile the walk runs: no status.intro and /api/intro is 404, so the 開場 layer never shows",
 }
 
 

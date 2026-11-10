@@ -309,8 +309,10 @@ CROSS_PACKAGE_CALLS = {
     ("explore", "story"): {"_story_begin"},
     ("faction", "battle"): {"_ally_follows_battle", "_battle_now"},
     ("faction", "guide"): {"_nearest_to", "_note_action", "_opening_pending"},
+    ("intro", "guide"): {"_opening_pending"},  # 開局前導畫本（Joy 2026-11-10）：還停在城門口才自動播
     ("figure_acts", "gear"): {"_signature_arms"},
     ("figure_acts", "military"): {"_order_credit"},
+    ("guard", "battle"): {"_battle_now"},  # 親衛隊長第四批（Joy 2026-11-10「全部做完一起上」）：你在決戰裡倒下時他說一句
     ("guide", "battle"): {"_at_battle", "_battle_status", "_watching_battle"},
     ("guide", "companions"): {"_recruit_target", "_recruitable_here"},
     ("guide", "craft"): {"_create_allowed", "_create_on", "_create_price", "forge"},

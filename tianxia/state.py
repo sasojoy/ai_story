@@ -419,6 +419,8 @@ class GuardBook(BaseModel):
     phase_days: int = 0  # 這一段一起過了幾天
     phase_n: int = 0  # 這一段一起經歷了幾件事
     teach_day: int = 0  # 哪一天教過他了（一天一次；換季歸零）
+    # 第四批（Joy 2026-11-10「全部做完一起上」）：你在決戰裡倒下的那一場（「<battle_id>#<流水號>」）他說過話了，同一場不再說
+    fell_battle: str = ""
 
 
 class LegacyBook(BaseModel):
@@ -2154,6 +2156,7 @@ class WorldState(BaseModel):
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
+    guard_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時親衛隊長（Config.guard）是不是開著：開著的季酒肆不再招同伴（hire.on；Joy 2026-11-10「全部做完一起上」、設計稿第四批「下一季關酒肆招募」）；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     # 這一季開季時地方豪強已經拿掉了（Config.gentry 關著；allied.gentry_on）：只剩官軍、黃巾、散人。舊季讀檔是 False（豪強照舊），False 不寫進存檔

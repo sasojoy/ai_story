@@ -20,8 +20,9 @@ TITLE = "招募同伴"
 
 
 def on(ctx: Game) -> bool:
-    """五項屬性的季（蓋了章）、Config.hire 開著。"""
-    return ctx.content.config.hire.enabled and attrset.on(ctx.content, ctx.state.world)
+    """五項屬性的季（蓋了章）、Config.hire 開著；開季時親衛隊長開著的季（WorldState.guard_on）不再招（親衛隊長取代酒肆招募，Joy 2026-11-10「全部做完一起上」）。"""
+    w = ctx.state.world
+    return ctx.content.config.hire.enabled and attrset.on(ctx.content, w) and not w.guard_on
 
 
 def _type(ctx: Game, key: str):

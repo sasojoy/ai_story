@@ -55,14 +55,16 @@ class GuardTuning(BaseModel):
     # 第三批：投效之後（設計稿第四節）
     hurt_ratio: float = Field(default=0.3, gt=0, le=1)  # 做完一件事氣血掉到上限的幾成以下、而且比做之前少：他說一句（一天一次）
     band_steps_per_season: int = Field(default=1, ge=0)  # 投效之後心性一季最多換幾檔（恨可以被焐回來、恩也會寒心，只是很慢）
-    # 專長（設計稿第三節；Joy 2026-11-09「好」：先合時數字全 0，假人照平衡清單量過再填）。出路 → {鍵: 值}；鍵與原位對照在 core/guard_base.py
+    # 專長（設計稿第三節；Joy 2026-11-09「好」先合時全 0）。第四批（Joy 2026-11-10「全部做完一起上」）照 scripts/measure_guard.py 量過填：
+    # 人人養得到，一格不超過玉璽碎片（威力 ×1.10、閃避 +0.03）的一半。week7 30 級、六種配法 × 七套身手、每格 400 場：
+    # 弓箭手 +3 個百分點；殺手、謀士 ×1.05 截殺設伏勝率平均 +6 個百分點（碎片 +13）；醫者少扣 5%～10% 的氣血；其餘照單位換算。出路 → {鍵: 值}；鍵與原位對照在 core/guard_base.py
     perks: dict[str, dict[str, float]] = Field(default_factory=lambda: {
-        "將軍": {"big_fight": 0.0}, "謀士": {"ambush": 0.0}, "遊俠": {"bounty_pct": 0.0}, "鐵匠": {"forge_points": 0.0},
-        "農夫": {"stamina_day": 0.0}, "乞丐": {"tavern_asks": 0.0}, "殺手": {"raid": 0.0}, "弓箭手": {"fight_pp": 0.0},
-        "醫者": {"toll_cut": 0.0}, "斥候": {"explore_legend": 0.0},
+        "將軍": {"big_fight": 3.0}, "謀士": {"ambush": 0.05}, "遊俠": {"bounty_pct": 0.1}, "鐵匠": {"forge_points": 4.0},
+        "農夫": {"stamina_day": 24.0}, "乞丐": {"tavern_asks": 1.0}, "殺手": {"raid": 0.05}, "弓箭手": {"fight_pp": 3.0},
+        "醫者": {"toll_cut": 0.05}, "斥候": {"explore_legend": 0.25},
     })
-    # 心性的加成（設計稿第四節）：恩深、敬重有機會替你擋一下（落敗閃成僵持）；怨懟、恨極不擋刀（Joy 2026-11-09 照推薦）
-    band_perks: dict[str, dict[str, float]] = Field(default_factory=lambda: {"恩深": {"dodge": 0.0}, "敬重": {"dodge": 0.0}})
+    # 心性的加成（設計稿第四節）：恩深、敬重有機會替你擋一下（落敗閃成僵持）；怨懟、恨極不擋刀（Joy 2026-11-09 照推薦）。碎片金角 +0.03
+    band_perks: dict[str, dict[str, float]] = Field(default_factory=lambda: {"恩深": {"dodge": 0.02}, "敬重": {"dodge": 0.01}})
     qing_cap: int = Field(default=20, ge=1)  # 情分上下限
     step_cap: int = Field(default=3, ge=1)  # 一件事最多動多少情分（模型評 −2～+2，固定事件寫死的也夾這個）
     tags: list[str] = Field(default_factory=lambda: list(TAGS))
