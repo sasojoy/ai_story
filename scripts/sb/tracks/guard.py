@@ -159,7 +159,7 @@ class GuardScenario(PeersScenario):
         self.main(self.LEAD)
         self.do(ADMIN, "next_season")
         self.guard_of(self.LEAD, "下一季")
-        emit("下一季的章 guard_on", self.world.get_season().guard_on)
+        emit("下一季的章 guard_on", getattr(self.world.get_season(), "guard_on", None))
         view = self.main(self.LEAD)
         emit("下一季的 hire:", sorted(i for i in self.ids(view) if i.startswith("hire:")) if isinstance(view, dict) else None)
 
