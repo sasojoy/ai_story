@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 
 from . import battle_base as battle_instance
 from . import features as features_core
+from . import guard_base  # 親衛隊長的專長（第三批，Joy 2026-11-09「好」）：將軍給大場面判讀的優勢多幾個百分點（Config.guard.perks，預設 0）
 from . import jieyi_base  # 並肩作戰（結義第二批）：決戰加入時快照兄弟
 from .services import PROLOGUE_FIGHT, drill_share
 from .. import (
@@ -173,7 +174,8 @@ def fight_with(ctx, squad: Squad, judged: fight_llm.Judgment | None, **kw) -> en
     shift = 0.0
     if judged is not None:
         swing = ctx.content.config.big_fight_swing
-        shift = encounter.advantage_shift(squad.difficulty, max(-swing, min(swing, judged.advantage)))
+        advantage = judged.advantage + guard_base.perk(ctx.state, ctx.content, "big_fight")  # 親衛隊長（將軍）：照舊夾在 ±big_fight_swing
+        shift = encounter.advantage_shift(squad.difficulty, max(-swing, min(swing, advantage)))
     return team.fight(ctx.state, ctx.content, ctx.world, squad.id, ctx.rng, shift=shift, **kw)
 
 

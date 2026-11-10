@@ -4,6 +4,7 @@
 # 畫法在 web/support.js、web/app.js（sheetHtml 那三處）、web/admin.js（renderAdmin 開頭）；寫在這裡 test_for 改這幾個檔時才挑得到
 from __future__ import annotations
 
+import json
 import random
 import re
 
@@ -17,7 +18,7 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES = '"bookHtml", "peerHtml"]'
-SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate"]')
+SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate", "supportChange", "supportDeskReload"]')
 assert SUPPORT_DRIVER != DRIVER
 
 XSS = ('<img src=x onerror="globalThis.__pwned=1">', "<script>globalThis.__pwned=1</script>", '"><svg onload=alert(1)>')
@@ -246,9 +247,9 @@ function page(opts) {
   const real = new Function("S", "$app", "promoHtml", "gatePatchHtml", "loadPatchNotes", "drawGateSlots", fn("renderGate") + "\nreturn renderGate;")(
     S, $app, () => '<div class="promo"></div>', () => "", () => {}, drawGateSlots);
   const renderGate = () => { renders++; real(); };
-  const kit = new Function("S", "esc", "fetch", "renderGate", "registerClicks", "registerForms", "registerGateSlot",
+  const kit = new Function("S", "esc", "fetch", "renderGate", "registerClicks", "registerForms", "registerChanges", "registerGateSlot",
     supSrc + "\nreturn { supportGate, supportGateHtml };")(
-    S, esc, fetch, renderGate, () => {}, () => {}, (f) => { if (opts.slot !== false) slots.push(f); });
+    S, esc, fetch, renderGate, () => {}, () => {}, () => {}, (f) => { if (opts.slot !== false) slots.push(f); });
   return { S, kit, renderGate, html: () => html, counts: () => [renders, urls.length], urls };
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -348,3 +349,173 @@ def test_gate_whole_app_same_while_closed(main, tmp_path):
                             {"m": main, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}, "app": str(_without_support(tmp_path))})
     assert now == before
     assert 'id="gate-patch"' in now[0] and not [u for u in now[1] if u.startswith("/api/support")]
+
+
+# ── 截圖（客服自動受理第 215 批；設計 5.5、5.6①③）：寫單附圖、看單縮圖與補圖、客服頁縮圖 ──
+# fetch 換成收 {method, headers, body} 的假貨：api() 的 JSON 照解，圖的內文記檔名；fail 列的網址回 400
+SHOT_FETCH = """
+  const sent = [];
+  T.ctx.fetch = (url, opts) => {
+    opts = opts || {};
+    const body = typeof opts.body === "string" ? JSON.parse(opts.body) : (opts.body ? opts.body.name : null);
+    sent.push([url, opts.method || "GET", (opts.headers || {})["Content-Type"] || null, body]);
+    const bad = (FAIL || []).includes(url);
+    const data = bad ? { error: "圖太大了：一張最多 3 MB。" } : (Object.keys(REPLIES).find((k) => url.startsWith(k)) ? REPLIES[Object.keys(REPLIES).find((k) => url.startsWith(k))] : {});
+    return Promise.resolve({ ok: !bad, status: bad ? 400 : 200, json: () => Promise.resolve(data) });
+  };
+  const file = (name, type, size) => ({ name, type, size: size || 100 });
+"""
+
+
+def _shots(script, *, S=None, replies=None, fail=None, m=None):
+    head = f"const REPLIES = {json.dumps(replies or {})}; const FAIL = {json.dumps(fail or [])};" + SHOT_FETCH
+    return run(m, "return (async () => {" + head + script + "})();", S=S)
+
+
+def _files(n):
+    return [{"seq": i + 1, "kind": "png", "bytes": 100} for i in range(n)]
+
+
+def test_new_ticket_with_two_shots_posts_ticket_then_each_file(main):
+    m = {**main, "support_unread": 0}
+    replies = {"/api/support/ticket": {"id": 7, "mine": {"tickets": [_ticket(status="open", replies=[], files=[])]}},
+               "/api/support/file": {"id": 7, "seq": 1, "kind": "png", "bytes": 100, "files": _files(1)}}
+    out = _shots("""
+        const form = H.sheetHtml();
+        await H.supportChange({ target: { id: "support-new-files", files: [file("a.png", "image/png"), file("b.webp", "image/webp")], value: "x" } });
+        await H.supportForm({ id: "support-new-form", dataset: {} }, { category: "game", body: "卡住了" });
+        return { form, sent, after: [H.S.supportTicket, (H.S.supportPicks || []).length], page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": {"tickets": []}}, replies=replies, m=m)
+    assert 'type="file"' in out["form"] and 'accept="image/png,image/jpeg,image/webp"' in out["form"] and "multiple" in out["form"]
+    assert "附截圖" in out["form"] and "最多 3 張、每張 3 MB 以內（PNG、JPEG、WebP）" in out["form"] and out["form"].count("sup-slot") == 3
+    assert out["sent"] == [["/api/support/ticket", "POST", "application/json", {"category": "game", "body": "卡住了"}],
+                           ["/api/support/file?id=7", "POST", "image/png", "a.png"], ["/api/support/file?id=7", "POST", "image/webp", "b.webp"]]
+    assert out["after"] == [7, 0]
+    assert "沒傳上" not in out["page"]
+    many = _shots("""
+        await H.supportChange({ target: { id: "support-new-files", files: [file("a.png", "image/png"), file("big.png", "image/png", 3000001)], value: "x" } });
+        const one = (H.S.supportPicks || []).length;
+        await H.supportChange({ target: { id: "support-new-files", files: [1, 2, 3].map((i) => file(i + ".png", "image/png")), value: "x" } });
+        return [one, H.S.supportPicks.map((p) => p.file.name), H.S.supportPickMsg, H.sheetHtml()];""",
+                  S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": {"tickets": []}}, m=m)
+    assert many[0] == 1 and many[1] == ["a.png", "1.png", "2.png"]  # 單張超過 3 MB 當場擋；第 4 張不收
+    assert many[2] == "一張單最多附 3 張圖。"
+    assert many[3].count("sup-slot") == 0 and many[3].count('class="sup-shot"') == 3
+
+
+def test_second_shot_fails_stops_and_keeps_the_ticket(main):
+    m = {**main, "support_unread": 0}
+    replies = {"/api/support/ticket": {"id": 7, "mine": {"tickets": [_ticket(status="open", replies=[], files=[])]}},
+               "/api/support/file": {"id": 7, "seq": 1, "kind": "png", "bytes": 100, "files": _files(1)}}
+    out = _shots("""
+        await H.supportChange({ target: { id: "support-new-files", files: ["a", "b", "c"].map((n) => file(n + ".png", "image/png")), value: "x" } });
+        FAIL.push("/api/support/file?id=7");
+        let n = 0;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => { if (url.startsWith("/api/support/file") && ++n === 1) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(REPLIES["/api/support/file"]) }); return real(url, opts); };
+        await H.supportForm({ id: "support-new-form", dataset: {} }, { category: "game", body: "卡住了" });
+        return { sent: sent.map((s) => s[0]), n, ticket: H.S.supportTicket, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": {"tickets": []}}, replies=replies, m=m)
+    assert out["n"] == 2 and out["sent"] == ["/api/support/ticket", "/api/support/file?id=7"]  # 第 3 張不送
+    assert out["ticket"] == 7 and "單送出了，第 2 張圖沒傳上，可以在單上補。" in out["page"]
+    assert 'id="support-file-form"' in out["page"]
+
+
+def test_ticket_shows_shots_and_closed_has_no_add_form(main):
+    m = {**main, "support_unread": 0}
+    two = _ticket(status="answered", files=_files(2))
+    page = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [two]}, "supportTicket": 7})
+    assert page.count('class="sup-shot"') == 2 and 'href="/api/support/file/7/2"' in page and 'target="_blank" rel="noopener"' in page
+    assert 'loading="lazy"' in page and 'alt="截圖 1"' in page and 'src="/api/support/file/7/1"' in page
+    assert 'id="support-file-form"' in page and 'data-id="7"' in page and "補一張圖" in page and 'id="support-add-file"' in page
+    full = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [_ticket(status="open", files=_files(3))]}, "supportTicket": 7})
+    assert full.count('class="sup-shot"') == 3 and "support-file-form" not in full
+    closed = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [_ticket(status="closed", files=_files(1))]}, "supportTicket": 7})
+    assert closed.count('class="sup-shot"') == 1 and "support-file-form" not in closed
+    bare = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [_ticket()]}, "supportTicket": 7})
+    assert "sup-shots" not in bare  # 沒有 files（舊的回應）：不畫那一列
+    out = _shots("""
+        await H.supportChange({ target: { id: "support-add-file", dataset: { id: "7" }, files: [file("c.jpg", "image/jpeg")], value: "x" } });
+        await H.supportForm({ id: "support-file-form", dataset: { id: "7" } }, {});
+        return { sent, files: H.S.supportMine.tickets[0].files.length };""",
+                 S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [two]}, "supportTicket": 7},
+                 replies={"/api/support/file": {"id": 7, "seq": 3, "kind": "jpg", "bytes": 100, "files": _files(3)}}, m=m)
+    assert out == {"sent": [["/api/support/file?id=7", "POST", "image/jpeg", "c.jpg"]], "files": 3}
+
+
+# ── 客服官（客服自動受理第 216 批；畫面② A 版：「找真人」在對話最下面、回覆表單上方）──
+
+def _auto(**over):
+    r = {"staff": True, "body": "先試試重新登入", "created": 1762585200, "auto": True}
+    r.update(over)
+    return r
+
+
+def _page(m, t):
+    return run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [t]}, "supportTicket": 7})
+
+
+def test_auto_reply_label_and_the_ask_a_human_button(main):
+    m = {**main, "support_unread": 0}
+    page = _page(m, _ticket(replies=[_auto(), {"staff": False, "body": "不行", "created": 1762585300, "auto": False}], human=False))
+    assert "客服（自動回覆）・回覆" in page and 'data-act="support-human"' in page and 'data-id="7"' in page and "找真人" in page
+    assert page.index('data-act="support-human"') < page.index('id="support-reply-form"')  # A 版：表單上方
+    human = _page(m, _ticket(replies=[_auto()], human=True))
+    assert "已請真人處理" in human and 'data-act="support-human"' not in human
+    person = _page(m, _ticket(replies=[_auto(auto=False)], human=False))
+    assert "客服・回覆" in person and "自動回覆" not in person and 'data-act="support-human"' not in person  # 沒有自動回覆：不畫
+    closed = _page(m, _ticket(status="closed", replies=[_auto()], human=False))
+    assert 'data-act="support-human"' not in closed  # 結了：不畫
+    old = _page(m, _ticket())  # 第 215 批的回應（沒有 auto、human）：跟以前一樣
+    assert "客服・回覆" in old and "support-human" not in old and "已請真人處理" not in old
+
+
+def test_ask_a_human_hits_the_route_and_redraws(main):
+    m = {**main, "support_unread": 0}
+    t = _ticket(replies=[_auto()], human=False)
+    out = run(m, """return (async () => {
+        await H.supportClick("support-human", { dataset: { id: "7" } });
+        return { calls: T.calls, human: H.S.supportMine.tickets[0].human, html: H.sheetHtml() };
+      })();""", S={"sheet": True, "supportPage": True, "supportMine": {"tickets": [t]}, "supportTicket": 7},
+        responses={"/api/support/human": {**t, "human": True, "status": "open"}})
+    assert out["calls"] == [["/api/support/human", {"id": 7}]]
+    assert out["human"] is True and "已請真人處理" in out["html"] and 'data-act="support-human"' not in out["html"]
+
+
+def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, "return (async () => { await H.supportDeskReload(); return T.calls; })();", S={"adminPage": True},
+              responses={"/api/support/sweep": {"closed": []}, "/api/support/queue": q})
+    assert out[:2] == [["/api/support/sweep", {}], ["/api/support/queue", None]]
+    failed = run(m, """return (async () => {
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => url === "/api/support/sweep" ? Promise.reject(new Error("down")) : real(url, opts);
+        await H.supportDeskReload();
+        return { calls: T.calls.map((c) => c[0]), tickets: H.S.supportDesk.tickets.length };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q})
+    assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
+
+
+def test_desk_labels_system_auto_and_human(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    state = _desk_state(_card())
+    state["supportDeskTicket"].update(human=True, last_by="system", replies=[
+        {"staff": True, "internal": False, "body": "先重登", "created": 1762585200, "auto": True, "system": False},
+        {"staff": True, "internal": False, "body": "真人", "created": 1762585300, "auto": False, "system": False},
+        {"staff": True, "internal": False, "body": "3 天沒再回，單自動結了。", "created": 1762585400, "auto": True, "system": True}])
+    state["supportDesk"]["tickets"][0].update(human=True, last_by="system")
+    desk = run(m, "return H.supportDeskHtml();", S=state)
+    assert "客服官・自動回覆" in desk and "客服・回覆" in desk and ">系統　" in desk
+    assert desk.count("已請真人處理") == 2  # 單的標題旁、清單那一列
+    plain = run(m, "return H.supportDeskHtml();", S=_desk_state(_card()))
+    assert "已請真人處理" not in plain and "客服官" not in plain and "系統" not in plain
+
+
+def test_desk_ticket_shows_shots(main):
+    m = {**main, "support_unread": 0, "support_staff": True}
+    state = _desk_state(_card())
+    state["supportDeskTicket"]["files"] = _files(2)
+    desk = run(m, "return H.supportDeskHtml();", S=state)
+    assert desk.count('class="sup-shot"') == 2 and 'href="/api/support/file/3/1"' in desk and 'rel="noopener"' in desk
+    assert "support-file-form" not in desk  # 客服頁只看、不補

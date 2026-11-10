@@ -1266,7 +1266,7 @@ SEAM_ORDER: dict[str, tuple[str, ...]] = {
     "advance.held": ("held_gear",),
     "tick": ("conquest", "battle", "seal"),
     "own_turn": ("bounties",),
-    "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy"),
+    "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy", "guard"),  # guard：親衛隊長跟著帳號走（Joy 2026-11-09「其他都按照建議」：設計稿推薦跨季帶著）
     "season.grant": ("faction",),
     "stale.first": ("guide",),
     "stale.early": ("cultivation", "resting", "sense", "companions"),
