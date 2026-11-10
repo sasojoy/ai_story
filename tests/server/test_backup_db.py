@@ -196,7 +196,7 @@ def test_backup_into_a_folder_with_url_special_characters(tmp_path):
         out = backup_db.backup(src, tmp_path / name, tag="manual", now=NOW)
         assert out.parent.name == name
         assert backup_db.verify(out)["characters"] == 2
-    assert [p.name for p in tmp_path.iterdir() if p.is_file()] == []  # 沒有因為路徑被切斷而多出別的檔
+    assert [p.name for p in tmp_path.iterdir() if p.is_file() and p.name != "tianxia.db"] == []  # 沒有因為路徑被切斷而多出別的檔（tianxia.db 是這個測試的預設資料庫，conftest 從模板抄來的）
 
 
 def test_main_manual_backup_prints_where_and_returns_zero(tmp_path, capsys):

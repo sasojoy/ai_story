@@ -80,7 +80,21 @@ def cached_content(root, profile=None, only=None) -> Content:
     if key not in _MASTERS:
         master = load_content(root, profile, only=only)
         _MASTERS[key] = (master, _dump(master))
-    return pickle.loads(_MASTERS[key][1])
+    return _loads_quietly(_MASTERS[key][1])
+
+
+def _loads_quietly(blob: bytes):
+    """pickle.loads 期間關掉垃圾回收：正式內容的複本 2.5 MB、十幾萬個物件，一邊配置一邊觸發的第二代回收把 30 ms 的複本拖成
+    50～160 ms（worker 活得越久、留著的東西越多越慢；2026-11-10 量的）。只關這一下，出來照原樣放回。"""
+    import gc
+
+    was = gc.isenabled()
+    gc.disable()
+    try:
+        return pickle.loads(blob)
+    finally:
+        if was:
+            gc.enable()
 
 
 def copy_real_content(dest: Path) -> None:
@@ -293,14 +307,28 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.WORLD_GAME = None
 
 
+@pytest.fixture(scope="session")
+def _db_template(tmp_path_factory):
+    """建好表（第 SCHEMA_VERSION 版）、一筆資料都沒有的資料庫檔一份：每個測試抄一份當自己的預設資料庫，省掉每條各建一次表的
+    183 句（約 6～9 ms，2026-11-10 量的）。測升版、測新檔建表的（test_database、test_old_saves、test_playlog）用自己的路徑，不經過這裡。"""
+    from tianxia import database
+
+    path = tmp_path_factory.mktemp("db-template") / "tianxia.db"
+    database.Database(path).close()
+    assert not path.with_name(path.name + "-wal").exists(), "模板關掉之後還留著 WAL，抄過去會少資料"
+    return path
+
+
 @pytest.fixture(autouse=True)
-def isolated_database(tmp_path, monkeypatch):
-    """每個測試用自己的暫存資料庫，不會讀寫到真正的 saves/tianxia.db，測試之間也不會互相汙染；
+def isolated_database(tmp_path, monkeypatch, _db_template):
+    """每個測試用自己的暫存資料庫（從建好表的模板抄一份），不會讀寫到真正的 saves/tianxia.db，測試之間也不會互相汙染；
     測試結束時關掉所有連線（Windows 才刪得掉暫存檔）。"""
     from tianxia import database
 
     monkeypatch.delenv(database.ENV_VAR, raising=False)
-    monkeypatch.setattr(database, "DEFAULT_PATH", tmp_path / "tianxia.db")
+    path = tmp_path / "tianxia.db"
+    shutil.copyfile(_db_template, path)
+    monkeypatch.setattr(database, "DEFAULT_PATH", path)
     yield
     database.close_all()
 
