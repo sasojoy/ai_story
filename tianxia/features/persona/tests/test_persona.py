@@ -121,7 +121,8 @@ def test_he_changes_a_stage_and_the_world_hears_of_it():
     [entry] = w.persona_log
     assert (entry.who, entry.axis, entry.stage, entry.toward) == (LUZHI, UPRIGHT, 1, "圓融")
     short = axis.stages[1].short
-    assert [(r.text, r.named) for r in w.rumors[rumors:] if "盧植" in r.text] == [(persona.RUMOR.format(name="盧植", short=short), False)]
+    heard = [r for r in w.rumors[rumors:] if "盧植" in r.text and not r.text.startswith(("今日軍令：", "本週軍令："))]  # 換日發的軍令（盧植傳令）不算
+    assert [(r.text, r.named) for r in heard] == [(persona.RUMOR.format(name="盧植", short=short), False)]
     assert [r.text for r in w.chronicle[chronicle:] if "性子" in r.text] == [persona.CHRONICLE.format(name="盧植", short=short)]
     assert g.world.get_season().persona_log == w.persona_log  # 存進共用的季
     view = persona.view(g.state, c, LUZHI)

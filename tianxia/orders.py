@@ -196,6 +196,8 @@ def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, 
     losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
     if t.kind == "siege" and not siege_places(content, t.side, front, state.world):
         return False
+    if t.kind == "defend" and not _defendable(content, state.world, t.side, front):
+        return False  # 領地爭奪：那條戰線這一邊此刻沒人來推、沒得守，不發守城（Joy 2026-11-11 決定卡「兩個都做」）
     if opening and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054；21 天季是季曆第 1 週的每一天）
         return True
     when, v = t.when, _value(state, content, front)
@@ -287,15 +289,27 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
 DAILY_TURNS = ("defend", "offense", "supply")  # 21 天季一天一道時輪流的三組：守、進攻（攻城、打擊）、補給（截糧、護糧）
 
 
+def _turn_kinds(group: str, day: int) -> tuple[str, ...]:
+    """DAILY_TURNS 的一組這一天先後認哪幾種軍令（進攻與補給照 preferred_offense／preferred_supply 偏好那一種排前面）。"""
+    if group == "defend":
+        return ("defend",)
+    if group == "offense":
+        return (preferred_offense(day), "strike" if preferred_offense(day) == "siege" else "siege")
+    return (preferred_supply(day), "escort" if preferred_supply(day) == "intercept" else "intercept")
+
+
 def _daily_choice(found: list, day: int, slots: int) -> list:
     """21 天季一天的軍令（正式季整合設計 7.1，五種照舊）：第一格照第幾天輪流挑守、進攻、補給（進攻與補給照 preferred_offense／
     preferred_supply 偏好那一種），那一組這一天沒有候選就照優先序；其餘的格照優先序。found 已照優先序排好。"""
     if slots <= 0 or not found:
         return []
     group = DAILY_TURNS[(day - 1) % len(DAILY_TURNS)]
-    kinds = {"defend": ("defend",), "offense": (preferred_offense(day), "strike" if preferred_offense(day) == "siege" else "siege"),
-             "supply": (preferred_supply(day), "escort" if preferred_supply(day) == "intercept" else "intercept")}[group]
-    first = next((item for kind in kinds for item in found if item[1].kind == kind), found[0])
+    kinds = _turn_kinds(group, day)
+    first = next((item for kind in kinds for item in found if item[1].kind == kind), None)
+    if first is None:  # 那一組這一天沒有候選（例：沒得守，不發守城）：退到下一組，再沒有才照優先序（Joy 2026-11-11）
+        start = DAILY_TURNS.index(group)
+        later = [_turn_kinds(DAILY_TURNS[(start + i) % len(DAILY_TURNS)], day) for i in range(1, len(DAILY_TURNS))]
+        first = next((item for ks in later for kind in ks for item in found if item[1].kind == kind), found[0])
     rest = [item for item in found if item is not first][: slots - 1]
     return sorted([first, *rest], key=lambda item: item[0])
 
@@ -409,6 +423,9 @@ PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "con
 # 領地爭奪：自家被戰書凍結的那一塊，攻城戰站守方、守住了（Game._settle_siege 替每一個守方的人記一次；FB-605）。那一塊守不動進度，
 # 在那裡出陣守、按守勢行動（duty）不算；別的守城地方反過來只認 duty
 SIEGE_GUARD = "siege_guard"
+# 領地爭奪：守城發了、此刻又沒得守（defend_places 空）時，在那條戰線自家的地方按守勢行動記一次（一人一天一次，跟約戰季的守勢貢獻同一個
+# 每日次數；Joy 2026-11-11 決定卡「兩個都做」）。有得守時不認它（照舊只認應戰守住）
+DUTY_IDLE = "duty_idle"
 
 
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
@@ -432,6 +449,27 @@ def defend_places(content: Content, world: WorldState | None, o: Order) -> list[
     return [loc for loc in _today(content, world, o.faction, "defend") if conquest.line_of(world, content, loc) == o.front]
 
 
+def _defendable(content: Content, world: WorldState | None, side: str | None, front: str) -> bool:
+    """發守城之前問：領地爭奪在這一季生效時，side 在這條戰線此刻有沒有守得了的地方（同 defend_places）。關著的季一律算有（舊規則整條戰線都記）。"""
+    from . import conquest  # noqa: PLC0415
+
+    if not conquest.on(content, world):
+        return True
+    return any(conquest.line_of(world, content, loc) == front for loc in _today(content, world, side, "defend"))
+
+
+def idle_defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:
+    """守城發了、此刻沒得守（約戰的領地爭奪季、defend_places 空）時，那條戰線上自家佔著的區塊（conquest.is_home：剛易手冷卻中的不算）：
+    在這裡按守勢行動記一次（DUTY_IDLE）。有得守、或不是領地爭奪的季是空的。記功、卡、輿圖、假人、duty_counts 都問它。"""
+    from . import conquest  # noqa: PLC0415
+
+    if o.template != "defend" or o.front is None or world is None or not conquest.duel_on(content, world) \
+            or defend_places(content, world, o):
+        return []
+    return [loc for loc in conquest.blocks(content)
+            if conquest.line_of(world, content, loc) == o.front and conquest.is_home(world, content, o.faction, loc)]
+
+
 def _counts(
     content: Content, o: Order, kind: str, location: str | None, front: str | None, squad: str | None,
     squad_faction: str | None, figure: str | None, order: str | None, world: WorldState | None = None,
@@ -442,6 +480,8 @@ def _counts(
     from . import conquest  # noqa: PLC0415
 
     guarding = kind == SIEGE_GUARD and o.template == "defend"
+    if kind == DUTY_IDLE:  # 沒得守時的守勢行動（Joy 2026-11-11）
+        return o.template == "defend" and location in idle_defend_places(content, world, o)
     if PERSONAL.get(o.template) != kind and not guarding:
         return False
     on = conquest.on(content, world)
@@ -613,6 +653,12 @@ def duty_counts(state: GameState, content: Content, faction: str | None, loc_id:
     return any(o.template == "defend" and not o.done and o.front == front for o in current(state, content, faction))
 
 
+def idle_duty_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
+    """在這裡按守勢行動，會替這週還沒達成、此刻沒得守的守城記一次（DUTY_IDLE；一天一次的次數由守勢行動那一邊數）。"""
+    return any(not o.done and _counts(content, o, DUTY_IDLE, loc_id, None, None, None, None, None, state.world)
+               for o in current(state, content, faction))
+
+
 def strike_on(state: GameState, content: Content, faction: str | None, fid: str) -> bool:
     """這週有還沒達成、打這位人物的打擊軍令。"""
     return any(o.template == "strike" and not o.done and o.figure == fid for o in current(state, content, faction))
@@ -634,7 +680,7 @@ def targets(state: GameState, content: Content, faction: str | None, skip: froze
             wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
             if conquest.on(content, state.world):  # 領地爭奪：自家被推得最高的那一塊（裁決 11、翻地與爭搶；同記功，FB-565）
-                wanted |= set(defend_places(content, state.world, o))
+                wanted |= set(defend_places(content, state.world, o) or idle_defend_places(content, state.world, o))
             else:
                 wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
