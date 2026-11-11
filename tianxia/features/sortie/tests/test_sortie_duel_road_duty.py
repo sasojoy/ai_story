@@ -110,10 +110,14 @@ def test_duty_in_a_duel_season_credits_one_point_once_a_day():
     assert f"貢獻 +{cfg.duty_contribution}" in first
     assert (p.contrib, p.duties_today, p.sorties_today) == (cfg.duty_contribution, 1, 0)  # 收進此地：不佔出陣的次數
     seat(c, world, "甲", "guan", _own_block(c, world))  # 體力補滿（同一天第二次）
-    second, _ = _duty(c, world, "甲", NOW + 60)
+    # 同一天第二次：鈕灰著寫「今天巡過了」，按不下去、不扣體力（Joy 2026-11-11：不能無腦一直按）
+    game = game_of(c, world, "甲", NOW + 60)
+    cell = next(o for o in game.options() if o.id == "act:duty")
+    assert not cell.enabled and cell.label == "巡哨（今天巡過了）", cell
+    before = game.state.player.stamina
+    do(c, world, "甲", lambda g: g.choose("act:duty"), NOW + 60)
     p = load(world, "甲").player
-    assert not any(m.startswith("貢獻 +") for m in second)
-    assert (p.contrib, p.duties_today) == (cfg.duty_contribution, 1)
+    assert p.stamina == before and (p.contrib, p.duties_today) == (cfg.duty_contribution, 1)
     seat(c, world, "甲", "guan", _own_block(c, world))
     third, _ = _duty(c, world, "甲", NOW + DAY)  # 隔天（_pill_day 換了）：照記
     p = load(world, "甲").player

@@ -791,6 +791,15 @@ def duel_report(ctx: Game, duel: SortieDuel, role: str, squad: Squad | None, mov
     return [line, sortie_duel.vs_line(duel), *moved, *msgs]
 
 
+def duty_done_today(ctx: Game) -> bool:
+    """約戰開著的季：今天守勢那一點貢獻已經記滿了（duty_credit 再按也是空的）。沒有貢獻可記的季（規則關著、貢獻是 0）不算，鈕照舊。"""
+    s, c = ctx.state, ctx.content
+    p, cfg = s.player, c.config.sortie
+    if cfg.duty_contribution <= 0 or not calendar.season_one_on(s.world, c):
+        return False
+    return p.duty_day == ctx._pill_day() and p.duties_today >= cfg.duty_per_day
+
+
 def duty_credit(ctx: Game) -> list[str]:
     """約戰開著的季巡哨、傳道、保境安民那一點貢獻（企劃者 2026-10-24 第 2 件：Config.sortie.duty_contribution，一天 duty_per_day 次；
     duty_day／duties_today 照 _pill_day 換日）。第一季的規則關著（沒有貢獻）、今天記滿了是空的。"""
