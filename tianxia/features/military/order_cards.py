@@ -53,6 +53,8 @@ DEFEND_ACT_DUEL = "，對面在那裡約戰時去應戰、守住"
 DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
 DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
 DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
+# 約戰的季發了守城、此刻又沒人來打（orders.idle_defend_places；Joy 2026-11-11 決定卡「兩個都做」）：在自家地方巡哨、傳道，一天記一次
+DEFEND_IDLE_DUEL = "{front}一帶沒人來打：在自家地方按「{duty}」，一天記一次。"  # 待 joy 潤
 # 自家被戰書凍結的那一塊（FB-605，PM 2026-10-21）：照樣列進守城，那一場攻城站守方、守住記一次（出陣守、守勢行動在那裡不算）。待 joy 潤
 DEFEND_SIEGE_CONQUEST = "{where}正等著一場攻城：加入那一場、站守方，守住記一次。"
 
@@ -106,6 +108,8 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
         if conquest.on(content, state.world):  # 領地爭奪（裁決 24、FB-565）：只寫記得到的那幾處，列與記同一個判斷
             listed = orders.defend_places(content, state.world, order)
             if not listed:
+                if orders.idle_defend_places(content, state.world, order):
+                    return DEFEND_IDLE_DUEL.format(front=front, duty=name)
                 return DEFEND_NONE_CONQUEST.format(front=front)
             sieged = [loc_id for loc_id in listed if conquest.frozen(state.world, loc_id) is not None]  # 被戰書凍結的（FB-605）：記攻城戰守住
             places = [loc_id for loc_id in listed if loc_id not in sieged]
