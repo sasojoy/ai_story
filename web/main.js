@@ -1077,8 +1077,10 @@
   }
   // 此地可為：圓章一排（照伺服器的順序，發光的、按得下去的排前面），「全部 N ›」打開整串（S.hereAll）
   function hereRowHtml(m, extras) {
-    const list = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
-    if (!list.length) return "";
+    const all = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
+    const quests = typeof questRowsHtml === "function" ? questRowsHtml(all) : ""; // 未了之事一件一行（web/story.js）
+    const list = all.filter((o) => !STORY.test(o.id));
+    if (!list.length) return quests ? `<section class="here-row"><div class="quest-rows">${quests}</div></section>` : "";
     const glow = guideGlow();
     const peers = callPeers(m); // 論武的「答應」：引擎不收那一顆，點了打開對方的玩家卡（同「全部」那一串，FB-117）
     // 同一類一個目標一顆的（設伏每條路一顆、投靠每一軍一顆……）收成一顆圓章，點開才挑哪一個（Joy 2026-11-10「同類型的 例如設伏 應該只有一個按鈕，
@@ -1110,7 +1112,7 @@
       const attrs = peers[o.id] ? `data-act="peer-answer" data-name="${esc(peers[o.id])}"` : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : o.note || detail ? `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || `${detail}。`)}" aria-disabled="true"` : "disabled";
       return `<button class="here-seal${o.enabled || peers[o.id] ? "" : " off"}" ${attrs}><span class="hs-tile${art ? "" : " ink"}">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(label.slice(0, 1))}</i>`}${n ? `<b class="hs-n">${n[1]}</b>` : ""}</span><span class="hs-name">${esc(label.replace(/^(.{0,5}).*$/, "$1"))}</span></button>`;
     };
-    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${row.length > HERE_ROW || row.some((o) => o.family == null && optParts(o)[0].length > 5)
+    return `<section class="here-row">${quests ? `<div class="quest-rows">${quests}</div>` : ""}<div class="hr-head"><span>${HERE_HEAD}</span>${row.length > HERE_ROW || row.some((o) => o.family == null && optParts(o)[0].length > 5)
       ? `<button class="linkish" data-act="here-all">${HERE_ALL} ${list.length} ›</button>` : ""}</div><div class="hr-seals">${row.map(seal).join("")}</div></section>`;
   }
   function hereAllHtml(m, extras) {
