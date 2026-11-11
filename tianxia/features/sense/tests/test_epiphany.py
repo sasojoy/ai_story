@@ -142,7 +142,7 @@ def test_the_waiting_trial_shows_a_row_and_counts_down():
     assert game.choose(f"{storyline.OPTION}:{line}") == ["（此刻無法這麼做。）"]  # 灰的按下去引擎本來就擋
 
     s.world.time += day_seconds(c, s.world) * 0.25 - 30  # 剩不到一分鐘
-    assert storyline.WAIT_SOON in row().label
+    assert storyline.WAIT_SOON.strip("（）") in row().label  # 第 233 批：這一句收進線名後面的括號，不再自己帶括號
     s.world.time += 60  # 到了：這一段過去了，換心魔那一行
     game._story_tick()
     assert s.player.storylines[line].stage == "demon"
@@ -322,7 +322,7 @@ def test_the_retry_note_counts_down_from_retry_at():
     s.world.time = progress.retry_at - 900           # 十五分鐘
     assert "再等 15 分鐘才能再試" in note()
     s.world.time = progress.retry_at - 30            # 剩不到一分鐘
-    assert storyline.RETRY_SOON in note()
+    assert storyline.RETRY_SOON.strip("（）") in note()
     s.world.time = progress.retry_at                 # 到了：不再有那一段，而且按得下去
     label = note()
     assert "才能再試" not in label and storyline.RETRY_SOON not in label

@@ -13,8 +13,8 @@
 | 檔 | 內容 |
 |---|---|
 | `__init__.py` | 登記：前綴 `opp`、`fs`（行動列的 `act:` 前綴是核心的）；認領 18 個欄位；掛鉤：`choose`（`opp:`、`fs:`，標題隨 `Outcome.title`）、`bot_pick`（都不按）、`defection()`（`clear` 的 `convoy`〔第 32 批〕與 `opportunities`、`leave` 的 `plots`）、`effects()`（`grain`、`fs_fragments`、`foreshadow` 三格，第 34 批） |
-| `order_actions.py` | 軍令卡與記功 4 個：`order_options`（守勢與接糧車的選單）、`order_credit`（替自己記一次軍令）、`convoy_line`、`orders_view`（江湖頁「本週軍令」卡） |
-| `order_cards.py` | 軍令卡上怎麼出力那一行與它的字（`order_how`、`siege_how`、`strike_how` 與 17 個常數，第二輪第 97 批從 `atlas` 搬來；`_strike_place` 輿圖包也讀，留 `atlas`） |
+| `order_actions.py` | 軍令卡與記功 4 個：`order_options`（守勢與接糧車的選單）、`order_credit`（替自己記一次軍令）、`convoy_line`、`orders_view`（江湖頁「本週軍令」卡）；守城的那一處在 `orders.defend_places` 空時改問 `orders.idle_defend_places`（Joy 2026-11-11 PR #234） |
+| `order_cards.py` | 軍令卡上怎麼出力那一行與它的字（`order_how`、`siege_how`、`strike_how` 與 18 個常數〔PR #234 多一句約戰季守城沒得守時的 `DEFEND_IDLE_DUEL`，待 joy 潤〕，第二輪第 97 批從 `atlas` 搬來；`_strike_place` 輿圖包也讀，留 `atlas`） |
 | `convoy_actions.py` | 押糧 2 個：`take_convoy`、`convoy_arrives`（走到終點：可能撞上截糧隊、記捐獻與貢獻、軍令記功）；叛投 `clear` 位置的 `convoy` 那一格 `defect_clear`（第 32 批） |
 | `step_actions.py` | 第 2 階與第 3、4 階行動 6 個：`rank2_options`、`check_cost_note`、`rank2`、`rank_action_options`、`rank_action_line`、`rank_action` |
 | `seat_actions.py` | 第四階席次抄帳：`report_seat`（賽季時鐘暫停中什麼都不做） |

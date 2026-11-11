@@ -263,6 +263,7 @@ def _order_spots(state: GameState, content: Content, faction: str | None) -> lis
             spots = list(orders.siege_places(content, o.faction, o.front, w))
         elif o.template == "defend" and o.front is not None and conquest.on(content, w):
             spots = orders.defend_places(content, w, o)  # 領地爭奪：自家被推得最高的那一塊（裁決 24、FB-565：列與記同一個判斷）
+            spots = spots or orders.idle_defend_places(content, w, o)  # 沒人來打：自家地方按守勢記一次（Joy 2026-11-11）
         elif o.template == "defend" and o.front is not None:
             spots = [loc for loc in content.locations if rules.front_of(content, loc) == o.front
                      and territory.line_of(content, loc) and territory.controller(w, content, loc) == faction]

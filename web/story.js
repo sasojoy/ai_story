@@ -37,3 +37,18 @@
     } // storyClick
   } // storyClick
   registerClicks(storyClick, ["story-ok"]);
+
+  // 未了之事（story:；main.js 的 hereRowHtml 叫）不擠進圓章：此地可為上面一件一行，章回主線標「主線」、別的標「奇事」，寫線名與這一步（Joy 2026-11-11「這明明算是主線任務
+  // 卻如此不起眼」）。做得了的按了就去做；時機未到的灰著，點了跳出還要等什麼
+  const QUEST_TAG = (id) => (/^story:ch_/.test(id) ? "主線" : "奇事"); // 待 joy 潤
+  function questRowsHtml(list) {
+    const quests = list.filter((o) => /^story:/.test(o.id)).sort((a, b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0));
+    return quests.map((o) => {
+      const m = /^(.*?)（(.*)）$/.exec(o.label), title = m ? m[1] : o.label, detail = m ? m[2] : ""; // 同 main.js 的 optParts
+      const step = detail.replace(/^未了之事[：:]?/, "");
+      const attrs = o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(`${step || title}。`)}" aria-disabled="true"`;
+      const main = QUEST_TAG(o.id) === "主線";
+      return `<button class="quest-row${main ? " main" : ""}${o.enabled ? "" : " off"}" ${attrs}><span class="qr-tag">${QUEST_TAG(o.id)}</span>`
+        + `<span class="qr-t"><b>${esc(title)}</b>${step ? `<small>${esc(step)}</small>` : ""}</span><span class="qr-go" aria-hidden="true">${o.enabled ? "›" : "…"}</span></button>`;
+    }).join("");
+  }

@@ -253,6 +253,11 @@ def train_trend_push(ctx: Game, loc_id: str | None = None) -> dict[str, int]:
 # ── 守勢（原 Game._duty_option、_duty；act:duty）──
 
 
+# 守勢記過今天那一點貢獻之後，鈕上寫的那一句（Joy 2026-11-11「是不是可以無腦刷勢力的推進進度」→ PM 派：一天一次、字要少）
+DUTY_DONE = {"巡哨": "今天巡過了", "傳道": "今天傳過了"}  # 待 joy 潤
+DUTY_DONE_ELSE = "今天做過了"  # 保境安民與其他；待 joy 潤
+
+
 def duty_option(ctx: Game, name: str) -> Option:
     """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守共用每日的次數），鈕上寫今天還能幾次、
     用完灰掉、寫跟出陣同一句；關著照舊。領地爭奪在這一季生效時，站在不是自家的區塊（別人的、沒佔下的中立地）灰掉寫原因，
@@ -263,6 +268,8 @@ def duty_option(ctx: Game, name: str) -> Option:
     if problem:
         return Option(id="act:duty", label=f"{name}（{problem}）", enabled=False)
     if not rules.on(c) or duel_actions.duel_on(ctx):  # 約戰開著（減法季批 3b）：收進此地、不佔出陣的次數
+        if duel_actions.duel_on(ctx) and duel_actions.duty_done_today(ctx):  # 今天那一點貢獻記過了：再按什麼都不給，灰掉（Joy 2026-11-11）
+            return Option(id="act:duty", label=f"{name}（{DUTY_DONE.get(name, DUTY_DONE_ELSE)}）", enabled=False)
         return ctx._cost_option("act:duty", name, cost)
     left = ctx.sorties_left()
     if left <= 0:
@@ -294,7 +301,11 @@ def duty(ctx: Game) -> list[str]:
         if host is not None:
             msgs += ctx._drill_gains(host, 1.0)
     if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
-        return msgs + duel_actions.duty_credit(ctx) + ctx._guide(ctx._note_action("order"))
+        first = not duel_actions.duty_done_today(ctx)  # 一天一次（跟守勢那一點貢獻同一個次數）
+        msgs += duel_actions.duty_credit(ctx)
+        # 守城發了、此刻沒得守：在那條戰線自家的地方按守勢記一次（orders.DUTY_IDLE；Joy 2026-11-11 決定卡「兩個都做」）
+        idle = ctx._order_credit(kind=orders.DUTY_IDLE, location=loc.id, front=front) if first else []
+        return msgs + idle + ctx._guide(ctx._note_action("order"))
     credit = ctx._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被推得最高的那一塊（裁決 11、翻地與爭搶）
     # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
     return msgs + (credit or ctx._guide(ctx._note_action("order")))

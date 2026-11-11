@@ -23,3 +23,19 @@
 .story-card.dun .story-sub { text-align: center; color: #d6a548; }
 .story-card.dun .story-text { font-family: var(--serif); font-size: 1.2em; line-height: 2.1; letter-spacing: .06em; text-align: center; margin: 1.2em 0; }
 .story-card.dun .story-count { color: #b3a894; }
+
+/* 此地可為上面的未了之事（web/main.js questRowsHtml，Joy 2026-11-11）：一件一行，主線朱印、奇事金框；時機未到的淡一點、點了說還要等什麼 */
+.quest-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.quest-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  background: var(--card); border: 1px solid var(--gold); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); }
+.quest-row.main { border-color: var(--accent); background: linear-gradient(90deg, var(--accent-soft), transparent 70%), var(--card); }
+.quest-row.off { opacity: .72; box-shadow: none; }
+.quest-row .qr-tag { flex: none; writing-mode: vertical-rl; font-family: var(--serif); font-weight: 700; font-size: .82em; letter-spacing: .15em;
+  padding: 6px 3px; border-radius: 4px; border: 1.5px solid var(--gold); color: var(--gold); }
+.quest-row.main .qr-tag { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.quest-row .qr-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.quest-row .qr-t b { font-family: var(--serif); font-size: 1.05em; }
+.quest-row .qr-t small { color: var(--ink-2); font-size: .88em; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.quest-row .qr-go { flex: none; color: var(--accent); font-size: 1.3em; }
+.quest-row.off .qr-go { color: var(--ink-2); }
+.quest-row:active { transform: scale(.98); }
