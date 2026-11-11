@@ -123,3 +123,89 @@ def test_duty_in_a_duel_season_credits_one_point_once_a_day():
     p = load(world, "甲").player
     assert f"貢獻 +{cfg.duty_contribution}" in third
     assert (p.contrib, p.duties_today) == (2 * cfg.duty_contribution, 1)
+
+
+# ── 守城發了、沒人來打（Joy 2026-11-11 決定卡「兩個都做」）──
+
+
+def _idle_setup(c, world):
+    """甲站在官軍自家、有戰線的一塊，這條線上發一道守城；回 (block, order)。"""
+    from tianxia import orders
+    from tianxia.state import Order
+
+    season = world.get_season()
+    block = next(b for b in conquest.blocks(c) if conquest.capturable(c, b) and conquest.holder(season, c, b) == "guan"
+                 and conquest.line_of(season, c, b) is not None and conquest.is_home(season, c, "guan", b))
+    seat(c, world, "甲", "guan", block)
+    g = game_of(c, world, "甲")
+    w = g.state.world
+    order = Order(id="t:guan:defend", template="defend", faction="guan", week=orders.period_of(g.state, c),
+                  front=conquest.line_of(w, c, block), quota=99, text="（測試）")
+    w.orders = [order]
+    g._save_season()
+    return block, order
+
+
+def _progress(world, order) -> int:
+    return next(o for o in world.get_season().orders if o.id == order.id).progress.get("甲", 0)
+
+
+def test_defend_order_with_nothing_to_defend_credits_one_duty_a_day():
+    from tianxia import orders
+    from tianxia.features.military import order_cards
+
+    c, world = _pair()
+    block, order = _idle_setup(c, world)
+    g = game_of(c, world, "甲")
+    w = g.state.world
+    assert orders.defend_places(c, w, order) == []
+    assert block in orders.idle_defend_places(c, w, order)
+    assert orders.idle_duty_counts(g.state, c, "guan", block)
+    assert "沒人來打" in order_cards.order_how(g.state, c, order) and "巡哨" in order_cards.order_how(g.state, c, order)
+    _duty(c, world, "甲", NOW)
+    assert _progress(world, order) == 1
+    seat(c, world, "甲", "guan", block)
+    do(c, world, "甲", lambda g: g.choose("act:duty"), NOW + 60)  # 同一天第二次：鈕灰著，不再記
+    assert _progress(world, order) == 1
+
+
+def test_defend_order_with_places_to_defend_does_not_credit_duty():
+    from tianxia import orders
+
+    c, world = _pair()
+    block, order = _idle_setup(c, world)
+    g = game_of(c, world, "甲")
+    w = g.state.world
+    conquest.push(w, c, block, "huang", "黃巾兵", 20.0, "attack")
+    g._save_season()
+    assert orders.defend_places(c, w, order) == [block] and orders.idle_defend_places(c, w, order) == []
+    _duty(c, world, "甲", NOW)
+    assert _progress(world, order) == 0  # 有得守：照舊只認應戰守住
+
+
+def test_no_defend_order_is_issued_when_nobody_pushes():
+    from tianxia import orders
+
+    c, world = _pair()
+    block, _ = _idle_setup(c, world)
+    g = game_of(c, world, "甲")
+    w = g.state.world
+    front = conquest.line_of(w, c, block)
+    t = next(t for t in c.orders.templates if t.kind == "defend" and t.side == "guan")
+    assert not orders._issuable(g.state, c, t, front, 2, True)  # 開局週也不發
+    conquest.push(w, c, block, "huang", "黃巾兵", 20.0, "attack")
+    assert orders._issuable(g.state, c, t, front, 2, True)
+
+
+def test_daily_turn_on_defend_falls_back_to_the_next_group():
+    from types import SimpleNamespace
+
+    from tianxia import orders
+
+    def item(kind, prio):
+        return ((prio, 0, 0, 0), SimpleNamespace(kind=kind), "f", None)
+
+    found = sorted([item("escort", 1), item("siege", 3), item("strike", 4)], key=lambda x: x[0])
+    day = next(d for d in range(1, 10) if orders.DAILY_TURNS[(d - 1) % 3] == "defend")
+    picked = orders._daily_choice(found, day, 1)
+    assert [x[1].kind for x in picked] == [orders.preferred_offense(day)]  # 守那一組沒有候選：退到進攻，不是照優先序挑護糧

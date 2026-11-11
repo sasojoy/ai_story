@@ -87,4 +87,6 @@ def duty(game) -> float:
     """守勢行動（計畫 T6）：替守城記功才值得做；約戰開著時不算守城（減法季批 3b：守是應戰）。"""
     s = game.state
     counts = not game.duel_on() and orders.duty_counts(s, game.content, game._side(), s.player.location)
+    if game.duel_on() and orders.idle_duty_counts(s, game.content, game._side(), s.player.location):
+        counts = True  # 沒人來打的守城：在自家地方按守勢記一次（一天一次；今天按過了選項是灰的）
     return DUTY_SCORE + (bot_base.ORDER_SCORE if counts else 0.0)

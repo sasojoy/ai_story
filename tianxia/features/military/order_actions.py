@@ -110,7 +110,7 @@ def _step_order_places(ctx, o) -> set[str]:
     elif o.template == "siege":
         places = orders.siege_places(c, o.faction, o.front, s.world) if o.front else []
     elif o.template == "defend":
-        places = orders.defend_places(c, s.world, o)
+        places = orders.defend_places(c, s.world, o) or orders.idle_defend_places(c, s.world, o)
     elif o.template == "escort":
         places = [o.end if s.player.convoy is not None and s.player.convoy.order == o.id else o.start]
     else:
