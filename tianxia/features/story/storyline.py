@@ -96,9 +96,13 @@ def ready_event(state: GameState, content: Content) -> str | None:
     return None
 
 
-def label(content: Content, progress: StoryProgress) -> str:
+def label(content: Content, progress: StoryProgress, note: str = "") -> str:
+    """此地可為那一顆的字：線名在前當短名（圓章只寫得下五個字，先前「未了之事：」就把它吃光了，Joy 2026-11-11），
+    「未了之事：這一步・還要多久」收進括號（網頁的 optParts 拆成點了才看的那一句、「全部」那一串照全文）。note 是 task_note／retry_note。"""
     line, stage = current(content, progress)
-    return f"{PENDING_HEAD}：{line.title}" + (f"・{stage.hint}" if stage.hint else "")
+    detail = f"{PENDING_HEAD}：{stage.hint}" if stage.hint else PENDING_HEAD
+    inner = note.strip("（）")
+    return f"{line.title}（{detail}{'・' + inner if inner else ''}）"
 
 
 def options(state: GameState, content: Content) -> list[tuple[str, str, bool]]:
@@ -116,13 +120,13 @@ def options(state: GameState, content: Content) -> list[tuple[str, str, bool]]:
             # 整條線從他那邊看就是消失了（FB-902，上班想下班停在小試「靜候」一天什麼都看不到）。
             # 灰的選項引擎本來就擋（choose 的 not option.enabled → 「此刻無法這麼做」），假人也只挑亮的
             out.append((f"{OPTION}:{progress.line}",
-                        label(content, progress) + task_note(state, content, progress, stage), False))
+                        label(content, progress, task_note(state, content, progress, stage)), False))
             continue
         if not doable(state, content, progress):
             continue
         waiting = stage.kind == "fight" and progress.retry_at is not None and state.world.time < progress.retry_at
         note = retry_note(state, content, progress) if waiting else ""
-        out.append((f"{OPTION}:{progress.line}", label(content, progress) + note, not waiting))
+        out.append((f"{OPTION}:{progress.line}", label(content, progress, note), not waiting))
     return out
 
 
