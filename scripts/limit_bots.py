@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from limit_metrics import snapshot  # noqa: E402
-from tianxia import bot, bot_policy, database, server_bots, tactics, team  # noqa: E402
+from tianxia import bot, bot_base, bot_policy, database, naming, server_bots, tactics, team  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
@@ -116,6 +116,7 @@ class Driver:
         self.raids = Counter()
         self.turns = 0
         self.errors = Counter()
+        self.unstuck = Counter()  # 打分數挑不出來、改照真人或整季機器人按的次數（照前綴）
 
     def online(self, now: float) -> bool:
         """每天從台灣早上 9 點起連著在線 hours 個鐘頭。"""
@@ -178,7 +179,39 @@ def _turn(game: Game, profile: BotProfile, driver: Driver) -> None:
     if focus.arts_every_turn:
         bot.forge_and_cultivate(game, driver.rng)
         bot.spend_xinde(game, driver.rng)
-    bot_policy.take_turn(game, profile, driver.rng)
+    slot = bot_base.NamingSlot(open=True, model=False)  # 有所感、首創、定名要取名：沒有 slot 的話停在有所感裡一整季
+    msgs = bot_policy.take_turn(game, profile, driver.rng, slot)
+    if slot.job is not None:
+        bot_policy.apply_job(game, slot.job, _fake_name(game, slot.job))
+    elif not msgs and game.state.player.journey is None:
+        _unstick(game, driver)
+
+
+def _unstick(game: Game, driver: Driver) -> None:
+    """伺服器假人碰不到、只有真人才會冒出來的那幾件（例：主線的答題 story:，假人不打分數）：照真人一樣答一題；
+    其餘照整季機器人隨機挑一顆（bot.pick）。真的沒事可做（體力不夠）什麼都不做。"""
+    options = [o for o in game.options(odds=False, tick=False) if o.enabled]
+    answers = [o.id for o in options if o.id.startswith("story:") and not o.id.endswith(":later")]
+    if answers:
+        driver.unstuck["story"] += 1
+        game.choose(driver.rng.choice(answers))
+        return
+    if options and all(o.id.startswith(("road:", "act:rest")) for o in options):
+        return
+    choice = bot.pick(game, options, driver.rng) if options else None
+    if choice:
+        driver.unstuck[choice.split(":")[0]] += 1
+        game.choose(choice)
+
+
+def _fake_name(game: Game, job):
+    """取名的 B 段不叫模型（同 sim_server_bots 的假取名）：有候選挑第一個，要新名字照字表組；有所感照沒有模型的路（C 段走退路字表）。"""
+    if isinstance(job, bot_base.SenseJob):
+        return None, ""
+    request = job.request
+    if getattr(request, "choices", None):
+        return request.choices[0], ""
+    return naming.fallback_name(game.content, f"極限|{request.key}", request.name_kind, salt=game.state.player.sense_serial), ""
 
 
 def _record_raids(driver: Driver, me: str):
@@ -233,7 +266,7 @@ def _bots_row(states) -> dict:
     return {k: {"median": statistics.median(x[k] for x in snaps), "max": max(x[k] for x in snaps)} for k in snaps[0]}
 
 
-def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str, fights: int) -> dict:
+def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str, fights: int, acts: int = 4) -> dict:
     focus = FOCUSES[focus_key]
     content = load_content(ROOT / "content", profile=profile)
     content.config.time_scale = 1.0
@@ -278,8 +311,11 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
                         in_focus[0] = True
                         try:
                             with mock.patch.object(peer_bots, "RAID_CHANCE", 1.0) if focus.raid else ExitStack():
-                                _turn(game, prof, driver)
-                            driver.turns += 1
+                                for _ in range(acts):  # 真人體力夠就一直按：一輪最多按 acts 下，在路上就停（路上的時間照走）
+                                    if game.state.player.journey is not None or game.state.world.ended:
+                                        break
+                                    _turn(game, prof, driver)
+                                    driver.turns += 1
                         except Exception as exc:  # 一步出錯不讓整季倒下（同 bot_runner）：記種類，報告上寫
                             driver.errors[type(exc).__name__] += 1
                         finally:
@@ -307,9 +343,9 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
     database.close_all()
     shutil.rmtree(workdir, ignore_errors=True)
     return {
-        "profile": profile, "focus": focus_key, "label": focus.label, "seed": seed, "talk": talk_tier, "hours": focus.hours,
+        "profile": profile, "focus": focus_key, "label": focus.label, "seed": seed, "talk": talk_tier, "hours": focus.hours, "acts": acts,
         "season_days": season.time / DAY, "ended": season.ended, "ending": season.ending_title, "faction": faction,
-        "turns": driver.turns, "errors": dict(driver.errors), "raids": dict(driver.raids),
+        "turns": driver.turns, "errors": dict(driver.errors), "unstuck": dict(driver.unstuck), "raids": dict(driver.raids),
         "curve": driver.curve, "final": final, "bots_final": bots_final, "bots": len(bots),
         "arena_vs_bots": {"mean": statistics.mean(vs) if vs else None, "min": min(vs) if vs else None, "max": max(vs) if vs else None, "n": len(vs)},
         "seconds": round(time.time() - t0),
@@ -317,9 +353,9 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
 
 
 def _job(args):
-    profile, focus, seed, tick, talk, fights, out = args
+    profile, focus, seed, tick, talk, fights, acts, out = args
     try:
-        result = run_one(profile, focus, seed, tick, talk, fights)
+        result = run_one(profile, focus, seed, tick, talk, fights, acts)
     except Exception as exc:
         result = {"profile": profile, "focus": focus, "seed": seed, "crash": repr(exc)}
     path = Path(out) / f"{profile}-{focus}-{seed}.json"
@@ -336,12 +372,13 @@ def main() -> None:
     parser.add_argument("--tick", type=float, default=120.0, help="假時鐘每一輪走幾秒（極限假人每一輪動一下）")
     parser.add_argument("--talk", default="loose", choices=sorted(TALK_TIERS), help="跟人物說話的固定分：寬鬆、普通、嚴格")
     parser.add_argument("--fights", type=int, default=60, help="季末對每個普通假人打幾場擂台")
+    parser.add_argument("--acts", type=int, default=4, help="極限假人每一輪最多按幾下（真人體力夠就一直按）")
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--out", default=str(ROOT / ".local" / "limit"))
     args = parser.parse_args()
     focuses = list(FOCUSES) if args.focus == ["all"] else args.focus
     Path(args.out).mkdir(parents=True, exist_ok=True)
-    jobs = [(p, f, s, args.tick, args.talk, args.fights, args.out) for p in args.profile for f in focuses for s in args.seeds]
+    jobs = [(p, f, s, args.tick, args.talk, args.fights, args.acts, args.out) for p in args.profile for f in focuses for s in args.seeds]
     if args.jobs > 1:
         with ProcessPoolExecutor(args.jobs) as pool:
             for name, secs, crash in pool.map(_job, jobs):

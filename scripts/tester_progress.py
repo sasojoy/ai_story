@@ -60,8 +60,19 @@ def main() -> int:
             continue
         if state.player.member.level <= 1 and not state.player.annals:
             continue  # 註冊了沒玩的不算
-        current.append({"now": snapshot(state, content), "levels": _milestones_days(level_milestones(state)),
+        current.append({"now": snapshot(state, content), "levels": _milestones_days(level_milestones(state)), "key": r["key"],
                         "season_day": round(season_time / DAY, 2), "season": getattr(state, "season_number", 0)})
+    # 每天按了哪幾顆（playlog 的 action_counts；第 7 版起才有）：照等級排的流水號，不帶名號
+    current.sort(key=lambda row: -row["now"]["level"])
+    if _has(conn, "action_counts"):
+        for row in current:
+            days = {}
+            for a in conn.execute("SELECT day, buttons FROM action_counts WHERE owner = ? AND season = ? ORDER BY day",
+                                  (row["key"], season.get("season_number"))):
+                days[int(a["day"])] = json.loads(a["buttons"] or "{}")
+            row["buttons"] = days
+    for row in current:
+        row.pop("key", None)
     past: dict[int, list] = {}
     if _has(conn, "biographies"):
         for r in conn.execute("SELECT season, key, annals, profile FROM biographies"):
@@ -110,7 +121,11 @@ def summary(out: dict) -> dict:
         levels = sorted(r["level"] or 0 for r in rows)
         past[season] = {"n": len(rows), "level_max": levels[-1] if levels else 0, "level_median": levels[len(levels) // 2] if levels else 0,
                         "milestones": _level_days(rows)}
-    return {"season_now": out["season_now"], "day_now": cur[0]["season_day"] if cur else None, "n_now": len(cur),
+    top = []
+    for row in cur[:5]:  # 等級最高的五個人：每天按最多的十二顆、季到此刻的身家（不帶名號）
+        days = {d: dict(sorted(b.items(), key=lambda kv: -kv[1])[:12]) for d, b in (row.get("buttons") or {}).items()}
+        top.append({"now": row["now"], "levels": row["levels"], "buttons": days})
+    return {"season_now": out["season_now"], "top": top, "day_now": cur[0]["season_day"] if cur else None, "n_now": len(cur),
             "now": now, "milestones_now": _level_days(cur), "past": past}
 
 
