@@ -158,7 +158,6 @@
   }
   function patchPopHtml(m) {
     if (pro() || (m.story_cards || []).length) return "";
-    if (S.nxAfter) { const id = S.nxAfter; S.nxAfter = null; setTimeout(() => nxGo(id), 0); return ""; } // 登入頁按了「去看看」：登入進來就帶過去
     if (!nxSeen()) return nxInviteHtml(); // 江湖新事：這一批新功能每支手機跳一次，排在改版資訊前面
     if (!S.patchNotes) return ""; // 進遊戲那一刻（enter）才讀一次；還沒讀到不跳
     const [top, ...older] = patchUnseen();
@@ -182,12 +181,12 @@
   const NX_SEEN = "tianxia.introSeen";
   const NX_HEAD = "江湖新事"; // 待 joy 潤
   const NX_SAY = "這一季，江湖多了幾條路可走。"; // 待 joy 潤
-  const NX_GO = "去看看 ›"; // 待 joy 潤
+  const NX_BACK = "‹ 江湖新事"; // 待 joy 潤
+  const NX_MORE_END = "‹ 看看別的"; // 待 joy 潤
   const NX_LATER = "之後再看"; // 待 joy 潤
   const NX_OPEN = "去看看"; // 待 joy 潤
   const NX_DONE = "入江湖"; // 待 joy 潤
   const NX_END = "其餘的，留給你自己去江湖上撞見。"; // 待 joy 潤
-  const NX_LOGIN = "登入之後就帶你過去"; // 待 joy 潤
   const NX_NUMS = "壹貳參肆伍陸柒捌玖";
   // 一樣一筆：art 是 /static/ 底下的圖；show 是不放圖、畫成實物的那幾樣（金蘭帖、信箋、親衛長大、名駒去背、圖上蓋印）
   const NX_ITEMS = [
@@ -209,6 +208,40 @@
     seals: '<span class="nx-seals" aria-hidden="true"><i class="s1">破陣首功</i><i class="s2">擂台三甲</i><i class="s3">校尉</i></span>',
     horse: '<div class="nx-horse" aria-hidden="true"><img src="/static/horse-liyun.webp" alt=""></div>',
   };
+  // 點開一張卡的介紹（Joy 2026-11-12「我以為你那個去看看是會到詳細介紹那個功能的內容」）：幾個畫面，一張圖一句話，不寫規則與數字
+  const NX_MORE = {
+    zongmen: [["img/events/academy.webp", "拜進一座山門，從此你就是這一門的人，換了一季也還是。"], // 待 joy 潤
+      ["img/legacy/scroll.webp", "同門各自悟到的招式獻上來，過了試練，就寫進師門的武譜。"], // 待 joy 潤
+      ["img/here/faction.webp", "譜上寫進去的每一式，同門的人都學得到。"], // 待 joy 潤
+      ["img/legacy/bamboo-slip.webp", "外人截了你們的親傳弟子，說不定撿走一頁殘譜。"]], // 待 joy 潤
+    jieyi: [["img/events/altar.webp", "幾個人焚香結拜，排了大小，從此以兄弟相稱。"], // 待 joy 潤
+      ["img/events/night.webp", "兄弟在路上被人截了，你可以替他出頭，把這筆帳討回來。"], // 待 joy 潤
+      ["img/events/tavern.webp", "剛好同在一地，就聚一聚。"], // 待 joy 潤
+      ["img/events/fight.webp", "大戰的時候，兄弟並肩站在一起。換了一季，情分也還在。"]], // 待 joy 潤
+    guard: [["img/guard/story/meet-river.webp", "出門探索，撞見一個落難的孩子。你救不救他？"], // 待 joy 潤
+      ["img/guard/story/yard.webp", "帶他回家。每天家裡都有件小事，你怎麼做，他都記得。"], // 待 joy 潤
+      ["img/guard/study/m-wuguan.webp", "送他去學本事，書院、武館、軍營，看他自己的性子。"], // 待 joy 潤
+      ["img/guard/story/oath-wen.webp", "有一天他學成回來，站到你身邊，當你的親衛。"]], // 待 joy 潤
+    mail: [["img/gear/treasure-mendi_mingtie.webp", "跟人換過名帖，就算是帖友了。"], // 待 joy 潤
+      ["img/events/road.webp", "人不在同一處也沒關係，信會送到。"], // 待 joy 潤
+      ["img/events/village.webp", "有新的信來，俠客頁上會亮起來。"]], // 待 joy 潤
+    titles: [["img/events/fort.webp", "在陣營裡立功升官，名號旁就有一方官印。"], // 待 joy 潤
+      ["img/here/arena.webp", "擂台三甲、破陣首功這種名號，同一時間只有幾個人戴得上。"], // 待 joy 潤
+      ["img/legacy/seal-talisman.webp", "一次戴一個。名帖上、榜單上，大家都看得到。"]], // 待 joy 潤
+    craft: [["img/stories/dunwu_enter.webp", "每一份意境裡，都藏著一道真意。"], // 待 joy 潤
+      ["img/stories/dunwu_demon.webp", "兩份放進爐裡合在一起，會長出新的真意。"], // 待 joy 潤
+      ["img/stories/dunwu_done.webp", "時機、地方、訣竅都對了，兩股意念擰成一線，合璧成神。"]], // 待 joy 潤
+    horses: [["horse-yinxue.webp", "荒野裡有野馬，馴得服就是你的。"], // 待 joy 潤
+      ["horse-benlei.webp", "陣上敵將騎的馬，打贏了可以奪過來。"], // 待 joy 潤
+      ["img/here/horses.webp", "立了功，軍中也會賜馬。"], // 待 joy 潤
+      ["horse-xiaoyuan.webp", "裂雲、奔雷、飲雪、嘯原，四匹名駒一季各只認一個主人。"]], // 待 joy 潤
+    temper: [["img/arena/weapon_saber.webp", "兵器、護具都能回爐，一回往上淬一階。"], // 待 joy 潤
+      ["img/gear/mat-gang_4.webp", "越往上越難，失了手會退一階。"], // 待 joy 潤
+      ["img/here/smith.webp", "東西不會碎，只是白費了料。"]], // 待 joy 潤
+    tavern: [["img/here/tavern.webp", "酒肆的粉牆上，借酒家的筆題一句。"], // 待 joy 潤
+      ["img/events/market.webp", "往來的人都讀得到你留下的話。"], // 待 joy 潤
+      ["img/events/night.webp", "翻一翻牆，看看別人都寫了什麼。"]], // 待 joy 潤
+  };
   function nxSeen() {
     if (S.nxSeen === undefined) { try { S.nxSeen = localStorage.getItem(NX_SEEN) || ""; } catch (e) { S.nxSeen = ""; } }
     return S.nxSeen === NX_KEY;
@@ -220,9 +253,23 @@
   function nxCardHtml(it, i) {
     const art = it.art ? `<div class="nx-art" style="background-image:url('/static/${it.art}')"></div>` : "";
     const show = it.show ? NX_SHOW[it.show] : "";
-    return `<article class="nx-card nx-${it.id}">${it.show === "seals" ? `<div class="nx-artwrap">${art}${show}</div>` : art + show}`
+    return `<div class="nx-card nx-${it.id}" role="button" tabindex="0" data-act="nx-item" data-id="${it.id}" aria-label="${it.name.replace(/\u3000/g, "")}">`
+      + `${it.show === "seals" ? `<div class="nx-artwrap">${art}${show}</div>` : art + show}`
       + `<b class="nx-num" aria-hidden="true">${NX_NUMS[i]}</b>`
-      + `<div class="nx-body"><h3>${it.name}</h3><p>${it.line}</p><button class="nx-go" data-act="nx-go" data-id="${it.id}">${NX_GO}</button></div></article>`;
+      + `<div class="nx-body"><h3>${it.name}<span class="nx-chev" aria-hidden="true">›</span></h3><p>${it.line}</p></div></div>`;
+  }
+  // 一樣的介紹：頂上回去的一行 → 卡上那張圖（實物）與名字、那一句 → 幾個畫面（圖＋一句）→ 底下回去
+  function nxDetailHtml(id) {
+    const i = NX_ITEMS.findIndex((it) => it.id === id);
+    const it = NX_ITEMS[i];
+    if (!it) return nxPageHtml();
+    const art = it.art ? `<div class="nx-art big" style="background-image:url('/static/${it.art}')"></div>` : "";
+    const show = it.show ? NX_SHOW[it.show] : "";
+    const scenes = (NX_MORE[id] || []).map(([img, line], k) => `<li class="nx-scene${k % 2 ? " flip" : ""}"><span class="nx-pic" style="background-image:url('/static/${img}')" aria-hidden="true"></span><p>${line}</p></li>`).join("");
+    return `<div class="nx-page nx-detail"><div class="nx-top"><button class="nx-back" data-act="nx-back">${NX_BACK}</button><button class="nx-x2" data-act="nx-close" aria-label="關閉">×</button></div>`
+      + `<div class="nx-card nx-${it.id} nx-head">${it.show === "seals" ? `<div class="nx-artwrap">${art}${show}</div>` : art + show}<b class="nx-num" aria-hidden="true">${NX_NUMS[i]}</b>`
+      + `<div class="nx-body"><h3>${it.name}</h3><p>${it.line}</p></div></div>`
+      + `<ol class="nx-scenes">${scenes}</ol><button class="nx-done ghost" data-act="nx-back">${NX_MORE_END}</button></div>`;
   }
   // 整頁：頁首（官道的圖、直書的匾、朱印、一句）→ 九張卡 → 收尾一句與「入江湖」
   function nxPageHtml() {
@@ -252,6 +299,7 @@
     layer.setAttribute("aria-label", NX_HEAD);
     layer.innerHTML = nxPageHtml();
     document.body.appendChild(layer);
+    nxListTop = 0;
     if (document.body.classList) document.body.classList.add("nx-lock"); // 底下的頁不跟著捲
   }
   function nxClose() {
@@ -269,70 +317,23 @@
     window.addEventListener("hashchange", nxFromHash);
     setTimeout(nxFromHash, 0);
   }
-  // 按完把那一塊捲到眼前、描一下邊（最後一層：那一張卡、那一顆鈕本身）
-  function nxFlash(sel) {
-    requestAnimationFrame(() => {
-      const el = document.querySelector(sel);
-      if (!el) return;
-      if (el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
-      el.classList.add("nx-flash");
-      setTimeout(() => el.classList.remove("nx-flash"), 2400);
-    });
+  // 點一張卡：同一層換成那一樣的介紹，從頂上看起；回去時回到剛才捲到的地方
+  let nxListTop = 0;
+  function nxShow(id) {
+    const layer = document.getElementById("nx-layer");
+    if (!layer) return;
+    if (id) nxListTop = layer.scrollTop;
+    layer.innerHTML = id ? nxDetailHtml(id) : nxPageHtml();
+    layer.scrollTop = id ? 0 : nxListTop;
   }
-  // 這一刻按得下去的那一個選項（江湖頁的那一顆、或店門）
-  const nxOpt = (pred) => ((S.main && S.main.options) || []).find((o) => o.enabled !== false && pred(o.id));
-  // 店在這裡就進店、翻到那一頁；不在城裡就開輿圖（去最近的城）
-  async function nxShop(optId, then, sel) {
-    const o = nxOpt((id) => id === optId);
-    if (!o) { await goTab("map"); return; }
-    if (S.tab !== "jianghu") await goTab("jianghu");
-    await choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(optId)}"]`) || document.createElement("button"), optId);
-    then(); // 店門一開會回到第一頁：進了店再翻到那一頁
-    if (typeof renderShop === "function" && S.main && S.main.shop) renderShop(false);
-    nxFlash(sel);
-  }
-  // 「去看看」：九樣各帶到哪裡。沒登入（登入頁）先記著，登入進來的第一畫再帶過去
-  async function nxGo(id) {
-    nxClose();
-    if (S.stage !== "game" || !S.main) {
-      S.nxAfter = id;
-      toast(NX_LOGIN);
-      const input = document.querySelector("#gate-form input");
-      if (input) input.focus();
-      return;
-    }
-    const m = S.main;
-    switch (id) {
-      case "zongmen": {
-        if (m.zongmen) { S.heroTab = "sect"; await goTab("practice"); nxFlash(".zongmen"); break; } // 是哪一門的人：師門那一頁
-        const o = nxOpt((x) => x.startsWith("zongmen:")); // 此地就是山門：拜師那一顆
-        if (o) { await goTab("jianghu"); nxFlash(`[data-id="${CSS.escape(o.id)}"]`); } else await goTab("map");
-        break;
-      }
-      case "jieyi": S.newsBack = S.news; S.news = "mingtie"; await goTab("news"); nxFlash(".jieyi"); break; // 名帖匣裡的金蘭譜
-      case "guard":
-        if (m.guard) { S.heroTab = "mates"; await goTab("practice"); nxFlash(".guard"); } // 同伴那一頁最上面
-        else { await goTab("jianghu"); nxFlash(".act-bar"); } // 還沒撞見：那個孩子是探索時遇上的
-        break;
-      case "mail": S.newsBack = S.news; S.news = m.mail ? "mail" : "mingtie"; await goTab("news"); break; // 信匣（沒開的季：先換名帖）
-      case "titles":
-        if (m.titles) { S.titlesOpen = true; render(); nxFlash(".ttl-sheet"); } // 名號旁的頭銜印攤開的那一張
-        else { S.heroTab = "attrs"; await goTab("practice"); }
-        break;
-      case "craft": await goTab("craft"); nxFlash("#kiln-wrap"); break; // 煉製頁的爐
-      case "horses": await nxShop("act:market", () => {}, ".stalls"); break; // 馬市的槽頭
-      case "temper": await nxShop("act:smith", () => { S.shopTab = "rack"; }, ".shop-worn"); break; // 鐵匠鋪身上那件的淬煉
-      case "tavern": await nxShop("act:tavern", () => { S.tavTab = "wall"; }, "#tav-wall"); break; // 酒肆的題壁
-    }
-  }
-
   async function newsClick(act, el, ev) {
     switch (act) {
         case "patch-close": patchPopClose(); renderPage(); break; // 進遊戲後跳的改版資訊：看過了，下一次改版才再跳
         case "nx-open": nxMarkSeen(); nxOpen(); if (S.stage === "game" && S.main) renderPage(); break; // 江湖新事：小窗按了「去看看」也就不再跳
         case "nx-later": nxMarkSeen(); renderPage(); break;
         case "nx-close": nxClose(); break;
-        case "nx-go": await nxGo(el.dataset.id); break;
+        case "nx-item": nxShow(el.dataset.id); break; // 點一張卡：翻開那一樣的介紹
+        case "nx-back": nxShow(""); break;
     } // newsClick
   } // newsClick
-  registerClicks(newsClick, ["patch-close", "nx-open", "nx-later", "nx-close", "nx-go"]);
+  registerClicks(newsClick, ["patch-close", "nx-open", "nx-later", "nx-close", "nx-item", "nx-back"]);
