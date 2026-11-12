@@ -258,6 +258,16 @@
     const old = document.getElementById("nx-layer");
     if (old) old.remove();
     if (document.body.classList) document.body.classList.remove("nx-lock");
+    if (typeof location !== "undefined" && location.hash === NX_HASH && typeof history !== "undefined") history.replaceState(null, "", location.pathname + location.search); // 關了就拿掉 #new，重新整理不再開
+  }
+  // 固定網址（Joy 2026-11-12「他會有固定網址嗎」）：https://tianxiadashi.com/#new 一打開就是這一頁，沒登入也看得到（只是網頁的錨點，不是新路由）
+  const NX_HASH = "#new";
+  function nxFromHash() {
+    if (typeof location !== "undefined" && location.hash === NX_HASH && !document.getElementById("nx-layer")) nxOpen();
+  }
+  if (typeof window !== "undefined" && window.addEventListener && typeof location !== "undefined") {
+    window.addEventListener("hashchange", nxFromHash);
+    setTimeout(nxFromHash, 0);
   }
   // 按完把那一塊捲到眼前、描一下邊（最後一層：那一張卡、那一顆鈕本身）
   function nxFlash(sel) {

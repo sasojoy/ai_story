@@ -88,3 +88,10 @@ def test_go_before_login_waits_and_takes_you_there_after(real, world):  # noqa: 
     out = run(m, "return (async () => { H.S.stage = 'gate'; await H.nxGo('craft'); const kept = H.S.nxAfter; H.S.stage = 'game';"
               " const pop = H.patchPopHtml(H.S.main); return { kept, after: H.S.nxAfter, pop }; })();", stored={"tianxia.introSeen": KEY})
     assert out["kept"] == "craft" and out["after"] is None and out["pop"] == ""
+
+
+def test_the_fixed_link_opens_the_page():
+    """固定網址（Joy 2026-11-12「他會有固定網址嗎」）：/#new 一打開就是這一頁；只是錨點，不是新路由，沒登入也看得到。"""
+    news = (WEB / "news.js").read_text(encoding="utf-8")
+    assert 'const NX_HASH = "#new";' in news
+    assert 'window.addEventListener("hashchange", nxFromHash);' in news and "setTimeout(nxFromHash, 0);" in news
