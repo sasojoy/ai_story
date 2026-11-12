@@ -95,6 +95,9 @@ def flags(profile: str, focus: str, runs: list[dict], control: list[dict], teste
         then = curve[day - 1] if 0 < day <= len(curve) else mine
         if top is not None and then is not None and then > top and key in keys[:2]:
             out.append(("贏過所有測試玩家", f"第 {day} 天{FIELDS[key]} {then:g}，測試玩家最高 {top:g}"))
+    vb = _mean([r.get("vs_benming") for r in runs])
+    if vb is not None and vb > 0.50:
+        out.append(("贏過本命", f"季末擂台對同等級的本命贏 {round(vb * 100)}%（目標是本命贏 50～52%，也就是這一邊 48～50%）"))
     return out  # 擂台對同場普通假人只印數字、不標：伺服器假人每天才上線一到五小時，誰都贏得了它們（本命 50～52% 要另外量）
 
 
@@ -148,8 +151,8 @@ def build(runs: list[dict], testers: dict | None) -> tuple[str, dict]:
                 f'<article class="card"><header><h3>{html.escape(label)}</h3><span>{len(rs)} 個種子・每天 {rs[0]["hours"]:g} 小時</span></header>'
                 f'<div class="spark">{spark}<p class="legend"><i class="k1"></i>{FIELDS[main]}・極限假人 <i class="k2"></i>普通假人最高 <i class="k3"></i>對照組</p></div>'
                 f'<div class="tbl"><table><tr><th>季末</th><th>它</th><th>普通最高</th><th>對照組</th><th>測試玩家最高</th></tr>{rows}</table></div>'
-                f'{extra}<p class="note">擂台對同場普通假人：{_fmt_pct(arena)}</p><ul class="flags">{tags}</ul></article>')
-            data[f"{profile}/{focus}"] = {"flags": fl, "arena": arena, "final": {k: _mean([r["final"][k] for r in rs]) for k in keys}}
+                f'{extra}<p class="note">季末擂台：對同等級本命 {_fmt_pct(_mean([r.get("vs_benming") for r in rs]))}・對同場普通假人 {_fmt_pct(arena)}</p><ul class="flags">{tags}</ul></article>')
+            data[f"{profile}/{focus}"] = {"flags": fl, "arena": arena, "vs_benming": _mean([r.get("vs_benming") for r in rs]), "final": {k: _mean([r["final"][k] for r in rs]) for k in keys}}
         cards.append("</div>")
     return PAGE.replace("{{CARDS}}", "".join(cards)).replace("{{TESTERS}}", _tester_line(testers)), data
 

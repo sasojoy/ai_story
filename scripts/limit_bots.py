@@ -44,6 +44,8 @@ from tianxia.features.bout import arena_actions  # noqa: E402
 from tianxia.features.bout import arena_rules as arena  # noqa: E402
 from tianxia.features.companions import companion_agent  # noqa: E402
 from tianxia.features.peers import bots as peer_bots  # noqa: E402
+from tianxia.features.peers import raid_actions  # noqa: E402
+from tianxia.core import bounty_base  # noqa: E402
 from tianxia.models import AFFINITY_TAG_DELTAS, MOVES  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 from tianxia.state import ArenaFight, BotProfile  # noqa: E402
@@ -53,6 +55,8 @@ DAY = 86400.0
 TZ = 8 * 3600
 WIN = {"大勝", "險勝"}
 MAX_REAL_DAYS = 30
+HUNT_FROM = 15  # 專截殺幾級起才去找人
+HUNT_SHARE = 0.25
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,9 @@ class Focus:
     talk: bool = False
     smith: bool = False
     arts_every_turn: bool = False
+    fixed: dict[str, float | None] = field(default_factory=dict)  # 前綴 → 直接給這個分數（None＝不按）；比 boost 先看，最長的前綴優先
+    guard_pick: bool = False  # 親衛那一件事攤開了：挑情分漲最多的做法（真人追滿專長就這麼挑）
+    smith_silver: int = 0  # smith 開著時，身上銀兩到這麼多才進鐵匠鋪（不然整天卡在鋪子裡、沒錢也沒出門賺）
 
 
 FIGHT = {"act:train": 25.0, "act:explore": 18.0, "act:challenge": 22.0}
@@ -81,17 +88,20 @@ FOCUSES: dict[str, Focus] = {
                      arts_every_turn=True),
     "friend": Focus("交情狂", boost={"act:socialize": 30.0, "call:": 30.0, "feast": 20.0, "errand:deliver": 25.0, "errand:scout": 25.0},
                     force=("act:socialize", "call:", "errand:deliver", "errand:scout"), damp=("act:arena", "act:dadian", "act:market"), talk=True),
-    "silver": Focus("財神", boost={"act:smith": 30.0, "smith:": 30.0, "bounty": 15.0, "act:bounties": 15.0}, force=("smith:temper", "smith:armor-temper"),
-                    damp=("act:tavern", "act:dadian", "act:arena"), smith=True),
+    "silver": Focus("財神", boost={"act:explore": 15.0, "bounty": 20.0, "act:bounties": 20.0, "act:smith": 10.0},
+                    damp=("act:tavern", "act:dadian", "act:arena"), smith=True, smith_silver=300),
     "raid": Focus("截殺狂", damp=("act:tavern", "act:dadian", "act:arena", "act:socialize"), raid=True),
     "merit": Focus("功勞狂", boost={"act:duty": 30.0, "act:train": 25.0, "act:convoy": 30.0, "act:summons": 30.0, "act:rank2": 25.0,
                                    "bounty": 20.0, "act:bounties": 20.0}, damp=("act:tavern", "act:dadian", "act:arena", "act:market")),
-    "guard": Focus("親衛狂", boost={"guard:": 40.0, "act:explore": 15.0}, force=("guard:teach", "guard:study", "guard:school"),
-                   damp=("act:tavern", "act:dadian", "act:arena")),
+    # 親衛：做法挑情分漲最多的那一顆（_guard_pick）、每天教、求學去處照假人的偏好；放著、離開、以後再說不按
+    "guard": Focus("親衛狂", boost={"act:explore": 15.0}, damp=("act:tavern", "act:dadian", "act:arena"),
+                   fixed={"guard:teach": 45.0, "guard:leave": None, "guard:part": None,
+                          "guard:later": None, "guard:stay": None}, guard_pick=True),
     "thrift": Focus("精算（普通打分、永遠挑最好的）"),
     # 疊起來的三條
-    "strongest": Focus("最強戰力（意境＋打造＋親衛＋練級）", boost={**FIGHT, "sense": 30.0, "act:smith": 15.0, "smith:": 20.0, "guard:": 20.0},
-                       damp=("act:tavern", "act:dadian", "act:market"), smith=True, arts_every_turn=True),
+    "strongest": Focus("最強戰力（意境＋打造＋親衛＋練級）", boost={**FIGHT, "sense": 30.0, "act:smith": 10.0},
+                       damp=("act:tavern", "act:dadian", "act:market"), smith=True, smith_silver=300, arts_every_turn=True,
+                       fixed={"guard:leave": None, "guard:part": None, "guard:later": None}, guard_pick=True),
     "grinder": Focus("肝帝（普通玩法、每天 16 小時）", hours=16.0),
     "overlord": Focus("霸主（功勞＋截殺＋交情）", boost={"act:duty": 25.0, "act:train": 25.0, "act:convoy": 25.0, "act:socialize": 20.0,
                                                       "call:": 20.0, "bounty": 15.0}, force=("call:",), raid=True, talk=True, hours=12.0),
@@ -116,6 +126,7 @@ class Driver:
         self.raids = Counter()
         self.turns = 0
         self.errors = Counter()
+        self.hunt: Counter | None = None  # 專截殺：此刻每個地點站著幾個人（量測這一邊每一輪重算）
         self.unstuck = Counter()  # 打分數挑不出來、改照真人或整季機器人按的次數（照前綴）
 
     def online(self, now: float) -> bool:
@@ -129,7 +140,12 @@ def _matches(option_id: str, prefixes) -> str | None:
 
 
 def _focused_score(real, focus: Focus):
+    fixed = sorted(focus.fixed, key=len, reverse=True)
+
     def score(game, option, profile):
+        hit = next((p for p in fixed if option.id.startswith(p)), None)
+        if hit is not None:
+            return focus.fixed[hit]
         value = real(game, option, profile)
         hit = _matches(option.id, focus.boost)
         if hit is not None and (value is not None or _matches(option.id, focus.force)):
@@ -174,7 +190,11 @@ def _turn(game: Game, profile: BotProfile, driver: Driver) -> None:
     if focus.talk and game.state.player.pending_companion is not None:
         _talk(game, driver)
         return
-    if focus.smith:
+    if focus.raid and driver.hunt is not None and _hunt(game, driver):
+        return
+    if focus.guard_pick and _guard_pick(game, driver.rng):
+        return
+    if focus.smith and game.state.player.stats.get("silver", 0) >= focus.smith_silver:
         bot.visit_smith(game)  # 兵器頁、防具頁的事做完再出門（含淬煉；整季機器人那一套）
     if focus.arts_every_turn:
         bot.forge_and_cultivate(game, driver.rng)
@@ -212,6 +232,58 @@ def _fake_name(game: Game, job):
     if getattr(request, "choices", None):
         return request.choices[0], ""
     return naming.fallback_name(game.content, f"極限|{request.key}", request.name_kind, salt=game.state.player.sense_serial), ""
+
+
+def _hunt(game: Game, driver: Driver) -> bool:
+    """專截殺：此地沒有截得了的人時，往「此刻最多人站著的野地」走一步（真人會挑人多的要道蹲）。
+    人在哪只拿來挑去處（driver.hunt 是量測這一邊給的、每一輪重算的人數表），動手照舊走 bot_policy 的 _raid（玩家卡同一條路）。"""
+    if game.state.player.journey is not None:
+        return False
+    here_targets = [name for name, odds in raid_actions.targets(game) if odds in ("穩勝", "有把握", "五五波")]
+    if here_targets and game.state.player.stamina >= game.content.config.raid.stamina:
+        from tianxia.features.peers import actions as peer_actions
+        peer_actions.peer_act(game, here_targets[0], "raid")  # 玩家卡上那一顆（真人看到勝算五五波以上就動手）
+        return True
+    if raid_actions.targets(game):
+        return False
+    if game.state.player.member.level < HUNT_FROM or driver.rng.random() >= HUNT_SHARE:
+        return False  # 新手期截不了人（也不能被截）：先練起來；之後四分之一的輪往人多的地方去，其餘照常練
+    here = game.state.player.location
+    spots = [loc for loc, _ in driver.hunt.most_common() if loc != here and not bounty_base.is_town(game.content, loc)]
+    if not spots:
+        return False
+    hop = bot_base.next_hop(game, spots[:1])
+    ids = {o.id for o in game.options(odds=False, tick=False) if o.enabled}
+    if hop is None or f"move:{hop}" not in ids:
+        return False
+    driver.raids["往人多的野地"] += 1
+    game.choose(f"move:{hop}")
+    return True
+
+
+def _guard_pick(game: Game, rng) -> bool:
+    """親衛隊長那一頁（真人在網頁上按的那幾顆，不在此地可為；伺服器假人從選單上按，極限假人是真人身分、選單上沒有）：
+    攤開眼前那一件、做法挑情分漲最多的那一顆（引擎夾過的數字就在做法上，畫面上看不到，真人靠試）、每天教一樣、長大了送去求學。"""
+    from tianxia.features.guard import actions as guard_actions
+    b = getattr(game.state.player, "guard", None)
+    if b is None or b.stage in ("met", "saved", "left"):
+        return False  # 撞見、救不救、收不收在選單上，take_turn 會按
+    ctx = game
+    if b.event is not None and not b.event.shown and b.stage in guard_actions.EVENT_STAGES:
+        return bool(game.choose("guard:open"))
+    if b.event is not None and b.event.shown and b.event.choices:
+        best = max(range(len(b.event.choices)), key=lambda i: b.event.choices[i].qing)
+        return bool(game.choose(f"guard:pick:{best}"))
+    if b.stage == "grow" and b.picking:
+        picks = [x for x in guard_actions._school_picks(ctx, b) if x["enabled"]]
+        return bool(game.choose(rng.choice(picks)["id"] if picks else "guard:stay"))
+    if guard_actions._can_study(ctx, b):
+        return bool(game.choose("guard:study"))
+    lessons = guard_actions._lessons(ctx, b)
+    if lessons:
+        game.choose(rng.choice(lessons)["id"])
+        return False  # 教一樣不花體力：照樣出門
+    return False
 
 
 def _record_raids(driver: Driver, me: str):
@@ -258,6 +330,19 @@ def share(a: Game, b: Game, n: int, seed: int) -> float:
     return won / n
 
 
+def _vs_benming(content, me: Game, n: int, seed: int, driver: Driver) -> float | None:
+    """季末的它對「本命」（scripts/balance_matrix 的「絕學」那一套：關羽的武學、董卓的內功，均衡配點，同等級）的擂台贏面。
+    企劃者的目標是本命對最強玩家配置 50～52%：這裡印的是極限假人那一邊的贏面，48～50% 就是在目標裡。"""
+    try:
+        with mock.patch.object(io, "TextIOWrapper", lambda *a, **k: sys.stdout):  # balance_matrix 一 import 就換 stdout，別讓它關掉這一份
+            import balance_matrix as bm  # noqa: PLC0415
+        rival = bm.make(content, bm.Kit(content), "均衡", "絕學", me.state.player.member.level, [seed * 1000])
+        return share(me, rival, n, seed + 77)
+    except Exception as exc:  # 組不起來（例：內容改了名字）就不印，報告寫「—」
+        driver.errors[f"本命:{type(exc).__name__}"] += 1
+        return None
+
+
 def _bots_row(states) -> dict:
     """普通假人（伺服器假人）這一刻：每一欄的中位數與最高。"""
     snaps = [snapshot(s) for s in states]
@@ -289,7 +374,7 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         stack.enter_context(mock.patch.object(server_bots, "strength", lambda cfg, p: 1.0 if in_focus[0] else real_strength(cfg, p)))
         stack.enter_context(mock.patch.object(Game, "_raid_record", _record_raids(driver, name)))
         if focus.raid:
-            stack.enter_context(mock.patch.object(peer_bots, "RAID_ODDS", ("必勝", "大有勝算", "勝算略高", "勢均力敵", "勝算略低")))
+            stack.enter_context(mock.patch.object(peer_bots, "RAID_ODDS", ("穩勝", "有把握", "五五波")))
         if focus.talk:
             stack.enter_context(mock.patch.object(companion_agent, "generate_turn", _fixed_turn(driver.tier)))
         world.seed_first_season(content)
@@ -302,6 +387,8 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         while not world.get_season().ended and now[0] - START < MAX_REAL_DAYS * DAY:
             runner.tick()
             if driver.online(now[0]):
+                if focus.raid:
+                    driver.hunt = Counter(s.player.location for s in characters.all() if s.player.name != name and s.player.journey is None)
                 with world.action_lock():
                     state = characters.load(name)
                     game = Game(content, state, me.rng, world)
@@ -340,6 +427,7 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
                 driver.errors[f"擂台:{type(exc).__name__}"] += 1
         final = snapshot(state)
         bots_final = _bots_row(bots)
+        benming = _vs_benming(content, final_me, fights * 2, seed, driver)
     database.close_all()
     shutil.rmtree(workdir, ignore_errors=True)
     return {
@@ -347,6 +435,7 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         "season_days": season.time / DAY, "ended": season.ended, "ending": season.ending_title, "faction": faction,
         "turns": driver.turns, "errors": dict(driver.errors), "unstuck": dict(driver.unstuck), "raids": dict(driver.raids),
         "curve": driver.curve, "final": final, "bots_final": bots_final, "bots": len(bots),
+        "vs_benming": benming,
         "arena_vs_bots": {"mean": statistics.mean(vs) if vs else None, "min": min(vs) if vs else None, "max": max(vs) if vs else None, "n": len(vs)},
         "seconds": round(time.time() - t0),
     }
