@@ -344,6 +344,41 @@ def _vs_benming(content, me: Game, n: int, seed: int, driver: Driver) -> float |
         return None
 
 
+LADDER = ("下品", "上品", "自創中品", "自創上品", "絕學")  # balance_matrix.KITS 的幾套（均衡配點、兩門練滿）：它季末的身手排在哪一階
+
+
+def _vs_ladder(content, me: Game, n: int, seed: int, driver: Driver) -> dict:
+    """季末的它對 balance_matrix 幾套標準身手（同等級、均衡配點、兩門練滿）各自的擂台贏面：看它玩出來的身手相當於哪一階。"""
+    out = {}
+    try:
+        with mock.patch.object(io, "TextIOWrapper", lambda *a, **k: sys.stdout):
+            import balance_matrix as bm  # noqa: PLC0415
+        kit = bm.Kit(content)
+        for i, name in enumerate(LADDER):
+            rival = bm.make(content, kit, "均衡", name, me.state.player.member.level, [seed * 1000 + 10 * i])
+            out[name] = share(me, rival, n, seed + 91 + i)
+    except Exception as exc:
+        driver.errors[f"身手階:{type(exc).__name__}"] += 1
+    return out
+
+
+def kit_of(game: Game) -> dict:
+    """季末身上那一套（給人看為什麼打不過）：兩門的品質與層數、意境槽裝了幾格、兵器防具階、身上有幾門武學。"""
+    p = game.state.player
+    m, c = p.member, game.content
+    out = {"level": m.level, "library": len(p.arts), "art_levels": dict(p.art_levels), "insights": len(p.insights),
+           "attrs": dict(p.attr_alloc or {}), "growth": p.growth_preset}
+    for kind, aid, lv in (("wugong", m.wugong_id, m.wugong_level), ("neigong", m.neigong_id, m.neigong_level)):
+        art = team.resolve_art(aid, c, game.world) if aid else None
+        out[kind] = {"id": aid, "level": lv, "quality": p.art_quality.get(aid) or (art.quality if art else None),
+                     "origin": getattr(art, "origin", None), "name": getattr(art, "name", None),
+                     "slots": sum(1 for x in p.art_slots.get(aid, []) if x), "slot_n": len(p.art_slots.get(aid, []))}
+    for slot in ("weapon", "armor"):
+        e = getattr(p, slot, None)
+        out[slot] = {"tier": e.tier, "quality": e.quality} if e else None
+    return out
+
+
 def _bots_row(states) -> dict:
     """普通假人（伺服器假人）這一刻：每一欄的中位數與最高。"""
     snaps = [snapshot(s) for s in states]
@@ -429,6 +464,8 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         final = snapshot(state)
         bots_final = _bots_row(bots)
         benming = _vs_benming(content, final_me, fights * 2, seed, driver)
+        ladder = _vs_ladder(content, final_me, fights, seed, driver)
+        kit = kit_of(final_me)
     database.close_all()
     shutil.rmtree(workdir, ignore_errors=True)
     return {
@@ -436,7 +473,7 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         "season_days": season.time / DAY, "ended": season.ended, "ending": season.ending_title, "faction": faction,
         "turns": driver.turns, "errors": dict(driver.errors), "unstuck": dict(driver.unstuck), "raids": dict(driver.raids),
         "curve": driver.curve, "final": final, "bots_final": bots_final, "bots": len(bots),
-        "vs_benming": benming,
+        "vs_benming": benming, "vs_ladder": ladder, "kit": kit,
         "arena_vs_bots": {"mean": statistics.mean(vs) if vs else None, "min": min(vs) if vs else None, "max": max(vs) if vs else None, "n": len(vs)},
         "seconds": round(time.time() - t0),
     }
