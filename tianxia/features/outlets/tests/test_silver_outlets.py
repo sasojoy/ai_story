@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import no_week_unlock, real_content
+from conftest import no_week_unlock, donate_content as real_content
 
 from tianxia import economy, silver
 from tianxia.engine import Game
