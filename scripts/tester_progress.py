@@ -60,11 +60,11 @@ def main() -> int:
             continue
         if state.player.member.level <= 1 and not state.player.annals:
             continue  # 註冊了沒玩的不算
-        if getattr(state, "season_number", None) != season.get("season_number"):
+        if state.player.season_number != season.get("season_number"):
             stale += 1
             continue  # 這一季還沒上線過：存檔還是上一季季末的樣子（登入才換季），那一份已經在列傳裡
         current.append({"now": snapshot(state, content), "levels": _milestones_days(level_milestones(state)), "key": r["key"],
-                        "season_day": round(season_time / DAY, 2), "season": getattr(state, "season_number", 0)})
+                        "season_day": round(season_time / DAY, 2), "season": state.player.season_number})
     # 每天按了哪幾顆（playlog 的 action_counts；第 7 版起才有）：照等級排的流水號，不帶名號
     current.sort(key=lambda row: -row["now"]["level"])
     if _has(conn, "action_counts"):
