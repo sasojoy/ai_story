@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from limit_metrics import snapshot  # noqa: E402
-from tianxia import bot, bot_base, bot_policy, database, naming, server_bots, tactics, team  # noqa: E402
+from tianxia import arts as arts_mod, bot, bot_base, bot_policy, database, fusion, insight_fx, insights, naming, server_bots, tactics, team  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.characters import open_characters  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
@@ -362,6 +362,41 @@ def _vs_ladder(content, me: Game, n: int, seed: int, driver: Driver) -> dict:
     return out
 
 
+def _count_infuse(driver: Driver, me: str):
+    real = fusion.infuse
+
+    def infuse(state, content, world, body, others):
+        ok, msgs = real(state, content, world, body, others)
+        if ok and state.player.name == me:
+            driver.raids["化入次數"] += 1
+            driver.raids["化掉的意境"] += len(others)
+        return ok, msgs
+    return infuse
+
+
+def insight_book(game: Game) -> dict:
+    """季末手上的意境：裝著幾份、帶真意幾份、各品相幾份、已經三重幾份，沒裝著的裡面為什麼化不掉（化入的條件：同一路、不帶真意、沒裝著）。"""
+    state, content, world = game.state, game.content, game.world
+    out = {"held": 0, "slotted": 0, "grand": 0, "god": 0, "look": {}, "max_layer": 0, "spare_paths": {}, "spare_grand": 0}
+    for i in state.player.insights:
+        ins = insights.resolve(i, content, world, state)
+        if ins is None:
+            continue
+        out["held"] += 1
+        fx = insight_fx.record(state, content, world, i, ins)
+        look = insight_fx.look(fx)
+        out["look"][look] = out["look"].get(look, 0) + 1
+        slotted = arts_mod.where_slotted(state, i) is not None
+        out["slotted"] += slotted
+        out["grand"] += fx.grand is not None
+        out["god"] += insight_fx.is_god(state, i)
+        out["max_layer"] += insight_fx.strength(state, i) >= insight_fx.MAX_LAYERS
+        if not slotted:
+            out["spare_paths"][ins.attribute] = out["spare_paths"].get(ins.attribute, 0) + 1
+            out["spare_grand"] += fx.grand is not None
+    return out
+
+
 def kit_of(game: Game) -> dict:
     """季末身上那一套（給人看為什麼打不過）：兩門的品質與層數、意境槽裝了幾格、兵器防具階、身上有幾門武學。"""
     p = game.state.player
@@ -373,6 +408,7 @@ def kit_of(game: Game) -> dict:
         out[kind] = {"id": aid, "level": lv, "quality": p.art_quality.get(aid) or (art.quality if art else None),
                      "origin": getattr(art, "origin", None), "name": getattr(art, "name", None),
                      "slots": sum(1 for x in p.art_slots.get(aid, []) if x), "slot_n": len(p.art_slots.get(aid, []))}
+    out["insight_book"] = insight_book(game)
     for slot in ("weapon", "armor"):
         e = getattr(p, slot, None)
         out[slot] = {"tier": e.tier, "quality": e.quality} if e else None
@@ -409,6 +445,7 @@ def run_one(profile: str, focus_key: str, seed: int, tick: float, talk_tier: str
         stack.enter_context(mock.patch.object(bot_policy, "score", lambda g, o, p: (focused if in_focus[0] else real_score)(g, o, p)))
         stack.enter_context(mock.patch.object(server_bots, "strength", lambda cfg, p: 1.0 if in_focus[0] else real_strength(cfg, p)))
         stack.enter_context(mock.patch.object(Game, "_raid_record", _record_raids(driver, name)))
+        stack.enter_context(mock.patch.object(fusion, "infuse", _count_infuse(driver, name)))
         if focus.raid:
             stack.enter_context(mock.patch.object(peer_bots, "RAID_ODDS", ("穩勝", "有把握", "五五波")))
         if focus.talk:
