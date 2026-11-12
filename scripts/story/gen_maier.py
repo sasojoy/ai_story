@@ -584,7 +584,7 @@ endings = [
         ],
     },
     {
-        "id": "late", "title": "來不及", "failed": True, "weight": 3,
+        "id": "late", "title": "門板上了", "failed": True, "weight": 3,
         "text": "你到汝南集市的時候，蘇家糧行的門板全上了。門縫裡沒有燈。帳上那一行，大概已經翻過去了。",
         "annal": "中平元年秋，{name}過汝南，有農人以賣兒契來問。{name}後尋其女，不及。",
         "image": "stories/maier_start",
