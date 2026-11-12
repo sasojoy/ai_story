@@ -76,6 +76,12 @@ def flags(profile: str, focus: str, runs: list[dict], control: list[dict], teste
             cap = CAPS.get(key)
             if (curve[-1] - q) / curve[-1] > STILL_RISING and (cap is None or curve[-1] < cap):
                 out.append(("還在漲", f"{FIELDS[key]}最後四分之一季還漲了 {round((curve[-1] - q) / curve[-1] * 100)}%（{q:g} → {curve[-1]:g}）"))
+        if key == "level" and testers:
+            for level, row in sorted(((int(k), v) for k, v in (testers.get("milestones_now") or {}).items()), reverse=True):
+                day = next((i + 1 for i, v in enumerate(curve) if v >= level), None)  # 曲線是每天結束時量的：第 d 天＝d 天以內
+                if day is not None and day < row["fastest"]:
+                    out.append(("贏過所有測試玩家", f"第 {day} 天就到 {level} 級，測試玩家最快 {row['fastest']:g} 天"))
+                    break
         if key == "level":
             hit = next((i + 1 for i, v in enumerate(curve) if v >= MAX_LEVEL), None)
             if hit is not None and hit <= FAST_DAY.get(profile, 3):
@@ -85,12 +91,11 @@ def flags(profile: str, focus: str, runs: list[dict], control: list[dict], teste
         if base and mine and mine >= DOMINANT * base and mine - base >= 3:
             out.append(("輾壓", f"{FIELDS[key]} {mine:g}，對照組 {base:g}（{mine / base:.1f} 倍）"))
         top = (testers or {}).get("now", {}).get(key, {}).get("max")
-        if top is not None and mine is not None and mine > top and key in keys[:2]:
-            out.append(("贏過所有測試玩家", f"{FIELDS[key]} {mine:g}，測試玩家最高 {top:g}"))
-    arena = _mean([r["arena_vs_bots"]["mean"] for r in runs])
-    if arena is not None and arena >= 0.9 and focus != "control":
-        out.append(("輾壓", f"季末擂台對同場普通假人贏 {round(arena * 100)}%"))
-    return out
+        day = int((testers or {}).get("day_now") or 0)  # 測試玩家的數字是這一季第幾天量的：極限假人也拿同一天比，不拿季末比
+        then = curve[day - 1] if 0 < day <= len(curve) else mine
+        if top is not None and then is not None and then > top and key in keys[:2]:
+            out.append(("贏過所有測試玩家", f"第 {day} 天{FIELDS[key]} {then:g}，測試玩家最高 {top:g}"))
+    return out  # 擂台對同場普通假人只印數字、不標：伺服器假人每天才上線一到五小時，誰都贏得了它們（本命 50～52% 要另外量）
 
 
 def _spark(series: list[tuple[str, list[float], str]], cap: float | None = None) -> str:
@@ -190,6 +195,8 @@ th{color:var(--ink2);font-weight:500;background:var(--wash)}td.n{text-align:righ
 <h1>極限假人報告</h1>
 <p class="lead">每張卡是一種只追一件事的假人，玩完整季。紅線是它，灰線是同場普通假人裡最高的，綠線是同樣在線時數、普通玩法的對照組。</p>
 <p class="note">{{TESTERS}}</p>
+<p class="note">這一版還沒量準的：財神（鐵匠鋪裡一直衝淬煉，人卡在城裡、等級起不來）、親衛狂（情分、性向幾乎沒長，跑法沒按到教他的那幾顆）、
+截殺狂（野地很少碰到人，一季只截到幾場）。這三張卡的數字先別當天花板。擂台對同場普通假人的贏面只當參考：普通假人每天只上線一到五小時。</p>
 {{CARDS}}
 <p class="note">判準：最後四分之一季還漲一成以上算還在漲；7 天季第 3 天、21 天季第 7 天以前滿級算太快封頂；比對照組多 1.5 倍以上、或贏過所有測試玩家算輾壓。
 跟人物說話用固定分（寬鬆）頂替模型；放手一搏、隨口應對沒算。只走玩家按得到的鈕，不改規則。</p>
