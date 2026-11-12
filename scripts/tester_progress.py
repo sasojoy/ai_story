@@ -51,7 +51,7 @@ def main() -> int:
     season_time = float(json.loads(latest["data"]).get("time", 0.0)) if latest else 0.0
     humans = [r for r in conn.execute("SELECT key, name, data FROM characters WHERE is_bot = 0") if r["name"].casefold() not in admins]
     human_keys = {r["key"] for r in humans}
-    current, unreadable = [], 0
+    current, unreadable, stale = [], 0, 0
     for r in humans:
         try:
             state = GameState.model_validate_json(r["data"])
@@ -60,6 +60,9 @@ def main() -> int:
             continue
         if state.player.member.level <= 1 and not state.player.annals:
             continue  # 註冊了沒玩的不算
+        if getattr(state, "season_number", None) != season.get("season_number"):
+            stale += 1
+            continue  # 這一季還沒上線過：存檔還是上一季季末的樣子（登入才換季），那一份已經在列傳裡
         current.append({"now": snapshot(state, content), "levels": _milestones_days(level_milestones(state)), "key": r["key"],
                         "season_day": round(season_time / DAY, 2), "season": getattr(state, "season_number", 0)})
     # 每天按了哪幾顆（playlog 的 action_counts；第 7 版起才有）：照等級排的流水號，不帶名號
@@ -90,11 +93,11 @@ def main() -> int:
                 "levels": _milestones_days(levels),
             })
     out = {"db": path.name, "profile": serving_profile(), "season_now": season.get("season_number"),
-           "current": current, "unreadable": unreadable, "past": {str(k): v for k, v in sorted(past.items())}}
+           "current": current, "unreadable": unreadable, "stale": stale, "past": {str(k): v for k, v in sorted(past.items())}}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(summary(out), ensure_ascii=False, separators=(",", ":")))
-    print(f"這一季 {len(current)} 人、以前 {sum(len(v) for v in past.values())} 筆列傳（{len(past)} 季）、讀不懂 {unreadable}；寫到 {args.out}")
+    print(f"這一季 {len(current)} 人、以前 {sum(len(v) for v in past.values())} 筆列傳（{len(past)} 季）、讀不懂 {unreadable}、這一季還沒上線 {stale}；寫到 {args.out}")
     return 0
 
 
@@ -125,7 +128,7 @@ def summary(out: dict) -> dict:
     for row in cur[:5]:  # 等級最高的五個人：每天按最多的十二顆、季到此刻的身家（不帶名號）
         days = {d: dict(sorted(b.items(), key=lambda kv: -kv[1])[:12]) for d, b in (row.get("buttons") or {}).items()}
         top.append({"now": row["now"], "levels": row["levels"], "buttons": days})
-    return {"season_now": out["season_now"], "top": top, "day_now": cur[0]["season_day"] if cur else None, "n_now": len(cur),
+    return {"season_now": out["season_now"], "stale": out.get("stale"), "top": top, "day_now": cur[0]["season_day"] if cur else None, "n_now": len(cur),
             "now": now, "milestones_now": _level_days(cur), "past": past}
 
 
