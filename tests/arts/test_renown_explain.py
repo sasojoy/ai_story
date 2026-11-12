@@ -52,10 +52,10 @@ def test_lesson_fame_scales_too():
     c = real_content()
     s = new_game_state(c, "甲")
     s.world = fresh_season(c)
-    s.player.stats.update({"fame": 27, "silver": 999})
-    assert library.learn_problem(s, c, c.skills["youxia_jian"]) == "名望 28 以上才肯教"
-    s.player.stats["fame"] = 28
-    assert library.learn_problem(s, c, c.skills["youxia_jian"]) is None
+    s.player.stats.update({"fame": 111, "silver": 999})
+    assert library.learn_problem(s, c, c.skills["kaibei_jin"]) == "名望 112 以上才肯教"  # 開碑勁（遊俠劍 2026-11-12 起不教了）
+    s.player.stats["fame"] = 112
+    assert library.learn_problem(s, c, c.skills["kaibei_jin"]) is None
 
 
 def test_practice_line_explains_when_on():
@@ -85,4 +85,14 @@ def test_switches_off_keep_the_old_bar():
     s.world = fresh_season(c)
     assert rules.audience_bar(s, c, WHO) == 25
     s.player.stats["fame"] = 5
-    assert library.learn_problem(s, c, c.skills["youxia_jian"]) != "名望 28 以上才肯教"
+    assert library.learn_problem(s, c, c.skills["kaibei_jin"]) != "名望 28 以上才肯教"
+
+
+def test_villages_and_camps_no_longer_teach_low_arts():
+    """Joy 2026-11-12「有了門派 原來那些隨處可學的低級武學是不是可以拿掉了」（決定卡：13 門全拿掉）：
+    誰都能學的下品不再教，剩門派第一式、名聲那四門與上品；武學本身還在（學過的人、同伴身上的照舊）。"""
+    c = real_content()
+    open_low = [s.id for s in c.skills.values()
+                if s.learn is not None and s.learn.sect is None and s.learn.title is None and s.quality == "下品"]
+    assert open_low == []
+    assert "yujia_quan" in c.skills and "xingwu_dao" in c.skills
