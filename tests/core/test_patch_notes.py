@@ -67,6 +67,7 @@ const S = { patchNotes: input.notes };
 const H = new Function("S", "localStorage", "pro", "loadPatchNotes", [
   ...["esc", "PATCH_SEEN", "PATCH_OK", "patchKey"].map(konst),
   ...["patchLines", "patchUnseen", "patchPopHtml", "patchPopClose"].map(fn),
+  "const nxSeen = () => true, nxLinkHtml = () => '';",  // 江湖新事那一張排在改版資訊前面（PR #247）：這裡測的是改版資訊，當作已經看過
   "return { patchPopHtml, patchPopClose, patchKey };",
 ].join("\n"))(S, localStorage, () => input.pro || null, () => {});
 const first = H.patchPopHtml(input.m || {});
