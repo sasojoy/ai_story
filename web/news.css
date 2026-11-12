@@ -104,8 +104,22 @@ body.nx-lock { overflow: hidden; }
 .nx-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
 .nx-body h3 { margin: 0; font: 700 21px/1.3 var(--kai); letter-spacing: 0.12em; }
 .nx-body p { margin: 0; font: 400 15px/1.65 var(--kai); color: var(--ink-2); }
-.nx-go { align-self: flex-end; margin-top: 6px; min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--accent);
-  background: transparent; color: var(--accent); font: 700 15px var(--sans); cursor: pointer; }
+.nx-list .nx-card { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform 0.12s; }
+.nx-list .nx-card:active { transform: scale(0.985); }
+.nx-body h3 { display: flex; align-items: center; }
+.nx-body h3 .nx-chev { margin-left: auto; padding: 0; font: 400 24px/1 var(--kai); color: var(--gold); }
+/* 一樣的介紹（nxDetailHtml）：頂上回去、卡頭、幾個畫面（圖左字右，下一個換邊）、底下回去 */
+.nx-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.nx-back { min-height: 44px; padding: 0 6px; border: 0; background: transparent; color: var(--ink); font: 700 16px var(--kai); letter-spacing: 0.08em; cursor: pointer; }
+.nx-x2 { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 400 24px/1 var(--sans); cursor: pointer; }
+.nx-art.big { height: 210px; }
+.nx-head .nx-body { padding-bottom: 16px; }
+.nx-scenes { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.nx-scene { display: flex; align-items: center; gap: 14px; }
+.nx-scene.flip { flex-direction: row-reverse; text-align: right; }
+.nx-pic { flex: none; width: 112px; height: 112px; border-radius: 12px; border: 1px solid var(--line); background: var(--card) center / cover no-repeat; box-shadow: var(--shadow); }
+.nx-scene p { margin: 0; font: 400 16px/1.7 var(--kai); }
+.nx-done.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-top: 22px; font-family: var(--kai); }
 .nx-num { position: absolute; top: 10px; left: 10px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 4px;
   background: var(--accent); color: #fff3d6; font: 700 15px var(--kai); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
 /* 親衛：撿回來的孩子 ⋯ 長成的親衛 */
@@ -152,9 +166,7 @@ body.nx-lock { overflow: hidden; }
 .nx-link { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin: 6px 0 4px; padding: 0 12px; border-radius: 10px;
   border: 1px solid var(--gold); background: transparent; color: var(--ink); font: 700 15px var(--kai); cursor: pointer; }
 .nx-link span { color: var(--gold); }
-/* 按了「去看看」到的那一塊：描一下邊 */
-.nx-flash { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 10px; transition: outline-color 0.6s; }
 @media (prefers-color-scheme: dark) {
-  .nx-hero-art, .nx-art, .nx-grow img, .nx-horse img, .nx-th { filter: brightness(0.78) saturate(0.85); }
+  .nx-hero-art, .nx-art, .nx-grow img, .nx-horse img, .nx-th, .nx-pic { filter: brightness(0.78) saturate(0.85); }
   .nx-letter { filter: brightness(0.86); }
 }
