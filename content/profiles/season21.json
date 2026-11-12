@@ -11,5 +11,10 @@
  "guard": {"enabled": true},
  "craft": {"enabled": true},
  "horses": {"enabled": true},
+ "zongmen": {"enabled": true},
+ "jieyi": {"enabled": true},
+ "mail": {"enabled": true},
+ "titles": {"enabled": true},
+ "terms": {"enabled": true},
  "economy": {"donate": false, "upgrade_batch": true, "leftover_silver": {"1": 2, "2": 6, "3": 18, "4": 54}, "leftover_cap": 300},
  "intro": {"enabled": true}}
