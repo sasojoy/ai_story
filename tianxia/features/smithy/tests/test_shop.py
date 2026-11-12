@@ -367,6 +367,7 @@ def test_the_routes_answer_the_forge_page(monkeypatch):
 
     content = real_content("week7")
     content.config.auto_open_first_season = True
+    content.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     content.config.jianfa.enabled = False  # 減法季的開局第一分鐘擋在鐵匠鋪前面；這裡測的是打造的路由
     monkeypatch.setattr(server, "CONTENT", content)
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
@@ -1084,6 +1085,7 @@ def test_the_server_route_looks_at_the_fire(monkeypatch):
 
     content = real_content("week7")
     content.config.auto_open_first_season = True
+    content.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     content.config.jianfa.enabled = False
     monkeypatch.setattr(server, "CONTENT", content)
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import leaderboard
+from tianxia import journal, leaderboard
 from tianxia.characters import CharacterStore
 from tianxia.rules import add_rumor
 
@@ -73,7 +73,12 @@ def wear(ctx: Game) -> list[str]:
         p.titles_pin = ""  # 挑的那一個沒了：回到自動（下次拿到不會自己跳回去，免得一直換來換去）
     p.titles_worn = worn
     if lines:
-        ctx._write(rules.JOURNAL_TITLE, lines)
+        head = ctx.state.journal[0] if ctx.state.journal else None
+        if head is not None and head.battle_id is not None and head.battle_id == ctx.state.battle_card:
+            # 最新一則是「剛剛」那張戰鬥卡片（例：決戰收場那一下頒了名號）：接在那一則後面，不另起一則把卡片蓋掉
+            journal.add_guide(ctx.state, lines)
+        else:
+            ctx._write(rules.JOURNAL_TITLE, lines)
     return lines
 
 

@@ -26,6 +26,7 @@ def weekend_server(monkeypatch):
     """server.CONTENT 換成這個測試自己的一份 7 天季（季自己開、「掌門」是管理者）；伺服器記憶體裡的登入與角色從空的開始。"""
     content = real_content("week7")
     content.config.auto_open_first_season = True
+    content.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     content.config.train_event_chance = 0.0
     content.config.admins = [ADMIN]
     monkeypatch.setattr(server, "CONTENT", content)

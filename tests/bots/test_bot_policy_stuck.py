@@ -26,6 +26,7 @@ def _bot(game: Game, side: str) -> Game:
 
 def test_a_bot_never_opens_the_quartermaster_and_walks_out_if_it_is_inside():
     game = _bot(go(join(conquest_game("week7", name="假官"), "guan"), "changshe"), "guan")
+    game.content.config.economy.donate = True  # 捐軍備 2026-11-12 起在正式設定關著；這裡測的是假人不進軍需官那一間
     profile = game.state.player.bot
     assert "act:donate" in {o.id for o in game.options(odds=False) if o.enabled}
     assert bot_policy.score(game, Option(id="act:donate", label=""), profile) is None  # 修前 0.0：隨手挑的那一半會按開

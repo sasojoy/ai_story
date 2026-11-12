@@ -10,6 +10,7 @@ from collections import Counter
 
 import pytest
 
+from conftest import old_packs
 from wins_kit import wins_content, wins_game
 from tianxia import server_bots, wins
 from tianxia.bot_runner import BotRunner
@@ -135,7 +136,7 @@ def test_the_sect_join_of_a_human_is_unchanged():
     world = open_world()
     for i in range(3):
         _gentry(world, f"先{i}", "guan")
-    game = wins_game(name="真人", at="cao_manor", world=world)
+    game = wins_game(old_packs(wins_content(), "zongmen"), name="真人", at="cao_manor", world=world)  # 門派開著時拜入不再連帶投靠
     game.state.pending_event = "cao_manor_join"
     from unittest import mock
 

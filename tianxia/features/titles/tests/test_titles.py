@@ -154,6 +154,7 @@ def test_switch_off_adds_nothing():
     from tianxia.core import combat, presence
 
     c = real_content("season21")
+    c.config.titles.enabled = False  # 正式設定 2026-11-12 起打開
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, MON + 10 * HOUR)
