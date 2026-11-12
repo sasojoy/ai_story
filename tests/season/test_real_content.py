@@ -449,12 +449,11 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
         for slot in ("{本週}", "{每週}"):  # 照軍令多久一道換字的插槽（enlist.SLOTS，FB-502）
             said = said.replace(slot, "")
         assert "{" not in said  # 沒有留下的預留位
-    skills = {skill.name for skill in content.skills.values()}  # 引薦人說的營地武學，內容裡真的有（N13）
-    for faction_id, names in {
+    for faction_id, names in {  # 營地武學 2026-11-12 起不教了（Joy：13 門全拿掉）：引薦人不再說營裡白學哪幾門
         "guan": ("行伍刀法", "行伍練氣"), "huang": ("黃天刀法", "符水掌", "太平導引"), "haoqiang": ("塢堡樁功",),
     }.items():
         for name in names:
-            assert name in skills and name in e.recruiters[faction_id].intro
+            assert name not in e.recruiters[faction_id].intro
     for faction in content.scenario.factions:
         for place in faction.join_at:
             assert content.locations[place].name in e.drifter_line
