@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 
+from conftest import old_packs
 from wins_kit import ids, wins_content, wins_game
 from tianxia.features.bounties import rules as bounties
 from tianxia.features.faction import defection
@@ -53,7 +54,7 @@ def test_join_gentry_takes_the_join_point_lean(place, side):
 
 def test_sect_join_takes_the_manor_lean():
     """拜入曹氏莊院而投靠（PM 2026-10-25 第 5 件）：照門派所在地，預設幫官軍；不出選邊鈕。"""
-    game = wins_game(at="cao_manor")
+    game = wins_game(old_packs(wins_content(), "zongmen"), at="cao_manor")  # 門派開著時拜入不再連帶投靠
     game.state.pending_event = "cao_manor_join"
     with _win():
         msgs = game.choose("choice:0")

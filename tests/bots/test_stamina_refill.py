@@ -357,6 +357,7 @@ def test_the_pill_route_refills_to_the_top_under_the_weekend_profile(monkeypatch
 
     weekend = real_content("week7")
     weekend.config.auto_open_first_season = True
+    weekend.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     weekend.config.beta_free_refill = True  # 週末設定不再開它（2026-10-12）；開關照舊管用
     monkeypatch.setattr(server, "CONTENT", weekend)
     client = TestClient(server.app)
