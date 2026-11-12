@@ -74,3 +74,8 @@ details > summary.nw-title { min-height: 44px; align-items: center; }
 /* 進遊戲後跳一次的改版資訊小窗（news.js patchPopHtml）：卡用登入頁 .patch-card 的樣子，這裡只補標題與鈕 */
 .patch-pop .patch-card h3 { font-size: 17px; margin-bottom: 6px; }
 .patch-pop .patch-ok { display: block; width: 100%; min-height: 44px; margin-top: 14px; }
+
+/* 見聞的紅點（web/shell.js registerDot）：戰況那一段（第二層）、新的那一場戰報那一行（第三層，絕對定位，不佔戰報那一行的三欄） */
+.nw-tabs .dot { position: absolute; top: 7px; right: calc(50% - 26px); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.nw-rep { position: relative; }
+.nw-rep > .dot { position: absolute; top: 6px; left: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }

@@ -507,3 +507,7 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
   .gear-cell .gc-pic { filter: brightness(.9); opacity: 0.24; }
   .wrow .gear-thumb { background: #efe6d2; filter: brightness(.86); }
 }
+
+/* 子分頁的紅點（web/shell.js registerDot 的第二層；Joy 2026-11-12）：同伴那一格亮，點進去那一件事上也有一顆 */
+.hero-tabs button { position: relative; }
+.hero-tabs .dot { position: absolute; top: 7px; right: 10%; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
