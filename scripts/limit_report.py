@@ -35,7 +35,6 @@ WATCH = {
     "raid": ("silver", "level", "fame"),
     "merit": ("contrib", "rank", "fame"),
     "guard": ("guard_qing", "guard_tags", "level"),
-    "thrift": ("level", "xinde", "silver", "contrib"),
     "strongest": ("level", "insights", "mastered", "weapon_tier", "guard_tags"),
     "grinder": ("level", "xinde", "silver", "contrib"),
     "overlord": ("contrib", "affinity_max", "silver", "fame"),
@@ -198,8 +197,8 @@ th{color:var(--ink2);font-weight:500;background:var(--wash)}td.n{text-align:righ
 <h1>極限假人報告</h1>
 <p class="lead">每張卡是一種只追一件事的假人，玩完整季。紅線是它，灰線是同場普通假人裡最高的，綠線是同樣在線時數、普通玩法的對照組。</p>
 <p class="note">{{TESTERS}}</p>
-<p class="note">這一版還沒量準的：財神（鐵匠鋪裡一直衝淬煉，人卡在城裡、等級起不來）、親衛狂（情分、性向幾乎沒長，跑法沒按到教他的那幾顆）、
-截殺狂（野地很少碰到人，一季只截到幾場）。這三張卡的數字先別當天花板。擂台對同場普通假人的贏面只當參考：普通假人每天只上線一到五小時。</p>
+<p class="note">擂台有兩個數字：對同等級「本命」（關羽的武學、董卓的內功、均衡配點）的贏面，目標是 48～50%（本命贏 50～52%）；
+對同場普通假人的贏面只當參考，普通假人每天只上線一到五小時。極限假人的武學是一路自己玩出來的，不是挑過的最強配置。</p>
 {{CARDS}}
 <p class="note">判準：最後四分之一季還漲一成以上算還在漲；7 天季第 3 天、21 天季第 7 天以前滿級算太快封頂；比對照組多 1.5 倍以上、或贏過所有測試玩家算輾壓。
 跟人物說話用固定分（寬鬆）頂替模型；放手一搏、隨口應對沒算。只走玩家按得到的鈕，不改規則。</p>

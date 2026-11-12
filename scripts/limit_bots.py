@@ -82,7 +82,7 @@ class Focus:
 FIGHT = {"act:train": 25.0, "act:explore": 18.0, "act:challenge": 22.0}
 SHOPS = ("act:tavern", "act:market", "act:dadian", "act:arena", "act:socialize", "act:smith", "guard:", "act:donate")
 FOCUSES: dict[str, Focus] = {
-    "control": Focus("對照組（普通玩法、同樣在線）"),
+    "control": Focus("對照組（普通打分、永遠挑最好的、同樣在線）"),
     "level": Focus("練級狂", boost=FIGHT, damp=SHOPS),
     "insight": Focus("意境狂", boost={"sense": 40.0, "act:explore": 20.0, "learn": 15.0}, damp=("act:tavern", "act:market", "act:dadian", "act:arena"),
                      arts_every_turn=True),
@@ -97,7 +97,6 @@ FOCUSES: dict[str, Focus] = {
     "guard": Focus("親衛狂", boost={"act:explore": 15.0}, damp=("act:tavern", "act:dadian", "act:arena"),
                    fixed={"guard:teach": 45.0, "guard:leave": None, "guard:part": None,
                           "guard:later": None, "guard:stay": None}, guard_pick=True),
-    "thrift": Focus("精算（普通打分、永遠挑最好的）"),
     # 疊起來的三條
     "strongest": Focus("最強戰力（意境＋打造＋親衛＋練級）", boost={**FIGHT, "sense": 30.0, "act:smith": 10.0},
                        damp=("act:tavern", "act:dadian", "act:market"), smith=True, smith_silver=300, arts_every_turn=True,
@@ -269,6 +268,8 @@ def _guard_pick(game: Game, rng) -> bool:
     if b is None or b.stage in ("met", "saved", "left"):
         return False  # 撞見、救不救、收不收在選單上，take_turn 會按
     ctx = game
+    if not guard_actions._free(ctx):
+        return False  # 眼前有事（在路上、事件攤開著）：那一頁的鈕按了也是「沒有這回事」，先照常把眼前的事做完
     if b.event is not None and not b.event.shown and b.stage in guard_actions.EVENT_STAGES:
         return bool(game.choose("guard:open"))
     if b.event is not None and b.event.shown and b.event.choices:
