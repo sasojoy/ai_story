@@ -22,7 +22,11 @@
   // 結果改成一顆小印（大勝、險勝綠；落敗紅；僵持灰），對手寫大，場次、時刻、地點寫小
   const NEWS_WIN = /勝/;
   const NEWS_LOSE = /敗|負/;
+  // 見聞的紅點：新的一場（S.unseen 是那一場的戰報 id）——見聞分頁、戰況那一段、那一行三層（web/shell.js registerDot）
+  if (typeof registerDot === "function") registerDot({ id: "report", at: "news", sub: "reports", on: () => !!S.unseen });
+
   function newsReportRow(x) {
+    const dot = dotHtml(S.unseen && x.id === S.unseen);
     const bits = String(x.label || "").split("　").filter(Boolean);
     const result = bits[0] || "";
     const stamp = bits.find((b) => /^第\s*\d+\s*[天週]/.test(b)) || "";
@@ -30,9 +34,9 @@
     const place = bits.filter((b) => b !== result && b !== stamp && !/^vs\s/.test(b) && !/^第\d+場$/.test(b)).join("・");
     const tone = NEWS_LOSE.test(result) ? "lose" : NEWS_WIN.test(result) ? "win" : "even";
     const clock = stamp.replace(/^.*\s(?=\d{1,2}:\d{2}$)/, "");
-    if (!foe) return `<button class="nw-rep" data-act="report" data-id="${x.id}"><span class="nw-who">${esc(x.label)}</span><span class="nw-go" aria-hidden="true">›</span></button>`;
+    if (!foe) return `<button class="nw-rep" data-act="report" data-id="${x.id}"><span class="nw-who">${esc(x.label)}</span>${dot}<span class="nw-go" aria-hidden="true">›</span></button>`;
     return `<button class="nw-rep" data-act="report" data-id="${x.id}"><span class="nw-seal ${tone}">${esc(result)}</span>`
-      + `<span class="nw-who">${esc(foe)}<small>${esc([x.big ? stamp : clock, place].filter(Boolean).join("・"))}</small></span><span class="nw-go" aria-hidden="true">›</span></button>`;
+      + `<span class="nw-who">${esc(foe)}<small>${esc([x.big ? stamp : clock, place].filter(Boolean).join("・"))}</small></span>${dot}<span class="nw-go" aria-hidden="true">›</span></button>`;
   }
   const NEWS_GO_FIGHT = "回江湖，出陣或上擂台打一場 ›"; // 待 joy 潤
   function newsReportsHtml(r) {

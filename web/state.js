@@ -151,7 +151,8 @@
     adResetTarget: "", // 重設密碼那一格填的（找、點選之後重畫照樣在）
     adPlayerName: "", // 管理者區「玩家個人劇情」查的名號與查到的那份（/api/admin/player）；登出清掉
     adPlayer: null,
-    unseen: false,
+    unseen: false, // 新的那一場的戰報 id（見聞的紅點；看過是 false）
+    unseenShown: false, // 戰況那一段攤開時標著紅點的那一行出現過（離開那一段才滅）
     offline: false,
     moveMode: "walk",
     prologueKey: "", // 上一次整頁重畫時序章亮起來的東西（見 prologueKey、renderTop）

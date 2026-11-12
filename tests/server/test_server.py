@@ -1004,14 +1004,17 @@ def test_the_news_dot_lights_only_for_a_new_fight_card():
     決戰收場的卡片常常是輪詢（sync）補送的，那一場也要亮。"""
     js = webharness.app_source()
     set_main = js[js.index("function setMain"):js.index("// ── 整體 ──")]
-    assert "main.card_id" in set_main and "S.unseen = true" in set_main
+    assert "main.card_id" in set_main and "S.unseen = main.card_id" in set_main  # 11/12 起記那一場的戰報 id：戰況那一行標紅點
     apply_main = js[js.index("function applyMain"):js.index("async function choose")]
-    assert "S.unseen = true" not in apply_main
+    assert "S.unseen = " not in apply_main
     # 輪詢只重畫狀態列與頁面、不重畫分頁列：亮的當下要把紅點補進見聞那一顆（不然要等下一次整頁重畫才看得到）
     assert "paintNewsDot()" in set_main
     paint = js[js.index("function paintNewsDot"):]
     paint = paint[:paint.index("\n  }\n")]
-    assert 'data-tab="news"' in paint and 'class="dot"' in paint
+    assert "paintDots()" in paint  # 照 web/shell.js 的紅點表就地補上分頁列那一顆
+    shell = (server.WEB / "shell.js").read_text(encoding="utf-8")
+    dots = shell[shell.index("function paintDots"):]
+    assert ".tabs .tab[data-tab]" in dots and "dotHtml(true)" in dots
 
 
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):

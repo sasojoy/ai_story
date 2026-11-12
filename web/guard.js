@@ -48,10 +48,12 @@
   const GD_GROWN = "{name}長大了，說想出去學本事。";
 
   // 俠客分頁的紅點（app.js tabsHtml、paintNewsDot 問；Joy 2026-11-10「要加」）：他有一件事還沒攤開、或等你挑去處；人在俠客頁時不亮
+  // 11/12 起三層：俠客分頁、「同伴」子分頁、「眼前這件事」那一格（web/shell.js registerDot；Joy「進去後 對應有紅點的事件應該也要標吧」）；攤開或挑了才滅
   const guardDot = () => {
     const g = S.main && S.main.guard;
-    return !!g && S.tab !== "practice" && ((!!g.event && !g.event.shown) || (!!g.schools && g.schools.length > 0));
+    return !!g && ((!!g.event && !g.event.shown) || (!!g.schools && g.schools.length > 0));
   };
+  if (typeof registerDot === "function") registerDot({ id: "guard", at: "practice", sub: "mates", on: guardDot });
   const gdFill = (s, g) => s.replace(/\{name\}/g, g.name).replace(/\{pron\}/g, g.pron)
     .replace(/\{school\}/g, g.school || "").replace(/\{until\}/g, g.study_until || "");
 
@@ -92,7 +94,7 @@
         <button class="btn primary" data-act="gd-say">${GD_SAY}</button></div>
         <button class="btn ghost gd-later" data-act="choose" data-id="guard:later">${GD_LATER}</button>`;
     }
-    const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}</h4>${kind}</div>${now}</section>`;
+    const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}${dotHtml(guardDot())}</h4>${kind}</div>${now}</section>`;
     const teachSec = g.lessons && g.lessons.length ? `<section class="gd-sec" aria-label="${esc(gdFill(GD_TEACH, g))}"><div class="gd-sec-hd"><h4>${esc(gdFill(GD_TEACH, g))}</h4><small>${GD_TEACH_SUB}</small></div>
       <div class="gd-teach">${g.lessons.map((c) => `<button class="gd-lesson" data-act="choose" data-id="${esc(c.id)}">${esc(c.label)}</button>`).join("")}</div></section>` : "";
     const bioSec = g.bio ? `<section class="gd-sec" aria-label="${GD_BIO}"><div class="gd-sec-hd"><h4>${GD_BIO}</h4><small>${GD_BIO_SUB}</small></div>
