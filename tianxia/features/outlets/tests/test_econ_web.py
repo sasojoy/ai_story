@@ -8,7 +8,7 @@ import random
 import re
 
 import pytest
-from conftest import no_week_unlock, real_content
+from conftest import no_week_unlock, donate_content as real_content
 from test_prologue_web import DRIVER as PROLOGUE_DRIVER
 
 import server
