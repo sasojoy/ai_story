@@ -79,3 +79,82 @@ details > summary.nw-title { min-height: 44px; align-items: center; }
 .nw-tabs .dot { position: absolute; top: 7px; right: calc(50% - 26px); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .nw-rep { position: relative; }
 .nw-rep > .dot { position: absolute; top: 6px; left: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* 江湖新事（news.js nxPageHtml；Joy 2026-11-12）：疊在最上面的一整頁，照介面設計規範——頁首圖＋直書匾＋朱印，一樣一張卡（圖、楷書名、一句、一顆「去看看」） */
+body.nx-lock { overflow: hidden; }
+.nx-layer { position: fixed; inset: 0; z-index: 70; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); animation: fade 0.2s; }
+.nx-page { position: relative; max-width: 480px; margin: 0 auto; padding: calc(12px + var(--top)) 16px calc(28px + var(--bottom)); }
+.nx-x { position: absolute; top: calc(18px + var(--top)); left: 22px; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 0;
+  background: color-mix(in srgb, var(--card) 85%, transparent); color: var(--ink); font: 400 26px/1 var(--sans); box-shadow: var(--shadow); cursor: pointer; }
+.nx-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.nx-hero-art { height: 176px; background: url("/static/img/events/road.webp") center 40% / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.nx-plaque { position: absolute; top: 12px; right: 14px; margin: 0; padding: 12px 7px; writing-mode: vertical-rl;
+  font: 700 22px/1 var(--kai); letter-spacing: 0.28em; color: #f1dfae; background: linear-gradient(160deg, #3a2a1c, #22180f);
+  border: 2px solid #9c7a3c; border-radius: 3px; box-shadow: 0 4px 12px rgba(30, 18, 8, 0.35), inset 0 0 0 2px #22180f; }
+.nx-hero-text { position: relative; margin-top: -36px; padding: 0 16px 14px; }
+.nx-hero-text p { margin: 0; font: 400 17px/1.6 var(--kai); }
+.nx-seal { display: inline-block; margin-bottom: 6px; padding: 2px 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); font: 700 13px var(--kai); transform: rotate(-4deg); }
+.nx-list { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.nx-card { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.nx-art { height: 150px; background: center / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.nx-craft .nx-art { background-position: center 35%; }
+.nx-artwrap { position: relative; }
+.nx-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+.nx-body h3 { margin: 0; font: 700 21px/1.3 var(--kai); letter-spacing: 0.12em; }
+.nx-body p { margin: 0; font: 400 15px/1.65 var(--kai); color: var(--ink-2); }
+.nx-go { align-self: flex-end; margin-top: 6px; min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--accent);
+  background: transparent; color: var(--accent); font: 700 15px var(--sans); cursor: pointer; }
+.nx-num { position: absolute; top: 10px; left: 10px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 4px;
+  background: var(--accent); color: #fff3d6; font: 700 15px var(--kai); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
+/* 親衛：撿回來的孩子 ⋯ 長成的親衛 */
+.nx-grow { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 170px; padding-top: 10px; background: radial-gradient(80% 90% at 50% 100%, var(--card-2), var(--card)); }
+.nx-grow img { height: 100%; width: auto; border-radius: 10px; -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent); mask-image: linear-gradient(to bottom, #000 75%, transparent); }
+.nx-grow img.kid { height: 72%; }
+.nx-grow span { align-self: center; font: 400 22px var(--kai); color: var(--gold); }
+/* 結義：金蘭帖（同 jieyi.css 的帖面） */
+.nx-jy { display: flex; flex-direction: column; align-items: center; margin: 14px 14px 8px; padding: 14px 12px 12px; border-radius: 12px; color: #f7e8c4;
+  background: radial-gradient(120% 90% at 20% 0%, #b8402f, #8e2a20 60%, #6f1f18); box-shadow: inset 0 0 0 2px #6f1f18, inset 0 0 0 4px #c9a25a, var(--shadow); }
+.nx-jy small { font: 400 12px var(--kai); letter-spacing: 0.5em; color: #e6c98a; }
+.nx-jy-hd { font: 700 26px/1.3 var(--kai); letter-spacing: 0.18em; color: #fff3d6; }
+.nx-jy-men { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
+.nx-jy-men i { font-style: normal; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 46px; padding: 6px 0 8px; border-radius: 6px; background: #f5ead2; color: #3a2414; box-shadow: 0 2px 4px rgba(40, 10, 5, 0.35); }
+.nx-jy-men u { text-decoration: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; background: #a8322a; color: #fff3d6; font: 700 13px var(--kai); }
+.nx-jy-men b { writing-mode: vertical-rl; font: 700 15px/1.1 var(--kai); letter-spacing: 0.1em; min-height: 3.2em; }
+/* 書信：信箋（紙本身的顏色，深色也是紙） */
+.nx-letter { position: relative; margin: 14px 14px 8px; height: 186px; border-radius: 6px; padding: 14px 52px 14px 14px; overflow: hidden; transform: rotate(-1deg);
+  background: repeating-linear-gradient(to left, transparent 0 25px, rgba(168, 50, 42, 0.22) 25px 26px), #f6ecd6; color: #3a2414; box-shadow: 0 2px 8px rgba(40, 25, 10, 0.18); }
+.nx-letter p { margin: 0; writing-mode: vertical-rl; font: 400 16px/26px var(--kai); letter-spacing: 0.12em; height: 100%; }
+.nx-letter span { position: absolute; right: 12px; top: 14px; writing-mode: vertical-rl; padding: 6px 3px; border: 2px solid #a8322a; color: #a8322a; font: 700 14px/1 var(--kai); border-radius: 3px; transform: rotate(4deg); }
+/* 稱號：圖上蓋三方印 */
+.nx-seals { position: absolute; left: 14px; bottom: 8px; display: flex; gap: 8px; }
+.nx-seals i { font-style: normal; padding: 4px 6px; writing-mode: vertical-rl; font: 700 14px/1 var(--kai); letter-spacing: 0.1em; border-radius: 3px; transform: rotate(-4deg); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
+.nx-seals .s1 { background: #a8322a; color: #fff3d6; }
+.nx-seals .s2 { background: #f6ecd6; color: #a8322a; border: 2px solid #a8322a; transform: rotate(3deg); }
+.nx-seals .s3 { background: #2a241d; color: #f1dfae; border: 2px solid #9c7a3c; transform: rotate(-2deg); }
+/* 名駒：去背的圖墊在紙上 */
+.nx-horse { height: 150px; display: grid; place-items: center; background: radial-gradient(70% 80% at 50% 60%, var(--card-2), var(--card)); }
+.nx-horse img { height: 140px; }
+.nx-end { margin: 18px 0 4px; text-align: center; font: 400 14px var(--kai); color: var(--ink-2); }
+.nx-done { display: block; width: 100%; min-height: 48px; margin-top: 8px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; font: 700 16px var(--sans); cursor: pointer; }
+/* 入口：登入頁那一條、跳一次的小窗、改版資訊頂上那一行 */
+.nx-ban { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 18px; min-height: 64px; padding: 0; border-radius: 12px; overflow: hidden; text-align: left; cursor: pointer;
+  border: 1.5px solid var(--gold); background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 14%, var(--card)), var(--card)); color: var(--ink); }
+.nx-th { width: 84px; align-self: stretch; background: url("/static/img/events/road.webp") center / cover no-repeat; }
+.nx-ban-t { flex: 1; display: flex; flex-direction: column; }
+.nx-ban-t b { font: 700 18px var(--kai); letter-spacing: 0.12em; }
+.nx-ban-t small { font: 400 13px var(--kai); color: var(--ink-2); }
+.nx-chev { padding-right: 12px; font: 400 22px var(--kai); color: var(--gold); }
+.nx-invite .nx-ban { margin-top: 0; }
+.nx-row { display: flex; gap: 8px; margin-top: 12px; }
+.nx-row .btn { flex: 1; }
+.nx-link { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin: 6px 0 4px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--gold); background: transparent; color: var(--ink); font: 700 15px var(--kai); cursor: pointer; }
+.nx-link span { color: var(--gold); }
+/* 按了「去看看」到的那一塊：描一下邊 */
+.nx-flash { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 10px; transition: outline-color 0.6s; }
+@media (prefers-color-scheme: dark) {
+  .nx-hero-art, .nx-art, .nx-grow img, .nx-horse img, .nx-th { filter: brightness(0.78) saturate(0.85); }
+  .nx-letter { filter: brightness(0.86); }
+}
