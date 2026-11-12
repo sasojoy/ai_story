@@ -416,7 +416,7 @@ endings = [
         ],
     },
     {
-        "id": "late", "title": "來不及", "failed": True, "weight": 3, "text": LATE, "annal": ANNAL_LATE,
+        "id": "late", "title": "少了一卷", "failed": True, "weight": 3, "text": LATE, "annal": ANNAL_LATE,
         "effect": {"stats": {**REWARD}},
         "after": [
             {"days": 7, "where": LUOYANG, "title": "一週後・洛陽的傳聞",

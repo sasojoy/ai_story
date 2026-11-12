@@ -53,8 +53,12 @@ def ending(eid: str, title: str, text: str, annal: str, effect: dict | None = No
     return out
 
 
+# 沒趕上那一段的標題照那一回的事各取一個（Joy 2026-11-12「請不要用這種太直白的詞」）
+MISSED_TITLES = {"投軍長社": "煙散之後", "頭裹黃巾": "煙散之後", "結社自保": "煙散之後", "長社火攻": "火已燒過", "依草結營": "火已燒過", "兩路買家": "火已燒過", "宛城城下": "城下已靜", "據守宛城": "城下已靜", "城中豪族": "城下已靜", "為盧植鳴冤": "車塵已遠", "洛陽流言": "車塵已遠", "押一邊": "使者已返", "廣宗城下": "塵埃落定", "大賢良師": "塵埃落定", "誰的天下": "塵埃落定"}
+
+
 def missed(title: str, text: str, annal: str) -> dict:
-    return ending("missed", "沒趕上", text, annal, effect={}, failed=True)
+    return ending("missed", MISSED_TITLES[title], text, annal, effect={}, failed=True)
 
 
 def chapter(lid: str, side: str, no: int, title: str, intro: str, beat: str, stages: list, endings: list, *,
