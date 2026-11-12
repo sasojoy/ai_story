@@ -124,6 +124,22 @@ def real_content(profile=None) -> Content:
     return cached_content(REAL_CONTENT, profile)
 
 
+def old_packs(content: Content, *names: str) -> Content:
+    """2026-11-12 打開的五包（門派、結義、帖友書信、稱號官職、條款；Joy「全部新功能都要打開」）關掉，回傳同一份內容。
+    測的是這幾包打開以前的規矩（拜入門派連帶投靠、論功的稱號寫在名號後面、註冊不用勾條款）的舊測試叫它；names 給了只關那幾包。"""
+    for name in names or ("zongmen", "jieyi", "mail", "titles", "terms"):
+        getattr(content.config, name).enabled = False
+    return content
+
+
+def donate_content(profile=None) -> Content:
+    """正式內容、捐軍備打開：week7、season21 的正式設定 2026-11-12 起關掉（Joy「捐軍備功能先拿掉」），
+    測捐軍備、捐銀兩本身的舊測試用它取代 real_content（`from conftest import donate_content as real_content`）。"""
+    content = real_content(profile)
+    content.config.economy.donate = True
+    return content
+
+
 def old_explore(cfg, setter=setattr) -> None:
     """三選一的開關以前關著時連帶關掉的三樣：一類一顆、可重複事件推大勢的五折、觀山石的加成（第 13 批拿掉那個開關）。
     `monkeypatch` 的地方 `old_explore(cfg, monkeypatch.setattr)`。"""

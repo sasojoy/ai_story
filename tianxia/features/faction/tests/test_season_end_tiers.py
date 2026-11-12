@@ -8,6 +8,7 @@ import random
 
 import pytest
 
+from conftest import old_packs
 from wins_kit import save, wins_content, wins_game
 from tianxia.features.peers import social
 from tianxia import wins
@@ -22,7 +23,7 @@ ADMIN = "論功官"
 
 def _season(off: bool = False):
     """一季：管理者＋官軍三人、黃巾兩人、豪強兩人（各幫一軍）、散人一人，貢獻直接寫好（其中兩人照引擎真的推一次）。"""
-    content = wins_content()
+    content = old_packs(wins_content(), "titles")  # 論功的稱號寫在名號後面是稱號包打開以前的規矩
     if off:
         content.config.jianfa.enabled = False
     content.config.admins = [ADMIN]

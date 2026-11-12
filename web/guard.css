@@ -99,3 +99,6 @@
 }
 .guard .gd-lesson:active { background: var(--card-2); }
 @media (max-width: 520px) { .guard .gd-teach { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 「眼前這件事」的紅點（第三層；俠客分頁、同伴子分頁也亮著）：攤開或挑了去處才滅 */
+.gd-sec-hd h4 .dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }

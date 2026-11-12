@@ -60,7 +60,7 @@ const S = { main: input.m || {}, news: input.news || "reports", xingshiOpen: inp
 const many = (name) => src.match(new RegExp(`\\n  const ${name} = \\[[\\s\\S]*?\\n  \\];`))[0]; // 多行的 const：konst 抓不到，照原文切
 const H = new Function("S", [
   konst("esc"), many("NEWS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
-  fn("xingshiParas"), fn("xingshiHtml"), fn("newsSegHtml"),
+  fn("xingshiParas"), fn("xingshiHtml"), konst("DOTS"), fn("dotAt"), konst("dotHtml"), fn("newsSegHtml"),
   "return { xingshiHtml, newsSegHtml };",
 ].join("\n"))(S);
 finish({ page: input.x === undefined ? "" : H.xingshiHtml(input.x), seg: H.newsSegHtml(input.m || {}) });

@@ -160,7 +160,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .where.split > .where-gap { display: none; }
 .where.split > .where-at { margin-top: 1px; }
 .icon-btn {
-  flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
+  position: relative; flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
 }
 /* 商城的入口乙（商城第二批，企劃者 2026-10-20 挑的）：齒輪左邊一顆錠子鈕寫元寶餘額。名號那一欄（.who，flex 1、min-width 0）跟著窄，
@@ -264,6 +264,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .tab .ico { font: 600 19px/1.2 var(--serif); }
 .tab.on { color: var(--accent); }
 .tab.on::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+.icon-btn .dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); } /* ⚙ 的紅點（registerDot at "sheet"） */
 .tab .dot { position: absolute; top: 6px; right: calc(50% - 18px); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .tab.tab-mall .ico { color: var(--gold); } /* 商城的入口丙（第六格）：「寶」字金色；點了打開商城那一層、不換頁，所以從不是 .on */
 

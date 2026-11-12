@@ -64,6 +64,9 @@
     if (html !== gate.innerHTML) gate.innerHTML = html;
   }
 
+  // 客服有新回覆：⚙、設定抽屜裡「客服」那一顆（sup-dot）兩層（web/shell.js registerDot，Joy 2026-11-12 紅點一路標到那件事）
+  if (typeof registerDot === "function") registerDot({ id: "support", at: "sheet", on: () => supportOn() && (Number(S.main && S.main.support_unread) || 0) > 0 });
+
   // ── 設定抽屜那一行（關著回 ""）──
   function supportRow() {
     if (!supportOn()) return "";

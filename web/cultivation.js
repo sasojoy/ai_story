@@ -831,7 +831,7 @@
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
       const heroTabs = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
-      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
+      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? `${gdBlock}${rosterBlock}`

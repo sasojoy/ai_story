@@ -215,7 +215,7 @@
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
     if (main.card && S.main && S.main.card_id !== main.card_id) {
-      S.unseen = true;
+      S.unseen = main.card_id || true; // 那一場的戰報 id：見聞・戰況那一行標紅點，點開它才滅（Joy 2026-11-12）
       paintNewsDot();
     }
     const key = JSON.stringify(main);
@@ -234,7 +234,7 @@
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
-    if ((main.mail && main.mail.unread) || (typeof guardDot === "function" && guardDot())) paintNewsDot(); // 信匣有沒看的信、親衛隊長有一件事等你（Joy 2026-11-10「要加」）：輪詢拿到的也補一顆紅點
+    paintNewsDot(); // 紅點照登記的來源（信匣、親衛、見聞、客服、帳號……）就地補上或拿掉：輪詢拿到的也算
     // 自建形象的圖版本（main.looks_ver）：那幾支組圖網址時接成 ?v=，圖一換網址就換，手機不必清快取
     window.LOOKS_VER = main.looks_ver || "";
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
@@ -259,10 +259,7 @@
   // 見聞的紅點：新的一場（S.unseen），或信匣有沒看的信（main.mail.unread，web/mail.js）
   // 信匣在俠客頁（SELF_NEWS）：沒看的信亮「俠客」那一顆（mail.js 的 mailDot；看信匣的時候不亮）
   function paintNewsDot() {
-    const tab = document.querySelector('.tabs .tab[data-tab="news"]');
-    if (tab && S.unseen && S.tab !== "news" && !tab.querySelector(".dot")) tab.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
-    const hero = document.querySelector('.tabs .tab[data-tab="practice"]');
-    if (hero && ((typeof mailDot === "function" && mailDot()) || (typeof guardDot === "function" && guardDot())) && !hero.querySelector(".dot")) hero.insertAdjacentHTML("beforeend", '<i class="dot"></i>');
+    paintDots(); // 全部的來源照 registerDot 那張表（web/shell.js；Joy 2026-11-12 紅點一路標到那件事）
   }
 
   // ── 整體 ──
@@ -351,7 +348,7 @@
     const glow = (t) => [t.id, ...(on(t) ? [] : t.also || [])].map((id) => `tab:${id}`).join(" ");
     return `${typeof bpMiniHtml === "function" ? bpMiniHtml() : ""}<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${on(t) ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="${glow(t)}">
-          <span class="ico">${t.ico}</span>${t.name}${(t.id === "news" && S.unseen && S.tab !== "news") || (t.id === "practice" && ((typeof mailDot === "function" && mailDot()) || (typeof guardDot === "function" && guardDot()))) ? '<i class="dot"></i>' : ""}
+          <span class="ico">${t.ico}</span>${t.name}${dotHtml(dotAt(t.id))}
         </button>`).join("")}${mall ? `
         <button class="tab tab-mall" data-act="mall-open" data-tab="mall" data-glow="tab:mall" aria-label="商城，元寶 ${S.main.mall.balance | 0}"><span class="ico">寶</span>商城</button>` : ""}</div></nav>`;
   }
@@ -486,7 +483,7 @@
           <div class="where">${where}</div>
         ${rv ? "</div>" : ""}</div>
         ${mallShown() ? mallBtnHtml(S.main.mall) : ""}
-        <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
+        <button class="icon-btn" data-act="sheet" aria-label="設定">⚙${dotHtml(dotAt("sheet"))}</button>
       </div>
       ${S.showMore && S.renownOpen && s.renown ? renownStripHtml(s.renown) : ""}
       ${inPro ? "" : subs}
@@ -1157,7 +1154,7 @@
     const self = selfNews(S.news);
     if (self) return `<div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 俠客</button><h3>${esc(self.name)}</h3></div>`;
     const at = newsPart(S.news);
-    return `<div class="seg news-seg nw-tabs" role="tablist">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" role="tab" aria-selected="${at === n}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+    return `<div class="seg news-seg nw-tabs" role="tablist">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" role="tab" aria-selected="${at === n}" data-act="news" data-news="${n.id}">${n.name}${dotHtml(dotAt("news", n.id))}</button>`).join("")}</div>`;
   }
 
 
@@ -1180,7 +1177,7 @@
       const r = S.reports;
       if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
       else if (r && S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
-      else body = newsReportsHtml(r) + trendsTopHtml(m) + (m.xingshi ? newsXingshiHtml(S.xingshi) : "");
+      else { body = newsReportsHtml(r) + trendsTopHtml(m) + (m.xingshi ? newsXingshiHtml(S.xingshi) : ""); if (r && r.list && r.list.some((x) => x.id === S.unseen)) S.unseenShown = S.unseen; }
     } else if (S.news === "rumors") body = m.rumor_layers ? newsRumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") {
       // 江湖史（見聞改版）：點得開的戰記與玉璽排最上面，下面照日子分段（天下大事併進來了，伺服器 chronicle_text）
@@ -1331,7 +1328,8 @@
     // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
     if (tab === "map" && !S.mapKeep) mapFirst();
     S.mapKeep = false;
-    if (tab === "news") S.unseen = false;
+    if (S.unseenShown && S.unseenShown === S.unseen) S.unseen = false; // 戰況那一段攤著、標著紅點的那一行看到了，離開才滅（不是一進見聞就滅）
+    S.unseenShown = false;
     render();
     window.scrollTo(0, 0);
     try {
@@ -1856,6 +1854,8 @@
           if (S.wheelSel) revealMoveCard();
           break;
         case "news":
+          if (S.unseenShown && S.unseenShown === S.unseen) S.unseen = false; // 戰況那一段看過了才換段
+          S.unseenShown = false;
           S.news = el.dataset.news;
           S.taleOpen = null;
           if (!selfNews(S.news)) S.newsBack = S.news; // 見聞的籤記下來：從行狀按底下的「見聞」回到這一段
@@ -1876,7 +1876,8 @@
           S.news = "reports";
           S.reportOpen = true;
           S.taleOpen = null;
-          if (S.tab !== "news") { S.tab = "news"; S.unseen = false; render(); }
+          if (Number(el.dataset.id) === S.unseen) S.unseen = false; // 點開的就是新的那一場：三層一起滅
+          if (S.tab !== "news") { S.tab = "news"; render(); } else paintNewsDot();
           await loadReports(Number(el.dataset.id));
           window.scrollTo(0, 0);
           break;
