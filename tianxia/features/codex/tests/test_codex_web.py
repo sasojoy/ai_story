@@ -15,7 +15,7 @@ from tianxia.features.codex import view
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 NAMES_START = 'wholeApp(["S", '
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "dotAt", "pagePractice", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "codexWhyHtml", "wkTugHtml", "dotAt", "pagePractice", ')
 
 
 def run(m, script, S=None):
@@ -106,6 +106,17 @@ def test_the_page_top_keeps_only_the_tracker_line(walked):
     m["codex"].pop("track")  # 「進行中」關著：照舊
     old = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
     assert "cx-track" not in old and "wk-box" in old
+
+
+def test_the_sides_tug_is_still_one_tap_away_when_the_week_card_folds(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    if not (m.get("week_card") and m["week_card"].get("sides")):
+        pytest.skip("這一局沒有兩軍態勢")
+    tug = run(m, "return H.wkTugHtml(m, m.week_card);")
+    assert tug
+    sheet = run(m, "return H.codexWhyHtml(m);", S={"cxWhy": True})
+    assert tug in sheet  # 本週卡收起來了，清單最底下那一顆拉起來的那一層最上面就是兩軍態勢
 
 
 def test_scenes_walked_before_the_book_opened_show_their_names(walked):

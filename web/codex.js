@@ -208,7 +208,7 @@
   const TK_WAITS = "在等的 {n} 件"; // 待 joy 潤
   const TK_WAIT_SEAL = "在等"; // 待 joy 潤
   const TK_NONE = "眼下沒有推得動的事，四處走走。"; // 待 joy 潤
-  const TK_WHY = "這一季在打什麼 ›"; // 待 joy 潤
+  const TK_WHY = "兩軍態勢・這一季在打什麼 ›"; // 待 joy 潤
   function tkMemo() {
     if (!S.cxTkMemo) {
       try { S.cxTkMemo = JSON.parse(localStorage.getItem(TK_STORE) || "null"); } catch (e) { S.cxTkMemo = null; }
@@ -304,9 +304,11 @@
   function codexWhyHtml(m) {
     if (!S.cxWhy || !m.week_card || typeof whyHtml !== "function") return "";
     const w = m.week_card;
+    // 本週卡收起來的時候兩軍態勢還得看得到（Joy 11/13「哪邊還能看態勢」）：拔河條畫在這一層最上面
+    const tug = typeof wkTugHtml === "function" && !(typeof bpOn === "function" && bpOn(m)) ? wkTugHtml(m, w) : "";
     return `<div class="sheet-bg" data-act="cx-why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${TK_SHEET}"><div class="grip"></div>`
       + `<div class="top-row"><h3 style="flex:1">${TK_SHEET}</h3><button class="btn small ghost" data-act="cx-why">${TK_CLOSE}</button></div>`
-      + `<p class="wk-sheet-th"><b>${esc(w.when)}</b>${esc(w.theme || "")}</p>${whyHtml(m, true)}</div>`;
+      + `<p class="wk-sheet-th"><b>${esc(w.when)}</b>${esc(w.theme || "")}</p>${tug}${whyHtml(m, true)}</div>`;
   }
   function tkSeeAll() {
     const got = tkItems(S.main, null), items = got ? got.on : [];
