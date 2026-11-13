@@ -152,3 +152,68 @@ def test_the_tracker_lists_open_lines_only_with_its_switch():
     row = next(x for x in rows if x["line"] == L)
     assert row["kind"] == "奇事" and row["title"] == game.content.storylines[L].title and row["what"]
     assert row["key"] == f"{game.state.player.season_number}:{L}"
+
+
+def _lit_cells(game) -> set[str]:
+    """畫面上亮著紅點的每一格（奇遇的一件、人物、器物、意境、結局）換回 fresh 的鍵。"""
+    page = view.page(game)
+    q = page["quests"]
+    out = {f"q:{r['line']}" for r in q["on"] + q["done"] if r["dot"]}
+    out |= {f"p:{r['id']}" for r in page["people"]["rows"] if r["dot"]}
+    out |= {f"t:{c['key']}" for g in page["things"]["groups"] for c in g["cells"] if c["dot"]}
+    out |= {f"g:{c['id']}" for c in page["gods"]["cells"].values() if c["dot"]}
+    for r in page["endings"]["rows"]:
+        out |= {f"e:{r['line']}:{e['id']}" for e in r["ends"] if e["got"] and f"e:{r['line']}:{e['id']}" in game.state.player.codex.fresh}
+    return out
+
+
+def _every_kind(game):
+    """每一種紅點都亮一個：走一幕（q:、p:）、拿寶物（t:）、悟出神品（g:）、另一條奇事收了（e:）。"""
+    from tianxia.martial_arts import Insight
+    from tianxia.state import InsightFx
+
+    s, p, c = game.state, game.state.player, game.content
+    _start(game)
+    game.choose("choice:0")
+    p.treasure = Equipment(slot="treasure", id="寶:1", name="觀山石", template="guanshan_shi")
+    god = c.traits.god[0]
+    p.own_insights["悟:9"] = Insight(id="悟:9", name="歸雁", attribute=god.attribute, place="潁川書院")
+    p.insight_fx["悟:9"] = InsightFx(quality="神品", grand=god.id)
+    other = next(lid for lid, line in c.storylines.items() if line.kind == "奇事" and line.start is not None and lid != L and line.endings)
+    p.storylines[other] = StoryProgress(line=other, ending=c.storylines[other].endings[0].id, ended_at=s.world.time)
+    game.sync(game.now + 1)
+
+
+def test_every_red_dot_has_a_cell_and_goes_out_when_seen():
+    game = _game()
+    _every_kind(game)
+    fresh = set(game.state.player.codex.fresh)
+    assert {k[0] for k in fresh} >= {"q", "p", "t", "g", "e"}
+    assert fresh == _lit_cells(game)  # 亮著的每一個都畫得出一格；畫不出來的不准亮
+    for key in sorted(fresh):  # 一格一格點過去：那一格滅，別格不動
+        view.seen(game, [key])
+        assert key not in game.state.player.codex.fresh and key not in _lit_cells(game)
+    st = view.status(game)
+    assert not any(st[k] for k in ("q", "p", "t", "g", "e"))
+
+
+def test_dots_seen_do_not_grow_back_over_ten_syncs():
+    from tianxia.state import JournalEntry
+
+    game = _game()
+    _every_kind(game)
+    view.seen(game, list(game.state.player.codex.fresh))
+    for i in range(10):  # 每一下都多一則跟線無關的紀錄（以前讀到哪裡一換，「這條線新開過」的記號就跟著清掉，主線又亮一次）
+        game.state.journal.insert(0, JournalEntry(time=game.state.world.time + i + 1, title=f"遊歷・第{i}趟"))
+        game.sync(game.now + 600 * (i + 1))
+        assert game.state.player.codex.fresh == [], i
+
+
+def test_dots_from_a_line_that_cannot_be_drawn_are_dropped():
+    game = _game()
+    _start(game)
+    game.choose("choice:0")
+    b = game.state.player.codex
+    b.fresh += ["q:no_such_line", "p:no_such_person", "e:ch_guan_1:x"]
+    game.sync(game.now + 1)
+    assert not {"q:no_such_line", "p:no_such_person", "e:ch_guan_1:x"} & set(b.fresh)
