@@ -543,16 +543,17 @@
       const has = (key) => (a.glow || []).includes(key);
       // 練成（Joy 2026-10-20「練成第x成這邊介面按鈕超醜」）：十成的格子旁邊一顆朱印「練」，下一格會亮；按不下去時印是灰的、原因寫在底下一行
       let train = "", why = "";
-      if (slot) {
+      const fightOnly = !!slot && !!slot.progress && slot.price == null && !slot.maxed && !slot.blocked; // 這一季成數只靠戰鬥：沒有「練」這顆印
+      if (slot && !fightOnly) {
         why = slot.blocked || "";
         const off = !!slot.blocked || slot.maxed;
         const label = slot.maxed ? "已到第十成" : `練成第${level + 1}成（心得 ${slot.price}）`;
         train = `<button class="train-go${off ? "" : " hot"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" aria-label="${esc(slot.blocked || label)}" title="${esc(slot.blocked || label)}" ${off ? "disabled" : ""}><b>${slot.maxed ? "滿" : "練"}</b><small>${slot.maxed ? "十成" : `心得 ${slot.price}`}</small></button>`;
       }
-      // 武學打了才升的季（slot.progress，別的季沒有）：這一成的熟練與今天還能長多少；打仗長、也能按「練」用心得補滿這一成  // 待 joy 潤
+      // 武學打了才升的季（slot.progress，別的季沒有）：這一成的熟練與今天還能長多少；只有打仗會長
       const pg = slot && slot.progress;
       const prog = !pg ? "" : `<p class="train-why train-prog">${slot.maxed ? "已到第十成" : `熟練 ${pg.exp}/${pg.need}・今天打仗還能長 ${pg.today_left}`}</p>`;
-      const next = slot && !slot.blocked && !slot.maxed ? level : -1; // 練下去會亮的那一格
+      const next = slot && !slot.blocked && !slot.maxed && !fightOnly ? level : -1; // 練下去會亮的那一格
       const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
       const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
       // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）

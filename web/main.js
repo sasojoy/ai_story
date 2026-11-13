@@ -823,19 +823,23 @@
   }
 
   // 「剛剛」那一張（不是戰鬥卡片的那種）：收著是一行（nowOneHtml，整合設計 6.3），點開整則攤開、底下「收起 ▴」；在路上照舊收成三行（FB-060）
+  // 一條線（奇事、章回主線）的事件剛選完（main.story_now）：那一則一進來就整段攤開（Joy 2026-11-13「選完後面只有顯示圖跟一行字」），玩家收起來才收；
+  // 結局卡等著時底下多一顆「看結局」（storyNowTail，web/story.js）
   function nowBlock(m) {
     if (!m.now) return "";
-    const expanded = S.nowOpen === m.now;
-    const [text, chips] = splitChips(m.now);
+    const expanded = S.nowOpen === m.now || (!!m.story_now && S.nowShut !== m.now);
+    const [text, chips] = splitChips(typeof storyNowText === "function" ? storyNowText(m, m.now) : m.now);
+    const tail = typeof storyNowTail === "function" ? storyNowTail(m) : "";
     return expanded || m.on_road
-      ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}</div>`
-      : `<div class="now one">${nowOneHtml(text)}${withGains(chips, text)}${frontReportHtml(m.front)}</div>`;
+      ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}${tail}</div>`
+      : `<div class="now one">${nowOneHtml(text)}${withGains(chips, text)}${frontReportHtml(m.front)}${tail}</div>`;
   }
   // 點「剛剛」：在路上原地換 class（同以前，不重播浮現動畫）；平常一行與整則之間原地換掉那一張
   function nowToggle(el) {
     const box = el.closest(".now");
     const open = !box.classList.contains("open");
     S.nowOpen = open ? S.main.now : null;
+    S.nowShut = open ? null : S.main.now;
     if (S.main.on_road) {
       box.classList.toggle("open", open);
       box.classList.toggle("clamp", !open);

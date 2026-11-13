@@ -5,6 +5,7 @@ import random
 import pytest
 from conftest import real_content
 
+from tianxia import team
 from tianxia.core.registry import FEATURES
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -40,6 +41,10 @@ def test_learn_practice_and_slot_an_insight():
     art = p.member.wugong_id
     p.stats["xinde"] = 100
     before = p.member.wugong_level
+    if team.xinde_practice_off(game.state, game.content):  # 打了才升的季（Joy 2026-11-13）：心得練不了，成數不動
+        game.practice("武學")
+        assert p.member.wugong_level == before
+        game.state.world.fight_practice = False  # 下面照舊規則的季驗「練」這一下
     game.practice("武學")
     assert p.member.wugong_level == before + 1
 

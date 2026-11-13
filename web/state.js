@@ -13,6 +13,9 @@
     tab: "jianghu",
     frontOpen: "", // 江湖頁「剛剛」底下那塊出陣回報，第一屏放不下收起來之後玩家點開的那一則（frontKey）：重畫時不再收
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
+    nowShut: null, // 一條線的事件剛選完、伺服器說要攤開（main.story_now）的那一則被玩家收起來了（記內容本身）：重畫不再自己攤開
+    storyShown: null, // 一條線的事件剛選完、攤開的那一則捲到眼前過了（記內容本身，web/story.js）：同一則不再捲
+    storyRead: null, // 一條線最後一幕選完：結局卡等玩家讀完後續、按「看結局」才跳（記那一則「剛剛」本身，web/story.js）
     letterOpen: null, // 江湖頁書信小卡攤開的那一封（id）
     letterShut: null, // 伺服器說一到就攤開的那一封（開局的託付，letter.open）被玩家收攏了（id）：下一次重畫不再自己攤開
     pushOn: false, // 手機通知：這台裝置訂著沒有（打開設定時問瀏覽器，pushRefresh）

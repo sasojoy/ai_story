@@ -102,3 +102,8 @@
 
 /* 「眼前這件事」的紅點（第三層；俠客分頁、同伴子分頁也亮著）：攤開或挑了去處才滅 */
 .gd-sec-hd h4 .dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+/* 出門帶不帶他：一排兩格，亮著的是現在的選擇（Joy 2026-11-13） */
+.guard .gd-along { display: flex; align-items: center; flex: 1 1 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.guard .gd-along-hd { padding: 0 12px; color: var(--ink-2); font-size: .9em; white-space: nowrap; }
+.guard .gd-seg { flex: 1 1 0; min-height: 44px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; }
+.guard .gd-seg.on { background: var(--gold); color: #241c12; font-weight: 600; cursor: default; opacity: 1; }
