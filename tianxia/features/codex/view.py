@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from tianxia import chapters, timetable
 from tianxia.figures import placed_characters
 from tianxia.mounts import COAT_ART, STEED_ART
 from tianxia.rules import day_seconds
@@ -25,6 +26,7 @@ UNSEEN = "？？"
 STAY = "到{place}，在「此地」裡找{pron}說話。"  # 待 joy 潤：走完留下來的人
 GONE = "{pron}不在了。"  # 待 joy 潤：收在留不住她的結局
 UNFINISHED = "此事未了"  # 待 joy 潤
+CH_WAIT = "這一回做完了，等「{beat}」"  # 待 joy 潤：章回最後一段（chapters.WAIT）
 FORMS = ("攻", "守", "變", "心")
 PATHS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實", "正", "邪")
 ATTR_TONE = {"快": "kuai", "慢": "man", "剛": "gang", "柔": "rou", "陽": "gang", "陰": "kuai", "虛": "rou", "實": "man", "正": "kuai", "邪": "gang"}
@@ -82,7 +84,12 @@ def _next(ctx, progress) -> dict | None:
     return {"what": what, "where": where, "loc": loc, "when": when, "left": left, "hint": bool(stage.hint), "ready": when == NOW}
 
 
-def _scene_rows(ctx, b, season: int, line_id: str) -> list[dict]:
+LOST = "當時的選擇沒有留下"  # 待 joy 潤：江湖錄打開之前走過的那一幕
+
+
+def _scene_rows(ctx, b, season: int, line_id: str, line=None, progress=None) -> list[dict]:
+    """走過的每一幕：記下來的照記的；還在走的線，現在這一段以前的事件段沒記到的（江湖錄打開之前走過的）寫幕名＋「當時的選擇沒有留下」，
+    照段的先後排。收了的線不補（分岔的線不知道走過哪幾段）。"""
     c = ctx.content
     rows = []
     for i, sc in enumerate(b.scenes):
@@ -90,8 +97,19 @@ def _scene_rows(ctx, b, season: int, line_id: str) -> list[dict]:
             continue
         ev = c.events.get(sc.event)
         pick = sc.said if sc.choice == rules.FREE else (ev.choices[sc.choice].text if ev and 0 <= sc.choice < len(ev.choices) else "")
-        rows.append({"i": i, "title": ev.title if ev else "", "pick": rules.fill(pick, ctx.state, sc.line, sc.marks),
+        rows.append({"i": i, "stage": sc.stage, "title": ev.title if ev else "", "pick": rules.fill(pick, ctx.state, sc.line, sc.marks),
                      "stamp": ctx.stamp(sc.time, clock=False) if season == ctx.state.player.season_number else f"第 {season} 季"})
+    if line is None or progress is None or progress.ending is not None:
+        return rows
+    ids = [st.id for st in line.stages]
+    if progress.stage not in ids:
+        return rows
+    order = {sid: n for n, sid in enumerate(ids)}
+    got = {r["stage"] for r in rows}
+    for st in line.stages[:ids.index(progress.stage)]:
+        if st.kind == "event" and st.event in c.events and st.id not in got:
+            rows.append({"i": None, "stage": st.id, "title": c.events[st.event].title, "pick": "", "lost": LOST, "stamp": ""})
+    rows.sort(key=lambda r: order.get(r["stage"], len(ids)))
     return rows
 
 
@@ -135,7 +153,7 @@ def _quest(ctx, b, season: int, line, progress=None, end=None) -> dict:
         "kind": KIND_MAIN if line.kind == "章回" else KIND_QIYU, "intro": line.intro,
         "who": c.characters[cid].name if cid and cid in c.characters else "",
         "src": _img(line.image) or _img(_stage_image(line, progress)) or _img(FALLBACK_ART[line.kind == "章回"]), "stages": len(line.stages),
-        "scenes": _scene_rows(ctx, b, season, line.id), "ends": _ends(c, line, got),
+        "scenes": _scene_rows(ctx, b, season, line.id, line, progress), "ends": _ends(c, line, got),
         "dot": f"q:{line.id}" in b.fresh and season == ctx.state.player.season_number,
     }
     if ending_id is None and progress is not None:
@@ -295,7 +313,18 @@ def track(ctx) -> list[dict]:
         if nx is None:
             continue
         due = progress.due - s.world.time if progress.due is not None else math.inf
-        out.append(({"key": f"{s.player.season_number}:{line.id}", "line": line.id, "kind": KIND_MAIN if line.kind == "章回" else KIND_QIYU, "title": line.title, **nx}, (not nx["ready"], due, n)))
+        row = {"key": f"{s.player.season_number}:{line.id}", "line": line.id, "kind": KIND_MAIN if line.kind == "章回" else KIND_QIYU, "title": line.title, **nx}
+        # 在等的（清單收在最底下一行，不算進印上的數字，不會被挑成最上面那一行）：章回這一回做完了、等大事結算；多日段還沒到時候
+        if line.chapter is not None and progress.stage == chapters.WAIT:
+            event = timetable.find(c, line.chapter.beat)
+            at = timetable.when_in(s.world, c, event) if event is not None else math.inf
+            row.update(wait=True, what=CH_WAIT.format(beat=event.title if event else line.chapter.beat),
+                       until=ctx.stamp(at) if math.isfinite(at) else "")
+        elif not nx["ready"]:
+            row.update(wait=True, until=nx["when"])
+        else:
+            row["wait"] = False
+        out.append((row, (row["wait"], due, n)))
     return [row for row, _ in sorted(out, key=lambda x: x[1])]
 
 
