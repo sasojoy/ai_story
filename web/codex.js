@@ -274,15 +274,32 @@
       : `<button class="cx-tk-main idle" data-act="cx-tk">${tkText({ ...got.wait[0], seal: TK_WAIT_SEAL })}</button>`; // 都在等：寫最前面那一件在等什麼，點了拉開
     const line = `<section class="cx-track" aria-label="${TK_HEAD}">${main}`
       + `<button class="cx-tk-all" data-act="cx-tk" aria-expanded="${!!S.cxTk}" aria-label="${TK_HEAD} ${got.on.length} 件">${TK_SEAL}${got.on.length ? `<em${fresh ? ' class="new"' : ""}>${got.on.length}</em>` : ""}</button></section>`;
-    if (!S.cxTk) return line + codexWhyHtml(m);
+    const tug = tkTugHtml(m);
+    if (!S.cxTk) return tug + line + codexWhyHtml(m);
     const rows = got.on.map((it) => `<div class="cx-tk-row"><button class="cx-tk-pin${it.key === top.key ? " on" : ""}" data-act="cx-tk-pin" data-key="${esc(it.key)}" aria-pressed="${it.key === top.key}" aria-label="${it.key === top.key ? TK_PINNED : TK_PIN}" title="${it.key === top.key ? TK_PINNED : TK_PIN}">◆</button>`
       + `${tkText(it)}<button class="cx-tk-go" ${tkGoAttrs(it)}>${TK_GO}</button></div>`).join("");
     const waits = got.wait.length ? `<button class="cx-tk-waits" data-act="cx-tk-wait" aria-expanded="${!!S.cxTkWait}">${TK_WAITS.replace("{n}", got.wait.length)}<i aria-hidden="true">${S.cxTkWait ? "▴" : "▾"}</i></button>`
       + (S.cxTkWait ? got.wait.map((it) => `<div class="cx-tk-row wait">${tkText(it)}</div>`).join("") : "") : "";
-    return `${line}<div class="sheet-bg" data-act="cx-tk"></div><div class="sheet cx-tk-sheet" role="dialog" aria-label="${TK_HEAD}"><div class="grip"></div>`
+    return `${tug}${line}<div class="sheet-bg" data-act="cx-tk"></div><div class="sheet cx-tk-sheet" role="dialog" aria-label="${TK_HEAD}"><div class="grip"></div>`
       + `<div class="top-row"><h3 style="flex:1">${TK_HEAD}</h3><button class="btn small ghost" data-act="cx-tk">${TK_CLOSE}</button></div>`
       + `${rows || `<p class="cx-tk-none">${TK_NONE}</p>`}${waits}`
       + `${codexSlim(m) && m.week_card ? `<p class="cx-tk-more"><button class="linkish" data-act="cx-tk-why">${TK_WHY}</button></p>` : ""}</div>`;
+  }
+  // 本週卡收起來的時候，「進行中」上面留一條細的兩軍態勢（Joy 2026-11-13「我還是想在首頁讓大家直觀地知道當前態勢 但是不想要像之前那樣佔那麼多版面」）：
+  // 一行、不寫數字，兩色一條加一句誰佔上風；點了拉起「這一季在打什麼」那一層（最上面是完整的拔河條）。本週卡露著、決戰面板開著時不畫（各自已有）
+  const TK_TUG = "兩軍態勢"; // 待 joy 潤
+  function tkTugHtml(m) {
+    const w = m && m.week_card, s = w && w.sides;
+    if (!s || !("guan" in s) || !("huang" in s) || !codexSlim(m) || codexWeekShow(m)) return "";
+    if (typeof bpOn === "function" && bpOn(m)) return "";
+    const g = s.guan | 0, h = s.huang | 0, at = g + h > 0 ? Math.round((g * 1000) / (g + h)) / 10 : 50, d = g - h;
+    const cols = (m.sides_card && m.sides_card.cols) || [];
+    const name = (k) => (cols.find((c) => c.id === k) || {}).name || (k === "guan" ? "官軍" : "黃巾");
+    const side = Math.abs(d) < 10 ? "even" : d > 0 ? "guan" : "huang";
+    const says = side === "even" ? "兩軍相持" : `${name(side)}${Math.abs(d) >= 30 ? "大佔上風" : "佔上風"}`; // 待 joy 潤（同本週卡那一句）
+    return `<button class="cx-tug" data-act="cx-tk-why" aria-label="${TK_TUG}：${says}">`
+      + `<span class="cx-tug-end side-guan" aria-hidden="true">${esc(name("guan").slice(0, 1))}</span><span class="cx-tug-bar" aria-hidden="true"><i style="width:${at}%"></i><u style="left:${at}%"></u></span><span class="cx-tug-end side-huang" aria-hidden="true">${esc(name("huang").slice(0, 1))}</span>`
+      + `<b class="side-${side}">${says}</b><span class="cx-tug-go" aria-hidden="true">›</span></button>`;
   }
   // 江湖頁上面那一區瘦身（Joy 2026-11-13「上面這區還是很臃腫 而且是有必要一直一直出現在這裡嗎」；PM 的方向）：「進行中」開著、
   // 已經投靠了一方（沒投靠的人照舊看三方卡與投靠鈕）時，狀態列底下只留「進行中」那一行——屬性點、識海那幾條提示與章回收進「事」的清單，

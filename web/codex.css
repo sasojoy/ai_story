@@ -164,3 +164,16 @@
 .cx-tk-row.wait .cx-tk-tag { border-color: var(--ink-2); color: var(--ink-2); }
 .cx-tk-none { margin: 8px 0; color: var(--ink-2); font: 400 14px/1.6 var(--kai); }
 .cx-act.lost .x small { color: var(--ink-2); }
+
+/* 本週卡收起來時「進行中」上面那一條細的兩軍態勢（Joy 11/13）：一行，左官右黃，點了拉起這一季在打什麼 */
+.cx-tug { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin: 0 0 4px; padding: 0 4px; border: 0; background: none; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.cx-tug-bar { position: relative; flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--gold); }
+.cx-tug-bar > i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 3px 0 0 3px; background: var(--kuai); }
+.cx-tug-bar > u { position: absolute; top: -4px; width: 3px; height: 14px; margin-left: -1.5px; background: var(--card); border: 1px solid var(--ink); border-radius: 2px; }
+.cx-tug > b { flex: none; font: 700 14px var(--kai, var(--serif)); color: var(--ink); }
+.cx-tug > b.side-guan { color: var(--kuai); }
+.cx-tug > b.side-huang { color: var(--gold); }
+.cx-tug-go { flex: none; color: var(--ink-2); }
+.cx-tug-end { flex: none; margin: 0 -4px; font: 700 13px var(--kai, var(--serif)); }
+.cx-tug-end.side-guan { color: var(--kuai); }
+.cx-tug-end.side-huang { color: var(--gold); }
