@@ -52,7 +52,7 @@ def _match(state: GameState, content, title: str) -> tuple[str, str, str, int] |
     """江湖紀錄一則的標題是這個人哪一條線、哪一段的哪一則事件、選了第幾個（隨口應對是 FREE）；對不上是 None。"""
     for progress in state.player.storylines.values():
         line = definition(content, progress)
-        if line is None:
+        if line is None or progress.custom is not None:  # 程式組的線（特殊頓悟）不在江湖錄：記了也畫不出來
             continue
         for eid, (stage, _) in stage_events(content, line).items():
             ev = content.events[eid]
@@ -85,8 +85,8 @@ def scan_journal(state: GameState, content, quiet: bool = False) -> None:
             if e.time > b.upto or (e.time == b.upto and f"{e.time}|{e.title}" not in b.upto_keys)]
     for entry in news:
         hit = _match(state, content, entry.title)
-        if entry.time > b.upto:
-            b.upto, b.upto_keys = entry.time, []
+        if entry.time > b.upto:  # 「open:季:線」（這條線新開過的紅點亮過了）不跟著讀到哪裡一起清：清了每多一則紀錄就又亮一次（11/13 紅點消不掉）
+            b.upto, b.upto_keys = entry.time, [k for k in b.upto_keys if k.startswith("open:")]
         b.upto_keys.append(f"{entry.time}|{entry.title}")
         if hit is None:
             continue
@@ -123,7 +123,9 @@ def scan_lines(state: GameState, content, quiet: bool = False) -> None:
         b.ended.append(CodexEnd(season=season, line=progress.line, ending=progress.ending,
                                 time=progress.ended_at or state.world.time))
         _fresh(b, f"q:{progress.line}", quiet)
-        _fresh(b, f"e:{progress.line}:{progress.ending}", quiet)
+        line = definition(content, progress)
+        if line is not None and line.kind == "奇事":  # 圖鑑的結局只收奇事（章回的收法不在那張表上，亮了也滅不掉）
+            _fresh(b, f"e:{progress.line}:{progress.ending}", quiet)
 
 
 def _opened(b: CodexBook, season: int, line: str) -> bool:
@@ -194,12 +196,29 @@ def scan_owned(state: GameState, content, quiet: bool = False) -> None:
             _fresh(b, f"g:{tid}", quiet)
 
 
+def drawable(state: GameState, content) -> set[str]:
+    """紅點畫得出來的鍵（每一個都要有一格點得到；畫不出來的不准亮）：這一季開過、不是程式組的線（q:），圖鑑四類有的格。"""
+    b = state.player.codex
+    out = {f"q:{pr.line}" for pr in state.player.storylines.values() if pr.custom is None and definition(content, pr) is not None}
+    out |= {f"p:{cid}" for cid in b.people if cid in content.characters}
+    out |= {f"t:{k}" for k in b.things}
+    gods = {t.id for t in content.traits.god}
+    out |= {f"g:{tid}" for tid in b.gods if tid in gods}
+    qiyu = {lid for lid, line in content.storylines.items() if line.kind == "奇事" and line.start is not None}
+    out |= {f"e:{e.line}:{e.ending}" for e in b.ended if e.line in qiyu}
+    return out
+
+
 def scan(state: GameState, content) -> None:
-    """同步、做完一件事、換季前都叫：讀新的江湖紀錄、線的進度、身上的東西。第一次（剛打開開關）照存檔補，不亮紅點。"""
+    """同步、做完一件事、換季前都叫：讀新的江湖紀錄、線的進度、身上的東西。第一次（剛打開開關）照存檔補，不亮紅點。
+    最後把畫不出來的紅點拿掉（上一季的線、程式組的線、不在表上的東西）：亮著卻沒有一格點得到，就永遠滅不掉。"""
     quiet = state.player.codex is None
     scan_journal(state, content, quiet)
     scan_lines(state, content, quiet)
     scan_owned(state, content, quiet)
+    b = state.player.codex
+    ok = drawable(state, content)
+    b.fresh = [k for k in b.fresh if k in ok]
 
 
 def carry(old: GameState | None, new: GameState, content) -> None:
