@@ -89,6 +89,7 @@ from ..features import zongmen  # 門派
 from ..features import guard  # 親衛隊長
 from ..features import horses  # 馬的來路
 from ..features import intro  # 開局前導
+from ..features import codex  # 江湖錄
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -176,6 +177,7 @@ FEATURES: list[Feature] = [
     guard.FEATURE,
     horses.FEATURE,
     intro.FEATURE,
+    codex.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
