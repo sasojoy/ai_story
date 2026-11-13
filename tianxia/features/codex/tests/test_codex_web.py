@@ -15,7 +15,7 @@ from tianxia.features.codex import view
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 NAMES_START = 'wholeApp(["S", '
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "dotAt", "pagePractice", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "codexWhyHtml", "wkTugHtml", "dotAt", "pagePractice", ')
 
 
 def run(m, script, S=None):
@@ -76,3 +76,73 @@ def test_the_tracker_line_and_its_drawer(walked):
     assert "cx-tk-sheet" in html and html.count('class="cx-tk-go"') == n and "守住長社" in html and 'data-duty="1"' in html
     m["codex"].pop("track")
     assert run(m, "return H.codexTrackHtml(m, []);") == ""
+
+
+def test_things_still_waiting_fold_under_one_line_and_have_no_go(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    active = [t for t in m["codex"]["track"] if not t["wait"]]
+    m["codex"]["track"].append({"key": "1:ch_x", "line": "ch_x", "kind": "主線", "title": "長社火攻", "what": "這一回做完了，等「長社火攻」",
+                                "until": "第 2 週・週三 20:00", "wait": True, "ready": True, "loc": None})
+    parts = [{"key": "plan", "name": "盤算", "seal": "謀", "n": "", "html": "<section>謀</section>", "line": "波才要圍長社", "now": 0, "i": 0}]
+    html = run(m, f"return H.codexTrackHtml(m, {json.dumps(parts)});", S={"cxTk": True})
+    assert f">{len(active)}</em>" in html  # 在等的不算進印上的數字
+    assert html.count('class="cx-tk-go"') == len(active) and "在等的 2 件" in html and "長社火攻" not in html
+    html = run(m, f"return H.codexTrackHtml(m, {json.dumps(parts)});", S={"cxTk": True, "cxTkWait": True})
+    waits = html.split('class="cx-tk-waits"')[1]
+    assert "長社火攻" in waits and "第 2 週・週三 20:00" in waits and "波才要圍長社" in waits and "cx-tk-go" not in waits
+
+
+def test_the_page_top_keeps_only_the_tracker_line(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    if not m.get("week_card"):
+        pytest.skip("這一局沒有本週卡")
+    key = m["week_card"]["label"] + m["week_card"]["when"]
+    fresh = run(m, "return H.pageJianghu();")
+    assert 'class="cx-track"' in fresh and 'class="card wk-box' in fresh  # 這一週還沒看過：本週卡露一次
+    seen = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
+    assert 'class="cx-track"' in seen and "wk-box" not in seen and "jh-hints" not in seen and "ch-card" not in seen
+    assert ('class="cx-tug"' in seen) == bool(m["week_card"].get("sides"))  # 收起來還有一條細的兩軍態勢
+    assert 'class="cx-tug"' not in fresh  # 本週卡露著就不重複
+    if m["week_card"].get("sides"):
+        sd = m["week_card"]["sides"]
+        assert f"官 {sd['guan']}" in seen and f"{sd['huang']} 黃" in seen  # 兩頭寫數字
+    m["codex"].pop("track")  # 「進行中」關著：照舊
+    old = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
+    assert "cx-track" not in old and "cx-tug" not in old and "wk-box" in old
+
+
+def test_the_sides_tug_is_still_one_tap_away_when_the_week_card_folds(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    if not (m.get("week_card") and m["week_card"].get("sides")):
+        pytest.skip("這一局沒有兩軍態勢")
+    tug = run(m, "return H.wkTugHtml(m, m.week_card);")
+    assert tug
+    sheet = run(m, "return H.codexWhyHtml(m);", S={"cxWhy": True})
+    assert tug in sheet  # 本週卡收起來了，清單最底下那一顆拉起來的那一層最上面就是兩軍態勢
+
+
+def test_scenes_walked_before_the_book_opened_show_their_names(walked):
+    b = walked.state.player.codex
+    b.scenes.clear()  # 當作開關打開之前就走過第一幕
+    q = next(x for x in view.quests(walked)["on"] if x["line"] == "yesanniang")
+    first = q["scenes"][0]
+    assert first["i"] is None and first["title"] == walked.content.events["yesanniang_1"].title and first["lost"] == view.LOST
+    page = json.loads(json.dumps(view.page(walked)))
+    m = server.main_view(walked)
+    html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxOpen": q["key"], "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15})
+    assert "cx-act lost" in html and view.LOST in html and first["title"] in html
+    assert html.count("？？") == 1  # 只有還沒到的那一幕是剪影
+
+
+def test_quest_rows_are_not_listed_twice(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    m["week_card"] = None
+    m["options"] = list(m["options"]) + [{"id": "story:yesanniang", "label": "渡口帳（未了之事：到北邙山）", "enabled": False, "note": ""}]
+    on = run(m, "return H.pageJianghu();")
+    m["codex"].pop("track")
+    off = run(m, "return H.pageJianghu();")
+    assert "quest-row" not in on and "quest-row" in off

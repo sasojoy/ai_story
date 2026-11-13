@@ -576,7 +576,7 @@
   function wkBoxHtml(m, w, open) {
     const bp = bpOn(m);
     const notes = [m.sides_card && m.sides_card.joined ? "" : w.gap, w.unlock, w.cap].filter(Boolean);
-    const ch = chapterCardHtml(m, true), join = ch ? "" : factionJoinHtml(m);
+    const ch = typeof codexSlim === "function" && codexSlim(m) && typeof revampOn === "function" && revampOn(m) ? "" : chapterCardHtml(m, true), join = ch ? "" : factionJoinHtml(m); // 「進行中」開著：章回是清單裡的一件
     const free = m.sides_card && !m.sides_card.joined;
     return `<section id="week" class="card wk-box" aria-label="${esc(w.label)}${esc(w.when)}">`
       + `<div class="wk-top"><p class="wk-head"><b class="wk-seg">${esc(w.when)}</b><span class="wk-th">${esc(w.theme || "")}</span></p>`
@@ -981,11 +981,13 @@
     // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
     // 合併的本週卡（2026-11-07）裡已經有章回與投靠鈕：卡在的時候不另畫章回卡與三方卡；收起來（×）只剩章回卡、三方卡照舊
     const box = !letterCard && m.week_card && shown("quest") && !wkHidden(m, "strip");
+    // 「進行中」開著（web/codex.js codexSlim）：狀態列底下只留那一行，提示與章回收進「事」的清單，本週卡只在有事時露（codexWeekShow）
+    const slim = !m.on_road && !myTurn && !masterTalks && typeof revampOn === "function" && revampOn(m) && typeof codexSlim === "function" && codexSlim(m);
     const sidesFirst = box || (m.on_road && m.week_card && shown("quest") && !wkHidden(m, "strip")) ? "" : sidesFirstHtml(m);
     // 跳出來的小窗同一刻只一張：先改版資訊（有新版時一次），看完才是每天第一次登入的簽到（checkin.js）
     const patchPop = typeof patchPopHtml === "function" ? patchPopHtml(m) : "";
     const ckPop = patchPop || (typeof ckPopHtml === "function" && !pro() ? ckPopHtml(m) : "");
-    const peek = ckPop + (letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top")));
+    const peek = ckPop + (letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirst + (letterCard ? letterCard + pushAsk : slim && !codexWeekShow(m) ? "" : weekCardHtml(m, "top")));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
@@ -1008,7 +1010,7 @@
     const guideUp = pro() ? guide : "", guideDown = pro() ? "" : guide;
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    const hints = jhHintsHtml(m);
+    const hints = slim ? "" : jhHintsHtml(m);
     if (m.on_road) return `${ckPop}${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirst}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
@@ -1084,7 +1086,8 @@
   // 此地可為：圓章一排（照伺服器的順序，發光的、按得下去的排前面），「全部 N ›」打開整串（S.hereAll）
   function hereRowHtml(m, extras) {
     const all = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
-    const quests = typeof questRowsHtml === "function" ? questRowsHtml(all) : ""; // 未了之事一件一行（web/story.js）
+    // 未了之事一件一行（web/story.js）；「進行中」開著時它們都在「事」的清單裡（做得了的那一顆「去」就是這一顆），這裡不再列一次
+    const quests = typeof questRowsHtml === "function" && !(typeof codexSlim === "function" && codexSlim(m)) ? questRowsHtml(all) : "";
     const list = all.filter((o) => !STORY.test(o.id));
     if (!list.length) return quests ? `<section class="here-row"><div class="quest-rows">${quests}</div></section>` : "";
     const glow = guideGlow();
