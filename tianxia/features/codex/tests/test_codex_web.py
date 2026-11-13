@@ -15,7 +15,7 @@ from tianxia.features.codex import view
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 NAMES_START = 'wholeApp(["S", '
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "dotAt", "pagePractice", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "dotAt", "pagePractice", ')
 
 
 def run(m, script, S=None):
@@ -62,3 +62,17 @@ def test_the_codex_book_four_kinds(walked):
     for cat, word in (("people", "位見過"), ("things", "寶物"), ("gods", "種神品"), ("ends", "種收法")):
         html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
         assert word in html and 'data-act="cx-cat"' in html, cat
+
+
+def test_the_tracker_line_and_its_drawer(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    assert m["codex"]["track"]
+    parts = [{"key": "orders", "name": "軍令", "seal": "令", "n": 1, "html": "<section>令</section>", "line": "守住長社", "now": 1, "i": 0}]
+    html = run(m, "return H.codexTrackHtml(m, parts);".replace("parts", json.dumps(parts)))
+    n = len(m["codex"]["track"]) + 1  # 奇事、主線＋那一道軍令
+    assert 'class="cx-track"' in html and f">{n}</em>" in html and "class=\"new\"" in html and "cx-tk-sheet" not in html
+    html = run(m, "return H.codexTrackHtml(m, parts);".replace("parts", json.dumps(parts)), S={"cxTk": True})
+    assert "cx-tk-sheet" in html and html.count('class="cx-tk-go"') == n and "守住長社" in html and 'data-duty="1"' in html
+    m["codex"].pop("track")
+    assert run(m, "return H.codexTrackHtml(m, []);") == ""

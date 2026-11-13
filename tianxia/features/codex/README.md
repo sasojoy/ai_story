@@ -4,6 +4,7 @@
 - 導覽：`docs/guide/大勢人物與賽季.md` 的「江湖錄」那一節
 - 設計稿：https://claude.ai/artifact/NjCLieeD5AgvWhpL5y3zL2（v1；Joy 2026-11-13「做」，三個決定照建議：跟帳號走、剪影＋地名、收滿給頭銜〔頭銜那一條還沒做，要跟稱號包接〕）
 - 開關：`Config.codex.enabled`（預設關，`tianxia/core/tuning/codex.py`）；路由 `/api/codex`、`/api/codex/scene`、`/api/codex/seen` 關著 404。
+- **江湖頁「進行中」**（設計稿 v2，Joy 2026-11-13 選甲）：`Config.codex.tracker`（預設關，要 `enabled` 也開著）。狀態列底下一行露正在追的那一件，右邊一顆「事」印記寫幾件，點了從底下拉起全部，每件一顆「去」（此地按得下去就去做、不然去輿圖那一處；要事那幾格打開原本的要事清單；同伴有事去俠客頁同伴）。奇事、主線照狀態列 `codex.track`（`view.track`），軍令、懸賞、盤算、本週、玉璽照 main.js 收成「要事」的那幾格（有它就不另畫要事那一張），同伴照 `main.guard`。追哪一件、看過哪幾件記在瀏覽器（`tianxia.cxTrack`）。此地可為上面那幾行未了之事照留（那是此刻按得下去的鈕）。
 
 | 檔 | 是什麼 |
 |---|---|
@@ -11,7 +12,7 @@
 | `rules.py` | 純規則：從江湖紀錄的標題（「事件・選項」「事件・隨口應對」）認出是哪一條線哪一段選了第幾個（`scan_journal`）、線新開與收了（`scan_lines`）、見過的人、拿過的東西、神品（`scan_owned`）；重讀照內容檔重組全文（`scene_text`，記號用那一下存的那一份） |
 | `view.py` | 畫面資料：奇遇（`quests`）、一幕（`scene`）、結局全文（`ending_text`）、圖鑑四類、紅點（`status`、`seen`） |
 | `routes.py` | `GET /api/codex`、`GET /api/codex/scene?i=` 或 `?line=&end=`、`POST /api/codex/seen {keys}` |
-| `web/codex.js`、`web/codex.css` | 畫面（俠客頁的分頁由 `web/cultivation.js` 照 `S.main.codex` 加在最後） |
+| `web/codex.js`、`web/codex.css` | 畫面（俠客頁的分頁由 `web/cultivation.js` 照 `S.main.codex` 加在最後；江湖頁的「進行中」由 `web/main.js` 介面重整那一支叫 `codexTrackHtml(m, parts)`） |
 | `tests/` | `test_codex.py`（引擎）、`test_codex_web.py`（網頁）、`test_codex_smoke.py` |
 
 **認領的欄位**：`PlayerState.codex`（`CodexBook`：scenes、ended、people、things、gods、upto、upto_keys、fresh）。存的是序號與 id，全文從內容檔重組；隨口應對存那一下的全文（模型寫的，重組不回來）。

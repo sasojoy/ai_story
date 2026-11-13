@@ -8,3 +8,4 @@ class CodexTuning(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    tracker: bool = False  # 江湖頁狀態列下一行的「進行中」（Joy 2026-11-13 設計稿 v2 選甲）：要 enabled 也開著

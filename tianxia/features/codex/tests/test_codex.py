@@ -130,3 +130,15 @@ def test_the_switch_off_keeps_the_save_quiet():
     game.sync(game.now)
     assert game.state.player.codex is None
     assert "codex" not in game.state.player.model_dump()
+
+
+def test_the_tracker_lists_open_lines_only_with_its_switch():
+    game = _game()
+    _start(game)
+    game.choose("choice:0")
+    assert "track" not in view.status(game)
+    game.content.config.codex.tracker = True
+    rows = view.status(game)["track"]
+    row = next(x for x in rows if x["line"] == L)
+    assert row["kind"] == "奇事" and row["title"] == game.content.storylines[L].title and row["what"]
+    assert row["key"] == f"{game.state.player.season_number}:{L}"

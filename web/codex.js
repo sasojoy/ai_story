@@ -183,6 +183,78 @@
     if (typeof heroStay === "function") heroStay(go); else go();
   }
 
+
+  // ── 江湖頁「進行中」（Joy 2026-11-13 設計稿 v2 選甲；Config.codex.tracker）──
+  // 狀態列底下一行：平常只露正在追的那一件（自己挑的，沒挑就排最前面那一件），右邊一顆印記寫幾件，點了從底下拉起全部，每件一顆「去」。
+  // 奇事、主線照伺服器的 codex.track；軍令、懸賞、盤算、本週、玉璽照 main.js 收成「要事」的那幾格（parts）；同伴有事等你照 main.guard。
+  // 追哪一件、看過哪幾件記在這個瀏覽器（tianxia.cxTrack）：只是方便，讀不到照樣畫
+  const TK_HEAD = "進行中"; // 待 joy 潤
+  const TK_SEAL = "事"; // 待 joy 潤
+  const TK_GO = "去"; // 待 joy 潤
+  const TK_PIN = "追這一件"; // 待 joy 潤
+  const TK_PINNED = "正在追"; // 待 joy 潤
+  const TK_MATE = "同伴"; // 待 joy 潤
+  const TK_MATE_LINE = "{name}有事等你"; // 待 joy 潤
+  const TK_CLOSE = "關閉";
+  const TK_STORE = "tianxia.cxTrack";
+  function tkMemo() {
+    if (!S.cxTkMemo) {
+      try { S.cxTkMemo = JSON.parse(localStorage.getItem(TK_STORE) || "null"); } catch (e) { S.cxTkMemo = null; }
+      S.cxTkMemo = S.cxTkMemo && typeof S.cxTkMemo === "object" ? S.cxTkMemo : {};
+      S.cxTkMemo.seen = Array.isArray(S.cxTkMemo.seen) ? S.cxTkMemo.seen : [];
+    }
+    return S.cxTkMemo;
+  }
+  function tkSave() { try { localStorage.setItem(TK_STORE, JSON.stringify(tkMemo())); } catch (e) { /* 私密視窗：這一次記著就好 */ } }
+  // 這一件此刻按得下去嗎（此地可為裡有那一顆）：按了就去做；不然去輿圖那一處；都沒有就打開它在哪一頁
+  function tkStoryGo(m, t) {
+    const id = `story:${t.line}`;
+    const opt = [...(m.options || []), ...(S.hereExtras || [])].find((o) => o.id === id && o.enabled);
+    return opt ? { id } : t.loc ? { loc: t.loc } : { hero: "codex", open: t.key };
+  }
+  function tkItems(m, parts) {
+    const c = (m && m.codex) || {};
+    if (!Array.isArray(c.track)) return null;
+    const items = c.track.map((t) => {
+      const go = tkStoryGo(m, t);
+      return { key: `q:${t.line}`, seal: t.kind, title: t.title, sub: [t.what, t.ready ? "" : t.when, t.left].filter(Boolean).join("・"), go, now: go.id ? 2 : t.ready ? 1 : 0 };
+    });
+    for (const p of parts || []) {
+      if (p.html) items.push({ key: `d:${p.key}`, seal: p.name, title: p.line || p.name, sub: "", go: { duty: 1 }, now: p.now ? 1 : 0 });
+    }
+    const g = m.guard;
+    if (g && ((g.event && !g.event.shown) || (g.schools && g.schools.length))) {
+      items.push({ key: "g", seal: TK_MATE, title: TK_MATE_LINE.replace("{name}", g.name || ""), sub: "", go: { hero: "mates" }, now: 1 });
+    }
+    return items.map((x, i) => ({ ...x, i })).sort((a, b) => (b.now - a.now) || (a.i - b.i));
+  }
+  const tkGoAttrs = (it) => `data-act="cx-tk-go"${it.go.id ? ` data-id="${esc(it.go.id)}"` : ""}${it.go.loc ? ` data-loc="${esc(it.go.loc)}"` : ""}`
+    + `${it.go.duty ? ' data-duty="1"' : ""}${it.go.hero ? ` data-hero="${esc(it.go.hero)}"` : ""}${it.go.open ? ` data-open="${esc(it.go.open)}"` : ""}`;
+  // 印記右上角的數字：有沒看過的那一件（拉開過就算看過）是朱紅的，都看過是墨色
+  // main.js 的江湖頁叫（介面重整那一支）：開關關著、沒有進行中的事回空字串，main.js 照舊畫「要事」那一張
+  function codexTrackHtml(m, parts) {
+    const items = tkItems(m, parts);
+    if (!items || !items.length) return "";
+    const memo = tkMemo();
+    const top = items.find((x) => x.key === memo.pin) || items[0];
+    const fresh = items.some((x) => !memo.seen.includes(x.key));
+    const line = `<section class="cx-track" aria-label="${TK_HEAD}"><button class="cx-tk-main" ${tkGoAttrs(top)}><span class="cx-tk-tag">${esc(top.seal)}</span>`
+      + `<span class="cx-tk-t"><b>${esc(top.title)}</b>${top.sub ? `<small>${esc(top.sub)}</small>` : ""}</span></button>`
+      + `<button class="cx-tk-all" data-act="cx-tk" aria-expanded="${!!S.cxTk}" aria-label="${TK_HEAD} ${items.length} 件">${TK_SEAL}<em${fresh ? ' class="new"' : ""}>${items.length}</em></button></section>`;
+    if (!S.cxTk) return line;
+    const rows = items.map((it) => `<div class="cx-tk-row"><button class="cx-tk-pin${it.key === top.key ? " on" : ""}" data-act="cx-tk-pin" data-key="${esc(it.key)}" aria-pressed="${it.key === top.key}" aria-label="${it.key === top.key ? TK_PINNED : TK_PIN}" title="${it.key === top.key ? TK_PINNED : TK_PIN}">◆</button>`
+      + `<span class="cx-tk-tag">${esc(it.seal)}</span><span class="cx-tk-t"><b>${esc(it.title)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</span>`
+      + `<button class="cx-tk-go" ${tkGoAttrs(it)}>${TK_GO}</button></div>`).join("");
+    return `${line}<div class="sheet-bg" data-act="cx-tk"></div><div class="sheet cx-tk-sheet" role="dialog" aria-label="${TK_HEAD}"><div class="grip"></div>`
+      + `<div class="top-row"><h3 style="flex:1">${TK_HEAD}</h3><button class="btn small ghost" data-act="cx-tk">${TK_CLOSE}</button></div>${rows}</div>`;
+  }
+  function tkSeeAll() {
+    const items = tkItems(S.main, null) || [];
+    const memo = tkMemo();
+    memo.seen = [...new Set([...memo.seen, ...items.map((x) => x.key), ...["orders", "bounty", "plan", "week", "seal"].map((k) => `d:${k}`)])].slice(-80);
+    tkSave();
+  }
+
   async function codexClick(act, el, ev) {
     switch (act) {
         case "cx-seg": cxDraw(() => { S.cxSeg = el.dataset.seg; S.cxOpen = null; S.cxRead = null; }); break;
@@ -208,6 +280,18 @@
           break;
         }
         case "cx-map": mapGoto(el.dataset.loc); goTab("map"); break;
+        case "cx-tk": S.cxTk = !S.cxTk; if (S.cxTk) tkSeeAll(); renderPage(); break;
+        case "cx-tk-pin": { const memo = tkMemo(); memo.pin = memo.pin === el.dataset.key ? null : el.dataset.key; tkSave(); renderPage(); break; }
+        case "cx-tk-go": {
+          const d = el.dataset;
+          S.cxTk = false;
+          if (d.id) await choose(el, d.id);
+          else if (d.loc) { mapGoto(d.loc); await goTab("map"); }
+          else if (d.duty) { S.dutyOpen = true; renderPage(); }
+          else if (d.hero) { S.heroTab = d.hero; if (d.open) { S.cxSeg = "qy"; S.cxOpen = d.open; S.cxRead = null; } await goTab("practice"); }
+          else renderPage();
+          break;
+        }
     } // codexClick
   } // codexClick
-  registerClicks(codexClick, ["cx-seg", "cx-cat", "cx-grp", "cx-open", "cx-back", "cx-read", "cx-end", "cx-map"]);
+  registerClicks(codexClick, ["cx-seg", "cx-cat", "cx-grp", "cx-open", "cx-back", "cx-read", "cx-end", "cx-map", "cx-tk", "cx-tk-pin", "cx-tk-go"]);

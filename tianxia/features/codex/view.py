@@ -282,13 +282,33 @@ def page(ctx) -> dict:
     return {"quests": quests(ctx), "people": people(ctx), "things": things(ctx), "gods": gods(ctx), "endings": endings(ctx)}
 
 
+def track(ctx) -> list[dict]:
+    """江湖頁「進行中」那一行與抽屜裡的奇事、主線（Config.codex.tracker）：這一季還沒收的線，下一步、去哪、還剩幾天。
+    做得了的排前面，再來是有期限的（越近越前），其餘照開線的先後。軍令、懸賞、同伴的事由網頁照 S.main 那幾格併進來。"""
+    s, c = ctx.state, ctx.content
+    out = []
+    for n, progress in enumerate(s.player.storylines.values()):
+        line = definition(c, progress)
+        if line is None or progress.custom is not None or progress.ending is not None:
+            continue
+        nx = _next(ctx, progress)
+        if nx is None:
+            continue
+        due = progress.due - s.world.time if progress.due is not None else math.inf
+        out.append(({"key": f"{s.player.season_number}:{line.id}", "line": line.id, "kind": KIND_MAIN if line.kind == "章回" else KIND_QIYU, "title": line.title, **nx}, (not nx["ready"], due, n)))
+    return [row for row, _ in sorted(out, key=lambda x: x[1])]
+
+
 def status(ctx) -> dict:
-    """狀態列那一格：只帶紅點（哪幾段有新的），整本另外拿（GET /api/codex）。"""
+    """狀態列那一格：紅點（哪幾段有新的）；整本另外拿（GET /api/codex）。「進行中」開著時多帶 track。"""
     b = rules.book(ctx.state)
     fresh = list(b.fresh) if b is not None else []
-    return {"fresh": fresh, "q": any(k.startswith("q:") for k in fresh),
-            "p": any(k.startswith("p:") for k in fresh), "t": any(k.startswith("t:") for k in fresh),
-            "g": any(k.startswith("g:") for k in fresh), "e": any(k.startswith("e:") for k in fresh)}
+    out = {"fresh": fresh, "q": any(k.startswith("q:") for k in fresh),
+           "p": any(k.startswith("p:") for k in fresh), "t": any(k.startswith("t:") for k in fresh),
+           "g": any(k.startswith("g:") for k in fresh), "e": any(k.startswith("e:") for k in fresh)}
+    if ctx.content.config.codex.tracker:
+        out["track"] = track(ctx)
+    return out
 
 
 def seen(ctx, keys: list[str]) -> list[str]:
