@@ -1535,9 +1535,11 @@
         S.wheelSel = null; // 收起展開的移動
         S.sortieAnswer = null; // 出陣約戰應戰那張卡也收起
         S.hereAll = false; S.dutyOpen = false; S.fig = null; // 介面重整：從「全部」、要事清單、點人物那一層按下去的，做成了就收起那一層（被擋下來時留著）
+        const tabWas = S.tab, yWas = window.scrollY || 0; // 不在江湖頁按的選項（俠客頁同伴的每日選擇、教他、門下……）：重畫完留在原地，不跳回頂（Joy 2026-11-13）
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
-        if (!S.main.story_now) window.scrollTo({ top: 0, behavior: "smooth" }); // 一條線的事件剛選完：story.js 把攤開的後續捲到眼前，這裡不捲回頂
+        if (tabWas !== "jianghu" && S.tab === tabWas) window.scrollTo(0, yWas);
+        else if (!S.main.story_now) window.scrollTo({ top: 0, behavior: "smooth" }); // 一條線的事件剛選完：story.js 把攤開的後續捲到眼前，這裡不捲回頂
         // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
         // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
         const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -1567,8 +1569,10 @@
       try {
         const r = await api("/api/answer", { text });
         S.answering = false;
+        const tabWas = S.tab, yWas = window.scrollY || 0; // 同 choose：不在江湖頁就留在原地
         applyMain(r.main);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        if (tabWas !== "jianghu" && S.tab === tabWas) window.scrollTo(0, yWas);
+        else window.scrollTo({ top: 0, behavior: "smooth" });
       } finally {
         stop();
         form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
