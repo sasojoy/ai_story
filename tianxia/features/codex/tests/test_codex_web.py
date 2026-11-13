@@ -105,6 +105,9 @@ def test_the_page_top_keeps_only_the_tracker_line(walked):
     assert 'class="cx-track"' in seen and "wk-box" not in seen and "jh-hints" not in seen and "ch-card" not in seen
     assert ('class="cx-tug"' in seen) == bool(m["week_card"].get("sides"))  # 收起來還有一條細的兩軍態勢
     assert 'class="cx-tug"' not in fresh  # 本週卡露著就不重複
+    if m["week_card"].get("sides"):
+        sd = m["week_card"]["sides"]
+        assert f"官 {sd['guan']}" in seen and f"{sd['huang']} 黃" in seen  # 兩頭寫數字
     m["codex"].pop("track")  # 「進行中」關著：照舊
     old = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
     assert "cx-track" not in old and "cx-tug" not in old and "wk-box" in old

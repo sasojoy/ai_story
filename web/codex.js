@@ -286,7 +286,7 @@
       + `${codexSlim(m) && m.week_card ? `<p class="cx-tk-more"><button class="linkish" data-act="cx-tk-why">${TK_WHY}</button></p>` : ""}</div>`;
   }
   // 本週卡收起來的時候，「進行中」上面留一條細的兩軍態勢（Joy 2026-11-13「我還是想在首頁讓大家直觀地知道當前態勢 但是不想要像之前那樣佔那麼多版面」）：
-  // 一行、不寫數字，兩色一條加一句誰佔上風；點了拉起「這一季在打什麼」那一層（最上面是完整的拔河條）。本週卡露著、決戰面板開著時不畫（各自已有）
+  // 一行，兩頭寫兩軍的數字（Joy 11/13「兩軍相持加數字」），兩色一條加一句誰佔上風；點了拉起「這一季在打什麼」那一層（最上面是完整的拔河條）。本週卡露著、決戰面板開著時不畫（各自已有）
   const TK_TUG = "兩軍態勢"; // 待 joy 潤
   function tkTugHtml(m) {
     const w = m && m.week_card, s = w && w.sides;
@@ -298,7 +298,7 @@
     const side = Math.abs(d) < 10 ? "even" : d > 0 ? "guan" : "huang";
     const says = side === "even" ? "兩軍相持" : `${name(side)}${Math.abs(d) >= 30 ? "大佔上風" : "佔上風"}`; // 待 joy 潤（同本週卡那一句）
     return `<button class="cx-tug" data-act="cx-tk-why" aria-label="${TK_TUG}：${says}">`
-      + `<span class="cx-tug-end side-guan" aria-hidden="true">${esc(name("guan").slice(0, 1))}</span><span class="cx-tug-bar" aria-hidden="true"><i style="width:${at}%"></i><u style="left:${at}%"></u></span><span class="cx-tug-end side-huang" aria-hidden="true">${esc(name("huang").slice(0, 1))}</span>`
+      + `<span class="cx-tug-end side-guan" aria-hidden="true">${esc(name("guan").slice(0, 1))} ${g}</span><span class="cx-tug-bar" aria-hidden="true"><i style="width:${at}%"></i><u style="left:${at}%"></u></span><span class="cx-tug-end side-huang" aria-hidden="true">${h} ${esc(name("huang").slice(0, 1))}</span>`
       + `<b class="side-${side}">${says}</b><span class="cx-tug-go" aria-hidden="true">›</span></button>`;
   }
   // 江湖頁上面那一區瘦身（Joy 2026-11-13「上面這區還是很臃腫 而且是有必要一直一直出現在這裡嗎」；PM 的方向）：「進行中」開著、
