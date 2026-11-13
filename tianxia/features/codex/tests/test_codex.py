@@ -81,9 +81,19 @@ def test_a_story_walked_to_the_end_shows_the_ending_and_where_she_stays():
     assert not view.status(game)["q"] and not view.status(game)["e"]
 
 
-def test_the_first_look_fills_from_the_save_without_red_dots():
-    game = ready(jianfa_game(), side="guan", loc=FORD)
+def _off_game():
+    """開關關著的局（season21 2026-11-13 起打開：這裡自己關）。"""
+    content = jianfa_game()
+    game = ready(content, side="guan", loc=FORD)
+    game.content.config.codex.enabled = False
+    game.content.config.codex.tracker = False
+    game.state.player.codex = None
     game.sync(game.now)
+    return game
+
+
+def test_the_first_look_fills_from_the_save_without_red_dots():
+    game = _off_game()
     p = game.state.player
     p.storylines[L] = StoryProgress(line=L, ending="chuan", ended_at=game.state.world.time)
     p.affinities["caocao"] = 10
@@ -126,14 +136,14 @@ def test_the_book_follows_the_player_into_the_next_season():
 
 
 def test_the_switch_off_keeps_the_save_quiet():
-    game = ready(jianfa_game(), side="guan", loc=FORD)
-    game.sync(game.now)
+    game = _off_game()
     assert game.state.player.codex is None
     assert "codex" not in game.state.player.model_dump()
 
 
 def test_the_tracker_lists_open_lines_only_with_its_switch():
     game = _game()
+    game.content.config.codex.tracker = False
     _start(game)
     game.choose("choice:0")
     assert "track" not in view.status(game)
