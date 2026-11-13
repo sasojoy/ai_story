@@ -3000,7 +3000,7 @@ class ChuangongTuning(_Strict):
 class FightPractice(_Strict):
     """武學打了才升（Joy 2026-11-09「甲方案」「369成不卡手動用心得解 可以一路到10成」「悟性不加熟練」；設計稿 https://claude.ai/artifact/8H3CEY6TQCYy7jLQ4sW5t6）：
     身上的內功、武學每打一場（core/combat.file_battle 歸檔的那一場）各長熟練，第 N 成升 N+1 成要 N × per_level；
-    也可以照舊在修練頁按練成，花「這一成還差的熟練 × xinde_per_point」點心得直接升（雲篆照打折），一路到第十成都行，沒有瓶頸。
+    成數只靠戰鬥，心得練不了（Joy 2026-11-13；team.xinde_practice_off）；只有序章照舊花「這一成還差的熟練 × xinde_per_point」點心得。
     一場給 win／draw／lose，再乘對手強弱：難度比（對手難度 ÷ 我方威力）低於 weak_ratio 不給、到 hard_ratio 以上 ×hard_scale；
     kind 在 double_kinds 的（頭目、擂台、截殺、切磋……）再 ×double_scale。每門每個遊戲日最多長 daily_cap。
     開關照開季蓋章（WorldState.fight_practice），正在跑的季一個字不變。數字全是【草】。"""
