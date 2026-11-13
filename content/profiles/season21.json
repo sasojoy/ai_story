@@ -16,5 +16,6 @@
  "mail": {"enabled": true},
  "titles": {"enabled": true},
  "terms": {"enabled": true},
+ "codex": {"enabled": true, "tracker": true},
  "economy": {"donate": false, "upgrade_batch": true, "leftover_silver": {"1": 2, "2": 6, "3": 18, "4": 54}, "leftover_cap": 300},
  "intro": {"enabled": true}}
