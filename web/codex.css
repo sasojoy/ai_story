@@ -154,3 +154,13 @@
 .cx-tk-pin { flex: none; width: 32px; min-height: 44px; border: 0; background: transparent; color: var(--line); font-size: 14px; }
 .cx-tk-pin.on { color: var(--gold, var(--accent)); }
 .cx-tk-go { flex: none; min-width: 48px; min-height: 44px; border: 1px solid var(--accent); border-radius: 10px; background: transparent; color: var(--accent); font: 700 16px var(--kai); }
+.cx-tk-more { margin: 10px 0 0; text-align: center; }
+.cx-tk-more .linkish { min-height: 44px; font: 700 15px var(--kai); letter-spacing: .08em; }
+.cx-tk-main.idle { border-left-color: var(--line); }
+.cx-tk-main.idle .cx-tk-tag { border-color: var(--ink-2); color: var(--ink-2); }
+.cx-tk-waits { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; margin-top: 6px; padding: 0 4px; border: 0; border-top: 1px solid var(--line);
+  background: transparent; color: var(--ink-2); font: 700 14px var(--kai); letter-spacing: .08em; }
+.cx-tk-row.wait { padding-left: 40px; opacity: .78; }
+.cx-tk-row.wait .cx-tk-tag { border-color: var(--ink-2); color: var(--ink-2); }
+.cx-tk-none { margin: 8px 0; color: var(--ink-2); font: 400 14px/1.6 var(--kai); }
+.cx-act.lost .x small { color: var(--ink-2); }

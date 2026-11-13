@@ -102,8 +102,11 @@
     const stay = q.stay ? `<div class="cx-stay">${q.stay.face ? `<span class="por">${cxImg(q.stay.face)}</span>` : ""}<div><b>${esc(q.stay.name)}</b>`
       + `<p>${esc(q.stay.text)}</p>${q.stay.said ? `<small>${esc(q.stay.said)}</small>` : ""}</div></div>`
       + (q.stay.loc ? `<button class="btn primary" data-act="cx-map" data-loc="${esc(q.stay.loc)}">${esc(CX_GO.replace("{place}", q.stay.place))}</button>` : "") : "";
-    const acts = q.scenes.map((sc, i) => `<button class="cx-act" data-act="cx-read" data-i="${sc.i}"><span class="n">第${"一二三四五六七八九十"[i] || i + 1}幕</span>`
-      + `<span class="x"><b>${esc(sc.title)}</b><small>${CX_YOU}：<q>${esc(sc.pick)}</q></small></span><span class="r">${CX_REREAD} ›</span></button>`).join("");
+    // 江湖錄打開之前走過的那一幕（sc.i 是 null）：幕名＋「當時的選擇沒有留下」，不能重讀
+    const acts = q.scenes.map((sc, i) => (sc.i == null
+      ? `<div class="cx-act lost"><span class="n">第${"一二三四五六七八九十"[i] || i + 1}幕</span><span class="x"><b>${esc(sc.title)}</b><small>${esc(sc.lost || "")}</small></span></div>`
+      : `<button class="cx-act" data-act="cx-read" data-i="${sc.i}"><span class="n">第${"一二三四五六七八九十"[i] || i + 1}幕</span>`
+      + `<span class="x"><b>${esc(sc.title)}</b><small>${CX_YOU}：<q>${esc(sc.pick)}</q></small></span><span class="r">${CX_REREAD} ›</span></button>`)).join("");
     const cur = q.state === "on" ? `<div class="cx-act cur"><span class="n">第${"一二三四五六七八九十"[q.scenes.length] || q.scenes.length + 1}幕</span><span class="x"><b>？？</b><small>${esc(q.next ? q.next.when : "")}</small></span></div>` : "";
     const gotN = q.ends.filter((e) => e.got).length;
     return `<button class="cx-back linkish" data-act="cx-back">${CX_BACK}</button>${art}${now}${stay}`
@@ -197,6 +200,15 @@
   const TK_MATE_LINE = "{name}有事等你"; // 待 joy 潤
   const TK_CLOSE = "關閉";
   const TK_STORE = "tianxia.cxTrack";
+  const TK_PTS = "有 {n} 點屬性可配"; // 待 joy 潤
+  const TK_ATTR = "屬性"; // 待 joy 潤
+  const TK_SHIHAI = "識海"; // 待 joy 潤
+  const TK_SHIHAI_PICK = "上一季的神品意境還沒挑"; // 待 joy 潤
+  const TK_SEALED = "封著「{name}」"; // 待 joy 潤
+  const TK_WAITS = "在等的 {n} 件"; // 待 joy 潤
+  const TK_WAIT_SEAL = "在等"; // 待 joy 潤
+  const TK_NONE = "眼下沒有推得動的事，四處走走。"; // 待 joy 潤
+  const TK_WHY = "這一季在打什麼 ›"; // 待 joy 潤
   function tkMemo() {
     if (!S.cxTkMemo) {
       try { S.cxTkMemo = JSON.parse(localStorage.getItem(TK_STORE) || "null"); } catch (e) { S.cxTkMemo = null; }
@@ -212,46 +224,95 @@
     const opt = [...(m.options || []), ...(S.hereExtras || [])].find((o) => o.id === id && o.enabled);
     return opt ? { id } : t.loc ? { loc: t.loc } : { hero: "codex", open: t.key };
   }
+  // 一件一格：wait 是現在推不動的（章回做完了等大事、多日段還沒到時候、時機未到的要事、識海還差什麼）——收在清單最底下「在等的 N 件」，
+  // 不算進印上的數字、不會被挑成最上面那一行、沒有「去」（Joy 2026-11-13「還不能做的要顯示嗎？」）。「去」一定有地方去
   function tkItems(m, parts) {
     const c = (m && m.codex) || {};
     if (!Array.isArray(c.track)) return null;
     const items = c.track.map((t) => {
+      if (t.wait) return { key: `q:${t.line}`, seal: t.kind, title: t.title, sub: [t.what, t.until].filter(Boolean).join("・"), wait: true };
       const go = tkStoryGo(m, t);
-      return { key: `q:${t.line}`, seal: t.kind, title: t.title, sub: [t.what, t.ready ? "" : t.when, t.left].filter(Boolean).join("・"), go, now: go.id ? 2 : t.ready ? 1 : 0 };
+      return { key: `q:${t.line}`, seal: t.kind, title: t.title, sub: [t.what, t.left].filter(Boolean).join("・"), go, now: go.id ? 2 : 1 };
     });
     for (const p of parts || []) {
-      if (p.html) items.push({ key: `d:${p.key}`, seal: p.name, title: p.line || p.name, sub: "", go: { duty: 1 }, now: p.now ? 1 : 0 });
+      if (p.html) items.push(p.now ? { key: `d:${p.key}`, seal: p.name, title: p.line || p.name, sub: "", go: { duty: 1 }, now: 1 }
+        : { key: `d:${p.key}`, seal: p.name, title: p.line || p.name, sub: "", wait: true });
+    }
+    // 江湖頁頂上那幾條提示（main.js 的 jhHintsHtml：屬性點、識海）：瘦身時收進這裡，一件一行
+    const slim = codexSlim(m);
+    const st = m.status || {}, pts = slim && st.growth ? st.stat_points | 0 : 0;
+    if (pts) items.push({ key: "h:pts", seal: TK_ATTR, title: TK_PTS.replace("{n}", pts), sub: "", go: { hero: "attrs" }, now: 1 });
+    const sh = slim && m.legacy && m.legacy.shihai;
+    if (sh && sh.offers && sh.offers.length) items.push({ key: "h:shihai", seal: TK_SHIHAI, title: TK_SHIHAI_PICK, sub: "", go: { legacy: "shihai" }, now: 1 });
+    else if (sh && sh.sealed) {
+      const left = (sh.need || []).filter((n) => !n.ok).map((n) => n.text), names = (sh.sealed.names || []).length;
+      const ready = !left.length && !sh.held && !names;
+      const why = names ? "要先換個名字" : ready ? "可以解封了" : sh.held && !left.length ? "身上已有一份神品" : `解封還差：${left.join("、")}`; // 待 joy 潤（同 main.js jhHintsHtml）
+      const it = { key: "h:sealed", seal: TK_SHIHAI, title: TK_SEALED.replace("{name}", sh.sealed.name || ""), sub: why };
+      items.push(ready || names ? { ...it, go: { legacy: "shihai" }, now: 1 } : { ...it, wait: true });
     }
     const g = m.guard;
     if (g && ((g.event && !g.event.shown) || (g.schools && g.schools.length))) {
       items.push({ key: "g", seal: TK_MATE, title: TK_MATE_LINE.replace("{name}", g.name || ""), sub: "", go: { hero: "mates" }, now: 1 });
     }
-    return items.map((x, i) => ({ ...x, i })).sort((a, b) => (b.now - a.now) || (a.i - b.i));
+    const all = items.map((x, i) => ({ ...x, i }));
+    return { on: all.filter((x) => !x.wait).sort((a, b) => (b.now - a.now) || (a.i - b.i)), wait: all.filter((x) => x.wait) };
   }
   const tkGoAttrs = (it) => `data-act="cx-tk-go"${it.go.id ? ` data-id="${esc(it.go.id)}"` : ""}${it.go.loc ? ` data-loc="${esc(it.go.loc)}"` : ""}`
-    + `${it.go.duty ? ' data-duty="1"' : ""}${it.go.hero ? ` data-hero="${esc(it.go.hero)}"` : ""}${it.go.open ? ` data-open="${esc(it.go.open)}"` : ""}`;
-  // 印記右上角的數字：有沒看過的那一件（拉開過就算看過）是朱紅的，都看過是墨色
-  // main.js 的江湖頁叫（介面重整那一支）：開關關著、沒有進行中的事回空字串，main.js 照舊畫「要事」那一張
+    + `${it.go.duty ? ' data-duty="1"' : ""}${it.go.hero ? ` data-hero="${esc(it.go.hero)}"` : ""}${it.go.open ? ` data-open="${esc(it.go.open)}"` : ""}`
+    + `${it.go.legacy ? ` data-legacy="${esc(it.go.legacy)}"` : ""}`;
+  const tkText = (it) => `<span class="cx-tk-tag">${esc(it.seal)}</span><span class="cx-tk-t"><b>${esc(it.title)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</span>`;
+  // 印記右上角的數字：現在推得動的幾件；有沒看過的那一件（拉開過就算看過）是朱紅的，都看過是墨色
+  // main.js 的江湖頁叫（介面重整那一支）：開關關著、什麼都沒有回空字串，main.js 照舊畫「要事」那一張
   function codexTrackHtml(m, parts) {
-    const items = tkItems(m, parts);
-    if (!items || !items.length) return "";
+    const got = tkItems(m, parts);
+    if (!got || (!got.on.length && !got.wait.length)) return "";
     const memo = tkMemo();
-    const top = items.find((x) => x.key === memo.pin) || items[0];
-    const fresh = items.some((x) => !memo.seen.includes(x.key));
-    const line = `<section class="cx-track" aria-label="${TK_HEAD}"><button class="cx-tk-main" ${tkGoAttrs(top)}><span class="cx-tk-tag">${esc(top.seal)}</span>`
-      + `<span class="cx-tk-t"><b>${esc(top.title)}</b>${top.sub ? `<small>${esc(top.sub)}</small>` : ""}</span></button>`
-      + `<button class="cx-tk-all" data-act="cx-tk" aria-expanded="${!!S.cxTk}" aria-label="${TK_HEAD} ${items.length} 件">${TK_SEAL}<em${fresh ? ' class="new"' : ""}>${items.length}</em></button></section>`;
-    if (!S.cxTk) return line;
-    const rows = items.map((it) => `<div class="cx-tk-row"><button class="cx-tk-pin${it.key === top.key ? " on" : ""}" data-act="cx-tk-pin" data-key="${esc(it.key)}" aria-pressed="${it.key === top.key}" aria-label="${it.key === top.key ? TK_PINNED : TK_PIN}" title="${it.key === top.key ? TK_PINNED : TK_PIN}">◆</button>`
-      + `<span class="cx-tk-tag">${esc(it.seal)}</span><span class="cx-tk-t"><b>${esc(it.title)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</span>`
-      + `<button class="cx-tk-go" ${tkGoAttrs(it)}>${TK_GO}</button></div>`).join("");
+    const top = got.on.find((x) => x.key === memo.pin) || got.on[0];
+    const fresh = got.on.some((x) => !memo.seen.includes(x.key));
+    const main = top ? `<button class="cx-tk-main" ${tkGoAttrs(top)}>${tkText(top)}</button>`
+      : `<button class="cx-tk-main idle" data-act="cx-tk">${tkText({ ...got.wait[0], seal: TK_WAIT_SEAL })}</button>`; // 都在等：寫最前面那一件在等什麼，點了拉開
+    const line = `<section class="cx-track" aria-label="${TK_HEAD}">${main}`
+      + `<button class="cx-tk-all" data-act="cx-tk" aria-expanded="${!!S.cxTk}" aria-label="${TK_HEAD} ${got.on.length} 件">${TK_SEAL}${got.on.length ? `<em${fresh ? ' class="new"' : ""}>${got.on.length}</em>` : ""}</button></section>`;
+    if (!S.cxTk) return line + codexWhyHtml(m);
+    const rows = got.on.map((it) => `<div class="cx-tk-row"><button class="cx-tk-pin${it.key === top.key ? " on" : ""}" data-act="cx-tk-pin" data-key="${esc(it.key)}" aria-pressed="${it.key === top.key}" aria-label="${it.key === top.key ? TK_PINNED : TK_PIN}" title="${it.key === top.key ? TK_PINNED : TK_PIN}">◆</button>`
+      + `${tkText(it)}<button class="cx-tk-go" ${tkGoAttrs(it)}>${TK_GO}</button></div>`).join("");
+    const waits = got.wait.length ? `<button class="cx-tk-waits" data-act="cx-tk-wait" aria-expanded="${!!S.cxTkWait}">${TK_WAITS.replace("{n}", got.wait.length)}<i aria-hidden="true">${S.cxTkWait ? "▴" : "▾"}</i></button>`
+      + (S.cxTkWait ? got.wait.map((it) => `<div class="cx-tk-row wait">${tkText(it)}</div>`).join("") : "") : "";
     return `${line}<div class="sheet-bg" data-act="cx-tk"></div><div class="sheet cx-tk-sheet" role="dialog" aria-label="${TK_HEAD}"><div class="grip"></div>`
-      + `<div class="top-row"><h3 style="flex:1">${TK_HEAD}</h3><button class="btn small ghost" data-act="cx-tk">${TK_CLOSE}</button></div>${rows}</div>`;
+      + `<div class="top-row"><h3 style="flex:1">${TK_HEAD}</h3><button class="btn small ghost" data-act="cx-tk">${TK_CLOSE}</button></div>`
+      + `${rows || `<p class="cx-tk-none">${TK_NONE}</p>`}${waits}`
+      + `${codexSlim(m) && m.week_card ? `<p class="cx-tk-more"><button class="linkish" data-act="cx-tk-why">${TK_WHY}</button></p>` : ""}</div>`;
+  }
+  // 江湖頁上面那一區瘦身（Joy 2026-11-13「上面這區還是很臃腫 而且是有必要一直一直出現在這裡嗎」；PM 的方向）：「進行中」開著、
+  // 已經投靠了一方（沒投靠的人照舊看三方卡與投靠鈕）時，狀態列底下只留「進行中」那一行——屬性點、識海那幾條提示與章回收進「事」的清單，
+  // 本週卡（第 N 週、主題、兩軍態勢）只在有事時露：換週的那一刻（這一週還沒看過）、這一回的大事在集結或開打；收起（×）或拉開過清單就算看過。
+  // 「這一季在打什麼」是清單最底下一顆，攤開的那一層同本週卡的（main.js whyHtml）。main.js 介面重整那一支問這兩個
+  function codexSlim(m) {
+    return !!(m && m.codex && Array.isArray(m.codex.track)) && (!m.sides_card || !!m.sides_card.joined);
+  }
+  const tkWeekKey = (w) => `${w.label}${w.when}`;
+  function codexWeekShow(m) {
+    const w = m && m.week_card;
+    if (!w) return false;
+    const memo = tkMemo(), key = tkWeekKey(w);
+    if (typeof wkHidden === "function" && wkHidden(m, "strip") && memo.week !== key) { memo.week = key; tkSave(); }
+    return !!(w.chapter && w.chapter.live) || memo.week !== key;
+  }
+  // 「這一季在打什麼」那一層（清單最底下那一顆打開）：內容同本週卡拉起來的那一層
+  const TK_SHEET = "這一季在打什麼"; // 待 joy 潤
+  function codexWhyHtml(m) {
+    if (!S.cxWhy || !m.week_card || typeof whyHtml !== "function") return "";
+    const w = m.week_card;
+    return `<div class="sheet-bg" data-act="cx-why"></div><div class="sheet wk-sheet" role="dialog" aria-label="${TK_SHEET}"><div class="grip"></div>`
+      + `<div class="top-row"><h3 style="flex:1">${TK_SHEET}</h3><button class="btn small ghost" data-act="cx-why">${TK_CLOSE}</button></div>`
+      + `<p class="wk-sheet-th"><b>${esc(w.when)}</b>${esc(w.theme || "")}</p>${whyHtml(m, true)}</div>`;
   }
   function tkSeeAll() {
-    const items = tkItems(S.main, null) || [];
+    const got = tkItems(S.main, null), items = got ? got.on : [];
     const memo = tkMemo();
     memo.seen = [...new Set([...memo.seen, ...items.map((x) => x.key), ...["orders", "bounty", "plan", "week", "seal"].map((k) => `d:${k}`)])].slice(-80);
+    if (S.main && S.main.week_card) memo.week = tkWeekKey(S.main.week_card); // 拉開過清單：這一週的本週卡算看過
     tkSave();
   }
 
@@ -280,6 +341,9 @@
           break;
         }
         case "cx-map": mapGoto(el.dataset.loc); goTab("map"); break;
+        case "cx-why": S.cxWhy = false; renderPage(); break;
+        case "cx-tk-wait": S.cxTkWait = !S.cxTkWait; renderPage(); break;
+        case "cx-tk-why": S.cxTk = false; S.cxWhy = true; renderPage(); break;
         case "cx-tk": S.cxTk = !S.cxTk; if (S.cxTk) tkSeeAll(); renderPage(); break;
         case "cx-tk-pin": { const memo = tkMemo(); memo.pin = memo.pin === el.dataset.key ? null : el.dataset.key; tkSave(); renderPage(); break; }
         case "cx-tk-go": {
@@ -288,10 +352,11 @@
           if (d.id) await choose(el, d.id);
           else if (d.loc) { mapGoto(d.loc); await goTab("map"); }
           else if (d.duty) { S.dutyOpen = true; renderPage(); }
+          else if (d.legacy) { S.legacy = d.legacy; render(); }
           else if (d.hero) { S.heroTab = d.hero; if (d.open) { S.cxSeg = "qy"; S.cxOpen = d.open; S.cxRead = null; } await goTab("practice"); }
           else renderPage();
           break;
         }
     } // codexClick
   } // codexClick
-  registerClicks(codexClick, ["cx-seg", "cx-cat", "cx-grp", "cx-open", "cx-back", "cx-read", "cx-end", "cx-map", "cx-tk", "cx-tk-pin", "cx-tk-go"]);
+  registerClicks(codexClick, ["cx-seg", "cx-cat", "cx-grp", "cx-open", "cx-back", "cx-read", "cx-end", "cx-map", "cx-why", "cx-tk-wait", "cx-tk-why", "cx-tk", "cx-tk-pin", "cx-tk-go"]);
