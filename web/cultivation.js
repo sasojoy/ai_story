@@ -830,13 +830,15 @@
     // 介面重整（2026-11-05，Joy「點了看武學或是裝備，卻不能馬上換…自創武學甚至要滑很下面才能看到」）：序章以外分四頁——
     // 武學（自創、煉製排第一屏，身上兩門，功法庫攤開）、裝備、門下、屬性（以前狀態列點名號攤開的那一大串也在這裡）。記在 S.heroTab
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
-      const heroTabs = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
+      const heroTabs0 = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
+      const heroTabs = S.main && S.main.codex && typeof codexHtml === "function" ? [...heroTabs0, HERO_CODEX] : heroTabs0; // 江湖錄（web/codex.js；開關開著才有）：排最後
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
       const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? `${gdBlock}${rosterBlock}`
         : tab === "sect" ? zmBlock
+        : tab === "codex" ? codexHtml(S.main)
         : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
@@ -861,6 +863,7 @@
   }
 
   const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "同伴"], ["attrs", "屬性"]]; // 待 joy 潤（Joy 2026-11-09：門下跟門派放一起怪，改名）
+  const HERO_CODEX = ["codex", "江湖錄"]; // 待 joy 潤：江湖錄包開著才排在最後（web/codex.js）
   const HERO_SECT = ["sect", "師門"]; // 待 joy 潤：門派包開著、是哪一門的人才插在同伴後面（web/zongmen.js）
   // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
   // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行。
