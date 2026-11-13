@@ -1151,6 +1151,7 @@ STAGE_PACKAGES += ["zongmen"]  # 門派（scripts/new_feature.py 生的 zongmen_
 STAGE_PACKAGES += ["guard"]  # 親衛隊長（scripts/new_feature.py 生的 guard_stage.py）
 STAGE_PACKAGES += ["horses"]  # 馬的來路（scripts/new_feature.py 生的 horses_stage.py）
 STAGE_PACKAGES += ["intro"]  # 開局前導（scripts/new_feature.py 生的 intro_stage.py）
+STAGE_PACKAGES += ["codex"]  # 江湖錄（scripts/new_feature.py 生的 codex_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

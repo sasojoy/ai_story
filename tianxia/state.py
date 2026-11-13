@@ -372,6 +372,46 @@ class GuardEntry(BaseModel):
     qing: int = 0  # 這一筆動了多少情分（畫面不露數字，只拿來上色）
 
 
+class CodexScene(BaseModel):
+    """江湖錄（features/codex）記下的一幕：哪一季、哪一條線、哪一段的哪一則事件、選了第幾個（-1 是隨口應對：lines 是那一下的全文，模型寫的、重組不回來）、
+    成了沒有（檢定、打一場；沒有檢定是 True）、那一下這條線的記號（重讀時照它換段落）、時刻（世界秒）。選的與後來的字照內容檔重組，不存整段。"""
+
+    season: int = 0
+    line: str
+    stage: str = ""
+    event: str
+    choice: int = 0
+    ok: bool = True
+    said: str = ""
+    lines: list[str] = Field(default_factory=list)
+    marks: dict[str, int] = Field(default_factory=dict)
+    time: float = 0
+
+
+class CodexEnd(BaseModel):
+    """江湖錄記下的一個收法：哪一季、哪一條線收在哪一個結局（「未了」也記，失敗的收法也記）、收的時刻。"""
+
+    season: int = 0
+    line: str
+    ending: str
+    time: float = 0
+
+
+class CodexBook(BaseModel):
+    """江湖錄（features/codex；設計稿 https://claude.ai/artifact/NjCLieeD5AgvWhpL5y3zL2，Joy 2026-11-13「做」）：走過的每一幕、收過的結局、
+    見過的人、拿過的東西（「寶:模板」「騎:模板」「毛:毛色」「兵:人物」「材:素材」）、悟出的神品（模板 id → 「名字|地點|季」）。
+    upto、upto_keys 是江湖紀錄讀到哪一則（世界秒；同一秒的那幾則記標題）；fresh 是還沒看過的新東西（紅點）。跟著帳號走、換季照帶（包的 on_season_start）。"""
+
+    scenes: list[CodexScene] = Field(default_factory=list)
+    ended: list[CodexEnd] = Field(default_factory=list)
+    people: list[str] = Field(default_factory=list)
+    things: list[str] = Field(default_factory=list)
+    gods: dict[str, str] = Field(default_factory=dict)
+    upto: float = -1
+    upto_keys: list[str] = Field(default_factory=list)
+    fresh: list[str] = Field(default_factory=list)
+
+
 class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
     10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
@@ -1252,6 +1292,8 @@ class PlayerState(BaseModel):
     legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
     # 親衛隊長（tianxia/features/guard）：遇見、收養、養成的帳。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）
     guard: GuardBook | None = Field(None, json_schema_extra=QUIET)
+    # 江湖錄（tianxia/features/codex）：奇遇紀錄與圖鑑。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
+    codex: CodexBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)
