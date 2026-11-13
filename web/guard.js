@@ -25,8 +25,9 @@
   const GD_LOG = "紀事";
   const GD_LOG_SUB = "{pron}記得的事";
   const GD_LOG_EMPTY = "還沒有。";
-  const GD_ALONG_ON = "出門帶著{pron}";
-  const GD_ALONG_OFF = "出門讓{pron}留下";
+  const GD_ALONG = "出門時";
+  const GD_ALONG_ON = "帶著{pron}";
+  const GD_ALONG_OFF = "留在家";
   const GD_RENAME = "替{pron}改名";
   const GD_RENAME_GO = "就叫這個";
   const GD_RENAME_NOTE = "名字只能改一次。";
@@ -103,7 +104,9 @@
       ? `<div class="gd-log">${g.log.map((e) => `<p class="gd-scrap tone${e.tone}"><small>${esc(e.stamp)}</small>${esc(e.text)}</p>`).join("")}</div>`
       : `<p class="gd-quiet">${GD_LOG_EMPTY}</p>`;
     const logSec = `<section class="gd-sec" aria-label="${GD_LOG}"><div class="gd-sec-hd"><h4>${GD_LOG}</h4><small>${esc(gdFill(GD_LOG_SUB, g))}</small></div>${log}</section>`;
-    const along = g.stage !== "grow" && g.stage !== "sworn" ? "" : `<button class="btn ghost gd-along" data-act="gd-along" data-on="${g.along ? 0 : 1}" aria-pressed="${!!g.along}">${esc(gdFill(g.along ? GD_ALONG_ON : GD_ALONG_OFF, g))}</button>`;
+    // 出門帶不帶他（Joy 2026-11-13「出門帶著他 是指現在就是已經帶著他？點這個鈕又說把它留在家裡」）：一排兩格，亮著的那格是現在的選擇，點另一格才換
+    const alongSeg = (on, text) => `<button class="gd-seg${!!g.along === on ? " on" : ""}" data-act="gd-along" data-on="${on ? 1 : 0}" aria-pressed="${!!g.along === on}"${!!g.along === on ? " disabled" : ""}>${esc(gdFill(text, g))}</button>`;
+    const along = g.stage !== "grow" && g.stage !== "sworn" ? "" : `<div class="gd-along" role="group" aria-label="${GD_ALONG}"><span class="gd-along-hd">${GD_ALONG}</span>${alongSeg(true, GD_ALONG_ON)}${alongSeg(false, GD_ALONG_OFF)}</div>`;
     const rename = !g.can_rename ? "" : S.gdRename
       ? `<div class="gd-own"><input class="input" id="gd-name" maxlength="6" value="${esc(g.name)}" aria-label="${esc(gdFill(GD_RENAME, g))}"><button class="btn primary" data-act="gd-rename-go">${GD_RENAME_GO}</button></div><p class="gd-note">${GD_RENAME_NOTE}</p>`
       : `<button class="btn ghost" data-act="gd-rename">${esc(gdFill(GD_RENAME, g))}</button>`;
