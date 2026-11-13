@@ -54,6 +54,25 @@ def story_card_view(ctx: Game) -> list[dict]:
     return out
 
 
+def now_status(ctx: Game) -> dict:
+    """「剛剛」那一則（越過配點與江湖大事，同 page_view 的挑法）的標題是「<一條線某一段的事件>・<選項>」：給 story_now。
+    只看這個角色這一季開過的線（自訂的線照存檔那一份），事件段才算。"""
+    p, s = ctx.state.player, ctx.state
+    if not p.storylines or not s.journal:
+        return {}
+    entry = next((e for e in s.journal if e.title not in (journal.ALLOCATE, journal.WORLD_NEWS)), None)
+    if entry is None or "・" not in entry.title:
+        return {}
+    head = entry.title.partition("・")[0]
+    for progress in p.storylines.values():
+        line = storyline.definition(ctx.content, progress)
+        for stage in line.stages if line is not None else ():
+            event = ctx.content.events.get(stage.event or "")
+            if stage.kind == "event" and event is not None and event.title == head:
+                return {"story_now": True}
+    return {}
+
+
 def story_begin(ctx: Game, definition: StoryDef, custom: bool = False) -> list[str]:
     progress = storyline.start(ctx.state, ctx.content, definition, custom=custom)
     if progress is None:
