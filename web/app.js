@@ -1539,7 +1539,7 @@
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
         if (tabWas !== "jianghu" && S.tab === tabWas) window.scrollTo(0, yWas);
-        else window.scrollTo({ top: 0, behavior: "smooth" });
+        else if (!S.main.story_now) window.scrollTo({ top: 0, behavior: "smooth" }); // 一條線的事件剛選完：story.js 把攤開的後續捲到眼前，這裡不捲回頂
         // 決戰選項（加入、趕到、出招）伺服器會回一句 message；大場面等模型判讀的時候選項沒了（人被別的分頁帶走），
         // 那一仗沒打成、不寫江湖紀錄，也只有這一句；一般選項的話在江湖紀錄裡，不回
         const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
