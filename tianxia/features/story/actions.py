@@ -51,6 +51,12 @@ def story_card_view(ctx: Game) -> list[dict]:
             "line": card.line, "kind": card.kind, "sort": line.kind if line is not None else storyline.JOURNAL,
             "title": card.title, "text": card.text, "image": card.image, "ending": card.ending, "failed": card.failed,
         })
+        # 段落卡後面接的是一場要打的（頓悟的心魔）、此刻就打得了：卡上的鈕直接寫那一步、按了就去打，
+        # 不要按掉之後叫玩家自己去找（Joy 2026-11-14「要在事件發生時就讓玩家知道要打心魔，而不是放在一個地方讓玩家去找」）
+        if card.kind == "stage" and progress is not None and progress.ending is None:
+            pair = storyline.current(ctx.content, progress)
+            if pair is not None and pair[1].kind == "fight" and pair[1].hint and storyline.doable(ctx.state, ctx.content, progress):
+                out[-1]["go"] = {"id": f"{storyline.OPTION}:{card.line}", "label": pair[1].hint}
     return out
 
 

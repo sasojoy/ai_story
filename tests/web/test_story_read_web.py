@@ -71,3 +71,21 @@ def test_without_the_flag_the_ending_card_pops_right_away(m):
     out = run(m, "H.storyCard(); return { html: T.els.pop && T.els.pop.innerHTML, now: H.nowBlock(H.S.main) };")
     assert out["html"] and "此事已了・入傳" in out["html"]
     assert "看結局" not in out["now"]
+
+
+def test_a_stage_card_before_a_fight_has_the_step_on_its_button_and_tapping_goes_to_fight(m):
+    """Joy 2026-11-14「要在事件發生時就讓玩家知道要打心魔，而不是放在一個地方讓玩家去找」：段落卡帶 go 而且此地可為有那一顆時，
+    鈕寫那一步、按了先清卡再直接按那一顆；旁邊一顆「先不打」只清卡。那一顆不在（走開了）就照舊「且看下去」。"""
+    card = {"line": "頓悟1", "kind": "stage", "sort": "頓悟", "title": "特殊頓悟", "text": "<p>你在心裡看見了一個人。</p>", "src": None,
+            "ending": "", "failed": False, "go": {"id": "story:頓悟1", "label": "去面對心魔"}}
+    m.update(story_cards=[card])
+    plain = run(m, "H.storyCard(); return T.els.pop.innerHTML;")
+    assert "且看下去" in plain and "data-go" not in plain
+    m["options"] = [*m["options"], {"id": "story:頓悟1", "label": "特殊頓悟（未了之事：去面對心魔）", "enabled": True}]
+    html = run(m, "H.storyCard(); return T.els.pop.innerHTML;")
+    assert 'data-go="story:頓悟1"' in html and ">去面對心魔</button>" in html and "先不打" in html and "且看下去" not in html
+    click = ("await T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: 'story-ok', last: '1', go: 'story:頓悟1' }, remove() {}, "
+             "classList: { contains: () => false, add() {}, remove() {} }, disabled: false }) } });")
+    out = webharness.run(DRIVER, {"m": m, "script": POP + "return (async () => { H.storyCard(); " + click + " return T.calls.map((c) => [c[0], c[1]]); })();",
+                                  "S": {}, "menxia": None, "stored": {}, "responses": {"/api/do/story_seen": {"main": m}}})
+    assert out[0][0] == "/api/do/story_seen" and any(c[1] and c[1].get("id") == "story:頓悟1" for c in out[1:]), out

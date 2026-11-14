@@ -42,3 +42,5 @@
 
 /* 一條線的事件剛選完、結局卡等著（web/story.js storyNowTail）：「剛剛」整段攤開，最底下一顆「看結局」，讀完後續才跳結局卡（Joy 2026-11-13） */
 .now .now-story-go { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 12px; font-family: var(--serif); letter-spacing: .12em; }
+.story-card .story-later { min-height: 44px; margin-top: .3em; border-color: transparent; background: none; color: var(--ink-2); }
+.story-card.dun .story-later { color: #b9ad97; }
