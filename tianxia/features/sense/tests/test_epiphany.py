@@ -511,3 +511,18 @@ def test_a_bot_runner_without_a_model_falls_back_to_the_word_list():
     _through_demon(game)
     bot_policy._god_name(game, mock.Mock(), bot_policy.NamingSlot(open=False, model=False))
     assert game.state.player.god_naming.asked and len(game.state.player.god_naming.candidates) == 3
+
+
+def test_the_demon_card_carries_the_fight_so_the_page_can_go_straight_to_it():
+    """Joy 2026-11-14：「朝你走過來」那張卡帶著下一步（去面對心魔、按哪一顆），網頁的鈕直接去打。"""
+    game = _game()
+    s = game.state
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(game.content, s.world)
+    game._story_tick()
+    cards = game.story_card_view()
+    stage = next(c for c in cards if c["kind"] == "stage")
+    assert stage["go"] == {"id": f"{storyline.OPTION}:{line}", "label": epiphany.DEMON_HINT}
+    assert all("go" not in c for c in cards if c["kind"] != "stage")
