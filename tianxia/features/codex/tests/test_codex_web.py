@@ -146,3 +146,25 @@ def test_quest_rows_are_not_listed_twice(walked):
     m["codex"].pop("track")
     off = run(m, "return H.pageJianghu();")
     assert "quest-row" not in on and "quest-row" in off
+
+
+def test_opening_a_things_group_clears_only_that_group_and_redraws_the_cells(walked):
+    """Joy 2026-11-14「素材的紅點怎麼消掉」：攤開器物只滅眼前那一組的格，滅完整本重拿（格上的點跟外層一起滅），別組的點留著。"""
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    here, other = page["things"]["groups"][-1], page["things"]["groups"][0]
+    here["cells"][0].update(got=True, dot=True, name="柳絲綿")
+    other["cells"][0].update(got=True, dot=True, name="別的")
+    k_here, k_other = f"t:{here['cells'][0]['key']}", f"t:{other['cells'][0]['key']}"
+    m["codex"].update(fresh=[k_here, k_other], t=True)
+    S = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxCat": "things", "cxThing": here["id"],
+         "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15, "main": m}
+    after = json.loads(json.dumps(m))
+    after["codex"].update(fresh=[k_other])
+    script = "return (async () => { H.codexHtml(m); for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 400)); return T.calls; })();"
+    out = webharness.run(DRIVER, {"m": m, "script": script, "S": S, "menxia": None, "stored": {},
+                                  "responses": {"/api/codex/seen": {"main": after}}})
+    seen = [c for c in out if c[0] == "/api/codex/seen"]
+    assert seen and all(c[1] == {"keys": [k_here]} for c in seen), out
+    urls = [c[0] for c in out]
+    assert "/api/codex" in urls[urls.index("/api/codex/seen") + 1:], urls

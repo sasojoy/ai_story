@@ -217,3 +217,26 @@ def test_dots_from_a_line_that_cannot_be_drawn_are_dropped():
     b.fresh += ["q:no_such_line", "p:no_such_person", "e:ch_guan_1:x"]
     game.sync(game.now + 1)
     assert not {"q:no_such_line", "p:no_such_person", "e:ch_guan_1:x"} & set(b.fresh)
+
+
+def test_the_epiphany_line_is_in_the_tracker_and_its_demon_step_can_be_gone_to():
+    """Joy 2026-11-14：特殊頓悟走到心魔，「朝你走過來」那張卡按了且看下去，「進行中」要有這一件、點了就去打；
+    小試（去做別的事）那一步收在「在等的」。"""
+    import test_epiphany as E
+    import server
+
+    game = E._game()
+    game.content.config.codex.enabled = game.content.config.codex.tracker = True
+    s = game.state
+    E._begin(game)
+    line = next(iter(s.player.storylines))
+    E._answer_all(game)
+    assert s.player.storylines[line].stage == "trial"
+    row = next(t for t in server.main_view(game)["codex"]["track"] if t["line"] == line)
+    assert row["wait"] is True and row["kind"] == "頓悟"
+    s.world.time += day_seconds(game.content, s.world)
+    game._story_tick()
+    m = server.main_view(game)
+    row = next(t for t in m["codex"]["track"] if t["line"] == line)
+    assert row["wait"] is False and row["what"] == "去面對心魔"
+    assert any(o["id"] == f"story:{line}" and o["enabled"] for o in m["options"])  # 網頁的「去」照這一顆按下去
