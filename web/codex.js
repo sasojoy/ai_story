@@ -56,7 +56,11 @@
     if (!want.length) return;
     try {
       const r = await api("/api/codex/seen", { keys: want });
-      if (r && r.main) { setMain(r.main); S.cxSig = JSON.stringify(((S.main && S.main.codex) || {}).fresh || []); if (typeof paintDots === "function") paintDots(); }
+      if (r && r.main) {
+        setMain(r.main);
+        if (typeof paintDots === "function") paintDots();
+        cxLoad(true); // 外層滅了，裡面的格也要一起滅：整本重拿再畫（不然分類的點沒了、格上的點還亮著）
+      }
     } catch (e) { /* 下一次輪詢再說 */ }
   }
 
@@ -177,7 +181,15 @@
     const c = (S.main && S.main.codex) || {};
     const chips = `<div class="cx-chips cats">${CX_CATS.map(([k, n]) => `<button class="${cat === k ? "on" : ""}" data-act="cx-cat" data-cat="${k}">${n}${dotHtml(!!c[CX_CAT_DOT[k]])}</button>`).join("")}</div>`;
     const body = cat === "people" ? cxPeople(d.people) : cat === "things" ? cxThings(d.things) : cat === "gods" ? cxGods(d.gods) : cxEndings(d.endings);
-    if (c[CX_CAT_DOT[cat]]) setTimeout(() => cxSeen([`${CX_CAT_DOT[cat]}:*`]), 1200); // 這一類攤開看了：一會兒之後四層一起滅（這一次畫的格照樣亮著）
+    // 攤開看了：一會兒之後這一頁的點一路滅到外層。器物分四組，只滅眼前這一組的，別組的留到點開那一組
+    if (c[CX_CAT_DOT[cat]]) {
+      let keys = [`${CX_CAT_DOT[cat]}:*`];
+      if (cat === "things") {
+        const g = d.things.groups.find((x) => x.id === S.cxThing) || d.things.groups[0];
+        keys = g.cells.filter((x) => x.dot).map((x) => `t:${x.key}`);
+      }
+      if (keys.length) setTimeout(() => cxSeen(keys), 1200);
+    }
     return `${segs}${chips}${body}`;
   }
 
