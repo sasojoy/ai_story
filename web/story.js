@@ -42,18 +42,28 @@
     const dun = c.sort === "頓悟"; // 特殊頓悟（Joy 2026-10-26「頓悟那邊也要有圖」）：圖照樣放上面，墨底與「悟」章分得出；沒圖就是墨底純字
     const src = c.src;
     const last = at >= cards.length - 1;
-    const btn = opening ? "且看下去" : after ? "嗯" : retry ? "改日再來" : "收下";
+    // 這張卡後面接一場要打的（頓悟的心魔）：鈕就寫那一步，按了直接去打；旁邊一顆小的「先不打」（Joy 2026-11-14「要在事件發生時就讓玩家知道要打心魔」）
+    const go = last0(cards, at) && c.go && ((S.main && S.main.options) || []).some((o) => o.id === c.go.id && o.enabled) ? c.go : null;
+    const btn = go ? go.label : opening ? "且看下去" : after ? "嗯" : retry ? "改日再來" : "收下";
     box.innerHTML = `<div class="story-card story-${esc(c.kind)}${c.failed ? " failed" : ""}${src ? " has-art" : ""}${dun ? " dun" : ""}" role="dialog" aria-label="${esc(c.title)}">
       ${src ? `<img class="story-art" src="${esc(src)}" alt="">` : ""}
       <div class="story-body"><p class="story-head">${tsealHtml(dun ? "悟" : opening || after || retry ? "奇" : "傳")}<b>${head}</b></p>${sub}
       <div class="story-text">${c.text}</div>
       ${cards.length > 1 ? `<p class="muted small story-count">${at + 1}／${cards.length}</p>` : ""}
-      <button class="btn primary" data-act="story-ok" data-last="${last ? 1 : 0}">${btn}</button></div></div>`;
+      <button class="btn primary" data-act="story-ok" data-last="${last ? 1 : 0}"${go ? ` data-go="${esc(go.id)}"` : ""}>${esc(btn)}</button>
+      ${go ? `<button class="btn ghost story-later" data-act="story-ok" data-last="1">${STORY_LATER}</button>` : ""}</div></div>`;
   }
+  const STORY_LATER = "先不打"; // 待 joy 潤
+  const last0 = (cards, at) => at >= cards.length - 1;
   async function storyClick(act, el, ev) {
     switch (act) {
         case "story-ok": // 特殊事件的跳顯框：還有下一張就翻過去，最後一張才請伺服器清掉
-          if (el.dataset.last === "1") { S.storyAt = 0; await doMain("story_seen", {}); } else { S.storyAt = (S.storyAt || 0) + 1; storyCard(); }
+          if (el.dataset.last === "1") {
+            const go = el.dataset.go;
+            S.storyAt = 0;
+            await doMain("story_seen", {});
+            if (go && ((S.main && S.main.options) || []).some((o) => o.id === go && o.enabled)) await choose(el, go);
+          } else { S.storyAt = (S.storyAt || 0) + 1; storyCard(); }
           break;
         case "story-read": // 「剛剛」底下的「看結局」：後續讀完了，結局卡跳出來
           S.storyRead = S.main && S.main.now;

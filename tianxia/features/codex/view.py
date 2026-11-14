@@ -8,7 +8,7 @@ from tianxia import chapters, timetable
 from tianxia.figures import placed_characters
 from tianxia.mounts import COAT_ART, STEED_ART
 from tianxia.rules import day_seconds
-from tianxia.story_base import current, definition, waiting
+from tianxia.story_base import current, definition, doable, waiting
 
 from . import rules
 
@@ -307,13 +307,14 @@ def track(ctx) -> list[dict]:
     out = []
     for n, progress in enumerate(s.player.storylines.values()):
         line = definition(c, progress)
-        if line is None or progress.custom is not None or progress.ending is not None:
+        if line is None or progress.ending is not None:
             continue
+        custom = progress.custom is not None  # 當場生出來的線（特殊頓悟）：圖鑑不收，但「進行中」要有——不然段落卡按掉之後不知道下一步在哪（Joy 2026-11-14）
         nx = _next(ctx, progress)
         if nx is None:
             continue
         due = progress.due - s.world.time if progress.due is not None else math.inf
-        row = {"key": f"{s.player.season_number}:{line.id}", "line": line.id, "kind": KIND_MAIN if line.kind == "章回" else KIND_QIYU, "title": line.title, **nx}
+        row = {"key": f"{s.player.season_number}:{line.id}", "line": line.id, "kind": KIND_MAIN if line.kind == "章回" else (line.kind if custom and line.kind else KIND_QIYU), "title": line.title, **nx}
         # 在等的（清單收在最底下一行，不算進印上的數字，不會被挑成最上面那一行）：章回這一回做完了、等大事結算；多日段還沒到時候
         if line.chapter is not None and progress.stage == chapters.WAIT:
             event = timetable.find(c, line.chapter.beat)
@@ -322,6 +323,8 @@ def track(ctx) -> list[dict]:
                        until=ctx.stamp(at) if math.isfinite(at) else "")
         elif not nx["ready"]:
             row.update(wait=True, until=nx["when"])
+        elif custom and (not doable(s, c, progress) or (progress.retry_at is not None and s.world.time < progress.retry_at)):
+            row.update(wait=True, until="")  # 這一步是去做別的事（小試）、或打輸了還沒到再試的時候：沒有地方「去」，收在「在等的」
         else:
             row["wait"] = False
         out.append((row, (row["wait"], due, n)))

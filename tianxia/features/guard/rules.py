@@ -436,6 +436,13 @@ def _model_qing(value) -> int:
         return 0
 
 
+def _latin(req: EventRequest, *texts_: str) -> bool:
+    """模型寫的字夾了英文（例：dimly lit、swore）：整段不用，換固定的。名號、地名、玩家自己寫的那一句裡本來就有的英文不算。"""
+    from tianxia import zh  # noqa: PLC0415  共用規則層（英文字）
+    known = (req.name, req.master, req.title, req.place, req.school, req.say)
+    return any(zh.stray_latin(x, *known) for x in texts_)
+
+
 def write_event(client, req: EventRequest, t) -> GuardEvent | None:
     """B 段：生一件事＋三個做法（溫、嚴、狠各一，各附他的反應、紀事一句、情分、性向）。寫不出來回 None（C 段換固定事件）。"""
     if client is None:
@@ -470,6 +477,8 @@ def write_event(client, req: EventRequest, t) -> GuardEvent | None:
                for c in got.choices[:3]]
     if any(not c.label or not c.reaction for c in choices):
         return None
+    if _latin(req, got.text, *(x for c in choices for x in (c.label, c.reaction, c.memo))):
+        return None
     return GuardEvent(seq=req.seq, kind=req.kind, day=req.day, text=got.text[:300], choices=choices)
 
 
@@ -493,6 +502,8 @@ def judge_say(client, req: EventRequest, t) -> GuardChoice | None:
         return None
     if not got.relevant or not got.reaction:
         return GuardChoice(label="", reaction="", memo="", qing=0, tags=[])
+    if _latin(req, got.reaction, got.memo):
+        return None  # 不算這一次
     return clamp_choice(t, GuardChoice(label=req.say[:30], reaction=got.reaction, memo=got.memo or req.say[:20], qing=_model_qing(got.qing), tags=got.tags))
 
 
@@ -524,6 +535,6 @@ def settle(client, req: EventRequest, t) -> Settled | None:
         got = client.chat_structured(messages, _Settle, temperature=0.9, num_predict=1200, required_fields=["path", "title", "bio", "oath"], require_in_schema=True)
     except Exception:
         return None
-    if not got.bio or not got.oath:
+    if not got.bio or not got.oath or _latin(req, got.title, got.bio, got.oath):
         return None
     return Settled(path=got.path.strip(), title=got.title.strip(), bio=got.bio, oath=got.oath)
