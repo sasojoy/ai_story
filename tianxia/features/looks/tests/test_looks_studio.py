@@ -62,6 +62,36 @@ def test_a_move_gets_both_drawings_and_waits_for_the_admin(on):
     assert "上架了" in actions.admin_move_release(_admin(on, game.world), pid)[-1]
 
 
+def test_a_moves_drawing_is_painted_from_an_english_object_description_without_the_sprite(on):
+    """2026-11-16 #591「棍」、#592「神弓」畫二、三十次全掛：klein 讀不懂中文的「棍」，附的立繪又被當成要畫的人。
+    審圖的先把那一樣寫成英文的物件描述；畫圖時提示詞不留中文、不附立繪；審圖照舊看立繪與玩家那一句。"""
+    game = _game(on)
+    pid = _move_order(on, game)
+
+    class Words(Critic):
+        asked = []
+
+        def describe_object(self, label, text):
+            self.asked.append((label, text))
+            return "a giant serene golden Buddha statue, palms together"
+
+    painter, critic = Painter(), Words()
+    assert _tick(game, painter, critic) == [f"#{pid} 大佛 收了"]
+    assert critic.asked == [("大佛", BUDDHA)]
+    prompt, refs = painter.calls[0]
+    assert "golden Buddha statue" in prompt and "大佛" not in prompt and BUDDHA not in prompt
+    assert refs == 0 and "No person" in prompt  # 不附斗笠小子
+    assert "大佛" in critic.seen[0] and BUDDHA in critic.seen[0]
+
+
+def test_a_move_without_a_description_paints_as_before(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    painter = Painter()
+    assert _tick(game, painter, Critic()) == [f"#{pid} 大佛 收了"]
+    assert "「大佛」" in painter.calls[0][0] and painter.calls[0][1] == 1
+
+
 def test_a_failed_review_is_fixed_from_the_last_picture(on):
     game = _game(on)
     pid = _move_order(on, game)
