@@ -94,7 +94,8 @@ class Job:
     refs: tuple[Path, ...]
     portrait: Path | None = None  # 這一套的定裝照（cut_for 照它判斷角色穿不穿白衣，見 cutting.wears_white）
     pose: Path | None = None  # 畫圖時拿來代替 refs[0] 的姿勢剪影（見 POSE）；審圖照舊看 refs
-    text: str = ""  # 自建形象：玩家寫的那一句（畫之前換成英文的外觀描述，見 described）
+    text: str = ""  # 玩家寫的那一句（畫之前換成英文的描述，見 described）
+    bare: bool = False  # 畫圖時不附參考圖（絕招的法相、巨物寫成英文描述以後；審圖照舊看 refs）
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,19 @@ def art_prompt(text: str, art: dict) -> str:
             "frame. Pure white background, no ground, no text, no other characters.")
 
 
+# 絕招的法相、巨物換成英文的物件描述再畫（2026-11-16 #591「棍」、#592「神弓」各畫二、三十次全掛）：本機 klein 讀不懂中文，
+# art_prompt 裡要畫的「棍」與玩家那一句都是中文，它只讀得到 spirit、giant thrown object，畫成砲管、十字架、扛炮的木樁；
+# 附的斗笠小子立繪又被它當成要畫的人，玩家寫的是場面（「神弓在身後旋轉…箭雨」）就一直畫出持弓的人。
+# 寫成描述以後不附那張立繪（審圖照舊拿它比畫風），提示詞裡也不留中文。
+OBJECT_PROMPT = (
+    "Soft ink-wash watercolor painting, Chinese wuxia style, gently glowing.\n"
+    "Draw ONLY this single object, alone, with nothing else in the picture: {text}\n"
+    "It is a huge spirit manifestation or a giant object from a martial arts move, shown on its own. Centred, large, with a "
+    "clear empty margin on every side so no part touches the edges. No person, no hands, no body, no ground, no shadow, "
+    "no scenery, no text. Pure white background."
+)
+
+
 # ── 要畫的 ───────────────────────────────────
 
 
@@ -243,7 +257,7 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
                 continue
             out.append(Job(kind="move", pid=m.pid, folder=mid, slot=art["slot"], label=art["label"],
                            prompt=art_prompt(m.prompt, art), checklist=CHECK_ART.format(label=art["label"], text=m.prompt),
-                           aspect="1:1", size="1K", refs=(arena / "hero_bare_idle.webp",)))
+                           aspect="1:1", size="1K", refs=(arena / "hero_bare_idle.webp",), text=m.prompt))
     look_item = orders.item_of(content)
     if look_item is not None:
         for b in wallet.purchases_of(look_item.id):
@@ -300,6 +314,8 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
     refs = [p.read_bytes() for p in job.refs if p.is_file()]
     # 畫圖用的：有姿勢剪影就代替第一張（斗笠小子的彩色原圖）；審圖照舊看 refs（見 POSE）
     paint_refs = [job.pose.read_bytes(), *refs[1:]] if job.pose is not None and job.pose.is_file() and refs else refs
+    if job.bare:
+        paint_refs = []
     raw = b""
     problems: list[str] = []
     for n in range(1, max(1, tries) + 1):
@@ -419,7 +435,13 @@ def note(data: dict) -> dict:
 # 審圖的沒有這兩個本事（測試假人、雲端以外的）就照舊用玩家那一句。
 def described(job: Job, critic: Critic, wallet: Wallet) -> tuple[Job, dict | None]:
     """這一張要畫的提示詞換成英文的外觀描述。回（換好的 job, 要記在訂單上的描述或 None）。"""
-    if job.kind != "look" or not job.text:
+    if not job.text:
+        return job, None
+    if job.kind == "move":
+        fn = getattr(critic, "describe_object", None)
+        words = fn(job.label, job.text) if callable(fn) else ""
+        return (replace(job, prompt=OBJECT_PROMPT.format(text=words), bare=True) if words else job), None
+    if job.kind != "look":
         return job, None
     if job.slot == PORTRAIT:
         fn = getattr(critic, "describe_text", None)
