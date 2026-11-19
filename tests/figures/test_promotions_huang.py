@@ -10,7 +10,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import no_territory, real_content
+from conftest import make_on, make_real, real_content
 from tianxia import calendar, figures
 from tianxia.features.military import fs_rules as foreshadow
 from tianxia import materials, ranks, rules
@@ -235,12 +235,9 @@ _DONATE_CHOICE = {0: 0, -1: 1}
 
 def _on():
     """跟這檔的 on 同一份：conftest 的 real、這檔的 real 那一行、conftest 的 on（module 範圍的 fixture 拿不到 function 範圍的 on）。"""
-    c = real_content()
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
+    c = make_real()
     c.config.affinity_gain_scale = 1.0
-    c.config.season_one, c.config.season_days, c.config.server_max_players = True, 2.5, 2
-    return no_territory(c)
+    return make_on(c)
 
 
 @pytest.fixture(scope="module")

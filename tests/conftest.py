@@ -504,13 +504,26 @@ def game(content):
 # 其他檔有自己的 real／on（設定各不相同），在那些檔裡蓋過這兩個：pytest 用離測試最近的定義。
 
 
-@pytest.fixture
-def real():
-    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+def make_real() -> Content:
+    """fixture real 的建法（純函式）：module 範圍的 fixture 拿不到 function 範圍的 real，要同一份就叫這個。"""
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
+
+
+def make_on(real: Content) -> Content:
+    """fixture on 的建法（純函式）：把傳進來的那一份就地打開、拿掉地盤，回傳同一份。"""
+    real.config.season_one = True
+    real.config.season_days = 2.5
+    real.config.server_max_players = 2
+    return no_territory(real)
+
+
+@pytest.fixture
+def real():
+    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+    return make_real()
 
 
 @pytest.fixture
@@ -518,10 +531,7 @@ def on(real):
     """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。豪強分屬兩軍（第一季規則的季一律如此；
     豪強第三方 2026-10-31 拿掉）。不畫地盤（劇本的 territory 拿掉）：以前這一份沒開 haoqiang_allied，地盤（領地爭奪）本來就不開；
     測領地爭奪的用 conquest_kit 或 week7、season21 設定。"""
-    real.config.season_one = True
-    real.config.season_days = 2.5
-    real.config.server_max_players = 2
-    return no_territory(real)
+    return make_on(real)
 
 
 def no_territory(content: Content) -> Content:
@@ -772,7 +782,8 @@ def install_foreshadows(content):
 # 背著九百多條，別人早就閒著（10/31 實測）。所以平行跑時（workerinput 的 workercount）把長的照蛇形（0、1、2、2、1、0…）
 # 分到每一段的最前面：每個 worker 一開始各拿一份差不多長的，其餘照 load 動態發。不要用 --dist worksteal（它的段是
 # 條數 ÷ worker 數，長的又會擠在同一段）。不跑 slow 時這幾條本來就被 -m 濾掉（trylast：排在 -m 濾掉之後），順序沒有差別。
-# 這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+# 這張表是排程用的提示：少寫不會紅，但表上每一筆的檔與測試名都要存在（改名、刪掉、名字寫錯，
+# tests/core/test_test_for.py::test_the_long_tests_listed_first_still_exist_and_rank_in_order 會紅），改名要一起改這張表。
 LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",

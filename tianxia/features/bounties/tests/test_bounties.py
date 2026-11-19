@@ -18,11 +18,6 @@ from tianxia.engine import Game
 from tianxia.models import FactionDef
 from tianxia.state import Bounty, BotProfile, GameState, PlayerState, WorldState
 from tianxia.world import advance_world_state, season_end_time, settle_season_start
-from tianxia.world_state import fresh_season
-from conftest import real_content
-from tianxia.features.bounties import rules as bounties
-from tianxia import calendar
-from tianxia.state import Bounty
 from tianxia.world_state import fresh_season, season_length_days, stamp_season
 
 pytestmark = pytest.mark.whole_content
