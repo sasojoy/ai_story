@@ -442,7 +442,11 @@ export const flows = [
       await c.step(ACT("outing-go"), "ex_go", { who: "p1", wait: 1500 });
       await c.crawl("ex", () => c.load("/"), [...UI, "outing-speed", "gather-wheel", "outing-tap", "outing-stele"], { total: 8, cap: 2 });
       await c.load("/");
-      for (const a of ["outing-speed", "outing-tap", "outing-skip", "outing-choose", "outing-say", "outing-close"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
+      for (const a of ["outing-speed", "outing-tap", "outing-skip", "outing-choose"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
+      // batch 233: since 親衛隊長's fifth batch (#217-#220) the first trip out at level 10 or more runs into the child: 救 (outing-choose
+      // above) asks once more, 收養他／收養她／不帶走. A player answers it (the first, 收養他) and the trip ends on its result card as before
+      if (await c.ev(`!!document.querySelector('[data-act="outing-choose"][data-id^="guard:"]')`)) await c.step(ACT("outing-choose"), "ex_guard_adopt", { who: "p1", wait: 800 });
+      for (const a of ["outing-say", "outing-close"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
       for (const [i, loc] of ["yingshui", "songshan_foot", "runan_wilds", "deep_mountain"].entries()) {
         await place(c, "沈浪", loc);
         await c.load("/");

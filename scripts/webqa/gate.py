@@ -57,14 +57,9 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
     "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
     "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
-    "web/titles.js": "the titles package (Config.titles) is off in every profile the walk runs: no main.titles, so nothing calls into it",
-    "web/terms.js": "the terms package (Config.terms) is off in every profile the walk runs: /api/terms is 404, so its sheet never shows",
-    "web/jieyi.js": "the jieyi package (Config.jieyi) is off in every profile the walk runs: no main.jieyi and no offer card, so nothing calls into it",
-    "web/mail.js": "the mail package (Config.mail) is off in every profile the walk runs: no main.mail, so the 信匣 entry is not drawn and nothing calls into it",
-    "web/zongmen.js": "the zongmen package (Config.zongmen) is off in every profile the walk runs: no main.zongmen, so nothing calls into it",
-    "web/guard.js": "the guard package (Config.guard) is off in every profile the walk runs: no main.guard, so the 養成冊 is not drawn and nothing calls into it",
-    "web/codex.js": "the codex package (Config.codex) is off in every profile the walk runs: no main.codex, so the 江湖錄 tab is not drawn and nothing calls into it",
-    "web/intro.js": "serve.py turns the intro package (Config.intro) off for the walk: every walk account is new and the 開場 layer would cover the clicks; tianxia/features/intro/tests covers it",
+    # batch 233: titles, terms, jieyi, mail, zongmen, guard and codex left this list: week7 and season21 turn them on (#243, codex 11/13)
+    # and every round's walk calls into their page files, so coverage.json has them. web/intro.js left too: serve.py still turns the
+    # intro package off for the walk (the 開場 layer would cover the clicks), but every round's page calls into the file all the same
 }
 
 

@@ -24,6 +24,9 @@ async function hold(c, sel) {
 const visible = (c, sel) => c.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; const r = e.getBoundingClientRect(); return !!(r.width && r.height); })()`);
 
 export const flows = [
+  // batch 233: the made look (mall_buy, stage.look_order made=True) is u3; its pictures go beside the databases before either walk reads
+  // a page, because the base and head servers share that folder and main.looks_ver is made from it (stage_lib.look_sheets)
+  ["look_sheets", async (c) => { c.log("look sheets", await c.py("out = stage.look_sheets('u3')")); }],
   accounts,
   rich,
   ["prologue", async (c) => {

@@ -170,17 +170,18 @@ def look_order(world, content, name, look_name, now, made=False):
         return {"pid": None, "said": said}
     if made:
         w.update_data(pid, status=orders.MADE, look_id=orders.look_id(pid))
-        _look_sheets(orders.look_id(pid))
+        look_sheets(orders.look_id(pid))
     return {"pid": pid, "look": orders.look_id(pid)}
 
 
-def _look_sheets(look):
+def look_sheets(look):
     """Batch 233: a made look's pictures sit beside the database (looks/<id>/); without them every page that draws it asks
     /api/looks/img/<id>/<sheet> and the console fills with 404s. Copy a shipped look's sheets (web/img/looks/baipao, the serving copy's
     own files) there, as a finished order would have them. Old commits without images_beside are left as they were.
     main.looks_ver is made of these files' times and sizes, and the base and head servers share the folder (their databases sit side by
     side): every file gets one fixed time, is written beside the folder and swapped in whole, and one already in place is left alone,
-    so both walks read the same version whoever copies first."""
+    so both walks read the same version whoever copies first. The folder is shared, so a copy made halfway through one walk shows in
+    the other walk's main.looks_ver at whatever scene it is on: extra.mjs calls this first thing, before either walk reads a page."""
     import os
     import shutil
     from pathlib import Path
