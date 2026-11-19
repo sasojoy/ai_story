@@ -161,7 +161,15 @@ def test_opening_a_things_group_clears_only_that_group_and_redraws_the_cells(wal
          "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15, "main": m}
     after = json.loads(json.dumps(m))
     after["codex"].update(fresh=[k_other])
-    script = "return (async () => { H.codexHtml(m); for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 400)); return T.calls; })();"
+    # 攤開時排的 1200 ms（cxSeen）在 harness 算長計時器、不會等：畫這一次的當下把頁面那一份（T.ctx）的長延遲縮成 0（畫完就換回來，別的計時器照舊），
+    # 再一輪一輪讓出去，看到 seen 之後又重抓 /api/codex 就停（最多 50 輪），不真等四百毫秒四次
+    script = ("return (async () => { const st = T.ctx.setTimeout;"
+              " T.ctx.setTimeout = (f, ms, ...a) => st(f, Number(ms) >= 1000 ? 0 : ms, ...a);"
+              " try { H.codexHtml(m); } finally { T.ctx.setTimeout = st; }"
+              " const done = () => { const u = T.calls.map((c) => c[0]); const i = u.indexOf('/api/codex/seen');"
+              " return i >= 0 && u.indexOf('/api/codex', i + 1) > i; };"
+              " for (let i = 0; i < 50 && !done(); i++) await new Promise((r) => st(r, 0));"
+              " return T.calls; })();")
     out = webharness.run(DRIVER, {"m": m, "script": script, "S": S, "menxia": None, "stored": {},
                                   "responses": {"/api/codex/seen": {"main": after}}})
     seen = [c for c in out if c[0] == "/api/codex/seen"]
