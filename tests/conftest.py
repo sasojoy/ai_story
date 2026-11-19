@@ -782,7 +782,8 @@ def install_foreshadows(content):
 # 背著九百多條，別人早就閒著（10/31 實測）。所以平行跑時（workerinput 的 workercount）把長的照蛇形（0、1、2、2、1、0…）
 # 分到每一段的最前面：每個 worker 一開始各拿一份差不多長的，其餘照 load 動態發。不要用 --dist worksteal（它的段是
 # 條數 ÷ worker 數，長的又會擠在同一段）。不跑 slow 時這幾條本來就被 -m 濾掉（trylast：排在 -m 濾掉之後），順序沒有差別。
-# 這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+# 這張表是排程用的提示：少寫不會紅，但表上每一筆的檔與測試名都要存在（改名、刪掉、名字寫錯，
+# tests/core/test_test_for.py::test_the_long_tests_listed_first_still_exist_and_rank_in_order 會紅），改名要一起改這張表。
 LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",

@@ -4312,7 +4312,8 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
 
 
 def test_app_js_parses():
-    """node --check 網頁的三個檔（main.js、map.js、app.js；沒裝 node 就略過）。"""
+    """node --check webharness.APP_FILES 的每一個檔（主頁載入的全部 script；sw.js、tale_page.js、zhuan_page.js 不在清單；
+    測試名是三個檔時取的，沒改；沒裝 node 就略過）。"""
     import shutil
     import subprocess
 
