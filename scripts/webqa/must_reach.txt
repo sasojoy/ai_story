@@ -217,6 +217,16 @@ main:nf_how
 main:nf_how_back
 main:nf_howto
 main:nf_close
+main:sup_mine
+main:sup_new
+main:sup_sent
+main:sup_desk
+main:sup_desk_pick
+main:sup_desk_answered
+main:sup_dot
+main:sup_dot_sheet
+main:sup_mine_answered
+main:sup_ticket_read
 main:mall
 main:admin
 main:admin_game_page
