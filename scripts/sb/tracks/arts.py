@@ -36,7 +36,8 @@ class ArtsScenario(Scenario):
     """修練（--track arts，自己一個資料庫）：修練頁的每一顆（/api/menxia/<op>、/api/do/allocate、/api/do/ascend_line）與 learn:。
     - 籌備中（管理者還沒開季）：修練頁的動作一律回「賽季籌備中」那一句（裝飾器 _not_while_preparing 搬進核心）。
     - 學藝（learn:）：書院那幾門灰著（書院弟子、俠名）、付不起灰著（按了被擋）、兩處各學一門、學過的不在選單上、再按一次被擋；
-      改練（換上庫裡學來的那一門）、換回、沒有這一門。
+      改練（換上庫裡學來的那一門）、換回、沒有這一門。#246 村鎮與營地的下品拿掉以後（week7、season21），散人學得到的是官軍大營、長社要名望的內功：
+      學的那一下名望在存檔裡擺夠、學完擺回，改練換的是內功（第 232 批）。
     - 練成：心得不足、練到第十成（第一下受傷：機率在記憶體裡擺成 1）、練無可練、內功；裝意境（第一格空著時指定第二格、不指定格、沒有這個意境、沒有這門武學）、
       拆下、拆不在槽上的。
     - 熔煉：身上的熔不掉、庫裡沒有、熔庫裡學來的一門、熔一個意境、批量熔煉（一門武學與一個意境）；配點：沒有點、配兩點、沒有這一項、到頂。
@@ -170,8 +171,21 @@ class ArtsScenario(Scenario):
     # ── 前半 ──
 
     def lesson_spots(self) -> list[str]:
-        """學藝的地方：書院（只教書院弟子、要俠名的，散人都灰著）、潁水與樓桑村（散人學得了、要學費）；測試內容是湖邊。"""
-        return ["lake"] if self.profile == "test" else [self.academy(), "yingshui", "loushang_village"]
+        """學藝的地方：書院（只教書院弟子、要俠名的，散人都灰著）、散人學得了的前兩處（照內容的先後：不限陣營、門派、善惡稱號，要學費；
+        #246 村鎮與營地的下品拿掉以後是要名望的內功，官軍大營、長社）；測試內容是湖邊。"""
+        if self.profile == "test":
+            return ["lake"]
+        free = []
+        for s in self.open_skills().values():
+            rule = s.learn
+            if rule is not None and rule.faction is None and rule.sect is None and rule.title is None and rule.at not in free:
+                free.append(rule.at)
+        return [self.academy(), *free[:2]]
+
+    def fame_need(self, loc: str) -> int:
+        """這裡散人學得了的那幾門要的名望（內容寫的數，還沒乘季長倍數）；沒有要名望的是 0。"""
+        return max((s.learn.fame for s in self.open_skills().values()
+                    if s.learn is not None and s.learn.at == loc and s.learn.faction is None and s.learn.sect is None and s.learn.title is None), default=0)
 
     def learn(self) -> None:
         """拜師學藝（learn:，修練包的前綴）：書院那幾門灰著（書院弟子、俠名）；付不起灰著、按了被擋；學兩門（兩處各一門）；
@@ -187,12 +201,19 @@ class ArtsScenario(Scenario):
             if shown:
                 self.choose(who, next(iter(shown)))  # 灰著的照樣按（書院弟子、付不起）：被擋
             self.edit(who, lambda p: p.stats.__setitem__("silver", 2000))
+            fame = self.chars.load(who).player.stats.get("fame", 0)
+            bumped = self.fame_need(loc) > fame
+            if bumped:  # 要名望的（#246 之後散人學得到的都是）：學的這一下存檔裡的名望擺夠（乘過季長倍數也夠），學完擺回原本的數
+                self.edit(who, lambda p: p.stats.__setitem__("fame", self.fame_need(loc) * 100))
+                emit(f"{loc} 名望這一下擺成", self.fame_need(loc) * 100)
             lessons = [i for i, o in self.ids(self.main(who)).items() if i.startswith("learn:") and o.get("enabled")]
             emit(f"{loc} 學藝的鈕", lessons)
             if lessons:
                 self.choose(who, lessons[0])
                 emit(f"{loc} 學過之後的鈕", [i for i in self.ids(self.main(who)) if i.startswith("learn:")])
                 self.choose(who, lessons[0])  # 已經不在選單上：被擋
+            if bumped:
+                self.edit(who, lambda p: p.stats.__setitem__("fame", fame))
         self.state_of(who, "學藝之後")
 
     def switch(self) -> None:
@@ -201,6 +222,9 @@ class ArtsScenario(Scenario):
         p = self.chars.load(who).player
         before = p.member.wugong_id
         other = next((a for a in p.arts if a in self.c.skills and self.c.skills[a].kind == "武學"), None)
+        if other is None and p.member.neigong_id is not None:  # #246 之後散人學來的都是內功：改練那一門內功、換回原本的內功
+            before = p.member.neigong_id
+            other = next((a for a in p.arts if a in self.c.skills and self.c.skills[a].kind == "內功"), None)
         if other is not None:
             self.mx(who, "switch", {"art": other})
             if before is not None:
