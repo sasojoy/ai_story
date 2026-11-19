@@ -746,7 +746,7 @@ class SenseScenario(ExploreScenario):
 # 改一個字（selftest）：「畫下來」只叫出畫布那一句（搬之前在 engine.py 的 choose、之後在 features/sense/actions.py）
 register_track("sense", SenseScenario, (("tianxia/features/sense/actions.py", "tianxia/engine.py"),
                                          ("（在畫布上一筆畫下心中的形。）", "（在畫布上一筆畫下心中的形！）")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
-                       "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "travel", "zhuan", "zongmen"))

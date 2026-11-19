@@ -143,8 +143,7 @@ class CraftScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         # 籌備中：煉製頁與自創的每一顆都擋
         who = self.FORGER
@@ -462,7 +461,7 @@ class CraftScenario(Scenario):
 # 搬的人照實際的檔名改這一個字串）。抓到的地方：松檐重骰形的第一下
 register_track("craft", CraftScenario, (("tianxia/features/craft/create.py",),
                                         ('NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"', 'NO_REROLL = "手上沒有重悟帖：萬寶閣買得到！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "looks",
+                       "mall", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))

@@ -26,7 +26,9 @@ class OutletsScenario(Scenario):
     人物不在此地）。看火候：有鐵匠鋪的城鎮（成、請了還沒開爐、錢不夠）。「打點」那一間店：進去、在裡頭做一樣（掮客換一句）、離開、動身、銀兩出口關了被收起。
     **前半停在兩處寫到一半**：一個人坐在「打點」店裡沒結、一個人開著軍需官那一串沒結；後半是新的行程，接著在裡面按。
     假人：BotRunner 兩個（官軍，站在自家大本營、背包有多的素材、手上有錢）；整季機器人與假人眼前的選單與分數（act:dadian、act:donate、dadian:、donate:）。
-    設定：season21、week7（銀兩出口、捐軍備都開著）、test（兩樣都關著；同一串 API 照打，寫「沒有」）。"""
+    設定：season21、week7（銀兩出口開著；捐軍備 #241 起關著〔economy.donate: false〕）、test（兩樣都關著；同一串 API 照打，寫「沒有」）。
+    **捐軍備三種設定都關著，所以上面捐素材、捐銀兩那幾段（含前半停在軍需官那一串）三種設定都走不到**：選單上沒有 act:donate、act:silver_donate、donate:，
+    照樣按（清單外）、照樣打 /api/do/donate，寫下來的是被擋的那一句（第 232 批實跑 season21 讀過）；醫館、打點門路、看火候、「打點」那一間店照舊走得到。"""
 
     DONOR_G, DONOR_H, POOR, LONE = "賀萬鈞", "裴雲舟", "邢孤雁", "霍青萍"
     CLINIC, FIG, SMITH = "史臨淵", "駱風吟", "柳尋芳"
@@ -499,11 +501,11 @@ class OutletsScenario(Scenario):
         self.world_view("換季之後")
 
 
-# 改一個字（selftest）：捐軍備記貢獻那一句（搬之前在 engine.py 的 _credit_donation、之後在 tianxia/features/outlets/ 的捐軍備動作檔；
-# 第 2 項是之前的檔名，搬的人照實際的檔名改第 1 項的字串）
-register_track("outlets", OutletsScenario, (("tianxia/features/outlets/donate_actions.py", "tianxia/engine.py"),
-                                            ('msgs.append(f"貢獻 +{total}")', 'msgs.append(f"貢獻 +{total}！")')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan", "zongmen"))
+# 改一個字（selftest）：「打點」那一間店的鈕名（銀兩出口的動作檔）。第 232 批換的：原本改捐軍備記貢獻那一句，#241 起捐軍備三種設定都關著，
+# week7 抓不到；打點那一間店 week7、season21 照舊走得到（史臨淵、計玄機進店）
+register_track("outlets", OutletsScenario, (("tianxia/features/outlets/silver_actions.py",),
+                                            ('Option(id="act:dadian", label=silver.SHOP)', 'Option(id="act:dadian", label=silver.SHOP + "！")')), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "looks",
+                       "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

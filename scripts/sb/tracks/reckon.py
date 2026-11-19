@@ -258,7 +258,8 @@ class ReckonScenario(CarveScenario):
 register_track("reckon", ReckonScenario, (("tianxia/engine.py", "tianxia/features/peers/actions.py"),
                                           ("fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, old.player.gifts_today",
                                            "fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, 0")), "season21",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall",
-                       "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "identity", "jieyi",
+                       "legacy", "looks", "mail", "mall", "military", "outlets", "peers", "seal", "seclusion", "sense",
+                       "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "titles", "travel", "zhuan",
+                       "zongmen"))

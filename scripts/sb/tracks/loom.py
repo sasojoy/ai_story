@@ -225,7 +225,7 @@ class LoomScenario(WorldScenario):
 
 # 改一個字（selftest）：退場的大勢人物回來那一句（figures.revive 的 BACK_LINE；figures 這一批收進共用規則層、留在原檔）
 register_track("loom", LoomScenario, (("tianxia/figures.py",), ("重新出來領兵", "重新出來帶兵")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "hire", "looks", "military", "outlets", "peers", "seal",
-                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "guide", "horses", "looks", "military", "outlets",
+                       "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "titles", "travel", "zhuan", "zongmen"))
