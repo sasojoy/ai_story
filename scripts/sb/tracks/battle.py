@@ -716,7 +716,7 @@ class BattleScenario(Scenario):
         else:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.register(who)
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
             self.do(who, "skip_tutorial")
             self.settle_choices(who)

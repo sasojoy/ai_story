@@ -238,7 +238,7 @@ class GearScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.register(who)
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         who = self.PREP  # 籌備中：只證到批量拆解擋（@not_while_preparing）；馬市、買、換上、餵、拆解也按，但沒走到（審查實測，照實記）
         self.choose(who, "act:market")

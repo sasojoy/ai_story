@@ -143,7 +143,7 @@ class CraftScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.register(who)
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         # 籌備中：煉製頁與自創的每一顆都擋
         who = self.FORGER

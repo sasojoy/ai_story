@@ -54,7 +54,7 @@ class _PrepTrack(Scenario):
         """註冊、建角色（真人從網頁建的那一條：序章外沒有預設配比，第一次看到畫面就是開季準備卡）。"""
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.register(who)
+        self.sign_up(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
 
     def past_card(self, who: str) -> None:

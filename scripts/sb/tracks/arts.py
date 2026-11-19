@@ -86,7 +86,7 @@ class ArtsScenario(Scenario):
         for who in players:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.register(who)
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         # 籌備中（管理者還沒開季）：修練頁的動作一律擋（_not_while_preparing），定名的 A 段（假人用）也是 None
         who = self.PRACTICE
