@@ -3,6 +3,7 @@ import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich } from "./common.mjs"
 
 export { ACCOUNTS };
 export const x_week2 = ["x_week2", async (c) => {
+    await c.leave(); // batch 233: no polling page while the week turns (main.mjs week2 says why)
     c.log("ff", (await c.api("admin", "/api/do/fast_forward", { hours: 200 })).status);
     for (const [w] of ACCOUNTS) await c.api(w, "/api/main");
     for (let i = 0; i < 8; i++) await c.api("admin", "/api/do/cancel_battle", {});
@@ -153,7 +154,8 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.load("/");
     await c.step(CH("act:duty"), "x_so_duty", { who: "p1" });
     await c.load("/");
-    await c.step(ACT("duty-open"), "x_so_duty_open", {});
+    // batch 233: with 江湖錄's 進行中 on (#267) the 要事 card is not drawn; a player opens the 事 seal of the 進行中 line (web/codex.js codexTrackHtml)
+    await c.step('button.cx-tk-all[data-act="cx-tk"]', "x_so_tk_open", {});
     await place(c, "沈浪", "wan_city");
   }],
   ["x_craft", async (c) => {
