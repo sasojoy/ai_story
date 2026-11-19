@@ -332,8 +332,6 @@
         case "support-ticket": S.supportTicket = Number(el.dataset.id); renderKeepingSheet(); break;
         case "support-list": S.supportTicket = null; renderKeepingSheet(); break;
         case "support-desk-refresh": S.supportDesk = null; S.supportDeskFailed = false; renderKeepingSheet(); break;
-        case "support-desk-enter": S.supportDeskAdmin = true; supportDeskUrl("/admin#support"); renderKeepingSheet(); break; // 管理者從管理頁進客服頁（第 228 批）
-        case "support-desk-leave": S.supportDeskAdmin = false; supportDeskUrl("/admin"); renderKeepingSheet(); break; // 回管理者工具：S.admin 空的話 renderAdmin 自己讀
         case "support-close": S.sheet = false; S.supportPage = false; S.supportTicket = null; render(); break; // 客服那一頁的「關閉」與底下的灰幕：下次打開設定回到設定
         case "support-desk-pick":
           S.supportDeskPick = Number(el.dataset.id);
@@ -357,6 +355,8 @@
           renderKeepingSheet();
           break;
         }
+        case "support-desk-enter": S.supportDeskAdmin = true; supportDeskUrl("/admin#support"); renderKeepingSheet(); break; // 管理者從管理頁進客服頁（第 228 批）
+        case "support-desk-leave": S.supportDeskAdmin = false; supportDeskUrl("/admin"); renderKeepingSheet(); break; // 回管理者工具：S.admin 空的話 renderAdmin 自己讀
     } // supportClick
   } // supportClick
   registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-human", "support-answer", "support-desk-enter", "support-desk-leave"]);
