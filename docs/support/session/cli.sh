@@ -9,11 +9,13 @@ export TIANXIA_SUPPORT_URL='{{URL}}'
 export TIANXIA_SUPPORT_INBOX='{{DIR}}\inbox'
 export PYTHONIOENCODING=utf-8
 # 下面只擋得到原樣傳進來的特殊字：$(...) 與反引號在叫到這一支之前就被 Git Bash 展開，這裡看到的是展開後的結果。
-# 擋命令替換靠 Claude Code 的許可比對不把夾帶 $(...)、反引號的指令當成符合 Bash(./cli.sh *)；排練表 Discord 那一半先補這兩條實跑。
+# 擋命令替換靠 Claude Code 的許可比對不把夾帶 $(...)、反引號的指令當成符合 Bash(./cli.sh *)（本機許可實跑見排練表）。
+# 縱深（第 227 批）：引號與大括號正常的參數用不到，只會是展開出來的 JSON（例：金鑰檔）；擋在 python 之前，
+# 免得 argparse 的「unrecognized arguments」把它原樣印回。
 for arg in "$@"; do
   case "$arg" in
-    *[\&\|\<\>^!]*)
-      echo "cli.sh 的參數不收 & | < > ^ 與驚嘆號（回覆與註記的字從 stdin 進）。"  # 待 joy 潤
+    *[\&\|\<\>^!\"{}]*)
+      echo "cli.sh 的參數不收 & | < > ^ \" { } 與驚嘆號（回覆與註記的字從 stdin 進）。"  # 待 joy 潤
       exit 2
       ;;
   esac
