@@ -411,6 +411,23 @@ def _mb(n: int) -> str:
     return f"{n / 1_000_000:g}"
 
 
+def _upload_check(shell, request: Request, text_id: str) -> None:
+    """讀本體之前的便宜預檢（第 228 批）：單號 → 登入 → 旁檔與單在、是自己的 → 沒結 → 張數沒滿；回的句子與狀態碼跟 _upload、add_file
+    一樣（別人的單、不存在的單、旁檔不在、單號不是數字 404 同一句；files_max 0 走「滿了」那一句）。只讀、不建旁檔、不建資料夾。
+    過了才讀本體；_upload 與 add_file 交易裡的檢查原樣留著（兩個請求同時來時靠它）。"""
+    tid = _tid(text_id)
+    who = _me(shell, _gate(shell, request))
+    files_max = shell.CONTENT.config.support.files_max
+    sidecar = store.open_store(sidecar_path(), create=False)
+    t = sidecar.ticket(tid) if sidecar is not None else None
+    if t is None or not rules.owns(t, who.id, who.created):
+        raise HTTPException(404, rules.NOT_FOUND)
+    if t["status"] == rules.CLOSED:
+        raise shell.GameError(rules.CLOSED_ALREADY)
+    if len(sidecar.files(tid)) >= files_max:
+        raise shell.GameError(rules.FILES_FULL.format(n=files_max))
+
+
 def _upload(shell, request: Request, text_id: str, raw: bytes) -> dict:
     """讀完內文之後的同步本體：單號 → 檔頭 → 登入 → 單在、是自己的、沒結 → 寫 .part → add_file（交易裡算 seq、記一列、換名）。
     別人的單、不存在的單 404 同一句（同 _player_reply）；不是圖、結了、滿了回那一句。失敗一律刪 .part。"""
@@ -533,13 +550,15 @@ def router(shell) -> APIRouter:
     @r.post("/api/support/file")
     async def api_support_file(request: Request):
         """截圖（第 215 批）：內文就是圖的位元組（不解 JSON）。gate → 認登入（只查記憶體的 SESSIONS，在讀內文之前）→ Content-Length 說超過的
-        提早拒（說不超過的不信）→ 串流累計、超過 file_bytes_max 立刻停止讀、拒絕 → 同步的本體丟執行緒池。"""
+        提早拒（說不超過的不信）→ 預檢（第 228 批：單在、是自己的、沒結、沒滿，sqlite 丟執行緒池；不過就不讀本體）→ 串流累計、
+        超過 file_bytes_max 立刻停止讀、拒絕 → 同步的本體丟執行緒池。"""
         _gate_off(shell)
         shell._account(request)
         cap = shell.CONTENT.config.support.file_bytes_max
         told = request.headers.get("content-length", "")
         if told.isascii() and told.isdigit() and int(told) > cap:
             raise shell.GameError(rules.FILE_TOO_BIG.format(mb=_mb(cap)))
+        await run_in_threadpool(_upload_check, shell, request, request.query_params.get("id", ""))
         raw = bytearray()
         async for chunk in request.stream():
             raw += chunk
