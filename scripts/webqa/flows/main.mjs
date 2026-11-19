@@ -775,6 +775,41 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.crawl("sh", async () => { await c.load("/"); await c.click(ACT("sheet")); }, [...UI, "recap", "howto"], { total: 8, cap: 2 });
       await c.load("/");
     }],
+    // batch 236: support is on in week7 and season21. A player opens 客服 › in the sheet, writes a text ticket (no picture);
+    // a non-admin account on the support list (only in this server process's memory, put back at the end) answers it on /admin;
+    // the player sees the dot and reads the answer, so the dot is gone for the flows after this one.
+    ["support", async (c) => {
+      // the lists come in after the click (supportLoad, supportDeskReload): wait for them before the picture, not a fixed sleep
+      const until = async (js) => { for (let i = 0; i < 40; i++) { if (await c.ev(js).catch(() => false)) return true; await c.sleep(100); } c.log("support wait gave up", js); return false; };
+      const shootWhen = async (sel, name, js, opts) => { const r = await c.click(sel, opts); if (r !== "ok") { c.log("skip", sel, r); return r; } await until(js); await c.settle(200); await c.shoot(name, opts); return r; };
+      await c.asPlayer("p1");
+      await c.click(ACT("sheet"));
+      await shootWhen(ACT("support-open"), "sup_mine", `!!S.supportMine`, { who: "p1", wait: 700 });
+      await c.step('[data-act="support-tab"][data-tab="new"]', "sup_new", {});
+      c.log("support send", await c.fillAndSend('#support-new-form textarea[name="body"]', "QA test ticket: the map does not open."));
+      await until(`S.supportTicket != null`);
+      await c.settle(600);
+      await c.shoot("sup_sent", { who: "p1" });
+      // a non-admin account on the support list, only in this server's memory (Config.support.staff; put back below), logged in again
+      // with the password so the desk's staff_session_ok holds after the clock moved
+      await c.py("content.config.support.staff = [*content.config.support.staff, 'qaplayer4']; out = 1");
+      c.log("support relogin", await c.relogin("p4"));
+      await c.asPlayer("p4");
+      await c.load("/admin");
+      await until(`!!S.supportDesk && !S.supportDeskLoading`);
+      await c.settle(300);
+      await c.shoot("sup_desk", { who: "p4" });
+      await shootWhen('[data-act="support-desk-pick"]', "sup_desk_pick", `!!document.getElementById("support-answer-body")`, { who: "p4", wait: 700 });
+      await c.ev(`(() => { const e = document.getElementById("support-answer-body"); if (e) e.value = "QA test answer: try reloading the page."; return e ? 1 : 0; })()`);
+      await shootWhen('[data-act="support-answer"][data-then="wait"]', "sup_desk_answered", `!S.supportDeskLoading`, { who: "p4", wait: 900 });
+      await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']; out = 1");
+      await c.asPlayer("p1");
+      await c.shoot("sup_dot", { who: "p1" });
+      await c.step(ACT("sheet"), "sup_dot_sheet", {});
+      await shootWhen(ACT("support-open"), "sup_mine_answered", `!!document.querySelector('[data-act="support-ticket"]')`, { wait: 700 });
+      await c.step('[data-act="support-ticket"]', "sup_ticket_read", {});
+      await c.load("/");
+    }],
     ["mall", async (c) => {
       await c.load("/");
       await c.step(ACT("mall-open"), "mall", { who: "p1" });
