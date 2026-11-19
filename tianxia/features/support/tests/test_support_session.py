@@ -191,7 +191,8 @@ def test_expanded_arguments_never_reach_the_server(tmp_path):
         assert done.returncode == 2, (args, done.returncode, out)
         assert token.encode() not in out, args
         assert "連不上伺服器".encode() not in out, args  # 沒有任何 HTTP 請求
-        assert b"usage:" in out or "cli.sh 的參數".encode() in out, (args, out)
+        assert "指令或參數不對".encode() in out or "cli.sh 的參數".encode() in out, (args, out)
+        assert b"usage:" not in out, args  # argparse 的原話（會把參數印回來）不再出現
 
 
 def test_every_command_in_the_session_rules_exists():

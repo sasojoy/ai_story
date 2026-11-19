@@ -80,6 +80,7 @@
 - **`.local/support.json` 的四個鍵**（不進版控，值不寫在任何文件裡）：`bot_token`（核心 `identity_base.support_bot_token()` 也讀這一個）、`discord_webhook`（可省：省了橋只記不貼）、`server_url`（CLI 用，預設 `http://127.0.0.1:7861`）、`mention`（找真人要點的 Discord ID，字串陣列）。
 - 怎麼開、停：主機端操作文件「帳號綁定與客服」的「客服的橋（第 217 批）」。客服官 session 與 `cli.cmd` 是第 218 批。
 - **客服官 session**（第 218 批；設計 6.3、6.4）：範本在 `docs/support/session/`（`CLAUDE.md` 七條規矩與醒來先 queue、`settings.local.json`、`cli.sh`、`cli.cmd`、`start.cmd`、`stop.cmd`），`scripts/support_session_init.py <工作夾> [--url] [--config] [--python]` 冪等抄過去（已經在的不蓋、`.cmd` 寫 CRLF、`cli.sh` 寫 LF；金鑰檔在工作夾裡就拒絕、結束碼 2）。客服官的許可白名單是 `mcp__plugin_discord_discord__reply`、`Bash(./cli.sh *)`、`Read(//<工作夾>/**)`、`Monitor(tail -n 0 -f bridge.log)`；**`cli.cmd` 不進白名單**：Git Bash 叫 `.cmd` 時參數不加引號交給 cmd，`"R&D"` 的 `&` 被 cmd 當成下一個指令（排練實跑），`cli.sh` 直接 exec python。兩支都設 `TIANXIA_SUPPORT_LOCKED=1` 與 `TIANXIA_SUPPORT_CONFIG`／`URL`／`INBOX`，參數含 `& | < > ^ !` 就結束碼 2（`cli.sh` 第 227 批起另擋 `" { }`：展開出來的 JSON 擋在 python 之前，不讓 argparse 把它印回；`test_expanded_arguments_never_reach_the_server` 拿真的 `cli.sh`＋`support_cli.py` 鎖住結束碼 2、零 HTTP、不印 token，`test_every_command_in_the_session_rules_exists` 鎖規矩檔裡每個子指令都在 argparse）。`scripts/support_knowledge.py <工作夾> [--profile] [--content]` 把 `content/patch_notes.json`、`docs/support/FAQ.md` 抄進 `knowledge\`、開一個暫存的世界（自己的 `TIANXIA_DB`，用完刪、還原）寫 `howto.md`（`Game.howto_text()`；新世界停在籌備中，但籌備中的季已蓋過章，正式內容匯得出「這一季在打什麼」與收季那一句，第 227 批實跑；匯不出的是天命之季那種變體與要開季才有的世界狀態；換設定、改版之後要重匯），三個檔過 `test_server_bots.FORBIDDEN` 同一張字表，命中就一個都不寫、結束碼 1。設定與企劃者要做的五樣：`docs/superpowers/discord/客服官-設定.md`；排練：`docs/support/排練.md`。
+- **參數不對不印回參數**（X 波合併時 PM 加，2026-11-19）：`support_cli.py` 的主 parser 與子指令都是覆寫 `error()` 的 `_Parser`，參數錯了不印 argparse 的原話與 usage（原話會把參數原樣印回：`unrecognized arguments`、`invalid int value`、`invalid choice`；客服官被騙把金鑰檔展開成「光禿禿的一串」參數時，金鑰就進了輸出），只印固定的一句 `BAD_ARGS`、結束碼 2、不打 HTTP，鎖定與不鎖定一樣；`-h` 照舊。`--human` 錯照舊印 `BAD_HUMAN`（不含值）；連不上伺服器時網址是命令列 `--url` 給的就不印網址（`UNREACHABLE_ARG`）。不把 `cli.sh` 改成白名單（會擋掉以後新加的子指令）。測試 `test_support_cli.py::test_cli_bad_arguments_never_echo_the_value`。
 
 ## 掛鉤與檔
 
@@ -100,6 +101,7 @@
 第 226 批：`/mine` 多四個鍵、`web/support.js` 讀它；沒有新欄位、新表、新資料夾。換回第 225 批：`_mine` 與 `web/support.js` 兩處退回就是寫死的 3 張、3 MB、3、5；舊前端不認新鍵、新前端缺鍵退回預設，混著跑也對。季中能換、不必休季。
 第 218 批：只多文件、範本（`docs/support/`）與兩支主機腳本（`scripts/support_session_init.py`、`scripts/support_knowledge.py`）；遊戲程式、資料庫、存檔、旁檔、`web/` 都不動，季中能換、不必休季。主機上多一個客服官的工作夾（`C:\Ray\tianxia-support\`，抄過去的檔留著）。只停客服官：關掉它的終端機、`stop.cmd` 停橋。
 第 227 批：只動範本 `cli.sh`（多擋 `" { }`，要重抄才生效：`support_session_init.py` 不蓋已在的檔，工作夾已有的 `cli.sh` 要手動刪掉再 init）、`scripts/support_knowledge.py` 的檔頭、`docs/support/` 的 FAQ 與排練、測試；遊戲程式、資料庫（第 9 版）、存檔、旁檔、`web/` 都不動，季中能換。換回：把範本 `cli.sh` 換回舊的再重抄。
+X 波（PM）：只動 `scripts/support_cli.py` 參數錯誤時印的字與測試；遊戲程式、資料庫（第 9 版）、存檔、旁檔、`web/` 都不動，季中能換。換回：換回舊的 `support_cli.py`（參數錯又會印 argparse 的原話）。
 
 ## 另外要跑的
 
