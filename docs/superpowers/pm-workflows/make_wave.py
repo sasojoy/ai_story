@@ -1362,6 +1362,51 @@ WAVES["Y"] = dict(
 WAVES["X"]["extra_lenses"].append(Y_PROOF_LENS)  # 合併與閘門一次：finish 用 X，built 是 X、Y 兩邊接起來
 
 
+# ── Z 波：比對與走查工具修到在現在的 develop 上跑得起來 232、233（PM 2026-11-19：X、Y 兩波的閘門要用；Joy 11/12 #243 在 week7、season21 打開條款之後，情境照舊的方式註冊建不出玩家）──
+Z_LOG = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveX\sbdbg"
+Z_NOTE = [
+    "- **這一批修的是工具，不是遊戲**。11/12～11/16 Joy 的 46 個 PR（#235～#281）直接合進 develop、上了 main，那段時間主機側沒跑過閘門與比對，只有每日整套 pytest（綠）。11/19 PM 要驗新的一波時發現比對情境在現在的 develop 上跑不起來。**上面波次模式寫的「你不跑 same_behavior compare」「不跑 selftest」對這一批不適用**：把工具跑起來、跑到穩，就是這一批的工作。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。",
+    "- **只准動 `scripts/`（派工單點名的那一塊）與它的測試**；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`tests/conftest.py` 一個字不動。情境跑不下去是因為遊戲的規則變了（Joy 改的，是要的），**改情境去配合遊戲，不改遊戲去配合情境**；不准為了跑得過而在情境裡把正式設定打開的包關掉（那樣比的就不是線上的樣子），除非那一軌本來就註明在比「關著」。判斷拿不準選最保守的，寫進 decided。",
+    "- 這台同時有別的線在跑測試：重的全軌跑一次就好，要重跑先只跑壞的那幾軌。跑的時候**環境裡不要有 `TIANXIA_DB`**（`same_behavior` 自己管暫存庫；設了連好的軌都會紅），暫存夾用 `--tmp` 給、放你的暫存底下，跑完刪大檔。各包 README、`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 `docs`。",
+]
+
+
+def zb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-19-工具修復-第{n}批.md"
+    return batch(n, f"工具修復第 {n} 批：{title}", "core_shared", dev, plan, ports, body + Z_NOTE, custom=True)
+
+
+def b232():
+    return zb(232, "same_behavior 的情境在現在的 develop 上跑得起來、跑得穩（條款開著的註冊；其餘壞掉的軌逐軌修），covers 重量", "dev/tools-sb-232", "8456", [
+        "- **已經知道的**：`PYTHONHASHSEED=0 python scripts/same_behavior.py run --tmp <夾> --track talk . season21 <輸出>`（還有 `switchboard`）在 develop `b0a70f841` 上丟 `AttributeError: 'NoneType' object has no attribute 'player'`（`scripts/sb/base.py` 的 `edit`，從 `place` 進來；PM 跑的紀錄在 `" + Z_LOG + "\\talk.log`、`switchboard.log`）。PM 讀程式的判斷（**你要自己證實**）：`scripts/sb/base.py` 的 `setup`、`newcomer` 與 `scripts/sb/tracks/switchboard.py` 自己的 `setup` 用 `POST /api/register` 只送 `login`、`password`、`again`；#243 之後 week7、season21 的條款開著，註冊要帶「滿 18 歲」「同意條款」兩個勾選與版號（`tianxia/core/terms_base.py::register_problem`、`web/terms.js` 怎麼送就怎麼送、版號從 `GET /api/terms/version` 拿），不帶就被拒、帳號沒建、後面全倒。`facade`、`drape` 兩軌沒壞。",
+        "- **①修註冊**：所有經 API 註冊的地方（`git grep -n '/api/register' -- scripts/sb`）改成條款開著時照前端的送法帶上勾選與版號；條款關著時（test 設定、`config.json` 那一層）送出去的請求**位元組不變**（那邊的輸出不能因此改）。寫成一個共用的小函式，不要每個軌各抄一份。",
+        "- **②全軌跑一遍找出其餘壞的**：三種設定（season21、week7、test）每一軌用現在的程式自己對自己跑（`selftest` 或 `compare --base <develop 解開的樹> --head <同一棵樹>`，看工具哪一個快；`--base`、`--head` 要的是解開的樹，用 Python 的 tarfile 解 `git archive`）。分三堆寫進回報的表：跑得完而且兩次一樣的；丟例外的；跑得完但兩次不一樣的（不穩）。丟例外與不穩的逐軌修情境（多半是五包打開、江湖錄、親衛隊長、開局前導、新的鎖與灰鈕讓原本那一步按不到）：修法是讓情境照現在的遊戲走得到它原本要走的東西；真的走不到了（那個玩法被拿掉或被取代）就把那一步拿掉並在軌的說明字裡照實寫，**不要留一步靜靜地什麼都沒做**。",
+        "- **③修完驗**：`ALWAYS_TRACKS`（`scripts/sb/harness.py`）六軌加你動過的每一軌，三種設定各跑 `selftest`：跑兩次一樣、前半加後半等於整段、改一個字抓得到。全軌三設定自己對自己 `compare` 全部一樣。`tests/core/` 裡守 `scripts/sb` 的測試（邊界、covers 那 15 條、`test_test_for` 裡點到 sb 的）照 `scripts/test_for.py` 挑的跑過。",
+        "- **④covers 重量**（五包打開、多了 codex 包，11/10 量的已經過時）：`scripts/sb/covers_measure.py` measure → analyze → write 照檔頭的做法在修好的程式上重量一次（三設定約 20 分鐘 CPU）；analyze 結束碼要 0（ALWAYS 的不變量沒破）；covers 測試有警告就照實抄進回報（例：codex 沒有任何軌碰到）。**不加新軌**（codex、guard 之外新包要不要補軌寫進 leftovers，PM 定）。",
+        "- **⑤確認閘門拿誰的情境**：讀 `docs/superpowers/pm-workflows/wave_gate.py` 與 `scripts/same_behavior.py compare`：比 base 與 head 時，跑 base 那一側用的是 head 的 `scripts/sb` 還是 base 自己的？寫進回報（PM 要知道這一批合進去之後，拿修之前的 develop 當 base 比不比得起來；比不起來的話寫出 PM 該拿哪一筆當 base）。`wave_gate.py` 不改。",
+        "- 時間上限：這一批（兩段合計）不超過 3 小時；到了就把修好的推上去、交，沒修完的軌列在 leftovers（哪一軌、哪個設定、倒在哪一步、你的判斷）。",
+    ])
+
+
+def b233():
+    return zb(233, "網頁走查與網頁比對（scripts/webqa）在現在的 develop 上跑得起來：條款開著的註冊、江湖錄開著、其餘走不到的景", "dev/tools-webqa-233", "8457", [
+        "- 背景同第 232 批：#243 之後 week7、season21 的條款開著，註冊表單多兩個勾選（`web/terms.js` 註冊模式才插、沒勾擋送出），進遊戲後沒同意現行版的會疊一層；江湖錄 `codex` 11/13 起在 week7、season21 開著（俠客頁多一顆分頁、江湖頁狀態列底下多「進行中」一行、已投靠的人上面那一大塊收進「事」清單）；`scripts/webqa/serve.py` 只把開局前導 `intro` 關掉。`scripts/webqa/gate.py` 把 `web/codex.js` 登記成走查不碰，理由寫「codex 在走查跑的每個設定都是關的」——這句跟現況對不上。**PM 沒實跑過 webqa，壞不壞、壞在哪由你量**。",
+        "- **①量現況**：照 `.claude/skills/tianxia-qa/SKILL.md` 與 `scripts/webqa/` 的 README／檔頭，用 develop 現在的程式自己對自己跑一次網頁比對的全回合（`wave_gate.py` 怎麼叫 webqa 就怎麼叫；`Start-Process` 分離啟動、輸出導到檔、`docs/superpowers/pm-workflows/wait_file.py` 等，不要前景跑；不帶 `--ports`，拒絕 7861；模型網址 127.0.0.1:9）。回報表：每一回合跑不跑得完、`real` 幾張、`missing_must_reach` 有哪些、主控台錯誤。全部好的話這一批到此為止，寫「沒壞」與證據，第二段只做②。",
+        "- **②修**：只改 `scripts/webqa/`（flow、stage、serve、gate 的登記）。註冊那一步照真人會做的勾兩個勾選；疊的同意層照真人會做的按同意。江湖頁改版之後原本靠「上面那一大塊」找的鈕，改成現在真人找得到的路（「事」清單、「進行中」那一行）。走不到的 must_reach 逐個判：是景還在、flow 要改路；還是景被 Joy 拿掉了（那就從 must_reach 拿掉並在回報寫是哪個 PR 拿的）。`gate.py` 對 `web/codex.js` 的登記改成跟現況一致：江湖錄開著，改到 `web/codex.js` 要挑得到至少一個走得到江湖錄分頁與「進行中」那一行的回合；現有回合走不到就在現有 flow 加最短的幾步（點開江湖錄分頁、點「事」印），加的景進 must_reach。**不准**為了跑得過在 `serve.py` 把正式設定開著的包關掉（intro 已經關的照舊：那是動畫，比不了）。",
+        "- **③修完驗**：全回合自己對自己再跑一次：每一回合跑得完、0 real、`missing_must_reach` 空、主控台 0 錯誤；`tests/web/test_webqa.py` 與 `scripts/test_for.py` 挑的跑過。跑兩次結果一樣（至少挑兩個回合跑第二次）。",
+        "- 時間上限：兩段合計不超過 3 小時（全回合一次約一小時，別重跑第三次）；到了就把修好的推上去、交，沒修完的列在 leftovers（哪一回合、哪一景、你的判斷）。",
+    ])
+
+
+WAVES["Z"] = dict(
+    round2=True,
+    lines=[dict(name="比對工具", batches=[b232]), dict(name="走查工具", batches=[b233])],
+    merge_port=8461, fix_port=8462,
+)
+Z_TOOL_LENS = dict(key="tools", text="**工具修復：改情境去配合遊戲，沒有反過來；修完真的在比東西**。第 232、233 批。親自驗：①`git diff --stat` 對 base：只動了 `scripts/sb/`、`scripts/webqa/` 與它們的測試、計畫檔；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔一個字沒動。②條款關著的設定（test）下，註冊送出去的請求跟修之前位元組一樣（讀程式；挑一軌在 test 設定跑修前修後的情境，輸出要一樣）。③沒有任何一軌、任何 `serve.py` 的設定把正式設定打開的包偷偷關掉（grep `enabled`、`old_packs`、`terms`、`zongmen`、`jieyi`、`mail`、`titles`、`codex` 在 `scripts/sb`、`scripts/webqa` 的每一處，逐處看是誰加的、為什麼）。④被拿掉的步驟與 must_reach 每一個在回報都有理由（哪個 PR 拿掉那個玩法）；沒有「靜靜地什麼都沒做」的步驟（挑三軌讀輸出，確認情境說明字寫「走到」的在輸出裡真的有）。⑤covers 重量的結果寫回了登記、analyze 結束碼 0。⑥`gate.py` 對 `web/codex.js` 的登記跟現況一致，改 `web/codex.js` 挑得到回合。")
+WAVES["X"]["extra_lenses"].append(Z_TOOL_LENS)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
