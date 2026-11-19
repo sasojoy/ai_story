@@ -415,7 +415,13 @@ async function ffBeforeSiege() {
   await py("CLOCK['now'] += 3600; out = 1");
   await api("admin", "/api/do/fast_forward", { hours: 2 });
 }
-const ctx = { PAGE, shootRaw, loadRaw, drawOn, api, account, py, ev, cdp, load, asPlayer, dropCookie, shoot, step, click, crawl, settle, sleep, log, report, jars, setView, VIEWS, stable, leave, declineLetters, fillAndSend, ffBeforeSiege, tab: async (t) => { await click(`.tabs [data-act="tab"][data-tab="${t}"]`); await settle(t === "map" ? 1800 : 300); } };
+// batch 236: the support desk wants a password login made within staff_hours (identity_base.staff_session_ok); the flow moves the
+// clock, so log that player in again right before the desk. The password stays in here.
+async function relogin(who) {
+  const row = ACCOUNTS.find((a) => a[0] === who);
+  return row ? (await api(who, "/api/login", { login: row[1], password: PW })).status : 0;
+}
+const ctx = { PAGE, shootRaw, relogin, loadRaw, drawOn, api, account, py, ev, cdp, load, asPlayer, dropCookie, shoot, step, click, crawl, settle, sleep, log, report, jars, setView, VIEWS, stable, leave, declineLetters, fillAndSend, ffBeforeSiege, tab: async (t) => { await click(`.tabs [data-act="tab"][data-tab="${t}"]`); await settle(t === "map" ? 1800 : 300); } };
 let fatal = null;
 try {
   await connect();
