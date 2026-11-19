@@ -93,7 +93,7 @@
   // 客服頁頂上多一顆「‹ 管理者工具」回去。設定抽屜（app.js）不動：管理者從「管理者工具 ›」進來再點這一顆。
   function supportAdminLink() {
     if (!(S.main && S.main.admin && S.main.support_staff)) return "";
-    return `<button class="btn small ghost ad-entry" data-act="support-desk-enter">客服單 ›</button>`; // 字沿用 supportDeskLink
+    return `<button class="btn small ghost ad-entry sup-admin-entry" data-act="support-desk-enter">客服單 ›</button>`; // 字沿用 supportDeskLink
   }
   function supportDeskAsked() { // 點過「客服單 ›」或「‹ 管理者工具」以記憶體的旗標為準；剛開頁（重新整理）看網址的錨點
     if (typeof S.supportDeskAdmin === "boolean") return S.supportDeskAdmin;
