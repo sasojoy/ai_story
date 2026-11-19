@@ -166,12 +166,19 @@ def _player_view(sidecar: store.SupportStore, t: dict, bot_id: int | None) -> di
                           human=sidecar.has_human(tid))
 
 
+def _limits(shell) -> dict:
+    """/mine 帶的上限（第 226 批）：網頁照它寫提示、挑圖，不再寫死。"""
+    cfg = shell.CONTENT.config.support
+    return {"body_max": cfg.body_max, "files_max": cfg.files_max, "file_bytes_max": cfg.file_bytes_max,
+            "open_max": cfg.open_max, "daily_max": cfg.daily_max}
+
+
 def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> dict:
     if sidecar is None:
-        return {"tickets": [], "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
+        return {"tickets": [], "categories": rules.CATEGORIES, **_limits(shell)}
     bot_id = _bot_id(shell)
     tickets = [_player_view(sidecar, t, bot_id) for t in sidecar.mine(who.id, who.created)]
-    return {"tickets": tickets, "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
+    return {"tickets": tickets, "categories": rules.CATEGORIES, **_limits(shell)}
 
 
 def _staff_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,

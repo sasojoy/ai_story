@@ -421,6 +421,55 @@ def test_second_shot_fails_stops_and_keeps_the_ticket(main):
     assert 'id="support-file-form"' in out["page"]
 
 
+def test_no_picker_when_files_max_is_zero(main):
+    """第 226 批：主機把截圖關掉（files_max 0）時寫單頁不畫挑圖那一塊，送單只打 /api/support/ticket。"""
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 0, "file_bytes_max": 3000000, "open_max": 3, "daily_max": 5}
+    replies = {"/api/support/ticket": {"id": 7, "mine": {**mine, "tickets": [_ticket(status="open", replies=[], files=[])]}}}
+    out = _shots("""
+        const form = H.sheetHtml();
+        H.S.supportPicks = [{ file: file("a.png", "image/png"), url: "" }];
+        await H.supportForm({ id: "support-new-form", dataset: {} }, { category: "game", body: "卡住了" });
+        return { form, sent: sent.map((s) => s[0]), picks: H.S.supportPicks.length, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, replies=replies, m=m)
+    assert "support-new-files" not in out["form"] and "sup-pick" not in out["form"] and "sup-slot" not in out["form"]
+    assert "附截圖" not in out["form"] and "PNG、JPEG、WebP" not in out["form"] and 'id="support-new-form"' in out["form"]
+    assert out["sent"] == ["/api/support/ticket"] and out["picks"] == 0
+    assert "support-file-form" not in out["page"]
+
+
+def test_picker_follows_the_server_limits(main):
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 5, "file_bytes_max": 1000000, "open_max": 3, "daily_max": 5}
+    out = _shots("""
+        const form = H.sheetHtml();
+        await H.supportChange({ target: { id: "support-new-files", files: [file("big.png", "image/png", 1000001), file("ok.png", "image/png", 1000000)], value: "x" } });
+        const big = [H.S.supportPicks.map((p) => p.file.name), H.S.supportPickMsg];
+        await H.supportChange({ target: { id: "support-new-files", files: [1, 2, 3, 4, 5].map((i) => file(i + ".png", "image/png")), value: "x" } });
+        return { form, big, names: H.S.supportPicks.map((p) => p.file.name), msg: H.S.supportPickMsg, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, m=m)
+    assert "最多 5 張、每張 1 MB 以內（PNG、JPEG、WebP）" in out["form"] and out["form"].count("sup-slot") == 5
+    assert out["big"] == [["ok.png"], "圖太大了：一張最多 1 MB。"]
+    assert out["names"] == ["ok.png", "1.png", "2.png", "3.png", "4.png"]  # 第 6 張不收
+    assert out["msg"] == "一張單最多附 5 張圖。"
+    assert out["page"].count('class="sup-shot"') == 5 and out["page"].count("sup-slot") == 0
+    half = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new",
+                                              "supportMine": {**mine, "file_bytes_max": 2500000}})
+    assert "每張 2.5 MB 以內" in half
+
+
+def test_note_follows_open_and_daily_max(main):
+    m = {**main, "support_unread": 0}
+    t = _ticket(status="open")
+    for extra, line in (({"open_max": 4, "daily_max": 7}, "同時最多 4 張沒結的單，一天最多送 7 張。"),
+                        ({}, "同時最多 3 張沒結的單，一天最多送 5 張。")):
+        mine = {"tickets": [t], **extra}
+        new = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine})
+        lst = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": mine})
+        assert line + "帳號、名號、時間、版本會自動附上。" in new
+        assert f'<p class="muted sup-fine">{line}</p>' in lst
+
+
 def test_ticket_shows_shots_and_closed_has_no_add_form(main):
     m = {**main, "support_unread": 0}
     two = _ticket(status="answered", files=_files(2))
@@ -525,6 +574,51 @@ def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
         return { calls: T.calls.map((c) => c[0]), tickets: H.S.supportDesk.tickets.length };
       })();""", S={"adminPage": True}, responses={"/api/support/queue": q})
     assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
+
+
+DESK_FAILED = "讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。"
+
+
+def test_desk_says_so_when_the_queue_cannot_be_read(main):
+    """第 226 批：客服單讀不到時不畫四個 0 的磚，說一句；之後重畫不自己再讀（不然讀不到就一直打）。"""
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    out = run(m, """return (async () => {
+        let fails = 0;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => { if (url === "/api/support/queue") { fails++; return Promise.reject(new Error("down")); } return real(url, opts); };
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const first = T.els.app.innerHTML;
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { first, again: T.els.app.innerHTML, fails, desk: H.S.supportDesk || null, html: H.supportDeskHtml() };
+      })();""", S={"adminPage": True})
+    assert out["fails"] == 1
+    assert out["desk"] is None
+    for html in (out["first"], out["again"], out["html"]):
+        assert DESK_FAILED in html and "sup-tile" not in html and "讀取中…" not in html
+        assert 'data-act="support-desk-refresh"' in html and f'<p class="muted">{DESK_FAILED}</p>' in html
+
+
+def test_desk_refresh_recovers_after_a_failed_read(main):
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, """return (async () => {
+        let down = true;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => down && url === "/api/support/queue" ? Promise.reject(new Error("down")) : real(url, opts);
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const failed = T.els.app.innerHTML;
+        down = false;
+        const before = T.calls.length;
+        await H.supportClick("support-desk-refresh", { dataset: {} });
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { failed, calls: T.calls.slice(before).map((c) => c[0]), html: T.els.app.innerHTML, flag: !!H.S.supportDeskFailed };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert DESK_FAILED in out["failed"]
+    assert out["calls"] == ["/api/support/sweep", "/api/support/queue"]
+    assert out["flag"] is False and DESK_FAILED not in out["html"] and out["html"].count('class="sup-tile"') == 4 and "月卡沒到" in out["html"]
 
 
 def test_desk_labels_system_auto_and_human(main):

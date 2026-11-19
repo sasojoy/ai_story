@@ -699,6 +699,34 @@ def test_admin_page_no_line_when_false_or_404():
         assert out[case]["after"] == [] and "/api/identity/session" not in out[case]["posts"]
 
 
+# 第 226 批：客服名單上、不是管理者的人進客服桌面（support.js 的 supportDeskHtml，入口只有 supportDeskLink 連 /admin）：標題下同一行、重畫照補
+MAIN_210 = 'const S = () => ({ main: { admin: false, identity: info } });'
+DRIVER_226 = DRIVER_210.replace(MAIN_210, 'const S = () => ({ main: { admin: false, support_staff: true, identity: info } });')
+assert DRIVER_226 != DRIVER_210
+
+
+def _support_desk_entry_is_admin_path():
+    src = (WEB / "support.js").read_text(encoding="utf-8")
+    links = re.findall(r'href="(/[^"]*)"[^>]*>客服單', src)
+    assert links == ["/admin"]  # 客服進桌面的入口只有這一個，identity.js 的觀察器只在 /admin 補那一行
+    assert '<header class="ad-head">' in src.split("function supportDeskHtml", 1)[1].split("function ", 1)[0]
+
+
+def test_support_desk_shows_the_relogin_line():
+    _support_desk_entry_is_admin_path()
+    out = run(DRIVER_226, {"identity": str(WEB / "identity.js")})
+    line = '<p class="form-msg idp-relogin">管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。</p>'
+    assert out["on"]["once"] == 1 and out["on"]["after"][0] == ["afterend", line]
+    assert out["off"]["after"] == [] and out["gone"]["after"] == []
+
+
+def test_support_desk_keeps_the_relogin_line_after_a_redraw():
+    out = run(DRIVER_226, {"identity": str(WEB / "identity.js")})
+    line = '<p class="form-msg idp-relogin">管理與客服的功能要用帳號密碼重新登入才打得開（驗證碼、LINE、Google 登入的不行）。</p>'
+    assert out["on"]["after"] == [["afterend", line]] * 2  # 桌面重畫把那一行換掉：照記下的補回
+    assert out["on"]["posts"].count("/api/identity/session") == 1  # 只問一次
+
+
 # 第 210 批修（R 波審查）：名單上、還不夠格的人開 /admin，殼不畫管理頁、網址換回 /：江湖頁跳同一句（toast），一頁只問一次
 DRIVER_210_BOUNCE = r"""
 const idSrc = fs.readFileSync(input.identity, "utf8").replace(/\r\n/g, "\n");
