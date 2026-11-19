@@ -501,10 +501,10 @@ class OutletsScenario(Scenario):
         self.world_view("換季之後")
 
 
-# 改一個字（selftest）：捐軍備記貢獻那一句（搬之前在 engine.py 的 _credit_donation、之後在 tianxia/features/outlets/ 的捐軍備動作檔；
-# 第 2 項是之前的檔名，搬的人照實際的檔名改第 1 項的字串）
-register_track("outlets", OutletsScenario, (("tianxia/features/outlets/donate_actions.py", "tianxia/engine.py"),
-                                            ('msgs.append(f"貢獻 +{total}")', 'msgs.append(f"貢獻 +{total}！")')), "week7",
+# 改一個字（selftest）：「打點」那一間店的鈕名（銀兩出口的動作檔）。第 232 批換的：原本改捐軍備記貢獻那一句，#241 起捐軍備三種設定都關著，
+# week7 抓不到；打點那一間店 week7、season21 照舊走得到（史臨淵、計玄機進店）
+register_track("outlets", OutletsScenario, (("tianxia/features/outlets/silver_actions.py",),
+                                            ('Option(id="act:dadian", label=silver.SHOP)', 'Option(id="act:dadian", label=silver.SHOP + "！")')), "week7",
                covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
                        "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "looks",
                        "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
