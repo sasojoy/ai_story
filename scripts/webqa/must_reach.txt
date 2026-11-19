@@ -125,6 +125,8 @@ main:ex_wilds
 main:ex_open
 main:ex_go
 main:ex_outing-tap
+main:ex_guard_adopt
+main:ex_guard_on
 main:ex_outing-say
 main:ex_outing-close
 main:ex_0_outing

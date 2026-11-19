@@ -446,6 +446,9 @@ export const flows = [
       // batch 233: since 親衛隊長's fifth batch (#217-#220) the first trip out at level 10 or more runs into the child: 救 (outing-choose
       // above) asks once more, 收養他／收養她／不帶走. A player answers it (the first, 收養他) and the trip ends on its result card as before
       if (await c.ev(`!!document.querySelector('[data-act="outing-choose"][data-id^="guard:"]')`)) await c.step(ACT("outing-choose"), "ex_guard_adopt", { who: "p1", wait: 800 });
+      // batch 234: the adoption leaves its 果 card up (「你替他取名…」) with the 接著走 bar still filling; a player taps 接著走 (outing-tap,
+      // web/outing.js outingNowHtml → outingHurry) and the trip's result card, with 留一句 and 收起, comes up as before
+      if (await c.ev(`!!document.querySelector('#outing-pop .outing-now-go')`)) await c.step("#outing-pop .outing-now-go", "ex_guard_on", { who: "p1", wait: 800 });
       for (const a of ["outing-say", "outing-close"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
       for (const [i, loc] of ["yingshui", "songshan_foot", "runan_wilds", "deep_mountain"].entries()) {
         await place(c, "沈浪", loc);
