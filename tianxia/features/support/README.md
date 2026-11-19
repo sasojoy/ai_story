@@ -6,7 +6,7 @@
 
 ## 開關
 
-`Config.support.enabled`（`tianxia/core/tuning/support.py`，預設關；緊急開關也是它）。關著時：
+`Config.support.enabled`（`tianxia/core/tuning/support.py`，預設關；緊急開關也是它）。**線上**：AA 波（2026-11-20，第 228 批）起 week7、season21 兩份設定覆寫檔開著，只開真人那一半（`bot_account` 空著、identity 關著，見下面「只開真人」）；`config.json` 那一層照舊關。關著時：
 
 - `/api/support/*` 十三條（第 215 批加截圖的上傳與看圖兩條，第 216 批加找真人與自動結單兩條）一律 404 `{"detail":"Not Found"}`，跟沒有這條路逐位元組一樣（第 212 批起 gate 先於登入、先於參數解析：沒登入、壞 JSON、單號不是數字都一樣；十三條都在 `NO_LOGIN_ROUTES`，因為關著的 404 不是 401）；
 - 登入頁沒有客服信箱那一行、不多問一次（`web/support.js` 只在 `S.identity` 設了才問 `/api/support/mailbox`，第 214 批）；
@@ -36,7 +36,7 @@
 
 ## 客服名單（認帳號，不認名號）
 
-三個來源合起來：`Config.support.staff`、`.local/support.txt`（一行一個、`#` 開頭是註解，照修改時間重讀）、`TIANXIA_SUPPORT`（逗號分開）。每一筆是 `accounts.id` 的數字或登入名（不分大小寫；全是數字的一筆只當 id）。第 212 批起本體在核心 `tianxia/core/identity_base.py`（`support_names`、`support_staff`、`support_staff_name`：商城的易名帖也要問，包不能 import 別包）；`staff.py` 留同名轉手（`_cache` 是同一個 dict）。不是名單上的人打客服那五條一律 404（跟沒有這條路同一句）。客服不走 `AdminTool`、`/api/admin*` 一條都打不過（`tests/test_support_staff.py::test_staff_rejected_by_every_admin_api` 守），`is_admin` 不動。**客服本人不能用易名帖改名**（同管理者；客服開著才擋，帖不用掉）。
+三個來源合起來：`Config.support.staff`、`.local/support.txt`（一行一個、`#` 開頭是註解，照修改時間重讀）、`TIANXIA_SUPPORT`（逗號分開）。每一筆是 `accounts.id` 的數字或登入名（不分大小寫；全是數字的一筆只當 id）。**主機上一律寫已經存在的帳號的數字編號**：寫一個還沒註冊的登入名，誰先用那個名字註冊誰就是客服；`.local/support.txt` 照 UTF-8 讀、不去 BOM，第一行放註解（主機端操作文件「開真人客服之前」）。第 212 批起本體在核心 `tianxia/core/identity_base.py`（`support_names`、`support_staff`、`support_staff_name`：商城的易名帖也要問，包不能 import 別包）；`staff.py` 留同名轉手（`_cache` 是同一個 dict）。不是名單上的人打客服那五條一律 404（跟沒有這條路同一句）。客服不走 `AdminTool`、`/api/admin*` 一條都打不過（`tests/test_support_staff.py::test_staff_rejected_by_every_admin_api` 守），`is_admin` 不動。**客服本人不能用易名帖改名**（同管理者；客服開著才擋，帖不用掉）。
 
 ## 查帳號（第 212 批；設計 6.3）
 
@@ -106,6 +106,7 @@
 第 226 批：`/mine` 多四個鍵、`web/support.js` 讀它；沒有新欄位、新表、新資料夾。換回第 225 批：`_mine` 與 `web/support.js` 兩處退回就是寫死的 3 張、3 MB、3、5；舊前端不認新鍵、新前端缺鍵退回預設，混著跑也對。季中能換、不必休季。
 第 218 批：只多文件、範本（`docs/support/`）與兩支主機腳本（`scripts/support_session_init.py`、`scripts/support_knowledge.py`）；遊戲程式、資料庫、存檔、旁檔、`web/` 都不動，季中能換、不必休季。主機上多一個客服官的工作夾（`C:\Ray\tianxia-support\`，抄過去的檔留著）。只停客服官：關掉它的終端機、`stop.cmd` 停橋。
 第 227 批：只動範本 `cli.sh`（多擋 `" { }`，要重抄才生效：`support_session_init.py` 不蓋已在的檔，工作夾已有的 `cli.sh` 要手動刪掉再 init）、`scripts/support_knowledge.py` 的檔頭、`docs/support/` 的 FAQ 與排練、測試；遊戲程式、資料庫（第 9 版）、存檔、旁檔、`web/` 都不動，季中能換。換回：把範本 `cli.sh` 換回舊的再重抄。
+第 228 批（AA 波）：week7、season21 的設定覆寫檔多 `"support": {"enabled": true}`，加上 `rules.TOO_MANY_OPEN` 換字、上傳預檢 `_upload_check`、`web/support.js` 與 `web/admin.js` 的管理者入口；沒有新欄位、新表、新資料夾，資料庫第 9 版不動。**只關客服**：設定覆寫檔的 `support.enabled` 設 `false`、兩個程式重開，季中能換、不必休季；旁檔與截圖夾留著不讀，再打開單都還在。換回第 228 批之前的程式：管理者入口與上傳預檢沒了（上傳照舊讀完本體才查單）、額滿那一句與客服頁讀不到那一行換回舊字，其餘一樣。
 X 波（PM）：只動 `scripts/support_cli.py` 參數錯誤時印的字與測試；遊戲程式、資料庫（第 9 版）、存檔、旁檔、`web/` 都不動，季中能換。換回：換回舊的 `support_cli.py`（參數錯又會印 argparse 的原話）。
 
 ## 另外要跑的
@@ -113,7 +114,7 @@ X 波（PM）：只動 `scripts/support_cli.py` 參數錯誤時印的字與測�
 - `test_for` 挑不到的：`tianxia/features/notify/tests/`（改了 notify 的 `kinds` 那三處）、`tests/web/test_shell_web.py`（表單框、點擊清單照字面）、`tests/bots/test_server_bots.py`（`web/support.js` 不准寫假人相關字）、`tianxia/features/mall/tests/test_mall_rename_staff.py` 與 `tests/core/test_identity_base.py`（改了核心 `identity_base` 的客服名單時：易名帖擋客服）。
 - 第 215 批：`tests/server/test_backup_db.py`（截圖的資料夾跟著備份、還原、輪替）、`tests/web/test_shell_web.py`（`supportChange` 的框照字面）。
 - 第 216 批：`tests/core/test_identity_base.py`（`support_bot_token`）、`tests/core/test_shell_stays_thin.py`（`NO_LOGIN_ROUTES` 兩條）、`tests/bots/test_server_bots.py`（`web/support.js` 新字）、`tests/web/test_shell_web.py`（`support-human` 的點擊清單照字面）。
-- 情境：`scripts/same_behavior.py` 的 `petition` 軌（客服關著時登入的人打十三條、沒登入的人打 `mailbox`、`/api/main`、`/api/push`）；比對帶 `--new support`；第 212 批起 base 已經有這一包，要再加 `--also-existing`（K 波，PM 核對）。
+- 情境：`scripts/same_behavior.py` 的 `petition` 軌（第 235 批起分兩段，開關與名單都在記憶體裡設：名單只認 `Config.support.staff`，`TIANXIA_SUPPORT` 拿掉、`LOCAL_DIR` 指到不存在的資料夾）。關著段：登入的人打十三條、沒登入的人打 `mailbox`、`/api/main`、`/api/push`，全是 404。開著段：寫單（擋法四種）、`/mine`、回一句、客服看單、回覆、內部註記、結單、查帳號、`sweep`、未讀與江湖紀錄、找真人、不是圖的上傳被拒（在建資料夾之前，不留 `-support-files/`）、帶 Bearer 打十三條。走不到的：真的存截圖與看圖、客服官 token、三天自動結單、一天 5 張的上限（由包的測試守）。比對帶 `--new support`；第 212 批起 base 已經有這一包，要再加 `--also-existing`（K 波，PM 核對）。
 - 第 217 批：改 `scripts/support_bridge.py`、`scripts/support_cli.py` 時 `test_for` 帶邊界與 `tianxia/features/support/tests/test_support_bridge.py`、`test_support_cli.py`、`test_support_session.py`（T 波合併時 PM 加；以前只帶邊界）；改了旁檔的表或欄位（`store.py` 的 `SCHEMA`）、`rules.CATEGORIES`、`/api/support/*` 的回應長相時，這兩個檔也要跑（兩支腳本自己照欄位與鍵讀，不 import 包）。
 - 第 218 批：改 `docs/support/session/` 的範本、`docs/support/FAQ.md`、`scripts/support_session_init.py`、`scripts/support_knowledge.py` 時：兩支腳本 `test_for` 會挑到主機端三個測試檔（T 波合併時 PM 加）；範本與 FAQ 是文件、挑不到，另跑 `tianxia/features/support/tests/test_support_session.py`；改 `content/patch_notes.json`、玩法說明（guide 包的 `howto`）時也跑它（匯出過 leaks 字表）。第 227 批起其中 `test_knowledge_export_with_real_content_carries_the_season_end_rule` 是 slow（正式內容兩種設定各匯一次），改 `content/patch_notes.json`、guide 包的 howto、`scripts/support_knowledge.py` 時加 `--slow` 跑。
 - 第 226 批：改 `web/support.js` 的客服頁標題（`.ad-head`）或 `supportDeskLink` 時另跑 `tianxia/features/identity/tests/test_identity_web.py`（`test_support_desk_*` 讀 support.js 的原始碼確認入口與標題；`test_for` 照包挑不到別包的測試）；`tests/bots/test_server_bots.py`（`web/support.js` 新字）。
