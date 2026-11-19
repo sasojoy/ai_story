@@ -703,7 +703,7 @@ class GearScenario(Scenario):
 # 第 1 項是搬進包的檔、第 2 項是舊名的檔，搬的人照實際的檔名改）。抓到的地方：贈丑的本命兵器（他不在身邊，託人送來）
 register_track("gear", GearScenario, (("tianxia/features/gear/signature_arms.py",),
                                       ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
-                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "map", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

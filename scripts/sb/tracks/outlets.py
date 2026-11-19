@@ -505,7 +505,7 @@ class OutletsScenario(Scenario):
 # 第 2 項是之前的檔名，搬的人照實際的檔名改第 1 項的字串）
 register_track("outlets", OutletsScenario, (("tianxia/features/outlets/donate_actions.py", "tianxia/engine.py"),
                                             ('msgs.append(f"貢獻 +{total}")', 'msgs.append(f"貢獻 +{total}！")')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "looks",
+                       "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

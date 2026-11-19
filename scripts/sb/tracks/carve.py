@@ -194,7 +194,7 @@ class CarveScenario(RelicScenario):
 # 〔計畫 2.1 的檔名；搬的人照實際的檔名改第 1 項〕），first_move 那一段抓到
 register_track("carve", CarveScenario, (("tianxia/engine.py", "tianxia/features/seal/duel_actions.py"),
                                        ('out.append(f"你出了{move}。")', 'out.append(f"你出了{move}！")')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "hire", "identity", "looks", "mail", "military", "outlets", "peers", "seal",
-                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan",
-                       "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "horses", "identity", "jieyi", "looks", "mail", "military",
+                       "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                       "territory_acts", "travel", "zhuan", "zongmen"))

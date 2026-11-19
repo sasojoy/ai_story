@@ -679,10 +679,11 @@ def arts_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # 改一個字（合回 develop 第 0 段換過）：原本改的是舊配點那一句，五項屬性的季（week7、season21）走 _allocate_v2、碰不到；換成練成絕學定名那一句
 register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py", "tianxia/engine.py"),
                                       ("練成絕學的人，定名", "練成絕學的人，命名")), "week7",
-               covers=("battle", "bounties", "bout", "companions", "craft", "cultivation", "explore", "faction", "figure_acts", "gear",
-                       "guide", "military", "peers", "seal", "seclusion", "sense", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "travel", "zhuan", "zongmen"))
+               covers=("battle", "bounties", "bout", "codex", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guard", "guide", "horses", "military", "peers", "seal", "seclusion", "sense", "socialize",
+                       "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))
 register_bots("arts", ARTS_BOT_PROFILES, arts_bots_run,
-              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
-                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 修練那一軌的假人（--seats arts）
+              covers=("battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                      "feast", "figure_acts", "gear", "guard", "guide", "horses", "jieyi", "looks", "military", "outlets",
+                      "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                      "travel", "zongmen"))  # 修練那一軌的假人（--seats arts）

@@ -596,7 +596,8 @@ class RelicScenario(HeraldScenario):
 # tianxia/features/seal/admin.py〔計畫 1.1 的檔名；搬的人照實際的檔名改第 1 項〕），week7 mandate_mark 那一段抓到
 register_track("relic", RelicScenario, (("tianxia/engine.py", "tianxia/features/seal/admin.py"),
                                        ("換季時照樣會蓋）。", "換季時照樣會蓋）！")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "legacy", "looks", "mail", "mall",
-                       "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "identity", "intro", "legacy",
+                       "looks", "mail", "mall", "military", "outlets", "peers", "persona", "seal", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "terms", "territory_acts", "titles", "travel", "zhuan",
+                       "zongmen"))
