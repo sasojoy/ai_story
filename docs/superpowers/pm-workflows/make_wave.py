@@ -1255,6 +1255,113 @@ WAVES["W"] = dict(
 )
 
 
+# ── X 波：客服自動受理收尾 226～228、Y 波：測試去重收尾 229～231（企劃者 2026-11-19「客服自動受理和測試去重 繼續做完」）──
+# 兩波分開開發（X 是新功能模式、Y 是只改測試），合併與閘門一次：finish 用 X，built 是兩邊接起來。
+X_SCOPE = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveX\scope.json"
+X_SHOTS = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveX"
+X_NOTE = [
+    "- **客服自動受理收尾這一波**（企劃者 2026-11-19「客服自動受理和測試去重 繼續做完」）：PM 11/19 把這條線留下的項目對現行程式重新查過一輪（每項一位查案、一位懷疑者），結果在 `" + X_SCOPE + "`（只讀；`items[].key` 是項目名，`found` 是查案、`verdict` 是懷疑者的核對與比較保守的做法）。**動手前先讀派工單點名的那幾個 key**，兩邊說法不一樣時照懷疑者的 `safer_way`，再對不上以現行程式為準、寫進 decided。原設計 `" + T_DESIGN + "`、原計畫 `" + T_PLAN + "`。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批不做派工單沒寫的事，碰到了寫 leftovers。",
+    "- **開關 `Config.support.enabled` 預設關、week7 與 season21 也還關著，這一批不開它**。核心（`tianxia/core/`）、殼（`server.py`、`web/app.js`、`web/main.js`、`web/shell.js`、`web/style.css`、`index.html`）、`tests/core/shell_tables.py`、資料庫結構（第 9 版）一個字不動；要動才做得完就停下來寫 stopped。",
+    T_NOTE[1].replace("設計 5.6 的對比圖：程式只做計畫寫的 A 版，B、C 兩版用暫時改 css 拍完就還原（不提交），截圖存計畫寫的暫存夾、路徑寫進回報；**不等企劃者挑才做**。", "這一批沒有要挑的版型：照現有的樣子接著畫，拍圖只為自驗，存 `" + X_SHOTS + "\\b<批號>\\shots\\`、路徑寫進回報。"),
+    T_NOTE[2],
+]
+
+
+def xb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-19-客服收尾-第{n}批.md"
+    return batch(n, f"客服自動受理收尾第 {n} 批：{title}", "support", dev, plan, ports, body + X_NOTE, custom=True)
+
+
+def b226():
+    return xb(226, "上限跟設定走（截圖張數與大小、沒結的單與一天幾張）、客服桌面讀不到時說一句、鎖兩件現有行為的測試", "dev/support-7", "8442", [
+        "- 先讀 scope 的 `sup-limits`、`sup-relogin`、`sup-critic`。",
+        "- **①上限跟設定走**。`tianxia/features/support/routes.py::_mine()` 的**每一個** return（含旁檔不在那一個）多回四個鍵：`files_max`、`file_bytes_max`、`open_max`、`daily_max`（值照 `Config.support`；先看 `tianxia/core/tuning/support.py` 這四個欄位真的叫什麼，名字照它）。測試加在現在斷言 `body_max` 的那一條旁邊（`test_support_tickets.py`）：`test_mine_carries_the_limits`（monkeypatch 成 0 與 5 都跟著變，旁檔不在時也有）。`web/support.js`：`SUPPORT_FILES_MAX`、`SUPPORT_FILE_BYTES` 兩個常數改成讀 `S.supportMine` 的函式，缺鍵（舊回應、讀取失敗）退回 3 與 3000000；三句提示（`SUPPORT_FILE_NOTE`、`SUPPORT_FILE_BIG`、`SUPPORT_FILE_FULL`）與 `SUPPORT_NOTE`（檔裡有兩處寫「同時最多 3 張沒結的單，一天最多送 5 張」，兩處都改）用數字組出來（MB 的寫法跟 `routes._mb` 一樣；預設值下組出來的句子**跟現在逐字一樣**）；`files_max` 是 0 時 `supportPickHtml()` 回空字串（按鈕、說明列、空位格整塊不畫）、送單不走上傳那一段。補圖那一格在 0 時本來就不出現，只換讀法。現有網頁測試（寫死 3 張、3000001 位元組、mine 假資料沒有新鍵的那幾條）**不改、要照樣綠**（它們就是「缺鍵退回預設」的證明）；新加 `test_support_web.py` 三條：`test_no_picker_when_files_max_is_zero`、`test_picker_follows_the_server_limits`（5 張與 1000000：第 6 張不收、1000001 位元組當場擋、提示寫 1 MB）、`test_note_follows_open_and_daily_max`。**不做**：`POST /api/support/file` 在 0 時提早拒（懷疑者判 drop）。",
+        "- **②客服桌面讀不到時說一句**。現況：`supportDeskReload` 的 catch 把 `S.supportDesk` 退成全 0，畫出四個 0 的磚，之後不再重讀。改成：catch 記一個失敗旗標，`supportDeskHtml` 這時不畫四個磚、畫一行 `p.muted`「讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。」（新字，旁註 `// 待 joy 潤`，列進 new_strings）；按「重新整理」清旗標重讀，讀到了就照常畫。`api()` 自己跳的那一則 toast 不管（在殼裡，不碰）。測試 `test_desk_says_so_when_the_queue_cannot_be_read`、`test_desk_refresh_recovers_after_a_failed_read`。",
+        "- **③鎖兩件現有行為（只加測試，紅了才動程式）**。(a) 客服桌面的「請用密碼重新登入」那一行：identity 開著、帳號在客服名單上但不是管理者、這次 session 不是密碼登入時，客服桌面標題下要有那一行，桌面重畫之後還在（仿 `tianxia/features/identity/tests/test_identity_web.py` 管理頁那幾條的 mock 寫法，加在同一個檔：`test_support_desk_shows_the_relogin_line`、`test_support_desk_keeps_the_relogin_line_after_a_redraw`）。先確認客服進桌面的入口是不是都落在 `/admin`（`identity.js` 的觀察器只在那個路徑補）；**紅了**就是真的缺：最小改法只在 `web/identity.js` 的觀察器條件，不准包對包、不碰殼，改了什麼寫進 decided。(b) 按過「找真人」、之後被真人客服回成已回覆的單，玩家 3 天沒再回照樣自動結（PM 11/10 認定維持、企劃者看過沒反對）：`test_support_flags.py` 加 `test_a_human_answered_ticket_still_auto_closes_after_three_days`。",
+        "- 拍圖自驗：暫存資料庫起 8442、客服開著、模型網址 127.0.0.1:9；寫單頁 `files_max` 預設與 0 各一組、客服桌面讀不到那一行，375 淺、375 深、1280。拍完 `taskkill /T`、刪暫存。",
+        "- 比對：`compare --new support --also-existing` 的清單裡會多 `web/support.js`（它不管開關都送給每個瀏覽器），其餘一樣；清單抄進回報。退版：`web/support.js` 與 `_mine` 兩處退回就是寫死的舊樣子；沒有新欄位、沒有新表、季中能換；緊急開關照舊 `Config.support.enabled`。",
+    ])
+
+
+def b227():
+    return xb(227, "主機端：客服官白名單的許可實跑與兩條自動測試、知識匯出驗一次並鎖住、FAQ 補到 11/19、排練清單更新", "dev/support-8", "8443", [
+        "- 先讀 scope 的 `sup-rehearsal`、`sup-howto`、`sup-critic`。這一批**不動 `tianxia/`、`web/`、`content/`、`server.py`**，只動 `scripts/support_*.py`、`docs/support/`、`docs/superpowers/discord/客服官-設定.md`、包的 `tests/` 與 README。",
+        "- **①許可實跑（T 波審查留下的唯一安全缺口）**。用 `scripts/support_session_init.py` 把客服官 session 範本裝到暫存夾（`" + X_SHOTS + "\\b227\\desk\\`，**不是** `C:\\Ray\\tianxia-support\\`），`settings.local.json` 拿掉 `enabledPlugins`（不接 Discord），金鑰檔自造 40 字亂數假 token，`cli.sh` 指到一台你自己起的暫存伺服器（8443、客服開著）或不存在的埠都行。用 `claude -p --output-format json`（模型用最小的那一顆；**絕不帶 `--dangerously-skip-permissions`、不帶任何放寬權限的參數**）各跑一次，看輸出的 `permission_denials`（**不是看結束碼**：展開之後 `cli.sh` 多半回 2，被擋與被放行但沒做事分不出來）：要放行的 `./cli.sh queue`；要被擋的 `./cli.sh queue \"$(whoami)\"`、反引號寫法、`./cli.sh queue $(ls ..)`、`./cli.sh ticket 1 \"$(cat ../.local/support.json)\"`、`./cli.sh answer 1 \"$(echo x)\"`、`./cli.sh queue; dir`、讀工作夾外的檔、寫一個檔。記下 `claude --version`。結果逐條寫進 decided 與 `docs/support/排練.md`。**有任何一條該擋而沒擋**：不要放寬任何規則、不要自己猜著改白名單；可以收緊（例：`cli.sh` 的 `case` 多擋展開後才會出現的字元，同步改 `test_support_session.py` 逐字比對那一條），收緊後重跑那一條；仍擋不住就寫 stopped，開頭寫「安全：」。跑不起來（沒有 `claude` 指令、要登入）就寫「沒實跑」與原因，不硬做。",
+        "- **②兩條自動測試**（`test_support_session.py`；要 Git Bash，沒有就 skip，照檔裡現有那一條的寫法）：`test_expanded_arguments_never_reach_the_server`（把「展開之後會長成的字」——帶空白的使用者名稱、一串檔名、一段 JSON——直接當參數給真的 `cli.sh`＋真的 `support_cli.py`：結束碼 2、零個 HTTP 請求、輸出不含 token）、`test_every_command_in_the_session_rules_exists`（`docs/support/session/CLAUDE.md` 裡每一個 `cli.sh <子指令>` 都是 `support_cli.py` 的 argparse 子指令）。不開埠、不起假的 webhook 伺服器。",
+        "- **③知識匯出**。交接寫「`howto.md` 從籌備中世界匯出沒有收季那句」，查案員讀程式認為這句是錯的（籌備中的季種下去就蓋過章）。實跑定案：`TIANXIA_DB` 指到暫存檔，`scripts/support_knowledge.py --profile season21` 與 `--profile week7` 各匯一次，看 `howto.md` 有沒有收季那一句（兩種設定的句子可能不同）。有：加回歸測試 `test_knowledge_export_with_real_content_carries_the_season_end_rule`（兩種設定一條迴圈，輸出過 `tests/bots/test_server_bots.py` 的 `leaks()`；單條超過 1 秒就標 slow），並把 `support_knowledge.py` 檔頭那句不對的說明改對（真正匯不出來的是什麼照實寫）。沒有：寫清楚少的是哪一句、為什麼，最小修法只在 `scripts/support_knowledge.py`（不開季、不碰 `tianxia/`），加同一條測試。檔頭再加一句：換了設定或改版之後要重匯。",
+        "- **④FAQ 補到 11/19**（`docs/support/FAQ.md`）：11/10～11/16 上線的東西各補一兩題——親衛隊長、江湖錄與江湖頁的「進行中」、門派、結義、帖友書信、稱號、馬的來路、意境合成改版、開局前導、紅點、捐軍備關了、村鎮營地不再教下品武學、武學成數只靠戰鬥、21 天季擂台與懸賞榜不再等第 2 週。**只寫 `content/patch_notes.json`、各包 README、`docs/guide` 查得到的**，查不到的不寫；不寫機率、戰況、任何跟假人有關的字；每條旁 `<!-- 待 joy 潤 -->`。舊題跟現況對不上的（例：寫了擂台第 2 週才開）一起改。",
+        "- **⑤排練清單**（`docs/support/排練.md`）：本機這一輪的結果填進去；Discord 那一半還沒走的每一項標清楚卡在企劃者五樣裡的哪一樣；「三種都要被擋」那一項補上讀工作夾外金鑰檔的那一種。`ALIVE`、`start.cmd`／`stop.cmd`（用假的 `claude.cmd`，`TIANXIA_DB` 填暫存庫）本機能走的走一次，等 300 秒的用參數縮短、沒有參數就讀程式確認不乾等；收尾確認橋與假 session 的行程都沒殘留。設計稿寫 `ALIVE` 會進 log、程式照計畫只印 stdout：不改程式，句子放回報的 docs（PM 改設計稿）。",
+        "- **不做**：真的 Discord 排練；橋打 HTTP 或寫旁檔；`monitor.py`；自動結單誰來掃（第 228 批另派）；`_wipe_db`（懷疑者判現在沒有東西可做）。退版：都是主機腳本、測試與文件。",
+    ])
+
+
+WEB_X = "**這一波動到畫面的只有第 226 批的 `web/support.js`：寫單頁的截圖與提示改讀伺服器給的上限、`files_max` 是 0 時整塊不畫、客服桌面讀不到時畫一行字**（開關預設關）。用 head 的 `scripts/webqa/`，上面「照 tianxia-qa 並排截圖」照做。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（各挑空埠，拒絕 7861）。\n1. **開關關著**：閘門帶 `--changed` 已經跑過網頁比對（`.local/wave_gate/<head8>/web/report.txt`），這一關不重跑，只看它有沒有 real（有就是 blocker）、`missing_must_reach` 空。\n2. **開關開著**（base 與 head 的設定覆寫檔都把 `support.enabled` 打開，客服身分用 `TIANXIA_SUPPORT=<你用 scripts/set_password.py 建的帳號>`，兩邊同樣的步驟）：玩家在設定抽屜開客服、開寫單頁——預設值下 base 與 head 的寫單頁**逐像素一樣**（提示字逐字一樣）；玩家附 2 張圖送一張單、看單有兩張縮圖。再只對 head：設定覆寫檔把 `support.files_max` 設 0 重起，寫單頁沒有「附截圖」那一塊、送單正常；設回 5 與 `file_bytes_max` 1000000，提示寫 5 張、1 MB。客服桌面：客服身分開 `/admin` 的客服桌面照常列單；把伺服器停掉再按「重新整理」，畫出「讀不到客服單…」那一行、不是四個 0；伺服器起回來再按，恢復。375 淺、375 深、1280 各拍。主控台 0 錯誤。"
+
+X_FEATURE_LENS = dict(key="feature", text="**客服收尾：關著一個字不變、開著照派工、看不出假人、沒碰不該碰的**。第 226、227 批（與第 228 批，如果這一波有）；查案原文 " + X_SCOPE + "。親自驗：①開關關著：`/api/support/*` 照舊 404、`/api/me`、`/api/main` 對 base 位元組一樣；變的只有 `web/support.js` 這個檔本身。②預設值下 `web/support.js` 組出來的四句提示跟 base 逐字一樣（把兩邊的字串抓出來比）；缺鍵退回 3、3000000；現有寫死 3 張與 3000001 的網頁測試一條沒改。③`_mine` 每一個 return 都帶四個鍵。④客服桌面讀不到那一行只在失敗時出現、重新整理會清；新字旁有待 joy 潤。⑤第 227 批沒有動 `tianxia/`、`web/`；許可實跑的指令沒有任何放寬權限的參數、暫存夾不在 `C:\\Ray\\tianxia-support\\`、回報與 commit 裡沒有真的 token；FAQ 新題沒有機率、戰況、假人字樣，每條有待潤標記，內容在 patch_notes 或 README 查得到（抽五題對）。⑥核心、殼、`shell_tables`、資料庫結構沒有動；包沒有 import 別包。⑦`leaks()` 掃得到新加的輸出。")
+
+WAVES["X"] = dict(
+    round2=True, feature=True, design=T_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[X_FEATURE_LENS],
+    lines=[dict(name="客服收尾", batches=[b226, b227])],
+    merge_port=8447, fix_port=8448,
+    web_check=dict(ports="8449、8450", steps=WEB_X),
+)
+
+
+Y_NOTE = [
+    "- **測試去重收尾這一波**（企劃者 2026-11-19「客服自動受理和測試去重 繼續做完」）：PM 11/19 把盤點 `" + V_SURVEY + "` 留下的每一項對現行程式重新查過（每項一位查案、一位懷疑者），結果在 `" + X_SCOPE + "`（只讀；`items[].key` 是項目名，`found` 是查案、`verdict` 是懷疑者）。**動手前先讀派工單點名的 key**；兩邊說法不一樣時照懷疑者的 `safer_way`，再對不上以現行程式為準、寫進 decided。上面「計畫不超過 120 行」照舊，計畫寫在 `plan` 那個路徑。**不動 `tianxia/`、`web/`、`content/`、`server.py`**，`scripts/` 只有派工單明寫的才碰；不改任何斷言的意思（併是把同樣的斷言放在一起，不是放寬）；**一條測試都不刪**（刪除候選只列在回報，企劃者點頭才刪）；清單外的測試不動。",
+    "- **秒數怎麼量**：junit（每日整套 11/19，`-n 4` 含 slow）在 `" + X_SHOTS + "\\junit_1119.json`，只能當線索；要下判斷的一律自己量：`.venv/Scripts/python.exe -m pytest --durations=0 -p no:xdist -m \"slow or not slow\" <檔>`，**跑兩次取大的**（別的線同時也在跑測試，機器不安靜）。改前改後寫進回報的 `decided`（表：檔或條、改前、改後）。各包 README、`docs/guide`、手冊、`CLAUDE.md` 不動，句子放回報的 `docs`。怎麼寫測試照 V、W 波定的：正式內容一律 `conftest.real_content(profile)`、harness 不等 ≥1 秒的計時器、預設資料庫從模板抄。",
+]
+
+
+def yb(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-19-測試收尾-第{n}批.md"
+    return batch(n, f"測試去重收尾第 {n} 批：{title}", "core_shared", dev, plan, ports, body + Y_NOTE, custom=True)
+
+
+def b229():
+    return yb(229, "備份大資料庫那一條的判準不靠牆鐘；conftest 的 real／on 建法收成一處；江湖錄網頁測試不真等計時器；過時的註解", "dev/test-tidy-229", "8444", [
+        "- 先讀 scope 的 `t-backup`、`t-critic`、`t-new`、`t-appjs`。",
+        "- **①`tests/server/test_backup_db.py::test_backup_of_a_big_database_finishes_while_writes_never_stop`**（11/10 03:30 紅過一次，判是四個 worker 搶磁碟）。現在 writer 靠 20 秒 monotonic deadline 自己停，備份拖過 20 秒或 writer 被 `database is locked` 打死，同一句 `assert` 倒、分不出原因。改成（照懷疑者的 `safer_way`）：writer 只由 `stop` 事件停（另留一個很長的保險期限，例 120 秒，只防測試自己卡死）、例外收進 `errors`、數 commit 次數；斷言的順序：先 `errors` 是空的（訊息寫「寫入的那一邊被鎖死」）、備份沒丟例外（訊息寫「備份被擋」）、備份回來之後 writer 還活著而且**之後**還會再 commit 至少一次（等事件、逾時 10 秒；**不比備份期間 commit 了幾次**——快機器上備份幾十毫秒就做完，期間可能 0 次）、備份檔 `integrity_check` 與筆數。**加一道結構護欄**抓「改回分步複製」的回歸（照 scope 裡寫的做法；它才是快速抓回歸的主力，不是選做）。**2 萬筆不縮**。證明：暫時把 `scripts/backup_db.py` 改回分步複製（不提交），新測試要紅，而且紅在護欄或「備份被擋」那一句；還原後綠；兩次都寫進回報。同檔 `test_backup_while_someone_keeps_writing` 的 writer 沒有 try/except 的話，同樣收 `errors`、先斷它是空的。`scripts/backup_db.py` 不改。",
+        "- **②conftest 的 real／on 建法**：W 波第 223 批在 `test_rank_actions.py`、`test_opportunities.py`、`test_promotions_huang.py` 各照抄了一份 `tests/conftest.py` 的 `real`／`on` 建法（docstring 自己寫是抄本）。在 `tests/conftest.py` 加純函式（名字你定，例 `make_real()`、`make_on(real)`），`real`、`on` 兩個 fixture 改成叫它，**fixture 的行為不變**；三個檔的抄本改叫同一個函式。換之前用一次性腳本比：舊抄本與新函式建出來的內容 `model_dump_json()` 逐字一樣（三個檔各比一次），結果寫進回報。",
+        "- **③江湖錄網頁測試**（`tianxia/features/codex/tests/test_codex_web.py` 裡 junit 1.9 秒那一條）：它真的在等 4×400 ms。只改**那一條測試自己的 script**（照懷疑者的寫法：把長延遲的 `setTimeout` 在那條 script 裡縮掉、再等一次 microtask），`tests/kit/webharness.py` 不碰；送出與重抓的斷言一句不少。改前改後秒數寫進回報。",
+        "- **④過時的註解，順手**：`tests/conftest.py` `LONG_FIRST` 上面那段註解跟 `tests/core/test_test_for.py` 現在斷的對不上的地方改對（名單本身不動）；`bounties` 測試檔開頭重複的 import 拿掉；`test_app_js_parses` 的 docstring 還寫「三個檔」（實際是 `APP_FILES` 五十幾個）改對，**測試名不改**；`test_codex_smoke.py` 檔頭骨架留下的範本註解清掉（`@pytest.mark.smoke` 與斷言不動）。",
+        "- **不做**（scope 裡懷疑者判 drop 的，不要撿回來）：`load_content(FIXTURE)` 換快取（省不到 1 秒）、`test_app_js_parses` 改成一次 node、identity notify 併對、`_live_db` 換模板、`test_real_content` 的 `_real_s1`／`_announce` 共用、`test_sim_scripts` 縮範圍、fb095。這幾項與理由抄一行進回報的 leftovers 開頭寫「查過不做：」，PM 寫回盤點。",
+    ])
+
+
+def b230():
+    return yb(230, "還標 slow 的網頁測試照第 220 批的 0.5 秒規則重量，量得過的拿掉標記", "dev/test-slowweb-230", "8445", [
+        "- 先讀 scope 的 `t-slowweb`、`t-s21frame`、`t-critic`，與 `docs/superpowers/plans/2026-11-10-測試去重-第220批.md` 裡拿掉 slow 的規則原文（0.5 秒那一條與怎麼量）。第 220 批改了常駐 harness 之後，只因為等計時器才標 slow 的可以放回平常的整套（企劃者 11/10：不把慢測試一律標 slow 藏起來；反過來，量得過的就放回來）。",
+        "- **先列全**：全 repo 用常駐 node harness 的網頁測試裡還標 slow 的（`git grep -l webharness -- tests tianxia/features` 再對每個檔 grep `mark.slow`／`pytestmark`；查案員的清單被截斷過，不要只看 scope 列的五個檔）。已知：sortie `test_core_loop_web`（單條標）、`test_sortie_report`（整檔）、territory_acts `test_conquest_web`（單條標）、`tests/web/test_jianghu_page_web.py`（單條標）、sense `test_epiphany_name_web`（整檔）、companions `test_errands_web`（整檔）、map、peers、socialize 各有零星一兩條。",
+        "- **逐檔量**（照上面「秒數怎麼量」，兩次取大的；整檔 `pytestmark` 的檔第一條會吃到載內容，照實量）：單跑 **< 0.5 秒**的拿掉 slow；**0.4 以上**的預設留著，除非兩次都明顯低於 0.5；≥0.5 的留著。整檔 `pytestmark = pytest.mark.slow` 的檔如果只有幾條要留，改成那幾條單條標；別的標記（`whole_content` 等）與旁註的其他內容不動。`tests/figures/test_season21_frame.py` 的兩條純函式測試（`test_the_warning_function_itself_knows_the_phase`、`…matching_programs_and_ended_seasons_stay_quiet`）照同一條規則量、量得過就拿掉 slow；這個檔啟動類那幾條**不動、不刪**（刪除候選抄進回報）。",
+        "- **連動**：`tests/core/test_test_for.py` 有拿這些檔當「整檔 slow」或數 slow 條數的例子，拿掉標記之後照新的事實改（例子換成還是整檔 slow 的別的檔，或改數字；**不改它在驗的規則**）；`scripts/test_for.py` 裡點名這些檔的註解跟著改（這一批只准動這個檔的註解）。`tests/conftest.py` 不碰（第 229 批在改）。",
+        "- 回報：一張表（檔、測試、第一次、第二次、決定），拿掉幾條、留幾條；平常的整套（不含 slow）因此多跑幾條、多幾秒（照你量的加總，寫【量】不是【估】）。跑一次 `scripts/test_for.py` 確認挑到的都綠。",
+    ])
+
+
+def b231():
+    return yb(231, "tests/core/test_content.py：先量；單條 1 秒上下、「改一個欄位再整份 validate 正式內容」的突變測試照第 223 批的規矩併組，省不到 8 秒就放棄", "dev/test-content-231", "8446", [
+        "- 先讀 scope 的 `t-critic`（最後兩項）與 `docs/superpowers/plans/2026-11-10-測試去重-第223批.md`（第 223 批怎麼併、怎麼證明）、`docs/superpowers/plans/2026-11-10-波次W紀錄.md` 第 223 批「開發定的」。`tests/core/test_content.py` 是不含 slow 的整套裡最大的一個檔（370 條、junit 51.5 秒）；裡面約 11 條各 1.2～1.7 秒（`test_orders_escort_must_end_at_a_base_of_its_side`、`test_orders_text_slots_must_be_known`、`test_stance_fields_only_on_season_one_endings`、`test_promote_only_on_promotion_scenes`……），其餘中位數 0.1 秒。",
+        "- **第一段只量、定組**：整檔單跑量每條；≥0.6 秒的每一條讀它做什麼（載哪一份內容、改幾個欄位、validate 幾次、斷哪一句）。**只收這一種**：改正式內容（或它的複本）的一個欄位、整份 `validate`、斷 `ContentError` 的某一句。照第 223 批的規矩定組：一組不超過約 8 個突變；同組的 match 互不為子字串；裸字串的 match 補成帶 id 的全句（先用探針把每個突變單獨丟的全句抄下來）；正向的 validate 不跟會丟錯的併；同一個欄位的突變不放同組；改掉別的突變要靠的物件的不併。算併完省幾秒（validate 次數 × 單次秒數）：**省不到 8 秒 CPU 就放棄**，回報寫量表與理由，第二段不做（照第 225 批放棄的前例，`stopped` 留空、`decided` 寫「放棄」）。0.1 秒那三百多條（各抄一份測試內容夾再載）不動。",
+        "- **第二段**：照第 223 批的寫法併——原本的 parametrize 與測試名都留著（每一筆還是自己的 id），module 範圍的 fixture 懶算、一組 validate 一次、每個 id 只斷自己那一句全句；整組套上卻沒丟錯要有帶組名的 assert。**每一筆做注入證明**：拿掉一個突變，只有它自己的 id 紅（至少每一組做一次，結果進回報）。只改 `tests/core/test_content.py` 一個檔。改前改後整檔秒數與 validate 次數寫進回報。",
+    ])
+
+
+Y_PROOF_LENS = dict(key="proof", text="**改測試，保護面不能掉**。第 229～231 批；查案原文 " + X_SCOPE + "。親自驗：①第 229 批：備份那一條改完之後，把 `scripts/backup_db.py` 暫時改回分步複製（解到暫存夾做、不提交）它真的會紅，而且訊息分得出「寫入被鎖死」與「備份被擋」；2 萬筆沒縮；沒有比「備份期間 commit 幾次」這種快機器會誤報的判準；conftest 新函式建出來的內容跟三個檔原本的抄本逐字一樣（回報要有比對，抽一個自己比）、`real`／`on` fixture 行為沒變；江湖錄那一條的斷言一句沒少、`tests/kit/webharness.py` 沒動。②第 230 批：每一條被拿掉 slow 的在回報的表裡有兩次量到的秒數且都 < 0.5；整檔 `pytestmark` 拿掉後該留的單條標記都在；`whole_content` 等別的標記沒被順手拿掉；`test_test_for.py` 改的是例子與數字、沒有改它在驗的規則；`scripts/test_for.py` 只動註解。③第 231 批（沒放棄的話）：每組不超過約 8 個突變、同組 match 互不為子字串、裸字串都補成帶 id 的全句、正向 validate 沒跟會丟錯的併、parametrize 的 id 與測試名都在、回報有每組的注入證明；放棄的話量表與理由在。④三批都沒有刪任何測試（`git diff --stat` 與收集條數對 base 比：只准第 230 批因為標記變動而「不含 slow」的條數變多，總條數不變）、沒有動 `tianxia/`、`web/`、`content/`、`server.py`。")
+
+WEB_Y = "**這一波沒動 `web/`，改的是測試**。這一關不比畫面：只看閘門的 `.local/wave_gate/<head8>/web/report.txt`（有跑的話）沒有 real、`missing_must_reach` 空；沒跑就回 same、寫「沒動畫面」。"
+
+WAVES["Y"] = dict(
+    round2=True,
+    extra_lenses=[Y_PROOF_LENS],
+    lines=[dict(name="測試小件", batches=[b229]), dict(name="慢網頁測試", batches=[b230]), dict(name="內容驗證", batches=[b231])],
+    merge_port=8452, fix_port=8453,
+    web_check=dict(ports="8454、8455", steps=WEB_Y),
+)
+WAVES["X"]["extra_lenses"].append(Y_PROOF_LENS)  # 合併與閘門一次：finish 用 X，built 是 X、Y 兩邊接起來
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
