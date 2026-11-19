@@ -69,7 +69,7 @@
 - 畫面（第 219 批起 C 版，企劃者 11/10 挑的）：玩家看單時自動回覆署名「客服（自動回覆）・回覆」；單沒結、有自動回覆、還沒按過，**最後一則自動回覆的框裡右下**一顆「找真人」（44px，獨佔一行不蓋字；緊貼內文、不留空白，因為框是 `pre-wrap`；`supportTicketHtml` 找最後一則 `staff && auto && !internal`，`supportAskHtml` 只回鈕；第 216 批 A 版那一列 `.sup-ask-row` 拿掉了）；按過畫膠囊籤「已請真人處理」。客服頁：「系統」「客服官・自動回覆」兩種署名，單的標題旁與清單列有同一個籤。
 - 這一批不做：橋、CLI、Discord（第 217 批）；真人客服頁的轉達鈕；客服官的動作上限（伺服器既有的字數、單數、狀態就是上限）。
 - 按過找真人、之後被真人客服回成已回覆的單，玩家 `auto_close_days` 天沒再回照樣自動結（PM 11/10 認定維持；第 226 批 `test_a_human_answered_ticket_still_auto_closes_after_three_days` 鎖住）。
-- 客服頁讀不到（第 226 批）：`/api/support/queue` 本身失敗時記 `S.supportDeskFailed`，標題下只畫一行「讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。」、不畫四個 0 的磚，之後重畫不自己再讀；按「重新整理」清旗標重讀。清單讀到了、只有點開的那張讀不到的，清單照留。客服（不是管理者、這次不是密碼登入）進客服頁時，identity 包的觀察器照管理頁那一套在標題下補「請用密碼重新登入」那一行（入口只有 `supportDeskLink` 連 `/admin`；`identity/tests/test_identity_web.py::test_support_desk_*` 鎖住，`web/identity.js` 沒動）。
+- 客服頁讀不到（第 226 批）：`/api/support/queue` 本身失敗時記 `S.supportDeskFailed`，標題下只畫一行「讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。」（第 228 批換字：identity 關著時沒有驗證碼登入，讀不到多半是這次登入超過 `identity.staff_hours`）、不畫四個 0 的磚，之後重畫不自己再讀；按「重新整理」清旗標重讀。清單讀到了、只有點開的那張讀不到的，清單照留。客服（不是管理者、這次不是密碼登入）進客服頁時，identity 包的觀察器照管理頁那一套在標題下補「請用密碼重新登入」那一行（入口只有 `supportDeskLink` 連 `/admin`；`identity/tests/test_identity_web.py::test_support_desk_*` 鎖住，`web/identity.js` 沒動）。
 - 上限照伺服器給（第 226 批）：`GET /api/support/mine` 與寫單、玩家回覆回的 `mine` 都多帶 `files_max`、`file_bytes_max`、`open_max`、`daily_max`（`routes._limits`）；`web/support.js` 的 `supportLimit` 照它組寫單頁的張數、大小、單數提示，缺鍵退回 3、3 MB、3、5；`files_max` 0 時寫單頁不畫挑圖、送單不走上傳。上面「畫面（A 版）」寫的 3 張、3 MB 是預設值。
 
 ## 主機端（客服自動受理第 217 批；設計 6.1、6.2、第七節）

@@ -55,7 +55,7 @@ def test_three_open_tickets_at_most():
     for _ in range(3):
         assert ticket(c).status_code == 200
     out = ticket(c)
-    assert out.status_code == 400 and out.json()["error"] == "已經有 3 張還沒結的單，等客服回覆或結單之後再送。"
+    assert out.status_code == 400 and out.json()["error"] == "已經有 3 張還沒結的單，等其中一張結了再送。"
 
 
 def test_five_tickets_a_day_at_most(monkeypatch):

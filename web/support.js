@@ -282,7 +282,7 @@
   function supportDeskHtml() {
     const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2><button class="btn small" data-act="support-desk-refresh">重新整理</button></header>`; // 待 joy 潤
     const q = S.supportDesk;
-    if (S.supportDeskFailed) return `${head}<p class="muted">讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。</p>`; // 待 joy 潤
+    if (S.supportDeskFailed) return `${head}<p class="muted">讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。</p>`; // 待 joy 潤
     if (!q) return `${head}<p class="muted">讀取中…</p>`; // 待 joy 潤
     const tile = (k, v, sub) => `<div class="sup-tile"><small>${k}</small><b>${Number(v) || 0}</b><span>${sub}</span></div>`;
     const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤

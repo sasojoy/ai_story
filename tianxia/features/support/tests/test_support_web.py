@@ -576,7 +576,7 @@ def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
     assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
 
 
-DESK_FAILED = "讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。"
+DESK_FAILED = "讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。"
 
 
 def test_desk_says_so_when_the_queue_cannot_be_read(main):
