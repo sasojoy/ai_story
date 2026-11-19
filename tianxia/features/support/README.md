@@ -99,6 +99,7 @@
 第 217 批：只多兩支主機腳本（`scripts/support_bridge.py`、`scripts/support_cli.py`）與主機上的 `.local/support_bridge.json`（橋的進度）、`.local/support-inbox/`（CLI 存的截圖）；資料庫、存檔、旁檔都不動，刪掉兩支腳本就沒了，季中能換、不必休季。只停貼 Discord：停橋（`taskkill /PID <pid> /T /F`）或拿掉 `discord_webhook`（只記不貼）；只停 CLI：拿掉 `bot_token`（全部 404）。
 第 226 批：`/mine` 多四個鍵、`web/support.js` 讀它；沒有新欄位、新表、新資料夾。換回第 225 批：`_mine` 與 `web/support.js` 兩處退回就是寫死的 3 張、3 MB、3、5；舊前端不認新鍵、新前端缺鍵退回預設，混著跑也對。季中能換、不必休季。
 第 218 批：只多文件、範本（`docs/support/`）與兩支主機腳本（`scripts/support_session_init.py`、`scripts/support_knowledge.py`）；遊戲程式、資料庫、存檔、旁檔、`web/` 都不動，季中能換、不必休季。主機上多一個客服官的工作夾（`C:\Ray\tianxia-support\`，抄過去的檔留著）。只停客服官：關掉它的終端機、`stop.cmd` 停橋。
+第 227 批：只動範本 `cli.sh`（多擋 `" { }`，要重抄才生效：`support_session_init.py` 不蓋已在的檔，工作夾已有的 `cli.sh` 要手動刪掉再 init）、`scripts/support_knowledge.py` 的檔頭、`docs/support/` 的 FAQ 與排練、測試；遊戲程式、資料庫（第 9 版）、存檔、旁檔、`web/` 都不動，季中能換。換回：把範本 `cli.sh` 換回舊的再重抄。
 
 ## 另外要跑的
 
