@@ -596,7 +596,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 橋把新單、玩家再回、找真人、補的截圖貼到 Discord 的 #客服（只讀客服旁檔、不寫；規則見 `tianxia/features/support/README.md`「主機端」）。要先在 `.local/support.json` 寫好 `discord_webhook`（與找真人要點的 `mention`）；沒寫就只記 log、不貼。跟 `server.py` 用同一個 `TIANXIA_DB`。
 
 1. **第一次開之前先試一輪、把舊單記成貼過**（進度檔不在時會把現有的單全部當新單貼一次）：
-   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --log C:\Ray\tianxia-support\bridge.log`
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --db <線上資料庫檔> --log C:\Ray\tianxia-support\bridge.log`
+   `--db` 是跟 `server.py` 同一個主資料庫檔（橋自己找旁邊的 `<db>-support.sqlite`）；沒帶 `--db` 照這個終端機的 `TIANXIA_DB`，也沒設就讀預設的 `<repo>\saves\tianxia.db`（`support_bridge.py` 的參數預設值）。線上的庫不在預設位置，所以一定帶 `--db`（或先在同一個終端機設好 `TIANXIA_DB`）；下面第 2 步的 `Start-Process` 也一樣，沒帶 `--db` 就吃這個終端機的 `TIANXIA_DB`。
    印出的 `NEW 12（只記不貼）` 那幾行就是記成貼過的；進度在 `.local/support_bridge.json`。
 2. **分離開**（跟伺服器一樣用 `Start-Process`、一定加 `-u`、記下 PID）：
    `$p = Start-Process -PassThru -WindowStyle Hidden -FilePath "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -ArgumentList "-u","C:\Ray\專案\天下大勢\scripts\support_bridge.py","--log","C:\Ray\tianxia-support\bridge.log" -WorkingDirectory C:\Ray\tianxia-support -RedirectStandardOutput C:\Ray\tianxia-support\bridge-out.log -RedirectStandardError C:\Ray\tianxia-support\bridge-err.log; $p.Id`
@@ -618,6 +619,24 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 5. **開、停**：雙擊 `start.cmd` 開（橋在背景、PID 在 `bridge.pid`）；`stop.cmd` 停。企劃者要先做的五樣看 `docs/superpowers/discord/客服官-設定.md`。
 - **金鑰檔不能放進工作夾**：客服官讀得到工作夾裡每一個檔（Claude Code 本來就放行工作夾裡的唯讀指令）；`support_session_init.py` 遇到 `--config` 指進工作夾會拒絕。
 - 緊急停用：拿掉 `bot_token`，或清掉 `support.bot_account`（token 路一律 404，玩家照常送單、真人客服照常回）。資料庫、存檔都不動，季中能換。
+
+### 開真人客服之前（企劃者 2026-11-19「這一波落地後先開真人客服」）
+
+開關 `support.enabled` 由下一批打開；這裡只寫主機要先做的。
+- **名單放哪**：`.local/support.txt`（`<repo>\.local\support.txt`），一行一個帳號：登入名或 `accounts.id` 的數字（不分大小寫；整行是數字的只當 id，不當登入名），`#` 開頭是註解，名號不認。伺服器照檔的修改時間重讀，**改了不用重開**。另外兩個來源（設定檔的 `support.staff`、環境變數 `TIANXIA_SUPPORT`）要重開伺服器才算數。
+- **客服要用帳號密碼登入**，而且 6 小時內登入過（`identity.staff_hours`）；用驗證碼（或之後的 LINE、Google）登入的 session 進不了客服桌面，桌面標題下會寫一行請他改用帳號密碼重新登入。超過 6 小時重新登入一次就好。
+- **帳號功能（identity）沒開時也進得去**：那時所有 session 都是帳號密碼登入，權限只看這個 session 是不是 6 小時內建的（`identity_base.staff_session_ok` 關著那一支）。所以真人客服可以單獨先開，不必等帳號功能。
+- 名單上的人登入之後進 `/admin` 是客服頁（管理者工具一條都打不過）；管理者本人不自動算客服。
+
+### 自動結單要有人掃（企劃者 2026-11-19：主機排程跑客服官的指令）
+
+「答完等玩家、3 天沒回自動結」（`support.auto_close_days`，3）不是伺服器自己定時做的：只有兩個地方會掃（`POST /api/support/sweep`）——真人客服打開客服桌面讀清單時（`web/support.js` 先掃再讀），與客服官跑 `scripts/support_cli.py queue` 時（先掃再讀）。沒有別的排程。
+- **沒有人開客服頁、客服官也沒在跑，就一張都不會結。** 結的時間是**掃到的那一刻**：條件是最後一則（含內部註記）早於「現在減 3 天」、而且沒掛請管理者，系統那一則「自動結單」的回覆與結單時間都記成掃的那一刻，不回填成滿 3 天那一刻。所以每小時掃一次，最多晚一小時結。
+- **主機上的做法**：用 Windows 工作排程器每小時跑一次 `queue`、輸出丟掉。在「命令提示字元」（cmd，不是 PowerShell）貼：
+  `schtasks /Create /TN "tianxia-support-sweep" /SC HOURLY /MO 1 /F /TR "cmd /c \"\"C:\Ray\專案\天下大勢\.venv\Scripts\python.exe\" \"C:\Ray\專案\天下大勢\scripts\support_cli.py\" queue >NUL 2>&1\""`
+  工作目錄不用設：`support_cli.py` 的金鑰檔預設照它自己的位置讀 `<repo>\.local\support.json`（不看工作目錄），網址讀那個檔的 `server_url`，沒寫就是 `http://127.0.0.1:7861`。預設是「使用者登入時才跑」，主機要一直登著。
+  看有沒有在跑：`schtasks /Query /TN "tianxia-support-sweep" /V /FO LIST`，看「上次執行時間」與「上次結果」（0 是好的；2 是金鑰沒設或不對、連不上伺服器、或伺服器回錯，客服開關關著也是 2〔路由 404〕；不是 0 就在 cmd 手動跑一次同一條指令、不加 `>NUL 2>&1`，看印出的那一句）。刪：`schtasks /Delete /TN "tianxia-support-sweep" /F`。
+- **這條路要客服官的金鑰**：`.local/support.json` 的 `bot_token`（至少 32 字），加上設定檔的 `support.bot_account`（客服官用的那個帳號）；設法見 `docs/superpowers/discord/客服官-設定.md`。值不寫進任何文件、不貼給任何人（也不貼給 Claude）。金鑰還沒放之前，排程每次都會停在「token 沒設」、什麼都不掃，照舊是有人開客服桌面時才掃。
 
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 

@@ -70,6 +70,7 @@
 - 這一批不做：橋、CLI、Discord（第 217 批）；真人客服頁的轉達鈕；客服官的動作上限（伺服器既有的字數、單數、狀態就是上限）。
 - 按過找真人、之後被真人客服回成已回覆的單，玩家 `auto_close_days` 天沒再回照樣自動結（PM 11/10 認定維持；第 226 批 `test_a_human_answered_ticket_still_auto_closes_after_three_days` 鎖住）。
 - 客服頁讀不到（第 226 批）：`/api/support/queue` 本身失敗時記 `S.supportDeskFailed`，標題下只畫一行「讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。」、不畫四個 0 的磚，之後重畫不自己再讀；按「重新整理」清旗標重讀。清單讀到了、只有點開的那張讀不到的，清單照留。客服（不是管理者、這次不是密碼登入）進客服頁時，identity 包的觀察器照管理頁那一套在標題下補「請用密碼重新登入」那一行（入口只有 `supportDeskLink` 連 `/admin`；`identity/tests/test_identity_web.py::test_support_desk_*` 鎖住，`web/identity.js` 沒動）。
+- 上限照伺服器給（第 226 批）：`GET /api/support/mine` 與寫單、玩家回覆回的 `mine` 都多帶 `files_max`、`file_bytes_max`、`open_max`、`daily_max`（`routes._limits`）；`web/support.js` 的 `supportLimit` 照它組寫單頁的張數、大小、單數提示，缺鍵退回 3、3 MB、3、5；`files_max` 0 時寫單頁不畫挑圖、送單不走上傳。上面「畫面（A 版）」寫的 3 張、3 MB 是預設值。
 
 ## 主機端（客服自動受理第 217 批；設計 6.1、6.2、第七節）
 
@@ -81,6 +82,7 @@
 - 怎麼開、停：主機端操作文件「帳號綁定與客服」的「客服的橋（第 217 批）」。客服官 session 與 `cli.cmd` 是第 218 批。
 - **客服官 session**（第 218 批；設計 6.3、6.4）：範本在 `docs/support/session/`（`CLAUDE.md` 七條規矩與醒來先 queue、`settings.local.json`、`cli.sh`、`cli.cmd`、`start.cmd`、`stop.cmd`），`scripts/support_session_init.py <工作夾> [--url] [--config] [--python]` 冪等抄過去（已經在的不蓋、`.cmd` 寫 CRLF、`cli.sh` 寫 LF；金鑰檔在工作夾裡就拒絕、結束碼 2）。客服官的許可白名單是 `mcp__plugin_discord_discord__reply`、`Bash(./cli.sh *)`、`Read(//<工作夾>/**)`、`Monitor(tail -n 0 -f bridge.log)`；**`cli.cmd` 不進白名單**：Git Bash 叫 `.cmd` 時參數不加引號交給 cmd，`"R&D"` 的 `&` 被 cmd 當成下一個指令（排練實跑），`cli.sh` 直接 exec python。兩支都設 `TIANXIA_SUPPORT_LOCKED=1` 與 `TIANXIA_SUPPORT_CONFIG`／`URL`／`INBOX`，參數含 `& | < > ^ !` 就結束碼 2（`cli.sh` 第 227 批起另擋 `" { }`：展開出來的 JSON 擋在 python 之前，不讓 argparse 把它印回；`test_expanded_arguments_never_reach_the_server` 拿真的 `cli.sh`＋`support_cli.py` 鎖住結束碼 2、零 HTTP、不印 token，`test_every_command_in_the_session_rules_exists` 鎖規矩檔裡每個子指令都在 argparse）。`scripts/support_knowledge.py <工作夾> [--profile] [--content]` 把 `content/patch_notes.json`、`docs/support/FAQ.md` 抄進 `knowledge\`、開一個暫存的世界（自己的 `TIANXIA_DB`，用完刪、還原）寫 `howto.md`（`Game.howto_text()`；新世界停在籌備中，但籌備中的季已蓋過章，正式內容匯得出「這一季在打什麼」與收季那一句，第 227 批實跑；匯不出的是天命之季那種變體與要開季才有的世界狀態；換設定、改版之後要重匯），三個檔過 `test_server_bots.FORBIDDEN` 同一張字表，命中就一個都不寫、結束碼 1。設定與企劃者要做的五樣：`docs/superpowers/discord/客服官-設定.md`；排練：`docs/support/排練.md`。
 - **參數不對不印回參數**（X 波合併時 PM 加，2026-11-19）：`support_cli.py` 的主 parser 與子指令都是覆寫 `error()` 的 `_Parser`，參數錯了不印 argparse 的原話與 usage（原話會把參數原樣印回：`unrecognized arguments`、`invalid int value`、`invalid choice`；客服官被騙把金鑰檔展開成「光禿禿的一串」參數時，金鑰就進了輸出），只印固定的一句 `BAD_ARGS`、結束碼 2、不打 HTTP，鎖定與不鎖定一樣；`-h` 照舊。`--human` 錯照舊印 `BAD_HUMAN`（不含值）；連不上伺服器時網址是命令列 `--url` 給的就不印網址（`UNREACHABLE_ARG`）。不把 `cli.sh` 改成白名單（會擋掉以後新加的子指令）。測試 `test_support_cli.py::test_cli_bad_arguments_never_echo_the_value`。
+- **許可實跑還欠著（第 227 批）**：`$(...)`、反引號、讀工作夾外的金鑰檔等九條，第 227 批因為這台 `claude` 命令列登入過期沒跑成；**開客服官之前一定要先補**，表在 `docs/support/排練.md`「本機那一半」。
 
 ## 掛鉤與檔
 
