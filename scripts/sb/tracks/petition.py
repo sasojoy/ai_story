@@ -1,6 +1,8 @@
 """same_behavior 一軌一檔：petition（這一檔登記 petition）。"""
 from __future__ import annotations
 
+import os
+
 from sb.base import Scenario
 from sb.harness import emit, register_track
 
@@ -22,6 +24,7 @@ SUPPORT_ROUTES = (
     ("POST", "/api/support/sweep", {}),  # 第 216 批：自動結單
 )
 MAILBOX = "/api/support/mailbox"
+SUPPORT_ENV = "TIANXIA_SUPPORT"  # 同 tianxia.core.identity_base.SUPPORT_ENV（這一檔頂層不 import tianxia）
 
 
 class PetitionScenario(Scenario):
@@ -41,6 +44,41 @@ class PetitionScenario(Scenario):
     PHASES_SECOND = ["resume", "closed_again"]
     GUEST = "祝無涯"
 
+    # ── 開關與名單（第 235 批：開關那一筆起 week7、season21 的客服開著；這一軌兩段都在記憶體裡設，不靠設定檔）──
+
+    def switch_off(self) -> None:
+        self.c.config.support.enabled = False
+        self.c.config.support.staff = []
+
+    def isolate(self) -> None:
+        """客服名單另外兩個來源隔掉（環境變數 TIANXIA_SUPPORT、LOCAL_DIR/support.txt：identity_base.support_file 每次現讀 LOCAL_DIR），
+        名單只剩記憶體裡的 Config.support.staff。LOCAL_DIR 指到不存在的資料夾（不建）；管理者名單在 import 時就讀好了，不受影響。"""
+        from tianxia import content as content_module
+
+        if not hasattr(self, "_saved"):
+            self._saved = (os.environ.pop(SUPPORT_ENV, None), content_module.LOCAL_DIR)
+        content_module.LOCAL_DIR = self.db.with_name("no-local")
+
+    def restore(self) -> None:
+        from tianxia import content as content_module
+
+        if hasattr(self, "_saved"):
+            env, content_module.LOCAL_DIR = self._saved
+            if env is not None:
+                os.environ[SUPPORT_ENV] = env
+            del self._saved
+
+    def setup(self) -> None:
+        """關著段從這裡起：開關那一筆之後 week7、season21 的客服開著，這一軌要比關著，先在記憶體裡關掉（第 235 批，照第 232 批 charter 的寫法）。"""
+        self.switch_off()
+        self.isolate()
+        super().setup()
+
+    def phase_end(self, name: str) -> None:
+        super().phase_end(name)
+        if name in (self.PHASES_FIRST[-1], self.PHASES_SECOND[-1]):
+            self.restore()
+
     def closed(self) -> None:
         for who in (self.GUEST, self.NEWBIE):
             for method, url, body in SUPPORT_ROUTES:
@@ -59,6 +97,8 @@ class PetitionScenario(Scenario):
         self.request(self.GUEST, "GET", "/api/push")
 
     def resume(self) -> None:
+        self.switch_off()
+        self.isolate()
         self.login_all()
 
     def closed_again(self) -> None:
