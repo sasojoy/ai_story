@@ -927,7 +927,6 @@ FIELDS = """
 """
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_the_conquest_buttons_ask_then_post_their_bodies(m):
     from test_admin_triggers_web import CLICK

@@ -19,7 +19,7 @@ from tianxia import team
 from tianxia.encounter import EncounterResult
 from tianxia.rules import day_seconds
 
-pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")]
 
 DRIVER = BASE_DRIVER.replace('"bookHtml", "peerHtml"]', '"bookHtml", "peerHtml", "godName", "choose"]')
 assert DRIVER != BASE_DRIVER
@@ -49,6 +49,7 @@ def _naming_game():
     return game
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_the_server_hands_the_typed_name_to_the_engine(monkeypatch):
     """/api/choose 收 text、原樣交給引擎（以前 server.choose 根本沒有這個參數，玩家打的字到不了引擎）。"""
     game = _naming_game()
@@ -59,6 +60,7 @@ def test_the_server_hands_the_typed_name_to_the_engine(monkeypatch):
     assert game.state.player.god_naming is None
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_pressing_own_name_opens_a_box_instead_of_sending():
     m = server.main_view(_naming_game())
     assert any(o["id"] == OWN and o["enabled"] for o in m["options"])

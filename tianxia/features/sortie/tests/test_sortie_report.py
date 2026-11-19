@@ -13,8 +13,6 @@ from tianxia import conquest, orders
 from tianxia.features.sortie import rules as sortie
 from tianxia.state import Order
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
-
 
 def _game(side="guan", loc="hilltop_wilds", name="沈浪", world=None):
     return go(join(conquest_game("season21", name=name, world=world), side), loc)
@@ -24,6 +22,7 @@ def _chips(front):
     return [c["text"] for c in front["chips"]]
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_an_attack_reports_my_bar_before_and_after_and_todays_numbers():
     game = _game()
     w, c = game.state.world, game.content
@@ -107,6 +106,7 @@ def test_cannot_push_says_why_and_the_order_chip_counts_the_side():
     assert front["rows"] == []
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_without_conquest_there_is_no_report_and_other_entries_drop_it():
     game = go(join(plain_game(), "guan"), "nanyang_wilds")
     win_sortie(game)
@@ -133,6 +133,7 @@ FRONT = {
 }
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 @needs_node
 def test_the_report_draws_bars_text_and_chips():
     script = f"const f = {json.dumps(FRONT, ensure_ascii=False)}; return [H.frontReportHtml(f), H.frontReportHtml(null)];"

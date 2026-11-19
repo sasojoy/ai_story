@@ -331,7 +331,6 @@ def test_resuming_realigns_the_calendar_and_settles_what_was_due(world):
 # 一樣是 week7、內容換了（週末式 → 照現實天）。PM 定不擋（擋了伺服器起不來更糟），部署說明寫死休季才換；這裡只改那一行的字，讓主機端
 # 的人看得懂該怎麼辦（字待 joy 潤）。
 
-@pytest.mark.slow
 def test_matching_programs_and_ended_seasons_stay_quiet():
     c7 = real_content("week7")
     season = fresh_season(c7)
@@ -416,7 +415,6 @@ def test_a_running_season_with_the_matching_calendar_prints_nothing(monkeypatch,
     assert MARK not in _start_bots(monkeypatch, capsys, profile)
 
 
-@pytest.mark.slow
 def test_the_warning_function_itself_knows_the_phase():
     """calendar.profile_warning(content, season, phase)：籌備中不印；跑著而且對不上才印；不給 phase 照舊（只看季收了沒）。"""
     c7 = real_content("week7")
