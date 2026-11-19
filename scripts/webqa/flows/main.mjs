@@ -29,6 +29,18 @@ export const flows = [
     // player: 知道了 remembers it in this browser's localStorage, so it stays closed for the rest of the round
     // It is also the browser's first page in the game: the web fonts' glyph subsets (fonts.googleapis.com, unicode-range) were still
     // arriving for one of four walks' 1280 picture (a 36-level difference along one line). Load the page once more, from cache, before it
+    // batch 233: since #247 the 江湖新事 invite (.sheet.nx-invite, web/news.js) comes first, over the 改版資訊 sheet. A player opens it
+    // (去看看 remembers it in localStorage, nxMarkSeen), reads the page and closes it; then the patch sheet shows as before
+    if (await c.ev(`!!document.querySelector(".sheet.nx-invite")`)) {
+      await c.settle(600);
+      await c.shoot("nx_invite", { who: "p3" });
+      await c.click('.sheet.nx-invite [data-act="nx-open"]');
+      await c.settle(600);
+      await c.shoot("nx_page", { who: "p3" });
+      await c.click('[data-act="nx-close"]');
+      await c.settle(400);
+      await c.load("/");
+    }
     if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) await c.load("/");
     if (await c.ev(`!!document.querySelector(".sheet.patch-pop")`)) {
       await c.settle(600);
@@ -90,6 +102,10 @@ export const flows = [
       await c.load("/");
       await c.shoot("bt_muster2", { who: "p1" });
       await c.crawl("bt", () => c.load("/"), [...UI, "battle-shut"], { total: 8, cap: 2 });
+      // batch 234: the page left open polls /api/main while the clock is pushed; on one walk it saw the battle start and played 開打
+      // (#bp-ov, web/battle.js bpShow) and marked it seen, on the other it played it on the load below (15 REAL on bt_active, 7f816cb5e).
+      // Leave the page first so the start is always seen on the load, then tap the layer away as a player does (it closes on a tap)
+      await c.leave();
       for (let hop = 0; hop < 6; hop++) {
         await c.py("CLOCK['now'] += 600; out = 1");
         await c.api("admin", "/api/do/fast_forward", { hours: 1 });
@@ -98,6 +114,8 @@ export const flows = [
         if (m.json && m.json.battle_gauge && m.json.battle_gauge.phase === "active") break;
       }
       await c.load("/");
+      for (let i = 0; i < 10 && !(await c.ev(`!!document.getElementById("bp-ov")`)); i++) await c.sleep(150);
+      if (await c.ev(`!!document.getElementById("bp-ov")`)) { await c.click("#bp-ov"); await c.settle(450); }
       await c.shoot("bt_active", { who: "p1" });
       await c.crawl("bta", () => c.load("/"), [...UI, "battle-shut", "battle-open"], { total: 8, cap: 2 });
       for (let r = 0; r < 3; r++) {
@@ -136,6 +154,10 @@ export const flows = [
       await c.crawl("bte", () => c.load("/"), UI, { total: 8, cap: 2 });
     }],
     ["week2", async (c) => {
+      // batch 233: the first sync after the week turns settles 名號 (titles, features/titles actions.settle) and writes its rumor at the same
+      // minute as 天下形勢; the open page polls /api/main by itself and raced the calls below, so the two rumors' order differed between walks.
+      // Leave the page first: the five accounts then sync in this order only
+      await c.leave();
       c.log("ff", (await c.api("admin", "/api/do/fast_forward", { hours: 200 })).status);
       for (const [w] of ACCOUNTS) await c.api(w, "/api/main");
       await place(c, "沈浪", "wan_city");
@@ -191,12 +213,15 @@ export const flows = [
       await c.step(ACT("shop-wield"), "sm_wield", { who: "p1" });
       await c.step(ACT("shop-keep"), "sm_keep", { who: "p1" });
       // batch 111: the shop covers #page (web/shop.css), so 修 and 淬煉 are the two big buttons on the 裝備庫 tab (web/smithy.js smithWornHtml)
+      // batch 233: the two big buttons are inside the 身上 card now (.shop-worn .sw-in .shop-bigs), and a bought blade is sharp (修 grey:
+      // 劍鋒還利); blunt the one in hand like a few fights would, then 修
+      await c.py("st = chars.load('沈浪')\nif st.player.weapon: st.player.weapon.edge = 30\nchars.save(st); out = 1");
       await c.load("/");
       await c.click('[data-act="shop-tab"][data-tab="rack"]');
-      await c.step(`.shop-layer .shop-worn ~ .shop-bigs ${CH("smith:repair")}`, "sm_repair", { who: "p1" });
+      await c.step(`.shop-layer .shop-worn .shop-bigs ${CH("smith:repair")}`, "sm_repair", { who: "p1" });
       await c.load("/");
       await c.click('[data-act="shop-tab"][data-tab="rack"]');
-      await c.step(`.shop-layer .shop-worn ~ .shop-bigs ${CH("smith:temper")}`, "sm_temper", { who: "p1" });
+      await c.step(`.shop-layer .shop-worn .shop-bigs ${CH("smith:temper")}`, "sm_temper", { who: "p1" });
       await c.load("/");
       await c.step('[data-act="shop-tab"][data-tab="forge"]', "sm_forge");
       await c.step(ACT("shop-kind"), "sm_forge_kind");
@@ -215,10 +240,14 @@ export const flows = [
       await c.step(ACT("shop-brew"), "sm_brew", {});
       await c.load("/");
       await c.step('[data-act="shop-tab"][data-tab="rack"]', "sm_rack");
+      // batch 233: the 裝備庫 check boxes only take a click after 挑著拆 (rack-picking, web/smithy.js rackHtml); 拆解 is one of the four
+      // buttons a row shows once it is opened (rack-open)
+      await c.click('[data-act="rack-picking"][data-on="1"]');
       await c.step(ACT("rack-pick"), "sm_rack_pick");
       await c.step(ACT("rack-melt"), "sm_rack_melt", { who: "p1" });
       await c.load("/");
       await c.step('[data-act="shop-tab"][data-tab="rack"]');
+      await c.click(ACT("rack-open"));
       await c.step(ACT("shop-dismantle"), "sm_dismantle", { who: "p1" });
       await c.step('[data-act="ask-yes"]', "sm_dismantle_yes", { who: "p1" });
       await c.step(ACT("trade-sell"), "sm_sell", { who: "p1" });
@@ -263,21 +292,13 @@ export const flows = [
     ["outlets", async (c) => {
       await enterShop(c, "dadian", "wan_city", "act:dadian");
       await c.crawl("dd", () => c.load("/"), SHOP_UI, { total: 10, cap: 2 });
-      for (const [id, n] of [["act:silver_donate", "silver"], ["act:mentor", "mentor"], ["act:buy_legend", "legend"], ["act:bribe:zhujun", "bribe"], ["act:furnace", "furnace"]]) {
+      // batch 233: 捐軍備 is off in week7 and season21 (#241, economy.donate false): no 捐銀兩 on the ledger and no donate shop, so both left the walk
+      for (const [id, n] of [["act:mentor", "mentor"], ["act:buy_legend", "legend"], ["act:bribe:zhujun", "bribe"], ["act:furnace", "furnace"]]) {
         await c.load("/");
         await c.step(CH(id), `dd_${n}`, { who: "p1" });
       }
       await c.load("/");
       await leave(c, "dadian", "dadian:back");
-      await enterShop(c, "donate", "wan_city", "act:donate");
-      await c.crawl("dn", () => c.load("/"), SHOP_UI, { total: 8, cap: 2 });
-      await c.load("/");
-      await c.step(ACT("dn-tier1"), "dn_tier1");
-      await c.step(ACT("dn-cell"), "dn_cell");
-      await c.step(ACT("dn-step"), "dn_step");
-      await c.step(ACT("dn-go"), "dn_go", { who: "p1" });
-      await c.load("/");
-      await leave(c, "donate", "donate:back");
     }],
     ["tavern", async (c) => {
       await enterShop(c, "tavern", "wan_city", "act:tavern");
@@ -300,10 +321,8 @@ export const flows = [
       }
       await c.step(ACT("tav-hit-name"), "tv_hit", {});
       await c.load("/");
+      // batch 233: a season stamped guard_on (親衛隊長, #212) hires nobody at the tavern (features/hire actions.on), so 招募 left the walk
       await leave(c, "tavern", "tavern:back");
-      await c.api("p1", "/api/choose", { id: "act:tavern" });
-      await c.load("/");
-      await c.step(ACT("tav-hire"), "tv_hire", { who: "p1" });
     }],
     ["bounties", async (c) => {
       await enterShop(c, "board", "wan_city", "act:bounties");
@@ -371,6 +390,9 @@ export const flows = [
       await c.step(ACT("here-all"), "here_all");
       await c.step(ACT("here-all-close"), "here_all_close");
       // the mingtie editor (名帖)
+      // batch 233: with the titles package on (#243) the pool only has 官職 from rank 2, 親傳, 本命兵器, 神器 and the title book
+      // (features/peers mingtie._earned_titles), too few for 刷新頭銜 (pool > 3); stage last seasons' book like a player who has played some
+      await c.py("st = chars.load('沈浪'); st.player.title_book = [*st.player.title_book, '第1季 擂台魁首', '第1季 懸賞榜首', '第1季 決戰首功', '第1季 練成絕學']; chars.save(st); out = 1");
       await c.load("/");
       // batch 111: the mingtie box moved to the 俠客 page (SELF_NEWS: the portrait card's "名帖 ›", web/cultivation.js heroAnnalsHtml)
       await c.tab("practice");
@@ -426,7 +448,14 @@ export const flows = [
       await c.step(ACT("outing-go"), "ex_go", { who: "p1", wait: 1500 });
       await c.crawl("ex", () => c.load("/"), [...UI, "outing-speed", "gather-wheel", "outing-tap", "outing-stele"], { total: 8, cap: 2 });
       await c.load("/");
-      for (const a of ["outing-speed", "outing-tap", "outing-skip", "outing-choose", "outing-say", "outing-close"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
+      for (const a of ["outing-speed", "outing-tap", "outing-skip", "outing-choose"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
+      // batch 233: since 親衛隊長's fifth batch (#217-#220) the first trip out at level 10 or more runs into the child: 救 (outing-choose
+      // above) asks once more, 收養他／收養她／不帶走. A player answers it (the first, 收養他) and the trip ends on its result card as before
+      if (await c.ev(`!!document.querySelector('[data-act="outing-choose"][data-id^="guard:"]')`)) await c.step(ACT("outing-choose"), "ex_guard_adopt", { who: "p1", wait: 800 });
+      // batch 234: the adoption leaves its 果 card up (「你替他取名…」) with the 接著走 bar still filling; a player taps 接著走 (outing-tap,
+      // web/outing.js outingNowHtml → outingHurry) and the trip's result card, with 留一句 and 收起, comes up as before
+      if (await c.ev(`!!document.querySelector('#outing-pop .outing-now-go')`)) await c.step("#outing-pop .outing-now-go", "ex_guard_on", { who: "p1", wait: 800 });
+      for (const a of ["outing-say", "outing-close"]) await c.step(ACT(a), `ex_${a}`, { who: "p1", wait: 800 });
       for (const [i, loc] of ["yingshui", "songshan_foot", "runan_wilds", "deep_mountain"].entries()) {
         await place(c, "沈浪", loc);
         await c.load("/");
@@ -591,6 +620,10 @@ out = 1`);
       await c.step(ACT("self-sec"), "pr_self_sec", {});
       await prac("attrs");
       await c.step(ACT("xinde-more"), "pr_xinde", { light: true });
+      // batch 233: 江湖錄 (codex, on in week7 and season21 since 11/13) is the 俠客 page's last tab: 奇遇 first, then 圖鑑
+      await prac();
+      await c.step('[data-act="hero-tab"][data-tab="codex"]', "pr_codex", { who: "p1", wait: 800 });
+      await c.step('[data-act="cx-seg"][data-seg="tj"]:not(.on)', "pr_codex_seg", { who: "p1", wait: 800 });
       await c.load("/");
     }],
     ["craft2", async (c) => {
@@ -718,7 +751,8 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.load("/");
       await place(c, "沈浪", "wan_city");
       await c.load("/");
-      await c.step(ACT("duty-open"), "so_duty_open", {});
+      // batch 233: with 江湖錄's 進行中 on (#267) the 要事 card is not drawn; a player opens the 事 seal of the 進行中 line (web/codex.js codexTrackHtml)
+      await c.step('button.cx-tk-all[data-act="cx-tk"]', "so_tk_open", {});
     }],
     ["notify", async (c) => {
       await c.load("/");
