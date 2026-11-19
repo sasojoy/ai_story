@@ -20,7 +20,9 @@ class CounterScenario(PlacardScenario):
     - rules_round：鐵匠的神器規矩講完一輪從頭。
     - solved_only：自己鑄譜上打中過、這一季現世、還沒人打出的那一件。
     - trade_words：素材頁那一句的兩種開關（升階關著、一定同屬性）與升階格子上的短原因（今天滿了、這一季滿了）。
-    - donate_tier4：軍需帳跳過捐不了的四階。
+    - donate_tier4：軍需帳跳過捐不了的四階。#241 起捐軍備三種設定都關著（week7、season21 economy.donate: false）：選單上沒有 act:donate，
+      寫「沒有 act:donate」，鎖裡直接叫的那一下寫「捐不了」，軍需帳那一頁走不到（第 232 批實跑 season21 讀過）。
+    - 開榜（借懸賞榜一軌的 unlock）：#277 起三種設定都不鎖，寫「榜：這一季不鎖」。
     - half：**前半停在這裡**——七間店各坐一個人，掌櫃那一句停在被拒的情況（shop_hold 是舊程式記的）或進門。
     後半：resume 新程式接手，原因不成立了（手上那一張作廢、錢補夠了、背包動了）換回進門那一組，再離開；views 每個人再看一遍。
     假人：不讀店面頁，經選單碰到的 hold_for、problem_key、next_rule、board_key、attribute_rank、line_text、forged_key 現有軌的假人段走到（week7 量過），這一軌不開。

@@ -160,7 +160,9 @@ class StripScenario(EventScenario):
         emit(f"大勢 {tag}", {"trends": dict(sorted(s.trends.items())), "accum": dict(sorted(s.trend_accum.items()))})
 
     def donate(self) -> None:
-        """捐軍備推大勢（economy.donate_push 也乘事件那一折）：自家大本營按軍需官那一串。沒有陣營的內容寫沒有。"""
+        """捐軍備推大勢（economy.donate_push 也乘事件那一折）：自家大本營按軍需官那一串。沒有陣營的內容寫沒有。
+        #241 起捐軍備三種設定都關著（week7、season21 的 economy.donate: false）：選單上沒有 act:donate，按軍需官那一串走不到，
+        只剩「捐十點推多少」那一行與捐之前、之後的大勢（兩次一樣）（第 232 批實跑 season21 讀過）。"""
         from tianxia import economy
 
         emit("捐十點推多少", economy.donate_push(self.c, 10))

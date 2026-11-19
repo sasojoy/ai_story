@@ -33,9 +33,11 @@ class PlacardScenario(HeraldScenario):
     測試內容沒有陣營：開場在記憶體裡補三個陣營（同 tianxia/features/bounties/tests/test_bounties.py 的 beta_setup；前半、後半各補一次），規則關著的季走 start、step 兩格。
     掛單（head 上讀輸出量的）：season21、week7 都是每天一批（issue_day：bounty_day 動、bounty_week 是 0），week 那一格的 issue 回空；issue 的本體只有測試內容經 tick 走到。
     這一軌走不到的（讀輸出量過）：測試內容的求兵（兵器關著，交不出）、大勢人物、人物倒下、改幫、事件拜入門派、酒肆、系統通緝（名聲關著）；season21 的新手揭通緝（新手連榜都看不到）、
-    season21 開局那封信（快轉到開榜那一段時過了期，week7 走到）；任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tianxia/features/gear/tests/test_shop2.py 直接叫 _bounty）；
+    任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tianxia/features/gear/tests/test_shop2.py 直接叫 _bounty）；
     榜開著動身（atlas.travel_block 擋掉，departure 那一行 close_board 只清掌櫃那一句，每一軌動身都走到）；官府通緝的惡名 BEATEN_OFFICIAL（crossblade 那一軌）；
-    一類一顆關著的三句討伐說法（STRIKE_PRECISE 那幾句：直接叫 how 的那一軌）。"""
+    一類一顆關著的三句討伐說法（STRIKE_PRECISE 那幾句：直接叫 how 的那一軌）。
+    #277 起 week7、season21 的榜也不照週鎖（jianfa.week_unlock: false）：unlock 那一步三種設定都寫「榜：這一季不鎖」，快轉到開榜那一段走不到；
+    少了那一段快轉，season21 開局那封信沒過期，邢晚晴照信上的委託去長社交信、委託辦成（第 232 批實跑 season21 讀過）。"""
 
     TAKER, RANGER, FOE, GIVER = "裴知遠", "阮青禾", "鍾九思", "陸觀潮"
     POSTER, QUARRY, AIDE, SITTER = "蘇硯冰", "童霜寒", "梅子衿", "韋望舒"
@@ -141,7 +143,7 @@ class PlacardScenario(HeraldScenario):
         self.books("開季")
 
     def unlock(self) -> None:
-        """減法季第 2 段才開榜（week_unlock）：管理者快轉到那一段的開頭。規則關著的季不鎖。"""
+        """減法季第 2 段才開榜（week_unlock）：管理者快轉到那一段的開頭。規則關著的季不鎖（#277 起 week7、season21 也關著，三種設定都不鎖）。"""
         import math
 
         from tianxia import calendar, week_unlock
