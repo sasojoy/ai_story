@@ -421,6 +421,55 @@ def test_second_shot_fails_stops_and_keeps_the_ticket(main):
     assert 'id="support-file-form"' in out["page"]
 
 
+def test_no_picker_when_files_max_is_zero(main):
+    """第 226 批：主機把截圖關掉（files_max 0）時寫單頁不畫挑圖那一塊，送單只打 /api/support/ticket。"""
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 0, "file_bytes_max": 3000000, "open_max": 3, "daily_max": 5}
+    replies = {"/api/support/ticket": {"id": 7, "mine": {**mine, "tickets": [_ticket(status="open", replies=[], files=[])]}}}
+    out = _shots("""
+        const form = H.sheetHtml();
+        H.S.supportPicks = [{ file: file("a.png", "image/png"), url: "" }];
+        await H.supportForm({ id: "support-new-form", dataset: {} }, { category: "game", body: "卡住了" });
+        return { form, sent: sent.map((s) => s[0]), picks: H.S.supportPicks.length, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, replies=replies, m=m)
+    assert "support-new-files" not in out["form"] and "sup-pick" not in out["form"] and "sup-slot" not in out["form"]
+    assert "附截圖" not in out["form"] and "PNG、JPEG、WebP" not in out["form"] and 'id="support-new-form"' in out["form"]
+    assert out["sent"] == ["/api/support/ticket"] and out["picks"] == 0
+    assert "support-file-form" not in out["page"]
+
+
+def test_picker_follows_the_server_limits(main):
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 5, "file_bytes_max": 1000000, "open_max": 3, "daily_max": 5}
+    out = _shots("""
+        const form = H.sheetHtml();
+        await H.supportChange({ target: { id: "support-new-files", files: [file("big.png", "image/png", 1000001), file("ok.png", "image/png", 1000000)], value: "x" } });
+        const big = [H.S.supportPicks.map((p) => p.file.name), H.S.supportPickMsg];
+        await H.supportChange({ target: { id: "support-new-files", files: [1, 2, 3, 4, 5].map((i) => file(i + ".png", "image/png")), value: "x" } });
+        return { form, big, names: H.S.supportPicks.map((p) => p.file.name), msg: H.S.supportPickMsg, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, m=m)
+    assert "最多 5 張、每張 1 MB 以內（PNG、JPEG、WebP）" in out["form"] and out["form"].count("sup-slot") == 5
+    assert out["big"] == [["ok.png"], "圖太大了：一張最多 1 MB。"]
+    assert out["names"] == ["ok.png", "1.png", "2.png", "3.png", "4.png"]  # 第 6 張不收
+    assert out["msg"] == "一張單最多附 5 張圖。"
+    assert out["page"].count('class="sup-shot"') == 5 and out["page"].count("sup-slot") == 0
+    half = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new",
+                                              "supportMine": {**mine, "file_bytes_max": 2500000}})
+    assert "每張 2.5 MB 以內" in half
+
+
+def test_note_follows_open_and_daily_max(main):
+    m = {**main, "support_unread": 0}
+    t = _ticket(status="open")
+    for extra, line in (({"open_max": 4, "daily_max": 7}, "同時最多 4 張沒結的單，一天最多送 7 張。"),
+                        ({}, "同時最多 3 張沒結的單，一天最多送 5 張。")):
+        mine = {"tickets": [t], **extra}
+        new = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine})
+        lst = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": mine})
+        assert line + "帳號、名號、時間、版本會自動附上。" in new
+        assert f'<p class="muted sup-fine">{line}</p>' in lst
+
+
 def test_ticket_shows_shots_and_closed_has_no_add_form(main):
     m = {**main, "support_unread": 0}
     two = _ticket(status="answered", files=_files(2))

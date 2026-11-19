@@ -12,16 +12,26 @@
   // 類別的字（伺服器也回一份 categories；先後照這裡）
   const SUPPORT_CATS = [["account", "帳號"], ["mall", "商城"], ["game", "遊戲問題"], ["other", "其他"]]; // 待 joy 潤
   const SUPPORT_STATUS = { open: "處理中", answered: "已回覆", closed: "已結" }; // 待 joy 潤
-  const SUPPORT_NOTE = "同時最多 3 張沒結的單，一天最多送 5 張。帳號、名號、時間、版本會自動附上。"; // 待 joy 潤
   const SUPPORT_ADMIN_NOTE = "要補發、退款、重設密碼、解綁、刪帳號：在單上註記，請管理者做。"; // 待 joy 潤
 
-  // 截圖（客服自動受理第 215 批；設計 5.1、5.5）：張數與大小跟伺服器的 Config.support 預設一樣（伺服器另外再擋一次）；只收這三種
-  const SUPPORT_FILES_MAX = 3;
-  const SUPPORT_FILE_BYTES = 3000000;
+  // 上限（第 226 批）：照 /api/support/mine 帶的 Config.support；缺鍵（舊回應、還沒讀到、讀取失敗）退回預設。0 是合法值（files_max 0＝主機把截圖關掉），不能寫 v || 預設
+  function supportLimit(key, dflt) {
+    const v = S.supportMine ? S.supportMine[key] : undefined;
+    return typeof v === "number" && Number.isFinite(v) ? v : dflt;
+  }
+  function supportOpenMax() { return supportLimit("open_max", 3); }
+  function supportDailyMax() { return supportLimit("daily_max", 5); }
+  function supportLimitLine() { return `同時最多 ${supportOpenMax()} 張沒結的單，一天最多送 ${supportDailyMax()} 張。`; } // 待 joy 潤
+  function supportNote() { return `${supportLimitLine()}帳號、名號、時間、版本會自動附上。`; } // 待 joy 潤
+
+  // 截圖（客服自動受理第 215 批；設計 5.1、5.5）：張數與大小照伺服器的 Config.support（伺服器另外再擋一次）；只收這三種
+  function supportFilesMax() { return supportLimit("files_max", 3); }
+  function supportFileBytes() { return supportLimit("file_bytes_max", 3000000); }
+  function supportMb(n) { return String(Number((Number(n) / 1e6).toPrecision(6))); } // 跟 routes._mb 的 %g 一樣：3000000 → 3、2500000 → 2.5
   const SUPPORT_ACCEPT = "image/png,image/jpeg,image/webp";
-  const SUPPORT_FILE_NOTE = "最多 3 張、每張 3 MB 以內（PNG、JPEG、WebP）"; // 待 joy 潤
-  const SUPPORT_FILE_BIG = "圖太大了：一張最多 3 MB。"; // 待 joy 潤
-  const SUPPORT_FILE_FULL = "一張單最多附 3 張圖。"; // 待 joy 潤
+  function supportFileNote() { return `最多 ${supportFilesMax()} 張、每張 ${supportMb(supportFileBytes())} MB 以內（PNG、JPEG、WebP）`; } // 待 joy 潤
+  function supportFileBig() { return `圖太大了：一張最多 ${supportMb(supportFileBytes())} MB。`; } // 待 joy 潤
+  function supportFileFull() { return `一張單最多附 ${supportFilesMax()} 張圖。`; } // 待 joy 潤
 
   function supportOn() { return !!(S.main && "support_unread" in S.main); }
 
@@ -92,23 +102,24 @@
   function supportPickedHtml() { // 寫單時挑好的圖（S.supportPicks），沒滿的格畫虛線空位
     const picks = S.supportPicks || [];
     const shots = picks.map((p, i) => `<span class="sup-shot">${p.url ? `<img src="${esc(p.url)}" alt="截圖 ${i + 1}">` : ""}</span>`).join(""); // 待 joy 潤
-    const slots = `<span class="sup-slot"></span>`.repeat(Math.max(0, SUPPORT_FILES_MAX - picks.length));
+    const slots = `<span class="sup-slot"></span>`.repeat(Math.max(0, supportFilesMax() - picks.length));
     return shots + slots;
   }
   function supportPickHtml() {
+    if (supportFilesMax() === 0) return ""; // 主機把截圖關掉：按鈕、說明列、空位格整塊不畫（第 226 批）
     return `<div class="sup-pick">
         <label class="btn ghost sup-pick-btn">附截圖<input type="file" id="support-new-files" name="files" accept="${SUPPORT_ACCEPT}" multiple></label>
-        <span class="muted sup-fine">${SUPPORT_FILE_NOTE}</span>
+        <span class="muted sup-fine">${supportFileNote()}</span>
         <div class="sup-shots" id="support-shots">${supportPickedHtml()}</div>
         <p class="sup-pick-msg" id="support-pick-msg">${esc(S.supportPickMsg || "")}</p></div>`; // 待 joy 潤
   }
   function supportAddHtml(t) { // 看單：沒結、張數少於上限才給補圖（一次一張）
     const files = Array.isArray(t.files) ? t.files : null;
-    if (t.status === "closed" || !files || files.length >= SUPPORT_FILES_MAX) return "";
+    if (t.status === "closed" || !files || files.length >= supportFilesMax()) return "";
     const pick = S.supportAddPick && S.supportAddPick.id === Number(t.id) ? S.supportAddPick.file : null;
     return `<form id="support-file-form" class="sup-pick sup-add" data-id="${Number(t.id)}">
         <label class="btn ghost sup-pick-btn">補一張圖<input type="file" id="support-add-file" name="file" accept="${SUPPORT_ACCEPT}" data-id="${Number(t.id)}"></label>
-        <span class="muted sup-fine" id="support-add-name">${pick ? esc(pick.name) : SUPPORT_FILE_NOTE}</span>
+        <span class="muted sup-fine" id="support-add-name">${pick ? esc(pick.name) : supportFileNote()}</span>
         <button class="btn sup-up" type="submit">傳上去</button><p class="form-msg"></p></form>`; // 待 joy 潤
   }
   async function supportUpload(id, file) { // 一張圖：內文就是檔本身（api() 只送 JSON，這裡自己打）。回 { ok, data }，連不上也是 ok: false
@@ -123,12 +134,13 @@
     const t = ((S.supportMine && S.supportMine.tickets) || []).find((x) => x.id === Number(id));
     if (t && Array.isArray(files)) t.files = files;
   }
-  function supportPick(input) { // 寫單挑圖：第 4 張起不收、單張超過 3 MB 不收；直接改那一格（重畫會清掉 file input，挑的檔記在 S.supportPicks）
+  function supportPick(input) { // 寫單挑圖：超過張數上限的不收、單張超過大小上限不收（預設 3 張、3 MB）；直接改那一格（重畫會清掉 file input，挑的檔記在 S.supportPicks）
     const picks = S.supportPicks = S.supportPicks || [];
+    const most = supportFilesMax(), bytes = supportFileBytes();
     let msg = "";
     for (const file of Array.from(input.files || [])) {
-      if (picks.length >= SUPPORT_FILES_MAX) { msg = SUPPORT_FILE_FULL; break; }
-      if (Number(file.size) > SUPPORT_FILE_BYTES) { msg = SUPPORT_FILE_BIG; continue; }
+      if (picks.length >= most) { msg = supportFileFull(); break; }
+      if (Number(file.size) > bytes) { msg = supportFileBig(); continue; }
       picks.push({ file, url: typeof URL !== "undefined" && URL.createObjectURL ? URL.createObjectURL(file) : "" });
     }
     S.supportPickMsg = msg;
@@ -140,9 +152,9 @@
   function supportAddPick(input) { // 補圖挑一張：太大的當場擋
     const file = (input.files || [])[0];
     const id = Number((input.dataset && input.dataset.id) || S.supportTicket);
-    S.supportAddPick = file && Number(file.size) <= SUPPORT_FILE_BYTES ? { id, file } : null;
+    S.supportAddPick = file && Number(file.size) <= supportFileBytes() ? { id, file } : null;
     const name = document.getElementById("support-add-name");
-    if (name) name.textContent = file ? (S.supportAddPick ? file.name : SUPPORT_FILE_BIG) : SUPPORT_FILE_NOTE;
+    if (name) name.textContent = file ? (S.supportAddPick ? file.name : supportFileBig()) : supportFileNote();
   }
 
   // ── 客服自己一頁（S.supportPage 時設定抽屜整個換成它）──
@@ -175,7 +187,7 @@
       return `<button class="sup-tk${t.status === "answered" ? " sup-hot" : ""}" data-act="support-ticket" data-id="${Number(t.id)}">
         <span class="sup-tk-top">${supportStatus(t.status)}#${Number(t.id)}・${supportCat(t)}<span class="sup-when">${supportWhen(t.updated)}</span></span>
         <span class="sup-sum">${esc(t.body)}</span>${last ? `<span class="sup-reply">客服：${esc(last.body)}</span>` : ""}</button>`; // 待 joy 潤
-    }).join("") + `<p class="muted sup-fine">同時最多 3 張沒結的單，一天最多送 5 張。</p>`; // 待 joy 潤
+    }).join("") + `<p class="muted sup-fine">${supportLimitLine()}</p>`; // 待 joy 潤
   }
   function supportNewHtml() {
     return `<form id="support-new-form" class="stack">
@@ -183,7 +195,7 @@
         <label>類別：<select name="category">${SUPPORT_CATS.map(([k, name]) => `<option value="${k}">${name}</option>`).join("")}</select></label>
         <textarea class="input" name="body" maxlength="1000" placeholder="想說的事（1,000 字內）"></textarea>
         ${supportPickHtml()}
-        <p class="muted sup-fine">${SUPPORT_NOTE}</p>
+        <p class="muted sup-fine">${supportNote()}</p>
         <p class="form-msg"></p><button class="btn primary" type="submit">送出</button></form>`; // 待 joy 潤
   }
   function supportPageHtml() {
@@ -333,11 +345,12 @@
 
   async function supportForm(form, data) {
       if (form.id === "support-new-form") {
+        const shots = supportFilesMax() > 0; // 主機把截圖關掉時不走上傳（第 226 批）；照寫單時看到的上限
         const r = await api("/api/support/ticket", { category: data.category, body: data.body || "" });
         S.supportMine = r.mine;
         S.supportTab = "mine";
         S.supportTicket = r.id;
-        const picks = S.supportPicks || []; // 單送出了才逐張傳圖（第 215 批）：一張失敗就停、單留著、寫哪一張沒傳上
+        const picks = shots ? S.supportPicks || [] : []; // 單送出了才逐張傳圖（第 215 批）：一張失敗就停、單留著、寫哪一張沒傳上
         S.supportPicks = [];
         S.supportPickMsg = "";
         S.supportFileMsg = null;
