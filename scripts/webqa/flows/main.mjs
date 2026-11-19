@@ -102,6 +102,10 @@ export const flows = [
       await c.load("/");
       await c.shoot("bt_muster2", { who: "p1" });
       await c.crawl("bt", () => c.load("/"), [...UI, "battle-shut"], { total: 8, cap: 2 });
+      // batch 234: the page left open polls /api/main while the clock is pushed; on one walk it saw the battle start and played 開打
+      // (#bp-ov, web/battle.js bpShow) and marked it seen, on the other it played it on the load below (15 REAL on bt_active, 7f816cb5e).
+      // Leave the page first so the start is always seen on the load, then tap the layer away as a player does (it closes on a tap)
+      await c.leave();
       for (let hop = 0; hop < 6; hop++) {
         await c.py("CLOCK['now'] += 600; out = 1");
         await c.api("admin", "/api/do/fast_forward", { hours: 1 });
@@ -110,6 +114,8 @@ export const flows = [
         if (m.json && m.json.battle_gauge && m.json.battle_gauge.phase === "active") break;
       }
       await c.load("/");
+      for (let i = 0; i < 10 && !(await c.ev(`!!document.getElementById("bp-ov")`)); i++) await c.sleep(150);
+      if (await c.ev(`!!document.getElementById("bp-ov")`)) { await c.click("#bp-ov"); await c.settle(450); }
       await c.shoot("bt_active", { who: "p1" });
       await c.crawl("bta", () => c.load("/"), [...UI, "battle-shut", "battle-open"], { total: 8, cap: 2 });
       for (let r = 0; r < 3; r++) {
