@@ -1407,6 +1407,119 @@ Z_TOOL_LENS = dict(key="tools", text="**工具修復：改情境去配合遊戲�
 WAVES["X"]["extra_lenses"].append(Z_TOOL_LENS)
 
 
+# ── AA 波：打開真人客服 228；AB 波：客服的比對軌 235、客服的走查景 236（企劃者 2026-11-19「這一波落地後先開真人客服」）──
+# 兩波分開開發（AA 是新功能模式、AB 是只改工具），合併與閘門一次：finish 用 AA，built 是兩邊接起來。
+# 基準不是 develop，是 PM 在 develop 上先放的「開關那一筆」（兩份設定覆寫檔打開客服＋煙霧測試那一行）：閘門拿它當 base，兩邊客服都開著，其餘才比得出一樣（W 波 craft、horses 打開那次的做法）。
+AA_SCOPE = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveX\scope228.json"
+AA_SHOTS = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveX"
+AA_BACKGROUND = (
+    "- **背景（三批共用）**：企劃者 2026-11-19 決定「這一波落地後先開真人客服」。**你的分支是從 PM 放好的「開關那一筆」開的**：`content/profiles/week7.json`、`season21.json` 已經各有 `\"support\": {\"enabled\": true}`，"
+    "`test_support_smoke.py` 已經改成斷言開著（`git log -1` 看得到那一筆）。**只開真人那一半**：`Config.support.bot_account` 照舊空字串（客服官 token 那條路一律 404，沒有自動回覆）、帳號綁定 identity 照舊關著、"
+    "客服名單由企劃者放在主機的 `.local/support.txt`（你不讀、不寫任何 `.local/`）。截圖照預設收（一張單 3 張、一張 3 MB；PM 量過主機那顆碟還剩 377 GB）。"
+    "PM 11/19 派了七位查案員、七位懷疑者、一位最後一關把「打開之後會怎樣」查過一輪，結果在 `" + AA_SCOPE + "`（只讀；`items[].key` 是角度名，`found` 是查案、`verdict` 是懷疑者；`gaps` 是最後一關，**說法互相打架時照 `gaps`**，再對不上以現行程式為準、寫進 decided）。"
+    "**動手前先讀派工單點名的那幾個 key**。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批不做派工單沒寫的事，碰到了寫 leftovers。"
+)
+AA_FENCE = (
+    "- **不准動**：核心（`tianxia/core/`）、殼（`server.py`、`web/app.js`、`web/main.js`、`web/shell.js`、`web/style.css`、`index.html`）、`tests/core/shell_tables.py`、`tests/conftest.py`、資料庫結構（第 9 版）、"
+    "identity 與 terms 兩包、兩份設定覆寫檔（開關那一筆已經放好，不再改）。要動才做得完就停下來寫 stopped。任何畫面、API 回應、主控台輸出都不能讓人分出誰是假人（`tests/bots/test_server_bots.py` 的 `leaks()` 掃得到你新加的輸出）。"
+    "各包 README 自己填；`docs/guide`、手冊、`CLAUDE.md`、主機端操作文件不動，句子放回報的 docs。新字每一句旁 `待 joy 潤`，`new_strings` 逐句列（改舊句的寫「舊 → 新」）。"
+    "這台同時有別的線在跑：重的東西跑一次就好；起伺服器一律暫存資料庫、模型網址 127.0.0.1:9、不碰 7861；跑 `same_behavior`、`webqa` 時環境裡不要有 `TIANXIA_DB`、`TIANXIA_SUPPORT`、`TIANXIA_PROFILE`。"
+)
+
+
+def ab(n, title, pkg, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-20-客服上線-第{n}批.md"
+    return batch(n, f"客服上線第 {n} 批：{title}", pkg, dev, plan, ports, body + [AA_BACKGROUND, AA_FENCE], custom=True)
+
+
+def b228():
+    return ab(228, "管理者帳號列在名單上也進得了客服頁、上傳先擋再讀、兩句在只開真人時說不對的字、改版資訊、鎖設定的測試", "support", "dev/support-on-228", "8467", [
+        "- 先讀 scope 的 `staff-desk`、`player-surface`、`abuse-and-data` 與 `gaps`。這一批動 `tianxia/features/support/`（含它的 `tests/`）、`web/support.js`、`web/support.css`、`web/admin.js`（只為①，PM 准這一次）、`content/patch_notes.json`、`tests/core/test_content.py`（只加⑤那一條）。",
+        "- **①管理者帳號列在客服名單上，也進得了客服頁**。現況（先自己證實）：伺服器那一側 `_staff` 不排除管理者；主機文件也寫「管理者本人不自動算客服，要列在名單上才是」。但畫面上 `web/admin.js` 的 `renderAdmin` 只在 `!S.main.admin && S.main.support_staff` 時畫客服頁，設定抽屜（`web/app.js`，殼，不准動）對管理者只給「管理者工具 ›」——所以企劃者本人（管理者）列進名單也沒有任何入口看單。"
+        "要的結果：`S.main.admin && S.main.support_staff` 的人有一個入口進客服頁，進去之後重新整理、點單、回覆、結單、查帳號都留在客服頁（重畫之後不會掉回管理者頁）、有路回管理者工具；**管理者不在名單上時管理頁一個位元組都不變**；不是管理者的客服照舊。"
+        "最小做法由你定（不碰殼）：例如管理頁頂上那一列在 `support_staff` 時多一顆「客服單 ›」（連到 `/admin#support`），`renderAdmin` 在網址帶這個錨點時畫客服頁，客服頁頂上對管理者多一顆回管理者工具；用什麼做法、為什麼寫進 decided。"
+        "測試（node 的網頁測試，加在 support 包現有的網頁測試檔）：`test_admin_on_the_staff_list_reaches_the_desk`、`test_desk_stays_the_desk_for_an_admin_after_refresh_and_actions`、`test_admin_not_on_the_list_sees_the_same_admin_page`（管理頁的 html 跟改之前逐字一樣）、`test_staff_who_is_not_admin_still_lands_on_the_desk`。`web/admin.js` 是 admin 包的檔：改完跑 `scripts/test_for.py` 挑到的 admin 測試。",
+        "- **②截圖上傳在讀本體之前先擋**（`routes.py::api_support_file`）。現況：認了登入就開始串流讀，最多讀到 `file_bytes_max`，之後 `_upload` 才看單在不在、是不是自己的、結了沒、張數滿了沒——沒有單的人、張數滿了的單、`files_max` 是 0 時，照樣讓伺服器整張讀進記憶體。"
+        "改成讀本體之前先做一次便宜的預檢（sqlite 那一下丟執行緒池）：`files_max` 是 0、單號不是數字、旁檔不在、單不在或不是自己的、單結了、張數已滿，各回**跟現在 `_upload` 與 `add_file` 回的同一句、同一個狀態碼**（逐一對現在的回應，位元組一樣；別人的單與不存在的單照舊同一句 404）。預檢過了才讀本體；`add_file` 交易裡原本的檢查原樣留著（兩個請求同時來時靠它）。Content-Length 說超過就提早拒的那一段照舊、順序你定但要寫進 decided。"
+        "測試（`test_support_files.py` 或現有測上傳的那個檔）：每一種拒絕各一條 `test_upload_refuses_<原因>_before_reading_the_body`，用一個會記下「有沒有被讀」的本體產生器證明沒讀；一條 `test_upload_replies_are_the_same_sentences_as_before`（六種拒絕的狀態碼與內文對改之前的字面）；現有上傳測試一條不改就綠。",
+        "- **③兩句在「只開真人」時說不對的字**（都標 `待 joy 潤`、進 new_strings 寫舊 → 新；斷言舊字的測試跟著改）：(a) `rules.TOO_MANY_OPEN`「已經有 {n} 張還沒結的單，等客服回覆或結單之後再送。」——已回覆的單也算沒結（`store` 數的是 `status != closed`），玩家自己結不了，「等客服回覆」這半句不對。改成「已經有 {n} 張還沒結的單，等其中一張結了再送。」"
+        "(b) `web/support.js` 客服頁讀不到那一行（第 226 批）「…剛用驗證碼登入的話，請改用帳號密碼重新登入。」——identity 關著時沒有驗證碼登入，真正的原因多半是客服這次登入超過 `identity.staff_hours`（6 小時）。改成「讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。」`git grep` 這兩句舊字在 `docs/support/`、README、測試、`scripts/` 還有沒有別處抄著，測試與 README 一起改，`docs/` 的寫進回報的 docs。",
+        "- **④改版資訊**：`content/patch_notes.json` 最前面加一筆（格式照檔頭 `_說明` 與現有幾筆；日期寫 `11/20`，回報的 docs 寫一句「日期照 Joy 實際部署那天改」）：`new` 一行「客服：設定裡多一個「客服」，可以寫單、附截圖，客服回覆了會通知你。」（進 new_strings，待 joy 潤）。先 `git grep patch_notes` 看哪些測試鎖最新一筆的日期或條數（客服單的版本欄讀最新日期），照著改到綠；`scripts/test_for.py` 會帶真實內容那幾條。",
+        "- **⑤鎖設定的測試**：`tests/core/test_content.py` 的 `ONLINE_PROFILES` 那幾條旁邊加 `test_online_profiles_open_only_the_human_half_of_support`：week7、season21 兩份 `support.enabled` 是 True、`support.bot_account == \"\"`、`identity.enabled` 是 False；`config.json` 那一層 `support.enabled` 是 False。docstring 寫明：客服官 token 那條路一律 404 靠 `bot_account` 空著；之後要開客服官或帳號綁定的那一批改這一條。",
+        "- **拍圖自驗**（照介面設計規範第八節：375 淺、375 深、1280；存 `" + AA_SHOTS + "\\b228\\shots\\`、路徑寫進回報）：暫存資料庫起 8467、`TIANXIA_PROFILE=week7`、模型網址 127.0.0.1:9；客服名單只對這一個暫存行程用環境變數 `TIANXIA_SUPPORT` 給（測完那個行程就關，不寫進任何檔）。拍：玩家的設定抽屜（多「客服 ›」）、寫單頁、看單；不是管理者的客服的客服頁；**管理者列在名單上**的入口與客服頁；管理者不在名單上的管理頁（對改之前要一樣）；客服頁讀不到的那一行。拍完 `taskkill /T`、刪暫存。",
+        "- **不做**：自動結單排程（只開真人時靠客服開客服頁那一下掃，企劃者知道）、「再回一句」的頻率上限、identity 關著時名號可以取「客服」、條款第十節的字、`staff_hours`、名單檔的 BOM（在核心）、`scripts/sb`、`scripts/webqa`（另外兩批在做）。退版：沒有新欄位、新表；`web/admin.js`、`web/support.js`、`routes.py` 三處退回就是舊樣子；季中能換；緊急開關 `support.enabled` 設 false 重開兩個程式（旁檔與截圖留著不讀），只停截圖是 `support.files_max` 設 0。",
+    ])
+
+
+AB_NOTE = [
+    "- **這一批改的是工具，不是遊戲**：只准動派工單點名的 `scripts/` 那一塊與它的測試；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔一個字不動。**上面波次模式寫的「你不跑 same_behavior compare」「不跑 selftest」對這一批不適用**：把工具跑到穩就是這一批的工作。改情境去配合遊戲，不改遊戲去配合情境；除了派工單明寫的「關著段」，不准在情境或 `serve.py` 把正式設定開著的包關掉。",
+]
+
+
+def b235():
+    return ab(235, "same_behavior 的 petition 軌：關著段在記憶體關、加開著段真的走到寫單、回覆、客服看單與結單", "core_shared", "dev/tools-petition-235", "8468", [
+        "- 先讀 scope 的 `compare-tracks` 與 `gaps`。**PM 已定，不照查案員的「`Scenario.__init__` 一律把客服關掉」**（懷疑者說得對：那樣線上開著的樣子只剩一軌在比）。做法是閘門拿「開關那一筆」當 base、兩邊客服都開著，其他軌就照線上的樣子（season21、week7 客服開著）在比；所以這一批**只動 `scripts/sb/tracks/petition.py`**（與 `tests/core/` 裡守它的測試、covers 的登記），`scripts/sb/base.py`、`harness.py` 不動（`_wipe_db` 少 `mail` 是舊洞，寫進 leftovers）。",
+        "- **①關著段**照第 232 批定的規矩（讀 `charter`、`letter`、`oath` 三軌怎麼寫的，照樣）：setup 先在記憶體把 `Config.support.enabled` 關掉，再走現在那一段（登入的人打十三條、沒登入的人打 `mailbox`、`/api/main`、`/api/push`）。三種設定走出來都是「關著」，test 設定的輸出跟改之前逐位元組一樣（改前改後各跑一次 test 設定對 sha）。",
+        "- **②開著段**（在記憶體打開；客服名單只用記憶體裡的 `Config.support.staff` 指到情境裡一個不是管理者的帳號，段落結束還原；這一軌從頭到尾把另外兩個名單來源隔掉——環境變數 `TIANXIA_SUPPORT` 拿掉、`tianxia.content.LOCAL_DIR` 指到不存在的資料夾〔`identity_base.support_file` 每次現讀它〕，結束還原）。照真人會走的順序，每一步把狀態碼與回應寫進輸出："
+        "玩家寫單（每種類別至少一張）、`/mine`、再回一句；被擋的每一種（空的、太長、沒有這種類別、第 4 張沒結的單）；`/api/main` 的 `support_unread`；不是客服的人打客服那幾條（要 404）；客服（**先重新密碼登入**：identity 關著時 `staff_session_ok` 看這次登入多久以前，情境的假時鐘每步 60 秒，超過 6 小時會靜靜變成 404——所以每次客服動作前先印 `queue` 的狀態碼，不是 200 就讓情境直接丟錯，不要空走）看佇列、看單、回覆並等玩家、內部註記、回覆並結單、查帳號（查得到、查無）、`sweep`；玩家這邊看到未讀、輪到自己那一回合江湖紀錄多一則、讀了之後歸零；玩家對自己的單打 `/api/support/human`（沒有客服官時會怎樣照實印）；帶 `Authorization: Bearer x` 打任何一條（要 404）；上傳只打一次「不是圖」的小本體看拒絕（**不真的存圖**：存了會多一個 `-support-files/` 資料夾，`_wipe_db` 不清它）。"
+        "段落結束把旁檔 `<db stem>-support.sqlite` 每張表的內容算進輸出（仿 `charter` 的段落收尾；不在就寫「不在」）。",
+        "- **③輸出要穩**：客服單的時間用的是 `shell.time.time()`——先看情境的假時鐘蓋不蓋得到它（`letter` 軌的信也有時間，看它怎麼辦）；蓋不到的欄位照別的軌的做法處理，寫進 decided。前半停點與後半接續（`resume`）照 `charter` 的寫法：開關與名單在 resume 之後要重新設。",
+        "- **④驗**：`petition` 三種設定各跑 `selftest`（跑兩次一樣、前半加後半等於整段、改一個字抓得到；「改一個字」的目標句要落在開著段走得到的句子上）。`ALWAYS_TRACKS` 六軌在 season21 各跑一次 `selftest`——**這是客服開著之後這六軌第一次跑**，紅了先分清楚是情境要跟著改還是遊戲真的壞了（後者停下回報，不改遊戲）。`covers`：`scripts/sb/covers_measure.py measure` 只量 `petition`（三設定）→ analyze 結束碼 0 → 寫回；守 covers 的那幾條測試跑過。docstring 與軌的說明字改成現在走的東西，寫明走不到什麼（截圖、客服官）。",
+        "- 時間上限兩段合計 2.5 小時；到了就把修好的推上去、交，沒做完的寫 leftovers（哪一步、倒在哪、你的判斷）。",
+    ] + AB_NOTE)
+
+
+def b236():
+    return ab(236, "網頁走查：客服開著之後 main 回合照樣穩，加客服的景（我的單、寫新單、看單、客服頁）", "core_shared", "dev/tools-webqa-236", "8469", [
+        "- 先讀 scope 的 `web-walkthrough` 與 `gaps`，再讀第 233、234 批的計畫與回報（`docs/superpowers/plans/2026-11-19-工具修復-第233批.md`；第 234 批：`flow` 用 `fast_forward` 推時鐘之前要 `c.leave()`、收養之後的「接著走」）。只動 `scripts/webqa/` 與 `tests/web/test_webqa.py`。",
+        "- **①先量**：基準已經把客服打開，所以每一個開著設定抽屜的景都多一行「客服 ›」、推播設定多一個「客服」勾選。要確定兩件事：(a) main 回合的 `crawl`（開抽屜之後照畫面上的鈕走的那一段）會不會自己點進客服頁——讀 `driver.mjs`／`flows/main.mjs` 的 crawl 怎麼挑鈕、排除哪些；(b) 客服頁上有沒有每次跑都不一樣的字（單的時間 `supportWhen`、版本欄）。用 `--only` 加 `--quick` 只跑到抽屜那幾景（第 234 批的跑法），不要一上來就跑整回合。",
+        "- **②讓它穩＋加景**：crawl 會點進客服頁的話，照工具現有的做法把它定下來（排除或固定走法，寫進 decided）。在 main 回合開抽屜之後加最短的幾步：點「客服 ›」拍「我的單」（空的）、切到「寫新單」拍、送一張文字單（不附圖）之後拍看單；客服那一側：比照 `common.mjs` 設管理者的做法，**只在走查自己起的兩個伺服器行程裡**把一個不是管理者的走查帳號放進客服名單（記憶體裡的 `Config.support.staff`；base、head 兩邊同樣做；不寫任何檔、不設環境變數），用它登入（密碼登入、剛登入）到 `/admin` 拍客服頁（四格數字加清單）、點那張單拍、回覆之後回玩家那邊拍抽屜的紅點。會變的字（時間）照工具現有的遮法處理，**不改 `web/`**。景名加進 `must_reach.txt`（用 `gate.py` 現成的寫法產生，不手改——先看第 234 批怎麼加的）。`coverage.py check` 要過；`web/support.js`、`support.css` 的登記跟現況一致。",
+        "- **③驗**：main 回合整回合自己對自己跑一次（`gate.py --base <head> --head <head> --rounds main --ports 8474,8475 --cdp-ports 8476,8477 --jobs 1`，`Start-Process` 分離啟動、輸出導到檔、`docs/superpowers/pm-workflows/wait_file.py` 等）：exit 0、0 real、`missing_must_reach` 空、主控台 0 錯誤。x 回合（也開抽屜）用 `--only` 跑到抽屜那幾景確認穩。`tests/web/test_webqa.py` 跑過。第 234 批留下的 c 回合 `029_bt_watch_shut` 偶發 1 張：有剩時間才看（先讀 `flows/c.mjs` 那一段推時鐘之前有沒有 `c.leave()`），沒時間就照舊留在 leftovers。",
+        "- **不做**：week7 的走查（工具只走 season21，寫進 leftovers）；管理者列在名單上的入口（第 228 批同時在做，下一次再加景）；截圖上傳的景。時間上限兩段合計 3 小時（整回合一次約 37 分鐘，別跑第三次）；到了就把修好的推上去、交。",
+    ] + AB_NOTE)
+
+
+WEB_AA = (
+    "**這一波把真人客服打開（week7、season21；identity 關、沒有客服官）**。用 head 的程式起暫存伺服器實機看，不是只看比對。都不花 token：`Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**；暫存資料庫、模型網址 127.0.0.1:9、拒絕 7861；客服名單只用環境變數 `TIANXIA_SUPPORT` 給那一個暫存行程，不寫任何 `.local/`。\n"
+    "1. 閘門的網頁比對（`.local/wave_gate/<head8>/web/report.txt`）：這一關不重跑，只看 real 是 0、`missing_must_reach` 空；有 real 逐張判是不是工具的事。\n"
+    "2. `TIANXIA_PROFILE=season21` 起一台（做完再用 `week7` 起一台走同樣的步驟）：(a) 一般玩家：設定抽屜有「客服 ›」；我的單是空的；寫新單頁的類別、字數、截圖提示（3 張、3 MB）；附一張小圖送出，看單有縮圖；通知設定多一個「客服」勾選。(b) 不是管理者的客服帳號（密碼登入）：抽屜頂上「客服單 ›」、客服頁四格數字與清單、點單、回覆並等玩家、回覆並結單、用帳號查帳號；回到玩家：⚙ 與「客服 ›」有紅點、點進去歸零。(c) 管理者帳號列在名單上：有入口進客服頁、回覆之後還在客服頁、回得去管理者工具；管理者不在名單上：管理頁沒有任何客服的東西。(d) 不在名單上的帳號直接打 `/api/support/queue` 回 404；帶 `Authorization: Bearer x` 打 `/api/support/queue` 回 404；登入頁沒有客服信箱那一行。(e) 整個過程畫面上沒有「找真人」鈕、沒有「客服官」「自動回覆」字樣（自動結單那一則除外，這一關不會出現）。\n"
+    "3. 設定覆寫暫時把 `support.files_max` 設 0 重起（只改你暫存的那份樹，不提交）：寫新單頁沒有「附截圖」，送單正常；直接打上傳那條路被拒。\n"
+    "4. 每一頁照介面設計規範第八節看 375 淺、375 深、1280：字不擠出框、可點的至少 44px、深色看得清；截圖存你的暫存夾、路徑寫進回報。任何一頁、任何回應分得出誰是假人就是 blocker。"
+)
+
+AA_FEATURE_LENS = dict(key="feature", text=(
+    "**打開真人客服：開的只有真人那一半、沒碰不該碰的、看不出假人**。第 228 批與 PM 的「開關那一筆」（這條線 base 那一筆：`git show <line base>`）；查案原文 " + AA_SCOPE + "。親自驗："
+    "①開關那一筆只動兩份設定覆寫檔（各一個 `support` 鍵、只有 `enabled`）與 `test_support_smoke.py`；用一行 Python（`TIANXIA_DB` 設到你的暫存檔）載 season21、week7：`support.enabled` True、`bot_account` 空字串、`identity.enabled` False，`config.json` 那一層 `support.enabled` False。"
+    "②核心、殼、`shell_tables`、`conftest`、資料庫結構、identity、terms 沒有動；`web/admin.js` 的改動只為了管理者進客服頁，**管理者不在名單上時 `renderAdmin` 畫出來的 html 跟 base 逐字一樣**（讀程式並看那條測試真的在比）。"
+    "③上傳預檢：六種拒絕的狀態碼與內文跟 base 的字面一樣（別人的單與不存在的單同一句 404，不洩漏單在不在）；`add_file` 交易裡的檢查還在；預檢沒有開新的旁檔、沒有在行動鎖裡做慢事。"
+    "④改的兩句字與改版資訊那一句旁有待 joy 潤、進了 new_strings；改版資訊沒有寫機率、戰況、任何跟假人有關的字。"
+    "⑤客服頁（含管理者進去的那一種）與查帳號的卡，沒有任何欄位、任何缺欄位分得出假人；`leaks()` 掃得到新加的輸出。"
+    "⑥鎖設定的那一條測試真的會紅：暫時把 week7 的 `support` 加上 `bot_account` 跑一次看它紅（看完還原，不提交）。"
+))
+AA_TOOL_LENS = dict(key="tools", text=(
+    "**客服的比對軌與走查景：改情境去配合遊戲，沒有反過來；真的在比東西**。第 235、236 批。親自驗："
+    "①兩批只動 `scripts/sb/tracks/petition.py`、`scripts/webqa/` 與它們的測試、計畫檔。"
+    "②petition 的關著段在 test 設定的輸出跟改之前一樣；開著段每一個客服動作前都印了 `queue` 的狀態碼而且是 200（挑一種設定讀輸出，確認「寫單、回覆、客服看單、結單、查帳號、未讀歸零」每一步的回應真的在輸出裡，不是 404 空走）。"
+    "③客服名單只在記憶體裡設、段落結束有還原；`TIANXIA_SUPPORT` 與 `LOCAL_DIR` 的隔離有還原；沒有任何地方寫 `.local/`。"
+    "④除了 petition 的關著段，沒有任何一軌、`serve.py` 的任何設定把正式設定開著的包關掉（grep `enabled` 在兩批的 diff 裡的每一處）。"
+    "⑤走查加的景都在 `must_reach.txt`、`coverage.py check` 過；會變的字是用工具的遮法處理，不是改 `web/`；crawl 的走法是定下來的（讀程式）。"
+    "⑥`ALWAYS_TRACKS` 六軌在客服開著的 season21 跑得過（開發的回報裡有證據；沒有就自己挑兩軌跑 `selftest`）。"
+))
+
+WAVES["AA"] = dict(
+    round2=True, feature=True, design=T_DESIGN, new_packages="identity,support,terms", new_existing=True,
+    extra_lenses=[AA_FEATURE_LENS, AA_TOOL_LENS],
+    lines=[dict(name="開客服", batches=[b228])],
+    merge_port=8470, fix_port=8471,
+    web_check=dict(ports="8472、8473", steps=WEB_AA),
+)
+WAVES["AB"] = dict(
+    round2=True,
+    lines=[dict(name="客服比對軌", batches=[b235]), dict(name="客服走查景", batches=[b236])],
+    merge_port=8478, fix_port=8479,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
