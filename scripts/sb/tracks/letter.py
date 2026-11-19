@@ -22,7 +22,7 @@ MAIL_ROUTES = (
 
 class LetterScenario(PeersScenario):
     """帖友書信的一軌（測試流程優化第 113 批；--track letter，自己一個資料庫）。借 peers 一軌的小工具（act、card_of、begin 清榜單快取）。班底的名字都是原創（PM 11/04）。
-    關著段（三種設定的 Config.mail.enabled 都關著）：白芷汀打六條 /api/mail*（兩邊都是 404）、三位管理者工具（/api/do/mail_*，關著也 404），讀 /api/main 的 mail 鍵。
+    關著段（test 設定本來就關著；week7、season21 #243 起開著，setup 先在記憶體裡把 Config.mail.enabled 關掉，第 232 批）：白芷汀打六條 /api/mail*（兩邊都是 404）、三位管理者工具（/api/do/mail_*，關著也 404），讀 /api/main 的 mail 鍵。
     換帖段（還關著）：白芷汀與沈眉山定稿名帖、互換（遞帖、卡上回帖）；顧遠帆有名帖但不換。
     開著段（記憶體裡打開開關，兩個行程都開）：沒換過帖的寄不了（兩個方向；寄給不存在的名號也是這一句，先問名帖匣）、寄給自己、空信、寄成、信匣與紅點、往來（打開記成看過）、回信、
     連寫三封之後被擋（等他回信）。前半停在白芷汀又寄了一封、沈眉山還沒看的那一刻。後半第一件事無條件重新登入：沈眉山看信匣與往來、不收白芷汀的信
@@ -37,6 +37,11 @@ class LetterScenario(PeersScenario):
 
     def switch_on(self) -> None:
         self.c.config.mail.enabled = True
+
+    def setup(self) -> None:
+        """關著段從這裡起：#243 之後 week7、season21 的帖友書信開著，這一軌要比關著，先在記憶體裡關掉（第 232 批；open 那一段照舊 switch_on）。"""
+        self.c.config.mail.enabled = False
+        super().setup()
 
     def side(self) -> Path:
         return self.db.with_name(f"{self.db.stem}-mail.sqlite")
