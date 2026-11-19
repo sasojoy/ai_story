@@ -38,8 +38,7 @@ class ShutScenario(StripScenario):
         """註冊一位新人、建角色（不略過引導）。"""
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                "again": self.passwords[who]})
+        self.register(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": gender})
 
     # ── 前半 ──

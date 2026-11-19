@@ -148,7 +148,7 @@ class MapScenario(Scenario):
         """另外註冊一個人（照 setup 的寫法：註冊、建角色、跳過教學、選掉開局三選一），擺到 loc、陣營照 side（沒有陣營的內容是散人）。"""
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+        self.register(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         self.do(who, "skip_tutorial")
         self.settle_choices(who)

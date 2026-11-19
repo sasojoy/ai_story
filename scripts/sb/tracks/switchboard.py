@@ -222,7 +222,7 @@ class SwitchboardScenario(Scenario):
         for who in [self.NEWBIE, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+            self.register(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         self.admin_page("籌備中")
 

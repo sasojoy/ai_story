@@ -231,6 +231,18 @@ class Scenario:
         self.clients[who] = self.TestClient(self.server.app)
         self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
 
+    def register(self, who: str):
+        """開帳號（POST /api/register），帳號、密碼要先放進 self.clients、self.passwords。第 232 批：條款開著（Config.terms.enabled，
+        #243 起 week7、season21）時照 web/terms.js 的送法多帶兩個勾選（FormData 的 "on"）與 GET /api/terms/version 的版號（不寫進輸出，
+        同前端沒登入先問一次）；關著（或根上沒有條款包、問版號不是 200）送的跟以前一個位元組都不差。"""
+        body = {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]}
+        if getattr(getattr(self.c.config, "terms", None), "enabled", False):
+            r = self.clients[who].get("/api/terms/version")
+            version = r.json().get("version") if r.status_code == 200 else None
+            if version:
+                body.update(age_ok="on", terms_agree="on", terms_version=version)
+        return self.call(who, "POST", "/api/register", body)
+
     def login_all(self) -> None:
         """重新登入每一個帳號（前半＋後半在這裡接）。"""
         for who in list(self.clients):
@@ -278,8 +290,7 @@ class Scenario:
         for who in [self.NEWBIE, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.register(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         for who in self.PLAYERS:
             self.do(who, "skip_tutorial")
@@ -446,7 +457,7 @@ class Scenario:
             return False
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+        self.register(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         self.do(who, "skip_tutorial")
         self.settle_choices(who)

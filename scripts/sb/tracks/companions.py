@@ -196,8 +196,7 @@ class CompanionsScenario(Scenario):
         for who in [self.PREP, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.register(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
             if who == self.PREP:  # 籌備中（管理者還沒開季）：名冊那三顆只回一句（_not_while_preparing；測試內容自動開季，照常做）
                 for op in ("join", "leave", "release"):

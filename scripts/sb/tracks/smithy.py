@@ -155,8 +155,7 @@ class SmithyScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.register(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         who = self.BUYER  # 籌備中：每一個入口都擋
         self.choose(who, "act:smith")
