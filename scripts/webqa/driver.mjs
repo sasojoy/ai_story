@@ -60,7 +60,11 @@ async function api(who, path, body, method) {
   return { status: res.status, json, text };
 }
 async function account(who, login, name, sex) {
-  await api(who, "/api/register", { login, password: PW, again: PW });
+  // batch 233: with the terms package on (week7, season21 since #243) the register form carries two ticks and the current version
+  // (web/terms.js termsInsertChecks); a player ticks both, so the walk sends both. Off: /api/terms/version is 404 and nothing is added.
+  const v = await api(who, "/api/terms/version");
+  const ticks = v.status === 200 && v.json && v.json.version ? { age_ok: true, terms_agree: true, terms_version: v.json.version } : {};
+  await api(who, "/api/register", { login, password: PW, again: PW, ...ticks });
   return (await api(who, "/api/character", { name, gender: sex })).status;
 }
 async function py(code) {
