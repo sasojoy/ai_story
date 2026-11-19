@@ -453,6 +453,24 @@ def test_main_closes_the_patch_sheet_after_one_picture_and_waits_for_the_ink_pic
     assert {"main:patch_pop", "main:call_close", "main:call_act", "main:zh_write"} <= rows
 
 
+def test_main_walks_support_between_notify_and_mall_and_puts_the_staff_list_back():
+    """第 236 批：客服在 week7、season21 打開了。main 回合在 notify 與 mall 之間走一趟客服：玩家寫一張文字單，不是管理者的走查帳號
+    只在這個伺服器行程的記憶體裡放進客服名單（Config.support.staff，不寫檔、不設環境變數），重新用密碼登入（staff_session_ok）到 /admin
+    回覆，同一個 flow 裡把名單還原；玩家讀過回覆，紅點滅掉，後面的景不多一個紅點。景名手加進 must_reach（不用 --write-must-reach）。"""
+    text = (TOOL / "flows" / "main.mjs").read_text(encoding="utf-8")
+    assert text.index('\n    ["notify"') < text.index('\n    ["support"') < text.index('\n    ["mall"')
+    sup = next(f for f in re.split(r'\n    \["', text) if f.startswith('support"'))
+    put = sup.index("content.config.support.staff = [*content.config.support.staff, 'qaplayer4']")
+    back = sup.index("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']")
+    assert put < sup.index('relogin("p4")') < sup.index('load("/admin")') < sup.index('"sup_desk_answered"') < back
+    assert back < sup.index('"sup_mine_answered"')
+    driver = (TOOL / "driver.mjs").read_text(encoding="utf-8")
+    assert "async function relogin(who)" in driver and "relogin," in driver
+    rows = set((TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines())
+    names = ["sup_mine", "sup_new", "sup_sent", "sup_desk", "sup_desk_pick", "sup_desk_answered", "sup_dot", "sup_dot_sheet", "sup_mine_answered", "sup_ticket_read"]
+    assert {f"main:{n}" for n in names} <= rows
+
+
 # ── 第 107 批：回合對照表（coverage.json）與 --changed-files ──
 
 
