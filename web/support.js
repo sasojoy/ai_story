@@ -89,6 +89,19 @@
     if (!(S.main && S.main.support_staff)) return "";
     return `<a class="btn small ghost ad-entry" href="/admin">客服單 ›</a>`; // 待 joy 潤
   }
+  // 第 228 批：管理者也列在客服名單上時，管理頁頂上多一顆「客服單 ›」進客服頁（網址換成 /admin#support，重新整理也留在客服頁），
+  // 客服頁頂上多一顆「‹ 管理者工具」回去。設定抽屜（app.js）不動：管理者從「管理者工具 ›」進來再點這一顆。
+  function supportAdminLink() {
+    if (!(S.main && S.main.admin && S.main.support_staff)) return "";
+    return `<button class="btn small ghost ad-entry sup-admin-entry" data-act="support-desk-enter">客服單 ›</button>`; // 字沿用 supportDeskLink
+  }
+  function supportDeskAsked() { // 點過「客服單 ›」或「‹ 管理者工具」以記憶體的旗標為準；剛開頁（重新整理）看網址的錨點
+    if (typeof S.supportDeskAdmin === "boolean") return S.supportDeskAdmin;
+    return typeof location !== "undefined" && !!location && location.hash === "#support";
+  }
+  function supportDeskUrl(path) { // node 的假瀏覽器沒有 history
+    if (typeof history !== "undefined" && history && typeof history.replaceState === "function") history.replaceState(null, "", path);
+  }
 
   // ── 截圖（第 215 批）：單上的縮圖列（看單、客服頁同一支），寫單的挑圖格，看單的補圖表單 ──
   function supportShotsHtml(id, files) { // 縮圖連到看圖的路由、新分頁開（rel="noopener"）；沒有 files（舊的回應）不畫
@@ -280,9 +293,10 @@
       ${supportCardHtml(t.card || { login: acct.login, created: acct.created, character: acct.character })}`;
   }
   function supportDeskHtml() {
-    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2><button class="btn small" data-act="support-desk-refresh">重新整理</button></header>`; // 待 joy 潤
+    const back = S.main && S.main.admin ? `<button class="btn small ghost" data-act="support-desk-leave">‹ 管理者工具</button>` : ""; // 待 joy 潤（第 228 批：只給管理者）
+    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2>${back}<button class="btn small" data-act="support-desk-refresh">重新整理</button></header>`; // 待 joy 潤
     const q = S.supportDesk;
-    if (S.supportDeskFailed) return `${head}<p class="muted">讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。</p>`; // 待 joy 潤
+    if (S.supportDeskFailed) return `${head}<p class="muted">讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。</p>`; // 待 joy 潤
     if (!q) return `${head}<p class="muted">讀取中…</p>`; // 待 joy 潤
     const tile = (k, v, sub) => `<div class="sup-tile"><small>${k}</small><b>${Number(v) || 0}</b><span>${sub}</span></div>`;
     const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤
@@ -341,9 +355,11 @@
           renderKeepingSheet();
           break;
         }
+        case "support-desk-enter": S.supportDeskAdmin = true; supportDeskUrl("/admin#support"); renderKeepingSheet(); break; // 管理者從管理頁進客服頁（第 228 批）
+        case "support-desk-leave": S.supportDeskAdmin = false; supportDeskUrl("/admin"); renderKeepingSheet(); break; // 回管理者工具：S.admin 空的話 renderAdmin 自己讀
     } // supportClick
   } // supportClick
-  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-human", "support-answer"]);
+  registerClicks(supportClick, ["support-open", "support-back", "support-tab", "support-ticket", "support-list", "support-desk-refresh", "support-close", "support-desk-pick", "support-human", "support-answer", "support-desk-enter", "support-desk-leave"]);
 
   async function supportForm(form, data) {
       if (form.id === "support-new-form") {

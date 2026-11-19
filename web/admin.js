@@ -20,6 +20,7 @@
 
   // 整頁：頂上一列（回江湖、標題、重新整理）、「現在」卡、各塊、底下的結果條
   function renderAdmin() {
+    if (S.main.admin && S.main.support_staff && typeof supportDeskAsked === "function" && supportDeskAsked()) return renderSupportDesk(); // 管理者也列在客服名單上、點了「客服單 ›」或網址是 /admin#support（第 228 批，support.js）
     if (!S.main.admin && S.main.support_staff) return renderSupportDesk(); // 客服身分（support.js）：畫客服頁，不叫 /api/admin
     if (typeof hideMapHost === "function") hideMapHost();
     $app.innerHTML = `<div class="ad-shell">${adminHtml()}</div>`;
@@ -47,7 +48,7 @@
 
   function adminHtml() {
     const a = S.admin;
-    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2><button class="btn small" data-act="ad-refresh">重新整理</button></header>`;
+    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2>${typeof supportAdminLink === "function" ? supportAdminLink() : ""}<button class="btn small" data-act="ad-refresh">重新整理</button></header>`;
     if (!a) return `${head}<p class="muted ad-wait">${S.adFailed ? "管理資料沒拿到（連不上、或伺服器出錯）。按「重新整理」再試一次。" : "正在讀……"}</p>`;
     // 介面重整（2026-11-05，設計稿 Admin）：四格狀態、常用的大鈕、分頁籤（一次只看一塊）、紅框的危險區（長按才算）
     const tabs = Object.keys(AD_SECS).filter((id) => adSecBody(a, id)); // 每一塊都畫（下拉選單、欄位都在，大鈕也找得到），只露選到的那一塊

@@ -1343,6 +1343,18 @@ def test_push_is_off_by_default():
         assert real_content(path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
 
 
+def test_online_profiles_open_only_the_human_half_of_support():
+    """客服只開真人那一半（企劃者 2026-11-19「這一波落地後先開真人客服」，第 228 批）：week7、season21 的 support.enabled 打開，
+    客服官的 bot_account 空著、帳號綁定 identity 關著；content/config.json 那一層照舊關。客服官 token 那條路一律 404 就靠
+    bot_account 空著（routes._desk_who 讀不到客服官就不認 Bearer）。之後要開客服官或帳號綁定的那一批改這一條。"""
+    for name in ONLINE_PROFILES:
+        cfg = real_content(name).config
+        assert cfg.support.enabled is True, name
+        assert cfg.support.bot_account == "", name
+        assert cfg.identity.enabled is False, name
+    assert real_content().config.support.enabled is False
+
+
 def test_push_timings_must_make_sense():
     """看守每 0 秒看一次是空轉；兩次「世界變了」的間隔不能是負的（0＝不壓）。"""
     with pytest.raises(ValidationError, match="greater than 0"):
