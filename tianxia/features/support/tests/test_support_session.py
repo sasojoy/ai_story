@@ -196,6 +196,28 @@ def test_knowledge_export_writes_three_files_without_leaks(tmp_path, monkeypatch
     assert os.environ["TIANXIA_DB"] == str(tmp_path / "should-not-be-touched.db")  # 用完還原
 
 
+@pytest.mark.slow  # 載入兩次正式內容，第 227 批量過超過 1 秒
+def test_knowledge_export_with_real_content_carries_the_season_end_rule(tmp_path, monkeypatch):
+    # 第 227 批實跑：籌備中的季種下去就蓋過章，正式內容匯得出「這一季在打什麼」與收季那一句（兩種設定都是）。
+    from test_server_bots import leaks
+
+    knowledge = _load(KNOWLEDGE, "support_knowledge_t4")
+    outside = tmp_path / "should-not-be-touched.db"
+    monkeypatch.setenv("TIANXIA_DB", str(outside))
+    for profile in ("season21", "week7"):
+        desk = tmp_path / profile
+        assert knowledge.main([str(desk), "--profile", profile]) == 0, profile
+        out = desk / "knowledge"
+        howto = (out / "howto.md").read_text(encoding="utf-8")
+        assert "這一季在打什麼" in howto, profile
+        assert "收季：" in howto, profile
+        for name in ("howto.md", "FAQ.md", "patch_notes.json"):
+            text = (out / name).read_text(encoding="utf-8")
+            assert not leaks(text), (profile, name)
+            assert "docs/guide" not in text, (profile, name)
+    assert not outside.exists()
+
+
 def test_knowledge_export_refuses_a_leaking_file(tmp_path, monkeypatch):
     knowledge = _load(KNOWLEDGE, "support_knowledge_t2")
     faq = tmp_path / "FAQ.md"
