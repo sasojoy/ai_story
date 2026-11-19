@@ -240,6 +240,17 @@ def test_faq_is_player_facing_and_marked_for_joy():
         assert word not in text, word
 
 
+def test_faq_covers_what_went_live_through_11_19():
+    # 第 227 批：11/10～11/16 上線的十四樣各至少一題（只寫改版資訊、包說明、玩法導覽查得到的）。
+    text = (ROOT / "docs" / "support" / "FAQ.md").read_text(encoding="utf-8")
+    new = text.split("## 新玩法（11/10 之後）", 1)[1]
+    for word in ("親衛隊長", "江湖錄", "進行中", "門派", "結義", "信", "稱號", "馬", "意境合成", "畫本", "紅點",
+                 "捐軍備", "村鎮", "成數", "第 2 週"):
+        assert word in new, word
+    old = text.split("## 換季", 1)[1].split("##", 1)[0]
+    assert "親衛隊長跟著你的帳號走" in old  # 舊題「同伴重獲自由」改成只說酒肆招來的
+
+
 def test_knowledge_export_writes_three_files_without_leaks(tmp_path, monkeypatch):
     from test_server_bots import FORBIDDEN, leaks
 
