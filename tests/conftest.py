@@ -504,13 +504,26 @@ def game(content):
 # 其他檔有自己的 real／on（設定各不相同），在那些檔裡蓋過這兩個：pytest 用離測試最近的定義。
 
 
-@pytest.fixture
-def real():
-    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+def make_real() -> Content:
+    """fixture real 的建法（純函式）：module 範圍的 fixture 拿不到 function 範圍的 real，要同一份就叫這個。"""
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
+
+
+def make_on(real: Content) -> Content:
+    """fixture on 的建法（純函式）：把傳進來的那一份就地打開、拿掉地盤，回傳同一份。"""
+    real.config.season_one = True
+    real.config.season_days = 2.5
+    real.config.server_max_players = 2
+    return no_territory(real)
+
+
+@pytest.fixture
+def real():
+    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+    return make_real()
 
 
 @pytest.fixture
@@ -518,10 +531,7 @@ def on(real):
     """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。豪強分屬兩軍（第一季規則的季一律如此；
     豪強第三方 2026-10-31 拿掉）。不畫地盤（劇本的 territory 拿掉）：以前這一份沒開 haoqiang_allied，地盤（領地爭奪）本來就不開；
     測領地爭奪的用 conquest_kit 或 week7、season21 設定。"""
-    real.config.season_one = True
-    real.config.season_days = 2.5
-    real.config.server_max_players = 2
-    return no_territory(real)
+    return make_on(real)
 
 
 def no_territory(content: Content) -> Content:
