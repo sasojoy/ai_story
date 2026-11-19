@@ -282,6 +282,7 @@
   function supportDeskHtml() {
     const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2><button class="btn small" data-act="support-desk-refresh">重新整理</button></header>`; // 待 joy 潤
     const q = S.supportDesk;
+    if (S.supportDeskFailed) return `${head}<p class="muted">讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。</p>`; // 待 joy 潤
     if (!q) return `${head}<p class="muted">讀取中…</p>`; // 待 joy 潤
     const tile = (k, v, sub) => `<div class="sup-tile"><small>${k}</small><b>${Number(v) || 0}</b><span>${sub}</span></div>`;
     const tiles = `<div class="sup-tiles">${tile("沒回的", q.open, "處理中")}${tile("等玩家", q.waiting, "回過了")}${tile("今天", q.fresh, "新單")}${tile("查帳剩", q.lookups_left, "這一小時")}</div>`; // 待 joy 潤
@@ -295,15 +296,16 @@
   function renderSupportDesk() {
     if (typeof hideMapHost === "function") hideMapHost();
     $app.innerHTML = `<div class="ad-shell sup-wide">${supportDeskHtml()}</div>`;
-    if (!S.supportDesk && !S.supportDeskLoading) supportDeskReload();
+    if (!S.supportDesk && !S.supportDeskLoading && !S.supportDeskFailed) supportDeskReload(); // 讀不到的那一次之後不自己再讀，等「重新整理」（第 226 批）
   }
   async function supportDeskReload() {
     S.supportDeskLoading = true;
     try { await api("/api/support/sweep", {}); } catch (e) { /* 先自動結單（第 216 批）；失敗不擋清單 */ }
     try {
       S.supportDesk = await api("/api/support/queue");
+      S.supportDeskFailed = false;
       if (S.supportDeskPick != null) S.supportDeskTicket = await api(`/api/support/ticket/${Number(S.supportDeskPick)}`);
-    } catch (e) { S.supportDesk = S.supportDesk || { open: 0, waiting: 0, fresh: 0, tickets: [] }; }
+    } catch (e) { if (!S.supportDesk) S.supportDeskFailed = true; } // 客服單本身讀不到才記（第 226 批）；清單讀到了、只有點開的那張讀不到，清單照留
     S.supportDeskLoading = false;
     if (S.adminPage) renderKeepingSheet();
   }
@@ -315,7 +317,7 @@
         case "support-tab": S.supportTab = el.dataset.tab === "new" ? "new" : "mine"; S.supportTicket = null; renderKeepingSheet(); break;
         case "support-ticket": S.supportTicket = Number(el.dataset.id); renderKeepingSheet(); break;
         case "support-list": S.supportTicket = null; renderKeepingSheet(); break;
-        case "support-desk-refresh": S.supportDesk = null; renderKeepingSheet(); break;
+        case "support-desk-refresh": S.supportDesk = null; S.supportDeskFailed = false; renderKeepingSheet(); break;
         case "support-close": S.sheet = false; S.supportPage = false; S.supportTicket = null; render(); break; // 客服那一頁的「關閉」與底下的灰幕：下次打開設定回到設定
         case "support-desk-pick":
           S.supportDeskPick = Number(el.dataset.id);

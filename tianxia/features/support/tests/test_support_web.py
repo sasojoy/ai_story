@@ -576,6 +576,51 @@ def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
     assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
 
 
+DESK_FAILED = "讀不到客服單，請按重新整理；剛用驗證碼登入的話，請改用帳號密碼重新登入。"
+
+
+def test_desk_says_so_when_the_queue_cannot_be_read(main):
+    """第 226 批：客服單讀不到時不畫四個 0 的磚，說一句；之後重畫不自己再讀（不然讀不到就一直打）。"""
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    out = run(m, """return (async () => {
+        let fails = 0;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => { if (url === "/api/support/queue") { fails++; return Promise.reject(new Error("down")); } return real(url, opts); };
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const first = T.els.app.innerHTML;
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { first, again: T.els.app.innerHTML, fails, desk: H.S.supportDesk || null, html: H.supportDeskHtml() };
+      })();""", S={"adminPage": True})
+    assert out["fails"] == 1
+    assert out["desk"] is None
+    for html in (out["first"], out["again"], out["html"]):
+        assert DESK_FAILED in html and "sup-tile" not in html and "讀取中…" not in html
+        assert 'data-act="support-desk-refresh"' in html and f'<p class="muted">{DESK_FAILED}</p>' in html
+
+
+def test_desk_refresh_recovers_after_a_failed_read(main):
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, """return (async () => {
+        let down = true;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => down && url === "/api/support/queue" ? Promise.reject(new Error("down")) : real(url, opts);
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const failed = T.els.app.innerHTML;
+        down = false;
+        const before = T.calls.length;
+        await H.supportClick("support-desk-refresh", { dataset: {} });
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { failed, calls: T.calls.slice(before).map((c) => c[0]), html: T.els.app.innerHTML, flag: !!H.S.supportDeskFailed };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert DESK_FAILED in out["failed"]
+    assert out["calls"] == ["/api/support/sweep", "/api/support/queue"]
+    assert out["flag"] is False and DESK_FAILED not in out["html"] and out["html"].count('class="sup-tile"') == 4 and "月卡沒到" in out["html"]
+
+
 def test_desk_labels_system_auto_and_human(main):
     m = {**main, "support_unread": 0, "support_staff": True}
     state = _desk_state(_card())
