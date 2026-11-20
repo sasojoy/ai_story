@@ -179,10 +179,10 @@ def test_id_account_reaches_main():
     assert AccountStore(database.open_database()).owner_of("柳如煙") == key
 
 
-def test_staff_and_id_names_blocked_only_when_on(monkeypatch, key_file):
+def test_staff_names_always_blocked_and_id_names_only_when_on(monkeypatch, key_file):
     names = ("客服", "GM", "id:3")
-    for name in names:
-        assert not server.name_taken(name), name  # 關著照舊能取
+    assert server.name_taken("客服") and server.name_taken("GM")  # 第 240 批：保留字不看帳號綁定
+    assert not server.name_taken("id:3")  # id: 開頭只在開著時擋
     _turn_on(monkeypatch)
     for i, name in enumerate(names):
         c = TestClient(server.app)

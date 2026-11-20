@@ -184,13 +184,31 @@ def test_session_auth_roundtrip_and_last_checked(tmp_path):
     assert ib.side_file(tmp_path / "g.db") == side
 
 
-def test_blocked_name_only_when_on(content, keyed):
-    names = ("客服", "GM", "gm", "id:3", "ID:3", "官方", "管理員")
-    assert not any(ib.blocked_name(n, content) for n in names)
+STAFF_LIKE = ("客服", "客服小美", "官方客服", "客 服", "ＧＭ", "gm", "G.M", "小美GM", "管理员", "系統", "管理者", "營運")
+NOT_STAFF = ("官府", "官軍", "沈浪", "Sigmund", "Dogma", "方官")
+
+
+def test_blocked_name_id_prefix_only_when_on(content, keyed):
+    assert not any(ib.blocked_name(n, content) for n in ("id:3", "ID:3"))
     content.config.identity.enabled = True
-    assert all(ib.blocked_name(n, content) for n in names)
-    assert not ib.blocked_name("沈浪", content)
-    assert not ib.blocked_name("客服甲", content)
+    assert all(ib.blocked_name(n, content) for n in ("id:3", "ID:3"))
+
+
+def test_blocked_name_staff_words_regardless_of_identity(content, keyed):
+    """第 240 批（企劃者 2026-11-20「現在就擋」）：像官方的名號不管帳號綁定開不開都擋，staff_names_on 關掉才全部不擋。"""
+    for identity_on in (False, True):
+        content.config.identity.enabled = identity_on
+        assert [n for n in STAFF_LIKE if not ib.blocked_name(n, content)] == []
+        assert [n for n in NOT_STAFF if ib.blocked_name(n, content)] == []
+    content.config.identity.enabled = False
+    content.config.staff_names_on = False
+    assert [n for n in STAFF_LIKE if ib.blocked_name(n, content)] == []
+
+
+def test_staff_like_is_pure():
+    from tianxia.core import name_base
+    assert all(name_base.staff_like(n) for n in STAFF_LIKE + ("G M", "gm2", "客．服", "官 方"))
+    assert not any(name_base.staff_like(n) for n in NOT_STAFF + ("Magma", "官府中人", "", None))
 
 
 # ── 第 207 批：管理者的 session、名單上的帳號、12 字 ──

@@ -300,7 +300,7 @@ def name_taken(name: str) -> bool:
     （帳號密碼登入設計第三節）。"""
     reserved = {n.casefold() for n in server_bots.reserved_names(CONTENT)}
     return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved \
-        or identity_base.blocked_name(name, CONTENT)  # identity：帳號綁定開著才擋（關著回假，行為不變）
+        or identity_base.blocked_name(name, CONTENT)  # 保留字一律擋（staff_names_on），id: 開頭帳號綁定開著才擋
 
 
 def _reload(game: Game) -> None:
