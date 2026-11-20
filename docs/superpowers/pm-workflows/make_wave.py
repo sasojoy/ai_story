@@ -1601,6 +1601,87 @@ WAVES["AC"] = dict(
 )
 
 
+# ── AD 波：企劃者 2026-11-20 傍晚答的三題（PM 用選單問，引號裡是他選的選項原字）：擋冒充客服的名號 240「現在就擋」、條款新版 241「現在就出新版條款」、刪四條啟動測試 242「四條都刪」──
+# 三條線互不相干，基準是 develop；收尾一次合、一次驗。條款改版會讓 charter 軌有預期的差：收尾時 PM 另做一筆比對基準（develop 加第 241 批的 terms.json），照 W、AA 波的先例。
+AD_SCOUT = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\tasks\wn60ui6k4.output"
+AD_NOTE = [
+    "- **背景（三批共用）**：真人客服 AA 波 2026-11-20 在 week7、season21 打開（進了 `develop`、還沒上 `main`）。企劃者 11/20 傍晚答了三題，這一波就是那三題。PM 先派了三位唯讀調查員，結果在 `" + AD_SCOUT + "`（JSON；`result.names`、`result.terms`、`result.tests` 各有 `facts`〔每條附檔名行號與原文〕、`plan`、`risks`）。**動手前先讀你那一批的那一段**；它是讀程式的結論，跟現行程式對不上時照程式、寫進 decided。派工單寫的是 PM 看完調查之後定的做法，跟調查的 `plan` 不一樣的地方照派工單。"
+    "上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批不做派工單沒寫的事，碰到了寫 leftovers。",
+    "- **這台同時有另外兩條線在跑**：重的東西跑一次就好；起伺服器一律暫存資料庫、模型網址 127.0.0.1:9、只用派工單給的埠、不碰 7861；跑 `same_behavior` 時環境裡不要有 `TIANXIA_DB`、`TIANXIA_SUPPORT`、`TIANXIA_PROFILE`；不讀不寫任何 `.local/` 的檔。任何畫面、API 回應、主控台輸出、腳本輸出都不能讓人分出誰是假人。"
+    "各包 README 自己改；`docs/guide`、手冊、`CLAUDE.md`、交接、架構圖不動，要改的句子放回報的 docs。新字每一句旁 `待 joy 潤`（json 裡的字列在回報的 `new_strings`），改舊句寫「舊 → 新」。",
+]
+
+
+def ad(n, title, pkg, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-20-客服上線補件-第{n}批.md"
+    return batch(n, f"客服上線補件第 {n} 批：{title}", pkg, dev, plan, ports, body + AD_NOTE, custom=True)
+
+
+def b240():
+    return ad(240, "名號不准冒充官方：含「客服」「官方」「管理員」「GM」這類字的名號，取名與易名帖一律擋（不再只在帳號綁定開著時擋）", "core_shared", "dev/names-staff-240", "8507", [
+        "- **點頭（動核心）**：企劃者 2026-11-20，PM 問「帳號綁定關著時名號可以取成客服、官方、GM，帖友書信開著有人能冒充客服寄信，要不要現在就擋（擋要動核心取名檢查的一小段，需要你點頭）」，他選「現在就擋」。回報的 `core_changes` 逐檔寫、附這句原話。",
+        "- **現況（調查員查的，先自己對一次）**：`tianxia/core/identity_base.py::blocked_name` 已經會擋 `name_base.STAFF_NAMES`（客服、官方、管理員、GM）與 `id:` 開頭，但**只在 identity 開著時**、而且是**全等**（「客服小美」「客 服」「官方客服」都過）。玩家的名號走三條路：殼的 `server.create_character`（`/api/character`）、identity 包建角色（同一支）、商城易名帖（`mall/actions.py::rename_self`，路由傳 `shell.name_taken`；沒傳時的後備 lambda 也叫 `blocked_name`）——三條都經 `server.name_taken` 或那個後備，所以改 `blocked_name` 就全擋到，**`server.py` 與各包的程式不用動**。名號只做 NFKC 與 strip，不限中文（`naming.name_problem` 只管武學、意境的名字）。主機的 `scripts/set_password.py --character` 直接 `Game.new`、不經這條檢查。",
+        "- **①`tianxia/core/name_base.py`**：加保留字表 `STAFF_WORDS`（PM 定：`客服`、`官方`、`管理員`、`管理员`、`管理者`、`系統`、`系统`、`營運`、`运营`、`運營`、`营运`）與純函式 `staff_like(name) -> bool`：先 NFKC、casefold，只留 Unicode 類別 L 與 N 開頭的字（空白、標點、符號去掉，所以「客 服」「客．服」「G.M」現形），中文詞用**包含**比對；`gm` 用「前後不接英文字母」的比對（擋 `GM`、`ＧＭ`、`gm小美`、`小美GM`、`G M`；不擋 `Sigmund`、`Dogma`、`Magma`）。不讀設定、不查資料庫。`STAFF_NAMES` 還有人 import 就留著（值不變）、沒人用就併掉不留別名；異聞設計稿之後會讀 `STAFF_NAMES`，留著比較穩，你看現況定、寫進 decided。",
+        "- **②`tianxia/models.py`**：`Config` 在 `banned_names_on` 旁邊加 `staff_names_on: bool = True`（註解：冒充官方的名號擋不擋；企劃者 2026-11-20「現在就擋」；主機緊急時在設定覆寫檔關掉、重開生效）。預設開，兩份設定覆寫檔與 `config.json` 都不用寫。先看 `Config` 的新欄位有沒有測試要登記（`tests/core/` 裡守設定欄位的），照著補。",
+        "- **③`tianxia/core/identity_base.py::blocked_name`**：保留字那一半不再看 identity（`content.config.staff_names_on and name_base.staff_like(name)`），`id:` 開頭那一半照舊只在 identity 開著時擋。docstring 改成現在的意思。拒絕句**沿用** `accounts.NAME_TAKEN`「這個名號已有人使用。」（PM 定：不加新字、殼不動；跟撞名、管理者名號、名號被別的角色用掉同一句，試不出名單也分不出對方是誰）。",
+        "- **④已經叫這類名號的人不動**：登入、玩、被人看見都照舊（確認 `open_game` 那條路不叫 `blocked_name`，寫一條測試：資料庫裡已有名號「客服」的角色照樣登入進得去）；他只是不能再用易名帖改成另一個這類名字。",
+        "- **⑤主機用的唯讀清單** `scripts/list_staff_like_names.py <資料庫檔>`：用 sqlite 的 `mode=ro` 開（照 `scripts/mall_ledger.py` 的開法，不走 `open_database`、不觸發遷移），`SELECT name FROM characters`，逐筆 `name_base.staff_like`，**只印名號**（一行一個，最後一行印幾個；不印是不是假人、陣營、帳號），給企劃者在主機上對線上資料庫跑、決定要不要請那些人改名。stdout 包成 UTF-8。寫一條測試（暫存資料庫放三個角色，其中一個叫「客服小美」）。`tests/core/test_feature_boundaries.py` 有守 `scripts/*.py` 的規矩，改完跑過。",
+        "- **⑥測試**（調查的 `plan` 第 5 點列了要改的四處，照著改，舊的「關著照舊能取」「只擋全等」斷言換成新規矩）：`tests/core/test_identity_base.py`（`id:` 只在開著時擋；保留字不管 identity 都擋——逐一列：客服、客服小美、官方客服、客 服、ＧＭ、gm、G.M、小美GM、管理员、系統、管理者、營運；不擋：官府、官軍、沈浪、Sigmund、Dogma、方官；`staff_names_on=False` 時保留字全部不擋）；"
+        "`tests/bots/test_server_bots.py` 加 `test_bot_name_pool_cannot_spell_staff_words`（假人取名的字表組不出任何一個 `STAFF_WORDS`、字表裡沒有 ASCII 字母；以後字表加字這條會紅）；`tianxia/features/identity/tests/test_identity_server.py` 與 `tianxia/features/mall/tests/test_mall_card_daily.py` 寫死舊行為的那幾行；`tests/server/test_server.py` 加一條走 HTTP 的（註冊後 `/api/character` 用「ＧＭ」「客服小美」「官 方」回 400 與 `NAME_TAKEN`，「官府中人」建得成）；`scripts/set_password.py --character 客服小天` 照舊建得出來（有現成測試就加一個 case，沒有就在 decided 寫你怎麼確認的）。",
+        "- **不加比對軌、不改情境**：調查員 grep 過 `scripts/sb`、`scripts/webqa` 沒有任何情境的名號命中新規則，全軌輸出應該一個位元組不變（閘門會驗）；你自己只跑 `scripts/test_for.py` 挑的、上面點名的檔、`tests/core/test_shell_stays_thin.py`、邊界與契約，再跑一次不含 slow 的整套（改到核心與 `Config`）。",
+        "- **不做**：同形字（西里爾 М、希臘 Μ）、拆字、同音字（課服）——這一版不擋，寫進 leftovers；改帖友書信的寄件人顯示；改線上資料庫裡任何人的名號；`reserved_names`；`naming.name_problem`。退版：沒有存檔欄位、沒有資料庫改動；換回舊程式就是不擋；緊急開關 `staff_names_on: false`。",
+    ])
+
+
+def b241():
+    return ad(241, "使用條款出新版（2026-11-v2）：第十條寫明客服管道是遊戲內的客服頁", "terms", "dev/terms-v2-241", "8508", [
+        "- **點頭**：企劃者 2026-11-20，PM 問「條款第十條現在寫『客服管道（另案建置）』，真人客服這次就要上線，這句什麼時候改」，他選「現在就出新版條款」。內容檔自己的 `_說明` 把「聯絡方式」歸成小改（不換版號）；這一次照企劃者的決定換版號——回報與計畫都寫這句原話，免得審查的人照 `_說明` 退回。條款包是 Joy 2026-11-09 PR #193 做的，新句全部列進 `new_strings` 給 Joy 潤。",
+        "- **只動兩個檔**：`tianxia/features/terms/content/terms.json`、`tianxia/features/terms/README.md`。程式、測試、`content/patch_notes.json`、設定都不動（調查員查過：沒有任何測試寫死版號或第十條的字；`check_content` 只驗 `published` 的格式、公司欄位、佔位填不填得進去）。",
+        "- **①`terms.json`**：(a) `version` 改 `2026-11-v2`。(b) `published` 與 `docs.terms.updated` 寫 `2026-11-21`（PM 定的預定日；**Joy 部署當天改成真的上線那一天**——改版頁的期限是 `published` 0 點加 `grace_days` 15 天，填早了期限縮短、上線比它晚超過 15 天就沒有人會被問；這句話寫進 README 與回報的 docs）。`docs.privacy.updated` 不動（隱私權的字這次不改）。"
+        "(c) 第十條「十、客服與申訴」的 `p` 換成：`客服管道為遊戲內「設定」裡的「客服」頁：可以寫單、附上截圖，全天 24 小時受理，客服的回覆在同一頁看。無法登入時，請寫信到 {email}。申訴處分於 15 日內回覆。`（PM 擬的，待 joy 潤；拿掉了原句的「回覆時限依客服管道公告」——客服頁與 FAQ 都沒有公告回覆時限。佔位只准 `{email}`，不能出現別的大括號。）"
+        "(d) `change_summary` **最前面加一句**、原本三句留著（新玩家第一次同意看的也是這幾句）：`客服上線：遊戲內「設定 › 客服」可以寫單、附截圖、看回覆（使用條款第十條）。`（待 joy 潤）。(e) 全文其他寫「透過客服管道」的句子不動（現在指得到客服頁了）。",
+        "- **②README**：第 5 行附近「條款裡寫客服管道（另案建置）」那半句改成現況（2026-11-v2 第十條改字、真人客服 AA 波打開）；講改版的那一段補一句「大改時 `published` 填上線那一天，期限從它起算」；加一小段「2026-11-v2 上線時會怎樣」：同意過 v1 的人登入後看到改版頁（開頭一句加 `change_summary`，三顆鈕：同意、稍後再看、我不同意），`published` 起 15 天內每次進遊戲都會再跳、過了就視為接受而且旁檔不寫紀錄；從沒同意過的人一定要按；註冊頁的勾選帶的版號是現問的。**這不是強制重新同意**——照程式寫（`rules.need`），不要寫成每個人都要按。",
+        "- **③驗**：`scripts/test_for.py` 挑的（terms 包的 tests、`tests/core/test_content.py`、`test_content_packs.py`、真實內容不含 slow）、`tests/core/test_terms_base.py`、`tianxia/features/identity/tests/test_identity_terms.py`。起一台暫存伺服器（8508、`TIANXIA_PROFILE=season21`、暫存資料庫、模型 127.0.0.1:9）實看一次：`/terms` 頁第十條是新句、頁上「版本 2026-11-v2」、沒有殘留的 `{`；`/api/terms/version` 回新版號；用一個「同意過 v1」的帳號（先在改之前的版本註冊、或直接在暫存的條款旁檔寫一列 v1 的同意）登入看 `/api/terms` 回 `need: ask`、`summary` 第一句是客服那一句、`deadline` 是 `published` 加 15 天。回報寫每一步看到的回應。看完 `taskkill /T`、刪暫存。",
+        "- **④比對會差的地方先寫出來**（閘門由 PM 處理，你不用放行）：只跑 `scripts/same_behavior.py selftest --tracks charter`（三種設定，確認這一軌自己還穩），並在回報的 decided 逐項列 charter 輸出裡會跟 develop 不一樣的行（`/api/terms/version` 的版號、`/terms` 與 `/privacy` 兩頁的長度與雜湊、`/api/terms` 的 `version` 與 `summary`、條款旁檔的雜湊），PM 做比對基準時拿來對。",
+        "- **不做（寫進 leftovers，附調查員 `result.terms.risks` 的原文出處）**：隱私權條款對客服單只有一句「客服往來內容…結案後 1 年」，沒寫截圖、沒寫客服看得到的帳號資料，程式也沒有一年後自動刪；第三條「你打的字不送到外部 AI 服務」與之後要開的客服官、Discord 的橋衝突；第七、九條寫「以電子郵件提供」「依你留下的聯絡方式通知」但 identity 關著玩家留不了 Email；條款的 `{email}` 是公司信箱、客服設定的 `mailbox` 是另一個（登入頁現在不畫）。這幾件是法律條文，要企劃者與 Joy 定，不要自己擴寫。改版資訊這一批不加。退版：資料庫不升版、沒有新欄位、季中可以換；換回舊程式時 v2 的同意紀錄留著，舊程式只會把它當「同意過別版」。",
+    ])
+
+
+def b242():
+    return ad(242, "刪掉 test_season21_frame 啟動類四條慢測試（企劃者點頭）與只有它們在用的 helper", "core_shared", "dev/tests-drop-242", "8509", [
+        "- **點頭（刪測試）**：企劃者 2026-11-20，PM 問這四條刪不刪（PM 建議留部分重複的那一條），他選「四條都刪」。回報與計畫寫這句原話。",
+        "- **刪的**（`tests/figures/test_season21_frame.py`，行號以 develop 現況為準、先自己對）：`test_a_fresh_database_still_in_preparation_prints_no_mismatch`、`test_a_seeded_but_unopened_season_prints_nothing_either`、`test_a_running_season_opened_with_another_calendar_still_prints_the_fb520_warning`、`test_a_running_season_with_the_matching_calendar_prints_nothing`（各 `slow`＋兩種設定，8 個 case、16 次啟動）連同裝飾器；只有它們在用的 `_start_server`、`_start_bots`、`NOW`、`import run_bots`、`import server`、`open_world` 的 import 一起刪。**留著** `test_the_warning_function_itself_knows_the_phase` 與它用的 `MARK`、`WorldState`。那一段開頭的說明註解改成兩三行：啟動時印不印警告的接線現在沒有自動測試，靠純函式那一條加 QA 手動起程式看。",
+        "- 刪完：`pytest --collect-only -q tests/figures/test_season21_frame.py` 應該是 23 條（含 slow 也是 23）；整檔跑過；用 `python -m pyflakes`（沒有就用 `python -W error -c \"import ast…\"` 自己掃）確認沒有殘留沒用到的 import 與常數；`scripts/test_for.py` 挑的跑過。",
+        "- **跟著改的字**：`docs/superpowers/plans/2026-11-10-測試去重-盤點.md` 第 140、164 行附近（刪除候選 → 2026-11-20 企劃者「四條都刪」、第 242 批刪了）並寫**刪掉之後少守什麼**四點：`server.main`／`run_bots.main` 啟動時真的把 `profile_warning` 印出來的接線；`seed_first_season` → `season_phase()` → 警告函式這一串資料庫接線（純函式版用空殼 `WorldState`，沒蓋到）；兩支程式印的一致；FB-520（季中換設定要印）與 FB-636（籌備中不印）的端到端回歸。`.claude/skills/tianxia-dev/SKILL.md` 提到「啟動警告的測試」當範例的那一行補一句現在沒有自動測試；`.claude/skills/tianxia-qa/` 講引擎驗收手動起程式看警告的那一格若寫著「有自動測試守」就改掉。其他文件（交接、架構圖、手冊）PM 改。",
+        "- **不做**：不補新的測試來取代（企劃者要的是刪）；不動 `server.py`、`run_bots.py`、`calendar.py`。退版：只動測試與文件。",
+    ])
+
+
+AD_NAMES_LENS = dict(key="names", text=(
+    "**冒充官方的名號真的擋住了、沒有誤傷、分不出假人**。第 240 批（動核心 `name_base.py`、`identity_base.py`、`models.py`；企劃者 2026-11-20「現在就擋」）。親自驗（解一份 head 到你的暫存夾，`TIANXIA_DB` 指到暫存檔，寫小腳本直接叫函式與打 HTTP）："
+    "①三條路都擋到：`/api/character`、identity 建角色、易名帖（路由那條與 `rename_self` 沒傳 `taken` 的後備那條）。自己想二十個繞法逐個試（全形、大小寫、夾空白與各種標點、零寬字元、前後加字、簡繁、`G M`、`gm` 前後接數字或中文），列出哪些擋了、哪些沒擋；沒擋而且一眼看得出是在冒充的算 should，同形字、拆字、同音字派工單明寫不擋、不算。"
+    "②誤傷：隨手取五十個正常的武俠名號（含姓官、姓方、姓管的；含「官府」「官軍」「客棧」「服」字、「系」字、「營」字、「統領」「理事」）全部過；英文名 Sigmund、Dogma、Magma、Enigma 過。"
+    "③回的句子與狀態碼跟「名號被別的角色用掉」逐字一樣（`NAME_TAKEN`）；判斷只看字串、不查資料庫，所以試不出對方是不是假人；假人取名的字表組不出任何保留字（看那條新測試真的在比字表）。"
+    "④`staff_names_on=False` 時回到改之前（identity 關著一律不擋；開著照舊只擋全等四個與 `id:`）——對 base 的 `blocked_name` 逐個輸入比。`id:` 開頭那一半一個字沒變。"
+    "⑤已經叫「客服」的角色照樣登入、照樣玩；`scripts/set_password.py --character` 照樣建得出含保留字的名號；`scripts/list_staff_like_names.py` 用 `mode=ro` 開、只印名號、不印任何分得出假人的欄位、不 import 會觸發遷移的東西。"
+    "⑥`server.py`、`web/`、`content/`、設定覆寫檔沒有動；`tests/core/shell_tables.py` 沒有多一筆。"
+))
+AD_TERMS_LENS = dict(key="terms", text=(
+    "**條款新版只改了該改的字、頁面畫得出來、說明沒有講錯行為**。第 241 批（企劃者 2026-11-20「現在就出新版條款」）。親自驗："
+    "①`git diff` 對 base：只動 `tianxia/features/terms/content/terms.json` 與包的 README；json 裡只有 `version`、`published`、`docs.terms.updated`、第十條的 `p`、`change_summary` 多一句這五處變了，其他條文、隱私權全文、公司資料一個字沒動（把兩份 json 載進來逐鍵比）。"
+    "②新句裡除了 `{email}` 沒有別的大括號；真實內容跑 `rules.check` 是空的；解一份 head 起得來、`/terms`、`/privacy` 兩頁 200、頁上版本是 `2026-11-v2`、第十條是新句（或直接叫 `pages` 的畫法函式）。"
+    "③README 新寫的「上線時會怎樣」逐句對 `rules.need`、`routes.py`、`web/terms.js`：同意過舊版的人是「可以稍後再看、15 天後視為接受」，不是強制；`published` 決定期限。寫錯一句就是 should。"
+    "④全文再找一次「另案」「建置中」這類跟現況對不上的字，有漏的列出來。⑤新句都進了 `new_strings`。"
+    "另外看第 242 批：刪的只有派工單點名的四條與只有它們在用的 helper，`test_the_warning_function_itself_knows_the_phase` 還在而且會跑；盤點文件寫了「刪掉之後少守什麼」。"
+))
+WAVES["AD"] = dict(
+    round2=True,
+    extra_lenses=[AD_NAMES_LENS, AD_TERMS_LENS],
+    lines=[dict(name="擋冒充名號", batches=[b240]), dict(name="條款新版", batches=[b241]), dict(name="刪啟動測試", batches=[b242])],
+    merge_port=8510, fix_port=8511,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
