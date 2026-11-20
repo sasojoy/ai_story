@@ -506,14 +506,19 @@ def _setup_child(root: Path, profile: str, db: Path) -> None:
 
 def _wipe_db(db: Path) -> None:
     """同一個暫存資料夾跑第二次之前清掉上一次的資料庫與旁邊的小檔（小檔的名字是 <主檔名去掉副檔名>-xxx.sqlite，不接在主檔名後面）：
-    留著的話舊的往來紀錄、戰記、封存會被讀到，「同一份跑兩次一樣」就不穩。"""
-    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push", "identity", "support", "terms")  # identity：帳號綁定（第 201 批）；support：客服單（第 211 批；開關關著不建）；terms：條款同意紀錄（第 206 批起註冊也寫；關著不建）
+    留著的話舊的往來紀錄、戰記、封存會被讀到，「同一份跑兩次一樣」就不穩。
+    第 239 批補：帖友書信的旁檔與封存（mail、mail-archive）、客服的截圖資料夾（<主檔名>-support-files/，資料夾用 rmtree）。
+    刻意不清的（照舊，tests/core/test_same_behavior_wipe.py 鎖著）：<主檔名>-vapid.pem（金鑰本來就隨機，輸出只寫有沒有）、
+    <db>.<軌>.json（各軌前半一定重寫、後半讀）、各軌自己建的（-play.db、-covers/、.noweb/……用之前自己清）、
+    <資料夾>/looks/（不帶主檔名、同一個 --tmp 底下所有軌共用，平行跑時清了會砸到別軌）。"""
+    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push", "identity", "support", "terms", "mail", "mail-archive")  # identity：帳號綁定（第 201 批）；support：客服單（第 211 批；開關關著不建）；terms：條款同意紀錄（第 206 批起註冊也寫；關著不建）；mail：帖友書信（第 239 批）
     names = [db.name, f"{db.name}.state.json"] + [f"{db.stem}-{side}.sqlite" for side in sides]
     for name in names:
         for suffix in ("", "-wal", "-shm"):
             p = db.with_name(name + suffix)
             if p.exists():
                 p.unlink()
+    shutil.rmtree(db.with_name(f"{db.stem}-support-files"), ignore_errors=True)  # 客服截圖（第 239 批）
 
 
 def emit(tag: str, value) -> None:
