@@ -311,4 +311,4 @@ class PetitionScenario(Scenario):
 
 # 改一個字（selftest）：還沒結的單滿 3 張那一句（只有開著段走得到：season21 open 那一段訴長亭的第四張單抓到）
 register_track("petition", PetitionScenario, (("tianxia/features/support/rules.py",), ('TOO_MANY_OPEN = "已經有 {n} 張還沒結的單', 'TOO_MANY_OPEN = "已經有 {n} 張沒結的單')), "season21",
-               covers=("notify", "support"))
+               covers=("bounties", "bout", "feast", "figure_acts", "notify", "socialize", "support", "territory_acts", "titles", "zhuan"))  # 第 239 批重量：later 段推三天，登入時補算碰到的包
