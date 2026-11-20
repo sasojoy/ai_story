@@ -589,6 +589,23 @@ def test_a_login_without_a_character_cannot_play_yet(client):
     assert client.post("/api/character", json={"name": "  "}).json() == {"error": "請先輸入你的名號。"}
 
 
+def test_staff_like_names_cannot_be_taken_over_http(client):
+    """第 240 批（企劃者 2026-11-20「現在就擋」）：像官方的名號不看帳號綁定一律擋，回撞名同一句。"""
+    client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    for name in ("ＧＭ", "客服小美", "官 方"):
+        out = client.post("/api/character", json={"name": name})
+        assert out.status_code == 400 and out.json() == {"error": NAME_TAKEN}, name
+        assert not open_characters().exists(name)
+    assert client.post("/api/character", json={"name": "官府中人"}).json()["stage"] == "game"
+
+
+def test_a_character_already_named_like_staff_still_logs_in(client):
+    """已經叫這類名號的人不動：open_game 不經 name_taken，登入、玩照舊（第 240 批）。"""
+    old = Game.new(server.CONTENT, "客服")
+    open_characters().save(old.state)
+    assert _bind("客服", "kefu_old").get("/api/main").status_code == 200
+
+
 def test_login_with_a_character_goes_straight_in(client):
     _player(client)
     client.post("/api/logout")

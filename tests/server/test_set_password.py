@@ -66,6 +66,14 @@ def test_creates_the_character_when_it_does_not_exist_yet(tmp_path, capsys):
     assert _store(tmp_path).authenticate("Rayal", _password(tmp_path, "rayal")).character == "Rayal"
 
 
+def test_creates_a_staff_like_character_for_the_host(tmp_path, capsys):
+    """主機用這支建客服的角色：不經 blocked_name，像官方的名號照舊建得出來、綁得上（第 240 批）。"""
+    assert _run(tmp_path, "kefu", "--character", "客服小天") == 0
+    assert "已經建立新角色" in capsys.readouterr().out
+    assert CharacterStore(_db(tmp_path)).load("客服小天") is not None
+    assert _store(tmp_path).authenticate("kefu", _password(tmp_path, "kefu")).character == "客服小天"
+
+
 def test_a_character_it_creates_gets_the_same_profile_as_the_server(tmp_path, capsys, monkeypatch):
     """設定照伺服器那一份（TIANXIA_PROFILE，content.serving_profile）：week7 下建角色，印的設定那一行是 week7 的；
     沒設是 season21 的那一行。以前這支腳本不看 TIANXIA_PROFILE，一律拿預設設定建角色。"""
