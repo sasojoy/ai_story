@@ -1520,6 +1520,87 @@ WAVES["AB"] = dict(
 )
 
 
+# ── AC 波：客服上線之後的工具批（PM 2026-11-20；企劃者 11/20「繼續」）：重放的假紅 237、走查補客服兩景 238、比對工具清旁檔與上傳 239 ──
+# 三條線都只改工具（scripts/webqa、scripts/sb 與它們的測試），基準是 develop；收尾一次合、一次驗。
+AC_PROBE = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveAA"
+AC_NOTE = [
+    "- **背景（三批共用）**：AA 波 2026-11-20 把真人客服在 week7、season21 打開（`support.enabled` 開、`bot_account` 空、identity 關），進了 `develop`。那一波閘門的網頁比對紅了 3 張，PM 查證後認定是工具的假紅才放行；"
+    "經過在 `docs/superpowers/plans/2026-11-20-波次AA紀錄.md` 最後一節「PM 的認定」與手冊第十五節「AA 波的 PM 認定」，留下的小件在交接第八節「AA 波留下的」。**動手前先讀紀錄最後一節**。"
+    "查證留下的材料（只讀，不要改、不要刪）：`" + AC_PROBE + r"\probe-replay\`（單景重放的小腳本 `probe.py`、`analyze.py`、每一組的 `result-*.json`、只有鐵匠鋪幾景的小語料 `corpus-*`）、`" + AC_PROBE + r"\probe-live\`（真頁面的實拍與放大圖）。"
+    "上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批不做派工單沒寫的事，碰到了寫 leftovers。",
+    "- **這台同時有另外兩條工具線在跑**：重的東西（整回合走查、全量重放、全軌比對）跑一次就好，不要為了保險再跑；起伺服器一律暫存資料庫、模型網址 127.0.0.1:9、只用派工單給的埠、不碰 7861；"
+    "跑 `same_behavior`、`webqa` 時環境裡不要有 `TIANXIA_DB`、`TIANXIA_SUPPORT`、`TIANXIA_PROFILE`；不讀不寫任何 `.local/` 的檔（閘門結果夾 `.local/wave_gate/<head8>/` 只准讀）。"
+    "長的指令用 `Start-Process` 分離啟動、輸出導到檔、`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，不要前景跑。任何輸出都不能讓人分出誰是假人。",
+]
+
+
+def ac(n, title, dev, ports, body):
+    plan = f"docs/superpowers/plans/2026-11-20-工具批-第{n}批.md"
+    return batch(n, f"工具批第 {n} 批：{title}", "core_shared", dev, plan, ports, body + AC_NOTE + AB_NOTE, custom=True)
+
+
+def b237():
+    return ac(237, "網頁比對的重放：同一景自己的畫法抖動不再算成真的差（鐵匠鋪打造那幾景的假紅），紅景留原圖", "dev/tools-replay-237", "8488～8491", [
+        "- **只動** `scripts/webqa/replay.py`、`replay.mjs`、`compare.py`、`noise.py`、`gate.py`、`selftest.py` 與 `tests/web/test_webqa.py`、計畫檔。**不動** `flows/`、`driver.mjs`、`must_reach.txt`、`coverage.json`（第 238 批同時在改）；`tests/web/test_webqa.py` 的新測試放在現有重放／雜訊那幾條旁邊，不放檔尾（兩批同時改這個檔，放檔尾會撞）。",
+        "- **起因（PM 查證過的事實，數字在紀錄裡）**：重放（同一份 DOM 快照分別套 A、B 兩邊的樣式表、不跑頁面腳本、dpr 1 重畫）在鐵匠鋪打造那幾景（main 回合 044～047）每個視窗有兩三種畫法、隨機出現：圓鈕上緣的弧線差 1 級、素材小圖的邊差到 40 級。"
+        "045 的 375 深色那一種剛好 102 px（門檻 100 px）、375 淺色 40 級（門檻 12 級），所以兩次閘門都紅在同一格。兩邊套**同一份**樣式表（A 對 A）也紅（5 次 3 次）；兩邊 367 個元素 × 413 項計算樣式 0 差；真頁面逐像素 0 差。044、046、047 也抖，只是沒過門檻。",
+        "- **①判法**：重放裡「`clean`（DOM 與計算樣式兩邊一致）、不 `unstable`、只差像素、超過 aa 門檻」的那種差，不直接算 REAL，先分清楚是不是這一景自己的畫法抖動。PM 建議的判法（你讀完程式有更穩的可以換，寫進 decided 說為什麼）："
+        "對這一張，兩邊各自重新載入重畫幾次（次數上限寫成常數，例 4 次），收集每一邊出現過的圖的雜湊；兩邊的集合有交集（A 邊畫得出 B 那一張，或反過來）就歸成新的一類雜訊（取個名字，例 `render-variants`，補進 `noise.py` 檔頭那張表、`summary.json` 的 noise 計數與 `report.txt`）；重畫完仍然不相交才是 REAL。"
+        "**不准做的**：放寬 aa 門檻（100 px、12 級一個字不動）、把鐵匠鋪的景列成白名單或例外、改走查（真伺服器那一段）的判法、把有樣式差（`clean` 不成立）的差也拿去重畫——那種照舊直接 REAL。",
+        "- **②紅景留原圖**：REAL 的像素差在 `red/` 除了現在那張縮小的 A|B 拼圖，另外存 A、B 原尺寸各一張（檔名看得出哪一邊）；`report.txt` 那一行後面帶檔名。查證時發現 `report.txt` 不列每一條雜訊是哪一景：看 `summary.json` 有沒有逐景的雜訊列，有就在 `report.txt` 的 noise 那一行後面寫一句去哪裡看，沒有就補上（景名、視窗、類別、像素數、級數）。",
+        "- **③說清楚重放看不到什麼**：重放的 DOM 快照來自 base 那一邊的走查，head 才畫得出來的元素（AA 波的 `.sup-admin-entry`）不在快照裡，針對它寫的樣式重放驗不到。這件不修，只在 `gate.py` 檔頭那段說明與 `report.txt` 的 replay 那一行各補一句（英文，照檔裡現有的口氣）。",
+        "- **④驗**：(a) 用查證留下的小語料或自己走一小段（`gate.py --rounds main --only gate,accounts,prep,opening,rich,week1,battle,week2,news2,smith --no-replay --keep-corpus <你的暫存夾>`，約 10 分鐘；base `3a6af3ac1c7494773598b3a0b7a722c994888a9f`、head `b1f86defbe388ab38dc844bfa857ac8bd7725654`，兩邊只差 `web/support.css` 三行）對 044～047 四景做 A 對 A、A 對 B 各至少 10 次：改之前會紅的（把次數寫進回報），改之後 0 REAL、歸到新的那一類。"
+        "(b) **靈敏度不能掉**：`selftest.py` 現有的每一種突變（`--mutate card-padding`、`css-last`、`pkg-css`、`css-comment`、`page-hang`、`page-alert`）改前改後結果一樣，該紅的照紅；另外自己做一個「計算樣式不變、像素真的變」的突變在重放驗一次（例：把一張素材圖檔換成另一張的內容、或把 `@font-face` 的檔換掉）——要判 REAL；真的做不出這種突變就寫進 leftovers 說試了什麼。"
+        "(c) 量重放多花多少：只有紅候選才重畫，整趟應該只多幾十秒以內；超過就說明。(d) `tests/web/test_webqa.py` 補純函式那一層的測試（集合有交集 → 雜訊；不相交 → REAL；`clean` 不成立 → 不重畫直接 REAL）。`scripts/test_for.py` 挑的跑過。",
+        "- 時間上限兩段合計 3 小時（全量重放不要跑超過一次）；到了就把修好的推上去、交，沒做完的寫 leftovers。",
+    ])
+
+
+def b238():
+    return ac(238, "網頁走查補客服兩段：名單上的管理者從管理頁進客服頁、寫單附截圖；名單的放與還包起來；c 回合觀戰那一張偶發差", "dev/tools-webqa-238", "8492～8495", [
+        "- **只動** `scripts/webqa/flows/`、`driver.mjs`、`snippets.mjs`、`must_reach.txt`、`coverage.json`（真的要才動）與 `tests/web/test_webqa.py`、計畫檔。**不動** `replay.py`、`replay.mjs`、`compare.py`、`noise.py`、`gate.py`、`selftest.py`（第 237 批同時在改）；`tests/web/test_webqa.py` 的新測試放在現有客服那一條（`test_main_walks_support…`）旁邊，不放檔尾。",
+        "- 先讀第 236 批的計畫與回報（`docs/superpowers/plans/2026-11-20-客服上線-第236批.md`）與 `flows/main.mjs` 客服那一段（約第 780～815 行：`sup_mine`…`sup_ticket_read` 十景，客服是 `qaplayer4`，用 `c.py` 只在走查伺服器的記憶體裡放進 `content.config.support.staff`、做完還原）。",
+        "- **①名單上的管理者從管理頁進客服頁**（第 228 批做的入口，還沒有景）：在客服那一段後面加——把走查的管理者帳號也放進名單（同樣只在記憶體）、用密碼重新登入（`ctx.relogin`；客服權限看這次登入多久以前）、載 `/admin`：拍頂列有「客服單 ›」的管理頁（**375 寬是重點**：第 228 批在 `web/support.css` 加的兩條 `.ad-head:has(.sup-admin-entry)` 只在這個畫面生效，讓「管理者工具」不折行；重放的快照來自 base、看不到它，只有這一景拍得到）、"
+        "點進客服頁拍（網址變成 `/admin#support`）、點「‹ 管理者工具」回管理頁拍。另外拍一張「管理者不在名單上」的管理頁頂列（沒有入口）如果現有的管理頁景已經涵蓋就不重拍、寫進 decided。",
+        "- **②寫單附截圖**：寫新單頁挑一張小圖（走查裡現場生成固定內容的小 PNG；用 CDP 的 `DOM.setFileInputFiles` 或 driver 已有的做法——先看 `driver.mjs` 有沒有現成的），拍「挑了圖、還沒送」、送出後拍「單內有縮圖」，客服那一側看單拍「客服看得到縮圖」。圖存在走查伺服器暫存資料庫旁邊的資料夾，回合結束整個暫存夾本來就會清；縮圖的網址（單號、檔號）兩邊要一樣，不一樣就照工具現有的遮法處理、寫進 decided。注意玩家同時最多 3 張沒結的單（現有的景已經送過一張）。",
+        "- **③放名單與還原之間包起來**（AA 波審查的小件）：`c.py` 把人放進名單之後、還原之前任何一步丟例外，還原那一行現在不會跑；包成 try/finally（①加的管理者也一樣）。`tests/web/test_webqa.py` 現有那一條守「名單有還原」的測試跟著改成看得出 finally。",
+        "- **④登記**：新景手加進 `must_reach.txt`（照第 236 批放的位置接著放），`coverage.py check` 過；`tests/web/test_webqa.py` 守景名與順序的那一條補上新景。",
+        "- **⑤驗**：main 回合整回合自己對自己跑一次（`gate.py --base <你的 head> --head <你的 head> --rounds main --ports 8492,8493 --cdp-ports 8494,8495 --jobs 1`）：exit 0、0 real、`missing_must_reach` 空、主控台 0 錯誤；新景每一張自己看一眼（375 淺、375 深、1280），截圖裡看得到該有的東西（頂列的鈕、縮圖），路徑寫進回報。",
+        "- **⑥還有時間才做**：c 回合 `029_bt_watch_shut`（`flows/c.mjs` 約第 234 行）偶發 1 張像素差（X 波第 234 批留的；景與景之間沒有推時鐘，原因不明）：`--rounds c` 自己對自己跑 3 次，記重現幾次、哪一張、差在哪個框；看得出原因（動畫沒凍住、倒數的字、捲動位置）就改走法，看不出就寫 leftovers，不要為了它超時。",
+        "- **不做**：week7 的走查（工具只走 season21）；改 `web/` 的任何檔（客服頁小鈕 38px 那些是畫面的事，不在這一批）。時間上限兩段合計 3 小時（整回合一次約 40 分鐘，main 不要跑第三次）；到了就把修好的推上去、交。",
+    ])
+
+
+def b239():
+    return ac(239, "前後比對：重跑前把帖友書信的旁檔與客服截圖夾清掉；petition 軌走到上傳截圖與自動結單", "dev/tools-wipe-239", "8496", [
+        "- **只動** `scripts/sb/harness.py`（只准動 `_wipe_db` 與它旁邊的註解）、`scripts/sb/tracks/petition.py`、`tests/core/` 裡守它們的測試、covers 的登記、計畫檔。`scripts/sb/base.py` 與別的軌不動；`scripts/webqa/` 不動（另外兩批在改）。",
+        "- 先讀第 235 批的計畫與回報（`docs/superpowers/plans/2026-11-20-客服上線-第235批.md`）：petition 軌現在有關著段與開著段，名單只認記憶體裡的 `Config.support.staff`，`TIANXIA_SUPPORT` 與 `LOCAL_DIR` 整軌隔掉；它留下的：`_wipe_db` 沒清帖友書信的旁檔與截圖夾、截圖真的存檔、3 天自動結單、一天幾張的上限、客服官 token 都走不到。",
+        "- **①`_wipe_db`**（`harness.py` 約第 507 行）：那張 `sides` 清單少了帖友書信（mail 包）的旁檔與它的封存、客服的截圖資料夾（`<db stem>-support-files/`，是資料夾，用 `rmtree`）。先 grep `tianxia/features/*/` 與核心，把「會在資料庫旁邊建檔或建資料夾」的地方全部列出來對一次清單（列進計畫），該清的補齊；"
+        "`_db_files` 上面那段註解說 `-vapid.pem` 與 `.db.<軌>.json` 為什麼不在清單，照它的理由判斷新找到的要不要清，寫進 decided。能寫一條測試鎖住「清單跟包實際會建的對得上」就寫（對不上就紅），寫不出來就照名字列、說明為什麼。",
+        "- **②petition 開著段加上傳截圖**：玩家對自己的單傳一張固定內容的小 PNG（位元組直接寫在軌裡）、傳到超過張數被擋、不是圖的檔被擋、傳到別人的單與不存在的單（同一句 404）；`/mine` 與看單回應裡的檔案欄位；客服看圖那一條的狀態碼、`Content-Type` 與 `X-Content-Type-Options`；不是客服也不是主人的人看圖（要被擋）。每一步的狀態碼與回應寫進輸出；段落收尾把旁檔的 `files` 表與截圖夾裡的檔名、大小算進輸出。輸出要穩：檔名或欄位帶隨機字、時間的，照別的軌現有的做法處理，寫進 decided。",
+        "- **③自動結單與一天上限**（走得到才做）：情境的假時鐘推得到「客服答覆之後 3 天」就加一步——客服打開佇列的那一下掃到、單變成已結、多一則系統回覆、不推播；一天幾張的上限同理（送到被擋的那一句）。假時鐘蓋不到客服單用的時間（第 235 批回報有寫它怎麼處理時間）就不硬做，寫進 leftovers 說卡在哪。客服官 token 這一軌照舊不走（`bot_account` 空著是線上的樣子）。",
+        "- **④驗**：`petition` 三種設定各跑 `selftest`（跑兩次一樣、前半加後半等於整段、改一個字抓得到）；**同一個暫存資料夾連跑兩次**確認第二次不會讀到第一次留下的截圖與信（這就是①要修的洞，改之前先重現一次、把現象寫進回報）。`harness.py` 每一軌都用：`ALWAYS_TRACKS` 六軌加 `letter`（帖友書信）在 season21 各跑一次 `selftest`，再隨機挑 3 軌跑；紅了先分清楚是①改壞的還是本來就有的。"
+        "`covers`：`scripts/sb/covers_measure.py measure` 只量 `petition`（三設定）→ analyze 結束碼 0 → 寫回；守 covers 與邊界的測試（`tests/core/test_feature_boundaries.py`、`test_same_behavior_gate.py` 等 `scripts/test_for.py` 挑到的）跑過。",
+        "- 時間上限兩段合計 2.5 小時；到了就把修好的推上去、交，沒做完的寫 leftovers（哪一步、倒在哪、你的判斷）。",
+    ])
+
+
+AC_TOOL_LENS = dict(key="tools", text=(
+    "**工具批：比對沒有變鈍、改情境去配合遊戲沒有反過來**。第 237、238、239 批。親自驗："
+    "①三批的 `git diff --stat` 對 base：只動 `scripts/webqa/`、`scripts/sb/harness.py`、`scripts/sb/tracks/petition.py`、它們的測試、covers 登記與計畫檔；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔一個字沒動。"
+    "②第 237 批：`noise.py` 的 aa 門檻（100 px、12 級）沒動；沒有任何景名、檔名的白名單；新的那一類雜訊只收「DOM 與計算樣式兩邊一致、而且兩邊重畫的結果有交集」的差，樣式有差的照舊直接 REAL（讀程式逐個分支看）；`selftest.py` 每一種突變改前改後結果一樣（開發的回報要有證據，沒有就自己挑 `card-padding` 與 `pkg-css` 各跑一次）；重畫的次數有上限、不會卡住。"
+    "③第 238 批：新景都在 `must_reach.txt`、`coverage.py check` 過；名單只在走查伺服器的記憶體裡放、放與還原之間有 finally；沒有在 `serve.py` 或 flow 裡把正式設定開著的包關掉；上傳的圖是流程裡現生成的固定內容，沒有讀這台機器上別的檔。"
+    "④第 239 批：`_wipe_db` 只多清資料庫旁邊、以資料庫檔名開頭的檔與資料夾，不會刪到別的路徑（讀它怎麼組路徑；`rmtree` 的對象逐個看）；petition 加的每一步在輸出裡真的有回應、不是 404 空走；沒有寫任何 `.local/`。"
+    "⑤三批的輸出、截圖、報告裡沒有任何一處分得出誰是假人。"
+))
+WAVES["AC"] = dict(
+    round2=True,
+    extra_lenses=[AC_TOOL_LENS],
+    lines=[dict(name="重放假紅", batches=[b237]), dict(name="走查補景", batches=[b238]), dict(name="比對清旁檔", batches=[b239])],
+    merge_port=8497, fix_port=8498,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
