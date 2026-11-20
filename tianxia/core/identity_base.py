@@ -279,11 +279,12 @@ def listed(content, login: str | None = None, character: str | None = None, acco
 
 def blocked_name(name: str | None, content) -> bool:
     """不准拿來當名號的：像官方的（name_base.staff_like：含客服、官方、管理員、GM 這類字；看 Config.staff_names_on、
-    不看帳號綁定，第 240 批企劃者 2026-11-20「現在就擋」），與帳號綁定開著時 id: 開頭的（跟帳號鍵撞）。"""
+    不看帳號綁定，第 240 批企劃者 2026-11-20「現在就擋」），與帳號綁定開著時 id: 開頭的（跟帳號鍵撞）；staff_names_on 關掉時
+    帳號綁定開著照第 240 批之前擋全等的 name_base.STAFF_NAMES。"""
     if content.config.staff_names_on and name_base.staff_like(name):
         return True
     text = (name or "").strip().casefold()
-    return text.startswith(ID_PREFIX) and on(content)
+    return (text.startswith(ID_PREFIX) or text in {n.casefold() for n in name_base.STAFF_NAMES}) and on(content)
 
 
 # ── 客服名單（帳號與客服第 212 批從 features/support/staff.py 搬來：商城的易名帖也要問，包不能 import 別包）──

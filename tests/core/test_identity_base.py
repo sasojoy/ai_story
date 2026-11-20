@@ -203,6 +203,9 @@ def test_blocked_name_staff_words_regardless_of_identity(content, keyed):
     content.config.identity.enabled = False
     content.config.staff_names_on = False
     assert [n for n in STAFF_LIKE if ib.blocked_name(n, content)] == []
+    content.config.identity.enabled = True  # 關掉開關、帳號綁定開著：回到第 240 批之前，只擋全等的四個
+    assert [n for n in STAFF_LIKE if ib.blocked_name(n, content)] == ["客服", "gm"]
+    assert all(ib.blocked_name(n, content) for n in ("客服", "官方", "管理員", "GM"))
 
 
 def test_staff_like_is_pure():
