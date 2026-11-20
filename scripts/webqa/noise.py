@@ -8,6 +8,10 @@ The classes (each one came from a real row of waves B and C):
   layout-used  used values read while layout was moving: only the properties below, and the pixels of that window agree
   layout-no-pixels  the same properties on a window the walk takes no pictures of (640, 641, 900): only the page's size says they agree, so it is counted apart.
                The pictures of those windows come from the replay, which gate.py runs when a stylesheet differs.
+  render-variants  the replay only (batch 237): the DOM and every computed style agree, neither side unstable, only pixels beyond aa
+               differ; each side reloads and draws that window again (replay.RERENDER_TIMES) and one side draws a picture the other drew.
+               That is the page's own way of drawing, not the stylesheets (wave AA: the forge scenes 044-047, a round button's arc
+               1 level apart, a material icon's edge 40 levels, two or three pictures per window at random; A against A went red too).
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
 order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
 when both sides still show them (compare.py).
@@ -118,6 +122,17 @@ def pixel_class(pixels: int, levels: int, *, view: str, sw_a=None, sw_b=None, on
     if within_aa(pixels, levels):
         return "aa"
     return None
+
+
+def recheck_candidate(*, clean_strict: bool, unstable: bool, same_size: bool) -> bool:
+    """The replay draws a picture again only when nothing but its pixels differ: the DOM and all computed styles agree
+    (used values that moved count as a style difference here), neither side unstable, the same size."""
+    return clean_strict and not unstable and same_size
+
+
+def render_variants(seen_a, seen_b) -> bool:
+    """The pictures (hashes) each side drew of one window over its re-renders: one in common and it is the page's own variants."""
+    return bool(set(seen_a) & set(seen_b))
 
 
 def scrollbar_flip(view: str, sw_a, sw_b) -> bool:

@@ -11,6 +11,7 @@ import gzip
 import hashlib
 import json
 import os
+import shutil
 import sys
 
 from PIL import Image, ImageChops, ImageDraw
@@ -165,6 +166,16 @@ def side_by_side(pa: str, pb: str, out: str) -> None:
     s.save(out, optimize=True)
 
 
+def save_red(pa: str, pb: str, red_dir: str, f: str) -> list[str]:
+    """A real pixel row's pictures under red/: the side-by-side (halved past 900 px) and both sides at full size. Names relative to red/."""
+    side_by_side(pa, pb, os.path.join(red_dir, f))
+    stem = f.removesuffix(".png")
+    names = [f, f"{stem}__A.png", f"{stem}__B.png"]
+    shutil.copy(pa, os.path.join(red_dir, names[1]))
+    shutil.copy(pb, os.path.join(red_dir, names[2]))
+    return names
+
+
 class Result:
     def __init__(self):
         self.real = []
@@ -201,10 +212,13 @@ def split_new_css(xa, xb, new_sheets, hosts):
     return keep_a, keep_b, listed
 
 
-def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True, new_sheets=None) -> dict:
+def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True, new_sheets=None, recheck: bool = False) -> dict:
+    """recheck (the replay only, batch 237): a pixel row with nothing else different (noise.recheck_candidate) is not real yet;
+    it goes to out["recheck"] with its place among the real rows, and replay.settle draws it again on both sides."""
     hosts = noise.hosts_pattern(origins)
     ra, rb = load_report(a), load_report(b)
     res = Result()
+    later = []
     for r in (ra, rb):
         if r.get("fatal"):
             res.tool.append(f"{r['label']} fatal: {r['fatal'][:400]}")
@@ -341,9 +355,13 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
                     res.noise[cls] += 1
                     res.noise_rows.append({"file": f, "class": cls, "pixels": d["pixels"], "levels": d["levels"], "box": d["box"]})
                     continue
-                res.red(sid, "pixel", {"file": f, **d, "clean": clean, "unstable": unstable})
+                detail = {"file": f, **d, "clean": clean, "unstable": unstable}
+                if recheck and noise.recheck_candidate(clean_strict=dom_same and not props and view not in broken, unstable=unstable, same_size="size" not in d):
+                    later.append({"at": len(res.real), "scene": sid, "file": f, "view": view, "detail": detail})
+                    continue
+                res.red(sid, "pixel", detail)
                 if red_dir and res.red_images < red_budget:
-                    side_by_side(os.path.join(a, "shots", f), os.path.join(b, "shots", f), os.path.join(red_dir, f))
+                    res.real[-1]["red"] = save_red(os.path.join(a, "shots", f), os.path.join(b, "shots", f), red_dir, f)
                     res.red_images += 1
 
     # only the head has it
@@ -378,6 +396,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
            "tool": res.tool, "not_reached": missed, "red_images": res.red_images}
     if new_sheets is not None:
         out["new_css"] = new_css
+    if recheck:
+        out["recheck"] = later
     coverage = {}
     for walk in (a, b):
         p = os.path.join(walk, "coverage.json")
