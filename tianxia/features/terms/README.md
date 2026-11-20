@@ -2,13 +2,13 @@
 
 - **做什麼**：使用條款與隱私權條款兩頁（`/terms`、`/privacy`，不用登入、開關關著也看得到）；登入後沒同意過現行版的帳號疊一層請他按同意；條款大改時，考慮期內上線的人看到改版頁（可以先關掉，過了考慮期視為接受）。登入頁與設定頁底下各兩個連結。
 - **導覽**：`docs/guide/核心與存檔.md` 的「條款」一節。
-- **設計稿**：https://claude.ai/artifact/BxXB4qnXvtDfCKUjmwuDj4（使用條款與隱私權 設計稿 v2，Joy 2026-11-07 給公司名義）。帳號註冊與綁定、客服系統 11/7 起交給另一位（條款裡寫「客服管道（另案建置）」）。
+- **設計稿**：https://claude.ai/artifact/BxXB4qnXvtDfCKUjmwuDj4（使用條款與隱私權 設計稿 v2，Joy 2026-11-07 給公司名義）。帳號註冊與綁定、客服系統 11/7 起交給另一位。條款 2026-11-v2（第 241 批，企劃者 11/20「現在就出新版條款」）第十條改字，寫明客服管道是遊戲內「設定」裡的「客服」頁；真人客服 AA 波（11/20）在 week7、season21 打開。
 - **開關**：`Config.terms.enabled`（預設關）、`grace_days`（15，定型化契約應記載事項十七）。
 
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`TermsFeature`）：沒有選項前綴、沒有 PlayerState 欄位；`routes`、`check_content`；`web`＝`terms.js`、`terms.css`；`content`＝`terms.json` |
-| `content/terms.json` | 條款全文、公司名義、版本（`version`、`published`）、同意頁的三句重點。**大改**換 `version` 與 `published`；**小改**只改字與 `updated` |
+| `content/terms.json` | 條款全文、公司名義、版本（`version`、`published`）、同意頁的三句重點。**大改**換 `version` 與 `published`；**小改**只改字與 `updated`。大改時 `published` 填上線那一天，考慮期從它起算（臺灣 0 點加 `grace_days` 天：填早了期限縮短，上線比它晚超過 `grace_days` 天就沒有人會被問） |
 | `rules.py` | 純規則：讀內容檔（改了就重讀）、`need`（`must`／`ask`／空字串）、`check` |
 | `store.py` | 同意紀錄的小檔 `<db>-terms.sqlite`（只加不刪；同手機通知的 `<db>-push.sqlite`，不進遊戲資料庫、資料庫不升版） |
 | `pages.py` | 兩頁的 HTML |
@@ -21,5 +21,10 @@
 **網頁**：`web/terms.js` 不改 `app.js`，用 MutationObserver 看 `#app`：登入頁（`.gate`）與設定頁（`.sheet[aria-label="設定"]`）底下補連結；進了遊戲問一次 `/api/terms`。網頁測試的 node 沒有 DOM，整段跳過。
 第 206 批：同一個 MutationObserver 裡 `termsInsertChecks`——註冊模式的 `#gate-form`（有 `name="again"` 那一格才算註冊）與 identity 建角色那一張 `#idp-create-form` 的 `.form-msg` 前面插兩個勾選與 hidden `terms_version`（畫法集中在 `termsChecksHtml`，樣式 `terms.css` 的 `.terms-check`）；登入模式與殼自己的 `#create-form`（帳號已經開了）不插。版號第一次要用才問 `/api/terms/version`，非 200（關著 404）這一頁不再問、不插；斷線下一次再問。`document` 上 capture 的 submit（先於 `app.js` 的 submit 鏈）：表單裡有勾選而沒全勾就擋下、表單下面寫 `TERMS_SAY.need`。送出照殼與 identity 原本的整張表單序列化，三欄自然帶上。
 第 210 批：兩格都勾了的那一次送出先攔下（`termsResend`）、不經快取重問 `/api/terms/version`（問到的寫回快取）、換掉 hidden `terms_version`，再 `form.requestSubmit()` 送一次（`termsFresh` 記著，那一次放行、不無窮攔）；問不到（斷線、非 200）照舊版號送，讓伺服器 `REGISTER_NEED` 那一句擋。條款改版後沒重新整理的註冊頁不再卡住。關著（版號 404）沒插勾選，照舊不攔。關著時同一頁只打一次 404（快取的是那一次請求），要連這一次都省得改殼，不做。
+
+**2026-11-v2 上線時會怎樣**（第 241 批；照 `rules.need`，**不是強制重新同意**）：`published` 先填預定日 2026-11-21，**Joy 部署當天改成真的上線那一天**（內容檔照修改時間重讀，改了不用重開伺服器）。
+- 同意過 v1 的人：`need` 是 `ask`，登入後看到改版頁（開頭一句加 `change_summary`，三顆鈕：同意、稍後再看、我不同意）；`published` 起 `grace_days`（15）天內每次進遊戲都會再跳，過了就視為接受，旁檔不寫紀錄（`need` 回空字串）。
+- 從沒同意過任何一版的人：`need` 是 `must`，一定要按。
+- 註冊頁的勾選帶的版號是現問的（`/api/terms/version`，第 210 批送出前不經快取再問），改版前打開的註冊頁不會卡住。
 
 **另外要跑的**（`scripts/test_for.py` 照這一包挑不到；第 206 批）：`tests/core/test_terms_base.py`、`tianxia/features/identity/tests/test_identity_terms.py`、`tianxia/features/identity/tests/test_identity_web.py -k privacy`、`tests/server/test_server.py -k register`（`server.register` 多一個參數）、`tests/core/test_shell_stays_thin.py`（`NO_LOGIN_ROUTES` 那一列）、`tests/bots/test_server_bots.py`（`web/terms.js` 不准寫假人字樣）、`tests/core/test_feature_boundaries.py`。第 210 批：`tianxia/features/identity/tests/test_identity_web.py`（同一張登入頁的 js）。
