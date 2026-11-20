@@ -3,7 +3,8 @@
   1. --rounds c, base against base: green. --rounds main,v,extra walks those instead: wave D's false rows only showed on main, v and extra.
   2. The same again: the fingerprint is the same (noise counts are allowed to move, they are not in it).
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
-     First through the corpus replay (quick), then through the c round.
+     First through the corpus replay (quick), then through the c round. The replay also inverts every image (img-invert, batch 237):
+     computed styles the same, pixels not, so the re-renders must leave it red.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
   5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
@@ -59,6 +60,13 @@ def _replay_controls(a, rows: list) -> None:
         gate.mutate(other, which)
         r = replay.replay(dom, web, os.path.join(other, "web"), os.path.join(work, "out_" + which), cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
         rows.append((f"replay --mutate {which} goes red", bool(r["real"]), f"real {len(r['real'])}: {sorted({x['class'] for x in r['real']})}"))
+    # batch 237: pictures that change with every computed style the same are what the re-renders look at; they must stay red
+    other = os.path.join(work, gate.IMG_INVERT)
+    shutil.copytree(web, os.path.join(other, "web"))
+    gate.mutate(other, gate.IMG_INVERT)
+    r = replay.replay(dom, web, os.path.join(other, "web"), os.path.join(work, "out_" + gate.IMG_INVERT), cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
+    rows.append((f"replay --mutate {gate.IMG_INVERT} goes red", any(x["class"] == "pixel" for x in r["real"]),
+                 f"real {len(r['real'])}: {sorted({x['class'] for x in r['real']})} noise {r['noise']} settle {r['settle']}"))
     shutil.rmtree(work, ignore_errors=True)
 
 
