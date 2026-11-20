@@ -508,22 +508,45 @@ def test_main_closes_the_patch_sheet_after_one_picture_and_waits_for_the_ink_pic
     assert {"main:patch_pop", "main:call_close", "main:call_act", "main:zh_write"} <= rows
 
 
-def test_main_walks_support_between_notify_and_mall_and_puts_the_staff_list_back():
+def test_main_walks_support_between_notify_and_mall_and_puts_the_staff_list_back_in_finally():
     """第 236 批：客服在 week7、season21 打開了。main 回合在 notify 與 mall 之間走一趟客服：玩家寫一張文字單，不是管理者的走查帳號
     只在這個伺服器行程的記憶體裡放進客服名單（Config.support.staff，不寫檔、不設環境變數），重新用密碼登入（staff_session_ok）到 /admin
-    回覆，同一個 flow 裡把名單還原；玩家讀過回覆，紅點滅掉，後面的景不多一個紅點。景名手加進 must_reach（不用 --write-must-reach）。"""
+    回覆，同一個 flow 裡把名單還原；玩家讀過回覆，紅點滅掉，後面的景不多一個紅點。景名手加進 must_reach（不用 --write-must-reach）。
+    第 238 批：放名單與還原之間包成 try/finally（click、ev 丟例外時名單照樣還原）。"""
     text = (TOOL / "flows" / "main.mjs").read_text(encoding="utf-8")
     assert text.index('\n    ["notify"') < text.index('\n    ["support"') < text.index('\n    ["mall"')
     sup = next(f for f in re.split(r'\n    \["', text) if f.startswith('support"'))
     put = sup.index("content.config.support.staff = [*content.config.support.staff, 'qaplayer4']")
     back = sup.index("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']")
-    assert put < sup.index('relogin("p4")') < sup.index('load("/admin")') < sup.index('"sup_desk_answered"') < back
+    opened = sup.index("try {", put)
+    closed = sup.index("} finally {", put)
+    assert put < opened < sup.index('relogin("p4")') < sup.index('load("/admin")') < sup.index('"sup_desk_answered"') < closed < back
+    assert "await" not in sup[put:opened]  # nothing else runs between putting the name on and the try
     assert back < sup.index('"sup_mine_answered"')
+    # 第 238 批：寫單附截圖（頁面裡造固定的 PNG，挑圖那一下 createObjectURL 換成 data: 網址、finally 換回），再讓走查的管理者
+    # 只在記憶體裡上名單、從 /admin 頂列「客服單 ›」進客服頁看到縮圖、點「‹ 管理者工具」回來，名單在 finally 還原
+    pick = sup.index('"sup_pick"')
+    swap = sup.index("URL.createObjectURL = () =>")
+    assert sup.index('"sup_ticket_read"') < swap < sup.index("finally { URL.createObjectURL = was; }") < pick
+    put_admin = sup.index("content.config.support.staff = [*content.config.support.staff, 'qaadmin']")
+    back_admin = sup.index("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaadmin']")
+    opened_admin = sup.index("try {", put_admin)
+    closed_admin = sup.index("} finally {", put_admin)
+    assert pick < sup.index('"sup_sent_shot"') < put_admin
+    assert "await" not in sup[put_admin:opened_admin]
+    assert put_admin < opened_admin < sup.index('relogin("admin")') < sup.index('"sup_admin"') < sup.index('"sup_admin_desk"') \
+        < sup.index('"sup_admin_desk_shot"') < sup.index('"sup_admin_back"') < closed_admin < back_admin
+    assert "support-desk-enter" in sup and "support-desk-leave" in sup
     driver = (TOOL / "driver.mjs").read_text(encoding="utf-8")
     assert "async function relogin(who)" in driver and "relogin," in driver
-    rows = set((TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines())
-    names = ["sup_mine", "sup_new", "sup_sent", "sup_desk", "sup_desk_pick", "sup_desk_answered", "sup_dot", "sup_dot_sheet", "sup_mine_answered", "sup_ticket_read"]
-    assert {f"main:{n}" for n in names} <= rows
+    lines = (TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines()
+    names = ["sup_mine", "sup_new", "sup_sent", "sup_desk", "sup_desk_pick", "sup_desk_answered", "sup_dot", "sup_dot_sheet", "sup_mine_answered", "sup_ticket_read",
+             "sup_pick", "sup_sent_shot", "sup_admin", "sup_admin_desk", "sup_admin_desk_shot", "sup_admin_back"]
+    assert {f"main:{n}" for n in names} <= set(lines)
+    at = [lines.index(f"main:{n}") for n in names]
+    assert at == sorted(at) and lines.index("main:sup_admin_back") < lines.index("main:mall")
+    shots = [sup.index(f'"{n}"') for n in names]
+    assert shots == sorted(shots)
 
 
 # ── 第 107 批：回合對照表（coverage.json）與 --changed-files ──

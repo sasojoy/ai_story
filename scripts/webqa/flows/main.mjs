@@ -782,6 +782,8 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       // the lists come in after the click (supportLoad, supportDeskReload): wait for them before the picture, not a fixed sleep
       const until = async (js) => { for (let i = 0; i < 40; i++) { if (await c.ev(js).catch(() => false)) return true; await c.sleep(100); } c.log("support wait gave up", js); return false; };
       const shootWhen = async (sel, name, js, opts) => { const r = await c.click(sel, opts); if (r !== "ok") { c.log("skip", sel, r); return r; } await until(js); await c.settle(200); await c.shoot(name, opts); return r; };
+      // batch 238: a 24x16 two-colour PNG (97 bytes), always the same bytes, for the ticket with a picture below
+      const QA_PNG = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAKElEQVR42mO4c2IBGtKwiUJDxKhhGMYGkacNU81wNmg0HY2mIyoYBADFO0GfviIV1gAAAABJRU5ErkJggg==";
       await c.asPlayer("p1");
       await c.click(ACT("sheet"));
       await shootWhen(ACT("support-open"), "sup_mine", `!!S.supportMine`, { who: "p1", wait: 700 });
@@ -792,22 +794,78 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.shoot("sup_sent", { who: "p1" });
       // a non-admin account on the support list, only in this server's memory (Config.support.staff; put back below), logged in again
       // with the password so the desk's staff_session_ok holds after the clock moved
+      // batch 238: anything that throws between putting a name on the list and taking it off (click, ev) must not leave it there
       await c.py("content.config.support.staff = [*content.config.support.staff, 'qaplayer4']; out = 1");
-      c.log("support relogin", await c.relogin("p4"));
-      await c.asPlayer("p4");
-      await c.load("/admin");
-      await until(`!!S.supportDesk && !S.supportDeskLoading`);
-      await c.settle(300);
-      await c.shoot("sup_desk", { who: "p4" });
-      await shootWhen('[data-act="support-desk-pick"]', "sup_desk_pick", `!!document.getElementById("support-answer-body")`, { who: "p4", wait: 700 });
-      await c.ev(`(() => { const e = document.getElementById("support-answer-body"); if (e) e.value = "QA test answer: try reloading the page."; return e ? 1 : 0; })()`);
-      await shootWhen('[data-act="support-answer"][data-then="wait"]', "sup_desk_answered", `!S.supportDeskLoading`, { who: "p4", wait: 900 });
-      await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']; out = 1");
+      try {
+        c.log("support relogin", await c.relogin("p4"));
+        await c.asPlayer("p4");
+        await c.load("/admin");
+        await until(`!!S.supportDesk && !S.supportDeskLoading`);
+        await c.settle(300);
+        await c.shoot("sup_desk", { who: "p4" });
+        await shootWhen('[data-act="support-desk-pick"]', "sup_desk_pick", `!!document.getElementById("support-answer-body")`, { who: "p4", wait: 700 });
+        await c.ev(`(() => { const e = document.getElementById("support-answer-body"); if (e) e.value = "QA test answer: try reloading the page."; return e ? 1 : 0; })()`);
+        await shootWhen('[data-act="support-answer"][data-then="wait"]', "sup_desk_answered", `!S.supportDeskLoading`, { who: "p4", wait: 900 });
+      } finally {
+        await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']; out = 1");
+      }
       await c.asPlayer("p1");
       await c.shoot("sup_dot", { who: "p1" });
       await c.step(ACT("sheet"), "sup_dot_sheet", {});
       await shootWhen(ACT("support-open"), "sup_mine_answered", `!!document.querySelector('[data-act="support-ticket"]')`, { wait: 700 });
       await c.step('[data-act="support-ticket"]', "sup_ticket_read", {});
+      // batch 238: a ticket with a picture. The picture is a fixed 24x16 PNG made in the page (DataTransfer), not a file on disk. The
+      // preview url would be a fresh blob: url on every run (and the dom compare reads it), so only for the change event that picks it
+      // URL.createObjectURL hands back a data: url of the same picture; the game's code runs as it is, and the original comes back after.
+      await c.load("/");
+      await c.click(ACT("sheet"));
+      await c.click(ACT("support-open"));
+      await until(`!!S.supportMine`);
+      await c.click('[data-act="support-tab"][data-tab="new"]');
+      await until(`!!document.getElementById("support-new-files")`);
+      c.log("support picks", await c.ev(`(() => {
+        const b64 = "${QA_PNG}";
+        const raw = atob(b64), bytes = new Uint8Array(raw.length);
+        for (let k = 0; k < raw.length; k++) bytes[k] = raw.charCodeAt(k);
+        const i = document.getElementById("support-new-files");
+        if (!i) return "missing";
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], "qa-shot.png", { type: "image/png" }));
+        i.files = dt.files;
+        const was = URL.createObjectURL;
+        URL.createObjectURL = () => "data:image/png;base64," + b64;
+        try { i.dispatchEvent(new Event("change", { bubbles: true })); } finally { URL.createObjectURL = was; }
+        return (S.supportPicks || []).length;
+      })()`));
+      await c.settle(300);
+      await c.shoot("sup_pick", { who: "p1" });
+      // the text after the pictures: a new window size redraws and clears the textarea (the picks stay in S.supportPicks)
+      const before = await c.ev(`S.supportTicket == null ? 0 : S.supportTicket`);
+      c.log("support send shot", await c.fillAndSend('#support-new-form textarea[name="body"]', "QA test ticket: a picture of the screen."));
+      await until(`(() => { const id = S.supportTicket; if (id == null || id === ${JSON.stringify(before)}) return false;
+        const t = ((S.supportMine && S.supportMine.tickets) || []).find((x) => x.id === Number(id));
+        const imgs = [...document.querySelectorAll(".sup-shots img")];
+        return !!t && Array.isArray(t.files) && t.files.length === 1 && imgs.length > 0 && imgs.every((m) => m.complete && m.naturalWidth > 0); })()`);
+      await c.settle(400);
+      await c.shoot("sup_sent_shot", { who: "p1" });
+      const tid = await c.ev(`S.supportTicket`);
+      // batch 238: the admin on the support list (only in this server's memory, put back below) comes in from /admin's top row
+      // (客服單 ›, batch 228; at 375 wide web/support.css keeps 管理者工具 on one line only on this page) and sees the picture
+      await c.py("content.config.support.staff = [*content.config.support.staff, 'qaadmin']; out = 1");
+      try {
+        c.log("support relogin admin", await c.relogin("admin"));
+        await c.asPlayer("admin");
+        await c.load("/admin");
+        await until(`!!document.querySelector('[data-act="support-desk-enter"]')`);
+        await c.settle(300);
+        await c.shoot("sup_admin", { who: "admin" });
+        await shootWhen('[data-act="support-desk-enter"]', "sup_admin_desk", `location.hash === "#support" && !!S.supportDesk && !S.supportDeskLoading`, { who: "admin", wait: 700 });
+        await shootWhen(`[data-act="support-desk-pick"][data-id="${tid}"]`, "sup_admin_desk_shot", `!!document.getElementById("support-answer-body") && [...document.querySelectorAll(".sup-shots img")].length > 0 && [...document.querySelectorAll(".sup-shots img")].every((m) => m.complete && m.naturalWidth > 0)`, { who: "admin", wait: 700 });
+        await shootWhen('[data-act="support-desk-leave"]', "sup_admin_back", `location.hash === "" && !!document.querySelector('[data-act="support-desk-enter"]')`, { who: "admin", wait: 700 });
+      } finally {
+        await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaadmin']; out = 1");
+      }
+      await c.asPlayer("p1");
       await c.load("/");
     }],
     ["mall", async (c) => {

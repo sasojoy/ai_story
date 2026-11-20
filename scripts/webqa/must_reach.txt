@@ -227,6 +227,12 @@ main:sup_dot
 main:sup_dot_sheet
 main:sup_mine_answered
 main:sup_ticket_read
+main:sup_pick
+main:sup_sent_shot
+main:sup_admin
+main:sup_admin_desk
+main:sup_admin_desk_shot
+main:sup_admin_back
 main:mall
 main:admin
 main:admin_game_page
