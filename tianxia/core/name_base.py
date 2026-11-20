@@ -43,10 +43,12 @@ _GM = re.compile(r"(?<![a-z])gm(?![a-z])")  # 只看 ASCII 英文字母：中文
 
 def staff_like(name: str | None) -> bool:
     """名號像不像官方（純函式，不讀設定、不查資料庫）：NFKC、casefold，只留 Unicode 類別 L、N 開頭的字（空白、標點、符號
-    去掉，「客 服」「G.M」現形），含 STAFF_WORDS 任一個，或 gm 前後不接英文字母（擋 ＧＭ、小美GM；不擋 Sigmund、Dogma）。"""
-    text = "".join(ch for ch in unicodedata.normalize("NFKC", name or "").casefold()
-                   if unicodedata.category(ch)[0] in "LN")
-    return any(word.casefold() in text for word in STAFF_WORDS) or _GM.search(text) is not None
+    去掉，「客 服」「G.M」現形），含 STAFF_WORDS 任一個，或 gm 前後不接英文字母（擋 ＧＭ、小美GM；不擋 Sigmund、Dogma）；
+    gm 另外在「空白、標點、符號換成分隔」的那一份再找一次（擋 GM Tom、gm_bob：去掉分隔後是 gmtom，會被放過）。"""
+    norm = unicodedata.normalize("NFKC", name or "").casefold()
+    text = "".join(ch for ch in norm if unicodedata.category(ch)[0] in "LN")
+    spaced = "".join(ch if unicodedata.category(ch)[0] in "LN" else " " for ch in norm)
+    return any(word.casefold() in text for word in STAFF_WORDS) or _GM.search(text) is not None or _GM.search(spaced) is not None
 
 
 def reserved_names(content: Content) -> frozenset[str]:

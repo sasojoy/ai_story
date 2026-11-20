@@ -210,8 +210,8 @@ def test_blocked_name_staff_words_regardless_of_identity(content, keyed):
 
 def test_staff_like_is_pure():
     from tianxia.core import name_base
-    assert all(name_base.staff_like(n) for n in STAFF_LIKE + ("G M", "gm2", "客．服", "官 方"))
-    assert not any(name_base.staff_like(n) for n in NOT_STAFF + ("Magma", "官府中人", "", None))
+    assert all(name_base.staff_like(n) for n in STAFF_LIKE + ("G M", "gm2", "客．服", "官 方", "GM Tom", "GM_Tom", "GM-Alice", "gm_bob"))
+    assert not any(name_base.staff_like(n) for n in NOT_STAFF + ("Magma", "官府中人", "", None, "gmail", "Big Mac"))
 
 
 # ── 第 207 批：管理者的 session、名單上的帳號、12 字 ──
