@@ -792,17 +792,21 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.shoot("sup_sent", { who: "p1" });
       // a non-admin account on the support list, only in this server's memory (Config.support.staff; put back below), logged in again
       // with the password so the desk's staff_session_ok holds after the clock moved
+      // batch 238: anything that throws between putting a name on the list and taking it off (click, ev) must not leave it there
       await c.py("content.config.support.staff = [*content.config.support.staff, 'qaplayer4']; out = 1");
-      c.log("support relogin", await c.relogin("p4"));
-      await c.asPlayer("p4");
-      await c.load("/admin");
-      await until(`!!S.supportDesk && !S.supportDeskLoading`);
-      await c.settle(300);
-      await c.shoot("sup_desk", { who: "p4" });
-      await shootWhen('[data-act="support-desk-pick"]', "sup_desk_pick", `!!document.getElementById("support-answer-body")`, { who: "p4", wait: 700 });
-      await c.ev(`(() => { const e = document.getElementById("support-answer-body"); if (e) e.value = "QA test answer: try reloading the page."; return e ? 1 : 0; })()`);
-      await shootWhen('[data-act="support-answer"][data-then="wait"]', "sup_desk_answered", `!S.supportDeskLoading`, { who: "p4", wait: 900 });
-      await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']; out = 1");
+      try {
+        c.log("support relogin", await c.relogin("p4"));
+        await c.asPlayer("p4");
+        await c.load("/admin");
+        await until(`!!S.supportDesk && !S.supportDeskLoading`);
+        await c.settle(300);
+        await c.shoot("sup_desk", { who: "p4" });
+        await shootWhen('[data-act="support-desk-pick"]', "sup_desk_pick", `!!document.getElementById("support-answer-body")`, { who: "p4", wait: 700 });
+        await c.ev(`(() => { const e = document.getElementById("support-answer-body"); if (e) e.value = "QA test answer: try reloading the page."; return e ? 1 : 0; })()`);
+        await shootWhen('[data-act="support-answer"][data-then="wait"]', "sup_desk_answered", `!S.supportDeskLoading`, { who: "p4", wait: 900 });
+      } finally {
+        await c.py("content.config.support.staff = [s for s in content.config.support.staff if s != 'qaplayer4']; out = 1");
+      }
       await c.asPlayer("p1");
       await c.shoot("sup_dot", { who: "p1" });
       await c.step(ACT("sheet"), "sup_dot_sheet", {});
