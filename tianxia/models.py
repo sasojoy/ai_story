@@ -4843,6 +4843,9 @@ class Config(_Strict):
     # 專有名詞禁用名單（content/banned_names.json）擋不擋（Joy 2026-10-31：「關閉禁用名單，上面的內容可以留著，但是現階段不卡」）：
     # 關著時取名、潤色、題壁都不看這份名單（Content.banned_name_list 回空的），名單照樣載入、照樣驗；髒話字表照舊擋
     banned_names_on: bool = False
+    # 冒充官方的名號（含客服、官方、管理員、GM 這類字，core/name_base.staff_like）擋不擋（第 240 批，企劃者 2026-11-20「現在就擋」）：
+    # 取名與易名帖都擋、不看帳號綁定；主機緊急時在設定覆寫檔關掉、重開生效
+    staff_names_on: bool = True
     # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
     party_wait_seconds: float = 600
     # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把
