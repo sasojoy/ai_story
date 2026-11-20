@@ -62,6 +62,17 @@ def test_nothing_is_noise_when_either_side_was_unstable_or_the_dom_differs(noise
     assert noise.style_class({"margin-left"}, True, unstable=True) is None
 
 
+def test_only_a_picture_with_nothing_else_different_is_drawn_again(noise):
+    # 第 237 批：AA 波鐵匠鋪 045 的 375 深色 102 px、淺色 40 色階，A 對 A 也紅；兩邊重畫出過同一張就是這一景自己的畫法
+    assert noise.recheck_candidate(clean_strict=True, unstable=False, same_size=True)
+    assert not noise.recheck_candidate(clean_strict=False, unstable=False, same_size=True)  # 有樣式差（連 used 值也算）：照舊直接紅
+    assert not noise.recheck_candidate(clean_strict=True, unstable=True, same_size=True)
+    assert not noise.recheck_candidate(clean_strict=True, unstable=False, same_size=False)
+    assert noise.render_variants(["x1", "y1"], ["z1", "y1"])
+    assert not noise.render_variants(["x1", "x2"], ["y1", "y2"])
+    assert not noise.render_variants([], ["y1"])  # 有一邊沒重畫成：不算雜訊
+
+
 def test_the_scrollbar_only_at_desktop_widths(noise):
     assert noise.pixel_class(210000, 200, view="1280", sw_a=1265, sw_b=1280) == "gutter"  # cl_c08
     assert noise.pixel_class(210000, 200, view="375-light", sw_a=1265, sw_b=1280) is None
@@ -202,6 +213,22 @@ def test_anti_aliasing_beside_a_used_value_is_still_the_same_picture(compare, tm
     assert _classes(out) == ["pixel", "style"]
 
 
+def test_the_replay_puts_a_clean_pixel_row_aside_and_a_dirty_one_stays_real(compare, tmp_path):
+    # 第 237 批：只有 recheck（重放）才延後；DOM 與計算樣式全同、只差像素的那一張先不算紅，記下它在 real 裡的位置
+    a, b = _walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", dots=500)
+    walk = compare.compare(a, b, HOSTS, str(tmp_path / "red"))
+    assert _classes(walk) == ["pixel"] and "recheck" not in walk, "走查照舊直接紅"
+    assert walk["real"][0]["red"] == ["001_scene__375-light.png", "001_scene__375-light__A.png", "001_scene__375-light__B.png"]
+    assert all((tmp_path / "red" / n).exists() for n in walk["real"][0]["red"]) and walk["red_images"] == 1
+    out = compare.compare(a, b, HOSTS, str(tmp_path / "red2"), recheck=True)
+    assert out["real"] == [] and out["red_images"] == 0 and not (tmp_path / "red2").exists()
+    assert [(c["at"], c["scene"], c["file"], c["view"]) for c in out["recheck"]] == [(0, "001_scene", "001_scene__375-light.png", "375-light")]
+    # 有樣式差就不重畫：color 變了、used 值動了（margin 312.5px）都照舊紅
+    for name, vals in (("c", ("blue", "1px")), ("d", ("red", "312.5px"))):
+        out = compare.compare(a, _walk(tmp_path / name, vals=vals, dots=500), HOSTS, recheck=True)
+        assert "pixel" in _classes(out) and out["recheck"] == [], name
+
+
 def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
     grid = ("grid-template-columns", "inline-size")
     a = _walk(tmp_path / "a", props=grid, vals=("600px", "641px"), width=641)
@@ -262,6 +289,34 @@ def test_the_candidates_head_comes_without_its_scripts(tmp_path):
     (tmp_path / "index.html").write_text('<html><head><link rel="stylesheet" href="/static/a.css"><script src="/static/app.js"></script></head><body></body></html>', encoding="utf-8")
     head = replay.candidate_head(str(tmp_path))
     assert "a.css" in head and "script" not in head
+
+
+def test_the_re_renders_settle_a_put_aside_picture(tmp_path):
+    # 第 237 批：兩邊重畫出過同一張 → render-variants 雜訊；從頭到尾不相交 → 照原本的位置插回 real，紅圖連 A、B 原圖
+    pytest.importorskip("PIL")
+    sys.path.insert(0, str(TOOL))
+    replay = _load("replay")
+    a, b = _walk(tmp_path / "a", dots=0), _walk(tmp_path / "b", dots=500)
+    f = "001_scene__375-light.png"
+    detail = {"file": f, "pixels": 500, "levels": 5, "box": [0, 0, 40, 13], "clean": True, "unstable": False}
+
+    def res():
+        return {"real": [{"scene": "000_x", "class": "dom", "detail": {}}, {"scene": "009_z", "class": "style", "detail": {}}], "noise": {"aa": 1}, "noise_rows": [], "red_images": 0,
+                "recheck": [{"at": 1, "scene": "001_scene", "file": f, "view": "375-light", "detail": detail}]}
+
+    out = replay.settle(res(), [str(a), str(b)], str(tmp_path / "red"), 40, {f: (["p", "q"], ["r", "q"])})
+    assert [r["class"] for r in out["real"]] == ["dom", "style"] and "recheck" not in out
+    assert out["noise"] == {"aa": 1, "render-variants": 1} and out["noise_rows"][0]["class"] == "render-variants" and out["noise_rows"][0]["renders"] == [2, 2]
+    assert out["red_images"] == 0 and not (tmp_path / "red").exists()
+    out = replay.settle(res(), [str(a), str(b)], str(tmp_path / "red"), 40, {f: (["p", "p"], ["r", "s"])})
+    assert [r["class"] for r in out["real"]] == ["dom", "pixel", "style"] and out["real"][1]["detail"]["renders"] == [1, 2]
+    assert out["red_images"] == 1 and out["real"][1]["red"][1:] == ["001_scene__375-light__A.png", "001_scene__375-light__B.png"]
+    from PIL import Image
+
+    with Image.open(tmp_path / "red" / "001_scene__375-light__B.png") as im:
+        assert im.size == (40, 40)  # 原尺寸
+    out = replay.settle(res(), [str(a), str(b)], None, 40, {})  # 重畫沒畫成：保守，照舊紅
+    assert [r["class"] for r in out["real"]] == ["dom", "pixel", "style"] and "red" not in out["real"][1]
 
 
 # ── 工具本身 ──
