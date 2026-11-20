@@ -31,7 +31,7 @@ from pathlib import Path
 from ..accounts import AccountStore, SessionStore, normalize
 from ..characters import name_key
 from ..database import default_path
-from .name_base import STAFF_NAMES
+from . import name_base
 
 _REPO = Path(__file__).resolve().parent.parent.parent
 KEY_FILE = _REPO / ".local" / "identity.json"  # {"key": "<至少 16 字>"}；不進版控
@@ -278,11 +278,12 @@ def listed(content, login: str | None = None, character: str | None = None, acco
 
 
 def blocked_name(name: str | None, content) -> bool:
-    """開著時不准拿來當名號的：id: 開頭（跟帳號鍵撞）、客服與官方的字（name_base.STAFF_NAMES）。關著一律回假（行為不變）。"""
-    if not on(content):
-        return False
+    """不准拿來當名號的：像官方的（name_base.staff_like：含客服、官方、管理員、GM 這類字；看 Config.staff_names_on、
+    不看帳號綁定，第 240 批企劃者 2026-11-20「現在就擋」），與帳號綁定開著時 id: 開頭的（跟帳號鍵撞）。"""
+    if content.config.staff_names_on and name_base.staff_like(name):
+        return True
     text = (name or "").strip().casefold()
-    return text.startswith(ID_PREFIX) or text in {n.casefold() for n in STAFF_NAMES}
+    return text.startswith(ID_PREFIX) and on(content)
 
 
 # ── 客服名單（帳號與客服第 212 批從 features/support/staff.py 搬來：商城的易名帖也要問，包不能 import 別包）──

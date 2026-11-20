@@ -150,7 +150,7 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
     if taken is None:
         store = CharacterStore(ctx.world.db)
         reserved = {n.casefold() for n in reserved_names(ctx.content)}
-        taken = lambda n: store.exists(n) or n.casefold() in reserved or identity_base.blocked_name(n, ctx.content)  # noqa: E731  identity：開著才擋
+        taken = lambda n: store.exists(n) or n.casefold() in reserved or identity_base.blocked_name(n, ctx.content)  # noqa: E731  保留字一律擋（staff_names_on），id: 開頭帳號綁定開著才擋
     if name_key(new) != name_key(old) and taken(new):
         return [NAME_IN_USE]
     if rename.clash(old, name_key(old), ctx.content) or rename.clash(new, name_key(new), ctx.content):
