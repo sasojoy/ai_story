@@ -1,5 +1,5 @@
 {
-  "_說明": "使用條款與隱私權條款（設計稿 https://claude.ai/artifact/BxXB4qnXvtDfCKUjmwuDj4）。version 是同意的版本：大改（權利義務、退費、個資用途）才換 version 與 published，換了 version 之後所有人下次進遊戲都要按過同意（Config.terms.update_must 關著才是 published 起 grace_days 天的考慮期）；小改（錯字、聯絡方式）只改字、只改 updated。上線前請法律專業看過。",
+  "_說明": "使用條款與隱私權條款（設計稿 https://claude.ai/artifact/BxXB4qnXvtDfCKUjmwuDj4）。version 是同意的版本：大改（權利義務、退費、個資用途）才換 version 與 published，換了 version 之後，同意過舊版的人在 published 起 grace_days 天內進遊戲會看到改版頁（可以稍後再看）、過了視為接受（Config.terms.update_must 開著才是每個人都要按過同意）；小改（錯字、聯絡方式）只改字、只改 updated。上線前請法律專業看過。",
   "version": "2026-11-v2",
   "published": "2026-11-21",
   "company": {"name": "蟲洞創意企業有限公司", "tax_id": "83703527", "address": "桃園市平鎮區廣達里廣平街18巷24號6樓", "email": "wormholecreativity@gmail.com"},

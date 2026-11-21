@@ -3,7 +3,7 @@
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  * 不改 app.js：看 #app 畫了什麼（MutationObserver）——登入頁、設定頁底下補兩個連結；進了遊戲問一次 /api/terms，
  * 要按同意就疊一層在最上面（沒同意過任何一版：按了同意才關得掉；改版的考慮期內：可以先關掉）。字待 joy 潤
- * 第 243 批起換版後同意過舊版的也是按了同意才關得掉（must 帶 update：開頭換改版那一句、同意記 update）；Config.terms.update_must 關著才回到考慮期。
+ * 換版後同意過舊版的預設是考慮期（ask）；Config.terms.update_must 開著（第 243 批的開關，第 246 批預設關）才是按了同意才關得掉（must 帶 update：開頭換改版那一句、同意記 update）。
  */
 "use strict";
 
