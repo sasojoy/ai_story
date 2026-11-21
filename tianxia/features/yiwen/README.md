@@ -14,6 +14,19 @@
 - 放下：發掘者一幕都沒寫→開場放回（`free_found`、`free_today` 不退）；已有幾幕→提早公開；後來的人→只清眼前。眼前那一則不見了（旁檔不在、旁檔少了那一列、開場改版拿掉、名額被收回）：選單不接管，下一次同步清掉、寫一則「那件怪事已經散了」。
 - 易名帖：旁檔的鍵（`tales.discoverer`、`nodes.by`、`walks.account`、`reports.by`、`mutes.account`）由 `core/renames` 換，`*_shown` 不動；旁檔不在不建。
 
+## 畫面（第 248 批：企劃者 2026-11-21 挑的乙版「頁邊朱批」，原始檔 `docs/superpowers/specs/2026-11-21-異聞-畫面/card-b.html`）
+
+- 只在 `web/yiwen.js`、`web/yiwen.css`（class 一律 `yw-`，色只用 `style.css` 的變數）；資料全是 `main.yiwen.card`，伺服器、欄位、路由一個字沒動。
+- 整頁的紙 `#yw-pop`（`MutationObserver` 照 `main.yiwen.card` 補上或拿掉）：頂上一行標題、「地點・異聞」、右邊「收起」。收起時頁上留一條「進行中」`.yw-track`（「異聞・〈標題〉（第幾幕／收尾）」，江湖錄 `.cx-track` 後面，沒有就 `#page` 最上面），點了叫回來；選單上的「〈標題〉」（`yiwen:open`）也叫回來（捕獲階段的 click 只清旗子）。
+- 撞見卡（`yiwenCard`，還沒有幕）：頁首圖（此地有圖用它、沒有是墨暈底）、朱印「異聞」（實心，發掘者）／「舊腳印」（後來的人）、懸念楷書大字、框、地點與「已有 N 人走過」；段標「你看那是什麼」；路牌 `ywSigns`；灰著的「自己說」；「？ 異聞的規矩」；「放下」問一次。
+- 每一幕（`yiwenScene`）：一頁書——左直條「第一幕」、中正文（順逆章蓋在末尾）、右頁邊朱批直書＋名號小印（只放前兩字，全名小字橫排在印下）；朱批照字數 `yw-zp-2`／`yw-zp-3` 折兩行、再縮字。回聲句畫在書上面，**發掘者那一步不畫回聲句**（PM 定）。較早的幕收成一行 `.yw-prev`，點了原地攤開。
+- 路牌：有人走過的照足跡多到少排前面，再沒人走過的（「免費開」，發掘者寫「寫下這一步」）、要香的（「問路香 1」，異聞三才會給）、鎖著的（灰、按不下去、籤寫伺服器的 `note`）；`state: "full"` 併成一列「a・b ｜開完了」＋頁下灰字；別人自己說開的路（`typed: true`、`i: "zhupi"`）朱色帶「某某說的」——這三種鍵伺服器什麼時候給是異聞二、三的事。
+- 等說書人寫（`yiwenWait`）：按了沒人走過的那一顆、請求 250ms 還沒回才畫；格線頁、三顆墨點（`prefers-reduced-motion` 不動）、「開路」小印。這一波替身當場就有，所以平常看不到；「停」不畫（異聞二）。
+- 收尾卡（`yiwenClose`）：收場句、朱印「完」、一路的做法（自己寫的朱字）、得失一行（剛按完那一下的回話扣掉收場句、回聲與正文；重新整理後沒有就不畫）、主鈕「回江湖」。「看這一則的全圖 ›」不放（異聞三）。
+- 窄機：寬 <380 頁邊 58→46px、直條 30→24px（360 寬正文一行 14 字）；<340 朱批改成頁頂橫排。
+- 還沒放的：「這一段讀不通」（會加在書下面一行）與檢舉（`.yw-leaf` 頂右「⋯」），都是異聞四。
+- 新按鈕走 `registerClicks`：`yw-step`、`yw-hide`、`yw-show`、`yw-help`、`yw-open`、`yw-drop`。
+
 ## 欄位與旁檔
 
 - `PlayerState.yiwen: YiwenWalk | None`（QUIET、None 起家、第一次撞見才建；不在 `carried`，換季清掉；回到「眼前沒有」只清眼前那幾格，季內的帳留著）。
@@ -31,7 +44,7 @@
 
 ## 測試
 
-- 包的 `tests/`：`test_yiwen_smoke`（關著不出聲、op 關著不動、新欄位不寫鍵）、`test_yiwen_content`、`test_yiwen_store`、`test_yiwen_discover`、`test_yiwen_walk`、`test_yiwen_rename`、`test_yiwen_frames`、`test_yiwen_web`（node）。經過探索的用正式內容 season21（`yiwen_kit.season21_game`；測試內容走舊探索，撞不到異聞），只測規則的直接叫 `actions.on_explore`。
+- 包的 `tests/`：`test_yiwen_smoke`（關著不出聲、op 關著不動、新欄位不寫鍵）、`test_yiwen_content`、`test_yiwen_store`、`test_yiwen_discover`、`test_yiwen_walk`、`test_yiwen_rename`、`test_yiwen_frames`、`test_yiwen_web`（node；第 248 批十一條：撞見卡兩種身分、每一幕、發掘者那一步不重複回聲句、朱批超長的 class、路牌排序與開滿、等待頁、進行中那一行、跳脫）。經過探索的用正式內容 season21（`yiwen_kit.season21_game`；測試內容走舊探索，撞不到異聞），只測規則的直接叫 `actions.on_explore`。
 - 另外要跑的（`test_for` 挑不到）：`tests/core/test_contract_core.py`（`BUS_ORDER` 三處）、`tests/server/test_outlock.py`（`OP_OWNERS`）、`tests/core/test_same_behavior_wipe.py`、`tests/server/test_backup_db.py`、`tests/core/test_content_packs.py`、`tests/web/test_shell_web.py`、`tests/bots/test_server_bots.py`。
 - 比對軌 `scripts/sb/tracks/yiwen.py`（season21：甲撞見、三幕替身走完；乙同處重走三步重放）。
 

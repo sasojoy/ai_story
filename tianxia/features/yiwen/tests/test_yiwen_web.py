@@ -67,6 +67,7 @@ def test_card_first_and_trail_marks():
 def test_zhupi_and_luck_seal():
     html = run(f"return H.yiwenScene({_js(_scene())});")
     assert 'class="yw-margin' in html and "當初一口咬定，那是" in html and "「官軍」" in html
+    assert '<p class="yw-zp-tx">' in html  # 直書那一段的 class 跟路牌的 yw-zp 分開（共用時路牌也被排成直書）
     assert 'class="yw-stamp">陸三<' in html and 'class="yw-zp-name">陸三刀<' in html
     assert 'class="yw-luck"' in html and ">逆<" in html and "第一幕" in html
     assert 'aria-label="——當初陸三刀一口咬定' in html  # 伺服器那一句放在頁邊的 aria-label

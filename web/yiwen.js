@@ -63,7 +63,7 @@
     const intro = sc.replay ? YW_ZP_THEIRS : YW_ZP_MINE;
     const two = ywChars(sc.who).slice(0, 2).join("");
     return `<div class="yw-margin${ywFit(intro, sc.pick)}" aria-label="${esc(sc.zhupi_text || "")}">
-      <p class="yw-zp"><small>${intro}</small>「${esc(sc.pick)}」</p>
+      <p class="yw-zp-tx"><small>${intro}</small>「${esc(sc.pick)}」</p>
       <span class="yw-stamp">${esc(two)}</span><small class="yw-zp-name">${esc(sc.who)}</small></div>`;
   }
 
@@ -177,7 +177,7 @@
     const book = `<div class="yw-book yw-waiting"><div class="yw-num">${ywAct(scenes.length + 1)}</div>
       <div class="yw-leaf"><div class="yw-ruled"><p class="yw-wait"><span class="yw-dots" aria-hidden="true"><i></i><i></i><i></i></span>${YW_WAIT}</p></div>
         <p class="yw-note">${YW_WAIT_NOTE}</p></div>
-      <div class="yw-margin${ywFit(YW_ZP_MINE, label)}"><p class="yw-zp"><small>${YW_ZP_MINE}</small>「${esc(label)}」</p><span class="yw-stamp solid">${YW_WAIT_SEAL}</span></div></div>`;
+      <div class="yw-margin${ywFit(YW_ZP_MINE, label)}"><p class="yw-zp-tx"><small>${YW_ZP_MINE}</small>「${esc(label)}」</p><span class="yw-stamp solid">${YW_WAIT_SEAL}</span></div></div>`;
     return `<div class="yw-card" role="dialog" aria-label="${esc(card.title)}" aria-busy="true">${ywTop(card)}<div class="yw-scr">${scenes.map(ywPrev).join("")}${book}</div></div>`;
   }
 
