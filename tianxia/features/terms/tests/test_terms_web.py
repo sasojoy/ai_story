@@ -143,5 +143,54 @@ def test_version_404_inserts_nothing():
 def test_terms_js_marks_new_words():
     text = (WEB / "terms.js").read_text(encoding="utf-8")
     for line in text.splitlines():
-        if any(s in line for s in ("我已滿 18 歲或已得到法定代理人同意\"", "我已讀過並同意", "請先勾選滿 18 歲")):
+        if any(s in line for s in ("我已滿 18 歲或已得到法定代理人同意\"", "我已讀過並同意", "請先勾選滿 18 歲", "請看過這次改了什麼")):
             assert "待 joy 潤" in line, line
+
+
+# 第 243 批：同意那一層（termsLayerHtml）與同意記哪一種（termsSource）
+LAYER_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+const kit = new Function("document", "fetch", tSrc + "\nreturn { termsLayerHtml, termsSource };")({ querySelectorAll: () => [] }, () => Promise.reject(new Error("x")));
+const base = { version: "v2", email: "a@b.c", summary: ["一", "<二>"] };
+const must = { ...base, need: "must", deadline: null }, ask = { ...base, need: "ask", deadline: "2026-12-06" }, upd = { ...must, update: true };
+finish({
+  must: kit.termsLayerHtml(must), ask: kit.termsLayerHtml(ask), update: kit.termsLayerHtml(upd),
+  source: [kit.termsSource(must), kit.termsSource(upd), kit.termsSource(ask)],
+});
+"""
+
+
+def _layer_html(lead: str, later: bool, no_line: str, logout: bool) -> str:
+    """第 243 批以前 terms.js 畫出來的那一層（在 base 的 terms.js 上量的），逐字。"""
+    return "\n".join([
+        '<div class="terms-layer" role="dialog" aria-modal="true" aria-label="使用條款與隱私權條款">',
+        '      <div class="terms-card card">',
+        "        <h3>使用條款與隱私權條款</h3>",
+        f"        <p>{lead}</p>",
+        '        <p class="muted">重點：</p><ul><li>一</li><li>&lt;二&gt;</li></ul>',
+        '        <p class="terms-links"><a href="/terms" target="_blank" rel="noopener">使用條款</a>・<a href="/privacy" target="_blank" rel="noopener">隱私權條款</a></p>',
+        '        <p class="form-msg" role="alert"></p>',
+        '        <button class="btn primary" data-terms="agree">我已滿 18 歲或已得到法定代理人同意，並同意以上條款</button>',
+        '        <div class="terms-row">',
+        "          " + ('<button class="btn ghost" data-terms="later">稍後再看</button>' if later else ""),
+        '          <button class="btn ghost" data-terms="no">我不同意</button>',
+        "        </div>",
+        f'        <p class="terms-no muted" hidden>{no_line}</p>',
+        "        " + ('<button class="btn ghost terms-out" data-act="logout" hidden>登出</button>' if logout else ""),
+        "      </div></div>",
+    ])
+
+
+MUST_LEAD = "開始之前，請先看過並同意天下大勢的使用條款與隱私權條款。"
+UPDATE_LEAD = "使用條款與隱私權條款有新版，請看過這次改了什麼，同意後繼續。"
+NO_MUST = "不同意的話沒辦法進遊戲。要終止帳號、退還沒用掉的元寶，請寫信到 a@b.c。"
+NO_ASK = "不同意新版的話，可以終止帳號並退還沒用掉的元寶，請寫信到 a@b.c。"
+
+
+def test_layer_without_update_flag_is_unchanged_and_update_swaps_only_the_lead():
+    out = run(LAYER_DRIVER, {"terms": str(WEB / "terms.js")})
+    assert out["must"] == _layer_html(MUST_LEAD, False, NO_MUST, True)  # 新玩家第一次：一個字不變
+    assert out["ask"] == _layer_html("使用條款與隱私權條款有新版。2026-12-06 以前沒有表示反對，就視為接受新版。", True, NO_ASK, False)
+    assert out["update"] == _layer_html(UPDATE_LEAD, False, NO_MUST, True)  # 換版後的 must：只換開頭那一句、沒有稍後再看
+    assert 'data-terms="later"' not in out["update"]
+    assert out["source"] == ["gate", "update", "update"]  # 稽核分得出改版時同意的
