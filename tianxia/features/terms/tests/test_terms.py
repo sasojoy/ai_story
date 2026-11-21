@@ -1,6 +1,8 @@
 """條款：誰要按同意（規則）、同意紀錄只加不刪（小檔）、/api/terms 與 /api/terms/agree（伺服器）、網頁那一層（node）。"""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,10 +22,20 @@ def test_need_must_for_a_new_account_and_none_once_agreed():
 
 
 def test_an_old_consent_is_asked_inside_the_grace_days_and_deemed_accepted_after():
+    """update_must 關著（第五個參數預設 False）：第 243 批以前的考慮期做法，一個字不變。"""
     start = rules.published_at(DATA)
     assert rules.need("v1", DATA, start + 14 * DAY, 15) == rules.ASK
     assert rules.need("v1", DATA, start + 15 * DAY, 15) == rules.NONE
     assert rules.need(None, DATA, start + 99 * DAY, 15) == rules.MUST  # 沒同意過任何一版：一直要按
+
+
+def test_update_must_makes_an_old_consent_must_inside_and_after_the_grace_days():
+    """第 243 批（企劃者 2026-11-21「改成強制按同意」）：同意過舊版跟沒同意過一樣要按。"""
+    start = rules.published_at(DATA)
+    for now in (start - DAY, start + 14 * DAY, start + 15 * DAY, start + 99 * DAY):
+        assert rules.need("v1", DATA, now, 15, True) == rules.MUST
+        assert rules.need(None, DATA, now, 15, True) == rules.MUST
+        assert rules.need("v2", DATA, now, 15, True) == rules.NONE
 
 
 def test_the_store_only_appends(tmp_path):
@@ -68,10 +80,36 @@ def test_api_asks_until_agreed_then_stays_quiet(client):
     assert TestClient(server.app).get("/api/terms").status_code == 401
     got = client.get("/api/terms").json()
     assert got["need"] == "must" and got["summary"] and got["email"] == "wormholecreativity@gmail.com"
+    assert "update" not in got  # 新玩家第一次：不帶改版旗標（第 243 批）
     assert client.post("/api/terms/agree", json={"version": "old"}).status_code == 409
     done = client.post("/api/terms/agree", json={"version": got["version"]}).json()
     assert done["need"] == ""
     assert terms_routes.consent_store(server).history("terms_01")[0]["source"] == "gate"
+
+
+def test_api_an_old_consent_must_agree_again_with_source_update(client):
+    """第 243 批：同意過舊版、update_must 開著（預設）→ must＋update、有 summary、沒有期限；同意後記 update。"""
+    terms_routes.consent_store(server).record("terms_01", "2026-11-v1", "register", 1.0)
+    got = client.get("/api/terms").json()
+    assert got["need"] == "must" and got["update"] is True and got["summary"] and got["deadline"] is None
+    done = client.post("/api/terms/agree", json={"version": got["version"], "source": "update"}).json()
+    assert done["need"] == "" and "update" not in done
+    assert terms_routes.consent_store(server).history("terms_01")[-1]["source"] == "update"
+
+
+def test_api_update_must_off_keeps_the_grace_days(client, monkeypatch):
+    """update_must 關著（緊急開關）：跟第 243 批以前一樣，ask＋期限、不帶 update。"""
+    monkeypatch.setattr(server.CONTENT.config.terms, "update_must", False)
+    terms_routes.consent_store(server).record("terms_01", "2026-11-v1", "register", 1.0)
+    data = rules.load()
+
+    def shell_at(now):  # 假鐘只給 status 用，不換全域的 time.time（登入的 session 也讀它）
+        return SimpleNamespace(CONTENT=server.CONTENT, default_path=server.default_path, time=SimpleNamespace(time=lambda: now))
+
+    got = terms_routes.status(shell_at(rules.published_at(data) + DAY), "terms_01")
+    assert got["need"] == "ask" and got["summary"] and got["deadline"] and "update" not in got
+    late = terms_routes.status(shell_at(rules.published_at(data) + 99 * DAY), "terms_01")
+    assert late == {"need": "", "version": data["version"], "email": data["company"]["email"]}
 
 
 def test_switch_off_never_asks(client, monkeypatch):
