@@ -208,8 +208,9 @@ def test_blocked_name_staff_words_regardless_of_identity(content, keyed):
     assert all(ib.blocked_name(n, content) for n in ("客服", "官方", "管理員", "GM"))
 
 
-SHANGGUAN_OK = ("上官方宇", "上官方正", "上官方", "上 官方", "上官 方宇", "上上官方")
-OFFICIAL_STILL = ("官方", "官方客服", "真官方", "官 方", "我是官方", "官方上官方", "上官官方", "上官方客服", "上官GM")
+SHANGGUAN_OK = ("上官方宇", "上官方正", "上官方", "上 官方", "上官 方宇")
+OFFICIAL_STILL = ("官方", "官方客服", "真官方", "官 方", "我是官方", "官方上官方", "上官官方", "上官方客服", "上官GM",
+                  "上上官方", "線上官方", "網上官方", "以上官方公告", "馬上官方", "小上官方宇")
 
 
 def test_blocked_name_shangguan_fang(content, keyed):
@@ -234,8 +235,9 @@ def test_staff_like_is_pure():
 def test_staff_like_lets_shangguan_fang_through():
     """第 245 批，企劃者 2026-11-21：PM 問「擋冒充名號的規則裡『官方』是包含比對，所以複姓上官加上以方開頭的名字（例：
     上官方宇、上官方正）也會被擋，玩家只會看到『這個名號已有人使用』。要不要放行這種名號」，他選「放行」。
-    「官方」前面緊接著「上」的不算，判在去掉空白符號的那一份上（上 官方、上官 方宇放行；官 方照擋）。邊界：上上官方唯一一處
-    官方前面是上 → 不擋；官方上官方開頭那一處前面不是上、上官官方第二處前面是官 → 擋；上官方客服、上官GM 別的字照擋。"""
+    判在去掉空白符號的那一份上，整個名號以上官開頭時開頭那一處官方不算（上 官方、上官 方宇放行；官 方照擋）。審查後收窄：
+    只看「官方前面緊接著上」會放過線上官方、小上官方宇、上上官方，這些照擋；官方上官方、上官官方第二處照擋；
+    上官方客服、上官GM 別的字照擋。"""
     from tianxia.core import name_base
     assert [n for n in SHANGGUAN_OK if name_base.staff_like(n)] == []
     assert [n for n in OFFICIAL_STILL if not name_base.staff_like(n)] == []
