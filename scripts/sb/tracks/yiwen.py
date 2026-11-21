@@ -125,4 +125,8 @@ class YiwenScenario(PeersScenario):
 
 # 改一個字（selftest）：重走的擲骰反過來，乙永遠撞不到那一則，season21 trail 那一段抓到
 register_track("yiwen", YiwenScenario, (("tianxia/features/yiwen/actions.py",), ("if old and r_walk < t.rewalk_chance:", "if old and r_walk > t.rewalk_chance:")),
-               "season21", covers=("yiwen", "explore"))
+               "season21",
+               covers=("admin", "battle", "bounties", "bout", "codex", "companions", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guard", "guide", "heroines", "hire", "horses", "legacy", "mall", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
+                       "yiwen", "zhuan", "zongmen"))
