@@ -595,6 +595,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 橋把新單、玩家再回、找真人、補的截圖貼到 Discord 的 #客服（只讀客服旁檔、不寫；規則見 `tianxia/features/support/README.md`「主機端」）。要先在 `.local/support.json` 寫好 `discord_webhook`（與找真人要點的 `mention`）；沒寫就只記 log、不貼。跟 `server.py` 用同一個 `TIANXIA_DB`。
 
+**開橋之前**：隱私權條款第三條（「給誰」，現在寫了「不送到外部 AI 服務」）要先改、而且要換條款版號（見「開真人客服之前」第 2之2 步）。
+
 1. **第一次開之前先試一輪、把舊單記成貼過**（進度檔不在時會把現有的單全部當新單貼一次）：
    `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --db <線上資料庫檔> --log C:\Ray\tianxia-support\bridge.log`
    `--db` 是跟 `server.py` 同一個主資料庫檔（橋自己找旁邊的 `<db>-support.sqlite`）；沒帶 `--db` 照這個終端機的 `TIANXIA_DB`，也沒設就讀預設的 `<repo>\saves\tianxia.db`（`support_bridge.py` 的參數預設值）。線上的庫不在預設位置，所以一定帶 `--db`（或先在同一個終端機設好 `TIANXIA_DB`）；下面第 2 步的 `Start-Process` 也一樣，沒帶 `--db` 就吃這個終端機的 `TIANXIA_DB`。
@@ -608,6 +610,8 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 ### 客服官（第 216、218 批）
 
 客服官是一個 Claude Code session，替客服先回單（自動回覆）、要真人的轉到 `#客服`；它的手只有 `scripts/support_cli.py`（打 Bearer）。規則見 `tianxia/features/support/README.md`「客服官、找真人、自動結單」與「主機端」。
+
+**開客服官之前**：隱私權條款第三條（「給誰」，現在寫了「不送到外部 AI 服務」）要先改、而且要換條款版號（見「開真人客服之前」第 2之2 步）。
 
 1. **開 token**：`.local/support.json` 寫 `{"bot_token": "<至少 32 字>"}`（跟 `discord_webhook`、`server_url`、`mention` 同一個檔；值不寫進任何文件、不貼進任何頻道），設定檔寫 `support.bot_account`（寫帳號的數字編號 `accounts.id`，理由同客服名單；登入名也認、名號不認）。`bot_token` 伺服器照檔的修改時間重讀；設定檔照舊要重開伺服器才讀得到。
 2. **建工作夾**：先建 `C:\Ray\tianxia-support`，再
@@ -652,8 +656,11 @@ AA 波（2026-11-20）起 week7、season21 兩份設定覆寫檔開著 `support.
 - 緊急開關：設定覆寫檔寫 `"staff_names_on": false`、兩個程式重開，像官方的名號就全部不擋（連帳號綁定開著時的客服、官方、管理員、GM 也不擋）；平常不要關。
 
 **2之2. 條款 2026-11-v2 的上線日**（第 241 批，企劃者 2026-11-20「現在就出新版條款」）
-- **部署條款 2026-11-v2 的那一天**，把 `tianxia\features\terms\content\terms.json` 的 `published` 與 `docs.terms.updated`（現在都寫 `2026-11-21`，是預定日）改成真的上線那一天。
-- 同意過舊版的人在 `published` 那天臺灣 0 點起 15 天（`terms.grace_days`）內進遊戲會看到改版頁，過了視為接受。填早了期限跟著縮短；上線比 `published` 晚超過 15 天，就沒有人會被問。從沒同意過的人不受影響，一定要按同意。
+- **部署條款 2026-11-v2 的那一天**，把 `tianxia\features\terms\content\terms.json` 的 `published`、`docs.terms.updated` 與 `docs.privacy.updated`（現在都寫 `2026-11-21`，是預定日；第 244 批隱私權條款補了客服單，日期一起寫成這一天）改成真的上線那一天。
+- `terms.update_must`（第 243 批，企劃者 2026-11-21「改成強制按同意」，預設開、兩份設定覆寫檔沒寫就是開著）開著時，`published` 不再拿來算期限，但它仍是條款頁上印的生效日，所以照樣要改成真的上線那一天。
+- **上線那一刻會怎樣**：同意過舊版的人每一個進遊戲都會先看到改版那一層（開頭是改版那一句、列這次改了什麼、沒有「稍後再看」），按了同意才關得掉；從沒同意過的人照舊一定要按同意。這一層只蓋在網頁上，伺服器沒有路由因為沒同意而拒絕。
+- 緊急時在設定覆寫檔（`content/profiles/season21.json` 或 `week7.json`，線上用哪一份改哪一份）把 `terms` 那一格（現在是 `"terms": {"enabled": true}`）改成 `"terms": {"enabled": true, "update_must": false}`、兩個程式重開，回到可以「稍後再看」的考慮期：同意過舊版的人在 `published` 那天臺灣 0 點起 15 天（`terms.grace_days`）內進遊戲看到改版頁，過了視為接受；這時 `published` 填早了期限跟著縮短，上線比 `published` 晚超過 15 天就沒有人會被問。
+- 之後要開 `scripts/support_bridge.py`（把單貼到 Discord）或客服官（自動受理）**之前**，隱私權條款第三條（「給誰」，現在寫了「不送到外部 AI 服務」）要先改，而且要換條款版號（`version` 與 `published`）。
 - 這個檔照修改時間重讀，改了不用重開伺服器。
 
 **3. 上線那一天的順序**
