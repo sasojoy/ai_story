@@ -12,6 +12,7 @@
 冒充官方的字 STAFF_WORDS 與 staff_like（第 240 批）：改了另外跑 tests/core/test_identity_base.py、
 tianxia/features/identity/tests/test_identity_server.py、tests/server/test_set_password.py、
 tests/server/test_list_staff_like_names.py（主機的唯讀清單 scripts/list_staff_like_names.py 讀它）。
+第 245 批：上官後面的方不算（「官方」前面緊接著「上」的不擋，上官方宇放行）。
 """
 from __future__ import annotations
 
@@ -36,19 +37,24 @@ FAMOUS_NAMES = frozenset((  # 三國名人：server_bots 的字庫組得出其�
 STAFF_NAMES = ("客服", "官方", "管理員", "GM")
 
 # 第 240 批（企劃者 2026-11-20「現在就擋」）：名號含這些字就像在冒充官方。不進 reserved_names（假人取名與易名帖讀那一份）；
-# 擋名號經 core/identity_base.blocked_name，看 Config.staff_names_on、不看帳號綁定。簡體繁體各自列，不做轉換
+# 擋名號經 core/identity_base.blocked_name，看 Config.staff_names_on、不看帳號綁定。簡體繁體各自列，不做轉換；
+# 官方另看 _OFFICIAL（第 245 批）
 STAFF_WORDS = ("客服", "官方", "管理員", "管理员", "管理者", "系統", "系统", "營運", "运营", "運營", "营运")
 _GM = re.compile(r"(?<![a-z])gm(?![a-z])")  # 只看 ASCII 英文字母：中文也算 alpha，用 isalpha 會放過「小美gm」
+_OFFICIAL = re.compile(r"(?<!上)官方")  # 第 245 批：複姓上官＋方開頭的名（上官方宇）不算；只要還有一處官方前面不是上就擋
 
 
 def staff_like(name: str | None) -> bool:
     """名號像不像官方（純函式，不讀設定、不查資料庫）：NFKC、casefold，只留 Unicode 類別 L、N 開頭的字（空白、標點、符號
     去掉，「客 服」「G.M」現形），含 STAFF_WORDS 任一個，或 gm 前後不接英文字母（擋 ＧＭ、小美GM；不擋 Sigmund、Dogma）；
-    gm 另外在「空白、標點、符號換成分隔」的那一份再找一次（擋 GM Tom、gm_bob：去掉分隔後是 gmtom，會被放過）。"""
+    gm 另外在「空白、標點、符號換成分隔」的那一份再找一次（擋 GM Tom、gm_bob：去掉分隔後是 gmtom，會被放過）。
+    「官方」前面緊接著「上」的不算（複姓上官，第 245 批，企劃者 2026-11-21「放行」）：在去掉空白符號的那一份上判，
+    「上 官方」放行、「官 方」照擋；只要還有一處官方前面不是上就擋（官方上官方、上官官方）。"""
     norm = unicodedata.normalize("NFKC", name or "").casefold()
     text = "".join(ch for ch in norm if unicodedata.category(ch)[0] in "LN")
     spaced = "".join(ch if unicodedata.category(ch)[0] in "LN" else " " for ch in norm)
-    return any(word.casefold() in text for word in STAFF_WORDS) or _GM.search(text) is not None or _GM.search(spaced) is not None
+    return (any(word.casefold() in text for word in STAFF_WORDS if word != "官方") or _OFFICIAL.search(text) is not None
+            or _GM.search(text) is not None or _GM.search(spaced) is not None)
 
 
 def reserved_names(content: Content) -> frozenset[str]:
