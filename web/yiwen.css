@@ -1,0 +1,23 @@
+/* 異聞（tianxia/features/yiwen）：撞見卡、每一幕、收尾卡。第 247 批只求不破版、44px、淺深都看得清；照對比圖細修是第 248 批。只用 style.css 的色票。 */
+.yw-wrap { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; padding: 16px; padding-bottom: calc(16px + var(--bottom)); background: rgba(20, 14, 8, 0.45); overflow-y: auto; }
+.yw-card { box-sizing: border-box; width: 100%; max-width: 520px; max-height: 100%; overflow-y: auto; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; font-family: var(--serif); overflow-wrap: anywhere; }
+.yw-title { margin: 0 0 6px; font-family: var(--kai); font-size: 1.3rem; }
+.yw-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.yw-seal { display: inline-block; padding: 2px 8px; border: 1.5px solid var(--accent); color: var(--accent); border-radius: 4px; font-family: var(--kai); }
+.yw-walkers { opacity: 0.75; }
+.yw-frame, .yw-note, .yw-step { margin: 6px 0; font-size: 0.92rem; opacity: 0.8; }
+.yw-hook { margin: 10px 0; font-family: var(--kai); font-size: 1.15rem; line-height: 1.7; }
+.yw-scene { margin: 10px 0; padding-top: 8px; border-top: 1px dashed var(--line); }
+.yw-zhupi { margin: 0 0 6px; color: var(--accent); font-family: var(--kai); }
+.yw-echo { margin: 0 0 6px; opacity: 0.8; }
+.yw-scene-body { position: relative; }
+.yw-luck { float: right; width: 32px; height: 32px; line-height: 30px; margin: 0 0 4px 8px; text-align: center; border: 1.5px solid var(--accent); border-radius: 50%; color: var(--accent); font-family: var(--kai); }
+.yw-text { margin: 0 0 6px; line-height: 1.7; }
+.yw-picks { display: grid; gap: 8px; margin: 8px 0; }
+.yw-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; width: 100%; padding: 8px 12px; text-align: left; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font: inherit; cursor: pointer; }
+.yw-pick.off { opacity: 0.55; cursor: default; }
+.yw-pick-note { font-size: 0.8rem; opacity: 0.75; }
+.yw-btn { min-height: 44px; width: 100%; margin-top: 6px; }
+.yw-close-line { font-family: var(--kai); font-size: 1.05rem; }
+.yw-gains-hd { margin: 8px 0 2px; font-weight: 600; }
+.yw-gains { margin: 0 0 6px; padding-left: 1.2em; }

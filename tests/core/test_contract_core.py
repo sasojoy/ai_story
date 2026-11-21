@@ -924,7 +924,7 @@ def test_the_bus_order_is_the_table_in_the_plan():
     （outing：打探懸賞→撿玉璽碎片；arrive：交糧車→護送懸賞；計畫 1.9 調了就抓得到）。改這張表先過 PM。"""
     assert features_core.BUS_ORDER == {
         "win": ("bounties", "horses"),  # 馬的來路（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
-        "outing": ("bounties", "seal", "guard"),  # 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）
+        "outing": ("bounties", "seal", "guard", "yiwen"),  # 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）；異聞：探索撞見一則怪事（企劃者 2026-11-21「五處都可以」）
         "explore": ("bounties", "guard"),
         "arrive": ("convoy", "bounties"),
         "raid_win": ("bounties", "zongmen"),
@@ -1078,9 +1078,10 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
         got = explore_actions.explore_one(game)
     here = ("yingchuan_wilds",)
     assert calls == [("win", "bounties", (game, *here, plan.foe.id)), ("win", "horses", (game, *here, plan.foe.id)),
-                     ("outing", "bounties", (game, *here)), ("outing", "seal", (game, *here)), ("outing", "guard", (game, *here))]
-    lines = [line for line in got if line in ("outing/bounties", "outing/seal", "outing/guard")]
-    assert lines == ["outing/bounties", "outing/seal", "outing/guard"]
+                     ("outing", "bounties", (game, *here)), ("outing", "seal", (game, *here)), ("outing", "guard", (game, *here)),
+                     ("outing", "yiwen", (game, *here))]
+    lines = [line for line in got if line in ("outing/bounties", "outing/seal", "outing/guard", "outing/yiwen")]
+    assert lines == ["outing/bounties", "outing/seal", "outing/guard", "outing/yiwen"]
 
 
 def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
@@ -1103,7 +1104,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
         # 馬的來路：奪馬、論功賜馬（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
         "horses": [("win", "horses"), ("showdown_pay", "horses")],
         # 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）
-        "guard": [("outing", "guard"), ("explore", "guard")]}
+        "guard": [("outing", "guard"), ("explore", "guard")],
+        # 異聞：探索撞見一則怪事（企劃者 2026-11-21「五處都可以」）
+        "yiwen": [("outing", "yiwen")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
