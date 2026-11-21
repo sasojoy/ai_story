@@ -27,6 +27,14 @@ def test_registered_and_off_gives_nothing(game):
     assert game.state.player.yiwen is None
 
 
+def test_off_main_and_status_never_mention_it(game):
+    """關著：/api/main 的那一份（server.main_view）與狀態列一個字都不提異聞（逐位元組比對是波末閘門的 compare --new yiwen）。"""
+    import server
+
+    assert "yiwen" not in json.dumps(server.main_view(game), ensure_ascii=False)
+    assert "yiwen" not in json.dumps(game.status_data(), ensure_ascii=False)
+
+
 def test_step_op_off_does_nothing(game):
     from tianxia.features.yiwen import actions
 

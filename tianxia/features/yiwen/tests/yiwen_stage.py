@@ -3,3 +3,8 @@
 
 def stages(game):
     yield "平常"
+    from yiwen_kit import claim, turn_on  # noqa: PLC0415
+
+    turn_on(game)
+    claim(game, "fog_figure")  # 撞見了一則：選單接管（yiwen:open、yiwen:drop）
+    yield "撞見"
