@@ -12,8 +12,8 @@ TAIPEI = dt.timezone(dt.timedelta(hours=8))
 
 # 這個帳號此刻的樣子（/api/terms 的 need）
 NONE = ""  # 不用問
-MUST = "must"  # 沒同意過任何一版：按了同意才進得去
-ASK = "ask"  # 同意過舊版、新版還在考慮期：跳改版頁，可以先關掉（過了考慮期視為接受）
+MUST = "must"  # 沒同意過任何一版、或換版後 update_must 開著同意過舊版：按了同意才進得去
+ASK = "ask"  # update_must 關著、同意過舊版、新版還在考慮期：跳改版頁，可以先關掉（過了考慮期視為接受）
 
 
 @lru_cache(maxsize=4)
@@ -38,11 +38,12 @@ def published_at(data: dict) -> float:
     return dt.datetime(day.year, day.month, day.day, tzinfo=TAIPEI).timestamp()
 
 
-def need(agreed: str | None, data: dict, now: float, grace_days: int) -> str:
-    """agreed：這個帳號最後同意的版本（沒有就是 None）。"""
+def need(agreed: str | None, data: dict, now: float, grace_days: int, update_must: bool = False) -> str:
+    """agreed：這個帳號最後同意的版本（沒有就是 None）。update_must（第 243 批，Config.terms.update_must；
+    預設 False＝照舊的考慮期，只有 routes.status 明傳設定）：開著時同意過別版的人跟沒同意過的一樣回 MUST。"""
     if agreed == data["version"]:
         return NONE
-    if agreed is None:
+    if agreed is None or update_must:  # 寫成一處：charter 軌 selftest 改的就是這一句（register_track 的目標句要剛好一處）
         return MUST
     return ASK if now < published_at(data) + grace_days * 86400 else NONE
 

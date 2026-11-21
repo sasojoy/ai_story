@@ -43,8 +43,10 @@ def status(shell, account_key: str) -> dict:
     data = rules.load()
     cfg = shell.CONTENT.config.terms
     agreed = consent_store(shell).latest(account_key)
-    need = rules.need(agreed, data, shell.time.time(), cfg.grace_days) if cfg.enabled else rules.NONE
+    need = rules.need(agreed, data, shell.time.time(), cfg.grace_days, cfg.update_must) if cfg.enabled else rules.NONE
     out = {"need": need, "version": data["version"], "email": data["company"]["email"]}
+    if need == rules.MUST and agreed is not None:
+        out["update"] = True  # 第 243 批：同意過別版（換版號之後），網頁開頭換成改版那一句、同意記 source=update
     if need:
         out["summary"] = data["change_summary"]
         out["deadline"] = None if need == rules.MUST else rules.dt.datetime.fromtimestamp(
