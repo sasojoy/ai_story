@@ -43,9 +43,7 @@ def need(agreed: str | None, data: dict, now: float, grace_days: int, update_mus
     預設 False＝照舊的考慮期，只有 routes.status 明傳設定）：開著時同意過別版的人跟沒同意過的一樣回 MUST。"""
     if agreed == data["version"]:
         return NONE
-    if agreed is None:
-        return MUST
-    if update_must:
+    if agreed is None or update_must:  # 寫成一處：charter 軌 selftest 改的就是這一句（register_track 的目標句要剛好一處）
         return MUST
     return ASK if now < published_at(data) + grace_days * 86400 else NONE
 
