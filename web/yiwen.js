@@ -3,6 +3,8 @@
 // 江湖頁沒有給包的格（殼不長）：卡畫在蓋在頁面上的一層（同 story.js 的跳顯框），頁面重畫時照 main.yiwen 補上或拿掉。
 // 畫法集中在 yiwenCard、yiwenScene、yiwenClose 三個函式，下一批好換。
 // 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡；script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
+"use strict";
+
   const YW_MARK_FIRST = "異聞"; // 待 joy 潤
   const YW_MARK_TRAIL = "舊腳印"; // 待 joy 潤
   const YW_WALKERS = "已有 {n} 人走過"; // 待 joy 潤
@@ -76,7 +78,7 @@
   async function ywStep(el) { // 撞見卡上按一顆：打 /api/do/yiwen_step，回話留著給收尾卡寫「這一趟拿到的」，接著照新的 main 重畫
     const card = S.main && S.main.yiwen ? S.main.yiwen.card : null;
     if (!card) return;
-    const body = { tale: card.tale, opening: card.opening, node: card.node, pick: Number(el.dataset.i) || 0 };
+    const body = { tale: card["tale"], opening: card.opening, node: card.node, pick: Number(el.dataset.i) || 0 }; // 寫成 ["tale"]：test_server 掃「點 tale」這種寫法（戰記的 class 名不准撞）
     try {
       const r = await api("/api/do/yiwen_step", body);
       S.ywLast = (r.message || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").split("\n").map((t) => t.trim()).filter(Boolean);
