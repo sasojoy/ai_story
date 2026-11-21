@@ -194,3 +194,30 @@ def test_layer_without_update_flag_is_unchanged_and_update_swaps_only_the_lead()
     assert out["update"] == _layer_html(UPDATE_LEAD, False, NO_MUST, True)  # 換版後的 must：只換開頭那一句、沒有稍後再看
     assert 'data-terms="later"' not in out["update"]
     assert out["source"] == ["gate", "update", "update"]  # 稽核分得出改版時同意的
+
+
+DEFAULT_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+const kit = new Function("document", "fetch", tSrc + "\nreturn { termsLayerHtml, termsSource };")({ querySelectorAll: () => [] }, () => Promise.reject(new Error("x")));
+finish({ html: kit.termsLayerHtml(input.status), source: kit.termsSource(input.status) });
+"""
+
+
+def test_default_settings_show_an_old_consent_the_ask_layer_with_later(tmp_path):
+    """第 246 批：預設設定（update_must 關）下，同意過舊版的人在考慮期內看到 ask 那一層：有「稍後再看」、開頭寫期限。"""
+    from types import SimpleNamespace
+
+    from tianxia.core.tuning.terms import TermsTuning
+    from tianxia.features.terms import routes as terms_routes
+    from tianxia.features.terms import rules
+
+    data = rules.load()
+    db = tmp_path / "t.db"
+    shell = SimpleNamespace(CONTENT=SimpleNamespace(config=SimpleNamespace(terms=TermsTuning(enabled=True))),
+                            default_path=lambda: db, time=SimpleNamespace(time=lambda: rules.published_at(data) + 86400))
+    terms_routes.consent_store(shell).record("ab", "2026-11-v1", "register", 1.0)
+    status = terms_routes.status(shell, "ab")
+    assert status["need"] == "ask" and "update" not in status
+    out = run(DEFAULT_DRIVER, {"terms": str(WEB / "terms.js"), "status": status})
+    assert 'data-terms="later"' in out["html"] and status["deadline"] in out["html"]
+    assert UPDATE_LEAD not in out["html"] and out["source"] == "update"

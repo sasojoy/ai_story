@@ -87,8 +87,9 @@ def test_api_asks_until_agreed_then_stays_quiet(client):
     assert terms_routes.consent_store(server).history("terms_01")[0]["source"] == "gate"
 
 
-def test_api_an_old_consent_must_agree_again_with_source_update(client):
-    """第 243 批：同意過舊版、update_must 開著（預設）→ must＋update、有 summary、沒有期限；同意後記 update。"""
+def test_api_an_old_consent_must_agree_again_with_source_update(client, monkeypatch):
+    """第 243 批：同意過舊版、update_must 開著（第 246 批起要明設，預設關）→ must＋update、有 summary、沒有期限；同意後記 update。"""
+    monkeypatch.setattr(server.CONTENT.config.terms, "update_must", True)
     terms_routes.consent_store(server).record("terms_01", "2026-11-v1", "register", 1.0)
     got = client.get("/api/terms").json()
     assert got["need"] == "must" and got["update"] is True and got["summary"] and got["deadline"] is None
@@ -98,7 +99,7 @@ def test_api_an_old_consent_must_agree_again_with_source_update(client):
 
 
 def test_api_update_must_off_keeps_the_grace_days(client, monkeypatch):
-    """update_must 關著（緊急開關）：跟第 243 批以前一樣，ask＋期限、不帶 update。"""
+    """update_must 關著（第 246 批起是預設）：跟第 243 批以前一樣，ask＋期限、不帶 update。"""
     monkeypatch.setattr(server.CONTENT.config.terms, "update_must", False)
     terms_routes.consent_store(server).record("terms_01", "2026-11-v1", "register", 1.0)
     data = rules.load()
@@ -110,6 +111,23 @@ def test_api_update_must_off_keeps_the_grace_days(client, monkeypatch):
     assert got["need"] == "ask" and got["summary"] and got["deadline"] and "update" not in got
     late = terms_routes.status(shell_at(rules.published_at(data) + 99 * DAY), "terms_01")
     assert late == {"need": "", "version": data["version"], "email": data["company"]["email"]}
+
+
+def test_update_must_defaults_to_the_grace_period(client):
+    """第 246 批（企劃者 2026-11-21 下午「這次用 15 天考慮期」）：config.json 那一層與 season21、week7 都不強制；
+    預設下同意過 v1、現行 v2、考慮期內 → ask、有期限、不帶 update（跟使用條款第九條一致）。"""
+    from conftest import real_content
+
+    for profile in (None, "season21", "week7"):
+        assert real_content(profile).config.terms.update_must is False, profile
+    assert server.CONTENT.config.terms.update_must is False
+    data = rules.load()
+    assert data["version"] != "2026-11-v1"
+    terms_routes.consent_store(server).record("terms_01", "2026-11-v1", "register", 1.0)
+    shell = SimpleNamespace(CONTENT=server.CONTENT, default_path=server.default_path,
+                            time=SimpleNamespace(time=lambda: rules.published_at(data) + DAY))
+    got = terms_routes.status(shell, "terms_01")
+    assert got["need"] == "ask" and got["deadline"] and got["summary"] and "update" not in got
 
 
 def test_switch_off_never_asks(client, monkeypatch):
