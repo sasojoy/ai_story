@@ -1,6 +1,7 @@
 """same_behavior 一軌一檔：yiwen（這一檔登記 yiwen）。"""
 from __future__ import annotations
 
+from sb import harness
 from sb.harness import ADMIN, emit, register_track
 from sb.tracks.peers import PeersScenario
 
@@ -21,6 +22,11 @@ class YiwenScenario(PeersScenario):
     NEWBIE = "遠客"
     PHASES_FIRST = ["setup", "seat", "closed", "meet", "walk"]
     PHASES_SECOND = ["resume", "trail", "season"]
+
+    def live(self) -> bool:
+        """這一包進了 base 才比（波 AF 修正）：base 還沒有 Config.yiwen（新包那一波），或這一次是 compare --new yiwen（head 那一邊），
+        兩邊都只寫同一行、不走異聞的段，免得 base 那一邊 AttributeError、head 那一邊整段都是新包的差異。selftest 與之後的波照整段跑。"""
+        return hasattr(self.c.config, "yiwen") and "yiwen" not in harness.NEW["packages"]
 
     def switch(self, on: bool) -> None:
         t = self.c.config.yiwen
@@ -81,24 +87,33 @@ class YiwenScenario(PeersScenario):
             self.main(who)
 
     def closed(self) -> None:
+        if not self.live():
+            emit("異聞這一軌", "這一包還沒進 base（或 --new yiwen）：異聞的段不比")
+            return
         self.switch(False)
         self.explore(self.LEAD)
         emit("關著按 yiwen_step", self.do(self.LEAD, "yiwen_step", {"tale": 1, "opening": "fog_figure", "node": 0, "pick": 0}))
         self.yiwen_of(self.LEAD, "關著")
 
     def meet(self) -> None:
+        if not self.live():
+            return
         self.switch(True)
         self.c.config.guard.enabled = False  # 親衛隊長第一段就撞見那個孩子（接管選單）：這一軌只看異聞
         self.explore(self.LEAD)
         self.yiwen_of(self.LEAD, "撞見")
 
     def walk(self) -> None:
+        if not self.live():
+            return
         self.steps(self.LEAD)
         self.yiwen_of(self.LEAD, "走完")
         emit("收起", self.choose(self.LEAD, "yiwen:drop"))
         self.yiwen_of(self.LEAD, "收起")
 
     def resume(self) -> None:
+        if not self.live():
+            return
         # 後半是另一個行程：記憶體裡的設定先照前半收尾的樣子擺回去（不打請求），再無條件重新登入
         self.c.config.yiwen.enabled = True
         self.c.config.yiwen.discover_chance = 0.0
@@ -107,6 +122,8 @@ class YiwenScenario(PeersScenario):
         self.login_all()
 
     def trail(self) -> None:
+        if not self.live():
+            return
         self.explore(self.TRAIL)
         self.yiwen_of(self.TRAIL, "重走")
         card = self.card(self.TRAIL)
@@ -116,6 +133,8 @@ class YiwenScenario(PeersScenario):
         self.yiwen_of(self.TRAIL, "重走完")
 
     def season(self) -> None:
+        if not self.live():
+            return
         self.do(ADMIN, "end_season")
         self.main(self.TRAIL)
         self.do(ADMIN, "next_season")
