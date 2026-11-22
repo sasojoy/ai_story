@@ -280,6 +280,16 @@ def test_c_refuses_after_claim_released(on, monkeypatch):
     assert (w is None or w.opening == "") and store_of(on).tale_by_opening(season, OPENING) is None
 
 
+def test_no_model_screens_through_and_writes_the_stand_in(on):
+    """先對程式確認的第 2、4 條：沒有 client 時 screen_text 回空字串（照送）、佇列關著 model_call 直接叫 job；
+    write_scene 拿不到 client 回 None，C 存替身（自己說的那一句照樣記成 typed 的節點）。"""
+    assert server.QUEUE is None and on.client is None
+    got = _step(on, "typed", "一隻會背兵法的鵝")
+    n = _nodes(on)[0]
+    assert n["typed"] == 1 and n["fallback"] == 1 and n["pick"] == "一隻會背兵法的鵝" and n["text"][0] in got
+    assert actions.card(on)["scenes"][0]["zhupi_text"] == actions.SAID.format(words="一隻會背兵法的鵝")
+
+
 def test_off_op_answers_empty_without_touching_anything(on, monkeypatch):
     calls = _writes(monkeypatch, lambda: pytest.fail("關著不該叫"))
     monkeypatch.setattr(server.CONTENT.config.yiwen, "enabled", False)
