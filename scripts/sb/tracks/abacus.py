@@ -175,6 +175,7 @@ class AbacusScenario(Scenario):
         """停在寫到一半：硯田生買下一件、回應沒收到（後半新程式收到同一個編號）；易安客手上一張舊程式賣的帖；硯田生的月卡明天的份還沒領；
         遲歸人帳號角色都建好了、還沒輪到過自己（封測發放由新程式發）。"""
         from tianxia.accounts import AccountStore
+        from tianxia.core import terms_base
         from tianxia.engine import Game
 
         self.buy(self.BUYER, "inscribe_ink", "abacus-h-1")
@@ -186,6 +187,9 @@ class AbacusScenario(Scenario):
             game = Game.new(self.c, self.LATE, world=self.world)
             self.chars.save(game.state)
             store.bind_character(self.login_of(self.LATE), self.LATE)
+        # 條款第 249 批：直接建的一般玩家帳號照註冊頁補記一筆同意（不然 season21、week7 會被伺服器擋）；條款關著 record 什麼都不做
+        if terms_base._HOOK is not None:
+            terms_base.record(self.c, self.login_of(self.LATE), terms_base._HOOK.version(), "register")
         self.clients[self.LATE] = self.TestClient(self.server.app)
         emit("遲歸人 還沒輪到過自己", [p.item for p in self.purchases(self.LATE)])
 

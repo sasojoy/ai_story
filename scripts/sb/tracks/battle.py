@@ -966,6 +966,7 @@ class BattleScenario(Scenario):
         """一位新人直接建進資料庫（同假人那一段：Game.new graduated、開局待選的事件選掉、過了新手期；兩軍的人直接記陣營）、綁一個帳號，
         再照 API 登入——一位只花兩步，集結那 30 分鐘才放得下第 7 批的幾段（照 API 註冊、略過引導、投靠一位要十來步）。"""
         from tianxia.accounts import AccountStore
+        from tianxia.core import terms_base
         from tianxia.engine import Game
 
         self.begin()
@@ -988,6 +989,9 @@ class BattleScenario(Scenario):
             self.chars.save(g.state)
             store.register(self.login_of(who), self.passwords[who])
             store.bind_character(self.login_of(who), who)
+        # 條款第 249 批：直接建的一般玩家帳號照註冊頁補記一筆同意（不然 season21、week7 會被伺服器擋）；條款關著 record 什麼都不做
+        if terms_base._HOOK is not None:
+            terms_base.record(self.c, self.login_of(who), terms_base._HOOK.version(), "register")
         emit(f"{who} 建進資料庫", {"faction": p.faction, "location": p.location})
         self.clients[who] = self.TestClient(self.server.app)
         self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})

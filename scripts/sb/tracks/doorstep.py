@@ -110,6 +110,7 @@ class DoorstepScenario(Scenario):
         self.call(self.NEW, "POST", "/api/do/hints_off", {})
 
 
-# 改一個字（selftest）：旁檔查不到任何人同意過（人人 need 是 must），season21 again 那一段褚未署按過同意的回應與之後的 GET /api/terms 抓到
-register_track("doorstep", DoorstepScenario, (("tianxia/features/terms/store.py",), ('        return None if row is None else row["version"]', "        return None")),
+# 改一個字（selftest）：伺服器端的擋永遠放行（gate_problem 不回那一句），season21 open 段褚未署那一輪寫的請求從 403 變 200 抓到。
+# 第一段原本改的是 store.py 的 latest()（人人 must）：第二段接上伺服器端的擋之後，范新簽建角色那一下的開季卡被擋、情境跑不完，改成這一句（第 249 批第二段）
+register_track("doorstep", DoorstepScenario, (("tianxia/core/terms_base.py",), ("    return GATE_NEED if must else None", "    return None")),
                "season21", covers=("terms",))
