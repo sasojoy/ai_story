@@ -495,6 +495,15 @@ def red_names(row: dict) -> str:
     return f" red {where}{both} A {where}{a} B {where}{b}"
 
 
+def fingerprint_note(fp) -> str:
+    """For a REAL line: did the two walks of that round leave the same DOM and styles? fp is summary["fingerprint"][round]; a replay row has none."""
+    if not fp or not fp.get("A") or not fp.get("B"):
+        return ""
+    keys = sorted(set(fp["A"]) | set(fp["B"]))
+    differ = [k for k in keys if fp["A"].get(k) != fp["B"].get(k)]
+    return " fingerprint differs: " + ",".join(differ) if differ else " fingerprint same"
+
+
 def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     if summary["green"] and not summary["rounds"]:
         lines = [f"webqa {summary['base']} -> {summary['head']}: NOTHING TO WALK (exit 0): {summary['rounds_why']}"]
@@ -512,7 +521,7 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     for row in summary.get("new_css", []):
         lines.append(f"NEW {row['round']} {row['sheet']} only A {json.dumps(row['only A'], ensure_ascii=False)[:300]} only B {json.dumps(row['only B'], ensure_ascii=False)[:300]}")
     for row in summary["real"]:
-        lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}{red_names(row)}")
+        lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}{red_names(row)}{fingerprint_note(summary['fingerprint'].get(row['round']))}")
     for row in summary["expected"]:
         lines.append(f"EXPECTED {row['round']}:{row['scene']} {row['class']} because {row['reason']}")
     lines.append("")

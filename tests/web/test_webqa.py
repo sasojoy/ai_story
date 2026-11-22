@@ -73,6 +73,17 @@ def test_only_a_picture_with_nothing_else_different_is_drawn_again(noise):
     assert not noise.render_variants([], ["y1"])  # 有一邊沒重畫成：不算雜訊
 
 
+def test_a_real_line_says_whether_the_two_walks_left_the_same_dom_and_styles():
+    # 第 254 批：AI 波 c 回合 028 那一張 REAL，PM 要自己翻 summary.json 的 fingerprint 才知道兩邊 DOM、樣式一樣
+    gate = _load("gate")
+    same = {"scenes": "s", "dom": "d", "style": "y", "main": "m"}
+    assert gate.fingerprint_note({"A": same, "B": dict(same)}) == " fingerprint same"
+    assert gate.fingerprint_note({"A": same, "B": {**same, "dom": "d2"}}) == " fingerprint differs: dom"
+    assert gate.fingerprint_note({"A": same, "B": {**same, "style": "y2", "dom": "d2"}}) == " fingerprint differs: dom,style"
+    assert gate.fingerprint_note(None) == ""  # 重放的列沒有指紋
+    assert gate.fingerprint_note({"A": same, "B": None}) == ""
+
+
 def test_the_scrollbar_only_at_desktop_widths(noise):
     assert noise.pixel_class(210000, 200, view="1280", sw_a=1265, sw_b=1280) == "gutter"  # cl_c08
     assert noise.pixel_class(210000, 200, view="375-light", sw_a=1265, sw_b=1280) is None
