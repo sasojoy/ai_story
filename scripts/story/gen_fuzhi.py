@@ -808,28 +808,28 @@ GOURD = "阿蒲的小葫蘆"
 OWES = "zhongjing_owes"  # 仲景欠你一次：這一季醫館療傷打折（tianxia/clinic.py）
 endings = [
     {
-        "id": "tang", "title": "湯藥", "text": P(TANG_NOW, TANG_TAIL), "annal": annal(END_TANG), "image": "stories/fuzhi_notes",
+        "id": "tang", "title": "一夜汗出", "text": P(TANG_NOW, TANG_TAIL), "annal": annal(END_TANG), "image": "stories/fuzhi_notes",
         "effect": {"stats": {"xinde": 40, "fame": 2, "good": 3}, "flags_add": [OWES]}, "keepsakes": ["仲景的方子"],
         "after": TANG_AFTER,
     },
     {
-        "id": "tang_she", "title": "湯藥", "text": P(TANG_NOW, "**其父親手餵之。**", TANG_TAIL), "annal": annal(END_SHE),
+        "id": "tang_she", "title": "一夜汗出", "text": P(TANG_NOW, "**其父親手餵之。**", TANG_TAIL), "annal": annal(END_SHE),
         "image": "stories/fuzhi_notes",
         "effect": {"stats": {"xinde": 40, "fame": 3, "good": 3}, "flags_add": [OWES]}, "keepsakes": ["仲景的方子"],
         "after": TANG_AFTER,
     },
     {
-        "id": "fu", "title": "符水", "text": FU_NOW, "annal": annal(END_FU), "image": "stories/fuzhi_ashes",
+        "id": "fu", "title": "符水涼了", "text": FU_NOW, "annal": annal(END_FU), "image": "stories/fuzhi_ashes",
         "effect": {"stats": {"xinde": 40, "fame": 1, "good": 2}}, "keepsakes": [GOURD],
         "after": FU_AFTER,
     },
     {
-        "id": "he", "title": "合碗", "text": HE_NOW, "annal": annal(END_HE), "image": "stories/fuzhi_notes",
+        "id": "he", "title": "不知何者愈之", "text": HE_NOW, "annal": annal(END_HE), "image": "stories/fuzhi_notes",
         "effect": {"stats": {"xinde": 40, "fame": 1, "good": 3}}, "keepsakes": ["一張寫滿「亦飲符」的紙"],
         "after": HE_AFTER,
     },
     {
-        "id": "late", "title": "遲", "failed": True, "text": LATE_NOW, "annal": annal(END_LATE), "image": "stories/fuzhi_late",
+        "id": "late", "title": "兩碗都涼了", "failed": True, "text": LATE_NOW, "annal": annal(END_LATE), "image": "stories/fuzhi_late",
         "effect": {"stats": {"xinde": 40, "fame": 1, "good": 1}}, "keepsakes": [GOURD],
         "after": LATE_AFTER,
     },

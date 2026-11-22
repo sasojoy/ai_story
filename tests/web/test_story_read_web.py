@@ -21,7 +21,7 @@ ENDING = "杜衡走了以後，就沒有再回來。"
 NOW = ('<div class="tx-now"><div class="tx-when">剛剛　第 6 天 09:46</div><div class="tx-head"><span class="tx-title">兩張矮几・把她的原稿交給杜衡</span></div>'
        f'<div class="tx-line">{RESULT}<br><br>杜衡接過去，解開青繩，就著燈讀。</div><div class="tx-line">{ENDING}<br><br>潁川的兵發了。</div></div>')
 CARD = {"line": "duruo", "kind": "end", "sort": "奇事", "title": "代筆", "text": f"<p>{ENDING}</p>\n<p>潁川的兵發了。</p>", "src": None,
-        "ending": "給哥哥", "failed": False}
+        "ending": "他讀過了", "failed": False}
 CLICK = ("await T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: '%s' }, remove() {}, "
          "classList: { contains: () => false } }) } });")
 

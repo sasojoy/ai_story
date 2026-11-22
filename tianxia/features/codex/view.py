@@ -84,7 +84,7 @@ def _next(ctx, progress) -> dict | None:
     return {"what": what, "where": where, "loc": loc, "when": when, "left": left, "hint": bool(stage.hint), "ready": when == NOW}
 
 
-LOST = "當時的選擇沒有留下"  # 待 joy 潤：江湖錄打開之前走過的那一幕
+LOST = "那時怎麼選的，已經記不清了"  # 待 joy 潤：江湖錄打開之前走過的那一幕
 
 
 def _scene_rows(ctx, b, season: int, line_id: str, line=None, progress=None) -> list[dict]:

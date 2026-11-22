@@ -59,7 +59,7 @@ def test_the_codex_book_four_kinds(walked):
     m = server.main_view(walked)
     page = json.loads(json.dumps(view.page(walked)))
     base = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15}
-    for cat, word in (("people", "位見過"), ("things", "寶物"), ("gods", "種神品"), ("ends", "種收法")):
+    for cat, word in (("people", "位見過"), ("things", "寶物"), ("gods", "種神品"), ("ends", "種結局")):
         html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
         assert word in html and 'data-act="cx-cat"' in html, cat
 

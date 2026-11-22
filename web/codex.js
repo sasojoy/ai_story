@@ -12,13 +12,13 @@
   const CX_ON = "正在走";
   const CX_DONE = "已了";
   const CX_PAST = "往季";
-  const CX_GHOST = "還沒遇上";
+  const CX_GHOST = "還沒遇上", CX_GHOST_ONE = "未遇";
   const CX_NEXT = "下一步";
   const CX_SCENES = "走過的幕";
   const CX_ENDS = "結局";
-  // 還沒走到的收法：一張暈了墨、還沒題字的箋，不是空格加問號（Joy 2026-11-22「直接空白然後給個?有點太隨便了」）
-  const CX_END_OFF = "未竟", CX_END_OFF_CAP = "另一種收法", CX_END_OFF_ARIA = "還沒走到的收法"; // 待 joy 潤
-  const CX_GHOST_END = "一樁還沒遇上的事"; // 待 joy 潤
+  // 還沒見到的結局：一張暈了墨、還沒題字的箋，不是空格加問號（Joy 2026-11-22「直接空白然後給個?有點太隨便了」）
+  const CX_END_OFF = "未見", CX_END_OFF_CAP = "另一個結局", CX_END_OFF_ARIA = "還沒見到的結局"; // 待 joy 潤
+  const CX_GHOST_END = "還有 {n} 樁奇事，你還沒遇上。"; // 待 joy 潤
   const CX_REREAD = "重讀";
   const CX_MAP = "在輿圖上看";
   const CX_GO = "去{place}";
@@ -31,7 +31,7 @@
   const CX_SEEN = "位見過";
   const CX_HAVE = "件拿過";
   const CX_GODS = "種神品";
-  const CX_ENDS_N = "種收法";
+  const CX_ENDS_N = "種結局";
   const CX_SEAL = { 奇事: "奇事", 主線: "主線" };
 
   const cxDot = () => { const c = S.main && S.main.codex; return !!c && !!(c.q || c.p || c.t || c.g || c.e); };
@@ -75,7 +75,7 @@
   };
 
   function cxRow(q) {
-    if (q.state === "ghost") return `<div class="cx-ghost"><b>？</b><small>${esc(q.where || "")}</small></div>`; // 還沒遇上：剪影＋地名
+    if (q.state === "ghost") return `<div class="cx-ghost"><b>${CX_GHOST_ONE}</b><small>${esc(q.where || "")}</small></div>`; // 還沒遇上：剪影＋地名
     const sub = q.state === "on" && q.next
       ? `<small class="nx"><b>${esc(q.next.what)}</b></small><small class="lf">${esc([q.next.ready ? "" : q.next.when, q.next.left].filter(Boolean).join("，"))}${cxDots(q)}</small>`
       : `<small class="nx">${q.ending ? `${esc(q.ending.title)}` : ""}　${cxSeal(q.ending && q.ending.failed ? "未成" : "入傳")}</small>`;
@@ -163,7 +163,7 @@
   function cxEndings(d) {
     const met = d.rows.filter((r) => r.met), not = d.rows.filter((r) => !r.met);
     return cxCount(d.got, d.all, CX_ENDS_N) + met.map((r) => `<h4 class="cx-sec">${esc(r.title)}${dotHtml(r.dot)}</h4>${cxEnds({ line: r.line, ends: r.ends })}`).join("")
-      + (not.length ? `<h4 class="cx-sec">${CX_GHOST}</h4>${not.map((r) => `<div class="cx-endrow"><b>${CX_GHOST_END}</b><span class="cx-pip">${r.ends.map(() => "<i></i>").join("")}</span></div>`).join("")}` : "");
+      + (not.length ? `<h4 class="cx-sec">${CX_GHOST}</h4><p class="cx-endmore">${CX_GHOST_END.replace("{n}", not.length)}</p>` : "");
   }
 
   // 俠客頁「江湖錄」那一頁（web/cultivation.js 叫）：main.codex 沒有（開關關著）是空字串、分頁也不加

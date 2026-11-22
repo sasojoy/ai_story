@@ -122,12 +122,13 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .rn-lbl { font-size: 12px; color: var(--ink-2); padding-top: 1px; }
 .rn-lbl b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .rn-dots { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: relative; }
-.rn-dots::before { content: ""; position: absolute; left: 12%; right: 12%; top: 6px; height: 2px; background: var(--line); }
-.rn-dots li { position: relative; display: grid; justify-items: center; gap: 2px; cursor: pointer; }
-.rn-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); }
-.rn-dots li.have i { border-color: currentColor; background: currentColor; }
-.rn-dots li.cur i { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent); }
-.rn-dots li.pick i { outline: 2px solid currentColor; outline-offset: 2px; }
+/* 一段一截的條（不用小圓圈，Joy 2026-11-22）：到過的上色、現在這一段粗一點、點到的那一段底下一道線 */
+.rn-dots { gap: 3px; }
+.rn-dots li { position: relative; display: grid; justify-items: stretch; text-align: center; gap: 3px; padding-top: 2px; cursor: pointer; }
+.rn-dots i { height: 5px; border-radius: 2px; background: var(--line); }
+.rn-dots li.have i { background: currentColor; }
+.rn-dots li.cur i { height: 7px; margin-top: -1px; margin-bottom: -1px; }
+.rn-dots li.pick small { text-decoration: underline; text-underline-offset: 3px; }
 .rn-dots small { font-size: 10px; color: var(--ink-2); white-space: nowrap; }
 .rn-dots li.cur small, .rn-dots li.pick small { color: currentColor; font-weight: 700; }
 .rn-note { margin: 2px 0 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
