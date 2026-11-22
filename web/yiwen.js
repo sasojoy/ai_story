@@ -256,10 +256,11 @@
     new MutationObserver(() => yiwenSync()).observe(document.body, { childList: true, subtree: true }); // 頁面重畫時補上或拿掉那一頁與細條（一樣就不動，不會自己叫自己）
   }
   if (typeof document !== "undefined" && document.addEventListener) { // 選單上的「〈標題〉」（yiwen:open，殼的 choose）：收起的那一頁叫回來；只清旗子，送選擇照舊走殼
-    document.addEventListener("click", (ev) => {
+    // 晚一拍才登記（殼 app.js 的 click 先登記、排第一個）：capture 照樣比殼先跑，網頁測試照舊拿 click[0] 當殼的那一個
+    Promise.resolve().then(() => document.addEventListener("click", (ev) => {
       const t = ev.target && ev.target.closest ? ev.target.closest('[data-id="yiwen:open"]') : null;
       if (t) { S.ywHide = false; S.ywSig = ""; }
-    }, true);
+    }, true));
   }
 
   async function yiwenClick(act, el, ev) {
