@@ -16,6 +16,9 @@
   const CX_NEXT = "下一步";
   const CX_SCENES = "走過的幕";
   const CX_ENDS = "結局";
+  // 還沒走到的收法：一張暈了墨、還沒題字的箋，不是空格加問號（Joy 2026-11-22「直接空白然後給個?有點太隨便了」）
+  const CX_END_OFF = "未竟", CX_END_OFF_CAP = "另一種收法", CX_END_OFF_ARIA = "還沒走到的收法"; // 待 joy 潤
+  const CX_GHOST_END = "一樁還沒遇上的事"; // 待 joy 潤
   const CX_REREAD = "重讀";
   const CX_MAP = "在輿圖上看";
   const CX_GO = "去{place}";
@@ -90,7 +93,7 @@
   function cxEnds(q) {
     return `<div class="cx-ends">${q.ends.map((e) => (e.got
       ? `<button class="cx-end" data-act="cx-end" data-line="${esc(q.line)}" data-end="${esc(e.id)}">${cxImg(e.src)}<span>${esc(e.title)}</span></button>`
-      : `<div class="cx-end off"><span>？</span></div>`)).join("")}</div>`;
+      : `<div class="cx-end off" role="img" aria-label="${CX_END_OFF_ARIA}"><em aria-hidden="true">${[...CX_END_OFF].map((ch) => `<i>${ch}</i>`).join("")}</em><span>${CX_END_OFF_CAP}</span></div>`)).join("")}</div>`;
   }
 
   function cxQuest(q) {
@@ -160,7 +163,7 @@
   function cxEndings(d) {
     const met = d.rows.filter((r) => r.met), not = d.rows.filter((r) => !r.met);
     return cxCount(d.got, d.all, CX_ENDS_N) + met.map((r) => `<h4 class="cx-sec">${esc(r.title)}${dotHtml(r.dot)}</h4>${cxEnds({ line: r.line, ends: r.ends })}`).join("")
-      + (not.length ? `<h4 class="cx-sec">${CX_GHOST}</h4>${not.map((r) => `<div class="cx-endrow"><b>${esc(r.title)}</b><span class="cx-pip">${r.ends.map(() => "<i></i>").join("")}</span></div>`).join("")}` : "");
+      + (not.length ? `<h4 class="cx-sec">${CX_GHOST}</h4>${not.map((r) => `<div class="cx-endrow"><b>${CX_GHOST_END}</b><span class="cx-pip">${r.ends.map(() => "<i></i>").join("")}</span></div>`).join("")}` : "");
   }
 
   // 俠客頁「江湖錄」那一頁（web/cultivation.js 叫）：main.codex 沒有（開關關著）是空字串、分頁也不加
