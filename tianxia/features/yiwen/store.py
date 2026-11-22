@@ -252,6 +252,13 @@ class YiwenStore:
                 out[nid] = out.get(nid, 0) + 1
         return out
 
+    # ── 禁寫（第 252 批先接讀法；寫的管理者動作是異聞四）──
+
+    def muted(self, account: str, now: float) -> bool:
+        """這個鍵現在被禁寫（mutes.until 在 now 之後）：自己說灰掉、猜法照走。只讀；檔不在當成沒有。now 是季鐘。"""
+        row = self._one("SELECT until FROM mutes WHERE account = ?", (account,))
+        return row is not None and float(row["until"]) > float(now)
+
     # ── 易名帖 ──
 
     def rename(self, old_key: str, new_key: str) -> None:
