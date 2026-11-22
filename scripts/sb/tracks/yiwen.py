@@ -14,13 +14,17 @@ class YiwenScenario(PeersScenario):
     開著段（記憶體裡打開、這一季補蓋章、撞見機率調成 1）：甲在野地探索撞見、撞見卡、三步都按第一顆（每一幕是替身）、收起。
     後半第一件事無條件重新登入、再打開：乙在同一處重走（重走機率調成 1）、三步重放（回聲、第一步的朱批、同一個圓章）、別人沒走過的那一顆鎖著；
     收季、開下一季：眼前那一則清空、下一季照開關蓋章。
+    說書人段（第 252 批，前半最後一段 scribe）：記憶體裡把 writer.write_scene 換成回固定的一幕、server.screen_text 照字回 ok／bad（不連模型）；
+    丙在山地探索撞見另一句（全服每天的名額記憶體調成 2），第一步自己說一句審得過的（寫成模型那一幕）、第二步自己說一句審字擋的
+    （refuse_typed、tries 1、什麼都沒寫）、再按第一顆，第三步照走（收場）。
     這一軌走不到的：測試內容（test 設定）走舊探索，撞不到異聞（總計畫「對不上的」第 13 條）：那一種設定兩邊照樣一樣；
-    模型（異聞二）、岔路與道具（異聞三）、定論與逾時（異聞四）。"""
+    真的模型（假的換在 write_scene 那一格）、B 段排隊與 busy（佇列在測試裡守）、岔路與道具（異聞三）、定論與逾時（異聞四）。"""
 
-    LEAD, TRAIL = "霜橋客", "柳岸生"
-    PLAYERS = {LEAD: None, TRAIL: None}
+    LEAD, TRAIL, SCRIBE = "霜橋客", "柳岸生", "墨池翁"
+    PLAYERS = {LEAD: None, TRAIL: None, SCRIBE: None}
+    SAID_OK, SAID_BAD = "一個撐篙的啞巴", "罵他是個蠢貨"  # 說書人段：自己說的兩句（後一句假的審字判 bad）
     NEWBIE = "遠客"
-    PHASES_FIRST = ["setup", "seat", "closed", "meet", "walk"]
+    PHASES_FIRST = ["setup", "seat", "closed", "meet", "walk", "scribe"]
     PHASES_SECOND = ["resume", "trail", "season"]
 
     def live(self) -> bool:
@@ -110,6 +114,54 @@ class YiwenScenario(PeersScenario):
         self.yiwen_of(self.LEAD, "走完")
         emit("收起", self.choose(self.LEAD, "yiwen:drop"))
         self.yiwen_of(self.LEAD, "收起")
+
+    def place_of(self, kind: str) -> str:
+        from tianxia.core import explore_base
+
+        return next((lid for lid, loc in sorted(self.c.locations.items()) if explore_base.kind_of(self.c.config.jianfa, loc).kind == kind),
+                    self.hub())
+
+    def say(self, who: str, text: str) -> None:
+        card = self.card(who)
+        if card is None:
+            emit(f"{who} 沒有撞見卡", None)
+            return
+        body = {"tale": card["tale"], "opening": card["opening"], "node": card["node"], "pick": "typed", "text": text}
+        emit(f"{who} 自己說「{text}」", self.do(who, "yiwen_step", body))
+        emit(f"{who} 那一張卡", self.card(who))
+        w = self.chars.load(who).player.yiwen
+        emit(f"{who} 自己說之後 tries", w.tries if w is not None else None)
+
+    def scribe(self) -> None:
+        if not self.live():
+            return
+        import server
+        from tianxia.features.yiwen import rules, writer
+
+        def write_scene(client_for, request, tuning, left, content):  # 假的說書人：照第幾步回一幕合格的
+            text = ["你撥開蘆葦，看清那人果然如你所說，正朝你點頭。", "對岸一個漁婦探出頭來，朝你招手，像是有話要說。"]
+            if request.depth >= rules.DEPTH:
+                return rules.SceneDraft(text=text)
+            return rules.SceneDraft(text=text, options=["划過去問個明白", "瞪那漁婦一眼", "學那人點頭"],
+                                    ledger=["在場：你、那人、漁婦", "你手上：無", "未了：漁婦要說什麼"])
+
+        real = (writer.write_scene, server.screen_text, self.c.config.yiwen.free_daily_cap)
+        writer.write_scene = write_scene
+        server.screen_text = lambda game, text, kind: "bad" if "蠢" in text else "ok"
+        self.c.config.yiwen.free_daily_cap = 2
+        try:
+            here = self.place_of("hill")
+            self.place(self.SCRIBE, here)
+            self.edit(self.SCRIBE, lambda p: setattr(p.member, "level", 20))
+            emit("丙坐在", here)
+            self.explore(self.SCRIBE)
+            self.yiwen_of(self.SCRIBE, "撞見")
+            self.say(self.SCRIBE, self.SAID_OK)
+            self.say(self.SCRIBE, self.SAID_BAD)
+            self.steps(self.SCRIBE, (0, 0))
+            self.yiwen_of(self.SCRIBE, "說完")
+        finally:
+            writer.write_scene, server.screen_text, self.c.config.yiwen.free_daily_cap = real
 
     def resume(self) -> None:
         if not self.live():
