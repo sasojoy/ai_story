@@ -3,7 +3,7 @@
 
 - rules.py：純規則（開關、季鐘、內容檔、種子、模板句、獎勵表）；store.py：旁檔 <db>-yiwen.sqlite。
 - actions.py：探索撞見那一格（BUS_ORDER 的 outing）、選單接管、走一步、走完、放下、status（main.yiwen）。
-- routes.py：鎖外工作的 op /api/do/yiwen_step（這一批是平鋪：進鎖就做，不叫模型）。
+- routes.py：鎖外工作的 op /api/do/yiwen_step（第 252 批起三段式：A actions.step_request → B 鎖外審字＋writer.write_scene → C actions.apply_step）。
 - checks.py：兩個內容檔的驗證（check_content）。bots.py：假人不碰這一包。
 - 易名帖改名時旁檔裡的鍵跟著換：載入這一包就登記到核心 core/renames（旁檔在才開，關著的伺服器改名不建出空旁檔）。
 新寫給玩家看的字標「待 joy 潤」。

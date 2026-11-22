@@ -18,14 +18,37 @@ def _node(st, tale, parent, pick, depth=1, by="甲"):
 
 
 def test_side_file_beside_db_and_tables(tmp_path, side):
-    assert side.path == tmp_path / "main-yiwen.sqlite" and side.path.is_file()
+    """第 251 批：開了 store 還不建檔（讀回空）；第一次寫（開則）才建檔、建表。"""
+    assert side.path == tmp_path / "main-yiwen.sqlite" and not side.path.exists()
+    assert side.tales(1) == [] and not side.path.exists()
+    side.open_tale(season=1, opening="clay_faces", place="p", by="甲", shown="甲", at=0.0)
+    assert side.path.is_file()
     with contextlib.closing(sqlite3.connect(side.path)) as conn:
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert set(yiwen_store.TABLES) <= names
     side.open_tale(season=1, opening="fog_figure", place="p", by="甲", shown="甲", at=0.0)
     again = yiwen_store.YiwenStore(side.path)  # 再開不重建（資料還在）
-    assert len(again.tales(1)) == 1
+    assert len(again.tales(1)) == 2
     assert yiwen_store.for_db(tmp_path / "main.db") is side
+
+
+def test_reads_never_create_the_file(side):
+    """檔不在時每一種讀法都回空、不建檔（sqlite3.connect 會建出空檔）。"""
+    assert side.tales(1) == [] and side.walking(1) == [] and side.tale(1) is None and side.node(1) is None
+    assert side.walk(1, "甲") is None and side.children(1, 0) == [] and side.nodes(1) == []
+    assert side.footprints(1) == {} and side.steps(1) == {}
+    assert not side.path.exists()
+
+
+def test_write_after_file_removed_rebuilds_tables(side):
+    """寫過一次之後檔被刪（還原、手動清）：下一次寫照樣建表，不寫進沒有表的空檔。"""
+    side.open_tale(season=1, opening="fog_figure", place="p", by="甲", shown="甲", at=0.0)
+    side.path.unlink()
+    for extra in ("-wal", "-shm"):
+        side.path.with_name(side.path.name + extra).unlink(missing_ok=True)
+    assert side.tales(1) == [] and not side.path.exists()
+    assert side.open_tale(season=1, opening="fog_figure", place="p", by="甲", shown="甲", at=0.0) > 0
+    assert len(side.tales(1)) == 1
 
 
 def test_one_tale_per_opening_per_season(side):

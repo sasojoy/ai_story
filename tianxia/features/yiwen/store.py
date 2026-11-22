@@ -54,7 +54,7 @@ def side_path(db_path: Path) -> Path:
 
 
 def for_db(db_path: Path) -> YiwenStore:
-    """資料庫檔旁邊那一份（<stem>-yiwen.sqlite）；同一個檔只開一次（建表只做一次）。"""
+    """資料庫檔旁邊那一份（<stem>-yiwen.sqlite）；同一個檔只開一次。開了不建檔：第一次寫才建（第 251 批）。"""
     path = side_path(db_path)
     with _OPEN_LOCK:
         store = _OPEN.get(path)
@@ -87,13 +87,23 @@ def _row(row: sqlite3.Row | None) -> dict | None:
 
 
 class YiwenStore:
+    """第 251 批：檔等第一次真的要寫才建（沒人撞見過、撞見了還沒說第一步，都沒有這個檔）；讀的時候檔不在當成空、不建
+    （sqlite3.connect 會建出空檔，所以讀之前先看檔在不在）。"""
+
     def __init__(self, path: Path):
         self.path = Path(path)
+        self._built = False
+
+    def _ensure(self) -> None:
+        """每一種寫法開連線之前先叫：檔不在、或這個物件還沒建過表，就建（表都是 IF NOT EXISTS）；檔被刪掉之後再寫也會重建表。"""
+        if self._built and self.path.is_file():
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with contextlib.closing(self._conn()) as conn, conn:
             conn.execute("PRAGMA journal_mode=WAL")
             for sql in _SCHEMA:
                 conn.execute(sql)
+        self._built = True
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=5)
@@ -101,6 +111,8 @@ class YiwenStore:
         return conn
 
     def _read(self, sql: str, args: tuple = ()) -> list[dict]:
+        if not self.path.is_file():
+            return []
         with contextlib.closing(self._conn()) as conn:
             return [_row(r) for r in conn.execute(sql, args).fetchall()]
 
@@ -109,6 +121,7 @@ class YiwenStore:
         return got[0] if got else None
 
     def _write(self, sql: str, args: tuple = ()) -> int:
+        self._ensure()
         with contextlib.closing(self._conn()) as conn, conn:
             cur = conn.execute(sql, args)
             return cur.lastrowid if sql.lstrip().upper().startswith("INSERT") else cur.rowcount
@@ -127,6 +140,10 @@ class YiwenStore:
 
     def tales(self, season: int) -> list[dict]:
         return self._read("SELECT * FROM tales WHERE season = ? ORDER BY id", (season,))
+
+    def tale_by_opening(self, season: int, opening: str) -> dict | None:
+        """這一季這一句開場的那一則（UNIQUE(season, opening)，最多一列）；第 251 批撤回後接回用。"""
+        return self._one("SELECT * FROM tales WHERE season = ? AND opening = ?", (season, opening))
 
     def walking(self, season: int) -> list[dict]:
         return self._read("SELECT * FROM tales WHERE season = ? AND status = 'walking' ORDER BY id", (season,))
@@ -153,6 +170,7 @@ class YiwenStore:
                  can_pay: bool, own: bool) -> AddResult:
         """一筆 BEGIN IMMEDIATE：同父同 pick 已在 → taken（那一列）；父節點已有別的子節點而且不是自己的路 → 這是一條岔路：
         重數已開的岔路，滿了 full；還有免費名額就寫；沒有就 can_pay 才寫（needs_pay），不然 full。寫成 new。"""
+        self._ensure()
         with contextlib.closing(self._conn()) as conn:
             conn.isolation_level = None
             conn.execute("BEGIN IMMEDIATE")
@@ -196,6 +214,7 @@ class YiwenStore:
 
     def step_walk(self, *, tale: int, account: str, season: int, node: int, at: float) -> None:
         """沒有就建；path 接上這一個節點（走完的不再動）。"""
+        self._ensure()
         with contextlib.closing(self._conn()) as conn, conn:
             row = conn.execute("SELECT path, finished_at FROM walks WHERE tale = ? AND account = ?", (tale, account)).fetchone()
             if row is None:
@@ -233,11 +252,19 @@ class YiwenStore:
                 out[nid] = out.get(nid, 0) + 1
         return out
 
+    # ── 禁寫（第 252 批先接讀法；寫的管理者動作是異聞四）──
+
+    def muted(self, account: str, now: float) -> bool:
+        """這個鍵現在被禁寫（mutes.until 在 now 之後）：自己說灰掉、猜法照走。只讀；檔不在當成沒有。now 是季鐘。"""
+        row = self._one("SELECT until FROM mutes WHERE account = ?", (account,))
+        return row is not None and float(row["until"]) > float(now)
+
     # ── 易名帖 ──
 
     def rename(self, old_key: str, new_key: str) -> None:
         if not old_key or old_key == new_key:
             return
+        self._ensure()
         with contextlib.closing(self._conn()) as conn, conn:
             conn.execute("UPDATE tales SET discoverer = ? WHERE discoverer = ?", (new_key, old_key))
             conn.execute("UPDATE nodes SET by = ? WHERE by = ?", (new_key, old_key))

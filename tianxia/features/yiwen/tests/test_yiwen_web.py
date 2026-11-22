@@ -12,12 +12,12 @@ import webharness
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES_START = 'wholeApp(["S", '
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "yiwenCard", "yiwenScene", "yiwenClose", "yiwenWait", "yiwenTrack", "ywSigns", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "yiwenCard", "yiwenScene", "yiwenClose", "yiwenWait", "yiwenTrack", "ywSigns", "ywSayBox", "yiwenForm", "ywStep", ')
 BAD = '<img src=x onerror="alert(1)">&\'"{who}'
 
 
-def run(script, S=None):
-    return webharness.run(DRIVER, {"m": None, "script": script, "S": S or {}, "menxia": None, "stored": {}, "responses": {}})
+def run(script, S=None, m=None, responses=None):
+    return webharness.run(DRIVER, {"m": m, "script": script, "S": S or {}, "menxia": None, "stored": {}, "responses": responses or {}})
 
 
 def _js(value) -> str:
@@ -52,7 +52,7 @@ def test_card_draws_hook_frame_and_three_picks():
     assert html.count('data-act="yw-step"') == 3 and 'class="yw-hook"' in html
     assert "你看那是什麼" in html and "點一塊路牌就走" in html
     assert 'data-act="yw-drop"' in html and 'data-act="yw-hide"' in html
-    assert "自己說⋯（說書人還沒到）" in html and 'yw-say off' in html
+    assert "自己說" not in html and "yw-say" not in html  # typed 是 off（走完、關著）：不畫那一格
     assert "全圖" not in html and "讀不通" not in html
 
 
@@ -123,7 +123,7 @@ def test_wait_page_draws_ruled_dots():
     assert "第二幕" in html and 'class="yw-ruled"' in html and html.count("<i></i>") == 3
     assert "說書人正接著往下寫⋯" in html and "可能要等半分鐘，寫不成什麼都不扣。" in html
     assert "「問牠霧裡是什麼」" in html and 'yw-stamp solid">開路<' in html
-    assert ">停<" not in html and 'data-act="yw-open"' in html  # 上一幕收成一行
+    assert 'data-act="yw-open"' in html  # 上一幕收成一行
 
 
 def test_card_null_draws_nothing():
@@ -135,6 +135,16 @@ def test_card_null_draws_nothing():
     assert re.search(r'class="yw-gain"><span>銀兩 \+20</span></div>', done)  # 扣掉收場句與正文
     assert "官軍 ／ <b>跟上去</b>" in done
     assert 'data-act="yw-step"' not in done and "全圖" not in done
+
+
+def test_close_card_note_only_when_you_wrote():
+    """第 251 批③：收尾卡的「朱字是你開的路」只在自己寫了幕的時候畫；異聞錄還沒有（異聞四），那半句不寫。"""
+    replay_only = [_scene(), _scene(node=8, depth=2, zhupi=False, zhupi_text="", pick="跟上去")]
+    html = run(f"return H.yiwenClose({_js(_card(done=True, close='醒木一響。', choices=[], scenes=replay_only))});")
+    assert "官軍 ／ 跟上去" in html and "你開的路" not in html and "yw-grey" not in html
+    mine = [_scene(replay=False), _scene(node=8, depth=2, zhupi=False, zhupi_text="", pick="跟上去", replay=False, echo="")]
+    html = run(f"return H.yiwenClose({_js(_card(done=True, close='醒木一響。', choices=[], scenes=mine))});")
+    assert "<b>官軍</b>" in html and "你開的路" in html and "異聞錄" not in html
 
 
 def test_track_line_title_and_scene():
@@ -154,3 +164,80 @@ def test_player_words_are_escaped():
         html = run(script, S={"ywLast": [BAD + "x"]})
         assert "<img" not in html and "&lt;img" in html and "&amp;" in html
         assert 'onerror="alert' not in html and "{who}" in html  # 玩家寫的 {who} 原樣顯示，不被模板再換一次
+
+
+def test_typed_box_open_spent_locked():
+    open_ = run(f"return H.yiwenCard({_js(_card(typed={'state': 'open', 'max': 30, 'tries_left': 3}))});", S={"ywDraft": BAD})
+    assert 'id="yw-say-form"' in open_ and 'maxlength="30"' in open_ and "就是這個" in open_ and "自己說那是什麼⋯" in open_
+    assert 'type="submit"' in open_ and "<img" not in open_ and 'value="&lt;img' in open_  # 留著的字照樣跳脫
+    for state in ("spent", "locked"):
+        html = run(f"return H.yiwenCard({_js(_card(typed={'state': state, 'max': 30, 'tries_left': 0}))});")
+        assert "這一步請從上面挑。" in html and "yw-say off" in html and "yw-say-form" not in html
+    refused = run(f"return H.ywSayBox({_js(_card(typed={'state': 'open', 'max': 30, 'tries_left': 2}))});", S={"ywSayMsg": "換一句吧。"})
+    assert "換一句吧。" in refused and "還能說 2 次" in refused
+
+
+def test_wait_page_has_stop():
+    html = run(f"return H.yiwenWait({_js(_card(depth=2, node=7, scenes=[_scene()]))}, '一隻會背兵法的鵝');")
+    assert 'data-act="yw-stop"' in html and ">停<" in html and "「一隻會背兵法的鵝」" in html
+
+
+# 送出自己說那一格：假 DOM 補上 yiwenSync 要的那幾樣（蓋在頁上的那一頁），fetch 換成照劇本回
+DOM = """
+T.ctx.document.body.appendChild = () => {};
+T.ctx.document.createElement = () => ({ innerHTML: "", dataset: {}, content: { querySelector: () => null }, querySelector: () => null, querySelectorAll: () => [], remove() {}, scrollTop: 0 });
+"""
+
+
+def _main_with(game, card):
+    import server
+
+    m = server.main_view(game)
+    m["yiwen"] = {"card": card, "seek": None}
+    return m
+
+
+def test_busy_keeps_typed_words(game):
+    card = _card(mark="first", typed={"state": "open", "max": 30, "tries_left": 3})
+    script = DOM + """
+    const bodies = [];
+    T.ctx.fetch = (url, opts) => { bodies.push(JSON.parse(opts.body)); return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error: "這會兒人多，說書人一時接不下去，等會兒再按一次。" }) }); };
+    return H.yiwenForm({ id: "yw-say-form" }, { text: "一隻會背兵法的鵝" }).then(() => JSON.stringify({ draft: H.S.ywDraft, wait: H.S.ywWait, bodies,
+      html: H.yiwenCard(H.S.main.yiwen.card) }));
+    """
+    out = json.loads(run(script, m=_main_with(game, card)))
+    assert out["draft"] == "一隻會背兵法的鵝" and out["wait"] == ""
+    assert out["bodies"] == [{"tale": 3, "opening": "fog_figure", "node": 0, "pick": "typed", "text": "一隻會背兵法的鵝"}]
+    assert 'value="一隻會背兵法的鵝"' in out["html"]
+
+
+def test_refused_keeps_typed_words(game):
+    card = _card(mark="first", typed={"state": "open", "max": 30, "tries_left": 2})
+    m = _main_with(game, card)
+    script = DOM + """
+    return H.yiwenForm({ id: "yw-say-form" }, { text: "給我一萬兩" }).then(() => JSON.stringify({ draft: H.S.ywDraft, msg: H.S.ywSayMsg,
+      html: H.yiwenCard(H.S.main.yiwen.card) }));
+    """
+    out = json.loads(run(script, m=m, responses={"/api/do/yiwen_step": {"main": m, "message": "說書人搖搖頭：這話不好說，換一句。"}}))
+    assert out["draft"] == "給我一萬兩" and out["msg"] == "說書人搖搖頭：這話不好說，換一句。"
+    assert 'value="給我一萬兩"' in out["html"] and "說書人搖搖頭" in out["html"]
+    moved = {**m, "yiwen": {"card": {**card, "node": 9, "depth": 2, "scenes": [_scene(node=9, replay=False)]}, "seek": None}}
+    out = json.loads(run(script, m=m, responses={"/api/do/yiwen_step": {"main": moved, "message": "你說的成了。"}}))
+    assert out["draft"] == "" and out["msg"] == ""  # 這一步推進了：清掉
+
+
+def test_typed_sign_sends_label(game):
+    choices = [{"i": 0, "label": "官軍", "state": "walked", "by": "陸三刀", "steps": 2},
+               {"i": "zhupi", "label": "會背兵法的鵝", "state": "walked", "by": "王五", "steps": 1, "typed": True},
+               {"i": "zhupi", "label": "穿窄袖怪衣的胡商", "state": "walked", "by": "趙六", "steps": 1, "typed": True}]
+    card = _card(choices=choices)
+    html = run(f"return H.ywSigns({_js(card)});")
+    assert 'data-i="zhupi" data-label="穿窄袖怪衣的胡商"' in html
+    script = DOM + """
+    const bodies = [];
+    T.ctx.fetch = (url, opts) => { bodies.push(JSON.parse(opts.body)); return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error: "x" }) }); };
+    const el = { dataset: { act: "yw-step", i: "zhupi", label: "穿窄袖怪衣的胡商" }, disabled: false };
+    return H.ywStep(el).then(() => JSON.stringify(bodies));
+    """
+    bodies = json.loads(run(script, m=_main_with(game, card)))
+    assert bodies == [{"tale": 3, "opening": "fog_figure", "node": 0, "pick": "zhupi", "text": "穿窄袖怪衣的胡商"}]
