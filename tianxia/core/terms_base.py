@@ -3,14 +3,16 @@
 註冊在殼（server.register）與 identity 包（建角色那一步才開帳號），包不准 import 別包（設計第五節「記版本的函式要放核心，
 或由條款包掛進註冊與建角色的流程」）：terms 包在殼掛路由那一下 set_hook，註冊那兩條路只問這裡。
 照 identity_base.set_notifier／notify 的寫法：核心只放掛鉤與純規則，不 import 包、不讀時鐘（時間在 hook 那一側的 shell.time）。
-開關 Config.terms.enabled 關著，或 terms 包沒掛（沒有 hook）：register_problem 回 None、record 回 False，什麼都不做。"""
+開關 Config.terms.enabled 關著，或 terms 包沒掛（沒有 hook）：register_problem 回 None、record 回 False，什麼都不做。
+第 249 批：gate_problem 給殼的 _game 問「會改東西的請求要不要擋」（關著或沒 hook 一樣回 None）。"""
 from __future__ import annotations
 
 import logging
 
 REGISTER_NEED = "請先勾選滿 18 歲與同意使用條款、隱私權條款，再送出。"  # 待 joy 潤（沒勾、只勾一個、版本舊都是這一句，不透露版本）
 _YES = (True, "on", "true", "1")  # 表單送 "on"，JSON 送 true
-_HOOK = None  # terms 包登記的物件：version() -> 現行版號；record(account_key, version, source)，版本不是現行版丟 ValueError
+GATE_NEED = "請先看過並同意使用條款與隱私權條款，才能繼續。重新整理頁面就會看到同意頁。"  # 待 joy 潤（第 249 批：伺服器擋下會改東西的請求時回這一句；網頁不會自己重問，所以叫他重新整理）
+_HOOK = None  # terms 包登記的物件：version() -> 現行版號；record(account_key, version, source)，版本不是現行版丟 ValueError；must(account_key) -> bool（第 249 批）
 _log = logging.getLogger(__name__)
 
 
@@ -50,3 +52,17 @@ def record(content, account_key: str, version, source: str = "register") -> bool
         _log.exception("terms: register consent not recorded (side file write failed)")
         return False
     return True
+
+
+def gate_problem(content, account_key: str) -> str | None:
+    """第 249 批：這個帳號會改東西的請求要不要擋（殼 server._game 在不是 GET、不是管理者時問）。
+    關著或 terms 包沒掛（沒有 hook）回 None，行為不變；hook 丟任何例外（旁檔鎖住、壞掉、內容檔讀不到、舊 hook 沒有 must）
+    記一行 log、回 None 放行（網頁那一層照樣會問）；必須同意而沒同意回 GATE_NEED。不看是不是假人（假人不經伺服器）。"""
+    if _HOOK is None or not on(content):
+        return None
+    try:
+        must = _HOOK.must(account_key)
+    except Exception:
+        _log.exception("terms: gate check failed, letting the request through")
+        return None
+    return GATE_NEED if must else None
