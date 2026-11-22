@@ -93,7 +93,7 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
 # identity（帳號與客服第 201 批；設計 4.1、第七節）：主檔旁邊的小檔 <主檔名去掉副檔名>-<side>.sqlite 跟主檔同一個時間戳備份與還原。
 # 不存在就跳過；驗只看 integrity_check（沒有結構版本）；壞了改 .bad、印警告，主檔照留
 # terms（第 206 批）：條款旁檔 <db>-terms.sqlite 從 Joy 的條款包就有，206 起註冊也寫它
-# yiwen（異聞第 247 批）：異聞的旁檔 <db>-yiwen.sqlite（開關開著、有人撞見才建）
+# yiwen（異聞第 247 批）：異聞的旁檔 <db>-yiwen.sqlite（開關開著、這一季有章時，第一次有人探索、擲撞見之前就建，不等撞見；開關關著不建）
 SIDE_FILES = ("identity", "support", "terms", "yiwen")
 
 
