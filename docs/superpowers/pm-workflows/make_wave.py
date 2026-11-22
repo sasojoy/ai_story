@@ -1951,6 +1951,81 @@ WAVES["AI"] = dict(
 )
 
 
+# ── AJ 波：AI 波留下的兩件補強（PM 2026-11-23 排；企劃者 11/22「繼續」）：異聞二的測試補洞 253、網頁比對走查的畫圖雜訊 254 ──
+# 兩條線互不相干（一條只動 yiwen 包的測試與 README，一條只動 scripts/webqa 與它的測試），基準是 AI 波落地後的 develop；收尾一次合、一次驗。
+# 異聞三不在這一波：要等主機的真模型實測（PM 跟企劃者約時間）。
+AJ_RECORD = "docs/superpowers/plans/2026-11-23-波次AI紀錄.md"
+AJ_PROBE = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad\waveAI"
+AJ_ENV = [
+    "- **環境（兩批共用）**：起伺服器一律暫存資料庫、模型網址 127.0.0.1:9（絕不連 11434）、只用派工單給的埠（連臨時的靜態檔伺服器也是）、不碰 7861；跑 `same_behavior`、`webqa` 時環境裡不要有 `TIANXIA_DB`、`TIANXIA_SUPPORT`、`TIANXIA_PROFILE`；"
+    "不讀不寫任何 `.local/` 的檔（閘門結果夾 `.local/wave_gate/<head8>/` 只准讀）；任何輸出、截圖、報告都不能分得出誰是假人。這台同時有另一條線在跑：重的東西（整回合走查、全軌比對）跑一次就好。"
+    "解 `git archive` 用 Python 的 `tarfile`（Windows 的 tar 會弄壞中文檔名）；手動跑 `same_behavior.py run` 要帶 `PYTHONHASHSEED=0`。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。這一批不做派工單沒寫的事，碰到了寫 leftovers。",
+]
+
+
+def b253():
+    plan = "docs/superpowers/plans/2026-11-23-異聞-第253批.md"
+    return batch(253, "異聞第 253 批：異聞二的測試補洞——C 段每一項重驗都要有一條拿掉會紅的測試、`improper` 與提示硬截、README 一句", "yiwen", "dev/yiwen-5", plan, "8541、8542", [
+        "- **來源**：AI 波審查的 should 與 nit（PM 2026-11-23 定：異聞三動 `apply_step` 以前要先補）。先讀 `" + AJ_RECORD + "` 最後一節「PM 的認定與補驗」與「審查」那一節模型鏡頭的原文，再讀 `tianxia/features/yiwen/actions.py`（`step_request`、`apply_step`、`_writable`、`_reattach`）、`routes.py`、`writer.py`、`rules.py` 與包的 `tests/`。",
+        "- **這一批只加測試、改 README 一句，程式的行為一個字不改**。寫測試時發現哪一項重驗其實是壞的或永遠走不到：把那一條先紅的測試留著（標 `xfail(strict=True)` 並在理由寫清楚）、不要自己改 `tianxia/` 的程式，寫進 stopped 或 leftovers 交 PM。",
+        "- **①`apply_step` 的重驗，每一項一條「拿掉就紅」的測試**。審查逐項拿掉再跑 `test_yiwen_step.py` 的結果：拿掉季、開關、`improper`、`draft.problems` 會紅；**拿掉下面六項測試還是綠的**——`w.node != req.node`、`w.tale != req.tale`、`key != req.key`、`not valid(ctx)` 那一支、自己說的 `w.tries >= typed_tries or store.muted`、`not _writable(...)`。原因：現有的案例用 `actions.drop` 清掉眼前那一則，`server.act` 一進鎖 `on_sync` 就先回 gone，走不到後面的比對。"
+        "要的情境（名字看得出在守哪一項；能走路由就走路由——把假的 `writer.write_scene` 換成「先做那件插進來的事、再回草稿」，這才是真的 B 段中間發生的事；路由走不到的才直接叫 `actions.apply_step`，並在測試的說明寫為什麼）："
+        "(a) 同一個玩家同一個節點送了兩次（兩張 A 段開的單）：第一張寫進去之後第二張進 C——不重寫節點、獎勵只給一次、回的是重放或那一句，旁檔節點數不變；"
+        "(b) B 段中間這個玩家眼前的則換了（放下再撞見另一則，或被接回另一則）：舊單不寫到新的那一則上；"
+        "(c) 單上的鍵跟進 C 的人不一樣（別人的單）：不寫；"
+        "(d) B 段中間這一則不再有效（`valid(ctx)` 為假的那幾種：逾時公開、名額被放回、則被管理者清掉——照程式實際的條件造）；"
+        "(e) 自己說：B 段中間次數到了上限、或這個人被禁寫：不寫、回鎖住那一句；"
+        "(f) B 段中間別人在同一個節點寫了**不同**的做法，使這一步不再可寫（`_writable` 為假）：不寫、回該回的那一句；別人寫了**同一個**做法的照現行行為（當重放加 taken）已經有測試就不重寫。"
+        "每一條斷言：回應是哪一句或哪一種、玩家存檔與世界狀態跟 C 之前比只有該變的變、旁檔的節點數與內容、獎勵沒有多給。",
+        "- **②證明每一條真的守得住**（貼進回報的 tests）：對上面六項加原本會紅的四項，逐項在你的工作樹暫時拿掉那一個檢查、跑 `tianxia/features/yiwen/tests`、記下紅了哪幾條、**再還原**（`git diff -- tianxia/features/yiwen/*.py` 交件前必須是空的，除了測試與 README）。回報列一張表：拿掉哪一項 → 紅了哪幾條。有哪一項拿掉還是綠的，寫清楚為什麼造不出來。",
+        "- **③兩處缺的測試**：`writer._check` 裡不是自己說的那一步模型回 `improper` 的那一支（`[] if request.typed else [\"improper\"]`）——補一條；`rules.build_prompt` 結尾的硬截 `text[:PROMPT_MAX]`——造一個截掉最舊的幕、拿掉帳之後仍然超長的輸入（例：開場或這一步的做法本身就很長），斷言不超過 `PROMPT_MAX` 而且 `TYPED_MARK` 那一段的結構還在；真的造不出走得到那一行的輸入，就寫進 leftovers 說明那一行是不是死碼（不要刪）。",
+        "- **④README**：包的 README「說書人」那一節寫第三步 `EndReply` 的 `required_fields` 是 verdict、reason、text，`writer.py` 實際是 `[\"verdict\", \"text\"]`——README 照程式改。另外補兩句現況（照程式寫）：自己說被前四道擋（`typed_problem`）不加次數、被審字或模型擋才加；撤回後接回的發掘者改按別顆會在第一層多開一條不佔名額的路（異聞三定岔路規則時一起處理）。",
+        "- **驗**：`tianxia/features/yiwen/tests` 全過；`scripts/test_for.py` 挑的跑過；契約 `[yiwen]`、邊界照舊綠。**程式沒動就不用跑比對與 selftest**；動了任何一行 `tianxia/`（照上面不該動）就照 AI 波的規矩跑 `compare --new yiwen --also-existing` 與 yiwen 軌 selftest，把最後一行貼進回報。",
+        "- **不做**：改行為、改畫面、改比對軌、異聞三的任何事；資料庫第 9 版不動、不動核心與殼。時間上限兩段合計 3 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。沒有新寫給玩家看的字（有就列 new_strings、旁註待 joy 潤）。",
+    ] + AJ_ENV, custom=True)
+
+
+def b254():
+    plan = "docs/superpowers/plans/2026-11-23-工具批-第254批.md"
+    return batch(254, "工具批第 254 批：網頁比對的走查——同一筆程式自己重拍就會差的像素（決戰卡倒數那一塊）不再報成真差異", "core_shared", "dev/tools-walk-254", plan, "8543～8546", [
+        "- **只動** `scripts/webqa/` 與 `tests/web/test_webqa.py`、計畫檔。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動。",
+        "- **起因（PM 查證過的事實）**：AI 波落地前 PM 對 base `a042073f8ec06a0ebe10770318dc45bf990c039b`、head `48b3304924be6e5188faae4168b58faec3a33f86`（兩邊只差異聞包的檔，異聞在每一種設定都關著）走了每一回合，工具報兩張 REAL："
+        "①c 回合 `028_bt_watch_open` 375 淺色，決戰卡右上倒數「3:00」那一塊，框 (271,255)～(335,288)、713 個像素各差 1 級（`clean`、不 `unstable`）；重跑 main、c 兩回合，同一格又紅、`029_bt_watch_shut` 同一塊也紅。"
+        "PM 把兩次留下的圖逐像素比：第一次是 B 比 A 亮 1 級、第二次反過來 B 比 A 暗 1 級；**第一次的 A 對第二次的 A、第一次的 B 對第二次的 B，差的就是同樣那 713 個像素**——那一塊有兩種畫法，哪一邊落在哪一種是隨機的；兩回合 A、B 的 DOM 與樣式指紋完全一樣。"
+        "這就是交接記了很久的 c 回合 `029_bt_watch_shut` 偶發像素差（第 238 批跑 3 次沒重現）。②main 回合 `075_dadian_left` 375 淺色第 2 張（`__s1`）11 個像素、差到 50 級、框 (179,222)～(197,228)，重跑沒有再出現。"
+        "材料（只讀，不要改、不要刪）：`" + AJ_PROBE + r"\weball\`（第一次：`summary.json`、`report.txt`、`red\`）、`" + AJ_PROBE + r"\weball2\`（重跑 main、c）、`" + AJ_PROBE + r"\pixdiff.py`（逐像素比兩張圖的小腳本）、`" + AJ_PROBE + r"\zoom_028*.png`（放大圖）。經過在 `" + AJ_RECORD + "` 最後一節。",
+        "- **①先找原因**（寫進計畫，附證據）：那一塊為什麼有兩種畫法？讀 `web/` 裡決戰卡倒數的樣式與 `scripts/webqa/driver.mjs` 凍結動畫、等字型、等圖的做法，用 `gate.py --rounds c --only <含 028、029 的 flow> --no-replay --keep`（base、head 可以都給同一筆 `48b3304924be…`，A 對 A）重現幾次：是動畫或轉場凍在不同的格、字型或圖還沒就緒、合成層的次像素、還是倒數的字每一秒重畫？`075_dadian_left` 那 11 個像素同樣看一次（它是捲動後的第二張）。找不到原因就照實寫試了什麼。",
+        "- **②改法的優先順序**：**能在拍的那一側讓畫面確定下來的，就修拍法**（例：等到某個條件再拍、把那個動畫凍在終點、拍之前多等一個畫格——照你找到的原因，改 `driver.mjs` 或流程裡拍照前的等待；不准為了這兩景改 `web/`）。拍法修不了的才動判法：照第 237 批替重放做的那一類（`render-variants`：`clean`、不 `unstable`、只差像素、超過 aa 門檻的差，兩邊各自重拍幾次，兩邊出現過的圖有交集才歸成雜訊）——走查是真伺服器、狀態會往前走，重拍只能在拍照當下做，所以要想清楚代價（例：只有那一景第一次拍完、兩張連拍不一樣時才多拍）。"
+        "**不准做的**：放寬 aa 門檻（100 px、12 級一個字不動）、把景名或檔名列成白名單或例外、把有樣式或 DOM 差（`clean` 不成立）的差也歸成雜訊、讓真的像素變化（計算樣式不變、圖真的變了）變成不紅。",
+        "- **③驗**：(a) A 對 A（base、head 同一筆）跑 c 回合至少 6 次、main 回合含 `075_dadian_left` 的那一段至少 3 次：改之前紅幾次（寫進回報）、改之後 0 REAL。(b) **靈敏度不能掉**：`selftest.py` 現有的每一種突變（`card-padding`、`css-last`、`pkg-css`、`css-comment`、`page-hang`、`page-alert`）改前改後結果一樣，該紅的照紅；另外做一個「就在決戰卡倒數那一塊、計算樣式不變、像素真的變」的突變（例：把那一塊用的圖或字型檔換掉）驗一次，要判 REAL；做不出來寫進 leftovers 說試了什麼。"
+        "(c) 走查多花多少時間：整趟八回合多不超過 2 分鐘，超過就說明。(d) `tests/web/test_webqa.py` 補純函式那一層的測試，放在現有雜訊那幾條旁邊。`scripts/test_for.py` 挑的跑過。(e) `gate.py` 檔頭那段說明與 `noise.py` 檔頭的表照改到的補（英文，照檔裡的口氣）。",
+        "- **④順手一件**（只在不花時間的前提下）：`report.txt` 的 REAL 那一行現在不寫「兩邊的 DOM 與樣式指紋一不一樣」——補上（PM 這次是自己翻 `summary.json` 的 `fingerprint` 才知道）。",
+        "- **不做**：把 `web/yiwen.js` 從 `NOT_ON_TABLE` 移走（異聞還關著，走不到）；重建覆蓋表；改 `flows/` 走的內容與 `must_reach.txt`。時間上限兩段合計 4 小時（八回合的整趟走查不要跑超過一次）；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AJ_ENV, custom=True)
+
+
+AJ_TEST_LENS = dict(key="tests", text=(
+    "**第 253 批：補的測試是不是真的守得住**。親自驗（解一份 head 到你的暫存夾，`TIANXIA_DB` 指到暫存檔，模型一律用假的，絕不連 11434）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/yiwen/tests/`、包的 README、計畫檔；`tianxia/features/yiwen/*.py` 與別的程式一個字沒動（動了就是 should，除非回報的 stopped 寫明）。"
+    "②自己逐項拿掉 `apply_step` 的十項重驗（季、開關、節點、則、鍵、`valid`、自己說的次數與禁寫、`_writable`、`improper`、`draft.problems`）各跑一次 `tianxia/features/yiwen/tests`：每一項都要有測試紅；哪一項拿掉還是綠的就是 should（開發說造不出來的，看他的理由站不站得住）。"
+    "③新測試走的是不是真的情境（B 段中間插進來的事），還是把內部狀態直接改成想要的樣子——後者只有在路由走不到時才行，而且要有說明。斷言有沒有驗到「沒有多寫、沒有多給獎勵」，不是只驗回了哪一句。"
+    "④`improper`（不是自己說的那一步）與提示硬截各有一條會紅的測試（把那一行拿掉跑一次）。⑤README 改的那幾句對得上 `writer.py`、`actions.py`。⑥沒有 `xfail` 是為了讓紅的變綠而加的（`xfail(strict=True)` 只准用在回報寫明「程式這一項是壞的」那種）。"
+))
+AJ_TOOL_LENS = dict(key="tools", text=(
+    "**第 254 批：只改工具、判得更準而不是判得更鬆**。逐條對（讀程式，不用重跑整回合）："
+    "①對 base 的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔。"
+    "②`noise.py` 的 aa 門檻（100 px、12 級）沒動；沒有任何景名、檔名、座標的白名單；新的判法（如果有）只收「DOM 與計算樣式兩邊一致、而且同一邊自己重拍就會出現另一邊那張」的差，樣式或 DOM 有差的照舊直接 REAL（逐個分支看）；重拍的次數有上限、不會卡住、不會讓走查的狀態往前多走一步（重拍之間沒有點擊、沒有送請求）。"
+    "③改的是拍法時：新的等待有上限、等不到會怎樣（不能無限等、也不能靜靜跳過那一景）；`selftest.py` 每一種突變改前改後結果一樣（開發的回報要有證據，沒有就自己挑 `card-padding` 與 `pkg-css` 各跑一次）。"
+    "④開發說的原因有證據（A 對 A 重現的次數、改之後的次數）；「計算樣式不變、像素真的變」的那個突變判 REAL。⑤輸出、截圖、報告裡沒有任何一處分得出誰是假人。"
+))
+WAVES["AJ"] = dict(
+    round2=True,
+    extra_lenses=[AJ_TEST_LENS, AJ_TOOL_LENS],
+    lines=[dict(name="異聞補測試", batches=[b253]), dict(name="走查雜訊", batches=[b254])],
+    merge_port=8547, fix_port=8548,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
