@@ -21,6 +21,7 @@ OP_OWNERS = {
     "outing_say": "explore", "outing_tale": "explore", "battle_text": "battle", "seal_text": "seal", "duel_text": "bout",
     "create_intent": "craft", "create_reread": "craft", "ascend_line": "cultivation", "tavern_ask": "tavern", "feast_text": "feast",
     "persuade_text": "companions", "guard_say": "guard", "guard_rename": "guard", "guard_along": "guard",
+    "yiwen_step": "yiwen",  # 異聞第 247 批：撞見卡上按一顆（這一批平鋪、不叫模型）
 }
 
 

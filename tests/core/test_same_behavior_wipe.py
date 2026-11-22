@@ -54,7 +54,7 @@ def _scanned() -> tuple[set[str], set[str]]:
 
 def test_scan_finds_the_known_sides():
     files, folders = _scanned()
-    assert {"talk", "narration", "archive", "tale", "push", "identity", "support", "terms", "mail"} <= files
+    assert {"talk", "narration", "archive", "tale", "push", "identity", "support", "terms", "mail", "yiwen"} <= files
     assert folders == {"support-files"}
 
 

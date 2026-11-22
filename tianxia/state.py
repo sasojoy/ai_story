@@ -463,6 +463,51 @@ class GuardBook(BaseModel):
     fell_battle: str = ""
 
 
+class YiwenWalk(BaseModel):
+    """異聞（features/yiwen；設計 docs/superpowers/specs/2026-11-20-異聞-design.md，企劃者 2026-11-21「看過了，十題都照建議做」）：
+    眼前那一則走到哪，加上這一季的帳。PlayerState.yiwen 是 None 起家、第一次撞見才建；不在 carried（換季清掉）。
+    回到「眼前沒有」只清 opening／tale／place／role／node／own_from／tries，季內的帳留著。"""
+
+    opening: str = ""  # 眼前那一則的開場 id；空＝眼前沒有
+    tale: int = 0  # 旁檔的則 id；0＝發掘者還沒寫成第一幕
+    place: str = ""  # 撞見的地點 id
+    role: str = ""  # "find"（發掘者）／"trail"（後來的人）
+    node: int = 0  # 走到哪一個節點（0＝開場）
+    own_from: int = -1  # 走在自己寫的路上：從哪一個節點之後是自己寫的（-1＝不是自己的路；發掘者＝0）
+    tries: int = 0  # 這一步自己說被擋了幾次（換一步歸零）
+    seek_on: bool = False  # 帶不帶尋異符（異聞三）
+    free_found: int = 0  # 這一季不用道具發掘了幾則
+    seeks_used: int = 0  # 這一季扣掉幾張尋異符（異聞三）
+    paid_scenes: list[int] = Field(default_factory=list)  # 這一季已經拿過寫幕或重放獎勵的節點 id（一則一人只算第一趟）
+    done: list[int] = Field(default_factory=list)  # 這一季走完的則 id
+    credited: list[int] = Field(default_factory=list)  # 定論名望已經補過的則 id（異聞四）
+
+
+class YiwenClaim(BaseModel):
+    """異聞：一句開場這一季誰佔了（WorldState.yiwen.taken 的值）。at＝撞見那一刻（季鐘），定論與逾時都從它起算。"""
+
+    by: str
+    at: float
+    tale: int = 0
+    seek: bool = False
+
+
+class YiwenSettled(BaseModel):
+    """異聞：一則定論的記號（異聞四）。side：陣營 id 或 ""（沒給邊）。"""
+
+    at: float
+    side: str = ""
+
+
+class YiwenWorld(BaseModel):
+    """異聞的全服那一份（WorldState.yiwen）：None 起家、第一次要寫才建。"""
+
+    taken: dict[str, YiwenClaim] = Field(default_factory=dict)  # 開場 id → 誰佔的
+    free_day: int = 0  # 台灣日（ctx._pill_day）
+    free_today: int = 0  # 那一天不用道具的發掘數
+    settled: dict[str, YiwenSettled] = Field(default_factory=dict)  # 則 id（字串）→ 定論的記號（異聞四）
+
+
 class LegacyBook(BaseModel):
     """傳承（tianxia/features/legacy）：正氣、邪氣、機緣只在換季那一刻結算一次（季中不動）、跨季帶著走；識海選了哪一份、封著的那一份。"""
 
@@ -1292,6 +1337,8 @@ class PlayerState(BaseModel):
     legacy: LegacyBook | None = Field(None, json_schema_extra=QUIET)
     # 親衛隊長（tianxia/features/guard）：遇見、收養、養成的帳。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）
     guard: GuardBook | None = Field(None, json_schema_extra=QUIET)
+    # 異聞（tianxia/features/yiwen）：眼前那一則與這一季的帳。不跟著帳號走（換季清掉）；None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著、沒撞見過存檔一個鍵都不多
+    yiwen: YiwenWalk | None = Field(None, json_schema_extra=QUIET)
     # 江湖錄（tianxia/features/codex）：奇遇紀錄與圖鑑。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     codex: CodexBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
@@ -2198,6 +2245,9 @@ class WorldState(BaseModel):
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
     craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
+    yiwen_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時異聞（Config.yiwen）是不是開著（features/yiwen rules.on）；舊季讀檔是 False，False 不寫進存檔
+    # 異聞的全服名額與定論記號（features/yiwen）：None 起家、第一次要寫才建（不用 default_factory：_drop_empty_marks_fired 只刪 falsy，空的子模型照樣寫鍵）
+    yiwen: YiwenWorld | None = Field(None, json_schema_extra=QUIET)
     guard_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時親衛隊長（Config.guard）是不是開著：開著的季酒肆不再招同伴（hire.on；Joy 2026-11-10「全部做完一起上」、設計稿第四批「下一季關酒肆招募」）；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
