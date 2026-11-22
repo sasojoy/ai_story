@@ -1716,11 +1716,16 @@ def _account(request: Request) -> str:
 
 
 def _game(request: Request) -> Game:
-    account = account_store().get(_account(request))
+    key = _account(request)
+    account = account_store().get(key)
     if account is None or account.character is None:
         raise HTTPException(409, "這個帳號還沒有角色。")
     MOVE_MODE.set(request.headers.get("X-Move-Mode", "walk"))  # 頁面選的走法，只在這次請求裡有效（見 MOVE_MODE）
-    return game_for(account.character)
+    game = game_for(account.character)
+    # 條款第 249 批：必須同意而沒同意的帳號，會改東西的請求（不是 GET）拒絕；讀取不擋、管理者不擋，條款關著 gate_problem 回 None
+    if request.method != "GET" and (why := terms_base.gate_problem(CONTENT, key)) and not game.is_admin():
+        raise HTTPException(403, why)
+    return game
 
 
 def _character_name(request: Request) -> str:
