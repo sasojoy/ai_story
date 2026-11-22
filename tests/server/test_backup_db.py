@@ -543,12 +543,13 @@ def test_backup_and_restore_carry_side_files(tmp_path, capsys):
     _side(src, "identity", ("甲",))
     _side(src, "support", ("單一",))
     _side(src, "terms", ("同意一",))  # 條款旁檔（第 206 批起註冊也寫）
+    _side(src, "yiwen", ("則一",))  # 異聞的旁檔（第 247 批）
     assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
     out = capsys.readouterr().out
     main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
-    sides = {s: main.with_name(f"{main.stem}-{s}.sqlite") for s in ("identity", "support", "terms")}
+    sides = {s: main.with_name(f"{main.stem}-{s}.sqlite") for s in ("identity", "support", "terms", "yiwen")}
     assert all(p.is_file() for p in sides.values()) and _rows(sides["identity"]) == ["甲"]
-    assert _rows(sides["terms"]) == ["同意一"]
+    assert _rows(sides["terms"]) == ["同意一"] and _rows(sides["yiwen"]) == ["則一"]
     assert f"已備份旁檔：{sides['identity']}" in out and f"已備份旁檔：{sides['support']}" in out
     assert f"已備份旁檔：{sides['terms']}" in out
     for p in sides.values():
@@ -559,10 +560,12 @@ def test_backup_and_restore_carry_side_files(tmp_path, capsys):
     _side(src, "identity", ("乙",))  # 備份之後又動了
     _side(src, "support", ("單二",))
     _side(src, "terms", ("同意二",))
+    _side(src, "yiwen", ("則二",))
     assert restore_db.main([str(main), "--db", str(src)]) == 0
     said = capsys.readouterr().out
     assert _rows(src.with_name("tianxia-identity.sqlite")) == ["甲"] and _rows(src.with_name("tianxia-support.sqlite")) == ["單一"]
     assert _rows(src.with_name("tianxia-terms.sqlite")) == ["同意一"]
+    assert _rows(src.with_name("tianxia-yiwen.sqlite")) == ["則一"]
     olds = sorted(p.name for p in src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
     assert len(olds) == 1 and _rows(src.parent / olds[0]) == ["乙"]  # 還原前的旁檔留著
     assert "還原了旁檔" in said

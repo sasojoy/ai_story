@@ -65,6 +65,9 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     # batch 233: titles, terms, jieyi, mail, zongmen, guard and codex left this list: week7 and season21 turn them on (#243, codex 11/13)
     # and every round's walk calls into their page files, so coverage.json has them. web/intro.js left too: serve.py still turns the
     # intro package off for the walk (the 開場 layer would cover the clicks), but every round's page calls into the file all the same
+    # yiwen (batch 247): Config.yiwen is off in every profile and no flow meets a tale; its observer calls yiwenSync on each render,
+    # so the next coverage rebuild will see it and it moves onto the table then
+    "web/yiwen.js": "batch 247: off in every profile, no round meets a strange tale (the card layer is drawn only from main.yiwen.card)",
 }
 
 

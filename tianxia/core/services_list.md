@@ -526,4 +526,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx.mail_day_at(now)`（主人人物與同伴包 `companions`；這個現實時刻算哪一個送信日，只讀）：手機通知包的 `notify.routes._notice_keys` 在鎖內叫
 - `ctx.write_battle_tales(client, act, items, sides=, fallen=)`（主人決戰包 `battle`；決戰放手一搏一整回合的劇情，B 段，不讀狀態）：戰記包的 `tale.routes.narrate_once` 在鎖外叫
 
+# yiwen（異聞第 247 批）：包要叫的都上面列了，這一段只記「誰在用」，不新增：`ctx._mall_owner()`（旁檔與種子的鍵）、`ctx._pill_day()`（全服每天的名額）、
+# `ctx.options(odds=False, tick=False)`（撞見那一格問探索還在不在選單上）、`ctx._save_season()`、`ctx._write(...)`、`ctx._side()`；名望走共用層 `renown.gain`、素材走共用層 `materials`
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
