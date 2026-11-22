@@ -1820,6 +1820,44 @@ WAVES["AF"] = dict(
 )
 
 
+# ── AG 波：伺服器端擋條款同意（第 249 批）。企劃者 2026-11-21 傍晚「要，另開一批」；PM 查好做法給他看，他選「照這個做，兩處可以動」──
+AG_SCOUT = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\tasks\wg2f2hwzr.output"
+
+
+def b249():
+    plan = "docs/superpowers/plans/2026-11-22-條款-第249批.md"
+    return batch(249, "條款第 249 批：必須同意而沒同意的帳號，會改遊戲狀態的請求由伺服器拒絕（不再只靠網頁那一層）", "terms", "dev/terms-gate-249", plan, "8525", [
+        "- **點頭（動殼 `server.py` 的 `_game` 與核心 `tianxia/core/terms_base.py`）**：企劃者 2026-11-21 傍晚，PM 問「條款同意那一層現在只是網頁上蓋一層……要不要連伺服器也擋」，他選「要，另開一批」；PM 查好做法之後用選單問「伺服器端擋條款同意，要照我查好的做法做嗎？做法：在所有遊戲動作都會經過的那一個地方加檢查，必須同意而沒同意的帳號，會改東西的動作（選項、出陣、購買、寄信…）一律拒絕並提示『重新整理、按同意』。讀取不擋（不然同意那一層底下畫不出畫面）、管理者不擋（不然會把自己鎖在管理頁外）、登入登出與客服不擋。要動兩處：外殼取角色的那一支函式加一個檢查、核心條款那一小半加一個函式」，他選「照這個做，兩處可以動」。回報的 `core_changes` 逐一列這兩處、附這句原話；**這兩處以外要動殼、核心或 `tests/core/shell_tables.py` 才做得完，停下來寫 stopped**。",
+        "- **先讀調查結果**：`" + AG_SCOUT + "`（JSON；`result.a` 是採用的做法〔`proposal`、`gated`、`exempt`、`core_or_shell_changes`、`tests`、`risks`，`facts` 每條附檔名行號〕，`result.verdict` 是懷疑者對著程式找的洞與一定要補的事；`result.b` 是沒採用的做法，不照它做）。調查讀的是 `wave/AE` 的 `1ca6d90b3`，現在都在 develop；跟現行程式對不上的照程式、寫進 decided。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。",
+        "- **①核心 `tianxia/core/terms_base.py`**：加常數 `GATE_NEED`（被擋時回的那一句，新字、旁註待 joy 潤；意思：要先同意使用條款與隱私權條款才能繼續，請重新整理頁面、按過同意——網頁不會自己重問，所以句子要叫他重新整理）與 `gate_problem(content, account_key) -> str | None`：掛鉤沒登記或條款關著回 `None`；否則問掛鉤 `must(account_key)`，任何例外（旁檔鎖住、壞掉、內容檔讀不到）記一行 log、回 `None`（放行：網頁那一層照樣會問）；`must` 為真回 `GATE_NEED`。核心照舊不 import 包、不讀時鐘。",
+        "- **②條款包 `tianxia/features/terms/routes.py` 的掛鉤**加 `must(account_key) -> bool`：照 `status()` 同一條路算（`rules.need(...) == rules.MUST`；時間用殼那一側的 `shell.time`；`update_must` 照設定——預設關，所以現在只有「從沒同意過現行版以外任何一版也沒同意過」的人是 `must`，考慮期內的 `ask` 不擋）。快取只放「同意過現行版」（紀錄只加不刪，這個結論不會翻），鍵含旁檔路徑、版號、帳號鍵，放在掛鉤的實例上（測試每條換一個資料庫，不能串）；`must`、`ask` 不快取（按了同意下一個請求就放行）。",
+        "- **③殼 `server.py` 的 `_game(request)`**：把帳號鍵留成變數；拿到 `game` 之後、回傳之前加一個檢查——請求不是 GET、`terms_base.gate_problem(CONTENT, key)` 回了字、而且 `game.is_admin()` 為假，就 `HTTPException(403, 那一句)`。只改這一支函式：不加路由、不加頂層名字、不加 middleware，`tests/core/shell_tables.py` 不動（`tests/core/test_shell_stays_thin.py` 要照舊綠）。403 的 `detail` 是字串（網頁的 `api()` 會把它用吐司跳出來，不登出、不跳建角色——先讀 `web/app.js` 的 `api()` 確認）。條款關著時 `gate_problem` 第一行就回 `None`，行為不變。",
+        "- **④不擋的要有測試守住**（每一種一條，名字看得出在守什麼）：所有 GET（`/api/main` 輪詢照回 200）；`/api/me`、登入、登出、`/api/terms`、`/api/terms/agree`（按了同意之後原本被擋的 POST 下一次就過）、`/api/terms/version`；客服 `/api/support/*`（沒同意的玩家照樣能寫單）；管理者（名單上的角色沒同意過照樣打得了管理者工具）；`ask`（同意過舊版、考慮期內）的人不擋、考慮期過了也不擋；`update_must` 打開時同意過舊版的人被擋；條款關著全部放行而且回應跟改之前逐字一樣；旁檔讀不到時放行並記 log；註冊時勾過同意的新帳號不擋；假人程式那一側（`run_bots.py` 不 import `server`，掛鉤是 `None`）不受影響。**擋的**至少各一條：`/api/choose`、`/api/do/<op>`（一個 MAIN_ACTIONS、一個鎖外的 op）、`/api/menxia/<op>`、商城購買、帖友書信、移動。測試放 terms 包的 `tests/`（走 HTTP 的照包裡現成的寫法）與 `tests/core/test_terms_base.py`。被擋的回應與畫面沒有任何一處分得出誰是假人。",
+        "- **⑤比對情境與測試夾具**：調查查到兩軌直接用 `AccountStore.register` 建一般玩家帳號（`scripts/sb/tracks/abacus.py` 的 LATE、`scripts/sb/tracks/battle.py` 的那一位），在 season21、week7 會落在 `must`、從此 POST 全被擋——在建帳號之後補記同意（經核心 `terms_base.record`；條款關著時它什麼都不做，所以 test 設定與比對基準那一邊不變），這兩軌加 `charter`、`amend` 跑 `selftest`（三種設定）要穩；自己再 grep 一次 `scripts/sb`、`scripts/webqa` 還有沒有別的直接建玩家帳號又去 POST 的（各軌的管理者帳號靠 `is_admin` 放行，確認那個名號真的在 `config.admins`）。把 `server.CONTENT` 換成 week7 或 season21 真內容、又直接建帳號去 POST 的測試（調查列了 `tests/server/test_server.py`、`tests/figures/test_week7_season.py` 幾處）照樣補記同意或改用夾具；改動到核心與殼，跑一次不含 slow 的整套 `-n 4`，紅的逐條分清楚是「這個測試的帳號沒同意過」（補記同意）還是真的壞了。",
+        "- **⑥主機用的三樣**：(a) 唯讀清單 `scripts/list_terms_must.py <主資料庫檔>`（`mode=ro` 開主資料庫與條款旁檔、不觸發遷移、不寫任何東西；用條款包同一支判斷算出「現在會被擋」的帳號，只印登入名或帳號鍵與最後同意的版號、最後一行印幾個；管理者名單上的另外標「管理者，不擋」；不印是不是假人——假人沒有帳號，本來就不在表裡）；測試一條。(b) 啟動時的警告：`server.py` 啟動印設定的那一段**不准動殼**——改成條款包自己在掛路由（`router(shell)`）那一下檢查「條款開著、帳號表有人、同意旁檔裡現行版一筆都沒有」就 log 一行醒目的警告（旁檔遺失或搬機沒帶時全體會變成要重新同意）；做不到不動殼就寫進 leftovers、不要硬做。(c) 包的 README 寫清楚：擋什麼、不擋什麼、緊急怎麼關（`terms.enabled` 設 false 重開，網頁那一層與註冊勾選會一起收掉；或退這一批）、旁檔一丟的後果。`docs/guide`、主機端操作文件、`CLAUDE.md` 你不動，句子放回報的 docs。",
+        "- **⑦實看一次**：起暫存伺服器（8525、`TIANXIA_PROFILE=season21`、暫存資料庫、模型 127.0.0.1:9、手機通知關掉免得在工作樹生金鑰），用一個沒同意過的老帳號（直接建的）登入：網頁同意那一層照樣出現；不按同意、用瀏覽器主控台或 curl 直接打一個 POST 動作，回 403 與那一句；按同意之後同一個動作過。再用新註冊的帳號確認一切照舊。375 淺、深各拍一張被擋時吐司的樣子，路徑寫進回報。看完 `taskkill /T`、刪暫存。",
+        "- **不做**：擋 GET；讓網頁碰到 403 自動重問 `/api/terms`（動 `web/terms.js` 是另一批）；另加獨立的開關或 Config 欄位（跟著 `terms.enabled`）；改條文；identity 開著時帳號鍵一致的問題（寫進 leftovers，開 identity 那一批驗）。退版：資料庫不升版、沒有存檔欄位；換回舊程式就是不擋。新字每句旁待 joy 潤、列進 new_strings。任何輸出都不能分得出誰是假人；不讀不寫任何 `.local/`；不碰 7861。",
+    ], custom=True)
+
+
+AG_GATE_LENS = dict(key="gate", text=(
+    "**伺服器端擋條款同意：擋得住、不會把人鎖在外面、關著不變**。第 249 批（企劃者 2026-11-21「照這個做，兩處可以動」）；調查原文 " + AG_SCOUT + "。親自驗（解一份 head 到你的暫存夾，`TIANXIA_DB` 指到暫存檔，用 TestClient 或小腳本打；條款用正式內容 season21 打開）："
+    "①**找洞**：grep `server.py` 與每一包 `routes.py` 的每一條非 GET 路由與 `/api/do` 的每一個 op，列出**沒有**經過 `_game` 而又會改遊戲狀態（角色存檔、全服狀態、錢包）的——每找到一條就是 blocker 或 should；只動帳號、客服旁檔、推播裝置的不算。用一個沒同意過的帳號實際打十條不同包的 POST，全部 403。"
+    "②**鎖在外面**：沒同意過的帳號登入、`/api/me`、`/api/main`（GET）、`/api/terms`、`/api/terms/agree`、登出、寫客服單都通；按了同意之後原本 403 的那一條馬上過（快取不會卡住）；管理者名單上的角色沒同意過照樣開季、用管理者工具；客服名單上的帳號回單不受影響；剛註冊還沒建角色的人照舊 409 不是 403。"
+    "③**不多擋**：同意過現行版的人、考慮期內同意過舊版的人（`ask`）、考慮期過後的人，一條都不擋；`update_must` 打開時同意過舊版的人才擋。"
+    "④**關著不變**：條款關著（測試內容、`config.json` 那一層）時 `_game` 的行為對 base 逐字一樣；殼的 diff 只有 `_game` 那一支函式；`tests/core/shell_tables.py` 沒動；核心沒有 import 包、沒有讀時鐘。"
+    "⑤旁檔讀不到（把旁檔換成一個壞檔、或讓掛鉤丟例外）時放行而且有 log、不 500；快取鍵含旁檔路徑（換一個資料庫、同名帳號不會被前一個庫的同意放行）。"
+    "⑥比對軌補記同意的那兩處在條款關著時真的什麼都不做（test 設定的輸出對 base 一樣）；`scripts/list_terms_must.py` 用 `mode=ro`、不寫、不印任何分得出假人的欄位。"
+    "⑦403 的句子有待 joy 潤；被擋的回應裡沒有任何欄位分得出誰是假人。"
+))
+WAVES["AG"] = dict(
+    round2=True,
+    extra_lenses=[AG_GATE_LENS],
+    lines=[dict(name="伺服器擋同意", batches=[b249])],
+    merge_port=8526, fix_port=8527,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
