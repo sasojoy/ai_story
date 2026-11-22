@@ -280,6 +280,8 @@ def step(ctx, body: dict) -> list[str]:
         return []
     label = choices[pick]
     key, season, clock = _key(ctx), _season(ctx), _clock(ctx)
+    if w.tale == 0:
+        _reattach(ctx, store, w, key, season)
     tale_key = w.tale or w.opening
     child = next((n for n in store.children(w.tale, w.node) if n["pick"] == label), None) if w.tale else None
     out: list[str] = []
@@ -328,6 +330,27 @@ def step(ctx, body: dict) -> list[str]:
     if ndepth >= rules.DEPTH:
         out += _finish(ctx, store, w, nid)
     return out
+
+
+def _reattach(ctx, store, w: YiwenWalk, key: str, season: int) -> None:
+    """第 251 批②：發掘者第一步已寫進旁檔（開則＋第一幕）、主交易卻撤回了（存檔失敗、行程被砍）：存檔的 w.tale 回到 0，
+    旁檔卻有這一季這一句、發掘者是自己的那一則。接回——w.tale 指回去，已經在旁檔的幕由 step 走重放（不重寫、不另開、不多佔名額）；
+    世界那一格有就把 tale 補上（已經是就不寫），沒有就補記一格。那一則是別人的、被拿掉的：不接，step 照舊開則撞 Taken。"""
+    if w.role != rules.FIND:
+        return
+    row = store.tale_by_opening(season, w.opening)
+    if row is None or row["discoverer"] != key or row["status"] == rules.REMOVED:
+        return
+    w.tale = int(row["id"])
+    yw = ctx.state.world.yiwen = ctx.state.world.yiwen or YiwenWorld()
+    claim = yw.taken.get(w.opening)
+    if claim is None:
+        yw.taken[w.opening] = YiwenClaim(by=key, at=float(row["discovered_at"]), tale=w.tale)
+    elif claim.tale == w.tale:
+        return
+    else:
+        claim.tale = w.tale
+    ctx._save_season()
 
 
 def _finish(ctx, store, w: YiwenWalk, leaf: int) -> list[str]:

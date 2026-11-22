@@ -31,7 +31,8 @@
 
 - `PlayerState.yiwen: YiwenWalk | None`（QUIET、None 起家、第一次撞見才建；不在 `carried`，換季清掉；回到「眼前沒有」只清眼前那幾格，季內的帳留著）。
 - `WorldState.yiwen_on: bool`（QUIET）、`WorldState.yiwen: YiwenWorld | None`（QUIET、None 起家、第一次要寫才建：名額 `taken`、每天的數 `free_day`／`free_today`、定論記號 `settled`〔異聞四〕）。關著的季、沒人撞見的季存檔一個鍵都不多。
-- 旁檔 `<db stem>-yiwen.sqlite`（`store.py`；表 tales、nodes、walks，reports、mutes 這一批只建表）：開關開著、有人探索到撞見那一格才建（關著一個檔都不建）；`scripts/backup_db.py` 的 `SIDE_FILES`、`scripts/sb/harness.py::_wipe_db` 都帶它。記憶體世界（沒有資料庫）異聞不開。
+- 旁檔 `<db stem>-yiwen.sqlite`（`store.py`；表 tales、nodes、walks，reports、mutes 這一批只建表）：第一次真的要寫才建（第 251 批：發掘者說了第一步、開則那一下；沒人撞見過、撞見了還沒走第一步都沒有這個檔，關著一個檔都不建）；讀的時候檔不在當成空、不建；寫過之後檔被刪，下一次寫重建表。`scripts/backup_db.py` 的 `SIDE_FILES`、`scripts/sb/harness.py::_wipe_db` 都帶它。記憶體世界（沒有資料庫）異聞不開。
+- 撤回後接回（第 251 批）：旁檔不跟主交易同一筆。發掘者第一步寫進旁檔（開則＋第一幕）之後主交易撤回（存檔失敗、行程被砍），存檔的 `w.tale` 回到 0、旁檔卻留著那一則 `walking`：再按時 `actions._reattach` 照旁檔那一列（同季、同開場、發掘者是自己的鍵、沒被拿掉）接回——`w.tale` 指回去，已在旁檔的幕走重放（不重寫、不另開一則，獎勵照 `paid_scenes` 一幕一次、給重放的量），世界名額那一格有就補上 `tale`、沒有就補記一格，不重複記；之後照常走完、那一列補上 `finished_at`。那一則是別人的，照舊「有人比你先一步」。
 - 內容檔包自己讀（`rules.FILES`）：`content/yiwen_openings.json`（設計 3.1 五句樣例；正式三十句等 Joy 與企劃者交）、`content/yiwen_lines.json`（3.3 的模板句，加 `gone`、`drop`、`locked`）。測試內容十八句在 `tests/data/yiwen_openings.json`（不放 `tests/content/`），`yiwen_kit.use_test_lines` 換。
 
 ## 讀別包的欄位

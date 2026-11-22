@@ -141,6 +141,10 @@ class YiwenStore:
     def tales(self, season: int) -> list[dict]:
         return self._read("SELECT * FROM tales WHERE season = ? ORDER BY id", (season,))
 
+    def tale_by_opening(self, season: int, opening: str) -> dict | None:
+        """這一季這一句開場的那一則（UNIQUE(season, opening)，最多一列）；第 251 批撤回後接回用。"""
+        return self._one("SELECT * FROM tales WHERE season = ? AND opening = ?", (season, opening))
+
     def walking(self, season: int) -> list[dict]:
         return self._read("SELECT * FROM tales WHERE season = ? AND status = 'walking' ORDER BY id", (season,))
 

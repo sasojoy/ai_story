@@ -245,6 +245,84 @@ def test_finder_chronicle_line(on):
     assert any("首見異聞" in a.text for a in on.state.player.annals) or not on.state.player.annals
 
 
+def _taken_said(got):
+    return any(line in rules.lines()["taken"] for line in got)
+
+
+@pytest.mark.parametrize("keep_world", [False, True])
+def test_rollback_after_first_scene_reattaches(on, keep_world):
+    """第 251 批②：發掘者第一步寫進旁檔（開則＋第一幕）之後主交易撤回（存檔失敗、行程被砍）：玩家那一格回到 step 之前，
+    世界那一格跟著撤回或留著；旁檔不動。再按同一顆接回自己那一則：第一幕走重放（給重放的量），不回「有人比你先一步」。"""
+    import copy
+
+    on.content.config.yiwen.luck_good = 0.0  # 不擲出素材，只看銀兩
+    claim(on, OPENING)
+    player_before = on.state.player.model_copy(deep=True)
+    world_before = copy.deepcopy(on.state.world.yiwen)
+    chronicle_before = len(on.state.world.chronicle)
+    c = actions.card(on)
+    actions.step(on, {"tale": c["tale"], "opening": OPENING, "node": 0, "pick": 0})
+    tid = on.state.player.yiwen.tale
+    assert tid > 0 and len(store_of(on).nodes(tid)) == 1
+    # 撤回：兩份狀態回到 step 之前，旁檔不動
+    on.state.player = player_before
+    if not keep_world:
+        on.state.world.yiwen = world_before
+        assert on.state.world.yiwen.taken[OPENING].tale == 0
+    on._save_season()
+    silver = _silver(on)
+    got = walk_all(on)
+    assert not any(_taken_said(g) for g in got)
+    w = on.state.player.yiwen
+    assert w.tale == tid and w.opening == OPENING and tid in w.done
+    taken = on.state.world.yiwen.taken
+    assert list(taken) == [OPENING] and taken[OPENING].tale == tid
+    season = int(on.state.player.season_number)
+    tales = store_of(on).tales(season)
+    assert [t["id"] for t in tales] == [tid] and tales[0]["status"] == rules.OPEN
+    assert store_of(on).walk(tid, on._mall_owner())["finished_at"] is not None
+    nodes = store_of(on).nodes(tid)
+    assert [n["depth"] for n in nodes] == [1, 2, 3]
+    assert sorted(w.paid_scenes) == sorted(n["id"] for n in nodes) and len(set(w.paid_scenes)) == 3
+    t = on.content.config.yiwen
+    # 第一幕撤回那一下的 per_scene 跟著主交易沒了，改給重放的量（少給一點）；其餘兩幕照寫的給
+    assert _silver(on) - silver == _amount(on, t.per_replay) + 2 * _amount(on, t.per_scene) + _amount(on, t.finish_first)
+    title = rules.openings()[OPENING]["title"]
+    assert [r.text for r in on.state.world.chronicle[chronicle_before:]] == [actions.CHRONICLE.format(who=on.state.player.name, title=title)]
+
+
+def test_rollback_reattach_with_world_claim_missing(on, monkeypatch):
+    """世界那一格整個不見（防呆）：接回時補記一格、tale 指回去。"""
+    claim(on, OPENING)
+    player_before = on.state.player.model_copy(deep=True)
+    c = actions.card(on)
+    actions.step(on, {"tale": c["tale"], "opening": OPENING, "node": 0, "pick": 0})
+    tid = on.state.player.yiwen.tale
+    on.state.player = player_before
+    del on.state.world.yiwen.taken[OPENING]
+    on._save_season()
+    monkeypatch.setattr(actions, "valid", lambda ctx: True)  # valid 要世界那一格才放行：這裡只測 step 補記
+    got = actions.step(on, {"tale": 0, "opening": OPENING, "node": 0, "pick": 0})
+    assert not _taken_said(got)
+    claim_now = on.state.world.yiwen.taken[OPENING]
+    assert claim_now.tale == tid and claim_now.by == on._mall_owner()
+    assert on.state.player.yiwen.tale == tid and len(store_of(on).tales(int(on.state.player.season_number))) == 1
+
+
+def test_taken_by_someone_else_still_refused(on):
+    """那一列是別人的（同季同開場、發掘者不是自己）：照舊回「有人比你先一步」、眼前清掉，旁檔還是只有那一則。"""
+    season = int(on.state.player.season_number)
+    tid = store_of(on).open_tale(season=season, opening=OPENING, place=on.state.player.location, by=on._mall_owner(),
+                                 shown=on.state.player.name, at=0.0)
+    other = _second(on)
+    claim(other, OPENING)
+    c = actions.card(other)
+    got = actions.step(other, {"tale": c["tale"], "opening": OPENING, "node": 0, "pick": 0})
+    assert _taken_said(got) and len(got) == 1
+    assert other.state.player.yiwen.opening == "" and other.state.player.yiwen.tale == 0
+    assert [t["id"] for t in store_of(on).tales(season)] == [tid] and store_of(on).nodes(tid) == []
+
+
 def test_world_and_player_none_write_no_key(on):
     """開著、沒人撞見：全服存檔、角色存檔都沒有 yiwen 鍵；撞見一次後才有。舊存檔沒有這個鍵照讀。"""
     player = json.loads(on.state.player.model_dump_json())
