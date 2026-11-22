@@ -1943,7 +1943,7 @@ AI_MODEL_LENS = dict(key="model", text=(
     "⑦開關關著：op 回空、存檔不多鍵、`compare --new yiwen` 的結果開發有貼；yiwen 軌 selftest 的輸出開發有貼而且真的走了第二段（假的模型）。核心、殼、`shell_tables` 沒動（只有計畫點名的三個測試名單各加一列）；包只 import 核心、共用層、自己；`scripts/try_yiwen.py` 的 `--fake` 不連任何網路、印的字分不出假人。"
 ))
 WAVES["AI"] = dict(
-    round2=True, feature=True, design=YW_DESIGN, new_packages="yiwen",
+    round2=True, feature=True, design=YW_DESIGN, new_packages="yiwen", new_existing=True,
     extra_lenses=[AI_MODEL_LENS],
     lines=[dict(name="異聞二", batches=[b251, b252])],
     merge_port=8535, fix_port=8536,
