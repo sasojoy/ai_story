@@ -382,6 +382,21 @@ def test_a_phone_viewport_widened_by_an_overflow_has_landed():
     assert json.loads(out.stdout) == [c[2] for c in cases]
 
 
+def test_a_window_set_twice_in_a_row_is_flipped_first():
+    # 第 254 批：light 景的第一張（375 淺色 dpr 1）跟前一景收尾設的視窗一樣，不會整頁重畫；決戰卡倒數那一塊每秒重寫，A 對 A 隨機差 1 級 713 px
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("no node")
+    src = (TOOL / "snippets.mjs").as_uri()
+    code = (f"const {{ sameWindow, SHOT_VIEWS: V }} = await import({json.dumps(src)});"
+            "console.log(JSON.stringify([sameWindow(null, V[0], 1), sameWindow([V[0], 1], V[0], 1), sameWindow([V[0], 2], V[0], 1),"
+            "sameWindow([V[1], 1], V[0], 1), sameWindow([[...V[0]], 1], V[0], 1), sameWindow([V[2], 1], V[2], 1)]));")
+    out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
+    assert json.loads(out.stdout) == [False, True, False, False, True, True]
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
+    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); await sleep(50); }" in text and "lastView = [v, dpr];" in text
+
+
 def test_a_dialog_is_answered_and_shows_as_a_console_line():
     text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
     assert "Page.javascriptDialogOpening" in text and "Page.handleJavaScriptDialog" in text and "report.console.push(`${sceneNow}: dialog" in text

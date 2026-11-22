@@ -28,6 +28,9 @@ export const STABLE_SIG = `(() => { const d = document.documentElement; const s 
 // that counts. Only near a phone width, and every window the walk comes from is 640 or wider, so an old width cannot pass for it.
 export const landed = (sig, width) => { const [w, , sw] = sig.split("|").map(Number); return w === width || (width <= 480 && w > width && w === sw && w - width < 100); };
 
+// Is this window the one already set (prev: [view, dpr] from the last setView, or null)? Then setting it again repaints nothing (batch 254).
+export const sameWindow = (prev, v, dpr) => !!prev && prev[1] === dpr && prev[0].length === v.length && prev[0].every((x, i) => x === v[i]);
+
 // every element under body plus ::before and ::after that exist: property text deduplicated by hash inside one scene.
 // The walk leaves #toast out: it drops its class 3.2 s after showing, on the wall clock, so it flips from side to side (wave D, 002_opening_event and 170_cr_pick2 at 640).
 // The replay keeps it: there both sides get the same snapshot, and that is where a change to the toast's own styles shows.
