@@ -24,7 +24,11 @@
   const YW_CHIP_FULL = "開完了"; // 待 joy 潤
   const YW_NOBODY = "沒人走過"; // 待 joy 潤
   const YW_FULL_LINE = "這一則的岔路都開完了，只能走有人走過的路。"; // 待 joy 潤
-  const YW_TYPED_OFF = "自己說⋯（說書人還沒到）"; // 待 joy 潤
+  const YW_TYPED_PH = "自己說那是什麼⋯"; // 待 joy 潤
+  const YW_TYPED_GO = "就是這個"; // 待 joy 潤
+  const YW_TYPED_PICK = "這一步請從上面挑。"; // 待 joy 潤
+  const YW_TYPED_LEFT = "還能說 {n} 次"; // 待 joy 潤
+  const YW_STOP = "停"; // 待 joy 潤
   const YW_HELP = "異聞的規矩"; // 待 joy 潤
   const YW_RULES = [
     "一則三幕，每一幕挑一個做法往下走。", // 待 joy 潤
@@ -99,7 +103,8 @@
     else if (c.state === "free") st = `<span class="yw-chip free">${card.mark === "first" ? YW_CHIP_MINE : YW_CHIP_FREE}</span>${YW_NOBODY}`;
     else if (c.state === "incense") st = `<span class="yw-chip paid">${YW_CHIP_INCENSE}</span>${YW_NOBODY}`;
     else { off = true; st = `<span class="yw-chip off">${esc(c.note || "")}</span>`; }
-    return `<button class="yw-sign${typed ? " yw-zp" : ""}${off ? " locked" : ""}" data-act="yw-step" data-i="${esc(String(c.i ?? 0))}"${off ? " disabled" : ""}>
+    const said = typed ? ` data-label="${esc(c.label)}"` : ""; // 自己說寫成的那一幕：送 pick "zhupi"＋這一句
+    return `<button class="yw-sign${typed ? " yw-zp" : ""}${off ? " locked" : ""}" data-act="yw-step" data-i="${esc(String(c.i ?? 0))}"${said}${off ? " disabled" : ""}>
       <b>${label}</b><span class="yw-st">${st}</span></button>`;
   }
 
@@ -119,9 +124,22 @@
     return `<div class="yw-signs">${signs}${merged}</div>${full.length ? `<p class="yw-legend">${YW_FULL_LINE}</p>` : ""}`;
   }
 
-  function ywSay() { // 自己說（這一批說書人還沒到：灰、虛線、按不下去）＋「？」規矩
+  // 自己說的那一格（第 252 批）：open 一格＋「就是這個」；spent（被擋滿、被禁寫）、locked（別人的則）灰著；off（走完）不畫。
+  // 被擋、說書人接不下去時輸入中的字留著（S.ywDraft，這一步推進了才清）；被擋的那一句寫在格下
+  function ywSayBox(card) {
+    const ty = (card && card.typed) || {};
+    if (ty.state === "open") {
+      const msg = S.ywSayMsg ? `<p class="yw-say-msg" role="status">${esc(S.ywSayMsg)}${Number.isFinite(Number(ty.tries_left)) ? `<small>${ywFill(YW_TYPED_LEFT, { n: Number(ty.tries_left) })}</small>` : ""}</p>` : "";
+      return `<form class="yw-say yw-say-open" id="yw-say-form"><input class="input" name="text" maxlength="${Number(ty.max) || 30}" placeholder="${YW_TYPED_PH}" aria-label="${YW_TYPED_PH}" autocomplete="off" value="${esc(S.ywDraft || "")}">
+        <button class="btn primary yw-say-go" type="submit">${YW_TYPED_GO}</button></form>${msg}`;
+    }
+    if (ty.state === "spent" || ty.state === "locked") return `<div class="yw-say off" aria-disabled="true"><span>${YW_TYPED_PICK}</span></div>`;
+    return "";
+  }
+
+  function ywSay(card) { // 自己說＋「？」規矩＋放下
     const rules = S.ywHelp ? `<ul class="yw-rules">${YW_RULES.map((t) => `<li>${t}</li>`).join("")}</ul>` : "";
-    return `<div class="yw-cd"><div class="yw-say off" aria-disabled="true"><span>${YW_TYPED_OFF}</span></div>
+    return `<div class="yw-cd">${ywSayBox(card)}
       <button class="yw-help" data-act="yw-help" aria-expanded="${!!S.ywHelp}"><span class="yw-q">？</span>${YW_HELP} ${S.ywHelp ? "▴" : "▾"}</button>${rules}</div>
       <button class="btn ghost yw-btn" data-act="yw-drop">${YW_DROP}</button>`;
   }
@@ -164,22 +182,24 @@
     if (card.done) {
       body = scenes.slice(0, -1).map(ywPrev).join("") + (scenes.length ? yiwenScene(scenes[scenes.length - 1]) : "") + yiwenClose(card);
     } else if (!scenes.length) {
-      body = `${ywHero(card)}<div class="yw-hd"><h4>${YW_HD_FIRST}</h4><small>${YW_HD_TIP}</small></div>${ywSigns(card)}${ywSay()}`;
+      body = `${ywHero(card)}<div class="yw-hd"><h4>${YW_HD_FIRST}</h4><small>${YW_HD_TIP}</small></div>${ywSigns(card)}${ywSay(card)}`;
     } else {
       body = scenes.slice(0, -1).map(ywPrev).join("") + yiwenScene(scenes[scenes.length - 1])
-        + `<div class="yw-hd"><h4>${YW_HD_NEXT}</h4></div>${ywSigns(card)}${ywSay()}`;
+        + `<div class="yw-hd"><h4>${YW_HD_NEXT}</h4></div>${ywSigns(card)}${ywSay(card)}`;
     }
     return `<div class="yw-card" role="dialog" aria-label="${esc(card.title)}">${ywTop(card)}<div class="yw-scr">${body}</div></div>`;
   }
 
-  // 等說書人寫的那一刻（按了沒人走過的那一顆、請求 250ms 還沒回）：上一幕收成一行、新的一頁是格線＋墨點；頁邊寫你說的那一句
+  // 等說書人寫的那一刻（按了沒人走過的那一顆、或自己說送出，請求 250ms 還沒回）：上一幕收成一行、新的一頁是格線＋墨點；頁邊寫你說的那一句；
+  // 「停」只收掉這一頁、回到卡上（伺服器那一件照樣寫完，回來照輪詢畫；沒有取消）
   function yiwenWait(card, label) {
     if (!card) return "";
     const scenes = card.scenes || [];
     const book = `<div class="yw-book yw-waiting"><div class="yw-num">${ywAct(scenes.length + 1)}</div>
       <div class="yw-leaf"><div class="yw-ruled"><p class="yw-wait"><span class="yw-dots" aria-hidden="true"><i></i><i></i><i></i></span>${YW_WAIT}</p></div>
         <p class="yw-note">${YW_WAIT_NOTE}</p></div>
-      <div class="yw-margin${ywFit(YW_ZP_MINE, label)}"><p class="yw-zp-tx"><small>${YW_ZP_MINE}</small>「${esc(label)}」</p><span class="yw-stamp solid">${YW_WAIT_SEAL}</span></div></div>`;
+      <div class="yw-margin${ywFit(YW_ZP_MINE, label)}"><p class="yw-zp-tx"><small>${YW_ZP_MINE}</small>「${esc(label)}」</p><span class="yw-stamp solid">${YW_WAIT_SEAL}</span></div></div>
+      <button class="btn ghost yw-btn yw-stop" data-act="yw-stop">${YW_STOP}</button>`;
     return `<div class="yw-card" role="dialog" aria-label="${esc(card.title)}" aria-busy="true">${ywTop(card)}<div class="yw-scr">${scenes.map(ywPrev).join("")}${book}</div></div>`;
   }
 
@@ -221,7 +241,8 @@
     if (!box) { box = document.createElement("div"); box.id = "yw-pop"; box.className = "yw-wrap"; document.body.appendChild(box); }
     const top = box.scrollTop;
     const said = box.querySelector(".yw-say input");
-    const keep = said ? said.value : "";
+    if (said) S.ywDraft = said.value; // 輸入中的字：重畫、等待頁、被擋、接不下去都留著（這一步推進了才清，見 ywSend）
+    const keep = said ? said.value : S.ywDraft || "";
     box.innerHTML = S.ywWait ? yiwenWait(card, S.ywWait) : yiwenCard(card);
     const again = box.querySelector(".yw-say input");
     if (again && keep) again.value = keep;
@@ -232,24 +253,60 @@
     box.scrollTop = last ? Math.max(0, last.offsetTop - 56) : top;
   }
 
-  async function ywStep(el) { // 路牌按一顆：打 /api/do/yiwen_step；沒人走過的那一顆 250ms 還沒回就畫等說書人那一頁；回話留著給收尾卡寫得失
+  // 送一步（路牌、別人自己說的那一塊、自己說）：打 /api/do/yiwen_step；要寫新的一幕的 250ms 還沒回就畫等說書人那一頁；
+  // 回話留著給收尾卡寫得失。這一步推進了（節點換了）才清輸入中的字與被擋的那一句；被擋、接不下去（api() 已經跳出那一句）都留著
+  async function ywSend(extra, label, slow) {
+    const card = S.main && S.main.yiwen ? S.main.yiwen.card : null;
+    if (!card) return;
+    clearTimeout(S.ywTimer);
+    S.ywStopped = false;
+    S.ywTimer = slow ? setTimeout(() => { if (!S.ywStopped) { S.ywWait = label; yiwenSync(); } }, 250) : null;
+    const body = { tale: card["tale"], opening: card.opening, node: card.node, ...extra }; // 寫成 ["tale"]：test_server 掃「點 tale」這種寫法（戰記的 class 名不准撞）
+    let r = null;
+    try {
+      r = await api("/api/do/yiwen_step", body);
+    } catch (e) { /* 連線斷了、說書人接不下去、排太久：卡與輸入中的字都還在，再按一次 */ }
+    clearTimeout(S.ywTimer);
+    S.ywTimer = null;
+    S.ywWait = "";
+    if (r) {
+      S.ywLast = (r.message || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").split("\n").map((t) => t.trim()).filter(Boolean);
+      const after = r.main && r.main.yiwen ? r.main.yiwen.card : null;
+      const moved = !after || after.node !== card.node || after["tale"] !== card["tale"];
+      if (moved) {
+        S.ywDraft = ""; S.ywSayMsg = ""; S.ywJump = true;
+        const box = document.getElementById("yw-pop");
+        const said = box && box.querySelector ? box.querySelector(".yw-say input") : null;
+        if (said) said.value = ""; // 不然 yiwenSync 又從格裡把上一步的字讀回來
+      } else if (extra.pick === "typed") S.ywSayMsg = S.ywLast.join(" ");
+      applyMain(r.main);
+    }
+    yiwenSync();
+  }
+
+  async function ywStep(el) { // 路牌按一顆；別人自己說的那一塊（data-i="zhupi"）帶著那一句送
     const card = S.main && S.main.yiwen ? S.main.yiwen.card : null;
     if (!card || el.disabled) return;
     const raw = el.dataset.i || "0";
-    const pick = /^\d+$/.test(raw) ? Number(raw) : raw; // 發掘者自己填的那一句（"zhupi"）照字串送
-    const c = (card.choices || []).find((x) => String(x.i) === raw);
-    const slow = c && (c.state === "free" || c.state === "incense");
-    const timer = slow ? setTimeout(() => { S.ywWait = c.label; yiwenSync(); }, 250) : null;
-    const body = { tale: card["tale"], opening: card.opening, node: card.node, pick }; // 寫成 ["tale"]：test_server 掃「點 tale」這種寫法（戰記的 class 名不准撞）
-    try {
-      const r = await api("/api/do/yiwen_step", body);
-      S.ywLast = (r.message || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").split("\n").map((t) => t.trim()).filter(Boolean);
-      S.ywJump = true;
-      if (timer) clearTimeout(timer);
-      S.ywWait = "";
-      applyMain(r.main);
-    } catch (e) { /* 連線斷了：卡還在，再按一次 */ }
-    if (timer) clearTimeout(timer);
+    const pick = /^\d+$/.test(raw) ? Number(raw) : raw;
+    const label = el.dataset.label || "";
+    const c = (card.choices || []).find((x) => String(x.i) === raw && (raw !== "zhupi" || x.label === label));
+    const slow = !!c && (c.state === "free" || c.state === "incense");
+    await ywSend(raw === "zhupi" ? { pick, text: label } : { pick }, c ? c.label : "", slow);
+  }
+
+  async function yiwenForm(form, data) { // 自己說的那一格送出
+    if (form.id !== "yw-say-form") return;
+    const text = String(data.text || "").trim();
+    if (!text) return;
+    S.ywDraft = text;
+    await ywSend({ pick: "typed", text }, text, true);
+  }
+
+  function ywStop() { // 「停」：只收掉等待頁，請求不取消
+    S.ywStopped = true;
+    clearTimeout(S.ywTimer);
+    S.ywTimer = null;
     S.ywWait = "";
     yiwenSync();
   }
@@ -268,6 +325,7 @@
   async function yiwenClick(act, el, ev) {
     switch (act) {
         case "yw-step": await ywStep(el); break;
+        case "yw-stop": ywStop(); break;
         case "yw-hide": S.ywHide = true; yiwenSync(); break;
         case "yw-show": S.ywHide = false; yiwenSync(); break;
         case "yw-help": S.ywHelp = !S.ywHelp; yiwenSync(); break;
@@ -275,4 +333,5 @@
         case "yw-drop": ask(YW_DROP_ASK, YW_DROP, () => choose(document.querySelector('[data-act="yw-drop"]') || el, "yiwen:drop")); break;
     } // yiwenClick
   } // yiwenClick
-  registerClicks(yiwenClick, ["yw-step", "yw-hide", "yw-show", "yw-help", "yw-open", "yw-drop"]);
+  registerClicks(yiwenClick, ["yw-step", "yw-stop", "yw-hide", "yw-show", "yw-help", "yw-open", "yw-drop"]);
+  registerForms(yiwenForm, ["yw-say-form"]);
