@@ -145,7 +145,7 @@
 .yw-say-open .input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; color: var(--ink); font: 400 16px/1.4 var(--kai); outline: none; }
 .yw-say-open .input::placeholder { color: var(--ink-2); opacity: .8; }
 .yw-say-open:focus-within { border-color: var(--accent); }
-.yw-say-go { flex: none; min-height: 44px; padding: 0 14px; white-space: nowrap; }
+.yw-say-open .btn.yw-say-go { flex: none; width: auto; min-height: 44px; padding: 0 14px; white-space: nowrap; }
 .yw-say-msg { margin: -4px 0 0; font: 400 13px/1.6 var(--kai); color: var(--accent); }
 .yw-say-msg small { display: block; font: 400 12px var(--sans); color: var(--ink-2); }
 .yw-card .yw-stop { margin-top: 12px; }
