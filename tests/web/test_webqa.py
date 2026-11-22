@@ -84,6 +84,23 @@ def test_a_real_line_says_whether_the_two_walks_left_the_same_dom_and_styles():
     assert gate.fingerprint_note({"A": same, "B": None}) == ""
 
 
+def test_the_battle_card_mutation_inverts_its_two_pictures_only(tmp_path):
+    # 第 254 批：selftest 的 img-battle，決戰卡底圖（web/battle.js BP_BG）反相、同尺寸同格式，c 回合要判像素 REAL
+    Image = pytest.importorskip("PIL.Image")
+    gate = _load("gate")
+    ev = tmp_path / "web" / "img" / "events"
+    ev.mkdir(parents=True)
+    for name in ("camp.webp", "night.webp", "rain.webp"):
+        Image.new("RGB", (4, 3), (10, 200, 30)).save(ev / name, format="WEBP", lossless=True)
+    gate.mutate(str(tmp_path), gate.IMG_BATTLE)
+    for name, px in (("camp.webp", (245, 55, 225)), ("night.webp", (245, 55, 225)), ("rain.webp", (10, 200, 30))):
+        with Image.open(ev / name) as im:
+            assert (im.format, im.size) == ("WEBP", (4, 3))
+            assert max(abs(x - y) for x, y in zip(im.convert("RGB").getpixel((0, 0)), px)) <= 8  # 存回去是有損的 webp，差幾級
+    assert set(gate.IMG_BATTLE_FILES) == {"web/img/events/camp.webp", "web/img/events/night.webp"}
+    assert '"/static/img/events/camp.webp"' in (ROOT / "web" / "battle.js").read_text(encoding="utf-8")  # 底圖換了檔名，突變要跟著換
+
+
 def test_the_scrollbar_only_at_desktop_widths(noise):
     assert noise.pixel_class(210000, 200, view="1280", sw_a=1265, sw_b=1280) == "gutter"  # cl_c08
     assert noise.pixel_class(210000, 200, view="375-light", sw_a=1265, sw_b=1280) is None
