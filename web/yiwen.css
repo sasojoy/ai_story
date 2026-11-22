@@ -140,3 +140,12 @@
   .yw-stamp { writing-mode: horizontal-tb; padding: 2px 4px; }
   .yw-zp-name { max-width: none; text-align: left; }
 }
+/* 自己說的那一格（第 252 批）：一格＋主鈕；被擋的那一句與還能說幾次寫在格下；等待頁的「停」 */
+.yw-say.yw-say-open { padding: 4px 4px 4px 10px; gap: 6px; background: var(--card); border-color: var(--ink-2); }
+.yw-say-open .input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; color: var(--ink); font: 400 16px/1.4 var(--kai); outline: none; }
+.yw-say-open .input::placeholder { color: var(--ink-2); opacity: .8; }
+.yw-say-open:focus-within { border-color: var(--accent); }
+.yw-say-open .btn.yw-say-go { flex: none; width: auto; min-height: 44px; padding: 0 14px; white-space: nowrap; }
+.yw-say-msg { margin: -4px 0 0; font: 400 13px/1.6 var(--kai); color: var(--accent); }
+.yw-say-msg small { display: block; font: 400 12px var(--sans); color: var(--ink-2); }
+.yw-card .yw-stop { margin-top: 12px; }

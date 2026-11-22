@@ -3998,6 +3998,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
         "guard_say",  # 親衛隊長自己寫的那一句（features/guard）：三段同 feast_text
         "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
+        "yiwen_step",  # 異聞的說書人寫一幕（features/yiwen，第 252 批）：A step_request → B 鎖外審字＋writer.write_scene → C apply_step
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）

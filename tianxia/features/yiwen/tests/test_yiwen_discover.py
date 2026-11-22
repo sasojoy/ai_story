@@ -105,6 +105,33 @@ def test_bot_never_meets():
     assert store_of(game).tales(int(game.state.player.season_number)) == []
 
 
+def test_side_file_absent_until_first_encounter():
+    """第 251 批：開關開著、季有章，沒人撞見過旁檔不存在、存檔也沒有 yiwen 鍵；撞見那一下只寫存檔，
+    發掘者說了第一步（開則）旁檔才出現（照現行程式：撞見不寫旁檔，見計畫第 251 批①「先後」）。"""
+    from tianxia.features.yiwen.store import TABLES, side_path
+
+    game = season21_game(discover_chance=0.0, rewalk_chance=0.0)
+    side = side_path(game.world.db.path)
+    for _ in range(5):
+        assert _meet(game) == []
+        actions.status(game)
+        game.state.player.explore_seq += 1
+    assert not side.exists()
+    assert "yiwen" not in json.loads(game.state.player.model_dump_json())
+    assert "yiwen" not in json.loads(game.state.world.model_dump_json())
+    game.content.config.yiwen.discover_chance = 1.0
+    assert _meet(game) and actions.card(game) is not None  # 撞見
+    assert not side.exists()
+    from yiwen_kit import walk_all
+    walk_all(game, picks=(0,))
+    assert side.is_file()
+    import contextlib
+    import sqlite3
+    with contextlib.closing(sqlite3.connect(side)) as conn:
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert set(TABLES) <= names
+
+
 def test_takeover_blocks_meeting():
     game = season21_game(discover_chance=1.0)
     game.content.config.guard.enabled = True
