@@ -87,7 +87,7 @@
 # identity（J 波第 201 批「帳號一」；計畫 docs/superpowers/plans/2026-11-08-帳號與客服-計畫.md）
 - identity_base.py：帳號綁定別人也要讀的那一半——正規化、遮罩、金鑰、subject_hmac、on、phone_ok、blocked_name；identity 包、server.name_taken、商城易名帖讀它。同 event_check 不進 MODULES。
 # terms（第 206 批「帳號六」；計畫 docs/superpowers/plans/2026-11-08-帳號與客服-第206批.md）
-- terms_base.py：註冊那兩條路（server.register、identity 包建角色）查兩個勾選、建好帳號記同意版本的接縫——on、set_hook、register_problem、record；terms 包掛路由時 set_hook，殼與 identity 包讀它。同 event_check 不進 MODULES。
+- terms_base.py：註冊那兩條路（server.register、identity 包建角色）查兩個勾選、建好帳號記同意版本的接縫——on、set_hook、register_problem、record；第 249 批加 gate_problem（殼 _game 問：必須同意而沒同意的帳號，不是 GET 的請求回 403）；terms 包掛路由時 set_hook，殼與 identity 包讀它。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
