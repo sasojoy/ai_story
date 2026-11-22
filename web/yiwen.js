@@ -43,7 +43,7 @@
   const YW_WAIT = "說書人正接著往下寫⋯"; // 待 joy 潤
   const YW_WAIT_NOTE = "可能要等半分鐘，寫不成什麼都不扣。"; // 待 joy 潤
   const YW_WAIT_SEAL = "開路"; // 待 joy 潤
-  const YW_TRAIL_NOTE = "朱字是你開的路，記進異聞錄，往後撞見的人都踩得到你的腳印。"; // 待 joy 潤
+  const YW_TRAIL_NOTE = "朱字是你開的路，往後撞見的人都踩得到你的腳印。"; // 待 joy 潤（「記進異聞錄」那半句異聞四加回）
   const YW_BACK = "回江湖"; // 待 joy 潤
 
   function ywFill(text, slots) { // 一次換完：放進去的字不會再被當成空格換一次（玩家寫的 {who} 原樣留著）
@@ -147,9 +147,11 @@
     for (const sc of scenes) { known.add(sc.echo); known.add(sc.zhupi_text); for (const t of sc.text || []) known.add(t); }
     const gains = (S.ywLast || []).filter((t) => t && !known.has(t));
     const trail = scenes.map((sc) => (sc.replay ? esc(sc.pick) : `<b>${esc(sc.pick)}</b>`)).join(" ／ ");
+    const wrote = scenes.some((sc) => !sc.replay); // 自己寫了幕（朱字）才說腳印那一句；只重放別人的路的人沒有開路
+    const note = wrote ? `<span class="yw-grey">${YW_TRAIL_NOTE}</span>` : "";
     return `<div class="yw-cd yw-done"><p class="yw-close">${esc(card.close || "")}</p>
       <div class="yw-fin"><span class="yw-seal solid">${YW_MARK_DONE}</span><b class="yw-fin-title">${esc(card.title)}</b></div>
-      ${trail ? `<div class="yw-trail3"><span>${trail}</span><span class="yw-grey">${YW_TRAIL_NOTE}</span></div>` : ""}
+      ${trail ? `<div class="yw-trail3"><span>${trail}</span>${note}</div>` : ""}
       ${gains.length ? `<div class="yw-gain">${gains.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
       <button class="btn primary yw-btn" data-act="choose" data-id="yiwen:drop">${YW_BACK}</button></div>`;
   }

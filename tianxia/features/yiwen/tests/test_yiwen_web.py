@@ -137,6 +137,16 @@ def test_card_null_draws_nothing():
     assert 'data-act="yw-step"' not in done and "全圖" not in done
 
 
+def test_close_card_note_only_when_you_wrote():
+    """第 251 批③：收尾卡的「朱字是你開的路」只在自己寫了幕的時候畫；異聞錄還沒有（異聞四），那半句不寫。"""
+    replay_only = [_scene(), _scene(node=8, depth=2, zhupi=False, zhupi_text="", pick="跟上去")]
+    html = run(f"return H.yiwenClose({_js(_card(done=True, close='醒木一響。', choices=[], scenes=replay_only))});")
+    assert "官軍 ／ 跟上去" in html and "你開的路" not in html and "yw-grey" not in html
+    mine = [_scene(replay=False), _scene(node=8, depth=2, zhupi=False, zhupi_text="", pick="跟上去", replay=False, echo="")]
+    html = run(f"return H.yiwenClose({_js(_card(done=True, close='醒木一響。', choices=[], scenes=mine))});")
+    assert "<b>官軍</b>" in html and "你開的路" in html and "異聞錄" not in html
+
+
 def test_track_line_title_and_scene():
     assert "異聞・〈霧裡的身影〉（第二幕）" in run(f"return H.yiwenTrack({_js(_card(scenes=[_scene()]))});")
     assert "異聞・〈霧裡的身影〉（第一幕）" in run(f"return H.yiwenTrack({_js(_card())});")

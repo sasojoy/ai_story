@@ -22,7 +22,7 @@
 - 每一幕（`yiwenScene`）：一頁書——左直條「第一幕」、中正文（順逆章蓋在末尾）、右頁邊朱批直書＋名號小印（只放前兩字，全名小字橫排在印下）；朱批照字數 `yw-zp-2`／`yw-zp-3` 折兩行、再縮字。回聲句畫在書上面，**發掘者那一步不畫回聲句**（PM 定）。較早的幕收成一行 `.yw-prev`，點了原地攤開。
 - 路牌：有人走過的照足跡多到少排前面，再沒人走過的（「免費開」，發掘者寫「寫下這一步」）、要香的（「問路香 1」，異聞三才會給）、鎖著的（灰、按不下去、籤寫伺服器的 `note`）；`state: "full"` 併成一列「a・b ｜開完了」＋頁下灰字；別人自己說開的路（`typed: true`、`i: "zhupi"`）朱色帶「某某說的」——這三種鍵伺服器什麼時候給是異聞二、三的事。
 - 等說書人寫（`yiwenWait`）：按了沒人走過的那一顆、請求 250ms 還沒回才畫；格線頁、三顆墨點（`prefers-reduced-motion` 不動）、「開路」小印。這一波替身當場就有，所以平常看不到；「停」不畫（異聞二）。
-- 收尾卡（`yiwenClose`）：收場句、朱印「完」、一路的做法（自己寫的朱字）、得失一行（剛按完那一下的回話扣掉收場句、回聲與正文；重新整理後沒有就不畫）、主鈕「回江湖」。「看這一則的全圖 ›」不放（異聞三）。
+- 收尾卡（`yiwenClose`）：收場句、朱印「完」、一路的做法（自己寫的朱字；有自己寫的幕才多一句灰字「朱字是你開的路……踩得到你的腳印」，只重放別人的路沒有這一句；「記進異聞錄」那半句異聞四加回，第 251 批）、得失一行（剛按完那一下的回話扣掉收場句、回聲與正文；重新整理後沒有就不畫）、主鈕「回江湖」。「看這一則的全圖 ›」不放（異聞三）。
 - 窄機：寬 <380 頁邊 58→46px、直條 30→24px（360 寬正文一行 14 字）；<340 朱批改成頁頂橫排。
 - 還沒放的：「這一段讀不通」（會加在書下面一行）與檢舉（`.yw-leaf` 頂右「⋯」），都是異聞四。
 - 新按鈕走 `registerClicks`：`yw-step`、`yw-hide`、`yw-show`、`yw-help`、`yw-open`、`yw-drop`。
@@ -45,7 +45,7 @@
 
 ## 測試
 
-- 包的 `tests/`：`test_yiwen_smoke`（關著不出聲、op 關著不動、新欄位不寫鍵）、`test_yiwen_content`、`test_yiwen_store`、`test_yiwen_discover`、`test_yiwen_walk`、`test_yiwen_rename`、`test_yiwen_frames`、`test_yiwen_web`（node；第 248 批十一條：撞見卡兩種身分、每一幕、發掘者那一步不重複回聲句、朱批超長的 class、路牌排序與開滿、等待頁、進行中那一行、跳脫）。經過探索的用正式內容 season21（`yiwen_kit.season21_game`；測試內容走舊探索，撞不到異聞），只測規則的直接叫 `actions.on_explore`。
+- 包的 `tests/`：`test_yiwen_smoke`（關著不出聲、op 關著不動、新欄位不寫鍵）、`test_yiwen_content`、`test_yiwen_store`、`test_yiwen_discover`、`test_yiwen_walk`、`test_yiwen_rename`、`test_yiwen_frames`、`test_yiwen_web`（node；第 251 批多收尾卡腳印那一句一條；第 248 批十一條：撞見卡兩種身分、每一幕、發掘者那一步不重複回聲句、朱批超長的 class、路牌排序與開滿、等待頁、進行中那一行、跳脫）。經過探索的用正式內容 season21（`yiwen_kit.season21_game`；測試內容走舊探索，撞不到異聞），只測規則的直接叫 `actions.on_explore`。
 - 另外要跑的（`test_for` 挑不到）：`tests/core/test_contract_core.py`（`BUS_ORDER` 三處）、`tests/server/test_outlock.py`（`OP_OWNERS`）、`tests/core/test_same_behavior_wipe.py`、`tests/server/test_backup_db.py`、`tests/core/test_content_packs.py`、`tests/web/test_shell_web.py`、`tests/bots/test_server_bots.py`。
 - 比對軌 `scripts/sb/tracks/yiwen.py`（season21：甲撞見、三幕替身走完；乙同處重走三步重放）。
 
