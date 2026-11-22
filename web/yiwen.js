@@ -295,13 +295,6 @@
     await ywSend(raw === "zhupi" ? { pick, text: label } : { pick }, c ? c.label : "", slow);
   }
 
-  async function yiwenForm(form, data) { // 自己說的那一格送出
-    if (form.id !== "yw-say-form") return;
-    const text = String(data.text || "").trim();
-    if (!text) return;
-    S.ywDraft = text;
-    await ywSend({ pick: "typed", text }, text, true);
-  }
 
   function ywStop() { // 「停」：只收掉等待頁，請求不取消
     S.ywStopped = true;
@@ -334,4 +327,13 @@
     } // yiwenClick
   } // yiwenClick
   registerClicks(yiwenClick, ["yw-step", "yw-stop", "yw-hide", "yw-show", "yw-help", "yw-open", "yw-drop"]);
+  // 自己說的那一格送出
+  async function yiwenForm(form, data) {
+      if (form.id === "yw-say-form") {
+        const text = String(data.text || "").trim();
+        if (!text) return;
+        S.ywDraft = text;
+        await ywSend({ pick: "typed", text }, text, true);
+      } // yiwenForm
+  } // yiwenForm
   registerForms(yiwenForm, ["yw-say-form"]);
