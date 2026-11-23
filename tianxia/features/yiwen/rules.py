@@ -33,13 +33,14 @@ SLOT = re.compile(r"\{(\w+)\}")
 # 每組至少幾句（設計 3.3；gone、drop、locked 是總計畫加的）
 LINE_GROUPS: dict[str, int] = {
     "lead_in": 4, "first_frame": 2, **{f"trail_frame.{k}": 2 for k in KINDS}, "echo": 3, "zhupi": 3, "summary": 4, "broken": 3,
+    "broken_end": 3,  # 第 264 批①：第三步的替身用這一組（事情收了，接 close）
     "fallback_options": 3, "close": 3, "verdict": 3, "no_verdict": 2, "pending": 1, "omen": 3, "omen_none": 2, "discover_rumor": 2,
     "busy": 2, "refuse_typed": 3, "taken": 1, "full_paths": 1, "full": 1, "removed": 2, "gone": 1, "drop": 1, "locked": 1,
 }
 # 每組的填空（驗證：只能用這幾個、填得進去）
 LINE_SLOTS: dict[str, set[str]] = {
     "trail_frame": {"place"}, "echo": {"pick"}, "zhupi": {"who", "words"}, "summary": {"who", "pick", "thing"},
-    "broken": {"pick", "thing"}, "fallback_options": {"thing"}, "verdict": {"place", "place_word", "thing", "answer", "who", "n"},
+    "broken": {"pick", "thing"}, "broken_end": {"pick", "thing"}, "fallback_options": {"thing"}, "verdict": {"place", "place_word", "thing", "answer", "who", "n"},
     "no_verdict": {"place", "thing"}, "pending": {"days"}, "omen": {"place", "thing", "answer"}, "omen_none": {"place", "thing"},
     "discover_rumor": {"place"},
 }

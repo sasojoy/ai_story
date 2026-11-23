@@ -430,7 +430,8 @@ def _write_node(ctx, store, w: YiwenWalk, req: rules.YiwenRequest, opening: dict
             ctx._save_season()
     thing = opening.get("thing_word", "")
     if draft is None or draft.problems or len(draft.text) != 2:  # 寫壞、叫不到、兩次都沒過：替身（模型的字不存）
-        text = [_line(ctx, "broken", tale=w.tale, node=w.node, pick=label, thing=thing)]
+        group = "broken_end" if depth >= rules.DEPTH else "broken"  # 第 264 批①：第三步的替身讀起來是這件事收了
+        text = [_line(ctx, group, tale=w.tale, node=w.node, pick=label, thing=thing)]
         options = rules.fallback_options(rules.lines(), season=season, tale=w.tale, node=w.node, thing=thing) if depth < rules.DEPTH else []
         ledger, fallback = [], True
     else:
