@@ -80,6 +80,7 @@ def test_d_code_reauth_seeds_its_own_kind(clock, monkeypatch):
     side_rows("DELETE FROM session_auth")  # 旁檔漏了這一列（打開之前登入、或旁檔不見）
     token = token_of(c)
     assert identity_base.session_auth(token) is None
+    clock.now += server.CONTENT.config.identity.recent_seconds + 1  # 過了寄碼的間隔；近期驗證只能靠這次重驗
     assert send(c, purpose="reauth").status_code == 200
     assert verify(c).status_code == 200
     auth = identity_base.session_auth(token)
