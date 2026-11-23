@@ -385,7 +385,7 @@ def apply_step(ctx, req, draft: rules.SceneDraft | None, screened: str) -> list[
         if req.typed and (screened == "bad" or (draft is not None and draft.verdict == rules.IMPROPER)):
             w.tries += 1
             return [_line(ctx, "refuse_typed", tale=w.tale, node=w.node)]
-        got = _write_node(ctx, store, w, req, opening, depth, draft)
+        got = _write_node(ctx, store, w, req, opening, depth, draft, here=here)
         if isinstance(got, list):
             return got
         nid, ndepth, written = got
@@ -411,8 +411,10 @@ def _replay(ctx, w: YiwenWalk, child: dict) -> list[str]:
     return out
 
 
-def _write_node(ctx, store, w: YiwenWalk, req: rules.YiwenRequest, opening: dict, depth: int, draft: rules.SceneDraft | None):
-    """寫一幕（替身與模型的字共用）：發掘的第一幕先開則；回 (節點 id, 深度, 回話) 或擋下的那一句（list）。"""
+def _write_node(ctx, store, w: YiwenWalk, req: rules.YiwenRequest, opening: dict, depth: int, draft: rules.SceneDraft | None,
+                here: dict | None = None):
+    """寫一幕（替身與模型的字共用）：發掘的第一幕先開則；回 (節點 id, 深度, 回話) 或擋下的那一句（list）。
+    here 是上一個節點（開場是 None；第 264 批：替身的做法從它來）。"""
     s, p, t = ctx.state, ctx.state.player, _t(ctx)
     key, season, clock = _key(ctx), _season(ctx), _clock(ctx)
     label, luck = req.pick, req.luck
@@ -433,6 +435,8 @@ def _write_node(ctx, store, w: YiwenWalk, req: rules.YiwenRequest, opening: dict
         group = "broken_end" if depth >= rules.DEPTH else "broken"  # 第 264 批①：第三步的替身讀起來是這件事收了
         text = [_line(ctx, group, tale=w.tale, node=w.node, pick=label, thing=thing)]
         options = rules.fallback_options(rules.lines(), season=season, tale=w.tale, node=w.node, thing=thing) if depth < rules.DEPTH else []
+        if options and depth >= 2:  # 第 264 批②(a)：上一幕的做法照理都還做得到（替身說的是「還在原處」）
+            options = rules.stand_in_options(here, label, options)
         ledger, fallback = [], True
     else:
         text = list(draft.text)

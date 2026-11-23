@@ -148,6 +148,20 @@ def fallback_options(table: dict[str, list[str]], *, season, tale, node, thing: 
     return [fill(x, thing=thing) for x in line.split("／")][:3]
 
 
+def stand_in_options(parent: dict | None, label: str, fallback: list[str]) -> list[str]:
+    """第 264 批②(a)：替身那一幕的三個做法。上一幕是寫成的一幕（不是開場、不是替身）：用它還沒被選的那幾顆
+    （按其中一顆來的剩兩顆，自己說的三顆都在），不足三顆照 fallback 的先後補不重複的；補完仍不足就照有的。其餘照舊用 fallback。"""
+    if parent is None or parent.get("fallback"):
+        return list(fallback)
+    out = [o for o in (parent.get("options") or []) if o != label]
+    for o in fallback:
+        if len(out) >= 3:
+            break
+        if o not in out:
+            out.append(o)
+    return out[:3]
+
+
 # ── 異聞二：說書人（第 252 批；三段式的單、提示、程式檢查、自己說的五道擋）──
 # 設計 4.2、4.4、5.1、5.4；總計畫「異聞二」。這一段不讀時鐘、不碰 Game、不叫模型（叫模型的是 writer.py，鎖外）。
 
