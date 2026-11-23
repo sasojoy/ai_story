@@ -169,3 +169,79 @@ def test_bot_covers_reach_compare_only_in_packages_mode(gate, tmp_path):
     assert gate.compare_extra({**packages, "bot_covers": ["seal"]})[-2:] == ["--bot-covers", "seal"]
     assert gate.compare_extra({**packages, "bot_covers": []})[-2:] == ["--bot-covers", ","]
     assert "--bot-covers" not in gate.compare_extra(packages)
+
+
+# ── 第 262 批：紅的只有把 js 算進輸出的軌、js 只有內容變 → base 換進 head 的 js 再比一次 ──
+
+def _row(track: str, profile: str, hb: str, hh: str, crossover: str = "") -> str:
+    tail = f"｜base 前半＋head 後半 {crossover} {'一樣' if crossover == hb else '不一樣'}" if crossover else "｜半舊半新 沒跑"
+    return f"{track:6} {profile:9} 整段 base 120 行 4096 位元組 {hb}｜head {hh} {'一樣' if hb == hh else '不一樣'}{tail}"
+
+
+A, B, C = "a" * 16, "b" * 16, "c" * 16
+JS_RED = "\n".join(["跑完 30 秒", _row("facade", "season21", A, B), "  第 12 行起不一樣：…", _row("facade", "test", C, B),
+                    _row("seal", "season21", A, A), "假人 ALWAYS season21  10 行 99 位元組 base " + A + "｜head " + A + " 一樣", "有不一樣的"])
+
+
+def test_only_js_content_changed_reruns_the_js_tracks(gate):
+    plan = gate.js_rerun_plan(JS_RED, "M\tweb/terms.js\nM\ttianxia/features/terms/routes.py\nA\tdocs/x.md")
+    assert plan["rerun"], plan["why"]
+    assert (plan["tracks"], plan["profiles"], plan["files"]) == (["facade"], ["season21", "test"], ["web/terms.js"])
+    assert plan["first"] == {("facade", "season21"): [A, B], ("facade", "test"): [C, B]}
+    assert set(gate.JS_TRACKS) == {"facade", "map", "beacon"}
+
+
+def test_a_js_file_added_or_gone_is_not_rerun(gate):
+    for status in ("A\tweb/x.js", "D\tweb/terms.js", "R100\tweb/a.js\tweb/b.js"):
+        plan = gate.js_rerun_plan(JS_RED, "M\tweb/terms.js\n" + status)
+        assert not plan["rerun"] and "script 清單會變" in plan["why"], status
+    assert not gate.js_rerun_plan(JS_RED, "M\tweb/terms.css")["rerun"], "沒有改了的 js：不再跑"
+
+
+def test_another_track_red_or_a_bot_red_is_not_rerun(gate):
+    other = JS_RED.replace(_row("seal", "season21", A, A), _row("seal", "season21", A, C))
+    plan = gate.js_rerun_plan(other, "M\tweb/terms.js")
+    assert not plan["rerun"] and "seal" in plan["why"]
+    bot = JS_RED.replace(f"base {A}｜head {A} 一樣", f"base {A}｜head {C} 不一樣")
+    assert not gate.js_rerun_plan(bot, "M\tweb/terms.js")["rerun"]
+    assert not gate.js_rerun_plan(JS_RED + "\nTraceback (most recent call last):", "M\tweb/terms.js")["rerun"]
+    half = "\n".join([_row("sortie", "season21", A, A, crossover=C), "有不一樣的"])
+    assert not gate.js_rerun_plan(half, "M\tweb/terms.js")["rerun"], "半舊半新不一樣也算紅"
+    assert not gate.js_rerun_plan("全部一樣", "M\tweb/terms.js")["rerun"]
+
+
+def test_the_rerun_verdict(gate):
+    plan = gate.js_rerun_plan(JS_RED, "M\tweb/terms.js")
+    same = "\n".join([_row("facade", "season21", B, B), _row("facade", "test", B, B), "全部一樣"])
+    v = gate.js_rerun_verdict(plan, same)
+    assert v["ok"] and v["rerun"] == {"facade season21": [B, B], "facade test": [B, B]}
+    assert "整段一樣，比對這一項算過" in gate.js_rerun_note(plan, v)
+    still = same.replace(_row("facade", "test", B, B), _row("facade", "test", C, B))
+    v = gate.js_rerun_verdict(plan, still)
+    assert not v["ok"] and "facade test 再跑還是不一樣" in v["bad"][0] and "照舊紅" in gate.js_rerun_note(plan, v)
+    moved = "\n".join([_row("facade", "season21", C, C), _row("facade", "test", B, B), "全部一樣"])
+    v = gate.js_rerun_verdict(plan, moved)
+    assert not v["ok"] and "不等於第一次的" in v["bad"][0], "再跑一樣、head 雜湊卻跟第一次不同：不算"
+    assert not gate.js_rerun_verdict(plan, _row("facade", "season21", B, B))["ok"], "少一列：不算"
+    assert "沒再跑" in gate.js_rerun_note({"rerun": False, "why": "x"}, None)
+
+
+def test_the_rerun_swaps_the_heads_js_into_a_copy_of_the_base(gate, tmp_path):
+    base, head = tmp_path / "base", tmp_path / "head"
+    for root, text in ((base, "old"), (head, "new")):
+        (root / "web").mkdir(parents=True)
+        (root / "web" / "terms.js").write_text(text, encoding="utf-8")
+        (root / "web" / "app.js").write_text(text, encoding="utf-8")
+    fake = tmp_path / "fake_sb.py"
+    fake.write_text("import sys, pathlib\nb = pathlib.Path(sys.argv[sys.argv.index('--base') + 1])\n"
+                    "print(' '.join(sys.argv[2:]).replace(str(b), 'B'))\nprint((b / 'web' / 'terms.js').read_text(), (b / 'web' / 'app.js').read_text())\n", encoding="utf-8")
+    import sys
+
+    plan = {"tracks": ["facade"], "profiles": ["season21", "test"], "files": ["web/terms.js"]}
+    extra = ["--tracks", "facade,seal", "--jobs", "2", "--profiles", "season21,test", "--crossover", "--bot-covers", "seal", "--new", "terms", "--also-existing"]
+    text = gate.js_rerun(sys.executable, str(fake), base, head, tmp_path / "tmp", plan, extra, tmp_path / "out.txt", None)
+    first, second = text.splitlines()[:2]
+    assert first.endswith("--tracks facade --profiles season21,test --no-bots --crossover --new terms --also-existing")
+    assert "--bot-covers" not in first and "--jobs" not in first
+    assert second == "new old", "只換進 plan 的檔，別的留 base 的"
+    assert not (tmp_path / "tmp" / "base_js").exists() and (base / "web" / "terms.js").read_text(encoding="utf-8") == "old"
