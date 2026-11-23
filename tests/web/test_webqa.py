@@ -101,6 +101,26 @@ def test_the_battle_card_mutation_inverts_its_two_pictures_only(tmp_path):
     assert '"/static/img/events/camp.webp"' in (ROOT / "web" / "battle.js").read_text(encoding="utf-8")  # 底圖換了檔名，突變要跟著換
 
 
+def test_the_battle_card_spot_mutation_inverts_a_middle_band_only(tmp_path):
+    # 第 260 批：selftest 的 img-battle-spot，同兩張底圖只把中間一條橫帶（高度一成）反相，c 回合要判像素 REAL、repaint-variants 不准收
+    Image = pytest.importorskip("PIL.Image")
+    gate = _load("gate")
+    ev = tmp_path / "web" / "img" / "events"
+    ev.mkdir(parents=True)
+    for name in ("camp.webp", "night.webp", "rain.webp"):
+        Image.new("RGB", (40, 40), (10, 200, 30)).save(ev / name, format="WEBP", lossless=True)
+    gate.mutate(str(tmp_path), gate.IMG_BATTLE_SPOT)
+    near = lambda got, want: max(abs(x - y) for x, y in zip(got, want)) <= 8  # 存回去是有損的 webp，差幾級
+    for name in ("camp.webp", "night.webp"):
+        with Image.open(ev / name) as im:
+            assert (im.format, im.size) == ("WEBP", (40, 40))
+            px = im.convert("RGB")
+            assert near(px.getpixel((20, 20)), (245, 55, 225)) and near(px.getpixel((5, 19)), (245, 55, 225))
+            assert near(px.getpixel((20, 5)), (10, 200, 30)) and near(px.getpixel((20, 35)), (10, 200, 30))
+    with Image.open(ev / "rain.webp") as im:
+        assert near(im.convert("RGB").getpixel((20, 20)), (10, 200, 30))
+
+
 def test_the_scrollbar_only_at_desktop_widths(noise):
     assert noise.pixel_class(210000, 200, view="1280", sw_a=1265, sw_b=1280) == "gutter"  # cl_c08
     assert noise.pixel_class(210000, 200, view="375-light", sw_a=1265, sw_b=1280) is None

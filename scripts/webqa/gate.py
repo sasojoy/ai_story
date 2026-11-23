@@ -81,6 +81,9 @@ QUIET = "css-comment"  # selftest only: a stylesheet that differs with nothing t
 IMG_INVERT = "img-invert"  # batch 237, selftest only: every web/ image inverted, same size and format: computed styles the same, pixels not; the replay must still go red
 IMG_BATTLE = "img-battle"  # batch 254, selftest only: the battle card's pictures inverted (web/battle.js BP_BG): computed styles the same, the countdown's piece really changes; the c round must go red
 IMG_BATTLE_FILES = ("web/img/events/camp.webp", "web/img/events/night.webp")
+# batch 260, selftest only: a band across the middle of the same two pictures inverted: a small piece of the battle card really changes,
+# computed styles the same; the c round must go red as pixels and repaint-variants must not take it (no picture each side drew of the other)
+IMG_BATTLE_SPOT = "img-battle-spot"
 ROUND_SECONDS = {"fast": 5400, "full": 16200}  # the slowest round so far, main on fast, took 34 minutes
 PORT_LOCK = threading.Lock()
 COVERAGE = os.path.join(HERE, "coverage.json")  # round -> web files it calls into (batch 107; scripts/webqa/coverage.py build/check)
@@ -283,6 +286,27 @@ def invert_image(p: str) -> None:
     out.save(p, format=fmt)
 
 
+def invert_band(p: str, frac: float = 0.1) -> None:
+    """Selftest only (batch 260): one horizontal band across the middle of the picture inverted, frac of its height; the rest, the size
+    and the format as they were."""
+    from PIL import Image, ImageOps
+
+    with Image.open(p) as im:
+        fmt = im.format
+        rgb = im.convert("RGBA") if "A" in im.mode or im.mode == "P" else im.convert("RGB")
+    w, h = rgb.size
+    top = int(h * (0.5 - frac / 2))
+    box = (0, top, w, max(top + 1, int(h * (0.5 + frac / 2))))
+    band = rgb.crop(box)
+    if band.mode == "RGBA":
+        r, g, b, a = band.split()
+        band = Image.merge("RGBA", (*ImageOps.invert(Image.merge("RGB", (r, g, b))).split(), a))
+    else:
+        band = ImageOps.invert(band)
+    rgb.paste(band, box)
+    rgb.save(p, format=fmt)
+
+
 def mutate(copy: str, which: str) -> None:
     """Selftest only: a change the gate has to catch."""
     if which == "card-padding":
@@ -344,6 +368,12 @@ def mutate(copy: str, which: str) -> None:
             if not os.path.isfile(p):
                 raise ToolBroke(f"mutate img-battle: no {rel}")
             invert_image(p)
+    elif which == IMG_BATTLE_SPOT:
+        for rel in IMG_BATTLE_FILES:
+            p = os.path.join(copy, *rel.split("/"))
+            if not os.path.isfile(p):
+                raise ToolBroke(f"mutate img-battle-spot: no {rel}")
+            invert_band(p)
     elif which in HOSTILE:
         with open(os.path.join(copy, "web", "app.js"), "a", encoding="utf-8", newline="") as f:
             f.write("\n" + HOSTILE[which] + "\n")
@@ -792,7 +822,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
