@@ -73,6 +73,34 @@ def test_only_a_picture_with_nothing_else_different_is_drawn_again(noise):
     assert not noise.render_variants([], ["y1"])  # 有一邊沒重畫成：不算雜訊
 
 
+def test_a_real_line_says_whether_the_two_walks_left_the_same_dom_and_styles():
+    # 第 254 批：AI 波 c 回合 028 那一張 REAL，PM 要自己翻 summary.json 的 fingerprint 才知道兩邊 DOM、樣式一樣
+    gate = _load("gate")
+    same = {"scenes": "s", "dom": "d", "style": "y", "main": "m"}
+    assert gate.fingerprint_note({"A": same, "B": dict(same)}) == " fingerprint same"
+    assert gate.fingerprint_note({"A": same, "B": {**same, "dom": "d2"}}) == " fingerprint differs: dom"
+    assert gate.fingerprint_note({"A": same, "B": {**same, "style": "y2", "dom": "d2"}}) == " fingerprint differs: dom,style"
+    assert gate.fingerprint_note(None) == ""  # 重放的列沒有指紋
+    assert gate.fingerprint_note({"A": same, "B": None}) == ""
+
+
+def test_the_battle_card_mutation_inverts_its_two_pictures_only(tmp_path):
+    # 第 254 批：selftest 的 img-battle，決戰卡底圖（web/battle.js BP_BG）反相、同尺寸同格式，c 回合要判像素 REAL
+    Image = pytest.importorskip("PIL.Image")
+    gate = _load("gate")
+    ev = tmp_path / "web" / "img" / "events"
+    ev.mkdir(parents=True)
+    for name in ("camp.webp", "night.webp", "rain.webp"):
+        Image.new("RGB", (4, 3), (10, 200, 30)).save(ev / name, format="WEBP", lossless=True)
+    gate.mutate(str(tmp_path), gate.IMG_BATTLE)
+    for name, px in (("camp.webp", (245, 55, 225)), ("night.webp", (245, 55, 225)), ("rain.webp", (10, 200, 30))):
+        with Image.open(ev / name) as im:
+            assert (im.format, im.size) == ("WEBP", (4, 3))
+            assert max(abs(x - y) for x, y in zip(im.convert("RGB").getpixel((0, 0)), px)) <= 8  # 存回去是有損的 webp，差幾級
+    assert set(gate.IMG_BATTLE_FILES) == {"web/img/events/camp.webp", "web/img/events/night.webp"}
+    assert '"/static/img/events/camp.webp"' in (ROOT / "web" / "battle.js").read_text(encoding="utf-8")  # 底圖換了檔名，突變要跟著換
+
+
 def test_the_scrollbar_only_at_desktop_widths(noise):
     assert noise.pixel_class(210000, 200, view="1280", sw_a=1265, sw_b=1280) == "gutter"  # cl_c08
     assert noise.pixel_class(210000, 200, view="375-light", sw_a=1265, sw_b=1280) is None
@@ -380,6 +408,24 @@ def test_a_phone_viewport_widened_by_an_overflow_has_landed():
     code = f"const {{ landed }} = await import({json.dumps(src)}); console.log(JSON.stringify({json.dumps([c[:2] for c in cases])}.map(([s, w]) => landed(s, w))));"
     out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
     assert json.loads(out.stdout) == [c[2] for c in cases]
+
+
+def test_a_window_set_twice_in_a_row_is_flipped_first():
+    # 第 254 批：light 景的第一張（375 淺色 dpr 1）跟前一景收尾設的視窗一樣，不會整頁重畫；決戰卡倒數那一塊每秒重寫，A 對 A 隨機差 1 級 713 px
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("no node")
+    src = (TOOL / "snippets.mjs").as_uri()
+    code = (f"const {{ sameWindow, SHOT_VIEWS: V }} = await import({json.dumps(src)});"
+            "console.log(JSON.stringify([sameWindow(null, V[0], 1), sameWindow([V[0], 1], V[0], 1), sameWindow([V[0], 2], V[0], 1),"
+            "sameWindow([V[1], 1], V[0], 1), sameWindow([[...V[0]], 1], V[0], 1), sameWindow([V[2], 1], V[2], 1)]));")
+    out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
+    assert json.loads(out.stdout) == [False, True, False, False, True, True]
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
+    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], \"dpr flip not drawn in 1.5s\"); }" in text and "lastView = [v, dpr];" in text
+    flipped = subprocess.run([node, "--input-type=module", "-e", f"const {{ FLIPPED }} = await import({json.dumps(src)}); console.log(FLIPPED(2));"],
+                             capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    assert "devicePixelRatio === 2" in flipped and "requestAnimationFrame" in flipped and "setTimeout(() => r(-1), 1500)" in flipped  # 等到真的畫過，最多 1.5 秒
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():

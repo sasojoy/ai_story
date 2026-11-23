@@ -15,6 +15,9 @@ reaches a code yet (identity is off in season21): ready, never walked.
 What the walk cannot see: it freezes animation, and it takes no pictures at 640, 641 and 900. Both come from the corpus replay (replay.py), and the
 replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
 why. Without it those three windows only have the page's size behind them: used values moving there are counted apart, as layout-no-pixels.
+A light scene's first picture (375-light, dpr 1) used to come in the very window the scene before had left: no whole-page paint, and the
+battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first;
+that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);
@@ -50,6 +53,8 @@ HOSTILE = {  # selftest only: a page that does what the walk must survive
 }
 QUIET = "css-comment"  # selftest only: a stylesheet that differs with nothing to see: the replay runs and stays green
 IMG_INVERT = "img-invert"  # batch 237, selftest only: every web/ image inverted, same size and format: computed styles the same, pixels not; the replay must still go red
+IMG_BATTLE = "img-battle"  # batch 254, selftest only: the battle card's pictures inverted (web/battle.js BP_BG): computed styles the same, the countdown's piece really changes; the c round must go red
+IMG_BATTLE_FILES = ("web/img/events/camp.webp", "web/img/events/night.webp")
 ROUND_SECONDS = {"fast": 5400, "full": 16200}  # the slowest round so far, main on fast, took 34 minutes
 PORT_LOCK = threading.Lock()
 COVERAGE = os.path.join(HERE, "coverage.json")  # round -> web files it calls into (batch 107; scripts/webqa/coverage.py build/check)
@@ -208,6 +213,21 @@ def clean_env() -> dict:
     return env
 
 
+def invert_image(p: str) -> None:
+    """Selftest only: the same picture inverted, same size and format (alpha kept)."""
+    from PIL import Image, ImageOps
+
+    with Image.open(p) as im:
+        fmt, mode = im.format, im.mode
+        rgb = im.convert("RGBA") if "A" in mode or mode == "P" else im.convert("RGB")
+    if rgb.mode == "RGBA":
+        r, g, b, a = rgb.split()
+        out = Image.merge("RGBA", (*ImageOps.invert(Image.merge("RGB", (r, g, b))).split(), a))
+    else:
+        out = ImageOps.invert(rgb)
+    out.save(p, format=fmt)
+
+
 def mutate(copy: str, which: str) -> None:
     """Selftest only: a change the gate has to catch."""
     if which == "card-padding":
@@ -243,25 +263,20 @@ def mutate(copy: str, which: str) -> None:
         with open(os.path.join(copy, "web", "style.css"), "a", encoding="utf-8", newline="") as f:
             f.write("\n/* webqa selftest */\n")
     elif which == IMG_INVERT:
-        from PIL import Image, ImageOps
-
         n = 0
         for root, _, names in os.walk(os.path.join(copy, "web")):
             for name in names:
                 if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-                    p = os.path.join(root, name)
-                    with Image.open(p) as im:
-                        fmt, mode = im.format, im.mode
-                        rgb = im.convert("RGBA") if "A" in mode or mode == "P" else im.convert("RGB")
-                    if rgb.mode == "RGBA":
-                        r, g, b, a = rgb.split()
-                        out = Image.merge("RGBA", (*ImageOps.invert(Image.merge("RGB", (r, g, b))).split(), a))
-                    else:
-                        out = ImageOps.invert(rgb)
-                    out.save(p, format=fmt)
+                    invert_image(os.path.join(root, name))
                     n += 1
         if not n:
             raise ToolBroke("mutate img-invert: no image under web/")
+    elif which == IMG_BATTLE:
+        for rel in IMG_BATTLE_FILES:
+            p = os.path.join(copy, *rel.split("/"))
+            if not os.path.isfile(p):
+                raise ToolBroke(f"mutate img-battle: no {rel}")
+            invert_image(p)
     elif which in HOSTILE:
         with open(os.path.join(copy, "web", "app.js"), "a", encoding="utf-8", newline="") as f:
             f.write("\n" + HOSTILE[which] + "\n")
@@ -493,6 +508,15 @@ def red_names(row: dict) -> str:
     return f" red {where}{both} A {where}{a} B {where}{b}"
 
 
+def fingerprint_note(fp) -> str:
+    """For a REAL line: did the two walks of that round leave the same DOM and styles? fp is summary["fingerprint"][round]; a replay row has none."""
+    if not fp or not fp.get("A") or not fp.get("B"):
+        return ""
+    keys = sorted(set(fp["A"]) | set(fp["B"]))
+    differ = [k for k in keys if fp["A"].get(k) != fp["B"].get(k)]
+    return " fingerprint differs: " + ",".join(differ) if differ else " fingerprint same"
+
+
 def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     if summary["green"] and not summary["rounds"]:
         lines = [f"webqa {summary['base']} -> {summary['head']}: NOTHING TO WALK (exit 0): {summary['rounds_why']}"]
@@ -510,7 +534,7 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     for row in summary.get("new_css", []):
         lines.append(f"NEW {row['round']} {row['sheet']} only A {json.dumps(row['only A'], ensure_ascii=False)[:300]} only B {json.dumps(row['only B'], ensure_ascii=False)[:300]}")
     for row in summary["real"]:
-        lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}{red_names(row)}")
+        lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}{red_names(row)}{fingerprint_note(summary['fingerprint'].get(row['round']))}")
     for row in summary["expected"]:
         lines.append(f"EXPECTED {row['round']}:{row['scene']} {row['class']} because {row['reason']}")
     lines.append("")
@@ -685,7 +709,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")

@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, landed, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
+import { freeze, landed, sameWindow, FLIPPED, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
 
 const [label, PAGE, API, OUT, CHROME_PORT] = process.argv.slice(2);
 const ROUND = process.env.QA_ROUND || "c";
@@ -128,8 +128,10 @@ async function ev(expr) {
 }
 
 const VIEWS = SHOT_VIEWS;
+let lastView = null; // [view, dpr] the browser was last set to: shoot() reads it through sameWindow
 async function setView(v, dpr) {
   const [, w, h, mobile, scheme] = v;
+  lastView = [v, dpr];
   await cdp("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: dpr, mobile });
   await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }] });
 }
@@ -204,6 +206,12 @@ async function shoot(name, { light = false, toast = false, who = null } = {}) {
   const dpr = light ? 1 : 2;
   for (const v of QUICK ? [] : VIEWS) {
     const d = v[1] > 1000 ? 1 : dpr;
+    // A light scene's first window is the one the scene before left behind: setting it again repaints nothing, and what is on screen is whatever
+    // the clicks redrew piece by piece. The battle card's countdown is rewritten every second over a filtered, half-clear picture, and a piece
+    // redrawn alone comes out one level off a whole-page paint, either way at random (batch 254, c round bt_watch_*, main dadian_left).
+    // Flip the dpr once first, so every picture follows a whole-page paint, like the dpr 2 scenes always did. Wait for two frames drawn at the
+    // flipped dpr, not a fixed time: with the machine busy 50 ms could pass with no frame, and the flip back then repainted nothing (1 in 6).
+    if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], "dpr flip not drawn in 1.5s"); }
     await setView(v, d);
     if (!(await stable(v[1]))) facts.unstable = true;
     if (v[1] === 1280) await fixGutter(v, d, facts);

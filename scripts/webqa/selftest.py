@@ -5,6 +5,8 @@
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round. The replay also inverts every image (img-invert, batch 237):
      computed styles the same, pixels not, so the re-renders must leave it red.
+     The c round also walks with the battle card's two pictures inverted (img-battle, batch 254): the countdown's piece at 375-light,
+     where the dpr flip in driver.mjs sits, must still go red as pixels.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
   5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
@@ -101,6 +103,11 @@ def main(argv=None) -> int:
             s = _gate(a, "mut_" + which, "--mutate", which)
             rows.append((f"c round --mutate {which} goes red", s["code"] == 1, f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})}"))
             rows.append((f"c round --mutate {which} ran the replay from the gate", s["replay"]["ran"] and any(x["round"].startswith("replay") for x in s["real"]), f"{s['replay']}"[:300]))
+        s = _gate(a, "mut_" + gate.IMG_BATTLE, "--mutate", gate.IMG_BATTLE)
+        walk = [x for x in s["real"] if x["class"] == "pixel" and not x["round"].startswith("replay")]
+        rows.append((f"c round --mutate {gate.IMG_BATTLE} goes red on the battle card's pictures (styles the same, pixels not)",
+                     s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk),
+                     f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]}"[:300]))
         s = _gate(a, "quiet", "--mutate", gate.QUIET)
         rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"
