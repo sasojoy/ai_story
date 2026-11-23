@@ -519,3 +519,59 @@ def test_improper_on_a_guess_counts_as_failed_check(on, monkeypatch):
     assert fake.calls == 2
     n = _nodes(on)[0]
     assert n["fallback"] == 1 and A not in n["text"] and A not in got and _walk().tries == 0
+
+
+# ── 第 261 批：收尾卡「名望 +5」少了差距那半句（第 256 批網頁走查拍到）。差距由共用層 renown.after_action 接，它只在 Game._log 裡被叫；
+# C 段回話不經 _log 的話，這一下沒人接，之後的同步只接「最新一則的時間＝此刻」的那一則——時鐘一走就永遠接不到。
+# 測試內容的 renown.titles 關著（關著差距永遠不接、修前修後都綠），這裡打開；時鐘每讀一次往後 1 秒，照真的玩家。
+
+
+@pytest.fixture
+def ticking(on, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.renown, "titles", True)
+    clock = [server.time.time()]
+
+    def tick():
+        clock[0] += 1.0
+        return clock[0]
+
+    monkeypatch.setattr(server.time, "time", tick)
+    return clock
+
+
+def _walk_to_the_end(game):
+    """走到收場（替身即可：client 是 None）。回最後一步的回話。"""
+    got = []
+    for _ in range(10):
+        w = _walk()
+        if w.tale and w.tale in w.done:
+            break
+        got = _step(game, 0)
+    w = _walk()
+    assert w.tale and w.tale in w.done, "十步內沒走完"
+    return got
+
+
+def _finish_entry():
+    entry = open_characters().load(NAME).journal[0]
+    assert entry.title.startswith("異聞")
+    return entry
+
+
+def test_finish_fame_gets_the_gap_on_the_spot(on, ticking):
+    _walk_to_the_end(on)
+    assert any(c.startswith("名望 +") and "（離「" in c for c in _finish_entry().changes)
+
+
+def test_finish_fame_gap_survives_a_later_sync(on, ticking):
+    _walk_to_the_end(on)
+    ticking[0] += 30
+    server.act(on, lambda g: [])
+    assert any(c.startswith("名望 +") and "（離「" in c for c in _finish_entry().changes)
+
+
+def test_finish_lines_go_into_the_game_log(on, ticking):
+    got = _walk_to_the_end(on)
+    assert got
+    log = open_characters().load(NAME).log
+    assert all(line in log for line in got if line)
