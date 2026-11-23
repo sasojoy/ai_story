@@ -20,8 +20,10 @@ battle card's countdown, rewritten every second, drew that piece one level off a
 that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
 Batch 260: the countdown repaints again every second with no reload, so each light scene's 375-light window is shot twice more on the same
 side (hashes only, facts.variants) and a picture both sides drew is noise.py repaint-variants; a change only one side can
-draw has no picture in common and stays real. main's dadian_left (19 px 50 levels, red twice in batch 258 beside a selftest) did not show
-in 9 runs of batch 260; if it is this repaint it goes the same way, if not it is still red.
+draw has no picture in common and stays real. After it the c round's stretch went 12 runs with 0 red (2 of them taken as repaint-variants).
+Still red: main's dadian_left at 375-light __s1 (19 px, 50 levels, the top corners of the shop's dark tiles): red 1 run in 13 in batch 260
+(4 of them with the variants on, the red one with another walk running beside it). It is not this repaint: in the run kept to look every later shot on a
+side was that side's own picture, and the red run had nothing in common, so it is still red (noise.py).
 The 1280 page's scrollbar gutter can come back by itself in the middle of a window (batch 258: from main 039_smith on Chrome kept the page
 without it, and it came back at random around 092_bd_given-094; AJ caught it between the first picture and the scrolled ones). driver.mjs
 reads the layout again when a window is done and shoots it again when sw or cw moved, twice at most; still moving, the scene keeps

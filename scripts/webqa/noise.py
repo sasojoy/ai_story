@@ -23,7 +23,10 @@ The classes (each one came from a real row of waves B and C):
                three ways (a whole-page paint; the countdown's piece repainted alone, 713 px 1 level; the whole card's picture, 4448 px
                3 levels), and the first picture is one of them at random (red 2 runs in 8). Left red: no picture in common (a side stuck in
                the third way for the whole scene was 1 time in 32), and anything only one side can draw: it is in none of the other's.
-Not a class: main's nx_invite at 1280 (456 px, 36 levels, LCD against grayscale text behind the invite) is fixed when the page loads and
+Not a class: main's dadian_left at 375-light __s1 (19 px, 50 levels, the top corners of the shop's dark tiles; 1 run in 13 in batch 260):
+in the run kept to look, every later shot on a side was that side's first picture, and the red run had no picture in common, so
+repaint-variants does not take it and it stays red.
+Not a class either: main's nx_invite at 1280 (456 px, 36 levels, LCD against grayscale text behind the invite) is fixed when the page loads and
 no repaint changes it; flows/main.mjs loads the page once more before it (batch 260), and it is still red when it shows.
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
 order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
