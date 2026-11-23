@@ -139,6 +139,7 @@
   .yw-zp-tx, .yw-zp-2 .yw-zp-tx, .yw-zp-3 .yw-zp-tx { writing-mode: horizontal-tb; flex: 1 1 100%; max-height: none; font-size: 14px; line-height: 1.5; }
   .yw-stamp { writing-mode: horizontal-tb; padding: 2px 4px; }
   .yw-zp-name { max-width: none; text-align: left; }
+  .yw-say-open .input { padding-left: 6px; padding-right: 6px; }  /* 第 261 批：320 寬時提示字尾巴被截（內容 122px＜字 128px），左右各收 6px；高度照舊 44 */
 }
 /* 自己說的那一格（第 252 批）：一格＋主鈕；被擋的那一句與還能說幾次寫在格下；等待頁的「停」 */
 .yw-say.yw-say-open { padding: 4px 4px 4px 10px; gap: 6px; background: var(--card); border-color: var(--ink-2); }
