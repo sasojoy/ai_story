@@ -2,10 +2,11 @@
 // so a new character meets one on the first trip out in the 潁川 wilds (batch 256 measured: the town, the roads, the fords, the temple and
 // the academy put an event or an insight first; the wilds do not). The model is the dead port: the storyteller fails twice and the stand-in
 // lines are stored, so the pages are fixed. What the walk shoots, in order:
-//   yw_out    the meeting card open, put away (the strip on the 江湖 page and over the open explore wheel), back, the rules open;
+//   yw_out    the meeting card open; put away over the trip's card, on the 江湖 page and the hero page (the strip); back from the
+//             strip and from the menu; the rules open;
 //   yw_walk   自己說 with words typed and not sent, one the word list refuses, the 等說書人 page (held, see below), the first act,
-//             自己說 written into the second act, the line serve.py screens bad (once, then until the box is spent), 停 on the
-//             waiting page, the third act with the closing card, back to the game;
+//             自己說 held again and 停 on its waiting page, the second act it wrote, the line serve.py screens bad (once, then until
+//             the box is spent), the third act with the closing card, back to the game;
 //   yw_trail  the second account meets the same tale (a walked one: replayed, its 自己說 box greyed), its first act, put away.
 // The waiting page is gone in an instant on the dead port: serve.py holds writer.write_scene while the walk has hold['armed'], and the walk
 // releases it when the picture is taken (finally: a flow that throws must not leave a request hanging).
@@ -85,20 +86,25 @@ export const flows = [
     } finally { await release(c); }
     await answered(c);
     await c.shoot("yw_act1", { who: "p1" });
-    await say(c, "他在等人");
+    // 停 on the second step (自己說, held): not on the last one. Held on the last step, the closing card's scene line 「名望 +5」 came
+    // without its gap note on one side in one walk of three (batch 256 measured): the fame only comes with the last step
+    try {
+      await arm(c);
+      const r = await c.fillAndSend("#yw-say-form input", "他在等人");
+      c.report.steps.push(`yw: say 他在等人 (held) -> ${r}`);
+      await until(c, `!!document.querySelector("#yw-pop .yw-waiting")`);
+      await c.click(ACT("yw-stop"));
+      await c.shoot("yw_wait_stop", { who: "p1" });
+    } finally { await release(c); }
+    await answered(c);
     await c.shoot("yw_act2", { who: "p1" });
     await say(c, BAD);
     await c.shoot("yw_typed_bad1", { who: "p1" });
     await say(c, BAD);
     await say(c, BAD);
     await c.shoot("yw_typed_spent", { who: "p1" });
-    try {
-      await arm(c);
-      c.report.steps.push(`yw: last sign -> ${await press(c, SIGN)}`);
-      await until(c, `!!document.querySelector("#yw-pop .yw-waiting")`);
-      await c.click(ACT("yw-stop"));
-      await c.shoot("yw_wait_stop", { who: "p1" });
-    } finally { await release(c); }
+    c.report.steps.push(`yw: last sign -> ${await press(c, SIGN)}`);
+    await c.settle(300);
     await answered(c);
     await c.shoot("yw_close", { who: "p1" });
     await c.step(`#yw-pop ${CH("yiwen:drop")}`, "yw_back", { who: "p1", wait: 800 });
