@@ -2160,6 +2160,144 @@ WAVES["AK"] = dict(
 )
 
 
+# ── AL 波：AK 波留下、不必企劃者決定的四件（PM 2026-11-23 排；企劃者 11/22「繼續」）：帳號綁定打開那天舊 session 的重新驗證 259、異聞畫面與名望那半句 261、走查自己還會紅的三張 260、閘門與走查的尾巴 262 ──
+# 三條線互不相干（identity 包；yiwen 包；scripts/webqa 與 PM 的閘門工具），基準是 AK 波落地後的 develop；收尾一次合、一次驗。
+# 異聞三不在這一波：要等主機的真模型實測（PM 跟企劃者約時間）。條款那個「identity 開過又關」的鍵對不上不在這一波：等要開帳號綁定時再定（修法會動到現在線上走的路）。
+AL_AK_RECORD = "docs/superpowers/plans/2026-11-23-波次AK紀錄.md"
+AL_YW_ROUND = "`scripts/webqa/gate.py --rounds yw`（第 256 批加的回合：只有這一回合的伺服器在記憶體裡把異聞打開；base、head 各給一筆 SHA；`--keep` 留截圖）"
+
+
+def b259():
+    plan = "docs/superpowers/plans/2026-11-23-帳號綁定-第259批.md"
+    return batch(259, "帳號綁定第 259 批：identity 打開之前就登入的 session，密碼重新驗證要真的記上（現在回「驗證好了」卻沒記，綁定照樣被擋）", "identity", "dev/identity-reauth-259", plan, "8565、8566", [
+        "- **起因**（第 257 批寫測試時碰到的，經過在 `" + AL_AK_RECORD + "` 最後一節與 `docs/superpowers/plans/2026-11-23-條款-第257批.md` 第五節）：identity 關著時登入的 session 在旁檔 `<db>-identity.sqlite` 的 `session_auth` 沒有那一列（殼 `_start_session` 只在開著時記）。"
+        "identity 打開之後，這個 session 打 `POST /api/identity/reauth`（密碼對）：`routes.reauth` 叫 `identity_base.record_reauth(token, \"password\", now)`——它是 `UPDATE … WHERE token_hash = ?`，找不到那一列回 `False`，路由沒看回傳值，照樣回 `binding.REAUTH_OK`。"
+        "之後綁定、解綁、設密碼查 `binding.recent(identity_base.session_auth(token), …)` 還是 `None` → 「請先重新驗證」，再驗幾次都一樣，要登出重新登入才走得下去。**打開帳號綁定那一天，已經登入的每一個人都會碰到。** identity 現在每一種設定都關著（要主機先放金鑰），所以這是打開之前要收的洞，線上現在碰不到。",
+        "- **要的行為**：密碼重新驗證成功、而這個 session 沒有 `session_auth` 那一列 → 先補一列（`method` 是 `password`、`at` 是這一刻），再記重驗；回的字照舊。理由寫進程式旁註：密碼剛驗過，等於這一刻用密碼登入；identity 打開之前能開 session 的只有密碼登入。"
+        "第三方回呼與驗證碼那兩條重驗（`routes.py` 裡 `purpose == \"reauth\"` 的兩處，`not identity_base.record_reauth(…)` 時回失敗）也一樣沒有那一列時記不上：照同樣的想法補，但補的 `method` 是**這次驗的那一種**（不是 `password`）——"
+        "`staff_session_ok`、`admin_session_ok` 開著時只認 `method == \"password\"`，不能讓一次第三方或驗證碼的重驗把 session 變成「密碼登入」。先把這三條路各自現在的行為用測試釘住（紅），再改。",
+        "- **只准動 identity 包**：`tianxia/features/identity/routes.py`（必要時包的 `store.py`、`binding.py`）、包的 `tests/`、包的 README、計畫檔。補那一列用核心現成的 `identity_base.record_session`（叫核心的函式可以）或包的 `store.set_session_auth`——**不准改** `tianxia/core/identity_base.py`、`server.py`、`tianxia/accounts.py`、別的包。"
+        "真的非改核心不可（例：`record_session` 會把別的欄清掉、補不了）：停下，把理由與要動哪幾行寫進 stopped——動核心要企劃者或 Joy 點頭。",
+        "- **不改的**：`admin_session_ok`、`staff_session_ok` 查不到一律回假（設計 4.4：管理者與客服在打開那天要重新登入，是要的）；`/api/identity/me` 的 `relogin`；任何回給玩家的字。沒有新寫給玩家看的字（真的需要新字就標 `# 待 joy 潤` 並列進 new_strings）。",
+        "- **想清楚再寫**（寫進計畫，一段）：補這一列會不會讓誰多拿到權限——拿著別人的 cookie 但不知道密碼的人過不了密碼重驗；知道密碼的人本來就能登入。旁檔不見（被刪、搬機漏帶）時所有 session 都沒有那一列：補的行為在那種情形下是不是也說得通。"
+        "補完之後 `binding.recent`、`binding.checked_by`、`not_by_new` 各自讀到什麼（`at`、`verified`、`verified_by`）逐個寫出來，別讓「新綁的方式 N 小時內不能拿來解綁別的」那一條因為補的列而失效。",
+        "- **測試**（包的 `tests/`，走真的路由；identity 用現成的 `fake_services`、金鑰寫在 tmp，不讀 `.local/`；照 `test_identity_session.py` 與第 257 批 `tianxia/features/terms/tests/test_terms_identity_keys.py` 的夾具做法）："
+        "(a) identity 關著時密碼登入 → 打開 → 同一個 session 密碼重驗 → 綁手機（或 Email）成功、之後解綁也走得下去；(b) 同 (a) 但密碼打錯：不補列、照舊算一次猜錯；"
+        "(c) 這個 session 的管理者在重驗之前 `admin_session_ok` 是假（照舊），密碼重驗之後是真（補的是 `password`、剛驗過）——這一格照你讀程式的結果寫，跟設計 4.4 對不上就停下寫進 stopped；"
+        "(d) 第三方或驗證碼那一條重驗補的列 `method` 不是 `password`，`staff_session_ok` 仍是假；(e) 本來就有那一列的 session 行為一個字不變（現有測試全綠就是證據，另補一條明確的）。把補列那一段拿掉，(a) 要紅。",
+        "- **比對**：identity 關著時這幾條路由回 404，不該有任何差。照規矩跑 `scripts/same_behavior.py compare`（三種設定；covers 含 identity 的軌加 `ALWAYS_TRACKS`），最後一行原樣貼進回報；有差就逐行說明。",
+        "- **不做**：打開 identity、改任何設定覆寫檔、碰金鑰或 `.local/`、改條款包（第 257 批那條測試裡「改在一台剛用密碼登入的 client 上做」的繞法留著，可以在回報的 docs 寫一句之後可以拿掉）。資料庫第 9 版不動、旁檔的表結構不動。時間上限兩段合計 2.5 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+def b261():
+    plan = "docs/superpowers/plans/2026-11-23-異聞-第261批.md"
+    return batch(261, "異聞第 261 批：第 256 批拍到的四件——收尾卡名望那半句偶爾不見、手機寬收起後看不到「進行中」那一條、第二幕的頁邊朱批、320 寬的提示字；先查清楚是什麼，只在異聞這一包裡修", "yiwen", "dev/yiwen-6", plan, "8567、8568", [
+        "- **這一批先查、後修**。四件都是第 256 批（網頁比對的 yw 回合）走到異聞畫面時記下的（`docs/superpowers/plans/2026-11-23-工具批-第256批.md` 第七節與 leftovers；`" + AL_AK_RECORD + "` 最後一節）。異聞在每一種設定都關著，玩家現在碰不到。"
+        "**只准動異聞這一包**：`tianxia/features/yiwen/`（程式、測試、README）、`web/yiwen.js`、`web/yiwen.css`、計畫檔。`tianxia/core/`、共用層（`tianxia/renown.py` 等）、`engine.py`、`server.py`、`web/app.js`、`shell.js`、`main.js`、`style.css`、別的包、`scripts/webqa/` 一個字不動——查到原因在那些地方就**停在那一件**，把證據與建議的改法寫進 leftovers（開頭寫「交 PM：」），別的件照做。",
+        "- **①收尾卡的「名望 +5」偶爾少了「（離「…」還差 N）」那半句**：第 256 批把寫幕的閘停在最後一步（收尾那一步）時，3 次裡 1 次、只有一邊少；把閘移到第二步之後沒再出現，原因沒追。"
+        "已知：差距那半句由共用層 `renown` 在動作收尾時接（`tianxia/renown.py` 第 757 行附近：`entry = s.journal[0] if s.journal and s.journal[0].time == s.world.time and not synced else None`），只有「最新一則江湖紀錄的時間等於此刻」才接。"
+        "要回答的：異聞最後一步（`routes` 的三段式 `/api/do/yiwen_step`：A 段鎖內、B 段鎖外等模型、C 段 `actions.apply_step` 鎖內）寫的那一則紀錄的時間，跟收尾接差距那一刻的 `world.time`，在什麼情形下會不一樣——"
+        "例：B 段等的時候別的請求（`/api/state` 的輪詢）進鎖補算了時間、C 段寫紀錄用的是 A 段那時的時刻；或 C 段之後才同步。讀程式定出原因，寫一條**確定重現**的測試（在 A、C 之間把時間往後撥、或插一個同步；照第 253 批 `test_yiwen_step.py` 尾巴那些交錯測試的做法）。"
+        "原因在異聞包裡（例：紀錄的時刻取錯）→ 修，測試轉綠。原因在共用層、殼或引擎（例：所有鎖外三段式的動作都會這樣，親衛隊長的 `guard_say`、人物對話也是）→ 不修，測試標 `xfail(strict=True)`、理由寫清楚，並順手用一條測試看 `guard_say` 有沒有同樣的現象（只看、不修），交 PM。"
+        "也可能是走查的閘造成、真的玩家碰不到（例：只有牆鐘停 60 秒才會）——那就把「真的玩家等說書人十幾秒會不會碰到」照程式回答清楚。",
+        "- **②手機寬（375）收起撞見卡之後，江湖頁與俠客頁上「進行中」那一條細條被場景卡蓋住，1280 才看得到**：先用 " + AL_YW_ROUND + " 走一次（base、head 都給你開工那一筆），打開 `yw_hidden`、`yw_hidden_trip`、`yw_track_hero` 的 375 淺色、深色與 1280 的圖看。"
+        "對設計稿 `" + YW_DESIGN + "` 與介面設計規範 `docs/superpowers/specs/2026-11-09-介面設計規範.md`：收起之後玩家在手機上要怎麼回到這一則（場景卡的選單有〈標題〉與「放下」兩顆——那是不是就是設計要的入口？細條在手機寬該不該出現、出現在哪）。"
+        "判成三種之一並寫明依據（設計稿哪一節哪一句）：(甲) 照設計、不用改——在包的 README「畫面」那一節寫一句；(乙) 異聞自己的樣式或畫法漏了（例：細條的位置在 `web/yiwen.css` 裡被自己的規則擠掉）→ 在包裡修，照介面設計規範第八節自己驗（375 淺色深色各拍、鈕不小於 44px）；"
+        "(丙) 是殼的場景卡本來就蓋住那一塊（探索途中任何「進行中」都看不到）→ 不動，交 PM，附三張圖的路徑。**不要為了讓它看得到去改殼或場景卡的層級。**",
+        "- **③發掘者「自己說」寫成的第二幕沒有頁邊朱批**（第一幕按路牌那一步有）：`web/yiwen.js` 的 `yiwenScene` 旁註寫「右頁邊朱批（只在發掘者那一步）」，畫不畫看 `sc.zhupi`。對設計稿（企劃者 11/21 選的乙版「頁邊朱批」那一節）與伺服器給的資料（`frames` 或 `view` 裡 `zhupi` 什麼時候是真）："
+        "朱批是只記「說那是什麼」的第一步，還是發掘者走的每一步都有？照設計是前者 → 不改，README 寫一句；照設計是後者而程式漏了 → 在包裡補（伺服器那一側或網頁那一側，看漏在哪），補測試，列進回報的行為變更。",
+        "- **④320 寬時「自己說」的提示字會不會被截掉尾巴**（AI 波記的推算，沒實測）：起一個本機伺服器（給你的埠；照 `scripts/webqa/serve.py` 對 yw 回合的做法在記憶體裡把異聞打開，或直接用 yw 回合的 `--keep` 圖加自己量），在 320×568 量那一格的 `scrollWidth` 對 `clientWidth`、看字有沒有被截。有就在 `web/yiwen.css` 修（照規範：說明收得起來、輸入格不小於 44px），淺色深色各拍一張；沒有就寫量到的數字。",
+        "- **⑤順手一條測試**（AJ 波留的，`docs/superpowers/plans/2026-11-23-波次AJ紀錄.md` 最後一節）：`actions.apply_step` 第一道的 `w.opening != req.opening` 拿掉後現有測試還是綠的。補一條拿掉就紅的測試；造不出那個狀態（被則與鍵那兩項先擋住）就在測試檔寫一段說明為什麼造不出來，並在回報寫明。這一條不改程式。",
+        "- **驗**：包的 `tests/` 全過、README「另外要跑的」那幾個檔跑過、`scripts/test_for.py` 挑的跑過；`scripts/same_behavior.py selftest --tracks yiwen`（或那一軌現在的叫法，照包的 README）最後一行原樣貼進回報；"
+        "改了伺服器那一側的行為就再跑 `compare`（三種設定，`--new yiwen --also-existing`；yiwen 以外的軌要一個字都一樣），把 yiwen 軌前後的差逐行列出來、每一行說明是哪一件造成的。"
+        "改了 `web/yiwen.*` 就用 " + AL_YW_ROUND + " 對開工那一筆比一次，差異清單（哪一景、哪一種差）貼進回報、逐項說明是要的。",
+        "- **不做**：異聞三的東西（岔路、道具、定論、異聞錄）；改替身句與任何玩家看得到的字（真的要新字標 `// 待 joy 潤`、`# 待 joy 潤` 並列進 new_strings）；打開異聞的開關；動資料庫第 9 版與旁檔的表。時間上限兩段合計 4 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+def b260():
+    plan = "docs/superpowers/plans/2026-11-23-工具批-第260批.md"
+    return batch(260, "工具批第 260 批：走查自己還會紅的三張（`bt_watch_shut`、`dadian_left`、`nx_invite`）——找出是什麼決定畫成哪一種；能不掉靈敏度地收就收", "core_shared", "dev/tools-walk-260", plan, "8569～8576", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/`、`docs/superpowers/pm-workflows/` 一個字不動。",
+        "- **現況（事實）**：同一筆程式自己對自己走，還有三張會偶發判成 REAL，行尾都寫 `fingerprint same`、DOM 與計算樣式兩邊一樣、只差像素："
+        "①c 回合 `029_bt_watch_shut`（與 `028_bt_watch_open`）375 淺色，決戰卡倒數那一格同一塊 713 px、差 1 級，約六趟一趟——第 254 批查到「那一塊永遠只有兩種畫法，沒找到是什麼決定落在哪一種」，換 dpr 再換回來只把機率壓下來（計畫 `docs/superpowers/plans/2026-11-23-工具批-第254批.md`）；"
+        "②main 回合 `075_dadian_left__375-light__s1` 19 px、差 50 級（更早一次是 11 px）——第 258 批 6 趟紅 2 趟，那 6 趟跟 selftest 同時跑，沒拆開驗是不是機器忙才出現（計畫 `…工具批-第258批.md` 第七節）；"
+        "③main 回合 `002_nx_invite` 1280 兩張 456 px、差 36 級，紅框在開季選長處那張卡的武將那一格附近——第 256 批九回合整趟碰到一次（計畫 `…工具批-第256批.md` 第七節）。AK 波的閘門九回合全走那一次三張都沒出現。這三張的說明在 `docs/guide/量表與教訓.md` 網頁比對那一段的最後幾條。",
+        "- **①先量、再說**（寫進計畫，附數字；每一次量都寫明那時候機器上還有沒有別的走查或測試在跑——這一波另外兩條線同時在跑，避不開就照實寫）："
+        "三張各自所在的那一段流程用 `--only` 自己對自己走（照第 258 批計畫第一節的走法），每張至少 8 趟：紅幾趟、每次紅的像素框與級數是不是同一塊；同一邊連拍（不重新載入頁面、強制整頁重畫之後再拍）會不會在兩種畫法之間換——"
+        "這一題決定下面走哪條路：**畫法是每一次畫都重擲的**（同一邊重畫就看得到兩種）還是**載入那一刻就定了的**（同一邊怎麼重畫都同一種）。順便回答②的「機器忙」：同時另開一趟走查時紅的比例有沒有明顯變高。",
+        "- **②改法，照量到的走**："
+        "(甲) 畫法每次重擲 → 照重放那一側第 237 批的 `render-variants` 的想法搬到走查：只對 light 景（或量到會抖的那一類視窗）在同一邊多拍幾次、中間強制整頁重畫，把出現過的畫法都留下（檔名或雜湊），`compare.py` 在「DOM 一樣、計算樣式一樣、兩邊指紋一樣、只差像素」的列上看兩邊的畫法集合有沒有交集——有交集歸成一類新的雜訊（名字照 `noise.py` 現有的口氣取），沒有交集照樣 REAL。多拍的成本量出來（整趟九回合多幾秒），超過一成五就縮範圍。"
+        "(乙) 畫法載入時就定 → 找出是哪一個載入時的不定因素（字型載入的先後、圖片解碼的時機、合成層、`requestAnimationFrame` 對齊……）；能在 `driver.mjs` 這一側固定住（等某個確定的訊號再拍）就固定，不能就照實寫查到哪裡，**不硬收**。"
+        "(丙) 三張原因不一樣就各走各的；時間不夠先做出現最多的那一張。",
+        "- **不准做的**（手冊第十五節 AJ 波認定第 2 條）：放寬 aa 門檻；列景名、檔名或像素框的白名單；把 DOM 或計算樣式有差的列也收進新的雜訊類；為了它改 `web/` 或停掉頁面的計時器。"
+        "新的雜訊類只能在「兩邊各自真的畫出過同一張」時成立——只有一邊畫得出來的像素變化（真的回歸）交集一定是空的，要照樣紅。",
+        "- **③證明沒掉靈敏度**：`selftest.py` 的 `img-battle`（決戰卡底圖反相）、`img-invert`、`card-padding`、`css-last`、第 256 批的 `yw-padding` 那幾列照樣紅；另外補一個針對你這次改法的正對照（例：只動 `bt_watch_shut` 那一塊裡幾個像素的圖或樣式——計算樣式不變、像素真的變，要判 REAL），做成 selftest 的一列或 `tests/web/test_webqa.py` 的測試。"
+        "改完之後三張各自那一段自己對自己至少 12 趟：0 REAL 才算收掉；還會紅就照實寫剩幾趟、改前幾趟，工具檔頭（`gate.py`、`noise.py`，英文、照檔裡的口氣）寫明剩下的機率與樣子。",
+        "- **驗**：`tests/web/test_webqa.py` 全過、`scripts/test_for.py` 挑的跑過；`selftest.py` 至少把上面點名的那幾列加 base 對 base、`css-comment` 跑過，表貼進回報（每一列的結果；最後一行原樣）。整趟九回合不要跑（波末閘門跑）。",
+        "- **不做**：第 262 批的事（閘門的 facade、`#yw-pop` 的捲動、略過那條路）。沒有新寫給玩家看的字。時間上限兩段合計 5 小時；到了就把做好的推上去、交，沒做完的寫 leftovers（查到哪裡、下一步試什麼）。",
+    ] + AK_ENV, custom=True)
+
+
+def b262():
+    plan = "docs/superpowers/plans/2026-11-23-工具批-第262批.md"
+    return batch(262, "工具批第 262 批：閘門與走查的四條尾巴——改到網頁 js 的波 facade 軌不再要人手動重跑、蓋在頁面外自己捲的卡捲著拍、head 把異聞弄丟不能只印略過、全表 selftest 補跑", "core_shared", "dev/tools-walk-260", plan, "8569～8576", [
+        "- **接在第 260 批後面、同一條分支**（你從它的最後一筆接著做）。**只動** `docs/superpowers/pm-workflows/wave_gate.py`、`tests/core/test_same_behavior_gate.py`（①）、`scripts/webqa/`、`tests/web/test_webqa.py`（②③④）、計畫檔。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動。",
+        "- **①閘門：改到 `web/*.js` 的波，facade 軌的紅自動驗掉**。現況：`same_behavior` 的 facade 軌把所有 js 的每一行算進雜湊（`scripts/sb/tracks/` 裡那一軌，第 64 行附近「所有 js 的行」），所以只要波裡改了任何一個 `web/*.js`，這一軌兩種設定一定不一樣、閘門記紅；"
+        "PM 每次都要手動做同一件事（手冊第十五節「AE 波的 PM 認定」第 2 條；AK 波又做了一次，經過在 `" + AL_AK_RECORD + "` 最後一節）：把 base 解一份、只換進 head 的那幾個 js、對 head 再比一次 facade，整段一樣才認列。"
+        "**要的**：`wave_gate.py` 在比對跑完之後，如果 (a) 紅的軌全部落在「把 js 的行算進雜湊」的那幾軌（先讀 `scripts/sb/tracks/` 定出是哪幾軌、各自把哪些檔算進去，寫成一張具名的表，不要猜）、(b) base 到 head 之間那幾軌會算進去的檔裡有差的**只有已經存在的 `web/*.js` 的內容**（沒有新增或刪掉的 js：那會動到伺服器生成的 script 清單，是真的差），"
+        "就自動再跑一次：base 的複本只換進 head 的那幾個 js，對 head 比那幾軌、同樣的設定。再跑的結果整段一樣 → 比對這一項算過，`result.json` 與 `compare.txt` 都記下「哪幾軌、換進了哪幾個檔、第一次兩邊的雜湊、再跑的雜湊」；再跑還是不一樣 → 照舊紅，兩次的輸出都留著。"
+        "條件 (a)(b) 任一不成立就不再跑、照舊紅。判斷的那一段寫成純函式，在 `tests/core/test_same_behavior_gate.py` 補測試：只有 js 內容變 → 再跑；多了一個 js 檔 → 不再跑；別的軌也紅 → 不再跑；再跑仍有差 → 紅。"
+        "另做一次真的（用給你的埠與暫存夾）：拿 AK 波那一對（base `b2f66293b65effcbbd36cc20a7d46c0ad39947f7`、head `63e7631b30a04034e88d6e2d4d76a8b9b127f564`，那一波只有 `web/terms.js` 變）只跑比對這一項或等價的最小走法，結果要是「facade 再跑一樣、算過」；"
+        "再造一個反例（在 head 的複本裡另外改一行會進 facade 輸出、但不是 js 的東西，例如伺服器回首頁的那一段字）確認照樣紅。`wave_gate.py` 檔頭的說明照改到的補。",
+        "- **②走查：蓋在頁面外、自己捲的卡要捲著拍**。`driver.mjs` 的 `SCROLLER` 只在 `#app` 底下找捲動區；異聞的卡是 `body` 底下的 `#yw-pop`（class `.yw-wrap`，`position: fixed`、`overflow-y: auto`，`web/yiwen.css` 第 5 行附近），長過一屏時只拍得到第一屏（第 256 批的 20 景剛好都在一屏內）。"
+        "改成也認得「掛在 `#app` 外、固定定位、自己會捲、內容比框高」的那一層（用一般的條件認，不要寫死 `#yw-pop` 這個名字；同時有好幾層時取最上面那一層），照現有 `__sN` 的拍法捲著拍。"
+        "**別的回合會不會因此多拍**（改版資訊 `.patch-pop`、簽到 `.ck-pop`、條款的同意層、客服頁……）：挑 main 與 c 兩個回合改前改後各走一次，把多出來的圖（哪一景、哪個視窗、多幾張）列成表；指紋那幾欄（scenes、dom、style、main）不該變，變了就說明。"
+        "多拍出來的圖自己對自己要穩（那兩個回合各 2 趟 0 REAL，已知那三張偶發除外）。證明它真的會捲著拍：一條測試（假的 DOM 或 snippet 的單測）加一次實拍（把視窗高度調小到異聞的撞見卡超過一屏，看有沒有 `__s1`）。",
+        "- **③head 把異聞弄丟不能只印 SKIPPED**（AK 波審查的 nit）：`gate.py` 的 `ROUND_NEEDS`／`round_cannot_walk` 現在 base、head 任一邊少了異聞的寫幕、`yiwen_step` 或 tuning 就兩邊都略過、結束碼 0。改成：**base 有而 head 沒有**（head 退化）→ 這一回合記成紅（照現有「工具壞」或 REAL 哪一種比較貼切你定，寫進 decided，報告那一行寫清楚少了哪一樣）；base 沒有（比 AI 波舊）才略過。補測試。"
+        "再拿一筆真的舊 commit 走一次略過那條路（第 256 批只用假的複本測過）：找一筆比 AI 波舊的 develop（`git log` 找第 251 批合進來之前的那一筆），當 base、head 給現在這一筆，`--rounds yw` → 報告印 SKIPPED、結束碼 0；`--rounds cs,yw` → cs 照常比、yw 略過。把報告那幾行原樣貼進回報。",
+        "- **④全表 selftest 補跑**：第 256 批之後整張 selftest 還沒有人完整跑過（只跑了 `--yw-only` 兩列）。在你最後那一筆上完整跑一次（含 yw 兩列與第 260 批新加的列），每一列的結果列成表貼進回報、最後一行原樣；哪一列紅，照實寫紅的是什麼、是不是那三張已知的偶發。`pkg-css` 兩種（不帶 `--new` 紅、帶 `--new identity` 列成 NEW）各跑一次。",
+        "- **驗**：`tests/core/test_same_behavior_gate.py`、`tests/core/test_nightly.py`、`tests/web/test_webqa.py` 全過；`scripts/test_for.py` 挑的跑過；`scripts/webqa/coverage.py check` 過（②若讓覆蓋表變了就重建並逐列對）。整趟九回合最多跑一次（②的 main 與 c 兩個回合不算）。",
+        "- **不做**：改 facade 軌本身算什麼（`scripts/sb/` 不動）；動 aa 門檻與雜訊判法（那是第 260 批）；改異聞的程式或畫面。沒有新寫給玩家看的字。時間上限兩段合計 5 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+AL_ID_LENS = dict(key="identity", text=(
+    "**第 259 批：帳號綁定的重新驗證**。親自驗（解一份 head 到你的暫存夾，`TIANXIA_DB` 指到暫存檔，模型網址 127.0.0.1:9）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/identity/`（程式、測試、README）與計畫檔；`tianxia/core/`、`server.py`、`tianxia/accounts.py`、別的包沒動（動了就是 blocker，除非 stopped 寫明沒做）。"
+    "②補列只發生在**這一次重驗真的成功**之後：密碼錯、第三方回呼的帳號不是開單的那一個、驗證碼的對象不是這個帳號綁的那一個，都不補——三條路各自逐個分支讀。"
+    "③補的 `method`：密碼重驗補 `password`；第三方與驗證碼補的是那一種、**不是** `password`（否則一次驗證碼重驗就拿得到 `staff_session_ok`、`admin_session_ok`）。自己寫一小段確認：驗證碼重驗之後 `staff_session_ok` 仍是假。"
+    "④補完之後 `binding.recent`、`checked_by`、`not_by_new` 讀到的值說得通：「新綁的方式不滿 `new_binding_hours` 不能拿來設密碼、解綁別的」沒有因為補的列被繞過（試一次：舊 session 綁一個新的 → 用它重驗 → 解綁別的，要被擋）。"
+    "⑤把補列那一段拿掉，包的測試要有一條紅（自己試）；測試走的是真的路由。identity 關著時這幾條路由照舊 404，開發貼的 compare 最後一行是全部一樣。"
+    "⑥沒有新寫給玩家看的字（有就要標待 joy 潤並列出）；沒有碰 `.local/`、金鑰、設定覆寫檔；任何輸出與測試名沒有一處分得出誰是假人。"
+))
+AL_YW_LENS = dict(key="yiwen", text=(
+    "**第 261 批：異聞的四件**。逐件看開發的結論站不站得住（解一份 head，`TIANXIA_DB` 指暫存檔，模型網址 127.0.0.1:9）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/yiwen/`、`web/yiwen.js`、`web/yiwen.css`、計畫檔；核心、共用層（`tianxia/renown.py`）、殼、`scripts/webqa/` 沒動（動了就是 blocker）。"
+    "②名望那半句：開發說的原因你自己照程式走一遍——那一則紀錄的時刻從哪來、收尾接差距那一刻的 `world.time` 從哪來、什麼情形下不一樣；他的重現測試是不是真的在重現那個情形（把他的修法拿掉，要紅；或 `xfail(strict=True)` 的那一條現在真的是失敗的）。"
+    "他說「真的玩家碰不到」或「碰得到」的那一句有沒有程式依據。原因在共用層或殼而他修在包裡繞過去的：繞法會不會讓紀錄的時刻跟別的系統（戰報、行狀、傳）對不上。"
+    "③375 那一條細條與第二幕的朱批：他引的設計稿那一句你自己翻出來看，是不是那個意思；判成「照設計」的，圖你自己打開看（375 淺色、深色）玩家是不是真的回得去那一則。改了畫面的：照介面設計規範第八節的證據在不在（淺色深色各一張、量到的尺寸、鈕不小於 44px、沒有橫向捲動）。"
+    "④320 寬：量到的 `scrollWidth`、`clientWidth` 數字在不在。⑤`w.opening != req.opening` 那一條：把那一道拿掉，新測試紅不紅；說造不出來的，理由對不對。"
+    "⑥行為變更清單：yiwen 軌前後的差逐行有說明、yiwen 以外的軌一個字都一樣；yw 回合的差異清單逐項有說明；selftest 最後一行在。沒有新字，或新字都標了待 joy 潤。輸出、截圖沒有一處分得出誰是假人。"
+))
+AL_TOOL_LENS = dict(key="tools", text=(
+    "**第 260 批**：①只動 `scripts/webqa/` 與它的測試。②aa 門檻沒動、沒有景名檔名像素框的白名單、沒有為了它改 `web/` 或停計時器。"
+    "新的雜訊類（如果有）只在「DOM 一樣、計算樣式一樣、兩邊指紋一樣、而且兩邊的畫法集合有交集」時成立——讀 `compare.py` 與 `noise.py` 那一段，自己想一個「只有一邊畫得出來的像素變化」會不會被它收掉；開發補的正對照（計算樣式不變、像素真的變）在不在、是不是真的會紅。"
+    "③量的數字在不在：改前每張紅幾趟、同一邊重畫看不看得到兩種、機器忙不忙有沒有差；改後 12 趟。說「沒收掉」的照實寫了沒有。多拍的成本量了沒有。④selftest 點名的那幾列的表。"
+    "**第 262 批**：⑤`wave_gate.py` 的再跑只在「紅的軌全在那張具名的表裡、而且有差的只有已存在的 `web/*.js` 內容」時發生；多一個或少一個 js 檔、別的軌也紅、再跑仍有差，都照舊紅——四種各有測試，再讀一次純函式確認沒有別的路會把紅變綠。"
+    "再跑用的 base 複本只換進了 js、沒有順手換進別的檔。那張「哪幾軌把哪些檔算進雜湊」的表對 `scripts/sb/tracks/` 的程式對一次。AK 波那一對的實跑與反例的輸出在不在。"
+    "⑥`SCROLLER`：用一般條件認、沒有寫死名字；別的回合多拍的圖的表在不在、指紋有沒有變；捲著拍的實拍證據。⑦head 少了異聞而 base 有 → 紅，base 沒有 → 略過，兩種各有測試；真的舊 commit 那兩次的報告行在不在。"
+    "⑧全表 selftest 每一列的表與最後一行、`pkg-css` 兩種。⑨輸出、截圖、報告裡沒有任何一處分得出誰是假人。"
+))
+WAVES["AL"] = dict(
+    round2=True,
+    extra_lenses=[AL_ID_LENS, AL_YW_LENS, AL_TOOL_LENS],
+    lines=[dict(name="帳號綁定", batches=[b259]), dict(name="異聞小修", batches=[b261]), dict(name="走查與閘門", batches=[b260, b262])],
+    merge_port=8577, fix_port=8578,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
