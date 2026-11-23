@@ -2291,7 +2291,7 @@ AL_TOOL_LENS = dict(key="tools", text=(
     "⑧全表 selftest 每一列的表與最後一行、`pkg-css` 兩種。⑨輸出、截圖、報告裡沒有任何一處分得出誰是假人。"
 ))
 WAVES["AL"] = dict(
-    round2=True,
+    round2=True, new_packages="yiwen", new_existing=True,  # 第 261 批改了異聞伺服器那一側（C 段回話經 g._log）與 web/yiwen.css
     extra_lenses=[AL_ID_LENS, AL_YW_LENS, AL_TOOL_LENS],
     lines=[dict(name="帳號綁定", batches=[b259]), dict(name="異聞小修", batches=[b261]), dict(name="走查與閘門", batches=[b260, b262])],
     merge_port=8577, fix_port=8578,
