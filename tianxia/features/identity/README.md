@@ -92,6 +92,17 @@
 - **管理頁的「請用密碼重新登入」**：`/admin` 跟江湖頁同一張頁；`identityAdminRelogin` 在 `.ad-head` 畫出來、有 identity 格、`S.main.admin` 假時問一次 `/api/identity/session`（結果記在 `S.idp.adRelogin`），真就在標題下插同一行 `p.form-msg.idp-relogin`；`web/admin.js` 整頁重畫換掉那一行時照記下的補回、不再問。`web/admin.js`、admin 包不動。
 - **管理者解綁的通知放鎖之後寄**（企劃者 2026-11-09「2. ok」）：`identity_unbind` 在行動鎖內只把那一則記進 `routes._LATER`（`WeakKeyDictionary`，鍵是那一份 Game；記憶體、不進存檔），`admin.unbind(..., later=)`；放鎖之後的背景格 `identity_notify`（`Feature.outlock`，`OUTLOCK_ORDER` 外、接在表尾；`waiting` 只讀、`start` 拿走）每一則再查一次那一種已經不在帳號上（動作丟例外、交易撤回的不寄）才 `contacts.send_all`；寄失敗只記 log，回給管理者的話不變。直接叫 `admin.unbind`（不帶 `later`）照舊當場寄。核心的 `AdminTool` 不加欄、`server.py` 不動。管理者重設密碼（admin 包 `/api/admin/reset_password`）本來就不經 `act()`、通知寫在交易外面，不改（`test_admin_reset_notifies_outside_the_lock` 釘住）。
 
+## 打開之前登入的人重新驗證也記得上（第 259 批）
+
+- **三條重新驗證都經 `routes.mark_reauth`**：密碼（`/api/identity/reauth`）、驗證碼的 reauth 用途（`/api/identity/code/verify`）、第三方回呼的 reauth 用途。先照舊 `identity_base.record_reauth`；這個 session 在旁檔沒有 `session_auth` 那一列（identity 打開之前登入的、或旁檔不見了），`record_reauth` 回假，就先用核心現成的 `identity_base.record_session` 補一列、再記一次。以前這種 session 重驗回「驗證好了」卻什麼都沒記。
+- **補的方式是這次驗的那一種**：密碼補 `password`，驗證碼補 `phone`／`email`，第三方補 `line`／`google`。所以 `staff_session_ok`、`admin_session_ok`（開著時只認 `method == "password"`）對後兩種補出來的 session 照舊是假。
+- **只在驗對之後補**：打錯密碼（`authenticate` 丟例外，照舊算一次猜錯）、驗證碼的號碼不是這個帳號綁的、第三方帳號對不上這個帳號，都在 `mark_reauth` 之前短路，不補。
+- **本來就有那一列的**：`record_reauth` 打得到，`method`、`at` 不變，只改 `verified`、`verified_by` 兩欄（`record_session` 只在 UPDATE 沒打到時才叫，不會清掉誰的重驗）。
+- **效果**：identity 打開那天已經登入的人，在同一個 session 打一次密碼重新驗證就能綁定，不必登出重登；管理者同理（重驗前 `admin_session_ok` 假，密碼重驗後真）。
+- **邊角（PM 2026-11-24 認定，不是缺陷）**：旁檔不見時，原本用驗證碼或第三方登入的 session 打密碼重驗會補成 `password`。這不算多給權限：補列只發生在驗對密碼之後，知道密碼的人本來就能直接用密碼登入。第 204 批「用驗證碼或第三方進來、事後補打密碼也不給」針對的是有那一列、方式不是密碼的 session，那一條照舊（有那一列的重驗不改 `method`，測試 (e) 守）。
+- **測試**：`tests/test_identity_reauth_seed.py` 五條——(a) 打開之前的 session 密碼重驗後綁得上；(b) 打錯密碼不補、照算一次；(c) 管理者密碼重驗後 `admin_session_ok` 真；(d) 驗證碼重驗補的是自己那一種、`staff_session_ok` 照舊假；(e) 本來有那一列的 `method`、`at` 不變、只改 verified 兩欄。**還沒有測試的**：第三方回呼的 reauth 補列（跟驗證碼那條共用同一個 `mark_reauth`；全 repo 還沒有 `auth=reauth` 那一條的測試）。
+- **退版**：沒有新欄位、旁檔的表不變、資料庫第 9 版不動、沒有新字；退回舊程式只是回到「打開之前登入的人重驗了也要重新登入」。季中能換、不必休季。
+
 ## 認領的欄位（手冊 3.5）
 
 `player_fields = ()`、`carried = ()`：沒有 `PlayerState` 欄位，資料在主資料庫的 `logins` 表（照現表多出 `provider` 不是 `password` 的列：第 202 批起有 `line`、`google`，`subject` 是對方的使用者編號原樣、`display` 是「LINE」「Google」）與旁檔。主資料庫第 9 版不動。
