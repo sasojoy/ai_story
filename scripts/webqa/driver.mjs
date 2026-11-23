@@ -192,6 +192,40 @@ async function taleReady() {
     taleBudget -= 200;
   }
 }
+// One window of a scene: its pictures (the first, then the scrolled ones) and, at 375-light and the main 1280, its styles. Returns the layout read before the first picture.
+async function shootWindow(id, v, d, light, facts) {
+  // A light scene's first window is the one the scene before left behind: setting it again repaints nothing, and what is on screen is whatever
+  // the clicks redrew piece by piece. The battle card's countdown is rewritten every second over a filtered, half-clear picture, and a piece
+  // redrawn alone comes out one level off a whole-page paint, either way at random (batch 254, c round bt_watch_*, main dadian_left).
+  // Flip the dpr once first, so every picture follows a whole-page paint, like the dpr 2 scenes always did. Wait for two frames drawn at the
+  // flipped dpr, not a fixed time: with the machine busy 50 ms could pass with no frame, and the flip back then repainted nothing (1 in 6).
+  if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], "dpr flip not drawn (no new dpr in 1s or no frames in 1.5s)"); }
+  await setView(v, d);
+  if (!(await stable(v[1]))) facts.unstable = true;
+  if (v[1] === 1280) await fixGutter(v, d, facts);
+  const first = facts.layout[v[0]] = await ev(LAYOUT);
+  const sc = await ev(SCROLLER);
+  const maxScreens = v[1] > 1000 ? (light ? 2 : 3) : (light ? 3 : 6);
+  if (sc) await ev(`window.__sc.scrollTop = 0; 0`); else await ev(`window.scrollTo(0, 0); 0`);
+  await sleep(60);
+  let f = `${id}__${v[0]}.png`;
+  await grab(f); facts.shots.push(f); await volatileOn(f, facts, d);
+  if (sc) {
+    const step = Math.max(200, sc.ch - 90);
+    for (let y = step, n = 1; y < sc.sh - sc.ch + step && n < maxScreens; y += step, n++) {
+      await ev(`window.__sc.scrollTop = ${Math.min(y, sc.sh - sc.ch)}; 0`);
+      await sleep(70);
+      f = `${id}__${v[0]}__s${n}.png`;
+      await grab(f); facts.shots.push(f); await volatileOn(f, facts, d);
+    }
+    await ev(`window.__sc.scrollTop = 0; 0`);
+    // scrolling back folds and unfolds things (the kiln): same wait again before reading what the browser worked out
+    if (facts.shots.length && facts.shots[facts.shots.length - 1].includes("__s") && !(await stable(v[1]))) facts.unstable = true;
+  }
+  if (v[0] === "375-light" || (!light && v[0] === "1280")) await dumpStyles(id, v[0], facts);
+  return first;
+}
+const RESHOOTS = 2;
 let sceneN = 0;
 // main scenes: dpr 2, more screens, styles on five widths; crawl scenes: dpr 1, fewer
 async function shoot(name, { light = false, toast = false, who = null } = {}) {
@@ -206,35 +240,24 @@ async function shoot(name, { light = false, toast = false, who = null } = {}) {
   const dpr = light ? 1 : 2;
   for (const v of QUICK ? [] : VIEWS) {
     const d = v[1] > 1000 ? 1 : dpr;
-    // A light scene's first window is the one the scene before left behind: setting it again repaints nothing, and what is on screen is whatever
-    // the clicks redrew piece by piece. The battle card's countdown is rewritten every second over a filtered, half-clear picture, and a piece
-    // redrawn alone comes out one level off a whole-page paint, either way at random (batch 254, c round bt_watch_*, main dadian_left).
-    // Flip the dpr once first, so every picture follows a whole-page paint, like the dpr 2 scenes always did. Wait for two frames drawn at the
-    // flipped dpr, not a fixed time: with the machine busy 50 ms could pass with no frame, and the flip back then repainted nothing (1 in 6).
-    if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], "dpr flip not drawn in 1.5s"); }
-    await setView(v, d);
-    if (!(await stable(v[1]))) facts.unstable = true;
-    if (v[1] === 1280) await fixGutter(v, d, facts);
-    facts.layout[v[0]] = await ev(LAYOUT);
-    const sc = await ev(SCROLLER);
-    const maxScreens = v[1] > 1000 ? (light ? 2 : 3) : (light ? 3 : 6);
-    if (sc) await ev(`window.__sc.scrollTop = 0; 0`); else await ev(`window.scrollTo(0, 0); 0`);
-    await sleep(60);
-    let f = `${id}__${v[0]}.png`;
-    await grab(f); facts.shots.push(f); await volatileOn(f, facts, d);
-    if (sc) {
-      const step = Math.max(200, sc.ch - 90);
-      for (let y = step, n = 1; y < sc.sh - sc.ch + step && n < maxScreens; y += step, n++) {
-        await ev(`window.__sc.scrollTop = ${Math.min(y, sc.sh - sc.ch)}; 0`);
-        await sleep(70);
-        f = `${id}__${v[0]}__s${n}.png`;
-        await grab(f); facts.shots.push(f); await volatileOn(f, facts, d);
+    // The scrollbar can come and go on its own while one window is being shot (batch 258: from 039_smith on Chrome kept the 1280 page
+    // without its gutter, and it came back at a random scene around 092-094, once between the first picture and the scrolled ones, so
+    // sw read before the first picture said both sides agreed). Read the layout again at the end of the window; when sw or cw moved,
+    // throw that window's pictures away and shoot it again, at most RESHOOTS times. Still moving: keep the last take and say so.
+    for (let take = 0; ; take++) {
+      const from = facts.shots.length;
+      const first = await shootWindow(id, v, d, light, facts);
+      const end = await ev(LAYOUT);
+      if (end.sw === first.sw && end.cw === first.cw) break;
+      if (take === RESHOOTS) {
+        facts.moved = (facts.moved || []).concat(v[0]);
+        facts.layoutEnd = { ...(facts.layoutEnd || {}), [v[0]]: end };
+        log(id, v[0], "gutter moved while shooting", JSON.stringify([first.sw, first.cw, end.sw, end.cw]));
+        break;
       }
-      await ev(`window.__sc.scrollTop = 0; 0`);
-      // scrolling back folds and unfolds things (the kiln): same wait again before reading what the browser worked out
-      if (facts.shots.length && facts.shots[facts.shots.length - 1].includes("__s") && !(await stable(v[1]))) facts.unstable = true;
+      for (const f of facts.shots.splice(from)) { delete facts.vol[f]; delete hashes[f]; rmSync(join(SHOTS, f), { force: true }); }
+      log(id, v[0], "gutter moved while shooting, again", JSON.stringify([first.sw, first.cw, end.sw, end.cw]));
     }
-    if (v[0] === "375-light" || (!light && v[0] === "1280")) await dumpStyles(id, v[0], facts);
   }
   if (!light && !QUICK) {
     for (const v of STYLE_VIEWS) {
