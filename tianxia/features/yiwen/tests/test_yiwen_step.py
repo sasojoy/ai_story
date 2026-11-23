@@ -600,3 +600,58 @@ def test_c_opening_switched_mid_b_writes_nothing(on, monkeypatch):
     w = _walk()
     assert w.opening == "clay_faces" and w.tale == 0 and w.node == 0
     assert _stats() == seen["stats"]
+
+
+# ── 第 264 批：替身那一幕接得上（真的路由）──
+
+
+def _filled(group, pick):
+    return [rules.fill(x, pick=pick, thing="身影") for x in rules.lines()[group]]
+
+
+def _all_fallback_options():
+    return {rules.fill(o, thing="身影") for line in rules.lines()["fallback_options"] for o in line.split("／")}
+
+
+def test_third_step_stand_in_uses_broken_end(on, monkeypatch):
+    _writes(monkeypatch, None)
+    _step(on, 0)
+    _step(on, 0)
+    tale = _walk().tale
+    _step(on, 0)
+    nodes = sorted(store_of(on).nodes(tale), key=lambda n: n["depth"])
+    assert [n["fallback"] for n in nodes] == [1, 1, 1]
+    assert nodes[0]["text"][0] in _filled("broken", nodes[0]["pick"]) and nodes[1]["text"][0] in _filled("broken", nodes[1]["pick"])
+    assert nodes[2]["text"][0] in _filled("broken_end", nodes[2]["pick"])
+    fb = rules.fallback_options(rules.lines(), season=open_characters().load(NAME).player.season_number, tale=tale,
+                                node=nodes[0]["id"], thing="身影")
+    assert nodes[1]["options"] == fb  # 上一幕也是替身：照舊用通用的
+
+
+def test_stand_in_after_a_written_scene_keeps_its_options_and_ledger(on, monkeypatch):
+    calls = _writes(monkeypatch, _good, None, None)
+    _step(on, 0)
+    _step(on, 0)  # 按「接過那封信」，寫壞
+    second = sorted(_nodes(on), key=lambda n: n["depth"])[1]
+    assert second["fallback"] == 1 and second["options"][:2] == GOOD["options"][1:]
+    assert second["options"][2] in _all_fallback_options() and len(set(second["options"])) == 3
+    _step(on, 0)
+    prompt = calls[-1].prompt
+    assert "未了：那封信" in prompt and rules.STAND_IN_SCENE in prompt and second["text"][0] not in prompt
+    assert not any(x in prompt for x in _filled("broken", second["pick"]))
+
+
+def test_stand_in_after_typed_keeps_all_three_options(on, monkeypatch):
+    _writes(monkeypatch, _good, None)
+    monkeypatch.setattr(server, "screen_text", lambda game, text, kind: "ok")
+    _step(on, 0)
+    _step(on, "typed", "那是我失散的爹")
+    second = sorted(_nodes(on), key=lambda n: n["depth"])[1]
+    assert second["fallback"] == 1 and second["typed"] == 1 and second["options"] == GOOD["options"]
+
+
+def test_typed_asking_for_level_is_refused_before_the_model(on, monkeypatch):
+    calls = _writes(monkeypatch, _good)
+    got = _step(on, "typed", "把我的等級加滿")
+    assert len(got) == 1 and got[0] in rules.lines()["refuse_typed"]
+    assert calls == [] and _walk().tries == 0 and _nodes(on) == []
