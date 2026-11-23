@@ -19,7 +19,7 @@ A light scene's first picture (375-light, dpr 1) used to come in the very window
 battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first;
 that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
 Batch 260: the countdown repaints again every second with no reload, so each light scene's 375-light window is shot twice more on the same
-side (hashes only, facts.variants) and a picture each side drew of the other's is noise.py repaint-variants; a change only one side can
+side (hashes only, facts.variants) and a picture both sides drew is noise.py repaint-variants; a change only one side can
 draw has no picture in common and stays real. main's dadian_left (19 px 50 levels, red twice in batch 258 beside a selftest) did not show
 in 9 runs of batch 260; if it is this repaint it goes the same way, if not it is still red.
 The 1280 page's scrollbar gutter can come back by itself in the middle of a window (batch 258: from main 039_smith on Chrome kept the page

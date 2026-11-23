@@ -283,20 +283,26 @@ def test_the_replay_puts_a_clean_pixel_row_aside_and_a_dirty_one_stays_real(comp
 
 def test_a_picture_each_side_drew_of_the_other_is_repaint_variants(compare, tmp_path):
     # 第 260 批：c 回合 bt_watch_open/shut 375 淺色，同一邊不重新載入，倒數每秒重寫就換畫法（整頁剛畫完、倒數那一格局部補畫 713 px 1 級）；
-    # 兩邊本來那張落在不同畫法就紅（8 趟紅 2）。走查在同一邊多拍兩張（facts.variants），兩邊各自畫出過對方那一張才是 repaint-variants
+    # 兩邊本來那張落在不同畫法就紅（8 趟紅 2）。走查在同一邊多拍兩張（facts.variants），兩邊各自真的畫出過同一張才是 repaint-variants
     a = _walk(tmp_path / "a", dots=0, variants=["dots0", "dots500"])
     b = _walk(tmp_path / "b", dots=500, variants=["dots0", "dots500"])
     out = compare.compare(a, b, HOSTS, str(tmp_path / "red"))
     assert out["real"] == [] and out["noise"] == {"repaint-variants": 1} and out["red_images"] == 0
     assert out["noise_rows"] == [{"file": "001_scene__375-light.png", "class": "repaint-variants", "pixels": 500, "levels": 5, "box": [0, 0, 40, 13], "variants": [2, 2]}]
     assert out["fingerprint"]["A"] == out["fingerprint"]["B"]
+    # 量到的樣子：一邊本來那張是整頁剛畫完（dots0），後拍的兩張都是倒數那一格補畫（dots500）；另一邊本來那張就是 dots500
+    out = compare.compare(_walk(tmp_path / "c", dots=0, variants=["dots500", "dots500"]), _walk(tmp_path / "d", dots=500, variants=["dots500"]), HOSTS)
+    assert out["real"] == [] and out["noise"] == {"repaint-variants": 1}
+    # 共同的是兩邊後拍的第三張也算：兩邊各自真的畫出過它
+    out = compare.compare(_walk(tmp_path / "e", dots=0, variants=["dots7"]), _walk(tmp_path / "f", dots=500, variants=["dots7"]), HOSTS)
+    assert out["real"] == [] and out["noise"] == {"repaint-variants": 1}
 
 
 @pytest.mark.parametrize("name, a_seen, b_seen", [
     ("交集空：只有一邊畫得出來的變化", ["dots0"], ["dots500"]),
-    ("只有一個方向：A 畫得出 B 那張、B 畫不出 A 那張", ["dots500"], ["dots500"]),
-    ("另一個方向", ["dots0"], ["dots0"]),
+    ("交集空：兩邊後拍的都是自己那一種", ["dots0", "dots0"], ["dots500", "dots500"]),
     ("一邊沒有 variants", None, ["dots0"]),
+    ("一邊的 variants 是空的", [], ["dots0"]),
     ("兩邊都沒有 variants（舊報告）", None, None),
 ])
 def test_a_picture_only_one_side_draws_stays_real(compare, tmp_path, name, a_seen, b_seen):
@@ -316,12 +322,11 @@ def test_repaint_variants_never_take_a_row_with_the_dom_or_styles_different(comp
     assert _classes(out) == want and "repaint-variants" not in out["noise"], name
 
 
-def test_repaint_variants_needs_each_sides_own_picture_in_the_other(noise):
+def test_repaint_variants_needs_a_picture_both_sides_drew(noise):
     assert noise.repaint_variants("a", ["b"], "b", ["a"])
-    assert noise.repaint_variants("a", ["a", "b"], "b", ["a", "c"])
-    assert not noise.repaint_variants("a", ["b"], "b", ["b"])  # B 畫不出 A 那張
-    assert not noise.repaint_variants("a", ["c"], "b", ["c"])  # 共同的只有第三張：比 render_variants 嚴
-    assert noise.render_variants(["a", "c"], ["b", "c"])
+    assert noise.repaint_variants("a", ["b", "b"], "b", ["b"])  # 第 260 批量到的：A 後拍的都是 B 那一種
+    assert noise.repaint_variants("a", ["c"], "b", ["c"])
+    assert not noise.repaint_variants("a", ["a"], "b", ["b"])
     assert not noise.repaint_variants("a", [], "b", [])
 
 
