@@ -1,0 +1,12 @@
+[2026-11-24 00:47:04] start probe model=gemma4:26b runs=1 ways=all
+模型：gemma4:26b　設定：season21　走法：正經、胡鬧、要獎勵、真實人物、平鋪直敘、轉身就走、認親　每種 1 趟　暫存：（腳本自己的暫存資料夾）
+
+── 正經 第 1 趟 〈霧裡的身影〉 前面濃霧瀰漫，隱約看到一個身影⋯
+  ⚠ 首次 LLM JSON 解析/請求失敗 (500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat)，觸發 re-prompt 重試...
+  ⚠ 審一句話失敗，只看字表：HTTPError('500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat')
+  ⚠ 首次 LLM JSON 解析/請求失敗 (500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat)，觸發 re-prompt 重試...
+  ⚠ 異聞寫幕失敗，換替身：HTTPError('500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat')
+  第 1 步 自己說「一個受傷的信使」　順　158.3 秒　替身
+    說到這裡，說書的打了個盹，只記得一個受傷的信使，身影沒有走遠。
+    做法：伸手去碰身影 ／ 找人來一起看 ／ 記下這裡改日再來
+  ⚠ 首次 LLM JSON 解析/請求失敗 (500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat)，觸發 re-prompt 重試...
