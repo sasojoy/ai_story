@@ -7,7 +7,8 @@
   B 鎖外：自己說的先 shell.screen_text 審字（最多 12 秒），剩下的不到 step_min_write_seconds 回 busy 那一句、什麼都不動；
     再 shell.model_call → writer.write_scene（預算 step_budget_seconds 從 A 開單算起，每一趟用 within_budget 的複本）；
     同一個人已經有一件在排回 busy 那一句、排太久回殼的 BUSY_QUEUE_TIMEOUT（都是 GameError：什麼都不扣、不推進）；
-  C shell.act → actions.apply_step（重驗再寫；寫壞或兩次都沒過存替身）。
+  C shell.act → actions.apply_step（重驗再寫；寫壞或兩次都沒過存替身），回話經 g._log（第 261 批：名望的差距由 renown.after_action
+    在 _log 裡接，不經 _log 的話收尾那一則永遠接不到；回話也跟其他動作一樣寫進紀錄）。
   text 殼不截，這裡截 120 字（同 guard_say）；自己說的上限 typed_max 由 A 段擋。
 關著的時候回空清單（不進鎖、不動帳）。"""
 from __future__ import annotations
@@ -39,7 +40,7 @@ def yiwen_step(shell, game, b: dict) -> list[str]:
     if isinstance(req, list):
         return req
     if isinstance(req, rules.Replay):
-        return shell.act(game, not_while_preparing(lambda g: actions.apply_step(g, req, None, "")))
+        return shell.act(game, not_while_preparing(lambda g: g._log(actions.apply_step(g, req, None, ""))))
     t = game.content.config.yiwen
 
     def left() -> float:
@@ -53,4 +54,4 @@ def yiwen_step(shell, game, b: dict) -> list[str]:
     if screened != "bad":
         draft = shell.model_call(game, lambda: writer.write_scene(lambda: shell.within_budget(game.client, left()), req, t, left, game.content),
                                  fallback=None, left=left(), busy=busy)
-    return shell.act(game, not_while_preparing(lambda g: actions.apply_step(g, req, draft, screened)))
+    return shell.act(game, not_while_preparing(lambda g: g._log(actions.apply_step(g, req, draft, screened))))

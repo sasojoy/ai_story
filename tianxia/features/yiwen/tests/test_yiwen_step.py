@@ -519,3 +519,84 @@ def test_improper_on_a_guess_counts_as_failed_check(on, monkeypatch):
     assert fake.calls == 2
     n = _nodes(on)[0]
     assert n["fallback"] == 1 and A not in n["text"] and A not in got and _walk().tries == 0
+
+
+# ── 第 261 批：收尾卡「名望 +5」少了差距那半句（第 256 批網頁走查拍到）。差距由共用層 renown.after_action 接，它只在 Game._log 裡被叫；
+# C 段回話不經 _log 的話，這一下沒人接，之後的同步只接「最新一則的時間＝此刻」的那一則——時鐘一走就永遠接不到。
+# 測試內容的 renown.titles 關著（關著差距永遠不接、修前修後都綠），這裡打開；時鐘每讀一次往後 1 秒，照真的玩家。
+
+
+@pytest.fixture
+def ticking(on, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.renown, "titles", True)
+    clock = [server.time.time()]
+
+    def tick():
+        clock[0] += 1.0
+        return clock[0]
+
+    monkeypatch.setattr(server.time, "time", tick)
+    return clock
+
+
+def _walk_to_the_end(game):
+    """走到收場（替身即可：client 是 None）。回最後一步的回話。"""
+    got = []
+    for _ in range(10):
+        w = _walk()
+        if w.tale and w.tale in w.done:
+            break
+        got = _step(game, 0)
+    w = _walk()
+    assert w.tale and w.tale in w.done, "十步內沒走完"
+    return got
+
+
+def _finish_entry():
+    entry = open_characters().load(NAME).journal[0]
+    assert entry.title.startswith("異聞")
+    return entry
+
+
+def test_finish_fame_gets_the_gap_on_the_spot(on, ticking):
+    _walk_to_the_end(on)
+    assert any(c.startswith("名望 +") and "（離「" in c for c in _finish_entry().changes)
+
+
+def test_finish_fame_gap_survives_a_later_sync(on, ticking):
+    _walk_to_the_end(on)
+    ticking[0] += 30
+    server.act(on, lambda g: [])
+    assert any(c.startswith("名望 +") and "（離「" in c for c in _finish_entry().changes)
+
+
+def test_finish_lines_go_into_the_game_log(on, ticking):
+    got = _walk_to_the_end(on)
+    assert got
+    log = open_characters().load(NAME).log
+    assert all(line in log for line in got if line)
+
+
+# ── 第 261 批（AJ 波留的）：守 C 的 w.opening != req.opening（拿掉那一項，現有測試照綠）。
+# 造法：發掘者第一步的 B 段中間，同一個人先放下、再撞見另一句（clay_faces）。這時季、節點（0）、鍵、則（0，_reattach 照新那一句找不到則）
+# 都相等，名額也是自己的（valid 過）——只剩開場不同。拿掉那一項，fog_figure 那一步的字會被寫成 clay_faces 的第一幕。
+
+
+def test_c_opening_switched_mid_b_writes_nothing(on, monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    assert "clay_faces" in rules.openings()
+    seen = {}
+
+    def drop_then_meet_another():
+        server.act(on, lambda g: (actions.drop(g), claim(g, "clay_faces")))
+        seen["stats"] = _stats()
+
+    calls = _meanwhile(monkeypatch, drop_then_meet_another)
+    got = _step(on, 0)
+    assert len(calls) == 1 and got == []
+    season = open_characters().load(NAME).player.season_number
+    assert store_of(on).tale_by_opening(season, "clay_faces") is None
+    assert store_of(on).tale_by_opening(season, OPENING) is None
+    w = _walk()
+    assert w.opening == "clay_faces" and w.tale == 0 and w.node == 0
+    assert _stats() == seen["stats"]
