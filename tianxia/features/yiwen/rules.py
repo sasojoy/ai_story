@@ -302,6 +302,17 @@ def _said(words: str) -> str:
     return f"「{zh.prompt_safe(words)}」{TYPED_MARK}"
 
 
+STAND_IN_SCENE = "寫成的一幕：（這一步沒有寫成，場上照上一幕）"  # 第 264 批②(b)；待 joy 潤（給模型看）
+
+
+def ledger_of(path_nodes: list[dict]) -> list[str]:
+    """第 264 批②(b)：下一步提示用的帳＝這條路上最近一個寫成的一幕（不是替身）的帳；全是替身或還在開場回空。"""
+    for n in reversed(path_nodes):
+        if not n.get("fallback"):
+            return list(n.get("ledger") or [])
+    return []
+
+
 def _head(opening: dict, place: str, path_nodes: list[dict], ledger: list[str], depth: int, skip: int) -> list[str]:
     lines_ = [f"你是《天下大勢》的說書人。東漢末年，黃巾之亂，武俠世界。玩家在探索時撞見一則「異聞」：開場只有一句懸念，那是什麼由玩家說了算；"
               f"之後玩家每說一句，你接著寫一幕。全部 {DEPTH} 步，現在是第 {depth} 步。", "", f"【開場】（地點：{place}）", str(opening.get("hook", ""))]
@@ -310,7 +321,12 @@ def _head(opening: dict, place: str, path_nodes: list[dict], ledger: list[str], 
         for i, n in enumerate(path_nodes):
             said = _said(n["pick"]) if n.get("typed") else f"「{n['pick']}」"
             lines_.append(f"第 {i + 1} 步 玩家說：{said}")
-            lines_.append("寫成的一幕：（從略）" if i < skip else "寫成的一幕：" + " ".join(n.get("text") or []))
+            if i < skip:
+                lines_.append("寫成的一幕：（從略）")
+            elif n.get("fallback"):  # 第 264 批②(b)：替身句不給模型看
+                lines_.append(STAND_IN_SCENE)
+            else:
+                lines_.append("寫成的一幕：" + " ".join(n.get("text") or []))
         facts = [n["pick"] for n in path_nodes if n.get("typed")]
         if facts:
             lines_ += ["", "【玩家親口定下的事】（照字面當真，主詞照原句讀：「他是我爹」就是他是你的父親，不是反過來；到結局都要算數）"]

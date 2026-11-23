@@ -338,7 +338,7 @@ def step_request(ctx, body: dict) -> rules.YiwenRequest | rules.Replay | list[st
     path = [by_id[nid] for nid in rules.path_of(nodes, w.node)] if w.node else []
     typed_words = tuple(n["pick"] for n in path if n["typed"]) + ((label,) if typed else ())
     known = (str(opening.get("hook", "")), str(opening.get("title", ""))) + typed_words
-    prompt = rules.build_prompt(opening, path, list(here.get("ledger") or []) if here else [], label, typed, luck, depth,
+    prompt = rules.build_prompt(opening, path, rules.ledger_of(path), label, typed, luck, depth,  # 第 264 批②(b)：替身沒有帳，往上找
                                 place=_place_name(ctx, w.place))
     return rules.YiwenRequest(season=season, key=key, opening=w.opening, tale=tale, parent=w.node, depth=depth, pick=label, typed=typed,
                               text=text if typed else "", luck=luck, branch=False, prompt=prompt, known=known, typed_words=typed_words)
