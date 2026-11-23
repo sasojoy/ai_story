@@ -365,6 +365,16 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
                     res.noise[cls] += 1
                     res.noise_rows.append({"file": f, "class": cls, "pixels": d["pixels"], "levels": d["levels"], "box": d["box"]})
                     continue
+                # batch 260: the walk shot this window again on each side (driver.mjs shootVariants, light scenes at 375-light). With the DOM
+                # and every computed style the same, neither side unstable and the same size, each side drawing the other's very picture is
+                # the page's own repaint, not a change. A report without variants (older walks, the replay) goes on as before.
+                va, vb = (x.get("variants") or {}).get(f), (y.get("variants") or {}).get(f)
+                if (va and vb and noise.recheck_candidate(clean_strict=dom_same and not props and view not in broken, unstable=unstable, same_size="size" not in d)
+                        and noise.repaint_variants(ra["hashes"].get(f), va, rb["hashes"].get(f), vb)):
+                    res.noise["repaint-variants"] += 1
+                    res.noise_rows.append({"file": f, "class": "repaint-variants", "pixels": d["pixels"], "levels": d["levels"], "box": d["box"],
+                                           "variants": [len({ra["hashes"].get(f), *va}), len({rb["hashes"].get(f), *vb})]})
+                    continue
                 detail = {"file": f, **d, "clean": clean, "unstable": unstable}
                 if recheck and noise.recheck_candidate(clean_strict=dom_same and not props and view not in broken, unstable=unstable, same_size="size" not in d):
                     later.append({"at": len(res.real), "scene": sid, "file": f, "view": view, "detail": detail})

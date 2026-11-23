@@ -154,8 +154,10 @@ def test_expected_rows_only_count_when_they_match(noise):
 
 # ── 兩邊的比對（不開瀏覽器，假的走法紀錄） ──
 
-def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪", dots=None, width=None, toast="") -> Path:
-    """dots: 這一鏡有一張 375-light 的截圖，塗黑這麼多個點（None 是沒有圖）。width: 視窗量到的 scrollWidth。"""
+def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-left"), vals=("red", "1px"), steps=(), fatal=None, text="沈浪", dots=None, width=None, toast="",
+          variants=None) -> Path:
+    """dots: 這一鏡有一張 375-light 的截圖，塗黑這麼多個點（None 是沒有圖）。width: 視窗量到的 scrollWidth。
+    variants: 同一邊不重新載入再拍的那幾張的雜湊（第 260 批 facts.variants；圖的雜湊寫成 dots<點數>）。"""
     for sub in ("dom", "style", "main", "shots"):
         (root / sub).mkdir(parents=True)
     sid = "001_scene"
@@ -176,6 +178,8 @@ def _walk(root: Path, *, dom="<body><p>甲</p></body>", props=("color", "margin-
         json.dump(doc, f)
     report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": list(steps), "apiCalls": [], "hashes": hashes, "pyErrors": [],
               "scenes": {sid: {"text": text, "toast": toast, "layout": {"375-light": {"sw": width or 375}}, "shots": shots, "sty": {"375-light": key}, "vol": {}, "unstable": False}}}
+    if variants is not None:
+        report["scenes"][sid]["variants"] = {name: list(variants) for name in shots}
     if fatal:
         report["fatal"] = fatal
     (root / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
@@ -255,6 +259,50 @@ def test_the_replay_puts_a_clean_pixel_row_aside_and_a_dirty_one_stays_real(comp
     for name, vals in (("c", ("blue", "1px")), ("d", ("red", "312.5px"))):
         out = compare.compare(a, _walk(tmp_path / name, vals=vals, dots=500), HOSTS, recheck=True)
         assert "pixel" in _classes(out) and out["recheck"] == [], name
+
+
+def test_a_picture_each_side_drew_of_the_other_is_repaint_variants(compare, tmp_path):
+    # 第 260 批：c 回合 bt_watch_open/shut 375 淺色，同一邊不重新載入，倒數每秒重寫就換畫法（整頁剛畫完、倒數那一格局部補畫 713 px 1 級）；
+    # 兩邊本來那張落在不同畫法就紅（8 趟紅 2）。走查在同一邊多拍兩張（facts.variants），兩邊各自畫出過對方那一張才是 repaint-variants
+    a = _walk(tmp_path / "a", dots=0, variants=["dots0", "dots500"])
+    b = _walk(tmp_path / "b", dots=500, variants=["dots0", "dots500"])
+    out = compare.compare(a, b, HOSTS, str(tmp_path / "red"))
+    assert out["real"] == [] and out["noise"] == {"repaint-variants": 1} and out["red_images"] == 0
+    assert out["noise_rows"] == [{"file": "001_scene__375-light.png", "class": "repaint-variants", "pixels": 500, "levels": 5, "box": [0, 0, 40, 13], "variants": [2, 2]}]
+    assert out["fingerprint"]["A"] == out["fingerprint"]["B"]
+
+
+@pytest.mark.parametrize("name, a_seen, b_seen", [
+    ("交集空：只有一邊畫得出來的變化", ["dots0"], ["dots500"]),
+    ("只有一個方向：A 畫得出 B 那張、B 畫不出 A 那張", ["dots500"], ["dots500"]),
+    ("另一個方向", ["dots0"], ["dots0"]),
+    ("一邊沒有 variants", None, ["dots0"]),
+    ("兩邊都沒有 variants（舊報告）", None, None),
+])
+def test_a_picture_only_one_side_draws_stays_real(compare, tmp_path, name, a_seen, b_seen):
+    out = compare.compare(_walk(tmp_path / "a", dots=0, variants=a_seen), _walk(tmp_path / "b", dots=500, variants=b_seen), HOSTS)
+    assert _classes(out) == ["pixel"] and "repaint-variants" not in out["noise"], name
+
+
+@pytest.mark.parametrize("name, kw, want", [
+    ("DOM 有差", {"dom": "<body><p>乙</p></body>"}, ["dom", "pixel"]),
+    ("計算樣式有差", {"vals": ("blue", "1px")}, ["pixel", "style"]),
+    ("used 值動了也算樣式有差", {"vals": ("red", "312.5px")}, ["pixel", "style"]),
+])
+def test_repaint_variants_never_take_a_row_with_the_dom_or_styles_different(compare, tmp_path, name, kw, want):
+    # AJ 波認定第 2 條：DOM 或計算樣式有差的列不收進新的雜訊類，兩邊的畫法有交集也照樣紅
+    a = _walk(tmp_path / "a", dots=0, variants=["dots0", "dots500"])
+    out = compare.compare(a, _walk(tmp_path / "b", dots=500, variants=["dots0", "dots500"], **kw), HOSTS)
+    assert _classes(out) == want and "repaint-variants" not in out["noise"], name
+
+
+def test_repaint_variants_needs_each_sides_own_picture_in_the_other(noise):
+    assert noise.repaint_variants("a", ["b"], "b", ["a"])
+    assert noise.repaint_variants("a", ["a", "b"], "b", ["a", "c"])
+    assert not noise.repaint_variants("a", ["b"], "b", ["b"])  # B 畫不出 A 那張
+    assert not noise.repaint_variants("a", ["c"], "b", ["c"])  # 共同的只有第三張：比 render_variants 嚴
+    assert noise.render_variants(["a", "c"], ["b", "c"])
+    assert not noise.repaint_variants("a", [], "b", [])
 
 
 def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
@@ -501,6 +549,20 @@ def test_a_window_set_twice_in_a_row_is_flipped_first():
     flipped = subprocess.run([node, "--input-type=module", "-e", f"const {{ FLIPPED }} = await import({json.dumps(src)}); console.log(FLIPPED(2));"],
                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
     assert "setTimeout(() => r(-1), 1500)" in flipped  # 換成了但畫格一直不來：最多 1.5 秒
+
+
+def test_the_walk_shoots_a_light_scenes_phone_window_again_for_hashes_only():
+    # 第 260 批：shootVariants 只在 light 景的 375-light、那個視窗拍完（含捲軸重拍那一圈）之後；只記雜湊，不寫檔、不動 shots、hashes、unstable
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8").replace("\r\n", "\n")
+    shoot = text[text.index("async function shoot(name"):]
+    shoot = shoot[:shoot.index("\n}\n")]
+    call = shoot.index("await shootVariants(id, v, d, facts)")
+    assert shoot.index("take === RESHOOTS") < call and 'if (light && v[0] === "375-light") await shootVariants' in shoot
+    body = text[text.index("async function shootVariants("):]
+    body = body[:body.index("\n}\n")]
+    for banned in ("writeFileSync", "hashes[", "facts.shots.push", "facts.unstable", "facts.vol", "grab("):
+        assert banned not in body, banned
+    assert body.index("FLIPPED(") < body.index("sleep(1100)") and "facts.variants[f].push(await grabHash())" in body
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():
