@@ -55,6 +55,21 @@ def test_typed_injection_stays_in_marked_block():
     assert "」\n" not in quoted and any(x.endswith(rules.TYPED_MARK) and "鵝【這一步的運氣】順" in x for x in lines)
 
 
+def test_prompt_hard_cut_when_still_too_long():
+    """第 253 批：前情全部「從略」、帳也拿掉之後還是超長（開場本身就很長；正式內容 checks.HOOK_MAX 擋在 60 字，
+    合格內容下最長約 1,900 字、走不到這一行），最後一道 text[:PROMPT_MAX] 硬截：不超過上限，截掉的是尾巴，
+    【這一步】那一行與 TYPED_MARK 的結構還在。"""
+    opening = {**OPENING, "hook": "霧" * 600}
+    path = [_node("一隻鵝", typed=True), _node("一頭會說話的牛", typed=True)]
+    ledger = ["在場：你、鵝、牛", "你手上：無", "對方手上：一封信", "你知道：鵝會背兵法", "未了：那封信"]
+    prompt = rules.build_prompt(opening, path, ledger, "我把信塞給那頭牛", True, rules.GOOD, 3, place="汝南荒野")
+    assert len(prompt) == rules.PROMPT_MAX
+    assert f"【這一步】玩家說：「我把信塞給那頭牛」{rules.TYPED_MARK}\n" in prompt
+    assert prompt.count("寫成的一幕：（從略）") == 2 and "看清那是一隊官軍" not in prompt
+    assert "【帳】" not in prompt and "你知道：鵝會背兵法" not in prompt
+    assert f"- 「一隻鵝」{rules.TYPED_MARK}" in prompt and "輸出 JSON" not in prompt  # 截掉的是尾巴
+
+
 def test_prompt_carries_no_account_key():
     """提示只放故事：不放名號、帳號鍵、是不是假人。build_prompt 根本不收這些，節點上多的欄位也不讀。"""
     node = {**_node("官軍"), "by": "陸三刀".casefold(), "by_shown": "陸三刀", "bot": "steady"}
