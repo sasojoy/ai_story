@@ -254,6 +254,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for side, f in (("A", x), ("B", y)):
             if f.get("gutterOdd"):
                 res.info["gutterOdd"].append(f"{side} {sid}")
+            if f.get("moved"):
+                res.info["gutter moved"].append(f"{side} {sid} {','.join(f['moved'])}")
         # the toast's words: screenshots hide it and the DOM masks it. It goes by itself after 3.2 s, so it only counts when both sides still show it
         ta, tb = x.get("toast"), y.get("toast")
         if ta and tb:
@@ -328,9 +330,15 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for view in VIEW_ORDER:
             mine = {f: d for f, d in results.items() if view_of(f) == view}
             la, lb = x.get("layout", {}).get(view) or {}, y.get("layout", {}).get(view) or {}
-            flip = noise.scrollbar_flip(view, la.get("sw"), lb.get("sw"))
+            # batch 258: the scrollbar can move while a window is shot, after the first picture. The driver then reads the layout again at the
+            # end (layoutEnd, only when it moved): the first picture goes by sw before it, the scrolled ones and the styles (dumped after the
+            # scrolling) by sw at the end. A side without layoutEnd did not move, so its end is its start.
+            ea, eb = x.get("layoutEnd", {}).get(view) or la, y.get("layoutEnd", {}).get(view) or lb
+            flip_first = noise.scrollbar_flip(view, la.get("sw"), lb.get("sw"))
+            flip = noise.scrollbar_flip(view, ea.get("sw"), eb.get("sw"))
             props = props_of.get(view, set())
             used_only = bool(props) and view not in broken and noise.used_only(props, flip)
+            used_first = bool(props) and view not in broken and noise.used_only(props, flip_first)
             if props:
                 if flip and used_only and dom_same and not unstable:
                     res.noise["gutter"] += 1
@@ -346,10 +354,12 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
             elif flip and view in STYLE_ONLY_VIEWS and not unstable:
                 res.noise["gutter"] += 1
             for f, d in sorted(mine.items()):
-                clean = dom_same and (not props or used_only)
+                scrolled = "__s" in f[len(sid) + 2:]
+                at_a, at_b = (ea, eb) if scrolled else (la, lb)
+                clean = dom_same and (not props or (used_only if scrolled else used_first))
                 cls = None
                 if "size" not in d:
-                    cls = noise.pixel_class(d["pixels"], d["levels"], view=view, sw_a=la.get("sw"), sw_b=lb.get("sw"), only_share=d.get("only_share", False),
+                    cls = noise.pixel_class(d["pixels"], d["levels"], view=view, sw_a=at_a.get("sw"), sw_b=at_b.get("sw"), only_share=d.get("only_share", False),
                                             only_tale=d.get("only_tale", False), clean=clean, unstable=unstable)
                 if cls:
                     res.noise[cls] += 1

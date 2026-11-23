@@ -275,6 +275,62 @@ def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
     assert out["fingerprint"]["A"]["style"] == out["fingerprint"]["B"]["style"]  # 雜訊不進指紋：波末第二趟 main 的樣式指紋就是差在這裡
 
 
+def _walk_1280(root: Path, *, sw=1280, sw_end=None, width="1280px", dots_first=0, dots_s1=0, dom="<body><p>甲</p></body>", prop="width") -> Path:
+    """1280 一個視窗：第一張、捲動後一張、樣式（捲完才傾印）。sw 是第一張之前量的，sw_end 是視窗拍完量的（None 是沒動、不寫 layoutEnd）。"""
+    from PIL import Image
+
+    for sub in ("dom", "style", "main", "shots"):
+        (root / sub).mkdir(parents=True)
+    sid, shots, hashes = "001_scene", [], {}
+    for name, dots in ((f"{sid}__1280.png", dots_first), (f"{sid}__1280__s1.png", dots_s1)):
+        img = Image.new("RGB", (40, 40), (255, 255, 255))
+        for i in range(dots):
+            img.putpixel((i % 40, i // 40), (200, 200, 200))
+        img.save(root / "shots" / name)
+        shots.append(name)
+        hashes[name] = f"dots{dots}"
+    (root / "dom" / f"{sid}.html").write_text(dom, encoding="utf-8")
+    key = width
+    with gzip.open(root / "style" / f"{sid}__1280.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({"props": [prop], "els": [["BODY.", key]], "dict": {key: key}}, f)
+    scene = {"text": "沈浪", "toast": "", "layout": {"1280": {"sw": sw, "cw": sw}}, "shots": shots, "sty": {"1280": key}, "vol": {}, "unstable": False}
+    if sw_end is not None:
+        scene["layoutEnd"], scene["moved"] = {"1280": {"sw": sw_end, "cw": sw_end}}, ["1280"]
+    report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": [], "apiCalls": [], "hashes": hashes, "pyErrors": [],
+              "scenes": {sid: scene}}
+    (root / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+def test_the_gutter_coming_back_after_the_first_picture_is_judged_at_the_end_of_the_window(compare, tmp_path):
+    # 第 258 批：AJ 波 main 092_bd_given 1280，第一張之前兩邊 sw 都 1280、第一張一樣；捲動時一邊的溝回來，__s1 整塊移半條捲軸、BODY 1280 對 1265
+    a = _walk_1280(tmp_path / "a")
+    old = _walk_1280(tmp_path / "old", width="1265px", dots_s1=500)
+    assert _classes(compare.compare(a, old, HOSTS)) == ["pixel", "style"], "只量第一張之前：落成真差異（舊工具就是這樣紅的）"
+    b = _walk_1280(tmp_path / "b", sw_end=1265, width="1265px", dots_s1=500)
+    out = compare.compare(a, b, HOSTS)
+    assert out["real"] == [] and out["noise"] == {"gutter": 2}, out
+    assert out["info"]["gutter moved"] == ["B 001_scene 1280"]
+    # 第一張照第一張之前的 sw：那一刻兩邊一樣，第一張有差照舊紅
+    c = _walk_1280(tmp_path / "c", sw_end=1265, width="1265px", dots_first=500, dots_s1=500)
+    assert _classes(compare.compare(a, c, HOSTS)) == ["pixel"]
+
+
+def test_the_same_scrollbar_and_a_15px_move_stays_real(compare, tmp_path):
+    # 第 258 批不准的：兩邊溝一樣（拍完都 1265）、畫面真的移了 15px（.shell 的 margin 改了）——樣式、像素照樣紅
+    a = _walk_1280(tmp_path / "a", sw=1280, sw_end=1265, prop="margin-left", width="0px")
+    b = _walk_1280(tmp_path / "b", sw=1280, sw_end=1265, prop="margin-left", width="15px", dots_s1=500)
+    assert _classes(compare.compare(a, b, HOSTS)) == ["pixel", "style"]
+    a2, b2 = _walk_1280(tmp_path / "a2", sw=1265, prop="margin-left", width="0px"), _walk_1280(tmp_path / "b2", sw=1265, prop="margin-left", width="15px", dots_s1=500)
+    assert _classes(compare.compare(a2, b2, HOSTS)) == ["pixel", "style"], "沒有 layoutEnd 的也一樣"
+    # 拍完的溝差 15，但 DOM 不一樣：不歸 gutter
+    d = _walk_1280(tmp_path / "d", sw_end=1265, width="1265px", dots_s1=500, dom="<body><p>乙</p></body>")
+    assert _classes(compare.compare(_walk_1280(tmp_path / "e"), d, HOSTS)) == ["dom", "pixel", "style"]
+    # 拍完的溝差 15，但樣式有不是 used 值的差：不歸 gutter
+    f = _walk_1280(tmp_path / "f", sw_end=1265, prop="color", width="blue", dots_s1=500)
+    assert _classes(compare.compare(_walk_1280(tmp_path / "g", prop="color", width="red"), f, HOSTS)) == ["pixel", "style"]
+
+
 def test_the_toasts_words_count_when_both_sides_still_show_them(compare, tmp_path):
     a = _walk(tmp_path / "a", toast="已經存好了。")
     assert compare.compare(a, _walk(tmp_path / "b", toast="已經存好了。"), HOSTS)["real"] == []
@@ -421,11 +477,30 @@ def test_a_window_set_twice_in_a_row_is_flipped_first():
             "sameWindow([V[1], 1], V[0], 1), sameWindow([[...V[0]], 1], V[0], 1), sameWindow([V[2], 1], V[2], 1)]));")
     out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
     assert json.loads(out.stdout) == [False, True, False, False, True, True]
-    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
-    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], \"dpr flip not drawn in 1.5s\"); }" in text and "lastView = [v, dpr];" in text
+    # driver.mjs 跑不起來單測（要瀏覽器）：守先後，不守那一行的字（第 258 批）。一個視窗裡先問 sameWindow、換成另一個 dpr 等它畫過，才設回這個視窗
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8").replace("\r\n", "\n")
+    body = text[text.index("async function shootWindow("):]
+    body = body[:body.index("\n}\n")]
+    ask, back = body.index("sameWindow(lastView, v, d)"), body.index("await setView(v, d);")
+    flip_line = body[ask:body.index("\n", ask)]
+    assert ask < back and "setView(v, d === 1 ? 2 : 1)" in flip_line and "FLIPPED(d === 1 ? 2 : 1)" in flip_line and "< 0) log(" in flip_line
+    setview = text[text.index("async function setView("):]
+    assert "lastView = [v, dpr];" in setview[:setview.index("\n}\n")]
+    # 視窗拍完再量一次：shoot 先叫 shootWindow、再量 LAYOUT、動了才重拍（最多 RESHOOTS 次）
+    shoot = text[text.index("async function shoot(name"):]
+    shoot = shoot[:shoot.index("\n}\n")]
+    assert shoot.index("await shootWindow(") < shoot.index("await ev(LAYOUT)") < shoot.index("take === RESHOOTS") and "const RESHOOTS = 2;" in text
+    # FLIPPED 照行為驗：假的時鐘與畫格，dpr 換成了回畫過的毫秒數，一秒內沒換成回 -1（以前逾時也等兩格、回正數，log 幾乎不印）
+    code = (f"const {{ FLIPPED }} = await import({json.dumps(src)}); let t = 0;"
+            "Object.defineProperty(globalThis, 'performance', { value: { now: () => (t += 50) }, configurable: true, writable: true });"
+            "globalThis.setTimeout = () => 0; globalThis.requestAnimationFrame = (cb) => setImmediate(cb);"
+            "const run = async (now, want) => { globalThis.devicePixelRatio = now; t = 0; return await (0, eval)(FLIPPED(want)); };"
+            "console.log(JSON.stringify([await run(2, 2), await run(1, 2), await run(2, 1)]));")
+    got = json.loads(subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    assert got[0] > 0 and got[1] == -1 and got[2] == -1, got
     flipped = subprocess.run([node, "--input-type=module", "-e", f"const {{ FLIPPED }} = await import({json.dumps(src)}); console.log(FLIPPED(2));"],
                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
-    assert "devicePixelRatio === 2" in flipped and "requestAnimationFrame" in flipped and "setTimeout(() => r(-1), 1500)" in flipped  # 等到真的畫過，最多 1.5 秒
+    assert "setTimeout(() => r(-1), 1500)" in flipped  # 換成了但畫格一直不來：最多 1.5 秒
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():

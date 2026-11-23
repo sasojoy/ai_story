@@ -18,6 +18,10 @@ why. Without it those three windows only have the page's size behind them: used 
 A light scene's first picture (375-light, dpr 1) used to come in the very window the scene before had left: no whole-page paint, and the
 battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first;
 that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
+The 1280 page's scrollbar gutter can come back by itself in the middle of a window (batch 258: from main 039_smith on Chrome kept the page
+without it, and it came back at random around 092_bd_given-094; AJ caught it between the first picture and the scrolled ones). driver.mjs
+reads the layout again when a window is done and shoots it again when sw or cw moved, twice at most; still moving, the scene keeps
+layoutEnd and moved (report.txt info "gutter moved"), and compare.py judges the scrolled pictures and the styles by the end-of-window sw.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);

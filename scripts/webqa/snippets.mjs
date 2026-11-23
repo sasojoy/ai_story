@@ -29,10 +29,11 @@ export const STABLE_SIG = `(() => { const d = document.documentElement; const s 
 export const landed = (sig, width) => { const [w, , sw] = sig.split("|").map(Number); return w === width || (width <= 480 && w > width && w === sw && w - width < 100); };
 
 // Is this window the one already set (prev: [view, dpr] from the last setView, or null)? Then setting it again repaints nothing (batch 254).
-// ...and the flip has been drawn: the page reports the new dpr and two frames have gone by (at most a second).
+// ...and the flip has been drawn: the page reports the new dpr and two frames have gone by. -1 when the new dpr never showed within a second,
+// or the two frames did not come within 1.5 s (batch 258: it used to wait for the frames anyway after the second and say it was drawn).
 export const FLIPPED = (dpr) => `new Promise((r) => { const t0 = performance.now(); setTimeout(() => r(-1), 1500); const two = () => requestAnimationFrame(() => requestAnimationFrame(() => r(Math.round(performance.now() - t0))));
-  const go = () => (devicePixelRatio === ${dpr} || performance.now() - t0 > 1000 ? two() : requestAnimationFrame(go)); go(); })`;
-export const sameWindow =(prev, v, dpr) => !!prev && prev[1] === dpr && prev[0].length === v.length && prev[0].every((x, i) => x === v[i]);
+  const go = () => (devicePixelRatio === ${dpr} ? two() : performance.now() - t0 > 1000 ? r(-1) : requestAnimationFrame(go)); go(); })`;
+export const sameWindow = (prev, v, dpr) => !!prev && prev[1] === dpr && prev[0].length === v.length && prev[0].every((x, i) => x === v[i]);
 
 // every element under body plus ::before and ::after that exist: property text deduplicated by hash inside one scene.
 // The walk leaves #toast out: it drops its class 3.2 s after showing, on the wall clock, so it flips from side to side (wave D, 002_opening_event and 170_cr_pick2 at 640).
