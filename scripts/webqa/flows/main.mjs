@@ -31,6 +31,11 @@ export const flows = [
     // arriving for one of four walks' 1280 picture (a 36-level difference along one line). Load the page once more, from cache, before it
     // batch 233: since #247 the 江湖新事 invite (.sheet.nx-invite, web/news.js) comes first, over the 改版資訊 sheet. A player opens it
     // (去看看 remembers it in localStorage, nxMarkSeen), reads the page and closes it; then the patch sheet shows as before
+    // batch 260: that put the invite before the reload above, and batch 113's trouble came back on nx_invite: both 1280 pictures, 456 px,
+    // 36 levels, in the scene card behind the invite. Not the fonts (the same glyphs): 潁川 drawn with LCD anti-aliasing on one load and
+    // grayscale on another, which the page's compositing layers decide when it loads, and no repaint changes it after. Load once more,
+    // from cache, before the invite too (it stays until 去看看): A against A went from red 5 runs in 16 to 0 in 11.
+    await c.load("/");
     if (await c.ev(`!!document.querySelector(".sheet.nx-invite")`)) {
       await c.settle(600);
       await c.shoot("nx_invite", { who: "p3" });

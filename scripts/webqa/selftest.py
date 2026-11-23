@@ -6,7 +6,8 @@
      First through the corpus replay (quick), then through the c round. The replay also inverts every image (img-invert, batch 237):
      computed styles the same, pixels not, so the re-renders must leave it red.
      The c round also walks with the battle card's two pictures inverted (img-battle, batch 254): the countdown's piece at 375-light,
-     where the dpr flip in driver.mjs sits, must still go red as pixels.
+     where the dpr flip in driver.mjs sits, must still go red as pixels. And with only a band across their middle inverted
+     (img-battle-spot, batch 260): red as pixels, and the walk's own repaints (repaint-variants) must take none of the battle card.
      The yw round (batch 256) with the meeting card's padding changed in web/yiwen.css (yw-padding): red without --new yiwen, listed
      (summary.new_rows, exit 0) with it. --yw-only runs just those two.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
@@ -128,6 +129,13 @@ def main(argv=None) -> int:
         rows.append((f"c round --mutate {gate.IMG_BATTLE} goes red on the battle card's pictures (styles the same, pixels not)",
                      s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk),
                      f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]}"[:300]))
+        # batch 260: only a band of the same pictures, where the walk shoots the window again (repaint-variants): still red, never noise
+        s = _gate(a, "mut_" + gate.IMG_BATTLE_SPOT, "--mutate", gate.IMG_BATTLE_SPOT)
+        walk = [x for x in s["real"] if x["class"] == "pixel" and not x["round"].startswith("replay")]
+        taken = [r["file"] for r in s.get("noise_rows", []) if r["class"] == "repaint-variants" and "bt_watch" in r["file"]]
+        rows.append((f"c round --mutate {gate.IMG_BATTLE_SPOT} goes red on the battle card's band and repaint-variants takes none of it",
+                     s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk) and not taken,
+                     f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]} repaint-variants on bt_watch {taken[:4]}"[:300]))
         _yw_controls(a, rows)
         s = _gate(a, "quiet", "--mutate", gate.QUIET)
         rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))

@@ -15,9 +15,19 @@ The classes (each one came from a real row of waves B and C):
                differ; each side reloads and draws that window again (replay.RERENDER_TIMES) and one side draws a picture the other drew.
                That is the page's own way of drawing, not the stylesheets (wave AA: the forge scenes 044-047, a round button's arc
                1 level apart, a material icon's edge 40 levels, two or three pictures per window at random; A against A went red too).
-Not a class: the c round's bt_watch_open/shut at 375-light (713 pixels, 1 level, the battle card's countdown) and main's dadian_left went
-red A against A because a light scene's first window repainted nothing; batch 254 narrowed that in driver.mjs (shoot flips the dpr first),
-not here: from every c round to 1 in 6, so it is still not a class, and still red when it shows.
+  repaint-variants  the walk only (batch 260), the same conditions as render-variants (DOM and every computed style agree, neither side
+               unstable, the same size): a light scene's 375-light window is shot again on each side with no reload, once after a
+               whole-page paint and once 1.1 s later (driver.mjs shootVariants, facts.variants), and one picture is among both sides'
+               (their first picture or a later one). That came from the c round's bt_watch_open/shut: batch 254's dpr flip took it from every c round to 1 in 6, and
+               batch 260 measured why the rest: with no reload the battle card's countdown, rewritten every second, makes one side draw
+               three ways (a whole-page paint; the countdown's piece repainted alone, 713 px 1 level; the whole card's picture, 4448 px
+               3 levels), and the first picture is one of them at random (red 2 runs in 8). Left red: no picture in common (a side stuck in
+               the third way for the whole scene was 1 time in 32), and anything only one side can draw: it is in none of the other's.
+Not a class: main's dadian_left at 375-light __s1 (19 px, 50 levels, the top corners of the shop's dark tiles; 1 run in 13 in batch 260):
+in the run kept to look, every later shot on a side was that side's first picture, and the red run had no picture in common, so
+repaint-variants does not take it and it stays red.
+Not a class either: main's nx_invite at 1280 (456 px, 36 levels, LCD against grayscale text behind the invite) is fixed when the page loads and
+no repaint changes it; flows/main.mjs loads the page once more before it (batch 260), and it is still red when it shows.
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
 order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
 when both sides still show them (compare.py).
@@ -139,6 +149,14 @@ def recheck_candidate(*, clean_strict: bool, unstable: bool, same_size: bool) ->
 def render_variants(seen_a, seen_b) -> bool:
     """The pictures (hashes) each side drew of one window over its re-renders: one in common and it is the page's own variants."""
     return bool(set(seen_a) & set(seen_b))
+
+
+def repaint_variants(own_a, seen_a, own_b, seen_b) -> bool:
+    """The walk (batch 260): own_* the hash of each side's picture, seen_* the hashes that side drew of the same window afterwards with no
+    reload (driver.mjs shootVariants). One picture both sides drew, their own or a later one, like render_variants: a change only one side
+    can draw is in none of the other side's pictures, so it stays real. (Asking for each side's own picture in the other's set was tried
+    first: on one side the later shots came out the countdown's piece every time, never the whole-page paint the first picture was.)"""
+    return render_variants({own_a, *seen_a}, {own_b, *seen_b})
 
 
 def scrollbar_flip(view: str, sw_a, sw_b) -> bool:

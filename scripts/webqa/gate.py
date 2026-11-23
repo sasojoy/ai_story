@@ -18,6 +18,12 @@ why. Without it those three windows only have the page's size behind them: used 
 A light scene's first picture (375-light, dpr 1) used to come in the very window the scene before had left: no whole-page paint, and the
 battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first;
 that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
+Batch 260: the countdown repaints again every second with no reload, so each light scene's 375-light window is shot twice more on the same
+side (hashes only, facts.variants) and a picture both sides drew is noise.py repaint-variants; a change only one side can
+draw has no picture in common and stays real. After it the c round's stretch went 12 runs with 0 red (2 of them taken as repaint-variants).
+Still red: main's dadian_left at 375-light __s1 (19 px, 50 levels, the top corners of the shop's dark tiles): red 1 run in 13 in batch 260
+(4 of them with the variants on, the red one with another walk running beside it). It is not this repaint: in the run kept to look every later shot on a
+side was that side's own picture, and the red run had nothing in common, so it is still red (noise.py).
 The 1280 page's scrollbar gutter can come back by itself in the middle of a window (batch 258: from main 039_smith on Chrome kept the page
 without it, and it came back at random around 092_bd_given-094; AJ caught it between the first picture and the scrolled ones). driver.mjs
 reads the layout again when a window is done and shoots it again when sw or cw moved, twice at most; still moving, the scene keeps
@@ -26,6 +32,8 @@ The yw round (batch 256) walks the strange tales (yiwen package), off in every p
 makes both rolls always hit, holds the storyteller (writer.write_scene) while the walk has it armed so the waiting page can be shot, and has
 a fake screen call one line bad so the 自己說 box can be spent (serve.py). A side whose copy lacks what the round stands on (ROUND_NEEDS:
 older than the AI wave) cannot walk it: the round is left out on both, SKIPPED in the report and summary.skipped, not red and not the tool.
+Batch 262: that is only when the base lacks it. The base has it and the head does not (the head lost it): REAL, class round-lost (in STAY_RED,
+so --new yiwen does not list it), detail names what the head lacks, and the round is not walked (split_unwalkable); all rounds lost is exit 1.
 --new yiwen (ROUND_PACKAGE) lists that round's differences as NEW (summary.new_rows) instead of red, except STAY_RED (the head's console,
 exceptions and failed requests, who-is-who words, stylesheet rules); a flow that throws or a scene in must_reach not reached is still exit 2.
 Without --new yiwen a difference there is REAL like any other round's.
@@ -60,7 +68,8 @@ ROUND_NEEDS = {
 }
 # Batch 256: --new <pkg> with the package a round is about: that round's differences are listed (summary.new_rows), not red, except these
 ROUND_PACKAGE = {"yw": "yiwen"}
-STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules"}
+STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules", "round-lost"}
+ROUND_LOST = "round-lost"  # batch 262: the base walks the round, the head lost what it stands on: REAL, not skipped (split_unwalkable)
 MUST_REACH = os.path.join(HERE, "must_reach.txt")
 FORBIDDEN_PORTS = {7861}
 DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if os.name == "nt" else 0
@@ -77,6 +86,9 @@ QUIET = "css-comment"  # selftest only: a stylesheet that differs with nothing t
 IMG_INVERT = "img-invert"  # batch 237, selftest only: every web/ image inverted, same size and format: computed styles the same, pixels not; the replay must still go red
 IMG_BATTLE = "img-battle"  # batch 254, selftest only: the battle card's pictures inverted (web/battle.js BP_BG): computed styles the same, the countdown's piece really changes; the c round must go red
 IMG_BATTLE_FILES = ("web/img/events/camp.webp", "web/img/events/night.webp")
+# batch 260, selftest only: a band across the middle of the same two pictures inverted: a small piece of the battle card really changes,
+# computed styles the same; the c round must go red as pixels and repaint-variants must not take it (no picture each side drew of the other)
+IMG_BATTLE_SPOT = "img-battle-spot"
 ROUND_SECONDS = {"fast": 5400, "full": 16200}  # the slowest round so far, main on fast, took 34 minutes
 PORT_LOCK = threading.Lock()
 COVERAGE = os.path.join(HERE, "coverage.json")  # round -> web files it calls into (batch 107; scripts/webqa/coverage.py build/check)
@@ -107,6 +119,24 @@ def round_cannot_walk(copy: str, r: str, needs=ROUND_NEEDS) -> str | None:
         except OSError:
             return f"no {rel}"
     return None
+
+
+def split_unwalkable(rounds, why_base, why_head):
+    """Batch 262: which rounds walk. why_base/why_head map a round to round_cannot_walk's answer on that side (None: it can walk).
+    The base cannot walk it (older than the package): skipped on both, as batch 256 did. The base can and the head cannot: the head lost
+    it, a REAL row (class round-lost, in STAY_RED) and the round is not walked. Returns (keep, skipped, lost): skipped are report lines,
+    lost are REAL rows."""
+    keep, skipped, lost = [], [], []
+    for r in rounds:
+        wb, wh = why_base.get(r), why_head.get(r)
+        if wb:
+            why = [f"base {wb}"] + ([f"head {wh}"] if wh else [])
+            skipped.append(f"{r}: 這一邊走不了：{'; '.join(why)}")
+        elif wh:
+            lost.append({"round": r, "scene": "(round)", "class": ROUND_LOST, "detail": f"head {wh}"})
+        else:
+            keep.append(r)
+    return keep, skipped, lost
 
 
 def scene_round(row: dict) -> str:
@@ -184,6 +214,10 @@ class ToolBroke(Exception):
 
 class NothingToWalk(Exception):
     """Batch 110: --changed-files picked no round (an empty list, or package files no round reaches while they are off): exit 0, nothing unpacked."""
+
+
+class OnlyLost(Exception):
+    """Batch 262: every round left is one the head lost (split_unwalkable): exit 1, the round-lost rows are REAL, nothing walked."""
 
 
 def find_chrome(arg: str | None) -> str:
@@ -279,6 +313,27 @@ def invert_image(p: str) -> None:
     out.save(p, format=fmt)
 
 
+def invert_band(p: str, frac: float = 0.1) -> None:
+    """Selftest only (batch 260): one horizontal band across the middle of the picture inverted, frac of its height; the rest, the size
+    and the format as they were."""
+    from PIL import Image, ImageOps
+
+    with Image.open(p) as im:
+        fmt = im.format
+        rgb = im.convert("RGBA") if "A" in im.mode or im.mode == "P" else im.convert("RGB")
+    w, h = rgb.size
+    top = int(h * (0.5 - frac / 2))
+    box = (0, top, w, max(top + 1, int(h * (0.5 + frac / 2))))
+    band = rgb.crop(box)
+    if band.mode == "RGBA":
+        r, g, b, a = band.split()
+        band = Image.merge("RGBA", (*ImageOps.invert(Image.merge("RGB", (r, g, b))).split(), a))
+    else:
+        band = ImageOps.invert(band)
+    rgb.paste(band, box)
+    rgb.save(p, format=fmt)
+
+
 def mutate(copy: str, which: str) -> None:
     """Selftest only: a change the gate has to catch."""
     if which == "card-padding":
@@ -340,6 +395,12 @@ def mutate(copy: str, which: str) -> None:
             if not os.path.isfile(p):
                 raise ToolBroke(f"mutate img-battle: no {rel}")
             invert_image(p)
+    elif which == IMG_BATTLE_SPOT:
+        for rel in IMG_BATTLE_FILES:
+            p = os.path.join(copy, *rel.split("/"))
+            if not os.path.isfile(p):
+                raise ToolBroke(f"mutate img-battle-spot: no {rel}")
+            invert_band(p)
     elif which in HOSTILE:
         with open(os.path.join(copy, "web", "app.js"), "a", encoding="utf-8", newline="") as f:
             f.write("\n" + HOSTILE[which] + "\n")
@@ -659,13 +720,16 @@ def run(args) -> int:
         copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
         for copy in copies:
             seed_local(copy, outbox=args.outbox)
-        for r in list(rounds):  # batch 256: a round one side cannot walk (older than the package it is about) is left out, not red
-            why = [f"{side} {w}" for side, copy in zip(("base", "head"), copies) if (w := round_cannot_walk(copy, r))]
-            if why:
-                rounds.remove(r)
-                summary.setdefault("skipped", []).append(f"{r}: 這一邊走不了：{'; '.join(why)}")
+        # batch 256: a round the base cannot walk (older than the package it is about) is left out, not red;
+        # batch 262: one the base walks and the head cannot is REAL (round-lost), and not walked
+        rounds, skipped, lost = split_unwalkable(rounds, {r: round_cannot_walk(copies[0], r) for r in rounds}, {r: round_cannot_walk(copies[1], r) for r in rounds})
+        if skipped:
+            summary["skipped"] = skipped
+        summary["real"] += lost
         summary["rounds"] = rounds
         if not rounds:
+            if lost:
+                raise OnlyLost()
             raise NothingToWalk("every round left was skipped: " + " / ".join(summary["skipped"]))
         if args.mutate:
             mutate(copies[1], args.mutate)
@@ -742,6 +806,9 @@ def run(args) -> int:
             summary["rounds_why"] = str(e)
         summary["replay"] = {"ran": False, "why": str(e)}
         summary["exit"], summary["green"] = 0, True
+    except OnlyLost:  # batch 262: every round left is one the head lost: red, nothing walked
+        summary["replay"] = {"ran": False, "why": "every round left was lost on the head"}
+        summary["exit"], summary["green"] = 1, False
     except ToolBroke as e:
         summary["tool"].append(str(e))
         summary["exit"] = 2
@@ -788,7 +855,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")

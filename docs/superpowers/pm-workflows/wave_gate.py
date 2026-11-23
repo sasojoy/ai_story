@@ -7,6 +7,11 @@
    預設跑不含 slow 的一趟，再跑一條冒煙（SMOKE，整季機器人一個種子，不 -n，smoke.xml）；--full 才跑整套含 slow（不另跑冒煙）。
 4. same_behavior、explore-compare：--base 對 --head（兩者同時跑）。每軌每設定的秒數在 compare.txt，最慢十格進 result.json。
    不帶 --changed：所有軌、三種設定、--crossover（跟以前一樣）。--changed：照 decide() 挑（下面），只比改到的包走到的軌。
+   第 262 批：compare 紅了，紅的列全是把 js 算進輸出的軌（JS_TRACKS：facade、map、beacon），而且 base..head 的 web/ 底下 .js 全是內容改（M，
+   沒有新增、刪掉、改名）、假人列沒紅，就自動再比一次：base 抄一份換進 head 的那幾支 js，對 head 只比紅的那幾軌與設定（--no-bots；--new、
+   --also-existing、--crossover 照第一次），輸出 compare_js.txt。再跑每一格都一樣、head 雜湊等於第一次的 → 比對這一項算過（result.json
+   compare.code 改 0、原碼在 code_first、js_rerun 寫軌、換進的檔、第一次與再跑的雜湊）；還是不一樣 → 照舊紅，兩份輸出都留。
+   條件不成立就不再跑（js_rerun.why 寫原因），照舊紅。compare.txt 檔尾都附「js 再跑」那一段。explore-compare 不讀 js，不受影響。
 5. 帶 --web 才跑（--changed 時 decide 說網頁有動也跑）：等前面都跑完叫 head 上的 scripts/webqa/gate.py --base <sha> --head <sha> --out <結果夾>/web，
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
    --changed 時把 decide 的 web_files 原樣交給 --changed-files（只走對照表上碰得到的回合；對不到的檔怎麼辦由 gate.py 定）；網頁要開的原因不只 web/ 的檔
@@ -455,6 +460,126 @@ def compare_extra(decision: dict, jobs: str = "", new: str = "", also_existing: 
     return extra + (["--new", new] if new else []) + (["--also-existing"] if (new and also_existing) else [])
 
 
+# 第 262 批：把 web/*.js 的內容算進輸出的軌（讀過 scripts/sb/tracks/ 定的；別的軌不讀 js：drape 只讀 css，charter 的兩頁沒有 script，
+# zhuan／tale 頁的 script 標籤換成記號〔harness.PAGE_SCRIPT〕）。軌 → 算進去的、在哪裡
+JS_TRACKS = {
+    "facade": "/ 的 script 清單上每一支 js（去掉 shell.js 與 --new 包的）全部非空行排序取 sha256＋行數；GET /static/<舊九支> 的標頭；/ 的 HTML（?v= 抹掉）"
+              "（facade.py scripts()、page()）",
+    "map": "web/map.js 整檔 sha256、/ 上載入 map.js 那一行含 ?v=（map.py 檔尾那一段）",
+    "beacon": "GET /sw.js（web/sw.js）整檔 sha256（beacon.py）",
+}
+_CMP_ROW = re.compile(r"^(\S+)\s+(\S+)\s+整段 base \d+ 行 \d+ 位元組 ([0-9a-f]+)｜head ([0-9a-f]+) (一樣|不一樣)"
+                      r"(?:｜半舊半新 沒跑|｜base 前半＋head 後半 ([0-9a-f]+) (一樣|不一樣))")
+_CMP_BOT = re.compile(r"^假人 .* base ([0-9a-f]+)｜head ([0-9a-f]+) (一樣|不一樣)")
+_WEB_JS = re.compile(r"^web/.+\.js$")
+
+
+def _cmp_rows(text: str) -> dict:
+    """compare.txt（scripts/sb/harness.py compare 印的）每一列 (軌, 設定) → {"hb", "hh", "same", "half"}；half 是半舊半新（沒跑算 True）。"""
+    rows = {}
+    for line in text.splitlines():
+        m = _CMP_ROW.match(line)
+        if m:
+            rows[(m.group(1), m.group(2))] = {"hb": m.group(3), "hh": m.group(4), "same": m.group(5) == "一樣", "half": m.group(7) != "不一樣"}
+    return rows
+
+
+def js_rerun_plan(compare_text: str, name_status: str, js_tracks=JS_TRACKS) -> dict:
+    """第 262 批：compare 紅了，要不要在「base 換進 head 的 js」上再比一次（純函式）。
+    (a) 紅的列全部是 js_tracks 的軌（整段或半舊半新不一樣都算紅；假人列紅、Traceback、失敗、一列紅的都沒有 → 不再跑）；
+    (b) name_status（git diff --name-status base head）裡 web/ 底下的 .js 全部是 M、至少一支（多了、少了、改名的 js 會動到伺服器生成的 script 清單，是真的差 → 不再跑）。
+    別的檔有差不擋：再跑時它們留 base 的，動到這幾軌的輸出的話再跑照樣不一樣 → 紅。
+    回 {"rerun", "why", "tracks", "profiles", "files", "first": {(軌, 設定): [hb, hh]}}。"""
+    plan = {"rerun": False, "why": "", "tracks": [], "profiles": [], "files": [], "first": {}}
+    if re.search(r"Traceback|失敗", compare_text):
+        plan["why"] = "compare 輸出有 Traceback 或失敗"
+        return plan
+    if any((m := _CMP_BOT.match(l)) and m.group(3) == "不一樣" for l in compare_text.splitlines()):
+        plan["why"] = "假人列有不一樣的"
+        return plan
+    red = {k: v for k, v in _cmp_rows(compare_text).items() if not (v["same"] and v["half"])}
+    if not red:
+        plan["why"] = "沒有不一樣的軌列"
+        return plan
+    other = sorted({t for t, _ in red} - set(js_tracks))
+    if other:
+        plan["why"] = "不只把 js 算進輸出的軌紅：" + ",".join(other)
+        return plan
+    js, bad = [], []
+    for line in name_status.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        paths = [p.replace("\\", "/") for p in parts[1:]]
+        if not any(_WEB_JS.match(p) for p in paths):
+            continue
+        (js if parts[0] == "M" else bad).append(paths[-1] if parts[0] == "M" else f"{parts[0]} {' '.join(paths)}")
+    if bad:
+        plan["why"] = "多了／少了 js 檔，script 清單會變：" + "；".join(bad)
+        return plan
+    if not js:
+        plan["why"] = "web/ 底下沒有內容改了的 js"
+        return plan
+    plan.update(rerun=True, why="紅的只有把 js 算進輸出的軌、web/ 的 js 只有內容變",
+                tracks=sorted({t for t, _ in red}), profiles=sorted({p for _, p in red}), files=sorted(js),
+                first={k: [v["hb"], v["hh"]] for k, v in sorted(red.items())})
+    return plan
+
+
+def js_rerun_verdict(plan: dict, rerun_text: str) -> dict:
+    """第 262 批：再跑的每一格（第一次紅的 (軌, 設定)）都一樣（半舊半新也一樣），而且再跑的 head 雜湊等於第一次的 → ok。"""
+    rows = _cmp_rows(rerun_text)
+    bad = []
+    for key, (_, hh) in plan["first"].items():
+        row = rows.get(tuple(key))
+        if row is None:
+            bad.append(f"{key[0]} {key[1]} 再跑沒有這一列")
+        elif not (row["same"] and row["half"]):
+            bad.append(f"{key[0]} {key[1]} 再跑還是不一樣（base {row['hb']}｜head {row['hh']}）")
+        elif row["hh"] != hh:
+            bad.append(f"{key[0]} {key[1]} 再跑的 head {row['hh']} 不等於第一次的 {hh}")
+    if not bad and re.search(r"Traceback|失敗", rerun_text):
+        bad.append("再跑的輸出有 Traceback 或失敗")
+    return {"ok": not bad, "bad": bad, "rerun": {f"{t} {p}": [v["hb"], v["hh"]] for (t, p), v in sorted(rows.items())}}
+
+
+def js_rerun(py: str, script: str, base_dir: Path, head_root: Path, tmp: Path, plan: dict, extra: list[str], out_txt: Path, env: dict) -> str:
+    """第 262 批：base 抄一份、換進 head 的那幾支 js，對 head 只比 plan 的軌與設定（--no-bots；--new、--also-existing、--crossover 照第一次）。
+    不開伺服器（TestClient）。輸出寫 out_txt，回文字。"""
+    swapped = tmp / "base_js"
+    shutil.rmtree(swapped, ignore_errors=True)
+    shutil.copytree(base_dir, swapped)
+    for rel in plan["files"]:
+        shutil.copyfile(head_root / rel, swapped / rel)
+    keep, i = [], 0
+    while i < len(extra):  # 第一次的參數只留這三樣
+        if extra[i] == "--new":
+            keep += extra[i:i + 2]
+            i += 2
+            continue
+        if extra[i] in ("--also-existing", "--crossover"):
+            keep.append(extra[i])
+        i += 1
+    cmd = [py, script, "compare", "--base", str(swapped), "--head", str(head_root), "--tmp", str(tmp / "cmp_js"),
+           "--tracks", ",".join(plan["tracks"]), "--profiles", ",".join(plan["profiles"]), "--no-bots", *keep]
+    with out_txt.open("w", encoding="utf-8") as f:
+        subprocess.run(cmd, cwd=head_root, env=env, stdout=f, stderr=subprocess.STDOUT, creationflags=FLAGS)
+    shutil.rmtree(swapped, ignore_errors=True)
+    return out_txt.read_text(encoding="utf-8", errors="replace")
+
+
+def js_rerun_note(plan: dict, verdict: dict | None) -> str:
+    """compare.txt 檔尾附的那一段。"""
+    lines = ["", "===== js 再跑（第 262 批）"]
+    if not plan["rerun"]:
+        return "\n".join(lines + [f"沒再跑：{plan['why']}"]) + "\n"
+    lines += [f"軌 {','.join(plan['tracks'])}　設定 {','.join(plan['profiles'])}", f"換進 base 的 head 檔 {','.join(plan['files'])}"]
+    lines += [f"第一次 {t} {p} base {hb}｜head {hh}" for (t, p), (hb, hh) in plan["first"].items()]
+    lines += [f"再跑 {k} base {hb}｜head {hh}" for k, (hb, hh) in verdict["rerun"].items()]
+    lines.append("結論：整段一樣，比對這一項算過" if verdict["ok"] else "結論：還是不一樣，照舊紅：" + "；".join(verdict["bad"]))
+    return "\n".join(lines) + "\n"
+
+
 def web_args(decision: dict, changed: bool, new: str = "") -> list[str]:
     """scripts/webqa/gate.py 的參數：--changed 且不全回合才交 --changed-files；--new 照樣轉（N 波合併時補；--also-existing webqa 沒有、不轉）。"""
     files = ["--changed-files", ",".join(decision["web_files"])] if changed and decision["web_files"] and not decision.get("web_all_rounds") else []
@@ -587,6 +712,31 @@ def main() -> int:
     if "compare" in result:
         result["compare"]["red"] = red_lines(out / "compare.txt", r"不一樣|不同|DIFF|differ|失敗|Traceback|Error")
         result["compare"]["slowest"] = red_lines(out / "compare.txt", r"^最慢 ", 10)
+        if result["compare"]["code"] != 0:  # 第 262 批：只有 js 內容變、紅的只有把 js 算進輸出的軌 → base 換進 head 的 js 再比一次
+            plan = js_rerun_plan((out / "compare.txt").read_text(encoding="utf-8", errors="replace"),
+                                 git(repo, "-c", "core.quotepath=off", "diff", "--name-status", base, head))
+            verdict = None
+            if plan["rerun"]:
+                print("比對：紅的只有 js 的軌，base 換進 head 的 js 再比一次：" + ",".join(plan["files"]), flush=True)
+                try:
+                    text = js_rerun(py, script, work / "base", root, work / "tmp", plan, extra, out / "compare_js.txt", env)
+                except OSError as e:  # 抄不成、跑不起來：照舊紅
+                    text = f"js 再跑失敗：{e}"
+                    (out / "compare_js.txt").write_text(text, encoding="utf-8")
+                verdict = js_rerun_verdict(plan, text)
+                result["compare"]["js_rerun"] = {"ran": True, "tracks": plan["tracks"], "profiles": plan["profiles"], "files": plan["files"],
+                                                 "first": {f"{t} {p}": v for (t, p), v in plan["first"].items()}, "rerun": verdict["rerun"],
+                                                 "ok": verdict["ok"], "bad": verdict["bad"], "out": str(out / "compare_js.txt")}
+                if verdict["ok"]:
+                    result["compare"]["code_first"] = result["compare"]["code"]
+                    result["compare"]["code"] = 0
+                print("比對：js 再跑" + ("整段一樣，算過" if verdict["ok"] else "還是不一樣，照舊紅"), flush=True)
+            else:
+                result["compare"]["js_rerun"] = {"ran": False, "why": plan["why"]}
+            with (out / "compare.txt").open("a", encoding="utf-8") as f:
+                f.write(js_rerun_note(plan, verdict))
+                if verdict is not None:
+                    f.write((out / "compare_js.txt").read_text(encoding="utf-8", errors="replace"))
     if "explore" in result:
         result["explore"]["red"] = red_lines(out / "explore.txt", r"不一樣|不同|DIFF|differ|失敗|Traceback|Error")
 

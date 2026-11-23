@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, landed, sameWindow, FLIPPED, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
+import { freeze, landed, sameWindow, FLIPPED, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES, SCROLLER } from "./snippets.mjs";
 
 const [label, PAGE, API, OUT, CHROME_PORT] = process.argv.slice(2);
 const ROUND = process.env.QA_ROUND || "c";
@@ -174,12 +174,7 @@ async function dumpStyles(id, view, facts) {
   facts.sty[view] = sha(d.els.map((r) => r.join(" ")).join("\n"));
   writeFileSync(join(STY, `${id}__${view}.json.gz`), gzipSync(JSON.stringify(d)));
 }
-// the biggest thing on screen that scrolls (the page itself, or a layer over it)
-const SCROLLER = `(() => { window.__sc = null; let best = 0; const root = document.scrollingElement;
-  const cand = [root, ...document.querySelectorAll("#app *")];
-  for (const el of cand) { if (el.scrollHeight <= el.clientHeight + 2) continue; if (el !== root) { const cs = getComputedStyle(el); if (!/(auto|scroll)/.test(cs.overflowY) || cs.visibility === "hidden") continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue; const hit = document.elementFromPoint(r.left + r.width / 2, Math.max(r.top, 0) + Math.min(r.height, innerHeight) / 2); if (!hit || !(el === hit || el.contains(hit))) continue; }
-    const area = el === root ? innerWidth * innerHeight * 0.5 : el.clientWidth * el.clientHeight; if (area > best) { best = area; window.__sc = el; } }
-  const s = window.__sc; return s ? { sh: s.scrollHeight, ch: s.clientHeight, root: s === root } : null; })()`;
+// SCROLLER (snippets.mjs): what the scrolled pictures scroll
 const volatileOn = async (file, facts, dpr) => { const r = await ev(VOLATILE); if (r.length) facts.vol[file] = r.map(([k, a, b, c, d]) => [k, a * dpr, b * dpr, c * dpr, d * dpr]); };
 // The chronicle link greys out until the writer is done: give it a moment before the shot. A budget, so a page where it never finishes cannot eat the walk.
 let taleBudget = 60000;
@@ -225,6 +220,48 @@ async function shootWindow(id, v, d, light, facts) {
   if (v[0] === "375-light" || (!light && v[0] === "1280")) await dumpStyles(id, v[0], facts);
   return first;
 }
+// A light scene's 375-light window, shot again on the same side with no reload, twice: once after a whole-page paint (the dpr flipped and
+// back), once 1.1 s later with nothing done (the battle card's countdown rewritten once). Only the hashes are kept, facts.variants[file]:
+// compare.py reads them for repaint-variants (noise.py). Batch 260 measured three ways one side draws bt_watch_open/shut with no reload:
+// a whole-page paint, the countdown's piece repainted alone (713 px, 1 level), the whole battle card's picture (4448 px, 3 levels);
+// the first picture was one of them at random. The pictures themselves are not kept, and nothing else in facts moves.
+async function grabHash() {
+  const r = await cdp("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
+  return sha(Buffer.from(r.data, "base64"));
+}
+async function shootVariants(id, v, d, facts) {
+  const mine = facts.shots.filter((f) => f === `${id}__${v[0]}.png` || f.startsWith(`${id}__${v[0]}__s`));
+  if (!mine.length) return;
+  facts.variants = facts.variants || {};
+  for (const f of mine) facts.variants[f] = [];
+  for (const round of ["repaint", "wait"]) {
+    if (round === "repaint") {
+      await setView(v, d === 1 ? 2 : 1);
+      await ev(FLIPPED(d === 1 ? 2 : 1));
+      await setView(v, d);
+      await stable(v[1]);
+    } else {
+      await sleep(1100);
+    }
+    const sc = await ev(SCROLLER);
+    if (sc) await ev(`window.__sc.scrollTop = 0; 0`); else await ev(`window.scrollTo(0, 0); 0`);
+    await sleep(60);
+    let f = `${id}__${v[0]}.png`;
+    if (facts.variants[f]) facts.variants[f].push(await grabHash());
+    if (sc) {
+      const step = Math.max(200, sc.ch - 90);
+      const maxScreens = v[1] > 1000 ? 2 : 3;
+      for (let y = step, n = 1; y < sc.sh - sc.ch + step && n < maxScreens; y += step, n++) {
+        await ev(`window.__sc.scrollTop = ${Math.min(y, sc.sh - sc.ch)}; 0`);
+        await sleep(70);
+        f = `${id}__${v[0]}__s${n}.png`;
+        if (facts.variants[f]) facts.variants[f].push(await grabHash());
+      }
+      await ev(`window.__sc.scrollTop = 0; 0`);
+    }
+  }
+  await stable(v[1]);
+}
 const RESHOOTS = 2;
 let sceneN = 0;
 // main scenes: dpr 2, more screens, styles on five widths; crawl scenes: dpr 1, fewer
@@ -258,6 +295,7 @@ async function shoot(name, { light = false, toast = false, who = null } = {}) {
       for (const f of facts.shots.splice(from)) { delete facts.vol[f]; delete hashes[f]; rmSync(join(SHOTS, f), { force: true }); }
       log(id, v[0], "gutter moved while shooting, again", JSON.stringify([first.sw, first.cw, end.sw, end.cw]));
     }
+    if (light && v[0] === "375-light") await shootVariants(id, v, d, facts); // batch 260: after the window is settled, so a reshoot never has to drop them
   }
   if (!light && !QUICK) {
     for (const v of STYLE_VIEWS) {
