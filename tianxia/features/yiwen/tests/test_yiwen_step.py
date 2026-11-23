@@ -1,5 +1,7 @@
 """異聞二（第 252 批）：/api/do/yiwen_step 的三段式（假的模型、server_kit 的殼）。A 鎖內開單 → B 鎖外 writer.write_scene → C 鎖內重驗再寫。
 模型一律是假的：換 writer.write_scene（或給 game.client 一個假的 client、within_budget 原樣交回）；佇列用 server_kit._ScriptedQueue。"""
+import dataclasses
+
 import pytest
 
 import server
@@ -295,3 +297,225 @@ def test_off_op_answers_empty_without_touching_anything(on, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config.yiwen, "enabled", False)
     monkeypatch.setattr(server, "_open_request", lambda *a, **k: pytest.fail("關著不進鎖"))
     assert _step(on, 0) == [] and calls == []
+
+
+# ── 第 253 批：C 段（apply_step）每一項重驗各一條「拿掉就紅」（AI 波審查：拿掉 node、tale、key、valid、自己說的鎖、_writable 那六項，
+# 舊的測試照綠——舊案例用 drop 清掉眼前那一則，server.act 一進鎖 on_sync 就先回 gone，走不到後面的比對）。
+# 能走路由就走路由：假的 write_scene 第一次被叫時先做「B 段中間插進來的事」，再回草稿。路由走不到的直接叫 apply_step，說明寫為什麼。
+
+
+def _stats(name=NAME):
+    st = open_characters().load(name).player.stats
+    return st.get("silver", 0), st.get("xinde", 0)
+
+
+def _meanwhile(monkeypatch, first_time):
+    """writer.write_scene 換成：第一次叫時先跑 first_time()（B 段中間插進來的事），之後每一次都回 _good()。"""
+    calls = []
+
+    def fake(client_for, request, tuning, left, content):
+        calls.append(request)
+        if len(calls) == 1:
+            first_time()
+        return _good()
+
+    monkeypatch.setattr(writer, "write_scene", fake)
+    return calls
+
+
+def _first_scene_then_trail(on, client):
+    """發掘者寫成第一幕後放下（則照逾時提早公開），兩個後來的人站在那一幕底下（還沒人接著寫）。"""
+    server.act(on, lambda g: actions.step(g, {"tale": 0, "opening": OPENING, "node": 0, "pick": 0}))
+    tale, first = _walk().tale, _walk().node
+    server.act(on, actions.drop)
+    return tale, first, _trail_player(client, "liu_02", "柳岸生", tale, first), _trail_player(client, "wu_03", "吳江月", tale, first)
+
+
+def test_c_same_node_sent_twice_keeps_one_scene(on, monkeypatch):
+    """守 C 的 w.node != req.node：同一個人在第二步送了兩次（兩張 A 開的單）。第一張寫進去、眼前前進到下一幕之後，
+    第二張進 C：不重寫、不多給獎勵，回空清單（現行行為：不是重放、也不是 taken）。
+    要在第二步造：第一步兩張單時 req.tale 是 0、眼前已經開則，會被 tale 那一項先擋住，拿掉 node 那一項照樣綠。"""
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    _writes(monkeypatch, _good)
+    _step(on, 0)
+    w = _walk()
+    tale, first = w.tale, w.node
+    body = {"tale": tale, "opening": OPENING, "node": first, "pick": 0}
+    seen = {}
+
+    def second_ticket():
+        seen["inner"] = server.OUTLOCK_OPS["yiwen_step"](on, dict(body))
+        seen["node"], seen["stats"] = _walk().node, _stats()
+
+    calls = _meanwhile(monkeypatch, second_ticket)
+    got = server.OUTLOCK_OPS["yiwen_step"](on, dict(body))
+    assert len(calls) == 2 and A in seen["inner"]  # 內層那一張寫成了第二幕
+    assert got == []
+    nodes = store_of(on).nodes(tale)
+    assert len(nodes) == 2 and [n["depth"] for n in nodes] == [1, 2] and nodes[1]["parent"] == first
+    w = _walk()
+    assert w.tale == tale and w.node == seen["node"] == nodes[1]["id"] and tale not in w.done
+    assert _stats() == seen["stats"]  # 外層那一張一兩銀子都沒多給
+
+
+def test_c_reattached_to_other_tale_writes_nothing(on, monkeypatch):
+    """守 C 的 w.tale != req.tale：發掘者第一步送了「按第二顆」（A 看到旁檔沒有則→單上 tale 是 0）。B 中間同一個人又送了「按第一顆」
+    寫成第一幕（開則 T），接著主交易撤回、玩家那一格回到 B 之前（tale 0）、世界那一格與旁檔留著。C 段接回 T（該變的），
+    跟單上的 0 不一樣：不在 T 的第一層多寫一幕。「放下再撞見另一則」同一句開場時單上也是 0、對不出不同的則，可造的只有撤回後接回。"""
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    seen = {}
+
+    def write_then_roll_back():
+        before = _walk().model_copy(deep=True)
+        server.OUTLOCK_OPS["yiwen_step"](on, {"tale": 0, "opening": OPENING, "node": 0, "pick": 0})
+        seen["tale"] = _walk().tale
+        server.act(on, lambda g: setattr(g.state.player, "yiwen", before))
+        seen["stats"] = _stats()
+
+    calls = _meanwhile(monkeypatch, write_then_roll_back)
+    got = _step(on, 1)
+    assert len(calls) == 2 and got == []
+    tale = seen["tale"]
+    nodes = store_of(on).nodes(tale)
+    assert tale > 0 and len(nodes) == 1 and nodes[0]["pick"] == rules.openings()[OPENING]["guesses"][0]
+    w = _walk()
+    assert w.tale == tale and w.node == 0
+    assert _stats() == seen["stats"]
+
+
+@pytest.mark.parametrize("at", ["first", "second"])
+def test_c_ticket_of_another_key_writes_nothing(on, monkeypatch, at):
+    """守 C 的 key != req.key：單上的鍵跟進 C 的人不一樣（別人的單）。直接叫 apply_step：鍵是名號的 casefold（_mall_owner），
+    路由的 A、C 用同一個 game；唯一換得了鍵的是易名帖，那走帳號交易、殼照名號重讀，這一批不造。
+    兩格：第一步（拿掉會開則）、第二步（拿掉會在既有的則上寫幕）。"""
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    if at == "second":
+        _writes(monkeypatch, _good)
+        _step(on, 0)
+    w = _walk()
+    body = {"tale": w.tale, "opening": OPENING, "node": w.node, "pick": 0}
+    req = server.act(on, lambda g: actions.step_request(g, body))
+    assert isinstance(req, rules.YiwenRequest)
+    before, stats = _walk().model_dump(), _stats()
+    other = dataclasses.replace(req, key="別人的鍵")
+    got = server.act(on, lambda g: actions.apply_step(g, other, _good(), ""))
+    assert got == []
+    season = open_characters().load(NAME).player.season_number
+    row = store_of(on).tale_by_opening(season, OPENING)
+    if at == "first":
+        assert row is None
+    else:
+        assert len(store_of(on).nodes(row["id"])) == 1
+    assert _walk().model_dump() == before and _stats() == stats
+
+
+@pytest.mark.parametrize("how", ["claim_released", "claim_other", "removed", "opening_gone"])
+def test_c_invalid_tale_inside_lock(on, monkeypatch, client, how):
+    """守 C 的 not valid(ctx) 那一支。直接叫 apply_step，在同一個 server.act 裡先把則弄無效、再叫：路由的 C 一進鎖 game.sync 就跑 on_sync，
+    眼前那一則無效就清掉、回 gone，走不到 C 的那一行。照 valid 的實際條件造：名額被放回、名額變成別人的（發掘者還沒寫第一幕）、
+    則被拿掉（後來的人）、開場不在內容檔（發掘者第二步）。「逾時公開」只把狀態從 walking 改成 open，valid 照樣為真，不列。"""
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    me, name = on, NAME
+    if how == "removed":
+        tale, first, me, _ = _first_scene_then_trail(on, client)
+        name = "柳岸生"
+    elif how == "opening_gone":
+        _writes(monkeypatch, _good)
+        _step(on, 0)
+    w = open_characters().load(name).player.yiwen
+    tale = w.tale
+    count = len(store_of(on).nodes(tale)) if tale else 0
+    body = {"tale": tale, "opening": OPENING, "node": w.node, "pick": 0}
+    req = server.act(me, lambda g: actions.step_request(g, body))
+    assert isinstance(req, rules.YiwenRequest)
+    stats = _stats(name)
+    real = rules.openings
+
+    def spoil_then_apply(g):
+        if how == "claim_released":
+            del g.state.world.yiwen.taken[OPENING]
+        elif how == "claim_other":
+            g.state.world.yiwen.taken[OPENING].by = "別人的鍵"
+        elif how == "removed":
+            store_of(g).set_status(tale, rules.REMOVED)
+        else:
+            monkeypatch.setattr(rules, "openings", lambda: {k: v for k, v in real().items() if k != OPENING})
+        g._save_season()
+        return actions.apply_step(g, req, _good(), "")
+
+    got = server.act(me, spoil_then_apply)
+    monkeypatch.setattr(rules, "openings", real)
+    season = open_characters().load(name).player.season_number
+    if how in ("claim_released", "claim_other"):  # 發掘者一幕都還沒寫：清眼前、回 gone、不開則
+        assert len(got) == 1 and got[0] in rules.lines()["gone"]
+        w = open_characters().load(name).player.yiwen
+        assert w.opening == "" and store_of(on).tale_by_opening(season, OPENING) is None
+    else:
+        assert got == []
+        assert len(store_of(on).nodes(tale)) == count
+    assert _stats(name) == stats
+
+
+@pytest.mark.parametrize("how", ["tries", "muted"])
+def test_c_typed_locked_mid_b(on, monkeypatch, how):
+    """守 C 的「自己說：w.tries >= typed_tries 或被禁寫」：A 開單時還寫得下去，B 中間這個人另外連送 typed_tries 次被審字擋掉的自己說
+    （次數到了上限），或被禁寫（旁檔沒有寫 mute 的方法，異聞四才寫，這裡直接 INSERT）。C 回 locked、不寫、不給。站在第一步即可：
+    發掘者走自己的路，_writable 永遠為真，不會被它先擋。"""
+    t = server.CONTENT.config.yiwen
+    monkeypatch.setattr(t, "luck_good", 0.0)
+    inner = ["一隻會唱曲的貓", "一頭會寫字的牛", "一條會算命的狗", "一匹會作揖的馬"][:t.typed_tries]
+    monkeypatch.setattr(server, "screen_text", lambda game, text, kind: "bad" if text in inner else "ok")
+    seen = {}
+
+    def meanwhile():
+        if how == "tries":
+            for text in inner:
+                server.OUTLOCK_OPS["yiwen_step"](on, {"tale": 0, "opening": OPENING, "node": 0, "pick": "typed", "text": text})
+        else:
+            store_of(on)._write("INSERT INTO mutes (account, until, by, at) VALUES (?, ?, ?, ?)", (on._mall_owner(), 1e15, "管理者", 0.0))
+        seen["tries"], seen["stats"] = _walk().tries, _stats()
+
+    calls = _meanwhile(monkeypatch, meanwhile)
+    got = _step(on, "typed", "一隻會背兵法的鵝")
+    assert len(calls) == 1  # 內層的自己說都被審字擋下、不叫模型
+    assert got == [rules.lines()["locked"][0]]
+    assert seen["tries"] == (t.typed_tries if how == "tries" else 0)
+    w = _walk()
+    assert w.tries == seen["tries"] and w.tale == 0 and w.node == 0
+    season = open_characters().load(NAME).player.season_number
+    assert store_of(on).tale_by_opening(season, OPENING) is None and _stats() == seen["stats"]
+
+
+def test_c_other_pick_written_mid_b_locks(on, monkeypatch, client):
+    """守 C 的 not _writable：兩個後來的人站在發掘者停下的那一幕底下；柳岸生按第一顆，B 中間吳江月按了**第二顆**、寫成一幕。
+    別人的則、這一個節點底下已經有人走過別的做法（開岔路是異聞三）：C 回 locked、不多開一條、不給。同一顆的情形由
+    test_c_revalidates_season_switch_node[taken] 守（當重放、多回 taken）。"""
+    monkeypatch.setattr(server.CONTENT.config.yiwen, "luck_good", 0.0)
+    tale, first, me, rival = _first_scene_then_trail(on, client)
+    stats = _stats("柳岸生")
+    calls = _meanwhile(monkeypatch, lambda: server.act(rival, lambda g: actions.step(g, {"tale": tale, "opening": OPENING, "node": first, "pick": 1})))
+    got = server.OUTLOCK_OPS["yiwen_step"](me, {"tale": tale, "opening": OPENING, "node": first, "pick": 0})
+    assert len(calls) == 1 and got == [rules.lines()["locked"][0]]
+    kids = store_of(on).children(tale, first)
+    assert len(kids) == 1 and kids[0]["by_shown"] == "吳江月"
+    w = open_characters().load("柳岸生").player.yiwen
+    assert w.node == first and w.own_from == -1 and w.tale == tale
+    assert _stats("柳岸生") == stats
+
+
+# ── 第 253 批：writer._check 猜法那一步回 improper（當成檢查沒過：重問一次、還是 improper 存替身，不加 tries）──
+
+
+def test_improper_on_a_guess_counts_as_failed_check(on, monkeypatch):
+    t = server.CONTENT.config.yiwen
+    improper = {"verdict": "improper", "reason": "換一句", "text": [A, B], "options": GOOD["options"], "ledger": GOOD["ledger"]}
+    req = actions.step_request(on, {"tale": 0, "opening": OPENING, "node": 0, "pick": 0})
+    assert isinstance(req, rules.YiwenRequest) and not req.typed
+    fake = _Fake(improper, improper)
+    draft = writer.write_scene(lambda: fake, req, t, lambda: 60.0, on.content)
+    assert fake.calls == 2 and draft.problems == ["improper"]
+    fake = _fake_model(on, monkeypatch, improper, improper)
+    got = _step(on, 0)
+    assert fake.calls == 2
+    n = _nodes(on)[0]
+    assert n["fallback"] == 1 and A not in n["text"] and A not in got and _walk().tries == 0
