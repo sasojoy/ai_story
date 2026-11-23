@@ -2,7 +2,10 @@
 
 The classes (each one came from a real row of waves B and C):
   aa           anti-aliasing on rounded corners: at most 12 levels and 100 pixels
-  gutter       the 15px scrollbar landed on one side only: never at phone width, sw 15 apart (1265 against 1280, 626 against 641); grid tracks may move with it
+  gutter       the 15px scrollbar landed on one side only: never at phone width, sw 15 apart (1265 against 1280, 626 against 641); grid tracks may move with it.
+               Each picture goes by sw read at its own time (batch 258): the first picture by sw before it, the scrolled ones and the
+               window's styles by sw at the end of the window (compare.py reads layoutEnd, which the driver keeps when the gutter moved
+               mid-window even after shooting it again). Both sides at the same time, 15 apart; the same scrollbar and a 15px move is real.
   share        a fresh share code: the difference is only in /zhuan/CODE, /zhanji/CODE and the share row's rect
   tale         the chronicle link written earlier on one side: only in the link
   layout-used  used values read while layout was moving: only the properties below, and the pixels of that window agree

@@ -275,6 +275,62 @@ def test_a_scrollbar_flip_with_grid_tracks_is_the_gutter(compare, tmp_path):
     assert out["fingerprint"]["A"]["style"] == out["fingerprint"]["B"]["style"]  # 雜訊不進指紋：波末第二趟 main 的樣式指紋就是差在這裡
 
 
+def _walk_1280(root: Path, *, sw=1280, sw_end=None, width="1280px", dots_first=0, dots_s1=0, dom="<body><p>甲</p></body>", prop="width") -> Path:
+    """1280 一個視窗：第一張、捲動後一張、樣式（捲完才傾印）。sw 是第一張之前量的，sw_end 是視窗拍完量的（None 是沒動、不寫 layoutEnd）。"""
+    from PIL import Image
+
+    for sub in ("dom", "style", "main", "shots"):
+        (root / sub).mkdir(parents=True)
+    sid, shots, hashes = "001_scene", [], {}
+    for name, dots in ((f"{sid}__1280.png", dots_first), (f"{sid}__1280__s1.png", dots_s1)):
+        img = Image.new("RGB", (40, 40), (255, 255, 255))
+        for i in range(dots):
+            img.putpixel((i % 40, i // 40), (200, 200, 200))
+        img.save(root / "shots" / name)
+        shots.append(name)
+        hashes[name] = f"dots{dots}"
+    (root / "dom" / f"{sid}.html").write_text(dom, encoding="utf-8")
+    key = width
+    with gzip.open(root / "style" / f"{sid}__1280.json.gz", "wt", encoding="utf-8") as f:
+        json.dump({"props": [prop], "els": [["BODY.", key]], "dict": {key: key}}, f)
+    scene = {"text": "沈浪", "toast": "", "layout": {"1280": {"sw": sw, "cw": sw}}, "shots": shots, "sty": {"1280": key}, "vol": {}, "unstable": False}
+    if sw_end is not None:
+        scene["layoutEnd"], scene["moved"] = {"1280": {"sw": sw_end, "cw": sw_end}}, ["1280"]
+    report = {"label": root.name, "facts": {}, "console": [], "exceptions": [], "http": [], "failed": [], "steps": [], "apiCalls": [], "hashes": hashes, "pyErrors": [],
+              "scenes": {sid: scene}}
+    (root / "report.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+def test_the_gutter_coming_back_after_the_first_picture_is_judged_at_the_end_of_the_window(compare, tmp_path):
+    # 第 258 批：AJ 波 main 092_bd_given 1280，第一張之前兩邊 sw 都 1280、第一張一樣；捲動時一邊的溝回來，__s1 整塊移半條捲軸、BODY 1280 對 1265
+    a = _walk_1280(tmp_path / "a")
+    old = _walk_1280(tmp_path / "old", width="1265px", dots_s1=500)
+    assert _classes(compare.compare(a, old, HOSTS)) == ["pixel", "style"], "只量第一張之前：落成真差異（舊工具就是這樣紅的）"
+    b = _walk_1280(tmp_path / "b", sw_end=1265, width="1265px", dots_s1=500)
+    out = compare.compare(a, b, HOSTS)
+    assert out["real"] == [] and out["noise"] == {"gutter": 2}, out
+    assert out["info"]["gutter moved"] == ["B 001_scene 1280"]
+    # 第一張照第一張之前的 sw：那一刻兩邊一樣，第一張有差照舊紅
+    c = _walk_1280(tmp_path / "c", sw_end=1265, width="1265px", dots_first=500, dots_s1=500)
+    assert _classes(compare.compare(a, c, HOSTS)) == ["pixel"]
+
+
+def test_the_same_scrollbar_and_a_15px_move_stays_real(compare, tmp_path):
+    # 第 258 批不准的：兩邊溝一樣（拍完都 1265）、畫面真的移了 15px（.shell 的 margin 改了）——樣式、像素照樣紅
+    a = _walk_1280(tmp_path / "a", sw=1280, sw_end=1265, prop="margin-left", width="0px")
+    b = _walk_1280(tmp_path / "b", sw=1280, sw_end=1265, prop="margin-left", width="15px", dots_s1=500)
+    assert _classes(compare.compare(a, b, HOSTS)) == ["pixel", "style"]
+    a2, b2 = _walk_1280(tmp_path / "a2", sw=1265, prop="margin-left", width="0px"), _walk_1280(tmp_path / "b2", sw=1265, prop="margin-left", width="15px", dots_s1=500)
+    assert _classes(compare.compare(a2, b2, HOSTS)) == ["pixel", "style"], "沒有 layoutEnd 的也一樣"
+    # 拍完的溝差 15，但 DOM 不一樣：不歸 gutter
+    d = _walk_1280(tmp_path / "d", sw_end=1265, width="1265px", dots_s1=500, dom="<body><p>乙</p></body>")
+    assert _classes(compare.compare(_walk_1280(tmp_path / "e"), d, HOSTS)) == ["dom", "pixel", "style"]
+    # 拍完的溝差 15，但樣式有不是 used 值的差：不歸 gutter
+    f = _walk_1280(tmp_path / "f", sw_end=1265, prop="color", width="blue", dots_s1=500)
+    assert _classes(compare.compare(_walk_1280(tmp_path / "g", prop="color", width="red"), f, HOSTS)) == ["pixel", "style"]
+
+
 def test_the_toasts_words_count_when_both_sides_still_show_them(compare, tmp_path):
     a = _walk(tmp_path / "a", toast="已經存好了。")
     assert compare.compare(a, _walk(tmp_path / "b", toast="已經存好了。"), HOSTS)["real"] == []
@@ -421,11 +477,30 @@ def test_a_window_set_twice_in_a_row_is_flipped_first():
             "sameWindow([V[1], 1], V[0], 1), sameWindow([[...V[0]], 1], V[0], 1), sameWindow([V[2], 1], V[2], 1)]));")
     out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
     assert json.loads(out.stdout) == [False, True, False, False, True, True]
-    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
-    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], \"dpr flip not drawn in 1.5s\"); }" in text and "lastView = [v, dpr];" in text
+    # driver.mjs 跑不起來單測（要瀏覽器）：守先後，不守那一行的字（第 258 批）。一個視窗裡先問 sameWindow、換成另一個 dpr 等它畫過，才設回這個視窗
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8").replace("\r\n", "\n")
+    body = text[text.index("async function shootWindow("):]
+    body = body[:body.index("\n}\n")]
+    ask, back = body.index("sameWindow(lastView, v, d)"), body.index("await setView(v, d);")
+    flip_line = body[ask:body.index("\n", ask)]
+    assert ask < back and "setView(v, d === 1 ? 2 : 1)" in flip_line and "FLIPPED(d === 1 ? 2 : 1)" in flip_line and "< 0) log(" in flip_line
+    setview = text[text.index("async function setView("):]
+    assert "lastView = [v, dpr];" in setview[:setview.index("\n}\n")]
+    # 視窗拍完再量一次：shoot 先叫 shootWindow、再量 LAYOUT、動了才重拍（最多 RESHOOTS 次）
+    shoot = text[text.index("async function shoot(name"):]
+    shoot = shoot[:shoot.index("\n}\n")]
+    assert shoot.index("await shootWindow(") < shoot.index("await ev(LAYOUT)") < shoot.index("take === RESHOOTS") and "const RESHOOTS = 2;" in text
+    # FLIPPED 照行為驗：假的時鐘與畫格，dpr 換成了回畫過的毫秒數，一秒內沒換成回 -1（以前逾時也等兩格、回正數，log 幾乎不印）
+    code = (f"const {{ FLIPPED }} = await import({json.dumps(src)}); let t = 0;"
+            "Object.defineProperty(globalThis, 'performance', { value: { now: () => (t += 50) }, configurable: true, writable: true });"
+            "globalThis.setTimeout = () => 0; globalThis.requestAnimationFrame = (cb) => setImmediate(cb);"
+            "const run = async (now, want) => { globalThis.devicePixelRatio = now; t = 0; return await (0, eval)(FLIPPED(want)); };"
+            "console.log(JSON.stringify([await run(2, 2), await run(1, 2), await run(2, 1)]));")
+    got = json.loads(subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    assert got[0] > 0 and got[1] == -1 and got[2] == -1, got
     flipped = subprocess.run([node, "--input-type=module", "-e", f"const {{ FLIPPED }} = await import({json.dumps(src)}); console.log(FLIPPED(2));"],
                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
-    assert "devicePixelRatio === 2" in flipped and "requestAnimationFrame" in flipped and "setTimeout(() => r(-1), 1500)" in flipped  # 等到真的畫過，最多 1.5 秒
+    assert "setTimeout(() => r(-1), 1500)" in flipped  # 換成了但畫格一直不來：最多 1.5 秒
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():
@@ -678,3 +753,107 @@ def test_nothing_to_walk_is_green_before_anything_is_looked_for(tmp_path):
     summary = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
     assert summary["green"] and summary["rounds"] == [] and not summary["tool"]
     assert "NOTHING TO WALK" in (tmp_path / "out" / "report.txt").read_text(encoding="utf-8").splitlines()[0]
+
+
+# ── 第 256 批：yw 回合（異聞）──
+
+def _yw_copy(root: Path, *, writer=True, route=True, tuning=True) -> str:
+    pkg = root / "tianxia" / "features" / "yiwen"
+    pkg.mkdir(parents=True)
+    (pkg / "writer.py").write_text("def write_scene(client_for, request, tuning, left, content):\n    pass\n" if writer else "def write_one():\n    pass\n", encoding="utf-8")
+    (pkg / "routes.py").write_text('OPS = {"yiwen_step": None}\n' if route else "OPS = {}\n", encoding="utf-8")
+    if tuning:
+        (root / "tianxia" / "core" / "tuning").mkdir(parents=True)
+        (root / "tianxia" / "core" / "tuning" / "yiwen.py").write_text("discover_chance: float = 0.0002\n", encoding="utf-8")
+    return str(root)
+
+
+def test_a_side_without_the_storyteller_cannot_walk_the_yw_round(tmp_path):
+    gate = _load("gate")
+    full = _yw_copy(tmp_path / "full")
+    assert gate.round_cannot_walk(full, "yw") is None
+    assert gate.round_cannot_walk(str(tmp_path / "empty"), "main") is None, "別的回合沒有要求"
+    assert "write_scene" in gate.round_cannot_walk(_yw_copy(tmp_path / "w", writer=False), "yw")
+    assert "yiwen_step" in gate.round_cannot_walk(_yw_copy(tmp_path / "r", route=False), "yw")
+    assert "no tianxia/core/tuning/yiwen.py" == gate.round_cannot_walk(_yw_copy(tmp_path / "t", tuning=False), "yw")
+    assert gate.round_cannot_walk(str(tmp_path / "empty"), "yw") == "no tianxia/features/yiwen/writer.py"
+    assert gate.round_cannot_walk(str(ROOT), "yw") is None, "這一份程式自己要走得了"
+
+
+def test_new_yiwen_lists_the_yw_rounds_differences_and_keeps_the_heads_errors_red():
+    gate = _load("gate")
+    rows = [{"round": "yw", "scene": "010_yw_wait", "class": "pixel", "detail": {}},
+            {"round": "yw", "scene": "(walk)", "class": "steps", "detail": []},
+            {"round": "yw", "scene": "011_yw_act1", "class": "console-head-only", "detail": ""},
+            {"round": "yw", "scene": "(css)", "class": "css-rules", "detail": {}},
+            {"round": "yw", "scene": "012_yw_act2", "class": "words", "detail": ""},
+            {"round": "main", "scene": "001_x", "class": "pixel", "detail": {}},
+            {"round": "replay", "scene": "yw-010_yw_wait", "class": "pixel", "detail": {}},
+            {"round": "replay-anim", "scene": "main-001_x", "class": "style", "detail": {}},
+            {"round": "(static)", "scene": "img/a.png", "class": "static-file", "detail": []}]
+    kept, listed = gate.split_round_new(rows, ["yiwen"])
+    assert [(r["round"], r["scene"]) for r in listed] == [("yw", "010_yw_wait"), ("yw", "(walk)"), ("replay", "yw-010_yw_wait")]
+    assert {r["class"] for r in kept if r["round"] == "yw"} == {"console-head-only", "css-rules", "words"}
+    assert gate.split_round_new(rows, ["identity"]) == (rows, []), "不帶 --new yiwen：一列都不動"
+    assert gate.split_round_new(rows, []) == (rows, [])
+    assert gate.ROUND_PACKAGE == {"yw": "yiwen"} and "yw" in gate.ROUNDS and (TOOL / "flows" / "yw.mjs").exists()
+
+
+def test_a_skipped_round_and_the_listed_rows_are_in_the_report(tmp_path):
+    gate = _load("gate")
+    skip = "yw: 這一邊走不了：base no tianxia/features/yiwen/writer.py"
+    gate.write_report(str(tmp_path), {"base": "a", "head": "b", "green": True, "exit": 0, "rounds": [], "rounds_why": "every round left was skipped", "skipped": [skip]}, {})
+    lines = (tmp_path / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert "NOTHING TO WALK (exit 0)" in lines[0] and f"SKIPPED {skip}" in lines
+    summary = {"base": "a", "head": "b", "green": True, "exit": 0, "rounds": ["main"], "scenes": 1, "shots": 1, "same_shots": 1, "seconds": 1, "noise": {}, "fingerprint": {},
+               "replay": {}, "tool": [], "real": [], "expected": [], "must_reach_quick_missing": [], "not_reached": [], "skipped": [skip],
+               "new_rows": [{"round": "yw", "scene": "010_yw_wait", "class": "pixel", "detail": {"file": "010_yw_wait__375-light.png"}}]}
+    gate.write_report(str(tmp_path), summary, {})
+    lines = (tmp_path / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert f"SKIPPED {skip}" in lines and any(x.startswith("NEW yw:010_yw_wait pixel ") for x in lines)
+
+
+def test_the_yw_padding_mutation_touches_the_meeting_card_only(tmp_path):
+    gate = _load("gate")
+    web = tmp_path / "web"
+    web.mkdir()
+    css = "/* a */\n.yw-wrap { position: fixed; }\n.yw-card { box-sizing: border-box; padding: 0 16px; }\n.yw-card p { margin: 0; }\n"
+    (web / "yiwen.css").write_text(css, encoding="utf-8", newline="")
+    gate.mutate(str(tmp_path), gate.YW_PADDING)
+    got = (web / "yiwen.css").read_text(encoding="utf-8")
+    assert got == css.replace("padding: 0 16px; }", "padding: 0 16px;  padding: 31px 23px; }")
+    assert "\n.yw-card {" in (ROOT / "web" / "yiwen.css").read_text(encoding="utf-8"), "撞見卡的規則換了寫法，突變要跟著換"
+    (web / "yiwen.css").write_text("/* nothing */\n", encoding="utf-8")
+    with pytest.raises(gate.ToolBroke):
+        gate.mutate(str(tmp_path), gate.YW_PADDING)
+
+
+def test_only_the_yw_round_turns_the_strange_tales_on_and_its_patch_targets_are_there():
+    text = (TOOL / "serve.py").read_text(encoding="utf-8")
+    assert 'YW = os.environ.get("QA_ROUND") == "yw"' in text
+    block = text.split("if YW:", 1)[1].split("\nfrom fastapi", 1)[0]
+    assert "_yw.enabled, _yw.discover_chance, _yw.rewalk_chance = True, 1.0, 1.0" in block
+    assert text.count("if YW:") == 2, "改設定與 /__qa/py 的 hold 都只在 yw 回合"
+    from tianxia.features.yiwen import routes, writer
+
+    assert callable(writer.write_scene) and "writer.write_scene(" in (ROOT / "tianxia" / "features" / "yiwen" / "routes.py").read_text(encoding="utf-8"), "routes 照模組屬性叫寫幕，閘才包得到"
+    assert "shell.screen_text(" in (ROOT / "tianxia" / "features" / "yiwen" / "routes.py").read_text(encoding="utf-8") and "screen_text" in _names_in(ROOT / "server.py")
+    from tianxia.core.tuning.yiwen import YiwenTuning
+
+    assert {"enabled", "discover_chance", "rewalk_chance"} <= set(YiwenTuning.model_fields)
+    flow = (TOOL / "flows" / "yw.mjs").read_text(encoding="utf-8")
+    bad = re.search(r'YW_BAD_WORDS = "([^"]+)"', text).group(1)
+    assert f'const BAD = "{bad}"' in flow, "走查送的那一句要等於假的審字認的那一句"
+    from tianxia.content import load_content
+    from tianxia.features.yiwen import rules as yw_rules
+
+    content = load_content(ROOT / "content", "season21")
+    assert yw_rules.typed_problem(bad, content, content.config.yiwen) is None, "那一句要過得了 A 段，才會走到審字"
+    assert routes is not None
+
+
+def test_the_yw_scenes_are_in_must_reach():
+    rows = (TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines()
+    flow = (TOOL / "flows" / "yw.mjs").read_text(encoding="utf-8")
+    shot = set(re.findall(r'"(yw_[a-z0-9_]+)"', flow)) - {"yw_out", "yw_walk", "yw_trail"}
+    assert shot and {line.split(":", 1)[1] for line in rows if line.startswith("yw:")} == shot

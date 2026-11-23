@@ -48,6 +48,7 @@
   "web/territory_acts.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
   "web/zhuan.js",
   "web/zongmen.js"
  ],
@@ -93,6 +94,7 @@
   "web/territory_acts.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
   "web/zhuan.js",
   "web/zongmen.js"
  ],
@@ -137,6 +139,7 @@
   "web/territory_acts.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
   "web/zongmen.js"
  ],
  "z": [
@@ -176,7 +179,8 @@
   "web/terms.js",
   "web/territory_acts.js",
   "web/titles.js",
-  "web/travel.js"
+  "web/travel.js",
+  "web/yiwen.js"
  ],
  "v": [
   "web/admin.js",
@@ -217,6 +221,7 @@
   "web/terms.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
   "web/zongmen.js"
  ],
  "c": [
@@ -260,6 +265,7 @@
   "web/territory_acts.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
   "web/zongmen.js"
  ],
  "cs": [
@@ -294,7 +300,8 @@
   "web/support.js",
   "web/terms.js",
   "web/titles.js",
-  "web/travel.js"
+  "web/travel.js",
+  "web/yiwen.js"
  ],
  "extra": [
   "web/admin.js",
@@ -338,6 +345,48 @@
   "web/terms.js",
   "web/titles.js",
   "web/travel.js",
+  "web/yiwen.js",
+  "web/zongmen.js"
+ ],
+ "yw": [
+  "web/admin.js",
+  "web/app.js",
+  "web/arena_anim.js",
+  "web/battle.js",
+  "web/bounties.js",
+  "web/codex.js",
+  "web/companions.js",
+  "web/craft.js",
+  "web/cultivation.js",
+  "web/faction.js",
+  "web/figure_acts.js",
+  "web/fit.js",
+  "web/gear.js",
+  "web/guard.js",
+  "web/guide.js",
+  "web/identity.js",
+  "web/intro.js",
+  "web/jieyi.js",
+  "web/legacy.js",
+  "web/looks.js",
+  "web/mail.js",
+  "web/main.js",
+  "web/mall.js",
+  "web/map.js",
+  "web/news.js",
+  "web/notify.js",
+  "web/outing.js",
+  "web/peers.js",
+  "web/seal.js",
+  "web/sense.js",
+  "web/shell.js",
+  "web/sortie.js",
+  "web/story.js",
+  "web/support.js",
+  "web/terms.js",
+  "web/titles.js",
+  "web/travel.js",
+  "web/yiwen.js",
   "web/zongmen.js"
  ]
 }
