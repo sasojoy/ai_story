@@ -629,6 +629,16 @@ def test_main_closes_the_patch_sheet_after_one_picture_and_waits_for_the_ink_pic
     assert {"main:patch_pop", "main:call_close", "main:call_act", "main:zh_write"} <= rows
 
 
+def test_main_loads_the_page_again_before_the_invite_picture():
+    """第 260 批：江湖新事邀請卡（第 233 批）排在第 113 批那次重載前面，nx_invite 兩邊偶爾一邊 LCD、一邊灰階反鋸齒（載入時就定了，
+    重畫不換）。asPlayer("p3") 之後、查 .sheet.nx-invite 之前多載入一次；守先後，不守那一行的字。"""
+    text = (TOOL / "flows" / "main.mjs").read_text(encoding="utf-8").replace("\r\n", "\n")
+    prep = next(f for f in re.split(r'\n  \["', text) if f.startswith('prep"'))
+    player, invite = prep.index('asPlayer("p3")'), prep.index('.sheet.nx-invite")')
+    assert 'await c.load("/");' in prep[player:invite]
+    assert invite < prep.index('shoot("nx_invite"')
+
+
 def test_main_walks_support_between_notify_and_mall_and_puts_the_staff_list_back_in_finally():
     """第 236 批：客服在 week7、season21 打開了。main 回合在 notify 與 mall 之間走一趟客服：玩家寫一張文字單，不是管理者的走查帳號
     只在這個伺服器行程的記憶體裡放進客服名單（Config.support.staff，不寫檔、不設環境變數），重新用密碼登入（staff_session_ok）到 /admin
