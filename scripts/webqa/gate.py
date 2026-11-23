@@ -32,6 +32,8 @@ The yw round (batch 256) walks the strange tales (yiwen package), off in every p
 makes both rolls always hit, holds the storyteller (writer.write_scene) while the walk has it armed so the waiting page can be shot, and has
 a fake screen call one line bad so the 自己說 box can be spent (serve.py). A side whose copy lacks what the round stands on (ROUND_NEEDS:
 older than the AI wave) cannot walk it: the round is left out on both, SKIPPED in the report and summary.skipped, not red and not the tool.
+Batch 262: that is only when the base lacks it. The base has it and the head does not (the head lost it): REAL, class round-lost (in STAY_RED,
+so --new yiwen does not list it), detail names what the head lacks, and the round is not walked (split_unwalkable); all rounds lost is exit 1.
 --new yiwen (ROUND_PACKAGE) lists that round's differences as NEW (summary.new_rows) instead of red, except STAY_RED (the head's console,
 exceptions and failed requests, who-is-who words, stylesheet rules); a flow that throws or a scene in must_reach not reached is still exit 2.
 Without --new yiwen a difference there is REAL like any other round's.
@@ -66,7 +68,8 @@ ROUND_NEEDS = {
 }
 # Batch 256: --new <pkg> with the package a round is about: that round's differences are listed (summary.new_rows), not red, except these
 ROUND_PACKAGE = {"yw": "yiwen"}
-STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules"}
+STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules", "round-lost"}
+ROUND_LOST = "round-lost"  # batch 262: the base walks the round, the head lost what it stands on: REAL, not skipped (split_unwalkable)
 MUST_REACH = os.path.join(HERE, "must_reach.txt")
 FORBIDDEN_PORTS = {7861}
 DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if os.name == "nt" else 0
@@ -116,6 +119,24 @@ def round_cannot_walk(copy: str, r: str, needs=ROUND_NEEDS) -> str | None:
         except OSError:
             return f"no {rel}"
     return None
+
+
+def split_unwalkable(rounds, why_base, why_head):
+    """Batch 262: which rounds walk. why_base/why_head map a round to round_cannot_walk's answer on that side (None: it can walk).
+    The base cannot walk it (older than the package): skipped on both, as batch 256 did. The base can and the head cannot: the head lost
+    it, a REAL row (class round-lost, in STAY_RED) and the round is not walked. Returns (keep, skipped, lost): skipped are report lines,
+    lost are REAL rows."""
+    keep, skipped, lost = [], [], []
+    for r in rounds:
+        wb, wh = why_base.get(r), why_head.get(r)
+        if wb:
+            why = [f"base {wb}"] + ([f"head {wh}"] if wh else [])
+            skipped.append(f"{r}: 這一邊走不了：{'; '.join(why)}")
+        elif wh:
+            lost.append({"round": r, "scene": "(round)", "class": ROUND_LOST, "detail": f"head {wh}"})
+        else:
+            keep.append(r)
+    return keep, skipped, lost
 
 
 def scene_round(row: dict) -> str:
@@ -193,6 +214,10 @@ class ToolBroke(Exception):
 
 class NothingToWalk(Exception):
     """Batch 110: --changed-files picked no round (an empty list, or package files no round reaches while they are off): exit 0, nothing unpacked."""
+
+
+class OnlyLost(Exception):
+    """Batch 262: every round left is one the head lost (split_unwalkable): exit 1, the round-lost rows are REAL, nothing walked."""
 
 
 def find_chrome(arg: str | None) -> str:
@@ -695,13 +720,16 @@ def run(args) -> int:
         copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
         for copy in copies:
             seed_local(copy, outbox=args.outbox)
-        for r in list(rounds):  # batch 256: a round one side cannot walk (older than the package it is about) is left out, not red
-            why = [f"{side} {w}" for side, copy in zip(("base", "head"), copies) if (w := round_cannot_walk(copy, r))]
-            if why:
-                rounds.remove(r)
-                summary.setdefault("skipped", []).append(f"{r}: 這一邊走不了：{'; '.join(why)}")
+        # batch 256: a round the base cannot walk (older than the package it is about) is left out, not red;
+        # batch 262: one the base walks and the head cannot is REAL (round-lost), and not walked
+        rounds, skipped, lost = split_unwalkable(rounds, {r: round_cannot_walk(copies[0], r) for r in rounds}, {r: round_cannot_walk(copies[1], r) for r in rounds})
+        if skipped:
+            summary["skipped"] = skipped
+        summary["real"] += lost
         summary["rounds"] = rounds
         if not rounds:
+            if lost:
+                raise OnlyLost()
             raise NothingToWalk("every round left was skipped: " + " / ".join(summary["skipped"]))
         if args.mutate:
             mutate(copies[1], args.mutate)
@@ -778,6 +806,9 @@ def run(args) -> int:
             summary["rounds_why"] = str(e)
         summary["replay"] = {"ran": False, "why": str(e)}
         summary["exit"], summary["green"] = 0, True
+    except OnlyLost:  # batch 262: every round left is one the head lost: red, nothing walked
+        summary["replay"] = {"ran": False, "why": "every round left was lost on the head"}
+        summary["exit"], summary["green"] = 1, False
     except ToolBroke as e:
         summary["tool"].append(str(e))
         summary["exit"] = 2

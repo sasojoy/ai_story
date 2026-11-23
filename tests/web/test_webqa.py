@@ -910,6 +910,30 @@ def test_a_skipped_round_and_the_listed_rows_are_in_the_report(tmp_path):
     assert f"SKIPPED {skip}" in lines and any(x.startswith("NEW yw:010_yw_wait pixel ") for x in lines)
 
 
+# ── 第 262 批：head 把異聞弄丟記紅，base 沒有才略過 ──
+
+def test_the_head_losing_a_round_the_base_walks_is_real_not_skipped(tmp_path):
+    gate = _load("gate")
+    full, old = _yw_copy(tmp_path / "full"), _yw_copy(tmp_path / "old", writer=False)
+    why = lambda copy: {r: gate.round_cannot_walk(copy, r) for r in ("main", "yw")}
+    assert gate.split_unwalkable(["main", "yw"], why(full), why(full)) == (["main", "yw"], [], []), "兩邊都有：照走"
+    keep, skipped, lost = gate.split_unwalkable(["main", "yw"], why(old), why(full))
+    assert keep == ["main"] and lost == [] and skipped == ["yw: 這一邊走不了：base tianxia/features/yiwen/writer.py has no def write_scene"], "base 比 AI 波舊：照舊略過"
+    keep, skipped, lost = gate.split_unwalkable(["main", "yw"], why(old), why(old))
+    assert keep == ["main"] and lost == [] and len(skipped) == 1 and "; head " in skipped[0], "兩邊都沒有：略過，兩邊都寫"
+    keep, skipped, lost = gate.split_unwalkable(["main", "yw"], why(full), why(old))
+    assert keep == ["main"] and skipped == []
+    assert lost == [{"round": "yw", "scene": "(round)", "class": "round-lost", "detail": "head tianxia/features/yiwen/writer.py has no def write_scene"}], "head 退化：REAL"
+    kept, listed = gate.split_round_new(lost, ["yiwen"])
+    assert kept == lost and listed == [], "--new yiwen 也不轉成 NEW"
+    summary = {"base": "a", "head": "b", "green": False, "exit": 1, "rounds": [], "scenes": 0, "shots": 0, "same_shots": 0, "seconds": 1, "noise": {}, "fingerprint": {},
+               "replay": {"ran": False, "why": "every round left was lost on the head"}, "tool": [], "real": lost, "expected": [], "must_reach_quick_missing": [], "not_reached": []}
+    gate.write_report(str(tmp_path), summary, {})
+    lines = (tmp_path / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "webqa a -> b: RED (exit 1)"
+    assert 'REAL yw:(round) round-lost "head tianxia/features/yiwen/writer.py has no def write_scene"' in lines
+
+
 def test_the_yw_padding_mutation_touches_the_meeting_card_only(tmp_path):
     gate = _load("gate")
     web = tmp_path / "web"
