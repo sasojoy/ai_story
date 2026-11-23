@@ -753,3 +753,107 @@ def test_nothing_to_walk_is_green_before_anything_is_looked_for(tmp_path):
     summary = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
     assert summary["green"] and summary["rounds"] == [] and not summary["tool"]
     assert "NOTHING TO WALK" in (tmp_path / "out" / "report.txt").read_text(encoding="utf-8").splitlines()[0]
+
+
+# ── 第 256 批：yw 回合（異聞）──
+
+def _yw_copy(root: Path, *, writer=True, route=True, tuning=True) -> str:
+    pkg = root / "tianxia" / "features" / "yiwen"
+    pkg.mkdir(parents=True)
+    (pkg / "writer.py").write_text("def write_scene(client_for, request, tuning, left, content):\n    pass\n" if writer else "def write_one():\n    pass\n", encoding="utf-8")
+    (pkg / "routes.py").write_text('OPS = {"yiwen_step": None}\n' if route else "OPS = {}\n", encoding="utf-8")
+    if tuning:
+        (root / "tianxia" / "core" / "tuning").mkdir(parents=True)
+        (root / "tianxia" / "core" / "tuning" / "yiwen.py").write_text("discover_chance: float = 0.0002\n", encoding="utf-8")
+    return str(root)
+
+
+def test_a_side_without_the_storyteller_cannot_walk_the_yw_round(tmp_path):
+    gate = _load("gate")
+    full = _yw_copy(tmp_path / "full")
+    assert gate.round_cannot_walk(full, "yw") is None
+    assert gate.round_cannot_walk(str(tmp_path / "empty"), "main") is None, "別的回合沒有要求"
+    assert "write_scene" in gate.round_cannot_walk(_yw_copy(tmp_path / "w", writer=False), "yw")
+    assert "yiwen_step" in gate.round_cannot_walk(_yw_copy(tmp_path / "r", route=False), "yw")
+    assert "no tianxia/core/tuning/yiwen.py" == gate.round_cannot_walk(_yw_copy(tmp_path / "t", tuning=False), "yw")
+    assert gate.round_cannot_walk(str(tmp_path / "empty"), "yw") == "no tianxia/features/yiwen/writer.py"
+    assert gate.round_cannot_walk(str(ROOT), "yw") is None, "這一份程式自己要走得了"
+
+
+def test_new_yiwen_lists_the_yw_rounds_differences_and_keeps_the_heads_errors_red():
+    gate = _load("gate")
+    rows = [{"round": "yw", "scene": "010_yw_wait", "class": "pixel", "detail": {}},
+            {"round": "yw", "scene": "(walk)", "class": "steps", "detail": []},
+            {"round": "yw", "scene": "011_yw_act1", "class": "console-head-only", "detail": ""},
+            {"round": "yw", "scene": "(css)", "class": "css-rules", "detail": {}},
+            {"round": "yw", "scene": "012_yw_act2", "class": "words", "detail": ""},
+            {"round": "main", "scene": "001_x", "class": "pixel", "detail": {}},
+            {"round": "replay", "scene": "yw-010_yw_wait", "class": "pixel", "detail": {}},
+            {"round": "replay-anim", "scene": "main-001_x", "class": "style", "detail": {}},
+            {"round": "(static)", "scene": "img/a.png", "class": "static-file", "detail": []}]
+    kept, listed = gate.split_round_new(rows, ["yiwen"])
+    assert [(r["round"], r["scene"]) for r in listed] == [("yw", "010_yw_wait"), ("yw", "(walk)"), ("replay", "yw-010_yw_wait")]
+    assert {r["class"] for r in kept if r["round"] == "yw"} == {"console-head-only", "css-rules", "words"}
+    assert gate.split_round_new(rows, ["identity"]) == (rows, []), "不帶 --new yiwen：一列都不動"
+    assert gate.split_round_new(rows, []) == (rows, [])
+    assert gate.ROUND_PACKAGE == {"yw": "yiwen"} and "yw" in gate.ROUNDS and (TOOL / "flows" / "yw.mjs").exists()
+
+
+def test_a_skipped_round_and_the_listed_rows_are_in_the_report(tmp_path):
+    gate = _load("gate")
+    skip = "yw: 這一邊走不了：base no tianxia/features/yiwen/writer.py"
+    gate.write_report(str(tmp_path), {"base": "a", "head": "b", "green": True, "exit": 0, "rounds": [], "rounds_why": "every round left was skipped", "skipped": [skip]}, {})
+    lines = (tmp_path / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert "NOTHING TO WALK (exit 0)" in lines[0] and f"SKIPPED {skip}" in lines
+    summary = {"base": "a", "head": "b", "green": True, "exit": 0, "rounds": ["main"], "scenes": 1, "shots": 1, "same_shots": 1, "seconds": 1, "noise": {}, "fingerprint": {},
+               "replay": {}, "tool": [], "real": [], "expected": [], "must_reach_quick_missing": [], "not_reached": [], "skipped": [skip],
+               "new_rows": [{"round": "yw", "scene": "010_yw_wait", "class": "pixel", "detail": {"file": "010_yw_wait__375-light.png"}}]}
+    gate.write_report(str(tmp_path), summary, {})
+    lines = (tmp_path / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert f"SKIPPED {skip}" in lines and any(x.startswith("NEW yw:010_yw_wait pixel ") for x in lines)
+
+
+def test_the_yw_padding_mutation_touches_the_meeting_card_only(tmp_path):
+    gate = _load("gate")
+    web = tmp_path / "web"
+    web.mkdir()
+    css = "/* a */\n.yw-wrap { position: fixed; }\n.yw-card { box-sizing: border-box; padding: 0 16px; }\n.yw-card p { margin: 0; }\n"
+    (web / "yiwen.css").write_text(css, encoding="utf-8", newline="")
+    gate.mutate(str(tmp_path), gate.YW_PADDING)
+    got = (web / "yiwen.css").read_text(encoding="utf-8")
+    assert got == css.replace("padding: 0 16px; }", "padding: 0 16px;  padding: 31px 23px; }")
+    assert "\n.yw-card {" in (ROOT / "web" / "yiwen.css").read_text(encoding="utf-8"), "撞見卡的規則換了寫法，突變要跟著換"
+    (web / "yiwen.css").write_text("/* nothing */\n", encoding="utf-8")
+    with pytest.raises(gate.ToolBroke):
+        gate.mutate(str(tmp_path), gate.YW_PADDING)
+
+
+def test_only_the_yw_round_turns_the_strange_tales_on_and_its_patch_targets_are_there():
+    text = (TOOL / "serve.py").read_text(encoding="utf-8")
+    assert 'YW = os.environ.get("QA_ROUND") == "yw"' in text
+    block = text.split("if YW:", 1)[1].split("\nfrom fastapi", 1)[0]
+    assert "_yw.enabled, _yw.discover_chance, _yw.rewalk_chance = True, 1.0, 1.0" in block
+    assert text.count("if YW:") == 2, "改設定與 /__qa/py 的 hold 都只在 yw 回合"
+    from tianxia.features.yiwen import routes, writer
+
+    assert callable(writer.write_scene) and "writer.write_scene(" in (ROOT / "tianxia" / "features" / "yiwen" / "routes.py").read_text(encoding="utf-8"), "routes 照模組屬性叫寫幕，閘才包得到"
+    assert "shell.screen_text(" in (ROOT / "tianxia" / "features" / "yiwen" / "routes.py").read_text(encoding="utf-8") and "screen_text" in _names_in(ROOT / "server.py")
+    from tianxia.core.tuning.yiwen import YiwenTuning
+
+    assert {"enabled", "discover_chance", "rewalk_chance"} <= set(YiwenTuning.model_fields)
+    flow = (TOOL / "flows" / "yw.mjs").read_text(encoding="utf-8")
+    bad = re.search(r'YW_BAD_WORDS = "([^"]+)"', text).group(1)
+    assert f'const BAD = "{bad}"' in flow, "走查送的那一句要等於假的審字認的那一句"
+    from tianxia.content import load_content
+    from tianxia.features.yiwen import rules as yw_rules
+
+    content = load_content(ROOT / "content", "season21")
+    assert yw_rules.typed_problem(bad, content, content.config.yiwen) is None, "那一句要過得了 A 段，才會走到審字"
+    assert routes is not None
+
+
+def test_the_yw_scenes_are_in_must_reach():
+    rows = (TOOL / "must_reach.txt").read_text(encoding="utf-8").splitlines()
+    flow = (TOOL / "flows" / "yw.mjs").read_text(encoding="utf-8")
+    shot = set(re.findall(r'"(yw_[a-z0-9_]+)"', flow)) - {"yw_out", "yw_walk", "yw_trail"}
+    assert shot and {line.split(":", 1)[1] for line in rows if line.startswith("yw:")} == shot
