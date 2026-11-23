@@ -221,3 +221,100 @@ def test_default_settings_show_an_old_consent_the_ask_layer_with_later(tmp_path)
     out = run(DEFAULT_DRIVER, {"terms": str(WEB / "terms.js"), "status": status})
     assert 'data-terms="later"' in out["html"] and status["deadline"] in out["html"]
     assert UPDATE_LEAD not in out["html"] and out["source"] == "update"
+
+
+# 第 255 批：分頁開著的時候才變成「必須同意」的人，殼 api() 把伺服器 403 的那一句（terms_base.GATE_NEED）跳成吐司；
+# terms.js 看 #toast，字裡有「條款」、人在遊戲裡、同意層沒開、離上一次重問滿 5 秒，就放掉 termsAsked、重問 /api/terms 照回來的畫
+REASK_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+function load(text, stage, reply, layerOpen) {
+  const fetched = [];
+  const st = { inserted: "", layer: layerOpen ? { addEventListener() {}, remove() { st.layer = null; } } : null };
+  const document = {
+    querySelectorAll: () => [],
+    getElementById: (id) => (id === "toast" ? { textContent: text } : null),
+    querySelector: (sel) => (sel === ".terms-layer" ? st.layer : null),
+    body: { insertAdjacentHTML: (where, html) => { st.inserted += html; st.layer = { addEventListener() {}, remove() { st.layer = null; } }; } },
+  };
+  const fetch = (url) => { fetched.push(url); return reply(url); };
+  const kit = new Function("document", "fetch", "S", tSrc + "\nreturn { termsOnToast, termsShouldReask };")(document, fetch, { stage });
+  return { kit, fetched, st };
+}
+const reply = (body) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+const must = { need: "must", version: "v2", email: "a@b.c", summary: [] };
+const tick = () => new Promise((r) => setTimeout(r, 5));
+async function main() {
+  const out = {};
+  const gate = input.gate;
+  const a = load(gate, "game", reply(must), false);
+  a.kit.termsOnToast();
+  await tick();
+  out.must = { fetched: [...a.fetched], drawn: a.st.inserted.includes("terms-layer"), later: a.st.inserted.includes('data-terms="later"') };
+  a.st.layer = null; // 按了同意、層收掉
+  a.kit.termsOnToast(); // 吐司馬上又跳一次：5 秒內不再打
+  await tick();
+  out.must.again = [...a.fetched];
+  const b = load("體力不夠了。", "game", reply(must), false);
+  b.kit.termsOnToast();
+  await tick();
+  out.other = b.fetched;
+  const c = load(gate, "game", reply({ need: "" }), false);
+  c.kit.termsOnToast();
+  await tick();
+  out.none = { fetched: c.fetched, inserted: c.st.inserted };
+  const d = load(gate, "login", reply(must), false);
+  d.kit.termsOnToast();
+  await tick();
+  out.notGame = d.fetched;
+  const e = load(gate, "game", reply(must), true);
+  e.kit.termsOnToast();
+  await tick();
+  out.layerOpen = e.fetched;
+  const f = load(gate, "game", () => Promise.reject(new Error("offline")), false);
+  f.kit.termsOnToast();
+  await tick();
+  out.down = { fetched: f.fetched, inserted: f.st.inserted };
+  const q = (o) => a.kit.termsShouldReask({ text: gate, inGame: true, layerOpen: false, now: 10000, last: 0, ...o });
+  out.table = [
+    q({}), q({ text: "體力不夠了。" }), q({ inGame: false }), q({ layerOpen: true }),
+    q({ now: 14999, last: 10000 }), q({ now: 15000, last: 10000 }), q({ text: "" }), q({ text: null }),
+  ];
+  return out;
+}
+finish(main());
+"""
+
+
+def _reask():
+    from tianxia.core import terms_base
+
+    return run(REASK_DRIVER, {"terms": str(WEB / "terms.js"), "gate": terms_base.GATE_NEED})
+
+
+def test_gate_line_keeps_the_word_terms_js_watches_for():
+    from tianxia.core import terms_base
+
+    assert "條款" in terms_base.GATE_NEED, "web/terms.js 靠這兩個字認出被擋的那一句，潤字時留著，或兩邊一起改"
+
+
+def test_blocked_toast_reasks_and_draws_the_layer_once():
+    out = _reask()
+    assert out["must"] == {"fetched": ["/api/terms"], "drawn": True, "later": False, "again": ["/api/terms"]}  # 拿掉重問就是空的
+
+
+def test_other_toasts_and_states_do_not_reask():
+    out = _reask()
+    assert out["other"] == [] and out["notGame"] == [] and out["layerOpen"] == []
+    assert out["none"] == {"fetched": ["/api/terms"], "inserted": ""}  # 別的分頁按過同意：問了、什麼都不畫
+    assert out["down"] == {"fetched": ["/api/terms"], "inserted": ""}  # 斷線：照舊下一次再問
+
+
+def test_should_reask_table():
+    assert _reask()["table"] == [True, False, False, False, False, True, False, False]
+
+
+def test_toast_is_observed():
+    """node 沒有 MutationObserver，觀察那一段跑不到：掃原始碼守住接線，免得接線被拿掉測試還綠。"""
+    text = (WEB / "terms.js").read_text(encoding="utf-8")
+    watch = text[text.index('if (typeof MutationObserver !== "undefined"'):]
+    assert 'document.getElementById("toast")' in watch and "termsOnToast()" in watch

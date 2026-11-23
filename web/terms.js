@@ -26,6 +26,11 @@
   };
   let termsAsked = false; // 這一次登入問過 /api/terms 了（登出、回到登入頁就重來）
   let termsBusy = false;
+  // 第 255 批：分頁開著的時候才變成「必須同意」的人（新版條款部署時沒關分頁、update_must 被打開、同意紀錄不見），伺服器擋下的那一句
+  // （terms_base.GATE_NEED）殼 api() 跳成吐司；看 #toast，字裡有「條款」、人在遊戲裡、同意層沒開，就重問一次 /api/terms。
+  // 連著跳的吐司隔 5 秒才再問（不連打）；斷線照 termsCheck 舊寫法下一次再問。靠「條款」兩個字認，包的測試守 GATE_NEED 留著這兩個字
+  const TERMS_REASK_GAP_MS = 5000;
+  let termsReaskAt = 0; // 上一次因吐司重問的時刻
 
   // ── 第 206 批：註冊的兩個勾選 ──
   // 插在註冊模式的 #gate-form（有「再輸入一次密碼」那一格才是註冊）與 identity 建角色那一張（#idp-create-form）的 .form-msg 前面；
@@ -200,12 +205,36 @@
     if (!termsAsked) termsCheck();
   }
 
+  function termsShouldReask({ text, inGame, layerOpen, now, last }) {
+    return String(text ?? "").includes("條款") && !!inGame && !layerOpen && now - last >= TERMS_REASK_GAP_MS;
+  }
+
+  function termsOnToast() {
+    const el = document.getElementById("toast");
+    const now = Date.now();
+    const inGame = typeof S !== "undefined" && S.stage === "game";
+    const layerOpen = !!document.querySelector(".terms-layer");
+    if (!termsShouldReask({ text: el && el.textContent, inGame, layerOpen, now, last: termsReaskAt })) return;
+    termsReaskAt = now;
+    termsAsked = false;
+    termsCheck();
+  }
+
   let termsQueued = false;
+  let termsToastQueued = false;
   if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") { // 網頁測試的 node 沒有 DOM：不看
     new MutationObserver(() => {
       if (termsQueued) return;
       termsQueued = true;
       queueMicrotask(() => { termsQueued = false; termsWatch(); });
     }).observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
+    const termsToastEl = document.getElementById("toast"); // 第 255 批：殼的吐司（index.html 固定的元素，在 #app 外面）
+    if (termsToastEl) {
+      new MutationObserver(() => {
+        if (termsToastQueued) return;
+        termsToastQueued = true;
+        queueMicrotask(() => { termsToastQueued = false; termsOnToast(); });
+      }).observe(termsToastEl, { childList: true, characterData: true, subtree: true });
+    }
     document.addEventListener("submit", termsBlockSubmit, true); // 第 206 批：capture，先於 app.js 的 submit 鏈
   }
