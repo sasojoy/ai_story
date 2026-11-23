@@ -1,8 +1,13 @@
 """帳號綁定第 259 批：identity 打開之前就登入的 session（旁檔 session_auth 沒有那一列），重新驗證要真的記上。
-密碼重驗沒有那一列時補一列（method=password），第三方與驗證碼的重驗補的是這次驗的那一種；本來就有那一列的照舊。"""
+密碼重驗沒有那一列時補一列（method=password），第三方與驗證碼的重驗補的是這次驗的那一種；本來就有那一列的照舊。
+第 267 批補第三方回呼（auth=reauth）那一條：(f) 回呼的身分就是這個帳號的才補列，(g) 別人的或沒人綁過的回 fail、不補。"""
 from __future__ import annotations
 
+from urllib.parse import parse_qs, urlsplit
+
+import pytest
 from fastapi.testclient import TestClient
+from test_identity_login import _callback, _fake_idp
 from test_identity_server import fresh_server, key_file  # noqa: F401  fresh_server 是 autouse
 from test_identity_session import (  # noqa: F401
     bind, clock, error, on, register, send, side_rows, token_of, verify,
@@ -110,3 +115,59 @@ def test_e_existing_row_is_untouched_but_verified(clock, monkeypatch):
     assert _reauth(c).status_code == 200
     assert identity_base.session_auth(token) == {"method": "password", "at": start["at"],
                                                  "verified": clock.now, "verified_by": "password"}
+
+
+def _open(c, seen, purpose, provider="line"):
+    """開一張第三方的單（purpose 是 bind／reauth），把這次的 nonce 寫進 seen；回 state。"""
+    r = c.post("/api/identity/start", json={"provider": provider, "purpose": purpose})
+    assert r.status_code == 200, r.text
+    q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["url"]).query).items()}
+    seen["nonce"], seen["provider"] = q["nonce"], provider
+    return q["state"]
+
+
+def _back(c, state, provider="line"):
+    return _callback(c, provider, state=state, code="x").headers["location"]
+
+
+# ── (f) 第三方回呼的重驗補的列是那一種（不是 password）：客服、管理者權限照舊假；之後綁別的方式過得了近期驗證 ──
+
+def test_f_oauth_reauth_seeds_its_own_kind(clock, monkeypatch):
+    seen = _fake_idp(monkeypatch, sub="U-f1")
+    c = _off_then_on(monkeypatch)
+    assert _reauth(c).status_code == 200  # 綁定本身要近期驗證：先密碼重驗（第 259 批修好的路）
+    assert _back(c, _open(c, seen, "bind")) == "/?auth=bound"
+    side_rows("DELETE FROM session_auth")  # 旁檔漏了這一列
+    token = token_of(c)
+    assert identity_base.session_auth(token) is None
+    clock.now += server.CONTENT.config.identity.recent_seconds + 1  # 近期驗證只能靠這次第三方重驗
+    assert error(send(c, purpose="bind")) == binding.NEED_RECENT  # 重驗前被擋
+    assert _back(c, _open(c, seen, "reauth")) == "/?auth=reauth"
+    auth = identity_base.session_auth(token)
+    assert auth == {"method": "line", "at": clock.now, "verified": clock.now, "verified_by": "line"}
+    assert identity_base.staff_session_ok(None, server.CONTENT, token, clock.now) is False
+    assert identity_base.admin_session_ok(server.CONTENT, token, lambda: clock.now) is False
+    assert bind(c).status_code == 200
+
+
+# ── (g) 反向：回呼回來的第三方身分是別的帳號的、或沒人綁過 → 回 fail、不補列，之後綁定照樣被擋 ──
+
+@pytest.mark.parametrize("whose", ["other", "nobody"])
+def test_g_oauth_reauth_with_someone_elses_way_seeds_nothing(clock, monkeypatch, whose):
+    seen = _fake_idp(monkeypatch, sub="U-g1")
+    c = TestClient(server.app)
+    register(c, name="沈青衫")  # identity 開著註冊：有那一列、剛登入算近期（不靠補列，突變掉補列這半照樣走得下去）
+    assert _back(c, _open(c, seen, "bind")) == "/?auth=bound"
+    if whose == "other":
+        o = TestClient(server.app)
+        register(o, "li_02", name="李白衣")
+        seen2 = _fake_idp(monkeypatch, sub="U-g2")
+        assert _back(o, _open(o, seen2, "bind")) == "/?auth=bound"  # 李白衣綁了 U-g2
+    else:
+        seen2 = _fake_idp(monkeypatch, sub="U-g9")  # 沒人綁過
+    side_rows("DELETE FROM session_auth")
+    token = token_of(c)
+    clock.now += server.CONTENT.config.identity.recent_seconds + 1
+    assert _back(c, _open(c, seen2, "reauth")) == "/?auth=fail"
+    assert identity_base.session_auth(token) is None
+    assert error(send(c, purpose="bind")) == binding.NEED_RECENT
