@@ -476,9 +476,15 @@ def _flat(text: str) -> str:
     return speech.squash(unicodedata.normalize("NFKC", text).casefold())
 
 
+# 第 264 批③（設計 5.4 第 6 條）：明擺著是遊戲外的詞，自己說那一格先擋。不收會擋到故事話的：「加滿」（把酒加滿）、
+# 「加點」（再加點柴火）、「元寶」（銀元寶）、「銀子」「寶物」（設計：錢財寶物不擋）、「體質」「根基」「灌頂」。
+ASK_WORDS = ("等級", "升級", "滿級", "屬性", "數值", "經驗值", "獎勵", "儲值", "月卡")
+
+
 def typed_problem(text: str, content, tuning) -> str | None:
     """自己說的五道擋的前四道（設計 5.4；第五道審字在 B 段）：空的、太長、字表（MOTTO：另擋網址、聯絡方式、六位以上的數字）、
-    身分字（name_base.staff_like＋typed_staff_extra，全形半形、大小寫、夾空白都一樣）、禁用名單（Config.banned_names_on 開著才擋）。
+    身分字（name_base.staff_like＋typed_staff_extra，全形半形、大小寫、夾空白都一樣）、禁用名單（Config.banned_names_on 開著才擋），
+    第 264 批起再加一道遊戲外的詞（ASK_WORDS：要等級、要數值、要獎勵；代碼 ask，放最後）。
     text 是 speech.clean 過的字。回代碼（呼叫端一律換成 refuse_typed 那一組，不說是哪一道擋的），合格回 None。"""
     if not text:
         return "empty"
@@ -491,4 +497,6 @@ def typed_problem(text: str, content, tuning) -> str | None:
         return "staff"
     if any(_flat(n) and _flat(n) in flat for n in content.banned_name_list()):
         return "banned"
+    if any(_flat(w) in flat for w in ASK_WORDS):  # 第 264 批③
+        return "ask"
     return None
