@@ -2026,6 +2026,140 @@ WAVES["AJ"] = dict(
 )
 
 
+# ── AK 波：四件不必企劃者決定的補強（PM 2026-11-23 排；企劃者 11/22「繼續」）：條款被擋當場重問 255、開帳號綁定前驗同意紀錄的鍵 257、走查自己的雜訊 258、網頁比對走得到異聞 256 ──
+# 兩條線互不相干（條款包；scripts/webqa），基準是 AJ 波落地後的 develop（256 要第 254 批的走查改動）；收尾一次合、一次驗。
+# 異聞三不在這一波：要等主機的真模型實測（PM 跟企劃者約時間）。
+AK_AG_RECORD = "docs/superpowers/plans/2026-11-23-波次AG紀錄.md"
+AK_AI_RECORD = "docs/superpowers/plans/2026-11-23-波次AI紀錄.md"
+AK_ENV = [
+    "- **環境（三批共用）**：起伺服器一律暫存資料庫、模型網址 127.0.0.1:9（絕不連 11434）、只用派工單給的埠（連臨時的靜態檔伺服器也是）、不碰 7861；跑 `same_behavior`、`webqa` 時環境裡不要有 `TIANXIA_DB`、`TIANXIA_SUPPORT`、`TIANXIA_PROFILE`；"
+    "不讀不寫任何 `.local/` 的檔（閘門結果夾 `.local/wave_gate/<head8>/` 只准讀）；任何輸出、截圖、報告都不能分得出誰是假人。這台同時有另一條線在跑：重的東西（整回合走查、全軌比對）跑一次就好。"
+    "解 `git archive` 用 Python 的 `tarfile`（Windows 的 tar 會弄壞中文檔名）；手動跑 `same_behavior.py run` 要帶 `PYTHONHASHSEED=0`；小腳本用檔案寫、不用 heredoc 或 `python -c`（會吃掉反斜線）。上面「計畫不超過 120 行」照舊，寫在 `plan` 那個路徑。"
+    "跑了 `same_behavior compare` 或 `selftest` 的，把它印的最後一行原樣貼進回報。這一批不做派工單沒寫的事，碰到了寫 leftovers。",
+]
+
+
+def b255():
+    plan = "docs/superpowers/plans/2026-11-23-條款-第255批.md"
+    return batch(255, "條款第 255 批：中途被伺服器擋下的人，不用重新整理就看到同意頁（只動條款包的 `web/terms.js`）", "terms", "dev/terms-reask-255", plan, "8551、8552", [
+        "- **起因**：第 249 批起，必須同意而沒同意現行版條款的帳號，不是 GET 的遊戲請求在殼 `server._game` 回 403，字是核心 `terms_base.GATE_NEED`。殼的 `api()`（`web/app.js`）把這一句用 toast 顯示。"
+        "但 `web/terms.js` 只在進遊戲那一刻問一次 `/api/terms`（`termsAsked`），之後不再問——所以分頁開著的時候才變成「必須同意」的人（例：新版條款部署時分頁沒關、`terms.update_must` 被打開、同意紀錄不見）只看到一句提示，要自己重新整理才看到同意層。經過在 `" + AK_AG_RECORD + "`（審查的 should 與 PM 的認定）。",
+        "- **要的行為**：人在遊戲裡、同意層沒開著，殼顯示了那一句擋下的話 → `terms.js` 重問一次 `/api/terms`、照回來的內容畫同意層（照現有的 `termsShow`，必須同意的不能關、考慮期的可以稍後再看）。按了同意、層收掉之後，剛才被擋的那顆鈕再按一次要成功。"
+        "伺服器回「不必同意」（剛好別的分頁按過了）就什麼都不畫。一次擋下只重問一次：toast 連著跳也不能連著打 `/api/terms`（設一個幾秒的間隔）；斷線照現有的寫法下一次再問。",
+        "- **只准動條款包**：`web/terms.js`（必要時 `web/terms.css`）、包的 `tests/`、包的 README、計畫檔。**不准動** `web/app.js`、`web/shell.js`、`web/main.js`、`web/index.html`、`server.py`、`tianxia/core/`、別的包；不准把 `window.fetch` 包一層、不准加定時輪詢。"
+        "PM 建議的做法（你找到更乾淨、同樣只在包裡的訊號可以換，寫進計畫說明為什麼）：`#toast` 在 `index.html` 裡是固定的元素、在 `#app` 外面——`terms.js` 本來就靠 `MutationObserver` 看 `#app`，再看一個 `#toast`：它顯示出字、字裡有「條款」兩個字、人在遊戲裡、同意層沒開，就把 `termsAsked` 放掉並叫 `termsCheck()`。"
+        "用「條款」兩個字認而不是整句比對，因為 `GATE_NEED` 還標著待 joy 潤；所以在包的測試加一條：`\"條款\" in terms_base.GATE_NEED`，失敗訊息寫明「`web/terms.js` 靠這兩個字認出被擋的那一句，潤字時留著，或兩邊一起改」。"
+        "**真的非動殼不可**（例：toast 的字拿不到）：停下，把理由與要動哪一行寫進 stopped，不要自己動——動殼要企劃者或 Joy 點頭。",
+        "- **測試**：照包裡 `test_terms_web.py` 現有的做法補（node 那個網頁測試的環境沒有 DOM 時，把「要不要重問」拆成一個純函式來測）；至少一條「把重問那一段拿掉就紅」的測試。",
+        "- **實機看一次（必做，測試看不到真的瀏覽器）**：用給你的埠起一個本機伺服器（暫存資料庫；設定用 `week7` 或 `season21`，條款在那兩份設定開著），在瀏覽器裡註冊、進遊戲；"
+        "然後**不要重新整理頁面**，把這個帳號弄成「必須同意而沒同意」——照程式實際的判斷造（例：停掉伺服器、在你那個暫存的 `<db>-terms.sqlite` 裡把這個帳號的同意紀錄拿掉、再用同一個埠開回來；`_Hook` 有快取，所以要重開）。回到那個沒重新整理的分頁按一個會改東西的鈕："
+        "要看到那一句提示**而且同意層當場出現**；按同意 → 層收掉 → 同一顆鈕再按成功。375 寬淺色、深色各截一張（同意層出現的那一刻），量同意鈕的大小（不小於 44px）、沒有橫向捲動。截圖放你的暫存夾，路徑寫進回報。"
+        "也看一次沒被擋的平常情形：別的 toast（字裡沒有「條款」）不會多打 `/api/terms`（看網路請求）。",
+        "- **比對**：只動 `web/` 的檔，`same_behavior` 不用跑。網頁比對由波末閘門走（`web/terms.js` 每一回合都走得到，閘門會全走），你不用跑整趟；想先看可以只跑一回合最小的。",
+        "- **不做**：改 `GATE_NEED` 的字、改伺服器擋的範圍、回到分頁時主動重問（另一件事，寫 leftovers 就好）；資料庫第 9 版不動。沒有新寫給玩家看的字（有就列 new_strings、旁註待 joy 潤）。時間上限兩段合計 2.5 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+def b257():
+    plan = "docs/superpowers/plans/2026-11-23-條款-第257批.md"
+    return batch(257, "條款第 257 批：帳號綁定（identity）開著時，同意紀錄的鍵對不對得上伺服器擋的那個鍵——先用測試釘住，對不上就停下回報", "terms", "dev/terms-reask-255", plan, "8553、8554", [
+        "- **接在第 255 批後面、同一條分支**。這一批先查、先寫測試；**程式能不能改看查到什麼**（見下面③）。",
+        "- **起因**：AG 波（第 249 批）留下的一句——「identity 開著時，session 的帳號鍵（`id:<n>`）和註冊時記同意用的鍵可能對不上，留給開 identity 那一批驗」（`" + AK_AG_RECORD + "`）。"
+        "identity 現在每一種設定都關著（要主機先放金鑰才開）；但真的對不上的話，打開那一天每一個人都會被第 249 批的擋擋在外面，所以現在就用測試釘住。",
+        "- **①先讀再說**（寫進計畫）：`tianxia/accounts.py`（`AccountStore.get` 回的鍵什麼時候是登入名、什麼時候是 `id:<n>`；綁定之後鍵會不會變）、`server.py` 的 `_game`（傳給 `terms_base.gate_problem` 的 `key` 從哪來）、`tianxia/core/terms_base.py`、條款包的 `routes.py`（`_Hook` 的 `must`、`record`、快取）、`store.py`、`rules.py`、`audit.py`，"
+        "identity 包建角色那一步怎麼開帳號、怎麼叫 `terms_base` 記 `source=register`（記在哪個鍵上）、綁定與解綁會不會改帳號的鍵。把「每一條會記同意的路記在哪個鍵、每一條會查同意的路用哪個鍵查」列成一張表。",
+        "- **②測試**（放條款包的 `tests/`；邊界測試不准包的測試碰別包的話改放 `tests/server/`，檔名全 repo 不能重複；identity 用它測試裡現成的假服務 `fake_services` 打開，不需要任何金鑰、不讀 `.local/`）：每一條都走真的路由（`server` 的測試用戶端），斷言「同意過現行版的人，會改東西的請求不是 403」："
+        "(a) identity 開著，從 identity 的建角色那條路新開的帳號（兩個勾選都勾）→ 進遊戲按一個會改東西的鈕；"
+        "(b) identity 還關著時用舊的 `/api/register` 註冊並同意的帳號，之後 identity 打開、用密碼登入；"
+        "(c) (b) 那種帳號再去綁定（綁手機或 Email，照 identity 測試現成的走法）之後——鍵若變了，同意紀錄跟不跟得上；解綁之後同上；"
+        "(d) identity 開著、登入後在同意層按同意（`/api/terms/agree`）的人；"
+        "(e) 反過來：沒同意過的人在 (a)～(d) 每一種鍵的形狀下都確實被擋（403、字是 `GATE_NEED`），不是因為鍵對不上而全部放行。"
+        "每一條的說明寫它守哪一格（上面那張表的哪一列）。",
+        "- **③查到對不上怎麼辦**：對得上（測試全綠）→ 這一批就是只加測試，回報寫「對得上」與那張表。"
+        "對不上 → **修法只在條款包裡**（`tianxia/features/terms/`）的可以直接修（例：記與查統一成同一種鍵、查的時候兩種鍵都認），修完上面的測試要綠，並且照規矩跑比對（`scripts/same_behavior.py compare`，三種設定，至少 `ALWAYS_TRACKS` 加 `doorstep`、`charter`；identity 關著的現況要一個字都不變）；"
+        "要動 `tianxia/core/`、`server.py`、`accounts.py`、identity 包或資料（搬舊紀錄）才修得了 → **停下**，把先紅的測試留著（標 `xfail(strict=True)`、理由寫清楚）、把查到的與建議的修法寫進 stopped，交 PM 去問企劃者。",
+        "- **順手一件**：`scripts/list_terms_must.py`（唯讀查帳，`audit.py`）在 identity 開著的資料上列出來的人，跟伺服器實際會擋的人是不是同一批——在 (a)～(e) 造出來的那個暫存資料庫上各比一次，寫進測試或回報。",
+        "- **驗**：條款包的 `tests/` 全過；`scripts/test_for.py` 挑的跑過；契約與邊界照舊綠（包不准 import 別包：測試要用 identity 的東西照現有測試的做法，別在 `tianxia/features/terms/*.py` 的程式裡 import）。",
+        "- **不做**：打開 identity、改任何設定覆寫檔、碰金鑰或 `.local/`、改條款的字與版號、資料庫第 9 版不動。沒有新寫給玩家看的字。時間上限兩段合計 3 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+def b258():
+    plan = "docs/superpowers/plans/2026-11-23-工具批-第258批.md"
+    gate_web = r"C:\Ray\專案\天下大勢\.local\wave_gate\d782ecca\web"
+    return batch(258, "工具批第 258 批：走查自己的雜訊——直捲軸在一景中途才翻面（`bd_given` 1280）不再報成真差異；補 selftest 的對照與第 254 批的兩條小尾巴", "core_shared", "dev/tools-walk-256", plan, "8555～8562", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動。這一批排在第 256 批前面、同一條分支。",
+        "- **起因（PM 查證過的事實）**：AJ 波的閘門（base `f084bfe76`、head `d782eccad`）網頁比對紅了三行，都是 main 回合 `092_bd_given`（宛城懸賞榜交差之後）1280 寬：style 一行（BODY 寬 1280px 對 1265px 等八個 used 值）、`__1280__s1.png` 與 `__s2.png` 兩張各 185,612 個像素（整塊往旁邊移了半條捲軸）；**第一張 `__1280.png` 兩邊一樣**，三行行尾都寫 `fingerprint same`。"
+        "那一波 base 到 head 只改了 `scripts/webqa/`、測試、README 與文件——兩邊解出來的程式、`web/`、內容一個位元組都一樣，而且兩邊都是 head 那一份工具在走，所以這是同一份東西自己對自己的差。"
+        "PM 讀程式的判斷（你要自己證實或推翻）：`driver.mjs` 的 `fixGutter` 與 `facts.layout[v[0]] = await ev(LAYOUT)` 都在拍第一張之前；`compare.py` 用那一刻的 `sw` 判「捲軸只落在一邊」（`noise.scrollbar_flip`、`pixel_class` 的 gutter）。"
+        "這一景的 15px 直捲軸是在**第一張之後**（捲店面裡的捲動區、拍 s1、s2 的那段時間）才在其中一邊出現或消失的——兩邊開頭的 `sw` 一樣，所以不歸 gutter，樣式與像素都落成 REAL。"
+        "材料（只讀）：`" + gate_web + r"\report.txt`、`summary.json`、`red\`。這一景以前也鬧過別的（第 113 批：交差章 1400 ms 的計時，`flows/main.mjs` 第 341 行附近的旁註）。",
+        "- **①先重現、找原因**（寫進計畫，附證據）：同一筆程式自己對自己走 main 回合裡含 `bd_given` 的那一段（`--only` 挑流程，照 `flows/main.mjs` 找它在哪一段、前面要哪幾段留下的狀態）幾次，看 1280 那一輪第一張之後 `sw`／`cw` 什麼時候變、是哪一邊多了或少了捲軸、跟那個 1400 ms 的計時或捲動有沒有關係。重現不出來就照實寫試了幾次、怎麼試的，仍然做②的判法（那是讀程式就站得住的洞）。",
+        "- **②改法**：優先修拍法（例：拍完捲動的那幾張之後再量一次，發現跟第一張之前不一樣就照 `fixGutter` 的做法把這個視窗重拍一輪，次數有上限）；拍法修不了的才動判法——"
+        "讓 `compare.py` 也拿到「這個視窗拍完之後」的 `sw`／`cw`（`driver.mjs` 多記一次），兩邊在**同一個時點**的寬差 15、非手機寬、DOM 一樣、樣式只差 used 值（`noise.used_only` 帶 flip）、不 `unstable` 時，那個視窗的樣式列與像素列才歸 gutter。"
+        "**不准做的**：放寬 aa 門檻、列景名或檔名白名單、把 DOM 有差或樣式有非 used 值差的也收進來、讓「兩邊捲軸狀態一樣但畫面真的移了 15px」變綠（例：一條規則把 `.shell` 的 margin 改了 15px——寫成一個突變或測試證明照樣紅）。",
+        "- **③第 254 批審查留下的三件**：(a) `selftest.py` 在現在的工具上完整跑一次（每一列），結果表貼進回報；哪一列紅，照實寫紅的是什麼（已知的偶發：c 回合 `bt_watch_shut` 375 淺色 713 px、行尾 `fingerprint same`）。`pkg-css` 不在 selftest 的表裡：單獨用 `gate.py --mutate pkg-css` 跑一次（不帶 `--new` 要紅、帶 `--new identity` 列成 NEW 不紅），寫進回報。"
+        "(b) `snippets.mjs` 的 `FLIPPED`：1000 ms 之後不管 dpr 有沒有換成都放行、於是「沒畫出來」那一行 log 幾乎不會出現——改成 dpr 沒換成就回 -1（或把逾時的那一路寫清楚），`driver.mjs` 的 log 照實；`sameWindow =(` 少的空格順手補。"
+        "(c) `tests/web/test_webqa.py::test_a_window_set_twice_in_a_row_is_flipped_first` 用整行字串比對 `driver.mjs`——改成守行為的寫法（做得到的範圍內：例如只認 `sameWindow(` 在 `setView(v, d)` 之前被叫到），做不到就留著並在測試說明寫為什麼。",
+        "- **④可以試、不強求（最多花 1.5 小時）**：c 回合 `bt_watch_shut` 375 淺色那個偶發像素差（第 254 批壓到約六趟一趟，沒找到是什麼決定落在哪一種畫法；它的計畫 `docs/superpowers/plans/2026-11-23-工具批-第254批.md` 寫了試過什麼、還值得試什麼）。"
+        "有把握不掉靈敏度的修法才收（`img-battle` 那一列照樣要紅；自己對自己至少 12 趟 0 紅才算修掉），沒有就原樣留著、把新試的寫進 leftovers。不准為了它停掉頁面的計時器或改 `web/`。",
+        "- **⑤驗**：`bd_given` 那一段自己對自己走 6 次（改前紅幾次照實寫；改後 0 REAL，或剩下的紅不是這一類）；②的反向證明紅；`tests/web/test_webqa.py` 全過、`scripts/test_for.py` 挑的跑過；`gate.py` 與 `noise.py` 檔頭的說明照改到的補（英文，照檔裡的口氣）。整趟八回合不要跑（波末閘門跑）。",
+        "- **不做**：第 256 批的事（新回合、`NOT_ON_TABLE`、覆蓋表）。沒有新寫給玩家看的字。時間上限兩段合計 4 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+def b256():
+    plan = "docs/superpowers/plans/2026-11-23-工具批-第256批.md"
+    return batch(256, "工具批第 256 批：網頁比對走得到異聞——新回合只把異聞打開，撞見卡、三幕、自己說、收尾卡都拍得到；`web/yiwen.*` 改了才有東西可比", "core_shared", "dev/tools-walk-256", plan, "8555～8562", [
+        "- **接在第 258 批後面、同一條分支**（258 先把走查自己的兩種雜訊收一收；你從它的最後一筆接著做）。",
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔；`docs/superpowers/pm-workflows/wave_gate.py` 只有在它自己寫死了回合名單或埠數、不改就走不到新回合時才動最少的幾行（寫進 decided）。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動。",
+        "- **起因**：異聞（包 `tianxia/features/yiwen/`，畫面 `web/yiwen.js`、`web/yiwen.css`）在每一種設定都關著，網頁比對沒有一個回合走得到它的畫面：`gate.NOT_ON_TABLE` 列著 `web/yiwen.js`，只改它的波閘門印「NOTHING TO WALK」。"
+        "AI 波 PM 只好另外把八回合全走一次——那也只證明別的畫面沒動，異聞自己的畫面沒有任何一張被比到，那一波的 blocker（「自己說」的輸入框被壓成 24px）是實機檢查才抓到的。經過在 `" + AK_AI_RECORD + "` 最後一節。異聞三、四還會大改這兩個檔。",
+        "- **①新回合**（名字你取，短的，例 `yw`；加進 `gate.ROUNDS`）：**只有這一回合的伺服器**把異聞打開，別的回合一個字不變（它們的指紋改前改後要一樣：挑一個最小的回合改前改後各走一次對指紋）。"
+        "怎麼打開：照 `serve.py` 現在對開場前導（intro）的做法，在那份解出來的程式載入內容之後、開季之前改記憶體裡的設定（`Config.yiwen.enabled`，開季才會蓋 `WorldState.yiwen_on` 的章），不改那份程式的檔。"
+        "撞見是探索時極低機率的一擲（接在 `BUS_ORDER[\"outing\"]` 最後一格、不碰 `Game.rng`）：**走真的路**——把撞見機率那個設定在記憶體裡調成必中（讀 `tianxia/core/tuning/yiwen.py` 與包的 `discover` 找是哪個數字），由走查按探索撞見；注意同一趟探索裡事件先出、會擋掉撞見（PM 實測新角色在城裡容易先撞到事件），挑一個走得到的地點與做法，照實寫。"
+        "真的走不到才在 `serve.py` 的 staging 路由加一格經包的公開函式放一張撞見卡，並在 decided 寫為什麼。模型照舊是死埠（127.0.0.1:9）：說書人兩次都失敗、存替身句，畫面是確定的。",
+        "- **②這一回合要拍到的**（每一景照別的回合的視窗：375 淺色、深色、1280……照 `driver.mjs` 現成的）：撞見卡（收著、打開）；按一顆猜法之後的第一幕、第二幕、第三幕與收尾卡；"
+        "「自己說」打開輸入框的樣子（打了字的狀態）、送出一句會被擋的字之後回的那一句、被擋滿之後那一格的樣子；第二個帳號撞見同一則（別人的則：照重放走、自己說那一格灰著）；探索頁與江湖頁上帶著進行中的則的樣子。"
+        "等待頁（三顆墨點與「停」）是一閃而過的：死埠幾乎立刻失敗——想辦法讓這一回合的寫幕停住、拍完再放行（例：`serve.py` 只在這一回合把寫幕那一步擋在一個由走查放行的閘上；不准改 `tianxia/` 與 `web/`），做不到寫 leftovers 說試了什麼。",
+        "- **③哪一邊沒有異聞怎麼辦**：base 或 head 那份程式沒有 `tianxia/features/yiwen/`、或沒有說書人那幾條路由（比 AI 波舊）→ 這一回合在報告寫一行「這一邊走不了：原因」、不算紅也不算工具壞（exit 0 的那種略過，`summary` 記下來）；兩邊都有才比。",
+        "- **④帶 `--new yiwen` 的波**（異聞自己的後續批，兩邊都有這一包、畫面本來就會變）：這一回合的差異**列成清單、不算紅**（照 `--new <包>` 現在對新包樣式的做法，印 NEW 那一類的行：哪一景、哪一種差）；"
+        "但 head 那一邊的 console 錯誤、頁面卡住、該走到的景沒走到（`must_reach`）照樣紅。**不帶 `--new yiwen` 的波**（別人動到殼或共用樣式）這一回合有差就是 REAL。這一段的判法寫純函式、補測試。",
+        "- **⑤表與自我測試**：`NOT_ON_TABLE` 拿掉 `web/yiwen.js`；`coverage.py build` 重建 `coverage.json`（重建前後別的檔的列有沒有變，逐列對，變了的寫進 decided 說明為什麼）；`must_reach.txt` 加這一回合的景；"
+        "`selftest.py` 加一列正對照：在 `web/yiwen.css` 改一條看得到的規則（例：撞見卡的 padding），不帶 `--new` 時這一回合要判 REAL。現有的每一列照舊（第 254 批留下的已知偶發：c 回合 `bt_watch_shut` 375 淺色 713 px，REAL 行尾寫 `fingerprint same`；`css-comment` 或 base 對 base 那一列若只紅在它，照實寫、不算你的）。",
+        "- **⑥驗**：(a) 同一筆程式自己對自己（base、head 都給你開工那一筆 develop）走新回合 3 次：0 REAL，每次的指紋一樣；(b) 上面的正對照紅；(c) 新回合走一次多久（目標 6 分鐘內，`ROUND_SECONDS` 不動）；"
+        "(d) `scripts/webqa/coverage.py check` 過；`tests/web/test_webqa.py` 全過、`scripts/test_for.py` 挑的跑過；(e) 截圖裡異聞的每一景你自己看一遍（挑 375 淺色那一組）：是真的那個畫面、不是錯誤頁或空白——把看到的列一張表（景名 → 畫面上有什麼）寫進回報。",
+        "- **不做**：改異聞的程式或畫面（看到畫面有問題寫 leftovers，附截圖路徑）；動 aa 門檻與雜訊判法；處理決戰倒數那個偶發像素差；整趟八回合不要跑超過一次。沒有新寫給玩家看的字。時間上限兩段合計 4.5 小時；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+AK_TERMS_LENS = dict(key="terms", text=(
+    "**第 255、257 批：條款包**。親自驗（解一份 head 到你的暫存夾，`TIANXIA_DB` 指到暫存檔，模型網址 127.0.0.1:9）："
+    "①第 255 批對 base 的 `git diff --stat`：只動 `web/terms.js`（與 `terms.css`）、條款包的 `tests/` 與 README、計畫檔；`web/app.js`、`shell.js`、`main.js`、`index.html`、`server.py`、`tianxia/core/` 沒動（動了就是 blocker，除非 stopped 寫明沒做）。沒有包 `fetch`、沒有定時輪詢。"
+    "②重問的條件逐個分支看：只在人在遊戲裡、同意層沒開、殼顯示了擋下那一句時才問；有間隔、toast 連跳不會連打；別的 toast 不觸發；`termsAsked` 的狀態不會卡在永遠不問或一直問。把重問那一段拿掉，包的測試要有一條紅（自己試一次）。`\"條款\" in GATE_NEED` 那一條在。"
+    "③實機證據：回報裡有沒有「沒重新整理、被擋當場出現同意層、同意後同一顆鈕成功」的截圖與量到的尺寸；沒有就是 should。截圖你自己打開看（淺色、深色）：同意層蓋住畫面、字讀得到、鈕不小於 44px。"
+    "④第 257 批：那張「記在哪個鍵、用哪個鍵查」的表對得上程式（抽三格自己對）；(a)～(e) 每一條走的是真的路由、不是直接叫內部函式；(e) 反向那幾條真的會擋（把 `server._game` 那一行擋拿掉跑一次，要紅）。"
+    "開發說「對得上」：挑 (c) 綁定後那一格自己再走一次。開發說「對不上」而且修了：修法只在條款包裡、identity 關著時行為一個字不變（看他貼的 compare 最後一行）；要動核心或殼的他有沒有照規矩停下。"
+    "⑤任何輸出、測試名、註解沒有一處分得出誰是假人；沒有碰 `.local/`、金鑰、設定覆寫檔。"
+))
+AK_TOOL_LENS = dict(key="tools", text=(
+    "**第 258 批**：①只動 `scripts/webqa/` 與它的測試；aa 門檻沒動、沒有白名單。②新的 gutter 判法（或拍法）只收「兩邊在同一個時點的寬差 15、DOM 一樣、樣式只差 used 值、不 unstable」；兩邊捲軸狀態一樣而畫面真的移了 15px 的照樣紅（開發的反向證明在不在，自己讀那個分支）。重拍有上限、重拍之間沒有點擊與請求。③selftest 完整跑過一次的表在不在、`pkg-css` 兩種各跑過；`FLIPPED` 逾時那一路現在說得通。"
+    "**第 256 批：網頁比對的新回合**。逐條對（讀程式為主；新回合可以自己走一次，別的回合不要重跑）："
+    "①對 base 的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔（與說明過的 `wave_gate.py` 幾行）。"
+    "②別的回合真的沒被碰到：異聞只在新回合的伺服器打開（看 `serve.py` 怎麼收這個參數、`gate.py` 怎麼只傳給這一回合）；開發有沒有貼別的回合改前改後指紋一樣的證據。"
+    "③走的是真的路（探索撞見）還是後門；用了後門的理由站不站得住。機率調成必中是改記憶體裡的設定、不是改那份程式的檔。"
+    "④略過與 `--new` 的判法：一邊沒有異聞時是記一行略過、不是靜靜當成綠（報告與 `summary` 都看得到）；帶 `--new yiwen` 時畫面差列成清單不紅，但 console 錯誤、頁面卡住、`must_reach` 沒走到照樣紅；不帶時有差就紅——三種各有測試。"
+    "⑤靈敏度：`web/yiwen.css` 的正對照會紅；aa 門檻沒動、沒有景名白名單。⑥開發列的「景名 → 畫面上有什麼」表：挑四景（撞見卡、第一幕、自己說被擋、收尾卡）自己打開 375 淺色的圖看，是不是真的那個畫面。"
+    "⑦新回合自己對自己 3 次 0 REAL 的證據在不在；走一次的時間。⑧輸出、截圖、報告裡沒有任何一處分得出誰是假人。"
+))
+WAVES["AK"] = dict(
+    round2=True,
+    extra_lenses=[AK_TERMS_LENS, AK_TOOL_LENS],
+    lines=[dict(name="條款補強", batches=[b255, b257]), dict(name="走查工具", batches=[b258, b256])],
+    merge_port=8563, fix_port=8564,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
