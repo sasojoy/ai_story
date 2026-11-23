@@ -139,25 +139,26 @@ def test_b_old_register_then_identity_on_password_login_passes(clock, monkeypatc
 
 def test_c_bind_and_unbind_keep_the_key(clock, monkeypatch):
     """K1：(b) 那種帳號（R1 記小寫名）綁手機 → 鍵不變、不擋；Q3 用手機登入（login_key 回小寫名）→ 不擋；
-    再綁 Email、解綁手機 → 鍵不變、不擋。A1：沒有人被列。"""
+    再綁 Email、解綁手機 → 鍵不變、不擋。A1：沒有人被列。
+    打開那一天已登入的人走密碼重新驗證（第 259 批）再綁，全程在打開前就登入的那一台上做。"""
     _terms(monkeypatch)
     _identity(monkeypatch, False)
     old = TestClient(server.app)
     key = _register(old, "shen_c1", "沈青衫")
     _identity(monkeypatch, True)
-    c = _pw_login("shen_c1")  # 綁要近期驗證：identity 打開前的 session 沒有 session_auth，換一台剛登入的
-    assert bind(c, "0912000003").status_code == 200
-    assert _key(c) == key
-    _passed(c)
+    assert send(old, "0912000003", purpose="bind").status_code == 400  # 沒重驗前被擋（擋在寄碼之前）
+    assert old.post("/api/identity/reauth", json={"password": PW}).status_code == 200
+    assert bind(old, "0912000003").status_code == 200
+    assert _key(old) == key
     _passed(old)
     phone = _phone_login("0912000003", clock)
     assert _key(phone) == key
     _passed(phone)
-    assert bind(c, "c1@example.com", "email").status_code == 200
-    assert c.post("/api/identity/unbind", json={"provider": "phone"}).status_code == 200
-    assert _key(c) == key
-    _passed(c)
-    assert _audit_matches([c, old, phone]) == set()
+    assert bind(old, "c1@example.com", "email").status_code == 200
+    assert old.post("/api/identity/unbind", json={"provider": "phone"}).status_code == 200
+    assert _key(old) == key
+    _passed(old)
+    assert _audit_matches([old, phone]) == set()
 
 
 def test_c_password_set_keeps_the_id_key(clock, monkeypatch):
