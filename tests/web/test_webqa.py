@@ -422,7 +422,10 @@ def test_a_window_set_twice_in_a_row_is_flipped_first():
     out = subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True)
     assert json.loads(out.stdout) == [False, True, False, False, True, True]
     text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
-    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); await sleep(50); }" in text and "lastView = [v, dpr];" in text
+    assert "if (sameWindow(lastView, v, d)) { await setView(v, d === 1 ? 2 : 1); if ((await ev(FLIPPED(d === 1 ? 2 : 1))) < 0) log(id, v[0], \"dpr flip not drawn in 1.5s\"); }" in text and "lastView = [v, dpr];" in text
+    flipped = subprocess.run([node, "--input-type=module", "-e", f"const {{ FLIPPED }} = await import({json.dumps(src)}); console.log(FLIPPED(2));"],
+                             capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    assert "devicePixelRatio === 2" in flipped and "requestAnimationFrame" in flipped and "setTimeout(() => r(-1), 1500)" in flipped  # 等到真的畫過，最多 1.5 秒
 
 
 def test_a_dialog_is_answered_and_shows_as_a_console_line():
