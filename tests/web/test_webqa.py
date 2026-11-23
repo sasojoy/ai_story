@@ -978,3 +978,54 @@ def test_the_yw_scenes_are_in_must_reach():
     flow = (TOOL / "flows" / "yw.mjs").read_text(encoding="utf-8")
     shot = set(re.findall(r'"(yw_[a-z0-9_]+)"', flow)) - {"yw_out", "yw_walk", "yw_trail"}
     assert shot and {line.split(":", 1)[1] for line in rows if line.startswith("yw:")} == shot
+
+
+# ── 第 262 批：掛在 #app 外、固定定位、自己捲的層捲著拍 ──
+
+SCROLLER_FAKE = r"""
+const { SCROLLER } = await import(SRC);
+const W = 375, H = 812;
+const mk = (id, o) => ({ id, inApp: false, pos: "static", oy: "visible", vis: "visible", sh: H, ch: H, z: 0, rect: [0, 0, W, H], ...o,
+  get scrollHeight() { return this.sh; }, get clientHeight() { return this.ch; }, get clientWidth() { return this.rect[2] - this.rect[0]; },
+  closest(sel) { return sel === "#app" && this.inApp ? {} : null; }, contains(x) { return x === this; },
+  getBoundingClientRect() { const [l, t, r, b] = this.rect; return { left: l, top: t, right: r, bottom: b, width: r - l, height: b - t }; } });
+const run = (els, rootSh) => {
+  const root = mk("root", { sh: rootSh, ch: H });
+  const doc = { scrollingElement: root, querySelectorAll: (sel) => sel === "#app *" ? els.filter((e) => e.inApp) : sel === "body *" ? els : [],
+    elementFromPoint: (x, y) => els.filter((e) => { const [l, t, r, b] = e.rect; return x >= l && x <= r && y >= t && y <= b; }).sort((a, b) => b.z - a.z)[0] || null };
+  const win = {};
+  const f = new Function("window", "document", "getComputedStyle", "innerWidth", "innerHeight", "return " + SCROLLER);
+  const got = f(win, doc, (e) => ({ position: e.pos, overflowY: e.oy, visibility: e.vis }), W, H);
+  return got && { ...got, id: win.__sc && win.__sc.id };
+};
+const app = () => mk("panel", { inApp: true, oy: "auto", sh: 2000, ch: 600, z: 1, rect: [0, 100, W, 700] });
+const card = (id, o) => mk(id, { pos: "fixed", oy: "auto", sh: 1900, ch: H, z: 10, ...o });
+console.log(JSON.stringify([
+  run([app(), card("yw")], 3000),
+  run([card("top", { z: 20 }), app(), card("under", { z: 5 })], 3000),
+  run([app(), card("short", { sh: H, z: 0 })], 3000),
+  run([app(), card("abs", { pos: "absolute", z: 0 })], 3000),
+  run([app(), card("hidden", { vis: "hidden", z: 0 })], 3000),
+  run([app(), card("inside", { inApp: true })], 3000),
+  run([], 3000),
+  run([], H),
+]));
+"""
+
+
+def test_a_fixed_layer_outside_the_app_that_scrolls_is_what_the_pictures_scroll():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("no node")
+    code = f"const SRC = {json.dumps((TOOL / 'snippets.mjs').as_uri())};" + SCROLLER_FAKE
+    got = json.loads(subprocess.run([node, "--input-type=module", "-e", code], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    assert got[0] == {"sh": 1900, "ch": H_812, "root": False, "id": "yw"}, "頁面外、固定定位、自己捲：選它，不選 #app 裡的"
+    assert got[1]["id"] == "top", "兩層都會捲：中心點落在上面那一層的才算（不是 DOM 最後那一層）"
+    assert got[2]["id"] == "panel" and got[3]["id"] == "panel" and got[4]["id"] == "panel", "不會捲、不是固定定位、看不見：走原來那一段"
+    assert got[5]["id"] == "inside", "#app 裡的固定層照原來那一段比面積（它最大）"
+    assert got[6] == {"sh": 3000, "ch": H_812, "root": True, "id": "root"} and got[7] is None, "沒有那種層：跟以前一樣"
+    text = (TOOL / "driver.mjs").read_text(encoding="utf-8")
+    assert "const SCROLLER" not in text and text.count("await ev(SCROLLER)") == 2, "driver 用 snippets 的那一份（shootWindow、shootVariants）"
+
+
+H_812 = 812

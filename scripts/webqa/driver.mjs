@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freeze, landed, sameWindow, FLIPPED, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES } from "./snippets.mjs";
+import { freeze, landed, sameWindow, FLIPPED, SHOT_VIEWS, STYLE_VIEWS, STABLE_SIG, WALK_STYLE_DUMP, LAYOUT, VOLATILE, CANVASES, DOM_TEXT, CSS_RULES, SCROLLER } from "./snippets.mjs";
 
 const [label, PAGE, API, OUT, CHROME_PORT] = process.argv.slice(2);
 const ROUND = process.env.QA_ROUND || "c";
@@ -174,12 +174,7 @@ async function dumpStyles(id, view, facts) {
   facts.sty[view] = sha(d.els.map((r) => r.join(" ")).join("\n"));
   writeFileSync(join(STY, `${id}__${view}.json.gz`), gzipSync(JSON.stringify(d)));
 }
-// the biggest thing on screen that scrolls (the page itself, or a layer over it)
-const SCROLLER = `(() => { window.__sc = null; let best = 0; const root = document.scrollingElement;
-  const cand = [root, ...document.querySelectorAll("#app *")];
-  for (const el of cand) { if (el.scrollHeight <= el.clientHeight + 2) continue; if (el !== root) { const cs = getComputedStyle(el); if (!/(auto|scroll)/.test(cs.overflowY) || cs.visibility === "hidden") continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue; const hit = document.elementFromPoint(r.left + r.width / 2, Math.max(r.top, 0) + Math.min(r.height, innerHeight) / 2); if (!hit || !(el === hit || el.contains(hit))) continue; }
-    const area = el === root ? innerWidth * innerHeight * 0.5 : el.clientWidth * el.clientHeight; if (area > best) { best = area; window.__sc = el; } }
-  const s = window.__sc; return s ? { sh: s.scrollHeight, ch: s.clientHeight, root: s === root } : null; })()`;
+// SCROLLER (snippets.mjs): what the scrolled pictures scroll
 const volatileOn = async (file, facts, dpr) => { const r = await ev(VOLATILE); if (r.length) facts.vol[file] = r.map(([k, a, b, c, d]) => [k, a * dpr, b * dpr, c * dpr, d * dpr]); };
 // The chronicle link greys out until the writer is done: give it a moment before the shot. A budget, so a page where it never finishes cannot eat the walk.
 let taleBudget = 60000;
