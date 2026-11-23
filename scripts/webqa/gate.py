@@ -16,7 +16,8 @@ What the walk cannot see: it freezes animation, and it takes no pictures at 640,
 replay is about stylesheets, so it runs here when a stylesheet or index.html differs between the two commits; summary.replay says whether it ran and
 why. Without it those three windows only have the page's size behind them: used values moving there are counted apart, as layout-no-pixels.
 A light scene's first picture (375-light, dpr 1) used to come in the very window the scene before had left: no whole-page paint, and the
-battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first.
+battle card's countdown, rewritten every second, drew that piece one level off at random (batch 254). driver.mjs now flips the dpr first;
+that took the c round from red every time to red 1 time in 6 (still bt_watch_shut, the same 713 pixels): the second paint is not all gone.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);

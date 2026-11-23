@@ -13,7 +13,8 @@ The classes (each one came from a real row of waves B and C):
                That is the page's own way of drawing, not the stylesheets (wave AA: the forge scenes 044-047, a round button's arc
                1 level apart, a material icon's edge 40 levels, two or three pictures per window at random; A against A went red too).
 Not a class: the c round's bt_watch_open/shut at 375-light (713 pixels, 1 level, the battle card's countdown) and main's dadian_left went
-red A against A because a light scene's first window repainted nothing; batch 254 fixed that in driver.mjs (shoot flips the dpr first), not here.
+red A against A because a light scene's first window repainted nothing; batch 254 narrowed that in driver.mjs (shoot flips the dpr first),
+not here: from every c round to 1 in 6, so it is still not a class, and still red when it shows.
 Not differences at all: ?v=, the host, the toast's DOM, animation-delay, whitespace; stylesheet rules with the same text in another
 order (that is what splitting a file looks like: the pixels and computed styles still have to agree). The toast's words do count,
 when both sides still show them (compare.py).
