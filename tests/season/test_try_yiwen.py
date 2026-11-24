@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-pytestmark = pytest.mark.slow  # 每一條開正式內容的世界，超過一秒
+SLOW = pytest.mark.slow  # 開正式內容的世界，超過一秒；第 268 批起每條各自標（常數對得上那一條不標）
 
 
 def _plain(monkeypatch, tmp_path):
@@ -23,6 +23,7 @@ def _no_leak(out: str) -> None:
         assert leak not in out
 
 
+@SLOW
 def test_fake_mode_runs(capsys, monkeypatch, tmp_path):
     import try_yiwen
 
@@ -71,6 +72,7 @@ def _line(out: str, head: str) -> str:
     return next(x for x in out.splitlines() if x.startswith(head))
 
 
+@SLOW
 def test_first_call_over_the_cap_is_a_stand_in_but_uncapped_writes(capsys, monkeypatch, tmp_path):
     import try_yiwen
 
@@ -91,6 +93,7 @@ def test_first_call_over_the_cap_is_a_stand_in_but_uncapped_writes(capsys, monke
     _no_leak(out)
 
 
+@SLOW
 def test_no_retry_when_too_little_is_left(capsys, monkeypatch, tmp_path):
     import try_yiwen
 
@@ -104,6 +107,7 @@ def test_no_retry_when_too_little_is_left(capsys, monkeypatch, tmp_path):
     _no_leak(out)
 
 
+@SLOW
 def test_screening_eats_the_budget_is_busy(capsys, monkeypatch, tmp_path):
     import try_yiwen
 
@@ -117,6 +121,7 @@ def test_screening_eats_the_budget_is_busy(capsys, monkeypatch, tmp_path):
     _no_leak(out)
 
 
+@SLOW
 def test_summary_numbers(capsys, monkeypatch, tmp_path):
     import try_yiwen
 
@@ -134,6 +139,7 @@ def test_summary_numbers(capsys, monkeypatch, tmp_path):
     _no_leak(out)
 
 
+@SLOW
 def test_budget_only_changes_this_run(capsys, monkeypatch, tmp_path):
     import try_yiwen
     from tianxia.content import load_content
@@ -145,3 +151,11 @@ def test_budget_only_changes_this_run(capsys, monkeypatch, tmp_path):
     assert out.rstrip().splitlines()[-1] == "量法：照伺服器的時間限制（一步 30 秒）"
     assert "（上限 15.0）" in out
     assert load_content(ROOT / "content", "season21").config.yiwen.step_budget_seconds == 60
+
+
+def test_screen_budget_matches_server():
+    """第 268 批④：腳本抄的 SCREEN_BUDGET_SECONDS 要等於伺服器的（腳本不 import server，測試可以）；唯讀、不開世界。"""
+    import server
+    import try_yiwen
+
+    assert try_yiwen.SCREEN_BUDGET_SECONDS == server.SCREEN_BUDGET_SECONDS
