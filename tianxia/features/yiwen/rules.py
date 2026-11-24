@@ -148,11 +148,29 @@ def fallback_options(table: dict[str, list[str]], *, season, tale, node, thing: 
     return [fill(x, thing=thing) for x in line.split("／")][:3]
 
 
-def stand_in_options(parent: dict | None, label: str, fallback: list[str]) -> list[str]:
+def fallback_sets(table: dict[str, list[str]], *, thing: str) -> list[list[str]]:
+    """第 268 批①：fallback_options 每一組照表的先後切成三顆（跟 fallback_options 同一種切法：填 thing、取前三）。"""
+    return [[fill(x, thing=thing) for x in line.split("／")][:3] for line in table.get("fallback_options") or []]
+
+
+def stand_in_options(parent: dict | None, label: str, fallback: list[str], sets: list[list[str]] | None = None) -> list[str]:
     """第 264 批②(a)：替身那一幕的三個做法。上一幕是寫成的一幕（不是開場、不是替身）：用它還沒被選的那幾顆
-    （按其中一顆來的剩兩顆，自己說的三顆都在），不足三顆照 fallback 的先後補不重複的；補完仍不足就照有的。其餘照舊用 fallback。"""
-    if parent is None or parent.get("fallback"):
+    （按其中一顆來的剩兩顆，自己說的三顆都在），不足三顆照 fallback 的先後補不重複的；
+    補完仍不足就照有的。上一幕是開場：照舊用 fallback。
+    第 268 批①：上一幕也是替身而且給了 sets（fallback_sets）：從 fallback 在 sets 裡的位置往後找、到底繞回第一組，
+    用第一組跟上一幕的做法沒有交集的；都有交集就用 fallback 拿掉上一幕的做法，不足三顆照有的。結果都不含剛按的那一顆。
+    決定性的：不擲骰、不讀時鐘。沒給 sets 照舊用 fallback。"""
+    if parent is None:
         return list(fallback)
+    if parent.get("fallback"):
+        if sets is None:
+            return list(fallback)
+        before = set(parent.get("options") or [])
+        start = sets.index(fallback) if fallback in sets else 0
+        for group in sets[start:] + sets[:start]:
+            if not before.intersection(group):
+                return [o for o in group if o != label]
+        return [o for o in fallback if o != label and o not in before]
     out = [o for o in (parent.get("options") or []) if o != label]
     for o in fallback:
         if len(out) >= 3:

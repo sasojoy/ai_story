@@ -436,7 +436,7 @@ def _write_node(ctx, store, w: YiwenWalk, req: rules.YiwenRequest, opening: dict
         text = [_line(ctx, group, tale=w.tale, node=w.node, pick=label, thing=thing)]
         options = rules.fallback_options(rules.lines(), season=season, tale=w.tale, node=w.node, thing=thing) if depth < rules.DEPTH else []
         if options and depth >= 2:  # 第 264 批②(a)：上一幕的做法照理都還做得到（替身說的是「還在原處」）
-            options = rules.stand_in_options(here, label, options)
+            options = rules.stand_in_options(here, label, options, sets=rules.fallback_sets(rules.lines(), thing=thing))  # 第 268 批①
         ledger, fallback = [], True
     else:
         text = list(draft.text)
