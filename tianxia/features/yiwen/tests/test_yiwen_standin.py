@@ -27,7 +27,78 @@ def test_stand_in_options_skips_duplicates_when_filling():
 
 def test_stand_in_options_after_opening_or_stand_in_is_the_fallback():
     assert rules.stand_in_options(None, "官軍", FALLBACK) == FALLBACK
-    assert rules.stand_in_options(STAND_IN, "走近看清楚", FALLBACK) == FALLBACK
+    assert rules.stand_in_options(STAND_IN, "走近看清楚", FALLBACK) == FALLBACK  # 沒給 sets：照舊
+    sets = rules.fallback_sets(rules.lines(), thing="身影")  # 第 268 批①：上一幕是替身，換一組、沒有剛按的
+    assert sets[0] == FALLBACK
+    assert rules.stand_in_options(STAND_IN, "走近看清楚", FALLBACK, sets=sets) == sets[1]
+
+
+# ── 第 268 批①：替身接替身換一組、沒有剛按的；②：補位不補回剛按的 ──
+
+
+def _after_stand_in(prev, label, drawn, sets):
+    return rules.stand_in_options({**STAND_IN, "options": list(prev)}, label, list(drawn), sets=sets)
+
+
+def test_fallback_sets_cut_like_fallback_options():
+    sets = rules.fallback_sets(rules.lines(), thing="身影")
+    assert len(sets) == len(rules.lines()["fallback_options"]) and all(len(s) == 3 for s in sets)
+    for season in (1, 2):
+        for node in range(5):
+            assert rules.fallback_options(rules.lines(), season=season, tale=1, node=node, thing="身影") in sets
+
+
+def test_stand_in_after_stand_in_every_set_and_pick():
+    sets = rules.fallback_sets(rules.lines(), thing="身影")
+    n = 0
+    for prev in sets:
+        for label in prev:
+            for drawn in sets:
+                got = _after_stand_in(prev, label, drawn, sets)
+                assert len(got) == 3 and len(set(got)) == 3, (prev, label, drawn)
+                assert label not in got and not set(got) & set(prev), (prev, label, drawn)
+                assert got in sets
+                n += 1
+    assert n == 27
+
+
+def test_stand_in_after_stand_in_real_lines_never_repeats_the_pick():
+    table = rules.lines()
+    same = hits = overlap = 0
+    for season in (1, 2, 3):
+        for tale in range(1, 6):
+            prev = rules.fallback_options(table, season=season, tale=tale, node=0, thing="身影")
+            for node in range(1, 40):
+                drawn = rules.fallback_options(table, season=season, tale=tale, node=node, thing="身影")
+                same += drawn == prev
+                for label in prev:
+                    got = _after_stand_in(prev, label, drawn, rules.fallback_sets(table, thing="身影"))
+                    hits += label in got
+                    overlap += bool(set(got) & set(prev))
+                    assert len(got) == 3
+    assert hits == 0 and overlap == 0
+    assert same > 0  # 這一掃真的碰到「抽到同一組」
+
+
+def test_stand_in_after_stand_in_all_sets_overlap_does_not_pad():
+    sets = [["甲", "乙", "丙"], ["甲", "丁", "戊"]]
+    assert _after_stand_in(sets[0], "乙", sets[1], sets) == ["丁", "戊"]
+    assert _after_stand_in(sets[1], "丁", sets[1], sets) == []
+
+
+def test_stand_in_after_stand_in_drops_the_pick_even_outside_the_previous_options():
+    # 剛按的那一顆照理都在上一幕的做法裡（換組就排掉了）；這裡另外鎖「結果不含剛按的」那一道，不靠換組
+    sets = [["丁", "戊", "己"], ["甲", "乙", "丙"]]
+    assert _after_stand_in(["甲"], "丁", sets[0], sets) == ["戊", "己"]
+    both = [["丁", "戊", "己"], ["甲", "戊", "庚"]]  # 每一組都跟上一幕有交集：抽到的那一組扣掉上一幕的與剛按的
+    assert _after_stand_in(["丁", "甲"], "戊", both[0], both) == ["己"]
+
+
+def test_stand_in_options_fill_skips_the_pressed_choice():
+    parent = {**WRITTEN, "options": ["甲", "乙", "走近看清楚"]}
+    got = rules.stand_in_options(parent, "走近看清楚", FALLBACK)
+    assert got == ["甲", "乙", "開口問身影的來歷"] and "走近看清楚" not in got
+    assert rules.stand_in_options(parent, "走近看清楚", ["走近看清楚"]) == ["甲", "乙"]  # 不足三顆照有的
 
 
 def test_ledger_of_takes_the_last_written_scene():

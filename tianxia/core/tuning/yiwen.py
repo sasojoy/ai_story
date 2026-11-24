@@ -27,7 +27,7 @@ class YiwenTuning(BaseModel):
     step_budget_seconds: float = 60  # 【草】一步從開單到寫成的總預算（異聞二）
     step_min_write_seconds: float = 15  # 【草】審字之後剩下的不到這麼多就不寫幕（異聞二）
     typed_staff_extra: list[str] = Field(default_factory=lambda: ["公告", "天下大勢"])  # 自己說另外擋的身分字（name_base.staff_like 沒涵蓋的；總計畫「對不上的」第 3 條）
-    scene_chars: int = 60  # 【草】一段的字數（提示寫的；檢查放到 72）
+    scene_chars: int = 60  # 【草】一段的字數（提示寫的；檢查的上限是包裡的 `rules.TEXT_MAX` 90【草】，第 263 批）
     option_chars: int = 14  # 【草】一個做法的字數（檢查放到 16）
     ledger_chars: int = 22  # 【草】帳一條的字數
     retry: int = 1  # 【草】程式檢查沒過重問幾次
