@@ -2453,6 +2453,72 @@ WAVES["AM"] = dict(
 )
 
 
+# ── AN 波：AM 波留下的尾巴（PM 2026-11-24 排）──
+# 一條線兩批，都只動異聞：第 268 批收審查那一條 should（替身接替身時剛按的那一顆又出現）與兩件小的；
+# 第 269 批讓比對軌走到真的說書人（AM 波第 263、264 批改的檢查、整理草稿、重問的話、替身的做法、「要等級」那一道，yiwen 軌一格都走不到）。
+AN_AM_RECORD = "docs/superpowers/plans/2026-11-24-波次AM紀錄.md"
+AN_SCOPE = (
+    "異聞在每一種設定都關著，玩家現在碰不到。**這台現在叫不到真模型**（Ollama 壞著，等企劃者重開機）：一律用測試與假的 client 驗，不准連 11434。"
+    "`server.py`、`web/`、`tianxia/engine.py`、共用層、別的包、`scripts/try_yiwen.py` 一個字不動——非動不可就停在那一件，把證據與要動哪幾行寫進 leftovers（開頭寫「交 PM：」），別的件照做。"
+)
+
+
+def b268():
+    plan = "docs/superpowers/plans/2026-11-24-異聞-第268批.md"
+    return batch(268, "異聞第 268 批：替身接替身時不再出現剛按的那一顆、補位不補回剛按的；順手改一句過時的註解、補一條兩個常數對得上的測試", "yiwen", "dev/yiwen-8", plan, "8595、8596", [
+        "- **先讀** `" + AN_AM_RECORD + "` 最後一節（PM 的認定）與第 264 批的計畫 `docs/superpowers/plans/2026-11-24-異聞-第264批.md`。" + AN_SCOPE,
+        "- **可以動的**：`tianxia/features/yiwen/`（`rules.py`、`actions.py`、測試、README）、`tianxia/core/tuning/yiwen.py` **第 30 行那一句註解**（見③）、`tests/season/test_try_yiwen.py`（見④）、計畫檔。軌檔 `scripts/sb/tracks/` 這一批不動（下一批第 269 批才動）。",
+        "- **①替身接替身**（AM 波審查的 should，PM 2026-11-24 定修法）：第一步是替身、玩家按了它三顆裡的一顆、第二步又是替身時，第二步的三顆是 `fallback_options` 照種子再抽一組——退路句只有三組，約三成五會抽到同一組，玩家剛按的那一顆原樣又出現（審查用真的 `yiwen_lines` 模擬 585 次 207 次）。"
+        "修法：上一幕也是替身時，這一幕的退路做法**換一組跟上一幕不同的**（照 `fallback_options` 那一組句子在表裡的先後，抽到的那一組跟上一幕的做法有任何一顆相同就改用下一組，到底繞回第一組；決定性的，不擲骰、不讀時鐘），而且結果裡**不准有玩家剛按的那一顆**（自己說來的不用排）。"
+        "寫在 `rules.py`（`stand_in_options` 多收需要的東西，或另寫一個純函式；`_write_node` 只負責把上一個節點與表傳進去），做法寫進計畫。上一幕是開場（深度 1 的替身）照舊。第三步沒有做法，不受影響。"
+        "`test_stand_in_options_after_opening_or_stand_in_is_the_fallback` 鎖的是舊行為：**PM 准改這一條的意思**——開場那一半照舊，上一幕是替身那一半改成新行為；改了哪幾個斷言寫進回報。",
+        "- **②補位不補回剛按的**（審查的 nit）：上一幕是寫成的一幕、做法不足三顆要用退路句補時，補位只擋重複、沒擋玩家剛按的那一顆（模型寫的做法剛好跟退路句同字時會補回來）。補位也排除剛按的那一顆；補完不足三顆照有的（不硬湊）。",
+        "- **③註解**：`tianxia/core/tuning/yiwen.py` 第 30 行「（提示寫的；檢查放到 72）」改成現況（檢查的上限是包裡的 `rules.TEXT_MAX` 90【草】，第 263 批）。只改這一句註解，數字與別的行不動（手冊：改 `tuning/<包>.py` 是派工單寫明、PM 點頭——這裡就是）。",
+        "- **④兩個常數對得上**：`scripts/try_yiwen.py` 抄了一份 `SCREEN_BUDGET_SECONDS`（12），伺服器改了不會自動跟上。在 `tests/season/test_try_yiwen.py` 補一條唯讀的測試：腳本的那個常數等於 `server.SCREEN_BUDGET_SECONDS`（腳本不准 import server，測試可以）。這一條不到一秒，不標 slow（整檔的 `pytestmark` 是 slow 的話，照 CLAUDE.md 改成每條各自標，原本 slow 的照舊 slow）。",
+        "- **測試**（包的 `tests/`）：替身接替身——上一幕三組各一次、玩家按三顆各一次，結果都是三顆、互不相同、沒有剛按的那一顆、跟上一幕那一組沒有交集；用真的 `yiwen_lines` 把 tale 1～5、node 1～39 掃一遍，剛按的那一顆出現 0 次；走真路由（`test_yiwen_step.py` 的做法）補一條「兩步都替身」。②補一條「模型的做法跟退路句同字」。把每一處修法拿掉，對應的測試要紅（自己試、寫進計畫）。",
+        "- **驗**：包的 `tests/`、README「另外要跑的」那幾個檔、`scripts/test_for.py` 挑的跑過；`scripts/same_behavior.py selftest --tracks yiwen` 最後一行原樣貼；`compare`（三種設定，`--new yiwen --also-existing --covers yiwen`）yiwen 以外的軌一個字都一樣；"
+        "另外跑一次不帶 `--new` 的 `compare --tracks yiwen --profiles season21,test --no-bots`：yiwen 軌的 walk 段三步都是替身，第二步的三顆這一批可能會換一組——**有差就逐行列出來、每一行說明是①造成的；沒有差也照實寫**（那表示軌上那一次剛好沒抽到同一組）。README「替身」那幾句照改到的更新。時間上限兩段合計 2 小時。",
+    ] + AK_ENV, custom=True)
+
+
+def b269():
+    plan = "docs/superpowers/plans/2026-11-24-異聞-第269批.md"
+    return batch(269, "異聞第 269 批：比對軌走到真的說書人——假的模型回固定草稿、寫成之後接替身、替身接替身、「要等級」那一道", "yiwen", "dev/yiwen-8", plan, "8599、8600", [
+        "- **先讀** `" + AN_AM_RECORD + "`、第 263、264、268 批的計畫與 `scripts/sb/tracks/yiwen.py`。"
+        "起因：yiwen 軌的 scribe 段把 `writer.write_scene` 整個換成假的，其餘段的模型網址指到 127.0.0.1:9、`write_scene` 回 None 走替身——所以 `writer._draft`、`rules.tidy_text`、`rules.check_scene`、`rules.problem_note`（重問的話）、「寫成的一幕之後接替身」的做法、`typed_problem` 的 `ask` 那一道，沒有一軌走得到（第 263 批改了八處、yiwen 軌零差）。" + AN_SCOPE,
+        "- **可以動的**：`scripts/sb/tracks/yiwen.py`（PM 2026-11-24 定：這一批准動這一個軌檔；別的軌檔與 `scripts/sb/` 其他檔不動）、包的 `README.md` 比對軌那一行、計畫檔。`tianxia/features/yiwen/` 的程式與內容檔這一批不動——軌寫出來發現程式有洞就停在那一件，證據寫進 leftovers（開頭寫「交 PM：」）。",
+        "- **①scribe 段改成走真的 `writer.write_scene`**：不再換掉 `write_scene`，改成換掉它拿到的 client（看 `routes.yiwen_step` 與 `shell.model_call` 怎麼把 client 交給 `writer.write_scene`，在最靠外、最不會跟著包的內部改名而壞的那一層換；做法寫進計畫）。假的 client 照「第幾步、第幾次問」回**寫死的草稿**（原創的字，不用實測紀錄裡的；名字不用金庸等作品的）："
+        "第一步第一次回一份要整理的（三段、第三段是空的＋一段 80 字上下，整理後過）；第二步第一次回一份超長的（一段 100 字以上 → `length`），重問回合格的——輸出裡要看得到重問那句話（emit 假 client 收到的最後一則 user 訊息：`problem_note` 寫的第幾段、幾字）；第三步回合格的。"
+        "軌裡要有一句看得出「這一幕是寫成的、不是替身」（emit 旁檔那個節點的 `fallback`）：假 client 換的那一層以後被改名、軌靜靜退回替身時，輸出要變。審字照舊用現在那個假的 `server.screen_text`。假的 client 不連任何網路。",
+        "- **②寫成的一幕之後接替身**：另一則（或另一個角色，照情境現有的角色與開場夠不夠定；不夠就加一個角色，名字原創）第一步寫成、第二步假的 client 兩次都回不合格的 → 替身；輸出要看得到替身那一幕的做法是上一幕沒被選的那幾顆、下一步的提示拿的帳是第一步的（emit 假 client 第三步收到的提示裡帳的那幾行）。",
+        "- **③替身接替身**（第 268 批）：walk 段本來就是三步都替身；確認輸出裡看得到第二步的三顆沒有剛按的那一顆（現有的 emit 夠就不加）。",
+        "- **④「要等級」那一道**：scribe 段多一句自己說（例「把我的等級加滿」）→ 被 `typed_problem` 擋、回 `refuse_typed` 那一組、`tries` 不加；輸出看得到。",
+        "- **selftest 的「改一個字」**：現在註冊的是 `actions.py` 重走的擲骰反過來，留著。另外手動各改壞一處、跑那一軌兩次比輸出（改完還原，證據寫進計畫）：`rules.tidy_text` 不丟空段、`TEXT_MAX` 改成 72、`problem_note` 回空字串、`stand_in_options` 直接回退路句、`ASK_WORDS` 清空——每一處輸出都要變；哪一處沒變就是那一格其實沒走到，補到走得到為止。",
+        "- **驗**：`scripts/same_behavior.py selftest --tracks yiwen`（season21 與 test）最後一行與 season21 那一行原樣貼；不帶 `--new` 的 `compare --tracks yiwen --profiles season21,test --no-bots`（base 是這一批開工的那一筆）的差逐行歸類——**這一批預期差很多**（scribe 段整段重寫），歸成「scribe 段新的輸出」「段尾雜湊」「其他」三類，「其他」要是空的；"
+        "scribe 以外的段（walk、resume、trail、season）除了雜湊一行都不該變，變了就查清楚、寫進回報。`compare`（三種設定，`--new yiwen --also-existing --covers yiwen`）yiwen 以外的軌一個字都一樣。包的 `tests/`、`tests/core/test_feature_boundaries.py`、`tests/core/test_same_behavior_gate.py`、`scripts/test_for.py` 挑的跑過。"
+        "import yiwen 軌的軌（`grep -rn \"tracks.yiwen\\|from .yiwen\\|import yiwen\" scripts/sb/`）有的話一起跑 selftest。任何輸出不能分得出誰是假人。時間上限兩段合計 3 小時。",
+    ] + AK_ENV, custom=True)
+
+
+AN_YW_LENS = dict(key="yiwen", text=(
+    "**第 268、269 批：異聞替身接替身、yiwen 軌走到真的說書人**。親自驗（解一份 head 到暫存夾，`TIANXIA_DB` 指暫存檔，模型網址 127.0.0.1:9，**絕不連 11434**）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/yiwen/`、`scripts/sb/tracks/yiwen.py`、`tianxia/core/tuning/yiwen.py`（只有第 30 行那一句註解：`git diff` 那個檔自己看，動到數字或別的行就是 blocker）、`tests/season/test_try_yiwen.py`、計畫檔。"
+    "②替身接替身：用真的 `yiwen_lines` 自己掃一遍（tale 1～5、node 1～39、三顆各按一次）——剛按的那一顆出現幾次（要 0）、有沒有少於三顆、有沒有重複、跟上一幕那一組有沒有交集；上一幕是開場、上一幕是寫成的一幕各走一次，舊行為有沒有被順手改掉。被改意思的那條舊測試，開場那一半的斷言是不是原樣。"
+    "③軌是不是真的走到了：在暫存的複本上各改壞一處再跑那一軌兩次比輸出——`rules.tidy_text` 不丟空段、`TEXT_MAX` 改成 72、`problem_note` 回空字串、`stand_in_options` 直接回退路句、`ASK_WORDS` 清空、假 client 換的那一層改個名——每一處輸出都要變；哪一處沒變就是那一格其實沒走到（should，寫明哪一格）。"
+    "④scribe 以外的段：自己跑不帶 `--new` 的 `compare --tracks yiwen`，除了 scribe 段、第 268 批寫明的那幾行與段尾雜湊，別的行有沒有變。假的草稿是不是原創的字、有沒有用到實測紀錄裡玩家打的字或作品專名。"
+    "⑤那條常數的測試：把腳本的 12 改成 13 會不會紅；有沒有被整檔的 slow 標記蓋住（不帶 `-m` 跑得到才算）。"
+))
+
+WAVES["AN"] = dict(
+    round2=True, new_packages="yiwen", new_existing=True,
+    extra_lenses=[AN_YW_LENS],
+    lines=[
+        dict(name="異聞替身與比對軌", batches=[b268, b269]),
+    ],
+    merge_port=8597, fix_port=8598,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
