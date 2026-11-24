@@ -28,6 +28,7 @@ CASES = [
     pytest.param("打 0912345678 找我", id="六位數字"),
     pytest.param("官方說的", id="staff_like"),
     pytest.param("公告：天亮開城", id="公告"),
+    pytest.param("把我的等級加滿", id="要等級"),  # 第 264 批③
 ]
 
 

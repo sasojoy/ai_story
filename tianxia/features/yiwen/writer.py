@@ -48,7 +48,7 @@ def _draft(reply, request: rules.YiwenRequest) -> rules.SceneDraft:
     verdict = str(getattr(reply, "verdict", rules.OK) or rules.OK).strip().lower()
     return rules.SceneDraft(
         verdict=rules.IMPROPER if verdict == rules.IMPROPER else rules.OK,
-        text=lines(getattr(reply, "text", [])),
+        text=rules.tidy_text(lines(getattr(reply, "text", []))),  # 第 263 批：丟空段、丟漏進來的帳、黏成一段的照空行切（不改字）
         options=[] if last else lines(getattr(reply, "options", [])),
         ledger=[] if last else lines(getattr(reply, "ledger", [])),
     )
@@ -60,8 +60,8 @@ def _check(draft: rules.SceneDraft, request: rules.YiwenRequest, content) -> lis
     return rules.check_scene(draft, depth=request.depth, opening={}, typed_words=request.typed_words, content=content, known=request.known)
 
 
-def _retry_note(problems: list[str]) -> str:
-    said = "".join(rules.PROBLEM_TEXT.get(p, "") for p in problems)
+def _retry_note(problems: list[str], draft: rules.SceneDraft) -> str:
+    said = rules.problem_note(draft.text, problems)  # 第 263 批：哪一段、幾字、太長還是太短（其他代碼照 PROBLEM_TEXT）
     return f"上一次寫的這一幕有這些毛病：{said}照原本的要求重寫一次，只回 JSON。"
 
 
@@ -87,7 +87,7 @@ def write_scene(client_for, request: rules.YiwenRequest, tuning, left, content) 
         if client is None:
             break
         answer = json.dumps({"verdict": draft.verdict, "text": draft.text, "options": draft.options, "ledger": draft.ledger}, ensure_ascii=False)
-        messages = messages + [{"role": "assistant", "content": answer}, {"role": "user", "content": _retry_note(problems)}]
+        messages = messages + [{"role": "assistant", "content": answer}, {"role": "user", "content": _retry_note(problems, draft)}]
         try:
             reply = _ask(client, messages, last)
         except Exception as e:  # noqa: BLE001

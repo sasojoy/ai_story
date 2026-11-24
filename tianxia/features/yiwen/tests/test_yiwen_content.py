@@ -60,3 +60,15 @@ def test_real_content_files_pass(content):
     """正式檔（五句樣例）照檔驗：只警告句數不夠，沒有硬擋。"""
     errors, warns = checks.check(content, checks.load(rules.FILES["openings"]), rules.lines())
     assert errors == [] and warns
+
+
+def test_broken_end_is_checked(content):
+    """第 264 批①：收尾替身句那一組少了報、填空只認 {pick}、{thing}。"""
+    lines = copy.deepcopy(rules.lines())
+    assert len(lines["broken_end"]) >= 3
+    lines.pop("broken_end")
+    errors, _ = checks.check(content, checks.load(DATA), lines)
+    assert any("broken_end" in e and "至少 3 句" in e for e in errors)
+    lines["broken_end"] = ["有人{pick}，{who}的事了了。"] * 3
+    errors, _ = checks.check(content, checks.load(DATA), lines)
+    assert any("broken_end" in e and "填空" in e for e in errors)
