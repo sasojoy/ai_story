@@ -623,9 +623,26 @@ def test_third_step_stand_in_uses_broken_end(on, monkeypatch):
     assert [n["fallback"] for n in nodes] == [1, 1, 1]
     assert nodes[0]["text"][0] in _filled("broken", nodes[0]["pick"]) and nodes[1]["text"][0] in _filled("broken", nodes[1]["pick"])
     assert nodes[2]["text"][0] in _filled("broken_end", nodes[2]["pick"])
-    fb = rules.fallback_options(rules.lines(), season=open_characters().load(NAME).player.season_number, tale=tale,
-                                node=nodes[0]["id"], thing="身影")
-    assert nodes[1]["options"] == fb  # 上一幕也是替身：照舊用通用的
+    _stand_in_after_stand_in(nodes)  # 第 268 批①：上一幕也是替身，換一組、沒有剛按的
+
+
+def _stand_in_after_stand_in(nodes):
+    first, second = nodes[0], nodes[1]
+    assert second["pick"] in first["options"]  # 真的是按上一幕的那一顆來的
+    assert len(second["options"]) == 3 and len(set(second["options"])) == 3
+    assert second["pick"] not in second["options"] and not set(second["options"]) & set(first["options"])
+    assert set(second["options"]) <= _all_fallback_options()
+
+
+@pytest.mark.parametrize("pick", [0, 1, 2])
+def test_two_stand_ins_switch_sets(on, monkeypatch, pick):
+    _writes(monkeypatch, None)
+    _step(on, 0)
+    _step(on, pick)
+    nodes = sorted(_nodes(on), key=lambda n: n["depth"])
+    assert [n["fallback"] for n in nodes] == [1, 1]
+    assert nodes[1]["pick"] == nodes[0]["options"][pick]
+    _stand_in_after_stand_in(nodes)
 
 
 def test_stand_in_after_a_written_scene_keeps_its_options_and_ledger(on, monkeypatch):
