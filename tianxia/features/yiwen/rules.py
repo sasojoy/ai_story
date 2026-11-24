@@ -155,8 +155,8 @@ def fallback_sets(table: dict[str, list[str]], *, thing: str) -> list[list[str]]
 
 def stand_in_options(parent: dict | None, label: str, fallback: list[str], sets: list[list[str]] | None = None) -> list[str]:
     """第 264 批②(a)：替身那一幕的三個做法。上一幕是寫成的一幕（不是開場、不是替身）：用它還沒被選的那幾顆
-    （按其中一顆來的剩兩顆，自己說的三顆都在），不足三顆照 fallback 的先後補不重複的；
-    補完仍不足就照有的。上一幕是開場：照舊用 fallback。
+    （按其中一顆來的剩兩顆，自己說的三顆都在），不足三顆照 fallback 的先後補不重複、也不是剛按的那一顆（第 268 批②）；
+    補完仍不足就照有的（不硬湊）。上一幕是開場：照舊用 fallback。
     第 268 批①：上一幕也是替身而且給了 sets（fallback_sets）：從 fallback 在 sets 裡的位置往後找、到底繞回第一組，
     用第一組跟上一幕的做法沒有交集的；都有交集就用 fallback 拿掉上一幕的做法，不足三顆照有的。結果都不含剛按的那一顆。
     決定性的：不擲骰、不讀時鐘。沒給 sets 照舊用 fallback。"""
@@ -175,7 +175,7 @@ def stand_in_options(parent: dict | None, label: str, fallback: list[str], sets:
     for o in fallback:
         if len(out) >= 3:
             break
-        if o not in out:
+        if o not in out and o != label:  # 第 268 批②：補位不補回剛按的
             out.append(o)
     return out[:3]
 
