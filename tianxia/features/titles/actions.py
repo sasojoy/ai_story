@@ -45,8 +45,13 @@ def settle(ctx: Game) -> bool:
     return True
 
 
+def codex_full(ctx: Game) -> list[str]:
+    """江湖錄收滿了哪幾頁（查詢服務，主人江湖錄包；那一包關著是空的）。"""
+    return list(ctx._codex_full())
+
+
 def choices(ctx: Game) -> list[dict]:
-    return rules.available(ctx.state, ctx.content, mandate_names(ctx))
+    return rules.available(ctx.state, ctx.content, mandate_names(ctx), codex_full(ctx))
 
 
 def wear(ctx: Game) -> list[str]:
@@ -58,6 +63,9 @@ def wear(ctx: Game) -> list[str]:
         if t["id"] in (rules.OFFICIAL, rules.SEASON_TITLE):
             continue  # 官職跟著階走、論功的稱號換季時已經記過，都不收進名號簿
         entry = rules.book_entry(p.season_number, t["name"])
+        once = t["id"] in rules.BY_ID and rules.BY_ID[t["id"]].span == rules.BOOK
+        if once and any(e.endswith(f" {t['name']}") for e in p.title_book):
+            continue  # 江湖錄給的跟著帳號走：名號簿只記拿到的那一季，換季不再記一次、不再說一次
         if entry not in p.title_book:
             p.title_book.append(entry)
             lines.append(rules.GOT_LINE.format(title=t["name"]))

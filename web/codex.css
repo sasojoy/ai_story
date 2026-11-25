@@ -186,3 +186,20 @@
 .cx-tug-end { flex: none; margin: 0 -4px; font: 700 13px var(--kai, var(--serif)); font-variant-numeric: tabular-nums; }
 .cx-tug-end.side-guan { color: var(--kuai); }
 .cx-tug-end.side-huang { color: var(--gold); }
+
+/* 收滿這一頁給的頭銜（數字那一行右邊）：還沒拿到是淡的、寫「收滿得」；拿到了是朱印、寫「已得」 */
+.cx-ttl { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--kai, var(--serif)); }
+.cx-ttl small { font-size: 12px; color: var(--ink-2); }
+.cx-ttl:not(.got) .ttl-seal { opacity: 0.45; border-style: dashed; }
+
+/* 圖鑑沒解鎖的格（Joy 11/22：不放「？」，畫成有質感的佔位）：暈了墨的底，淡楷書兩個字（人物照舊剪影＋地名，名字寫「未見」） */
+.cx-cell.off .im, .cx-yc.off { background:
+    radial-gradient(60% 46% at 38% 40%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 72%),
+    radial-gradient(42% 32% at 66% 62%, color-mix(in srgb, var(--ink) 11%, transparent), transparent 74%),
+    color-mix(in srgb, var(--line) 30%, var(--card)); }
+.cx-grid.sq .cx-cell.off .im::after { content: none; }
+.cx-cell.off b { font-weight: 400; letter-spacing: .2em; color: color-mix(in srgb, var(--ink) 45%, transparent); }
+.cx-cell.off small { min-height: 1em; }
+.cx-yc.off { border: 1px solid color-mix(in srgb, var(--ink-2) 30%, var(--line)); font-weight: 400; letter-spacing: .15em; color: color-mix(in srgb, var(--ink) 40%, transparent); }
+.cx-yc.none { border: 0; }
+.cx-act .x b.off { font-weight: 400; letter-spacing: .2em; color: color-mix(in srgb, var(--ink) 45%, transparent); }

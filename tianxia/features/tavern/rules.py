@@ -469,7 +469,7 @@ def ties_figure_lines(state: GameState, content: Content, cid: str,
 
 def ties_player_lines(state: GameState, content: Content, other: GameState, mates: list[str],
                       wanted: set[str] | None = None) -> tuple[list[str], bool]:
-    """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴，4 以上加近來的三件事（行狀份量 3 以上、最新的在前；
+    """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴與親衛隊長的傳聞（guard_base.rumor_line），4 以上加近來的三件事（行狀份量 3 以上、最新的在前；
     起用碎片那一筆不列，annals.heard，FB-643）；1 以下沒人聽過（退一半）。"""
     from tianxia import allied  # noqa: PLC0415  共用規則層（豪強依附的那一軍）
 
@@ -483,6 +483,8 @@ def ties_player_lines(state: GameState, content: Content, other: GameState, mate
              else TIES_PLAYER_SIDE_PLAIN.format(name=p.name, side=side)]
     if score >= 3 and mates:
         lines.append(TIES_MATES.format(mates="、".join(mates)))
+    if score >= 3 and (heard := guard_base.rumor_line(other, content)):  # 親衛隊長收尾（Joy 2026-11-25）：他的傳聞，只講出路與一件事
+        lines.append(heard)
     if score >= 4:
         deeds = [a.text for a in sorted(p.annals, key=lambda a: -a.time) if a.weight >= 3 and annals.heard(a)][:3]
         if deeds:

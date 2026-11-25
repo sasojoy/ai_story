@@ -117,7 +117,7 @@ def test_unseen_people_and_stories_stay_silhouettes():
     ghost = next(g for g in page["quests"]["ghosts"] if g["line"] == "duruo")
     assert ghost["title"] == view.UNSEEN and ghost["where"]
     duruo = next(r for r in page["people"]["rows"] if r["id"] == "duruo")
-    assert duruo["name"] == view.UNSEEN and duruo["face"] is None and duruo["place"]
+    assert duruo["name"] == view.UNSEEN_PERSON and duruo["face"] is None and duruo["place"]
     assert page["gods"]["all"] == 40 and page["gods"]["got"] == 0
     assert set(page["gods"]["forms"]) == {"攻", "守", "變", "心"} and len(page["gods"]["paths"]) == 10
 

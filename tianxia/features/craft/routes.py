@@ -3,11 +3,11 @@
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 開爐與立意的鎖外三段式（forge_args、prepare_forge、forge、create_intent、create_reread）第 69 批搬進這個檔（outlock 掛鉤）；殼留一行包裝（api_menxia_do、測試叫），包裡互叫也經 shell.<名字>。
 自創的動作表（原本寫在 server.py 的 MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（menxia_actions 掛鉤）。"""
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 
 from tianxia.core.features import Outlock
 
-from . import actions, create
+from . import actions, board, create
 
 
 def menxia_actions(shell) -> dict:
@@ -45,6 +45,15 @@ def router(shell) -> APIRouter:
             "line": shell.md(g.forge_line(picked)), "picks": g.forge_picks(picked),
             "preview": g.forge_preview(picked),  # 兩格都放好：預覽卡，其餘 None、網頁畫 line
         })
+
+    @r.get("/api/he_board")
+    def api_he_board(request: Request):
+        """合璧榜（board.rows）：只讀。意境合成改版沒開的季 404。"""
+        game = shell._game(request)
+        got = shell.look(game, lambda g: board.rows(g.state, g.content, g.world) if board.on(g.content, g.state) else None)
+        if got is None:  # 這一季的章要在鎖裡重讀過角色才準，所以在 look 裡問
+            raise HTTPException(404)
+        return got
 
     return r
 
