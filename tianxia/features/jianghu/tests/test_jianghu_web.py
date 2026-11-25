@@ -266,3 +266,7 @@ def test_guide_words_are_the_eye_card(wan):  # noqa: F811
     eye = page.split('aria-label="眼下"')[1].split('class="jh-acts')[0]
     assert "老石" in eye and "城門口人多。" in eye and 'data-act="guide-shut"' in eye
     assert 'class="guide' not in page  # 舊的說書人框不畫
+    assert "稍後" not in eye  # 兩顆都是關掉的鈕不要（PM 11/25）
+    m["guide"]["glow"] = ["act:explore"]  # 那件事本身當主鈕，旁邊一顆「知道了」
+    eye = run(m, "return H.pageJianghu();").split('aria-label="眼下"')[1].split('class="jh-acts')[0]
+    assert '<button class="btn jh-eye-go" data-act="choose" data-id="act:explore">去探索</button>' in eye and "知道了" in eye

@@ -87,11 +87,18 @@
   }
 
   // 旁白：場景描述（地名那一行已經題在畫上，不寫兩次）收成兩行，點了攤開；剛發生的事一行（照舊點了攤開整則）
-  function jhProseHtml(m, inner, now) {
+  function jhProseHtml(m, inner, now, one = false) { // one：有眼下卡時描述收成一行（點了展開），讓整排招牌留在第一屏
     const open = !!S.sceneRvOpen;
     const tappable = !/<button|<form/.test(inner);
-    return `<div class="jh-prose">${inner ? `<div class="jh-desc${open || !tappable ? "" : " clamp"}"${tappable ? ` data-act="rv-scene" role="button" tabindex="0" aria-expanded="${open}"` : ""}>${inner}</div>` : ""}${now ? `<div class="jh-now">${now}</div>` : ""}</div>`;
+    return `<div class="jh-prose">${inner ? `<div class="jh-desc${open || !tappable ? "" : ` clamp${one ? " one" : ""}`}"${tappable ? ` data-act="rv-scene" role="button" tabindex="0" aria-expanded="${open}"` : ""}>${inner}</div>` : ""}${now ? `<div class="jh-now">${now}</div>` : ""}</div>`;
   }
+
+  // 地名底下那一行「剛剛」：前面的標題（「特殊頓悟」「打點・宛城」）不印，只留那一句話；只有標題、沒有句子的不畫（PM 11/25）
+  function jhNowClean(html) {
+    const out = String(html || "").replace(/<div class="tx-head">[\s\S]*?<\/div>/, "").replace(/<div class="tx-line[^"]*">\s*【[^】<]*】\s*<\/div>/g, "");
+    return /<div class="tx-line/.test(out) && out.replace(/<div class="tx-when">[\s\S]*?<\/div>/, "").replace(/<[^>]+>/g, "").trim() ? out : "";
+  }
+  const jhNowLine = (m) => { const now = jhNowClean(m.now); return now && typeof nowBlock === "function" ? nowBlock({ ...m, card: null, now }) : ""; };
 
   // 旁白開頭的「〔戰火〕」：小印已經寫了，不寫兩次（一件事一頁只出現一次）
   function jhNoSealTwice(inner, seal) {
@@ -118,7 +125,9 @@
   // 一件：{ key, seal（小印的字）, title, sub, btn（主鈕的字）, attrs（主鈕的 data-act…）}；wait 的是現在推不動的（收在清單最底下）
   const JH_LATER = "稍後"; // 待 joy 潤
   const JH_GUIDE_OK = "知道了"; // 待 joy 潤
-  const JH_GUIDE_SHUT = "收起"; // 待 joy 潤
+  // 老石那一句說的去處 → 卡上的主鈕（[認的字, 鈕上的字, 選項 id, 或拉起哪一層]）
+  const JH_GUIDE_GO = [[/今日軍令|軍令/, "看今日軍令", "", 'data-act="jh-sheet" data-sheet="duty"'], [/探索/, "去探索", "act:explore"], [/出陣/, "去出陣", "act:train"],
+    [/行路|前往|動身/, "看去處", "", 'data-act="jh-sheet" data-sheet="road"']]; // 待 joy 潤
   const JH_MORE = "另有 {n} 件"; // 待 joy 潤
   const JH_LIST = "眼下的事"; // 待 joy 潤
   const JH_WAITS = "在等的 {n} 件"; // 待 joy 潤
@@ -201,9 +210,21 @@
     if (g && g.text && !g.pending && !(typeof pro === "function" && pro()) && (g.end || typeof guideShut !== "function" || typeof guideKey !== "function" || guideShut() !== guideKey(g))) {
       const first = String(g.text).split(/(?<=[。！？])/)[0];
       const rest = g.line ? g.text : String(g.text).slice(first.length);
+      // 主鈕是那件事本身（PM 11/25：下一步的鈕在卡上）：伺服器標了要亮的那一顆（guide.glow、初入江湖的鍵）就按它；旁邊一顆「知道了」
+      const ids = [...(g.glow || []), ...(((m.onboard && m.onboard.glow) || []).map((k) => `act:${k}`))];
+      let go = (m.options || []).find((o) => o.enabled && ids.includes(o.id));
+      const ok = `data-act="${g.end ? "guide-ack" : "guide-shut"}"`;
+      let btn = "", attrs = "";
+      if (go) { const name = optParts(go)[0]; btn = /^[去看]/.test(name) ? name : `去${name}`; attrs = `data-act="choose" data-id="${esc(go.id)}"`; }
+      else { // 沒標要亮哪一顆：照那一句說的去處認（「看看『今日軍令』」→ 拉起軍務）
+        const said = `${g.line || ""}${first}`;
+        const hit = JH_GUIDE_GO.find(([re]) => re.test(said));
+        const opt = hit && hit[2] && (m.options || []).find((o) => o.enabled && o.id === hit[2]);
+        if (hit && (!hit[2] || opt)) { btn = hit[1]; attrs = hit[3] || `data-act="choose" data-id="${esc(hit[2])}"`; go = true; }
+      }
       on.unshift({ key: `g:${typeof guideKey === "function" ? guideKey(g) : g.text}`, seal: g.speaker || "", title: g.line || first,
         sub: [rest.trim(), ...(g.done || []).filter((d) => !d.startsWith("✔"))].filter(Boolean).join("　"),
-        btn: g.end ? JH_GUIDE_OK : JH_GUIDE_SHUT, attrs: `data-act="${g.end ? "guide-ack" : "guide-shut"}"`, guide: true });
+        btn: go ? btn : JH_GUIDE_OK, attrs: go ? attrs : ok, alt: go ? { label: JH_GUIDE_OK, attrs: ok } : null, guide: true });
     }
     on.push(...jhCalls(m));
     if (m.letter) { // 來信：主鈕拉起整封信（婉拒、收起都在信上）
@@ -459,7 +480,7 @@
     const lines = jhTxLines(p.nowRaw).filter((l) => !/tx-new/.test(l) && !/^得：|^失：|　失：/.test(plain(l))).map(jhTxP);
     const { title: t2, body } = jhParas(m);
     let last, rest;
-    if (take.slot === "duel" && m.card) { last = `${body.pop() || ""}${p.now || ""}`; rest = body; }
+    if (take.slot === "duel" && m.card) { last = `${body.pop() || ""}<div class="card battle-card">${fightCard(m.card, m.card_id)}</div>`; rest = body; }
     else if (placeOnly) { last = lines.pop() || body.pop() || ""; rest = lines; }
     else { last = body.pop() || ""; rest = [...lines, ...body]; }
     const title = take.title || (placeOnly ? "" : t2) || (m.art && m.art.title) || t2 || "";
@@ -486,6 +507,8 @@
   const JH_WAR_SEAL = "決戰"; // 待 joy 潤
   const JH_WAR_SKIP = "先不去"; // 待 joy 潤
   const JH_WAR_IN = "已投入"; // 待 joy 潤
+  const JH_WAR_OPEN = "後開打"; // 待 joy 潤
+  const JH_WAR_GO = "去看看"; // 待 joy 潤
   const jhChoiceCells = (opts) => opts.map((o) => { const [name, sub] = optParts(o); return `<button class="btn jh-do${o.enabled ? "" : " off"}" ${o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : `data-act="opt-why" data-why="${esc(o.note || sub)}" aria-disabled="true"`}>${esc(name)}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`; }).join("");
   function jhPrepPage(m, p) {
     return `<div class="jh-page jh-ev jh-season">${p.ckPop || ""}${jhMomentHero(m, JH_PREP_TITLE, JH_PREP_SEAL, "/static/img/places/world.webp")}<div class="jh-ev-txt"><p>${JH_PREP_TEXT}</p></div>`
@@ -506,7 +529,7 @@
   // 閉關：圖、還要多久、提前出關（擂台那一格照選單）
   function jhBusyPage(m, p) {
     const h = m.status.busy_hours;
-    return `<div class="jh-page jh-ev jh-busy">${p.ckPop || ""}${jhMomentHero(m, JH_BUSY_TITLE, JH_BUSY_SEAL, jhArtSrc(m))}${jhProseHtml(m, "", p.now)}`
+    return `<div class="jh-page jh-ev jh-busy">${p.ckPop || ""}${jhMomentHero(m, JH_BUSY_TITLE, JH_BUSY_SEAL, jhArtSrc(m))}`
       + `<div class="jh-ev-txt"><p>${esc(JH_BUSY_LEFT.replace("{h}", h < 1 ? "不到 1" : String(Math.round(h))))}</p></div><div class="jh-dos">${jhChoiceCells(m.options || [])}</div></div>`;
   }
   // 決戰集結（設計稿 q）：還沒投入時整頁是這一場：倒數、兩邊的主將、投入的鈕與先不去；投入了（或先不去）回到閒著的頁，集結那一條在眼下上面
@@ -524,9 +547,12 @@
     const bp = m.battle_panel;
     const joins = typeof musterJoins === "function" ? musterJoins(m) : [];
     const mine = bp.me && !joins.length;
-    return `<section class="jh-war-strip">${jhSealHtml(JH_WAR_SEAL)}<span class="jh-row-t"><b>${esc(bp.name)}</b><small>${mine ? JH_WAR_IN : ""}</small></span>${typeof bpClockHtml === "function" ? bpClockHtml(bp) : ""}`
-      + `${joins.length ? `<button class="btn small jh-row-go" data-act="jh-muster-skip" data-name="">${esc(optParts(joins[0])[0])}</button>` : ""}</section>`;
+    const left = typeof bpLeft === "function" && bpLeft() != null ? bpLeft() : bp.due;
+    const when = left > 0 && typeof bpClock === "function" ? `${bpClock(left)} ${JH_WAR_OPEN}` : "";
+    return `<section class="jh-war-strip">${jhSealHtml(JH_WAR_SEAL)}<span class="jh-row-t"><b>${esc(bp.name)}</b><small>${[mine ? JH_WAR_IN : "", when].filter(Boolean).join("・")}</small></span>`
+      + `${joins.length ? `<button class="btn small jh-row-go" data-act="jh-muster-skip" data-name="">${esc(JH_WAR_GO)}</button>` : ""}</section>`;
   }
+
 
   // ── 第六批：戰報（設計稿 o）：圖、勝負一枚大印、對手、一句話、得失用字（數字留在完整戰報）、看完整戰報、往下看 ──
   const JH_FIGHT_SEAL = "對陣"; // 待 joy 潤
@@ -862,6 +888,7 @@
     try { return jhPage(m, p); } catch (e) { if (typeof console !== "undefined") console.error(e); return ""; }
   }
   function jhPage(m, p) {
+    const eyeH = jhEyeHtml(m, p);
     try { document.documentElement.classList.add("jh2"); } catch (e) { /* 測試裡沒有 document */ }
     const src = jhArtSrc(m);
     const seal = jhSealWord(m);
@@ -880,5 +907,5 @@
     if (S.fig && !S.figLog && typeof figPickHtml === "function") base = base.replace(figPickHtml(m), () => jhFigHtml(m));
     if (S.hereAll && typeof hereAllHtml === "function") base = base.replace(hereAllHtml(m, p.extras || []), () => hereAllHtml(m, extras));
     const layers = `${base}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
-    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhBpMuster(m) ? "" : jhNoSealTwice(p.inner, seal), jhNoRenown(m.card && typeof nowBlock === "function" ? nowBlock({ ...m, card: null }) : p.now))}${p.resultCard}${jhMusterStrip(m)}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}${jhActsWrap(jhStamWhy(m, jhActs(p.menu, m, kinds)))}${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${jhStamWhy(m, jhSignsHtml(m, kinds))}${p.skip}${layers}</div>`;
+    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}${eyeH && jhBpMuster(m) ? " jh-tight" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhBpMuster(m) ? "" : jhNoSealTwice(p.inner, seal), jhNoRenown(jhNowLine(m)), !!eyeH)}${p.resultCard}${jhMusterStrip(m)}${eyeH}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}${jhActsWrap(jhStamWhy(m, jhActs(p.menu, m, kinds)))}${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${jhStamWhy(m, jhSignsHtml(m, kinds))}${p.skip}${layers}</div>`;
   }

@@ -100,6 +100,7 @@ def _place_art(c, loc_id: str) -> str:
 TAKE_SEALS = {"duel": "單挑", "sense": "感悟", "talk": "同伴", "faction": "投靠", "audience": "求見", "omen": "伏筆"}  # 待 joy 潤
 MENU_SEALS = {"guard": "撞見", "heroines": "奇遇", "yiwen": "異聞", "feast": "宴席", "bout": "擂台"}  # 待 joy 潤：Feature.menu 接管的那一包
 STORY_SEALS = {**EVENT_KINDS, "頓悟": "頓悟"}  # 待 joy 潤
+STORY_TITLES = {"特殊頓悟": "心頭一動"}  # 待 joy 潤：內部的叫法換成玩家的話（PM 11/25）
 SHOP_SLOTS = ("bounties", "smithy", "gear", "shops")
 # 撞見孩子那兩步（親衛隊長包，PlayerState.guard 是核心存檔欄位）：標題與圖照開場（web/img/guard/story/meet-<開場>.webp）
 GUARD_TITLES = {"soldiers": "被追的孩子", "slaves": "車上的孩子", "river": "河裡的孩子", "spy": "被圍的孩子",
@@ -150,5 +151,5 @@ def _story_take(ctx) -> dict:
     line = story_base.definition(c, progress) if progress is not None else None
     out = {"slot": "story", "seal": STORY_SEALS.get(line.kind, "奇事") if line is not None else "奇事", "place": _place_art(c, s.player.location)}
     if line is not None and line.title:
-        out["title"] = line.title
+        out["title"] = STORY_TITLES.get(line.title, line.title)
     return out
