@@ -46,3 +46,17 @@ def test_bots_get_no_switch(wan):  # noqa: F811
     wan.content.config.jianghu.enabled = True
     wan.state.player.bot = True
     assert "jianghu" not in server.main_view(wan)
+
+
+def test_eye_card_one_thing_and_the_rest_in_the_sheet(wan):  # noqa: F811
+    """第二批：眼下卡只擺一件、其餘收進「另有 N 件」；屬性點也算一件；按「另有」打開清單。"""
+    wan.content.config.jianghu.enabled = True
+    wan.state.player.stat_points = 6
+    m = server.main_view(wan)
+    page = run(m, "return H.pageJianghu();")
+    assert len(__import__("re").findall(r'class="jh-eye[ "]', page)) == 1
+    eye = page.split('aria-label="眼下"')[1].split('class="jh-acts"')[0]
+    assert "data-act=" in eye  # 那一件有鈕可按
+    sheet = run(m, 'H.S.jhSheet = "eye"; return H.pageJianghu();')
+    assert "屬性" in sheet and "眼下的事" in sheet
+    assert "○" not in page and "？" not in page

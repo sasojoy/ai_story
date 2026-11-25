@@ -84,8 +84,149 @@
     return String(menu || "").replace(/<b>移動<\/b>/, "<b>行路</b>"); // 待 joy 潤：行路（施工單第 5 條）
   }
 
+  // ── 4. 眼下（第二批）：一張卡只放現在最該理的一件，一顆主要的鈕加「稍後」；其餘收成右上「另有 N 件 ›」，點了從底下拉起清單 ──
+  // 一件：{ key, seal（小印的字）, title, sub, btn（主鈕的字）, attrs（主鈕的 data-act…）}；wait 的是現在推不動的（收在清單最底下）
+  const JH_LATER = "稍後"; // 待 joy 潤
+  const JH_MORE = "另有 {n} 件"; // 待 joy 潤
+  const JH_LIST = "眼下的事"; // 待 joy 潤
+  const JH_WAITS = "在等的 {n} 件"; // 待 joy 潤
+  const JH_CLOSE = "關閉";
+  const JH_NONE = "眼下沒有別的事。"; // 待 joy 潤
+  const JH_READ = "看信"; // 待 joy 潤
+  const JH_LOOK = "看看"; // 待 joy 潤
+  const JH_GO = { id: "去做", loc: "前往", duty: "去辦", hero: "去看", legacy: "去看" }; // 待 joy 潤：主鈕的字（照「去」到哪裡）
+  const JH_RENOWN = "江湖上稱你「{t}」"; // 待 joy 潤
+  const JH_PTS = "有 {n} 點屬性可配"; // 待 joy 潤（同進行中那一行）
+  const JH_SIDES = "還沒投靠哪一方"; // 待 joy 潤
+  const JH_SIDES_SUB = "官軍、黃巾，或做個散人"; // 待 joy 潤
+  const JH_WEEK_SEAL = "本週"; // 待 joy 潤
+  const JH_DAILY = "月卡・今日份"; // 待 joy 潤（同 mall.js 那一張）
+  const JH_TUG_LINK = "兩軍態勢・這一季在打什麼"; // 待 joy 潤
+
+  // 剛剛那一則裡的「名號傳開・某某 ›」：從那一行拿出來，變成眼下的一件（PM 2026-11-25：方框連結有網頁味）
+  const JH_RENOWN_CHIP = /<span class="tx-chg tx-renown"[^>]*>名號傳開・([^<]*?)\s*›<\/span>/g;
+  const jhRenowns = (m) => [...String(m.now || "").matchAll(JH_RENOWN_CHIP)].map((x) => x[1]);
+  const jhNoRenown = (html) => String(html || "").replace(JH_RENOWN_CHIP, "");
+
+  // 進行中（web/codex.js 的 tkItems）的一件換成眼下的一件：主鈕照 codex 的「去」那一套（cx-tk-go），字照去哪裡
+  function jhFromTrack(m, it) {
+    const o = it.go && it.go.id ? (m.options || []).find((x) => x.id === it.go.id) : null;
+    const name = o ? optParts(o)[0].split("・")[0] : "";
+    const kind = Object.keys(JH_GO).find((k) => it.go && it.go[k]) || "id";
+    return { key: it.key, seal: it.seal, title: it.title, sub: it.sub, wait: !!it.wait, btn: name && name.length <= 4 && !it.title.includes(name) ? name : JH_GO[kind], attrs: it.go ? tkGoAttrs(it) : "" };
+  }
+
+  // 別人遞來的邀請（切磋、論武、結伴……）：一則一件，排最前面（邀請半小時就作廢）。主鈕是答應，第二顆是婉拒（不是稍後）
+  const JH_CALL_SEAL = [[/切磋/, "邀戰"], [/論武/, "論武"], [/結伴/, "結伴"], [/結義/, "結義"]]; // 待 joy 潤
+  const jhBtnAttrs = (o) => (o.peer ? `data-act="peer-answer" data-name="${esc(o.peer)}"` : `data-act="choose" data-id="${esc(o.id)}"${o.enabled === false ? " disabled" : ""}`);
+  function jhCalls(m) {
+    return (m.calls || []).map((c, i) => {
+      const [yes, no] = c.options || [];
+      const seal = (JH_CALL_SEAL.find(([re]) => re.test(c.text)) || [null, "邀約"])[1];
+      return { key: `c:${yes ? yes.id : i}`, seal, title: c.text, sub: "", btn: yes ? yes.label : JH_LOOK, attrs: yes ? jhBtnAttrs(yes) : "", alt: no ? { label: no.label, attrs: jhBtnAttrs(no) } : null };
+    });
+  }
+
+  function jhEyeItems(m, p) {
+    const on = [...jhCalls(m)], wait = [];
+    const s = m.status || {};
+    if (m.letter) { // 來信：主鈕拉起整封信（婉拒、收起都在信上）
+      const x = m.letter;
+      on.push({ key: `l:${x.id}`, seal: x.kind || "來信", title: `${x.sender}來信`, sub: x.task ? x.task.how : x.errand ? x.errand.text : x.text, btn: JH_READ, attrs: 'data-act="jh-sheet" data-sheet="letter"' });
+    }
+    if (p.daily) { // 月卡今天的份：主鈕直接領
+      const today = m.mall && m.mall.daily;
+      on.push({ key: "daily", seal: "月卡", title: JH_DAILY, sub: today && typeof dailyWhat === "function" ? dailyWhat(today) : "", btn: "領取", attrs: 'data-act="mall-claim"' });
+    }
+    for (const t of jhRenowns(m)) on.push({ key: `r:${t}`, seal: "名聲", title: JH_RENOWN.replace("{t}", t), sub: "", btn: JH_LOOK, attrs: 'data-act="renown-open" role="button"' });
+    const joined = !m.sides_card || !!m.sides_card.joined;
+    if (!joined && m.sides_card) on.push({ key: "sides", seal: "投靠", title: JH_SIDES, sub: JH_SIDES_SUB, btn: JH_LOOK, attrs: 'data-act="jh-sheet" data-sheet="sides"' });
+    const slim = typeof codexSlim === "function" && codexSlim(m);
+    const w = m.week_card;
+    if (w && slim && typeof codexWeekShow === "function" && codexWeekShow(m)) on.push({ key: `w:${w.when}`, seal: JH_WEEK_SEAL, title: w.theme || w.when, sub: w.when || "", btn: JH_LOOK, attrs: 'data-act="cx-tk-why"' });
+    const got = typeof tkItems === "function" ? tkItems(m, p.parts) : null;
+    if (got) {
+      for (const it of got.on) on.push(jhFromTrack(m, it));
+      for (const it of got.wait) wait.push(jhFromTrack(m, it));
+    } else {
+      for (const d of p.parts || []) if (d.html) (d.now ? on : wait).push({ key: `d:${d.key}`, seal: d.name, title: d.line || d.name, sub: "", btn: JH_GO.duty, attrs: 'data-act="duty-open"', wait: !d.now });
+    }
+    // 屬性點、識海：進行中瘦身時已經在 tkItems 裡；沒瘦身（還沒投靠、進行中關著）這裡補
+    if (!slim) {
+      const pts = s.growth ? s.stat_points | 0 : 0;
+      if (pts) on.push({ key: "h:pts", seal: "屬性", title: JH_PTS.replace("{n}", pts), sub: "", btn: "去配", attrs: 'data-act="hero-attrs"' });
+      const sh = m.legacy && m.legacy.shihai;
+      if (sh && sh.offers && sh.offers.length) on.push({ key: "h:shihai", seal: "識海", title: "上一季的神品意境還沒挑", sub: "", btn: JH_LOOK, attrs: 'data-act="legacy-view" data-v="shihai"' }); // 待 joy 潤
+    }
+    return { on, wait };
+  }
+
+  // 眼下已經有的（邀請的答應、婉拒）不再排進此地可為
+  function jhNotInEye(m, extras) {
+    const ids = new Set((m.calls || []).flatMap((c) => (c.options || []).map((o) => o.id)));
+    return extras.filter((o) => !ids.has(o.id) && !o.id.startsWith("invite:"));
+  }
+  // 標題前面的小圖示（「🪧 懸賞」）拿掉：小印已經說了是哪一類
+  const jhPlain = (t) => String(t || "").replace(/^[^\p{L}\p{N}（「]+/u, "");
+
+  const jhSealHtml = (t) => `<span class="jh-k">${esc(t)}</span>`;
+  // 眼下那一張：挑第一件不在「稍後」裡的（都稍後了就從頭再來）
+  function jhEyeHtml(m, p) {
+    const { on, wait } = jhEyeItems(m, p);
+    if (!on.length && !wait.length) return "";
+    const later = S.jhLater || [];
+    const top = on.find((x) => !later.includes(x.key)) || on[0];
+    const rest = on.length - (top ? 1 : 0);
+    const more = rest || wait.length ? `<button class="jh-more" data-act="jh-sheet" data-sheet="eye" aria-label="${esc(JH_MORE.replace("{n}", rest))}">${rest ? esc(JH_MORE.replace("{n}", rest)) : esc(JH_WAITS.replace("{n}", wait.length))}<i aria-hidden="true">›</i></button>` : "";
+    if (!top) { // 都在等：一行就好，點了拉起清單
+      return `<section class="jh-eye idle"><div class="jh-eye-hd">${jhSealHtml(wait[0].seal)}<b>${esc(jhPlain(wait[0].title))}</b>${more}</div></section>`;
+    }
+    return `<section class="jh-eye" aria-label="眼下">
+        <div class="jh-eye-hd">${jhSealHtml(top.seal)}<b>${esc(jhPlain(top.title))}</b>${more}</div>
+        <p class="jh-eye-sub">${esc(top.sub || "")}</p>
+        <div class="jh-eye-row"><button class="btn jh-eye-go" ${top.attrs}>${esc(top.btn)}</button>${top.alt ? `<button class="btn jh-eye-later" ${top.alt.attrs}>${esc(top.alt.label)}</button>` : on.length > 1 ? `<button class="btn jh-eye-later" data-act="jh-later" data-key="${esc(top.key)}">${JH_LATER}</button>` : ""}</div>
+      </section>`;
+  }
+
+  // 拉起來的那一層：眼下的事（全部）、一封信、投靠的三方卡
+  function jhSheetHtml(m, p) {
+    const which = S.jhSheet;
+    if (!which) return "";
+    const wrap = (label, inner) => `<div class="sheet-bg" data-act="jh-sheet"></div><div class="sheet jh-sheet" role="dialog" aria-label="${esc(label)}"><div class="grip"></div>`
+      + `<div class="top-row"><h3 style="flex:1">${esc(label)}</h3><button class="btn small ghost" data-act="jh-sheet">${JH_CLOSE}</button></div>${inner}</div>`;
+    if (which === "letter") {
+      if (!m.letter || typeof letterHtml !== "function") { S.jhSheet = null; return ""; }
+      S.letterOpen = m.letter.id;
+      return wrap(`${m.letter.sender}來信`, letterHtml(m.letter) + (p.pushAsk || ""));
+    }
+    if (which === "sides") {
+      const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";
+      if (!html) { S.jhSheet = null; return ""; }
+      return wrap(JH_SIDES, html);
+    }
+    const { on, wait } = jhEyeItems(m, p);
+    const row = (it, go) => `<div class="jh-row${go ? "" : " wait"}">${jhSealHtml(it.seal)}<span class="jh-row-t"><b>${esc(jhPlain(it.title))}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</span>${go ? `<button class="btn small jh-row-go" ${it.attrs}>${esc(it.btn)}</button>` : ""}</div>`;
+    const tug = typeof tkTugHtml === "function" ? tkTugHtml(m) : "";
+    const why = m.week_card ? `<button class="jh-why" data-act="cx-tk-why">${JH_TUG_LINK}<i aria-hidden="true">›</i></button>` : "";
+    const waits = wait.length ? `<button class="jh-waits" data-act="jh-wait" aria-expanded="${!!S.jhWait}">${esc(JH_WAITS.replace("{n}", wait.length))}<i aria-hidden="true">${S.jhWait ? "▴" : "▾"}</i></button>${S.jhWait ? wait.map((it) => row(it, false)).join("") : ""}` : "";
+    return wrap(JH_LIST, `${tug}${on.length ? on.map((it) => row(it, true)).join("") : `<p class="jh-none">${JH_NONE}</p>`}${waits}${why}`);
+  }
+
+  async function jianghuClick(act, el, ev) {
+    switch (act) {
+        case "jh-later": S.jhLater = [...(S.jhLater || []).filter((k) => k !== el.dataset.key), el.dataset.key]; renderPage(); break;
+        case "jh-sheet": S.jhSheet = el.dataset.sheet || null; S.jhWait = false; renderPage(); break;
+        case "jh-wait": S.jhWait = !S.jhWait; renderPage(); break;
+    } // jianghuClick
+  } // jianghuClick
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait"]);
+
   // 整頁：parts 是 pageJianghu 已經算好的各塊（同一份資料，不重算）
+  // 畫壞了（新排法哪一格丟例外）不能讓整頁掉回登入頁（app.js 的 enter 接到例外就回登入）：回空字串，main.js 照舊畫原本的江湖頁
   function jhPageHtml(m, p) {
+    try { return jhPage(m, p); } catch (e) { if (typeof console !== "undefined") console.error(e); return ""; }
+  }
+  function jhPage(m, p) {
     try { document.documentElement.classList.add("jh2"); } catch (e) { /* 測試裡沒有 document */ }
     const src = jhArtSrc(m);
     const seal = jhSealWord(m);
@@ -95,8 +236,8 @@
         ${jhStatusHtml(m)}
         <div class="jh-pl"><h1>${esc(name)}</h1>${seal ? `<span class="jh-seal">${esc(seal)}</span>` : ""}</div>
       </section>`;
-    // 眼下（第二批換成一張不會長高的卡，排回行動牌上面）：這一批進行中、提示、結算、來信、本週卡照舊的樣子，先排在行動牌底下——
-    // 來信攤開有一屏高，排在上面會把四顆行動牌擠出第一屏（Joy 2026-10-26「四顆行動鈕一定在第一屏」）
-    const eye = `${p.track}${p.hints}${p.resultCard}${p.peek}${p.letter}`;
-    return `<div class="jh-page">${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), p.now)}${p.social}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhActs(p.menu)}</div>${eye}${p.duty}${p.sealCard}${p.senseNotes}${p.hereRow}${p.peopleRow}${p.guideDown}${p.skip}${p.layers}</div>`;
+    // 眼下一張卡排在旁白底下、行動牌上面（高度固定：事再多也只多「另有 N 件」那幾個字）
+    const sheetOpen = !!S.jhSheet || !!S.cxWhy || !!S.dutyOpen;
+    const layers = `${p.layers}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
+    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhActs(p.menu)}</div>${p.sealCard}${p.senseNotes}${typeof hereRowHtml === "function" ? hereRowHtml(m, jhNotInEye(m, p.extras || [])) : ""}${p.peopleRow}${p.guideDown}${p.skip}${layers}</div>`;
   }

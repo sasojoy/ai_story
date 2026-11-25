@@ -1037,7 +1037,8 @@
       // 「進行中」（web/codex.js，Config.codex.tracker）：狀態列底下一行、點印記拉起全部；有它就不另畫「要事」那一張（要事那幾格併在它的清單裡）
       const track = typeof codexTrackHtml === "function" ? codexTrackHtml(m, parts) : "";
       // 江湖頁重排（web/jianghu.js，Config.jianghu.enabled；Joy 2026-11-25 決定卡「開始做，先不上線」）：同一份各塊，換排法
-      if (typeof jhOn === "function" && jhOn(m)) return jhPageHtml(m, { track, hints, resultCard, peek, letter, inner, now, social, jieyi: typeof jieyiOfferHtml === "function" ? jieyiOfferHtml(m) : "", links, free, menu, duty: track ? "" : dutyCardHtml(m, parts), sealCard, senseNotes, hereRow: hereRowHtml(m, extras), peopleRow: peopleRowHtml(m), guideDown, skip, layers });
+      const jh = typeof jhOn === "function" && jhOn(m) ? jhPageHtml(m, { ckPop, parts, pushAsk, daily: letter, resultCard, inner, now, social, jieyi: typeof jieyiOfferHtml === "function" ? jieyiOfferHtml(m) : "", links, free, menu, sealCard, senseNotes, extras, peopleRow: peopleRowHtml(m), guideDown, skip, layers }) : "";
+      if (jh) return jh;
       return `${track}${hints}${resultCard}${bp}${peek}${letter}${sceneR}${typeof jieyiOfferHtml === "function" ? jieyiOfferHtml(m) : ""}${links}${free}${bp ? bpDropMoves(menu) : menu}${track ? "" : dutyCardHtml(m, parts)}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
