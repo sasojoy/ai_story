@@ -230,7 +230,7 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-ev-txt p { margin: 0 0 10px; }
 .jh-ev-more { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 2px; border: 0; background: none; color: var(--ink-2); font: 400 13px var(--sans); cursor: pointer; }
 .jh-ev-before { margin: 0 0 12px; padding: 0 0 4px 12px; border-left: 2px solid var(--line); color: var(--ink-2); font-size: 15px; }
-.jh-ev-before .tx-now { margin: 0 0 8px; padding: 0; border: 0; background: none; box-shadow: none; }
+.jh-ev-before .tx-now, .jh-ev-before .card, .jh-ev-before .now { margin: 0 0 8px; padding: 0; border: 0; background: none; box-shadow: none; }
 .jh-ev-opts { position: relative; z-index: 2; margin: 0 0 16px; }
 .jh-ev-opts .options { display: grid; gap: 8px; }
 .jh-ev-opts .options > .btn { justify-content: flex-start; min-height: 50px; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-left: 4px solid var(--ink);
