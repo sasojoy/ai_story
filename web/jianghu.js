@@ -492,8 +492,8 @@
     try { document.documentElement.classList.add("jh2"); } catch (e) { /* 測試裡沒有 document */ }
     return `<section class="jh-hero">${src ? `<img class="jh-art" src="${esc(src)}" alt="" decoding="async">` : '<div class="jh-art none"></div>'}
         ${jhStatusHtml(m)}
-        <div class="jh-pl">${seal ? `<span class="jh-seal">${esc(seal)}</span>` : ""}<h1>${esc(title)}</h1></div>
-      </section>`;
+        <div class="jh-pl">${seal ? `<span class="jh-seal">${esc(seal)}</span>` : ""}<h1>${esc(title).replace(/（([^（）]*)）$/, '<small class="jh-ground">$1</small>')}</h1></div>
+      </section>`; // 標題後面的地形（感悟「有所感・鐵匠鋪（城鎮）」）縮成一枚小字，不跟大字擠一行
   }
   // 選項底下那一句把屬性與數字拿掉、只留話（「統御 108：這點苦頭，你吃得消。」→「這點苦頭，你吃得消。」；Joy 11/10 不把數字寫給玩家讀）
   const jhNoOdds = (menu) => String(menu || "").replace(/(<small class="opt-note ev-odds[^"]*">)[^<：]*\d[^<：]*：/g, "$1");

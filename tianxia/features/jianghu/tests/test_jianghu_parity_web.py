@@ -135,7 +135,7 @@ def test_sense_methods_keep_numbers_notes_and_the_ground():
     block = re.search(r'<div class="act-notes sense-notes">(.*?)</div>', page).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == m["sense_help"]["lines"]
     assert page.index('class="act-notes sense-notes"') > max(page.index(f'data-id="{o["id"]}"') for o in m["options"])
-    assert "<h1>有所感・鐵匠鋪（城鎮）</h1>" in page
+    assert '<h1>有所感・鐵匠鋪<small class="jh-ground">城鎮</small></h1>' in page
     txt = page.split('class="jh-ev-txt">')[1].split('<div class="jh-ev-opts">')[0]
     shown = re.sub(r'<button class="jh-ev-more".*?</button>', "", txt, flags=re.S)  # 前文收著
     assert "街口的鐵匠鋪" in shown and "選錯了做法" not in shown
