@@ -686,16 +686,25 @@ def title_of(state: GameState, content: Content, arg: str) -> str:
 
 def chatter(content: Content, loc_id: str, hour: int, world: WorldState | None = None) -> list[tuple[str, str]]:
     """鄰桌閒談：這一間這一陣子有模型寫好的一段（chatter_fresh）就用它；不然 shop_lines.json 酒肆的 chatter 那一組挑兩句
-    （照「地點｜季曆小時」雜湊，同一個時辰不換）。每一句「誰：「說了什麼」」拆成（誰, 說了什麼）。只是氣氛：寫好的那一段也只拿
+    （chatter_rotation：同一個時辰不換、一間酒肆整組輪完才重來）。每一句「誰：「說了什麼」」拆成（誰, 說了什麼）。只是氣氛：寫好的那一段也只拿
     人人都看得到的事（天下大事、牆上的字、誰請了客）當話頭，消息要花錢聽。"""
     written = chatter_fresh(world, content, loc_id) if world is not None else None
     if written:
         return [_split_line(text) for text in written]
     pool = list(content.shop_lines.get("tavern", {}).get("chatter") or [])
+    return [_split_line(text) for text in chatter_rotation(pool, loc_id, hour)]
+
+
+def chatter_rotation(pool: list[str], loc_id: str, hour: int, k: int = 2) -> list[str]:
+    """固定句的閒談照輪替挑（PM 2026-11-25 派工「酒肆事件會重複」：以前每個時辰各自亂抽兩句，十句裡隔一兩個時辰就撞到一樣的）：
+    一間酒肆把整組洗成一副牌（照地點雜湊，rng_for），每個時辰往下拿 k 句、拿到底接回開頭；整組輪完才會再聽到同一句，
+    相鄰兩個時辰不會重複。不碰 Game.rng、不記狀態。"""
     if not pool:
         return []
-    rng = rng_for("chatter", loc_id, hour)
-    return [_split_line(text) for text in rng.sample(pool, k=min(2, len(pool)))]
+    k = min(k, len(pool))
+    deck = rng_for("chatter", loc_id).sample(pool, len(pool))
+    start = hour * k
+    return [deck[(start + i) % len(deck)] for i in range(k)]
 
 
 def _split_line(text: str) -> tuple[str, str]:
