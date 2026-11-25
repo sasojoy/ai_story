@@ -313,3 +313,5 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-more { position: relative; }
 .jh-more::after { content: ""; position: absolute; inset: -6px 0; }
 .jh-desc.clamp.one[data-act] { border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin: -8px 0; } /* 收一行的字：overflow 切在 padding 外緣，透明邊框才點得到又不露出第二行 */
+.tx-chg[data-act] { position: relative; }
+.tx-chg[data-act]::after { content: ""; position: absolute; inset: -12px -4px; } /* 紀錄裡「名號傳開 ›」那一顆字籤：點的範圍撐到 44 */
