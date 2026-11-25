@@ -100,6 +100,16 @@
   const JH_SIDES = "還沒投靠哪一方"; // 待 joy 潤
   const JH_SIDES_SUB = "官軍、黃巾，或做個散人"; // 待 joy 潤
   const JH_WEEK_SEAL = "本週"; // 待 joy 潤
+  const JH_WEEK_LIVE = "大事"; // 待 joy 潤：這一回的大事在集結或開打
+  // 兩軍態勢一句話（同 codex.js tkTugHtml、本週卡那一句）
+  function jhTugWords(m) {
+    const w = m.week_card, sd = w && w.sides;
+    if (!sd || !("guan" in sd) || !("huang" in sd)) return "";
+    const d = (sd.guan | 0) - (sd.huang | 0);
+    const cols = (m.sides_card && m.sides_card.cols) || [];
+    const name = (k) => (cols.find((c) => c.id === k) || {}).name || (k === "guan" ? "官軍" : "黃巾");
+    return Math.abs(d) < 10 ? "兩軍相持" : `${name(d > 0 ? "guan" : "huang")}${Math.abs(d) >= 30 ? "大佔上風" : "佔上風"}`; // 待 joy 潤（同本週卡那一句）
+  }
   const JH_DAILY = "月卡・今日份"; // 待 joy 潤（同 mall.js 那一張）
   const JH_TUG_LINK = "兩軍態勢・這一季在打什麼"; // 待 joy 潤
 
@@ -113,23 +123,49 @@
     const o = it.go && it.go.id ? (m.options || []).find((x) => x.id === it.go.id) : null;
     const name = o ? optParts(o)[0].split("・")[0] : "";
     const kind = Object.keys(JH_GO).find((k) => it.go && it.go[k]) || "id";
-    return { key: it.key, seal: it.seal, title: it.title, sub: it.sub, wait: !!it.wait, btn: name && name.length <= 4 && !it.title.includes(name) ? name : JH_GO[kind], attrs: it.go ? tkGoAttrs(it) : "" };
+    let { title, sub } = it;
+    if (it.seal === JH_EPIPHANY && sub) [title, sub] = [sub.split("・")[0], sub.split("・").slice(1).join("・")]; // 「特殊頓悟」是線的代稱：標題寫這一步本身（靜心自問、去面對心魔）
+    if (it.key === "d:bounty") ({ title, sub } = jhBountyWords(m) || { title, sub });
+    return { key: it.key, seal: it.seal, title, sub, wait: !!it.wait, btn: name && name.length <= 4 && !title.includes(name) ? name : JH_GO[kind], attrs: it.go ? tkGoAttrs(it) : "" };
+  }
+
+  // 懸賞那一件的字：卡頭那一行（「懸賞（2）賞照你第 30 級」）像代號，換成手上的事（PM 2026-11-25）
+  const JH_EPIPHANY = "頓悟";
+  const JH_BOUNTY_MANY = "手上有 {n} 件懸賞"; // 待 joy 潤
+  const JH_BOUNTY_GIVE = "身上有懸賞要的東西"; // 待 joy 潤（求兵：還沒揭、身上有合用的）
+  function jhBountyWords(m) {
+    const rows = (m.status && m.status.bounties) || [];
+    if (!rows.length) return null;
+    const first = rows[0];
+    if (rows.length > 1) return { title: JH_BOUNTY_MANY.replace("{n}", rows.length), sub: jhPlain(first.title) };
+    return first.have ? { title: JH_BOUNTY_GIVE, sub: jhPlain(first.title) } : { title: jhPlain(first.title), sub: first.how || "" };
   }
 
   // 別人遞來的邀請（切磋、論武、結伴……）：一則一件，排最前面（邀請半小時就作廢）。主鈕是答應，第二顆是婉拒（不是稍後）
+  const JH_CALL_WHO = "{side}・人就在此地"; // 待 joy 潤：眼下卡那一行副題（他是誰），卡高不變
+  const JH_CALL_SOON = "邀約不久就作廢"; // 待 joy 潤（找不到人時）
   const JH_CALL_SEAL = [[/切磋/, "邀戰"], [/論武/, "論武"], [/結伴/, "結伴"], [/結義/, "結義"]]; // 待 joy 潤
   const jhBtnAttrs = (o) => (o.peer ? `data-act="peer-answer" data-name="${esc(o.peer)}"` : `data-act="choose" data-id="${esc(o.id)}"${o.enabled === false ? " disabled" : ""}`);
   function jhCalls(m) {
     return (m.calls || []).map((c, i) => {
       const [yes, no] = c.options || [];
       const seal = (JH_CALL_SEAL.find(([re]) => re.test(c.text)) || [null, "邀約"])[1];
-      return { key: `c:${yes ? yes.id : i}`, seal, title: c.text, sub: "", btn: yes ? yes.label : JH_LOOK, attrs: yes ? jhBtnAttrs(yes) : "", alt: no ? { label: no.label, attrs: jhBtnAttrs(no) } : null };
+      const who = (m.here || []).find((x) => x.name && String(c.text).includes(x.name));
+      return { key: `c:${yes ? yes.id : i}`, seal, title: c.text, sub: who && who.side ? JH_CALL_WHO.replace("{side}", who.side) : JH_CALL_SOON, btn: yes ? yes.label : JH_LOOK, attrs: yes ? jhBtnAttrs(yes) : "", alt: no ? { label: no.label, attrs: jhBtnAttrs(no) } : null };
     });
   }
 
   function jhEyeItems(m, p) {
-    const on = [...jhCalls(m)], wait = [];
+    const on = [], wait = [];
     const s = m.status || {};
+    const slim = typeof codexSlim === "function" && codexSlim(m);
+    const w = m.week_card;
+    // 換週那一刻、這一回的大事在集結或開打：兩軍態勢自己變成眼下的一件，排最前（PM 2026-11-25；平常只在清單裡）
+    if (w && slim && typeof codexWeekShow === "function" && codexWeekShow(m)) {
+      const live = !!(w.chapter && w.chapter.live);
+      on.push({ key: `w:${w.when}`, seal: live ? JH_WEEK_LIVE : JH_WEEK_SEAL, title: w.theme || w.when, sub: [jhTugWords(m), w.when].filter(Boolean).join("・"), btn: JH_LOOK, attrs: 'data-act="cx-tk-why"' });
+    }
+    on.push(...jhCalls(m));
     if (m.letter) { // 來信：主鈕拉起整封信（婉拒、收起都在信上）
       const x = m.letter;
       on.push({ key: `l:${x.id}`, seal: x.kind || "來信", title: `${x.sender}來信`, sub: x.task ? x.task.how : x.errand ? x.errand.text : x.text, btn: JH_READ, attrs: 'data-act="jh-sheet" data-sheet="letter"' });
@@ -141,9 +177,6 @@
     for (const t of jhRenowns(m)) on.push({ key: `r:${t}`, seal: "名聲", title: JH_RENOWN.replace("{t}", t), sub: "", btn: JH_LOOK, attrs: 'data-act="renown-open" role="button"' });
     const joined = !m.sides_card || !!m.sides_card.joined;
     if (!joined && m.sides_card) on.push({ key: "sides", seal: "投靠", title: JH_SIDES, sub: JH_SIDES_SUB, btn: JH_LOOK, attrs: 'data-act="jh-sheet" data-sheet="sides"' });
-    const slim = typeof codexSlim === "function" && codexSlim(m);
-    const w = m.week_card;
-    if (w && slim && typeof codexWeekShow === "function" && codexWeekShow(m)) on.push({ key: `w:${w.when}`, seal: JH_WEEK_SEAL, title: w.theme || w.when, sub: w.when || "", btn: JH_LOOK, attrs: 'data-act="cx-tk-why"' });
     const got = typeof tkItems === "function" ? tkItems(m, p.parts) : null;
     if (got) {
       for (const it of got.on) on.push(jhFromTrack(m, it));
@@ -161,9 +194,10 @@
     return { on, wait };
   }
 
-  // 眼下已經有的（邀請的答應、婉拒）不再排進此地可為
+  // 眼下已經有的（邀請的答應、婉拒）、收進人物卡的（護衛、犒軍、挑戰：aid 那幾顆）不再排進此地可為（施工單第 6 條「aid:* 不再散在此地可為」）
   function jhNotInEye(m, extras) {
     const ids = new Set((m.calls || []).flatMap((c) => (c.options || []).map((o) => o.id)));
+    for (const f of m.figures_here || []) for (const id of f.aid || []) ids.add(id);
     return extras.filter((o) => !ids.has(o.id) && !o.id.startsWith("invite:"));
   }
   // 標題前面的小圖示（「🪧 懸賞」）拿掉：小印已經說了是哪一類
@@ -199,6 +233,7 @@
       S.letterOpen = m.letter.id;
       return wrap(`${m.letter.sender}來信`, letterHtml(m.letter) + (p.pushAsk || ""));
     }
+    if (which === "people") return wrap(JH_PEERS_HEAD, jhPeersSheetBody(m));
     if (which === "sides") {
       const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";
       if (!html) { S.jhSheet = null; return ""; }
@@ -221,6 +256,89 @@
   } // jianghuClick
   registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait"]);
 
+  // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
+  // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡
+  const JH_PEOPLE = "這裡的人"; // 待 joy 潤
+  const JH_PEOPLE_F = "{n} 位人物", JH_PEOPLE_P = "{n} 位俠客"; // 待 joy 潤（沒有的那一半不寫）
+  const JH_PEERS_ALL = "俠客"; // 待 joy 潤：「＋N 俠客」那一格
+  const JH_PEERS_HEAD = "此地的俠客"; // 待 joy 潤
+  const JH_BROTHER = "義"; // 待 joy 潤：義兄弟頭上的小印
+  const JH_FOE = "敵"; // 待 joy 潤：敵方頭上的小印
+  const JH_ROW_MAX = 6; // 一排六格（390 寬），人再多也是一排
+  const JH_SIDES2 = ["官軍", "黃巾"];
+  function jhMySide(m) {
+    return String((m.status && m.status.affiliation) || "").split("・").find((x) => JH_SIDES2.includes(x)) || "";
+  }
+  // 誰頭上掛什麼印：大勢人物（id → 印）與俠客（名號 → 印）
+  function jhMarks(m) {
+    const fig = {}, peer = {};
+    for (const f of m.figures_here || []) {
+      if ((m.orders || []).some((o) => !o.done && String(o.text || "").startsWith(f.name))) fig[f.id] = "軍令";
+      else if (m.letter && m.letter.sender === f.name && (m.letter.task || m.letter.errand)) fig[f.id] = m.letter.kind || "託付";
+    }
+    for (const c of m.calls || []) {
+      const who = (m.here || []).find((x) => String(c.text).startsWith(x.name));
+      if (who) peer[who.name] = (JH_CALL_SEAL.find(([re]) => re.test(c.text)) || [null, "邀約"])[1];
+    }
+    const j = m.jieyi;
+    for (const x of (j && j.members) || []) if (!x.me && !peer[x.name]) peer[x.name] = JH_BROTHER;
+    const mine = jhMySide(m);
+    for (const x of m.here || []) if (!peer[x.name] && mine && JH_SIDES2.includes(x.side) && x.side !== mine) peer[x.name] = JH_FOE;
+    return { fig, peer };
+  }
+  const jhMk = (t) => (t ? `<i class="jh-mk">${esc(t)}</i>` : "");
+  function jhPeopleHtml(m) {
+    const figs = m.figures_here || [], peers = m.here || [];
+    if (!figs.length && !peers.length) return "";
+    const { fig, peer } = jhMarks(m);
+    const order = { 邀戰: 0, 論武: 0, 結伴: 0, 結義: 0, 邀約: 0, [JH_BROTHER]: 1, [JH_FOE]: 2 };
+    const near = peers.filter((x) => peer[x.name]).sort((a, b) => order[peer[a.name]] - order[peer[b.name]]);
+    const room = Math.max(0, JH_ROW_MAX - figs.length - (peers.length ? 1 : 0));
+    const shown = near.slice(0, room), rest = peers.length - shown.length;
+    const tiles = figs.map((f) => `<button class="jh-ic fig" data-act="fig-open" data-id="${esc(f.id)}"><span${f.face ? ` style="background-image:url('${esc(f.face)}')"` : ""}>${f.face ? "" : esc(f.name.slice(0, 1))}</span>${esc(f.name)}${jhMk(fig[f.id])}</button>`)
+      .concat(shown.map((x) => `<button class="jh-ic pc${peer[x.name] === JH_FOE ? " foe" : ""}" data-act="peer" data-name="${esc(x.name)}"><span>${esc(x.name.slice(0, 1))}</span>${esc(x.name)}${jhMk(peer[x.name] === JH_FOE ? "" : peer[x.name])}</button>`))
+      .concat(rest > 0 ? [`<button class="jh-ic all" data-act="jh-sheet" data-sheet="people"><span>＋${rest}</span>${JH_PEERS_ALL}</button>`] : []);
+    const n = [figs.length ? JH_PEOPLE_F.replace("{n}", figs.length) : "", peers.length ? JH_PEOPLE_P.replace("{n}", peers.length) : ""].filter(Boolean).join("・");
+    return `<section class="jh-blk jh-people"><h3>${JH_PEOPLE}<small>${esc(n)}</small></h3><div class="jh-ppl">${tiles.join("")}</div></section>`;
+  }
+  // 「＋N 俠客」拉起來那一層：此地全部的俠客，跟你有關的排前面
+  function jhPeersSheetBody(m) {
+    const { peer } = jhMarks(m);
+    const list = (m.here || []).slice().sort((a, b) => (peer[a.name] ? 0 : 1) - (peer[b.name] ? 0 : 1));
+    return `<div class="jh-peers">${list.map((x) => `<button class="jh-prow${peer[x.name] === JH_FOE ? " foe" : ""}" data-act="peer" data-name="${esc(x.name)}"><span class="jh-pface">${esc(x.name.slice(0, 1))}</span><span class="jh-row-t"><b>${esc(x.name)}</b><small>${esc(x.side || "")}</small></span>${peer[x.name] ? jhSealHtml(peer[x.name]) : ""}<i aria-hidden="true">›</i></button>`).join("")}</div>`;
+  }
+
+  // 點人物：拉起他的卡。立繪、名字與身分、一句他是誰；他交代你的事（有的話，鈕在最上面）；其餘能對他做的兩欄排（不能做的變淡、寫原因）
+  const JH_FIG_TALK = "交談", JH_FIG_LOG = "往來紀錄"; // 待 joy 潤（同 companions.js）
+  const JH_FIG_ORDER = "他點了你的名：{t}"; // 待 joy 潤
+  const JH_FIG_GO = "去辦"; // 待 joy 潤
+  function jhFigHtml(m) {
+    const f = (m.figures_here || []).find((x) => x.id === S.fig);
+    if (!f) return "";
+    const byId = Object.fromEntries((m.options || []).map((o) => [o.id, o]));
+    const btn = (label, small, attrs, off) => `<button class="btn jh-do${off ? " off" : ""}" ${attrs}>${esc(label)}${small ? `<small>${esc(small)}</small>` : ""}</button>`;
+    const why = (t) => `data-act="opt-why" data-why="${esc(t ? `${t}。` : "")}" aria-disabled="true"`;
+    const dos = [f.talk.via ? btn(JH_FIG_TALK, f.affinity ? `情誼 ${f.affinity}` : "", `data-act="fig-talk" data-id="${esc(f.id)}"`) : btn(JH_FIG_TALK, f.talk.why || "", why(f.talk.why), true)];
+    for (const id of f.aid || []) {
+      const o = byId[id];
+      if (!o) continue;
+      const [label, detail] = optParts(o);
+      const name = label.replace(/^(護衛|犒軍|挑戰).*$/, "$1").replace(/・.*$/, "");
+      const note = String(detail || "").split("）（").pop();
+      dos.push(o.enabled ? btn(name, note, `data-act="fig-act" data-id="${esc(o.id)}"`) : btn(name, note, why(note), true));
+    }
+    dos.push(btn(JH_FIG_LOG, "", `data-act="fig-log" data-id="${esc(f.id)}"`));
+    const order = (m.orders || []).find((o) => !o.done && String(o.text || "").startsWith(f.name));
+    const letter = m.letter && m.letter.sender === f.name && (m.letter.task || m.letter.errand) ? m.letter : null;
+    const say = order ? `<div class="jh-say"><b>${esc(JH_FIG_ORDER.replace("{t}", order.title))}</b><small>${esc(order.how || "")}</small></div>${btn(JH_FIG_GO, "", 'data-act="duty-open"').replace("jh-do", "jh-do wide primary")}`
+      : letter ? `<div class="jh-say"><b>${esc(letter.task ? letter.task.title : letter.errand.text)}</b><small>${esc(letter.task ? letter.task.how : "")}</small></div>${btn(JH_READ, "", 'data-act="jh-sheet" data-sheet="letter"').replace("jh-do", "jh-do wide primary")}` : "";
+    const i = f.intro || {};
+    const role = i.role || f.side || "";
+    return `<div class="sheet-bg" data-act="fig-close"></div><div class="sheet jh-card jh-fig" role="dialog" aria-label="${esc(f.name)}">
+        <div class="jh-pt"${f.face ? ` style="background-image:url('${esc(f.face)}')"` : ""}><button class="jh-x" data-act="fig-close" aria-label="${JH_CLOSE}">×</button></div>
+        <div class="jh-in"><h2>${esc(f.name)}<small>${esc(role)}</small></h2>${i.who ? `<p>${esc(i.who)}</p>` : ""}${say}<div class="jh-dos">${dos.join("")}</div></div></div>`;
+  }
+
   // 整頁：parts 是 pageJianghu 已經算好的各塊（同一份資料，不重算）
   // 畫壞了（新排法哪一格丟例外）不能讓整頁掉回登入頁（app.js 的 enter 接到例外就回登入）：回空字串，main.js 照舊畫原本的江湖頁
   function jhPageHtml(m, p) {
@@ -237,7 +355,12 @@
         <div class="jh-pl"><h1>${esc(name)}</h1>${seal ? `<span class="jh-seal">${esc(seal)}</span>` : ""}</div>
       </section>`;
     // 眼下一張卡排在旁白底下、行動牌上面（高度固定：事再多也只多「另有 N 件」那幾個字）
-    const sheetOpen = !!S.jhSheet || !!S.cxWhy || !!S.dutyOpen;
-    const layers = `${p.layers}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
-    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhActs(p.menu)}</div>${p.sealCard}${p.senseNotes}${typeof hereRowHtml === "function" ? hereRowHtml(m, jhNotInEye(m, p.extras || [])) : ""}${p.peopleRow}${p.guideDown}${p.skip}${layers}</div>`;
+    const sheetOpen = !!S.jhSheet || !!S.cxWhy || !!S.dutyOpen || !!S.fig;
+    const extras = jhNotInEye(m, p.extras || []);
+    let base = p.layers || "";
+    // 點人物那一層換成人物卡（舊的對話式那一層 figPickHtml 拿掉）；「全部」那一層也不列收進人物卡的
+    if (S.fig && !S.figLog && typeof figPickHtml === "function") base = base.replace(figPickHtml(m), () => jhFigHtml(m));
+    if (S.hereAll && typeof hereAllHtml === "function") base = base.replace(hereAllHtml(m, p.extras || []), () => hereAllHtml(m, extras));
+    const layers = `${base}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
+    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhActs(p.menu)}</div>${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${typeof hereRowHtml === "function" ? hereRowHtml(m, extras) : ""}${p.guideDown}${p.skip}${layers}</div>`;
   }

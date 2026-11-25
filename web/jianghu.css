@@ -122,8 +122,55 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
 .jh-row .jh-row-go { flex: none; width: auto; white-space: nowrap; min-height: 44px; min-width: 64px; font-family: var(--kai); }
 .jh-row.wait { opacity: 0.75; }
 .jh-row.wait .jh-k { border-color: var(--ink-2); color: var(--ink-2); }
-.jh-waits, .jh-why { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin-top: 8px; padding: 0 12px; border: 1px dashed var(--line);
+.jh-waits, .jh-why { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin-top: 8px; padding: 0 12px; border: 1px solid var(--line);
   border-radius: 10px; background: none; color: var(--ink-2); font: 400 14px var(--kai); cursor: pointer; }
-.jh-why { border-style: solid; }
+.jh-waits { margin-top: 0; padding: 0 2px; border: 0; border-top: 1px solid var(--line); border-radius: 0; opacity: .8; } /* 在等的：跟上面幾列一樣的實線分隔、字淡一點（虛線框有網頁味） */
 .jh-none { margin: 12px 0; font: 400 15px var(--kai); color: var(--ink-2); text-align: center; }
 .jh-sheet .card.letter { box-shadow: none; }
+
+/* ── 6. 這裡的人（第三批）：一排方格，人再多也是一排（六格），最後一格「＋N 俠客」 ── */
+.jh-blk { margin: 14px 16px 12px; }
+.jh-blk > h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font: 700 14px var(--kai); letter-spacing: 0.3em; color: var(--ink-2); }
+.jh-blk > h3 small { margin-left: auto; font: 400 12px var(--sans); letter-spacing: 0; }
+.jh-ppl { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.jh-ic { position: relative; display: block; min-width: 0; min-height: 44px; padding: 4px 0 0; border: 0; background: none; color: var(--ink-2); font: 400 12px var(--kai);
+  text-align: center; white-space: nowrap; overflow: visible; text-overflow: ellipsis; cursor: pointer; }
+.jh-ic > span { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 3px; border: 1.5px solid var(--ink-2); border-radius: 10px;
+  background: var(--card) center 12% / cover; color: var(--ink); font: 700 22px var(--kai); }
+.jh-ic.all > span { background: var(--ink); border-color: var(--ink); color: var(--paper); font-size: 16px; }
+.jh-ic.foe > span { border-color: var(--accent); }
+.jh-mk { position: absolute; top: 0; right: calc(50% - 32px); padding: 2px 5px; border-radius: 4px; background: var(--accent); color: #fff3e8;
+  font: 700 10.5px/1.2 var(--kai); font-style: normal; transform: rotate(4deg); }
+.jh-peers { display: grid; }
+.jh-prow { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 0; border: 0; border-top: 1px solid var(--line); background: none;
+  color: var(--ink); text-align: left; cursor: pointer; }
+.jh-prow > i { margin-left: auto; color: var(--ink-2); font-style: normal; }
+.jh-prow .jh-k { margin-left: auto; }
+.jh-prow .jh-k + i { margin-left: 4px; }
+.jh-pface { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: 1.5px solid var(--ink-2); border-radius: 8px; font: 700 18px var(--kai); }
+.jh-prow.foe .jh-pface { border-color: var(--accent); }
+
+/* 人物卡：立繪滿版在上、往下暈進紙色；名字楷書大字、身分小字；交代的事一條朱邊；能做的兩欄排 */
+.sheet.jh-card { padding: 0; overflow: hidden auto; }
+.jh-pt { position: relative; height: 250px; background: var(--card) center 8% / cover; }
+.jh-pt::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(var(--jh-fade), 0) 35%, rgba(var(--jh-fade), 0.86) 78%, rgb(var(--jh-fade)) 100%); pointer-events: none; }
+.jh-x { position: absolute; z-index: 1; top: 10px; right: 10px; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(20, 14, 8, 0.5); color: #fff3e8;
+  font-size: 24px; line-height: 1; cursor: pointer; }
+.jh-in { position: relative; margin-top: -56px; padding: 0 18px calc(22px + env(safe-area-inset-bottom, 0px)); }
+.jh-in h2 { display: flex; align-items: flex-end; gap: 10px; margin: 0; font: 700 34px var(--kai); letter-spacing: 0.1em; color: var(--ink); }
+.jh-in h2 small { padding-bottom: 6px; font: 400 13px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.jh-in > p { margin: 6px 0 12px; font: 400 15px/1.65 var(--kai); color: var(--ink); }
+.jh-say { display: grid; gap: 2px; margin-bottom: 10px; padding: 10px 12px; border-left: 4px solid var(--accent); border-radius: 3px 10px 10px 3px; background: var(--card); }
+.jh-say b { font: 700 15px var(--kai); color: var(--ink); }
+.jh-say small { font: 400 13px var(--kai); color: var(--ink-2); }
+.jh-in > .jh-do.wide { width: 100%; min-height: 48px; margin-bottom: 10px; background: var(--ink); color: var(--paper); border: 0; font: 700 17px var(--kai); letter-spacing: 0.2em; }
+.jh-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.jh-do { display: grid; justify-items: center; align-content: center; gap: 2px; width: 100%; min-height: 52px; padding: 6px 4px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font: 400 16px/1.2 var(--kai); letter-spacing: 0.1em; }
+.jh-do small { font: 400 11.5px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.jh-do.off { opacity: 0.45; }
+.jh-dos .jh-do:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* 俠客的玩家卡（peers.js 畫的那一張）：別人邀你的那一件（答應切磋、挑一樣答應論武）排最上面、一整行、墨底（設計稿 j「應戰」） */
+html.jh2 .peer-card .peer-acts > [data-answer] { order: -1; grid-column: 1 / -1; }
+html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background: var(--ink); color: var(--paper); border-color: var(--ink); }

@@ -32,7 +32,7 @@ def test_on_draws_the_new_skeleton(wan):  # noqa: F811
     assert 'class="card scene rv' not in page  # 舊的場景卡不畫
     acts = page.split('class="jh-acts"')[1]
     assert acts.count('class="act-ink') == 4 and "<b>行路</b>" in acts and "<b>移動</b>" not in acts
-    assert 'class="here-row"' in page and 'class="people-row"' in page  # 人與去處這一批照舊
+    assert 'class="here-row"' in page and 'class="jh-blk jh-people"' in page  # 這裡的人（第三批）、去處照舊（第四批）
 
 
 def test_on_but_on_the_road_keeps_the_road_page(wan):  # noqa: F811
@@ -60,3 +60,21 @@ def test_eye_card_one_thing_and_the_rest_in_the_sheet(wan):  # noqa: F811
     sheet = run(m, 'H.S.jhSheet = "eye"; return H.pageJianghu();')
     assert "屬性" in sheet and "眼下的事" in sheet
     assert "○" not in page and "？" not in page
+
+
+def test_people_row_and_figure_card(wan):  # noqa: F811
+    """第三批：這裡的人一排（大勢人物立繪方格），人物的護衛、犒軍、挑戰收進他的卡，不散在此地可為；點人物拉起人物卡。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    figs = m["figures_here"]
+    assert figs
+    page = run(m, "return H.pageJianghu();")
+    assert 'class="jh-blk jh-people"' in page and 'class="people-row"' not in page
+    for f in figs:
+        assert f'data-act="fig-open" data-id="{f["id"]}"' in page.split('class="jh-blk jh-people"')[1]
+    aid = [i for f in figs for i in f["aid"]]
+    here = page.split('class="here-row"')[1] if 'class="here-row"' in page else ""
+    assert not any(f'data-id="{i}"' in here for i in aid)
+    card = run(m, f'H.S.fig = "{figs[0]["id"]}"; return H.pageJianghu();')
+    assert 'class="sheet jh-card jh-fig"' in card and 'class="vn-layer pick"' not in card
+    assert f"<h2>{figs[0]['name']}" in card and 'data-act="fig-log"' in card
