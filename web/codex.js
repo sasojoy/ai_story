@@ -131,20 +131,29 @@
       + (t.others && t.others.length ? `<p class="cx-unpick">${CX_OTHERS}${t.others.map(esc).join("・")}</p>` : "") + "</article>";
   }
 
-  function cxCount(n, all, word) {
+  // 收滿這一頁給的頭銜（Joy 2026-11-13 設計稿決定三；名字在稱號包，從 S.main.titles 那一列讀）：數字右邊一顆印，拿到了是朱印、還沒是淡的「收滿得」
+  const CX_TITLE_GOAL = "收滿得", CX_TITLE_GOT = "已得"; // 待 joy 潤
+  function cxTitle(page) {
+    const t = S.main && S.main.titles, row = t && (t.rows || []).find((r) => r.id === `codex_${page}`);
+    if (!row) return "";
+    const seal = typeof titleSeal === "function" ? titleSeal(row, true) : `<span class="ttl-seal">${esc(row.name)}</span>`;
+    return `<span class="cx-ttl${row.mine ? " got" : ""}" title="${esc(row.how)}"><small>${row.mine ? CX_TITLE_GOT : CX_TITLE_GOAL}</small>${seal}</span>`;
+  }
+  function cxCount(n, all, word, page) {
     const pct = all ? Math.round((n / all) * 100) : 0;
-    return `<div class="cx-count"><b>${n}</b><small>／ ${all} ${word}</small></div><div class="cx-bar"><i style="width:${pct}%"></i></div>`;
+    return `<div class="cx-count"><b>${n}</b><small>／ ${all} ${word}</small>${page ? cxTitle(page) : ""}</div><div class="cx-bar"><i style="width:${pct}%"></i></div>`;
   }
 
   function cxPeople(d) {
-    return cxCount(d.got, d.all, CX_SEEN) + `<div class="cx-grid">${d.rows.map((r) => `<div class="cx-cell${r.got ? "" : " off"}">${dotHtml(r.dot)}`
+    return cxCount(d.got, d.all, CX_SEEN, "people") + `<div class="cx-grid">${d.rows.map((r) => `<div class="cx-cell${r.got ? "" : " off"}">${dotHtml(r.dot)}`
       + `<span class="im">${cxImg(r.face)}</span><b>${esc(r.name)}</b><small>${esc(r.place)}</small></div>`).join("")}</div>`;
   }
 
   function cxThings(d) {
     const g = d.groups.find((x) => x.id === S.cxThing) || d.groups[0];
     const chips = `<div class="cx-chips grp">${d.groups.map((x) => `<button class="${x.id === g.id ? "on" : ""}" data-act="cx-grp" data-id="${esc(x.id)}">${esc(x.name)}<small>${x.got}／${x.all}</small>${dotHtml(x.cells.some((c) => c.dot))}</button>`).join("")}</div>`;
-    return chips + `<div class="cx-grid sq">${g.cells.map((c) => `<div class="cx-cell${c.got ? "" : " off"}">${dotHtml(c.dot)}`
+    const tg = d.groups.reduce((n, x) => n + x.got, 0), ta = d.groups.reduce((n, x) => n + x.all, 0);
+    return cxCount(tg, ta, CX_HAVE, "things") + chips + `<div class="cx-grid sq">${g.cells.map((c) => `<div class="cx-cell${c.got ? "" : " off"}">${dotHtml(c.dot)}`
       + `<span class="im">${cxImg(c.src) || (c.got ? `<span class="glyph">${esc(c.name[0])}</span>` : "")}</span><b>${esc(c.name)}</b><small>${esc(c.sub || "")}</small></div>`).join("")}</div>`;
   }
 
@@ -157,12 +166,12 @@
     const mine = Object.values(d.cells).filter((c) => c.got);
     const list = mine.length ? mine.map((c) => `<div class="cx-kv">${cxSeal("神品")}<div><b>${esc(c.name)}</b><small>${c.season ? `第 ${c.season} 季・` : ""}${esc(c.place)}</small></div></div>`).join("")
       : `<p class="cx-empty">${CX_EMPTY_GOD}</p>`;
-    return cxCount(d.got, d.all, CX_GODS) + `<div class="cx-ygrid">${head}${rows}</div>${list}`;
+    return cxCount(d.got, d.all, CX_GODS, "gods") + `<div class="cx-ygrid">${head}${rows}</div>${list}`;
   }
 
   function cxEndings(d) {
     const met = d.rows.filter((r) => r.met), not = d.rows.filter((r) => !r.met);
-    return cxCount(d.got, d.all, CX_ENDS_N) + met.map((r) => `<h4 class="cx-sec">${esc(r.title)}${dotHtml(r.dot)}</h4>${cxEnds({ line: r.line, ends: r.ends })}`).join("")
+    return cxCount(d.got, d.all, CX_ENDS_N, "endings") + met.map((r) => `<h4 class="cx-sec">${esc(r.title)}${dotHtml(r.dot)}</h4>${cxEnds({ line: r.line, ends: r.ends })}`).join("")
       + (not.length ? `<h4 class="cx-sec">${CX_GHOST}</h4><p class="cx-endmore">${CX_GHOST_END.replace("{n}", not.length)}</p>` : "");
   }
 

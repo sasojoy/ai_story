@@ -1,6 +1,7 @@
 # 稱號與官職（`tianxia/features/titles/`）
 
 - 做什麼：頭銜分三等（尋常不能配戴、不印名帖；官職第 2 階起墨印；名號金印或朱印），一次戴一個。名次型的名號每週結算一次（季曆換週之後第一個同步的人替全服頒），整週有效；一季的名號拿到就整季有效；拿過的名號收進名號簿（`PlayerState.title_book`）往後都能印名帖。**不加任何屬性**（Joy 2026-11-08「不加屬性，靠稀有和顯示」）。開關 `Config.titles.enabled`（`tianxia/core/tuning/titles.py`）預設關。
+- 江湖錄收滿一頁的四個名號（span `BOOK`，2026-11-25）：閱盡群英、百寶盈囊、萬象在胸、看盡悲歡，朱印、跟著帳號走（江湖錄換季照帶），問江湖錄包的查詢服務 `ctx._codex_full()`；名號簿只記第一次拿到的那一季，往後不再記、不再說。
 - 導覽：`docs/guide/散人與玩家互動.md` 的「稱號與官職」那一節
 - 設計稿：稱號與官職重做 v5（Artifact https://claude.ai/artifact/1rXqs2bYVD9EKmu7w67nj4，2026-11-08）
 - 檔：`rules.py`（名號清單 DEFS、三檔印色、誰拿得到、結算頒給誰、傳聞與紀錄的字）、`actions.py`（同步時的結算與配戴、換戴、狀態列資料）、`routes.py`（`/api/titles/wear {id}`，關著 404）、`web/titles.js`、`web/titles.css`

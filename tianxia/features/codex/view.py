@@ -296,6 +296,29 @@ def endings(ctx) -> dict:
     return {"rows": rows, "got": sum(sum(e["got"] for e in r["ends"]) for r in rows), "all": sum(len(r["ends"]) for r in rows)}
 
 
+PAGES = ("people", "things", "gods", "endings")  # 圖鑑的四頁（收滿一頁給一個頭銜：Joy 2026-11-13 設計稿決定三，名字在稱號包）
+
+
+def _tally(ctx, page: str) -> tuple[int, int]:
+    if page == "things":
+        groups = things(ctx)["groups"]
+        return sum(g["got"] for g in groups), sum(g["all"] for g in groups)
+    one = {"people": people, "gods": gods, "endings": endings}[page](ctx)
+    return one["got"], one["all"]
+
+
+def full_pages(ctx) -> list[str]:
+    """圖鑑收滿了哪幾頁（PAGES 的順序）：那一頁每一格都亮了。開關關著、假人、還沒有江湖錄是空的。稱號包經 ctx._codex_full 問。"""
+    if not ctx.content.config.codex.enabled or ctx.state.player.bot or rules.book(ctx.state) is None:
+        return []
+    out = []
+    for page in PAGES:
+        got, total = _tally(ctx, page)
+        if total and got >= total:
+            out.append(page)
+    return out
+
+
 def page(ctx) -> dict:
     return {"quests": quests(ctx), "people": people(ctx), "things": things(ctx), "gods": gods(ctx), "endings": endings(ctx)}
 

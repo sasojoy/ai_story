@@ -345,6 +345,7 @@ CROSS_PACKAGE_CALLS = {
     ("tale", "battle"): {"_tale_battles", "apply_battle_tales", "battle_tale_request", "write_battle_tales"},  # write_battle_tales：core_shared 第二輪第 102 批
     ("tavern", "battle"): {"_battle_now"},
     ("territory_acts", "battle"): {"_cancel_siege", "_joinable", "_sieges"},
+    ("titles", "codex"): {"_codex_full"},  # 江湖錄收滿給頭銜（2026-11-25）
     ("travel", "battle"): {"_sync_battle_presence"},
     ("travel", "guide"): {"_check_hints", "_note_action"},
     ("travel", "military"): {"_hear_after_stamina", "_report_seat"},

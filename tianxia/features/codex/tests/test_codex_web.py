@@ -64,6 +64,25 @@ def test_the_codex_book_four_kinds(walked):
         assert word in html and 'data-act="cx-cat"' in html, cat
 
 
+def test_each_book_page_shows_the_title_it_gives(walked):
+    """收滿一頁給一個頭銜：數字那一行右邊一顆印，還沒拿到寫「收滿得」、拿到了寫「已得」；稱號關著不畫。"""
+    walked.content.config.titles.enabled = True
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    base = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15, "main": m}
+    for cat, name in (("people", "閱盡群英"), ("things", "百寶盈囊"), ("gods", "萬象在胸"), ("ends", "看盡悲歡")):
+        html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
+        assert 'class="cx-ttl"' in html and name in html and "收滿得" in html, cat
+    for row in m["titles"]["rows"]:
+        if row["id"] == "codex_people":
+            row["mine"] = True
+    html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": "people"})
+    assert 'class="cx-ttl got"' in html and "已得" in html
+    m.pop("titles")
+    html = run(m, "return H.codexHtml(m);", S={**base, "main": m, "cxCat": "people"})
+    assert "cx-ttl" not in html
+
+
 def test_the_tracker_line_and_its_drawer(walked):
     walked.content.config.codex.tracker = True
     m = server.main_view(walked)

@@ -21,7 +21,7 @@ from tianxia.state import GameState, WorldState
 
 GOLD, ZHU, INK = "gold", "zhu", "ink"
 GRADE_ORDER = (GOLD, ZHU, INK)
-WEEKLY, SEASON = "weekly", "season"
+WEEKLY, SEASON, BOOK = "weekly", "season", "book"  # BOOK：江湖錄收滿一頁給的，跟著帳號走、拿到就一直有
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class TitleDef:
     id: str
     name: str
     grade: str
-    span: str  # WEEKLY（每週結算）、SEASON（拿到就整季）
+    span: str  # WEEKLY（每週結算）、SEASON（拿到就整季）、BOOK（江湖錄收滿一頁，往後一直有）
     how: str  # 怎麼拿（換戴那一格寫給玩家看；待 joy 潤）
 
 
@@ -46,7 +46,13 @@ DEFS: tuple[TitleDef, ...] = (
     TitleDef("kou", "天下大盜", ZHU, WEEKLY, "每週結算時惡人榜第一，而且惡名到天下大盜"),
     TitleDef("merit", "破陣首功", ZHU, SEASON, "一場全服決戰自己那一軍戰功第一"),
     TitleDef("divine", "神器之主", ZHU, SEASON, "身上帶著自己打出的神器原品"),
+    # 江湖錄收滿一頁（Joy 2026-11-13 設計稿決定三「收滿給頭銜」；2026-11-25 開工）：朱印、跟著帳號走；排在最後，一樣高的時候週名號先戴。名字與 how 待 joy 潤
+    TitleDef("codex_people", "閱盡群英", ZHU, BOOK, "江湖錄的人物一頁全見過"),
+    TitleDef("codex_things", "百寶盈囊", ZHU, BOOK, "江湖錄的器物一頁全拿過"),
+    TitleDef("codex_gods", "萬象在胸", ZHU, BOOK, "江湖錄的神品意境一頁全悟過"),
+    TitleDef("codex_endings", "看盡悲歡", ZHU, BOOK, "江湖錄的結局一頁全收過"),
 )
+CODEX_PAGE = {"codex_people": "people", "codex_things": "things", "codex_gods": "gods", "codex_endings": "endings"}  # 名號 → 江湖錄哪一頁
 BY_ID = {d.id: d for d in DEFS}
 WEEKLY_IDS = tuple(d.id for d in DEFS if d.span == WEEKLY)
 OFFICIAL = "official"  # 官職那一格的 id（名字照陣營與階：屯長、軍司馬、校尉……）
@@ -139,8 +145,9 @@ def divine_owner(state: GameState) -> bool:
     return any(item is not None and item.original and item.secret and "無名" not in item.name for item in (p.weapon, p.armor))
 
 
-def available(state: GameState, content: Content, mandate: list[str] | None = None) -> list[dict]:
-    """此刻手上能戴的（照檔次排，一樣高照 DEFS）：每一個 {"id", "name", "grade", "how"}。mandate 是受命於天的那幾個名號。"""
+def available(state: GameState, content: Content, mandate: list[str] | None = None, codex_full: list[str] | None = None) -> list[dict]:
+    """此刻手上能戴的（照檔次排，一樣高照 DEFS）：每一個 {"id", "name", "grade", "how"}。mandate 是受命於天的那幾個名號；
+    codex_full 是江湖錄收滿了哪幾頁（江湖錄包經 ctx._codex_full 回答）。"""
     p, w = state.player, state.world
     out: list[dict] = []
     for d in DEFS:
@@ -150,6 +157,8 @@ def available(state: GameState, content: Content, mandate: list[str] | None = No
             got = p.top_merits > 0
         elif d.id == "mandate":
             got = _mine(mandate or [], p.name)
+        elif d.span == BOOK:
+            got = CODEX_PAGE.get(d.id) in (codex_full or [])
         else:  # divine
             got = divine_owner(state)
         if got:

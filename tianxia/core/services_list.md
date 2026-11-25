@@ -388,6 +388,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._letter_thank(task)`（主人人物情誼：求援委託辦成了，那位人物寫一封道謝信；懸賞榜包 rules._complete_rally 叫）
 - `ctx._parley_settle_task(task_id, cid)`、`ctx._parley_keep(cid, cond)`、`ctx._parley_owed_line(name)`、`ctx._parley_ask_label(ask_id)`（主人人物情誼：委託辦成了，欠他的那一件清掉、記一筆守約、他會兌現的那一句、答應你的那一件的字；懸賞榜包 rules._complete_commission、commission_reward 叫，PM 認定乙案）
 
+# codex（江湖錄收滿給頭銜，2026-11-25；主人：江湖錄包）
+- `ctx._codex_full()`：圖鑑收滿了哪幾頁（"people"、"things"、"gods"、"endings"；關著、假人是空的）。稱號包問：收滿一頁給一個頭銜
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
