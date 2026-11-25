@@ -530,3 +530,4 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # `ctx.options(odds=False, tick=False)`（撞見那一格問探索還在不在選單上）、`ctx._save_season()`、`ctx._write(...)`、`ctx._side()`；名望走共用層 `renown.gain`、素材走共用層 `materials`
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
+# unfold（慢慢長出來，Joy 2026-11-25）：包要叫的都上面列了，這一段只記「誰在用」，不新增：`ctx._opening_pending()`（城門口三選一還沒選：新角色在這一刻開本，選了路輿圖長出來）

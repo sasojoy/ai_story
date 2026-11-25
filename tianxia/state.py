@@ -412,6 +412,15 @@ class CodexBook(BaseModel):
     fresh: list[str] = Field(default_factory=list)
 
 
+class UnfoldBook(BaseModel):
+    """慢慢長出來（features/unfold；Joy 2026-11-25 對提案表的三個決定）：新角色還用不到的分頁先不畫，玩到才長出來。
+    grown 是已經長出來的區塊鍵（「tab:map」「hero:gear」「self:mingtie」……），長出來就不收回；fresh 是長出來還沒點開過的（紅點）。
+    只有開關開著時新建、站在城門口還沒選路的角色才有這一本；None（舊角色、假人）是全部照舊攤開。"""
+
+    grown: list[str] = Field(default_factory=list)
+    fresh: list[str] = Field(default_factory=list)
+
+
 class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
     10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
@@ -1341,6 +1350,8 @@ class PlayerState(BaseModel):
     yiwen: YiwenWalk | None = Field(None, json_schema_extra=QUIET)
     # 江湖錄（tianxia/features/codex）：奇遇紀錄與圖鑑。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     codex: CodexBook | None = Field(None, json_schema_extra=QUIET)
+    # 慢慢長出來（tianxia/features/unfold）：新角色長出了哪幾塊。跟著帳號走、換季照帶（包的 on_season_start）；None 是舊角色，全部攤開，不寫進存檔（QUIET_DEFAULTS）
+    unfold: UnfoldBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)
