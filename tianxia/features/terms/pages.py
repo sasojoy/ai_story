@@ -14,7 +14,7 @@ main { max-width:720px; margin:0 auto; padding:24px 16px 48px; }
 h1 { font-family:"Noto Serif TC","Songti TC","PMingLiU",serif; font-size:26px; margin:8px 0 4px; }
 .meta { color:var(--ink-2); font-size:14px; margin:0 0 20px; }
 nav { display:flex; gap:16px; font-size:15px; margin-bottom:8px; flex-wrap:wrap; }
-nav a { color:var(--accent); text-decoration:none; }
+nav a { color:var(--accent); text-decoration:none; display:inline-flex; align-items:center; min-height:44px; }
 nav a[aria-current] { color:var(--ink); font-weight:600; }
 section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin:12px 0; }
 h2 { font-size:17px; margin:0 0 6px; }
