@@ -169,7 +169,6 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
   background: var(--card); color: var(--ink); font: 400 16px/1.2 var(--kai); letter-spacing: 0.1em; }
 .jh-do small { font: 400 11.5px var(--sans); letter-spacing: 0; color: var(--ink-2); }
 .jh-do.off { opacity: 0.45; }
-.jh-dos .jh-do:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 /* 俠客的玩家卡（peers.js 畫的那一張）：別人邀你的那一件（答應切磋、挑一樣答應論武）排最上面、一整行、墨底（設計稿 j「應戰」） */
 html.jh2 .peer-card .peer-acts > [data-answer] { order: -1; grid-column: 1 / -1; }
@@ -205,3 +204,21 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-pills { margin: 0 0 12px; font: 400 15px/1.7 var(--kai); color: var(--ink); }
 .jh-stam .jh-bar i { background: var(--line); }
 .jh-sheet .jh-do.wide { width: 100%; min-height: 48px; } .jh-sheet .jh-do.wide.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font: 700 17px var(--kai); letter-spacing: 0.2em; }
+
+/* ── 7. 這裡的去處（第四批）：直書木牌一排，人再多去處再多也是一排（多了橫滑）；有東西的標數字 ── */
+.jh-signs { display: flex; gap: 8px; overflow-x: auto; padding: 6px 2px 4px; scrollbar-width: none; }
+.jh-signs::-webkit-scrollbar { display: none; }
+.jh-sign { position: relative; flex: none; display: grid; place-items: center; width: 50px; min-height: 112px; padding: 10px 0; border: 1px solid #5a4329; border-radius: 4px;
+  background: linear-gradient(90deg, #6b4f30, #8a6a43 45%, #6b4f30); box-shadow: inset 0 0 0 3px rgba(40, 26, 12, 0.35), 0 3px 6px rgba(40, 26, 12, 0.25); cursor: pointer; }
+.jh-sign::before { content: ""; position: absolute; top: -6px; left: 50%; width: 2px; height: 6px; background: #5a4329; }
+.jh-sign b { writing-mode: vertical-rl; font: 700 18px/1.15 var(--kai); letter-spacing: 0.15em; color: #f6ead2; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.jh-sign u { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: #fff;
+  font: 700 12px/20px var(--sans); text-decoration: none; text-align: center; }
+.jh-sign.off { filter: grayscale(0.85) brightness(0.7); }
+.jh-noshop { margin: 4px 0 0; font: 400 15px var(--kai); color: var(--ink-2); }
+/* 軍務那一格：沒有圖，寫一個大字「令」 */
+.jh-acts .act-ink .jh-ink-ch { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 18px; font: 700 34px var(--kai); color: rgba(245, 215, 127, 0.55); }
+.jh-ink-n { position: absolute; z-index: 3; top: 4px; right: 4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--accent); color: #fff;
+  font: 700 11px/18px var(--sans); font-style: normal; text-align: center; }
+.jh-row-go.off { opacity: 0.45; }
+.jh-sheet h4.jh-sub { margin: 14px 0 4px; }

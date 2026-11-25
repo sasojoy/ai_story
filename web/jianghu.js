@@ -54,7 +54,7 @@
       ? `<div class="jh-help" id="stam-help">${s.stamina_help.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     return `<header class="jh-st">
         <button class="jh-me" data-act="hero-attrs" aria-label="看屬性">${esc((s.name || "").slice(0, 1))}${s.stat_points ? dotHtml(true) : ""}</button>
-        <div class="jh-nm"><b>${esc(s.name || "")}</b><small>${s.level | 0} 級・${esc(s.affiliation || "")}${s.anonymous ? "・匿名" : ""}</small></div>
+        <div class="jh-nm"><b>${esc(s.name || "")}</b><small>${s.level | 0} 級・${esc(jhMySide(m) || JH_FREE)}${s.anonymous ? "・匿名" : ""}</small></div>
         <div class="jh-vit"${shown("stamina") ? ` data-act="jh-sheet" data-sheet="stam" role="button" tabindex="0" aria-label="${JH_STAM}"` : ""}>${vit}<span class="jh-tm">${esc(when)}</span></div>${pill}
         <button class="jh-gear" data-act="sheet" aria-label="設定">⚙${dotHtml(dotAt("sheet"))}</button>
       </header>${purse}${help}`;
@@ -79,8 +79,12 @@
   }
 
   // 四顆行動牌：先沿用原本行動列的格子（按的東西、灰著的原因、點開的卡都照舊），樣子換成牌子；「移動」改叫「行路」
-  function jhActs(menu) {
-    return String(menu || "").replace(/<b>移動<\/b>/, "<b>行路</b>"); // 待 joy 潤：行路（施工單第 5 條）
+  // 第四批：第三格「交友」換成「軍務」（點人就是交友），「行路」點了拉起行路清單（不在行動牌底下攤一排）
+  function jhActs(menu, m, kinds) {
+    const duty = jhDutyCell(m, kinds);
+    return String(menu || "").replace(/<b>移動<\/b>/, "<b>行路</b>") // 待 joy 潤：行路（施工單第 5 條）
+      .replace(/<button class="act-ink[^"]*" data-key="social"[\s\S]*?<\/button>/, () => duty)
+      .replace(/data-act="wheel" data-key="move" aria-expanded="[^"]*"/, 'data-act="jh-sheet" data-sheet="road"');
   }
 
   // ── 4. 眼下（第二批）：一張卡只放現在最該理的一件，一顆主要的鈕加「稍後」；其餘收成右上「另有 N 件 ›」，點了從底下拉起清單 ──
@@ -248,6 +252,90 @@
       ? cell.replace(/data-act="opt-why" data-why="[^"]*"/, `data-act="jh-stam" data-why="${esc(JH_STAM_LOW.replace("{name}", (cell.match(/<b>([^<]*)<\/b>/) || [, ""])[1]))}"`) : cell))
       .replace(JH_STAM_WHY, 'data-act="jh-stam"$1 data-why="$2"') : html);
 
+  // ── 7. 這裡的去處與軍務（第四批）：此地可為拆成兩半——進得去的地方（直書木牌一排）與差事（收進「軍務」那一格，點了拉起清單）。
+  // 選項只認前綴（伺服器沒有「這一顆是哪一類」的欄位）；兩類都不是的（義聚、探望……）排在軍務清單的「此地還能」。
+  const JH_PLACE = /^(act:(bounties|smith|tavern|arena|heal|market|dadian|feast|donate|silver_donate)$|feast:join:|learn:|sect:)/;
+  const JH_DUTY = /^(act:duty$|act:convoy$|act:works|fs:|ambush:|opp:|plan:(help|block):|battle:|defect:|works:|seal:)/;
+  const JH_SKIP = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:(?:yes|no):|hire:|invite:|faction:|act:call$|call:|act:socialize$)/; // 人物卡、眼下、投靠卡已經有的
+  const JH_SIGN_GROUP = [[/^learn:/, "學藝"], [/^feast:join:/, "赴宴"], [/^sect:/, "拜師"]]; // 待 joy 潤：同類一塊牌子
+  const JH_PLACES_HEAD = "這裡的去處"; // 待 joy 潤
+  const JH_NO_SHOP = "荒郊野外，沒有店家。"; // 待 joy 潤
+  const JH_DUTY_NAME = "軍務"; // 待 joy 潤
+  const JH_DUTY_SEAL = "令"; // 待 joy 潤：軍務那一格沒有圖，寫一個字
+  const JH_DUTY_N = "{n} 件"; // 待 joy 潤
+  const JH_DUTY_FREE = "投靠後才有"; // 待 joy 潤：散人沒有軍務（提案：點了拉起投靠的三方卡）
+  const JH_DUTY_NONE = "眼下沒有"; // 待 joy 潤
+  const JH_MORE_HERE = "此地還能"; // 待 joy 潤
+  const JH_GO_DO = "去做"; // 待 joy 潤
+  function jhKinds(m, extras) {
+    const places = [], duties = [], others = [];
+    const slim = typeof codexSlim === "function" && codexSlim(m); // 進行中開著時未了之事都在眼下的清單裡
+    for (const o of extras) {
+      if (JH_SKIP.test(o.id) || (slim && o.id.startsWith("story:")) || o.id.startsWith("move:") || /^act:(explore|train|rest|move|practice)$/.test(o.id) || o.id.startsWith("explore:")) continue;
+      (JH_PLACE.test(o.id) ? places : JH_DUTY.test(o.id) ? duties : others).push(o);
+    }
+    return { places, duties, others };
+  }
+  const jhBase = (o) => optParts(o)[0].replace(/（.*$/, "").trim();
+  function jhSignsHtml(m, kinds) {
+    const signs = [];
+    for (const o of kinds.places) {
+      const g = JH_SIGN_GROUP.find(([re]) => re.test(o.id));
+      if (g) {
+        const same = kinds.places.filter((x) => g[0].test(x.id));
+        if (same[0] !== o) continue;
+        if (same.length > 1) {
+          const on = same.filter((x) => x.enabled).length;
+          signs.push(`<button class="jh-sign${on ? "" : " off"}" data-act="here-all" data-ids="${esc(same.map((x) => x.id).join(" "))}" data-title="${esc(g[1])}"><b>${esc(g[1])}</b><u>${on || same.length}</u></button>`);
+          continue;
+        }
+      }
+      const [, detail] = optParts(o);
+      const n = /^(\d+) 張$/.exec(detail || "");
+      const name = g && kinds.places.filter((x) => g[0].test(x.id)).length === 1 ? g[1] : jhBase(o);
+      const attrs = o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true"`;
+      signs.push(`<button class="jh-sign${o.enabled ? "" : " off"}" ${attrs} aria-label="${esc(optParts(o).join("・"))}"><b>${esc(name)}</b>${n ? `<u>${n[1]}</u>` : ""}</button>`);
+    }
+    return `<section class="jh-blk jh-places"><h3>${JH_PLACES_HEAD}</h3>${signs.length ? `<div class="jh-signs">${signs.join("")}</div>` : `<p class="jh-noshop">${JH_NO_SHOP}</p>`}</section>`;
+  }
+  // 軍務那一格：自己陣營的差事（巡哨、請纓……）幾件做得了；散人沒有軍務時灰著寫「投靠後才有」，點了拉起投靠的三方卡（提案）
+  function jhDutyCell(m, kinds) {
+    const all = [...kinds.duties, ...kinds.others], on = all.filter((o) => o.enabled).length;
+    const free = !jhMySide(m);
+    const sub = all.length ? JH_DUTY_N.replace("{n}", on || all.length) : free ? JH_DUTY_FREE : JH_DUTY_NONE;
+    const attrs = all.length ? 'data-act="jh-sheet" data-sheet="duty"' : free && m.sides_card ? 'data-act="jh-sheet" data-sheet="sides"' : `data-act="opt-why" data-why="${esc(sub)}。" aria-disabled="true"`;
+    return `<button class="act-ink${on ? "" : " off"}" data-key="duty" ${attrs}><span class="jh-ink-ch" aria-hidden="true">${JH_DUTY_SEAL}</span><b>${JH_DUTY_NAME}</b><small>${esc(sub)}</small>${on ? `<i class="jh-ink-n">${on}</i>` : ""}</button>`;
+  }
+  function jhOptRow(o, btn = JH_GO_DO) {
+    const [label, detail] = optParts(o);
+    return `<div class="jh-row${o.enabled ? "" : " wait"}"><span class="jh-row-t"><b>${esc(label)}</b>${detail ? `<small>${esc(detail)}</small>` : ""}</span>${o.enabled
+      ? `<button class="btn small jh-row-go" data-act="choose" data-id="${esc(o.id)}">${esc(btn)}</button>`
+      : `<button class="btn small jh-row-go off" data-act="opt-why" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true">${esc(btn)}</button>`}</div>`;
+  }
+  function jhDutyBody(m, kinds) {
+    const d = kinds.duties.map((o) => jhOptRow(o)).join(""), x = kinds.others.map((o) => jhOptRow(o)).join("");
+    return `${d}${x ? `${d ? `<h4 class="jh-sub">${JH_MORE_HERE}</h4>` : ""}${x}` : ""}` || `<p class="jh-none">${JH_DUTY_NONE}</p>`;
+  }
+  // 行路清單：有事要辦的地方排最上面、標是哪一件；其餘是鄰近；最底下打開輿圖
+  const JH_ROAD = "行路"; // 待 joy 潤
+  const JH_ROAD_GO = "前往"; // 待 joy 潤
+  const JH_ROAD_MAP = "打開輿圖"; // 待 joy 潤
+  const JH_ROAD_NONE = "四下沒有路。"; // 待 joy 潤
+  function jhRoadBody(m) {
+    const moves = (m.options || []).filter((o) => o.id.startsWith("move:"));
+    const marks = {};
+    for (const t of (m.codex && m.codex.track) || []) if (t.loc && !marks[t.loc]) marks[t.loc] = { seal: t.kind, what: t.title };
+    for (const e of m.errands || []) if (e.target && e.target.id && !marks[e.target.id]) marks[e.target.id] = { seal: "託付", what: e.text };
+    const rows = moves.map((o) => {
+      const loc = o.id.slice(5), mk = marks[loc];
+      const [label, detail] = optParts(o);
+      return { mk, html: `<div class="jh-row${o.enabled ? "" : " wait"}">${mk ? jhSealHtml(mk.seal) : ""}<span class="jh-row-t"><b>${esc(label.replace(/^前往\s*/, ""))}</b><small>${esc([mk ? mk.what : "", detail].filter(Boolean).join("・"))}</small></span>${o.enabled
+        ? `<button class="btn small jh-row-go" data-act="choose" data-id="${esc(o.id)}">${JH_ROAD_GO}</button>`
+        : `<button class="btn small jh-row-go off" data-act="opt-why" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true">${JH_ROAD_GO}</button>`}</div>` };
+    }).sort((a, b) => (a.mk ? 0 : 1) - (b.mk ? 0 : 1));
+    return `${rows.length ? rows.map((r) => r.html).join("") : `<p class="jh-none">${JH_ROAD_NONE}</p>`}<button class="jh-why" data-act="jh-map">${JH_ROAD_MAP}<i aria-hidden="true">›</i></button>`;
+  }
+
   // 拉起來的那一層：眼下的事（全部）、一封信、投靠的三方卡
   function jhSheetHtml(m, p) {
     const which = S.jhSheet;
@@ -261,6 +349,8 @@
     }
     if (which === "people") return wrap(JH_PEERS_HEAD, jhPeersSheetBody(m));
     if (which === "stam") return wrap(JH_STAM, jhStamBody(m));
+    if (which === "road") return wrap(JH_ROAD, jhRoadBody(m));
+    if (which === "duty") return wrap(JH_DUTY_NAME, jhDutyBody(m, jhKinds(m, jhNotInEye(m, p.extras || []))));
     if (which === "sides") {
       const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";
       if (!html) { S.jhSheet = null; return ""; }
@@ -279,6 +369,7 @@
         case "jh-later": S.jhLater = [...(S.jhLater || []).filter((k) => k !== el.dataset.key), el.dataset.key]; renderPage(); break;
         case "jh-sheet": S.jhSheet = el.dataset.sheet || null; S.jhWait = false; S.jhStamWhy = ""; renderPage(); break;
         case "jh-stam": S.jhSheet = "stam"; S.jhStamWhy = el.dataset.why || ""; renderPage(); break;
+        case "jh-map": S.jhSheet = null; await goTab("map"); break;
         case "jh-wait": S.jhWait = !S.jhWait; renderPage(); break;
         case "jh-peer-pick": S.jhPeerPick = { name: S.peer && S.peer.name, key: el.dataset.key }; render(); break;
         case "jh-peer-back": S.jhPeerPick = null; S.jhPeerChoice = null; if (S.peer) { S.peer.amountFor = null; S.peer.textFor = null; } render(); break;
@@ -286,7 +377,7 @@
         case "jh-peer-go": S.jhPeerPick = null; await peerAct(Number(el.dataset.i)); break;
     } // jianghuClick
   } // jianghuClick
-  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go"]);
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-map", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go"]);
 
   // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
   // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡
@@ -299,6 +390,7 @@
   const JH_KIN = "同門"; // 待 joy 潤
   const JH_ROW_MAX = 6; // 一排六格（390 寬），人再多也是一排
   const JH_SIDES2 = ["官軍", "黃巾"];
+  const JH_FREE = "散人"; // 狀態行只寫等級・陣營（PM 2026-11-25）：門派與頭銜在點名號印拉起的卡上
   function jhMySide(m) {
     return String((m.status && m.status.affiliation) || "").split("・").find((x) => JH_SIDES2.includes(x)) || "";
   }
@@ -487,10 +579,11 @@
     // 眼下一張卡排在旁白底下、行動牌上面（高度固定：事再多也只多「另有 N 件」那幾個字）
     const sheetOpen = !!S.jhSheet || !!S.cxWhy || !!S.dutyOpen || !!S.fig;
     const extras = jhNotInEye(m, p.extras || []);
+    const kinds = jhKinds(m, extras);
     let base = p.layers || "";
     // 點人物那一層換成人物卡（舊的對話式那一層 figPickHtml 拿掉）；「全部」那一層也不列收進人物卡的
     if (S.fig && !S.figLog && typeof figPickHtml === "function") base = base.replace(figPickHtml(m), () => jhFigHtml(m));
     if (S.hereAll && typeof hereAllHtml === "function") base = base.replace(hereAllHtml(m, p.extras || []), () => hereAllHtml(m, extras));
     const layers = `${base}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
-    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhStamWhy(m, jhActs(p.menu))}</div>${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${typeof hereRowHtml === "function" ? jhStamWhy(m, hereRowHtml(m, extras)) : ""}${p.guideDown}${p.skip}${layers}</div>`;
+    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhStamWhy(m, jhActs(p.menu, m, kinds))}</div>${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${jhStamWhy(m, jhSignsHtml(m, kinds))}${p.guideDown}${p.skip}${layers}</div>`;
   }

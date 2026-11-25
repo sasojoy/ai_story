@@ -31,8 +31,8 @@ def test_on_draws_the_new_skeleton(wan):  # noqa: F811
     assert "<h1>大將軍府</h1>" in hero
     assert 'class="card scene rv' not in page  # 舊的場景卡不畫
     acts = page.split('class="jh-acts"')[1]
-    assert acts.count('class="act-ink') == 4 and "<b>行路</b>" in acts and "<b>移動</b>" not in acts
-    assert 'class="here-row"' in page and 'class="jh-blk jh-people"' in page  # 這裡的人（第三批）、去處照舊（第四批）
+    assert acts.count('class="act-ink') == 4 and "<b>行路</b>" in acts and "<b>移動</b>" not in acts and "<b>軍務</b>" in acts and "<b>交友</b>" not in acts
+    assert 'class="jh-blk jh-places"' in page and 'class="jh-blk jh-people"' in page and 'class="here-row"' not in page  # 這裡的人（第三批）、去處（第四批）
 
 
 def test_on_but_on_the_road_keeps_the_road_page(wan):  # noqa: F811
