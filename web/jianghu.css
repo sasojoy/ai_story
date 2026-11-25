@@ -222,3 +222,32 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
   font: 700 11px/18px var(--sans); font-style: normal; text-align: center; }
 .jh-row-go.off { opacity: 0.45; }
 .jh-sheet h4.jh-sub { margin: 14px 0 4px; }
+
+/* ── 第五批：事件選擇中、趕路中（設計稿 k、l）。整頁只剩這一刻的事：圖、標題、字、要按的 ── */
+.jh-ev .jh-hero, .jh-rd .jh-hero { min-height: calc(250px + var(--top)); }
+.jh-ev .jh-pl h1, .jh-rd .jh-pl h1 { font-size: 34px; }
+.jh-ev-txt { position: relative; z-index: 2; margin: 10px 6px 14px; font: 400 16.5px/1.85 var(--kai); color: var(--ink); }
+.jh-ev-txt p { margin: 0 0 10px; }
+.jh-ev-more { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 2px; border: 0; background: none; color: var(--ink-2); font: 400 13px var(--sans); cursor: pointer; }
+.jh-ev-before { margin: 0 0 12px; padding: 0 0 4px 12px; border-left: 2px solid var(--line); color: var(--ink-2); font-size: 15px; }
+.jh-ev-before .tx-now { margin: 0 0 8px; padding: 0; border: 0; background: none; box-shadow: none; }
+.jh-ev-opts { position: relative; z-index: 2; margin: 0 0 16px; }
+.jh-ev-opts .options { display: grid; gap: 8px; }
+.jh-ev-opts .options > .btn { justify-content: flex-start; min-height: 50px; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-left: 4px solid var(--ink);
+  border-radius: 3px 12px 12px 3px; background: var(--card); color: var(--ink); text-align: left; font: 700 16.5px/1.35 var(--kai); letter-spacing: 0.03em; box-shadow: none; }
+.jh-ev-opts .options > .btn[data-id="choice:free"] { border-left-color: var(--gold, #b8892f); font-weight: 400; color: var(--ink-2); }
+.jh-ev-opts .options > .btn small, .jh-ev-opts .options > .btn .ev-worry { font-weight: 400; }
+.jh-ev-opts .free { margin-top: 8px; }
+
+.jh-road { position: relative; z-index: 2; margin: 4px 0 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 6px 18px rgba(60, 40, 10, 0.1); }
+.jh-road-ln { display: flex; justify-content: space-between; gap: 12px; font: 700 17px var(--kai); letter-spacing: 0.06em; color: var(--ink); }
+.jh-road-bar { position: relative; height: 6px; margin: 18px 11px 8px; border-radius: 2px 4px 4px 2px; background: color-mix(in srgb, var(--ink-2) 22%, transparent); }
+.jh-road-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--ink); }
+.jh-tick { position: absolute; top: -4px; width: 2px; height: 14px; margin-left: -1px; background: var(--ink-2); opacity: 0.55; }
+.jh-road-bar em { position: absolute; top: -9px; width: 24px; height: 24px; margin-left: -12px; display: grid; place-items: center; border-radius: 5px; background: var(--accent);
+  color: #fff3e8; font: 700 13px var(--kai); font-style: normal; transform: rotate(-4deg); z-index: 1; }
+.jh-road-tm { margin-bottom: 12px; text-align: center; font: 400 13px var(--sans); color: var(--ink-2); }
+.jh-road .jh-do.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700; letter-spacing: 0.2em; }
+.jh-road .jh-do.primary small { color: color-mix(in srgb, var(--paper) 75%, transparent); }
+.jh-road .jh-why { margin-top: 10px; }
+.jh-rd .jh-blk { margin: 4px 0 16px; }

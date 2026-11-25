@@ -321,19 +321,96 @@
   const JH_ROAD_GO = "前往"; // 待 joy 潤
   const JH_ROAD_MAP = "打開輿圖"; // 待 joy 潤
   const JH_ROAD_NONE = "四下沒有路。"; // 待 joy 潤
+  const JH_GO_FAIL = "沒能出發："; // 待 joy 潤
   function jhRoadBody(m) {
     const moves = (m.options || []).filter((o) => o.id.startsWith("move:"));
     const marks = {};
-    for (const t of (m.codex && m.codex.track) || []) if (t.loc && !marks[t.loc]) marks[t.loc] = { seal: t.kind, what: t.title };
-    for (const e of m.errands || []) if (e.target && e.target.id && !marks[e.target.id]) marks[e.target.id] = { seal: "託付", what: e.text };
+    for (const t of (m.codex && m.codex.track) || []) if (t.loc && !marks[t.loc]) marks[t.loc] = { seal: t.kind, what: t.title, name: t.where };
+    for (const e of m.errands || []) if (e.target && e.target.id && !marks[e.target.id]) marks[e.target.id] = { seal: "託付", what: e.text, name: e.target.name };
+    const row = (mk, name, detail, go) => `<div class="jh-row">${mk ? jhSealHtml(mk.seal) : ""}<span class="jh-row-t"><b>${esc(name)}</b><small>${esc([mk ? mk.what : "", detail].filter(Boolean).join("・"))}</small></span>${go}</div>`;
     const rows = moves.map((o) => {
       const loc = o.id.slice(5), mk = marks[loc];
       const [label, detail] = optParts(o);
-      return { mk, html: `<div class="jh-row${o.enabled ? "" : " wait"}">${mk ? jhSealHtml(mk.seal) : ""}<span class="jh-row-t"><b>${esc(label.replace(/^前往\s*/, ""))}</b><small>${esc([mk ? mk.what : "", detail].filter(Boolean).join("・"))}</small></span>${o.enabled
+      return { mk, html: row(mk, label.replace(/^前往\s*/, ""), detail, o.enabled
         ? `<button class="btn small jh-row-go" data-act="choose" data-id="${esc(o.id)}">${JH_ROAD_GO}</button>`
-        : `<button class="btn small jh-row-go off" data-act="opt-why" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true">${JH_ROAD_GO}</button>`}</div>` };
-    }).sort((a, b) => (a.mk ? 0 : 1) - (b.mk ? 0 : 1));
+        : `<button class="btn small jh-row-go off" data-act="opt-why" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true">${JH_ROAD_GO}</button>`) };
+    });
+    // 有事要去、卻不在鄰近的地方（例：人在宛城，主線要去長社）：也列上來、排最上面，按了照輿圖的出發走（步行）
+    const near = new Set(moves.map((o) => o.id.slice(5)));
+    const ways = (m.jianghu && m.jianghu.ways) || {};
+    for (const [loc, mk] of Object.entries(marks)) {
+      if (near.has(loc) || !ways[loc]) continue;
+      rows.push({ mk, html: row(mk, mk.name || loc, `${JH_WALK}${ways[loc]}`, `<button class="btn small jh-row-go" data-act="jh-go" data-dest="${esc(loc)}" data-mode="walk">${JH_ROAD_GO}</button>`) });
+    }
+    rows.sort((a, b) => (a.mk ? 0 : 1) - (b.mk ? 0 : 1));
     return `${rows.length ? rows.map((r) => r.html).join("") : `<p class="jh-none">${JH_ROAD_NONE}</p>`}<button class="jh-why" data-act="jh-map">${JH_ROAD_MAP}<i aria-hidden="true">›</i></button>`;
+  }
+
+  // ── 第五批：其他時刻。事件選擇中、趕路中整頁換掉（設計稿 k、l）；行動、人、去處都收起來，選完、到了才回來 ──
+  const JH_WALK = "步行"; // 待 joy 潤
+  const JH_EV_SEAL = "遭遇"; // 待 joy 潤：事件標題旁那一枚直書小印
+  const JH_EV_MORE = "前文"; // 待 joy 潤
+  const JH_ON_ROAD = "往{to}的路上"; // 待 joy 潤
+  const JH_ROAD_LEFT = "{mode}・還有 {n} 分鐘"; // 待 joy 潤
+  const JH_ROAD_NEXT = "下一站{name}"; // 待 joy 潤
+  const JH_DASH = "疾行"; // 待 joy 潤
+  const JH_BACK = "折返"; // 待 joy 潤
+  const JH_ROAD_DO = "路上順手"; // 待 joy 潤
+  const jhEvNow = (m) => (m.options || []).some((o) => /^choice:/.test(o.id));
+  // 這一刻要不要整頁換掉：開關開著、介面第二版、不在序章與新手教學、不在決戰面板與戰鬥卡
+  function jhMomentHtml(m, p) {
+    if (!(m && m.jianghu && m.jianghu.on) || m.card) return "";
+    if (!(typeof uiV2 === "function" && uiV2()) || (typeof pro === "function" && pro()) || (typeof onb === "function" && onb()) || (typeof bpOn === "function" && bpOn(m))) return "";
+    try {
+      if (m.on_road && m.jianghu.road) return jhRoadPage(m, p);
+      if (!m.on_road && jhEvNow(m)) return jhEvPage(m, p);
+    } catch (e) { if (typeof console !== "undefined") console.error(e); }
+    return "";
+  }
+  function jhMomentHero(m, title, seal, src) {
+    try { document.documentElement.classList.add("jh2"); } catch (e) { /* 測試裡沒有 document */ }
+    return `<section class="jh-hero">${src ? `<img class="jh-art" src="${esc(src)}" alt="" decoding="async">` : '<div class="jh-art none"></div>'}
+        ${jhStatusHtml(m)}
+        <div class="jh-pl">${seal ? `<span class="jh-seal">${esc(seal)}</span>` : ""}<h1>${esc(title)}</h1></div>
+      </section>`;
+  }
+  // 事件：圖、標題、最後一段字；前文（剛剛那一則與這一幕前面的段落）收起來，點了攤開；選項照原本那一排（含自己說）
+  function jhEvPage(m, p) {
+    const paras = String(m.scene || "").match(/<p>[\s\S]*?<\/p>/g) || [];
+    const title = (m.art && m.art.title) || ((paras[0] || "").match(/<strong>(.*?)<\/strong>/) || [])[1] || "";
+    const body = paras.filter((x) => !/^<p><strong>[^<]*<\/strong><\/p>$/.test(x.trim()));
+    const last = body.pop() || "";
+    const before = `${p.now || ""}${body.join("")}`;
+    const more = before ? `<button class="jh-ev-more" data-act="jh-ev-more" aria-expanded="${!!S.jhEvMore}">${JH_EV_MORE}<i aria-hidden="true">${S.jhEvMore ? "︿" : "﹀"}</i></button>${S.jhEvMore ? `<div class="jh-ev-before">${before}</div>` : ""}` : "";
+    const src = m.art && m.art.kind === "event" && m.art.src ? m.art.src : jhArtSrc(m);
+    return `<div class="jh-page jh-ev">${p.ckPop || ""}${jhMomentHero(m, title, JH_EV_SEAL, src)}<div class="jh-ev-txt">${more}${last}</div><div class="jh-ev-opts">${p.menu || ""}${p.free || ""}</div></div>`;
+  }
+  // 趕路：圖、「往某地的路上」、剛剛那一則、一條路的墨條（中間各站是細的刻痕，不畫圓圈）、疾行與折返；路上的小事收在底下
+  function jhRoadPage(m, p) {
+    const r = m.jianghu.road;
+    const opts = m.options || [];
+    // 剛剛那一則：剛出發那一則（「前往 長社（途經…）」）跟墨條說的是同一件事，不寫兩次；路上小事的結果照寫
+    const now = /tx-title">前往 /.test(p.now || "") ? "" : p.now;
+    const back = opts.find((o) => o.id.startsWith("road:back"));
+    const halt = opts.find((o) => o.id === "act:halt");
+    const rest = opts.filter((o) => o !== back && o !== halt && o.id !== "act:on_road");
+    const pct = (x) => `${Math.round(Math.min(1, Math.max(0, x)) * 1000) / 10}%`;
+    const me = ((m.status && m.status.name) || "").slice(0, 1);
+    const ticks = (r.stops || []).map((t) => `<i class="jh-tick" style="left:${pct(t.at)}"></i>`).join("");
+    const next = r.stops && r.stops.length && r.stops[0].at > r.done ? r.stops[0].name : "";
+    const dash = r.dash
+      ? `<button class="btn jh-do wide primary${r.dash.enabled ? "" : " off"}" ${r.dash.enabled ? `data-act="jh-go" data-dest="${esc(r.dest)}" data-mode="dash"` : `data-act="opt-why" data-why="${esc(optParts({ label: r.dash.label })[1])}" aria-disabled="true"`}>${JH_DASH}<small>${esc(optParts({ label: r.dash.label })[1])}</small></button>` : "";
+    const backBtn = back ? `<button class="btn jh-do wide" data-act="choose" data-id="${esc(back.id)}"${back.enabled ? "" : " disabled"}>${JH_BACK}<small>${esc(optParts(back)[0].replace(/^折返\s*/, ""))}</small></button>` : "";
+    const haltBtn = halt ? `<button class="jh-why" data-act="choose" data-id="${esc(halt.id)}"${halt.enabled ? "" : " disabled"}>${esc(optParts(halt)[1].replace(/^到(.*)就停下$/, "停在$1") || optParts(halt)[0])}<i aria-hidden="true">›</i></button>` : "";
+    const cell = (o) => { const [name, sub] = optParts(o); return `<button class="btn jh-do${o.enabled ? "" : " off"}" ${o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : `data-act="opt-why" data-why="${esc(o.note || sub)}" aria-disabled="true"`}>${esc(name)}${sub ? `<small>${esc(sub)}</small>` : ""}</button>`; };
+    const card = `<section class="jh-road">
+        <div class="jh-road-ln"><b>${esc(r.from)}</b><b>${esc(r.to)}</b></div>
+        <div class="jh-road-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(r.done * 100)}"><span style="width:${pct(r.done)}"></span>${ticks}<em style="left:${pct(r.done)}">${esc(me)}</em></div>
+        <div class="jh-road-tm">${esc(JH_ROAD_LEFT.replace("{mode}", r.mode).replace("{n}", r.left))}${next ? `・${esc(JH_ROAD_NEXT.replace("{name}", next))}` : ""}</div>
+        <div class="jh-dos">${dash}${backBtn}</div>${haltBtn}
+      </section>`;
+    const tasks = rest.length ? `<div class="jh-blk"><h3>${JH_ROAD_DO}</h3><div class="jh-dos">${rest.map(cell).join("")}</div></div>` : "";
+    return `<div class="jh-page jh-rd">${p.ckPop || ""}${jhMomentHero(m, JH_ON_ROAD.replace("{to}", r.to), "", r.art || jhArtSrc(m))}${now ? jhProseHtml(m, "", now) : ""}${card}${tasks}</div>`;
   }
 
   // 拉起來的那一層：眼下的事（全部）、一封信、投靠的三方卡
@@ -375,9 +452,22 @@
         case "jh-peer-back": S.jhPeerPick = null; S.jhPeerChoice = null; if (S.peer) { S.peer.amountFor = null; S.peer.textFor = null; } render(); break;
         case "jh-peer-choice": S.jhPeerChoice = el.dataset.c; render(); break;
         case "jh-peer-go": S.jhPeerPick = null; await peerAct(Number(el.dataset.i)); break;
+        case "jh-ev-more": S.jhEvMore = !S.jhEvMore; renderPage(); break;
+        case "jh-go": { // 遠路（行路清單裡不在鄰近的）與路上疾行：照輿圖的出發走同一條路（/api/travel）
+          const place = el.dataset.dest, mode = el.dataset.mode || "walk";
+          S.jhSheet = null;
+          await busy(async () => {
+            const r = await api("/api/travel", { place, mode });
+            setMain(r.main);
+            renderTop();
+            if (!r.arrived) toast(`${JH_GO_FAIL}${r.reason}`);
+          }, WAIT_LINES.move);
+          renderPage();
+          break;
+        }
     } // jianghuClick
   } // jianghuClick
-  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-map", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go"]);
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-map", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go", "jh-ev-more", "jh-go"]);
 
   // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
   // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡

@@ -22,7 +22,8 @@ def test_off_keeps_the_old_page(wan):  # noqa: F811
 def test_on_draws_the_new_skeleton(wan):  # noqa: F811
     wan.content.config.jianghu.enabled = True
     m = server.main_view(wan)
-    assert m["jianghu"] == {"on": True}
+    assert m["jianghu"]["on"] is True and "road" not in m["jianghu"]  # 閒著：沒有墨條，有遠路的步行時間（第五批）
+    assert m["jianghu"]["ways"] and all(v.startswith("約") for v in m["jianghu"]["ways"].values())
     page = run(m, "return H.pageJianghu();")
     assert page.startswith('<div class="jh-page">')
     hero = page.split('class="jh-prose"')[0]
@@ -129,3 +130,45 @@ def test_no_pill_button_and_the_stamina_sheet(wan):  # noqa: F811
     assert 'data-act="jh-stam"' in page.split('class="jh-acts"')[1].split("</div>")[0]
     sheet = run(m, 'H.S.jhSheet = "stam"; return H.pageJianghu();')
     assert 'data-act="pill"' in sheet and "還有 5 顆" in sheet
+
+
+def test_on_the_road_one_ink_bar_dash_and_back(wan):  # noqa: F811
+    """第五批・趕路中：圖、「往某地的路上」、墨條（中間各站是刻痕，不畫圓圈）、疾行與折返；行動、人、去處都不畫。"""
+    wan.content.config.jianghu.enabled = True
+    far = next(loc for loc, w in server.main_view(wan)["jianghu"]["ways"].items() if w != "約 1 分鐘")
+    wan.travel(far, "walk")
+    m = server.main_view(wan)
+    road = m["jianghu"]["road"]
+    assert road["to"] == wan.content.locations[far].name and 0 <= road["done"] <= 1 and road["left"] >= 1
+    assert road["dash"]["label"].startswith("疾行") and road["art"].startswith("/static/img/")
+    page = run(m, "return H.pageJianghu();")
+    assert page.startswith('<div class="jh-page jh-rd">') and f"往{road['to']}的路上" in page
+    assert 'class="jh-road-bar"' in page and page.count('class="jh-tick"') == len(road["stops"])
+    assert 'data-act="jh-go"' in page and f'data-dest="{far}"' in page and 'data-mode="dash"' in page
+    assert 'data-id="road:back' in page and "jh-acts" not in page and "jh-people" not in page and "jh-signs" not in page
+    assert "●" not in page and "○" not in page
+
+
+def test_event_page_only_the_event(wan):  # noqa: F811
+    """第五批・事件選擇中：圖、標題與小印、最後一段字（前文收起來）、選項；行動、人、去處、眼下都不畫。"""
+    wan.content.config.jianghu.enabled = True
+    wan.state.pending_event = "yz_market_salt"
+    m = server.main_view(wan)
+    page = run(m, "return H.pageJianghu();")
+    assert page.startswith('<div class="jh-page jh-ev">') and "私鹽擔子" in page
+    assert 'data-id="choice:0"' in page and "jh-acts" not in page and "jh-eye" not in page and "jh-people" not in page
+    assert 'data-act="jh-ev-more"' in page and "jh-ev-before" not in page
+    opened = run(m, "H.S.jhEvMore = true; return H.pageJianghu();")
+    assert "jh-ev-before" in opened
+
+
+def test_road_sheet_lists_a_far_errand_first(wan):  # noqa: F811
+    """第五批補第四批：有事要去、卻不在鄰近的地方也列進行路清單、排最上面、掛那件事的小印，按了照輿圖出發（jh-go）。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    near = {o["id"][5:] for o in m["options"] if o["id"].startswith("move:")}
+    far = next(loc for loc in m["jianghu"]["ways"] if loc not in near)
+    m["codex"] = {**(m.get("codex") or {}), "track": [{"key": "x", "kind": "主線", "title": "某一回", "where": "某地", "loc": far}]}
+    body = run(m, "H.S.jhSheet = 'road'; return H.pageJianghu();").split('role="dialog" aria-label="行路"')[1]
+    first = body.split('class="jh-row"')[1]
+    assert "主線" in first and "某地" in first and f'data-dest="{far}"' in first and "步行約" in first
