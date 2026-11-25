@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tianxia import gender
 from tianxia.core import guard_base
 from tianxia.features.guard import actions, texts
 
@@ -99,11 +100,22 @@ def test_others_hear_of_him_only_the_path_and_the_deed(sworn):
     line = guard_base.rumor_line(s, c)
     assert line.startswith(f"聽說{s.player.name}身邊那個{guard_base.PATH_WORD[b.path]}{b.name}，是")
     assert all(word not in line for word in ("恩深", "敬重", "淡然", "怨懟", "恨極"))
-    b.opening = "spy"
-    b.sex = "女"
-    assert "要打死她的村人" in guard_base.rumor_line(s, c)
-    b.opening = "nope"
-    assert "撿回來的孩子" in guard_base.rumor_line(s, c)
+    # 六種開場整句寫死（主詞要清楚：PM 2026-11-25 抓到「是他偷了他的錢袋」讀起來像主人去偷）
+    s.player.name, b.name, b.path, b.sex = "甲", "青禾", "弓箭手", "女"
+    s.player.gender = gender.MALE
+    want = {
+        "soldiers": "聽說甲身邊那個弓手青禾，是他從亂兵刀下救出來的。",
+        "slaves": "聽說甲身邊那個弓手青禾，是他從人販子的車上買下來的。",
+        "river": "聽說甲身邊那個弓手青禾，是他從河裡撈起來的。",
+        "spy": "聽說甲身邊那個弓手青禾，當年被村人當成探子、差點活活打死，是他把她帶走的。",
+        "fever": "聽說甲身邊那個弓手青禾，是他從破廟裡背出來的，那時她還發著高燒。",
+        "thief": "聽說甲身邊那個弓手青禾，當年偷過他的錢袋，他反倒把她收留了下來。",
+        "nope": "聽說甲身邊那個弓手青禾，是他當年撿回來的孩子。",
+    }
+    assert set(want) - {"nope"} == {o["id"] for o in texts.OPENINGS}
+    for opening, line in want.items():
+        b.opening = opening
+        assert guard_base.rumor_line(s, c) == line
     # 接在酒肆打聽交情（打聽度 3 以上）
     monkey = pytest.MonkeyPatch()
     try:

@@ -101,11 +101,17 @@ def raid_lines(state: GameState, content: Content, rival_state: GameState | None
 # 傳聞裡怎麼叫他（只講出路，不講心性）
 PATH_WORD = {"將軍": "會帶兵的", "謀士": "肚裡有計的", "遊俠": "遊俠", "鐵匠": "會打鐵的", "農夫": "種地出身的",
              "乞丐": "討過飯的", "殺手": "下手極冷的", "弓箭手": "弓手", "醫者": "會看病的", "斥候": "探路的"}
-# 撿到他的那一件事（content 的 openings 的 id；{him}＝主人的他／她）
-OPENING_DEED = {"soldiers": "從亂兵刀下救出來的", "slaves": "從人販子的車上買下來的", "river": "從河裡撈起來的",
-                "spy": "從一群要打死{pron}的村人手裡帶走的", "fever": "發著高燒，從破廟裡背出來的", "thief": "偷了{him}的錢袋，{him}反倒收留下來的"}
-RUMOR = "聽說{owner}身邊那個{word}{gname}，是{him}{deed}。"  # 待 joy 潤
-RUMOR_PLAIN = "聽說{owner}身邊那個{word}{gname}，是{him}當年撿回來的孩子。"  # 待 joy 潤
+# 撿到他的那一件事：逗號後面那半句整句寫好（主詞各自清楚；{him}＝主人的他／她，{pron}＝親衛的他／她）
+OPENING_DEED = {
+    "soldiers": "是{him}從亂兵刀下救出來的。",
+    "slaves": "是{him}從人販子的車上買下來的。",
+    "river": "是{him}從河裡撈起來的。",
+    "spy": "當年被村人當成探子、差點活活打死，是{him}把{pron}帶走的。",
+    "fever": "是{him}從破廟裡背出來的，那時{pron}還發著高燒。",
+    "thief": "當年偷過{him}的錢袋，{him}反倒把{pron}收留了下來。",
+}
+RUMOR = "聽說{owner}身邊那個{word}{gname}，{deed}"  # 待 joy 潤
+RUMOR_PLAIN = "是{him}當年撿回來的孩子。"  # 認不得的開場；待 joy 潤
 
 # 心性粗分三樣：恩深、敬重 warm；淡然 plain；怨懟、恨極 cold
 _MOOD = {"恩深": "warm", "敬重": "warm", "淡然": "plain", "怨懟": "cold", "恨極": "cold"}
@@ -132,11 +138,8 @@ def rumor_line(other: GameState, content: Content) -> str:
     b = _along(other, content)
     if b is None or not b.name:
         return ""
-    him = gender.pronoun(other)
-    deed = OPENING_DEED.get(b.opening, "").replace("{pron}", _pron(b))
-    word = PATH_WORD.get(b.path, b.path)
-    fmt = RUMOR if deed else RUMOR_PLAIN
-    return fmt.format(owner=other.player.name, word=word, gname=b.name, him=him, deed=deed.replace("{him}", him))
+    deed = OPENING_DEED.get(b.opening, RUMOR_PLAIN).replace("{him}", gender.pronoun(other)).replace("{pron}", _pron(b))
+    return RUMOR.format(owner=other.player.name, word=PATH_WORD.get(b.path, b.path), gname=b.name, deed=deed)
 
 
 def _mood(content: Content, b: GuardBook) -> str:
