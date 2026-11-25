@@ -5,6 +5,11 @@
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round. The replay also inverts every image (img-invert, batch 237):
      computed styles the same, pixels not, so the re-renders must leave it red.
+     The c round also walks with the battle card's two pictures inverted (img-battle, batch 254): the countdown's piece at 375-light,
+     where the dpr flip in driver.mjs sits, must still go red as pixels. And with only a band across their middle inverted
+     (img-battle-spot, batch 260): red as pixels, and the walk's own repaints (repaint-variants) must take none of the battle card.
+     The yw round (batch 256) with the meeting card's padding changed in web/yiwen.css (yw-padding): red without --new yiwen, listed
+     (summary.new_rows, exit 0) with it. --yw-only runs just those two.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
   5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
@@ -70,6 +75,21 @@ def _replay_controls(a, rows: list) -> None:
     shutil.rmtree(work, ignore_errors=True)
 
 
+def _yw_controls(a, rows: list) -> None:
+    """Batch 256: the meeting card's padding changed in web/yiwen.css. The yw round goes red as REAL without --new yiwen; with it the round's
+    differences are listed (new_rows), not red. Whole yw round, not --only (its flows are not the c round's)."""
+    only, a.only = a.only, None
+    try:
+        s = _gate(a, "mut_" + gate.YW_PADDING, "--mutate", gate.YW_PADDING, rounds="yw")
+        yw = [x for x in s["real"] if gate.scene_round(x) == "yw"]
+        rows.append((f"yw round --mutate {gate.YW_PADDING} goes red", s["code"] == 1 and bool(yw), f"exit {s['code']} yw rows {len(yw)}: {sorted({x['class'] for x in yw})} {s['took']}s"))
+        s = _gate(a, "mut_" + gate.YW_PADDING + "_new", "--mutate", gate.YW_PADDING, "--new", "yiwen", rounds="yw")
+        rows.append((f"yw round --mutate {gate.YW_PADDING} --new yiwen is listed, not red", s["code"] == 0 and bool(s.get("new_rows")),
+                     f"exit {s['code']} new_rows {len(s.get('new_rows', []))}: {sorted({x['class'] for x in s.get('new_rows', [])})} real {[x['class'] for x in s['real']][:6]} {s['took']}s"))
+    finally:
+        a.only = only
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -84,23 +104,39 @@ def main(argv=None) -> int:
     ap.add_argument("--replay-only", action="store_true", help="reuse the corpus already under --out, only the replay controls")
     ap.add_argument("--walk-only", action="store_true", help="skip the replay controls")
     ap.add_argument("--only", help="flows of the c round, for a shorter walk (accounts,smoke,craft is about 2.5 minutes a time, the whole round about 8)")
+    ap.add_argument("--yw-only", action="store_true", help="only the yw round's two controls (batch 256)")
     a = ap.parse_args(argv)
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
     rows = []
     corpus = os.path.join(a.out, "corpus")
-    if not a.replay_only:
+    if a.yw_only:
+        _yw_controls(a, rows)
+    if not a.replay_only and not a.yw_only:
         s1 = _gate(a, "same1", "--keep-corpus", corpus, rounds=a.rounds)
         rows.append(("base against base is green", s1["code"] == 0, f"exit {s1['code']} real {len(s1['real'])} noise {s1['noise']} {s1['took']}s"))
         s2 = _gate(a, "same2", rounds=a.rounds)
         rows.append(("the same walk again has the same fingerprint", s1["fingerprint"] == s2["fingerprint"], f"{s1['fingerprint']} / {s2['fingerprint']} noise {s2['noise']}"))
-    if not a.walk_only:
+    if not a.walk_only and not a.yw_only:
         _replay_controls(a, rows)
-    if not a.replay_only:
+    if not a.replay_only and not a.yw_only:
         for which in gate.MUTATIONS:
             s = _gate(a, "mut_" + which, "--mutate", which)
             rows.append((f"c round --mutate {which} goes red", s["code"] == 1, f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})}"))
             rows.append((f"c round --mutate {which} ran the replay from the gate", s["replay"]["ran"] and any(x["round"].startswith("replay") for x in s["real"]), f"{s['replay']}"[:300]))
+        s = _gate(a, "mut_" + gate.IMG_BATTLE, "--mutate", gate.IMG_BATTLE)
+        walk = [x for x in s["real"] if x["class"] == "pixel" and not x["round"].startswith("replay")]
+        rows.append((f"c round --mutate {gate.IMG_BATTLE} goes red on the battle card's pictures (styles the same, pixels not)",
+                     s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk),
+                     f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]}"[:300]))
+        # batch 260: only a band of the same pictures, where the walk shoots the window again (repaint-variants): still red, never noise
+        s = _gate(a, "mut_" + gate.IMG_BATTLE_SPOT, "--mutate", gate.IMG_BATTLE_SPOT)
+        walk = [x for x in s["real"] if x["class"] == "pixel" and not x["round"].startswith("replay")]
+        taken = [r["file"] for r in s.get("noise_rows", []) if r["class"] == "repaint-variants" and "bt_watch" in r["file"]]
+        rows.append((f"c round --mutate {gate.IMG_BATTLE_SPOT} goes red on the battle card's band and repaint-variants takes none of it",
+                     s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk) and not taken,
+                     f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]} repaint-variants on bt_watch {taken[:4]}"[:300]))
+        _yw_controls(a, rows)
         s = _gate(a, "quiet", "--mutate", gate.QUIET)
         rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"

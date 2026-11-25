@@ -3998,6 +3998,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
         "guard_say",  # 親衛隊長自己寫的那一句（features/guard）：三段同 feast_text
         "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
+        "yiwen_step",  # 異聞的說書人寫一幕（features/yiwen，第 252 批）：A step_request → B 鎖外審字＋writer.write_scene → C apply_step
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -4871,6 +4872,8 @@ NOT_IN_THE_FINGERPRINT = {
         "fight_practice": "開季時蓋的章（武學打了才升），開季之後不變",
         "craft_v2": "開季時蓋的章（意境合成改版），開季之後不變",
         "guard_on": "開季時蓋的章（親衛隊長取代酒肆招募），開季之後不變",
+        "yiwen_on": "開季時蓋的章（異聞），開季之後不變",
+        "yiwen": "異聞的名額與每天的數：撞見那一下另寫一則地方傳聞（傳聞流水號已在指紋裡）；撞見卡只畫自己眼前那一則，別人的畫面不讀它",
         "no_gentry": "開季時蓋的章（拿掉地方豪強），開季之後不變",
         "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",
         "titles_holders": "名號結算的那一下寫江湖傳聞（傳聞流水號已在指紋裡）；各人戴哪一個是自己存檔的事，下次輪詢才補也不礙事",

@@ -182,6 +182,17 @@ def router(shell) -> APIRouter:
         if not binding.recent(identity_base.session_auth(token), now, shell.CONTENT.config.identity):
             raise shell.GameError(binding.NEED_RECENT)
 
+    def mark_reauth(token: str, by: str, now: float) -> bool:
+        """重新驗證過一次（第 259 批）：照舊 record_reauth；這個 session 在旁檔沒有 session_auth 那一列（identity 打開之前登入的、
+        或旁檔不見了）就先補一列再記。理由：剛用 by 這一種證明過是本人，等於這一刻用它登入；identity 打開之前能開 session 的只有
+        密碼登入。補的 method 是這次驗的那一種（password／line／google／phone／email），不是一律 password：staff_session_ok、
+        admin_session_ok 開著時只認 password，第三方或驗證碼的重驗不能把 session 變成密碼登入。只在已經驗對之後才叫（打錯密碼、
+        號碼對不上這個帳號都在前面短路，不補）；record_session 只在 UPDATE 沒打到時才叫，不會清掉誰的重驗。"""
+        if identity_base.record_reauth(token, by, now):
+            return True
+        identity_base.record_session(token, by, now)
+        return identity_base.record_reauth(token, by, now)
+
     def have_of(account) -> dict[str, dict]:
         """這個帳號的每一種（記號列不算）：provider → {subject, display}。"""
         rows = shell.account_store().logins_of(account.key)
@@ -231,7 +242,7 @@ def router(shell) -> APIRouter:
         found = accounts.login_key(provider, sub)
         owner = accounts.account_id(found) if found is not None else None
         if ticket["purpose"] == "reauth":
-            if owner != account.id or not identity_base.record_reauth(token, provider, now):
+            if owner != account.id or not mark_reauth(token, provider, now):
                 return back(request, "fail")
             return back(request, "reauth")
         if identity_base.reset_held(account.id, now):  # 第 209 批：開單之後才被管理者重設的，回呼這一步也擋（網頁照 RESET_NO_BIND 那一句）
@@ -520,7 +531,7 @@ def router(shell) -> APIRouter:
             raise shell.GameError(codes.BAD_CODE)
         channel, subject = row["channel"], row["subject_hmac"]
         if row["purpose"] == "reauth":
-            if have_of(account).get(channel, {}).get("subject") != subject or not identity_base.record_reauth(token, channel, now):
+            if have_of(account).get(channel, {}).get("subject") != subject or not mark_reauth(token, channel, now):
                 raise shell.GameError(codes.BAD_CODE)
             side.record_verified(account.id, channel, subject, now)
             return {"message": binding.REAUTH_OK.format(minutes=max(1, cfg.recent_seconds // 60))}
@@ -605,7 +616,7 @@ def router(shell) -> APIRouter:
             shell.account_store().authenticate(account.login, str(body.get("password") or ""))
         except shell.AccountError as exc:
             raise shell.GameError(str(exc)) from None
-        identity_base.record_reauth(token, "password", now)
+        mark_reauth(token, "password", now)  # 第 259 批：沒有那一列先補（補完一定記得上；回傳值照舊不拿來分支、不加新的失敗句）
         return {"message": binding.REAUTH_OK.format(minutes=max(1, shell.CONTENT.config.identity.recent_seconds // 60))}
 
     @r.post("/api/identity/unbind")
