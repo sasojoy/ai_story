@@ -203,17 +203,20 @@ def test_after_the_first_buy_of_a_kind_a_card_teaches_its_first_use(on):
 def test_the_jianghu_page_blocks_grow_by_the_table(on):
     """江湖頁重排第六批的表（PM 2026-11-25 同意）：俠客、出陣軍務、五塊招牌各自什麼時候長出來。"""
     g = _new(on)
-    g.choose("choice:0")
     jh = [k for k in rules.KEYS if k.startswith("jh:")]
-    assert set(jh) <= set(g.feature_status()["unfold"]["hide"])
+    assert set(jh) <= set(g.feature_status()["unfold"]["hide"])  # 城門口全收著
+    g.choose("choice:0")
     p = g.state.player
     p.faction = next(iter(on.scenario.factions)).id if isinstance(on.scenario.factions, list) else next(iter(on.scenario.factions))
     _errand_done(g)
-    p.stats["silver"] = on.config.unfold.sign_silver
+    p.stats["silver"] = on.config.unfold.sign_silver_dadian
     p.mingtie_box.append(_card())
     g.sync(g.now + 1)
     grown = set(p.unfold.grown)
-    assert {"jh:peers", "jh:sortie", "jh:duty", "jh:sign:bounties", "jh:sign:dadian", "jh:sign:market"} <= grown
+    assert {"jh:peers", "jh:sortie", "jh:duty", "jh:sign:bounties", "jh:sign:dadian"} <= grown and "jh:sign:market" not in grown
+    p.stats["silver"] = on.config.unfold.sign_silver_market
+    g.sync(g.now + 1)
+    assert "jh:sign:market" in p.unfold.grown
     assert "jh:sign:arena" not in grown and ("jh:sign:smith" in grown) == ("hero:gear" in grown)
 
 

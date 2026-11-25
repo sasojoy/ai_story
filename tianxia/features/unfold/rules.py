@@ -32,8 +32,8 @@ KEYS: tuple[str, ...] = (
     "jh:sign:bounties",  # 懸賞榜：第一件託付辦完
     "jh:sign:smith",  # 鐵匠鋪：跟俠客頁的裝備同一刻
     "jh:sign:arena",  # 擂台：到 10 級，或第一次切磋
-    "jh:sign:dadian",  # 打點：銀兩第一次到 Config.unfold.sign_silver
-    "jh:sign:market",  # 馬市：同打點
+    "jh:sign:dadian",  # 打點：銀兩第一次到 Config.unfold.sign_silver_dadian
+    "jh:sign:market",  # 馬市：銀兩第一次到 Config.unfold.sign_silver_market
 )
 READY_KEYS = frozenset({"tab:craft"})  # 要問世界才知道的（包算好傳進 ready）
 
@@ -51,9 +51,9 @@ def _level(state: GameState) -> int:
 
 
 def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0,
-            sign_silver: int = 0) -> bool:
+            sign_silver: tuple[int, int] = (0, 0)) -> bool:
     """這一塊此刻用不用得到（只看身上的東西；長出來之後不再問）。ready：包算好的（READY_KEYS）；create_price：自創第一門要的心得；
-    sign_silver：打點、馬市兩塊招牌要的銀兩。"""
+    sign_silver：打點、馬市兩塊招牌各要的銀兩。"""
     p = state.player
     if key == "jh:peers":
         return bool(p.mingtie_box) or p.sect is not None or _level(state) >= 5
@@ -66,7 +66,7 @@ def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozens
     if key == "jh:sign:arena":
         return _level(state) >= 10 or any(b.kind == "spar" for b in state.battles)
     if key in ("jh:sign:dadian", "jh:sign:market"):
-        return p.stats.get("silver", 0) >= sign_silver
+        return not opening_pending and p.stats.get("silver", 0) >= sign_silver[key == "jh:sign:market"]  # 開局的盤纏就夠打點：城門口先不畫
     if key in READY_KEYS:
         return key in ready
     if key == "self:create":
@@ -92,7 +92,7 @@ def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozens
 
 
 def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0,
-         sign_silver: int = 0) -> list[str]:
+         sign_silver: tuple[int, int] = (0, 0)) -> list[str]:
     """看一次：用得到而還沒長出來的寫進 grown 與 fresh。回這一次長出來的鍵。沒有這一本的角色不動。"""
     book = state.player.unfold
     if book is None:
