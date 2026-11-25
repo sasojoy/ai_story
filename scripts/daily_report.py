@@ -39,12 +39,25 @@ STALE_HOURS = 36  # 備份多久沒成功算失敗
 OPENING = ROOT / "tianxia" / "features" / "guide" / "content" / "opening.json"  # 城門口那一則事件（guide 包 opening.pending）
 STAGES = ("還在城門口沒選路", "選了路未滿 5 級", "5 到 9 級", "10 級以上")
 # 量表上的鈕（playlog.button_of 歸過類的）→ 企劃者看得懂的名字；表外的照原樣印
+OTHER = "其他"  # 對不到的鈕一律歸這裡，短報不印原本的代號（Joy：看得到的字不准像內部用語）
 BUTTONS = {
+    # 行動列（act:<動詞>）
     "act:explore": "探索", "act:train": "出陣", "act:socialize": "交友", "act:rest": "調息", "act:seclusion": "閉關",
-    "act:clinic": "醫館", "act:move": "移動", "move": "移動", "travel": "趕路中的選項", "choice": "事件選項", "talk": "跟人物說話",
-    "call": "求見", "battle": "決戰", "duel": "單挑", "arena": "擂台", "shop": "店面", "smith": "鐵匠鋪", "tavern": "酒肆",
-    "faction": "投靠", "bounty": "懸賞", "raid": "截殺", "seal": "玉璽碎片", "guard": "親衛", "codex": "江湖錄",
-    "yiwen": "異聞", "checkin": "簽到", "mall": "商城", "craft": "煉製", "cultivate": "修練", "sense": "感悟",
+    "act:clinic": "醫館", "act:heal": "醫館", "act:move": "移動", "act:duty": "軍務", "act:convoy": "護送", "act:halt": "停下",
+    "act:on_road": "趕路", "act:call": "求見", "act:summons": "應召", "act:rank": "晉升", "act:break": "破境",
+    "act:bounties": "懸賞榜", "act:arena": "擂台", "act:smith": "鐵匠鋪", "act:furnace": "鐵匠鋪", "act:market": "馬市",
+    "act:tavern": "酒肆", "act:recruit": "招募", "act:mentor": "名師指點", "act:bribe": "打點", "act:dadian": "打點",
+    "act:donate": "捐軍備", "act:silver_donate": "捐軍備", "act:buy_legend": "店面", "act:part": "分手",
+    # 其他前綴
+    "move": "移動", "road": "趕路", "travel": "趕路", "choice": "事件選項", "story": "奇事", "fs": "伏筆", "opp": "機會",
+    "talk": "跟人物說話", "parley": "跟人物說話", "errand": "託付", "call": "求見", "aid": "幫人物", "plan": "大勢人物的盤算",
+    "battle": "決戰", "melee": "混戰", "duel": "單挑", "arena": "擂台", "spar": "切磋", "raid": "截殺", "ambush": "設伏",
+    "works": "工事", "t": "軍令", "sortie": "出陣", "smith": "鐵匠鋪", "market": "馬市", "horses": "馬", "tavern": "酒肆",
+    "shop": "店面", "mall": "商城", "dadian": "打點", "donate": "捐軍備", "feast": "宴席", "hire": "招募", "learn": "學武",
+    "faction": "投靠", "defect": "叛投", "sect": "門派", "zongmen": "門派", "jieyi": "結義", "invite": "邀約", "mail": "書信",
+    "titles": "稱號", "bounty": "懸賞", "seal": "玉璽碎片", "guard": "親衛", "codex": "江湖錄", "yiwen": "異聞",
+    "heroines": "女子傳", "legacy": "傳承", "zhuan": "列傳", "mirror": "心魔", "dunwu": "頓悟", "sense": "感悟",
+    "persona": "性子", "checkin": "簽到", "craft": "煉製", "cultivate": "修練", "season": "賽季",
 }
 
 
@@ -70,7 +83,7 @@ def has_table(conn: sqlite3.Connection, name: str) -> bool:
 
 
 def button_name(button: str) -> str:
-    return BUTTONS.get(button, button)
+    return BUTTONS.get(button, OTHER)
 
 
 def stage_of(data: dict, opening_event: str | None) -> str:
@@ -201,8 +214,16 @@ def pct(a: int, b: int) -> str:
     return f"{a / b:.0%}" if b else "—"
 
 
+def named(counter: Counter) -> Counter:
+    """代號換成企劃者看得懂的名字並合併（同一個名字的幾顆鈕加在一起，對不到的併進「其他」）。"""
+    out: Counter = Counter()
+    for button, count in counter.items():
+        out[button_name(button)] += count
+    return out
+
+
 def top(counter: Counter, k: int) -> str:
-    return "、".join(f"{button_name(b)} {c}" for b, c in counter.most_common(k)) or "沒有"
+    return "、".join(f"{name} {c}" for name, c in named(counter).most_common(k)) or "沒有"
 
 
 def render(n: Numbers, today: dt.date) -> tuple[str, str]:
