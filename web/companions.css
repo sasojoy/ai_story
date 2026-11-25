@@ -26,3 +26,8 @@
 .vi-now span { background: #e6efe6; border-radius: 3px; padding: 0 4px; }
 .vi-now b { color: #3f7a68; }
 .vi-hist { margin: 0; padding-left: 64px; list-style: none; font-size: 12px; color: #7a6a55; line-height: 1.6; }
+
+/* 心神用完（web/companions.js talkShopHtml）：「心神不足」那一行底下一顆去萬寶閣，朱底白字，跟灰掉的選項分得開 */
+.vn-menu .btn.vn-shop, .vn-menu .options .btn.vn-shop { display: flex; width: 100%; min-height: 44px; border-radius: 8px; border: 1px solid; padding: 8px 12px; font: 15px/1.4 var(--kai); text-align: left; align-items: center; justify-content: space-between; gap: 8px; background: #a8322a; border-color: #8a2620; color: #fbf6ec; }
+.vn-menu .btn.vn-shop small { font-size: 12px; opacity: .85; }
+.vn-menu .btn.vn-shop::after { content: "›"; font-size: 18px; margin-left: auto; }

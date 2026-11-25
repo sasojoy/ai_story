@@ -16,7 +16,7 @@ from tianxia import figures, precise, roster, secret_recipes  # 共用規則層�
 from tianxia.core import xinshen  # 心神（核心的資源）：心神開著時對話扣它、不扣體力
 from tianxia.core.option import Option
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
-from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text
+from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, item_for, say_text
 
 from . import actions, companion_agent, parley, parley_actions
 
@@ -316,7 +316,23 @@ def talk_view(ctx) -> dict | None:
     if not cid or cid not in c.characters:
         return None
     side = figures.side_name(c, figures.of_character(c, cid))
-    return {"id": cid, "name": c.characters[cid].name, "side": side, "affinity": s.player.affinities.get(cid, 0)}
+    view = {"id": cid, "name": c.characters[cid].name, "side": side, "affinity": s.player.affinities.get(cid, 0)}
+    shop = short_shop(ctx)
+    if shop:
+        view["shop"] = shop
+    return view
+
+
+def short_shop(ctx) -> str | None:
+    """心神用完了（還有話可說、卻付不起按選項那一輪）：「去萬寶閣」停在哪一件補心神的商品（Joy 2026-11-07 待辦「心神用完→萬寶閣鈕」）；
+    心神關著、商城關著、沒賣、付得起都是 None。"""
+    c = ctx.content
+    if not xinshen.on(c):
+        return None
+    offered, _ = companion_agent.offered(ctx.state, ctx.state.player.pending_companion)
+    if not offered or ctx.xinshen_purse().can(talk_cost(ctx, "talk")):
+        return None
+    return item_for(c, "xinshen")
 
 
 def talk_title(ctx) -> str:
