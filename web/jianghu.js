@@ -261,7 +261,7 @@
     return `<section class="jh-eye" aria-label="眼下">
         <div class="jh-eye-hd">${jhSealHtml(top.seal)}<b>${esc(jhPlain(top.title))}</b>${more}</div>
         <p class="jh-eye-sub">${esc(top.sub || "")}</p>
-        <div class="jh-eye-row"><button class="btn jh-eye-go" ${top.attrs}>${esc(top.btn)}</button>${top.alt ? `<button class="btn jh-eye-later" ${top.alt.attrs}>${esc(top.alt.label)}</button>` : on.length > 1 ? `<button class="btn jh-eye-later" data-act="jh-later" data-key="${esc(top.key)}">${JH_LATER}</button>` : ""}</div>
+        <div class="jh-eye-row"><button class="btn jh-eye-go" ${top.attrs}>${esc(top.btn)}</button>${top.alt ? `<button class="btn jh-eye-later" ${top.alt.attrs}>${esc(top.alt.label)}</button>` : on.length > 1 && !top.guide ? `<button class="btn jh-eye-later" data-act="jh-later" data-key="${esc(top.key)}">${JH_LATER}</button>` : ""}</div>
       </section>`;
   }
 
