@@ -198,3 +198,34 @@ def test_after_the_first_buy_of_a_kind_a_card_teaches_its_first_use(on):
     cards.close(g, g.state.player.unfold)
     mall_actions.buy(g, "pills_5", "ref-unfold-0002")
     assert _card_now(g) is None  # 同一種只教一次
+
+
+def test_the_jianghu_page_blocks_grow_by_the_table(on):
+    """江湖頁重排第六批的表（PM 2026-11-25 同意）：俠客、出陣軍務、五塊招牌各自什麼時候長出來。"""
+    g = _new(on)
+    g.choose("choice:0")
+    jh = [k for k in rules.KEYS if k.startswith("jh:")]
+    assert set(jh) <= set(g.feature_status()["unfold"]["hide"])
+    p = g.state.player
+    p.faction = next(iter(on.scenario.factions)).id if isinstance(on.scenario.factions, list) else next(iter(on.scenario.factions))
+    _errand_done(g)
+    p.stats["silver"] = on.config.unfold.sign_silver
+    p.mingtie_box.append(_card())
+    g.sync(g.now + 1)
+    grown = set(p.unfold.grown)
+    assert {"jh:peers", "jh:sortie", "jh:duty", "jh:sign:bounties", "jh:sign:dadian", "jh:sign:market"} <= grown
+    assert "jh:sign:arena" not in grown and ("jh:sign:smith" in grown) == ("hero:gear" in grown)
+
+
+def test_shop_goods_bought_with_the_gift_cannot_change_hands():
+    """見面禮是白送的元寶，帳號綁定還沒開、一個人能開很多號（PM 2026-11-25）：小號買的東西不能轉給大號。
+    贈物只送素材、商城沒有一樣效果是素材；市集形象一件最低價比見面禮高（小號買大號掛的形象，大號拿分成，就是轉手）。"""
+    from tianxia.features.looks import market
+    from tianxia.features.mall import rules as mall_rules
+    from tianxia.features.peers import social
+
+    c = real_content()
+    assert social.GIFT_KINDS == ("material",)
+    assert not any(k in ("material", "materials", "silver") for k in mall_rules.EFFECTS)
+    assert all("material" not in k for item in c.mall.values() for k in item.effects)
+    assert c.config.unfold.gift < market.PRICE_MIN

@@ -25,6 +25,15 @@ KEYS: tuple[str, ...] = (
     "hero:mates",  # 同伴：收養了那個孩子、或第一次有人跟你走
     "tab:craft",  # 武學頁的「煉製」：身上第一次有兩個合得起來的意境（要問共用層 fusion，由包算好放進 ready）
     "self:create",  # 武學頁的「自創」：心得第一次夠自創一門
+    # 江湖頁上的（江湖頁重排第六批的表，PM 2026-11-25 同意；畫在 main.js 那一頁，那一條自己照 shown() 藏）
+    "jh:peers",  # 這裡的人裡的俠客：交過名帖、有同門，或到 5 級
+    "jh:sortie",  # 出陣牌：投靠一方
+    "jh:duty",  # 軍務牌：投靠一方
+    "jh:sign:bounties",  # 懸賞榜：第一件託付辦完
+    "jh:sign:smith",  # 鐵匠鋪：跟俠客頁的裝備同一刻
+    "jh:sign:arena",  # 擂台：到 10 級，或第一次切磋
+    "jh:sign:dadian",  # 打點：銀兩第一次到 Config.unfold.sign_silver
+    "jh:sign:market",  # 馬市：同打點
 )
 READY_KEYS = frozenset({"tab:craft"})  # 要問世界才知道的（包算好傳進 ready）
 
@@ -41,9 +50,23 @@ def _level(state: GameState) -> int:
     return state.player.member.level
 
 
-def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0) -> bool:
-    """這一塊此刻用不用得到（只看身上的東西；長出來之後不再問）。ready：包算好的（READY_KEYS）；create_price：自創第一門要的心得。"""
+def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0,
+            sign_silver: int = 0) -> bool:
+    """這一塊此刻用不用得到（只看身上的東西；長出來之後不再問）。ready：包算好的（READY_KEYS）；create_price：自創第一門要的心得；
+    sign_silver：打點、馬市兩塊招牌要的銀兩。"""
     p = state.player
+    if key == "jh:peers":
+        return bool(p.mingtie_box) or p.sect is not None or _level(state) >= 5
+    if key in ("jh:sortie", "jh:duty"):
+        return p.faction is not None
+    if key == "jh:sign:bounties":
+        return any(e.status == "done" for e in p.errands)
+    if key == "jh:sign:smith":
+        key = "hero:gear"
+    if key == "jh:sign:arena":
+        return _level(state) >= 10 or any(b.kind == "spar" for b in state.battles)
+    if key in ("jh:sign:dadian", "jh:sign:market"):
+        return p.stats.get("silver", 0) >= sign_silver
     if key in READY_KEYS:
         return key in ready
     if key == "self:create":
@@ -68,12 +91,14 @@ def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozens
     return True
 
 
-def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0) -> list[str]:
+def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0,
+         sign_silver: int = 0) -> list[str]:
     """看一次：用得到而還沒長出來的寫進 grown 與 fresh。回這一次長出來的鍵。沒有這一本的角色不動。"""
     book = state.player.unfold
     if book is None:
         return []
-    new = [k for k in KEYS if k not in book.grown and reached(state, k, opening_pending=opening_pending, ready=ready, create_price=create_price)]
+    new = [k for k in KEYS if k not in book.grown and reached(state, k, opening_pending=opening_pending, ready=ready, create_price=create_price,
+                                                      sign_silver=sign_silver)]
     book.grown.extend(new)
     book.fresh.extend(k for k in new if k not in book.fresh)
     return new

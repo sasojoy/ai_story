@@ -37,7 +37,8 @@ class UnfoldFeature(Feature):
 
         a = ctx.content.config.arts
         ready = frozenset({"tab:craft"}) if "tab:craft" not in p.unfold.grown and cards.fuse_pair(ctx) else frozenset()
-        rules.grow(ctx.state, opening_pending=pending, ready=ready, create_price=a.create_first_xinde or a.create_xinde)
+        rules.grow(ctx.state, opening_pending=pending, ready=ready, create_price=a.create_first_xinde or a.create_xinde,
+                   sign_silver=ctx.content.config.unfold.sign_silver)
         if not pending:
             cards.look(ctx, p.unfold)
 
