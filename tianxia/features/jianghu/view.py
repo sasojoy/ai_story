@@ -5,10 +5,13 @@
 - 第五批「趕路中」的墨條（road）：/api/main 只有狀態列那一句字，沒有走到幾成，這裡照 Journey 算；疾行那一顆照輿圖詳情欄同一個算法（atlas.travel_options）。
 - 第五批事件頁的小印（event）：章回寫「主線」、奇事寫「奇事」、其餘「遭遇」（PM 11/25）；/api/main 看不出眼前這一則是不是哪條線的一段。
 - 第五批「行路」清單的遠路（ways）：有事要辦的地方不一定在鄰近，選項裡沒有它的「前往」；這裡給每個走得到的地方步行要多久（輿圖出發同一條路）。
+- 第六批接管選單的那一刻（take）：/api/main 只有選項，看不出是哪一格接管了選單（撞見、感悟、同伴、投靠……），頁面要照它寫那一枚小印；
+  照 MENU_ORDER["take"] 同一個先後問一次（店面那幾格不算：店有自己的整頁）。
 """
 from __future__ import annotations
 
 from tianxia import atlas, mounts, story_base  # 共用規則層（輿圖：路程、走法、抵達時刻；坐騎的步調；一條線走到哪）
+from tianxia.core import features as features_core  # 核心：選單接管的先後表與各格
 
 
 def status(ctx) -> dict:
@@ -16,6 +19,9 @@ def status(ctx) -> dict:
     kind = event_kind(ctx)
     if kind:
         out["event"] = kind
+    took = take(ctx)
+    if took:
+        out["take"] = took
     road = road_bar(ctx)
     if road:
         out["road"] = road
@@ -88,3 +94,61 @@ def _place_art(c, loc_id: str) -> str:
         region = atlas.region_of(c, loc.id)
         path = f"places/{region.id}" if region is not None else "places/world"
     return f"/static/img/{path}.webp"
+
+
+# 第六批：接管整個選單的那一格 → 頁上那一枚小印（待 joy 潤）。店面那幾格（懸賞榜、鐵匠鋪、馬市、搬成包的店）不在這裡：店有自己的整頁
+TAKE_SEALS = {"duel": "單挑", "sense": "感悟", "talk": "同伴", "faction": "投靠", "audience": "求見", "omen": "伏筆"}  # 待 joy 潤
+MENU_SEALS = {"guard": "撞見", "heroines": "奇遇", "yiwen": "異聞", "feast": "宴席", "bout": "擂台"}  # 待 joy 潤：Feature.menu 接管的那一包
+STORY_SEALS = {**EVENT_KINDS, "頓悟": "頓悟"}  # 待 joy 潤
+SHOP_SLOTS = ("bounties", "smithy", "gear", "shops")
+# 撞見孩子那兩步（親衛隊長包，PlayerState.guard 是核心存檔欄位）：標題與圖照開場（web/img/guard/story/meet-<開場>.webp）
+GUARD_TITLES = {"soldiers": "被追的孩子", "slaves": "車上的孩子", "river": "河裡的孩子", "spy": "被圍的孩子",
+                "fever": "破廟裡的孩子", "thief": "偷錢袋的孩子"}  # 待 joy 潤
+
+
+def take(ctx) -> dict | None:
+    """此刻接管整個選單的是哪一格（同 Game._everyday_options：籌備、休季、開季準備、事件都不是；先後照 MENU_ORDER["take"]）。
+    回 {"slot", "seal", "title"?, "art"?}；店面那幾格與沒人接管是 None。每一格照原本的條件問一次（只讀，同 /api/main 已經叫過的那一次）。"""
+    s, c = ctx.state, ctx.content
+    if s.world.ended or s.pending_event or ctx._preparing():  # 開季準備卡（main.prep）接管時頁面先看它
+        return None
+    own = features_core.menu_hooks("take")
+    for slot in features_core.MENU_ORDER["take"]:
+        if slot == "menu":
+            for f in features_core.active(ctx):
+                if f.menu(ctx) is not None:
+                    return _menu_take(ctx, f.name)
+            continue
+        if slot in SHOP_SLOTS:
+            if slot == "shops" and features_core.shop_menu(ctx) is not None:
+                return None
+            run = own.get(slot)
+            if run is not None and run(ctx) is not None:
+                return None
+            continue
+        run = own.get(slot)
+        if run is None or run(ctx) is None:
+            continue
+        if slot == "story":
+            return _story_take(ctx)
+        return {"slot": slot, "seal": TAKE_SEALS.get(slot, EVENT_PLAIN), "place": _place_art(c, s.player.location)}
+    return None
+
+
+def _menu_take(ctx, name: str) -> dict:
+    out = {"slot": "menu", "seal": MENU_SEALS.get(name, EVENT_PLAIN), "pack": name, "place": _place_art(ctx.content, ctx.state.player.location)}
+    b = ctx.state.player.guard
+    if name == "guard" and b is not None and b.stage in ("met", "saved") and b.opening in GUARD_TITLES:
+        out["title"] = GUARD_TITLES[b.opening]
+        out["art"] = f"/static/img/guard/story/meet-{b.opening}.webp"
+    return out
+
+
+def _story_take(ctx) -> dict:
+    s, c = ctx.state, ctx.content
+    progress = s.player.storylines.get(s.player.story_open or "")
+    line = story_base.definition(c, progress) if progress is not None else None
+    out = {"slot": "story", "seal": STORY_SEALS.get(line.kind, "奇事") if line is not None else "奇事", "place": _place_art(c, s.player.location)}
+    if line is not None and line.title:
+        out["title"] = line.title
+    return out

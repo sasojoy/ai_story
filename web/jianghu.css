@@ -251,3 +251,16 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-road .jh-do.primary small { color: color-mix(in srgb, var(--paper) 75%, transparent); }
 .jh-road .jh-why { margin-top: 10px; }
 .jh-rd .jh-blk { margin: 4px 0 16px; }
+
+/* ── 第六批：戰報（設計稿 o）與接管選單的那一刻（同事件頁） ── */
+.jh-fight { position: relative; }
+.jh-stamp { position: absolute; z-index: 3; right: 22px; top: calc(118px + var(--top)); width: 92px; height: 92px; display: grid; place-items: center; border: 4px double var(--accent);
+  border-radius: 10px; color: var(--accent); font: 700 38px var(--kai); transform: rotate(-12deg); background: color-mix(in srgb, var(--paper) 55%, transparent); pointer-events: none; }
+.jh-stamp.long { font-size: 26px; }
+.jh-gains { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; margin: 0 6px 6px; }
+.jh-gains span { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font: 400 14px var(--kai); color: var(--ink); }
+.jh-gains span.bad { border-color: var(--accent); color: var(--accent); }
+.jh-fight .jh-why { margin: 8px 0 4px; }
+.jh-fight .jh-dos { grid-template-columns: 1fr; margin: 6px 0 18px; }
+.jh-fight .jh-do.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700; letter-spacing: 0.2em; }
+.jh-sheet .battle-card { margin: 0; border: 0; box-shadow: none; background: none; padding: 0; }

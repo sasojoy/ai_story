@@ -174,3 +174,52 @@ def test_road_sheet_lists_a_far_errand_first(wan):  # noqa: F811
     body = run(m, "H.S.jhSheet = 'road'; return H.pageJianghu();").split('role="dialog" aria-label="行路"')[1]
     first = body.split('class="jh-row"')[1]
     assert "主線" in first and "某地" in first and f'data-dest="{far}"' in first and "步行約" in first
+
+
+_CARD = ("<h3>⚔ 汝南荒野・對陣 潰營悍卒</h3>\n<p>第 1 週・週五 12:08　出門一趟・遭遇<br />\n<strong>僵持</strong>　我方威力 15　對手難度 65</p>\n"
+         "<p><strong>過程</strong></p>\n<ul>\n<li>第1回合　你氣血 -25</li>\n</ul>")
+_NOW = ('<div class="tx-extra"><div class="tx-line">半路撞上潰營悍卒，雙方相持不下，各自退開。</div>'
+        '<div class="tx-line">得：沉淵石 ×1、【基礎拳腳】熟練 +4（第1成 4/10）　失：氣血 -12、內傷 +12</div>'
+        '<div class="tx-line">渡口下游有東西在水裡翻。是個孩子，眼看就要沉下去。</div></div>')
+
+
+def test_fight_report_page_words_not_numbers(wan):  # noqa: F811
+    """第六批・戰報（設計稿 o）：勝負一枚大印、對手當標題、一句話、得失用字（數字只在完整戰報）；往下看之後回到這一刻該有的頁。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m.update(card=_CARD, card_id=7, now=_NOW)
+    page = run(m, "return H.pageJianghu();")
+    assert page.startswith('<div class="jh-page jh-ev jh-fight">') and "<h1>潰營悍卒</h1>" in page and 'class="jh-stamp">僵持<' in page
+    chips = page.split('class="jh-gains"')[1].split("</div>")[0]
+    assert "得了沉淵石" in chips and "基礎拳腳 熟了些" in chips and "氣血少了一截" in chips and "內傷加重" in chips
+    assert not any(ch.isdigit() for ch in chips) and "過程" not in page and 'data-act="jh-card-on"' in page
+    sheet = run(m, 'H.S.jhSheet = "fight"; return H.pageJianghu();')
+    assert "我方威力 15" in sheet  # 數字在完整戰報裡
+    after = run(m, "H.S.jhSheet = null; H.S.jhCardSeen = 7; return H.pageJianghu();")
+    assert "jh-fight" not in after and "battle-card" not in after
+
+
+def test_take_menu_moment_uses_the_event_page(wan):  # noqa: F811
+    """第六批・接管選單（撞見孩子）：跟事件頁同一種元件；小印、標題與圖照伺服器給的，那一幕的話是剛剛最後一行，得失那一行不收進前文。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m.update(card=_CARD, card_id=7, now=_NOW, options=[{"id": "guard:save", "label": "跳下水把他撈上來", "enabled": True, "note": ""},
+                                                       {"id": "guard:leave", "label": "水太急，不管了", "enabled": True, "note": ""}])
+    m["jianghu"]["take"] = {"slot": "menu", "seal": "撞見", "pack": "guard", "title": "河裡的孩子", "art": "/static/img/guard/story/meet-river.webp", "place": ""}
+    assert "jh-fight" in run(m, "return H.pageJianghu();")  # 戰報先
+    page = run(m, "H.S.jhCardSeen = 7; return H.pageJianghu();")
+    assert page.startswith('<div class="jh-page jh-ev jh-tk jh-tk-menu">') and "<h1>河裡的孩子</h1>" in page and ">撞見<" in page
+    assert "meet-river.webp" in page and "水裡翻" in page.split('class="jh-ev-txt"')[1]
+    assert 'data-id="guard:save"' in page and "jh-acts" not in page and "jh-people" not in page
+    opened = run(m, "H.S.jhCardSeen = 7; H.S.jhEvMore = true; return H.pageJianghu();")
+    assert "相持不下" in opened and "熟練" not in opened
+
+
+def test_take_slot_from_the_server(wan):  # noqa: F811
+    """伺服器照 MENU_ORDER["take"] 認出接管選單的那一格：投靠的確認畫面是「投靠」，店裡（懸賞榜）不算。"""
+    wan.content.config.jianghu.enabled = True
+    assert "take" not in server.main_view(wan)["jianghu"]
+    wan.state.player.faction = None
+    wan.state.player.pending_faction = "guan"
+    took = server.main_view(wan)["jianghu"].get("take")
+    assert took and took["slot"] == "faction" and took["seal"] == "投靠"
