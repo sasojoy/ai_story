@@ -198,3 +198,10 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-chip.on small { color: var(--paper); }
 .jh-form { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
 .jh-form .input { min-height: 48px; font: 400 16px var(--kai); }
+
+/* 體力的小卡：一條粗一點的體力條、還有幾顆、今天還能服幾顆、服一顆 */
+.jh-stam .jh-bar { grid-template-columns: auto 1fr 40px; margin: 6px 0 10px; color: var(--ink); text-shadow: none; }
+.jh-stam .jh-bar i { height: 8px; }
+.jh-pills { margin: 0 0 12px; font: 400 15px/1.7 var(--kai); color: var(--ink); }
+.jh-stam .jh-bar i { background: var(--line); }
+.jh-sheet .jh-do.wide { width: 100%; min-height: 48px; } .jh-sheet .jh-do.wide.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font: 700 17px var(--kai); letter-spacing: 0.2em; }

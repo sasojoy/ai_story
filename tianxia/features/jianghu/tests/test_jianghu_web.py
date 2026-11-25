@@ -114,3 +114,18 @@ def test_peers_here_marks_same_sect_only_when_on(wan):  # noqa: F811
     assert all("kin" not in x for x in actions.peers_here(wan))
     wan.content.config.jianghu.enabled = True
     assert all(x.get("kin") in (None, True) for x in actions.peers_here(wan))
+
+
+def test_no_pill_button_and_the_stamina_sheet(wan):  # noqa: F811
+    """丹鈕拿掉（Joy 2026-11-25「可以」）：狀態行沒有丹，點體力條拉起體力的小卡，卡上服一顆；體力不夠灰著的牌點了也拉起它。"""
+    wan.content.config.jianghu.enabled = True
+    wan.state.player.stamina_pills = 5
+    wan.state.player.stamina = 1
+    m = server.main_view(wan)
+    assert m["status"]["pills"]
+    page = run(m, "return H.pageJianghu();")
+    hero = page.split('class="jh-prose"')[0]
+    assert 'data-act="pill"' not in hero and 'data-sheet="stam"' in hero
+    assert 'data-act="jh-stam"' in page.split('class="jh-acts"')[1].split("</div>")[0]
+    sheet = run(m, 'H.S.jhSheet = "stam"; return H.pageJianghu();')
+    assert 'data-act="pill"' in sheet and "還有 5 顆" in sheet

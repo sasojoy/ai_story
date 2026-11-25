@@ -46,9 +46,8 @@
       shown("stamina") ? jhBar("stam", "體", s.stamina, s.stamina_max) : "",
       shown("hp") ? jhBar("hp", "血", s.hp, s.hp_max) : "",
     ].join("");
-    const pill = s.pills && shown("stamina")
-      ? `<button class="jh-pill" data-act="pill" ${s.pills.full || (!s.pills.refill && s.pills.today === 0) ? "disabled" : ""} aria-label="${esc(s.pills.refill ? `${s.pills.refill}體力` : `服下${s.pills.name}（剩 ${s.pills.count} 顆）`)}">${esc(s.pills.refill || `丹${s.pills.count}`)}</button>`
-      : "";
+    // 「丹 N」不在這一行（Joy 2026-11-25「可以」）：點體力那一條拉起體力的小卡，在那裡服；體力不夠被擋下來時提示上直接有「服一顆」
+    const pill = "";
     const purse = JH_PURSE && shown("silver") ? `<div class="jh-purse"><span><em>銀</em>${s.silver | 0}</span>${s.xinshen ? `<span><em>${esc(s.xinshen.name)}</em>${s.xinshen.now | 0}</span>` : ""}</div>` : "";
     const when = s.calendar ? s.calendar.text : `第${s.day}天 ${s.clock}`;
     const help = S.stamOpen && s.stamina_help && s.stamina_help.length
@@ -56,7 +55,7 @@
     return `<header class="jh-st">
         <button class="jh-me" data-act="hero-attrs" aria-label="看屬性">${esc((s.name || "").slice(0, 1))}${s.stat_points ? dotHtml(true) : ""}</button>
         <div class="jh-nm"><b>${esc(s.name || "")}</b><small>${s.level | 0} 級・${esc(s.affiliation || "")}${s.anonymous ? "・匿名" : ""}</small></div>
-        <div class="jh-vit"${s.stamina_help && s.stamina_help.length ? ` data-act="stam-help" role="button" tabindex="0" aria-expanded="${!!S.stamOpen}" aria-controls="stam-help"` : ""}>${vit}<span class="jh-tm">${esc(when)}</span></div>${pill}
+        <div class="jh-vit"${shown("stamina") ? ` data-act="jh-sheet" data-sheet="stam" role="button" tabindex="0" aria-label="${JH_STAM}"` : ""}>${vit}<span class="jh-tm">${esc(when)}</span></div>${pill}
         <button class="jh-gear" data-act="sheet" aria-label="設定">⚙${dotHtml(dotAt("sheet"))}</button>
       </header>${purse}${help}`;
   }
@@ -222,6 +221,33 @@
       </section>`;
   }
 
+  // 體力的小卡（點狀態行的體力條；體力不夠被擋下來的那一刻也拉起它，最上面寫被擋的那一句）：還有幾顆、今天還能服幾顆、服一顆
+  const JH_STAM = "體力"; // 待 joy 潤
+  const JH_PILL_LEFT = "{name}還有 {n} 顆"; // 待 joy 潤
+  const JH_PILL_TODAY = "今天還能服 {n} 顆"; // 待 joy 潤
+  const JH_PILL_TAKE = "服一顆"; // 待 joy 潤
+  const JH_PILL_FULL = "體力是滿的"; // 待 joy 潤
+  const JH_PILL_DONE = "今天服夠了"; // 待 joy 潤
+  const JH_PILL_NONE = "身上沒有回體丹了"; // 待 joy 潤
+  function jhStamBody(m) {
+    const s = m.status || {}, pl = s.pills;
+    const why = S.jhStamWhy ? `<div class="jh-say"><b>${esc(S.jhStamWhy)}</b></div>` : "";
+    const bar = `<div class="jh-stam">${jhBar("stam", "體", s.stamina, s.stamina_max)}</div>`;
+    if (!pl) return `${why}${bar}<p class="jh-none">${JH_PILL_NONE}</p>`;
+    const lines = [pl.refill ? "" : JH_PILL_LEFT.replace("{name}", pl.name || "").replace("{n}", pl.count | 0), "today" in pl && !pl.refill ? JH_PILL_TODAY.replace("{n}", pl.today | 0) : ""].filter(Boolean);
+    const off = pl.full ? JH_PILL_FULL : !pl.refill && pl.today === 0 ? JH_PILL_DONE : "";
+    const go = off ? `<button class="btn jh-do off wide" data-act="opt-why" data-why="${esc(off)}。" aria-disabled="true">${esc(pl.refill || JH_PILL_TAKE)}<small>${esc(off)}</small></button>`
+      : `<button class="btn jh-do wide primary" data-act="pill">${esc(pl.refill || JH_PILL_TAKE)}</button>`;
+    return `${why}${bar}${lines.length ? `<p class="jh-pills">${lines.map(esc).join("<br>")}</p>` : ""}${go}`;
+  }
+  // 灰著的鈕上寫的原因是體力不夠、身上又有丹：點了拉起體力的小卡（不是只跳一句），卡上就能服
+  const JH_STAM_WHY = /data-act="opt-why"((?: data-id="[^"]*")?) data-why="([^"]*體力[^"]*)"/g;
+  const JH_STAM_LOW = "體力不夠{name}"; // 待 joy 潤：行動牌灰著、牌上寫「體力不夠」時，小卡最上面那一句
+  const jhStamWhy = (m, html) => (m.status && m.status.pills
+    ? String(html || "").replace(/<button class="act-ink[^"]*"[^>]*>[\s\S]*?<\/button>/g, (cell) => (/<small>體力不夠<\/small>/.test(cell)
+      ? cell.replace(/data-act="opt-why" data-why="[^"]*"/, `data-act="jh-stam" data-why="${esc(JH_STAM_LOW.replace("{name}", (cell.match(/<b>([^<]*)<\/b>/) || [, ""])[1]))}"`) : cell))
+      .replace(JH_STAM_WHY, 'data-act="jh-stam"$1 data-why="$2"') : html);
+
   // 拉起來的那一層：眼下的事（全部）、一封信、投靠的三方卡
   function jhSheetHtml(m, p) {
     const which = S.jhSheet;
@@ -234,6 +260,7 @@
       return wrap(`${m.letter.sender}來信`, letterHtml(m.letter) + (p.pushAsk || ""));
     }
     if (which === "people") return wrap(JH_PEERS_HEAD, jhPeersSheetBody(m));
+    if (which === "stam") return wrap(JH_STAM, jhStamBody(m));
     if (which === "sides") {
       const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";
       if (!html) { S.jhSheet = null; return ""; }
@@ -250,7 +277,8 @@
   async function jianghuClick(act, el, ev) {
     switch (act) {
         case "jh-later": S.jhLater = [...(S.jhLater || []).filter((k) => k !== el.dataset.key), el.dataset.key]; renderPage(); break;
-        case "jh-sheet": S.jhSheet = el.dataset.sheet || null; S.jhWait = false; renderPage(); break;
+        case "jh-sheet": S.jhSheet = el.dataset.sheet || null; S.jhWait = false; S.jhStamWhy = ""; renderPage(); break;
+        case "jh-stam": S.jhSheet = "stam"; S.jhStamWhy = el.dataset.why || ""; renderPage(); break;
         case "jh-wait": S.jhWait = !S.jhWait; renderPage(); break;
         case "jh-peer-pick": S.jhPeerPick = { name: S.peer && S.peer.name, key: el.dataset.key }; render(); break;
         case "jh-peer-back": S.jhPeerPick = null; S.jhPeerChoice = null; if (S.peer) { S.peer.amountFor = null; S.peer.textFor = null; } render(); break;
@@ -258,7 +286,7 @@
         case "jh-peer-go": S.jhPeerPick = null; await peerAct(Number(el.dataset.i)); break;
     } // jianghuClick
   } // jianghuClick
-  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go"]);
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go", "jh-stam"]);
 
   // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
   // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡
@@ -464,5 +492,5 @@
     if (S.fig && !S.figLog && typeof figPickHtml === "function") base = base.replace(figPickHtml(m), () => jhFigHtml(m));
     if (S.hereAll && typeof hereAllHtml === "function") base = base.replace(hereAllHtml(m, p.extras || []), () => hereAllHtml(m, extras));
     const layers = `${base}${jhSheetHtml(m, p)}${typeof codexWhyHtml === "function" ? codexWhyHtml(m) : ""}`;
-    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhActs(p.menu)}</div>${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${typeof hereRowHtml === "function" ? hereRowHtml(m, extras) : ""}${p.guideDown}${p.skip}${layers}</div>`;
+    return `<div class="jh-page${sheetOpen ? " sheet-on" : ""}">${p.ckPop || ""}${hero}${jhProseHtml(m, jhNoSealTwice(p.inner, seal), jhNoRenown(p.now))}${p.resultCard}${jhEyeHtml(m, p)}${m.party && typeof socialHtml === "function" ? socialHtml({ ...m, calls: [] }) : ""}${p.jieyi}${p.links}${p.free}<div class="jh-acts">${jhStamWhy(m, jhActs(p.menu))}</div>${p.sealCard}${p.senseNotes}${jhPeopleHtml(m)}${typeof hereRowHtml === "function" ? jhStamWhy(m, hereRowHtml(m, extras)) : ""}${p.guideDown}${p.skip}${layers}</div>`;
   }
