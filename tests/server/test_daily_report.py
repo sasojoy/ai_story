@@ -157,3 +157,14 @@ def test_long_report_is_cut_to_one_message():
     text = daily_report.fit("字" * 5000)
     assert len(text) == 2000 and text.endswith("（全文在主機）")
     assert daily_report.fit("短") == "短"
+
+
+def test_short_report_never_shows_code_names(tmp_path):
+    import re
+    db = make_db(tmp_path)
+    n = daily_report.collect(db, TODAY, status=_status(tmp_path), now=NOW)
+    n.presses.update({"story": 9, "road": 7, "act:duty": 5, "zzz_unknown": 4, "act:whatever": 3})
+    n.gone_last.update({"weird:thing": 2})
+    short, full = daily_report.render(n, TODAY)
+    assert "奇事 9" in short and "趕路 7" in short and "軍務 5" in full and "其他 7" in full
+    assert not re.search(r"[A-Za-z]", full.replace("MB", ""))  # 英文代號一個都不印（MB 是單位）
