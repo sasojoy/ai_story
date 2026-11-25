@@ -101,10 +101,12 @@
 .shop-tavern .tv-toggle i { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--ink-2); border-radius: 4px; font-style: normal; font-size: 0.9em; }
 .shop-tavern .tv-toggle.on { border-style: solid; border-color: var(--accent); color: var(--ink); }
 .shop-tavern .tv-toggle.on i { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.shop-tavern .tv-dots { display: inline-flex; gap: 5px; margin-left: 6px; vertical-align: middle; }
-.shop-tavern .tv-dots i { width: 11px; height: 11px; border: 1.5px solid var(--ink); border-radius: 50%; background: var(--ink); }
-.shop-tavern .tv-dots.red i { width: 9px; height: 9px; border-color: var(--ink-2); background: transparent; }
-.shop-tavern .tv-dots.red i.f { border-color: var(--accent); background: var(--accent); }
+/* 殺手的等級：一截一截由短到長的朱痕（不用小圓圈，Joy 2026-11-22） */
+.shop-tavern .tv-lv { display: inline-flex; align-items: flex-end; gap: 3px; height: 12px; }
+.shop-tavern .tv-lv i { width: 5px; border-radius: 1px; background: color-mix(in srgb, var(--ink-2) 28%, transparent); }
+.shop-tavern .tv-lv i:nth-child(1) { height: 4px; } .shop-tavern .tv-lv i:nth-child(2) { height: 7px; } .shop-tavern .tv-lv i:nth-child(3) { height: 10px; } .shop-tavern .tv-lv i:nth-child(n+4) { height: 12px; }
+.shop-tavern .tv-lv i.f { background: var(--accent); }
+.shop-tavern .tv-left b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .shop-tavern .tv-tiers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .shop-tavern .tv-tiers button { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font: 700 1.15em var(--kai); cursor: pointer; }
 .shop-tavern .tv-tiers button.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
