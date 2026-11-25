@@ -298,3 +298,20 @@ def test_duel_round_not_twice(wan):  # noqa: F811
     m["jianghu"] = {**m.get("jianghu", {}), "take": {"slot": "duel", "seal": "單挑", "place": "/static/img/places/nanyang.webp"}}
     page = run(m, "return H.pageJianghu();")
     assert page.count("第 2") == 1 and "你一記快拳" in page
+
+
+def test_free_agent_third_plaque_is_join(wan):  # noqa: F811
+    """Joy 11/25「可以改」：還沒投靠的人第三顆是「投靠」；此地投得了就亮、按了走投靠確認，投不了暗著說去哪裡；投靠之後變回軍務。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["status"] = {**m["status"], "affiliation": ""}
+    m["sides_card"] = {"joined": False, "cols": [{"id": "guan", "name": "官軍", "where": ["宛城"]}, {"id": "huang", "name": "黃巾", "where": ["廣宗"]}]}
+    cell = lambda h: h.split('data-key="duty"')[0].rsplit("<button", 1)[1] + h.split('data-key="duty"')[1].split("</button>")[0]  # noqa: E731
+    away = cell(run(m, "return H.pageJianghu();"))
+    assert "投靠" in away and "off" in away and "官軍最近在宛城、黃巾最近在廣宗" in away and "軍務" not in away
+    m["options"] = [*m["options"], {"id": "faction:guan", "label": "投靠官軍", "enabled": True, "note": ""}]
+    here = cell(run(m, "return H.pageJianghu();"))
+    assert 'data-act="choose" data-id="faction:guan"' in here and "此地可投官軍" in here and "off" not in here
+    m["status"] = {**m["status"], "affiliation": "官軍"}
+    m["sides_card"] = {**m["sides_card"], "joined": True}
+    assert "軍務" in cell(run(m, "return H.pageJianghu();"))

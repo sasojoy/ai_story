@@ -206,7 +206,7 @@
     // 換週那一刻、這一回的大事在集結或開打：兩軍態勢自己變成眼下的一件，排最前（PM 2026-11-25；平常只在清單裡）
     if (w && slim && typeof codexWeekShow === "function" && codexWeekShow(m)) {
       const live = !!(w.chapter && w.chapter.live);
-      on.push({ key: `w:${w.when}`, seal: live ? JH_WEEK_LIVE : JH_WEEK_SEAL, title: w.theme || w.when, sub: [jhTugWords(m), w.when].filter(Boolean).join("・"), btn: JH_LOOK, attrs: 'data-act="cx-tk-why"' });
+      on.push({ key: `w:${w.when}`, seal: live ? JH_WEEK_LIVE : JH_WEEK_SEAL, title: w.theme || w.when, sub: [jhTugWords(m), w.when].filter(Boolean).join("・"), btn: JH_LOOK, attrs: 'data-act="cx-tk-why"', alt: { label: JH_GUIDE_OK, attrs: `data-act="jh-later" data-key="w:${esc(w.when)}"` } }); // 第二顆「知道了」（PM 11/25）
     }
     const g = m.guide; // 說書人、老石的話（新角色那一包說好：開場那幾句排在眼下最前面，不另畫一個框）
     if (g && g.text && !g.pending && !(typeof pro === "function" && pro()) && (g.end || typeof guideShut !== "function" || typeof guideKey !== "function" || guideShut() !== guideKey(g))) {
@@ -368,7 +368,27 @@
     return `<section class="jh-blk jh-places"><h3>${JH_PLACES_HEAD}</h3>${signs.length ? `<div class="jh-signs">${signs.join("")}</div>` : `<p class="jh-noshop">${JH_NO_SHOP}</p>`}</section>`;
   }
   // 軍務那一格：自己陣營的差事（巡哨、請纓……）幾件做得了；散人沒有軍務時灰著寫「投靠後才有」，點了拉起投靠的三方卡（提案）
+  // 還沒投靠的人（有陣營的季）：這一格是「投靠」牌（Joy 11/25「可以改」）。此地投得了就亮、按了走原本的投靠確認；投不了就暗著，按了說去哪裡投
+  const JH_JOIN_NAME = "投靠"; // 待 joy 潤
+  const JH_JOIN_SEAL = "投"; // 待 joy 潤：牌面的圖還沒畫，先寫一個字
+  const JH_JOIN_HERE = "此地可投{side}"; // 待 joy 潤
+  const JH_JOIN_AWAY = "不在此地"; // 待 joy 潤
+  const JH_JOIN_WHERE = "投靠要到那一方的地方：{where}。"; // 待 joy 潤
+  function jhJoinCell(m) {
+    const sc = m.sides_card;
+    const here = (m.options || []).filter((o) => o.enabled && /^faction:(?!ally:|lean:|confirm$|cancel$)/.test(o.id));
+    const name = (o) => { const c = sc.cols.find((x) => `faction:${x.id}` === o.id); return c ? c.name : optParts(o)[0].replace(/^投靠/, ""); };
+    if (here.length) {
+      const attrs = here.length === 1 ? `data-act="choose" data-id="${esc(here[0].id)}"` : 'data-act="jh-sheet" data-sheet="join"';
+      return `<button class="act-ink" data-key="duty" ${attrs}><span class="jh-ink-ch" aria-hidden="true">${JH_JOIN_SEAL}</span><b>${JH_JOIN_NAME}</b><small>${esc(JH_JOIN_HERE.replace("{side}", here.map(name).join("、")))}</small></button>`;
+    }
+    const near = (c) => { const j = (c.join_at || []).slice().sort((a, b) => (a.minutes | 0) - (b.minutes | 0))[0]; return j ? j.name : (c.where || [])[0]; }; // 最近的那一處
+    const where = sc.cols.filter((c) => near(c)).map((c) => `${c.name}最近在${near(c)}`).join("、");
+    const why = where ? JH_JOIN_WHERE.replace("{where}", where) : "";
+    return `<button class="act-ink off" data-key="duty" data-act="opt-why" data-why="${esc(why)}" aria-disabled="true"><span class="jh-ink-ch" aria-hidden="true">${JH_JOIN_SEAL}</span><b>${JH_JOIN_NAME}</b><small>${JH_JOIN_AWAY}</small></button>`;
+  }
   function jhDutyCell(m, kinds) {
+    if (!jhMySide(m) && m.sides_card && !m.sides_card.joined && (m.sides_card.cols || []).length) return jhJoinCell(m);
     const all = [...kinds.duties, ...kinds.others], on = all.filter((o) => o.enabled).length;
     const free = !jhMySide(m);
     const sub = all.length ? JH_DUTY_N.replace("{n}", on || all.length) : free ? JH_DUTY_FREE : JH_DUTY_NONE;
@@ -667,6 +687,11 @@
     if (which === "stam") return wrap(JH_STAM, jhStamBody(m));
     if (which === "road") return wrap(JH_ROAD, jhRoadBody(m));
     if (which === "duty") return wrap(JH_DUTY_NAME, jhDutyBody(m, jhKinds(m, jhNotInEye(m, p.extras || []))));
+    if (which === "join") { // 此地投得了兩方以上：兩顆投靠鈕（同江湖頁原本那兩顆）
+      const html = typeof factionJoinHtml === "function" ? factionJoinHtml(m) : "";
+      if (!html) { S.jhSheet = null; return ""; }
+      return wrap(JH_JOIN_NAME, html);
+    }
     if (which === "sides") {
       const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";
       if (!html) { S.jhSheet = null; return ""; }
