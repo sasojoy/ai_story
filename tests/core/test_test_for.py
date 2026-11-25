@@ -1155,6 +1155,7 @@ STAGE_PACKAGES += ["intro"]  # 開局前導（scripts/new_feature.py 生的 intr
 STAGE_PACKAGES += ["codex"]  # 江湖錄（scripts/new_feature.py 生的 codex_stage.py）
 STAGE_PACKAGES += ["yiwen"]  # 異聞（scripts/new_feature.py 生的 yiwen_stage.py）
 STAGE_PACKAGES += ["unfold"]  # 慢慢長出來（scripts/new_feature.py 生的 unfold_stage.py）
+STAGE_PACKAGES += ["jianghu"]  # 江湖頁重排（scripts/new_feature.py 生的 jianghu_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():
