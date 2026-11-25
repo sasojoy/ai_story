@@ -39,7 +39,7 @@
    備份要看到「已備份：…tianxia-daily-…db（結構第 9 版、帳號 N、角色 N…）」、每個旁檔一行「已備份旁檔」、「還原演練：另開一份讀得回來，角色 N 個」。數字那支印出短報，第三或第一行的備份要是「成功」。
 4. **接主機現有的 Discord 機器人**（Joy 2026-11-25 選的，不用 webhook）：`.local\daily_report.json` 寫
    ```json
-   {"relay": {"script": "<使用者資料夾>\\.claude\\discord-relay\\relay.py 的完整路徑", "channel": "<頻道的數字代號>"}}
+   {"relay": {"script": "<主機轉送 relay.py 的完整路徑，反斜線寫兩次>", "channel": "<頻道的數字代號>"}}
    ```
    代號用管理員頻道的；路徑和代號只寫在這個檔，不寫進任何文件。python 預設用遊戲的 `.venv`（要換就多寫 `"python": "<路徑>"`）。
    再跑一次 `daily_report.py`（不加 `--no-post`），結束碼要是 0、頻道裡看得到一則短報。
