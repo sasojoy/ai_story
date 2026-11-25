@@ -223,3 +223,46 @@ def test_take_slot_from_the_server(wan):  # noqa: F811
     wan.state.player.pending_faction = "guan"
     took = server.main_view(wan)["jianghu"].get("take")
     assert took and took["slot"] == "faction" and took["seal"] == "投靠"
+
+
+def test_season_moments_and_seclusion(wan):  # noqa: F811
+    """第六批・全服的時刻（設計稿 r、s）與閉關：籌備中、休季、閉關各是一頁；行動、人、去處都不畫。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    prep = run({**m, "options": [{"id": "season:preparing", "label": "籌備中", "enabled": False, "note": ""}]}, "return H.pageJianghu();")
+    assert prep.startswith('<div class="jh-page jh-ev jh-season">') and "<h1>江湖未開</h1>" in prep and 'data-tab="hero"' in prep
+    result = {"title": "官軍平了黃巾", "text": "<p>張角病死廣宗。</p><p>第二段。</p>", "stances": [{"side": "guan", "name": "官軍", "value": 62}, {"side": "huang", "name": "黃巾", "value": 38}],
+              "fronts": [], "timeline": [], "rankings": []}
+    rest_m = {**m, "options": [{"id": "season:resting", "label": "休季中", "enabled": False, "note": ""}], "season_result": result, "zhuan": {"season": 1, "title": "傳", "written": True}}
+    rest = run(rest_m, "return H.pageJianghu();")
+    assert "jh-rest" in rest and "<h3>官軍平了黃巾</h3>" in rest and "第二段" not in rest and "guan_win.webp" in rest and 'data-act="zhuan-open"' in rest
+    assert "jh-acts" not in rest and "休季中" not in rest
+    assert "最終態勢" in run(rest_m, 'H.S.jhSheet = "result"; return H.pageJianghu();')
+    busy = {**m, "options": [{"id": "act:break", "label": "提前出關", "enabled": True, "note": ""}], "status": {**m["status"], "busy_hours": 2.4}}
+    page = run(busy, "return H.pageJianghu();")
+    assert "jh-busy" in page and "還要約 2 小時出關" in page and 'data-id="act:break"' in page and "jh-acts" not in page
+
+
+def test_muster_page_then_the_strip(wan):  # noqa: F811
+    """第六批・決戰集結（設計稿 q）：還沒投入時整頁是這一場（倒數、主將、投入與先不去）；先不去回到閒著的頁，集結那一條在眼下上面。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["battle_panel"] = {"name": "宛城之戰", "phase": "muster", "due": 2400, "span": 3600, "round": 0, "total": 6, "sent": 0, "present": 0, "feed": [], "beats": [], "key": "k",
+                         "paused": False, "left": {"id": "guan", "name": "官軍", "mine": True}, "right": {"id": "huang", "name": "黃巾", "mine": False},
+                         "chiefs": {"left": [], "right": []}, "me": None}
+    m["options"] = [{"id": "battle:join:wancheng_yi", "label": "加入宛城之戰", "enabled": True, "note": ""}, *m["options"]]
+    page = run(m, "return H.pageJianghu();")
+    assert page.startswith('<div class="jh-page jh-ev jh-war">') and "<h1>宛城之戰</h1>" in page and 'data-id="battle:join:wancheng_yi"' in page and 'data-act="jh-muster-skip"' in page
+    idle = run(m, 'H.S.jhMusterSkip = "宛城之戰"; return H.pageJianghu();')
+    assert idle.startswith('<div class="jh-page') and "jh-war-strip" in idle and 'class="jh-acts' in idle
+
+
+def test_guide_words_are_the_eye_card(wan):  # noqa: F811
+    """第六批（新角色那一包說好）：說書人、老石的話排在眼下最前面，不另畫一個框。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["guide"] = {"speaker": "老石", "text": "城門口人多。先去探索一趟，看看這一帶。", "line": "", "end": False, "done": [], "key": "qa-step"}
+    page = run(m, "return H.pageJianghu();")
+    eye = page.split('aria-label="眼下"')[1].split('class="jh-acts')[0]
+    assert "老石" in eye and "城門口人多。" in eye and 'data-act="guide-shut"' in eye
+    assert 'class="guide' not in page  # 舊的說書人框不畫

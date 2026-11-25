@@ -264,3 +264,28 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-fight .jh-dos { grid-template-columns: 1fr; margin: 6px 0 18px; }
 .jh-fight .jh-do.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700; letter-spacing: 0.2em; }
 .jh-sheet .battle-card { margin: 0; border: 0; box-shadow: none; background: none; padding: 0; }
+.jh-box { position: relative; z-index: 2; margin: 4px 0 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 6px 18px rgba(60, 40, 10, 0.1); }
+.jh-box h3 { margin: 0 0 4px; font: 700 19px var(--kai); letter-spacing: 0.06em; color: var(--ink); }
+.jh-box-txt { margin: 4px 0 12px; font: 400 15px/1.7 var(--kai); color: var(--ink); }
+.jh-box-txt p { margin: 0; }
+.jh-box-img { height: 120px; margin: -4px -4px 10px; border-radius: 10px; background: center / cover no-repeat; }
+.jh-quiet { position: relative; z-index: 2; margin: 6px 6px 18px; font: 400 14.5px/1.7 var(--kai); color: var(--ink-2); }
+.jh-rest .jh-art { filter: grayscale(0.75) brightness(0.95); }
+.jh-season .jh-dos, .jh-busy .jh-dos { margin: 6px 0 16px; }
+.jh-dos.one { grid-template-columns: 1fr; }
+.jh-season .jh-do.primary, .jh-box .jh-do.primary, .jh-war .jh-do:first-child { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700; }
+.jh-war .jh-box .bp-clock { margin: 0 auto 12px; }
+.jh-war .jh-box .bp-gens { margin: 0 0 12px; }
+.jh-war-strip { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--accent);
+  border-radius: 12px; background: var(--card); }
+.jh-war-strip .jh-row-t { flex: 1; min-width: 0; }
+.jh-war-strip .bp-clock { flex: none; transform: scale(0.8); transform-origin: right center; }
+/* 新角色慢慢長出來：行動牌少於四顆時平分；剛長出來的那一格一顆紅點 */
+.jh-acts.n1 > .act-bar { grid-template-columns: 1fr; }
+.jh-acts.n2 > .act-bar { grid-template-columns: repeat(2, 1fr); }
+.jh-acts.n3 > .act-bar { grid-template-columns: repeat(3, 1fr); }
+.jh-uf { position: absolute; z-index: 4; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 1.5px solid var(--paper); }
+.jh-sign { position: relative; }
+.jh-sign .jh-uf { top: -4px; right: -4px; }
+.jh-people h3 { position: relative; }
+.jh-people h3 .jh-uf { position: static; display: inline-block; margin: 0 0 0 6px; vertical-align: top; }
