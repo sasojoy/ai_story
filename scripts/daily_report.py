@@ -5,7 +5,9 @@
 - 真的只讀：sqlite 的唯讀模式（mode=ro）直接開檔，不走 open_database（那一條會照版本跑遷移）、不進行動鎖、不寫任何東西到資料庫。
 - 「昨天」是台灣日期（回體丹換日那一天，Game._pill_day 的算法）；--date 給報表那一天（預設今天），數的是前一天。
 - 備份成敗讀 scripts/backup_db.py --status 寫的小檔（預設 .local/backup_status.json）；超過 36 小時沒有成功的一份也算失敗。
-- 短報貼到 Discord：.local/daily_report.json 寫 {"discord_webhook": "<網址>"}；沒寫就只存檔。payload 一律帶 allowed_mentions（點不到人）。
+- 短報貼到 Discord：.local/daily_report.json 寫 {"relay": {"script": <主機轉送 relay.py 的完整路徑>, "channel": <頻道代號>}}
+  （主機現有的 Discord 機器人，Joy 2026-11-25 選的；python 預設用跑這支的那一個，可另寫 "python"），或 {"discord_webhook": "<網址>"}；
+  兩個都有時走 relay，都沒有就只存檔。短報超過 2,000 字截短並寫「全文在主機」；失敗再試一次，還是失敗結束碼 1（全文照樣存好）。
 - 存檔：--out（預設 .local/daily_report/）底下 <日期>.txt（全文）與 latest.txt。
 
 執行：.venv/Scripts/python.exe scripts/daily_report.py [--db <資料庫>] [--date 2026-11-25] [--no-post]
@@ -18,6 +20,7 @@ import datetime as dt
 import io
 import json
 import sqlite3
+import subprocess
 import sys
 import urllib.request
 from collections import Counter
@@ -238,8 +241,35 @@ def render(n: Numbers, today: dt.date) -> tuple[str, str]:
     return short, full
 
 
+DISCORD_MAX = 2000  # Discord 一則上限；超過就截短，不讓轉送切成好幾則
+CUT_NOTE = "\n…（全文在主機）"
+
+
+def fit(text: str, limit: int = DISCORD_MAX) -> str:
+    return text if len(text) <= limit else text[: limit - len(CUT_NOTE)] + CUT_NOTE
+
+
+def relay(cfg: dict, text: str, *, tries: int = 2) -> str:
+    """走主機現有的 Discord 機器人轉送（Joy 2026-11-25 選的）：python relay.py send <頻道> -，文字從 stdin 給 UTF-8。
+    失敗最多再試一次；兩次都失敗丟 OSError。回轉送印的字。"""
+    py = cfg.get("python") or sys.executable
+    cmd = [py, str(cfg["script"]), "send", str(cfg["channel"]), "-"]
+    last = ""
+    for _ in range(tries):
+        try:
+            done = subprocess.run(cmd, input=fit(text).encode("utf-8"), capture_output=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            last = str(e)
+            continue
+        out = done.stdout.decode("utf-8", errors="replace").strip()
+        if done.returncode == 0:
+            return out
+        last = (done.stderr.decode("utf-8", errors="replace").strip() or out or f"結束碼 {done.returncode}")[:300]
+    raise OSError(f"轉送失敗（試了 {tries} 次）：{last}")
+
+
 def post(webhook: str, text: str) -> None:
-    body = json.dumps({"content": text[:1900], "allowed_mentions": {"parse": []}}).encode("utf-8")
+    body = json.dumps({"content": fit(text), "allowed_mentions": {"parse": []}}).encode("utf-8")
     req = urllib.request.Request(webhook, data=body, headers={"Content-Type": "application/json", "User-Agent": "tianxia-daily-report"})
     with urllib.request.urlopen(req, timeout=20) as resp:
         resp.read()
@@ -275,18 +305,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_post:
         return 0
     try:
-        webhook = json.loads(args.config.read_text(encoding="utf-8")).get("discord_webhook") if args.config.is_file() else None
+        cfg = json.loads(args.config.read_text(encoding="utf-8")) if args.config.is_file() else {}
     except (OSError, ValueError) as e:
         print(f"{args.config} 讀不懂（{e}），這次不貼", file=sys.stderr)
         return 1
-    if not webhook:
-        print(f"沒設 discord_webhook（{args.config}），只存檔")
+    via = cfg.get("relay") or {}
+    if via.get("script") and via.get("channel"):
+        try:
+            relay(via, short)
+        except OSError as e:
+            print(f"貼不到 Discord：{e}", file=sys.stderr)
+            return 1
+    elif cfg.get("discord_webhook"):
+        try:
+            post(cfg["discord_webhook"], short)
+        except OSError as e:
+            print(f"貼不到 Discord：{e}", file=sys.stderr)
+            return 1
+    else:
+        print(f"沒設 relay 或 discord_webhook（{args.config}），只存檔")
         return 0
-    try:
-        post(webhook, short)
-    except OSError as e:
-        print(f"貼不到 Discord：{e}", file=sys.stderr)
-        return 1
     print("已貼到 Discord")
     return 0
 

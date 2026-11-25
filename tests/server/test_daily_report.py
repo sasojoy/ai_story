@@ -102,6 +102,58 @@ def test_main_only_reads_and_saves_without_a_webhook(tmp_path, capsys):
     out = tmp_path / "report"
     args = ["--db", str(db), "--date", "2026-11-25", "--status", str(_status(tmp_path)), "--config", str(tmp_path / "none.json"), "--out", str(out)]
     assert daily_report.main(args) == 0
-    assert "沒設 discord_webhook" in capsys.readouterr().out
+    assert "沒設 relay 或 discord_webhook" in capsys.readouterr().out
     assert (out / "2026-11-25.txt").read_text(encoding="utf-8") == (out / "latest.txt").read_text(encoding="utf-8")
     assert db.read_bytes() == before  # 唯讀：一個位元都沒動
+
+
+FAKE_RELAY = '''import sys
+args = sys.argv[1:]
+text = sys.stdin.buffer.read().decode("utf-8")
+log, fail = sys.argv[0] + ".log", sys.argv[0] + ".fail"
+import os
+if os.path.exists(fail):
+    n = int(open(fail).read() or "0")
+    if n > 0:
+        open(fail, "w").write(str(n - 1))
+        sys.exit(1)
+open(log, "a", encoding="utf-8").write(repr((args, text)) + "\\n")
+sys.stdout.buffer.write("已送出".encode("utf-8"))
+'''
+
+
+def _relay_setup(tmp_path: Path, fails: int = 0):
+    import ast
+    script = tmp_path / "relay.py"
+    script.write_text(FAKE_RELAY, encoding="utf-8")
+    if fails:
+        (tmp_path / "relay.py.fail").write_text(str(fails))
+    cfg = tmp_path / "daily_report.json"
+    cfg.write_text(json.dumps({"relay": {"script": str(script), "channel": "123"}, "discord_webhook": "http://127.0.0.1:9/never"}), encoding="utf-8")
+    sent = lambda: [ast.literal_eval(line) for line in (tmp_path / "relay.py.log").read_text(encoding="utf-8").splitlines()] if (tmp_path / "relay.py.log").exists() else []  # noqa: E731
+    return cfg, sent
+
+
+def test_relay_sends_the_short_report_as_utf8(tmp_path, capsys):
+    db = make_db(tmp_path)
+    cfg, sent = _relay_setup(tmp_path)
+    args = ["--db", str(db), "--date", "2026-11-25", "--status", str(_status(tmp_path)), "--config", str(cfg), "--out", str(tmp_path / "o")]
+    assert daily_report.main(args) == 0  # relay 跟 webhook 都有時走 relay（webhook 那個網址連不上，走到就會失敗）
+    [(argv, text)] = sent()
+    assert argv == ["send", "123", "-"] and text.startswith("【天下大勢　每日數字 11/25】") and "【細項】" not in text
+
+
+def test_relay_retries_once_then_fails_but_keeps_the_file(tmp_path, capsys):
+    db = make_db(tmp_path)
+    cfg, sent = _relay_setup(tmp_path, fails=1)
+    args = ["--db", str(db), "--date", "2026-11-25", "--status", str(_status(tmp_path)), "--config", str(cfg), "--out", str(tmp_path / "o")]
+    assert daily_report.main(args) == 0 and len(sent()) == 1  # 第一次失敗、第二次成功
+    (tmp_path / "relay.py.fail").write_text("5")
+    assert daily_report.main(args) == 1 and len(sent()) == 1  # 兩次都失敗：不再試第三次
+    assert "貼不到 Discord" in capsys.readouterr().err and (tmp_path / "o" / "latest.txt").is_file()
+
+
+def test_long_report_is_cut_to_one_message():
+    text = daily_report.fit("字" * 5000)
+    assert len(text) == 2000 and text.endswith("（全文在主機）")
+    assert daily_report.fit("短") == "短"
