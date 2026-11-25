@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from tianxia.core import identity_base
 from tianxia.database import default_path, open_database
 
-from . import FEATURE, accounts_view, lookup, rules, staff, store
+from . import FEATURE, accounts_view, lookup, purge, rules, staff, store
 from .store import Refused
 
 # 推播的內文（標題照殼的 NOTICE_TITLE）；notify 包的「客服」種類關掉就不送
@@ -394,6 +394,11 @@ def _human(shell, request: Request, body: dict) -> dict:
     return _player_view(sidecar, t, _bot_id(shell))
 
 
+def start_purge(shell):
+    """到期刪除的看守（purge.py）：伺服器啟動時經 Feature.threads 叫一次。時鐘是殼的 time.time。"""
+    return purge.start(default_path, shell.time.time, shell.CONTENT.config.support.purge_days)
+
+
 def _sweep(shell, request: Request) -> dict:
     """自動結單（第 216 批；設計 5.4）：客服（cookie 或客服官的 token）叫；玩家 404 同一句。旁檔不在回空的、不建檔；不推播。回 {closed: [單號]}。"""
     _staff(shell, request)
@@ -401,6 +406,7 @@ def _sweep(shell, request: Request) -> dict:
     if sidecar is None:
         return {"closed": []}
     days = shell.CONTENT.config.support.auto_close_days
+    purge.purge_once(default_path(), shell.time.time(), shell.CONTENT.config.support.purge_days)  # 順手刪到期的單（看守之外多一道；回的字照舊）
     return {"closed": sidecar.sweep(shell.time.time(), days * rules.DAY_SECONDS, rules.AUTO_CLOSED.format(days=days))}
 
 
