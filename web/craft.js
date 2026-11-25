@@ -744,12 +744,12 @@
       <rect x="5" y="5" width="42" height="42" rx="1.5" class="seal-rim"/><g class="seal-ink">${glyphs}</g></svg>`;
   }
 
-  // 合璧榜（意境合成改版批四，伺服器 /api/he_board、craft 包 board.rows）：這一季全服合出過的意境，誰首創、合璧成神幾回、誰先成。
+  // 意境榜（玩家看的名字，Joy 2026-11-25「意境榜吧」；程式裡照舊叫 he/合璧榜，意境合成改版批四，伺服器 /api/he_board、craft 包 board.rows）：這一季全服合出過的意境，誰首創、合璧成神幾回、誰先成。
   // 入口跟兩本譜排在一起（改版開著才有），點了疊一頁同一種書頁（S.book === "he"），資料開的那一下才問。字少：路是一顆色印、成神是朱印「神」
   function heEntry() {
     return `<button class="manual-entry" data-act="he-open"><svg class="book-icon" viewBox="0 0 48 56" aria-hidden="true">
     <path d="M14 2v10M34 2v10" class="bk-hang"/><rect x="4" y="12" width="40" height="40" rx="2" class="bk-cover"/>
-    <path d="M12 24h24M12 32h24M12 40h16" class="bk-thread"/></svg><span><b>合璧榜</b><small>這一季，江湖上合出了什麼</small></span><i class="go">翻閱 ›</i></button>`;
+    <path d="M12 24h24M12 32h24M12 40h16" class="bk-thread"/></svg><span><b>意境榜</b><small>這一季，江湖上合出了什麼</small></span><i class="go">翻閱 ›</i></button>`;
   }
   function heBoardHtml() {
     const d = S.heBoard;
@@ -760,15 +760,15 @@
       </li>`;
     const body = !d ? `<p class="hb-empty">翻開中……</p>`
       : d.rows.length ? `<ol class="hb-list">${d.rows.map(row).join("")}</ol>` : `<p class="hb-empty">爐火未起，榜上無名。</p>`;
-    return `<div class="book-layer he-board" role="dialog" aria-label="合璧榜">
-      <header class="book-bar"><button class="book-back" data-act="book-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">合璧榜</span></header>
+    return `<div class="book-layer he-board" role="dialog" aria-label="意境榜">
+      <header class="book-bar"><button class="book-back" data-act="book-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">意境榜</span></header>
       <div class="book-cover">
         <svg class="book-hills" viewBox="0 0 375 120" preserveAspectRatio="none" aria-hidden="true">
           <path class="hill far" d="M0 86 C40 58 70 64 104 46 C134 30 160 52 190 40 C226 26 258 48 292 36 C326 24 352 40 375 34 V120 H0Z"/>
           <path class="hill near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>
         </svg>
         <i class="book-moon" aria-hidden="true"></i>
-        <div class="book-title"><span>合璧榜</span></div>
+        <div class="book-title"><span>意境榜</span></div>
         ${d && d.rows.length ? `<p class="book-sub">本季 ${d.rows.length} 種${d.gods ? `・成神 ${d.gods} 回` : ""}</p>` : ""}
       </div>
       <div class="leaves">${body}</div>
