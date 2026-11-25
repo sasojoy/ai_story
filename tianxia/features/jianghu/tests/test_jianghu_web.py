@@ -78,3 +78,39 @@ def test_people_row_and_figure_card(wan):  # noqa: F811
     card = run(m, f'H.S.fig = "{figs[0]["id"]}"; return H.pageJianghu();')
     assert 'class="sheet jh-card jh-fig"' in card and 'class="vn-layer pick"' not in card
     assert f"<h2>{figs[0]['name']}" in card and 'data-act="fig-log"' in card
+
+
+def _peer_card():
+    a = dict(confirm="", amount=0, amount_min=1, choices=[], group="", pick="", text=0, note="", enabled=True)
+    return {"name": "柳七", "affiliation": "官軍・鄉勇", "level": 20, "arts": [], "title": {}, "actions": [
+        {**a, "action": "greet", "label": "挑釁", "arg": "taunt", "note": "可以附一句話（20 字內）", "text": 20},
+        {**a, "action": "jieyi", "label": "邀他結義", "arg": "ask", "note": "要先跟他互換過名帖", "enabled": False},
+        {**a, "action": "spar", "label": "答應切磋", "arg": "yes", "note": "體力 6"},
+        {**a, "action": "spar", "label": "婉拒", "arg": "no"},
+        {**a, "action": "discuss", "label": "論武・以「風」", "arg": "invite:insight:feng", "group": "論武", "pick": "「風」"},
+        {**a, "action": "discuss", "label": "論武・以「火」", "arg": "invite:insight:huo", "group": "論武", "pick": "「火」"},
+    ]}
+
+
+def test_peer_card_answer_on_top_one_cell_a_kind(wan):  # noqa: F811
+    """第三批補（PM 2026-11-25）：點俠客拉起同一種卡；他邀你的墨底排最上面，其餘一類一格，同類收一顆（不攤下拉選單），不能做的寫人話的原因。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    card = run(m, f"H.S.peer = {{ name: '柳七', card: {__import__('json').dumps(_peer_card(), ensure_ascii=False)} }}; return H.peerHtml();")
+    assert "jh-pcard" in card and "peer-card" in card and "<select" not in card
+    top = card.split('class="jh-dos"')[0]
+    assert 'data-answer="spar"' in top and "答應切磋" in top and "婉拒" in top
+    cells = card.split('class="jh-dos"')[1]
+    assert cells.count('data-act="jh-peer-pick"') == 1 and "論武" in cells  # 兩樣論武收成一顆
+    assert "還沒跟他換過名帖" in cells and "20 字內" not in card
+    off = run(m, "H.S.peer = { name: '柳七', card: null, gone: '走了' }; H.S.main.jianghu = null; return H.peerHtml();")
+    assert "jh-pcard" not in off  # 新排法關著：舊的玩家卡
+
+
+def test_peers_here_marks_same_sect_only_when_on(wan):  # noqa: F811
+    from tianxia.features.peers import actions
+
+    wan.state.player.sect = "yingchuan_academy"
+    assert all("kin" not in x for x in actions.peers_here(wan))
+    wan.content.config.jianghu.enabled = True
+    assert all(x.get("kin") in (None, True) for x in actions.peers_here(wan))

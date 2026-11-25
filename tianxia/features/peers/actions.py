@@ -19,8 +19,12 @@ if TYPE_CHECKING:
 
 
 def peers_here(ctx) -> list[dict]:
-    """場景底下「此地還有誰」：[{name, side}]，照名號排序。路上、序章裡看不到人（social.here）。"""
-    return [{"name": o.player.name, "side": social.side(o, ctx.content)} for o in social.here(ctx)]
+    """場景底下「此地還有誰」：[{name, side}]，照名號排序。路上、序章裡看不到人（social.here）。
+    江湖頁重排（Config.jianghu.enabled，Joy 2026-11-25 決定卡「開始做，先不上線」）開著時，同門的那幾位多一格 kin: true
+    （畫面用的回傳，不是存檔欄位；「這裡的人」把同門算進跟你有關的）。關著一個字都不變。"""
+    mine = ctx.state.player.sect if ctx.content.config.jianghu.enabled else None
+    return [{"name": o.player.name, "side": social.side(o, ctx.content), **({"kin": True} if mine and o.player.sect == mine else {})}
+            for o in social.here(ctx)]
 
 
 def peer(ctx, name: str) -> Game | None:

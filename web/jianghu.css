@@ -174,3 +174,27 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
 /* 俠客的玩家卡（peers.js 畫的那一張）：別人邀你的那一件（答應切磋、挑一樣答應論武）排最上面、一整行、墨底（設計稿 j「應戰」） */
 html.jh2 .peer-card .peer-acts > [data-answer] { order: -1; grid-column: 1 / -1; }
 html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* 俠客卡（設計稿 j）：跟人物卡同一種卡，上面是名號印（或他的名帖） */
+.jh-pcard .jh-pt { height: 124px; display: grid; place-items: center; background: none; }
+.jh-pcard .jh-pt::after { content: none; }
+.jh-pcard .jh-pt > span { display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: 24px; border: 2px solid var(--ink-2); border-radius: 14px;
+  font: 700 40px var(--kai); color: var(--ink); }
+.jh-pmt { margin-bottom: 20px; padding: 0; border: 0; background: none; cursor: pointer; }
+.jh-pcard .jh-in { margin-top: -26px; }
+.jh-ptags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.jh-pmsg { margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: var(--card-2); font: 400 14px/1.6 var(--kai); color: var(--ink); }
+.jh-pcard .jh-say { margin-top: 10px; }
+.jh-ans { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 10px; }
+.jh-ans .jh-do.wide, .jh-in .jh-do.wide.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 700; letter-spacing: 0.2em; }
+.jh-ans .jh-do:only-child { grid-column: 1 / -1; }
+.jh-pcard .jh-dos { margin-top: 10px; }
+.jh-sub { margin: 12px 0 8px; font: 700 15px var(--kai); letter-spacing: 0.2em; color: var(--ink-2); }
+.jh-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.jh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.jh-chip { min-height: 44px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); color: var(--ink); font: 400 15px var(--kai); cursor: pointer; }
+.jh-chip small { margin-left: 4px; font: 400 12px var(--sans); color: var(--ink-2); }
+.jh-chip.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.jh-chip.on small { color: var(--paper); }
+.jh-form { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
+.jh-form .input { min-height: 48px; font: 400 16px var(--kai); }

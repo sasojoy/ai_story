@@ -252,9 +252,13 @@
         case "jh-later": S.jhLater = [...(S.jhLater || []).filter((k) => k !== el.dataset.key), el.dataset.key]; renderPage(); break;
         case "jh-sheet": S.jhSheet = el.dataset.sheet || null; S.jhWait = false; renderPage(); break;
         case "jh-wait": S.jhWait = !S.jhWait; renderPage(); break;
+        case "jh-peer-pick": S.jhPeerPick = { name: S.peer && S.peer.name, key: el.dataset.key }; render(); break;
+        case "jh-peer-back": S.jhPeerPick = null; S.jhPeerChoice = null; if (S.peer) { S.peer.amountFor = null; S.peer.textFor = null; } render(); break;
+        case "jh-peer-choice": S.jhPeerChoice = el.dataset.c; render(); break;
+        case "jh-peer-go": S.jhPeerPick = null; await peerAct(Number(el.dataset.i)); break;
     } // jianghuClick
   } // jianghuClick
-  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait"]);
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go"]);
 
   // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
   // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡
@@ -264,16 +268,24 @@
   const JH_PEERS_HEAD = "此地的俠客"; // 待 joy 潤
   const JH_BROTHER = "義"; // 待 joy 潤：義兄弟頭上的小印
   const JH_FOE = "敵"; // 待 joy 潤：敵方頭上的小印
+  const JH_KIN = "同門"; // 待 joy 潤
   const JH_ROW_MAX = 6; // 一排六格（390 寬），人再多也是一排
   const JH_SIDES2 = ["官軍", "黃巾"];
   function jhMySide(m) {
     return String((m.status && m.status.affiliation) || "").split("・").find((x) => JH_SIDES2.includes(x)) || "";
   }
   // 誰頭上掛什麼印：大勢人物（id → 印）與俠客（名號 → 印）
+  // 主線、章回、奇事這一步要你「見他」、而且現在就做得了（人就在此地）：那一步（PM 2026-11-25 第三批）
+  function jhFigStep(m, f) {
+    const got = typeof tkItems === "function" ? tkItems(m, []) : null;
+    return got ? got.on.find((it) => it.go && it.go.id && String(it.sub || "").includes(`見${f.name}`)) || null : null;
+  }
   function jhMarks(m) {
     const fig = {}, peer = {};
     for (const f of m.figures_here || []) {
-      if ((m.orders || []).some((o) => !o.done && String(o.text || "").startsWith(f.name))) fig[f.id] = "軍令";
+      const step = jhFigStep(m, f);
+      if (step) fig[f.id] = step.seal;
+      else if ((m.orders || []).some((o) => !o.done && String(o.text || "").startsWith(f.name))) fig[f.id] = "軍令";
       else if (m.letter && m.letter.sender === f.name && (m.letter.task || m.letter.errand)) fig[f.id] = m.letter.kind || "託付";
     }
     for (const c of m.calls || []) {
@@ -282,6 +294,7 @@
     }
     const j = m.jieyi;
     for (const x of (j && j.members) || []) if (!x.me && !peer[x.name]) peer[x.name] = JH_BROTHER;
+    for (const x of m.here || []) if (x.kin && !peer[x.name]) peer[x.name] = JH_KIN;
     const mine = jhMySide(m);
     for (const x of m.here || []) if (!peer[x.name] && mine && JH_SIDES2.includes(x.side) && x.side !== mine) peer[x.name] = JH_FOE;
     return { fig, peer };
@@ -291,7 +304,7 @@
     const figs = m.figures_here || [], peers = m.here || [];
     if (!figs.length && !peers.length) return "";
     const { fig, peer } = jhMarks(m);
-    const order = { 邀戰: 0, 論武: 0, 結伴: 0, 結義: 0, 邀約: 0, [JH_BROTHER]: 1, [JH_FOE]: 2 };
+    const order = { 邀戰: 0, 論武: 0, 結伴: 0, 結義: 0, 邀約: 0, [JH_BROTHER]: 1, [JH_KIN]: 1, [JH_FOE]: 2 };
     const near = peers.filter((x) => peer[x.name]).sort((a, b) => order[peer[a.name]] - order[peer[b.name]]);
     const room = Math.max(0, JH_ROW_MAX - figs.length - (peers.length ? 1 : 0));
     const shown = near.slice(0, room), rest = peers.length - shown.length;
@@ -312,6 +325,7 @@
   const JH_FIG_TALK = "交談", JH_FIG_LOG = "往來紀錄"; // 待 joy 潤（同 companions.js）
   const JH_FIG_ORDER = "他點了你的名：{t}"; // 待 joy 潤
   const JH_FIG_GO = "去辦"; // 待 joy 潤
+  const JH_FIG_MEET = "見他"; // 待 joy 潤：主線這一步要你見他
   function jhFigHtml(m) {
     const f = (m.figures_here || []).find((x) => x.id === S.fig);
     if (!f) return "";
@@ -328,15 +342,103 @@
       dos.push(o.enabled ? btn(name, note, `data-act="fig-act" data-id="${esc(o.id)}"`) : btn(name, note, why(note), true));
     }
     dos.push(btn(JH_FIG_LOG, "", `data-act="fig-log" data-id="${esc(f.id)}"`));
+    const step = jhFigStep(m, f);
     const order = (m.orders || []).find((o) => !o.done && String(o.text || "").startsWith(f.name));
     const letter = m.letter && m.letter.sender === f.name && (m.letter.task || m.letter.errand) ? m.letter : null;
-    const say = order ? `<div class="jh-say"><b>${esc(JH_FIG_ORDER.replace("{t}", order.title))}</b><small>${esc(order.how || "")}</small></div>${btn(JH_FIG_GO, "", 'data-act="duty-open"').replace("jh-do", "jh-do wide primary")}`
+    const st = step ? jhFromTrack(m, step) : null;
+    const say = st ? `<div class="jh-say"><b>${esc(`${st.seal}・${jhPlain(st.title)}`)}</b><small>${esc(st.sub || "")}</small></div><button class="btn jh-do wide primary" ${st.attrs}>${JH_FIG_MEET}</button>`
+      : order ? `<div class="jh-say"><b>${esc(JH_FIG_ORDER.replace("{t}", order.title))}</b><small>${esc(order.how || "")}</small></div>${btn(JH_FIG_GO, "", 'data-act="duty-open"').replace("jh-do", "jh-do wide primary")}`
       : letter ? `<div class="jh-say"><b>${esc(letter.task ? letter.task.title : letter.errand.text)}</b><small>${esc(letter.task ? letter.task.how : "")}</small></div>${btn(JH_READ, "", 'data-act="jh-sheet" data-sheet="letter"').replace("jh-do", "jh-do wide primary")}` : "";
     const i = f.intro || {};
     const role = i.role || f.side || "";
     return `<div class="sheet-bg" data-act="fig-close"></div><div class="sheet jh-card jh-fig" role="dialog" aria-label="${esc(f.name)}">
         <div class="jh-pt"${f.face ? ` style="background-image:url('${esc(f.face)}')"` : ""}><button class="jh-x" data-act="fig-close" aria-label="${JH_CLOSE}">×</button></div>
         <div class="jh-in"><h2>${esc(f.name)}<small>${esc(role)}</small></h2>${i.who ? `<p>${esc(i.who)}</p>` : ""}${say}<div class="jh-dos">${dos.join("")}</div></div></div>`;
+  }
+
+  // 點俠客：跟人物卡同一種卡（設計稿 j；PM 2026-11-25 第三批）。名號印、名號、陣營門派等級一行、頭銜小印；他邀你的那一件墨底排最上面；
+  // 其餘一類一格、兩欄排，同類收一顆（論武挑哪一樣、贈哪一樣，點了再拉出來挑）；不能做的變淡、寫原因。
+  // 卡上的鈕照舊送玩家卡那一套（peers.js 的 peer-act、#peer-amount、#peer-text；伺服器給的 actions 照索引），只換畫法。
+  // 只在新排法開著的那一刻換（jhOn）；舊的玩家卡（peers.js 的 peerHtml）別處照舊
+  const JH_PEER_KIND = { spar: "切磋", discuss: "論武", gift: "贈物", mingtie: "名帖", raid: "截殺", greet: "挑釁", jieyi: "結義", party: "結伴" }; // 待 joy 潤：一格的名字
+  const JH_PEER_ORDER = ["spar", "discuss", "gift", "mingtie", "raid", "greet", "jieyi", "party"];
+  const JH_PEER_ANSWER = "挑一樣應他"; // 待 joy 潤：論武要挑自己出哪一樣
+  const JH_PEER_PICK = "挑一樣"; // 待 joy 潤
+  const JH_PEER_BACK = "返回";
+  const JH_PEER_TWIN = "・另一份"; // 待 joy 潤：同名的兩份意境（第二份）
+  const JH_PEER_GIFT = "{label}・挑一樣、給幾份"; // 待 joy 潤
+  const JH_PEER_SAY = "想對他說的話（可以不寫）"; // 待 joy 潤
+  const JH_PEER_HOW_MANY = "給幾份"; // 待 joy 潤
+  const JH_PEER_SEND = "送出";
+  const JH_PEER_GONE = "對方已經不在這裡了。";
+  // 原因的人話（伺服器的字像規則的，這裡換掉；其餘照伺服器的字）
+  const JH_PEER_WHY = [[/^要先跟他互換過名帖$/, "還沒跟他換過名帖"], [/^先做一張名帖$/, "你還沒有名帖"], [/^他出「.+?」・/, "跟他出的一樣"]]; // 待 joy 潤
+  const jhPeerWhy = (t) => (JH_PEER_WHY.find(([re]) => re.test(t || "")) || [null, t || ""])[1];
+  const jhIsAnswer = (b) => /^yes(:|$)/.test(b.arg || "");
+  const jhIsNo = (b) => /^no$/.test(b.arg || "");
+  function jhPeerHtml(still) {
+    const P = S.peer, c = P && P.card, m = S.main || {};
+    const quiet = still ? " still" : "";
+    const shell = (inner, name) => `<div class="sheet-bg${quiet}" data-act="peer-close"></div><div class="sheet jh-card jh-pcard peer-card${quiet}" role="dialog" aria-label="${esc(name)}">${inner}</div>`;
+    const x = `<button class="jh-x" data-act="peer-close" aria-label="${JH_CLOSE}">×</button>`;
+    if (!P || P.loading) S.jhPeerPick = S.jhPeerChoice = null; // 剛打開（或換人）：從頭看
+    if (!P || P.loading) return shell(`<div class="jh-pt"><span>${esc(((P && P.name) || "").slice(0, 1))}</span>${x}</div><div class="jh-in"><p>……</p></div>`, (P && P.name) || "");
+    if (!c) return shell(`<div class="jh-pt"><span>${esc(P.name.slice(0, 1))}</span>${x}</div><div class="jh-in"><h2>${esc(P.name)}</h2><p>${esc(P.gone || JH_PEER_GONE)}</p></div>`, P.name);
+    const acts = c.actions.map((b, i) => ({ ...b, i }));
+    const head = `<h2>${esc(c.name)}<small>${esc([...String(c.affiliation || "").split("・").filter(Boolean), `${c.level | 0} 級`].join("・"))}</small></h2>`
+      + `${(c.title && c.title.name && typeof titleSeal === "function") || c.jieyi ? `<div class="jh-ptags">${c.title && c.title.name && typeof titleSeal === "function" ? titleSeal(c.title) : ""}${c.jieyi ? `<span class="jh-k">${esc(c.jieyi)}</span>` : ""}</div>` : ""}`;
+    const face = c.mingtie && typeof mtCardHtml === "function" ? `<button class="jh-pmt" data-act="mt-zoom-peer" aria-label="看${esc(c.name)}的名帖">${mtCardHtml(c.mingtie, c.name, "thumb")}</button>` : `<span>${esc(c.name.slice(0, 1))}</span>`;
+    const msg = P.msg ? `<div class="jh-pmsg">${P.msg}</div>` : "";
+    const btn = (b, label, cls = "") => (b.enabled
+      ? `<button class="btn jh-do${cls}" data-act="peer-act" data-i="${b.i}"${jhIsAnswer(b) ? ` data-answer="${esc(b.action)}"` : ""}>${esc(label)}</button>`
+      : `<button class="btn jh-do off${cls}" data-act="opt-why" data-why="${esc(jhPeerWhy(b.note))}" aria-disabled="true">${esc(label)}<small>${esc(jhPeerWhy(b.note))}</small></button>`);
+    const pick = S.jhPeerPick && S.jhPeerPick.name === c.name ? S.jhPeerPick.key : "";
+    // 正在填的：贈物（挑一樣、給幾份）、挑釁（附一句話）
+    if (P.amountFor != null && c.actions[P.amountFor]) {
+      const b = c.actions[P.amountFor];
+      const ch = b.choices || [];
+      const chosen = ch.find((o) => o.id === S.jhPeerChoice) || ch[0];
+      const chips = ch.length > 1 ? `<div class="jh-chips">${ch.map((o) => `<button class="jh-chip${o === chosen ? " on" : ""}" data-act="jh-peer-choice" data-c="${esc(o.id)}">${esc(o.label)}<small>${o.max | 0}</small></button>`).join("")}</div>` : "";
+      const max = chosen ? Math.min(chosen.max, b.amount) : b.amount;
+      return shell(`<div class="jh-pt">${face}${x}</div><div class="jh-in">${head}<h3 class="jh-sub">${esc(JH_PEER_GIFT.replace("{label}", b.label))}</h3>${chips}<form class="jh-form" id="peer-amount">${chosen ? `<input type="hidden" name="choice" value="${esc(chosen.id)}">` : ""}<input class="input" name="amount" type="number" inputmode="numeric" min="${b.amount_min || 1}" max="${max}" value="1" aria-label="${JH_PEER_HOW_MANY}"><button class="btn jh-do wide primary" type="submit">${JH_PEER_SEND}</button></form><button class="btn jh-do" data-act="jh-peer-back">${JH_PEER_BACK}</button></div>`, c.name);
+    }
+    if (P.textFor != null && c.actions[P.textFor]) {
+      const b = c.actions[P.textFor];
+      return shell(`<div class="jh-pt">${face}${x}</div><div class="jh-in">${head}${msg}<form class="jh-form" id="peer-text"><input class="input" name="text" maxlength="${b.text}" value="${esc(P.textDraft || "")}" placeholder="${JH_PEER_SAY}" aria-label="${JH_PEER_SAY}"><button class="btn jh-do wide primary" type="submit">${esc(b.label)}</button></form><button class="btn jh-do" data-act="jh-peer-back">${JH_PEER_BACK}</button></div>`, c.name);
+    }
+    // 拉出來挑的那一層：同一類裡的每一樣（論武出哪一樣、應論武出哪一樣）
+    if (pick) {
+      const list = acts.filter((b) => (b.group || b.action) === pick && !jhIsNo(b));
+      return shell(`<div class="jh-pt">${face}${x}</div><div class="jh-in">${head}<h3 class="jh-sub">${esc(JH_PEER_KIND[list[0] && list[0].action] || pick)}・${JH_PEER_PICK}</h3><div class="jh-picks">${list.map((b, k) => btn(b, `${b.pick || b.label}${list.slice(0, k).some((y) => (y.pick || y.label) === (b.pick || b.label)) ? JH_PEER_TWIN : ""}`).replace('data-act="peer-act"', 'data-act="jh-peer-go"')).join("")}</div><button class="btn jh-do" data-act="jh-peer-back">${JH_PEER_BACK}</button></div>`, c.name);
+    }
+    // 他邀你的：說的那一句、應他（論武要先挑一樣）、婉拒
+    const ans = acts.filter(jhIsAnswer);
+    let say = "";
+    if (ans.length) {
+      const kind = ans[0].action;
+      const call = (m.calls || []).find((k) => String(k.text).startsWith(c.name) && (kind !== "spar" || /切磋/.test(k.text)) && (kind !== "discuss" || /論武/.test(k.text)));
+      const no = acts.find((b) => b.action === kind && jhIsNo(b));
+      const grouped = ans.length > 1 || ans[0].group;
+      const go = grouped ? `<button class="btn jh-do wide primary" data-act="jh-peer-pick" data-key="${esc(ans[0].group || kind)}" data-answer="${esc(kind)}">${JH_PEER_ANSWER}</button>` : btn(ans[0], ans[0].label, " wide primary");
+      say = `${call ? `<div class="jh-say"><b>${esc(call.text)}</b></div>` : ""}<div class="jh-ans">${go}${no ? btn(no, no.label) : ""}</div>`;
+    }
+    // 其餘：一類一格（應答、婉拒不算）
+    const rest = acts.filter((b) => !jhIsAnswer(b) && !jhIsNo(b));
+    const kinds = [...new Set(rest.map((b) => b.action))].sort((a, b) => ((JH_PEER_ORDER.indexOf(a) + 99) % 99) - ((JH_PEER_ORDER.indexOf(b) + 99) % 99));
+    const cells = kinds.map((k) => {
+      const list = rest.filter((b) => b.action === k);
+      const name = JH_PEER_KIND[k] || list[0].label;
+      const live = list.filter((b) => b.enabled);
+      if (!live.length) return btn(list[0], name);
+      if (live.length === 1) return btn(live[0], name);
+      return `<button class="btn jh-do" data-act="jh-peer-pick" data-key="${esc(list[0].group || k)}">${esc(name)}</button>`;
+    });
+    return shell(`<div class="jh-pt">${face}${x}</div><div class="jh-in">${head}${msg}${say}<div class="jh-dos">${cells.join("")}</div></div>`, c.name);
+  }
+  // 玩家卡的畫法換掉（只在新排法那一刻）：peers.js 的 peerHtml 由殼 app.js 與輪詢換卡叫，這裡包一層
+  if (typeof peerHtml === "function") {
+    const jhOldPeerHtml = peerHtml;
+    peerHtml = (still = false) => (jhOn(S.main) ? jhPeerHtml(still) : jhOldPeerHtml(still)); // eslint-disable-line no-func-assign
   }
 
   // 整頁：parts 是 pageJianghu 已經算好的各塊（同一份資料，不重算）
