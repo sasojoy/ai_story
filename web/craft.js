@@ -467,7 +467,7 @@
       ${attrNoteHtml(x)}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
-      ${manualEntry("arts")}${manualEntry("forge")}
+      ${manualEntry("arts")}${manualEntry("forge")}${S.main?.status?.fusion ? heEntry() : ""}
       <details class="fold"><summary>背包</summary><div class="fold-body">${x.bag}</div></details>
       ${S.craftPick ? craftSheetHtml(x) : ""}`;
   }
@@ -744,7 +744,39 @@
       <rect x="5" y="5" width="42" height="42" rx="1.5" class="seal-rim"/><g class="seal-ink">${glyphs}</g></svg>`;
   }
 
+  // 合璧榜（意境合成改版批四，伺服器 /api/he_board、craft 包 board.rows）：這一季全服合出過的意境，誰首創、合璧成神幾回、誰先成。
+  // 入口跟兩本譜排在一起（改版開著才有），點了疊一頁同一種書頁（S.book === "he"），資料開的那一下才問。字少：路是一顆色印、成神是朱印「神」
+  function heEntry() {
+    return `<button class="manual-entry" data-act="he-open"><svg class="book-icon" viewBox="0 0 48 56" aria-hidden="true">
+    <path d="M14 2v10M34 2v10" class="bk-hang"/><rect x="4" y="12" width="40" height="40" rx="2" class="bk-cover"/>
+    <path d="M12 24h24M12 32h24M12 40h16" class="bk-thread"/></svg><span><b>合璧榜</b><small>這一季，江湖上合出了什麼</small></span><i class="go">翻閱 ›</i></button>`;
+  }
+  function heBoardHtml() {
+    const d = S.heBoard;
+    const row = (r) => `<li class="hb-row${r.gods ? " god" : ""}${r.mine ? " mine" : ""}" style="--he-c:${HE_HUE[r.path] || "var(--gold)"}">
+        <span class="hb-path" aria-label="${esc(r.path)}">${esc(r.path)}</span>
+        <div class="hb-main"><b class="hb-name">${esc(r.name)}</b><small>${r.by.map(esc).join("、")}</small></div>
+        ${r.gods ? `<div class="hb-god"><span class="hb-seal">${sealSvg("神")}<i>${r.gods > 1 ? `×${r.gods}` : ""}</i></span><small>${esc(r.first)}${r.grand ? `〔${esc(r.grand)}〕` : ""}</small></div>` : ""}
+      </li>`;
+    const body = !d ? `<p class="hb-empty">翻開中……</p>`
+      : d.rows.length ? `<ol class="hb-list">${d.rows.map(row).join("")}</ol>` : `<p class="hb-empty">爐火未起，榜上無名。</p>`;
+    return `<div class="book-layer he-board" role="dialog" aria-label="合璧榜">
+      <header class="book-bar"><button class="book-back" data-act="book-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">合璧榜</span></header>
+      <div class="book-cover">
+        <svg class="book-hills" viewBox="0 0 375 120" preserveAspectRatio="none" aria-hidden="true">
+          <path class="hill far" d="M0 86 C40 58 70 64 104 46 C134 30 160 52 190 40 C226 26 258 48 292 36 C326 24 352 40 375 34 V120 H0Z"/>
+          <path class="hill near" d="M0 104 C36 86 72 96 110 80 C150 64 178 88 222 76 C262 66 300 86 340 74 C356 70 366 72 375 70 V120 H0Z"/>
+        </svg>
+        <i class="book-moon" aria-hidden="true"></i>
+        <div class="book-title"><span>合璧榜</span></div>
+        ${d && d.rows.length ? `<p class="book-sub">本季 ${d.rows.length} 種${d.gods ? `・成神 ${d.gods} 回` : ""}</p>` : ""}
+      </div>
+      <div class="leaves">${body}</div>
+    </div>`;
+  }
+
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
+    if (S.book === "he") return heBoardHtml();
     // 參透了卻一句口訣都沒聽過的那一頁寫一句（Joy 2026-10-26 卡上選「補一句」；以前直書區是空的）。寫在行內：有測試只抽這一支。待 joy 潤
     const rows = manualRows(which), b = BOOKS[which];
     const now = rows.filter((r) => !r.past); // 卷首只算這一季真的聽到、打中的：跨季記得的那幾行（past）照樣列在卷裡（FB-404）
@@ -947,6 +979,11 @@
         case "secret-close": document.getElementById("sp-pop")?.remove(); break;
         case "secret-book": document.getElementById("sp-pop")?.remove(); S.bookFrom = window.scrollY; S.book = "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
+        case "he-open":
+          S.bookFrom = window.scrollY; S.book = "he"; S.heBoard = null; render(); document.querySelector(".book-layer")?.scrollTo(0, 0);
+          try { S.heBoard = await api("/api/he_board"); } catch (e) { S.heBoard = { rows: [], gods: 0 }; }
+          if (S.book === "he") render();
+          break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
         case "create-kind": { const c = S.main.status.create; S.createPick = { kind: el.dataset.val, form: "" }; if (c) renderPage(); break; }
         case "create-pick": { if (S.createPick) S.createPick.form = el.dataset.val; renderPage(); break; }
@@ -988,7 +1025,7 @@
         case "inf-go": if (!S.busy) await infuseGo(); break;
     } // craftClick
   } // craftClick
-  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "inf-open", "inf-body", "inf-pick", "inf-go"]);
+  registerClicks(craftClick, ["secret-close", "secret-book", "book-open", "he-open", "book-close", "create-kind", "create-pick", "create-begin", "create-preset", "create-pose", "create-intent", "create-back", "create-name", "create-cancel", "create-reroll", "create-reread", "create-open", "create-close", "art-filter", "pick", "unslot", "pot-lock", "forge", "craft-all", "pot-open", "pot-close", "craft-ok", "forge-hub", "inf-open", "inf-body", "inf-pick", "inf-go"]);
   async function craftChange(ev) {
     if (ev.target.dataset && ev.target.dataset.act === "craft-view") { // 煉製頁的屬性、品質、排序
       const v = craftView();
