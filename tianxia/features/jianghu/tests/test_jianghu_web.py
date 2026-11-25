@@ -270,3 +270,31 @@ def test_guide_words_are_the_eye_card(wan):  # noqa: F811
     m["guide"]["glow"] = ["act:explore"]  # 那件事本身當主鈕，旁邊一顆「知道了」
     eye = run(m, "return H.pageJianghu();").split('aria-label="眼下"')[1].split('class="jh-acts')[0]
     assert '<button class="btn jh-eye-go" data-act="choose" data-id="act:explore">去探索</button>' in eye and "知道了" in eye
+
+
+def test_guide_not_doable_here_goes_last(wan):  # noqa: F811
+    """PM 11/25：老石說的那件此地做不了（軍務暗著）不排第一則，排到最後；排到它時句子說去哪裡做，卡上只有「知道了」。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["guide"] = {"speaker": "老石", "text": "上頭每天發幾道軍令，自己挑一道。", "line": "看看「今日軍令」", "end": False, "done": [], "key": "qa-duty", "glow": []}
+    m["options"] = [o for o in m["options"] if o["id"] != "act:duty"] + [{"id": "act:duty", "label": "巡哨", "enabled": False, "note": ""}]
+    eye = lambda h: h.split('aria-label="眼下"')[1].split("</section>")[0]  # noqa: E731
+    first = eye(run(m, "return H.pageJianghu();"))
+    assert "看看「今日軍令」" not in first and "jh-eye-go" in first  # 別的那一則在前
+    sheet = run(m, 'H.S.jhSheet = "eye"; return H.pageJianghu();')
+    rows = sheet.split('<div class="jh-row">')[1:]
+    assert len(rows) > 1 and "看看「今日軍令」" in rows[-1]  # 排在最後
+    assert "回到自家的地盤" in rows[-1] and ">知道了<" in rows[-1] and "看今日軍令" not in rows[-1]
+
+
+def test_duel_round_not_twice(wan):  # noqa: F811
+    """PM 11/25：單挑卡頭寫了第 N 回合，底下那一句句首不再寫一次。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["art"] = {"kind": "bout", "src": "/static/img/events/fight.webp", "title": "黃巾渠帥・韓忠"}
+    m["scene"] = "<p><strong>黃巾渠帥・韓忠</strong></p>\n<p>韓忠提刀繞著你走。</p>"
+    m["card"] = "<p><strong>黃巾渠帥・韓忠</strong>（頭目戰 第 2／4 回合）</p>\n<ul><li>第 2 回合：你一記快拳打在他肩上。</li></ul>"
+    m["card_id"] = 9
+    m["jianghu"] = {**m.get("jianghu", {}), "take": {"slot": "duel", "seal": "單挑", "place": "/static/img/places/nanyang.webp"}}
+    page = run(m, "return H.pageJianghu();")
+    assert page.count("第 2") == 1 and "你一記快拳" in page

@@ -126,7 +126,8 @@
   const JH_LATER = "稍後"; // 待 joy 潤
   const JH_GUIDE_OK = "知道了"; // 待 joy 潤
   // 老石那一句說的去處 → 卡上的主鈕（[認的字, 鈕上的字, 選項 id, 或拉起哪一層]）
-  const JH_GUIDE_GO = [[/今日軍令|軍令/, "看今日軍令", "", 'data-act="jh-sheet" data-sheet="duty"'], [/探索/, "去探索", "act:explore"], [/出陣/, "去出陣", "act:train"],
+  // 第五格是「此地做得了嗎」看哪一顆選項（暗著就是做不了）；第六格是做不了時說去哪裡做的那一句（PM 11/25：做不了的不排第一則，只剩它就說去哪裡）
+  const JH_GUIDE_GO = [[/今日軍令|軍令/, "看今日軍令", "", 'data-act="jh-sheet" data-sheet="duty"', "act:duty", "回到自家的地盤，就看得到今日軍令。"], [/探索/, "去探索", "act:explore", "", "", "到了城外，再去探索。"], [/出陣/, "去出陣", "act:train", "", "", "到了能出陣的地方，再去出陣。"],
     [/行路|前往|動身/, "看去處", "", 'data-act="jh-sheet" data-sheet="road"']]; // 待 joy 潤
   const JH_MORE = "另有 {n} 件"; // 待 joy 潤
   const JH_LIST = "眼下的事"; // 待 joy 潤
@@ -198,6 +199,7 @@
 
   function jhEyeItems(m, p) {
     const on = [], wait = [];
+    let guideFar = null; // 老石說的那件此地做不了：排到最後（別的都沒有時才是第一則）
     const s = m.status || {};
     const slim = typeof codexSlim === "function" && codexSlim(m);
     const w = m.week_card;
@@ -214,17 +216,20 @@
       const ids = [...(g.glow || []), ...(((m.onboard && m.onboard.glow) || []).map((k) => `act:${k}`))];
       let go = (m.options || []).find((o) => o.enabled && ids.includes(o.id));
       const ok = `data-act="${g.end ? "guide-ack" : "guide-shut"}"`;
-      let btn = "", attrs = "";
+      let btn = "", attrs = "", where = "";
       if (go) { const name = optParts(go)[0]; btn = /^[去看]/.test(name) ? name : `去${name}`; attrs = `data-act="choose" data-id="${esc(go.id)}"`; }
       else { // 沒標要亮哪一顆：照那一句說的去處認（「看看『今日軍令』」→ 拉起軍務）
         const said = `${g.line || ""}${first}`;
         const hit = JH_GUIDE_GO.find(([re]) => re.test(said));
         const opt = hit && hit[2] && (m.options || []).find((o) => o.enabled && o.id === hit[2]);
-        if (hit && (!hit[2] || opt)) { btn = hit[1]; attrs = hit[3] || `data-act="choose" data-id="${esc(hit[2])}"`; go = true; }
+        const gate = hit && hit[4] && (m.options || []).find((o) => o.id === hit[4]);
+        if (hit && (!hit[2] || opt) && !(gate && !gate.enabled)) { btn = hit[1]; attrs = hit[3] || `data-act="choose" data-id="${esc(hit[2])}"`; go = true; }
+        else if (hit && hit[5]) where = hit[5];
       }
-      on.unshift({ key: `g:${typeof guideKey === "function" ? guideKey(g) : g.text}`, seal: g.speaker || "", title: g.line || first,
-        sub: [rest.trim(), ...(g.done || []).filter((d) => !d.startsWith("✔"))].filter(Boolean).join("　"),
-        btn: go ? btn : JH_GUIDE_OK, attrs: go ? attrs : ok, alt: go ? { label: JH_GUIDE_OK, attrs: ok } : null, guide: true });
+      const item = { key: `g:${typeof guideKey === "function" ? guideKey(g) : g.text}`, seal: g.speaker || "", title: g.line || first,
+        sub: [where, rest.trim(), ...(g.done || []).filter((d) => !d.startsWith("✔"))].filter(Boolean).join("　"),
+        btn: go ? btn : JH_GUIDE_OK, attrs: go ? attrs : ok, alt: go ? { label: JH_GUIDE_OK, attrs: ok } : null, guide: true, far: !!where };
+      if (where) guideFar = item; else on.unshift(item);
     }
     on.push(...jhCalls(m));
     if (m.letter) { // 來信：主鈕拉起整封信（婉拒、收起都在信上）
@@ -252,6 +257,7 @@
       const sh = m.legacy && m.legacy.shihai;
       if (sh && sh.offers && sh.offers.length) on.push({ key: "h:shihai", seal: "識海", title: "上一季的神品意境還沒挑", sub: "", btn: JH_LOOK, attrs: 'data-act="legacy-view" data-v="shihai"' }); // 待 joy 潤
     }
+    if (guideFar) on.push(guideFar);
     return { on, wait };
   }
 
@@ -480,7 +486,12 @@
     const lines = jhTxLines(p.nowRaw).filter((l) => !/tx-new/.test(l) && !/^得：|^失：|　失：/.test(plain(l))).map(jhTxP);
     const { title: t2, body } = jhParas(m);
     let last, rest;
-    if (take.slot === "duel" && m.card) { last = `${body.pop() || ""}<div class="card battle-card">${fightCard(m.card, m.card_id)}</div>`; rest = body; }
+    if (take.slot === "duel" && m.card) {
+      // 卡頭已經寫了「第 N 回合」，底下那一句句首的同一個「第 N 回合」拿掉（PM 11/25）
+      const n = (String(m.card).replace(/<li[\s\S]*$/, "").match(/第\s*(\d+)\s*(?:／\s*\d+\s*)?回合/) || [])[1];
+      const card = n ? String(m.card).replace(new RegExp(`(<li[^>]*>)第\\s*${n}\\s*回合[：:　\\s]*`, "g"), "$1") : m.card;
+      last = `${body.pop() || ""}<div class="card battle-card">${fightCard(card, m.card_id)}</div>`; rest = body;
+    }
     else if (placeOnly) { last = lines.pop() || body.pop() || ""; rest = lines; }
     else { last = body.pop() || ""; rest = [...lines, ...body]; }
     const title = take.title || (placeOnly ? "" : t2) || (m.art && m.art.title) || t2 || "";
