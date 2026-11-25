@@ -1295,7 +1295,10 @@ def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
     行高第二輪（PM 2026-10-05）：內文與過程、補充一律 1.45，標題以外沒有低於 1.4 的。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     js = webharness.app_source()
-    assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
+    # 只有「剛剛」那張戰鬥卡片用這個 class（江湖頁重排的戰報頁、單挑頁畫的也是同一張 m.card：每一處都緊接著 fightCard）
+    found = re.findall(r'class="[^"]*battle-card[^"]*"', js)
+    assert found and set(found) == {'class="card battle-card"'}
+    assert len(found) == len(re.findall(r'class="card battle-card">\$\{fightCard\(', js))
 
     def rule(selector: str) -> str:
         found = re.search(r"(?m)^" + re.escape(selector) + r" \{([^}]*)\}", css)
