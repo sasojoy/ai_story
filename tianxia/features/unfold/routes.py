@@ -25,9 +25,9 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/unfold/card")
     def api_card(request: Request):
-        """小事卡按了鈕或「改天」：收起這一張（每一種只出一次，收了就不再出）。回 {main}。"""
+        """小事卡按了鈕或「改天」：收起這一張（每一種只出一次，收了就不再出；見面禮這一下入帳）。回 {main}。"""
         game = gate(request)
-        shell.act(game, lambda g: cards.close(g.state.player.unfold), paused_ok=True)
+        shell.act(game, lambda g: cards.close(g, g.state.player.unfold), paused_ok=True)
         return {"main": shell.look(game, shell.main_view)}
 
     return r

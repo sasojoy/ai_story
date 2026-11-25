@@ -43,3 +43,17 @@ def test_the_sect_card_carries_the_join_and_later_buttons_and_wins_over_a_hint()
 def test_an_old_player_gets_no_card_from_the_new_slot():
     out = webharness.run(DRIVER, {"m": {"guide": HINT}, "script": "return H.unfoldNowHtml(m);", "S": {}, "menxia": None, "stored": {}, "responses": {}})
     assert out is None
+
+
+def test_the_gift_card_goes_to_the_shop_and_a_bought_card_takes_its_first_step():
+    gift = {"kind": "gift", "arg": "zhu", "who": "萬寶閣掌櫃", "say": "「這 100 元寶是見面禮」", "go": "收下，進去看看", "later": "改天"}
+    html = webharness.run(DRIVER, {"m": {"unfold": {"hide": [], "fresh": [], "card": gift}}, "script": "return H.unfoldNowHtml(m);", "S": {},
+                                   "menxia": None, "stored": {}, "responses": {}})
+    assert 'data-go="mall"' in html and "收下" in html
+    buy = {"kind": "buy", "arg": "pills", "who": "回體丹五顆", "say": "腿軟的時候服一顆。", "go": "服一顆", "later": "改天"}
+    m = {"unfold": {"hide": [], "fresh": [], "card": buy}, "status": {"pills": {"full": False, "today": 3}}}
+    html = webharness.run(DRIVER, {"m": m, "script": "return H.unfoldNowHtml(m);", "S": {"main": m}, "menxia": None, "stored": {}, "responses": {}})
+    assert 'data-go="pill"' in html and "mall/pills_5" in html
+    m["status"]["pills"]["full"] = True  # 體力滿著：不給一顆按了被唸的鈕
+    html = webharness.run(DRIVER, {"m": m, "script": "return H.unfoldNowHtml(m);", "S": {"main": m}, "menxia": None, "stored": {}, "responses": {}})
+    assert 'data-go="pill"' not in html and "知道了" in html

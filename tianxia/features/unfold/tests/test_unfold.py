@@ -96,7 +96,7 @@ def test_standing_at_a_sect_gate_lays_the_sect_card_with_its_join_button(on):
     rules_book = g.state.player.unfold
     from tianxia.features.unfold import cards
 
-    cards.close(rules_book)
+    cards.close(g, rules_book)
     assert _card_now(g) is None  # 收了就不再出同一種
 
 
@@ -112,7 +112,7 @@ def test_one_card_at_a_time_mail_then_jieyi_after_a_fight_together(on):
     g.state.battles.append(BattleRecord(id=99, time=0, location="", kind="spar", opponent="王越", ours=[Fighter(name="沈浪", level=1)],
                                         tier="險勝", our_power=1, difficulty=1))
     assert _card_now(g)["kind"] == "mail"  # 前一張還攤著：排著等
-    cards.close(g.state.player.unfold)
+    cards.close(g, g.state.player.unfold)
     k = _card_now(g)
     assert k["kind"] == "jieyi" and k["arg"] == "王越"
 
@@ -154,3 +154,47 @@ def test_the_mall_comes_up_once_the_road_is_chosen_and_the_pills_when_legs_give_
     assert "h_pills" in actions.hint_triggers(g)
     p.stamina_pills = 1
     assert "h_pills" not in actions.hint_triggers(g)
+
+
+# ── 見面禮與買了之後（Joy 2026-11-25：100 元寶；「很多商城裡面的東西也要教學」）
+def _errand_done(g):
+    from tianxia.state import ErrandState
+
+    fid = next(iter(g.content.figures))
+    g.state.player.errands.append(ErrandState(id="e1", figure=fid, errand="x", kind="letter", target=g.state.player.location, week=1,
+                                              at=0, expires=1e12, letter=1, status="done"))
+    return g.content.figures[fid].name
+
+
+def test_the_first_errand_done_brings_the_gift_card_and_pressing_it_pays_once(on):
+    from tianxia.features.unfold import cards
+    from tianxia.wallet import Wallet
+
+    g = _new(on)
+    g.choose("choice:0")
+    assert _card_now(g) is None
+    who = _errand_done(g)
+    k = _card_now(g)
+    assert k["kind"] == "gift" and who in k["say"] and "100" in k["say"]
+    wallet = Wallet(g.world.db)
+    before = wallet.balance(g._mall_owner())
+    cards.close(g, g.state.player.unfold)
+    assert wallet.balance(g._mall_owner()) == before + 100
+    assert cards.give_gift(g) == 0 and wallet.balance(g._mall_owner()) == before + 100  # 一輩子一次
+    assert _card_now(g) is None
+
+
+def test_after_the_first_buy_of_a_kind_a_card_teaches_its_first_use(on):
+    from tianxia.features.mall import actions as mall_actions
+    from tianxia.features.unfold import cards
+    from tianxia.wallet import Wallet
+
+    g = _new(on)
+    g.choose("choice:0")
+    Wallet(g.world.db).post(g._mall_owner(), 1000, "grant", "test:seed", time=g.now)
+    mall_actions.buy(g, "pills_5", "ref-unfold-0001")
+    k = _card_now(g)
+    assert (k["kind"], k["arg"], k["who"]) == ("buy", "pills", "回體丹五顆") and k["go"] == "服一顆"
+    cards.close(g, g.state.player.unfold)
+    mall_actions.buy(g, "pills_5", "ref-unfold-0002")
+    assert _card_now(g) is None  # 同一種只教一次

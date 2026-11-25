@@ -8,13 +8,14 @@ from __future__ import annotations
 from tianxia import fusion
 from tianxia.state import UnfoldBook
 
-ORDER = ("sect", "mail", "jieyi", "title", "codex", "fuse")  # 同時成立時先出哪一張
+ORDER = ("gift", "buy", "sect", "mail", "jieyi", "title", "codex", "fuse")  # 同時成立時先出哪一張
 
 # 待 joy 潤：卡上的字（{x} 是對象的名字）；圖在 web/unfold.js
 WHO = {
-    "sect": "{x}山門口", "mail": "{x}的名帖", "jieyi": "{x}", "title": "一枚剛蓋下的印", "codex": "江湖錄", "fuse": "夜裡",
+    "gift": "萬寶閣掌櫃", "sect": "{x}山門口", "mail": "{x}的名帖", "jieyi": "{x}", "title": "一枚剛蓋下的印", "codex": "江湖錄", "fuse": "夜裡",
 }
 SAY = {
+    "gift": "「聽說你替{x}把事辦成了。這 {n} 元寶是見面禮，進來挑一件吧。」",
     "sect": "掃地的門人抬頭：「進來喝口茶？」",
     "mail": "名帖背面寫著：「有事捎個信來。」",
     "jieyi": "打完那一場，他拍拍你的肩：「下回還一起。」",
@@ -22,8 +23,21 @@ SAY = {
     "codex": "這件事，你記下了。",
     "fuse": "兩股意在身上互相頂著，睡不安穩。",
 }
-GO = {"sect": "進去看看", "mail": "寫一封", "jieyi": "邀他結義", "title": "戴上", "codex": "翻開", "fuse": "去煉製"}
+GO = {"gift": "收下，進去看看", "sect": "進去看看", "mail": "寫一封", "jieyi": "邀他結義", "title": "戴上", "codex": "翻開", "fuse": "去煉製"}
 LATER = "改天"
+
+# 買了之後教一次怎麼用（Joy 2026-11-25「很多商城裡面的東西也要教學」）：照商品的效果分種類，每一種第一次買到才出。待 joy 潤
+BUY_SAY = {
+    "pills": "回體丹收進行囊了。腿軟的時候服一顆。",
+    "xinshen": "凝神香點上了，心神足了。找個人好好聊一聊。",
+    "inscribe": "題壁墨帶在身上。走完一趟，在那兒留一句話。",
+    "move_basic": "絕招的帖子到手了。替你的武功寫一句樣子。",
+    "legend": "破境丹收好了。卡在關口上的時候服一顆。",
+    "card_days": "月卡掛上了。每天來萬寶閣領一份。",
+    "rename": "易名帖到手了。想好新名號就改。",
+}
+BUY_GO = {"pills": "服一顆", "xinshen": "去找人聊", "inscribe": "出門走走", "move_basic": "去寫一招", "legend": "去衝關",
+          "card_days": "領今天的", "rename": "去改名"}
 
 
 def _sect(ctx) -> tuple[str, str] | None:
@@ -89,7 +103,42 @@ def _fuse(ctx) -> tuple[str, str] | None:
     return (f"{pair[0]}+{pair[1]}", "") if pair else None  # 「|」是卡的分隔，兩個意境用「+」
 
 
-FIND = {"sect": _sect, "mail": _mail, "jieyi": _jieyi, "title": _title, "codex": _codex, "fuse": _fuse}
+def _gift(ctx) -> tuple[str, str] | None:
+    """辦完第一件託付（PlayerState.errands 有一件 done）：掌櫃送見面禮。商城關著、數字是 0 不出。"""
+    s, c = ctx.state, ctx.content
+    if c.config.unfold.gift <= 0 or ctx._wallet() is None:  # noqa: SLF001  核心的錢包（同 looks 包）
+        return None
+    e = next((e for e in s.player.errands if e.status == "done"), None)
+    if e is None:
+        return None
+    return e.figure, c.figures[e.figure].name if e.figure in c.figures else ""
+
+
+def gift_ref(owner: str) -> str:
+    return f"grant:unfold:{owner}"  # 一個錢包一輩子一次（ref UNIQUE）
+
+
+def give_gift(ctx) -> int:
+    """按了見面禮那一張（收下或改天都算收下）：入帳，回入了幾個；入過了、商城關著回 0。"""
+    wallet, amount = ctx._wallet(), ctx.content.config.unfold.gift  # noqa: SLF001
+    if wallet is None or amount <= 0:
+        return 0
+    return amount if wallet.post(ctx._mall_owner(), amount, "grant", gift_ref(ctx._mall_owner()), time=ctx.now) else 0  # noqa: SLF001
+
+
+def _bought(ctx, done: list[str]) -> tuple[str, str] | None:
+    """第一次買到某一種東西（照購買的先後）：(種類, 商品名)。"""
+    for buy in reversed(ctx.wallet.purchases()):
+        item = ctx.content.mall.get(buy.item)
+        if item is None or buy.refunded is not None:
+            continue
+        kind = next((k for k in item.effects if k in BUY_SAY), None)
+        if kind is not None and f"buy:{kind}" not in done:
+            return kind, item.name
+    return None
+
+
+FIND = {"gift": _gift, "sect": _sect, "mail": _mail, "jieyi": _jieyi, "title": _title, "codex": _codex, "fuse": _fuse}
 
 
 def look(ctx, book: UnfoldBook) -> None:
@@ -97,6 +146,13 @@ def look(ctx, book: UnfoldBook) -> None:
     if book.card:
         return
     for kind in ORDER:
+        if kind == "buy":
+            hit = _bought(ctx, book.done)
+            if hit is not None:
+                book.done.append(f"buy:{hit[0]}")
+                book.card = f"buy|{hit[0]}|{hit[1]}"
+                return
+            continue
         if kind in book.done:
             continue
         hit = FIND[kind](ctx)
@@ -106,18 +162,24 @@ def look(ctx, book: UnfoldBook) -> None:
             return
 
 
-def close(book: UnfoldBook | None) -> None:
-    """按了鈕或「改天」：收起這一張。"""
+def close(ctx, book: UnfoldBook | None) -> None:
+    """按了鈕或「改天」：收起這一張；見面禮那一張這一下入帳。"""
     if book is not None:
+        if book.card.startswith("gift|"):
+            give_gift(ctx)
         book.card = ""
 
 
-def view(book: UnfoldBook) -> dict | None:
+def view(book: UnfoldBook, gift: int = 0) -> dict | None:
     """網頁畫卡要的：種類、對象、說話的、那一句、鈕上的字。"""
     if not book.card:
         return None
     kind, arg, name = (book.card.split("|", 2) + ["", ""])[:3]
+    if kind == "buy":
+        if arg not in BUY_SAY:
+            return None
+        return {"kind": kind, "arg": arg, "who": name, "say": BUY_SAY[arg], "go": BUY_GO[arg], "later": LATER}
     if kind not in SAY:
         return None
     x = name or arg
-    return {"kind": kind, "arg": arg, "who": WHO[kind].format(x=x), "say": SAY[kind].format(x=x), "go": GO[kind], "later": LATER}
+    return {"kind": kind, "arg": arg, "who": WHO[kind].format(x=x), "say": SAY[kind].format(x=x, n=gift), "go": GO[kind], "later": LATER}

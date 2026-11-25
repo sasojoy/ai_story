@@ -60,7 +60,7 @@ class UnfoldFeature(Feature):
             return {}
         from . import cards  # noqa: PLC0415
 
-        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh), "card": cards.view(book)}}
+        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh), "card": cards.view(book, ctx.content.config.unfold.gift)}}
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）

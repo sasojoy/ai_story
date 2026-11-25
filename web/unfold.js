@@ -57,7 +57,10 @@
   // 位置：江湖頁的場景卡底下、行動列上面（main.js 的 unfoldNowHtml；Joy 11/14「下一步的鈕要在玩家眼前」）。
   // 待 joy 潤：鈕上的字（提示那一種；自己那六張的字在伺服器 features/unfold/cards.py）
   const UF_IMG = { sect: "events/temple", mail: "gear/treasure-mendi_mingtie", jieyi: "events/tavern", title: "events/office", codex: "events/tale",
-    fuse: "events/altar" };
+    fuse: "events/altar", gift: "events/market" };
+  // 買了之後那一張（main.unfold.card.kind 是 buy，arg 是種類）：圖與鈕帶去哪
+  const UF_BUY = { pills: ["mall/pills_5", "pill"], xinshen: ["events/night", "opt:act:socialize"], inscribe: ["mall/inscribe_ink", "opt:act:explore"],
+    move_basic: ["events/academy", "moves"], legend: ["mall/legend_1", "hero:arts"], card_days: ["mall/card_30", "mall"], rename: ["mall/rename", "mall"] };
   // 提示 id → 圖、鈕（go 的寫法見 unfoldGo）。沒有鈕的那幾條是事情已經擺在眼前（放手一搏的輸入框、路上的選項）或只是一句話
   const UF_HINTS = {
     h_merge: { img: "events/altar", go: "tab:craft", label: "去煉製" },
@@ -115,11 +118,15 @@
   }
   // 這一包自己的那六張
   const UF_GO = { sect: (a) => `opt:zongmen:join:${a}`, mail: (a) => `mail:${a}`, jieyi: (a) => `peer:${a}`, title: (a) => `title:${a}`,
-    codex: (a) => `codex:${a}`, fuse: (a) => `forge:${a}` };
+    codex: (a) => `codex:${a}`, fuse: (a) => `forge:${a}`, gift: () => "mall", buy: (a) => (UF_BUY[a] || [])[1] || "" };
   function ufOwnHtml(k) {
-    const go = UF_GO[k.kind] ? UF_GO[k.kind](k.arg) : "";
+    let go = UF_GO[k.kind] ? UF_GO[k.kind](k.arg) : "";
+    if (k.kind === "buy" && go.startsWith("opt:")) { const o = ufOpt(S.main, go.slice(4)); go = o ? `opt:${o.id}` : ""; } // 交友、探索此刻按不按得下去
+    const pills = (S.main && S.main.status && S.main.status.pills) || null;
+    if (go === "pill" && (!pills || pills.full || pills.today === 0)) go = ""; // 體力滿著、今天服滿了：只說一句，不給一顆按了被唸的鈕
     const btn = go ? `<button class="btn primary" data-act="unfold-card-go" data-go="${esc(go)}">${esc(k.go)}</button>` : "";
-    return ufCardHtml(UF_IMG[k.kind], k.who, k.say, btn, "unfold-card-later");
+    const img = k.kind === "buy" ? (UF_BUY[k.arg] || [])[0] : UF_IMG[k.kind];
+    return ufCardHtml(img, k.who, k.say, btn, "unfold-card-later");
   }
   // 江湖頁場景卡底下那一格（main.js）：舊角色（沒有那一本）回 null，照舊畫師父的框
   function unfoldNowHtml(m) {
@@ -140,6 +147,8 @@
     else if (kind === "peer" && typeof openPeer === "function") await openPeer(arg);
     else if (kind === "title" && typeof titlesWear === "function") await titlesWear(arg);
     else if (kind === "codex") { S.heroTab = "codex"; S.cxSeg = "qy"; S.cxOpen = arg; S.cxRead = null; await goTab("practice"); }
+    else if (kind === "pill") await doMain("pill"); // 體力條上那一顆同一條路
+    else if (kind === "moves" && typeof openMallMoves === "function") await openMallMoves("");
     else if (kind === "forge") { S.forgeSel = arg.split("+").map((id) => ({ type: "ins", id })); await goTab("craft"); } // 兩個已經放進爐裡
   }
   async function unfoldCardDone() {
