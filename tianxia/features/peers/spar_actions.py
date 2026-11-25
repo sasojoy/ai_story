@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import battlelog, encounter, gender, prologue as prologue_rules, team
+from tianxia.core import guard_base  # 親衛隊長收尾（Joy 2026-11-25）：對手的親衛在一旁說一句（核心唯讀）
 from tianxia.core import identity_base  # 綁手機才能發起切磋（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import presence
 from tianxia.models import Squad
@@ -138,10 +139,13 @@ def spar_record(ctx, result: encounter.EncounterResult, rival: str, rival_power:
             ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
     record.notes += [n for n in maxed_note if not n.startswith("心得 +")]  # 戰報敘事只留那一句；心得算在得失
     record.notes += ups
+    outcome = "won" if result.tier in team.WIN_TIERS else "even" if result.tier in team.DRAW_TIERS else "lost"
+    guarded = [g] if (g := guard_base.spar_line(rival_game.state, c, outcome)) else []  # 親衛隊長收尾（Joy 2026-11-25）：對手的親衛在一旁說一句
+    record.notes += guarded
     ctx._play_rounds(record, squad, result.tier, None)
     line = ctx._file_battle(record, team_exp=False)
     # 兩邊對稱（FB-244）：各寫各自拿到的經驗與心得（只有本人拿，不寫「（每人）」）、各連自己的戰報
-    msgs = [line] + ([f"經驗 +{cfg.exp}"] if record.exp else []) + [f"心得 +{xinde}"] + maxed_note + ups + ctx._last_wear  # 滿級不寫經驗（FB-451）
+    msgs = [line] + guarded + ([f"經驗 +{cfg.exp}"] if record.exp else []) + [f"心得 +{xinde}"] + maxed_note + ups + ctx._last_wear  # 滿級不寫經驗（FB-451）
     if ctx._draft is None:  # 對方那一邊（或從玩家卡答應、沒有草稿）：替他記一則，連到這一份戰報
         ctx._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record), battle_id=record.id)
     else:  # 答應的那一方（自己按的，這次行動的草稿寫這一則）：結果那一句照樣寫進敘事，跟發邀請的那一方一樣（FB-117）

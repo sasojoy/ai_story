@@ -23,9 +23,16 @@
 - card_line(state, content)：名帖、玩家卡上那一行「親衛隊長小明（將軍）」（peers 包 mingtie.earned 讀）；開關關著、沒投效是空的。
 - raid_lines(state, content, rival_state, outcome)：截殺那一場戰報裡他的那一句（peers 包 raid_actions.raid_record 讀）：
   自己帶在身邊的照心性說一句，對手帶著的也寫一句（兩邊各看到各自的）。outcome 是 won／lost／even。
+
+收尾（Joy 2026-11-25「前三項還沒開工的開工來做」；設計稿第五節「酒肆：聽得到別人親衛的傳聞…只講出路與一件事，不講心性」「切磋、論武：對方的親衛在旁邊說一句」）：
+- rumor_line(other, content)：酒肆打聽交情（tavern 包 rules.ties_player_lines，打聽度 3 以上）多一句他的傳聞：出路與撿到他的那一件事，不講心性。
+- spar_line(rival, content, outcome)：切磋那一場，對手帶著的他在一旁說一句（peers 包 spar_actions.spar_record 讀；outcome 從看的人那一邊算）。
+- discuss_line(rival, content)：論武那一場，對手帶著的他在一旁的那一句（peers 包 discuss_actions.discuss 讀）。
+都看開關、投效了、帶在身邊（along）；自己的那一位不在自己的戰報裡說（截殺那一句已經有了）。
 """
 from __future__ import annotations
 
+from .. import gender
 from ..models import Content
 from ..state import GameState, GuardBook
 
@@ -87,3 +94,65 @@ def raid_lines(state: GameState, content: Content, rival_state: GameState | None
     if theirs is not None:
         out.append(RAID_RIVAL.replace("{rival}", rival_state.player.name).replace("{gname}", card_line(rival_state, content)))
     return out
+
+
+# ── 收尾：酒肆的傳聞、切磋論武時他在一旁（待 joy 潤）──
+
+# 傳聞裡怎麼叫他（只講出路，不講心性）
+PATH_WORD = {"將軍": "會帶兵的", "謀士": "肚裡有計的", "遊俠": "遊俠", "鐵匠": "會打鐵的", "農夫": "種地出身的",
+             "乞丐": "討過飯的", "殺手": "下手極冷的", "弓箭手": "弓手", "醫者": "會看病的", "斥候": "探路的"}
+# 撿到他的那一件事（content 的 openings 的 id；{him}＝主人的他／她）
+OPENING_DEED = {"soldiers": "從亂兵刀下救出來的", "slaves": "從人販子的車上買下來的", "river": "從河裡撈起來的",
+                "spy": "從一群要打死{pron}的村人手裡帶走的", "fever": "發著高燒，從破廟裡背出來的", "thief": "偷了{him}的錢袋，{him}反倒收留下來的"}
+RUMOR = "聽說{owner}身邊那個{word}{gname}，是{him}{deed}。"  # 待 joy 潤
+RUMOR_PLAIN = "聽說{owner}身邊那個{word}{gname}，是{him}當年撿回來的孩子。"  # 待 joy 潤
+
+# 心性粗分三樣：恩深、敬重 warm；淡然 plain；怨懟、恨極 cold
+_MOOD = {"恩深": "warm", "敬重": "warm", "淡然": "plain", "怨懟": "cold", "恨極": "cold"}
+# 切磋那一場（outcome 從看的人那一邊：won 是你贏了他的主人）
+SPAR_RIVAL = {  # 待 joy 潤
+    "won": {"warm": "{owner}的親衛{gname}搶上來扶住{owner}，回頭對你說：「下回換我來領教。」",
+            "plain": "{owner}的親衛{gname}在一旁看完，朝你點了點頭。",
+            "cold": "{owner}的親衛{gname}看著{owner}輸了，竟輕輕笑了一聲。"},
+    "lost": {"warm": "{owner}的親衛{gname}在一旁鬆了口氣，對你抱拳：「承讓了。」",
+             "plain": "{owner}的親衛{gname}在一旁收起兵器，什麼也沒說。",
+             "cold": "{owner}的親衛{gname}瞥了你一眼，又瞥了{owner}一眼，轉身走開。"},
+    "even": {"warm": "{owner}的親衛{gname}在一旁拍手：「好！再打三十招也分不出高下。」",
+             "plain": "{owner}的親衛{gname}在一旁看著，說了一句：「都沒使全力。」",
+             "cold": "{owner}的親衛{gname}靠在樹下打了個呵欠。"},
+}
+DISCUSS_RIVAL = {  # 待 joy 潤
+    "warm": "{owner}的親衛{gname}在一旁替兩人添茶，聽得入了神。",
+    "plain": "{owner}的親衛{gname}守在門口，沒讓閒人進來。",
+    "cold": "{owner}的親衛{gname}在一旁聽得不耐煩，先出去了。",
+}
+
+
+def rumor_line(other: GameState, content: Content) -> str:
+    b = _along(other, content)
+    if b is None or not b.name:
+        return ""
+    him = gender.pronoun(other)
+    deed = OPENING_DEED.get(b.opening, "").replace("{pron}", _pron(b))
+    word = PATH_WORD.get(b.path, b.path)
+    fmt = RUMOR if deed else RUMOR_PLAIN
+    return fmt.format(owner=other.player.name, word=word, gname=b.name, him=him, deed=deed.replace("{him}", him))
+
+
+def _mood(content: Content, b: GuardBook) -> str:
+    return _MOOD.get(band(content, b.qing), "plain")
+
+
+def spar_line(rival: GameState, content: Content, outcome: str) -> str:
+    b = _along(rival, content)
+    if b is None or not b.name:
+        return ""
+    pool = SPAR_RIVAL.get(outcome, SPAR_RIVAL["even"])
+    return pool[_mood(content, b)].format(owner=rival.player.name, gname=b.name)
+
+
+def discuss_line(rival: GameState, content: Content) -> str:
+    b = _along(rival, content)
+    if b is None or not b.name:
+        return ""
+    return DISCUSS_RIVAL[_mood(content, b)].format(owner=rival.player.name, gname=b.name)

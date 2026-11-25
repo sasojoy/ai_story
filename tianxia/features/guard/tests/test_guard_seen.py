@@ -89,3 +89,48 @@ def test_the_player_card_carries_the_line(sworn):
     assert line in mingtie.earned(sworn.state, sworn.content)
     sworn.state.player.guard.stage = "grow"
     assert "guard" not in social.card(sworn, sworn)
+
+
+def test_others_hear_of_him_only_the_path_and_the_deed(sworn):
+    """收尾（Joy 2026-11-25）：酒肆打聽交情聽得到他的傳聞（出路與撿到他的那一件事，不講心性）；留在家、還沒投效、開關關著都聽不到。"""
+    from tianxia.features.tavern import rules as tavern_rules
+
+    s, c, b = sworn.state, sworn.content, sworn.state.player.guard
+    line = guard_base.rumor_line(s, c)
+    assert line.startswith(f"聽說{s.player.name}身邊那個{guard_base.PATH_WORD[b.path]}{b.name}，是")
+    assert all(word not in line for word in ("恩深", "敬重", "淡然", "怨懟", "恨極"))
+    b.opening = "spy"
+    b.sex = "女"
+    assert "要打死她的村人" in guard_base.rumor_line(s, c)
+    b.opening = "nope"
+    assert "撿回來的孩子" in guard_base.rumor_line(s, c)
+    # 接在酒肆打聽交情（打聽度 3 以上）
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(tavern_rules, "person_reach", lambda *a, **k: 3)
+        lines, found = tavern_rules.ties_player_lines(s, c, s, [])
+        assert found and guard_base.rumor_line(s, c) in lines
+        monkey.setattr(tavern_rules, "person_reach", lambda *a, **k: 2)
+        assert guard_base.rumor_line(s, c) not in tavern_rules.ties_player_lines(s, c, s, [])[0]
+    finally:
+        monkey.undo()
+    b.along = False
+    assert guard_base.rumor_line(s, c) == ""
+    b.along, b.stage = True, "grow"
+    assert guard_base.rumor_line(s, c) == ""
+    b.stage = "sworn"
+    c.config.guard.enabled = False
+    assert guard_base.rumor_line(s, c) == ""
+
+
+def test_at_a_spar_or_a_discussion_the_rivals_guard_says_a_line_by_his_band(sworn):
+    s, c, b = sworn.state, sworn.content, sworn.state.player.guard
+    owner = s.player.name
+    for qing, mood in ((15, "warm"), (0, "plain"), (-15, "cold")):
+        b.qing = qing
+        assert guard_base._mood(c, b) == mood
+        for outcome in ("won", "lost", "even"):
+            assert guard_base.spar_line(s, c, outcome) == guard_base.SPAR_RIVAL[outcome][mood].format(owner=owner, gname=b.name)
+        assert guard_base.discuss_line(s, c) == guard_base.DISCUSS_RIVAL[mood].format(owner=owner, gname=b.name)
+    b.along = False
+    assert guard_base.spar_line(s, c, "won") == "" == guard_base.discuss_line(s, c)
