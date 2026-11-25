@@ -5,7 +5,7 @@
 | 時間（台北） | 做什麼 | 指令 |
 |---|---|---|
 | 05:00 | 線上備份主資料庫、所有旁檔、客服截圖夾，另開一份讀一次，記下成敗 | `scripts/backup_db.py --tag daily --prune --drill --status .local/backup_status.json` |
-| 08:00 | 讀資料庫（唯讀）算昨天的玩家數字，存全文，短報貼 Discord | `scripts/daily_report.py` |
+| 08:00 | 讀資料庫（唯讀）算昨天的玩家數字，存全文，短報經主機的 Discord 機器人貼出 | `scripts/daily_report.py` |
 
 兩支都**不停站、不進行動鎖**：備份用 SQLite 的線上備份，數字用唯讀模式開檔。伺服器開著、省電模式睡著都可以跑。
 
@@ -13,7 +13,7 @@
 - 保留：每日備份留最近 14 天每天一份，加最近 8 週每週一份，最多約 22 份；手動備份與部署前的備份永遠不刪。
 - 驗：每一份先驗 integrity_check、結構版本、列數才換上正式檔名；`--drill` 再把它複製到暫存資料夾，用這版程式真的打開、每個角色的存檔讀一次，做完刪掉複本。
 - 短報：只有數字與鈕的名稱，不印名號、帳號、IP；假人只給總數。備份失敗或超過 36 小時沒成功，短報第一行就是「⚠ 備份失敗」。
-- `.local/` 不進版控：`backup_status.json`、`daily_report.json`（webhook）、`daily_report\<日期>.txt` 都在這裡。
+- `.local/` 不進版控：`backup_status.json`、`daily_report.json`（轉送設定）、`daily_report\<日期>.txt` 都在這裡。
 
 ## 安裝（PM 遙控主機做；在跑正式站的那份 clone 裡）
 
@@ -37,11 +37,14 @@
    & $py "$repo\scripts\daily_report.py" --db $db --no-post
    ```
    備份要看到「已備份：…tianxia-daily-…db（結構第 9 版、帳號 N、角色 N…）」、每個旁檔一行「已備份旁檔」、「還原演練：另開一份讀得回來，角色 N 個」。數字那支印出短報，第三或第一行的備份要是「成功」。
-4. **放 Discord 的 webhook**（企劃者給網址；建議貼到管理員頻道）：`.local\daily_report.json` 寫
+4. **接主機現有的 Discord 機器人**（Joy 2026-11-25 選的，不用 webhook）：`.local\daily_report.json` 寫
    ```json
-   {"discord_webhook": "https://discord.com/api/webhooks/..."}
+   {"relay": {"script": "<使用者資料夾>\\.claude\\discord-relay\\relay.py 的完整路徑", "channel": "<頻道的數字代號>"}}
    ```
-   網址不寫進任何文件、不貼進頻道。再跑一次 `daily_report.py`（不加 `--no-post`），要印「已貼到 Discord」、頻道裡看得到。
+   代號用管理員頻道的；路徑和代號只寫在這個檔，不寫進任何文件。python 預設用遊戲的 `.venv`（要換就多寫 `"python": "<路徑>"`）。
+   再跑一次 `daily_report.py`（不加 `--no-post`），結束碼要是 0、頻道裡看得到一則短報。
+   - 短報超過 2,000 字會截短並寫「全文在主機」，所以一定是一則；失敗會再試一次，兩次都失敗結束碼 1，全文照樣存在 `.local\daily_report\`。
+   - 舊的寫法 `{"discord_webhook": "<網址>"}` 還認得；兩個都寫時走 relay。
 5. **排兩個工作**：
    ```powershell
    $bk = "`"$repo\scripts\backup_db.py`" --db `"$db`" --dest `"$dest`" --tag daily --prune --drill --status `"$repo\.local\backup_status.json`""
