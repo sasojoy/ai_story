@@ -127,7 +127,7 @@
   }
 
   // 遊戲分級標識（遊戲軟體分級管理辦法第 11～13 條：起始網頁旁明顯標示分級、不小於 45×45 像素，加上情節與付費、避免沉迷的警語）。
-  // 只畫在登入頁（.gate 有 #gate-form 的那一頁）條款連結的上面；版號那一趟同時帶回來，問不到（關著 404、斷線）就不畫
+  // 只畫在登入頁（.gate 有 #gate-form 的那一頁）登入表單的正下方；版號那一趟同時帶回來，問不到（關著 404、斷線）就不畫
   function termsRatingHtml(m) {
     const lines = [m.age, ...(m.lines || [])].map((x) => `<li>${termsEsc(x)}</li>`).join("");
     return `<div class="terms-rating" role="note" aria-label="遊戲分級"><b>${termsEsc(m.short)}</b><ul>${lines}</ul></div>`;
@@ -136,9 +136,9 @@
     const gate = document.querySelector("#gate-form") && document.querySelector(".gate");
     if (!gate || gate.querySelector(".terms-rating")) return;
     await termsVersion();
-    const links = gate.querySelector(".terms-links");
-    if (!termsRatingMark || !links || gate.querySelector(".terms-rating")) return;
-    links.insertAdjacentHTML("beforebegin", termsRatingHtml(termsRatingMark));
+    const form = gate.querySelector("#gate-form");
+    if (!termsRatingMark || !form || gate.querySelector(".terms-rating")) return;
+    form.insertAdjacentHTML("afterend", termsRatingHtml(termsRatingMark)); // 緊接在登入表單底下：一進來就看得到
   }
 
   function termsLayerHtml(t) {

@@ -14,7 +14,7 @@
 .terms-check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
 .terms-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
 .terms-check a { color: inherit; }
-/* 遊戲分級標識（登入頁條款連結上面）：標識 52px 見方（法定不小於 45×45 像素），右邊級別與警語 */
-.terms-rating { display: flex; gap: 12px; align-items: center; margin: 16px 0 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+/* 遊戲分級標識（登入頁表單正下方）：標識 52px 見方（法定不小於 45×45 像素），右邊級別與警語 */
+.terms-rating { display: flex; gap: 12px; align-items: center; margin: 12px 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
 .terms-rating b { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 10px; background: #e0a526; color: #2a241d; font-size: 17px; letter-spacing: .02em; }
 .terms-rating ul { margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.6; color: var(--ink-2); }
