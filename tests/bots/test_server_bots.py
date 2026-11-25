@@ -195,3 +195,11 @@ def test_no_web_file_names_the_dummy_players():
         for number, snippet in leaks(text):
             problems.append(f"{path.relative_to(WEB.parent).as_posix()}:{number}: …{snippet}…")
     assert not problems, "web/ 的檔隨檔送到每個玩家的瀏覽器，不能出現假人、機器人、bot：\n" + "\n".join(problems)
+
+
+def test_bot_name_pool_cannot_spell_staff_words():
+    """第 240 批：假人取名不經 blocked_name，所以字表組不出任何一個冒充官方的字（字表加字這條會紅）。"""
+    from tianxia.core.name_base import STAFF_WORDS
+    pool = set(SURNAMES) | set(GIVEN)
+    assert [w for w in STAFF_WORDS if set(w) <= pool] == []
+    assert not any(ch.isascii() and ch.isalpha() for ch in pool)

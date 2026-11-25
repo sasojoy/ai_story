@@ -21,7 +21,8 @@ export const flows = [
       await c.shoot(`z_ad_${t}`, { who: "admin" });
       ops[t] = await c.ev(`[...document.querySelectorAll('[data-act="admin"]:not([disabled])')].filter((b) => b.getBoundingClientRect().width).map((b) => b.dataset.op)`);
       if (await c.ev(`!!document.querySelector('[data-act="ad-find"]')`)) {
-        await c.ev(`(() => { for (const i of document.querySelectorAll("input.input")) { if (i.getBoundingClientRect().width) { i.value = "沈浪"; i.dispatchEvent(new Event("input", { bubbles: true })); } } return 1; })()`);
+        // batch 233: only the text boxes; the admin page has datetime-local boxes now, and a name typed there is a console warning
+        await c.ev(`(() => { for (const i of document.querySelectorAll('input.input:not([type]), input.input[type="text"], input.input[type="search"]')) { if (i.getBoundingClientRect().width) { i.value = "沈浪"; i.dispatchEvent(new Event("input", { bubbles: true })); } } return 1; })()`);
         await c.step(ACT("ad-find"), `z_ad_${t}_find`, { who: "admin", wait: 700 });
         await c.step(ACT("ad-pick"), `z_ad_${t}_pick`, { who: "admin", wait: 700 });
         await c.step(ACT("ad-result-close"), `z_ad_${t}_close`, { light: true });

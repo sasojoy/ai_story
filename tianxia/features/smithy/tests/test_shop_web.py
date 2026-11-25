@@ -385,7 +385,6 @@ def test_tier_one_in_the_bag_makes_tier_two_brewable(content, world):
     assert "手上 0／10" in _cell_of(html, "剛", 3)
 
 
-@pytest.mark.slow  # 提示泡泡的 3.2 秒計時器把 node 留到時間到（同 test_a_blocked_cell_only_says_why）
 def test_a_brew_cell_that_cannot_brew_only_says_why(content, world):
     game = _brewing(content, world, {"gang_2": 1})
     m = server.main_view(game)
@@ -568,7 +567,6 @@ def test_a_furnace_used_today_is_grey_until_tomorrow():
     assert 'aria-label="今天看過了，明日再來。" aria-disabled="true"' in _fire(html)
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_a_furnace_you_cannot_afford_is_grey_and_says_why_when_tapped():
     """錢不夠（序章也是）：小籤照舊寫價錢、灰掉；點那一團火只說整句原因（小籤放不下長原因，同打造頁的灰格），什麼都不送。"""
     _game, m = _fired(silver=10)

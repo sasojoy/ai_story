@@ -28,8 +28,6 @@
 .outing-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; font-family: var(--serif); }
 .outing-head b { color: var(--gold); font-size: 18px; }
 .outing-step { font: 500 12px var(--sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.outing-step .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--gold); margin-left: 3px; vertical-align: 1px; }
-.outing-step .d.on { background: var(--gold); }
 .outing-scene { flex: none; position: relative; border-radius: 12px; overflow: hidden; background: #efe6d2; cursor: pointer; } /* 點一下就接著走（outingHurry） */
 .outing-cv { display: block; width: 100%; aspect-ratio: 2 / 1; max-width: 100%; }
 .outing-stele { position: absolute; top: 6px; right: 6px; max-width: 42%; display: grid; gap: 0; text-align: left; cursor: pointer;

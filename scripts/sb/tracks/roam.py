@@ -208,7 +208,7 @@ class RoamScenario(StripScenario):
 
 
 register_track("roam", RoamScenario, (("tianxia/features/explore/explore_base.py", "tianxia/engine.py"), ('一枚——{cfg.legend_item_note}', '一枚——{cfg.legend_item_note}！')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "map", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

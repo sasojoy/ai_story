@@ -299,6 +299,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("features/tavern/actions.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（tavern_hit_fight）
         # territory_acts：領地爭奪的分紅與守城功搬進地盤包（全部拆包第 46 批；這一行原本在 engine.py 的 Game._deliver_conquest，字一個沒變，路徑換成地盤包、照路徑排在酒肆後面；FB-9431）
         ("features/territory_acts/day_actions.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，day_actions.deliver_conquest）
+        # yiwen：異聞發掘者走完三步（第 247 批，設計 6.1 discover_fame；開關預設關；照路徑排在地盤包後面）
+        ("features/yiwen/actions.py", 'gains += renown.gain(s, ctx.content, "fame", t.discover_fame)'),  # 異聞：首見（actions._finish）
     ]
     givers = []
 

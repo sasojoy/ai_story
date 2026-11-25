@@ -12,7 +12,7 @@ from sb.tracks.peers import PeersScenario
 
 class OathScenario(PeersScenario):
     """結義的一軌（測試流程優化第 113 批；--track oath，自己一個資料庫）。借 peers 一軌的小工具（act、reply、card_of、edit_state、begin 清榜單快取）。班底的名字都是原創（PM 11/04）。
-    關著段（三種設定的 Config.jieyi.enabled 都關著）：柳拂衣看杜衡舟的玩家卡（沒有結義那一顆）、照樣送 /api/peer/act jieyi ask、打 /api/do/jieyi_leave，讀 /api/main 的 jieyi 鍵。
+    關著段（test 設定本來就關著；week7、season21 #243 起開著，setup 先在記憶體裡把 Config.jieyi.enabled 關掉，第 232 批）：柳拂衣看杜衡舟的玩家卡（沒有結義那一顆）、照樣送 /api/peer/act jieyi ask、打 /api/do/jieyi_leave，讀 /api/main 的 jieyi 鍵。
     換帖段（還關著）：六個人定稿名帖，柳拂衣跟其餘五位互換（遞帖、卡上回帖）；石不語不換。
     開著段（記憶體裡打開開關，兩個行程都開）：沒換帖的被拒、提起、再提（等他回話）、對方卡上的「他邀你結義」、選單上答應（開義）、婉拒、第三、第四人入義；
     前半停在柳拂衣向晏歸舟提起、還沒回的那一刻。後半第一件事無條件重新登入：晏歸舟答應（滿 5 人）、第 6 人（簡素心）卡上灰掉、硬按被拒、舊的邀請答不了；
@@ -28,6 +28,11 @@ class OathScenario(PeersScenario):
 
     def switch_on(self) -> None:
         self.c.config.jieyi.enabled = True
+
+    def setup(self) -> None:
+        """關著段從這裡起：#243 之後 week7、season21 的結義開著，這一軌要比關著，先在記憶體裡關掉（第 232 批；open 那一段照舊 switch_on）。"""
+        self.c.config.jieyi.enabled = False
+        super().setup()
 
     def book(self, tag: str) -> None:
         bk = self.world.read().jieyi
@@ -207,6 +212,7 @@ class OathScenario(PeersScenario):
 
 # 改一個字（selftest）：一組的人數上限那一句反過來（>= 改 >），第 6 人照樣邀得到，season21 fill 那一段抓到
 register_track("oath", OathScenario, (("tianxia/features/jieyi/rules.py",), ("if mine is not None and len(mine.members) >= cfg.max_members:", "if mine is not None and len(mine.members) > cfg.max_members:")), "season21",
-               covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
-                       "gear", "guide", "jieyi", "looks", "military", "outlets", "peers", "seal", "sense", "smithy",
-                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))
+               covers=("battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guard", "guide", "horses", "jieyi", "looks", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
+                       "zongmen"))

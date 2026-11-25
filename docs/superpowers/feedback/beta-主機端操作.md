@@ -146,6 +146,37 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 
 每一則印原文、改寫、幾秒；寫壞照原文的印原因（太長太短、冒出原文沒有的名字……）。最後一行是總計：寫成幾則、照原文幾則、平均幾秒。照原文的超過三成、或讀起來走味，把 `narration_week.txt` 傳回來。
 
+## 異聞說書人實測（AI 波第 252 批，2026-11-23；第 265 批起照伺服器的時間限制量）
+
+異聞（`yiwen` 包，兩種季都還沒開）的每一幕由本機模型寫，寫壞了重問一次、再壞存引擎的替身句。**異聞二做完、異聞三開工之前跑一次**。這台也是企劃者的遊戲電腦，跑之前先跟他約時間。
+
+- 先開 Ollama（照設定的 `ollama_url`、`ollama_model`）。在主要那份 clone（`C:\Ray\專案\天下大勢`）用 venv 跑；伺服器不必開。
+- 世界開在暫存資料庫（每一趟一份，`TIANXIA_DB` 腳本自己指到暫存資料夾），跑完整個資料夾刪掉；不碰 `saves/` 與線上資料庫。模型的呼叫跟伺服器同一份提示、同一套檢查與重問，只是不經佇列與行動鎖。
+
+```
+.venv/Scripts/python.exe scripts/try_yiwen.py                                   # 預設：season21、七種走法各三趟（共 21 趟，每趟三幕）
+.venv/Scripts/python.exe scripts/try_yiwen.py --runs 1 --ways 胡鬧,認親           # 只跑幾種、每種一趟
+.venv/Scripts/python.exe scripts/try_yiwen.py --model gemma4:26b                # 換一個模型試（預設用設定的 ollama_model）
+.venv/Scripts/python.exe scripts/try_yiwen.py --uncapped                        # 不套時間限制（舊量法）
+.venv/Scripts/python.exe scripts/try_yiwen.py --budget 90                       # 這一趟把一步的預算換成 90 秒，比較用
+.venv/Scripts/python.exe scripts/try_yiwen.py --drafts                          # 沒過檢查的草稿整段印出來
+```
+
+- 七種走法：正經、胡鬧、要獎勵、真實人物、平鋪直敘、轉身就走、認親；`--profile` 換設定覆寫檔（預設 season21）。`--fake` 是假的模型（不連模型），只驗腳本本身，開發用。
+- **要在跑伺服器的那一台量才算數**：秒數跟顯卡走，別台量出來的替身率不能拿來定數字。11/23 在企劃者的遊戲電腦量過一次，26b 載不起來、還把 Ollama 弄到要重開機——17 GB 的模型不要在 8 GB 的顯卡上試。
+- **兩種量法**（第 265 批起；開頭那一行與最後一行都寫這一趟是哪一種）：
+  - **預設＝照伺服器的時間限制**：跟伺服器寫一幕同一套切法。一步從開單起算 `yiwen.step_budget_seconds`（現在 60 秒）；自己說的先審字（另一份 12 秒），審完剩不到 `step_min_write_seconds`（15 秒）就是「正忙」（伺服器什麼都不存，腳本另數一類、那一趟停）；寫幕每一趟的逾時是 min(模型逾時, 剩下的秒數 ÷ 2)，所以第一次大約只能等 30 秒，超過就是替身；分不到 1 秒就不叫。不經模型佇列與行動鎖，正式伺服器上排隊的秒數也吃預算，伺服器只會比這裡差。
+  - **`--uncapped`＝沒套時間限制**：第 252 批的舊量法，模型慢慢寫完也算寫成，只看模型本身寫不寫得出來；替身率比伺服器樂觀（企劃者的遊戲電腦上那一次，照伺服器切是 71%，舊量法報 29%；見 `2026-11-24-異聞說書人實測.md`），不能拿來判斷要不要停。
+  - `--budget <秒>` 只改這一趟在記憶體裡的設定，不寫任何設定檔；給企劃者比較「預算放寬到幾秒才夠」用。
+- 每一步印第幾步、玩家說的、順逆、幾秒、寫成／替身／正忙，底下一次呼叫一行：`〔審字〕`、`〔第一次〕`、`〔重問〕`，寫花幾秒（上限幾秒）、結果（過、程式檢查的代碼、逾時、連不上、回不成 JSON，或「沒叫（剩 n 秒）」）、段長（每一段幾字）與做法（每一個幾字）。`--drafts` 再把沒過的草稿整段印出來（`✗ ` 開頭），看檢查擋得對不對。
+- 最後「總計」怎麼讀：
+  - `寫成 a　替身 b　正忙 c（共 n 幕；替身 幾成）`：替身率的分母是寫成＋替身（正忙沒寫、不算幕）；底下各步、各走法各一行同樣格式。
+  - `第一次就過`：第一次呼叫就過檢查的幕數；`重問 r 次、救回 s 次`：重問之後寫成的幕數。
+  - `每一次呼叫秒數（寫幕）／（審字）`：中位／九成／最久（只算真的叫了的）；`沒叫（預算不夠）`：剩下的秒數分不到一趟、沒叫的次數。
+  - `第一次擋了什麼`、`重問擋了什麼`：代碼×次（含逾時、連不上、回不成 JSON）。
+  - `自己說被擋：A 段 i、審字 j、improper k`，後面列被擋的那幾句。
+- **替身超過三成就停**（照伺服器量的那一種才算；腳本會多印一行「替身超過三成……」）：異聞三不開工，把整段輸出傳回來，回頭談換模型或改呈現。`--uncapped` 超過三成印的是「這是沒套時間限制的數，照伺服器量再看」。
+
 ## 網址在哪、怎麼給 joy
 
 - 伺服器視窗會先印「天下大勢：http://127.0.0.1:7861」和「資料庫：…」，**大約 7 秒後**再印：
@@ -438,7 +469,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
 - 每日備份只留最近 14 天每天一份，加最近 8 週每週一份，其餘自動刪掉；最新的一份不管多舊都會留著。手動備份和資料夾裡別的檔都不會被刪。
 - 某一份舊備份刪不掉（被別的程式開著）時，其他能刪的照刪，腳本最後把刪不掉的檔一份一份列出來、印「刪舊備份失敗」，「上次執行結果」會是 `0x1`；今天的備份已經做好，隔天會再試。
 - 資料夾裡有 `.bad` 結尾的檔，是驗證沒通過的備份，留著給人查原因（把檔案和那次印出的訊息給開發的人），不會被自動刪。資料庫自己壞掉時（腳本印「資料庫本身壞了」），複製到一半的檔也會留成 `.bad`，每天跑一次就多一份，壞掉修好之後記得自己清掉。
-- **旁檔**（J 波，2026-11-08）：資料庫旁邊有 `<db>-identity.sqlite`（帳號綁定）、`<db>-support.sqlite`（客服單）時，`backup_db.py` 驗過主檔之後把它們一起備份成 `<備份檔名>-identity.sqlite`、`-support.sqlite`（同一個時間戳，例 `tianxia-daily-20261108-050000-identity.sqlite`；每做成一份多印一行「已備份旁檔：…」）。旁檔壞了留成 `.bad`、印警告，主檔照留、結果照樣成功。刪舊備份時一起刪同名的旁檔。兩個開關都關著時這兩個檔不會出現，什麼都不多印。`<db>-terms.sqlite`（條款同意紀錄，Joy 的條款包；第 206 批起註冊也寫它）也一起備份與還原（第 206 批合併時補進 `backup_db.py` 的名單 `SIDE_FILES`，`restore_db.py` 用同一個名單），備份檔名 `-terms.sqlite`；條款開關關著時不會出現。客服單的截圖（客服自動受理第 215 批）放在資料庫旁邊的資料夾 `<db>-support-files/`（`<單號>/<序號>.png` 這種），`backup_db.py` 有就整夾複製成 `<備份檔名>-support-files/`（多印一行「已備份資料夾：…」）、刪舊備份時連資料夾一起刪；`restore_db.py` 一起還原，現有的改名成 `.pre-restore-<時間>` 留著。客服關著、沒人傳過圖時這個資料夾不會出現。
+- **旁檔**（J 波，2026-11-08）：資料庫旁邊有 `<db>-identity.sqlite`（帳號綁定）、`<db>-support.sqlite`（客服單）時，`backup_db.py` 驗過主檔之後把它們一起備份成 `<備份檔名>-identity.sqlite`、`-support.sqlite`（同一個時間戳，例 `tianxia-daily-20261108-050000-identity.sqlite`；每做成一份多印一行「已備份旁檔：…」）。旁檔壞了留成 `.bad`、印警告，主檔照留、結果照樣成功。刪舊備份時一起刪同名的旁檔。兩個開關都關著時這兩個檔不會出現，什麼都不多印。`<db>-terms.sqlite`（條款同意紀錄，Joy 的條款包；第 206 批起註冊也寫它）也一起備份與還原（第 206 批合併時補進 `backup_db.py` 的名單 `SIDE_FILES`，`restore_db.py` 用同一個名單），備份檔名 `-terms.sqlite`；條款開關關著時不會出現。**`<db>-terms.sqlite` 一定要跟主資料庫一起帶**（備份、還原、搬機、換資料夾都一樣）：第 249 批起伺服器照它擋，旁檔一丟，所有帳號都查不到同意紀錄、全體變成要重新同意，會改東西的動作全部被擋（管理者除外）；伺服器啟動時會在 log 印一行 `!!! terms: ... side file lost or not copied? ...`，這時先停兩個程式、把旁檔放回主資料庫旁邊再開（看誰會被擋用 `scripts\list_terms_must.py`，見「開真人客服之前」第 2之3 步）。`<db>-yiwen.sqlite`（異聞）從第 247 批起也在 `SIDE_FILES` 裡：`backup_db.py` 一起備份成 `-yiwen.sqlite`、`restore_db.py` 一起還原；資料庫旁邊沒有這個檔時備份就跳過（還原時備份旁邊沒有、現在卻有的，照「怎麼還原」那一句改名留著、印警告）；異聞開關關著、或還沒有發掘者走過第一步時不會出現（第 251 批起第一次真的要寫才建：撞見了還沒走第一步也沒有這個檔）。客服單的截圖（客服自動受理第 215 批）放在資料庫旁邊的資料夾 `<db>-support-files/`（`<單號>/<序號>.png` 這種），`backup_db.py` 有就整夾複製成 `<備份檔名>-support-files/`（多印一行「已備份資料夾：…」）、刪舊備份時連資料夾一起刪；`restore_db.py` 一起還原，現有的改名成 `.pre-restore-<時間>` 留著。客服關著、沒人傳過圖時這個資料夾不會出現。
 - 遊戲的資料庫換了位置（例如換到線上版資料夾），第 1 步要重貼一次，`/F` 會蓋掉舊的。
 - 備份和遊戲資料在同一顆硬碟：硬碟壞掉時兩份一起沒。在還沒上雲之前，偶爾把 `C:\Ray\tianxia-play\backup` 整個資料夾複製到隨身碟或別台電腦。
 
@@ -474,7 +505,7 @@ $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
    cd C:\Ray\專案\天下大勢
    .venv\Scripts\python.exe scripts\restore_db.py <備份檔> --db C:\Ray\tianxia-play\tianxia.db
    ```
-3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著。如果舊的資料庫旁邊還有 `-wal`、`-shm`、`-journal`（伺服器當機留下的），它們也一起改了名，腳本會把這些檔的路徑一個一個印出來。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。主檔還原好之後，腳本會找備份旁邊同一個時間戳的旁檔（`-identity.sqlite`、`-support.sqlite`）一起還原，現有的改名成 `.pre-restore-<時間>` 留著；備份沒有旁檔、現在卻有的，現有的會改名留著並印「警告：備份旁邊沒有同一個時間的旁檔…」；旁檔還原失敗只印警告，主檔已經還原好。
+3. 成功會印「已還原：…」，以及「還原前的資料庫留在：…pre-restore-…」。原本的檔改了名留著。如果舊的資料庫旁邊還有 `-wal`、`-shm`、`-journal`（伺服器當機留下的），它們也一起改了名，腳本會把這些檔的路徑一個一個印出來。複製不過去（例如磁碟滿了）會印「還原失敗」，現在的資料庫一點都沒動。主檔還原好之後，腳本會找備份旁邊同一個時間戳的旁檔（`-identity.sqlite`、`-support.sqlite`、`-terms.sqlite`、`-yiwen.sqlite`，名單是 `backup_db.py` 的 `SIDE_FILES`）一起還原，現有的改名成 `.pre-restore-<時間>` 留著；備份沒有旁檔、現在卻有的，現有的會改名留著並印「警告：備份旁邊沒有同一個時間的旁檔…」；旁檔還原失敗只印警告，主檔已經還原好。
 4. 照平常的方式開伺服器和假人。所有人都要重新登入一次。
 
 **還原錯了、要退回去**：先停掉伺服器和假人，再把還原出來的檔移開，把舊的改名回去，**舊的 `-wal`、`-shm`、`-journal` 有印出來的也要一起改回去**（不然舊的資料庫會少掉還沒寫進主檔的最後一段）。以腳本印出的檔名為準，下面是例子：
@@ -542,7 +573,7 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **挑戰大勢人物每季都有上線之後要退回舊程式**：先試緊急開關——`content/config.json` 加一行 `"figure_challenge_every_season": false`，兩個程式重開：第一季以外的季沒有挑戰鈕、不閉門、求見照 `talk_at`、聲威不回、虛擬玩家照常出手、輿圖跟以前一樣（已經記下的 `bocai_defeated` 留著）。真的要退版：資料庫結構沒變（第 5 版），舊程式打得開檔；`PlayerState.figure_rare_drops`、`trend_accum` 的 `regen:`、`lost:` 鍵、14 天的季寫進去的 `WorldState.figures` 舊程式都不讀或略過；退版前先把 `content/config.json` 裡這一批新的設定（`figure_challenge_every_season`、`figure_prestige_regen`、`figure_daily_loss_cap`、`figure_rare_cap`、`figure_treasure_cap`）拿掉，`content/figures.json` 的 `out_flag` 跟著程式一起退——舊程式的 `Config`、`FigureDef` 不認得這些欄位，讀設定就會報錯。`tier3_per_figure` 退回 2 照舊程式的值。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨。
 
-## 帳號綁定與客服（J 波，2026-11-08；兩個開關都預設關）
+## 帳號綁定與客服（J 波，2026-11-08；兩個開關都預設關，AA 波 2026-11-20 起 week7、season21 開著客服的真人那一半）
 
 **帳號綁定（identity）的金鑰**：開關 `identity.enabled` 要打開，主機還要放 `.local/identity.json`，內容一行 `{"key": "<至少 16 字的亂數>"}`。可以這樣生：
 
@@ -582,21 +613,24 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **CSP 標頭（L 波第 213 批，整站、不是開關）**：伺服器每個回應都帶 `Content-Security-Policy`（只准載自己網域與 Cloudflare Turnstile 的 script、不准 inline 的程式）。線上要是哪一頁被擋（主控台有 `Refused to …`、按鈕沒反應），緊急做法是 **revert 那一筆**（`efe6ac12b`，`server.py` 的 `CSP` 常數與那一個 middleware）再重開兩個程式；`web/battle.js` 與兩支公開頁 script（`web/zhuan_page.js`、`web/tale_page.js`）的搬家留著也沒事。資料庫、存檔、旁檔都不動，季中能換。維修頁（`scripts/maintenance.py`）是另一支行程，不帶這個標頭。第 209 批起同一個 middleware 多送 HSTS（`max-age=31536000; includeSubDomains`，不加 preload）、`Referrer-Policy`、`nosniff`，CSP 多 `frame-ancestors 'self'`（只准同源：遊戲裡「戰記 ›」用 iframe 嵌自家 `/zhanji`，`'none'` 連它也擋，第 P 波修）；要退就 revert `4cac6269c` 那一筆裡 `server.py` 的 CSP 段（維修頁的探測檔是同一筆的 `scripts/maintenance.py`），HSTS 瀏覽器已經記住的一年內照樣只走 https。
 
-**客服人員名單怎麼設**：客服認帳號（登入名或 `accounts.id`），不認名號。三個來源合起來：
-- `.local/support.txt`：一行一個帳號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
-- `TIANXIA_SUPPORT=甲,乙`（逗號分隔，臨時用）。
-- `content/config.json` 的 `support.staff`。
+**客服人員名單怎麼設**：客服認帳號，不認名號。**一律寫帳號的數字編號（`accounts.id`），而且只寫已經存在的帳號**（寫法、放哪、怎麼查編號看下面「開真人客服之前」第 1 步）。三個來源合起來：
+- `.local/support.txt`（跑線上伺服器的那份程式旁邊的 `.local/`）：一行一個編號，`#` 開頭是註解；改了不用重開（照修改時間重讀）。
+- `TIANXIA_SUPPORT=7,12`（逗號分隔，臨時用；要重開）。
+- 設定檔的 `support.staff`（要重開）。
 
-客服登入之後進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過；管理者本人不自動算客服，要列在名單上才是。L 波第 204 批起客服要**用帳號密碼登入、登入 6 小時內**（`identity.staff_hours`）才有客服權限：用驗證碼或 LINE、Google 進來的不算，超過 6 小時重新登入一次就好。客服單存在 `<db>-support.sqlite`（有人送單才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
+名單上的人（不是管理者）登入之後，設定抽屜頂上有「客服單 ›」，進 `/admin` 看到的是客服頁，管理者工具與 `/api/admin*` 一條都打不過。**管理者本人不自動算客服**：沒列進名單的管理者沒有客服頁；列進名單的管理者從設定抽屜「管理者工具 ›」進管理頁，頂上那一列多一顆「客服單 ›」，點了進客服頁（網址換成 `/admin#support`，重新整理也留在客服頁；直接開這個網址也一樣），客服頁頂上有「‹ 管理者工具」回去（第 228 批；以前管理者列進名單畫面上也沒有入口）。客服要**用帳號密碼登入、登入 6 小時內**（`identity.staff_hours`）才有客服權限，細節看「開真人客服之前」。客服單存在 `<db>-support.sqlite`（有人送單才建），截圖在 `<db stem>-support-files\`（有人附圖才建），備份還原見上面「怎麼備份資料庫」「怎麼還原」的旁檔那一句。
 
-**緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到現在的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。
+**緊急開關**：`identity.enabled`、`support.enabled` 設 `false`、兩個程式重開，就回到原本的行為；兩邊都沒有存檔欄位、資料庫第 9 版不動，季中能換，旁檔留著不讀。**只關客服**：設定覆寫檔（`content/profiles/season21.json` 或 `week7.json`，線上用哪一份改哪一份）的 `support.enabled` 設 `false`、兩個程式重開；客服旁檔與截圖夾留著不讀，再打開時單與截圖都還在。
 
 ### 客服的橋（第 217 批）
 
 橋把新單、玩家再回、找真人、補的截圖貼到 Discord 的 #客服（只讀客服旁檔、不寫；規則見 `tianxia/features/support/README.md`「主機端」）。要先在 `.local/support.json` 寫好 `discord_webhook`（與找真人要點的 `mention`）；沒寫就只記 log、不貼。跟 `server.py` 用同一個 `TIANXIA_DB`。
 
+**開橋之前**：橋貼到 Discord 的東西第 250 批已經寫進隱私權條款第三條（`2026-11-v2`）；**條款 `2026-11-v2` 上線之後才開橋**（上線那天的順序在「開真人客服之前」第 3 步）。橋不記 Discord 的訊息 id，貼出去的訊息程式刪不了（客服單到期刪除那一批要人工清頻道，或先改橋）。
+
 1. **第一次開之前先試一輪、把舊單記成貼過**（進度檔不在時會把現有的單全部當新單貼一次）：
-   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --log C:\Ray\tianxia-support\bridge.log`
+   `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -u "C:\Ray\專案\天下大勢\scripts\support_bridge.py" --once --dry-run --db <線上資料庫檔> --log C:\Ray\tianxia-support\bridge.log`
+   `--db` 是跟 `server.py` 同一個主資料庫檔（橋自己找旁邊的 `<db>-support.sqlite`）；沒帶 `--db` 照這個終端機的 `TIANXIA_DB`，也沒設就讀預設的 `<repo>\saves\tianxia.db`（`support_bridge.py` 的參數預設值）。線上的庫不在預設位置，所以一定帶 `--db`（或先在同一個終端機設好 `TIANXIA_DB`）；下面第 2 步的 `Start-Process` 也一樣，沒帶 `--db` 就吃這個終端機的 `TIANXIA_DB`。
    印出的 `NEW 12（只記不貼）` 那幾行就是記成貼過的；進度在 `.local/support_bridge.json`。
 2. **分離開**（跟伺服器一樣用 `Start-Process`、一定加 `-u`、記下 PID）：
    `$p = Start-Process -PassThru -WindowStyle Hidden -FilePath "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" -ArgumentList "-u","C:\Ray\專案\天下大勢\scripts\support_bridge.py","--log","C:\Ray\tianxia-support\bridge.log" -WorkingDirectory C:\Ray\tianxia-support -RedirectStandardOutput C:\Ray\tianxia-support\bridge-out.log -RedirectStandardError C:\Ray\tianxia-support\bridge-err.log; $p.Id`
@@ -608,7 +642,9 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 客服官是一個 Claude Code session，替客服先回單（自動回覆）、要真人的轉到 `#客服`；它的手只有 `scripts/support_cli.py`（打 Bearer）。規則見 `tianxia/features/support/README.md`「客服官、找真人、自動結單」與「主機端」。
 
-1. **開 token**：`.local/support.json` 寫 `{"bot_token": "<至少 32 字>"}`（跟 `discord_webhook`、`server_url`、`mention` 同一個檔；值不寫進任何文件、不貼進任何頻道），設定檔寫 `support.bot_account`（`accounts.id` 或登入名，名號不認）。`bot_token` 伺服器照檔的修改時間重讀；設定檔照舊要重開伺服器才讀得到。
+**開客服官之前**：隱私權條款第三條的 AI 那一句（「給誰」，現在寫了「不送到外部 AI 服務」）要先改、而且要換條款版號（見「開真人客服之前」第 2之2 步）。
+
+1. **開 token**：`.local/support.json` 寫 `{"bot_token": "<至少 32 字>"}`（跟 `discord_webhook`、`server_url`、`mention` 同一個檔；值不寫進任何文件、不貼進任何頻道），設定檔寫 `support.bot_account`（寫帳號的數字編號 `accounts.id`，理由同客服名單；登入名也認、名號不認）。`bot_token` 伺服器照檔的修改時間重讀；設定檔照舊要重開伺服器才讀得到。
 2. **建工作夾**：先建 `C:\Ray\tianxia-support`，再
    `& "C:\Ray\專案\天下大勢\.venv\Scripts\python.exe" "C:\Ray\專案\天下大勢\scripts\support_session_init.py" C:\Ray\tianxia-support`
    （範本在 `docs/support/session/`；已經在的檔不蓋，重跑安全）。
@@ -618,6 +654,98 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 5. **開、停**：雙擊 `start.cmd` 開（橋在背景、PID 在 `bridge.pid`）；`stop.cmd` 停。企劃者要先做的五樣看 `docs/superpowers/discord/客服官-設定.md`。
 - **金鑰檔不能放進工作夾**：客服官讀得到工作夾裡每一個檔（Claude Code 本來就放行工作夾裡的唯讀指令）；`support_session_init.py` 遇到 `--config` 指進工作夾會拒絕。
 - 緊急停用：拿掉 `bot_token`，或清掉 `support.bot_account`（token 路一律 404，玩家照常送單、真人客服照常回）。資料庫、存檔都不動，季中能換。
+
+### 開真人客服之前（企劃者 2026-11-19「這一波落地後先開真人客服」）
+
+AA 波（2026-11-20）起 week7、season21 兩份設定覆寫檔開著 `support.enabled`，只開真人那一半：`support.bot_account` 空著（沒有客服官、沒有自動回覆、沒有「找真人」鈕）、identity 關著、Discord 的橋不開。自動受理那一半（客服官、橋）還沒開，開法在上面兩小節；橋第 250 批起照下面第 2之4 步在條款 `2026-11-v2` 上線之後開（企劃者 2026-11-22「要，上線時一起開橋」）。
+
+**1. 名單檔先放好**
+- **檔放哪**：跑線上伺服器的那份程式旁邊的 `.local\support.txt`（伺服器在 `C:\Ray\專案\天下大勢` 跑，就是 `C:\Ray\專案\天下大勢\.local\support.txt`；程式照 `tianxia/content.py` 的 `LOCAL_DIR`，就是程式所在那份 checkout 的 `.local`）。資料庫所在的資料夾（`TIANXIA_DB` 指的地方，例 `C:\Ray\tianxia-play`）**不是**，放那裡不會被讀。
+- **一律寫帳號的數字編號（`accounts.id`），而且只寫已經存在的帳號**，一行一個。整行是數字的只當編號；不是數字的會當登入名比對（不分大小寫）。寫登入名有一個洞：名單上寫了一個還沒註冊的登入名，誰先用那個名字註冊誰就是客服（看得到所有客服單、帳號資料與元寶帳本）。帳號改不了登入名、編號也不會變，所以寫編號。名號不認。
+- **第一行放一行 `#` 開頭的註解**（例 `# 客服名單：一行一個帳號編號`）：這個檔照 UTF-8 讀、不去 BOM，用 Windows 記事本存成「UTF-8（含 BOM）」時第一行前面會多三個位元組，第一行寫的編號就對不上；第一行是註解就沒事。也可以存成不含 BOM 的 UTF-8。
+- **怎麼查編號**（唯讀，不改資料庫；伺服器開著也可以查）：在 `C:\Ray\專案\天下大勢` 開 PowerShell，`<資料庫檔>` 換成線上那份（跟 `server.py` 同一個 `TIANXIA_DB`），`<登入名>` 換成客服那個帳號登入時打的名字：
+  ```powershell
+  .venv\Scripts\python.exe -c "import sqlite3, sys, pathlib; c = sqlite3.connect(pathlib.Path(sys.argv[1]).resolve().as_uri() + '?mode=ro', uri=True); print(c.execute('SELECT account_id, display FROM logins WHERE provider = ? AND subject = ?', ('password', sys.argv[2].strip().lower())).fetchall())" <資料庫檔> <登入名>
+  ```
+  印出 `[(7, 'JoyQA')]` 的 `7` 就是編號；印 `[]` 是沒有這個帳號（先註冊或用 `scripts/set_password.py` 建好再查）。登入名存在 `logins` 表（`accounts` 表沒有登入名那一欄）。
+- **改這個檔不用重開**（伺服器照檔的修改時間重讀）；另外兩個來源（設定檔的 `support.staff`、環境變數 `TIANXIA_SUPPORT`）要重開兩個程式才算數，寫法一樣寫編號。
+
+**2. 客服的登入**
+- **客服要用帳號密碼登入，而且 6 小時內登入過**（`identity.staff_hours`）。identity 關著時所有 session 都是帳號密碼登入，權限只看這個 session 是不是 6 小時內建的（`identity_base.staff_session_ok` 關著那一支），所以真人客服可以單獨先開，不必等帳號功能。
+- **超過 6 小時**：登入本身還在（cookie 能活 30 天），設定抽屜的「客服單 ›」照樣亮著，點進去只會看到一行「讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。」。登出、再用帳號密碼登入一次就好。（identity 打開之後，用驗證碼或 LINE、Google 進來的 session 也進不了客服頁，標題下另有一行請他改用帳號密碼重新登入。）
+- **客服帳號的密碼**用 `scripts/set_password.py <登入名>` 設（它自己產生一組 12 字的亂數密碼、寫到 `.local\<登入名>_password.txt`，不印在畫面上）。identity 關著時密碼只要 6 字，但名單上的帳號看得到所有人的單與帳本，一律照 12 字以上設，不要用自己挑的短密碼。
+- 名單上的管理者怎麼進客服頁，看上面「客服人員名單怎麼設」。
+- **替客服建角色時名號可以含「客服」**：`scripts/set_password.py <登入名> --character <名號>` 不經擋名號那條檢查（第 240 批起玩家建角色、易名帖都擋像官方的名號，主機這支不擋）。
+
+**2之1. 先看有沒有人已經叫像官方的名號**（第 240 批，企劃者 2026-11-20「現在就擋」）
+- 上線前在主機的 `C:\Ray\專案\天下大勢` 開 PowerShell 跑（`<線上資料庫檔>` 換成跟 `server.py` 同一個 `TIANXIA_DB`）：
+  ```powershell
+  .venv\Scripts\python.exe scripts\list_staff_like_names.py <線上資料庫檔>
+  ```
+  唯讀（sqlite `mode=ro` 開檔、不跑遷移、不改資料），伺服器開著也可以跑；一行印一個名號、最後一行印共幾個，只印名號。打不開（路徑打錯、不是資料庫）印一句、結束碼 1。
+- 有人已經叫這類名號（含客服、官方、管理員、系統、營運這類字或獨立的 GM）：他登入、玩都照舊，只是不能再用易名帖改成另一個這類名字。要不要請他改名由企劃者決定。
+- 緊急開關：設定覆寫檔寫 `"staff_names_on": false`、兩個程式重開，像官方的名號就全部不擋（連帳號綁定開著時的客服、官方、管理員、GM 也不擋）；平常不要關。
+
+**2之2. 條款 2026-11-v2 的上線日**（第 241 批，企劃者 2026-11-20「現在就出新版條款」）
+- **部署條款 2026-11-v2 的那一天**，把 `tianxia\features\terms\content\terms.json` 的 `published`、`docs.terms.updated` 與 `docs.privacy.updated`（現在都寫 `2026-11-21`，是預定日；第 244 批隱私權條款補了客服單，日期一起寫成這一天）改成真的上線那一天。
+- **期限從 `published` 起算**：預設是 15 天考慮期（`terms.update_must` 預設關，第 246 批；企劃者 2026-11-21 下午「這次用 15 天考慮期」，跟使用條款第九條一致；兩份設定覆寫檔沒寫就是考慮期）。期限是 `published` 那天臺灣 0 點起 15 天（`terms.grace_days`）：`published` 填早了期限跟著縮短，上線比 `published` 晚超過 15 天就沒有人會被問，所以**一定要改成真的上線那一天**。
+- **上線那一刻會怎樣**：同意過舊版的人在期限以前每次登入進遊戲都會看到改版那一層（寫著「某天以前沒有表示反對，就視為接受新版」、列這次改了什麼），三顆鈕：同意、稍後再看、我不同意；按稍後再看只關掉這一次，過了期限就不再跳、視為接受。從沒同意過的人照舊一定要按同意。第 249 批起伺服器也擋：一定要按同意而還沒按的人（不是管理者），會改東西的動作伺服器回「請先看過並同意使用條款與隱私權條款……」那一句、畫面跳一行提示，讀取照常；考慮期內按「稍後再看」的人不擋。誰會被擋看下面第 2之3 步，細節看 `tianxia/features/terms/README.md`「伺服器端擋」。
+- **要強制才開**（給以後大改的版，開之前先問法律專業）：在設定覆寫檔（`content/profiles/season21.json` 或 `week7.json`，線上用哪一份改哪一份）把 `terms` 那一格（現在是 `"terms": {"enabled": true}`）改成 `"terms": {"enabled": true, "update_must": true}`、兩個程式重開：同意過舊版的人進遊戲先看到改版那一層（開頭是改版那一句、沒有「稍後再看」），按了同意才關得掉；這時期限用不到 `published`，但它仍是條款頁上印的生效日。改回考慮期就把 `update_must` 拿掉（或寫 `false`）、重開。
+- `scripts/support_bridge.py`（把單貼到 Discord）第 250 批已經寫進 `2026-11-v2` 的隱私權條款第三條，**條款 `2026-11-v2` 上線之後才開橋**（下面第 2之4 步）。之後要開客服官（自動受理）**之前**，隱私權條款第三條的 AI 那一句（「給誰」，現在寫了「不送到外部 AI 服務」）要先改，而且要換條款版號（`version` 與 `published`）。
+- 這個檔照修改時間重讀，改了不用重開伺服器。
+
+**2之3. 先看有多少帳號會被伺服器擋**（條款第 249 批，企劃者 2026-11-21「照這個做，兩處可以動」）
+- 上線前在主機的 `C:\Ray\專案\天下大勢` 開 PowerShell 跑（`<線上資料庫檔>` 換成跟 `server.py` 同一個 `TIANXIA_DB`；設定照這個終端機的 `TIANXIA_PROFILE`，沒帶是 season21，跟伺服器同一份）：
+  ```powershell
+  .venv\Scripts\python.exe scripts\list_terms_must.py <線上資料庫檔>
+  ```
+  唯讀（主資料庫與 `<db>-terms.sqlite` 都用 sqlite `mode=ro` 開、不跑遷移、不建檔），伺服器開著也可以跑。一行一個 `<登入名>　最後同意：<版號或「沒有」>`，管理者後面多「　管理者，不擋」，最後一行 `共 N 個`（含管理者那幾行）；條款關著印「條款關著：伺服器什麼都不擋。」；打不開印一句、結束碼 1。
+- 列出來的多半是條款功能打開之前就有的老帳號：他們下次進遊戲按一次同意就好（沒按之前讀得到畫面、動不了）。管理者不擋。考慮期內同意過舊版的人不在表上（不擋）。
+- **列出來的是全部帳號**（或比預期多很多）：先看 `<db>-terms.sqlite` 在不在、是不是跟主資料庫同一台、同一個資料夾（下面「怎麼備份資料庫」的旁檔那一句）；伺服器啟動時這種情形會在 log 印一行 `!!! terms: ... has accounts but no consent for the current version in ...`（剛換版號那一刻旁檔裡還沒有新版紀錄，也會印這一行，這時看這份清單為準）。
+- 緊急開關：設定覆寫檔的 `terms.enabled` 設 `false`、兩個程式重開：伺服器不擋，網頁的同意層與註冊的兩個勾選一起收掉。
+
+**2之4. 開橋**（第 250 批，企劃者 2026-11-22「要，上線時一起開橋」；**條款 `2026-11-v2` 上線之後**才做，放在下面第 3 步的最後）
+1. 企劃者在 Discord 開一個只有客服看得到的私密頻道：頻道設定 → 整合 → Webhook → 新 Webhook → 複製網址。
+2. 把網址寫進跑線上伺服器那份程式的 `.local\support.json` 的 `discord_webhook`（找真人要點的人寫 `mention`）。網址等於金鑰：不貼給任何人、不貼進任何頻道、不進版控、不寫進任何文件。
+3. 第一次先跑 `--once --dry-run --db <線上資料庫檔>`，把現有的舊單記成貼過（指令照上面「客服的橋（第 217 批）」第 1 步）。
+4. 再分離啟動、記 PID（照「客服的橋（第 217 批）」第 2 步）。
+- 驗：送一張測試單，過了 `--grace`（60 秒）或附一張圖之後，私密頻道出現一則（頭一行是單號・類別・名號・遊戲版本・送單時間），`bridge.log` 多一行 `NEW <單號>`。沒出現看 `bridge-err.log`。
+
+**3. 上線那一天的順序**
+1. 名單檔先放好（上面第 1 步），客服帳號的密碼設好（第 2 步），跑過第 2之1 步的清單，條款的日期改成這一天（第 2之2 步），跑過第 2之3 步的清單（看有多少帳號會被伺服器擋）。
+2. Joy 把 develop 合上 `main`；主機照這份文件原本的做法換版：停伺服器與假人（「怎麼停」），拉新的程式，照「開伺服器和假人」重開兩個程式。啟動時印的「設定：…」兩邊都要是 season21（或 week7）。
+3. 驗（網址用 `http://127.0.0.1:7861` 舉例，線上換成自己的網址）：
+   - 沒登入打 `GET http://127.0.0.1:7861/api/support/mine` 應該是 **401**。是 404 表示客服開關沒開，先看啟動時印的設定是不是 season21 或 week7。
+   - 帶 `Authorization: Bearer x`（不帶 cookie）打客服那一側的路，例 `GET /api/support/queue`，應該是 **404**（客服官那條路沒開，是對的）。客服那一側是 `queue`、`ticket/<單號>`、`answer`、`close`、`lookup`、`sweep` 與看圖；玩家那幾條（`ticket`、`mine`、`reply`、`human`、上傳）不看 `Authorization`、照 cookie 走，沒登入就是 401，`mailbox` 不用登入、回 200。
+   - 名單上的帳號（不是管理者）登入之後，設定抽屜頂上有「客服單 ›」；名單上的管理者從「管理者工具 ›」進管理頁，頂上有「客服單 ›」。
+   - 一般玩家的設定抽屜有一行「客服 ›」。
+   - 送一張測試單之後，資料庫旁邊出現 `<db stem>-support.sqlite`（例 `tianxia-support.sqlite`）；附一張圖之後出現 `<db stem>-support-files\`。
+4. 第一張單送出之後，照「怎麼備份資料庫」的**手動備份**跑一次，看印出來多了「已備份旁檔：…-support.sqlite」，附過圖的話再多一行「已備份資料夾：…-support-files」。
+5. 條款 `2026-11-v2` 上線、上面幾項都驗過之後，照第 2之4 步開橋。
+
+**4. 截圖吃磁碟**
+- 一張單最多 `support.files_max`（3）張、每張 `support.file_bytes_max`（3 MB），**沒有全服總量上限**。
+- 備份時 `backup_db.py` 把整個截圖夾**整夾複製**成 `<備份檔名>-support-files\`，刪舊的每日備份時同名的資料夾一起刪。每日備份最多留最近 14 天每天一份加最近 8 週每週一份（最多約 22 份），手動備份永遠留著，所以留 N 份備份就是 N 倍的截圖。
+- 要盯的是資料庫那顆磁碟的剩餘空間（PM 2026-11-19 量主機 C 槽剩 377 GB）。
+- **急用**：設定覆寫檔的 `support` 那一塊加 `"files_max": 0`（寫在同一塊，例 `"support": {"enabled": true, "files_max": 0}`），兩個程式重開：寫單頁就不畫挑圖、只收文字（第 226 批），上傳一律回「一張單最多附 0 張圖。」；舊的截圖照樣看得到（看圖那一條不看 `files_max`）。
+
+### 自動結單：只開真人時靠客服開頁；客服官開了才排程
+
+「答完等玩家、3 天沒回自動結」（`support.auto_close_days`，3）不是伺服器自己定時做的：只有 `POST /api/support/sweep` 會掃，伺服器沒有排程。掃到的條件是最後一則（含內部註記）早於「現在減 3 天」、而且沒掛請管理者；系統那一則「自動結單」的回覆與結單時間都記成**掃到的那一刻**，不回填成滿 3 天那一刻。
+
+**只開真人客服的這段期間（現在；`support.bot_account` 空著）**
+- `scripts/support_cli.py` 的每一條指令都走客服官的路（Bearer），伺服器回 404，`queue` 跑不起來、也掃不到（結束碼 2）。所以**下面那條排程現在不要建**。
+- 這段期間唯一會掃的是真人客服打開客服頁讀清單的那一下（`web/support.js` 先掃再讀）。**客服每天至少開一次客服頁**，不然「答完等玩家、3 天沒回」的單一張都不會自動結。
+- 玩家同時最多 `support.open_max`（3）張沒結的單，**已經答覆、在等玩家的也算**（玩家自己結不了）。所以問題答完了就用「回覆並結單」，比較不會卡住玩家再送單；要等玩家回話的才用「回覆並等玩家」。
+
+**客服官開了之後（企劃者 2026-11-19：主機排程跑客服官的指令）**
+
+要先把客服官設好：Discord 那五樣（`docs/superpowers/discord/客服官-設定.md`）、`.local/support.json` 的 `bot_token`（至少 32 字）、設定檔的 `support.bot_account`（客服官用的那個帳號，一樣寫編號）。值不寫進任何文件、不貼給任何人（也不貼給 Claude）。這些都好了，下面這條排程才用得上：每小時掃一次，最多晚一小時結。
+- **主機上的做法**：用 Windows 工作排程器每小時跑一次 `queue`、輸出丟掉。在「命令提示字元」（cmd，不是 PowerShell）貼：
+  `schtasks /Create /TN "tianxia-support-sweep" /SC HOURLY /MO 1 /F /TR "cmd /c \"\"C:\Ray\專案\天下大勢\.venv\Scripts\python.exe\" \"C:\Ray\專案\天下大勢\scripts\support_cli.py\" queue >NUL 2>&1\""`
+  工作目錄不用設：`support_cli.py` 的金鑰檔預設照它自己的位置讀 `<repo>\.local\support.json`（不看工作目錄），網址讀那個檔的 `server_url`，沒寫就是 `http://127.0.0.1:7861`。預設是「使用者登入時才跑」，主機要一直登著。
+  看有沒有在跑：`schtasks /Query /TN "tianxia-support-sweep" /V /FO LIST`，看「上次執行時間」與「上次結果」（0 是好的；2 是金鑰沒設或不對、連不上伺服器、或伺服器回錯，客服開關關著、`bot_account` 空著也是 2〔路由 404〕；不是 0 就在 cmd 手動跑一次同一條指令、不加 `>NUL 2>&1`，看印出的那一句）。刪：`schtasks /Delete /TN "tianxia-support-sweep" /F`。
+- 金鑰還沒放之前，排程每次都會停在「token 沒設」、什麼都不掃，照舊是有人開客服頁時才掃。
 
 ## 商城上線：資料庫升到第 6 版（2026-10-20）
 

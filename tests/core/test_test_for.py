@@ -835,7 +835,8 @@ def test_a_feature_packages_js_runs_the_package_tests_that_execute_it_with_their
     （10/31 起只有超過一秒的那幾條）：照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
     那幾個連 slow 一起跑，跟改到的測試檔一樣分開跑一次；挑到的其他檔照舊不含 slow，也不再列成「這一次不跑」。
     例子第 220 批從 mall 換成 sense：harness 不再等提示泡泡的長計時器，test_mall_web.py 的 slow 全拿掉了（量到 ≤0.28 秒），
-    mall.js 只剩一段不含 slow 的指令；sense 的 test_epiphany_name_web.py 整檔還標 slow，是 web/sense.js 唯一連 slow 一起跑的檔。"""
+    mall.js 只剩一段不含 slow 的指令；sense 的 test_epiphany_name_web.py 是 web/sense.js 唯一連 slow 一起跑的檔
+    （第 230 批起不再整檔 slow，只剩兩條超過 0.5 秒的單條標記：0.96、0.81 秒；has_slow 看任何 slow 標記，所以例子照舊）。"""
     web_test = test_for.FEATURES / "sense" / "tests" / "test_epiphany_name_web.py"
     assert test_for.has_slow(web_test) and "webharness" in test_for.imported(web_test)
     js = test_for.pick(["web/sense.js"])
@@ -1152,6 +1153,9 @@ STAGE_PACKAGES += ["guard"]  # 親衛隊長（scripts/new_feature.py 生的 guar
 STAGE_PACKAGES += ["horses"]  # 馬的來路（scripts/new_feature.py 生的 horses_stage.py）
 STAGE_PACKAGES += ["intro"]  # 開局前導（scripts/new_feature.py 生的 intro_stage.py）
 STAGE_PACKAGES += ["codex"]  # 江湖錄（scripts/new_feature.py 生的 codex_stage.py）
+STAGE_PACKAGES += ["yiwen"]  # 異聞（scripts/new_feature.py 生的 yiwen_stage.py）
+STAGE_PACKAGES += ["unfold"]  # 慢慢長出來（scripts/new_feature.py 生的 unfold_stage.py）
+STAGE_PACKAGES += ["jianghu"]  # 江湖頁重排（scripts/new_feature.py 生的 jianghu_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():
@@ -1661,7 +1665,11 @@ def test_the_other_shell_scripts_stay_on_the_whole_file_picks(monkeypatch):
 
 def test_a_wholly_slow_web_test_that_writes_the_name_runs_with_its_slow_tests(monkeypatch):
     """test_errands_web 整檔 slow、用假瀏覽器跑頁面：不連 slow 一起跑，挑到了也一條不跑（同包的 js，10/31 審查）。
-    部分 slow 的（test_cultivation_page_web）、整檔 slow 可是不跑 js 的（test_event_tiers）不放。"""
+    部分 slow 的（test_cultivation_page_web）、整檔 slow 可是不跑 js 的（test_event_tiers）不放。
+    第 230 批起全 repo 沒有整檔 slow 又跑假瀏覽器的檔了（errands 只剩第一條 1.89 秒單條標記；epiphany、sortie_report 也改成單條）：
+    這裡用 monkeypatch 假裝 errands 還整檔 slow，驗的規則不變。"""
+    real_whole_slow = test_for.whole_slow
+    monkeypatch.setattr(test_for, "whole_slow", lambda t: t.name == "test_errands_web.py" or real_whole_slow(t))
     files = ["test_errands_web.py", "test_cultivation_page_web.py", "test_event_tiers.py"]
     picked = _shell_pick(monkeypatch, 9, {"topHtml": files})
     assert set(files) <= {p.name for p in picked.files}

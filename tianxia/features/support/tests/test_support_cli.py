@@ -152,6 +152,60 @@ def test_cli_locked_mode_refuses_path_flags(monkeypatch, support_isolated, capsy
     assert [c[1] for c in spy.calls] == ["/api/support/sweep", "/api/support/queue"]
 
 
+KEYLIKE = "sk-live-0123456789abcdef"  # 測試自造、像金鑰的一串字
+
+
+@pytest.mark.parametrize("locked", [False, True])
+def test_cli_bad_arguments_never_echo_the_value(monkeypatch, support_isolated, capsys, tmp_path, locked):
+    # X 波（PM 2026-11-19）：argparse 的原話會把參數原樣印回來（unrecognized arguments、invalid int value、
+    # invalid choice）；金鑰被展開成參數就進了輸出。參數不對只印固定的一句、結束碼 2、不打 HTTP。
+    cfg = _desk(monkeypatch, support_isolated)
+    if locked:
+        monkeypatch.setenv("TIANXIA_SUPPORT_LOCKED", "1")
+        monkeypatch.setenv("TIANXIA_SUPPORT_CONFIG", str(cfg))
+        monkeypatch.setenv("TIANXIA_SUPPORT_URL", URL)
+        monkeypatch.setenv("TIANXIA_SUPPORT_INBOX", str(tmp_path / "inbox"))
+        head = []
+    else:
+        monkeypatch.delenv("TIANXIA_SUPPORT_LOCKED", raising=False)
+        head = ["--config", str(cfg), "--url", URL]
+    cases = (
+        ["queue", KEYLIKE],                    # ① 多出來的位置參數
+        ["ticket", KEYLIKE],                   # ② 單號
+        [KEYLIKE],                             # ③ 子指令名
+        ["answer", "1", "--human", KEYLIKE],   # ④ --human 的值
+        ["queue", "--foo", KEYLIKE],           # ⑤ 不認得的旗標的值
+        ["queue", f"--foo={KEYLIKE}"],
+        ["ticket", "1", f"--bar={KEYLIKE}"],
+    )
+    capsys.readouterr()
+    for argv in cases:
+        spy = _Spy()
+        assert cli.main([*head, *argv], session=spy) == 2, argv
+        assert spy.calls == [], argv
+        out = capsys.readouterr()
+        text = out.out + out.err
+        assert KEYLIKE not in text and "usage:" not in text, (argv, text)
+        assert cli.BAD_ARGS in text or cli.BAD_HUMAN in text, (argv, text)
+    with pytest.raises(SystemExit) as e:  # -h 照舊印說明（main 把 SystemExit 收成結束碼）
+        cli._parser(locked).parse_args(["-h"])
+    assert e.value.code == 0 and "客服官" in capsys.readouterr().out
+
+
+def test_cli_unreachable_does_not_echo_a_command_line_url(monkeypatch, capsys, tmp_path):
+    cfg = tmp_path / "support.json"
+    cfg.write_text(json.dumps({"bot_token": "x" * 20}), encoding="utf-8")
+    monkeypatch.delenv("TIANXIA_SUPPORT_LOCKED", raising=False)
+
+    class _Down:
+        def request(self, *a, **k):
+            raise OSError("down")
+
+    assert cli.main(["--config", str(cfg), "--url", f"http://{KEYLIKE}.invalid", "queue"], session=_Down()) == 2
+    text = capsys.readouterr().out
+    assert cli.UNREACHABLE_ARG in text and KEYLIKE not in text
+
+
 def test_cli_refusal_and_bad_token_messages(monkeypatch, support_isolated, capsys):
     cfg = _desk(monkeypatch, support_isolated)
     c = player()

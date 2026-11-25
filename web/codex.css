@@ -24,15 +24,16 @@
 .cx-qy.done .nx { color: var(--ink-2); }
 .cx-ghosts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .cx-ghost { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; padding: 6px 4px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
-.cx-ghost b { font: 700 18px var(--kai); color: var(--ink-2); opacity: .7; }
+.cx-ghost b { font: 700 15px var(--kai); letter-spacing: .12em; color: var(--ink-2); opacity: .75; }
 .cx-ghost small { font-size: 12px; line-height: 1.3; color: var(--ink-2); overflow-wrap: anywhere; }
 .cx-qy.ghost { background: transparent; border-style: dashed; box-shadow: none; min-height: 60px; }
 .cx-qy.ghost .th { background: color-mix(in srgb, var(--line) 70%, var(--card)); }
 .cx-qy.ghost .nm, .cx-qy.ghost .nx { color: var(--ink-2); }
 .cx-pip { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
-.cx-pip i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink-2); }
-.cx-pip i.f { background: var(--ink); border-color: var(--ink); }
-.cx-pip i.c { background: var(--accent); border-color: var(--accent); }
+/* 幕的進度：一截一截的墨痕（Joy 2026-11-22「很討厭 ooo 的進度呈現方式，看起來很廉價」：全遊戲不用小圓圈排進度） */
+.cx-pip i { width: 14px; height: 4px; border-radius: 1px 3px 3px 1px; background: color-mix(in srgb, var(--ink-2) 26%, transparent); transform: skewX(-18deg); }
+.cx-pip i.f { background: var(--ink); }
+.cx-pip i.c { background: var(--accent); }
 
 /* 朱印 */
 .cx-seal { display: inline-grid; place-items: center; padding: 2px 5px; border: 2px solid var(--accent); border-radius: 4px; transform: rotate(-4deg);
@@ -78,11 +79,19 @@
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); font: inherit; color: var(--ink); }
 .cx-end img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .cx-end span { position: relative; padding: 4px 2px; text-align: center; font: 700 13px/1.2 var(--kai); background: color-mix(in srgb, var(--card) 82%, transparent); }
-.cx-end.off { border-style: dashed; background: color-mix(in srgb, var(--line) 60%, var(--card)); }
-.cx-end.off span { background: transparent; color: var(--ink-2); }
+/* 還沒走到的收法：暈了墨、還沒題字的箋，右上一方空印 */
+.cx-end.off { border-color: color-mix(in srgb, var(--ink-2) 35%, var(--line));
+  background: radial-gradient(62% 44% at 36% 38%, color-mix(in srgb, var(--ink) 17%, transparent), transparent 72%),
+    radial-gradient(44% 32% at 68% 60%, color-mix(in srgb, var(--ink) 12%, transparent), transparent 74%),
+    radial-gradient(30% 20% at 50% 84%, color-mix(in srgb, var(--ink) 8%, transparent), transparent 76%),
+    color-mix(in srgb, var(--line) 30%, var(--card)); }
+.cx-end.off em { position: absolute; inset: 0 0 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font: 700 21px/1.1 var(--kai); font-style: normal; color: color-mix(in srgb, var(--ink) 42%, transparent); }
+.cx-end.off em i { font-style: normal; }
+.cx-end.off::after { content: ""; position: absolute; top: 6px; right: 6px; width: 13px; height: 13px; border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 3px; transform: rotate(-6deg); }
+.cx-end.off span { background: transparent; color: var(--ink-2); font-weight: 400; font-size: 12px; }
 
-.cx-endrow { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin: 0 0 6px; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; }
-.cx-endrow b { font: 700 15px var(--kai); color: var(--ink-2); }
+.cx-endmore { margin: 0 0 6px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; font: 400 15px/1.6 var(--kai); letter-spacing: .04em; color: var(--ink-2); }
 
 /* 重讀一幕 */
 .cx-paper { position: relative; padding: 14px 14px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; font: 400 16px/1.9 var(--kai); }
@@ -177,3 +186,20 @@
 .cx-tug-end { flex: none; margin: 0 -4px; font: 700 13px var(--kai, var(--serif)); font-variant-numeric: tabular-nums; }
 .cx-tug-end.side-guan { color: var(--kuai); }
 .cx-tug-end.side-huang { color: var(--gold); }
+
+/* 收滿這一頁給的頭銜（數字那一行右邊）：還沒拿到是淡的、寫「收滿得」；拿到了是朱印、寫「已得」 */
+.cx-ttl { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--kai, var(--serif)); }
+.cx-ttl small { font-size: 12px; color: var(--ink-2); }
+.cx-ttl:not(.got) .ttl-seal { opacity: 0.45; border-style: dashed; }
+
+/* 圖鑑沒解鎖的格（Joy 11/22：不放「？」，畫成有質感的佔位）：暈了墨的底，淡楷書兩個字（人物照舊剪影＋地名，名字寫「未見」） */
+.cx-cell.off .im, .cx-yc.off { background:
+    radial-gradient(60% 46% at 38% 40%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 72%),
+    radial-gradient(42% 32% at 66% 62%, color-mix(in srgb, var(--ink) 11%, transparent), transparent 74%),
+    color-mix(in srgb, var(--line) 30%, var(--card)); }
+.cx-grid.sq .cx-cell.off .im::after { content: none; }
+.cx-cell.off b { font-weight: 400; letter-spacing: .2em; color: color-mix(in srgb, var(--ink) 45%, transparent); }
+.cx-cell.off small { min-height: 1em; }
+.cx-yc.off { border: 1px solid color-mix(in srgb, var(--ink-2) 30%, var(--line)); font-weight: 400; letter-spacing: .15em; color: color-mix(in srgb, var(--ink) 40%, transparent); }
+.cx-yc.none { border: 0; }
+.cx-act .x b.off { font-weight: 400; letter-spacing: .2em; color: color-mix(in srgb, var(--ink) 45%, transparent); }

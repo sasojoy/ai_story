@@ -28,6 +28,13 @@ export const STABLE_SIG = `(() => { const d = document.documentElement; const s 
 // that counts. Only near a phone width, and every window the walk comes from is 640 or wider, so an old width cannot pass for it.
 export const landed = (sig, width) => { const [w, , sw] = sig.split("|").map(Number); return w === width || (width <= 480 && w > width && w === sw && w - width < 100); };
 
+// Is this window the one already set (prev: [view, dpr] from the last setView, or null)? Then setting it again repaints nothing (batch 254).
+// ...and the flip has been drawn: the page reports the new dpr and two frames have gone by. -1 when the new dpr never showed within a second,
+// or the two frames did not come within 1.5 s (batch 258: it used to wait for the frames anyway after the second and say it was drawn).
+export const FLIPPED = (dpr) => `new Promise((r) => { const t0 = performance.now(); setTimeout(() => r(-1), 1500); const two = () => requestAnimationFrame(() => requestAnimationFrame(() => r(Math.round(performance.now() - t0))));
+  const go = () => (devicePixelRatio === ${dpr} ? two() : performance.now() - t0 > 1000 ? r(-1) : requestAnimationFrame(go)); go(); })`;
+export const sameWindow = (prev, v, dpr) => !!prev && prev[1] === dpr && prev[0].length === v.length && prev[0].every((x, i) => x === v[i]);
+
 // every element under body plus ::before and ::after that exist: property text deduplicated by hash inside one scene.
 // The walk leaves #toast out: it drops its class 3.2 s after showing, on the wall clock, so it flips from side to side (wave D, 002_opening_event and 170_cr_pick2 at 640).
 // The replay keeps it: there both sides get the same snapshot, and that is where a change to the toast's own styles shows.
@@ -40,6 +47,18 @@ export const STYLE_DUMP = styleDump(false);
 export const WALK_STYLE_DUMP = styleDump(true);
 
 export const LAYOUT = `(() => { const d = document.documentElement; const over = [...document.querySelectorAll("#app *")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > innerWidth + 1 && getComputedStyle(e).position !== "fixed"; }).length; return { sw: d.scrollWidth, cw: d.clientWidth, sh: d.scrollHeight, past: over }; })()`;
+// What the scrolled pictures scroll (driver.mjs shootWindow, shootVariants; moved here from driver.mjs in batch 262 so it can be tested).
+// Batch 262 first: a layer hung outside #app (a card put on body, like the strange tales' meeting card), fixed, scrolling itself, taller
+// inside than its box, that is on top where its middle is (elementFromPoint lands in it); several: the last in DOM order. Not by name.
+// None: the biggest thing on screen that scrolls (the page itself, or a layer over it), the same words as before batch 262.
+export const SCROLLER = `(() => { window.__sc = null;
+  const outside = []; for (const el of document.querySelectorAll("body *")) { if (el.closest("#app")) continue; if (el.scrollHeight <= el.clientHeight + 2) continue; const cs = getComputedStyle(el); if (cs.position !== "fixed" || !/(auto|scroll)/.test(cs.overflowY) || cs.visibility === "hidden") continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue; const hit = document.elementFromPoint(r.left + r.width / 2, Math.max(r.top, 0) + Math.min(r.height, innerHeight) / 2); if (!hit || !(el === hit || el.contains(hit))) continue; outside.push(el); }
+  if (outside.length) { const s = window.__sc = outside[outside.length - 1]; return { sh: s.scrollHeight, ch: s.clientHeight, root: false }; }
+  let best = 0; const root = document.scrollingElement;
+  const cand = [root, ...document.querySelectorAll("#app *")];
+  for (const el of cand) { if (el.scrollHeight <= el.clientHeight + 2) continue; if (el !== root) { const cs = getComputedStyle(el); if (!/(auto|scroll)/.test(cs.overflowY) || cs.visibility === "hidden") continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue; const hit = document.elementFromPoint(r.left + r.width / 2, Math.max(r.top, 0) + Math.min(r.height, innerHeight) / 2); if (!hit || !(el === hit || el.contains(hit))) continue; }
+    const area = el === root ? innerWidth * innerHeight * 0.5 : el.clientWidth * el.clientHeight; if (area > best) { best = area; window.__sc = el; } }
+  const s = window.__sc; return s ? { sh: s.scrollHeight, ch: s.clientHeight, root: s === root } : null; })()`;
 
 // the things that are allowed to change by themselves: the share row (a fresh code), the chronicle link (written when the writer gets to it). Rects on screen.
 export const VOLATILE = `(() => { const out = []; const add = (kind, sel) => { for (const e of document.querySelectorAll(sel)) { const r = e.getBoundingClientRect(); if (r.width && r.height) out.push([kind, Math.floor(r.left), Math.floor(r.top), Math.ceil(r.right), Math.ceil(r.bottom)]); } }; add("share", ".zh-url"); add("tale", ".huaben-link"); return out; })()`;

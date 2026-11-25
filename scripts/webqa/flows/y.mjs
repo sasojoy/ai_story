@@ -113,6 +113,7 @@ out = 1`);
     await c.step('.shop-layer [data-act="shop-brew"].on', "y_sm_brew_off", { light: true });
     await c.load("/");
     await c.step('[data-act="shop-tab"][data-tab="rack"]', "y_sm_rack", {});
+    await c.click('[data-act="rack-picking"][data-on="1"]'); // batch 233: the check boxes take a click only after 挑著拆
     await c.step(ACT("rack-pick"), "y_sm_rack_pick", {});
     await c.load("/");
     await c.step(".shop-layer .shop-back", "y_sm_left", { who: "p1" });

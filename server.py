@@ -300,7 +300,7 @@ def name_taken(name: str) -> bool:
     （帳號密碼登入設計第三節）。"""
     reserved = {n.casefold() for n in server_bots.reserved_names(CONTENT)}
     return open_characters().exists(name) or account_store().owner_of(name) is not None or name.casefold() in reserved \
-        or identity_base.blocked_name(name, CONTENT)  # identity：帳號綁定開著才擋（關著回假，行為不變）
+        or identity_base.blocked_name(name, CONTENT)  # 保留字一律擋（staff_names_on），id: 開頭帳號綁定開著才擋
 
 
 def _reload(game: Game) -> None:
@@ -1716,11 +1716,17 @@ def _account(request: Request) -> str:
 
 
 def _game(request: Request) -> Game:
-    account = account_store().get(_account(request))
+    key = _account(request)
+    account = account_store().get(key)
     if account is None or account.character is None:
         raise HTTPException(409, "這個帳號還沒有角色。")
     MOVE_MODE.set(request.headers.get("X-Move-Mode", "walk"))  # 頁面選的走法，只在這次請求裡有效（見 MOVE_MODE）
-    return game_for(account.character)
+    game = game_for(account.character)
+    # 條款第 249 批：必須同意而沒同意的帳號，會改東西的請求（不是 GET）拒絕；讀取不擋、管理者不擋，條款關著 gate_problem 回 None
+    # 管理者先判（不問 gate_problem）：管理者本來就不擋，先問會多讀一次時鐘（must 經 rules.need 讀 shell.time）
+    if request.method != "GET" and not game.is_admin() and (why := terms_base.gate_problem(CONTENT, key)):
+        raise HTTPException(403, why)
+    return game
 
 
 def _character_name(request: Request) -> str:

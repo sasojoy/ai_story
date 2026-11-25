@@ -1,0 +1,200 @@
+<style>
+/* 異聞錄對比圖（book）共用底：色票照 web/style.css 的 :root 與深色那一組；字體堆疊照規範 */
+.yw-book.yw-light { --paper: #f4ede0; --card: #fbf7ef; --card-2: #efe6d5; --ink: #2a241d; --ink-2: #6b6155; --line: #ddd1bc; --accent: #a8322a; --accent-ink: #fff;
+  --accent-soft: rgba(168, 50, 42, 0.10); --gold: #b7862b; --ok: #2f7d4f; --bad: #b23a2b; --kuai: #2f5d8a; --disk: #2a241d;
+  --shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06); --art-filter: none; --frame: #e6dccb; }
+.yw-book.yw-dark { --paper: #16130f; --card: #211c17; --card-2: #2b251e; --ink: #ece3d3; --ink-2: #a89b88; --line: #3a3229; --accent: #d2574a; --accent-ink: #fff;
+  --accent-soft: rgba(210, 87, 74, 0.16); --gold: #d6a548; --ok: #5cb67f; --bad: #e06a5c; --kuai: #4a7cae; --disk: #0d0b09;
+  --shadow: none; --art-filter: brightness(.78) saturate(.85); --frame: #0d0b09; }
+.yw-book { --radius: 14px;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif;
+  --kai: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "DFKai-SB", var(--serif);
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  padding: 20px 16px 28px; background: var(--frame); color: var(--ink); font: 15px/1.5 var(--sans); text-align: left; }
+.yw-book, .yw-book * { box-sizing: border-box; }
+.yw-book p, .yw-book h2, .yw-book h3, .yw-book h4 { margin: 0; }
+
+/* 這一版的名字與取捨 */
+.yw-book .vhead { max-width: 1260px; margin: 0 0 18px; }
+.yw-book .vhead h2 { font: 700 22px/1.3 var(--kai); letter-spacing: .12em; }
+.yw-book .vhead h2 small { margin-left: 10px; font: 600 13px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.yw-book .vhead p { margin-top: 4px; font-size: 14px; color: var(--ink-2); }
+
+/* 一排手機框 */
+.yw-book .shots { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.yw-book .shot { width: 390px; }
+.yw-book .cap { margin: 0 0 8px; font: 600 13px/1.4 var(--sans); color: var(--ink-2); }
+.yw-book .cap b { color: var(--ink); }
+.yw-book .phone { width: 390px; min-height: 760px; display: flex; flex-direction: column; overflow: hidden; border-radius: 26px; background: var(--paper);
+  border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(30, 20, 10, .18); }
+.yw-book .topbar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+.yw-book .topbar b { font: 700 16px var(--kai); letter-spacing: .06em; }
+.yw-book .topbar small { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.yw-book .scr { flex: 1; padding: 12px 16px 16px; }
+.yw-book .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--card); }
+.yw-book .tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 52px; gap: 1px; font-size: 11px; color: var(--ink-2); }
+.yw-book .tab i { font: 600 19px/1.2 var(--serif); font-style: normal; }
+.yw-book .tab.on { color: var(--accent); }
+.yw-book .tab.on::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+.yw-book .tab.mall i { color: var(--gold); }
+.yw-book .dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* 共用元件 */
+.yw-book .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; box-shadow: var(--shadow); }
+.yw-book .muted { font-size: 13px; color: var(--ink-2); }
+.yw-book .art { position: relative; display: grid; place-items: center; overflow: hidden; color: var(--ink-2); font: 400 12px var(--kai); letter-spacing: .1em;
+  background: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--ink) 7%, transparent) 9px 10px),
+    radial-gradient(90% 80% at 30% 35%, color-mix(in srgb, var(--ink) 22%, var(--card-2)), var(--card-2) 70%); filter: var(--art-filter); }
+.yw-book .seal { display: inline-grid; place-items: center; padding: 1px 6px; border: 2px solid var(--accent); border-radius: 4px; transform: rotate(-4deg);
+  font: 700 12px/1.25 var(--kai); color: var(--accent); background: var(--card); white-space: nowrap; }
+.yw-book .seal.solid { background: var(--accent); color: var(--accent-ink); }
+.yw-book .seal.grey { border-color: var(--ink-2); color: var(--ink-2); border-style: dashed; }
+.yw-book .seal.you { border-color: var(--gold); color: var(--gold); }
+.yw-book .zhupi { margin: 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  font: 700 15px/1.5 var(--kai); color: var(--accent); }
+.yw-book .zhupi small { display: block; font: 700 11px var(--sans); letter-spacing: .1em; color: var(--accent); }
+.yw-book .verdict { position: relative; margin: 10px 0 4px; padding: 14px 12px 10px; border: 3px double var(--ink); border-radius: 4px; background: var(--card);
+  font: 400 15px/1.75 var(--kai); }
+.yw-book .verdict > .seal { position: absolute; top: -11px; left: 10px; }
+.yw-book .verdict small { display: block; margin-top: 4px; font: 400 13px/1.5 var(--kai); color: var(--ink-2); }
+.yw-book .help { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 2px; border-top: 1px dashed var(--line);
+  font-size: 13px; color: var(--ink-2); }
+.yw-book .help b { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 6px; border: 1px solid var(--line); border-radius: 50%;
+  font: 600 12px var(--sans); }
+.yw-book .empty { margin: 8px 0 12px; padding: 16px 14px; border: 1px dashed var(--line); border-radius: 12px; font: 400 16px/1.75 var(--kai); color: var(--ink-2); }
+.yw-book .go { display: flex; align-items: center; justify-content: space-between; min-height: 44px; font: 700 14px var(--kai); letter-spacing: .06em; color: var(--accent); }
+.yw-book .go::after { content: "›"; font: 400 20px var(--kai); color: var(--ink-2); }
+.yw-book .sec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 16px 0 8px; padding-left: 8px; border-left: 3px solid var(--ink);
+  font: 700 17px/1.3 var(--kai); letter-spacing: .12em; }
+.yw-book .sec:first-child { margin-top: 2px; }
+.yw-book .sec small { font: 400 12px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.yw-book .past { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 2px; border-bottom: 1px dashed var(--line); }
+.yw-book .past:last-child { border-bottom: 0; }
+.yw-book .past b { font: 700 15px var(--kai); letter-spacing: .06em; }
+.yw-book .past small { display: block; font-size: 12px; color: var(--ink-2); }
+.yw-book .past .t { flex: 1; min-width: 0; }
+.yw-book .past::after { content: "›"; font: 400 20px var(--kai); color: var(--ink-2); }
+.yw-book .past.open::after { content: "▴"; font-size: 13px; }
+.yw-book .stub { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); opacity: .72; }
+.yw-book .stub b { font: 700 15px var(--serif); }
+.yw-book .stub .bars { display: grid; gap: 8px; margin-top: 8px; }
+.yw-book .stub .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--kuai) var(--w), var(--gold) var(--w)); }
+.yw-book .stub p { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+.yw-book .note { margin: 6px 0 0; font-size: 12px; color: var(--ink-2); }
+.yw-book .hl { outline: 2px dashed var(--gold); outline-offset: 3px; border-radius: 10px; }
+
+/* 甲：見聞頁一顆籤（籤照 web/news.css 的 .nw-tabs） */
+.yw-book .nseg { display: flex; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+.yw-book .nseg span { position: relative; flex: 1 1 0; display: grid; place-items: center; min-height: 44px; padding: 8px 0 10px; font: 600 15px var(--serif); color: var(--ink-2); white-space: nowrap; }
+.yw-book .nseg span.on { color: var(--ink); }
+.yw-book .nseg span.on::after { content: ""; position: absolute; left: 24%; right: 24%; bottom: -2px; height: 4px; border-radius: 3px 1px 4px 1px; background: var(--accent); transform: skewX(-12deg); }
+.yw-book .nseg .dot { top: 7px; right: calc(50% - 22px); }
+.yw-book .ya { padding: 12px 14px 4px; }
+.yw-book .ya-q { position: relative; padding: 2px 0 8px 26px; font: 700 19px/1.45 var(--kai); color: var(--accent); }
+.yw-book .ya-q::before { content: "「"; position: absolute; left: -2px; top: -6px; font: 700 32px/1 var(--kai); color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.yw-book .ya-q small { display: block; margin-top: 2px; font: 400 13px var(--kai); color: var(--ink-2); }
+.yw-book .ya-q small b { font-weight: 700; color: var(--accent); }
+.yw-book .ya-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.yw-book .ya-pic { flex: none; width: 46px; height: 46px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink); font: 700 17px var(--kai); color: var(--ink); letter-spacing: 0; }
+.yw-book .ya-t { flex: 1; min-width: 0; }
+.yw-book .ya-t b { display: block; font: 700 17px/1.3 var(--kai); letter-spacing: .08em; }
+.yw-book .ya-t small { font-size: 12px; color: var(--ink-2); }
+.yw-book .ya-hook { margin: 8px 0 0; font: 400 15px/1.65 var(--kai); color: var(--ink-2); }
+.yw-book .ya-you { margin: 8px 0 0; padding: 4px 8px; border-left: 3px solid var(--gold); font-size: 13px; color: var(--ink); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
+.yw-book .ya-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
+.yw-book .ya-foot .n { font-size: 13px; color: var(--ink-2); }
+.yw-book .ya-foot .n b { font: 700 15px var(--serif); color: var(--ink); }
+.yw-book .ya-foot .go { margin-left: auto; gap: 6px; }
+</style>
+<div class="yw-book yw-book-a yw-light">
+<div class="vhead">
+  <h2>甲・朱批當頭<small>見聞頁一顆籤「異聞」（設計稿的建議）</small></h2>
+  <p>這一版的取捨：異聞跟戰況、傳聞、江湖史放在同一排，人人每天會翻見聞就會看到；卡上第一眼是發掘者那一句朱批（好笑的是人寫的），定論框整段攤在卡上，一張卡比較高，四則就要捲兩屏。</p>
+</div>
+<div class="shots">
+
+<div class="shot">
+  <p class="cap"><b>一、入口</b>：見聞頁的籤從五顆變六顆（每顆約 60px，「江湖史」三個字還放得下）；有新定論時籤上一顆紅點</p>
+  <div class="phone">
+    <div class="topbar"><b>沈驚鴻</b><small>第 2 週・週三 14:05</small></div>
+    <div class="scr">
+      <div class="nseg"><span class="on">戰況</span><span>傳聞</span><span>江湖史</span><span class="hl">異聞<i class="dot"></i></span><span>榜單</span><span>紀錄</span></div>
+      <div class="stub"><b>三路戰況</b><small class="muted">　藍官軍・金黃巾</small>
+        <div class="bars"><div class="bar" style="--w:58%"></div><div class="bar" style="--w:44%"></div><div class="bar" style="--w:51%"></div></div>
+        <p>說明與可能的結局 ▾</p></div>
+      <div class="stub"><b>戰報</b><small class="muted">　點開看過程</small>
+        <p>第 2 週・週三</p><p>險勝　黃巾渠帥・潁川城外</p><p>僵持　游騎・汝南荒野</p></div>
+      <div class="stub"><b>天下形勢</b><p>潁川一帶官軍新到，黃巾退守山中，各路豪傑……</p></div>
+      <p class="note">（原本見聞頁的戰況照舊；只是籤多了一顆）</p>
+    </div>
+    <nav class="tabbar"><div class="tab"><i>江</i>江湖</div><div class="tab"><i>俠</i>俠客</div><div class="tab"><i>圖</i>輿圖</div><div class="tab on"><i>聞</i>見聞</div><div class="tab mall"><i>寶</i>商城</div></nav>
+  </div>
+</div>
+
+<div class="shot">
+  <p class="cap"><b>二、點「異聞」</b>：這一季四則（新撞見的排前面，定論了的排後面）、最底下往季</p>
+  <div class="phone">
+    <div class="topbar"><b>沈驚鴻</b><small>第 2 週・週三 14:05</small></div>
+    <div class="scr">
+      <div class="nseg"><span>戰況</span><span>傳聞</span><span>江湖史</span><span class="on">異聞</span><span>榜單</span><span>紀錄</span></div>
+      <h3 class="sec">本季異聞<small>四則現世・一季三十則</small></h3>
+
+      <article class="card ya">
+        <p class="ya-q">兩家爭認一個孩子<small>——<b>蘇青禾</b>說的</small></p>
+        <div class="ya-row"><div class="ya-pic art">渡</div><div class="ya-t"><b>河心舢舨</b><small>潁水渡口</small></div><span class="seal">眾說</span></div>
+        <p class="ya-hook">兩條船各靠一岸，誰也不肯先動，河心漂著一條空舢舨。兩邊同時朝你招手⋯</p>
+        <div class="ya-foot"><span class="n">走過 <b>12</b> 人・還有兩天定論</span><span class="go">看全圖</span></div>
+      </article>
+
+      <article class="card ya">
+        <p class="ya-q">替主將代筆的情詩<small>——<b>某位少俠</b>說的</small></p>
+        <div class="ya-row"><div class="ya-pic art">營</div><div class="ya-t"><b>空簡一夜</b><small>長社大營</small></div><span class="seal grey">未竟</span></div>
+        <p class="ya-hook">帳裡的燈亮了一夜，有人對著空竹簡抓頭嘆氣，見你走過，一把將你拖了進去⋯</p>
+        <div class="ya-foot"><span class="n">還沒有人走完・一天後定論</span><span class="go">看全圖</span></div>
+      </article>
+
+      <article class="card ya">
+        <p class="ya-q">逃婚的新郎<small>——<b>柳五郎</b>說的</small></p>
+        <div class="ya-row"><div class="ya-pic art">城</div><div class="ya-t"><b>簷下的人</b><small>潁川城</small></div><span class="seal you">你走過</span></div>
+        <p class="ya-hook">巷裡避雨，簷下還站著一個人，渾身發抖。滿街火把都在喊同一個名字⋯</p>
+        <p class="ya-you">你這一趟算在「那夜開城門的人」這條路上</p>
+        <div class="ya-foot"><span class="n">走過 <b>23</b> 人・還有一天定論</span><span class="go">看全圖</span></div>
+      </article>
+
+      <article class="card ya">
+        <p class="ya-q">一隻會背兵法的鵝<small>——<b>陸三刀</b>說的</small></p>
+        <div class="ya-row"><div class="ya-pic art">野</div><div class="ya-t"><b>霧裡的身影</b><small>荒野山道</small></div></div>
+        <p class="ya-hook">前面濃霧瀰漫，隱約看到一個身影⋯</p>
+        <div class="verdict"><span class="seal solid">定論</span>山道霧裡的身影，原是「一隻會背兵法的鵝」。——陸三刀說的，此地從此這麼傳。四十四人走過這條路。<small>這一帶的人都說，這是個好兆頭。</small></div>
+        <div class="ya-foot"><span class="n">走過 <b>57</b> 人</span><span class="go">看全圖</span></div>
+      </article>
+
+      <h3 class="sec">往季<small>只留定論與全圖</small></h3>
+      <div class="past open"><div class="t"><b>第三季</b><small>二十六則現世・十九則有定論</small></div></div>
+      <div class="verdict"><span class="seal solid">定論</span>破祠壁上的泥臉，原是「捏的全是他債主」。——石小樓說的，此地從此這麼傳。三十一人走過這條路。</div>
+      <div class="past"><div class="t"><b>第二季</b><small>三十則現世・二十二則有定論</small></div></div>
+      <div class="help"><span><b>？</b>異聞錄的規矩</span><span>▾</span></div>
+    </div>
+    <nav class="tabbar"><div class="tab"><i>江</i>江湖</div><div class="tab"><i>俠</i>俠客</div><div class="tab"><i>圖</i>輿圖</div><div class="tab on"><i>聞</i>見聞</div><div class="tab mall"><i>寶</i>商城</div></nav>
+  </div>
+</div>
+
+<div class="shot">
+  <p class="cap"><b>三、空的時候</b>：開季頭幾天還沒有人撞見</p>
+  <div class="phone">
+    <div class="topbar"><b>沈驚鴻</b><small>第 2 週・週三 14:05</small></div>
+    <div class="scr">
+      <div class="nseg"><span>戰況</span><span>傳聞</span><span>江湖史</span><span class="on">異聞</span><span>榜單</span><span>紀錄</span></div>
+      <h3 class="sec">本季異聞<small>一季三十則</small></h3>
+      <p class="empty">這一季還沒有人撞見怪事。四處探索，也許你就是第一個。</p>
+      <h3 class="sec">往季<small>只留定論與全圖</small></h3>
+      <div class="past"><div class="t"><b>第三季</b><small>二十六則現世・十九則有定論</small></div></div>
+      <div class="past"><div class="t"><b>第二季</b><small>三十則現世・二十二則有定論</small></div></div>
+      <div class="help"><span><b>？</b>異聞錄的規矩</span><span>▾</span></div>
+    </div>
+    <nav class="tabbar"><div class="tab"><i>江</i>江湖</div><div class="tab"><i>俠</i>俠客</div><div class="tab"><i>圖</i>輿圖</div><div class="tab on"><i>聞</i>見聞</div><div class="tab mall"><i>寶</i>商城</div></nav>
+  </div>
+</div>
+
+</div>
+</div>

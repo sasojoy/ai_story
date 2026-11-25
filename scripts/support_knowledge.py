@@ -11,8 +11,10 @@
   `tianxia` 都在函式裡 import（設好之後）。模型一律不叫（`OllamaClient.from_config` 回 None）。
 - 三個檔寫之前都過 `tests/bots/test_server_bots.py` 的 `leaks()` 同一張字表（`FORBIDDEN`，測試鎖兩邊一樣）：
   有一個命中就印出來、一個檔都不寫、結束碼 1。
-- 新世界停在「籌備中」：`howto.md` 沒有「這一季在打什麼」的收季規則那一句（要開季才有）。
-- 改版、改 FAQ、改玩法說明之後重跑。退版：刪掉這支就沒了，工作夾裡匯出的檔留著。"""
+- 新世界停在「籌備中」，但籌備中的季種下去就蓋過章：正式內容（season21、week7）匯得出「這一季在打什麼」
+  與收季那一句（第 227 批實跑，`test_knowledge_export_with_real_content_carries_the_season_end_rule` 鎖住）。
+  匯不出來的是「天命之季」那種變體（匯出的新世界不是天命之季）與要開季、季中才有的世界狀態。
+- 換了設定（`--profile`）、改版、改 FAQ、改玩法說明之後都要重跑。退版：刪掉這支就沒了，工作夾裡匯出的檔留著。"""
 from __future__ import annotations
 
 import argparse

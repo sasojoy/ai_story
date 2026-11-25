@@ -7,7 +7,7 @@ import random
 import re
 
 import pytest
-from conftest import classic_rules, real_content
+from conftest import classic_rules, old_page, real_content
 from test_prologue_web import run
 
 import server
@@ -166,11 +166,11 @@ def test_the_newbie_entry_opens_the_drawer_on_the_howto_page():
 
 
 def _feeling_view():
-    """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。"""
+    """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。舊江湖頁（old_page）；新頁上的同一件事在 jianghu 包的 test_jianghu_parity_web.py。"""
     from tianxia import insights
     from tianxia.features.sense import sensing
 
-    content = real_content("week7")
+    content = old_page(real_content("week7"))
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

@@ -448,7 +448,7 @@ class MilitaryScenario(Scenario):
 # 搬的人照實際的檔名改這一個字串）
 register_track("military", MilitaryScenario, (("tianxia/features/military/convoy_actions.py", "tianxia/engine.py"),
                                               ('"糧車被劫走了，這一趟不算數。"', '"糧車被劫走了，這一趟不算數！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks",
+                       "mall", "map", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

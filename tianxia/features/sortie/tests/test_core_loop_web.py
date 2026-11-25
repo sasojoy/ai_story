@@ -107,7 +107,6 @@ def test_the_sortie_cell_opens_the_card_and_never_sends_act_train():
     assert "act-sortie" not in closed and out["wheel"] is None  # 再點一次收起
 
 
-@pytest.mark.slow
 def test_sealing_three_moves_posts_sortie_go_and_folds_the_card():
     c, world = _duel_cast()
     m = _view(c, world, "甲")
@@ -124,7 +123,6 @@ def test_sealing_three_moves_posts_sortie_go_and_folds_the_card():
     assert out["wheel"] is None and out["pick"] == [] and "act-sortie" not in out["bars"][-1]  # 回來之後卡收起
 
 
-@pytest.mark.slow
 def test_a_grey_cell_still_opens_and_the_button_says_why():
     from duel_kit import NOW, do, seat
 
@@ -148,7 +146,6 @@ def test_a_grey_cell_still_opens_and_the_button_says_why():
     assert 'class="sx-sec sx-dim"' in bar and bar.count('aria-pressed="false" disabled>') == 12  # 招淡掉、按不下去
 
 
-@pytest.mark.slow
 def test_the_three_duel_cards_answer_join_and_walk():
     from duel_kit import FAR, LOC, do, seat
 
@@ -206,7 +203,6 @@ def _far_view():
     return m
 
 
-@pytest.mark.slow
 def test_far_travel_keeps_the_route_glow_in_the_state_and_the_class():
     m = _far_view()
     out = _clicks(m, [{"act": "sortie-far", "id": "baima_ford"}])
@@ -218,7 +214,6 @@ def test_far_travel_keeps_the_route_glow_in_the_state_and_the_class():
     assert " glow" not in _bar_of(m, wheelSel="move")
 
 
-@pytest.mark.slow
 def test_apply_glow_puts_the_route_glow_back_after_it_clears_everything():
     """摺疊 toggle 之後跑的 applyGlow 第一行清掉所有 .glow：路的光要在它後面補回來。"""
     m = _far_view()
@@ -233,7 +228,6 @@ def test_apply_glow_puts_the_route_glow_back_after_it_clears_everything():
     assert out["kept"] == [True, False] and out["closed"] == [False, None]
 
 
-@pytest.mark.slow
 def test_the_route_glow_goes_out_when_nothing_is_left_to_point_at():
     m = _far_view()
     stale = {**m, "options": [o for o in m["options"] if not o["id"].startswith("move:baima_ford")]}  # 走了、換了地方：清單上沒有那一條
@@ -246,7 +240,6 @@ def test_the_route_glow_goes_out_when_nothing_is_left_to_point_at():
     assert out["route"] is None  # 按了選項
 
 
-@pytest.mark.slow
 def test_the_newbie_go_button_keeps_its_route_glow_the_same_way():
     m = _far_view()
     m["status"]["newbie"] = {"title": "新手目標", "done": 0, "total": 1, "rows": [
@@ -281,7 +274,6 @@ def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
 # 現在約戰卡自己帶 sides 與 answer_stamina，網頁先讀它
 
 
-@pytest.mark.slow
 def test_answering_off_a_block_still_names_the_armies_and_shows_the_stamina():
     from duel_kit import do, seat
 
@@ -305,7 +297,6 @@ def test_answering_off_a_block_still_names_the_armies_and_shows_the_stamina():
 # 跟這一場應戰無關。現在寫這一場牽動什麼：約戰那一軍推到幾、離翻走（沒人佔的拿下）還差多少，守住了拉回它；資料是約戰卡自己帶的，站在哪裡都一樣
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("where", ["runan_wilds", "jade_cave"])  # 站在約戰的那一塊上／站在同一區不是區塊的地方
 def test_the_answer_card_says_what_this_fight_touches_not_my_own_push(where):
     from duel_kit import do, seat
@@ -365,7 +356,6 @@ def test_duel_rows_sort_and_settled_ones_say_how_it_went():
     assert ">對面</span>" in out  # 沒有出陣卡（不知道陣營名）：對面的小章寫「對面」
 
 
-@pytest.mark.slow
 def test_a_passing_convoy_keeps_act_train_and_no_card_keeps_the_bar():
     c, world = _duel_cast()
     m = _view(c, world, "甲")
@@ -379,7 +369,6 @@ def test_a_passing_convoy_keeps_act_train_and_no_card_keeps_the_bar():
     assert all(x not in bar for x in ("sortie-open", "act-sortie", "sx-duels", "sx-"))  # 沒有 sortie_card：行動列一個字不變
 
 
-@pytest.mark.slow
 def test_the_map_cards_sortie_button_opens_the_card_on_the_jianghu_page():
     c, world = _duel_cast()
     m = _view(c, world, "甲")

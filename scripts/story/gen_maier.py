@@ -518,7 +518,7 @@ ANNAL_ASH = (OPEN_ANNAL + "後入西華賊營。會官軍夜至，"
 REWARD = {"xinde": 40, "fame": 1}
 endings = [
     {
-        "id": "home", "title": "回家", "text": HOME, "annal": ANNAL_HOME, "image": "stories/maier_end_home",
+        "id": "home", "title": "一鍋粟粥", "text": HOME, "annal": ANNAL_HOME, "image": "stories/maier_end_home",
         "effect": {"stats": {**REWARD, "good": 3}},
         "after": [
             {"days": 3, "where": MARKET, "title": "三天後・汝南集市", "image": "stories/maier_ledger", "text": P(
@@ -536,7 +536,7 @@ endings = [
         ],
     },
     {
-        "id": "south", "title": "往南", "text": SOUTH, "annal": ANNAL_SOUTH, "image": "stories/maier_rope",
+        "id": "south", "title": "南去的人", "text": SOUTH, "annal": ANNAL_SOUTH, "image": "stories/maier_rope",
         "effect": {"stats": {**REWARD, "good": 2}},
         "after": [
             {"days": 0, "within": 3, "where": WILDS, "when": {"南": 1}, "title": "送粟", "keepsake_drop": "小滿的一把粟", "text": P(
@@ -555,7 +555,7 @@ endings = [
         ],
     },
     {
-        "id": "stay", "title": "留下", "text": STAYED, "annal": ANNAL_STAY, "image": "stories/maier_end_home",
+        "id": "stay", "title": "留下來的人", "text": STAYED, "annal": ANNAL_STAY, "image": "stories/maier_end_home",
         "effect": {"stats": {**REWARD, "good": 3}},
         "after": [
             {"days": 3, "where": WILDS, "title": "三天後・汝南荒野", "text": P(
@@ -572,7 +572,7 @@ endings = [
         ],
     },
     {
-        "id": "ash", "title": "灰", "failed": True, "text": ASH, "annal": ANNAL_ASH, "image": "stories/maier_end_ash",
+        "id": "ash", "title": "灰裡的繩子", "failed": True, "text": ASH, "annal": ANNAL_ASH, "image": "stories/maier_end_ash",
         "effect": {"stats": {**REWARD, "good": 1}}, "keepsakes": ["一段燒斷的繩子"],
         "after": [
             {"days": 3, "where": WILDS, "title": "三天後・汝南荒野", "text": "草屋的門檻上，葛三坐著，編蚱蜢。他身邊已經有很多隻了，排成一排。他看見你，沒有問。他笑了一下。他一直在等你開口，又怕你開口。"},
@@ -584,7 +584,7 @@ endings = [
         ],
     },
     {
-        "id": "late", "title": "門板上了", "failed": True, "weight": 3,
+        "id": "late", "title": "糧行閉門", "failed": True, "weight": 3,
         "text": "你到汝南集市的時候，蘇家糧行的門板全上了。門縫裡沒有燈。帳上那一行，大概已經翻過去了。",
         "annal": "中平元年秋，{name}過汝南，有農人以賣兒契來問。{name}後尋其女，不及。",
         "image": "stories/maier_start",

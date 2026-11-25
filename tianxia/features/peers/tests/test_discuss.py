@@ -1101,3 +1101,20 @@ def test_fb244_both_spar_entries_show_their_exp_and_link_their_report(pair, via)
         assert any(c.startswith("心得 +") for c in head.changes)
         assert head.battle_id is not None and head.battle_id == state.battles[-1].id
         assert state.player.member.exp != before[name] or state.player.member.level > 1  # 經驗真的加了
+
+
+def test_the_other_sides_guard_is_there_at_the_discussion(pair):
+    """親衛隊長收尾（Joy 2026-11-25）：對方帶在身邊、投效了的親衛在一旁的那一句，兩邊各看到對方的。"""
+    from tianxia.core import guard_base
+    from tianxia.state import GuardBook
+
+    content, world = pair
+    content.config.guard.enabled = True
+    jia = _load(world, "甲")
+    jia.player.guard = GuardBook(stage="sworn", path="醫者", name="白芷", sex="女", opening="fever", qing=-15)
+    CharacterStore(world.db).save(jia)
+    _invite(content, world)
+    msgs = _accept(content, world, "insight:huo")
+    assert msgs[-1] == guard_base.DISCUSS_RIVAL["cold"].format(owner="甲", gname="白芷")
+    seen = [ln for e in _load(world, "甲").journal if e.title.startswith("論武") for ln in e.lines]
+    assert not any("白芷" in ln for ln in seen)  # 自己的不在自己那一則裡說

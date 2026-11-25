@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import old_page, real_content
 from test_prologue_web import run as run_classic
 
 import server
@@ -24,8 +24,8 @@ def run(m, script, *, S=None, menxia=None):
 
 @pytest.fixture
 def wan(world):
-    """正式內容 week7、開了季、站在大將軍府（何進在）、投靠官軍、名望夠求見。"""
-    content = real_content("week7")
+    """正式內容 week7、開了季、站在大將軍府（何進在）、投靠官軍、名望夠求見。舊江湖頁（old_page）：新頁的測試自己打開開關。"""
+    content = old_page(real_content("week7"))
     world.seed_first_season(content)
     world.open_season(content, now=0.0)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world, graduated=True)
@@ -76,6 +76,21 @@ def test_talking_to_a_figure_draws_the_overlay_with_the_same_options(wan):
     assert 'data-id="talk:0"' in page and 'data-id="talk:leave"' in page
     assert "「你來了。」" in page and "（情誼 7）" not in page  # 名字在名牌上、情誼在框底，不寫第二次
     assert "情誼 7" in page
+    assert "vn-shop" not in page  # 心神還夠：沒有去萬寶閣那一顆
+
+
+def test_out_of_xinshen_the_talk_overlay_offers_the_shop_under_the_short_line(wan):
+    """心神用完（talk.shop，Joy 待辦「心神用完→萬寶閣鈕」）：「心神不足」那一行底下一顆去萬寶閣，停在那一件（mall-goto）。"""
+    m = server.main_view(wan)
+    m["talk"] = {"id": "zhujun", "name": "朱儁", "side": "官軍", "affinity": 7, "face": None, "shop": "xinshen_5"}
+    m["options"] = [{"id": "talk:0", "label": "「請將軍指點。」（心神 1）", "enabled": False},
+                    {"id": "talk:short", "label": "心神不足，明早 00:00 回到 6。", "enabled": False},
+                    {"id": "talk:leave", "label": "告辭", "enabled": True}]
+    m["scene"], m["art"] = "<p>「你來了。」</p>", None
+    page = run(m, "return H.pageJianghu();")
+    menu = page.split('class="vn-menu"')[1]
+    short, shop = menu.index('data-id="talk:short"'), menu.index('data-act="mall-goto" data-id="xinshen_5"')
+    assert short < shop and "去萬寶閣" in menu[shop:]
 
 
 def test_a_long_reply_never_hides_the_leave_button(wan):

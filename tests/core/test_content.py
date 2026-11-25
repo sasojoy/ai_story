@@ -1343,6 +1343,18 @@ def test_push_is_off_by_default():
         assert real_content(path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
 
 
+def test_online_profiles_open_only_the_human_half_of_support():
+    """客服只開真人那一半（企劃者 2026-11-19「這一波落地後先開真人客服」，第 228 批）：week7、season21 的 support.enabled 打開，
+    客服官的 bot_account 空著、帳號綁定 identity 關著；content/config.json 那一層照舊關。客服官 token 那條路一律 404 就靠
+    bot_account 空著（routes._desk_who 讀不到客服官就不認 Bearer）。之後要開客服官或帳號綁定的那一批改這一條。"""
+    for name in ONLINE_PROFILES:
+        cfg = real_content(name).config
+        assert cfg.support.enabled is True, name
+        assert cfg.support.bot_account == "", name
+        assert cfg.identity.enabled is False, name
+    assert real_content().config.support.enabled is False
+
+
 def test_push_timings_must_make_sense():
     """看守每 0 秒看一次是空轉；兩次「世界變了」的間隔不能是負的（0＝不壓）。"""
     with pytest.raises(ValidationError, match="greater than 0"):
@@ -1500,72 +1512,86 @@ def test_location_desc_when_is_checked(tmp_path):
 # ── 第一季的結局與季末大事（計畫 T9）──────────────────────────
 
 
-def _real_copy(tmp_path):
-    """真實內容的一份副本（fixture 內容沒有第一季的結局與季末大事）。"""
-    root = tmp_path / "content"
-    copy_real_content(root)
-    return root
+# 下面 11 條各改真實內容副本的一個欄位、整份 load_content 一次；第 231 批把它們併成兩組、一組只抄一份載一次
+# （第 223 批的規矩：同一個物件的兩個欄位分在不同組、組裡沒有哪一句是另一句的子字串）。
+# 每條照舊是自己的測試，只斷自己那一句帶 id 的全句（原本的短字都是全句的子字串）。
+_REAL_MUTATIONS = {
+    "stance": lambda root: edit_json(root / "scenario.json", lambda d: d["endings"][0].update(stance_top="guan")),
+    "finale": lambda root: edit_json(root / "timetable.json", lambda d: d[0].update(early_preface="提早了。")),
+    "fallback": lambda root: edit_json(root / "scenario.json", lambda d: d["endings"].append(
+        {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}})),
+    "intercept": lambda root: edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(intercept="nanyang_wilds")),
+    "escort": lambda root: edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(escort=["luoyang_road", "huangjin_camp"])),
+    "personal": lambda root: edit_json(root / "orders.json", lambda d: d["templates"][0].update(personal="convoy")),
+    "textslot": lambda root: edit_json(root / "orders.json", lambda d: d["templates"][0].update(text="{將軍}傳令")),
+    "squad": lambda root: edit_json(root / "orders.json", lambda d: d["convoy_squads"].update(guan="huang_grain_convoy")),
+    "promote": lambda root: edit_json(root / "events" / "general.json",
+                                      lambda d: d[0]["choices"][0].setdefault("effect", {}).update(promote=2)),
+    "followers": lambda root: edit_json(root / "events" / "promotion.json",
+                                        lambda d: d[0]["choices"][0]["effect"].update(followers=["follower_huang_believer", "follower_guan_spear"])),
+    "handoff": lambda root: edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None)),
+}
+_REAL_GROUPS = {
+    "A": ["stance", "finale", "intercept", "personal", "squad", "promote", "handoff"],
+    "B": ["fallback", "escort", "textslot", "followers"],
+}
 
 
-def test_stance_fields_only_on_season_one_endings(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "scenario.json", lambda d: d["endings"][0].update(stance_top="guan"))
-    with pytest.raises(ContentError, match="第一季"):
-        load_content(root)
+@pytest.fixture(scope="module")
+def real_mutation_text(tmp_path_factory):
+    """組名 → 真實內容副本套上那一組全部突變後 load_content 丟出的訊息（懶算：用到那一組才抄、才載，一組只載一次）。"""
+    cache = {}
+
+    def text(group):
+        if group not in cache:
+            root = tmp_path_factory.mktemp(f"real_{group}") / "content"
+            copy_real_content(root)
+            for name in _REAL_GROUPS[group]:
+                _REAL_MUTATIONS[name](root)
+            try:
+                load_content(root)
+                cache[group] = None
+            except ContentError as e:
+                cache[group] = str(e)
+        assert cache[group] is not None, f"第 231 批組 {group}：整組套上沒有丟 ContentError"
+        return cache[group]
+    return text
 
 
-def test_finale_fields_only_on_the_finale(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "timetable.json", lambda d: d[0].update(early_preface="提早了。"))
-    with pytest.raises(ContentError, match="季末"):
-        load_content(root)
+def test_stance_fields_only_on_season_one_endings(real_mutation_text):
+    assert "結局 huangjin_win：stance_min／stance_max／stance_top 只有第一季的結局（season_one）能寫" in real_mutation_text("A")
 
 
-def test_each_season_keeps_its_own_fallback_ending(tmp_path):
+def test_finale_fields_only_on_the_finale(real_mutation_text):
+    assert "時刻表 uprising：early_preface、out_lines、ending_chronicle 只有季末大事能寫" in real_mutation_text("A")
+
+
+def test_each_season_keeps_its_own_fallback_ending(real_mutation_text):
     """beta 季與第一季各自清單的最後一筆是保底：第一季多一筆有門檻的結局排在最後，就沒有保底。"""
-    root = _real_copy(tmp_path)
-    edit_json(root / "scenario.json", lambda d: d["endings"].append(
-        {"id": "x", "season_one": True, "title": "多的", "text": "多的。", "stance_min": {"huang": 99}}))
-    with pytest.raises(ContentError, match="保底"):
-        load_content(root)
+    assert "劇本第一季的最後一個結局必須沒有條件、也不限主線（作為保底結局）" in real_mutation_text("B")
 
 
 # ── 軍令（計畫 T6）──────────────────────────────────────────
 
 
-def test_orders_slot_must_be_on_its_front(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(intercept="nanyang_wilds"))
-    with pytest.raises(ContentError, match="截糧"):
-        load_content(root)
+def test_orders_slot_must_be_on_its_front(real_mutation_text):
+    assert "orders.json 的 slots.yingru.guan：截糧的地點 nanyang_wilds 不在這條戰線上" in real_mutation_text("A")
 
 
-def test_orders_escort_must_end_at_a_base_of_its_side(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "orders.json", lambda d: d["slots"]["yingru"]["guan"].update(escort=["luoyang_road", "huangjin_camp"]))
-    with pytest.raises(ContentError, match="護糧"):
-        load_content(root)
+def test_orders_escort_must_end_at_a_base_of_its_side(real_mutation_text):
+    assert "orders.json 的 slots.yingru.guan：護糧的終點 huangjin_camp 不是這個陣營的據點" in real_mutation_text("B")
 
 
-def test_orders_personal_kind_must_match(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "orders.json", lambda d: d["templates"][0].update(personal="convoy"))
-    with pytest.raises(ContentError, match="個人部分"):
-        load_content(root)
+def test_orders_personal_kind_must_match(real_mutation_text):
+    assert "orders.json 的 defend／guan：個人部分應該是 duty，寫的是 convoy" in real_mutation_text("A")
 
 
-def test_orders_text_slots_must_be_known(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "orders.json", lambda d: d["templates"][0].update(text="{將軍}傳令"))
-    with pytest.raises(ContentError, match="插槽"):
-        load_content(root)
+def test_orders_text_slots_must_be_known(real_mutation_text):
+    assert "orders.json 的 defend／guan：不認得的插槽 {將軍}" in real_mutation_text("B")
 
 
-def test_orders_convoy_squad_must_belong_to_its_side(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "orders.json", lambda d: d["convoy_squads"].update(guan="huang_grain_convoy"))
-    with pytest.raises(ContentError, match="糧隊"):
-        load_content(root)
+def test_orders_convoy_squad_must_belong_to_its_side(real_mutation_text):
+    assert "orders.json 的 convoy_squads：guan 的糧隊 huang_grain_convoy 不存在或不屬於這個陣營" in real_mutation_text("A")
 
 
 def test_season_one_tutorial_steps_must_come_last(tmp_path):
@@ -1579,26 +1605,16 @@ def test_season_one_tutorial_steps_must_come_last(tmp_path):
 # ── 晉升（計畫 T5）──────────────────────────────────────────
 
 
-def test_promote_only_on_promotion_scenes(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "events" / "general.json", lambda d: d[0]["choices"][0].setdefault("effect", {}).update(promote=2))
-    with pytest.raises(ContentError, match="晉升奇遇"):
-        load_content(root)
+def test_promote_only_on_promotion_scenes(real_mutation_text):
+    assert "事件 drunk_token：promote／followers 只能寫在晉升奇遇（promotions.json 的事件）" in real_mutation_text("A")
 
 
-def test_promotion_followers_must_be_that_sides(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "events" / "promotion.json",
-              lambda d: d[0]["choices"][0]["effect"].update(followers=["follower_huang_believer", "follower_guan_spear"]))
-    with pytest.raises(ContentError, match="給的部下要是 guan 的"):
-        load_content(root)
+def test_promotion_followers_must_be_that_sides(real_mutation_text):
+    assert "事件 promo_guan_2：給的部下要是 guan 的" in real_mutation_text("B")
 
 
-def test_promotion_handoff_needs_its_scene_and_summons(tmp_path):
-    root = _real_copy(tmp_path)
-    edit_json(root / "promotions.json", lambda d: d[0].update(summons_handoff=None))
-    with pytest.raises(ContentError, match="接手"):
-        load_content(root)
+def test_promotion_handoff_needs_its_scene_and_summons(real_mutation_text):
+    assert "promotions.json 的 guan／第 2 階：有接手的人就要有接手版的奇遇與召見，沒有就都不寫" in real_mutation_text("A")
 
 
 # ── 意境與基礎武學（武學與成長設計附錄 A～C）─────────────────

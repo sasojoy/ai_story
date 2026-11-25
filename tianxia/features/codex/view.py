@@ -22,7 +22,9 @@ LEFT = "還有 {n} 天"  # 待 joy 潤：期限
 LEFT_TODAY = "今天就過期"  # 待 joy 潤
 DOING = "去做那件事"  # 待 joy 潤：task 段沒寫 hint
 FIGHT = "打一場"  # 待 joy 潤
-UNSEEN = "？？"
+UNSEEN = "？？"  # 只當內部的記號（還沒遇上的線、還沒見的結局的 title；畫面不寫它）
+# 圖鑑沒解鎖的格不放「？」（Joy 2026-11-22「直接空白然後給個?有點太隨便了」）：暈墨佔位加兩個字
+UNSEEN_PERSON, UNSEEN_THING = "未見", "未得"  # 待 joy 潤
 STAY = "到{place}，在「此地」裡找{pron}說話。"  # 待 joy 潤：走完留下來的人
 GONE = "{pron}不在了。"  # 待 joy 潤：收在留不住她的結局
 UNFINISHED = "此事未了"  # 待 joy 潤
@@ -84,7 +86,7 @@ def _next(ctx, progress) -> dict | None:
     return {"what": what, "where": where, "loc": loc, "when": when, "left": left, "hint": bool(stage.hint), "ready": when == NOW}
 
 
-LOST = "當時的選擇沒有留下"  # 待 joy 潤：江湖錄打開之前走過的那一幕
+LOST = "那時怎麼選的，已經記不清了"  # 待 joy 潤：江湖錄打開之前走過的那一幕
 
 
 def _scene_rows(ctx, b, season: int, line_id: str, line=None, progress=None) -> list[dict]:
@@ -236,7 +238,7 @@ def people(ctx) -> dict:
         if not got and _face(cid) is None:  # 圖鑑只收有立繪的人（大勢人物、女子、名士）；沒立繪的見過了才列
             continue
         loc = (placed.get(cid) or ch.talk_at) if got else ch.talk_at  # 沒見過的寫他平常在的地方（剪影＋地名）
-        rows.append({"id": cid, "name": ch.name if got else UNSEEN, "face": _face(cid) if got else None, "got": got,
+        rows.append({"id": cid, "name": ch.name if got else UNSEEN_PERSON, "face": _face(cid) if got else None, "got": got,
                      "place": _loc_name(c, loc) if loc else "", "dot": f"p:{cid}" in b.fresh,
                      "about": (ch.situation or "").split("。")[0] if got else ""})
     rows.sort(key=lambda r: not r["got"])
@@ -250,7 +252,7 @@ def things(ctx) -> dict:
 
     def cell(key: str, name: str, src: str | None, sub: str = "") -> dict:
         got = key in have
-        return {"key": key, "name": name if got else UNSEEN, "src": src if got else None, "got": got, "sub": sub if got else "",
+        return {"key": key, "name": name if got else UNSEEN_THING, "src": src if got else None, "got": got, "sub": sub if got else "",
                 "dot": f"t:{key}" in b.fresh}
 
     def web(path: str) -> str | None:
@@ -294,6 +296,29 @@ def endings(ctx) -> dict:
                      "dot": any(f"e:{line.id}:{e}" in b.fresh for e in got)})
     rows.sort(key=lambda r: not r["met"])
     return {"rows": rows, "got": sum(sum(e["got"] for e in r["ends"]) for r in rows), "all": sum(len(r["ends"]) for r in rows)}
+
+
+PAGES = ("people", "things", "gods", "endings")  # 圖鑑的四頁（收滿一頁給一個頭銜：Joy 2026-11-13 設計稿決定三，名字在稱號包）
+
+
+def _tally(ctx, page: str) -> tuple[int, int]:
+    if page == "things":
+        groups = things(ctx)["groups"]
+        return sum(g["got"] for g in groups), sum(g["all"] for g in groups)
+    one = {"people": people, "gods": gods, "endings": endings}[page](ctx)
+    return one["got"], one["all"]
+
+
+def full_pages(ctx) -> list[str]:
+    """圖鑑收滿了哪幾頁（PAGES 的順序）：那一頁每一格都亮了。開關關著、假人、還沒有江湖錄是空的。稱號包經 ctx._codex_full 問。"""
+    if not ctx.content.config.codex.enabled or ctx.state.player.bot or rules.book(ctx.state) is None:
+        return []
+    out = []
+    for page in PAGES:
+        got, total = _tally(ctx, page)
+        if total and got >= total:
+            out.append(page)
+    return out
 
 
 def page(ctx) -> dict:

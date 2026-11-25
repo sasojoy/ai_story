@@ -343,7 +343,7 @@
     const trip = outingTrip();
     if (!box || !trip) return;
     const at = Math.min(Math.max(OW.played, 1), trip.total);
-    box.querySelector(".outing-step").innerHTML = `第 ${at}／${trip.total} 段${Array.from({ length: trip.total }, (_, j) => `<i class="d${j < OW.played ? " on" : ""}"></i>`).join("")}`;
+    box.querySelector(".outing-step").innerHTML = `第 ${at}／${trip.total} 段`;
     const foot = box.querySelector(".outing-foot");
     const walking = OW.cur || OW.tasks.length;
     const card = box.querySelector(".outing-card");

@@ -17,7 +17,9 @@ class AllegianceScenario(EffectsScenario):
     投靠（faction:<id> → faction:confirm）：確認畫面（寫明這一季不能改投、各方人數）、再想想（faction:cancel）、確定、按了之後走開再確定
     （寫「你已經不在投靠的地方了」）、豪強分屬兩軍的季投靠豪強（四勝利開著時照投靠點直接給傾向；pick_side 把四勝利暫時關掉，走 faction:ally:<id> 自己挑依附哪一軍；那一段只有投靠豪強的人，沒有人拜門派）。
     改幫（faction:lean:<軍>，三陣營四勝利）：改幫、再改同一軍（灰或清單外）、有事件待選時被擋（FB-820）、在路上照樣收（lean_actions.stale_cell）。
-    拜入門派（sect:<事件>）：進去、婉拒；測試內容只有流雲派一個。拜入曹氏莊院之後「挑依附哪一軍」這一步在四勝利開著時由 join_lean 直接給傾向（回「你依附了官軍。」），不經選單，見下面「沒走到的」。
+    拜入門派（sect:<事件>）：進去、婉拒；測試內容只有流雲派一個。門派包打開的季（week7、season21，#243）兩格分開：第一格是包自己的門派（白馬寺，
+    zongmen:join:<門派>，一位按了拜入、之後選單上是叛出；婉拒那位看了不按），第二格是走 sect: 事件的門派（潁川書院；曹氏莊院的事件要豪強，拿掉豪強的季
+    選單上是空的，寫一行「找拜得到的」就跳過）（第 232 批）。拜入曹氏莊院之後「挑依附哪一軍」這一步在四勝利開著時由 join_lean 直接給傾向（回「你依附了官軍。」），不經選單，見下面「沒走到的」。
     叛投（defect:<陣營>[:<依附>] → defect:confirm）：確認畫面（身份歸零、糧車、密謀、懸賞、同伴……）、再想想、按了之後走開再確定（叛投不成）、
     已叛投過再按、豪強以叛投換陣營；叛投之後欠著的、清進度那幾格由效果與叛投那一軌擺局面（defect_full）。
     三方卡與結局卡（main 的 sides_card、week_card.tier_hint、收季之後的 ending）、新的一季開局的起手資源與稱號（_season_grant）。
@@ -180,20 +182,47 @@ class AllegianceScenario(EffectsScenario):
             jianfa.enabled = before
         self.world_view("挑依附之後")
 
+    def sect_slots(self) -> list[list]:
+        """門派兩格（拜入、婉拒各一位）。門派包打開的季（開著的門派裡有掛開關的，Sect.switch）：第一格是包自己的門派（zongmen:join:），
+        第二格是走 sect: 事件的門派，各照 id 排、第一個選單上有拜入鈕的那一門（拿掉豪強的季曹氏莊院要豪強才抽得到，跳過）。
+        只有一種（測試內容、門派包關著）照舊：照 id 排的前兩門，一門一格。"""
+        sects = sorted(self.open_sects().items())
+        own = [kv for kv in sects if getattr(kv[1], "switch", None)]
+        rest = [kv for kv in sects if not getattr(kv[1], "switch", None)]
+        if not own or not rest:
+            return [[kv] for kv in sects[:2]]
+        return [own, rest]
+
     def sect(self) -> None:
         """每個門派：一位拜入（有事件選那個拜入的選項；拜入曹氏莊院之後挑依附哪一軍）、一位婉拒（不拜的那個選項）。"""
-        for i, (sid, sect) in enumerate(sorted(self.open_sects().items())[:2]):
+        for i, slot in enumerate(self.sect_slots()):
+            sid, sect = slot[0]
             for who, accept in ((self.ACCEPT[i], True), (self.DECLINE[i], False)):
-                if not self.place(who, sect.location):
-                    continue
                 squad = self.c.squads.get("xuantie_dizi") if accept else None
                 before = None if squad is None else squad.difficulty
+                if accept:  # 這一格有好幾個候選：照先後到門派所在地看，選單上有拜入的鈕（或候選用完）就是這一門
+                    placed = False
+                    for k, (sid, sect) in enumerate(slot):
+                        placed = self.place(who, sect.location)
+                        if placed and (k == len(slot) - 1 or self.menu(who, f"{sid} 門派所在地（找拜得到的）", "sect:", "zongmen:join:")):
+                            break
+                    if not placed:
+                        continue
+                elif not self.place(who, sect.location):
+                    continue
                 if accept:  # 曹氏莊院要先接護院三招：屬性補滿、護院的難度這一下壓到 1（讓拜入走得到），接不下來（還是散人）再試，最多四回
                     self.edit(who, lambda p: p.stats.update({"str": 15, "agi": 15, "con": 15}))
                     if squad is not None:
                         squad.difficulty = 1
                         emit("曹家護院這一下的難度", {"before": before, "now": squad.difficulty})
-                for oid in self.menu(who, f"{sid} 門派所在地", "sect:"):
+                for oid in self.menu(who, f"{sid} 門派所在地", "sect:", "zongmen:join:"):
+                    if oid.startswith("zongmen:join:"):  # 門派包打開的季：包自己的門派不走 sect: 事件，拜入是 zongmen:join:<門派>；婉拒那位看了不按
+                        if accept:
+                            self.press(who, oid, "拜入門派")
+                        else:
+                            emit(f"{who} 看門派 不按 {oid}", None)
+                        self.menu(who, "之後", "sect:", "zongmen:", "faction:")
+                        continue
                     eid = oid.partition(":")[2]
                     picks = [k for k, ch in enumerate(self.c.events[eid].choices) if bool(ch.effect.join_sect or ch.fail_effect.join_sect) == accept]
                     for _try in range(4 if accept else 1):
@@ -406,7 +435,7 @@ class AllegianceScenario(EffectsScenario):
 
 # 改一個字（selftest）：按了投靠走開再確定那一句（原 Game._faction_step 確定那一支，第 35 批搬進 features/faction/join_actions.py；舊名的檔與包裡的檔兩處找）
 register_track("allegiance", AllegianceScenario, (("tianxia/engine.py", "tianxia/features/faction/join_actions.py"), ("（你已經不在投靠的地方了。）", "（你已經不在投靠的地方了！）")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "looks",
+                       "mall", "map", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

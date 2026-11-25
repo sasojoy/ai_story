@@ -38,8 +38,7 @@ class ShutScenario(StripScenario):
         """註冊一位新人、建角色（不略過引導）。"""
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                "again": self.passwords[who]})
+        self.sign_up(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": gender})
 
     # ── 前半 ──
@@ -194,7 +193,7 @@ class ShutScenario(StripScenario):
 
 register_track("shut", ShutScenario, (("tianxia/features/guide/newbie.py",),
                                       ("到匪寇橫行的地方出門探索，打贏一場", "到匪寇橫行的地方出門探索，打贏兩場")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "jieyi", "legacy", "looks", "mall", "map",
-                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "map", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

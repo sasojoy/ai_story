@@ -55,7 +55,7 @@ def test_three_open_tickets_at_most():
     for _ in range(3):
         assert ticket(c).status_code == 200
     out = ticket(c)
-    assert out.status_code == 400 and out.json()["error"] == "已經有 3 張還沒結的單，等客服回覆或結單之後再送。"
+    assert out.status_code == 400 and out.json()["error"] == "已經有 3 張還沒結的單，等其中一張結了再送。"
 
 
 def test_five_tickets_a_day_at_most(monkeypatch):
@@ -78,6 +78,27 @@ def test_mine_lists_my_tickets_newest_first():
     assert [t["body"] for t in mine["tickets"]] == ["第二張", "第一張"]
     assert mine["tickets"][0]["category_name"] == "其他" and mine["tickets"][0]["status"] == "open"
     assert list(mine["categories"]) == ["account", "mall", "game", "other"] and mine["body_max"] == 1000
+
+
+LIMIT_KEYS = ("files_max", "file_bytes_max", "open_max", "daily_max")
+
+
+def test_mine_carries_the_limits(monkeypatch):
+    """第 226 批：/mine 帶四個上限，值照 Config.support（旁檔還沒建也帶；送單回的 mine 也帶），網頁照它畫提示與挑圖。"""
+    cfg = server.CONTENT.config.support
+    c = player()
+    assert not sidecar().exists()
+    empty = c.get("/api/support/mine").json()
+    assert {k: empty[k] for k in LIMIT_KEYS} == {"files_max": 3, "file_bytes_max": 3_000_000, "open_max": 3, "daily_max": 5}
+    assert list(empty)[-5:] == ["body_max", *LIMIT_KEYS]
+    for value in (0, 5):
+        for k in LIMIT_KEYS:
+            monkeypatch.setattr(cfg, k, value)
+        assert {k: c.get("/api/support/mine").json()[k] for k in LIMIT_KEYS} == dict.fromkeys(LIMIT_KEYS, value)
+    for k in LIMIT_KEYS:
+        monkeypatch.setattr(cfg, k, 5)
+    filed = ticket(c).json()
+    assert {k: filed["mine"][k] for k in LIMIT_KEYS} == dict.fromkeys(LIMIT_KEYS, 5)
 
 
 def test_other_players_ticket_is_404():

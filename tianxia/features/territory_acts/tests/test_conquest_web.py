@@ -136,7 +136,6 @@ def test_server_sends_the_banner_for_a_siege_and_the_page_draws_it():
     assert out.startswith('<p class="siege-strip"') and "攻城・南陽官道" in out
 
 
-@pytest.mark.slow
 def test_banner_words_for_melee_lone_and_held():
     """三方混戰（裁決 22）、只有一軍到場轉回單方（裁決 23）、陣營佔著的區塊：那一條各怎麼寫（【開發定】，待 joy 潤）。"""
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
@@ -165,9 +164,13 @@ def test_banner_words_for_melee_lone_and_held():
 # .pick），一顆的照舊在名字右邊。版面在 node 裡量不到：這裡鎖住排法與那兩條 CSS，375 寬實量見 docs/superpowers/specs/2026-10-20-領地爭奪-草圖/第三批/。
 
 
-def _sieges_view(locs):
-    """官軍的人站南陽官道，locs 每一塊各排一場官軍攻城、此刻開集結（同一州）：回 server.main_view。"""
+def _sieges_view(locs, old=True):
+    """官軍的人站南陽官道，locs 每一塊各排一場官軍攻城、此刻開集結（同一州）：回 server.main_view。old：舊江湖頁（conftest.old_page）。"""
+    from conftest import old_page  # noqa: PLC0415
+
     game = go(join(conquest_game("season21"), "guan"), "nanyang_road")
+    if old:
+        old_page(game.content)
     game.now = NOW
     for loc in locs:
         slot = announce(game, loc, "guan")
@@ -180,6 +183,7 @@ def _sieges_view(locs):
 
 
 def _join_row(m):
+    """舊江湖頁的集結那一排（m 要用 old_page 關掉新頁的內容做的）；新頁上一場一顆、一顆一列在 jianghu 包的 test_jianghu_parity_web.py。"""
     from test_prologue_web import run as page_run
 
     page = page_run(m, "return H.pageJianghu();")
@@ -188,7 +192,6 @@ def _join_row(m):
     return row.group(1), row.group(2)
 
 
-@pytest.mark.slow
 def test_fb553_two_join_buttons_stack_one_per_line():
     m = _sieges_view(["nanyang_road", "nanyang_wilds"])
     joins = [o for o in m["options"] if o["id"].startswith("battle:join:")]
@@ -198,13 +201,11 @@ def test_fb553_two_join_buttons_stack_one_per_line():
     assert row.count('data-act="choose"') == 2
 
 
-@pytest.mark.slow
 def test_fb553_one_join_button_stays_beside_the_name():
     cls, row = _join_row(_sieges_view(["nanyang_road"]))
     assert cls == "" and row.count('data-act="choose"') == 1  # 一顆的照舊（FB-105 的排法，一個像素都不變）
 
 
-@pytest.mark.slow
 def test_scene_does_not_repeat_the_strip():
     """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege_rules.scene_note）。"""
     m = _sieges_view(["nanyang_road"])
@@ -212,7 +213,6 @@ def test_scene_does_not_repeat_the_strip():
     assert "；守方：" not in m["scene"] and "官軍攻南陽官道" not in m["scene"]
 
 
-@pytest.mark.slow
 def test_melee_scene_keeps_only_the_rule():
     """三方混戰：誰攻、守方是誰也拿掉，只留那一條沒說到的規矩（誰補上最後一刀誰拿下）。"""
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
@@ -302,7 +302,6 @@ def test_one_row_of_five_tabs():
     assert "‹ 俠客" in mingtie and "名帖匣" in mingtie and 'data-news="journal"' not in mingtie
 
 
-@pytest.mark.slow
 def test_real_view_renders():
     import calendar as pycal
     from datetime import datetime
@@ -447,7 +446,6 @@ def test_crossed_swords_on_every_block_you_can_attack():
     assert not armed & {"yingchuan", "changshe", "zhuo_county", "haozu_fort"}  # 自家的、不是區塊的
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_ropes_hang_no_beads_without_tug_of_war():
     """領地爭奪沒有拔河：輿圖總覽的三條戰線照舊寫值，繩上不掛照門檻擺的地點（舊拔河 2026-10-27 拿掉，沒有「關著照舊掛」了）。"""
     ropes = _game().map_state()["ropes"]
@@ -654,7 +652,6 @@ def test_the_report_button_opens_the_reports_page():
 
 
 # ── 地圖 ──
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_the_map_seal_for_a_letter_and_a_ring_for_a_fight():
     """A：汝南荒野名字旁一枚「戰」字印；B：潁川郊野外一圈紅（.mv-fight）；C：荒丘不另畫。名字照舊寫。"""
     game = _sgame(profile="season21")

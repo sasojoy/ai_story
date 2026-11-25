@@ -70,8 +70,9 @@
   // prologueKey：亮起來的東西變了沒——變了就整頁重畫（分頁列、狀態列只在整頁重畫時才換，見 renderTop）
   const pro = () => (S.main && S.main.prologue) || null;
   // 初入江湖（新手引導第四段）：出了草廬之後那幾步也一樣一樣亮（m.onboard，同一個形狀）；草廬裡才有的規矩（略過序章、師父的框）照舊只看 pro()
-  const shown = (key) => { const p = pro() || (S.main && S.main.onboard); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
-  const prologueKey = () => { const p = pro() || (S.main && S.main.onboard); return p ? p.reveal.join(",") : ""; };
+  // 慢慢長出來（web/unfold.js；Joy 2026-11-25）：新角色還用不到的分頁先不畫（m.unfold.hide），玩到才長出來；舊角色沒有 m.unfold，照舊
+  const shown = (key) => { const u = S.main && S.main.unfold; if (u && u.hide.includes(key)) return false; const p = pro() || (S.main && S.main.onboard); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
+  const prologueKey = () => { const p = pro() || (S.main && S.main.onboard); const u = S.main && S.main.unfold; return (p ? p.reveal.join(",") : "") + (u ? `|${u.hide.join(",")}` : ""); };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // FB-501（PM 2026-10-20）：7 天濃縮季的「週」是段（第 1～2、3～4、5～7 天），軍令每天一道。伺服器在 7 天季送
@@ -555,7 +556,7 @@
         ${note("fame", f, f.ladder, "rn-fame", f.title)}
         <div class="rn-row"><span class="rn-lbl">${esc(v.by)} <b>${way === "寇" ? v.evil : v.good}</b></span>${dots(v.ladder[way], v.tier, vcls, "virtue")}</div>
         ${note("virtue", v, v.ladder[way], vcls, "還沒有稱號")}
-        <p class="rn-hint">點圓點看那一段給什麼・${other}，走${esc(way)}的路${r.scale_note ? `・${esc(r.scale_note)}` : ""}</p>
+        <p class="rn-hint">點哪一段，看那一段給什麼・${other}，走${esc(way)}的路${r.scale_note ? `・${esc(r.scale_note)}` : ""}</p>
         ${sanren}
         <p class="rn-src"><b>名望從哪裡來</b>${esc(r.sources.fame)}<b>善名、惡名從哪裡來</b>${esc(r.sources.virtue)}</p>
       </div>`;

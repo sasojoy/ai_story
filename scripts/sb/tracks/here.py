@@ -61,7 +61,7 @@ class HereScenario(SocializeScenario):
         who = self.NEWBIE
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+        self.sign_up(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
 
     def one(self) -> None:
@@ -437,12 +437,12 @@ TRACK_REQUIRES.update({"here": "content/figure_intros.json", "places": "tianxia/
 # 改一個字（selftest）：說得上話但鈕上不是他的那一句（搬之前在 engine.py，搬之後在交友求見包）、戰火那一句（共用層 place_state，這一批不搬）
 register_track("here", HereScenario, (("tianxia/engine.py", "tianxia/features/socialize/view.py", "tianxia/features/socialize/menus.py"),
                                       ('"先按「交友」"', '"先按下「交友」"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "companions", "craft", "cultivation", "explore", "faction", "figure_acts",
-                       "gear", "guide", "heroines", "legacy", "mall", "map", "military", "outlets", "peers", "seal",
-                       "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
-                       "zongmen"))
-register_track("places", PlacesScenario, (("tianxia/place_state.py",), ("這一帶剛打過仗，焦土還沒冷", "這一帶剛打過仗，焦土還未冷")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "map", "military",
+               covers=("admin", "battle", "bounties", "bout", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                       "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "mall", "map", "military",
                        "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+                       "tavern", "travel", "zhuan", "zongmen"))
+register_track("places", PlacesScenario, (("tianxia/place_state.py",), ("這一帶剛打過仗，焦土還沒冷", "這一帶剛打過仗，焦土還未冷")), "week7",
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks",
+                       "mall", "map", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize",
+                       "sortie", "stamina_plays", "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

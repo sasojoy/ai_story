@@ -196,8 +196,7 @@ class CompanionsScenario(Scenario):
         for who in [self.PREP, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
             if who == self.PREP:  # 籌備中（管理者還沒開季）：名冊那三顆只回一句（_not_while_preparing；測試內容自動開季，照常做）
                 for op in ("join", "leave", "release"):
@@ -755,7 +754,7 @@ class GameStateFor:
 # 改一個字（selftest）：託付辦成了那一句（errands.DONE；搬之前在 tianxia/errands.py、之後在包裡）
 register_track("companions", CompanionsScenario, (("tianxia/features/companions/errands.py",),
                                                   ('DONE = "{who}託你的事辦成了。"', 'DONE = "{who}託你的事辦成了！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "military",
-                       "notify", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
-                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy",
+                       "looks", "mall", "military", "notify", "outlets", "peers", "seal", "seclusion", "sense", "smithy",
+                       "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

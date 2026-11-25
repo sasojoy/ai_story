@@ -46,6 +46,8 @@ LOCKED = "鎖定模式：--config、--url、--inbox 不能在命令列上給（�
 EMPTY = "EMPTY：stdin 沒有字，沒送。"  # 待 joy 潤
 BAD_HUMAN = "--human 只收 Discord 的數字 ID。"  # 待 joy 潤
 UNREACHABLE = "連不上伺服器（{url}）。"  # 待 joy 潤
+UNREACHABLE_ARG = "連不上伺服器（--url 給的那個網址）。"  # 待 joy 潤（命令列給的值不印回來）
+BAD_ARGS = "指令或參數不對。可用的：queue、ticket <單號>、answer <單號> [--close] [--human <客服單上的數字>]、note <單號>、close <單號>。"  # 待 joy 潤
 BAD_STATUS = "伺服器回 {code}。"  # 待 joy 潤
 GONE = "帳號卡：這個帳號不在了（或換過人）。"  # 待 joy 潤
 CARD = "帳號卡：名號 {character}・建帳號 {created}・綁了 {binds}・餘額 {balance}"  # 待 joy 潤
@@ -82,13 +84,21 @@ def _locked() -> bool:
     return os.environ.get(LOCK_ENV) == "1"
 
 
+class _Parser(argparse.ArgumentParser):
+    """參數錯了只印固定的一句：argparse 的原話會把參數原樣印回來（金鑰被展開成參數就進了輸出）。"""
+
+    def error(self, message):  # noqa: ARG002 刻意不印 message 與 usage
+        _say(BAD_ARGS)
+        raise SystemExit(2)
+
+
 def _parser(locked: bool) -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="support_cli", description="客服官：看清單、看單、回覆、註記、結單。", allow_abbrev=False)  # 待 joy 潤
+    p = _Parser(prog="support_cli", description="客服官：看清單、看單、回覆、註記、結單。", allow_abbrev=False)  # 待 joy 潤
     if not locked:
         p.add_argument("--config", default=None)
         p.add_argument("--url", default=None)
         p.add_argument("--inbox", default=None)
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
     sub.add_parser("queue", allow_abbrev=False)
     one = sub.add_parser("ticket", allow_abbrev=False)
     one.add_argument("n", type=int)
@@ -112,15 +122,16 @@ def _read_config(path: Path) -> dict:
 
 
 class _Desk:
-    def __init__(self, session, url: str, token: str):
+    def __init__(self, session, url: str, token: str, url_from_args: bool = False):
         self.session, self.url, self.token = session, url.rstrip("/"), token
+        self.url_from_args = url_from_args
 
     def call(self, method: str, path: str, body=None):
         """回 2xx 的回應；其他照結束碼的規矩印一句、丟 _Done。例外的字不印。"""
         try:
             r = self.session.request(method, self.url + path, headers={"Authorization": f"Bearer {self.token}"}, json=body)
         except Exception:  # noqa: BLE001 連不上、逾時：只印網址，不印例外的字
-            _say(UNREACHABLE.format(url=self.url))
+            _say(UNREACHABLE_ARG if self.url_from_args else UNREACHABLE.format(url=self.url))
             raise _Done(2) from None
         code = int(r.status_code)
         if 200 <= code < 300:
@@ -256,7 +267,8 @@ def main(argv=None, session=None) -> int:
         if not body:
             _say(EMPTY)
             return 1
-    desk = _Desk(session if session is not None else requests.Session(), url, token.strip())
+    desk = _Desk(session if session is not None else requests.Session(), url, token.strip(),
+                 url_from_args=not locked and bool(opts.url))
     try:
         if opts.cmd == "queue":
             return _queue(desk)

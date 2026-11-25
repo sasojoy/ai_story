@@ -14,7 +14,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
-- **比畫面先用 `scripts/webqa/gate.py`**（第二輪第 77 批；用法在 `docs/guide/量表與教訓.md`）：兩邊走同一批流程、比 DOM、樣式、截圖、`/api/main`，人工走只補工具走不到的（`report.txt` 的 not reached）。
+- **比畫面先用 `scripts/webqa/gate.py`**（第二輪第 77 批；用法在 `docs/guide/量表與教訓.md`）：兩邊走同一批流程、比 DOM、樣式、截圖、`/api/main`，人工走只補工具走不到的（`report.txt` 的 not reached）。season21、week7 條款開著，註冊要兩個勾選與版號（`age_ok`、`terms_agree`、`terms_version`），工具已經會帶（第 232、233 批）；自己手打 `/api/register` 驗東西時也要帶（版號先 `GET /api/terms/version`）。
 - **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30；`tianxia-flow` 同一句）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q -n 4 -m "slow or not slow" tests/a.py tests/b.py`（點名的檔照字面跑，連 slow）。不跑整套、不跑 `test_for`；派工單沒點名就一條都不跑。
 - **純搬的批：兩台真伺服器逐位元組比**（全部拆包總表 5.0，PM 2026-10-31；第 5 批起）：派工單寫「純搬、`web/` 一個字沒動」的批，實機 QA 改成這樣做，不拍整套截圖：
@@ -86,7 +86,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **設定**：現役只有 `week7`（7 天濃縮季）與 `season21`（21 天季）兩種（企劃者 2026-10-31「現在只有7天跟21天兩種版本」），驗收照這兩種。`weekend` 第 14 批關門了（設了起不來，「找不到設定覆寫檔」）；沒帶（空字串）時伺服器、`run_bots.py`、主機端工具套 `season21`。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
 - **帳號**：`TIANXIA_PROFILE=… <python> scripts/set_password.py <帳號> --character <名號> --db <db> --local-dir <scratchpad>/local`。
   - 密碼寫在 `local/<帳號>_password.txt`，要用就從檔案讀，不要貼進對話。
-  - 這樣建的角色不走草廬序章。要驗序章，就打 `POST /api/register {login,password,again}`，再打 `POST /api/character {name,gender}`（網頁註冊的那一條路）。
+  - 這樣建的角色不走草廬序章。要驗序章，就打 `POST /api/register {login,password,again}`（season21、week7 條款開著，另帶 `age_ok`、`terms_agree` 與 `GET /api/terms/version` 的 `terms_version`），再打 `POST /api/character {name,gender}`（網頁註冊的那一條路）。
   - **要驗序章或初入江湖的某一步**：先走網頁那一條建角色，再直接改 `characters.data` 裡的 `player.tutorial_step` 與 `player.location`（`tutorial.json` 的 `prologue_steps`＝11，0～10 在草廬、`location` 要是 `mentor_hut`；11～14 是初入江湖 e1～e4，`location` 換成 `yingchuan`；15 走完）。伺服器開著也能改：`sqlite3.connect(db, timeout=30)`、`BEGIN IMMEDIATE`，下一個請求會從資料庫重讀。
   - 不同資料庫的帳號用不同的 `--local-dir`，才不會互相蓋掉。
 - **管理者**：設環境變數 `TIANXIA_ADMINS=驗收官`，再建一個叫這個名號的角色。全服第一季停在「籌備中」，要用管理者開季。

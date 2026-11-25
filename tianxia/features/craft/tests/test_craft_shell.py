@@ -499,3 +499,45 @@ def test_the_he_block_is_one_line_of_fire_and_no_rules():
         assert word not in html, word
     assert "斬&lt;月&gt;" in out["seen"] and "he-grand" in out["seen"]
     assert "金光" in out["god"] and 'class="he god"' in out["god"]
+
+
+def test_the_he_board_route_is_404_off_and_lists_this_seasons_merges_on(client, monkeypatch):
+    """合璧榜（board.rows）：改版沒開 404；開著列這一季合出過的意境（合過一爐就有一列，誰首創）。"""
+    _player(client)
+    assert client.get("/api/he_board").status_code == 404
+    _craft_v2_on(monkeypatch)
+    assert client.get("/api/he_board").json() == {"rows": [], "gods": 0}
+    game = server.game_for("沈青衫")
+    game.state.player.insights = ["huo", "feng"]
+    game.state.player.stats["xinde"] = 500
+    open_characters().save(game.state)
+    assert client.post("/api/menxia/forge", json={"insights": ["huo", "feng"]}).status_code == 200
+    rows = client.get("/api/he_board").json()["rows"]
+    assert len(rows) == 1 and rows[0]["by"] == ["沈青衫"] and rows[0]["gods"] == 0 and rows[0]["path"] == "陽"
+
+
+def test_the_he_board_page_is_names_and_seals_not_rules():
+    """合璧榜那一頁（craft.js heBoardHtml）：一列一個意境名、首創的人；成神過的蓋「神」印、寫第一個成神的人與真意。空的一句話。"""
+    js = (server.ROOT / "web" / "craft.js").read_text(encoding="utf-8")
+    script = "\n".join([
+        'const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;"}[c]));',
+        'const HE_HUE = { "陽": "var(--gang)" }; const S = {};',
+        _js_function(js, "function sealSvg(") + "\n  }",
+        _js_function(js, "function heBoardHtml(") + "\n  }",
+    ]) + """
+    const out = { loading: heBoardHtml() };
+    S.heBoard = { rows: [], gods: 0 }; out.empty = heBoardHtml();
+    S.heBoard = { gods: 2, rows: [{ name: "焚<風>", path: "陽", by: ["甲", "乙"], gods: 2, first: "丙", grand: "斬月", mine: true },
+      { name: "沉淵", path: "陰", by: ["丁"], gods: 0, first: null, grand: null, mine: false }] };
+    out.full = heBoardHtml();
+    console.log(JSON.stringify(out));
+    """
+    done = webharness.node(script)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    assert "hb-list" not in out["loading"] and "榜上無名" in out["empty"]
+    full = out["full"]
+    assert full.count('class="hb-row') == 2 and "焚&lt;風&gt;" in full and "甲、乙" in full
+    assert "×2" in full and "丙〔斬月〕" in full and "hb-row god mine" in full and "成神 2 回" in full
+    for word in ("主料", "輔料", "三重", "火候", "秘訣"):
+        assert word not in full, word

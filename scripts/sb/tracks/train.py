@@ -52,8 +52,7 @@ class TrainScenario(Scenario):
         for who in [*self.NEWBIES, self.RANGER, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         for who in [self.RANGER, *self.PLAYERS]:
             self.do(who, "skip_tutorial")
@@ -513,10 +512,11 @@ def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 # 改一個字（selftest）：操練那一句（搬之前在 engine.py 的 _drill、之後在 features/sortie/train_actions.py），none 的官軍大營操練到
 register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions.py", "tianxia/engine.py"),
                                         ("軍心為之一振。", "軍心為之一振！")), "week7",
-               covers=("battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear", "guide",
-                       "military", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
-                       "zhuan", "zongmen"))
+               covers=("battle", "bounties", "bout", "codex", "companions", "cultivation", "explore", "faction", "figure_acts", "gear",
+                       "guard", "guide", "horses", "military", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "travel", "zhuan", "zongmen"))
 register_bots("train", TRAIN_BOT_PROFILES, train_bots_run,
-              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
-                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 出陣三那一軌的假人（--seats train）
+              covers=("battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                      "feast", "figure_acts", "gear", "guard", "guide", "horses", "jieyi", "looks", "military", "outlets",
+                      "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                      "travel", "zongmen"))  # 出陣三那一軌的假人（--seats train）

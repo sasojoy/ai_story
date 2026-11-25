@@ -231,6 +231,18 @@ class Scenario:
         self.clients[who] = self.TestClient(self.server.app)
         self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
 
+    def sign_up(self, who: str):
+        """開帳號（POST /api/register），帳號、密碼要先放進 self.clients、self.passwords。第 232 批：條款開著（Config.terms.enabled，
+        #243 起 week7、season21）時照 web/terms.js 的送法多帶兩個勾選（FormData 的 "on"）與 GET /api/terms/version 的版號（不寫進輸出，
+        同前端沒登入先問一次）；不叫 register：charter 那一軌自己有一支 register（三個參數）；關著（或根上沒有條款包、問版號不是 200）送的跟以前一個位元組都不差。"""
+        body = {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]}
+        if getattr(getattr(self.c.config, "terms", None), "enabled", False):
+            r = self.clients[who].get("/api/terms/version")
+            version = r.json().get("version") if r.status_code == 200 else None
+            if version:
+                body.update(age_ok="on", terms_agree="on", terms_version=version)
+        return self.call(who, "POST", "/api/register", body)
+
     def login_all(self) -> None:
         """重新登入每一個帳號（前半＋後半在這裡接）。"""
         for who in list(self.clients):
@@ -278,8 +290,7 @@ class Scenario:
         for who in [self.NEWBIE, *self.PLAYERS]:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         for who in self.PLAYERS:
             self.do(who, "skip_tutorial")
@@ -446,7 +457,7 @@ class Scenario:
             return False
         self.clients[who] = self.TestClient(self.server.app)
         self.passwords[who] = "pw-" + self.login_of(who)
-        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+        self.sign_up(who)
         self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         self.do(who, "skip_tutorial")
         self.settle_choices(who)
@@ -1225,22 +1236,24 @@ def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
 
 # 改一個字（selftest）：出陣回報打輸那一句
 register_track("sortie", Scenario, (("tianxia/features/sortie/rules.py",), ("這一下沒推動。", "這一下沒推動！")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "figure_acts", "gear",
-                       "guide", "heroines", "legacy", "mall", "military", "outlets", "peers", "seal", "sense", "socialize",
-                       "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "codex", "companions", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guard", "guide", "heroines", "horses", "legacy", "mall", "military", "outlets", "peers",
+                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
+                       "zongmen"))
 # 改一個字（selftest）：同去按第二次那一句
 register_track("duel", DuelScenario, (("tianxia/features/sortie/duel_rules.py",),
                                       ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "companions", "cultivation", "explore", "faction", "feast", "figure_acts",
-                       "gear", "guide", "heroines", "legacy", "mall", "map", "military", "notify", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "codex", "companions", "cultivation", "explore", "faction", "feast",
+                       "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "mall", "map", "military",
+                       "notify", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
 register_bots("sortie", BOT_PROFILES, bots_run,
-              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
-                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "military", "outlets", "peers", "seal",
-                      "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel", "zongmen"))  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
+              covers=("battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                      "feast", "figure_acts", "gear", "guard", "guide", "horses", "jieyi", "looks", "military", "outlets",
+                      "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
+                      "travel", "zongmen"))  # 出陣那一軌的假人（整季機器人＋BotRunner 四個）
 register_bots("duel", DUEL_BOT_PROFILES, duel_bots_run,
-              covers=("battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction", "feast",
-                      "figure_acts", "gear", "guide", "hire", "jieyi", "looks", "map", "military", "outlets", "peers",
-                      "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                      "zongmen"))  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）
+              covers=("battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore", "faction",
+                      "feast", "figure_acts", "gear", "guard", "guide", "horses", "jieyi", "looks", "map", "military",
+                      "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern",
+                      "territory_acts", "titles", "travel", "zongmen"))  # 約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍各 4 個）

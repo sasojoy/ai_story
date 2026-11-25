@@ -10,6 +10,7 @@ from tianxia.features.tavern import rules as tavern
 from tianxia.features.figure_acts import yuedan
 from tianxia import zh
 from tianxia.features.zhuan import zhuan_end
+from tianxia.features.yiwen import rules as yiwen_rules
 
 
 @pytest.mark.smoke
@@ -278,6 +279,8 @@ CHATTER = tavern.ChatterRequest(place="wan_city", sign="宛城・酒肆", asked_
                  "Rayal揚手撒出石灰，迷了敵將的眼。", id="battle_instance.story"),
     pytest.param(lambda t: letters.clean(t, "Rayal"), "Rayal少俠見字如面，dear friend。", "Rayal少俠見字如面，速來一敘。", id="letters"),
     pytest.param(lambda t: zhuan_end.clean_verdict(t, 40, "Rayal"), "Rayal一介A hero也。", "Rayal一介武夫也。", id="zhuan_end"),
+    pytest.param(lambda t: yiwen_rules.clean_line(t, "叫Rayal的人"), "你喊了一聲Rayal，霧裡有人回頭hello。", "你喊了一聲Rayal，霧裡有人回頭。",
+                 id="yiwen"),
 ])
 def test_model_text_with_english_letters_is_thrown_away_but_a_quoted_name_is_kept(clean, english, quoted):
     """M-07：模型寫的字有英文就整句不用（照固定句）；名號、玩家寫的字、話頭裡本來就有的英文被引用不算。"""

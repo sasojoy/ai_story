@@ -11,6 +11,7 @@ import gzip
 import hashlib
 import json
 import os
+import shutil
 import sys
 
 from PIL import Image, ImageChops, ImageDraw
@@ -165,6 +166,16 @@ def side_by_side(pa: str, pb: str, out: str) -> None:
     s.save(out, optimize=True)
 
 
+def save_red(pa: str, pb: str, red_dir: str, f: str) -> list[str]:
+    """A real pixel row's pictures under red/: the side-by-side (halved past 900 px) and both sides at full size. Names relative to red/."""
+    side_by_side(pa, pb, os.path.join(red_dir, f))
+    stem = f.removesuffix(".png")
+    names = [f, f"{stem}__A.png", f"{stem}__B.png"]
+    shutil.copy(pa, os.path.join(red_dir, names[1]))
+    shutil.copy(pb, os.path.join(red_dir, names[2]))
+    return names
+
+
 class Result:
     def __init__(self):
         self.real = []
@@ -201,10 +212,13 @@ def split_new_css(xa, xb, new_sheets, hosts):
     return keep_a, keep_b, listed
 
 
-def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True, new_sheets=None) -> dict:
+def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int = MAX_RED_IMAGES, want_fingerprint: bool = True, new_sheets=None, recheck: bool = False) -> dict:
+    """recheck (the replay only, batch 237): a pixel row with nothing else different (noise.recheck_candidate) is not real yet;
+    it goes to out["recheck"] with its place among the real rows, and replay.settle draws it again on both sides."""
     hosts = noise.hosts_pattern(origins)
     ra, rb = load_report(a), load_report(b)
     res = Result()
+    later = []
     for r in (ra, rb):
         if r.get("fatal"):
             res.tool.append(f"{r['label']} fatal: {r['fatal'][:400]}")
@@ -240,6 +254,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for side, f in (("A", x), ("B", y)):
             if f.get("gutterOdd"):
                 res.info["gutterOdd"].append(f"{side} {sid}")
+            if f.get("moved"):
+                res.info["gutter moved"].append(f"{side} {sid} {','.join(f['moved'])}")
         # the toast's words: screenshots hide it and the DOM masks it. It goes by itself after 3.2 s, so it only counts when both sides still show it
         ta, tb = x.get("toast"), y.get("toast")
         if ta and tb:
@@ -314,9 +330,15 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
         for view in VIEW_ORDER:
             mine = {f: d for f, d in results.items() if view_of(f) == view}
             la, lb = x.get("layout", {}).get(view) or {}, y.get("layout", {}).get(view) or {}
-            flip = noise.scrollbar_flip(view, la.get("sw"), lb.get("sw"))
+            # batch 258: the scrollbar can move while a window is shot, after the first picture. The driver then reads the layout again at the
+            # end (layoutEnd, only when it moved): the first picture goes by sw before it, the scrolled ones and the styles (dumped after the
+            # scrolling) by sw at the end. A side without layoutEnd did not move, so its end is its start.
+            ea, eb = x.get("layoutEnd", {}).get(view) or la, y.get("layoutEnd", {}).get(view) or lb
+            flip_first = noise.scrollbar_flip(view, la.get("sw"), lb.get("sw"))
+            flip = noise.scrollbar_flip(view, ea.get("sw"), eb.get("sw"))
             props = props_of.get(view, set())
             used_only = bool(props) and view not in broken and noise.used_only(props, flip)
+            used_first = bool(props) and view not in broken and noise.used_only(props, flip_first)
             if props:
                 if flip and used_only and dom_same and not unstable:
                     res.noise["gutter"] += 1
@@ -332,18 +354,34 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
             elif flip and view in STYLE_ONLY_VIEWS and not unstable:
                 res.noise["gutter"] += 1
             for f, d in sorted(mine.items()):
-                clean = dom_same and (not props or used_only)
+                scrolled = "__s" in f[len(sid) + 2:]
+                at_a, at_b = (ea, eb) if scrolled else (la, lb)
+                clean = dom_same and (not props or (used_only if scrolled else used_first))
                 cls = None
                 if "size" not in d:
-                    cls = noise.pixel_class(d["pixels"], d["levels"], view=view, sw_a=la.get("sw"), sw_b=lb.get("sw"), only_share=d.get("only_share", False),
+                    cls = noise.pixel_class(d["pixels"], d["levels"], view=view, sw_a=at_a.get("sw"), sw_b=at_b.get("sw"), only_share=d.get("only_share", False),
                                             only_tale=d.get("only_tale", False), clean=clean, unstable=unstable)
                 if cls:
                     res.noise[cls] += 1
                     res.noise_rows.append({"file": f, "class": cls, "pixels": d["pixels"], "levels": d["levels"], "box": d["box"]})
                     continue
-                res.red(sid, "pixel", {"file": f, **d, "clean": clean, "unstable": unstable})
+                # batch 260: the walk shot this window again on each side (driver.mjs shootVariants, light scenes at 375-light). With the DOM
+                # and every computed style the same, neither side unstable and the same size, one picture both sides drew is
+                # the page's own repaint, not a change. A report without variants (older walks, the replay) goes on as before.
+                va, vb = (x.get("variants") or {}).get(f), (y.get("variants") or {}).get(f)
+                if (va and vb and noise.recheck_candidate(clean_strict=dom_same and not props and view not in broken, unstable=unstable, same_size="size" not in d)
+                        and noise.repaint_variants(ra["hashes"].get(f), va, rb["hashes"].get(f), vb)):
+                    res.noise["repaint-variants"] += 1
+                    res.noise_rows.append({"file": f, "class": "repaint-variants", "pixels": d["pixels"], "levels": d["levels"], "box": d["box"],
+                                           "variants": [len({ra["hashes"].get(f), *va}), len({rb["hashes"].get(f), *vb})]})
+                    continue
+                detail = {"file": f, **d, "clean": clean, "unstable": unstable}
+                if recheck and noise.recheck_candidate(clean_strict=dom_same and not props and view not in broken, unstable=unstable, same_size="size" not in d):
+                    later.append({"at": len(res.real), "scene": sid, "file": f, "view": view, "detail": detail})
+                    continue
+                res.red(sid, "pixel", detail)
                 if red_dir and res.red_images < red_budget:
-                    side_by_side(os.path.join(a, "shots", f), os.path.join(b, "shots", f), os.path.join(red_dir, f))
+                    res.real[-1]["red"] = save_red(os.path.join(a, "shots", f), os.path.join(b, "shots", f), red_dir, f)
                     res.red_images += 1
 
     # only the head has it
@@ -378,6 +416,8 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
            "tool": res.tool, "not_reached": missed, "red_images": res.red_images}
     if new_sheets is not None:
         out["new_css"] = new_css
+    if recheck:
+        out["recheck"] = later
     coverage = {}
     for walk in (a, b):
         p = os.path.join(walk, "coverage.json")

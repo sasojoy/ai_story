@@ -16,7 +16,7 @@ LATE = "晚簽者"  # 開著段才註冊的那一位（兩個勾選、版號都�
 
 class CharterScenario(Scenario):
     """條款的一軌（測試流程優化第 113 批；--track charter，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
-    關著段（三種設定的 Config.terms.enabled 都關著）：沒登入的人看兩頁（開關關著也看得到，200，寫全文的雜湊）、打 /api/terms/version（404）；
+    關著段（test 設定本來就關著；week7、season21 #243 起開著，setup 先在記憶體裡把 Config.terms.enabled 關掉，第 232 批）：沒登入的人看兩頁（開關關著也看得到，200，寫全文的雜湊）、打 /api/terms/version（404）；
     登入的嚴守約打 GET /api/terms、POST /api/terms/agree（404），讀 /api/main 的 terms 鍵；沒勾選照樣註冊得了（setup 那一輪就是）。
     開著段（記憶體裡打開開關，兩個行程都開）：沒登入的人拿版號；註冊沒勾、只勾一個、勾了版號不對都被擋（同一句、不算一次註冊），兩個勾選加現行版才開得了帳號（記一筆 register）；
     關著時註冊的嚴守約 GET /api/terms 的 need 是 must、帶舊版號同意回 409、帶現行版同意之後 need 空；剛註冊的那一位 need 一開始就是空的；沒登入打 /api/terms。
@@ -33,6 +33,11 @@ class CharterScenario(Scenario):
 
     def switch_on(self) -> None:
         self.c.config.terms.enabled = True
+
+    def setup(self) -> None:
+        """關著段從這裡起：#243 之後 week7、season21 的條款開著，這一軌要比關著，先在記憶體裡關掉（第 232 批；open 那一段照舊 switch_on）。"""
+        self.c.config.terms.enabled = False
+        super().setup()
 
     def side(self) -> Path:
         return self.db.with_name(f"{self.db.stem}-terms.sqlite")

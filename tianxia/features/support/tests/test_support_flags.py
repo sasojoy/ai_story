@@ -146,6 +146,22 @@ def test_sweep_closes_only_answered_older_than_days(monkeypatch):
     assert sc.replies(b, internal=True)[-1]["body"] == rules.AUTO_CLOSED.format(days=1)
 
 
+def test_a_human_answered_ticket_still_auto_closes_after_three_days(monkeypatch):
+    """第 226 批鎖現況（PM 11/10 認定維持）：按過找真人、之後真人客服回成已回覆的單，玩家 3 天沒再回照樣自動結。"""
+    c = player()
+    s = staffer(monkeypatch)
+    old, fresh = ticket(c).json()["id"], ticket(c).json()["id"]
+    for tid in (old, fresh):
+        assert c.post("/api/support/human", json={"id": tid}).json()["human"] is True
+        assert s.post("/api/support/answer", json={"id": tid, "body": "真人看過了，請再試一次", "then": "wait"}).json()["status"] == "answered"
+    _age(old, 4)
+    _age(fresh, 2)
+    assert s.post("/api/support/sweep", json={}).json() == {"closed": [old]}
+    sc = _sc()
+    assert [sc.ticket(t)["status"] for t in (old, fresh)] == ["closed", "answered"]
+    assert sc.has_human(old) and sc.replies(old, internal=True)[-1]["body"] == rules.AUTO_CLOSED.format(days=3)
+
+
 def test_sweep_rechecks_inside_the_write_lock(monkeypatch, tmp_path):
     """Review Focus 4：sweep 在 BEGIN IMMEDIATE 裡才讀要結哪幾張；別人先拿著寫入鎖、在鎖裡讓玩家回了一句（單回到處理中），sweep 等到鎖之後就不結它。"""
     import threading

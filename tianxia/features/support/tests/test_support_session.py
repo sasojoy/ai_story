@@ -129,7 +129,7 @@ def test_cli_sh_locks_paths_and_rejects_shell_metachars(tmp_path):
     for name in ("TIANXIA_SUPPORT_LOCKED=1", "TIANXIA_SUPPORT_CONFIG=", "TIANXIA_SUPPORT_URL=", "TIANXIA_SUPPORT_INBOX=",
                  "PYTHONIOENCODING=utf-8"):
         assert name in template, name
-    assert "*[\\&\\|\\<\\>^!]*)" in template
+    assert "*[\\&\\|\\<\\>^!\\\"{}]*)" in template  # 第 227 批多擋 " { }（展開出來的 JSON）
     assert "exec '{{PYTHON}}' '{{REPO}}\\scripts\\support_cli.py' \"$@\"" in template
     git = shutil.which("git")
     bash = Path(git).resolve().parents[1] / "bin" / "bash.exe" if git else None  # Git Bash（PATH 上的 bash 可能是 WSL 的）
@@ -138,12 +138,81 @@ def test_cli_sh_locks_paths_and_rejects_shell_metachars(tmp_path):
     desk, _ = _init(tmp_path)
     cli = (desk / "cli.sh").as_posix()
     # python 填的是不存在的路徑：叫到了 exec 失敗（126、127），不是 2。
-    for arg in ("a&b", "a|b", "a<b", "a>b", "a^b", "a!b", "R&D"):
-        done = subprocess.run([bash, cli, "queue", arg], capture_output=True, timeout=30)
+    for arg in ("a&b", "a|b", "a<b", "a>b", "a^b", "a!b", "R&D", 'a"b', "a{b", "a}b"):
+        done = _run_sh(bash, cli, ["queue", arg], tmp_path)
         assert done.returncode == 2, (arg, done.returncode, done.stdout, done.stderr)
         assert b"not recognized" not in done.stderr
     plain = subprocess.run([bash, cli, "queue", "--close"], capture_output=True, timeout=30)
     assert plain.returncode not in (0, 2)
+
+
+def _run_sh(bash, cli: str, args, where: Path) -> subprocess.CompletedProcess:
+    # 參數寫進一支 sh 再跑：Windows 的命令列交給 Git Bash 時 " 會被拆壞（第 227 批量到 a"b 進來變 a\b），
+    # 客服官的 Bash 工具是把整行交給 bash，引號照 sh 的規矩，這樣才是同一回事。
+    import shlex
+
+    driver = where / "drive.sh"
+    driver.write_bytes(("exec " + " ".join(shlex.quote(a) for a in (cli, *args)) + "\n").encode("utf-8"))
+    return subprocess.run([bash, driver.as_posix()], capture_output=True, timeout=30, cwd=where)
+
+
+def _git_bash():
+    git = shutil.which("git")
+    bash = Path(git).resolve().parents[1] / "bin" / "bash.exe" if git else None  # Git Bash（PATH 上的 bash 可能是 WSL 的）
+    if sys.platform != "win32" or bash is None or not bash.is_file():
+        pytest.skip("cli.sh 由客服官的 Git Bash 跑")
+    return bash
+
+
+def test_expanded_arguments_never_reach_the_server(tmp_path):
+    # 第 227 批：$(...)、反引號在叫到 cli.sh 之前就被展開；這裡把「展開之後會長成的字」直接交給真的 cli.sh＋真的
+    # support_cli.py。網址指 :9（沒人聽），真的連了會印「連不上伺服器」；要的是參數不對就停（結束碼 2）、token 不出現。
+    import secrets
+
+    bash = _git_bash()
+    token = secrets.token_hex(20)  # 40 字假 token，只活在暫存夾
+    config = tmp_path / "secret" / "support.json"
+    config.parent.mkdir()
+    config.write_text(json.dumps({"bot_token": token}), encoding="utf-8")
+    desk = tmp_path / "desk"
+    init = _load(INIT, "support_session_init_t5")
+    assert init.main([str(desk), "--url", "http://127.0.0.1:9", "--config", str(config),
+                      "--python", sys.executable]) == 0
+    cli = (desk / "cli.sh").as_posix()
+    cases = (
+        ["queue", "ray 61"],                                    # 帶空白的使用者名稱（$(whoami) 加了引號）
+        ["queue", "a.txt", "b.txt", "c.txt"],                   # 一串檔名（$(ls ..) 沒加引號）
+        ["ticket", "1", json.dumps({"bot_token": token})],     # 一段 JSON（$(cat ../secret/support.json)）
+        ["answer", "1", "x"],                                   # $(echo x)
+    )
+    for args in cases:
+        done = _run_sh(bash, cli, args, tmp_path)
+        out = done.stdout + done.stderr
+        assert done.returncode == 2, (args, done.returncode, out)
+        assert token.encode() not in out, args
+        assert "連不上伺服器".encode() not in out, args  # 沒有任何 HTTP 請求
+        assert "指令或參數不對".encode() in out or "cli.sh 的參數".encode() in out, (args, out)
+        assert b"usage:" not in out, args  # argparse 的原話（會把參數印回來）不再出現
+
+
+def test_every_command_in_the_session_rules_exists():
+    import re
+
+    cli = _load(ROOT / "scripts" / "support_cli.py", "support_cli_t227")
+    parser = cli._parser(True)
+    sub = next(a for a in parser._actions if a.__class__.__name__ == "_SubParsersAction")
+    text = (SESSION / "CLAUDE.md").read_text(encoding="utf-8")
+    used = set(re.findall(r"\./cli\.sh (\w+)", text))
+    listed = re.search(r"`\./cli\.sh`（([^）]*)）", text)
+    if listed:
+        used |= set(re.findall(r"`(\w+)`", listed.group(1)))
+    assert used >= {"queue", "ticket", "answer", "note", "close"}, used
+    for name in used:
+        assert name in sub.choices, name
+    answer_flags = {o for a in sub.choices["answer"]._actions for o in a.option_strings}
+    for flag in re.findall(r"\./cli\.sh answer <單號> (--\w+)", text):
+        assert flag in answer_flags, flag
+    assert {"--close", "--human"} <= answer_flags
 
 
 def test_start_and_stop_cmd_detach_the_bridge():
@@ -172,6 +241,17 @@ def test_faq_is_player_facing_and_marked_for_joy():
         assert word not in text, word
 
 
+def test_faq_covers_what_went_live_through_11_19():
+    # 第 227 批：11/10～11/16 上線的十四樣各至少一題（只寫改版資訊、包說明、玩法導覽查得到的）。
+    text = (ROOT / "docs" / "support" / "FAQ.md").read_text(encoding="utf-8")
+    new = text.split("## 新玩法（11/10 之後）", 1)[1]
+    for word in ("親衛隊長", "江湖錄", "進行中", "門派", "結義", "信", "稱號", "馬", "意境合成", "畫本", "紅點",
+                 "捐軍備", "村鎮", "成數", "第 2 週"):
+        assert word in new, word
+    old = text.split("## 換季", 1)[1].split("##", 1)[0]
+    assert "親衛隊長跟著你的帳號走" in old  # 舊題「同伴重獲自由」改成只說酒肆招來的
+
+
 def test_knowledge_export_writes_three_files_without_leaks(tmp_path, monkeypatch):
     from test_server_bots import FORBIDDEN, leaks
 
@@ -194,6 +274,28 @@ def test_knowledge_export_writes_three_files_without_leaks(tmp_path, monkeypatch
     assert not (tmp_path / "should-not-be-touched.db").exists()  # 開的是自己的暫存檔
     import os
     assert os.environ["TIANXIA_DB"] == str(tmp_path / "should-not-be-touched.db")  # 用完還原
+
+
+@pytest.mark.slow  # 載入兩次正式內容，第 227 批量過超過 1 秒
+def test_knowledge_export_with_real_content_carries_the_season_end_rule(tmp_path, monkeypatch):
+    # 第 227 批實跑：籌備中的季種下去就蓋過章，正式內容匯得出「這一季在打什麼」與收季那一句（兩種設定都是）。
+    from test_server_bots import leaks
+
+    knowledge = _load(KNOWLEDGE, "support_knowledge_t4")
+    outside = tmp_path / "should-not-be-touched.db"
+    monkeypatch.setenv("TIANXIA_DB", str(outside))
+    for profile in ("season21", "week7"):
+        desk = tmp_path / profile
+        assert knowledge.main([str(desk), "--profile", profile]) == 0, profile
+        out = desk / "knowledge"
+        howto = (out / "howto.md").read_text(encoding="utf-8")
+        assert "這一季在打什麼" in howto, profile
+        assert "收季：" in howto, profile
+        for name in ("howto.md", "FAQ.md", "patch_notes.json"):
+            text = (out / name).read_text(encoding="utf-8")
+            assert not leaks(text), (profile, name)
+            assert "docs/guide" not in text, (profile, name)
+    assert not outside.exists()
 
 
 def test_knowledge_export_refuses_a_leaking_file(tmp_path, monkeypatch):

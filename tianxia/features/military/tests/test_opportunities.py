@@ -11,7 +11,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import real_content
+from conftest import make_real, real_content
 from tianxia import bot, bot_policy, calendar, events, figures
 from tianxia.features.military import opp_rules as opportunities
 from tianxia import push, rules, timetable
@@ -99,10 +99,8 @@ def test_timing_must_name_its_place_and_front(real):
 @pytest.fixture(scope="module")
 def broken_opportunities_text():
     """下面三條的五筆突變（各在不同的欄位、訊息彼此不是子字串）一起套上、validate 一次（第 223 批）。
-    內容跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）。"""
-    c = real_content()
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
+    內容是 tests/conftest.py 的 make_real（fixture real 的建法；module 範圍的 fixture 拿不到 function 範圍的 real）。"""
+    c = make_real()
     courier = _opp(c, "guan_courier").timing
     courier.deliver_label = ""
     courier.done = ""

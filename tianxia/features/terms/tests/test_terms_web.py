@@ -143,5 +143,178 @@ def test_version_404_inserts_nothing():
 def test_terms_js_marks_new_words():
     text = (WEB / "terms.js").read_text(encoding="utf-8")
     for line in text.splitlines():
-        if any(s in line for s in ("我已滿 18 歲或已得到法定代理人同意\"", "我已讀過並同意", "請先勾選滿 18 歲")):
+        if any(s in line for s in ("我已滿 18 歲或已得到法定代理人同意\"", "我已讀過並同意", "請先勾選滿 18 歲", "請看過這次改了什麼")):
             assert "待 joy 潤" in line, line
+
+
+# 第 243 批：同意那一層（termsLayerHtml）與同意記哪一種（termsSource）
+LAYER_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+const kit = new Function("document", "fetch", tSrc + "\nreturn { termsLayerHtml, termsSource };")({ querySelectorAll: () => [] }, () => Promise.reject(new Error("x")));
+const base = { version: "v2", email: "a@b.c", summary: ["一", "<二>"] };
+const must = { ...base, need: "must", deadline: null }, ask = { ...base, need: "ask", deadline: "2026-12-06" }, upd = { ...must, update: true };
+finish({
+  must: kit.termsLayerHtml(must), ask: kit.termsLayerHtml(ask), update: kit.termsLayerHtml(upd),
+  source: [kit.termsSource(must), kit.termsSource(upd), kit.termsSource(ask)],
+});
+"""
+
+
+def _layer_html(lead: str, later: bool, no_line: str, logout: bool) -> str:
+    """第 243 批以前 terms.js 畫出來的那一層（在 base 的 terms.js 上量的），逐字。"""
+    return "\n".join([
+        '<div class="terms-layer" role="dialog" aria-modal="true" aria-label="使用條款與隱私權條款">',
+        '      <div class="terms-card card">',
+        "        <h3>使用條款與隱私權條款</h3>",
+        f"        <p>{lead}</p>",
+        '        <p class="muted">重點：</p><ul><li>一</li><li>&lt;二&gt;</li></ul>',
+        '        <p class="terms-links"><a href="/terms" target="_blank" rel="noopener">使用條款</a>・<a href="/privacy" target="_blank" rel="noopener">隱私權條款</a></p>',
+        '        <p class="form-msg" role="alert"></p>',
+        '        <button class="btn primary" data-terms="agree">我已滿 18 歲或已得到法定代理人同意，並同意以上條款</button>',
+        '        <div class="terms-row">',
+        "          " + ('<button class="btn ghost" data-terms="later">稍後再看</button>' if later else ""),
+        '          <button class="btn ghost" data-terms="no">我不同意</button>',
+        "        </div>",
+        f'        <p class="terms-no muted" hidden>{no_line}</p>',
+        "        " + ('<button class="btn ghost terms-out" data-act="logout" hidden>登出</button>' if logout else ""),
+        "      </div></div>",
+    ])
+
+
+MUST_LEAD = "開始之前，請先看過並同意天下大勢的使用條款與隱私權條款。"
+UPDATE_LEAD = "使用條款與隱私權條款有新版，請看過這次改了什麼，同意後繼續。"
+NO_MUST = "不同意的話沒辦法進遊戲。要終止帳號、退還沒用掉的元寶，請寫信到 a@b.c。"
+NO_ASK = "不同意新版的話，可以終止帳號並退還沒用掉的元寶，請寫信到 a@b.c。"
+
+
+def test_layer_without_update_flag_is_unchanged_and_update_swaps_only_the_lead():
+    out = run(LAYER_DRIVER, {"terms": str(WEB / "terms.js")})
+    assert out["must"] == _layer_html(MUST_LEAD, False, NO_MUST, True)  # 新玩家第一次：一個字不變
+    assert out["ask"] == _layer_html("使用條款與隱私權條款有新版。2026-12-06 以前沒有表示反對，就視為接受新版。", True, NO_ASK, False)
+    assert out["update"] == _layer_html(UPDATE_LEAD, False, NO_MUST, True)  # 換版後的 must：只換開頭那一句、沒有稍後再看
+    assert 'data-terms="later"' not in out["update"]
+    assert out["source"] == ["gate", "update", "update"]  # 稽核分得出改版時同意的
+
+
+DEFAULT_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+const kit = new Function("document", "fetch", tSrc + "\nreturn { termsLayerHtml, termsSource };")({ querySelectorAll: () => [] }, () => Promise.reject(new Error("x")));
+finish({ html: kit.termsLayerHtml(input.status), source: kit.termsSource(input.status) });
+"""
+
+
+def test_default_settings_show_an_old_consent_the_ask_layer_with_later(tmp_path):
+    """第 246 批：預設設定（update_must 關）下，同意過舊版的人在考慮期內看到 ask 那一層：有「稍後再看」、開頭寫期限。"""
+    from types import SimpleNamespace
+
+    from tianxia.core.tuning.terms import TermsTuning
+    from tianxia.features.terms import routes as terms_routes
+    from tianxia.features.terms import rules
+
+    data = rules.load()
+    db = tmp_path / "t.db"
+    shell = SimpleNamespace(CONTENT=SimpleNamespace(config=SimpleNamespace(terms=TermsTuning(enabled=True))),
+                            default_path=lambda: db, time=SimpleNamespace(time=lambda: rules.published_at(data) + 86400))
+    terms_routes.consent_store(shell).record("ab", "2026-11-v1", "register", 1.0)
+    status = terms_routes.status(shell, "ab")
+    assert status["need"] == "ask" and "update" not in status
+    out = run(DEFAULT_DRIVER, {"terms": str(WEB / "terms.js"), "status": status})
+    assert 'data-terms="later"' in out["html"] and status["deadline"] in out["html"]
+    assert UPDATE_LEAD not in out["html"] and out["source"] == "update"
+
+
+# 第 255 批：分頁開著的時候才變成「必須同意」的人，殼 api() 把伺服器 403 的那一句（terms_base.GATE_NEED）跳成吐司；
+# terms.js 看 #toast，字裡有「條款」、人在遊戲裡、同意層沒開、離上一次重問滿 5 秒，就放掉 termsAsked、重問 /api/terms 照回來的畫
+REASK_DRIVER = r"""
+const tSrc = fs.readFileSync(input.terms, "utf8").replace(/\r\n/g, "\n");
+function load(text, stage, reply, layerOpen) {
+  const fetched = [];
+  const st = { inserted: "", layer: layerOpen ? { addEventListener() {}, remove() { st.layer = null; } } : null };
+  const document = {
+    querySelectorAll: () => [],
+    getElementById: (id) => (id === "toast" ? { textContent: text } : null),
+    querySelector: (sel) => (sel === ".terms-layer" ? st.layer : null),
+    body: { insertAdjacentHTML: (where, html) => { st.inserted += html; st.layer = { addEventListener() {}, remove() { st.layer = null; } }; } },
+  };
+  const fetch = (url) => { fetched.push(url); return reply(url); };
+  const kit = new Function("document", "fetch", "S", tSrc + "\nreturn { termsOnToast, termsShouldReask };")(document, fetch, { stage });
+  return { kit, fetched, st };
+}
+const reply = (body) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+const must = { need: "must", version: "v2", email: "a@b.c", summary: [] };
+const tick = () => new Promise((r) => setTimeout(r, 5));
+async function main() {
+  const out = {};
+  const gate = input.gate;
+  const a = load(gate, "game", reply(must), false);
+  a.kit.termsOnToast();
+  await tick();
+  out.must = { fetched: [...a.fetched], drawn: a.st.inserted.includes("terms-layer"), later: a.st.inserted.includes('data-terms="later"') };
+  a.st.layer = null; // 按了同意、層收掉
+  a.kit.termsOnToast(); // 吐司馬上又跳一次：5 秒內不再打
+  await tick();
+  out.must.again = [...a.fetched];
+  const b = load("體力不夠了。", "game", reply(must), false);
+  b.kit.termsOnToast();
+  await tick();
+  out.other = b.fetched;
+  const c = load(gate, "game", reply({ need: "" }), false);
+  c.kit.termsOnToast();
+  await tick();
+  out.none = { fetched: c.fetched, inserted: c.st.inserted };
+  const d = load(gate, "login", reply(must), false);
+  d.kit.termsOnToast();
+  await tick();
+  out.notGame = d.fetched;
+  const e = load(gate, "game", reply(must), true);
+  e.kit.termsOnToast();
+  await tick();
+  out.layerOpen = e.fetched;
+  const f = load(gate, "game", () => Promise.reject(new Error("offline")), false);
+  f.kit.termsOnToast();
+  await tick();
+  out.down = { fetched: f.fetched, inserted: f.st.inserted };
+  const q = (o) => a.kit.termsShouldReask({ text: gate, inGame: true, layerOpen: false, now: 10000, last: 0, ...o });
+  out.table = [
+    q({}), q({ text: "體力不夠了。" }), q({ inGame: false }), q({ layerOpen: true }),
+    q({ now: 14999, last: 10000 }), q({ now: 15000, last: 10000 }), q({ text: "" }), q({ text: null }),
+  ];
+  return out;
+}
+finish(main());
+"""
+
+
+def _reask():
+    from tianxia.core import terms_base
+
+    return run(REASK_DRIVER, {"terms": str(WEB / "terms.js"), "gate": terms_base.GATE_NEED})
+
+
+def test_gate_line_keeps_the_word_terms_js_watches_for():
+    from tianxia.core import terms_base
+
+    assert "條款" in terms_base.GATE_NEED, "web/terms.js 靠這兩個字認出被擋的那一句，潤字時留著，或兩邊一起改"
+
+
+def test_blocked_toast_reasks_and_draws_the_layer_once():
+    out = _reask()
+    assert out["must"] == {"fetched": ["/api/terms"], "drawn": True, "later": False, "again": ["/api/terms"]}  # 拿掉重問就是空的
+
+
+def test_other_toasts_and_states_do_not_reask():
+    out = _reask()
+    assert out["other"] == [] and out["notGame"] == [] and out["layerOpen"] == []
+    assert out["none"] == {"fetched": ["/api/terms"], "inserted": ""}  # 別的分頁按過同意：問了、什麼都不畫
+    assert out["down"] == {"fetched": ["/api/terms"], "inserted": ""}  # 斷線：照舊下一次再問
+
+
+def test_should_reask_table():
+    assert _reask()["table"] == [True, False, False, False, False, True, False, False]
+
+
+def test_toast_is_observed():
+    """node 沒有 MutationObserver，觀察那一段跑不到：掃原始碼守住接線，免得接線被拿掉測試還綠。"""
+    text = (WEB / "terms.js").read_text(encoding="utf-8")
+    watch = text[text.index('if (typeof MutationObserver !== "undefined"'):]
+    assert 'document.getElementById("toast")' in watch and "termsOnToast()" in watch

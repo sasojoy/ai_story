@@ -155,8 +155,7 @@ class SmithyScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         who = self.BUYER  # 籌備中：每一個入口都擋
         self.choose(who, "act:smith")
@@ -669,10 +668,10 @@ class SmithyScenario(Scenario):
 # 搬的人照實際的檔名改這一個字串）。抓到的地方：砧乙挑種類之後按「上一步」
 register_track("smithy", SmithyScenario, (("tianxia/features/smithy/smithing.py",),
                                           ('UNDONE = "退回一步。"', 'UNDONE = "退回一步！"')), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts",
-                       "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays",
+                       "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
 
 
 # 鐵匠鋪那一軌改一個字的那一句（UNDONE，# smithy 那一段登記的）這一批跟著鐵匠鋪的常數搬進了 tianxia/core/smith_base.py：檔清單前面補上

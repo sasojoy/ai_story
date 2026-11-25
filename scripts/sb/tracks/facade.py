@@ -82,6 +82,11 @@ SUPPORT_SHELL_TOUCHED = (
     '  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"], ["support", "客服"]]; // 客服（帳號與客服第 211 批）：伺服器的 kinds 有這個鍵才畫（客服關著沒有）。待 joy 潤',
     '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.map(([k, name]) =>',
     '    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.filter(([k]) => k !== "support" || k in kinds).map(([k, name]) =>',
+    # 第 228 批（企劃者 2026-11-19「這一波落地後先開真人客服」）：PM 准改 web/admin.js 只為「名單上的管理者進得了客服頁」——
+    # head 才有的那一行（點了「客服單 ›」畫客服頁）只放行 head 那一行；adminHtml 的 head 改過，舊的新的都放行。
+    '    if (S.main.admin && S.main.support_staff && typeof supportDeskAsked === "function" && supportDeskAsked()) return renderSupportDesk(); // 管理者也列在客服名單上、點了「客服單 ›」或網址是 /admin#support（第 228 批，support.js）',
+    '    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2><button class="btn small" data-act="ad-refresh">重新整理</button></header>`;',
+    '    const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2>${typeof supportAdminLink === "function" ? supportAdminLink() : ""}<button class="btn small" data-act="ad-refresh">重新整理</button></header>`;',
 )
 FACADE_SHELL_LINES = re.compile(FACADE_SHELL_LINES.pattern + "".join(f"|^{re.escape(line)}$" for line in SUPPORT_SHELL_TOUCHED))
 # identity（帳號與客服第 204 批；設計第七節 web/admin.js 那一列，企劃者 2026-11-08 點頭第 2 版）：管理頁重設密碼那一塊改的行——
@@ -220,8 +225,8 @@ MapScenario.web = _facade_map_web
 
 # 改一個字（selftest）：修練頁換一門的那一句（swapListHtml；第 64 批從 app.js 切到 cultivation.js，兩處找）
 register_track("facade", FacadeScenario, (("web/cultivation.js", "web/app.js"), ("功法庫裡沒有別的", "功法庫裡沒有其他的")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "hire", "identity", "jieyi", "legacy", "looks", "mail",
-                       "mall", "map", "military", "news", "notify", "outlets", "peers", "seal", "sense", "smithy",
-                       "sortie", "story", "support", "tale", "tavern", "terms", "territory_acts", "titles", "travel", "zhuan",
-                       "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "hire", "identity", "intro", "jieyi",
+                       "legacy", "looks", "mail", "mall", "map", "military", "news", "notify", "outlets", "peers",
+                       "seal", "sense", "smithy", "sortie", "story", "support", "tale", "tavern", "terms", "territory_acts",
+                       "titles", "travel", "zhuan", "zongmen"))

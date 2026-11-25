@@ -1,0 +1,11 @@
+/* 慢慢長出來（features/unfold，web/unfold.js）：新角色碰到才說的小事卡。只用 style.css 的色票；深色模式跟著色票走，圖壓暗一點 */
+.uf-card { position: relative; padding: 0; overflow: hidden; border-left: 5px solid var(--accent); border-radius: 4px var(--radius) var(--radius) 4px; }
+.uf-pic { height: 150px; background: var(--card) center 30% / cover no-repeat; position: relative; }
+.uf-pic::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, var(--card) 100%); }
+.uf-in { position: relative; margin-top: -34px; padding: 0 16px 14px; }
+.uf-card.bare .uf-in { margin-top: 0; padding-top: 14px; }
+.uf-who { display: block; font: 400 13px var(--sans); color: var(--ink-2); letter-spacing: .04em; }
+.uf-say { margin: 4px 0 12px; font: 400 17px/1.7 var(--kai); color: var(--ink); }
+.uf-dos { display: flex; gap: 8px; }
+.uf-dos .btn { flex: 1; min-height: 44px; font: 700 16px var(--kai); letter-spacing: .1em; }
+@media (prefers-color-scheme: dark) { .uf-pic { filter: brightness(.82); } }
