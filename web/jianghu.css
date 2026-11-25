@@ -124,7 +124,7 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
 .jh-row.wait .jh-k { border-color: var(--ink-2); color: var(--ink-2); }
 .jh-waits, .jh-why { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin-top: 8px; padding: 0 12px; border: 1px solid var(--line);
   border-radius: 10px; background: none; color: var(--ink-2); font: 400 14px var(--kai); cursor: pointer; }
-.jh-waits { margin-top: 0; padding: 0 2px; border: 0; border-top: 1px solid var(--line); border-radius: 0; opacity: .8; } /* 在等的：跟上面幾列一樣的實線分隔、字淡一點（虛線框有網頁味） */
+.jh-waits, .jh-why { margin-top: 0; padding: 0 2px; border: 0; border-top: 1px solid var(--line); border-radius: 0; opacity: .8; } /* 在等的：跟上面幾列一樣的實線分隔、字淡一點（虛線框有網頁味） */
 .jh-none { margin: 12px 0; font: 400 15px var(--kai); color: var(--ink-2); text-align: center; }
 .jh-sheet .card.letter { box-shadow: none; }
 

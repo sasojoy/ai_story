@@ -126,7 +126,7 @@
     let { title, sub } = it;
     if (it.seal === JH_EPIPHANY && sub) [title, sub] = [sub.split("・")[0], sub.split("・").slice(1).join("・")]; // 「特殊頓悟」是線的代稱：標題寫這一步本身（靜心自問、去面對心魔）
     if (it.key === "d:bounty") ({ title, sub } = jhBountyWords(m) || { title, sub });
-    return { key: it.key, seal: it.seal, title, sub, wait: !!it.wait, btn: name && name.length <= 4 && !title.includes(name) ? name : JH_GO[kind], attrs: it.go ? tkGoAttrs(it) : "" };
+    return { key: it.key, seal: it.seal, title, sub, wait: !!it.wait, btn: name && name.length <= 4 && !title.includes(name) && !it.title.includes(name) ? name : JH_GO[kind], attrs: it.go ? tkGoAttrs(it) : "" };
   }
 
   // 懸賞那一件的字：卡頭那一行（「懸賞（2）賞照你第 30 級」）像代號，換成手上的事（PM 2026-11-25）
