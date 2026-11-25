@@ -312,3 +312,22 @@ def test_each_side_of_a_spar_dulls_its_own_blade_and_hears_the_warning(pair):
         warning = weapons.EDGE_WARNING.format(dull=weapons.DULL["拳腳"], name=f"{name}刃")
         assert warning in after.battles[0].notes
         assert any(warning in line for e in after.journal for line in e.lines)
+
+
+def test_the_rivals_guard_says_a_line_at_the_spar(pair):
+    """親衛隊長收尾（Joy 2026-11-25）：對手帶在身邊、投效了的親衛在一旁說一句，寫進看的那一邊的戰報；自己的不在自己的戰報裡說。"""
+    from tianxia.core import guard_base
+    from tianxia.state import GuardBook
+
+    content, world = pair
+    content.config.guard.enabled = True
+    yi = _load(world, "乙")
+    yi.player.guard = GuardBook(stage="sworn", path="弓箭手", name="青禾", sex="女", opening="river", qing=15)
+    CharacterStore(world.db).save(yi)
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "spar", {"arg": "invite"}))
+    _do(content, world, "乙", lambda g: g.choose(f"invite:yes:{_invite_id(world)}"))
+    jia, yi = _load(world, "甲").battles[0], _load(world, "乙").battles[0]
+    said = [n for n in jia.notes if "青禾" in n]
+    assert len(said) == 1 and said[0].startswith("乙的親衛青禾")
+    assert said[0] in {pool["warm"].format(owner="乙", gname="青禾") for pool in guard_base.SPAR_RIVAL.values()}
+    assert not any("青禾" in n for n in yi.notes)
