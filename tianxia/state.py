@@ -2243,6 +2243,9 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    # 合璧榜（意境合成改版批四，features/craft board）：意境 id → 這一季每一回合璧成神的 [名號, 真意 id]（照先後；換季整個重來；
+    # 跟 secret_sets 一樣走這一下動作最後的 _save_season）
+    he_gods: dict[str, list[list[str]]] = Field(default_factory=dict, json_schema_extra=QUIET)
     craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     yiwen_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時異聞（Config.yiwen）是不是開著（features/yiwen rules.on）；舊季讀檔是 False，False 不寫進存檔

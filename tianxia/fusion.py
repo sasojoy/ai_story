@@ -822,6 +822,9 @@ def _v2_compound(
         lines.append(HE_GOD_LINE.format(grand=gname))
         here = content.locations.get(state.player.location)
         annals.note(state, content, annals.DEED, HE_GOD_DEED.format(place=here.name if here else "爐前", name=result.name, grand=gname), 3)
+        season = getattr(state, "world", None)
+        if season is not None:  # 合璧榜：記下誰、悟出哪一種真意
+            season.he_gods.setdefault(result.id, []).append([state.player.name, grand_id])
     else:
         fx = InsightFx(quality=quality, general={general: 1} if general is not None else {})
         rng = insight_fx._rng(state, world, piece, "合璧")
