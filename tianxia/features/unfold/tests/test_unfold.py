@@ -232,3 +232,39 @@ def test_shop_goods_bought_with_the_gift_cannot_change_hands():
     assert not any(k in ("material", "materials", "silver") for k in mall_rules.EFFECTS)
     assert all("material" not in k for item in c.mall.values() for k in item.effects)
     assert c.config.unfold.gift < market.PRICE_MIN
+
+
+def _season_game(content):
+    from tianxia.sqlite_world import open_world  # noqa: PLC0415
+
+    world = open_world()
+    g = Game.new(content, "換季俠", rng=random.Random(0), world=world, prologue=True)
+    g.sync(g.now + 1)
+    return g, world
+
+
+def test_the_book_rides_into_the_next_season(on):
+    """跟著帳號走：換季照帶（on_season_start），不走 core 的 carried 表。"""
+    from conftest import next_season  # noqa: PLC0415
+
+    g, world = _season_game(on)
+    g.choose("choice:0")
+    g.sync(g.now + 1)
+    before = g.state.player.unfold.model_copy(deep=True)
+    assert "tab:map" in before.grown
+    next_season(on, world, g)
+    assert g.state.player.unfold is not None
+    assert set(before.grown) <= set(g.state.player.unfold.grown)
+
+
+def test_an_old_account_gets_no_book_in_the_next_season(on):
+    """開關打開之前就在玩的人沒有本子；換季之後也不會長出一本（新的一季照樣站在城門口也一樣）。"""
+    from conftest import next_season  # noqa: PLC0415
+
+    g, world = _season_game(on)
+    g.choose("choice:0")
+    g.state.player.unfold = None
+    next_season(on, world, g)
+    g.sync(g.now + 1)
+    assert g.state.player.unfold is None
+    assert "unfold" not in g.feature_status()
