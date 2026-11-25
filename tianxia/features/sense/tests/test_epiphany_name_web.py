@@ -62,7 +62,11 @@ def test_the_server_hands_the_typed_name_to_the_engine(monkeypatch):
 
 @pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_pressing_own_name_opens_a_box_instead_of_sending():
-    m = server.main_view(_naming_game())
+    from conftest import old_page  # noqa: PLC0415
+
+    game = _naming_game()
+    old_page(game.content)  # 舊江湖頁；新頁（先看戰報、往下看才到取名）在 jianghu 包 test_jianghu_parity_web.py
+    m = server.main_view(game)
     assert any(o["id"] == OWN and o["enabled"] for o in m["options"])
     out = run(m, f"""return (async () => {{
       await H.choose({{ classList: {{ add() {{}} }} }}, "{OWN}");

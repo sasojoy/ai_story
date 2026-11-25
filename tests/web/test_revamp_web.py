@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 import pytest
-from conftest import real_content
+from conftest import old_page, real_content
 from test_prologue_web import run as run_classic
 
 import server
@@ -24,8 +24,8 @@ def run(m, script, *, S=None, menxia=None):
 
 @pytest.fixture
 def wan(world):
-    """正式內容 week7、開了季、站在大將軍府（何進在）、投靠官軍、名望夠求見。"""
-    content = real_content("week7")
+    """正式內容 week7、開了季、站在大將軍府（何進在）、投靠官軍、名望夠求見。舊江湖頁（old_page）：新頁的測試自己打開開關。"""
+    content = old_page(real_content("week7"))
     world.seed_first_season(content)
     world.open_season(content, now=0.0)
     game = Game.new(content, "沈浪", rng=random.Random(0), world=world, graduated=True)
