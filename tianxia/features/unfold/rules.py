@@ -23,7 +23,14 @@ KEYS: tuple[str, ...] = (
     "self:mail",  # 信匣：同名帖匣（帖友＝兩邊都收著對方的名帖；信匣自己還看 main.mail）
     "hero:codex",  # 江湖錄：第一次記下一幕、一個人、一件東西
     "hero:mates",  # 同伴：收養了那個孩子、或第一次有人跟你走
+    "tab:craft",  # 武學頁的「煉製」：身上第一次有兩個合得起來的意境（要問共用層 fusion，由包算好放進 ready）
+    "self:create",  # 武學頁的「自創」：心得第一次夠自創一門
 )
+READY_KEYS = frozenset({"tab:craft"})  # 要問世界才知道的（包算好傳進 ready）
+
+
+# 提案表：跟小事卡、紅點重疊的那幾句說明（合成、配點、自創）新角色不再說：開本那一刻記成說過
+REPLACED_HINTS = ("h_merge", "h_points", "h_create")
 
 
 def new_book() -> UnfoldBook:
@@ -34,9 +41,13 @@ def _level(state: GameState) -> int:
     return state.player.member.level
 
 
-def reached(state: GameState, key: str, *, opening_pending: bool) -> bool:
-    """這一塊此刻用不用得到（只看身上的東西；長出來之後不再問）。"""
+def reached(state: GameState, key: str, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0) -> bool:
+    """這一塊此刻用不用得到（只看身上的東西；長出來之後不再問）。ready：包算好的（READY_KEYS）；create_price：自創第一門要的心得。"""
     p = state.player
+    if key in READY_KEYS:
+        return key in ready
+    if key == "self:create":
+        return create_price > 0 and p.stats.get("xinde", 0) >= create_price
     if key == "tab:map":
         return not opening_pending
     if key == "hero:attrs":
@@ -57,12 +68,12 @@ def reached(state: GameState, key: str, *, opening_pending: bool) -> bool:
     return True
 
 
-def grow(state: GameState, *, opening_pending: bool) -> list[str]:
+def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = frozenset(), create_price: int = 0) -> list[str]:
     """看一次：用得到而還沒長出來的寫進 grown 與 fresh。回這一次長出來的鍵。沒有這一本的角色不動。"""
     book = state.player.unfold
     if book is None:
         return []
-    new = [k for k in KEYS if k not in book.grown and reached(state, k, opening_pending=opening_pending)]
+    new = [k for k in KEYS if k not in book.grown and reached(state, k, opening_pending=opening_pending, ready=ready, create_price=create_price)]
     book.grown.extend(new)
     book.fresh.extend(k for k in new if k not in book.fresh)
     return new

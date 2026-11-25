@@ -348,9 +348,10 @@
   // 入口就是江湖頁「此地還能做」的「醫館療傷」（act:heal），這裡再放一顆多半是灰的；閉關現在的玩法用不到。兩個都沒有時整段不畫
   function selfEntriesHtml(x) {
     const c = S.main && S.main.status && S.main.status.create;
-    const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
+    const ufDot = (k) => (typeof unfoldDot === "function" ? dotHtml(unfoldDot(k)) : ""); // 慢慢長出來（web/unfold.js）：剛長出來的那一顆亮紅點
+    const craft = shown("tab:craft") ? `<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small>${ufDot("tab:craft")}</button>` : "";
     // 心得不夠開始自創（還沒起意）：入口灰掉、小字寫還差多少（手機介面自檢 U-04），不讓人進去挑了才在下一步被踢回來
-    const create = c && c.on ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
+    const create = c && c.on && ufShown("self:create") ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small>${ufDot("self:create")}</button>` : "";
     if (!craft && !create) return "";
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }

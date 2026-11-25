@@ -73,38 +73,72 @@ def test_seen_route_clears_the_dot_and_is_404_when_off(tmp_path, monkeypatch):
     assert client.post("/api/unfold/seen", json={"keys": []}).status_code in (401, 404)
 
 
-# ── 第二批：五件小事（guide 包的 _unfold_triggers）只對拿到那一本的新角色說；網頁把提示畫成小事卡（test_unfold_web.py）
+# ── 小事卡（features/unfold/cards.py）：門派、書信、結義、稱號、江湖錄、合成第一次碰到時攤一張（帶著對象），一次一張、每種一次
 def _card(name="王越"):
     from tianxia.state import Mingtie, MingtieCopy
 
-    return MingtieCopy(name=name, card=Mingtie(), when="", place="", season=1)
+    return MingtieCopy(name=name, card=Mingtie(), when="", place="", season=1, gave=1)
 
 
-def test_the_first_name_card_brings_the_mail_hint_to_a_new_player_only(on):
-    from tianxia.features.guide import actions
-
-    on.config.mail.enabled = True
-    on.config.jieyi.enabled = True
-    g = _new(on)
-    g.state.player.mingtie_box.append(_card())
-    assert "h_mail" in actions.hint_triggers(g) and "h_jieyi" not in actions.hint_triggers(g)
-    g.state.player.mingtie_box.append(_card("童淵"))
-    assert "h_jieyi" in actions.hint_triggers(g)
-    g.state.player.unfold = None  # 舊角色：一句都不多
-    assert not {"h_mail", "h_jieyi"} & set(actions.hint_triggers(g))
+def _card_now(g):
+    g.sync(g.now + 1)
+    return (g.feature_status()["unfold"] or {}).get("card")
 
 
-def test_standing_at_a_sect_gate_brings_the_sect_hint(on):
-    from tianxia.features.guide import actions
-
+def test_standing_at_a_sect_gate_lays_the_sect_card_with_its_join_button(on):
     on.config.zongmen.enabled = True
     g = _new(on)
+    g.choose("choice:0")
     sect = next(s for s in on.sects.values() if s.switch == "zongmen" and on.sect_open(s.id))
-    assert "h_sect" not in actions.hint_triggers(g)
     g.state.player.location = sect.location
-    assert "h_sect" in actions.hint_triggers(g)
-    g.state.player.sect = sect.id
-    assert "h_sect" not in actions.hint_triggers(g)
+    k = _card_now(g)
+    assert k["kind"] == "sect" and k["arg"] == sect.id and k["go"] and k["later"]
+    rules_book = g.state.player.unfold
+    from tianxia.features.unfold import cards
+
+    cards.close(rules_book)
+    assert _card_now(g) is None  # 收了就不再出同一種
+
+
+def test_one_card_at_a_time_mail_then_jieyi_after_a_fight_together(on):
+    from tianxia.features.unfold import cards
+    from tianxia.state import BattleRecord, Fighter
+
+    on.config.mail.enabled = on.config.jieyi.enabled = True
+    g = _new(on)
+    g.choose("choice:0")
+    g.state.player.mingtie_box.append(_card())
+    assert _card_now(g)["kind"] == "mail"
+    g.state.battles.append(BattleRecord(id=99, time=0, location="", kind="spar", opponent="王越", ours=[Fighter(name="沈浪", level=1)],
+                                        tier="險勝", our_power=1, difficulty=1))
+    assert _card_now(g)["kind"] == "mail"  # 前一張還攤著：排著等
+    cards.close(g.state.player.unfold)
+    k = _card_now(g)
+    assert k["kind"] == "jieyi" and k["arg"] == "王越"
+
+
+def test_an_old_player_never_gets_a_card(on):
+    on.config.mail.enabled = True
+    g = _new(on)
+    g.choose("choice:0")
+    g.state.player.unfold = None
+    g.state.player.mingtie_box.append(_card())
+    g.sync(g.now + 1)
+    assert "unfold" not in g.feature_status()
+
+
+def test_a_new_player_no_longer_hears_the_three_replaced_hints(on):
+    g = _new(on)
+    assert {"h_merge", "h_points", "h_create"} <= g.state.player.hints_seen
+
+
+def test_a_new_player_hears_the_short_line(on):
+    from tianxia.features.guide import hints, short
+
+    g = _new(on)
+    assert hints.note_for(g.state, on, "h_tavern").text == short.SHORT["h_tavern"]
+    g.state.player.unfold = None
+    assert hints.note_for(g.state, on, "h_tavern").text != short.SHORT["h_tavern"]
 
 
 def test_the_mall_comes_up_once_the_road_is_chosen_and_the_pills_when_legs_give_out(on):

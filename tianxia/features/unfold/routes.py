@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
-from . import rules
+from . import cards, rules
 
 
 def router(shell) -> APIRouter:
@@ -21,6 +21,13 @@ def router(shell) -> APIRouter:
         game = gate(request)
         keys = [str(k)[:40] for k in (body.get("keys") or [])][:20]
         shell.act(game, lambda g: rules.seen(g.state.player.unfold, keys), paused_ok=True)
+        return {"main": shell.look(game, shell.main_view)}
+
+    @r.post("/api/unfold/card")
+    def api_card(request: Request):
+        """小事卡按了鈕或「改天」：收起這一張（每一種只出一次，收了就不再出）。回 {main}。"""
+        game = gate(request)
+        shell.act(game, lambda g: cards.close(g.state.player.unfold), paused_ok=True)
         return {"main": shell.look(game, shell.main_view)}
 
     return r

@@ -32,7 +32,14 @@ class UnfoldFeature(Feature):
             if not (self.enabled(ctx) and pending):  # 只有開關開著時新建、還站在城門口的角色才開本；舊角色全部攤開
                 return
             p.unfold = rules.new_book()
-        rules.grow(ctx.state, opening_pending=pending)
+            p.hints_seen.update(rules.REPLACED_HINTS)
+        from . import cards  # noqa: PLC0415
+
+        a = ctx.content.config.arts
+        ready = frozenset({"tab:craft"}) if "tab:craft" not in p.unfold.grown and cards.fuse_pair(ctx) else frozenset()
+        rules.grow(ctx.state, opening_pending=pending, ready=ready, create_price=a.create_first_xinde or a.create_xinde)
+        if not pending:
+            cards.look(ctx, p.unfold)
 
     def on_sync(self, ctx, elapsed: float) -> None:
         self._look(ctx)
@@ -51,7 +58,9 @@ class UnfoldFeature(Feature):
         book = ctx.state.player.unfold
         if book is None or ctx.state.player.bot:
             return {}
-        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh)}}
+        from . import cards  # noqa: PLC0415
+
+        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh), "card": cards.view(book)}}
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）

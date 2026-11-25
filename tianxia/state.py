@@ -419,6 +419,10 @@ class UnfoldBook(BaseModel):
 
     grown: list[str] = Field(default_factory=list)
     fresh: list[str] = Field(default_factory=list)
+    # 七個系統第一次碰到的小事卡（門派、結義、書信、稱號、江湖錄、合成）：done 是出過的（「sect」「mail」……，一個角色每一種只出一次）；
+    # card 是此刻攤著的那一張「種類|對象」（「sect|baima」「mail|白飛」），空的是沒有；同一時間只攤一張
+    done: list[str] = Field(default_factory=list)
+    card: str = ""
 
 
 class GuardBook(BaseModel):

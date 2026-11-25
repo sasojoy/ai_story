@@ -389,29 +389,16 @@ def _more_triggers(ctx: Game, want) -> list[str]:
 
 
 PILLS_AT = 10  # 體力低於這個數、身上沒有回體丹，師父提萬寶閣的回體丹（慢慢長出來）
-JIEYI_CARDS = 2  # 名帖匣裡收了幾個人的名帖，師父才提結義（慢慢長出來）
 
 
 def _unfold_triggers(ctx: Game, want) -> list[str]:
-    """慢慢長出來（Joy 2026-11-25）的六件小事（加上體力見底的回體丹）：只對拿到那一本（PlayerState.unfold）的新角色說；舊角色照舊不說。
-    門派、結義、書信、稱號、江湖錄都是包，包不能 import 包：這裡只讀狀態與各自的開關。"""
+    """慢慢長出來（Joy 2026-11-25）只對拿到那一本（PlayerState.unfold）的新角色說的：體力見底、身上沒有回體丹。舊角色照舊不說。
+    門派、結義、書信、稱號、江湖錄、合成的小事卡在 unfold 包（要帶著對象：哪一門、哪一個人、哪一件），不在提示表。"""
     c, p = ctx.content, ctx.state.player
     if p.unfold is None:
         return []
     on: list[str] = []
     cfg = c.config
-    # 山門前：人站在一門（門派包管拜入的那幾門，Sect.switch＝zongmen）的山門，自己還沒拜入
-    if want("h_sect") and cfg.zongmen.enabled and p.sect is None and p.journey is None and any(
-            s.switch == "zongmen" and s.location == p.location and c.sect_open(s.id) for s in c.sects.values()):
-        on.append("h_sect")
-    if want("h_mail") and cfg.mail.enabled and p.mingtie_box:
-        on.append("h_mail")
-    if want("h_jieyi") and cfg.jieyi.enabled and len({x.name for x in p.mingtie_box}) >= JIEYI_CARDS:
-        on.append("h_jieyi")
-    if want("h_title") and cfg.titles.enabled and p.titles_worn:
-        on.append("h_title")
-    if want("h_codex") and cfg.codex.enabled and p.codex is not None and p.codex.ended:
-        on.append("h_codex")
     # 體力快見底、身上一顆回體丹都沒有：萬寶閣有（Joy 2026-11-25「很多商城裡面的東西也要教學」）
     if want("h_pills") and cfg.mall.enabled and p.stamina_pills == 0 and p.stamina < PILLS_AT:
         on.append("h_pills")

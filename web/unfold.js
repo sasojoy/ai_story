@@ -13,6 +13,8 @@
     "hero:gear": { at: "practice", sub: "gear" },
     "hero:mates": { at: "practice", sub: "mates" },
     "hero:codex": { at: "practice", sub: "codex" },
+    "tab:craft": { at: "practice", sub: "arts" },
+    "self:create": { at: "practice", sub: "arts" },
     "self:annals": { at: "practice" },
     "self:mingtie": { at: "practice" },
     "self:mail": { at: "practice" },
@@ -21,6 +23,8 @@
   // 這一塊此刻就在眼前（點開了）：紅點該滅
   function ufHere(key) {
     if (key === "tab:map") return S.tab === "map";
+    if (key === "tab:craft") return S.tab === "craft";
+    if (key === "self:create") return !!S.createOpen;
     if (key === "tab:news") return S.tab === "news" && !SELF_NEWS.some((n) => n.id === S.news);
     if (key.startsWith("hero:")) return S.tab === "practice" && S.heroTab === key.slice(5);
     if (key.startsWith("self:")) return S.tab === "news" && S.news === key.slice(5);
@@ -47,51 +51,106 @@
     }
   }
 
-  // ── 小事卡（第二批）：拿到那一本的新角色，碰到才說的提示（guideHtml 的 g.hint）一律畫成這一張：上面一張圖、師父一句話、一顆「去做」。
-  // 「去做」先按掉這一張（同「知道了」），再帶到那一處；沒有去處的只有「知道了」。待 joy 潤：鈕上的字
-  const UF_CARDS = {
-    h_sect: { img: "events/temple" },
-    h_mail: { img: "events/road", go: "news:mail", label: "看信匣" },
-    h_jieyi: { img: "events/tavern", go: "news:mingtie", label: "看名帖匣" },
-    h_title: { img: "events/town", go: "tab:practice", label: "去挑" },
-    h_codex: { img: "events/tale", go: "hero:codex", label: "翻江湖錄" },
+  // ── 小事卡（提案表「七個系統第一次碰到的小事」，Joy 2026-11-25）：一張圖、一兩句話、一顆真的做第一步的鈕、一顆「改天」。
+  // 兩種來源同一個樣子：①這一包自己的六張（main.unfold.card：門派、結義、書信、稱號、江湖錄、合成，帶著對象）；②碰到才說的提示（main.guide 的
+  // g.hint），新角色一律畫成這一張，話是伺服器換好的一兩句（guide 包 short.py）。同一時間只畫一張，自己那張先。
+  // 位置：江湖頁的場景卡底下、行動列上面（main.js 的 unfoldNowHtml；Joy 11/14「下一步的鈕要在玩家眼前」）。
+  // 待 joy 潤：鈕上的字（提示那一種；自己那六張的字在伺服器 features/unfold/cards.py）
+  const UF_IMG = { sect: "events/temple", mail: "gear/treasure-mendi_mingtie", jieyi: "events/tavern", title: "events/office", codex: "events/tale",
+    fuse: "events/altar" };
+  // 提示 id → 圖、鈕（go 的寫法見 unfoldGo）。沒有鈕的那幾條是事情已經擺在眼前（放手一搏的輸入框、路上的選項）或只是一句話
+  const UF_HINTS = {
     h_merge: { img: "events/altar", go: "tab:craft", label: "去煉製" },
-    h_points: { img: "events/academy", go: "hero:attrs", label: "去配點" },
+    h_clash: { img: "events/academy", go: "hero:arts", label: "去看看" },
+    h_lose: { img: "events/fight", go: "hero:arts", label: "回去練" },
+    h_injury: { img: "here/clinic", go: "opt:act:heal", label: "去療傷" },
+    h_drill_done: { img: "events/road", go: "opt:act:explore", label: "出門走走" },
+    h_field_lose: { img: "events/fight", go: "tab:map", label: "看輿圖" },
     h_create: { img: "events/academy", go: "create", label: "去自創" },
-    h_tavern: { img: "here/tavern" },
-    h_feast: { img: "here/feast" },
-    h_injury: { img: "here/clinic" },
-    h_mount: { img: "here/horses", go: "hero:gear", label: "去看看" },
-    h_treasure: { img: "events/treasure", go: "hero:gear", label: "去看看" },
-    h_mall: { img: "mall/card_30", go: "mall", label: "去萬寶閣" },
-    h_pills: { img: "mall/pills_5", go: "buy:pills_5", label: "去買回體丹" },
-    h_looks: { img: "mall/legend_1", go: "mall", label: "去萬寶閣" },
-    h_tale: { img: "events/tale", go: "news:reports", label: "看戰報" },
-    h_lose: { img: "events/fight" },
-    h_field_lose: { img: "events/fight" },
+    h_tavern: { img: "here/tavern", go: "opt:act:tavern", label: "進酒肆" },
+    h_points: { img: "events/academy", go: "hero:attrs", label: "去配點" },
+    h_basic_art: { img: "events/academy", go: "opt:learn:", label: "去學" },
+    h_snubbed: { img: "events/office" },
+    h_recruit: { img: "here/tavern", go: "opt:act:tavern", label: "進酒肆" },
+    h_free_text: { img: "events/road" },
     h_road: { img: "events/road" },
+    h_cap: { img: "events/academy", go: "hero:arts", label: "去整理" },
+    h_spectator: { img: "events/camp" },
+    h_foreshadow: { img: "events/night" },
+    h_event_reveal: { img: "events/town" },
+    h_promotion: { img: "events/office", go: "opt:act:summons", label: "去見他" },
+    h_showdown: { img: "events/camp" },
+    h_figure: { img: "events/camp" },
+    h_mandate: { img: "events/altar" },
+    h_bond: { img: "here/tavern" },
+    h_raid_guard: { img: "events/forest" },
+    h_checkin: { img: "events/village" },
+    h_mall: { img: "mall/card_30", go: "mall", label: "進去看看" },
+    h_pills: { img: "mall/pills_5", go: "buy:pills_5", label: "去買回體丹" },
+    h_looks: { img: "mall/legend_1", go: "mall", label: "去換一身" },
+    h_seal: { img: "events/treasure", go: "hero:gear", label: "看看它" },
+    h_feast: { img: "here/feast", go: "opt:feast:join:", label: "入席" },
+    h_chuangong: { img: "events/academy", go: "hero:mates", label: "去分" },
+    h_mount: { img: "here/horses", go: "hero:gear", label: "騎上" },
+    h_treasure: { img: "events/treasure", go: "hero:gear", label: "帶上" },
+    h_place: { img: "events/refugees" },
+    h_tale: { img: "events/tale", go: "news:reports", label: "去讀" },
+    h_lilian: { img: "events/road" },
   };
-  function unfoldCardHtml(g) {
-    const c = UF_CARDS[g.key] || {};
-    const pic = c.img ? `<div class="uf-pic" style="background-image:url(/static/img/${c.img}.webp)"></div>` : "";
-    const go = c.go ? `<button class="btn primary" data-act="unfold-go" data-go="${esc(c.go)}">${esc(c.label)}</button>` : "";
-    const ack = `<button class="btn${go ? " ghost" : ""}" data-act="guide-ack">知道了</button>`;
-    return `<section class="card uf-card${pic ? "" : " bare"}" aria-label="${esc(g.speaker)}的話">${pic}<div class="uf-in"><b class="uf-who">${esc(g.speaker)}</b>`
-      + `<p class="uf-say">${esc(g.text)}</p><div class="uf-dos">${go}${ack}</div></div></section>`;
+  // 「opt:」開頭的鈕只有那個選項此刻在選單上才畫（「opt:learn:」這種結尾是冒號的，認開頭）
+  const ufOpt = (m, want) => ((m && m.options) || []).find((o) => o.enabled !== false && (want.endsWith(":") ? o.id.startsWith(want) : o.id === want));
+  function ufCardHtml(img, who, say, goBtn, laterAct) {
+    const pic = img ? `<div class="uf-pic" style="background-image:url(/static/img/${img}.webp)"></div>` : "";
+    const later = `<button class="btn${goBtn ? " ghost" : " primary"}" data-act="${laterAct}">${goBtn ? "改天" : "知道了"}</button>`;
+    return `<section class="card uf-card${pic ? "" : " bare"}" aria-label="${esc(who)}">${pic}<div class="uf-in"><b class="uf-who">${esc(who)}</b>`
+      + `<p class="uf-say">${esc(say)}</p><div class="uf-dos">${goBtn}${later}</div></div></section>`;
   }
-  async function unfoldGo(go) { // 先按掉這一張，再帶過去
-    await doMain("guide_ack");
-    const [kind, arg] = go.split(":");
+  // 提示那一種（guideHtml 交過來的；也是 unfoldNowHtml 畫的那一張）
+  function unfoldCardHtml(g) {
+    const c = UF_HINTS[g.key] || {};
+    let go = c.go || "";
+    if (go.startsWith("opt:")) { const o = ufOpt(S.main, go.slice(4)); go = o ? `opt:${o.id}` : ""; }
+    const btn = go ? `<button class="btn primary" data-act="unfold-go" data-go="${esc(go)}">${esc(c.label)}</button>` : "";
+    return ufCardHtml(c.img, g.speaker, g.text, btn, "guide-ack");
+  }
+  // 這一包自己的那六張
+  const UF_GO = { sect: (a) => `opt:zongmen:join:${a}`, mail: (a) => `mail:${a}`, jieyi: (a) => `peer:${a}`, title: (a) => `title:${a}`,
+    codex: (a) => `codex:${a}`, fuse: (a) => `forge:${a}` };
+  function ufOwnHtml(k) {
+    const go = UF_GO[k.kind] ? UF_GO[k.kind](k.arg) : "";
+    const btn = go ? `<button class="btn primary" data-act="unfold-card-go" data-go="${esc(go)}">${esc(k.go)}</button>` : "";
+    return ufCardHtml(UF_IMG[k.kind], k.who, k.say, btn, "unfold-card-later");
+  }
+  // 江湖頁場景卡底下那一格（main.js）：舊角色（沒有那一本）回 null，照舊畫師父的框
+  function unfoldNowHtml(m) {
+    if (!m || !m.unfold) return null;
+    if (m.unfold.card) return ufOwnHtml(m.unfold.card);
+    return m.guide && m.guide.hint ? unfoldCardHtml(m.guide) : "";
+  }
+  async function unfoldGo(go) { // 帶過去：go 是「種類:對象」
+    const i = go.indexOf(":"), kind = i < 0 ? go : go.slice(0, i), arg = i < 0 ? "" : go.slice(i + 1);
     if (kind === "tab") await goTab(arg);
     else if (kind === "hero") { S.heroTab = arg; await goTab("practice"); }
     else if (kind === "news") { S.news = arg; await goTab("news"); }
     else if (kind === "create") { S.createOpen = true; await goTab("practice"); }
     else if (kind === "mall" && typeof openMall === "function") await openMall();
     else if (kind === "buy" && typeof openMall === "function") { await openMall(); if (typeof mallPick === "function") mallPick(arg); } // 萬寶閣開在那一件
+    else if (kind === "opt") await choose(document.querySelector(`[data-act="choose"][data-id="${CSS.escape(arg)}"]`) || document.createElement("button"), arg);
+    else if (kind === "mail" && typeof mailOpen === "function") await mailOpen(arg);
+    else if (kind === "peer" && typeof openPeer === "function") await openPeer(arg);
+    else if (kind === "title" && typeof titlesWear === "function") await titlesWear(arg);
+    else if (kind === "codex") { S.heroTab = "codex"; S.cxSeg = "qy"; S.cxOpen = arg; S.cxRead = null; await goTab("practice"); }
+    else if (kind === "forge") { S.forgeSel = arg.split("+").map((id) => ({ type: "ins", id })); await goTab("craft"); } // 兩個已經放進爐裡
+  }
+  async function unfoldCardDone() {
+    const r = await api("/api/unfold/card", {});
+    if (r && r.main) setMain(r.main);
   }
   async function unfoldClick(act, el, ev) {
     switch (act) {
-        case "unfold-go": await unfoldGo(el.dataset.go || ""); break;
+        case "unfold-go": await doMain("guide_ack"); await unfoldGo(el.dataset.go || ""); break; // 提示那一種：先按掉，再帶過去
+        case "unfold-card-go": await unfoldCardDone(); await unfoldGo(el.dataset.go || ""); break; // 自己那六張：收起，再帶過去
+        case "unfold-card-later": await unfoldCardDone(); renderPage(); break;
     } // unfoldClick
   } // unfoldClick
-  registerClicks(unfoldClick, ["unfold-go"]);
+  registerClicks(unfoldClick, ["unfold-go", "unfold-card-go", "unfold-card-later"]);
