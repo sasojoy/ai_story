@@ -60,7 +60,7 @@
 .shop-layer.shop-mall .mall-hero .lantern:first-child { left: 2px; }
 .shop-layer.shop-mall .mall-hero .lantern:nth-child(3) { right: 2px; }
 .shop-layer.shop-mall .mall-cats { display: flex; gap: 8px; overflow-x: auto; margin: 10px 0 0; padding: 2px 0; scrollbar-width: none; }
-.shop-layer.shop-mall .mall-cat { flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid #6b4a2e; background: #24140f; color: #e6d3b0;
+.shop-layer.shop-mall .mall-cat { flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid #6b4a2e; background: #24140f; color: #e6d3b0;
   font: 14px var(--sans); cursor: pointer; }
 .shop-layer.shop-mall .mall-cat.on { background: #f0cf7a; border-color: #f0cf7a; color: #3a1d08; font-weight: 700; }
 .shop-layer.shop-mall .mall-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

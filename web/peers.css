@@ -134,3 +134,6 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
 .mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }
+/* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
+.peer-name { position: relative; }
+.peer-name::after { content: ""; position: absolute; inset: -9px -2px; }

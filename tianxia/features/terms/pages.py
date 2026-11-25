@@ -20,7 +20,17 @@ section { background:var(--card); border:1px solid var(--line); border-radius:14
 h2 { font-size:17px; margin:0 0 6px; }
 p { margin:6px 0; }
 footer { color:var(--ink-2); font-size:13px; margin-top:24px; }
+.rating { display:flex; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin:12px 0; }
+.rating b { flex:none; display:grid; place-items:center; width:52px; height:52px; border-radius:10px; background:#e0a526; color:#2a241d; font-size:17px; line-height:1.1; text-align:center; }
+.rating ul { margin:0; padding:0; list-style:none; font-size:13px; color:var(--ink-2); line-height:1.6; }
 """
+
+
+def rating_html(data: dict) -> str:
+    """遊戲分級標識與警語（遊戲軟體分級管理辦法第 11～13 條：起始網頁旁明顯標示、不小於 45×45 像素）。"""
+    m = data["rating_mark"]
+    lines = "".join(f"<li>{escape(x)}</li>" for x in [f"{data['rating']}：{m['age']}"] + list(m["lines"]))
+    return f'<div class="rating" role="note" aria-label="遊戲分級"><b>{escape(m["short"])}</b><ul>{lines}</ul></div>'
 
 
 def page(doc: str, data: dict) -> str:
@@ -36,5 +46,5 @@ def page(doc: str, data: dict) -> str:
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>天下大勢 {escape(d["title"])}</title><style>{STYLE}</style></head>
 <body><main><nav>{nav}</nav><h1>{escape(d["title"])}</h1>
-<p class="meta">最後更新 {escape(d["updated"])}・版本 {escape(data["version"])}</p>{body}
+<p class="meta">最後更新 {escape(d["updated"])}・版本 {escape(data["version"])}</p>{rating_html(data)}{body}
 <footer>{escape(c["name"])}・統編 {escape(c["tax_id"])}・{escape(c["address"])}・{escape(c["email"])}</footer></main></body></html>"""

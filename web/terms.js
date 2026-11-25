@@ -37,6 +37,7 @@
   // 殼自己的 #create-form（密碼帳號註冊完才建角色，帳號已經開了）不插。版號問 /api/terms/version：非 200（關著 404、伺服器沒這一包）
   // 這一頁不再問、不插；斷線下一次重畫再問。送出時（capture，先於 app.js 那一支）沒全勾就擋下、寫那一句。畫法集中在 termsChecksHtml。
   let termsVersionAsk = null; // Promise：版號字串，或 null（不問）
+  let termsRatingMark = null; // 遊戲分級標識（/api/terms/version 同一趟帶回來的 rating：short、age、lines），登入頁畫在條款連結上面
 
   function termsChecksHtml(version) {
     const read = termsEsc(TERMS_SAY.read)
@@ -56,7 +57,7 @@
   function termsVersion() {
     if (!termsVersionAsk) {
       termsVersionAsk = fetch("/api/terms/version", { credentials: "same-origin" })
-        .then((res) => (res.ok ? res.json().then((d) => (d && d.version) || null) : null))
+        .then((res) => (res.ok ? res.json().then((d) => { termsRatingMark = (d && d.rating) || null; return (d && d.version) || null; }) : null))
         .catch(() => { termsVersionAsk = null; return null; }); // 斷線：下一次再問
     }
     return termsVersionAsk;
@@ -122,6 +123,22 @@
     for (const box of document.querySelectorAll('.gate, .sheet[aria-label="設定"]')) {
       if (!box.querySelector(".terms-links")) box.insertAdjacentHTML("beforeend", TERMS_LINKS);
     }
+    termsAddRating();
+  }
+
+  // 遊戲分級標識（遊戲軟體分級管理辦法第 11～13 條：起始網頁旁明顯標示分級、不小於 45×45 像素，加上情節與付費、避免沉迷的警語）。
+  // 只畫在登入頁（.gate 有 #gate-form 的那一頁）條款連結的上面；版號那一趟同時帶回來，問不到（關著 404、斷線）就不畫
+  function termsRatingHtml(m) {
+    const lines = [m.age, ...(m.lines || [])].map((x) => `<li>${termsEsc(x)}</li>`).join("");
+    return `<div class="terms-rating" role="note" aria-label="遊戲分級"><b>${termsEsc(m.short)}</b><ul>${lines}</ul></div>`;
+  }
+  async function termsAddRating() {
+    const gate = document.querySelector("#gate-form") && document.querySelector(".gate");
+    if (!gate || gate.querySelector(".terms-rating")) return;
+    await termsVersion();
+    const links = gate.querySelector(".terms-links");
+    if (!termsRatingMark || !links || gate.querySelector(".terms-rating")) return;
+    links.insertAdjacentHTML("beforebegin", termsRatingHtml(termsRatingMark));
   }
 
   function termsLayerHtml(t) {

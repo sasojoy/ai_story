@@ -264,7 +264,7 @@
   const DV_NOT_MINE = "未有"; // 待 joy 潤
   const DV_SOLVED = "鑄譜上有・尚無人打出"; // 待 joy 潤
   const DV_ALBUM = "收藏 {have}／{total}"; // 待 joy 潤
-  const DV_UNKNOWN = "？"; // 待 joy 潤
+  const DV_UNKNOWN = "未鑄"; // 待 joy 潤（總檢查 11/25：沒打出來的格不放「？」，暈墨底寫「未鑄」，同江湖錄圖鑑的「未見」）
   const DV_LINK = "神器 江湖已見 {k} 件・收藏 {have}／{total} ›"; // 待 joy 潤：架上頁那一行（K 是這一季已打出原品的件數）
   const DV_LINK_ZERO = "神器 收藏 {have}／{total} ›"; // 待 joy 潤：K 是 0
   const DV_REF = "鑄|"; // 神器譜那一筆的 ref 是「鑄|配方 id」（伺服器的 GearFind.id）；tests/web/test_smith_divine_web.py 拿真的神器譜鎖著

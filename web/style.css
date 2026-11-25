@@ -161,13 +161,13 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .where.split > .where-gap { display: none; }
 .where.split > .where-at { margin-top: 1px; }
 .icon-btn {
-  position: relative; flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
+  position: relative; flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
 }
 /* 商城的入口乙（商城第二批，企劃者 2026-10-20 挑的）：齒輪左邊一顆錠子鈕寫元寶餘額。名號那一欄（.who，flex 1、min-width 0）跟著窄，
    長名號照舊在 .who-name > span 收成「…」 */
 .mall-btn {
-  flex: none; height: 40px; padding: 0 9px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--line));
+  flex: none; height: 44px; padding: 0 9px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--line));
   background: var(--card); color: var(--ink); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
   font: 600 13px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
@@ -290,7 +290,7 @@ button:not(:disabled):active, a[href]:active, summary:active, [data-act]:not(but
 button, a[href], summary, [data-act] { transition: opacity 0.12s; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn.ghost { background: transparent; }
-.btn.small { min-height: 38px; padding: 6px 12px; font-size: 14px; width: auto; }
+.btn.small { min-height: 44px; padding: 6px 12px; font-size: 14px; width: auto; }
 .btn:disabled { opacity: 0.45; cursor: default; }
 .btn.busy { opacity: 1; position: relative; overflow: hidden; }
 .btn.busy::after {
@@ -324,7 +324,7 @@ button, a[href], summary, [data-act] { transition: opacity 0.12s; }
 
 .seg { display: flex; background: var(--card-2); border-radius: 12px; padding: 3px; gap: 3px; margin: 0 0 12px; overflow-x: auto; scrollbar-width: none; }
 .seg::-webkit-scrollbar { display: none; }
-.seg button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.seg button { flex: 1 0 auto; min-height: 44px; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
 /* 見聞四顆（減法季批 1，整合設計 6.5）：大事、傳聞、江湖史、紀錄；大事底下再一排小的（戰報、大勢、形勢，.news-sub） */
 .news-sub { margin-top: -4px; background: none; padding: 0; gap: 4px; }
@@ -889,7 +889,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .result-rank li i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .result-rank p { margin: 4px 0 0; color: var(--ink-2); }
 .linkish { position: relative; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 6px 2px; font-size: 14px; }
-.linkish::after { content: ""; position: absolute; inset: -6px -8px; }
+.linkish::after { content: ""; position: absolute; inset: -8px -8px; } /* 一行 28px 的字鈕也撐到 44（總檢查 11/25） */
 
 /* ── 修練 ── */
 /* 卷軸卡（企劃者 2026-10-06「先用捲軸卡」）：一門一張卡，左邊一條品質色、左上一方品質印。品質色是 --q（q1～q4 四階） */
@@ -1026,7 +1026,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .lib .art-body .art-card { background: var(--card); }
 /* 武學多時（上限 50 門）：篩選一排，橫向可滑 */
 .lib-filter { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 0 8px; padding-bottom: 2px; }
-.lib-filter button { flex: none; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.lib-filter button { flex: none; min-height: 44px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; cursor: pointer; }
 .lib-filter button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .lib-more { margin: -4px 0 12px; }
 /* 批量熔煉（修練頁功法庫）：每一列前面一個勾，底下浮一條「熔掉 N 樣」 */
@@ -1875,3 +1875,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 body.layer-open { position: fixed; left: 0; right: 0; overflow: hidden; }
 .sheet, .tl-list, .vn-menu { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .sheet-bg, .vn-bg { touch-action: none; }
+/* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
+.promo-sound::after { content: ""; position: absolute; inset: -8px -4px; }
+.rn-dots li::after { content: ""; position: absolute; inset: -9px 0; }
+.tx-chg[data-act] { position: relative; }
+.tx-chg[data-act]::after { content: ""; position: absolute; inset: -12px -4px; }
