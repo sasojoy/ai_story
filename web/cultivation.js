@@ -835,7 +835,7 @@
       const heroTabs1 = S.main && S.main.codex && typeof codexHtml === "function" ? [...heroTabs0, HERO_CODEX] : heroTabs0; // 江湖錄（web/codex.js；開關開著才有）：排最後
       const heroTabs = heroTabs1.filter(([k]) => ufShown(`hero:${k}`)); // 慢慢長出來（web/unfold.js）：新角色還用不到的子分頁先不畫
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
-      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
+      const tabs = heroTabs.length < 2 ? "" : `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? `${gdBlock}${rosterBlock}`

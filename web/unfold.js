@@ -46,3 +46,52 @@
       registerDot({ id: `unfold:${key}`, at: place.at, sub: place.sub, on: () => unfoldDot(key) });
     }
   }
+
+  // ── 小事卡（第二批）：拿到那一本的新角色，碰到才說的提示（guideHtml 的 g.hint）一律畫成這一張：上面一張圖、師父一句話、一顆「去做」。
+  // 「去做」先按掉這一張（同「知道了」），再帶到那一處；沒有去處的只有「知道了」。待 joy 潤：鈕上的字
+  const UF_CARDS = {
+    h_sect: { img: "events/temple" },
+    h_mail: { img: "events/road", go: "news:mail", label: "看信匣" },
+    h_jieyi: { img: "events/tavern", go: "news:mingtie", label: "看名帖匣" },
+    h_title: { img: "events/town", go: "tab:practice", label: "去挑" },
+    h_codex: { img: "events/tale", go: "hero:codex", label: "翻江湖錄" },
+    h_merge: { img: "events/altar", go: "tab:craft", label: "去煉製" },
+    h_points: { img: "events/academy", go: "hero:attrs", label: "去配點" },
+    h_create: { img: "events/academy", go: "create", label: "去自創" },
+    h_tavern: { img: "here/tavern" },
+    h_feast: { img: "here/feast" },
+    h_injury: { img: "here/clinic" },
+    h_mount: { img: "here/horses", go: "hero:gear", label: "去看看" },
+    h_treasure: { img: "events/treasure", go: "hero:gear", label: "去看看" },
+    h_mall: { img: "mall/card_30", go: "mall", label: "去萬寶閣" },
+    h_pills: { img: "mall/pills_5", go: "buy:pills_5", label: "去買回體丹" },
+    h_looks: { img: "mall/legend_1", go: "mall", label: "去萬寶閣" },
+    h_tale: { img: "events/tale", go: "news:reports", label: "看戰報" },
+    h_lose: { img: "events/fight" },
+    h_field_lose: { img: "events/fight" },
+    h_road: { img: "events/road" },
+  };
+  function unfoldCardHtml(g) {
+    const c = UF_CARDS[g.key] || {};
+    const pic = c.img ? `<div class="uf-pic" style="background-image:url(/static/img/${c.img}.webp)"></div>` : "";
+    const go = c.go ? `<button class="btn primary" data-act="unfold-go" data-go="${esc(c.go)}">${esc(c.label)}</button>` : "";
+    const ack = `<button class="btn${go ? " ghost" : ""}" data-act="guide-ack">知道了</button>`;
+    return `<section class="card uf-card${pic ? "" : " bare"}" aria-label="${esc(g.speaker)}的話">${pic}<div class="uf-in"><b class="uf-who">${esc(g.speaker)}</b>`
+      + `<p class="uf-say">${esc(g.text)}</p><div class="uf-dos">${go}${ack}</div></div></section>`;
+  }
+  async function unfoldGo(go) { // 先按掉這一張，再帶過去
+    await doMain("guide_ack");
+    const [kind, arg] = go.split(":");
+    if (kind === "tab") await goTab(arg);
+    else if (kind === "hero") { S.heroTab = arg; await goTab("practice"); }
+    else if (kind === "news") { S.news = arg; await goTab("news"); }
+    else if (kind === "create") { S.createOpen = true; await goTab("practice"); }
+    else if (kind === "mall" && typeof openMall === "function") await openMall();
+    else if (kind === "buy" && typeof openMall === "function") { await openMall(); if (typeof mallPick === "function") mallPick(arg); } // 萬寶閣開在那一件
+  }
+  async function unfoldClick(act, el, ev) {
+    switch (act) {
+        case "unfold-go": await unfoldGo(el.dataset.go || ""); break;
+    } // unfoldClick
+  } // unfoldClick
+  registerClicks(unfoldClick, ["unfold-go"]);

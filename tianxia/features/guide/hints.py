@@ -28,6 +28,10 @@ KNOWN = frozenset({
     "h_tale",
     # 歷練快滿了（2026-11-05，五項屬性的季才有）：這一季從事件得來的屬性到 Config.attributes.v2.event_hint_at
     "h_lilian",
+    # 慢慢長出來（Joy 2026-11-25，unfold 包）：只對拿到那一本的新角色說的五件小事——山門前、第一次換名帖、名帖收了幾張、第一次有稱號、
+    # 第一段奇事走完。網頁對有那一本的角色把每一條提示都畫成一張小事卡（web/unfold.js）
+    "h_sect", "h_mail", "h_jieyi", "h_title", "h_codex",
+    "h_pills",  # 體力見底、身上沒有回體丹：萬寶閣有（Joy「很多商城裡面的東西也要教學」）
 })
 
 

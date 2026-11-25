@@ -12,7 +12,7 @@ from tianxia.core.features import Feature
 class UnfoldFeature(Feature):
     name = "unfold"
     prefix = "unfold"  # 沒有選項：紅點滅走 /api/unfold/seen
-    web = ("unfold.js",)  # 照 main.unfold 藏還沒長出來的分頁、亮剛長出來的紅點（web/unfold.js；藏的那一步在 app.js 的 shown()）
+    web = ("unfold.js", "unfold.css")  # 照 main.unfold 藏還沒長出來的分頁、亮剛長出來的紅點、新角色的提示畫成小事卡（web/unfold.js、unfold.css；藏的那一步在 app.js 的 shown()）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ("unfold",)  # PlayerState.unfold（UnfoldBook）
     # 跟著帳號走：長出來的不因換季收回（on_season_start 照帶）；不寫進 carried——season.carry 那一張表是核心的
