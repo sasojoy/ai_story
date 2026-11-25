@@ -20,6 +20,7 @@ from .core.tuning.horses import HorsesTuning  # 馬的來路
 from .core.tuning.intro import IntroTuning  # 開局前導
 from .core.tuning.codex import CodexTuning  # 江湖錄
 from .core.tuning.yiwen import YiwenTuning  # 異聞
+from .core.tuning.unfold import UnfoldTuning  # 慢慢長出來
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4500,6 +4501,7 @@ class Config(_Strict):
     intro: IntroTuning = Field(default_factory=IntroTuning)  # 開局前導（tianxia/core/tuning/intro.py）
     codex: CodexTuning = Field(default_factory=CodexTuning)  # 江湖錄（tianxia/core/tuning/codex.py）
     yiwen: YiwenTuning = Field(default_factory=YiwenTuning)  # 異聞（tianxia/core/tuning/yiwen.py）
+    unfold: UnfoldTuning = Field(default_factory=UnfoldTuning)  # 慢慢長出來（tianxia/core/tuning/unfold.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")

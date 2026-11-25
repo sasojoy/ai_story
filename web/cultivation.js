@@ -348,14 +348,16 @@
   // 入口就是江湖頁「此地還能做」的「醫館療傷」（act:heal），這裡再放一顆多半是灰的；閉關現在的玩法用不到。兩個都沒有時整段不畫
   function selfEntriesHtml(x) {
     const c = S.main && S.main.status && S.main.status.create;
-    const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
+    const ufDot = (k) => (typeof unfoldDot === "function" ? dotHtml(unfoldDot(k)) : ""); // 慢慢長出來（web/unfold.js）：剛長出來的那一顆亮紅點
+    const craft = shown("tab:craft") ? `<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small>${ufDot("tab:craft")}</button>` : "";
     // 心得不夠開始自創（還沒起意）：入口灰掉、小字寫還差多少（手機介面自檢 U-04），不讓人進去挑了才在下一步被踢回來
-    const create = c && c.on ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
+    const create = c && c.on && ufShown("self:create") ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small>${ufDot("self:create")}</button>` : "";
     if (!craft && !create) return "";
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
   // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
-  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.filter((n) => !n.when || n.when(S.main)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
+  const ufShown = (k) => typeof shown !== "function" || shown(k); // 慢慢長出來：只載一部分檔的頁（測試）照舊全畫
+  const heroAnnalsHtml = () => (shown("tab:news") || (S.main && S.main.unfold) ? SELF_NEWS.filter((n) => (!n.when || n.when(S.main)) && ufShown(`self:${n.id}`)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${typeof unfoldDot === "function" ? dotHtml(unfoldDot(`self:${n.id}`)) : ""}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
@@ -831,9 +833,10 @@
     // 武學（自創、煉製排第一屏，身上兩門，功法庫攤開）、裝備、門下、屬性（以前狀態列點名號攤開的那一大串也在這裡）。記在 S.heroTab
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
       const heroTabs0 = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
-      const heroTabs = S.main && S.main.codex && typeof codexHtml === "function" ? [...heroTabs0, HERO_CODEX] : heroTabs0; // 江湖錄（web/codex.js；開關開著才有）：排最後
+      const heroTabs1 = S.main && S.main.codex && typeof codexHtml === "function" ? [...heroTabs0, HERO_CODEX] : heroTabs0; // 江湖錄（web/codex.js；開關開著才有）：排最後
+      const heroTabs = heroTabs1.filter(([k]) => ufShown(`hero:${k}`)); // 慢慢長出來（web/unfold.js）：新角色還用不到的子分頁先不畫
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
-      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
+      const tabs = heroTabs.length < 2 ? "" : `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
       const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? `${gdBlock}${rosterBlock}`

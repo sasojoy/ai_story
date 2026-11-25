@@ -358,7 +358,9 @@ def _more_triggers(ctx: Game, want) -> list[str]:
         on.append("h_raid_guard")
     if want("h_checkin") and services.checkin_on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
         on.append("h_checkin")
-    if want("h_mall") and c.config.mall.enabled and p.member.level >= SETTLED_LEVEL:
+    # 慢慢長出來的新角色（Joy 2026-11-25「商城當然是能越快出來越好」）：城門口選了路、輿圖長出來那一刻就說，不等升到 SETTLED_LEVEL
+    early = p.unfold is not None and "tab:map" in p.unfold.grown
+    if want("h_mall") and c.config.mall.enabled and (p.member.level >= SETTLED_LEVEL or early):
         on.append("h_mall")
     # 形象：上過一次擂台（看過自己那副模樣）；形象開著＝商城開著而且有形象可賣（looks.rules.on 同一條；包不能 import 包）
     if want("h_looks") and c.config.mall.enabled and c.looks and any(r.kind == "arena" for r in s.battles):
@@ -382,6 +384,24 @@ def _more_triggers(ctx: Game, want) -> list[str]:
     # 歷練快滿了（五項屬性的季）：這一季從事件得來的屬性到 event_hint_at（到頂之前說一次，再磨下去長進有限）
     if want("h_lilian") and attrset.on(c, w) and attrset.event_total(s) >= c.config.attributes.v2.event_hint_at:
         on.append("h_lilian")
+    on += _unfold_triggers(ctx, want)
+    return on
+
+
+PILLS_AT = 10  # 體力低於這個數、身上沒有回體丹，師父提萬寶閣的回體丹（慢慢長出來）
+
+
+def _unfold_triggers(ctx: Game, want) -> list[str]:
+    """慢慢長出來（Joy 2026-11-25）只對拿到那一本（PlayerState.unfold）的新角色說的：體力見底、身上沒有回體丹。舊角色照舊不說。
+    門派、結義、書信、稱號、江湖錄、合成的小事卡在 unfold 包（要帶著對象：哪一門、哪一個人、哪一件），不在提示表。"""
+    c, p = ctx.content, ctx.state.player
+    if p.unfold is None:
+        return []
+    on: list[str] = []
+    cfg = c.config
+    # 體力快見底、身上一顆回體丹都沒有：萬寶閣有（Joy 2026-11-25「很多商城裡面的東西也要教學」）
+    if want("h_pills") and cfg.mall.enabled and p.stamina_pills == 0 and p.stamina < PILLS_AT:
+        on.append("h_pills")
     return on
 
 
