@@ -12,6 +12,7 @@ from collections.abc import Iterable
 
 from tianxia import allied, calendar
 from tianxia.models import Content
+from tianxia.features.guide.short import SHORT
 from tianxia.state import GameState, HintNote, PlayerState
 
 # 設計 5.2 的十八條（第 7 條 h_snubbed 與第 18 條 h_mandate 不看狀態，由事件自己叫 Game._hint），加上 explain-1 的 h_bond（第一次交友、
@@ -28,6 +29,9 @@ KNOWN = frozenset({
     "h_tale",
     # 歷練快滿了（2026-11-05，五項屬性的季才有）：這一季從事件得來的屬性到 Config.attributes.v2.event_hint_at
     "h_lilian",
+    # 慢慢長出來（Joy 2026-11-25，unfold 包）：體力見底、身上沒有回體丹，萬寶閣有（Joy「很多商城裡面的東西也要教學」）。只對拿到那一本的新角色說；
+    # 網頁對有那一本的角色把每一條提示都畫成一張小事卡（web/unfold.js），話換成 SHORT 的一兩句
+    "h_pills",
 })
 
 
@@ -63,7 +67,15 @@ def defined(content: Content, hint_id: str) -> bool:
 
 
 def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | None:
-    """這一條此刻由誰說、說什麼；說不了（散人碰到沒有散人版的陣營提示、內容沒有這一條）是 None。"""
+    """這一條此刻由誰說、說什麼；說不了（散人碰到沒有散人版的陣營提示、內容沒有這一條）是 None。
+    拿到慢慢長出來那一本的新角色改說 short.SHORT 的一兩句（說話的人照舊；說不說得了照舊由原本那幾句決定）。"""
+    note = _note_for(state, content, hint_id)
+    if note is not None and state.player.unfold is not None and hint_id in SHORT:
+        note.text = SHORT[hint_id]
+    return note
+
+
+def _note_for(state: GameState, content: Content, hint_id: str) -> HintNote | None:
     h = content.hints
     hint = next((x for x in h.hints if x.id == hint_id), None)
     if hint is None:

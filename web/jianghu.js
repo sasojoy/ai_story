@@ -733,7 +733,7 @@
         }
     } // jianghuClick
   } // jianghuClick
-  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-map", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go", "jh-ev-more", "jh-go", "jh-card-on", "jh-muster-skip"]);
+  registerClicks(jianghuClick, ["jh-later", "jh-sheet", "jh-stam", "jh-map", "jh-wait", "jh-peer-pick", "jh-peer-back", "jh-peer-choice", "jh-peer-go", "jh-ev-more", "jh-muster-skip", "jh-card-on", "jh-go"]);
 
   // ── 6. 這裡的人（第三批）：一排方格。大勢人物全放（立繪），俠客只放跟你有關的（邀你的、義兄弟、敵方），最後一格「＋N 俠客」拉起全部。
   // 有事找你的人頭上一枚小印（軍令、託付、邀戰……）。人是入口：點人物拉起他的卡（他交代的事、交談、護衛、犒軍、挑戰），點俠客照舊開玩家卡

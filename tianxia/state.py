@@ -412,6 +412,19 @@ class CodexBook(BaseModel):
     fresh: list[str] = Field(default_factory=list)
 
 
+class UnfoldBook(BaseModel):
+    """慢慢長出來（features/unfold；Joy 2026-11-25 對提案表的三個決定）：新角色還用不到的分頁先不畫，玩到才長出來。
+    grown 是已經長出來的區塊鍵（「tab:map」「hero:gear」「self:mingtie」……），長出來就不收回；fresh 是長出來還沒點開過的（紅點）。
+    只有開關開著時新建、站在城門口還沒選路的角色才有這一本；None（舊角色、假人）是全部照舊攤開。"""
+
+    grown: list[str] = Field(default_factory=list)
+    fresh: list[str] = Field(default_factory=list)
+    # 七個系統第一次碰到的小事卡（門派、結義、書信、稱號、江湖錄、合成）：done 是出過的（「sect」「mail」……，一個角色每一種只出一次）；
+    # card 是此刻攤著的那一張「種類|對象」（「sect|baima」「mail|白飛」），空的是沒有；同一時間只攤一張
+    done: list[str] = Field(default_factory=list)
+    card: str = ""
+
+
 class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
     10 級那一路撞見的孩子、救下、收養、一件一件的事；情分（善待往上、虐待往下）與性向兩條帳，紀事是他的記憶。跟著帳號走、換季照帶。"""
@@ -1341,6 +1354,8 @@ class PlayerState(BaseModel):
     yiwen: YiwenWalk | None = Field(None, json_schema_extra=QUIET)
     # 江湖錄（tianxia/features/codex）：奇遇紀錄與圖鑑。跟著帳號走、換季照帶（包的 on_season_start）；None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
     codex: CodexBook | None = Field(None, json_schema_extra=QUIET)
+    # 慢慢長出來（tianxia/features/unfold）：新角色長出了哪幾塊。跟著帳號走、換季照帶（包的 on_season_start）；None 是舊角色，全部攤開，不寫進存檔（QUIET_DEFAULTS）
+    unfold: UnfoldBook | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)
@@ -2243,6 +2258,9 @@ class WorldState(BaseModel):
     # 稱號與官職（tianxia/features/titles）：每週結算到第幾週（季曆；0＝還沒結算過）、這一週每個名號頒給了誰（名號 id → 名號）
     titles_week: int = Field(0, json_schema_extra=QUIET)
     titles_holders: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra=QUIET)
+    # 合璧榜（意境合成改版批四，features/craft board）：意境 id → 這一季每一回合璧成神的 [名號, 真意 id]（照先後；換季整個重來；
+    # 跟 secret_sets 一樣走這一下動作最後的 _save_season）
+    he_gods: dict[str, list[list[str]]] = Field(default_factory=dict, json_schema_extra=QUIET)
     craft_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時意境合成改版（Config.craft）是不是開著（fusion.v2_on）；舊季讀檔是 False，False 不寫進存檔
     fight_practice: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時「武學打了才升」（Config.arts.fight_practice）是不是開著；舊季讀檔是 False
     yiwen_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時異聞（Config.yiwen）是不是開著（features/yiwen rules.on）；舊季讀檔是 False，False 不寫進存檔

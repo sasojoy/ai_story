@@ -133,10 +133,16 @@
     // 排在最後的告辭被壓在框底下按不到。選項那一串的底邊也停在宣紙框的上面（style.css .vn-menu），自己捲
     const leaveRe = /<button\b[^>]*data-id="talk:leave"[^>]*>[\s\S]*?<\/button>/;
     const leave = (String(menu).match(leaveRe) || [""])[0];
+    // 心神用完了（t.shop：補心神的商品）：「心神不足，明早…」那一行底下一顆去萬寶閣，停在那一件（Joy 待辦「心神用完→萬寶閣鈕」）
+    const shortRe = /(<button\b[^>]*data-id="talk:short"[^>]*>[\s\S]*?<\/button>)/;
+    if (t.shop) menu = shortRe.test(String(menu)) ? String(menu).replace(shortRe, `$1${talkShopHtml(t.shop)}`) : `${menu}${talkShopHtml(t.shop)}`;
     return `<div class="vn-layer talk" role="dialog" aria-label="與${esc(t.name)}說話">${vnBack(m)}${t.face ? `<img class="vn-fig" src="${esc(t.face)}" alt="">` : ""}
       ${leave ? `<div class="vn-leave">${leave}</div>` : ""}<div class="vn-menu">${leave ? String(menu).replace(leaveRe, "") : menu}</div>
       ${vnBox(t.name, t.side, `${chips ? `<div class="vn-chips">${chips}</div>` : ""}<div class="vn-say">${scene}</div>`, `情誼 ${t.affinity}`)}</div>`;
   }
+
+  const TALK_SHOP = "去萬寶閣", TALK_SHOP_SUB = "補心神"; // 待 joy 潤
+  const talkShopHtml = (id) => `<button class="btn vn-shop" data-act="mall-goto" data-id="${esc(id)}"><span>${TALK_SHOP}</span><small>${TALK_SHOP_SUB}</small></button>`;
 
   // ── 往來紀錄（設計稿 Talk-Log）：你跟這位人物說過的話，照日子分段；這一季／上一季。資料在伺服器旁邊的小檔（/api/talk_log）──
   async function openFigLog(id, season = "now") {

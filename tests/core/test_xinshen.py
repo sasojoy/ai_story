@@ -157,6 +157,16 @@ def test_incense_is_stored_on_the_account_and_spent_last(shop):
     assert game.xinshen_purse() == xinshen.Purse(free=6, card=0, bank=3)  # 隔天：免費補滿，存著的還在
 
 
+def test_out_of_xinshen_the_talk_view_points_to_the_incense_until_bought(shop):
+    """心神用完（還有話可說）：對話框 talk_view 帶 shop＝補心神的那一件（網頁畫「去萬寶閣」，companions.js talkShopHtml）；買了、付得起就沒有。"""
+    game = _talking(shop, _buyer(shop))
+    assert "shop" not in talk_actions.talk_view(game)  # 心神還夠
+    game.state.player.xinshen_free, game.state.player.xinshen_free_day = 0, game._pill_day()
+    assert talk_actions.talk_view(game)["shop"] == "xinshen_5"
+    mall_actions.buy(game, "xinshen_5", "x1")
+    assert "shop" not in talk_actions.talk_view(game)
+
+
 def test_the_card_adds_four_a_day(shop):
     game = _buyer(shop)
     mall_actions.buy(game, "card_30", "c1")

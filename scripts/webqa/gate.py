@@ -106,6 +106,7 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     # and every round's walk calls into their page files, so coverage.json has them. web/intro.js left too: serve.py still turns the
     # intro package off for the walk (the 開場 layer would cover the clicks), but every round's page calls into the file all the same
     # web/yiwen.js left in batch 256: the yw round turns the strange tales on (serve.py) and walks them
+    "web/unfold.js": "the unfold package (Joy 2026-11-25) is off in week7 and season21: no round reaches it until a profile turns it on",
 }
 
 
