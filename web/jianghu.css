@@ -295,3 +295,14 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 .jh-war-strip .jh-row-t b, .jh-war-strip .jh-row-t small { display: inline; }
 .jh-war-strip .jh-row-t small { margin-left: 8px; }
 .jh-tight .jh-hero { min-height: calc(206px + var(--top)); }
+
+/* 軍務清單裡同一類收成一列（設伏）：點開才列每一處 */
+.jh-group > summary { list-style: none; cursor: pointer; min-height: 44px; }
+.jh-group > summary::-webkit-details-marker { display: none; }
+.jh-group[open] > summary .jh-row-go { opacity: .6; }
+.jh-group > .jh-row { padding-left: 14px; }
+
+/* 人物卡的本性、如今：一行一格，字小一號 */
+.jh-fig-row { display: flex; gap: 8px; margin: 6px 0 0; font: 400 14px/1.55 var(--sans); color: var(--ink-2); }
+.jh-fig-row b { flex: none; font: 700 14px/1.55 var(--kai); color: var(--ink); }
+.jh-fig-hist { margin: 4px 0 0; padding-left: 18px; font: 400 13px/1.5 var(--sans); color: var(--ink-2); }

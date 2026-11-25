@@ -132,6 +132,14 @@ def old_packs(content: Content, *names: str) -> Content:
     return content
 
 
+def old_page(content: Content) -> Content:
+    """新江湖頁（jianghu 包，Joy 2026-11-25「上線」：week7、season21 打開）關掉，回傳同一份內容。
+    測的是舊江湖頁版面（場景卡、本週卡、此地可為一排、行動列底下的師父的話……）的舊測試叫它；同一件玩家該有的事在新頁上的測試在
+    tianxia/features/jianghu/tests/test_jianghu_parity_web.py。"""
+    content.config.jianghu.enabled = False
+    return content
+
+
 def donate_content(profile=None) -> Content:
     """正式內容、捐軍備打開：week7、season21 的正式設定 2026-11-12 起關掉（Joy「捐軍備功能先拿掉」），
     測捐軍備、捐銀兩本身的舊測試用它取代 real_content（`from conftest import donate_content as real_content`）。"""

@@ -95,7 +95,8 @@
 
   // 地名底下那一行「剛剛」：前面的標題（「特殊頓悟」「打點・宛城」）不印，只留那一句話；只有標題、沒有句子的不畫（PM 11/25）
   function jhNowClean(html) {
-    const out = String(html || "").replace(/<div class="tx-head">[\s\S]*?<\/div>/, "").replace(/<div class="tx-line[^"]*">\s*【[^】<]*】\s*<\/div>/g, "");
+    // 標題拿掉、結果小章（成功、失敗……）留著：收成一行時照舊排在最右邊（Joy 2026-10-27「看不出是成功還是失敗」）
+    const out = String(html || "").replace(/<div class="tx-head">([\s\S]*?)<\/div>/, (all, inner) => { const tag = inner.match(/<span class="tx-tag">[\s\S]*?<\/span>/); return tag ? `<div class="tx-head">${tag[0]}</div>` : ""; }).replace(/<div class="tx-line[^"]*">\s*【[^】<]*】\s*<\/div>/g, "");
     return /<div class="tx-line/.test(out) && out.replace(/<div class="tx-when">[\s\S]*?<\/div>/, "").replace(/<[^>]+>/g, "").trim() ? out : "";
   }
   const jhNowLine = (m) => { const now = jhNowClean(m.now); return now && typeof nowBlock === "function" ? nowBlock({ ...m, card: null, now }) : ""; };
@@ -401,8 +402,27 @@
       ? `<button class="btn small jh-row-go" data-act="choose" data-id="${esc(o.id)}">${esc(btn)}</button>`
       : `<button class="btn small jh-row-go off" data-act="opt-why" data-why="${esc(o.note || (detail ? `${detail}。` : ""))}" aria-disabled="true">${esc(btn)}</button>`}</div>`;
   }
+  // 同一類一個目標一顆的（設伏每條路一顆）收成一列，點開才挑哪一條（Joy 2026-11-10「同類型的 例如設伏 應該只有一個按鈕，點開才選設伏在哪」）
+  const JH_DUTY_GROUP = [[/^ambush:set:/, "設伏"]]; // 待 joy 潤
+  const JH_DUTY_PICK = "挑一處"; // 待 joy 潤
+  function jhDutyRows(list) {
+    const out = [];
+    for (const o of list) {
+      const g = JH_DUTY_GROUP.find(([re]) => re.test(o.id));
+      const same = g ? list.filter((x) => g[0].test(x.id)) : [];
+      if (same.length > 1) {
+        if (same[0] !== o) continue;
+        const on = same.filter((x) => x.enabled).length;
+        out.push(`<details class="jh-group"><summary class="jh-row${on ? "" : " wait"}"><span class="jh-row-t"><b>${esc(g[1])}</b><small>${esc(JH_DUTY_N.replace("{n}", on || same.length))}</small></span><span class="btn small jh-row-go">${JH_DUTY_PICK}</span></summary>`
+          + `${same.map((x) => jhOptRow({ ...x, label: optParts(x)[0].replace(new RegExp(`^${g[1]}[・：:]?`), "") || optParts(x)[0] })).join("")}</details>`);
+        continue;
+      }
+      out.push(jhOptRow(o));
+    }
+    return out.join("");
+  }
   function jhDutyBody(m, kinds) {
-    const d = kinds.duties.map((o) => jhOptRow(o)).join(""), x = kinds.others.map((o) => jhOptRow(o)).join("");
+    const d = jhDutyRows(kinds.duties), x = jhDutyRows(kinds.others);
     return `${d}${x ? `${d ? `<h4 class="jh-sub">${JH_MORE_HERE}</h4>` : ""}${x}` : ""}` || `<p class="jh-none">${JH_DUTY_NONE}</p>`;
   }
   // 行路清單：有事要辦的地方排最上面、標是哪一件；其餘是鄰近；最底下打開輿圖
@@ -480,13 +500,15 @@
   // 一幕的頁（事件、接管選單的每一種共用，第六批 PM「不另畫新樣子」）：圖、小印與標題、最後一段字；前文收起來，點了攤開；選項照原本那一排（含自己說）
   function jhStagePage(m, p, x) {
     const more = x.before ? `<button class="jh-ev-more" data-act="jh-ev-more" aria-expanded="${!!S.jhEvMore}">${JH_EV_MORE}<i aria-hidden="true">${S.jhEvMore ? "︿" : "﹀"}</i></button>${S.jhEvMore ? `<div class="jh-ev-before">${x.before}</div>` : ""}` : "";
-    return `<div class="jh-page jh-ev${x.cls ? ` ${x.cls}` : ""}">${p.ckPop || ""}${jhMomentHero(m, x.title, x.seal, x.src)}<div class="jh-ev-txt">${more}${x.last}</div>${x.extra || ""}<div class="jh-ev-opts">${jhNoOdds(p.menu)}${p.free || ""}</div></div>`;
+    return `<div class="jh-page jh-ev${x.cls ? ` ${x.cls}` : ""}">${p.ckPop || ""}${jhMomentHero(m, x.title, x.seal, x.src)}<div class="jh-ev-txt">${more}${x.last}</div>${x.extra || ""}<div class="jh-ev-opts">${jhNoOdds(p.menu)}${p.senseNotes || ""}${p.free || ""}</div></div>`; // 感悟的做法底下兩行小字（同舊頁）
   }
   // 場景卡的段落：第一段只有粗體標題的拿掉（標題在圖上）
-  function jhParas(m) {
-    const paras = String(m.scene || "").match(/<p>[\s\S]*?<\/p>/g) || [];
-    const title = ((paras[0] || "").match(/<strong>(.*?)<\/strong>/) || [])[1] || "";
-    return { title, body: paras.filter((x) => !/^<p><strong>[^<]*<\/strong><\/p>$/.test(x.trim())) };
+  function jhParas(m, noQuote) { // noQuote：接管選單那一頁不收引言框裡的提點（感悟的「選錯了做法……」那一句不當正文）
+    const paras = String(m.scene || "").replace(noQuote ? /<blockquote>[\s\S]*?<\/blockquote>/g : /$^/, "").match(/<p>[\s\S]*?<\/p>/g) || [];
+    // 標題段後面跟著地形（「<strong>有所感・鐵匠鋪</strong>（城鎮）」）：地形接在標題後面，這一段不當正文
+    const head = (paras[0] || "").trim().match(/^<p><strong>([^<]*)<\/strong>(（[^<）]*）)?<\/p>$/);
+    const title = head ? `${head[1]}${head[2] || ""}` : ((paras[0] || "").match(/<strong>(.*?)<\/strong>/) || [])[1] || "";
+    return { title, body: paras.filter((x, i) => !(i === 0 && head) && !/^<p><strong>[^<]*<\/strong><\/p>$/.test(x.trim())) };
   }
   // 事件：最後一段字；前文是剛剛那一則與這一幕前面的段落
   function jhEvPage(m, p) {
@@ -500,11 +522,12 @@
   const jhTxLines = (html) => String(html || "").match(/<div class="tx-line[^"]*">[\s\S]*?<\/div>/g) || [];
   const jhTxP = (line) => `<p>${line.replace(/^<div[^>]*>/, "").replace(/<\/div>$/, "")}</p>`;
   function jhTakePage(m, p, take) {
-    const placeOnly = !m.art || m.art.kind === "place";
+    // 場景卡只是地點（撞見孩子、異聞）：沒有 art 時看場景的標題是不是地名（感悟的「有所感・鐵匠鋪」是這一幕自己的）
+    const placeOnly = m.art ? m.art.kind === "place" : (() => { const t = jhParas(m).title.replace(/（.*?）/g, "").trim(); return !t || t === jhPlaceName(m); })();
     const plain = (h) => String(h).replace(/<[^>]+>/g, "").trim();
     // 得失那一行（數字）與「獲得…」不收進前文：完整的在戰報與江湖紀錄
     const lines = jhTxLines(p.nowRaw).filter((l) => !/tx-new/.test(l) && !/^得：|^失：|　失：/.test(plain(l))).map(jhTxP);
-    const { title: t2, body } = jhParas(m);
+    const { title: t2, body } = jhParas(m, true);
     let last, rest;
     if (take.slot === "duel" && m.card) {
       // 卡頭已經寫了「第 N 回合」，底下那一句句首的同一個「第 N 回合」拿掉（PM 11/25）
@@ -829,9 +852,16 @@
     const role = i.role || f.side || "";
     return `<div class="sheet-bg" data-act="fig-close"></div><div class="sheet jh-card jh-fig" role="dialog" aria-label="${esc(f.name)}">
         <div class="jh-pt"${f.face ? ` style="background-image:url('${esc(f.face)}')"` : ""}><button class="jh-x" data-act="fig-close" aria-label="${JH_CLOSE}">×</button></div>
-        <div class="jh-in"><h2>${esc(f.name)}<small>${esc(role)}</small></h2>${i.who ? `<p>${esc(i.who)}</p>` : ""}${say}<div class="jh-dos">${dos.join("")}</div></div></div>`;
+        <div class="jh-in"><h2>${esc(f.name)}<small>${esc(role)}</small></h2>${i.who ? `<p>${esc(i.who)}</p>` : ""}${jhFigNature(i)}${say}<div class="jh-dos">${dos.join("")}</div></div></div>`;
   }
 
+  // 人物卡上的本性、如今與變化紀錄（同舊的點人物那一層：Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；性子還沒變的不畫如今）
+  const JH_FIG_NATURE = "本性", JH_FIG_NOW = "如今"; // 待 joy 潤
+  function jhFigNature(i) {
+    const row = (cls, k, v) => `<p class="jh-fig-row ${cls}"><b>${k}</b><span>${esc(v)}</span></p>`;
+    return `${i.nature ? row("vi-nature", JH_FIG_NATURE, i.nature) : ""}${i.now ? row("vi-now", JH_FIG_NOW, i.now) : ""}`
+      + `${(i.history || []).length ? `<ul class="jh-fig-hist vi-hist">${i.history.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : ""}`;
+  }
   // 點俠客：跟人物卡同一種卡（設計稿 j；PM 2026-11-25 第三批）。名號印、名號、陣營門派等級一行、頭銜小印；他邀你的那一件墨底排最上面；
   // 其餘一類一格、兩欄排，同類收一顆（論武挑哪一樣、贈哪一樣，點了再拉出來挑）；不能做的變淡、寫原因。
   // 卡上的鈕照舊送玩家卡那一套（peers.js 的 peer-act、#peer-amount、#peer-text；伺服器給的 actions 照索引），只換畫法。
@@ -862,7 +892,8 @@
     if (!c) return shell(`<div class="jh-pt"><span>${esc(P.name.slice(0, 1))}</span>${x}</div><div class="jh-in"><h2>${esc(P.name)}</h2><p>${esc(P.gone || JH_PEER_GONE)}</p></div>`, P.name);
     const acts = c.actions.map((b, i) => ({ ...b, i }));
     const head = `<h2>${esc(c.name)}<small>${esc([...String(c.affiliation || "").split("・").filter(Boolean), `${c.level | 0} 級`].join("・"))}</small></h2>`
-      + `${(c.title && c.title.name && typeof titleSeal === "function") || c.jieyi ? `<div class="jh-ptags">${c.title && c.title.name && typeof titleSeal === "function" ? titleSeal(c.title) : ""}${c.jieyi ? `<span class="jh-k">${esc(c.jieyi)}</span>` : ""}</div>` : ""}`;
+      + `${(c.title && c.title.name && typeof titleSeal === "function") || c.jieyi ? `<div class="jh-ptags">${c.title && c.title.name && typeof titleSeal === "function" ? titleSeal(c.title) : ""}${c.jieyi ? `<span class="jh-k">${esc(c.jieyi)}</span>` : ""}</div>` : ""}`
+      + (typeof peerRenownHtml === "function" ? peerRenownHtml(c, P) : ""); // 稱號小籤（名聲 3B，同舊的玩家卡）
     const face = c.mingtie && typeof mtCardHtml === "function" ? `<button class="jh-pmt" data-act="mt-zoom-peer" aria-label="看${esc(c.name)}的名帖">${mtCardHtml(c.mingtie, c.name, "thumb")}</button>` : `<span>${esc(c.name.slice(0, 1))}</span>`;
     const msg = P.msg ? `<div class="jh-pmsg">${P.msg}</div>` : "";
     const btn = (b, label, cls = "") => (b.enabled

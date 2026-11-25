@@ -114,6 +114,10 @@ def test_things_still_waiting_fold_under_one_line_and_have_no_go(walked):
 
 
 def test_the_page_top_keeps_only_the_tracker_line(walked):
+    """舊江湖頁的頂上（old_page）；新頁換成眼下一張卡，進行中的事收在「另有 N 件」裡（jianghu 包 test_jianghu_parity_web.py）。"""
+    from conftest import old_page  # noqa: PLC0415
+
+    old_page(walked.content)
     walked.content.config.codex.tracker = True
     m = server.main_view(walked)
     if not m.get("week_card"):
@@ -158,6 +162,9 @@ def test_scenes_walked_before_the_book_opened_show_their_names(walked):
 
 
 def test_quest_rows_are_not_listed_twice(walked):
+    from conftest import old_page  # noqa: PLC0415
+
+    old_page(walked.content)  # 舊江湖頁；新頁上的同一件事在 jianghu 包 test_jianghu_parity_web.py
     walked.content.config.codex.tracker = True
     m = server.main_view(walked)
     m["week_card"] = None

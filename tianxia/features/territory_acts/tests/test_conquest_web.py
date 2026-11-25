@@ -164,9 +164,13 @@ def test_banner_words_for_melee_lone_and_held():
 # .pick），一顆的照舊在名字右邊。版面在 node 裡量不到：這裡鎖住排法與那兩條 CSS，375 寬實量見 docs/superpowers/specs/2026-10-20-領地爭奪-草圖/第三批/。
 
 
-def _sieges_view(locs):
-    """官軍的人站南陽官道，locs 每一塊各排一場官軍攻城、此刻開集結（同一州）：回 server.main_view。"""
+def _sieges_view(locs, old=True):
+    """官軍的人站南陽官道，locs 每一塊各排一場官軍攻城、此刻開集結（同一州）：回 server.main_view。old：舊江湖頁（conftest.old_page）。"""
+    from conftest import old_page  # noqa: PLC0415
+
     game = go(join(conquest_game("season21"), "guan"), "nanyang_road")
+    if old:
+        old_page(game.content)
     game.now = NOW
     for loc in locs:
         slot = announce(game, loc, "guan")
@@ -179,6 +183,7 @@ def _sieges_view(locs):
 
 
 def _join_row(m):
+    """舊江湖頁的集結那一排（m 要用 old_page 關掉新頁的內容做的）；新頁上一場一顆、一顆一列在 jianghu 包的 test_jianghu_parity_web.py。"""
     from test_prologue_web import run as page_run
 
     page = page_run(m, "return H.pageJianghu();")
