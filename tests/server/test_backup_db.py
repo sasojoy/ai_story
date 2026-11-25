@@ -652,3 +652,48 @@ def test_restore_without_matching_side_file_sets_the_current_one_aside(tmp_path,
     olds = list(src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
     assert len(olds) == 1 and _rows(olds[0]) == ["後來的"]
     assert "identity" in err and "改名留著" in err
+
+
+# ── 每日備份（2026-11-25）：其餘的小檔也帶、另開一份讀得回來、狀態寫給每日報表 ────────
+
+
+def test_daily_backup_carries_the_rest_of_the_small_files(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    news = ("mail", "mail-archive", "talk", "talk-archive", "archive", "push", "tale")
+    for side in news:
+        _side(src, side, (side,))
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
+    for side in news:
+        assert _rows(main.with_name(f"{main.stem}-{side}.sqlite")) == [side]
+    assert not main.with_name(f"{main.stem}-narration.sqlite").exists()  # 改寫的旁白不帶：丟了背景再寫
+
+
+def test_drill_and_status(tmp_path, capsys):
+    import json
+
+    src = _live_db(tmp_path)
+    _side(src, "talk", ("一句",))
+    status = tmp_path / "local" / "backup_status.json"
+    args = ["--db", str(src), "--dest", str(tmp_path / "backups"), "--tag", "daily", "--prune", "--drill", "--status", str(status)]
+    assert backup_db.main(args) == 0
+    assert "還原演練：另開一份讀得回來，角色 2 個" in capsys.readouterr().out
+    got = json.loads(status.read_text(encoding="utf-8"))
+    assert got["ok"] is True and got["characters"] == 2 and got["bytes"] > 0 and "tianxia-daily-" in got["file"]
+    assert not list(Path(tmp_path / "backups").glob("*drill*"))  # 演練的複本不留在備份資料夾
+    assert backup_db.main(["--db", str(tmp_path / "nope.db"), "--dest", str(tmp_path / "backups"), "--status", str(status)]) == 1
+    got = json.loads(status.read_text(encoding="utf-8"))
+    assert got["ok"] is False and "找不到資料庫" in got["error"]
+
+
+def test_drill_fails_when_a_save_does_not_read_back(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    close_all()
+    conn = sqlite3.connect(src)
+    conn.execute("UPDATE characters SET data = '{broken' WHERE name = '甲'")
+    conn.commit()
+    conn.close()
+    status = tmp_path / "status.json"
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups"), "--drill", "--status", str(status)]) == 1
+    assert "還原演練" in capsys.readouterr().err
+    assert '"ok": false' in status.read_text(encoding="utf-8")

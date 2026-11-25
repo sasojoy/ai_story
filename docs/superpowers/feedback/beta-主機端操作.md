@@ -439,6 +439,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1 
 
 **往來紀錄**（2026-11-06，介面重整）：玩家跟大勢人物說過的話記在資料庫旁邊的 `tianxia-talk.sqlite`，兩季以前的搬到 `tianxia-talk-archive.sqlite`（都跟著 `TIANXIA_DB` 換名字）。備份腳本只備份主檔，這兩個檔跟封存檔一樣自己複製走（伺服器開著也可以複製，最多少掉剛寫的那幾句）。丟了只是看不到舊的往來紀錄，遊戲照玩。
 
+**正式站的每日備份與每日數字**（2026-11-25）：05:00 備份（多帶 mail、talk、archive、push、tale 這幾個旁檔，另開一份讀一次）、08:00 每日玩家數字貼 Discord，安裝步驟在 `scripts/daily_ops/README.md`。下面「每天自動備份」那一段是舊的寫法，以那份為準。
+
 **手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell
