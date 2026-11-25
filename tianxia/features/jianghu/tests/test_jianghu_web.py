@@ -154,8 +154,10 @@ def test_event_page_only_the_event(wan):  # noqa: F811
     wan.content.config.jianghu.enabled = True
     wan.state.pending_event = "yz_market_salt"
     m = server.main_view(wan)
+    assert m["jianghu"]["event"] == "遭遇"  # 不是哪條線的一段（章回寫主線、奇事寫奇事）
     page = run(m, "return H.pageJianghu();")
-    assert page.startswith('<div class="jh-page jh-ev">') and "私鹽擔子" in page
+    assert page.startswith('<div class="jh-page jh-ev">') and "私鹽擔子" in page and ">遭遇<" in page
+    assert "ev-odds" in page and not any(ch.isdigit() for ch in "".join(page.split("ev-odds")[1:]).split("</small>")[0])  # 屬性數字拿掉、只留那句話
     assert 'data-id="choice:0"' in page and "jh-acts" not in page and "jh-eye" not in page and "jh-people" not in page
     assert 'data-act="jh-ev-more"' in page and "jh-ev-before" not in page
     opened = run(m, "H.S.jhEvMore = true; return H.pageJianghu();")

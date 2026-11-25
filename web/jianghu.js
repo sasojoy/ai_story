@@ -348,7 +348,7 @@
 
   // ── 第五批：其他時刻。事件選擇中、趕路中整頁換掉（設計稿 k、l）；行動、人、去處都收起來，選完、到了才回來 ──
   const JH_WALK = "步行"; // 待 joy 潤
-  const JH_EV_SEAL = "遭遇"; // 待 joy 潤：事件標題旁那一枚直書小印
+  const JH_EV_SEAL = "遭遇"; // 待 joy 潤：事件標題旁那一枚直書小印（伺服器沒帶種類時）
   const JH_EV_MORE = "前文"; // 待 joy 潤
   const JH_ON_ROAD = "往{to}的路上"; // 待 joy 潤
   const JH_ROAD_LEFT = "{mode}・還有 {n} 分鐘"; // 待 joy 潤
@@ -383,7 +383,9 @@
     const before = `${p.now || ""}${body.join("")}`;
     const more = before ? `<button class="jh-ev-more" data-act="jh-ev-more" aria-expanded="${!!S.jhEvMore}">${JH_EV_MORE}<i aria-hidden="true">${S.jhEvMore ? "︿" : "﹀"}</i></button>${S.jhEvMore ? `<div class="jh-ev-before">${before}</div>` : ""}` : "";
     const src = m.art && m.art.kind === "event" && m.art.src ? m.art.src : jhArtSrc(m);
-    return `<div class="jh-page jh-ev">${p.ckPop || ""}${jhMomentHero(m, title, JH_EV_SEAL, src)}<div class="jh-ev-txt">${more}${last}</div><div class="jh-ev-opts">${p.menu || ""}${p.free || ""}</div></div>`;
+    // 選項底下那一句把屬性與數字拿掉、只留話（「統御 108：這點苦頭，你吃得消。」→「這點苦頭，你吃得消。」；Joy 11/10 不把數字寫給玩家讀）
+    const menu = String(p.menu || "").replace(/(<small class="opt-note ev-odds[^"]*">)[^<：]*\d[^<：]*：/g, "$1");
+    return `<div class="jh-page jh-ev">${p.ckPop || ""}${jhMomentHero(m, title, m.jianghu.event || JH_EV_SEAL, src)}<div class="jh-ev-txt">${more}${last}</div><div class="jh-ev-opts">${menu}${p.free || ""}</div></div>`;
   }
   // 趕路：圖、「往某地的路上」、剛剛那一則、一條路的墨條（中間各站是細的刻痕，不畫圓圈）、疾行與折返；路上的小事收在底下
   function jhRoadPage(m, p) {

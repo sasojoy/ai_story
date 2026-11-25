@@ -3,21 +3,41 @@
 第一批（骨架）只要一個「開著」的記號：頁面照它換排法，資料都是 /api/main 原本就有的（status、art、scene、options）。
 之後的批真的缺欄位才加在這裡，先回報 PM：
 - 第五批「趕路中」的墨條（road）：/api/main 只有狀態列那一句字，沒有走到幾成，這裡照 Journey 算；疾行那一顆照輿圖詳情欄同一個算法（atlas.travel_options）。
+- 第五批事件頁的小印（event）：章回寫「主線」、奇事寫「奇事」、其餘「遭遇」（PM 11/25）；/api/main 看不出眼前這一則是不是哪條線的一段。
 - 第五批「行路」清單的遠路（ways）：有事要辦的地方不一定在鄰近，選項裡沒有它的「前往」；這裡給每個走得到的地方步行要多久（輿圖出發同一條路）。
 """
 from __future__ import annotations
 
-from tianxia import atlas, mounts  # 共用規則層（輿圖：路程、走法、抵達時刻；坐騎的步調）
+from tianxia import atlas, mounts, story_base  # 共用規則層（輿圖：路程、走法、抵達時刻；坐騎的步調；一條線走到哪）
 
 
 def status(ctx) -> dict:
     out: dict = {"on": True}
+    kind = event_kind(ctx)
+    if kind:
+        out["event"] = kind
     road = road_bar(ctx)
     if road:
         out["road"] = road
     elif ctx.state.player.journey is None:
         out["ways"] = ways(ctx)
     return out
+
+
+EVENT_KINDS = {"章回": "主線", "奇事": "奇事"}  # 待 joy 潤：一條線的種類 → 事件頁那一枚小印
+EVENT_PLAIN = "遭遇"  # 待 joy 潤
+
+
+def event_kind(ctx) -> str | None:
+    """眼前端出來的事件是哪一種：某條線開著的事件段（同 story_base.stage_art 的認法）照那條線的種類，其餘是遭遇；沒有事件是 None。"""
+    s, c = ctx.state, ctx.content
+    if not s.pending_event:
+        return None
+    for progress in story_base.active(s):
+        pair = story_base.current(c, progress)
+        if pair is not None and progress.opened and pair[1].kind == "event":
+            return EVENT_KINDS.get(pair[0].kind, EVENT_PLAIN)
+    return EVENT_PLAIN
 
 
 def ways(ctx) -> dict[str, str]:
