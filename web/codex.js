@@ -30,6 +30,7 @@
   const CX_EMPTY_GOD = "悟出神品意境，會在這張表上寫下你替它取的名字。";
   const CX_SEEN = "位見過";
   const CX_HAVE = "件拿過";
+  const CX_GOD_OFF = "未悟", CX_ACT_OFF = "未至"; // 待 joy 潤（沒解鎖的格不放「？」，Joy 11/22）
   const CX_GODS = "種神品";
   const CX_ENDS_N = "種結局";
   const CX_SEAL = { 奇事: "奇事", 主線: "主線" };
@@ -114,7 +115,7 @@
       ? `<div class="cx-act lost"><span class="n">第${"一二三四五六七八九十"[i] || i + 1}幕</span><span class="x"><b>${esc(sc.title)}</b><small>${esc(sc.lost || "")}</small></span></div>`
       : `<button class="cx-act" data-act="cx-read" data-i="${sc.i}"><span class="n">第${"一二三四五六七八九十"[i] || i + 1}幕</span>`
       + `<span class="x"><b>${esc(sc.title)}</b><small>${CX_YOU}：<q>${esc(sc.pick)}</q></small></span><span class="r">${CX_REREAD} ›</span></button>`)).join("");
-    const cur = q.state === "on" ? `<div class="cx-act cur"><span class="n">第${"一二三四五六七八九十"[q.scenes.length] || q.scenes.length + 1}幕</span><span class="x"><b>？？</b><small>${esc(q.next ? q.next.when : "")}</small></span></div>` : "";
+    const cur = q.state === "on" ? `<div class="cx-act cur"><span class="n">第${"一二三四五六七八九十"[q.scenes.length] || q.scenes.length + 1}幕</span><span class="x"><b class="off">${CX_ACT_OFF}</b><small>${esc(q.next ? q.next.when : "")}</small></span></div>` : "";
     const gotN = q.ends.filter((e) => e.got).length;
     return `<button class="cx-back linkish" data-act="cx-back">${CX_BACK}</button>${art}${now}${stay}`
       + (acts || cur ? `<h4 class="cx-sec">${CX_SCENES}</h4><div class="cx-acts">${acts}${cur}</div>` : "")
@@ -161,7 +162,7 @@
     const head = `<span></span>${d.forms.map((f) => `<span class="h">${esc(f)}</span>`).join("")}`;
     const rows = d.paths.map((p) => `<span class="h">${esc(p)}</span>${d.forms.map((f) => {
       const c = d.cells[`${p}${f}`];
-      return c && c.got ? `<span class="cx-yc on ${esc(c.tone)}" title="${esc(c.place)}">${dotHtml(c.dot)}${esc(c.name)}</span>` : `<span class="cx-yc"></span>`;
+      return c && c.got ? `<span class="cx-yc on ${esc(c.tone)}" title="${esc(c.place)}">${dotHtml(c.dot)}${esc(c.name)}</span>` : c ? `<span class="cx-yc off">${CX_GOD_OFF}</span>` : `<span class="cx-yc none"></span>`; // 沒悟過的格：暈墨加「未悟」（不放「？」）
     }).join("")}`).join("");
     const mine = Object.values(d.cells).filter((c) => c.got);
     const list = mine.length ? mine.map((c) => `<div class="cx-kv">${cxSeal("神品")}<div><b>${esc(c.name)}</b><small>${c.season ? `第 ${c.season} 季・` : ""}${esc(c.place)}</small></div></div>`).join("")

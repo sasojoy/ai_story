@@ -62,6 +62,7 @@ def test_the_codex_book_four_kinds(walked):
     for cat, word in (("people", "位見過"), ("things", "寶物"), ("gods", "種神品"), ("ends", "種結局")):
         html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
         assert word in html and 'data-act="cx-cat"' in html, cat
+        assert "？" not in html, cat  # 沒解鎖的格不放「？」（Joy 11/22）：暈墨加兩個字
 
 
 def test_each_book_page_shows_the_title_it_gives(walked):
@@ -153,7 +154,7 @@ def test_scenes_walked_before_the_book_opened_show_their_names(walked):
     m = server.main_view(walked)
     html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxOpen": q["key"], "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15})
     assert "cx-act lost" in html and view.LOST in html and first["title"] in html
-    assert html.count("？？") == 1  # 只有還沒到的那一幕是剪影
+    assert "？" not in html and html.count("未至") == 1  # 只有還沒到的那一幕寫「未至」（不放「？」，Joy 11/22）
 
 
 def test_quest_rows_are_not_listed_twice(walked):
