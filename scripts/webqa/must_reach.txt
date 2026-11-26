@@ -91,6 +91,7 @@ main:bd_take
 main:bd_pick
 main:bd_give
 main:bd_given
+main:bd_drop_ask
 main:bd_drop
 main:board_left
 main:arena
@@ -107,6 +108,8 @@ main:ar_board
 main:arena_left
 main:peer_card
 main:peer_act
+main:jh_peer_pick
+main:jh_peer_back
 main:here_all
 main:here_all_close
 main:mingtie_box
@@ -123,6 +126,7 @@ main:ex_wilds
 main:ex_open
 main:ex_go
 main:ex_outing-tap
+main:ex_outing-choose
 main:ex_guard_adopt
 main:ex_guard_on
 main:ex_outing-say
@@ -214,6 +218,7 @@ main:nf_how
 main:nf_how_back
 main:nf_howto
 main:nf_close
+main:letter_read
 main:sup_mine
 main:sup_new
 main:sup_sent
@@ -316,6 +321,7 @@ y:y_so_p2_move2
 y:y_so_p2_send
 y:y_so_result
 y:y_so_rounds
+y:y_card_on
 y:y_so_news
 y:y_cr_pot
 y:y_cr_pick1
@@ -539,6 +545,14 @@ extra:mvp_replay
 extra:mvp_again
 extra:x_j
 extra:wk_clean
+extra:jh_people
+extra:jh_sheet_close
+extra:jh_stam_sheet
+extra:jh_eye
+extra:jh_wait
+extra:jh_map
+extra:jh_stam
+extra:jh_go
 extra:ring_joined
 extra:ring_fight
 extra:ring_round
@@ -551,12 +565,17 @@ yw:yw_typed_draft
 yw:yw_typed_refused
 yw:yw_wait
 yw:yw_act1
+yw:yw_wait_stop
 yw:yw_act2
 yw:yw_typed_bad1
 yw:yw_typed_spent
-yw:yw_wait_stop
 yw:yw_close
 yw:yw_back
 yw:yw_trail_meet
 yw:yw_trail_act1
 yw:yw_trail_hidden
+uf:uf_first
+uf:uf_map_seen
+uf:uf_attrs
+uf:uf_hero
+uf:uf_attrs_seen
