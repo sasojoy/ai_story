@@ -234,7 +234,7 @@
   function kilnPeek(v) {
     const merge = v.kind === "合併";
     const badge = merge ? '<span class="qseal qi">意</span>' : v.quality ? seal(v.quality) : '<span class="qseal q1">？</span>';
-    const head = [v.made, v.attribute ? `屬${v.attribute}` : "", v.he ? "" : merge ? v.depth : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean).map(esc).join("・");
+    const head = [v.made, v.attribute ? `屬${v.attribute}` : "", v.he ? "" : merge ? v.depth : v.gen, v.level > 1 ? `第 ${v.level} 成` : ""].filter(Boolean).map(esc).join("・");
     const tags = (v.traits || []).map((t) => `${esc(t.name)}${t.layers > 1 ? ` ×${t.layers}` : ""}`);
     const he = v.he; // 改版：縮起來的那一行只寫爐火的樣子（heLine）
     const line2 = (he ? [heLine(he)]
@@ -296,7 +296,7 @@
     const a = (x.owned_arts || []).find((r) => r.id === item.id);
     if (!a) return "";
     const j = a.judge || {};
-    const sub = [a.kind, a.attribute ? `屬${a.attribute}` : "", a.affinity ? `收${a.affinity}` : "", `第${a.level}成`].filter(Boolean);
+    const sub = [a.kind, a.attribute ? `屬${a.attribute}` : "", a.affinity ? `收${a.affinity}` : "", `第 ${a.level} 成`].filter(Boolean);
     const diff = typeof j.worn_diff === "number" ? j.worn_diff : null;
     const verdict = diff === null ? ""
       : diff > 0 ? `<b class="up">比身上那門強 ${meltNum(diff)}</b>` : diff < 0 ? `<b class="down">比身上那門弱 ${meltNum(diff)}</b>` : "跟身上那門一樣";
@@ -323,7 +323,7 @@
   function previewCardHtml(v) {
     if (!v) return "";
     const merge = v.kind === "合併";
-    const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean);
+    const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第 ${v.level} 成` : ""].filter(Boolean);
     const badge = merge ? '<span class="qseal qi big">意</span>' : v.quality ? seal(v.quality, true) : '<span class="qseal q1 big">？</span>';
     const pair = merge || v.kind === "揣摩"; // 意境＋意境：品質照兩份裡好的，另寫真意機會
     // 真意幾成（鐵匠鋪與合成流程 3.5，企劃者 2026-10-29「寫百分比沒關係」）：合併而且那一路有真意時伺服器給 grand_pct，寫在火候字後面；

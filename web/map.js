@@ -123,7 +123,7 @@
   function mapChrome() {
     const seeing = S.mapMode === "timeline" && S.mapWeek && S.mapWeek !== S.mapState.now_week;
     const banner = `<div class="map-banner" id="map-banner"${seeing ? "" : " hidden"}>${seeing ? `正在看${wkName(S.mapWeek, `第 ${S.mapWeek} 週`)}` : ""}</div>`;
-    const top = `<div class="mv-top"><button type="button" class="mv-q map-search" data-act="map-search"><span aria-hidden="true">🔍</span><span>${MV_WORDS.search}</span></button>`
+    const top = `<div class="mv-top"><button type="button" class="mv-q map-search" data-act="map-search"><svg class="mv-q-ico" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.6 12.6 17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>${MV_WORDS.search}</span></button>`
       + `<div class="mv-chips" id="mv-chips">${chipsHtml(S.mapBase, S.mapState)}</div></div>`;
     const fab = `<div class="mv-fab" id="mv-fab"><button type="button" class="mv-me" data-act="map-home" aria-label="${MV_WORDS.me}">◎</button><button type="button" data-act="map-fit" aria-label="${MV_WORDS.fit}">全</button></div>`;
     const find = S.mapMode === "search" ? `<div class="mv-find" id="mv-find">${searchHtml(S.mapBase, S.mapState, S.mapQuery)}</div>` : "";
@@ -213,10 +213,10 @@
     const goes = st.suggest.length && st.sorties_left !== null
       ? `<div class="m-sec"><h4>今天去哪裡出陣<small>今日還能 ${Number(st.sorties_left)} 次</small></h4>` +
         st.suggest.map((g, i) => `<div class="m-go${g.lose ? " lose" : ""}" data-act="map-pick" data-id="${esc(g.id)}" role="button"><span class="n">${i + 1}</span><span class="t"><b>${esc(placeOf(base, g.id).name)}</b>　出陣・${SORTIE_WORD[g.sortie] || ""}
-          <span class="why">${g.why.map(([t, tone]) => `<span style="background:${TONE_COLOR[tone] || "#8A7A62"}">${esc(t)}</span>`).join("")}</span></span><span class="m">${g.minutes ? `${Number(g.minutes)} 分 ›` : "這裡 ›"}</span></div>`).join("") + "</div>"
+          <span class="why">${g.why.map(([t, tone]) => `<span style="background:${TONE_COLOR[tone] || "#8A7A62"}">${esc(oddsSay(t))}</span>`).join("")}</span></span><span class="m">${g.minutes ? `${Number(g.minutes)} 分 ›` : "這裡 ›"}</span></div>`).join("") + "</div>"
       : "";
     const ropes = st.ropes.length ? `<div class="m-sec"><h4>${st.season_one ? "三條戰線" : "大勢"}</h4>${st.ropes.map(ropeHtml).join("")}</div>` : "";
-    const events = st.events.length ? `<div class="m-sec"><h4>${wkWord("this", "本週")}大事</h4>${st.events.map((t) => `<div class="m-evt">📜 ${esc(t)}</div>`).join("")}</div>` : "";
+    const events = st.events.length ? `<div class="m-sec"><h4>${wkWord("this", "本週")}大事</h4>${st.events.map((t) => `<div class="m-evt">${esc(t)}</div>`).join("")}</div>` : "";
     return goes + ropes + events;
   }
   // 卡上「此地能悟」（意境提示設計第五節）：一種一顆牌子，最濃的實心、寫「最濃」；開關關著沒有最濃，全部空心
@@ -238,12 +238,12 @@
   }
   // ── 卡（輿圖簡化設計 5.3）：一打開是你腳下這一處、點別處是同一張。由上往下：1 印、名字、★高級、距離；2 一句話；3 正在翻；4 此地能悟；
   // 5 此地的對手；6 今日產出；7 動作一排（下戰書）；8 拉高才看（軍令懸賞、這一季誰佔過、地利、此地、劇情；今天去哪裡出陣、戰線、本週大事）。字待 joy 潤
-  const CARD_RICH = "★高級";
-  const LINE_BASE = "{side}大本營", LINE_HOME = "{side}的基礎資源領地", LINE_RICH_FREE = "中立・高級資源領地，還沒有人佔";
-  const LINE_RICH_HELD = "{side}佔下的高級資源領地", LINE_FREE = "還沒有人佔", LINE_OFF = "不在戰線上", LINE_FIXED = "只照大事易手";
-  const LINE_HELD = "{side}控制", LINE_TUG = "{side}控制，照戰線易手", LINE_COOL = "剛易手，{n} 分後才能再推、加成暫停";
-  const FLIP_TITLE = "正在翻", CLASH_WORD = "激戰", FLIP_IDLE = "還沒有人推，進度 0／100", FLIP_ATTACK = "正在攻", FLIP_HOLD = "在守";
-  const FOCUS_WORD = "{side}集火 +{pct}%";
+  const CARD_RICH = "寶地"; // 待 joy 潤（以前「★高級」）
+  const LINE_BASE = "{side}大本營", LINE_HOME = "{side}的地盤", LINE_RICH_FREE = "產得多的寶地，還沒有人佔"; // 待 joy 潤
+  const LINE_RICH_HELD = "{side}佔著的寶地", LINE_FREE = "還沒有人佔", LINE_OFF = "不在戰線上", LINE_FIXED = "要有大事才會換人佔"; // 待 joy 潤
+  const LINE_HELD = "{side}佔著", LINE_TUG = "{side}佔著，戰線推過來就換人", LINE_COOL = "剛換人佔，{n} 分後才能再搶"; // 待 joy 潤
+  const FLIP_TITLE = "誰在搶這塊地", CLASH_WORD = "激戰", FLIP_IDLE = "這塊地還沒有人來搶", FLIP_ATTACK = "在攻", FLIP_HOLD = "在守"; // 待 joy 潤
+  const FOCUS_WORD = "{side}一起攻，快 {pct}%"; // 待 joy 潤
   // 攻城戰的三種時刻（輿圖第三版第 5 批，企劃者 2026-10-22 從對比圖挑 A 乙、B 甲、C 甲）：卡上第 2 段底下一段——戰書下了到開集結（A）、
   // 集結・交戰中（B）、打完到換天（C）；讀 main_view["conquest"]["today"]（Game.conquest_view：攻方、時刻、狀態字、看的人站哪一格 you、
   // 打完的大勝／險勝 margin）與 muster（開打前幾分鐘開集結）。字待 joy 潤
@@ -351,7 +351,7 @@
     let acts;
     if (here) { // 就在這裡：出陣、探索都回江湖頁按（江湖頁照舊處理接下來的事）
       // 出陣・攻那一顆也寫勝算：要按之前最想看的就是它（FB-262）
-      const risk = p.sortie === "attack" && p.odds && !p.convoy ? `${esc(p.odds.word)}・` : ""; // 截糧：按了打運糧隊，不是攻，不寫攻的勝算（FB-9005）
+      const risk = p.sortie === "attack" && p.odds && !p.convoy ? `${esc(oddsSay(p.odds.word))}・` : ""; // 截糧：按了打運糧隊，不是攻，不寫攻的勝算（FB-9005）
       const sortie = p.sortie && st.sorties_left !== null ? `<button type="button" class="main" data-act="map-jianghu" data-key="sortie">出陣・${p.convoy ? SORTIE_CONVOY : SORTIE_WORD[p.sortie] || ""}<small>${risk}今日還能 ${Number(st.sorties_left)} 次</small></button>` : "";
       acts = `${sortie}<button type="button"${sortie ? "" : ' class="main"'} data-act="map-jianghu" data-key="explore">探索<small>回江湖頁挑一種</small></button>`;
     } else if (block) {
@@ -363,7 +363,7 @@
     }
     const letter = letterRow(id);
     const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
-    const foes = p.squads.length ? p.squads.map((q) => `${esc(q.name)} <b style="color:${tone(q.odds)}">${esc(q.odds)}</b>`).join("、") : "<b>沒有對手</b>";
+    const foes = p.squads.length ? p.squads.map((q) => `${esc(q.name)} <b style="color:${tone(q.odds)}">${esc(oddsSay(q.odds))}</b>`).join("、") : "<b>沒有對手</b>";
     const strip = p.kind === "line" || p.kind === "fixed" || p.kind === "neutral" ? `<div class="m-strip">${Array.from({ length: st.weeks_total }, (_, i) => {
       const w = i + 1, row = (st.weeks || []).find((x) => x.week === w), c = row && row.control ? row.control[id] : null;
       return `<span class="${w > st.now_week ? "future" : ""}${w === st.now_week ? " now" : ""}" style="background:${c ? sideInk(c).color : "#CDBF9F"}"></span>`;
@@ -461,7 +461,7 @@
       const [lw, lv] = pts[pts.length - 1];
       out.push(`<text x="${f1(gx(lw) + 4)}" y="${f1(gy(lv) + 3)}" font-size="10" fill="${ROPE_INK[i % 3]}">${esc(r.name.slice(0, 2))}</text>`);
     });
-    for (const x of st.weeks || []) if (x.events.length) out.push(`<text x="${f1(gx(x.week))}" y="${GY0 - 1}" font-size="9" text-anchor="middle">📜</text>`);
+    for (const x of st.weeks || []) if (x.events.length) out.push(`<text x="${f1(gx(x.week))}" y="${GY0 - 1}" font-size="9" text-anchor="middle" fill="currentColor">事</text>`);
     out.push(`<line x1="${f1(gx(week))}" y1="${GY0}" x2="${f1(gx(week))}" y2="${GY0 + GH}" stroke="#A8322A" stroke-width="2"/>`);
     for (let w = 1; w <= st.weeks_total; w++) out.push(`<text x="${f1(gx(w))}" y="${GY0 + GH + 11}" font-size="9.5" text-anchor="middle" fill="${w === week ? "#A8322A" : w > st.now_week ? "#C2B699" : "#8A7A62"}">${w}</text>`);
     return `<svg class="m-graph" data-act="map-graph" viewBox="0 0 ${GX0 + GW + 34} ${GY0 + GH + 14}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三條戰線這一季的走勢">${out.join("")}</svg>`;
@@ -494,7 +494,7 @@
       + (from ? `<small class="m-sum-note">${from.label}</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
     const side = (k) => `<span${k ? ` class="m-sc" style="${sideText(k)}"` : ""}>${esc(flipSide(k))}</span>`;
-    const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),
+    const list = [...row.events.map((t) => `<div class="m-evt"><b>${esc(t)}</b></div>`),
       ...row.changed.map((e) => `<div class="m-evt">⇄ ${name(e.id)}：${side(e.from)} → ${side(e.to)}</div>`)].join("");
     const wk = Number(week); // 7 天濃縮季寫段（wkName，FB-501）
     return `<div class="m-tl-head"><b>天下怎麼變<small>${wkName(wk, `第 ${wk} 週週末`, true)}</small></b><button type="button" data-act="map-play">▶ 播放</button><button type="button" data-act="map-now">回到現在</button>${close}</div>
@@ -652,14 +652,14 @@
   // 城與營用畫的小圖（web/img/map）。拖縮的每一幀只換兩層的 transform（底圖那一層、字那一層照上一次排字的倍率先跟著縮放），
   // 縮放差過一截、跨了一段、停下來才重排字（地點多也不卡）。字待 joy 潤
   const MV_WORDS = {
-    search: "要去哪？地點、人物、店面", all: "全部", sense: "能悟", tl: "⏱ 版圖", me: "回到我", fit: "看整張天下",
+    search: "要去哪？地點、人物、店面", all: "全部", sense: "悟得到", tl: "版圖", me: "回到我", fit: "看整張天下",
     from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", swipeWk: "本週要去的排第一，其餘由近到遠", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡", next: "下一站", end: "終點",
     weekHead: "本週要事", figures: "附近的人物", jump: "跳到大區", places: "地點", people: "人物",
     notFound: "找不到「{q}」。地名、大區、人物、店面（醫館、鐵匠鋪、馬市）都找得到。",
   };
   const MV_CHIP_PEOPLE = "有人物";
   const NEAR_WORDS = { weekGo: "本週要去", bounty: "有賞" }; // 待 joy 潤
-  const NEAR_PULL = "往上拉：能悟、對手、人物、今日產出"; // 待 joy 潤
+  const NEAR_PULL = "往上拉看對手、人物、今天產什麼"; // 待 joy 潤
   const RICH_WORD = "寶", LETTER_SEAL_WORD = "戰";
   const MV_ZMAX = 3.2; // 最多放大幾倍（地圖 1 單位＝螢幕 1px 是 1 倍）；最小是整張天下放得下
   const MV_LV1 = 0.72, MV_LV2 = 1.35; // 字分三段的倍率
@@ -725,10 +725,15 @@
   function nearSub(base, st, id, week) {
     const q = st.places[id], b = placeOf(base, id);
     const far = q.minutes !== null && q.minutes !== undefined ? `${Number(q.minutes)} 分` : "";
-    if (week && week.id === id) return [far, week.why].filter(Boolean).join("・");
-    const tag = !base.viewer_mostly && q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : b.mostly || "";
+    if (week && week.id === id) return [far, String(week.why || "").split("・")[0]].filter(Boolean).join("・"); // 「軍令・攻城・冀州」只留「軍令」，細節在卡上
+    const tag = !base.viewer_mostly && q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : mostlySay(b.mostly);
     return [far, tag].filter(Boolean).join("・");
   }
+  // 名字旁、篩選鈕上「多半什麼」與勝算的說法（2026-11-26 全站總檢查 C：伺服器的「多事」「必敗」是我們自己的簡稱，畫的時候換成玩家的話）
+  const MOSTLY_SAY = { 多事: "事情多", 多敵: "對手多", 多料: "素材多", 多悟: "好參悟", 參半: "什麼都有", 比劃: "跟同袍過招" }; // 待 joy 潤
+  const ODDS_SAY = { 穩勝: "穩贏", 必敗: "打不過", 凶險: "很險" }; // 待 joy 潤
+  const mostlySay = (m) => MOSTLY_SAY[m] || m || "";
+  const oddsSay = (w) => ODDS_SAY[w] || w || "";
   // 估一段字在螢幕上多寬（px）：中日韓的字一個字寬、數字與英文約六成、空白約三成
   function textW(text, px) {
     let w = 0;
@@ -799,7 +804,7 @@
       for (const id of b.insights || []) kinds[id] = (kinds[id] || 0) + 1;
     }
     const out = [["all", MV_WORDS.all]];
-    for (const [m] of Object.entries(most).sort((a, z) => z[1] - a[1]).slice(0, 4)) out.push([`most:${m}`, esc(m)]);
+    for (const [m] of Object.entries(most).sort((a, z) => z[1] - a[1]).slice(0, 4)) out.push([`most:${m}`, esc(mostlySay(m))]);
     if (shown.some((b) => st.places[b.id].rich)) out.push(["rich", `<i class="mv-red">${RICH_WORD}</i>`]);
     if (shown.some((b) => st.places[b.id].people.length)) out.push(["people", MV_CHIP_PEOPLE]);
     for (const [id] of Object.entries(kinds).sort((a, z) => z[1] - a[1]).slice(0, MV_KINDS_MAX)) {
@@ -850,8 +855,8 @@
   }
   function nearCard(base, st, b) {
     const q = st.places[b.id], wk = nearWeek(st), isWk = !!wk && wk.id === b.id;
-    const odds = q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
-    const ins = (b.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2).map((k) => `<i style="color:${k.c}">${esc(k.name)}</i>`).join("");
+    const odds = q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(oddsSay(q.odds.word))}</b>` : "";
+    const ins = ""; // 一行只留路程與一兩個重點（2026-11-26 全站總檢查 C）：能悟什麼看篩選鈕與卡
     return `<button type="button" class="m-pc${S.mapPreview === b.id ? " on" : ""}" data-act="map-place" data-id="${esc(b.id)}">${iconHtml(b, 30)}`
       + `<b>${esc(b.name)}${q.rich ? `<em>${RICH_WORD}</em>` : ""}${isWk ? `<em class="wk">${MV_WORDS.week}</em>` : ""}</b>`
       + `<span>${esc(nearSub(base, st, b.id, wk))}${odds}${ins ? `・${ins}` : ""}</span></button>`;
@@ -1081,7 +1086,7 @@
       if (live && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
       if (!on || (lvl === 0 && !isSel && !isHere && !isWk && !filt)) continue;
       const sub = isHere ? MV_WORDS.here : (lvl === 2 || isSel || isWk) ? nearSub(base, st, b.id, wk) : "";
-      const odds = !isHere && (lvl === 2 || isSel) && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
+      const odds = !isHere && (lvl === 2 || isSel) && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(oddsSay(q.odds.word))}</b>` : "";
       const inks = lvl > 1 ? (b.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 3) : [];
       const ins = inks.length ? `<span class="ins">${inks.map((k) => `<i style="color:${k.c}">${esc(k.name)}</i>`).join("")}</span>` : "";
       const t = lvl > 0 && live ? tugOf(st, b.id, ctl) : null;

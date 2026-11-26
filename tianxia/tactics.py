@@ -125,7 +125,7 @@ def when_text(tactic: TacticDef) -> str:
     if tactic.timing == "乘勢":
         text = f"剋中對手後 {rate}"
     elif tactic.timing == "心法":
-        text = (f"{span}一直在" if tactic.rounds else "一直在") if rate == "必定" else f"{span if tactic.rounds else '每回合'} {rate}"
+        text = (f"{span}有效" if tactic.rounds else "平時就有效") if rate == "必定" else f"{span if tactic.rounds else '每回合'} {rate}"
     elif tactic.timing == "騎戰":
         text = "騎著馬才有"
     elif tactic.timing == "應招":

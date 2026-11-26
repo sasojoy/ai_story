@@ -28,7 +28,7 @@ def xinde_section(content: Content) -> list[str]:
         f"- 學武的本錢：練成（第 N 成升下一成花 N×{cfg.practice_xinde_per_level}）、"
         f"兩個意境合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）、自創武學都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
-        "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
+        "用不上的功法熔掉也能拿回一些。狀態列的心得提示會在你付得起、又真的有事可做時提醒你去哪一頁。",
         "",
     ]
 

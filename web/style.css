@@ -1878,3 +1878,5 @@ body.layer-open { position: fixed; left: 0; right: 0; overflow: hidden; }
 /* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
 .promo-sound::after { content: ""; position: absolute; inset: -8px -4px; }
 .rn-dots li::after { content: ""; position: absolute; inset: -9px 0; }
+.stam-help .pill-btn { width: 100%; margin-top: 8px; flex-direction: column; gap: 2px; line-height: 1.3; } /* 總檢查 11/26：服丹的鈕從體力條右端搬進攤開的那一塊 */
+.stam-help .pill-btn small { font-size: 12px; font-weight: 400; opacity: .85; }
