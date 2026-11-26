@@ -167,7 +167,7 @@
     return `<div class="shop-worn"><span class="sw-spine" aria-hidden="true">${WORN_SPINE}</span><div class="sw-in">
         <div class="sw-hd"><b>【${esc(it.name)}】</b>${plusHtml(it.tempers)}<span>${esc(it.grade)}${it.wear_note ? `・${esc(it.wear_note)}` : ""}</span></div>
         <div class="shop-wear"><span>${esc(it.wear_word)} ${it.wear | 0}</span><div class="wear-bar"><i class="${(it.wear | 0) < 50 ? "low" : ""}" style="width:${Math.max(0, Math.min(100, it.wear | 0))}%"></i></div></div>
-        <div class="tempers"><span>淬煉 ${it.tempers | 0}/${it.temper_max | 0}</span>${pips}</div>
+        <div class="tempers"><span>淬煉 ${it.tempers | 0}／${it.temper_max | 0}</span>${pips}</div>
       <div class="shop-bigs">${big(w.repair, "修", "repair")}${big(w.temper, "淬煉", "temper")}</div>
       ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}</div></div>`;
   }
@@ -195,7 +195,7 @@
   function rackRowHtml(shop, r) {
     const on = !!r.into && !!(S.rackPick || {})[r.id];
     // 那一行數字：這一頁就是淬煉的地方，淬煉幾次一律寫（「淬煉 0/7」看得出還能淬幾次；上限照這一件的品質，3.6），上品接「磨得慢」
-    const temper = `・淬煉 ${r.tempers | 0}/${r.temper_max | 0}`, slow = r.wear_note ? `・${r.wear_note}` : "";
+    const temper = `・淬煉 ${r.tempers | 0}／${r.temper_max | 0}`, slow = r.wear_note ? `・${r.wear_note}` : "";
     const line = shop.page === "armor"
       ? `屬${r.attribute}・${r.grade}${temper}・${r.wear_word} ${r.edge | 0}${slow}・少扣 ${r.cut}`
       : `${r.noun || r.kind}・屬${r.attribute}・${r.grade}${temper}・鋒利度 ${r.edge | 0}${slow}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`;
@@ -264,7 +264,7 @@
   const DV_NOT_MINE = "未有"; // 待 joy 潤
   const DV_SOLVED = "鑄譜上有・尚無人打出"; // 待 joy 潤
   const DV_ALBUM = "收藏 {have}／{total}"; // 待 joy 潤
-  const DV_UNKNOWN = "？"; // 待 joy 潤
+  const DV_UNKNOWN = "未鑄"; // 待 joy 潤（總檢查 11/25：沒打出來的格不放「？」，暈墨底寫「未鑄」，同江湖錄圖鑑的「未見」）
   const DV_LINK = "神器 江湖已見 {k} 件・收藏 {have}／{total} ›"; // 待 joy 潤：架上頁那一行（K 是這一季已打出原品的件數）
   const DV_LINK_ZERO = "神器 收藏 {have}／{total} ›"; // 待 joy 潤：K 是 0
   const DV_REF = "鑄|"; // 神器譜那一筆的 ref 是「鑄|配方 id」（伺服器的 GearFind.id）；tests/web/test_smith_divine_web.py 拿真的神器譜鎖著
@@ -609,7 +609,7 @@
         ${card.first ? '<span class="first-seal">首位發現</span>' : ""}
         <span class="q">${esc(card.grade)}</span><h4>${esc((now && now.name) || card.name)}</h4>
         <p class="meta">${esc(card.kind)}・屬${esc(card.attribute)}</p>
-        ${now && now.temper_max ? `<p class="meta">淬煉 ${now.tempers | 0}/${now.temper_max | 0}${now.wear_note ? `・${esc(now.wear_note)}` : ""}</p>` : ""}
+        ${now && now.temper_max ? `<p class="meta">淬煉 ${now.tempers | 0}／${now.temper_max | 0}${now.wear_note ? `・${esc(now.wear_note)}` : ""}</p>` : ""}
         ${card.value ? `<p class="stat">${esc(card.value)}</p>` : ""}${card.fit ? `<p class="fit">${esc(card.fit)}</p>` : ""}${(card.tactic || []).map((t) => `<p class="fit tactic">${esc(t)}</p>`).join("")}
         ${pending ? divineFormHtml(card.id, pending, true, card.unit) : ""}
         <div class="btns${card.where === "rack" ? "" : " one"}">${btns}</div></article></div>`;

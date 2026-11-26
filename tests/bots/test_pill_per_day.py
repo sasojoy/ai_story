@@ -136,8 +136,8 @@ def test_newcomers_get_more_pills_a_day_until_the_newbie_hours_run_out(capped):
 def _button(today, full=False):
     m = server.main_view(_web_game())
     m["status"]["pills"] = {"name": "回體丹", "count": 28, "restore": 150, "full": full, "today": today}
-    top = run(m, "return H.topHtml();")
-    start = top.index('<button class="pill-btn"')
+    top = run(m, "return H.topHtml();", S={"stamOpen": True})
+    start = top.index('<button class="btn pill-btn"')
     return top[start:top.index("</button>", start)]
 
 
@@ -151,8 +151,8 @@ def _web_game():
 
 def test_the_button_shows_the_three_states():
     can = _button(2)
-    assert "disabled" not in can and "丹28<small>今2</small>" in can and "今天還能服 2 顆" in can
+    assert "disabled" not in can and "還有 28 顆・今天還能服 2 顆" in can and "今天還能服 2 顆" in can
     spent = _button(0)
-    assert "disabled" in spent and "丹28<small>明日</small>" in spent and "明日 00:00 後再服" in spent
+    assert "disabled" in spent and "今天服滿了，明日再服" in spent and "明日 00:00 後再服" in spent
     full = _button(1, full=True)
-    assert "disabled" in full and "丹28<small>今1</small>" in full
+    assert "disabled" in full and "還有 28 顆・今天還能服 1 顆" in full

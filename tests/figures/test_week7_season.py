@@ -666,7 +666,7 @@ def _render(game, monkeypatch, app=None):
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_week7_pages_say_segments_and_today(monkeypatch):
     out = _render(_game_fb501("week7"), monkeypatch)
-    assert "📜 今日軍令（1）" in out["orders"]
+    assert "今日軍令（1）" in out["orders"]
     assert out["board"] == "這一段江湖大事"
     assert "<b>第 1 段（第 1～2 天）・三十六方起義</b>" in out["result"] and "<b>第 3 段（第 5～7 天）・廣宗決戰</b>" in out["result"]
     assert "<small>第 1 段末（第 2 天）</small>" in out["timeline"] and "<h4>第 1 段（第 1～2 天）</h4>" in out["timeline"]

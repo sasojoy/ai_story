@@ -97,7 +97,7 @@ def test_yuanshao_crown_sword_lengthens_the_awe_and_leaves_the_neigong_always_on
     _game, holders = _armed(content, "yuanshao")
     got = {h.tactic.name: h.tactic for h in holders}
     assert got["世家威儀"].rounds == 3
-    assert got["猶疑兩端"].rounds == 0 and tactics.when_text(got["猶疑兩端"]) == "心法・一直在"
+    assert got["猶疑兩端"].rounds == 0 and tactics.when_text(got["猶疑兩端"]) == "心法・平時就有效"
 
 
 # ── 3. 盧植的海內儒宗：守一只撐前 3 回合 ──

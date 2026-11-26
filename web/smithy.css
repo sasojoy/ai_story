@@ -308,7 +308,8 @@
 .shop-layer.shop-smith button.dv-cell:not(.have) { border-color: var(--accent); color: var(--accent); }
 .shop-layer.shop-smith .dv-cell.dv-now { border-width: 3px; }
 .shop-layer.shop-smith .dv-cell.on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 60%, transparent); }
-.shop-layer.shop-smith .dv-cell.unknown { border-style: dashed; opacity: 0.7; }
+.shop-layer.shop-smith .dv-cell.unknown { border-style: dashed; opacity: 1; font-weight: 400; letter-spacing: .12em; color: color-mix(in srgb, var(--ink) 45%, transparent);
+  background: radial-gradient(60% 46% at 38% 40%, color-mix(in srgb, var(--ink) 14%, transparent), transparent 72%), radial-gradient(42% 32% at 66% 62%, color-mix(in srgb, var(--ink) 10%, transparent), transparent 74%); } /* 沒打出來的格：暈墨＋淡楷書「未鑄」（不放「？」，Joy 11/22） */
 .shop-layer.shop-smith .dv-line { border-left-color: var(--accent); border-radius: 0 8px 8px 0; background: var(--card-2); color: var(--ink); font-family: var(--kai); }
 .shop-layer.shop-smith .smith-hero .sh-art { width: 100%; }
 .shop-layer.shop-smith .ups .btn { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); }

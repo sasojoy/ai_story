@@ -1,6 +1,6 @@
 /* 使用條款與隱私權（功能包 terms）：登入頁、設定頁底下兩個連結，與同意那一層 */
 .terms-links { text-align: center; font-size: 13px; color: var(--ink-2); margin: 14px 0 4px; }
-.terms-links a { color: var(--ink-2); }
+.terms-links a { color: var(--ink-2); display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; } /* 44px：點得到的都要這麼高 */
 .terms-layer { position: fixed; inset: 0; z-index: 1000; background: rgba(20, 14, 8, 0.55); display: flex; align-items: center; justify-content: center; padding: calc(16px + var(--top)) 16px calc(16px + var(--bottom)); }
 .terms-card { width: 100%; max-width: 440px; max-height: 100%; overflow: auto; }
 .terms-card h3 { margin: 0 0 8px; }
@@ -14,3 +14,7 @@
 .terms-check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
 .terms-check input { margin-top: 3px; flex: none; width: 18px; height: 18px; }
 .terms-check a { color: inherit; }
+/* 遊戲分級標識（登入頁表單正下方）：標識 52px 見方（法定不小於 45×45 像素），右邊級別與警語 */
+.terms-rating { display: flex; gap: 12px; align-items: center; margin: 12px 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.terms-rating b { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 10px; background: #e0a526; color: #2a241d; font-size: 17px; letter-spacing: .02em; }
+.terms-rating ul { margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.6; color: var(--ink-2); }
