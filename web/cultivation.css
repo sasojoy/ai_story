@@ -61,7 +61,7 @@
 .hm-stage canvas { display: block; width: 100%; height: auto; border-radius: 10px; background: #1e1a15; }
 .hm-warn { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--ink); background: color-mix(in srgb, var(--stam) 14%, var(--card)); border-top: 1px solid var(--line); }
 .hm-foot { display: flex; justify-content: flex-end; padding: 2px 12px 4px; }
-.hm-go { min-height: 40px; font-size: 13px; }
+.hm-go { min-height: 44px; font-size: 13px; }
 .sa-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
 .sa-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .sa-hd b { font: 600 16px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -511,3 +511,8 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 /* 子分頁的紅點（web/shell.js registerDot 的第二層；Joy 2026-11-12）：同伴那一格亮，點進去那一件事上也有一顆 */
 .hero-tabs button { position: relative; }
 .hero-tabs .dot { position: absolute; top: 7px; right: 10%; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
+.self-hd .attr-q::after { inset: -11px; border-radius: 50%; }
+.self-attrs .attr .alloc { position: relative; }
+.self-attrs .attr .alloc::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
+.self-xinde .xinde-tip { padding: 4px 0; }

@@ -1039,14 +1039,14 @@ def test_the_status_shows_a_companions_rooted_hp_cap(game):
 
 
 def test_status_text_shows_the_practice_hint_only_when_xinde_is_idle(game):
-    assert "心得" in game.status_text() and "💡" not in game.status_text()
+    assert "心得" in game.status_text() and "你已攢下" not in game.status_text()
     # explain-2：提示只看「付得起、做得了」——心得夠練第一成就算（以前要攢到 xinde_hint_threshold 50）
     game.state.player.stats["xinde"] = team.practice_price(game.content, 1)
-    assert "💡" not in game.status_text()  # 兩欄都空著：沒有哪一門可以練
+    assert "你已攢下" not in game.status_text()  # 兩欄都空著：沒有哪一門可以練
     _wear(game, wugong="fist", neigong="breath")
-    assert "💡" in game.status_text() and "練成內功、武學" in game.status_text()
+    assert "你已攢下" in game.status_text() and "練成內功、武學" in game.status_text()
     game.state.player.member.wugong_level = game.state.player.member.neigong_level = 10
-    assert "💡" not in game.status_text()  # 沒東西可練、手上也沒有意境可合成
+    assert "你已攢下" not in game.status_text()  # 沒東西可練、手上也沒有意境可合成
 
 
 # ── 安排前往 ──────────────────────────────────────────────

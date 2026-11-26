@@ -163,7 +163,7 @@ def test_art_and_book_rows_open_but_other_boards_do_not():
 @needs_node
 def test_the_card_has_no_buttons_but_the_close():
     html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "武學", "card": ART}})
-    assert "甲身上的武學" in html and "第7成" in html and "評 9" in html and "斷金" in html
+    assert "甲身上的武學" in html and "第 7 成" in html and "意境評分 9" in html and "斷金" in html
     assert set(re.findall(r'data-act="([^"]+)"', html)) == {"board-card-close"}
     gear = {"name": "【斬月】", "what": "劍", "attribute": "剛", "grade": "三階上品・神器", "tempers": None, "edge": None,
             "wear_word": "鋒利度", "tactic": [], "owner": "甲", "season": 1}
@@ -186,6 +186,6 @@ def test_a_top_grade_card_says_it_wears_slowly(divine_content, world):  # noqa: 
     assert card["wear_note"] == "磨得慢"
     html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "神器", "card": card}})
     sub = html[html.index('class="sub"'):]
-    assert f"淬煉 2/{card['temper_max']}・鋒利度 {card['edge']}・磨得慢</div>" in sub[:sub.index("</div>") + 6]
+    assert f"淬煉 2／{card['temper_max']}・鋒利度 {card['edge']}・磨得慢</div>" in sub[:sub.index("</div>") + 6]
     plain = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "神器", "card": {**card, "wear_note": ""}}})
     assert "磨得慢" not in plain

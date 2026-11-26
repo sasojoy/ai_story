@@ -2519,6 +2519,181 @@ WAVES["AN"] = dict(
 )
 
 
+# ── AO 波：決戰與宴席兩處回話經紀錄（PM 2026-11-26 排）──
+# 企劃者 2026-11-26 在選單上選「兩處都修 (Recommended)」（PM 的題目：決戰裡自己寫的那一搏剛好收掉決戰時「名望 +32」後面少了差距那半句、升段的話隔 30 秒另起一則；
+# 宴席敬酒時情誼跨段的那一筆行狀晚一步才寫——兩處都是線上正在跑的行為，要他或 Joy 點頭才排）。依據是 AM 波第 266 批的清查表。
+AO_SWEEP = "docs/superpowers/plans/2026-11-24-回話沒經紀錄-第266批.md"
+AO_NOD = (
+    "**誰點頭**：企劃者 2026-11-26，PM 用選單問「決戰與宴席兩處的回話要不要修」，他選的原話是「兩處都修 (Recommended)」。這兩處改的是線上正在跑的包的行為（決戰、宴席都在 week7、season21 開著），"
+    "計畫檔與回報的 core_changes／decided 都要抄這一句（哪天、原話）。**只准修派工單點名的這一處**：別的沒經 `_log` 的動作（親衛隊長 `guard_say`、回絕書信、新手散人禮……共 19 個）企劃者沒有點頭，不准順手改。"
+)
+
+
+def b270():
+    plan = "docs/superpowers/plans/2026-11-26-決戰回話經紀錄-第270批.md"
+    return batch(270, "決戰第 270 批：自己寫的那一搏（放手一搏）C 段的回話經 `Game._log`——收掉決戰時名望的差距那半句與升段接在同一則", "battle", "dev/log-fix-270", plan, "8601、8602", [
+        "- **先讀** `" + AO_SWEEP + "`（第七～十節：少了什麼、試改量到的、建議）與 `docs/superpowers/plans/2026-11-23-異聞-第261批.md`（異聞同一種毛病怎麼修的）。" + AO_NOD,
+        "- **毛病**：`tianxia/features/battle/routes.py` 的 `battle_text`（決戰的放手一搏，鎖外三段式）C 段是 `shell.act(game, lambda g: g.submit_battle_custom_action(request.text, rate))`，回話沒經 `Game._log`。"
+        "按鈕出招走 `choose`、會 `_log`；自己寫的這一條不會。自己這一搏剛好湊滿回合、收掉決戰時：決戰那一則「名望 +N」後面少了「（離「…」還差 M）」（只接時間等於此刻的那一則，之後永遠補不上），升段的那幾句與金色籤延到下一次同步另起一則「名聲」，行狀晚一個請求才寫。沒收場的回合只差 `GameState.log`。",
+        "- **修法**：C 段包一層 `g._log(...)`（照第 261 批異聞 `yiwen_step` 的寫法；`_log` 收的是訊息的 list、回的也是——先讀 `tianxia/engine.py` 的 `_log` 與 `submit_battle_custom_action` 回什麼，被擋下的拒絕句也經 `_log` 會不會多寫東西，照按鈕那條路的行為對齊）。"
+        "**另外查一件、照查到的做**：按鈕出招的 `choose` 一般那條路在 `_log` 之外還叫 `features_core.after_action`（`engine.py` 裡；酒肆殺手、親衛隊長、江湖錄的掛鉤）。自己寫的這一條少叫它，玩家會少什麼（讀那幾個掛鉤在決戰回合裡做不做事）？"
+        "少的東西玩家看得出來、而且補上只是多叫一次同一個核心函式（不改核心），就一起補、寫進計畫；要改核心或拿不準，就不補、把證據寫進 leftovers（開頭寫「交 PM：」）。",
+        "- **新江湖頁**（Joy 2026-11-25 上線：`tianxia/features/jianghu/`、`web/jianghu.js`，week7、season21 開著）接管了戰報那一頁：讀它畫決戰收場那一則時名望那一行、升段的金色籤從哪裡讀（`/api/main` 的哪一格），確認這一批修的那半句在新頁與舊頁（`tests/conftest.py::old_page`）都畫得出來；畫不出來就照實寫進回報（不改 jianghu 包、不改 `web/`）。",
+        "- **只准動**：`tianxia/features/battle/routes.py`（C 段那一行上下）、`tianxia/features/battle/tests/`、`scripts/sb/tracks/battle.py`（見下一條）、包的 README 路由那一段、計畫檔。`tianxia/core/`、`engine.py`、`server.py`、`web/`、別的包、資料庫第 9 版與存檔欄位一個字不動。",
+        "- **測試**（包的 `tests/`，走真路由 `/api/do/…` 那一條，照 `test_battle…shell` 現有的做法；模型用假的 client 或 `client=None` 的保底值）：(a) 自己這一搏收掉決戰（照第 266 批計畫第八節的量法：測試內容開 `renown`、`biography`，一幕的放手一搏成功率 100% 收掉決戰）→ 決戰那一則的「名望 +N」後面有「（離「…」還差 M）」、升段的句子在**同一則**裡、不必等下一次同步；"
+        "(b) 沒收場的回合：回話一字不變、只多寫進 `GameState.log`；(c) 被擋下（送不出去、同一句還在評）：回的那一句照舊、不多寫行狀。把 `g._log` 拿掉，(a) 要紅（自己試、寫進計畫）。",
+        "- **比對軌**：`battle` 軌現在只走到「沒收場的回合」。在 `scripts/sb/tracks/battle.py` **最後新開一段**（不准在前面的段多打請求：這些軌每個請求讓步數加一、每一行印步數，前面多打一個後面每一行都變——手冊 AN 波第 2 條）走一次「自己一搏收掉決戰」，輸出看得到那半句。"
+        "軌檔裡排不出這個局面（要動到別的段或要改程式）就不加軌、把原因寫進回報，靠 (a) 守（手冊 AM 波第 1 條：寫明哪一處沒有軌走得到、靠哪條測試守）。",
+        "- **驗**：包的 `tests/`、README 列的 slow、`scripts/test_for.py` 挑的跑過；`scripts/same_behavior.py selftest --tracks battle` 最後一行原樣貼；`compare --covers battle`（season21 與 test；不帶 `--new`）的差逐行歸類——預期只有 battle 軌（與走到放手一搏的別的軌）的段落雜湊變（回話進了 `GameState.log`）與新開那一段，畫面的行一字不變；有「其他」就查清楚、寫進回報。"
+        "有動軌檔時照手冊 AN 波第 1 條另跑三份 `run`（old、mid、new）分開軌檔的差與程式的差。任何輸出不能分得出誰是假人。時間上限兩段合計 3 小時。",
+    ] + AK_ENV, custom=True)
+
+
+def b271():
+    plan = "docs/superpowers/plans/2026-11-26-宴席回話經紀錄-第271批.md"
+    return batch(271, "宴席第 271 批：自己寫的敬酒詞 C 段的回話經 `Game._log`——情誼跨段的那一筆行狀當下就寫", "feast", "dev/log-fix-270", plan, "8605、8606", [
+        "- **先讀** `" + AO_SWEEP + "`（第八、九節 feast 那一列）與上一批（第 270 批）的計畫。" + AO_NOD,
+        "- **毛病**：`tianxia/features/feast/routes.py` 的 `feast_text`（宴客時自己寫的敬酒詞，鎖外三段式）C 段是 `shell.act(game, lambda g: g.feast_toast(request.text, rate, request))`，回話沒經 `Game._log`。固定敬酒那一條走 `choose`、會 `_log`。"
+        "差別：情誼照分數動、跨過 `affinity_marks` 那一下的行狀延到下一個請求才寫；沒跨段時只差 `GameState.log` 與 `annals_mark.aff` 早記一次（內部欄位）。",
+        "- **修法**：C 段包一層 `g._log(...)`，讓自己寫的與固定敬酒兩條路一樣（先讀 `feast_toast` 回什麼、拒絕句經 `_log` 會不會多寫東西）。`features_core.after_action` 那一件照第 270 批查到的結論對宴席再看一次（固定敬酒那條路叫不叫、少叫了玩家少什麼），同樣的規矩：不改核心才補，拿不準寫 leftovers。",
+        "- **只准動**：`tianxia/features/feast/routes.py`（C 段那一行上下）、`tianxia/features/feast/tests/`、包的 README、計畫檔。軌檔這一批不動（`relay` 軌已經走得到自己寫的敬酒詞：第 266 批試改時量到 relay 的 log 多「你舉杯：…」「許劭情誼 +4」、`annals_mark.aff.xushao` 早記）。其餘同第 270 批：核心、殼、`web/`、別的包、資料庫與欄位不動。",
+        "- **測試**（包的 `tests/`，走真路由）：(a) 自己寫的敬酒詞讓情誼跨過一段 → 那一筆行狀在這個請求當下就寫了（不必再打一個請求）；(b) 沒跨段：回話一字不變；(c) 被擋下：照舊。把 `g._log` 拿掉 (a) 要紅。",
+        "- **驗**：包的 `tests/`、`scripts/test_for.py` 挑的跑過；`selftest --tracks relay` 最後一行原樣貼；`compare --covers feast`（season21 與 test；不帶 `--new`）的差逐行歸類——預期 relay 軌從 feast 那幾段起段落雜湊變（log 多兩句、`annals_mark` 早記）、畫面的行一字不變；跟第 266 批計畫第九節量到的對一次，對不上寫明差在哪。任何輸出不能分得出誰是假人。時間上限兩段合計 2 小時。",
+    ] + AK_ENV, custom=True)
+
+
+AO_LOG_LENS = dict(key="log", text=(
+    "**第 270、271 批：決戰與宴席兩處 C 段回話經 `Game._log`**（企劃者 2026-11-26 選單「兩處都修」）。親自驗（解一份 head 到暫存夾，`TIANXIA_DB` 指暫存檔，模型網址 127.0.0.1:9，**絕不連 11434**）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/battle/routes.py`、`tianxia/features/feast/routes.py`、兩包的測試與 README、`scripts/sb/tracks/battle.py`（有加軌的話）、計畫檔；核心、`engine.py`、殼、`web/`、別的包沒動（動了就是 blocker）。**別的沒經 `_log` 的動作有沒有被順手改**（`guard/routes.py`、`companions/routes.py`、`guide/routes.py`：動了就是 blocker，企劃者沒點頭）。"
+    "②自己走一次：照開發的測試 (a) 在暫存世界打真路由——自己一搏收掉決戰，決戰那一則裡有沒有差距那半句與升段；把 `g._log` 拿掉再走一次，確認少了。宴席同樣走一次跨段的。"
+    "③會不會寫兩次：`submit_battle_custom_action`、`feast_toast` 裡面如果本來就有哪一支自己 `_log` 過，外面再包一層會不會讓行狀、名聲、`GameState.log` 重複（讀程式＋看暫存世界的行狀與江湖紀錄有沒有同一句出現兩次）。被擋下的拒絕句經 `_log` 之後有沒有多出不該有的東西（名聲檢查、行狀）。"
+    "④`features_core.after_action`：開發補了的話，同一個請求裡會不會叫兩次（酒肆殺手、親衛隊長、江湖錄的掛鉤各看一眼會不會重複給東西）；沒補的話 leftovers 的理由站不站得住。"
+    "⑤比對：開發列的每一行差自己對一次；畫面的行有沒有任何一行變（有就是 blocker，除非是那半句本身而且開發寫明了）。計畫與回報有沒有抄企劃者的原話與日期。"
+))
+
+WAVES["AO"] = dict(
+    round2=True,
+    extra_lenses=[AO_LOG_LENS],
+    lines=[
+        dict(name="回話經紀錄", batches=[b270, b271]),
+    ],
+    merge_port=8603, fix_port=8604,
+)
+
+
+# ── AP 波：網頁走查跟上新江湖頁與慢慢長出來（PM 2026-11-26 排；工具批，不用點頭）──
+# 起因：Joy 2026-11-25 在 week7、season21 打開新江湖頁（包 jianghu）與新角色慢慢長出來（包 unfold）。PM 11/26 對 develop `077af0a0a` 自己對自己跑了一次
+# `wave_gate.py --full --no-suite`：全軌比對全部一樣，網頁走查 exit 2（20 個必到的景到不了、同一筆程式兩邊走出 6 個 REAL）。
+AP_SELF = r"C:\Ray\專案\天下大勢\.local\wave_gate\077af0a0"
+
+
+def b272():
+    plan = "docs/superpowers/plans/2026-11-26-工具批-第272批.md"
+    return batch(272, "工具批第 272 批：網頁走查跟上新江湖頁與慢慢長出來——必到的景走得到、同一筆程式自己對自己 0 個真差異、覆蓋表重建", "core_shared", "dev/tools-walk-272", plan, "8607～8614", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔；`docs/superpowers/pm-workflows/wave_gate.py` 只有在它自己寫死了回合名單、不改就走不到新回合時才動最少的幾行（寫進 decided）。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動（走查是工具，不准為了走得到去改畫面）。",
+        "- **起因（PM 查證過的事實）**：Joy 2026-11-25 在 week7、season21 打開兩包：新江湖頁（`tianxia/features/jianghu/`、`web/jianghu.js`、`web/jianghu.css`，殼 `web/main.js` 有掛鉤；舊頁只剩測試用的 `tests/conftest.py::old_page`）與新角色慢慢長出來（`tianxia/features/unfold/`、`web/unfold.js`：站在城門口還沒選路的**新**真人角色開一本，還用不到的分頁先不畫、玩到才長出來並亮紅點；舊角色沒有這一本＝全部攤開）。"
+        "走查沒跟上：`scripts/webqa/gate.py` 的 `NOT_ON_TABLE` 還寫這兩個檔「關著、走不到」，`coverage.json`、`must_reach.txt` 是 11/23 的，`flows/` 點的是舊江湖頁的 `data-act`。"
+        "PM 11/26 對 develop `077af0a0aa32ed5e530a363f5383ab153937214a` 自己對自己（base、head 同一筆）走了每一回合，結果（**只讀，不要改、不要刪**）在 `" + AP_SELF + r"\web\`（`summary.json`、`report.txt`、`red\`）與 `" + AP_SELF + r"\web.txt`：exit 2。"
+        "①**必到的景 20 個沒到**：main 回合 `j1_letter_toggle`、`j1_push_no`、`here_all`、`here_all_close`、`mt_edit`、`mt_shuffle`、`mt_close`、`call_list`、`call_zhujun`、`call_log`、`call_talk`、`call_close`、`call_act`、`letter_open`、`guide_next`、`tr_wheel`、`tr_mode`、`so_tk_open`、`nf_prompt_yes`，x 回合 `x_guide_more`。"
+        "②**同一筆程式兩邊走出 6 個 REAL**：`x:045_x_peer` 375 淺色的樣式指紋多一個 `I.jh-uf`；`yw:014_yw_close` 375 淺色與 1280 多三個 `BUTTON.tab`（PM 的判斷、沒驗過：分頁長出來是同步那一下寫的，兩邊同步的時機不同，拍照那一刻一邊長出來了、一邊還沒）；"
+        "c 回合 `029_bt_watch_shut` 375 淺色（4448 px、3 級，框 30,255～345,427）、`051_bt_end_first` 與 `052_bt_end_closed` 1280（2066／3310 px、到 76 級，框 381,12～939,57：頁面最上面那一條），三張兩邊的 DOM 與樣式指紋都一樣。`029` 是記了很久的偶發（第 254 批修過一輪：那時是 713 px）；`051`、`052` 是新的。",
+        "- **①先查清楚**（每一項寫進計畫，附證據；讀 `web/jianghu.js`、`web/unfold.js`、`web/main.js` 的掛鉤、`web/app.js` 的 `shown()`、兩包的 README 與 `rules.py`）：20 個沒到的景，各自是**被慢慢長出來藏住**（走查的帳號都是新角色）、**新江湖頁上那顆鈕換了名字或搬了位置**、還是**新江湖頁上已經沒有這個東西**？"
+        "6 個 REAL 各自的原因（用 `gate.py --base X --head X --rounds <回合> --only <含那一景的 flow> --no-replay --keep` A 對 A 重現幾次；`051`、`052` 那一條是什麼在動——新江湖頁頂上的「進行中」那一條？倒數？）。找不到原因就照實寫試了什麼。",
+        "- **②PM 定的方向**（照做；查到的事實跟它衝突就停下、把證據寫進 stopped 交 PM）："
+        "(a) **新江湖頁在每一回合都開著**（玩家看到的就是它；不准為了讓舊流程走得到在走查的伺服器把 jianghu 關掉）。舊江湖頁不再走查（玩家看不到），在 `gate.py` 檔頭寫明。"
+        "(b) **慢慢長出來：現有的回合在走查的伺服器把它關掉**（照 `serve.py` 對開場前導 intro 的做法：解出來的那份程式載入內容之後在記憶體裡改 `Config.unfold.enabled`，不改檔）——理由：舊角色本來就全部攤開，現有回合要走的是攤開的畫面；長出來的時機跟同步綁在一起、兩邊不會一樣。"
+        "**另開一個小回合**（名字你取，短的，例 `uf`；加進 `gate.ROUNDS`）只把慢慢長出來打開，走一個新角色：城門口選路之後第一屏（藏著的分頁沒畫）、玩到長出一塊（紅點亮：底部分頁、俠客頁子分頁、人像卡上那一顆）、點開之後紅點滅（`/api/unfold/seen`）。"
+        "這一回合的畫面要**確定**：拍之前等到「該長的長出來了」這個條件成立再拍（讀 `main.unfold` 的 `hide`、`fresh`，或等 DOM），不是等固定幾秒；A 對 A 跑 3 次 0 REAL 才算數。做不到確定就不加這個回合、`web/unfold.js` 留在 `NOT_ON_TABLE`、理由改成真的（「每一回合都把它關掉，因為…」），把試了什麼寫 leftovers 交 PM。"
+        "(c) **20 個景逐個處理**：新江湖頁上有對應的鈕 → 改 `flows/` 的選擇器走新的（景名能留就留，`must_reach.txt` 才對得上）；新江湖頁上已經沒有這個東西 → 從 `must_reach.txt` 拿掉，**計畫裡一景一行寫為什麼**（引 `web/jianghu.js` 的行或 Joy 的提交）；拿不準的不拿掉、寫 leftovers。"
+        "(d) **新江湖頁自己的鈕要走到**：讀 `web/jianghu.js` 的 `registerClicks`／`registerForms`／`registerChanges` 列出它登記的每一個動作，現有回合走不到的補景（放在 main 或 extra 回合最合適的那一段的**後面**，不要插在中間讓後面的景編號全變——編號變了也沒關係但差異要看得懂）；真的走不到的（要特定季況）一個一行寫原因。"
+        "(e) **c 回合那三張**：能在拍的那一側讓畫面確定下來的就修拍法（第 254 批的做法：`driver.mjs` 拍之前的等待、翻 dpr 逼整頁重畫）。**不准做的**照第 254 批：不放寬 aa 門檻（100 px、12 級）、不把景名或檔名列成白名單、不把有樣式或 DOM 差的差歸成雜訊、不讓真的像素變化變成不紅。修不了就照實寫 A 對 A 幾次裡紅幾次，交 PM。",
+        "- **③重建**：走查穩了之後，照 `coverage.py` 檔頭的做法用一次完整的 `gate.py --base X --head X --out <夾> --jobs 4 --write-must-reach`（X＝你的最後一筆；每一回合、season21）重建 `coverage.json` 與 `must_reach.txt`；`NOT_ON_TABLE` 的 `web/jianghu.js` 那一行拿掉（`web/unfold.js` 那一行看 (b) 的結果）；`coverage.py check` 要過。"
+        "`gate.py`、`serve.py`、`coverage.py` 檔頭的說明照改到的補（英文，照檔裡的口氣）。",
+        "- **④驗**：(a) A 對 A（base、head 都給你的最後一筆）每一回合完整走一次：exit 0、REAL 0、必到的景全到；c 回合與新回合另外各再跑 2 次（共 3 次）都 0 REAL，紅了幾次照實寫。"
+        "(b) **靈敏度不能掉**：`selftest.py` 現有的每一種突變改前改後結果一樣，該紅的照紅；另外做一個「只改 `web/jianghu.css` 一條規則」的突變驗一次，要判 REAL（證明新江湖頁現在真的有人在看）。"
+        "(c) `tests/web/test_webqa.py` 綠（它查 `coverage.py check`；跟著改到的補純函式那一層的測試）。`scripts/test_for.py` 挑的跑過。"
+        "(d) 整趟走查的時間改前（PM 這次：九回合 `--web-jobs 4` 37.6 分）改後各多少。這台同時可能有另一波的閘門在跑（pytest `-n 8` 加全軌比對）：碰到像素偶發先重跑一次再追，逾時也是。",
+        "- **做事的順序與提交**：這台今天可能會重開機（企劃者要重開讓顯卡驅動恢復），**每做完一段就提交並推上 `dev/tools-walk-272`**（①的查證寫進計畫就先提交一次；(b)、(c)、(d)、(e) 各一次；重建一次），提交訊息寫做到哪。被中斷之後接手的人從分支的最後一筆與計畫檔接著做。"
+        "時間上限兩段合計 6 小時（完整的九回合走查不要超過 3 次）；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+AP_WALK_LENS = dict(key="walk", text=(
+    "**第 272 批：網頁走查跟上新江湖頁與慢慢長出來**（工具批，只該動 `scripts/webqa/` 與它的測試）。親自驗（解一份 head 到你的暫存夾；模型網址 127.0.0.1:9，**絕不連 11434**；只用派工單給你的埠）："
+    "①對 base 的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔（`wave_gate.py` 有動的話看 decided 的理由）；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔動了就是 blocker。"
+    "②有沒有偷放寬：`noise.py`、`compare.py`、`gate.py` 的差逐行看——aa 門檻（100 px、12 級）有沒有動、有沒有新的景名或檔名白名單、有沒有把樣式或 DOM 有差的差歸成雜訊（有就是 blocker）。走查的伺服器有沒有把新江湖頁關掉（關了就是 blocker：PM 定每一回合都開著）。"
+    "③`must_reach.txt` 拿掉的每一景：計畫裡有沒有一景一行的理由，自己到 `web/jianghu.js`／`web/main.js` 對兩三景看理由站不站得住（新頁上明明還有那顆鈕卻被拿掉的就是 should）。新江湖頁登記的動作（`registerClicks` 等）自己列一次，對 `coverage.json`／`summary.round_files` 看 `web/jianghu.js` 是不是真的被走到、哪幾個動作沒走到而計畫沒寫原因。"
+    "④自己跑：挑最小的兩個回合（含新開的那個回合，如果有）A 對 A 各走一次，exit 0、REAL 0；再做一個只改 `web/jianghu.css` 一條規則的突變走含江湖頁的最小一段，要紅。開發說的時間對不對（完整九回合不用你重跑，閘門會跑）。"
+    "⑤報告與輸出：`report.txt`、`summary.json`、截圖檔名與計畫檔裡有沒有任何一處分得出誰是假人；計畫檔有沒有本機使用者資料夾的路徑（有就列出來，PM 落地時拿掉）。"
+))
+
+WAVES["AP"] = dict(
+    round2=True,
+    extra_lenses=[AP_WALK_LENS],
+    lines=[
+        dict(name="走查跟上新頁", batches=[b272]),
+    ],
+    merge_port=8615, fix_port=8616,
+)
+
+
+# ── AQ 波：網頁走查再跟一次——俠客頁重排、凌煙閣、zh_share 的假差異（PM 2026-11-26 排；工具批，不用點頭）──
+# 起因：AP 波第 272 批開發回來那一刻（11/26 傍晚），Joy 又在 week7、season21 打開俠客頁重排（包 xiake，#312、#316、#317，develop `686b26257`）；凌煙閣（包 lingyan）也在
+# 11/26 #313 打開。第 272 批自己還剩一個假差異（main:245_zh_share）。兩波分開開發，合併與閘門一次：finish 用 AP，built 是 AP、AQ 兩邊接起來（照 X／Y、AA／AB 的做法）。
+AQ_DEVELOP = "686b262578118e27d4e1286468925fc62dbc4869"
+
+
+def b273():
+    plan = "docs/superpowers/plans/2026-11-26-工具批-第273批.md"
+    return batch(273, "工具批第 273 批：網頁走查跟上俠客頁重排與凌煙閣、收掉 zh_share 那個假差異——必到的景走得到、同一筆程式自己對自己 0 個真差異、覆蓋表重建、完整 selftest 跑一次", "core_shared", "dev/tools-walk-273", plan, "8617～8624", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔（加上第一步那一次合併帶進來的 develop）。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/`、`docs/superpowers/pm-workflows/` 一個字不動（走查是工具，不准為了走得到去改畫面）。",
+        "- **你接的是第 272 批**：你的基準就是它的最後一筆（`dev/tools-walk-272` `c3324fd14`）。先讀它的計畫 `docs/superpowers/plans/2026-11-26-工具批-第272批.md`（第八節做了什麼、第九節驗證紀錄）與 `scripts/webqa/flows/common.mjs` 的 `stepVia`／`openLetter`：它讓走查跟上了新江湖頁（每一回合都開著）、把慢慢長出來（unfold）在 `uf` 以外的回合於記憶體裡關掉、新開了 `uf` 回合。這些都留著，不要重做。",
+        "- **第一步：把 develop 合進來**：`git fetch origin " + AQ_DEVELOP + "`、`git merge " + AQ_DEVELOP + "`。只有 `scripts/webqa/gate.py` 的 `NOT_ON_TABLE` 會衝突（第 272 批拿掉了 `web/jianghu.js`、`web/unfold.js` 兩行；Joy 在旁邊加了 `web/xiake.js` 一行）：兩邊都收（jianghu、unfold 那兩行照第 272 批拿掉；`web/xiake.js`、`web/lingyan.js` 兩行先留著，後面走得到了才拿）。合完跑 `tests/web/test_webqa.py`，提交並推上 `dev/tools-walk-273`。",
+        "- **起因（PM 查證過的事實）**：①Joy 2026-11-26 在 week7、season21 打開**俠客頁重排**（`tianxia/features/xiake/`、`web/xiake.js`、`web/xiake.css`；README 與 `docs/guide/地圖與介面.md`「俠客頁重排」那一節）：`web/cultivation.js` 的 `pagePractice`（序章以外）問 `xkOn`，開著就交給 `xkPageHtml`——六顆子分頁換成人像、眼下一張卡、六面牌（武學、裝備、同伴、師門、屬性、江湖錄），點一面從底下拉起那一塊，內容照舊是原本那一頁（`pageOf`）；同伴那一塊另排（親衛一張卡、立繪方格、點一位拉起他的卡）；拉起哪一塊記在 `S.xkSec`，別處跳過來照舊設 `S.heroTab`。伺服器只多送 `main.xiake = {on, faces}`。"
+        "走查的 `flows/` 點的還是舊俠客頁的子分頁，預期一批俠客頁底下的景到不了（幾個、哪幾個要你實跑才知道）；第 272 批 `uf` 回合的「俠客頁子分頁的紅點」那兩景也在這一頁上。"
+        "②**凌煙閣**（`tianxia/features/lingyan/`、`web/lingyan.js`）11/26 在 week7、season21 打開：入口在見聞「江湖史」最上面（`lingyanEntryHtml`），點了去 `GET /lingyan`（伺服器直接回的一整頁，沒登入也看得到）。`NOT_ON_TABLE` 那一行還寫「每個設定都關著」，是舊話。"
+        "③第 272 批最後一趟完整走查（f3）還剩 **1 個 REAL**：`main:245_zh_share`，1280 那一窗，`DIV.shell` 的 margin-left／right 一邊 0、一邊 320，DOM 一樣；f2、f3 兩次都紅、方向相反，f1 沒紅。開發的猜測（沒驗過）：拍 1280 那一窗時讀樣式比改窗寬早了一步（320 等於 640 寬的殼置中在 1280；0 像是在 640 寬時讀到的）。另外 `yw:002_yw_hidden_trip`（1280，7724 px、38 級，行旅卡圖那一塊）f2 紅過一次，看起來是圖還沒解碼完。",
+        "- **①先看壞了什麼**：合完之後用你的那一筆自己對自己完整走一次（`gate.py --base X --head X --out <夾> --jobs 4`，每一回合、season21；這是完整走查的第 1 次），把沒到的必到景與 REAL 逐個列進計畫，各自分成：**俠客頁重排搬了位置**（哪一面牌底下）、**新頁上已經沒有這個東西**、**跟這次無關的偶發**。提交一次。",
+        "- **②PM 定的方向**（照做；查到的事實跟它衝突就停下、把證據寫進 stopped 交 PM）："
+        "(a) **俠客頁重排在每一回合都開著**（玩家看到的就是它；不准在走查的伺服器把 xiake 關掉）。舊俠客頁不再走查，在 `gate.py` 檔頭那一段（第 272 批寫舊江湖頁的地方）補一句。"
+        "(b) **搬了位置的景改走新頁**：照第 272 批 `stepVia` 的想法——要點的東西不在頁上，就先拉起它所在的那一面牌再點；景名能留就留。新頁上已經沒有的 → 從 `must_reach.txt` 拿掉，**計畫裡一景一行寫為什麼**（引 `web/xiake.js`／`web/cultivation.js` 的行）；拿不準的不拿掉、寫 leftovers。"
+        "(c) **俠客頁新頁自己的鈕要走到**：列出 `web/xiake.js` 登記的每一個動作（`registerClicks`／`registerForms`／`registerChanges`），六面牌各拉起一次、關掉一次，同伴方格點一位拉起他的卡；現有回合走不到的補景（放在最合適那一段的後面）；真的走不到的一個一行寫原因。`uf` 回合那兩景照新頁改（紅點現在亮在哪：牌上？拉起來的那一塊裡？讀 `web/unfold.js` 與 `web/xiake.js`）。"
+        "(d) **凌煙閣**：見聞「江湖史」最上面那個入口要有一景拍到；`NOT_ON_TABLE` 的 `web/lingyan.js` 那一行拿掉（`coverage.json` 要真的列到它）。`/lingyan` 那一整頁：看 `driver.mjs` 能不能多拍一張獨立的頁（走查的資料庫是新開的，閣上有什麼要你實看）；畫面確定（A 對 A 3 次 0 REAL）才加，不確定就不加、寫 leftovers。"
+        "(e) **`main:245_zh_share`**：找到原因再修（先在 `--jobs 4` 的負載下把它重現出來：只跑 main 回合、同時另開一條別的回合當負載）。開發的猜測只是猜測，自己驗：1280 那一窗改完窗寬之後，拍照與讀樣式指紋之前有沒有等到版面真的照新寬度排好（例：等 `document.documentElement.clientWidth` 等於目標寬、再過一個 `requestAnimationFrame`）。`yw:002_yw_hidden_trip` 一起看：拍之前等頁上的 `<img>` 都 `complete`／`decode()` 完。"
+        "**不准做的**照第 254、272 批：不放寬 aa 門檻（100 px、12 級）、不把景名或檔名列成白名單、不把有樣式或 DOM 差的差歸成雜訊、不讓真的像素變化變成不紅。修不了就照實寫 A 對 A 幾次裡紅幾次，交 PM。"
+        "(f) **散人打不開「此地還能」**（第 272 批的發現，PM 要轉 Joy，所以證據要準）：新江湖頁上散人的第三格是「投靠」，`jhKinds` 分到 others 的選項（`yiwen:open`、`errand:*` 這一類）是不是真的沒有任何一格拉得起？在計畫裡寫清楚：哪個函式哪幾行、散人看到什麼、投靠過的人看到什麼、舊江湖頁上散人點得到哪些而新頁點不到（實際列出這幾類選項的前綴）。只查、只寫，不改 `web/`。"
+        "(g) **下一次有人重排一頁時要改哪幾處**：Joy 這三天連著重排了江湖頁、俠客頁。在計畫最後寫一節給下一個人的做法（十行以內）：先跑什麼看壞了什麼、`flows/` 靠哪幾個輔助函式找東西、`must_reach.txt` 與 `coverage.json` 怎麼重建、`NOT_ON_TABLE` 什麼時候拿。同一段話濃縮成幾行補進 `gate.py` 檔頭（英文，照檔裡的口氣）。",
+        "- **③重建**：走查穩了之後，用一次完整的 `gate.py --base X --head X --out <夾> --jobs 4 --write-must-reach`（X＝你的最後一筆）重建 `coverage.json` 與 `must_reach.txt`；`NOT_ON_TABLE` 的 `web/xiake.js` 那一行拿掉（`web/lingyan.js` 看 (d)）；`coverage.py check` 要過。重建前後的 `must_reach.txt` diff 一次，除了計畫裡寫了理由的，只能有新增。",
+        "- **④驗**：(a) A 對 A 完整走查**連續兩次**都 exit 0、REAL 0、必到的景全到（第 272 批的偶發大約兩次紅一次，所以要兩次）；紅了幾次照實寫。"
+        "(b) **完整的 `selftest.py` 跑一次**（第 272 批沒跑：約 1.5 小時，分離啟動、輸出導到檔、不花 token 地等）：現有每一種突變（`MUTATIONS`、img-battle、img-battle-spot、hostile、quiet、yw、jh）該紅的照紅、該綠的照綠；另加一個只改 `web/xiake.css` 一條規則的突變（照 `--jh-only` 的寫法，例 `--xk-only`），含俠客頁的最小一段要判 REAL。最後一行原樣貼進回報。"
+        "(c) `tests/web/test_webqa.py` 綠（跟著改到的補純函式那一層的測試）；`scripts/test_for.py` 挑的跑過。"
+        "(d) 整趟走查的時間改前（第 272 批：十回合 `--jobs 4` 38.3 分）改後各多少。這台同時可能有別的東西在跑：碰到像素偶發先重跑一次再追，逾時也是。",
+        "- **做事的順序與提交**：這台今天可能會重開機（企劃者要重開讓顯卡驅動恢復），**每做完一段就提交並推上 `dev/tools-walk-273`**（合併一次；①的清單一次；(b)(c)、(d)、(e) 各一次；重建一次），提交訊息寫做到哪（英文、不要帶 BOM：第 272 批有一筆訊息帶了 BOM）。被中斷之後接手的人從分支的最後一筆與計畫檔接著做。"
+        "時間上限兩段合計 7 小時（完整的十回合走查不要超過 5 次，完整 selftest 1 次）；到了就把做好的推上去、交，沒做完的寫 leftovers。暫存的大檔做完刪掉，**只刪你自己開的夾**。",
+    ] + AK_ENV, custom=True)
+
+
+AQ_WALK_LENS = dict(key="walk2", text=(
+    "**第 273 批：網頁走查跟上俠客頁重排與凌煙閣**（工具批，只該動 `scripts/webqa/` 與它的測試；接在第 272 批後面，中間合過一次 develop `" + AQ_DEVELOP[:9] + "`）。親自驗（解一份 head 到你的暫存夾；模型網址 127.0.0.1:9，**絕不連 11434**；只用派工單給你的埠）："
+    "①對 develop `" + AQ_DEVELOP[:9] + "` 的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、兩份計畫檔；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔動了就是 blocker。"
+    "②有沒有偷放寬：`noise.py`、`compare.py`、`gate.py`、`driver.mjs` 的差逐行看——aa 門檻（100 px、12 級）有沒有動、有沒有新的景名或檔名白名單、有沒有把樣式或 DOM 有差的差歸成雜訊（有就是 blocker）。走查的伺服器有沒有把俠客頁重排或新江湖頁關掉（關了就是 blocker：PM 定每一回合都開著）。`main:245_zh_share` 的修法是不是讓畫面確定下來（等版面排好），而不是讓差異不被看見。"
+    "③`must_reach.txt` 這一批拿掉的每一景：計畫裡有沒有一景一行的理由，自己到 `web/xiake.js`／`web/cultivation.js` 對兩三景看理由站不站得住（新頁上明明還有那顆鈕卻被拿掉的就是 should）。`web/xiake.js` 登記的動作自己列一次，對 `coverage.json` 看它與 `web/lingyan.js` 是不是真的被走到、哪幾個動作沒走到而計畫沒寫原因。"
+    "④自己跑：挑含俠客頁的最小一段與 `uf` 回合 A 對 A 各走一次，exit 0、REAL 0；再做一個只改 `web/xiake.css` 一條規則的突變走含俠客頁的最小一段，要紅。完整十回合不用你重跑，閘門會跑。"
+    "⑤計畫裡「散人打不開此地還能」那一段：自己讀 `web/jianghu.js` 對一次，開發寫的函式、行號、選項前綴對不對（PM 要拿去轉 Joy；寫錯就是 should，附正確的）。"
+    "⑥報告與輸出：`report.txt`、`summary.json`、截圖檔名與計畫檔裡有沒有任何一處分得出誰是假人（凌煙閣那一景特別看：閣上列的名號不能在走查的輸出裡被標成哪一種）；計畫檔有沒有本機使用者資料夾的路徑（有就列出來，PM 落地時拿掉）。用完**只刪你自己開的那一個夾**。"
+))
+
+WAVES["AQ"] = dict(
+    round2=True,
+    extra_lenses=[AQ_WALK_LENS],
+    lines=[
+        dict(name="走查跟上俠客頁", batches=[b273]),
+    ],
+    merge_port=8625, fix_port=8626,
+)
+WAVES["AP"]["extra_lenses"].append(AQ_WALK_LENS)  # 合併與閘門一次：finish 用 AP，built 是 AP、AQ 兩邊接起來
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}

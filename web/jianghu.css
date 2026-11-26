@@ -85,13 +85,14 @@ html.jh2 .tab.on::before { display: none; }
 html.jh2 .tab .ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 7px; font: 700 19px/1 var(--kai); }
 html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: rotate(-3deg); }
 
-/* 剛發生的事收成一行，不寫時刻（PM 2026-11-25：兩行灰字有網頁味）；拿到的東西照舊接在同一行最後 */
-.jh-now .now.one { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.jh-now .now.one .now-one { flex: 1 1 auto; min-width: 0; display: block; min-height: 32px; text-align: left; }
+/* 剛發生的事收成一行，不寫時刻（PM 2026-11-25：兩行灰字有網頁味）；拿到的東西（小籤）排在字的下一行、多了就換行，不跟字搶同一行、不切在螢幕邊（Joy 2026-11-25「貢獻+1這邊畫面沒做好」） */
+.jh-now .now.one { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.jh-now .now.one .now-one { flex: 1 1 100%; min-width: 0; display: block; min-height: 44px; margin: -6px 0 0; text-align: left; }
 .jh-now .tx-when { display: none; }
 .jh-now .now.one .now-line { display: flex; min-width: 0; }
 .jh-now .now.one .now-text-one { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jh-now .now.one .tx-chgs { flex: 0 1 auto; display: flex; flex-wrap: nowrap; overflow: hidden; margin: 0; max-width: 45%; }
+.jh-now .now.one .tx-chgs { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; max-width: 100%; }
+.jh-now .now.one .tx-chgs > * { margin: 0; }
 
 /* 4. 眼下：一張卡、高度固定（標題一行、說明一行、一顆主鈕加稍後） */
 .jh-eye { position: relative; z-index: 2; margin: 0 0 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--accent);
@@ -137,7 +138,21 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
   text-align: center; white-space: nowrap; overflow: visible; text-overflow: ellipsis; cursor: pointer; }
 .jh-ic > span { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 3px; border: 1.5px solid var(--ink-2); border-radius: 10px;
   background: var(--card) center 12% / cover; color: var(--ink); font: 700 22px var(--kai); }
-.jh-ic.all > span { background: var(--ink); border-color: var(--ink); color: var(--paper); font-size: 16px; }
+/* 放不下的俠客：兩枚墨印疊著，底下寫「＋N 俠客」（不是米色實心的「＋N」方塊） */
+.jh-ic.all > span { position: relative; display: block; background: none; border: 0; }
+.jh-ic.all em { position: absolute; display: grid; place-items: center; width: 34px; height: 34px; border: 1.5px solid var(--ink-2); border-radius: 50%; font: 700 15px var(--kai); font-style: normal;
+  background: radial-gradient(circle at 42% 38%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 72%), var(--paper); color: var(--ink); }
+.jh-ic.all em:first-child { left: 2px; top: 4px; }
+.jh-ic.all em:nth-child(2) { right: 2px; bottom: 4px; }
+/* 此地只有俠客：一張橫的俠客卡，墨印疊著＋一行字（不是米色的「＋N」方塊） */
+.jh-crowd { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px 8px 10px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--card); color: var(--ink); text-align: left; cursor: pointer; }
+.jh-crowd-f { display: flex; flex: none; padding-left: 10px; }
+.jh-crowd-f > span { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -10px; border: 1.5px solid var(--ink-2); border-radius: 50%;
+  background: radial-gradient(circle at 42% 38%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 72%), var(--paper); color: var(--ink); font: 700 19px var(--kai); }
+.jh-crowd-f > span:nth-child(2) { transform: translateY(3px); }
+.jh-crowd > b { font: 700 16px var(--kai); letter-spacing: 0.08em; }
+.jh-crowd > i { margin-left: auto; color: var(--ink-2); font-style: normal; font-size: 18px; }
 .jh-ic.foe > span { border-color: var(--accent); }
 .jh-mk { position: absolute; top: 0; right: calc(50% - 32px); padding: 2px 5px; border-radius: 4px; background: var(--accent); color: #fff3e8;
   font: 700 10.5px/1.2 var(--kai); font-style: normal; transform: rotate(4deg); }
@@ -309,3 +324,9 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 
 /* 大標題後面的地形：小一號的灰字，貼在大字後面 */
 .jh-pl h1 .jh-ground { display: inline-block; margin-left: 8px; padding: 0 6px; vertical-align: middle; border: 1px solid var(--line); border-radius: 4px; font: 400 14px/22px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+/* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
+.jh-more { position: relative; }
+.jh-more::after { content: ""; position: absolute; inset: -6px 0; }
+.jh-desc.clamp.one[data-act] { border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin: -8px 0; } /* 收一行的字：overflow 切在 padding 外緣，透明邊框才點得到又不露出第二行 */
+.tx-chg[data-act] { position: relative; }
+.tx-chg[data-act]::after { content: ""; position: absolute; inset: -12px -4px; } /* 紀錄裡「名號傳開 ›」那一顆字籤：點的範圍撐到 44 */

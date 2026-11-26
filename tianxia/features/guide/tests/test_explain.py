@@ -479,7 +479,7 @@ def test_the_stamina_help_reads_the_config(game):
     cfg.beta_free_refill, cfg.stamina_pill_restore = False, 100
     assert _help(game) == [
         "體力每 3 分鐘回 1 點，滿 150 就不再回。",
-        f"回體丹一顆回 100 點（還有 {game.state.player.stamina_pills} 顆），按體力條右端的「丹」服下。",
+        f"回體丹一顆回 100 點（還有 {game.state.player.stamina_pills} 顆），點體力條就能服下。",
     ]  # 打坐 2026-10-12 拿掉了，沒有那一行
     cfg.stamina_regen_seconds, cfg.stamina_max, cfg.stamina_pill_restore = 120, 250, 150
     cfg.newbie_stamina_multiplier = 3
@@ -524,7 +524,7 @@ def test_a_new_character_gets_a_journal_line_for_the_gift(content):
     game = Game.new(content, "沈浪", rng=random.Random(0))
     head = game.state.journal[0]
     assert head.tag == "賽季開始" and head.lines[-1] == guide_howto.gift_line(content)
-    assert head.lines[-1] == f"新手福利：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。"
+    assert head.lines[-1] == f"新手福利：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，點體力條就能服下。"
     assert sum(1 for e in game.state.journal if e.tag == "賽季開始") == 1  # 接在開場那一則裡，不另起一則
 
 
@@ -562,7 +562,7 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
         assert f"先收著；測試期間按體力條上的「{content.config.beta_free_refill_label}」就能免費補滿，不花丹。" in line
         assert "服下" not in line
     else:
-        assert line.endswith("按體力條右端的「丹」服下。") and "補滿" not in line
+        assert line.endswith("點體力條就能服下。") and "補滿" not in line
 
 
 def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_content, world):

@@ -151,7 +151,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
         parts.append("去「煉製」把兩個意境合成新的")  # 待 joy 潤
     if not parts:
         return None
-    return f"💡 你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
+    return f"你已攢下 {xinde} 點心得。{'，或'.join(parts)}。"
 
 
 def fx_traits(content: Content, fx, insight=None) -> list[dict]:

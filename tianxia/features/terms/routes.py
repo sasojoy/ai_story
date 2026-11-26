@@ -5,7 +5,7 @@
 - GET /api/terms：這個帳號要不要按同意（沒登入 401，網頁不理它）。開關關著 404（網頁把非 200 當沒事）。
 - POST /api/terms/agree：{version, source}，version 不是現行版回 409（頁面開著的時候條款改版了）。
 - record_consent(shell, account_key, version, source)：給註冊那一邊叫（設計稿「請註冊那邊接的一個勾選」）。
-- GET /api/terms/version（第 206 批）：註冊頁與建角色頁的勾選要帶現行版號；不用登入、開關關著 404，只回 {version}。
+- GET /api/terms/version（第 206 批）：註冊頁與建角色頁的勾選要帶現行版號；不用登入、開關關著 404，只回 {version, rating}（rating 是登入頁的分級標識）。
 - router 開頭把 _Hook 登記到核心 terms_base（第 206 批）：殼的 register 與 identity 包建角色經它查兩個勾選、記 source=register。"""
 from __future__ import annotations
 
@@ -120,7 +120,8 @@ def router(shell) -> APIRouter:
         """第 206 批：註冊頁與建角色頁的勾選要帶現行版號；還沒有帳號，不看 cookie。關著 404（gate 先於一切）。"""
         if not shell.CONTENT.config.terms.enabled:
             raise HTTPException(404)
-        return {"version": rules.load()["version"]}
+        data = rules.load()
+        return {"version": data["version"], "rating": data["rating_mark"]}  # 分級標識：登入頁畫在條款連結上面（還沒登入，同一趟拿）
 
     @r.get("/api/terms")
     def api_terms(request: Request):
