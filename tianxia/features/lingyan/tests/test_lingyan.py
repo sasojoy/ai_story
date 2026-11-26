@@ -50,7 +50,7 @@ def test_an_ended_season_puts_its_people_on_the_hall_one_cell_each(game):
 def test_a_running_season_is_not_hung_yet(game):
     scrolls, live = hall.hall(game.world, game.content)
     assert scrolls == [] and live in (True, False)
-    assert "閣裡還空著" in hall_html.page(scrolls, live)
+    assert "閣中尚虛" in hall_html.page(scrolls, live)
 
 
 def test_second_time_on_the_hall_and_old_seasons_still_read_after_next_season(game):
