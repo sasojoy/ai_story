@@ -74,10 +74,10 @@ export const flows = [
     await c.crawl("j1", () => c.load("/"), UI, { total: 30, cap: 3 });
     await c.load("/");
     // batch 272: the new 江湖頁 pulls the whole letter up (jh-sheet letter, web/jianghu.js jhSheetHtml) and asks about phone
-    // notices only there, under the letter; 收起 (letter-read) closes it, so 不用 comes before it now
+    // notices only there, under the letter. 收起 (letter-read) is not pressed here: on the old page this click only folded the letter
+    // that comes open (letter-read was never there), so the letter stayed for call's letter_open and notify's ask; it still has to
     await openLetter(c, "j1_letter_toggle", { light: true });
     await c.step('[data-act="push-no"]', "j1_push_no", { who: "p1" });
-    await c.step('[data-act="letter-read"]', "j1_letter_read", { who: "p1" });
     await c.load("/");
     await c.shoot("j1_clean", { who: "p1" });
     const prac = async () => { await c.load("/"); await c.tab("practice"); };
@@ -451,9 +451,8 @@ export const flows = [
       await c.step(`${PICK} ${ACT("fig-act")}`, "call_act", { who: "p1" });
       await c.api("p1", "/api/choose", { id: "call:back" });
       await c.load("/");
+      // batch 272: open only; reading or declining it here would take the letter away from notify's ask (they moved to notify's end)
       await openLetter(c, "letter_open", {});
-      await c.step(ACT("letter-read"), "letter_read", { who: "p1" });
-      await c.step(ACT("letter-decline"), "letter_decline", { who: "p1" });
       await c.load("/");
       await c.step(ACT("checkin"), "checkin", { who: "p1" });
       await c.step(ACT("story-ok"), "story_ok", { who: "p1" });
@@ -767,7 +766,7 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.api("p1", "/api/main");
       await c.load("/");
       await c.shoot("so_result", { who: "p1" });
-      await c.step(ACT("rounds-more"), "so_rounds", {});
+      await stepVia(c, ACT("rounds-more"), SHEET("fight"), "so_rounds", {}); // batch 272: in 全部戰報 on the new page's fight page
       await c.load("/");
       await c.step(ACT("drill-full"), "so_drill", {});
       // batch 272: 巡哨 (act:duty) is a row of the 軍務 list on the new 江湖頁 (web/jianghu.js jhKinds JH_DUTY, jh-sheet duty)
@@ -800,6 +799,12 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.load("/");
       await c.click(ACT("sheet"));
       await c.crawl("sh", async () => { await c.load("/"); await c.click(ACT("sheet")); }, [...UI, "recap", "howto"], { total: 8, cap: 2 });
+      await c.load("/");
+      // batch 272 (from call): the letter read and, when it is a task, declined, on the new 江湖頁's letter layer
+      await openLetter(c, "", {});
+      await c.step(ACT("letter-read"), "letter_read", { who: "p1" });
+      await openLetter(c, "", {});
+      await c.step(ACT("letter-decline"), "letter_decline", { who: "p1" });
       await c.load("/");
     }],
     // batch 236: support is on in week7 and season21. A player opens 客服 › in the sheet, writes a text ticket (no picture);

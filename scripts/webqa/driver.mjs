@@ -74,11 +74,10 @@ async function py(code) {
 }
 
 // ---- chrome / CDP ----
-// Batch 272: --disable-lcd-text. Whether a line of text gets LCD (coloured subpixel) or grayscale anti-aliasing is the compositor's choice
-// per layer when it lays the page out, and with the machine busy it chose differently for the same page: c round 051/052 at 1280, the
-// status line under a pulled-up layer, LCD on one side and grayscale on the other (2066/3310 px, 76 levels; batch 260 saw the same on
-// main nx_invite and went around it with a reload). Grayscale everywhere, on both sides: a glyph that really changes still changes.
-const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${CHROME_PORT}`, `--user-data-dir=${PROFILE}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-lcd-text", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
+// Batch 272 tried --disable-lcd-text here (c round 051/052 at 1280 under load: the status line LCD-antialiased on one side, grayscale on
+// the other). It made the z round red every time instead (admin pages at 1280: a card's shadow edge, 131 px, 2 levels, on both A-against-A
+// walks with it and none without), so it is not used: the LCD choice stays the compositor's.
+const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${CHROME_PORT}`, `--user-data-dir=${PROFILE}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
 let ws, seq = 0, sceneNow = "(start)";
 const pending = new Map();
 const report = { label, round: ROUND, facts: {}, console: [], exceptions: [], http: [], failed: [], statics: {}, scenes: {}, steps: [], apiCalls: [], pyErrors: [] };

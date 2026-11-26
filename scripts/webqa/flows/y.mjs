@@ -1,5 +1,5 @@
 // The last gaps of wave B: the duel, the sortie, the craft and smith corners, figures. Round 4.
-import { CH, CHP, ACT, place, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, CHP, ACT, place, ACCOUNTS, accounts, rich, SHEET, stepVia } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export { ACCOUNTS };
@@ -66,7 +66,10 @@ out = 1`);
     await c.api("p1", "/api/main");
     await c.load("/");
     await c.shoot("y_so_result", { who: "p1" });
-    await c.step(ACT("rounds-more"), "y_so_rounds", {});
+    // batch 272: the new 江湖頁 shows a fight as its own page (web/jianghu.js jhCardPage); the battle card with 回合 is in 全部戰報 (jh-sheet fight)
+    await stepVia(c, ACT("rounds-more"), SHEET("fight"), "y_so_rounds", {});
+    await c.load("/");
+    await c.step(ACT("jh-card-on"), "y_card_on", { who: "p1" });
     await c.load("/");
     await c.tab("news");
     await c.shoot("y_so_news", { who: "p1" });

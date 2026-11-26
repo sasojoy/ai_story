@@ -1,5 +1,5 @@
 // What the main walk did not reach: seals, gear, sorties, crafting from the panel, the push prompts. Wave B's round 3.
-import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, EYE, DUTY, stepVia } from "./common.mjs";
+import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, EYE, DUTY, SHEET, stepVia } from "./common.mjs";
 
 export { ACCOUNTS };
 export const x_week2 = ["x_week2", async (c) => {
@@ -147,7 +147,7 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.api("p1", "/api/main");
     await c.load("/");
     await c.shoot("x_so_result", { who: "p1" });
-    await c.step(ACT("rounds-more"), "x_so_rounds", {});
+    await stepVia(c, ACT("rounds-more"), SHEET("fight"), "x_so_rounds", {}); // batch 272: in 全部戰報 on the new page's fight page
     await c.load("/");
     await c.step(ACT("sortie-far"), "x_so_far", { who: "p1" });
     await place(c, "沈浪", "yingchuan_wilds");
