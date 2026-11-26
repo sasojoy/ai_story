@@ -100,6 +100,84 @@ def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypat
     assert battle.round.stories == {} and battle.round.sexes == {"沈青衫": "男"}
 
 
+# ── 放手一搏的回話經 g._log（第 270 批；企劃者 2026-11-26「兩處都修 (Recommended)」）────────────
+
+
+def _last_round_with_only_my_gamble_left(definition):
+    """最後一回合：對面的黃巾真人已經出了招，只差這一位官軍的放手一搏，送出去就收掉決戰。"""
+    def setup(b):
+        b.round_number = battle_instance.total_rounds(definition) - 1
+        battle_instance.submit_action(b, "乙玩家", battle_instance.safest_option_tag(b, definition, "乙玩家"))
+    open_world().mutate_battle(setup)
+
+
+def _one_short_of_the_first_fame_tier():
+    """名望差一點就跨進「小有名氣」；這一季的段已經看過（不寫第一次的說明那一則）。"""
+    from tianxia import renown
+    from tianxia.state import RenownSeen
+    s = server.game_for("沈青衫").state  # 同 _a_showdown_fighter：改伺服器手上那一份再存
+    bar = renown.fame_bars(server.CONTENT, s.world)[0]
+    s.player.stats["fame"] = bar - 1
+    s.player.renown_seen = RenownSeen()
+    s.player.renown_told = True
+    open_characters().save(s)
+
+
+def test_my_own_gamble_that_closes_the_showdown_gets_the_fame_gap_and_the_rank_up_in_the_same_entry(client, monkeypatch):
+    """(a) 自己這一搏收掉決戰：決戰那一則的「名望 +N」後面接「（離「…」還差 M）」，升段的句子與金色籤在同一則，
+    這一下的存檔就有、不必等下一次同步；回話也寫進 GameState.log。把 routes.py 的 g._log 拿掉這一條會紅。"""
+    from tianxia import journal, renown
+    definition = _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    _one_short_of_the_first_fame_tier()
+    _last_round_with_only_my_gamble_left(definition)
+    monkeypatch.setattr(battle_instance, "score_gamble", lambda *a, **k: 100)
+    logged = len(open_characters().load("沈青衫").log)
+    out = client.post("/api/do/battle_text", json={"text": "孤身闖陣，奪旗而還"}).json()
+    assert open_world().get_battle().phase == "ended"
+    saved = open_characters().load("沈青衫")  # 這一下的存檔（不再打 /api/main）
+    entry = saved.journal[0]
+    assert entry.title.startswith("黃巾決戰・")
+    fame = [c for c in entry.changes if c.startswith("名望 +")]
+    assert len(fame) == 1 and "（離「名動一方」還差 " in fame[0], entry.changes
+    assert renown.UP_FAME.format(title="小有名氣") in entry.lines
+    assert journal.renown_mark("小有名氣") in entry.changes
+    # 新頁與舊頁畫的那兩格（/api/main 的 card、now）：差距在戰報卡的得失、升段與金色籤在「剛剛」的補充
+    assert "還差" in out["main"]["card"]
+    assert "小有名氣" in out["main"]["now"] and "名號傳開" in out["main"]["now"]
+    assert len(saved.log) > logged and saved.log[-1] == journal.LOG_BREAK
+
+
+def test_my_own_gamble_in_a_round_that_does_not_close_replies_the_same_and_is_logged(client):
+    """(b) 沒收場的回合：回話一字不變（等待其他人），江湖紀錄不多，只多寫進 GameState.log。"""
+    _a_showdown_fighter(client, started=True)
+    client.post("/api/choose", json={"id": "battle:join_late"})
+    before = _journal_titles()
+    out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
+    assert out["message"] == "<p>你選擇了行動，等待其他人……</p>\n"
+    assert _journal_titles() == before
+    log = open_characters().load("沈青衫").log
+    assert log[-2:] == ["你選擇了行動，等待其他人……", "\x1e"]
+
+
+@pytest.mark.parametrize("battle, text, said", [
+    (False, "直取波才首級", "（此刻無法這麼做。）"), (True, "   ", "（請先輸入你想做的事。）"),
+])
+def test_a_gamble_that_is_turned_away_says_the_same_line_and_adds_no_deed(client, battle, text, said):
+    """(c) 被擋下（沒有決戰、空白字）：回的那一句照舊，行狀、江湖紀錄、GameState.log 都不多（A 段就回了，到不了 C 段）。"""
+    if battle:
+        _a_showdown_fighter(client, started=True)
+        client.post("/api/choose", json={"id": "battle:join_late"})
+    else:
+        _player(client)
+    before = open_characters().load("沈青衫")
+    out = client.post("/api/do/battle_text", json={"text": text}).json()
+    assert out["message"] == f"<p>{said}</p>\n"
+    saved = open_characters().load("沈青衫")
+    assert [e.title for e in saved.journal] == [e.title for e in before.journal]
+    assert saved.player.annals == before.player.annals and saved.log == before.log
+
+
 def test_a_showdown_option_that_is_no_longer_there_still_says_so(client):
     _a_showdown_fighter(client)
     out = client.post("/api/choose", json={"id": "battle:act:safe"}).json()
