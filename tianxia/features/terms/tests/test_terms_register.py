@@ -41,7 +41,7 @@ def _reg(c, login, **extra):
 def test_terms_version_route(fresh, monkeypatch):
     c = TestClient(server.app)
     r = c.get("/api/terms/version")
-    assert r.status_code == 200 and r.json() == {"version": rules.load()["version"]}  # 沒 cookie 也拿得到
+    assert r.status_code == 200 and r.json() == {"version": rules.load()["version"], "rating": rules.load()["rating_mark"]}  # 沒 cookie 也拿得到；分級標識同一趟（總檢查 11/25）
     monkeypatch.setattr(server.CONTENT.config.terms, "enabled", False)
     assert c.get("/api/terms/version").status_code == 404
 

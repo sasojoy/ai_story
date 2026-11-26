@@ -1,0 +1,159 @@
+/* 俠客頁重排（功能包 xiake；web/xiake.js）。只在 main.xiake 開著時畫出 .xk-page；其餘一字不變。
+   色票照 style.css 的 :root（介面設計規範第二節）；寫死的顏色只用在圖上的字（疊在畫上）與牌子本身（墨底金字，同江湖頁的行動牌與招牌）。 */
+
+/* 舊的狀態列：人像上已經有狀態那一行（江湖頁那一條），這一頁不畫舊的 */
+.shell:has(.xk-hero.st) > header.top { display: none; }
+.page:has(> .xk-page) { padding-top: 0; }
+.xk-page { --xk-fade: 244, 237, 224; position: relative; }
+@media (prefers-color-scheme: dark) { .xk-page { --xk-fade: 22, 19, 15; } }
+
+/* 1. 人像當主角：所在地的圖滿版、往下暈進紙色；墨色人像在右，名號在左 */
+.xk-hero { position: relative; margin: 0 -16px; min-height: calc(340px + var(--top)); padding-top: var(--top); overflow: hidden; }
+.xk-art { position: absolute; inset: 0 0 auto 0; width: 100%; height: calc(340px + var(--top)); object-fit: cover; object-position: center 35%; display: block; }
+.xk-art.none { background: var(--card-2); }
+.xk-hero::after { content: ""; position: absolute; inset: 0 0 auto 0; height: calc(341px + var(--top)); pointer-events: none; z-index: 1;
+  background: linear-gradient(180deg, rgba(20, 14, 8, 0.55) 0, rgba(20, 14, 8, 0.05) 22%, rgba(var(--xk-fade), 0.55) 48%, rgba(var(--xk-fade), 0.93) 80%, rgb(var(--xk-fade)) 100%); }
+@media (prefers-color-scheme: dark) { .xk-art { filter: brightness(0.74) saturate(0.85); } }
+.xk-hero .jh-st { position: relative; z-index: 3; }
+.xk-hero .jh-nm b { display: none; } /* 名號題在畫上那一行大字，狀態行不寫第二次 */
+.xk-fig { position: absolute; z-index: 2; right: 4px; bottom: 0; height: calc(100% - 64px - var(--top)); max-height: 290px; width: auto; pointer-events: none; }
+@media (prefers-color-scheme: dark) { .xk-fig { filter: drop-shadow(0 0 1.5px rgba(232, 214, 180, 0.85)) drop-shadow(0 0 14px rgba(232, 214, 180, 0.35)); } }
+.xk-who { position: absolute; z-index: 3; left: 20px; bottom: 6px; max-width: 58%; }
+.xk-who h1 { margin: 0; font: 700 46px/1.05 var(--kai); letter-spacing: 0.1em; color: var(--ink); overflow-wrap: anywhere;
+  text-shadow: 0 0 14px rgb(var(--xk-fade)), 0 0 4px rgb(var(--xk-fade)); }
+.xk-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.xk-tag { display: inline-grid; place-items: center; padding: 3px 6px; border: 1.5px solid var(--accent); border-radius: 4px; color: var(--accent);
+  font: 700 12px/1.15 var(--kai); background: color-mix(in srgb, var(--card) 80%, transparent); transform: rotate(-3deg); }
+.xk-pw { margin-top: 8px; font: 400 14px var(--kai); color: var(--ink-2); }
+.xk-pw b { margin-left: 4px; font: 700 28px var(--kai); color: var(--accent); }
+.xk-links { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
+.xk-links .hero-annals { min-height: 36px; padding: 0; font: 400 14px var(--kai); color: var(--ink-2); background: none; border: 0; }
+
+/* 2. 旁白：不裝框 */
+.xk-prose { margin: 10px 6px 12px; font: 400 16px/1.7 var(--kai); color: var(--ink); }
+.xk-prose p { margin: 0; }
+.xk-prose .em { color: var(--ink-2); }
+
+/* 共用小印 */
+.xk-seal { flex: none; display: inline-grid; place-items: center; padding: 2px 5px; border: 1.5px solid var(--accent); border-radius: 4px; color: var(--accent);
+  font: 700 12px/1.2 var(--kai); font-style: normal; background: color-mix(in srgb, var(--card) 85%, transparent); transform: rotate(-3deg); white-space: nowrap; }
+
+/* 3. 眼下一張卡 */
+.xk-eye { margin: 0 0 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--accent); border-radius: 4px 14px 14px 4px; box-shadow: var(--shadow); }
+.xk-eye-hd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.xk-eye-hd h2 { flex: 1; min-width: 0; margin: 0; font: 700 19px/1.3 var(--kai); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xk-eye p { margin: 4px 0 0; font: 400 14.5px/1.55 var(--kai); color: var(--ink-2); }
+.xk-more { flex: none; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 999px; background: var(--accent); color: #fff3e8; font: 700 12.5px var(--sans); cursor: pointer; }
+.xk-more i { font-style: normal; margin-left: 2px; }
+.xk-eye-go { display: flex; gap: 10px; margin-top: 10px; }
+.xk-eye-go .btn { flex: none; width: auto; padding: 0 18px; min-height: 44px; font-family: var(--kai); font-size: 16px; letter-spacing: 0.15em; }
+.xk-eye-go .btn.primary { flex: 1; }
+.xk-row { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 0; border-top: 1px dashed var(--line); margin-top: 8px; }
+.xk-row b { flex: 1; min-width: 0; font: 700 15px var(--kai); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xk-row .btn { min-height: 40px; }
+
+/* 4. 六面牌：墨底金字，牌上一個大字當底紋（同江湖頁「軍務」那面） */
+.xk-pls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px; }
+.xk-pls.two { grid-template-columns: repeat(2, 1fr); }
+.xk-pls.one { grid-template-columns: 1fr; }
+.xk-pls.two .xk-pl { height: 84px; }
+.xk-pl { position: relative; height: 76px; padding: 0; overflow: hidden; text-align: left; cursor: pointer; border-radius: 10px;
+  background: linear-gradient(180deg, #30251a, #1d160f); border: 1px solid #4a3a26; box-shadow: inset 0 0 0 2px rgba(214, 165, 72, 0.18); }
+.xk-pl i { position: absolute; right: -4px; top: -12px; font: 700 70px/1 var(--kai); font-style: normal; color: rgba(214, 165, 72, 0.22); pointer-events: none; }
+.xk-pl b { position: absolute; left: 12px; top: 12px; font: 700 19px var(--kai); letter-spacing: 0.18em; color: #f6ead2; }
+.xk-pl small { position: absolute; left: 12px; right: 8px; bottom: 9px; font: 400 11.5px var(--sans); color: #cdb995; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xk-pl .dot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; background: #e0574a; border: 1.5px solid #1d160f; }
+.xk-pl:active { transform: translateY(1px); }
+
+/* 拉起的那一塊：頂上留一條暗下去的圖與狀態（點了收起），底下圓角的紙 */
+.xk-hero.mini { min-height: calc(70px + var(--top)); }
+.xk-hero.mini .xk-art { height: calc(120px + var(--top)); }
+.xk-hero.mini::after { height: calc(121px + var(--top)); }
+.xk-dim { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; background: rgba(15, 10, 5, 0.45); cursor: pointer; }
+.xk-hero.mini .jh-st { z-index: 3; }
+.xk-sheet { position: relative; z-index: 4; margin: -6px -16px 0; padding: 8px 16px 20px; min-height: calc(100vh - 120px); background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.22); }
+.xk-grip { width: 44px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--line); }
+.xk-sh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.xk-sh h2 { margin: 0; font: 700 26px var(--kai); letter-spacing: 0.12em; }
+.xk-sh-sub { margin-left: 4px; padding-top: 6px; font: 400 13px var(--sans); color: var(--ink-2); }
+.xk-sh .xk-x { margin-left: auto; }
+.xk-x { margin-left: auto; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; font-size: 20px; color: var(--ink-2); cursor: pointer; }
+.xk-sheet > .msg:empty { display: none; }
+.xk-sheet .hero-tabs { display: none; }
+
+/* 同伴那一塊：親衛一張卡、立繪方格 */
+.xk-gd { display: flex; gap: 12px; padding: 12px; margin-bottom: 6px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--gold); border-radius: 4px 14px 14px 4px; box-shadow: var(--shadow); }
+.xk-gd.hot { border-left-color: var(--accent); }
+.xk-gd-face { flex: none; width: 84px; height: 110px; border-radius: 10px; background: var(--card-2) center 12% / cover; border: 1.5px solid var(--gold); }
+.xk-gd-bd { flex: 1; min-width: 0; }
+.xk-gd h3 { margin: 0; display: flex; align-items: center; gap: 8px; font: 700 21px var(--kai); letter-spacing: 0.1em; }
+.xk-gd-sub { margin: 2px 0 4px; font: 400 12.5px var(--sans); color: var(--ink-2); }
+.xk-gd p { margin: 0 0 8px; font: 400 14.5px/1.55 var(--kai); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.xk-gd-go { display: flex; gap: 8px; flex-wrap: wrap; }
+.xk-gd-go .btn { min-height: 44px; font-family: var(--kai); font-size: 15px; }
+.xk-gd-go .btn.primary { flex: 1; }
+.xk-gd-back { width: 100%; margin: 8px 0 4px; min-height: 44px; }
+.xk-sec { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 10px; }
+.xk-sec h3 { margin: 0; font: 700 15px var(--kai); letter-spacing: 0.24em; color: var(--ink-2); }
+.xk-sec small { margin-left: auto; font: 400 12px var(--sans); color: var(--ink-2); }
+.xk-mates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 8px; }
+.xk-mt { position: relative; display: grid; justify-items: center; gap: 1px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--ink); font: 400 13px var(--kai); }
+.xk-mt-face { display: grid; place-items: center; width: 70px; height: 84px; border-radius: 10px; background: var(--card) center 10% / cover; border: 1.5px solid var(--line); }
+.xk-mt-face.tx { font: 700 30px var(--kai); color: var(--ink-2); }
+.xk-mt.fight .xk-mt-face { border-color: var(--ink); box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink); }
+.xk-mt .xk-seal { position: absolute; top: -5px; left: calc(50% - 40px); font-size: 11px; padding: 1px 4px; }
+.xk-mt.fight .xk-seal { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.xk-mt b { margin-top: 3px; font: 700 14px var(--kai); max-width: 84px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xk-mt small { font: 400 11px var(--sans); color: var(--ink-2); }
+.xk-none { padding: 14px; border: 1px dashed var(--line); border-radius: 10px; font: 400 14.5px/1.6 var(--kai); color: var(--ink-2); text-align: center; }
+
+/* 點一位同伴：拉起他的卡 */
+.sheet.xk-card { padding: 0; overflow: auto; }
+.xk-card-pt { height: 230px; background: var(--card) center 8% / cover; position: relative; }
+.xk-card-pt::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(var(--xk-fade, 244, 237, 224), 0) 45%, var(--paper) 100%); }
+.xk-card-pt.tx { height: 120px; display: grid; place-items: center; }
+.xk-card-pt.tx span { width: 76px; height: 76px; display: grid; place-items: center; border: 2px solid var(--ink-2); border-radius: 14px; font: 700 40px var(--kai); }
+.xk-card-in { position: relative; margin-top: -54px; padding: 0 18px 22px; }
+.xk-card-pt.tx + .xk-card-in { margin-top: 0; }
+.xk-card-in h2 { margin: 0 0 10px; display: flex; align-items: flex-end; gap: 10px; font: 700 32px var(--kai); letter-spacing: 0.1em; }
+.xk-card-in h2 small { padding-bottom: 6px; font: 400 13px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.xk-ak { padding: 10px 12px 6px; margin-bottom: 6px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--ink); border-radius: 4px 12px 12px 4px; }
+.xk-ak.q4 { border-left-color: var(--gold); }
+.xk-ak-t { display: flex; align-items: baseline; gap: 8px; }
+.xk-ak-t b { font: 700 17px var(--kai); }
+.xk-ak-t small { font: 400 12.5px var(--sans); color: var(--ink-2); }
+.xk-ak .sa-ten { display: block; margin-top: 4px; }
+.xk-ak .sa-ink { width: 100%; height: auto; display: block; }
+.xk-card-in .mate-lines { margin: 8px 0 0; font: 400 13px/1.6 var(--sans); color: var(--ink-2); }
+.xk-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.xk-dos > :only-child { grid-column: 1 / -1; }
+.xk-dos .btn { min-height: 52px; font-family: var(--kai); font-size: 16px; letter-spacing: 0.1em; }
+.xk-teach { display: grid; place-items: center; gap: 1px; line-height: 1.2; }
+.xk-teach small { font: 400 11.5px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+.xk-card-in .lessons { margin-top: 8px; }
+.xk-release { display: block; margin: 12px auto 0; min-height: 40px; font: 400 13px var(--sans); color: var(--ink-2); }
+.xk-card-x { width: 100%; margin-top: 8px; min-height: 44px; }
+
+/* ── 第二批：拉起那一塊裡面照示意稿排 ── */
+.xk-sb { display: flex; flex-direction: column; }
+.xk-sb > * { order: 3; }
+/* 武學：身上兩門擺最上面，煉製、自創兩面牌接著，功法庫、規矩在後面；定名那一張（有事要做）最先 */
+.sec-arts .xk-sb > .naming { order: 0; }
+.sec-arts .xk-sb > section[aria-label="武學"] { order: 1; }
+.sec-arts .xk-sb > section[aria-label="去做"] { order: 2; margin-top: 4px; }
+.sec-arts section[aria-label="武學"] > .self-hd, .sec-arts section[aria-label="去做"] > .self-hd { display: none; }
+.sec-arts .self-goes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sec-arts .self-goes > :only-child { grid-column: 1 / -1; }
+.sec-arts .self-go { position: relative; overflow: hidden; height: 76px; padding: 12px 12px 9px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+  text-align: left; border-radius: 10px; background: linear-gradient(180deg, #30251a, #1d160f); border: 1px solid #4a3a26; box-shadow: inset 0 0 0 2px rgba(214, 165, 72, 0.18);
+  font: 700 19px var(--kai); letter-spacing: 0.18em; color: #f6ead2; }
+.sec-arts .self-go small { font: 400 11.5px var(--sans); letter-spacing: 0; color: #cdb995; }
+.sec-arts .self-go::before { position: absolute; right: -4px; top: -12px; font: 700 70px/1 var(--kai); color: rgba(214, 165, 72, 0.22); pointer-events: none; }
+.sec-arts .self-go[data-tab="craft"]::before { content: "爐"; }
+.sec-arts .self-go[data-act="create-open"]::before { content: "創"; }
+.sec-arts .self-go[disabled] { opacity: 0.55; }
+.sec-arts .self-go .dot { position: absolute; top: 7px; right: 7px; }
+/* 屬性：有點可配時，可配那一行是一張朱邊小卡 */
+.sec-attrs .self-hd:has(.pts) { justify-content: space-between; padding: 6px 8px 6px 14px; margin-bottom: 8px; border: 1px solid var(--accent); border-left-width: 4px; border-radius: 4px 10px 10px 4px; background: var(--card); }
+.sec-attrs .self-hd:has(.pts) .pts { margin: 0; font: 700 17px var(--kai); letter-spacing: 0.06em; }
+.sec-arts .lib-sec > .self-hd small { display: none; } /* 功法庫用了幾格寫在標題旁，一樣東西只寫一次 */

@@ -423,7 +423,21 @@ class UnfoldBook(BaseModel):
     # card 是此刻攤著的那一張「種類|對象」（「sect|baima」「mail|白飛」），空的是沒有；同一時間只攤一張
     done: list[str] = Field(default_factory=list)
     card: str = ""
+    # 第一次碰到的系統帶著做一次（Joy 2026-11-26「照建議」）：old 是舊角色那一本（開關打開以前就在玩的人：不藏分頁、不出見面禮與買後那幾張、
+    # 提示照舊，只出小事卡與帶著做）；lead 是正在帶的那一件「種類|對象|這一步|起點」（空的是沒在帶）；later 是按過一次「改天」的「種類@世界秒」
+    old: bool = Field(False, json_schema_extra=QUIET)
+    lead: str = Field("", json_schema_extra=QUIET)
+    later: list[str] = Field(default_factory=list, json_schema_extra=QUIET)
 
+    @model_serializer(mode="wrap")
+    def _drop_quiet(self, handler):
+        """標 QUIET 的三格是空的、False 的時候不寫鍵（巢狀模型 PlayerState 那一層管不到）：沒帶過的角色存檔一個字都不多。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in _quiet_fields(UnfoldBook):
+                if key in data and not data[key]:
+                    del data[key]
+        return data
 
 class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：

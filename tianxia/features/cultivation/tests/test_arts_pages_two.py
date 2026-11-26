@@ -1011,7 +1011,7 @@ def test_an_empty_library_says_whose_slots_the_count_is_and_not_that_it_is_empty
     """U-14（手機介面自檢 2026-10-31）：標題寫「功法庫 3/50」（身上兩門＋意境一份也佔格），點開不能說「功法庫是空的」。"""
     rows = [_art("w1", "武學", "甲拳", worn=True), _art("n1", "內功", "乙功", worn=True)]
     html = _practice(rows, insights=[_insight("feng", "風")], holdings={"count": 3, "cap": 50})
-    assert "功法庫 3/50" in html and "功法庫是空的" not in html
+    assert "功法庫 3／50" in html and "功法庫是空的" not in html
     assert "庫裡還沒有閒置的武學。上面的 3/50 是身上練的 2 門、意境 1 份佔的。" in html
     bare = _practice([], insights=[], holdings={"count": 0, "cap": 50})
     assert "庫裡還沒有閒置的武學。合成出來的" in bare  # 什麼都沒有：不多那一句
@@ -1037,7 +1037,7 @@ def test_create_short_of_xinde_greys_the_entry_and_the_button_and_says_how_much_
     c = m["status"]["create"]
     need = c["price"] - 24
     assert c["on"] and c["problem"] is None and need > 0
-    hero = run(m, "return H.pagePractice();", menxia=x)
+    hero = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "arts"})  # 俠客頁重排（xiake 包）：入口在拉起的武學那一塊
     entry = re.search(r'<button class="btn self-go" data-act="create-open"[^>]*>自創武學<small>([^<]*)</small>', hero)
     assert entry and " disabled" in entry.group(0) and entry.group(1) == f"還差 {need} 心得"
     page = run(m, "return H.pagePractice();", menxia=x, S={"createOpen": True, "createPick": {"kind": "武學", "form": "拳腳"}})

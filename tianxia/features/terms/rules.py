@@ -60,6 +60,9 @@ def check(data: dict) -> list[str]:
         dt.date.fromisoformat(data["published"])
     except ValueError:
         problems.append("terms.json 的 published 要寫成 YYYY-MM-DD")
+    mark = data.get("rating_mark")  # 遊戲分級標識（遊戲軟體分級管理辦法第 11～13 條）：登入頁與兩頁條款頂上畫的那一塊
+    if not isinstance(mark, dict) or not mark.get("short") or not mark.get("age") or not mark.get("lines"):
+        problems.append("terms.json 的 rating_mark 要有 short、age、lines（分級標識與警語）")
     for field in ("name", "tax_id", "address", "email"):
         if not data["company"].get(field):
             problems.append(f"terms.json 的 company 少了 {field}")

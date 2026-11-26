@@ -31,6 +31,11 @@ APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那�
 WIDE = "{ vw: 2400, vh: 3600 }"
 
 
+
+def _say(word):
+    """網頁畫勝算的說法（web/map.js ODDS_SAY，2026-11-26 全站總檢查 C）。"""
+    return {"穩勝": "穩贏", "必敗": "打不過", "凶險": "很險"}.get(word, word)
+
 def _game(faction="guan", at="yingchuan", profile="week7", content=None):
     c = content or real_content(profile)
     c.config.auto_open_first_season = True
@@ -370,9 +375,9 @@ def test_fb262_standing_there_still_shows_the_odds():
     assert p["sortie"] == "attack" and p["odds"]
     out = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
     foes = out[out.index("此地的對手"):out.index('class="m-foes"') + 400]
-    assert p["odds"]["word"] in foes
+    assert _say(p["odds"]["word"]) in foes
     sortie = out[out.index('data-key="sortie"'):]
-    assert p["odds"]["word"] in sortie[: sortie.index("</button>")]
+    assert _say(p["odds"]["word"]) in sortie[: sortie.index("</button>")]
     calm = run(_game(faction="guan", at="yingchuan"), 'return H.placeCard(H.S.mapBase, H.S.mapState, "yingchuan");')
     assert "沒有對手" in calm[calm.index("此地的對手"):calm.index("此地的對手") + 200]
 
@@ -392,9 +397,9 @@ def test_fb905_a_passing_convoy_makes_the_card_button_say_intercept_without_the_
     out = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");', st=st)
     sortie = out[out.index('data-key="sortie"'):]
     button = sortie[:sortie.index("</button>")]
-    assert "出陣・截糧" in button and "出陣・攻" not in button and p["odds"]["word"] not in button and "今日還能" in button
+    assert "出陣・截糧" in button and "出陣・攻" not in button and _say(p["odds"]["word"]) not in button and "今日還能" in button
     foes = out[out.index("此地的對手"):out.index('class="m-foes"') + 400]
-    assert p["odds"]["word"] in foes  # 對手那一段照舊寫運糧隊與勝算
+    assert _say(p["odds"]["word"]) in foes  # 對手那一段照舊寫運糧隊與勝算
 
 
 def test_the_card_says_what_you_can_sense_with_the_strongest_filled():

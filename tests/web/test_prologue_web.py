@@ -183,7 +183,7 @@ def test_after_meeting_the_master_only_the_name_and_xinde_and_two_tabs_show(hut)
     top = out["top"]
     assert "心得" in top and 'class="bar stam"' not in top and 'class="bar hp"' not in top and "<em>銀</em>" not in top
     assert 'data-act="toggle-more"' not in top and 'class="who static"' in top  # 屬性還沒亮：名號不是按鈕
-    assert "第 " not in top and "下一件" not in top  # 序章裡所在只寫地名：沒有日期
+    assert not re.search(r"第 \d+ 週", top) and "下一件" not in top  # 序章裡所在只寫地名：沒有日期
     tabs = out["tabs"]
     assert re.findall(r'data-tab="(\w+)"', tabs) == ["jianghu", "practice"]
     assert "repeat(2, 1fr)" in tabs and re.search(r'data-glow="[^"]*\btab:practice\b', tabs)
@@ -473,7 +473,7 @@ def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
     assert '<p class="train-why">師父這一步沒叫你練功。</p>' in page  # 原因寫在朱印底下那一行
     m, x = pages_at(hut, 4)  # 練到第三成那一步：裝了意境的基礎拳腳就在身上（武學重構：不必先換上），武學那一欄練得下去
     page = run(m, "return H.pagePractice();", menxia=x)  # 師父叫你練：沒點過光點，抽屜也先攤開練得下去的那一門
-    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" aria-label="練成第\d+成（心得 \d+）"[^>]*><b>練</b><small>心得', page)
+    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" aria-label="練成第 \d+ 成（心得 \d+）"[^>]*><b>練</b><small>心得', page)
 
 
 LONG_WORDS = "這一段師父的話很長很長，" * 8 + "\n\n" + "最後一段才是要你做的事：按底下的鈕。"
@@ -892,7 +892,7 @@ def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):
     page = _scroll_page(prologue_content, S={"artInfo": "basic_fist"})
     assert "●" not in page and "○" not in page
     # 俠客頁改版（Joy 2026-10-26）之後本人的角色卡不再整張攤在門下：門下卡上的兩門是同一種十格（sa-ten）
-    assert 'class="sa-ten" role="meter"' in page and 'aria-label="粗淺拳腳第1成"' in page
+    assert 'class="sa-ten" role="meter"' in page and 'aria-label="粗淺拳腳第 1 成"' in page
     assert "→" not in page and "下一品" not in page
 
 
