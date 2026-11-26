@@ -126,7 +126,7 @@ class BattleScenario(Scenario):
     PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster_seat", "muster", "muster_pick",
                     "muster_more", "siege_muster", "siege_cancel", "siege_start", "start", "late", "gamble"]
     PHASES_SECOND = ["narrate", "wander", "fight", "siege_end", "deliver", "muster_deliver", "reports", "restore", "admin_trial", "siege_after",
-                     "bots", "siege_bots", "siege_shelve", "season"]
+                     "bots", "siege_bots", "siege_shelve", "season", "last_gamble"]  # 第 270 批：最後新開一段（前面的段一個請求都不多打）
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -1271,6 +1271,67 @@ class BattleScenario(Scenario):
         emit(f"{name} 站在大區外", loc)
         self.give_mate(name, side)
         return {seed}
+
+    # ── 第 270 批：自己這一搏收掉決戰（PHASES_SECOND 最後一段；計畫 docs/superpowers/plans/2026-11-26-決戰回話經紀錄-第270批.md）──
+
+    def last_gamble(self) -> None:
+        """換季之後再開一場（target），只有秦朗月一位加入：每一回合他放手一搏（/api/do/battle_text；搏之前氣血補滿，不讓他中途倒下），這一搏是這一回合唯一的招，
+        送出就湊滿、結算——收場的那一回合也是他還站著時這一搏收的（expect 驗）。收場之後他輪詢一次，寫出最新三則紀錄
+        （標題、時間、得失那一排：決戰那一則的名望後面接不接差距、升段的句子在不在同一則）。測試內容沒有決戰：略過。"""
+        if not self.c.battles:
+            emit("這份內容沒有決戰：自己一搏收場那一段略過", None)
+            return
+        self.login_all()  # 登入狀態認 SESSION_SECONDS（同 progress 一軌 quiet_open）：換季之後再登入一次
+        for who in self.PLAYERS:
+            self.settle_choices(who)
+        self.join()
+        op, battle_id = self.target()
+        if not self.live_showdown():
+            self.do(ADMIN, op, {"id": battle_id})
+        b = self.world.get_battle()
+        if b is None or b.phase == "ended":
+            emit("自己一搏收場的那一場沒開成", None)
+            return
+        duo = (self.GAMBLER,)  # 只有他一位：這一搏一定是這一回合最後一個收的招（兩軍各一位時他第 8 回合被集火倒下，收場那一下是對面按鈕收的）
+        for who in duo:
+            self.place(who, self.spot(b.battle_id))
+            pick = self.join_pick(who, self.ids(self.main(who)))
+            if pick is not None:
+                self.choose(who, pick)
+                self.no_escort(who)
+        b = self.world.get_battle()
+        if b is not None and b.phase == "muster":
+            self.skip_past(b.muster_deadline_real)
+            self.main(self.GAMBLER)
+        closed = False
+        for _ in range(40):
+            b = self.world.get_battle()
+            if b is None or b.phase != "active":
+                break
+            n = b.round_number
+            # 第 270 批第二段：每一搏之前把他這一場的氣血補滿（排局面）——第一段的跑法他第 8 回合自己搏輸倒下，
+            # 第 9 回合是同一個請求回頁面時的同步收的（synced），走不到 C 段收場
+            self.world.mutate_battle(self._refill_gambler)
+            me = self.world.get_battle().participants.get(self.GAMBLER)
+            up = me is not None and not me.eliminated
+            self.do(self.GAMBLER, "battle_text", {"text": "孤身闖陣，奪旗而還"})
+            after = self.world.get_battle()
+            closed = up and (after is None or after.phase == "ended")
+            if not closed and after.round_number == n:  # 這一搏沒送出去（倒下了）：推過期限、輪詢一次
+                self.skip_past(after.round.opened_real + self.c.battles[after.battle_id].round_seconds)
+                self.main(self.GAMBLER)
+        self.battle_row("自己一搏之後")
+        self.expect(closed, "收場的那一回合是秦朗月自己這一搏收的")
+        for who in duo:
+            self.main(who)
+            state = self.chars.load(who)
+            emit(f"{who} 自己一搏收場之後的紀錄", [[e.title, e.time, e.lines, e.changes] for e in state.journal[:3]])
+            self.me(who, "自己一搏收場之後")
+
+    def _refill_gambler(self, b) -> None:
+        p = b.participants.get(self.GAMBLER)
+        if p is not None and not p.eliminated:
+            p.neili = p.neili_cap
 
 
 class MusterScenario(BattleScenario):
