@@ -23,6 +23,7 @@ from .core.tuning.yiwen import YiwenTuning  # 異聞
 from .core.tuning.unfold import UnfoldTuning  # 慢慢長出來
 from .core.tuning.jianghu import JianghuTuning  # 江湖頁重排
 from .core.tuning.lingyan import LingyanTuning  # 凌煙閣
+from .core.tuning.xiake import XiakeTuning  # 俠客頁重排
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4506,6 +4507,7 @@ class Config(_Strict):
     unfold: UnfoldTuning = Field(default_factory=UnfoldTuning)  # 慢慢長出來（tianxia/core/tuning/unfold.py）
     jianghu: JianghuTuning = Field(default_factory=JianghuTuning)  # 江湖頁重排（tianxia/core/tuning/jianghu.py）
     lingyan: LingyanTuning = Field(default_factory=LingyanTuning)  # 凌煙閣（tianxia/core/tuning/lingyan.py）
+    xiake: XiakeTuning = Field(default_factory=XiakeTuning)  # 俠客頁重排（tianxia/core/tuning/xiake.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
