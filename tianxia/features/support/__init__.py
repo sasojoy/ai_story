@@ -6,9 +6,10 @@
 - staff.py：客服名單（認帳號，不認名號；第 212 批起本體在核心 identity_base，這裡轉手）。
 - accounts_view.py：唯讀查主檔的 accounts、logins（帳號鍵照 AccountStore.account_id）。
 - lookup.py：客服查帳號與帳號卡（第 212 批；唯讀，帳本讀 Wallet.ledger）。
+- purge.py：結案超過 Config.support.purge_days（365）天的單整張刪掉（隱私權條款）；伺服器啟動開看守，sweep 也順手刪。
 - routes.py：/api/support/* 八條（async；第一行 _gate_off：關著 404，先於登入與參數解析）。
 
-沒有選項前綴、沒有 PlayerState 欄位（不必 QUIET）、沒有內容檔。掛鉤：routes、on_own_turn（有客服回覆就寫一則「客服」紀錄）、status_slots（/api/main 的
+沒有選項前綴、沒有 PlayerState 欄位（不必 QUIET）、沒有內容檔。掛鉤：routes、threads（到期刪除的看守，purge.py）、on_own_turn（有客服回覆就寫一則「客服」紀錄）、status_slots（/api/main 的
 support_unread、support_staff；關著不多鍵）。不在最上層 import routes：FEATURES 登記不拖進 fastapi。
 """
 from __future__ import annotations
@@ -34,6 +35,13 @@ class SupportFeature(Feature):
         from . import routes  # noqa: PLC0415  只有殼掛路由時才 import（routes 要 fastapi）
 
         return routes.router(shell)
+
+    def threads(self, shell) -> None:
+        """伺服器啟動時（start_threads 只在 server.main 叫）開到期刪除的看守（purge.py）：結案超過 purge_days 天的單整張刪掉。
+        不看 enabled（關掉客服也要守隱私權條款）；旁檔不在就什麼都不刪、不建檔。"""
+        from . import routes  # noqa: PLC0415  時鐘只在殼那一側（routes）拿
+
+        routes.start_purge(shell)
 
     def gate_slot(self, config) -> str:
         """登入頁那一行的字（關著回空字串）。/api/support/mailbox 叫（第 214 批），web/support.js 畫。"""

@@ -9,6 +9,7 @@
 - pending_notes（第 212 批）：寫進存檔、還沒確定存成的「客服」紀錄（reply_id、ticket_id、at＝寫進去那一下的遊戲時間）；notes.py 下一輪對存檔確認。
 - files（客服自動受理第 215 批）：單上的截圖，一張一列（seq 從 1 起、kind＝副檔名 png／jpg／webp、bytes、sha256）；檔在 files_dir 的 <單號>/<seq>.<kind>，
   先寫 .part、在 add_file 的交易裡換名（先檔後列）。有列無檔時看圖回 404。
+到期刪除（purge）：結案後 Config.support.purge_days 天整張單連各表的列一起刪，lookups 也刪（「只有 INSERT」指的是客服改不到；到期是主機的事）。
 純 sqlite3；「檢查並記一筆」在同一筆 BEGIN IMMEDIATE 裡（兩個分頁同時送單也不會超過上限）。時間一律由呼叫端傳進來。"""
 from __future__ import annotations
 
@@ -350,6 +351,22 @@ class SupportStore:
                 conn.execute("INSERT INTO replies (ticket_id, by_account_id, staff, internal, body, created, seen, journaled) "
                              "VALUES (?, ?, 1, 0, ?, ?, 0, 1)", (tid, rules.SYSTEM_ACCOUNT, body, now))
                 conn.execute("UPDATE tickets SET status = ?, admin_flag = 0, updated = ? WHERE id = ?", (rules.CLOSED, now, tid))
+        return ids
+
+    def purge(self, now: float, max_age: float) -> list[int]:
+        """到期刪除（隱私權條款第二條：客服單結案後 1 年）：結了的單、最後一筆動靜（回覆或單本身的 updated，取晚的）早於 now - max_age 的，
+        連同 replies、files、flags、pending_notes、lookups 那幾列在同一筆 BEGIN IMMEDIATE 裡刪掉（在鎖裡才讀：拿到鎖之前別人改的都看得到）。
+        截圖的檔不在這裡刪（呼叫端在這筆交易之後刪 files_dir/<單號>/）。回刪掉的單號（舊的在前）。"""
+        cutoff = now - max_age
+        with self._write() as conn:
+            ids = [int(r[0]) for r in conn.execute(
+                "SELECT t.id FROM tickets t WHERE t.status = ? "
+                "AND MAX(t.updated, COALESCE((SELECT MAX(r.created) FROM replies r WHERE r.ticket_id = t.id), t.updated)) < ? ORDER BY t.id",
+                (rules.CLOSED, cutoff))]
+            for tid in ids:
+                for table in ("replies", "files", "flags", "pending_notes", "lookups"):
+                    conn.execute(f"DELETE FROM {table} WHERE ticket_id = ?", (tid,))  # noqa: S608  表名是上面寫死的
+                conn.execute("DELETE FROM tickets WHERE id = ?", (tid,))
         return ids
 
     def has_human(self, ticket_id: int) -> bool:
