@@ -58,16 +58,19 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 REPO = os.path.dirname(os.path.dirname(HERE))
-ROUNDS = ("main", "x", "y", "z", "v", "c", "cs", "extra", "yw")
+ROUNDS = ("main", "x", "y", "z", "v", "c", "cs", "extra", "yw", "uf")
 # Batch 256: a round that stands on a package the older commit may not have. Each (file, text) has to be in a copy for the round to walk there;
 # a side without one is not red and not the tool broken: the round is left out, summary.skipped says why (round_cannot_walk).
 ROUND_NEEDS = {
     "yw": (("tianxia/features/yiwen/writer.py", "def write_scene"),  # serve.py holds it
            ("tianxia/features/yiwen/routes.py", '"yiwen_step"'),  # the storyteller's three-stage route (AI wave, batch 252)
            ("tianxia/core/tuning/yiwen.py", "discover_chance")),  # serve.py turns it to always
+    # batch 272: the unfolding book (Joy 2026-11-25), which serve.py leaves on only in this round, and the route that puts a dot out
+    "uf": (("tianxia/features/unfold/__init__.py", "class UnfoldFeature"),
+           ("tianxia/features/unfold/routes.py", '"/api/unfold/seen"')),
 }
 # Batch 256: --new <pkg> with the package a round is about: that round's differences are listed (summary.new_rows), not red, except these
-ROUND_PACKAGE = {"yw": "yiwen"}
+ROUND_PACKAGE = {"yw": "yiwen", "uf": "unfold"}
 STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules", "round-lost"}
 ROUND_LOST = "round-lost"  # batch 262: the base walks the round, the head lost what it stands on: REAL, not skipped (split_unwalkable)
 MUST_REACH = os.path.join(HERE, "must_reach.txt")
@@ -77,6 +80,7 @@ STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff",
 STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
 YW_PADDING = "yw-padding"  # batch 256, selftest only: the meeting card's padding in web/yiwen.css: the yw round must go red, and with --new yiwen be listed
+JH_PADDING = "jh-padding"  # batch 272, selftest only: the new 江湖頁's own padding in web/jianghu.css (.jh-page): a round that draws the page must go red
 PKG_CSS = "pkg-css"  # batch 110: one rule more in web/identity.css: red without --new, NEW (not red) with --new identity; not a selftest control
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
@@ -371,6 +375,18 @@ def mutate(copy: str, which: str) -> None:
         i = t.find("\n.yw-card {")
         if i < 0:
             raise ToolBroke("mutate yw-padding: no .yw-card rule in web/yiwen.css")
+        j = t.index("}", i)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(t[:j] + " padding: 31px 23px; " + t[j:])
+    elif which == JH_PADDING:  # batch 272: the new 江湖頁 (.jh-page, web/jianghu.js jhPage; on in week7 and season21)
+        p = os.path.join(copy, "web", "jianghu.css")
+        t = ""
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", newline="") as f:
+                t = f.read()
+        i = t.find("\n.jh-page {")
+        if i < 0:
+            raise ToolBroke("mutate jh-padding: no .jh-page rule in web/jianghu.css")
         j = t.index("}", i)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(t[:j] + " padding: 31px 23px; " + t[j:])
@@ -858,7 +874,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, JH_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")

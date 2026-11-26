@@ -893,7 +893,8 @@ def test_new_yiwen_lists_the_yw_rounds_differences_and_keeps_the_heads_errors_re
     assert {r["class"] for r in kept if r["round"] == "yw"} == {"console-head-only", "css-rules", "words"}
     assert gate.split_round_new(rows, ["identity"]) == (rows, []), "不帶 --new yiwen：一列都不動"
     assert gate.split_round_new(rows, []) == (rows, [])
-    assert gate.ROUND_PACKAGE == {"yw": "yiwen"} and "yw" in gate.ROUNDS and (TOOL / "flows" / "yw.mjs").exists()
+    assert gate.ROUND_PACKAGE == {"yw": "yiwen", "uf": "unfold"} and "yw" in gate.ROUNDS and (TOOL / "flows" / "yw.mjs").exists()
+    assert "uf" in gate.ROUNDS and (TOOL / "flows" / "uf.mjs").exists()  # batch 272: the unfolding book's round
 
 
 def test_a_skipped_round_and_the_listed_rows_are_in_the_report(tmp_path):
@@ -947,6 +948,29 @@ def test_the_yw_padding_mutation_touches_the_meeting_card_only(tmp_path):
     (web / "yiwen.css").write_text("/* nothing */\n", encoding="utf-8")
     with pytest.raises(gate.ToolBroke):
         gate.mutate(str(tmp_path), gate.YW_PADDING)
+
+
+def test_the_jh_padding_mutation_touches_the_new_jianghu_page_only(tmp_path):
+    """Batch 272: the control that proves the new 江湖頁 is looked at changes one rule of web/jianghu.css, .jh-page."""
+    gate = _load("gate")
+    web = tmp_path / "web"
+    web.mkdir()
+    css = "/* a */\n.jh-page { --jh-fade: 1; position: relative; }\n.jh-page .x { margin: 0; }\n"
+    (web / "jianghu.css").write_text(css, encoding="utf-8", newline="")
+    gate.mutate(str(tmp_path), gate.JH_PADDING)
+    got = (web / "jianghu.css").read_text(encoding="utf-8")
+    assert got == css.replace("position: relative; }", "position: relative;  padding: 31px 23px; }", 1)
+    assert "\n.jh-page {" in (ROOT / "web" / "jianghu.css").read_text(encoding="utf-8"), "江湖頁的規則換了寫法，突變要跟著換"
+    (web / "jianghu.css").write_text("/* nothing */\n", encoding="utf-8")
+    with pytest.raises(gate.ToolBroke):
+        gate.mutate(str(tmp_path), gate.JH_PADDING)
+
+
+def test_only_the_uf_round_leaves_the_unfolding_book_on():
+    """Batch 272: serve.py turns unfold off for every round but uf (every walk account is new; old characters see the page laid out)."""
+    text = (TOOL / "serve.py").read_text(encoding="utf-8")
+    assert 'if os.environ.get("QA_ROUND") != "uf" and getattr(server.CONTENT.config, "unfold", None) is not None:' in text
+    assert "server.CONTENT.config.unfold.enabled = False" in text
 
 
 def test_only_the_yw_round_turns_the_strange_tales_on_and_its_patch_targets_are_there():

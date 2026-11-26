@@ -10,6 +10,8 @@
      (img-battle-spot, batch 260): red as pixels, and the walk's own repaints (repaint-variants) must take none of the battle card.
      The yw round (batch 256) with the meeting card's padding changed in web/yiwen.css (yw-padding): red without --new yiwen, listed
      (summary.new_rows, exit 0) with it. --yw-only runs just those two.
+     The yw round again with the new 江湖頁's .jh-page padding changed in web/jianghu.css (jh-padding, batch 272): red, so the page the
+     players see (on in season21) is really looked at. --jh-only runs just that one.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
   5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
@@ -90,6 +92,18 @@ def _yw_controls(a, rows: list) -> None:
         a.only = only
 
 
+def _jh_control(a, rows: list) -> None:
+    """Batch 272: the new 江湖頁's padding changed in web/jianghu.css (jh-padding). The page is on in season21 and every round's 江湖 scenes
+    draw it, so a round goes red as REAL. The yw round (about 3 minutes, whole round): the 江湖 page is under its meeting card."""
+    only, a.only = a.only, None
+    try:
+        s = _gate(a, "mut_" + gate.JH_PADDING, "--mutate", gate.JH_PADDING, rounds="yw")
+        rows.append((f"yw round --mutate {gate.JH_PADDING} goes red", s["code"] == 1 and bool(s["real"]),
+                     f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})} {s['took']}s"))
+    finally:
+        a.only = only
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -105,6 +119,7 @@ def main(argv=None) -> int:
     ap.add_argument("--walk-only", action="store_true", help="skip the replay controls")
     ap.add_argument("--only", help="flows of the c round, for a shorter walk (accounts,smoke,craft is about 2.5 minutes a time, the whole round about 8)")
     ap.add_argument("--yw-only", action="store_true", help="only the yw round's two controls (batch 256)")
+    ap.add_argument("--jh-only", action="store_true", help="only the new 江湖頁's control, jh-padding on the yw round (batch 272)")
     a = ap.parse_args(argv)
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
@@ -112,6 +127,9 @@ def main(argv=None) -> int:
     corpus = os.path.join(a.out, "corpus")
     if a.yw_only:
         _yw_controls(a, rows)
+    if a.jh_only:
+        _jh_control(a, rows)
+    a.yw_only = a.yw_only or a.jh_only
     if not a.replay_only and not a.yw_only:
         s1 = _gate(a, "same1", "--keep-corpus", corpus, rounds=a.rounds)
         rows.append(("base against base is green", s1["code"] == 0, f"exit {s1['code']} real {len(s1['real'])} noise {s1['noise']} {s1['took']}s"))
@@ -137,6 +155,7 @@ def main(argv=None) -> int:
                      s["code"] == 1 and any("bt_watch_open" in x["scene"] and "375-light" in x["detail"]["file"] for x in walk) and not taken,
                      f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]} repaint-variants on bt_watch {taken[:4]}"[:300]))
         _yw_controls(a, rows)
+        _jh_control(a, rows)
         s = _gate(a, "quiet", "--mutate", gate.QUIET)
         rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"
