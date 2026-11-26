@@ -25,6 +25,7 @@
   "web/jianghu.js",
   "web/jieyi.js",
   "web/legacy.js",
+  "web/lingyan.js",
   "web/looks.js",
   "web/mail.js",
   "web/main.js",
@@ -50,6 +51,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zhuan.js",
   "web/zongmen.js"
@@ -98,6 +100,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zhuan.js",
   "web/zongmen.js"
@@ -145,6 +148,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zongmen.js"
  ],
@@ -231,6 +235,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zongmen.js"
  ],
@@ -277,6 +282,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zongmen.js"
  ],
@@ -403,6 +409,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zongmen.js"
  ],
@@ -446,6 +453,7 @@
   "web/titles.js",
   "web/travel.js",
   "web/unfold.js",
+  "web/xiake.js",
   "web/yiwen.js",
   "web/zongmen.js"
  ]
