@@ -265,7 +265,7 @@
   // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
   function selfArtsHtml(x) {
     const worn = KINDS.map((k) => x.owned_arts.find((a) => a.worn && a.kind === k)).filter(Boolean);
-    const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}/${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
+    const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}／${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
     const head = `<div class="self-hd"><h3>武學</h3>${lib}</div>`;
     if (!worn.length) return `<section class="self-sec" aria-label="武學">${head}<p class="muted">你身上還沒有武學。</p></section>`;
     const hm = S.main && S.main.hero_move;

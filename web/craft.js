@@ -296,7 +296,7 @@
     const a = (x.owned_arts || []).find((r) => r.id === item.id);
     if (!a) return "";
     const j = a.judge || {};
-    const sub = [a.kind, a.attribute ? `屬${a.attribute}` : "", a.affinity ? `收${a.affinity}` : "", `第 ${a.level} 成`].filter(Boolean);
+    const sub = [a.kind, a.attribute ? `屬${a.attribute}` : "", a.affinity ? (a.affinity === "兼容並蓄" ? "什麼意境都能裝" : `能裝${a.affinity}的意境`) : "", `第 ${a.level} 成`].filter(Boolean);
     const diff = typeof j.worn_diff === "number" ? j.worn_diff : null;
     const verdict = diff === null ? ""
       : diff > 0 ? `<b class="up">比身上那門強 ${meltNum(diff)}</b>` : diff < 0 ? `<b class="down">比身上那門弱 ${meltNum(diff)}</b>` : "跟身上那門一樣";

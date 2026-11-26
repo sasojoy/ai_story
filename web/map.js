@@ -730,7 +730,7 @@
     return [far, tag].filter(Boolean).join("・");
   }
   // 名字旁、篩選鈕上「多半什麼」與勝算的說法（2026-11-26 全站總檢查 C：伺服器的「多事」「必敗」是我們自己的簡稱，畫的時候換成玩家的話）
-  const MOSTLY_SAY = { 多事: "事情多", 多敵: "對手多", 多料: "素材多", 多悟: "好參悟", 參半: "什麼都有", 比劃: "跟同袍過招" }; // 待 joy 潤
+  const MOSTLY_SAY = { 多事: "事情多", 多敵: "對手多", 多料: "素材多", 多悟: "好參悟", 參半: "什麼都有", 比劃: "同袍過招" }; // 待 joy 潤
   const ODDS_SAY = { 穩勝: "穩贏", 必敗: "打不過", 凶險: "很險" }; // 待 joy 潤
   const mostlySay = (m) => MOSTLY_SAY[m] || m || "";
   const oddsSay = (w) => ODDS_SAY[w] || w || "";

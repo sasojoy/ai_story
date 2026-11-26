@@ -904,11 +904,11 @@
     mount: '<path d="M4 18c1-4 3-6 6-7l2-5 3 2 3-1-1 4 3 3-2 1-2-2c-2 1-3 3-3 6M8 18v3m8-4v4"/>',
     treasure: '<path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7-6.3-3.6-6.3 3.6 1.5-7L2 9.3l7-.8z"/>',
   };
-  const ringWord = (colors) => ((colors || []).length ? `收${colors.join("")}` : "任意皆收"); // 待 joy 潤
+  const ringWord = (colors) => ((colors || []).length ? `能裝${colors.join("")}` : "什麼都能裝"); // 待 joy 潤
   // 意境的強度（一重～三重）畫成三節玉
   const lvHtml = (n) => `<span class="lv" role="img" aria-label="${["", "一重", "二重", "三重"][Math.max(1, Math.min(3, n | 0))]}">${[1, 2, 3].map((k) => `<i${k <= (n | 0) ? ' class="on"' : ""}></i>`).join("")}</span>`;
   // 修練頁卡上的評分；槽裡有不發動的秘方特效時底下一行小字（skillview.score_note，Joy 2026-10-28「要讓玩家能清楚知道」）
-  const scoreHtml = (a) => (typeof a.score === "number" ? `<span class="score">意境評分 ${a.score}${a.score_note ? `<small>${esc(a.score_note)}</small>` : ""}</span>` : "");
+  const scoreHtml = (a) => (typeof a.score === "number" && a.score > 0 ? `<span class="score">意境評分 ${a.score}${a.score_note ? `<small>${esc(a.score_note)}</small>` : ""}</span>` : "");
   // 自創武學也走同一條梯子（Joy 2026-10-21「那武學呢 有分？」）：撞到幾樣稀有（create.marks_of：純或渾、招已透、稀有路數）
   const ART_LOOK_STEPS = [["凡", "三樣稀有一樣都沒撞到"], ["佳", "撞到一樣：三格同是單色或任色、招已透、稀有路數"], ["珍", "撞到兩樣"], ["神", "三樣全撞到：最好的一級"]];
   // 招的印記（招式與絕學稿案第一節）：伺服器寫「看家〔拄棍守村〕應招・…」「本命〔…〕」「絕〔…〕」「沈〔…〕」（自創：創的人名號第一個字），
