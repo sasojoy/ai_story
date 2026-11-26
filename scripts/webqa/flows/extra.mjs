@@ -1,6 +1,6 @@
 // What waves B and C did not reach: the prologue (staged), the map's away state, the divine form, the brew, figure talk and the persuade form,
 // the MVP overlay, the ring, buying and selling in the mall, the admin buttons behind a held press or a picked player, the week card, the folded battlefield.
-import { CH, ACT, place, ACCOUNTS as COMMON, accounts, rich } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS as COMMON, accounts, rich, SHEET, EYE } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export const ACCOUNTS = COMMON;
@@ -377,6 +377,37 @@ export const flows = [
     const drew = await c.ev(`(() => { const e = document.getElementById("ring-stage"); return e ? [e.width, e.height] : null; })()`);
     c.report.facts.ring_stage = drew;
     await c.step(CH("arena:強攻"), "ring_round", { who: "p1", wait: 900 });
+    await c.load("/");
+  }],
+  // Batch 272: the new 江湖頁's own buttons (web/jianghu.js registerClicks) that the rounds' clicks do not reach on their way.
+  // Last, because 行路's far road (jh-go) sets out.
+  ["jh_page", async (c) => {
+    await c.leave();
+    await place(c, "白飛", "yingchuan_wilds");
+    await place(c, "沈浪", "yingchuan_wilds");
+    await c.api("p2", "/api/main");
+    await c.load("/");
+    // no figure here and a 俠客: the crowd card pulls up the people list
+    await c.step(SHEET("people"), "jh_people", { who: "p1" });
+    await c.step('.jh-sheet .top-row [data-act="jh-sheet"]', "jh_sheet_close", { light: true });
+    await place(c, "沈浪", "wan_city");
+    await c.load("/");
+    await c.step(SHEET("stam"), "jh_stam_sheet", {});
+    await c.load("/");
+    await c.step('.jh-eye [data-act="jh-later"]', "jh_later", { light: true });
+    await c.step(EYE, "jh_eye", {});
+    await c.step(ACT("jh-wait"), "jh_wait", { light: true });
+    await c.load("/");
+    await c.click(SHEET("road"));
+    await c.step(ACT("jh-map"), "jh_map", {});
+    await c.load("/");
+    await c.py("st = chars.load('沈浪'); st.player.stamina = 0; chars.save(st); out = 1");
+    await c.load("/");
+    await c.step('[data-act="jh-stam"]', "jh_stam", {});
+    await c.py("st = chars.load('沈浪'); st.player.stamina = 240; chars.save(st); out = 1");
+    await c.load("/");
+    await c.click(SHEET("road"));
+    await c.step(ACT("jh-go"), "jh_go", { who: "p1", wait: 800 });
     await c.load("/");
   }],
 ];

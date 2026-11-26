@@ -37,6 +37,12 @@ so --new yiwen does not list it), detail names what the head lacks, and the roun
 --new yiwen (ROUND_PACKAGE) lists that round's differences as NEW (summary.new_rows) instead of red, except STAY_RED (the head's console,
 exceptions and failed requests, who-is-who words, stylesheet rules); a flow that throws or a scene in must_reach not reached is still exit 2.
 Without --new yiwen a difference there is REAL like any other round's.
+Batch 272: the new 江湖頁 (jianghu package, Joy 2026-11-25) is on in week7 and season21, and every round walks it: it is the page players
+see. The old 江湖頁 (tests/conftest.py old_page) is not walked any more. The unfolding book (unfold package, also on) is turned off in
+memory by serve.py in every round but uf: every walk account is new, and with the book open the tabs it has not grown would not be drawn,
+and a grow is written by a sync, so when one appears depended on when each side synced. Old characters have no book: everything laid out,
+which is what the other rounds walk. The uf round walks the book: each picture waits until what it shows is true in S.main.unfold.
+--mutate jh-padding (selftest) changes .jh-page in web/jianghu.css: the page is looked at.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);

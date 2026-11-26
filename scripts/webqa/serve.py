@@ -8,6 +8,9 @@ stops applying would turn into noise on every run). gate.py turns that into its 
 --outbox (batch 110): codes never go to the log (batch 208: only the notice line, LOG_LINE), so a round that reaches a code reads it here.
 With the identity switch and fake_services both on, every fake SMS and mail is appended as one JSON line {"kind", "to", "text"};
 otherwise one line says the outbox is off and nothing is touched.
+
+Batch 272: QA_ROUND other than uf turns the unfold package off in memory, after the content is loaded, like the intro package (no file
+is changed); the uf round leaves it as the profile has it.
 """
 import importlib
 import json

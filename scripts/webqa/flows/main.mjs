@@ -393,6 +393,13 @@ export const flows = [
       await c.load("/");
       await c.click(ACT("peer"));
       await c.step(ACT("peer-act"), "peer_act", { who: "p1" });
+      // batch 272: on the new 江湖頁 the 俠客's card groups what you can do (web/jianghu.js jhPeerHtml): pick a kind, a choice, back.
+      // 去 (jh-peer-go) is not walked: it sends the act and changes 沈浪 and 白飛 for the flows after (peer_act above already sends one)
+      await c.load("/");
+      await c.click(ACT("peer"));
+      await c.step(ACT("jh-peer-pick"), "jh_peer_pick", { who: "p1" });
+      await c.step(ACT("jh-peer-choice"), "jh_peer_choice", { light: true });
+      await c.step(ACT("jh-peer-back"), "jh_peer_back", { light: true });
       // batch 272: the new 江湖頁 has no 全部 N › line; here-all is a sign that gathers two places of one kind or more (學藝, 赴宴,
       // 拜師: web/jianghu.js jhSignsHtml JH_SIGN_GROUP). 宛城 teaches 沈浪 nothing he lacks; the deep mountains teach two arts (learn.at)
       await place(c, "沈浪", "deep_mountain");
