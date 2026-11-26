@@ -951,7 +951,7 @@
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
       : kind === "arena" ? back.replace("‹ 出店", "‹ 離開") : back;
-    const purse = kind === "mall" ? `${ingotSvg()}元寶 ${shop.balance | 0}` : shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`;
+    const purse = kind === "mall" ? mallPurse(shop) : shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`;
     return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
       <header class="shop-bar">${leave}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">${purse}</span></header>
       ${underForge ? "" : line}

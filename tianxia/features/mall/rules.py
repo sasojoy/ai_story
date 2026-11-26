@@ -21,11 +21,11 @@ from tianxia import calendar, naming
 from tianxia import library  # 共用規則層（功法庫上限 cap_of，開發規範手冊 3.10）
 from tianxia.characters import name_key
 # 票的庫存、月卡加的上限、哪一件賣這種效果搬進核心的錢包服務（開發規範手冊 3.10）；這裡照舊叫得到（mall.tokens……）
-from tianxia.core.services import CARD_KEY, card_bonus, item_for, look_ids, tokens  # noqa: F401
+from tianxia.core.services import CARD_KEY, card_bonus, item_for, look_ids, paid_only, tokens  # noqa: F401
 from tianxia.core import xinshen  # 心神（核心的資源）：凝神香的效果名、退款時收回存著的
 from tianxia.models import Content, MallItem
 from tianxia.state import GameState
-from tianxia.wallet import Wallet
+from tianxia.wallet import GIFT, PAID, PAID_SUFFIX, Wallet, coins_of
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class EffectSpec:
 EFFECTS: dict[str, EffectSpec] = {
     "pills": EffectSpec("consumable", "{pill} {n} 顆", 999),
     "card_days": EffectSpec("card", "月卡 {n} 天（每天多服 {bonus} 顆{pill}{daily}）", 366),
-    "card_rebate": EffectSpec("card", "當場回 {n} 元寶", 100000),  # 月卡買下當場拿回的元寶（定案甲：600 回 300）；要比價錢少
+    "card_rebate": EffectSpec("card", "當場回 {n} {coin}", 100000),  # 月卡買下當場拿回的元寶（定案甲：600 回 300）；要比價錢少
     "zhuan_rewrite": EffectSpec("consumable", "列傳多重寫 {n} 次", 9),  # 重修列傳：休季時列傳多重寫幾次（Config.biography.rewrites 之外）
     "rename": EffectSpec("consumable", "易名帖 {n} 張", 1),  # 易名帖：買了得一張帖，在設定頁改名、當場生效（rename.py）
     # 功法庫擴充：武學與意境合計的持有上限多幾格（PlayerState.holding_bonus），買下當場生效、只這一季（Joy 2026-10-21 一張 15 格、不限張數）
@@ -91,8 +91,8 @@ SHORT_MANY = "元寶不夠：「{name}」×{n} 要 {price}，你有 {balance}。
 LIMIT_DAY = "「{name}」今天已經買了 {n} 次，明日 00:00 後再來。"
 LIMIT_SEASON = "「{name}」這一季已經買了 {n} 次。"
 LIMIT_ACCOUNT = "「{name}」每個帳號限買 {n} 次，已經買滿了。"
-BOUGHT = "買下「{name}」：{effects}。元寶 -{price}（還剩 {left}）。"
-BOUGHT_MANY = "買下「{name}」×{n}：每一件{effects}。元寶 -{price}（還剩 {left}）。"  # 一次買好幾件（Joy 2026-10-22）；字待 joy 潤
+BOUGHT = "買下「{name}」：{effects}。{price}（還剩 {left}）。"
+BOUGHT_MANY = "買下「{name}」×{n}：每一件{effects}。{price}（還剩 {left}）。"  # 一次買好幾件（Joy 2026-10-22）；字待 joy 潤
 CLAMPED = "（限購只剩 {n} 件，就買 {n} 件。）"  # 選的數量比限購剩的多：照剩的買；字待 joy 潤
 MAX_QTY = 99  # 一次最多選幾件（網頁的數量框也照它）
 CARD_UNTIL = "月卡到 {day}"  # 江湖紀錄的變化：卡用到哪一天（含）
@@ -100,13 +100,13 @@ CARD_UNTIL = "月卡到 {day}"  # 江湖紀錄的變化：卡用到哪一天（�
 NEED_NOTE = "（要寫原因：每一筆都會記進帳。）"
 BAD_AMOUNT = "（元寶要寫正整數。）"
 NEED_REF = "（這一筆沒有編號，沒有記帳。）"
-REVOKE_SHORT = "（{name}只有 {balance} 元寶，扣不了 {n}：餘額不能是負的。）"
+REVOKE_SHORT = "（{name}只有 {balance} {coin}，扣不了 {n}：餘額不能是負的。）"
 DONE_BEFORE = "（這個編號已經記過帳了，沒有再記一次。）"
-REISSUED = "已替{name}補發 {n} 元寶（餘額 {left}）。"
-REVOKED = "已從{name}扣回 {n} 元寶（餘額 {left}）。"
+REISSUED = "已替{name}補發 {n} {coin}（餘額 {left}）。"
+REVOKED = "已從{name}扣回 {n} {coin}（餘額 {left}）。"
 NO_PURCHASE = "（{name}沒有這一筆購買。）"
 REFUNDED_BEFORE = "（這一筆已經退過了。）"
-REFUNDED = "已退{name}的「{item}」：元寶 +{price}（餘額 {left}）。{took}"
+REFUNDED = "已退{name}的「{item}」：{price}（餘額 {left}）。{took}"
 PILLS_BACK = "{pill}收回 {n} 顆。"
 PILLS_USED = "用掉的 {n} 顆不追。"
 HOLDING_UP = "功法庫上限 +{n}（現在 {cap} 格，這一季）"
@@ -114,10 +114,10 @@ HOLDING_BACK = "功法庫上限收回 {n} 格。"
 REROLL_BACK = "重悟帖收回 {n} 張。"
 CARD_BACK = "月卡少 {n} 天。"
 TICKET_BACK = "{name}作廢。"  # 列傳的四件（批 7b）：退了那一列就不算票、用過的也不再畫
-REBATE_BACK = "當場回的 {n} 元寶扣回。"
+REBATE_BACK = "當場回的 {n} {coin}扣回。"
 # 月卡每日領（定案甲）：待 joy 潤
-DAILY_PART = "，每天領 {ingots} 元寶與 {pills} 顆{pill}"  # 效果那一句（月卡）多這一段
-CLAIMED = "領了月卡今天的份：元寶 +{ingots}、{pill} +{pills}（元寶 {left}）。"
+DAILY_PART = "，每天領 {ingots} {coin}與 {pills} 顆{pill}"  # 效果那一句（月卡）多這一段
+CLAIMED = "領了月卡今天的份：{coin} +{ingots}、{pill} +{pills}（{coin} {left}）。"
 CLAIMED_BEFORE = "月卡今天的份已經領過了，明日 00:00 後再來。"
 NO_CARD = "你沒有月卡，或月卡已經到期。"
 NO_DAILY = "月卡沒有每天領的份。"
@@ -135,6 +135,37 @@ LOOK_BACK = "形象「{name}」收回。"
 MOVE_BACK = "「{name}」的招式動畫收回。"
 ORDERED = ("look_order", "move_order", "move_basic", "look_market")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
 
+
+
+# 元寶拆成兩種（Joy 2026-11-26；Config.mall.two_coins）：以下都待 joy 潤
+PAID_SHORT = "「{name}」要用元寶（儲值得來的）買：要 {price}，你的元寶有 {paid}。"
+PAID_SHORT_MANY = "「{name}」×{n} 要用元寶（儲值得來的）買：要 {price}，你的元寶有 {paid}。"
+
+
+def two(content: Content) -> bool:
+    """元寶拆成兩種的開關打開了沒（Config.mall.two_coins）。"""
+    return content.config.mall.two_coins
+
+
+def gift_word(content: Content) -> str:
+    """送的那一種寫給玩家看的名字：開關關著照舊寫「元寶」（一個字都不變），開著寫五銖（Config.mall.gift_name）。"""
+    return content.config.mall.gift_name if two(content) else "元寶"
+
+
+def coins_text(content: Content, coins: dict[str, int], sign: str = "-") -> list[str]:
+    """一筆各動了幾個 → 江湖紀錄的變化：開關關著合成一列「元寶 -N」，開著分兩列（0 的不寫，都 0 寫元寶 0）。"""
+    if not two(content):
+        return [f"元寶 {sign}{coins.get(GIFT, 0) + coins.get(PAID, 0)}"]
+    out = [f"{word} {sign}{coins[c]}" for c, word in ((PAID, "元寶"), (GIFT, gift_word(content))) if coins.get(c)]
+    return out or [f"元寶 {sign}0"]
+
+
+def left_text(content: Content, wallet: Wallet, owner: str) -> str:
+    """「還剩多少」那一段：開關關著「N」（兩種加起來），開著「元寶 N、五銖 M」。"""
+    if not two(content):
+        return str(wallet.balance(owner))
+    b = wallet.balances(owner)
+    return f"元寶 {b[PAID]}、{gift_word(content)} {b[GIFT]}"
 
 
 @dataclass(frozen=True)
@@ -201,9 +232,10 @@ def effects_text(item: MallItem, content: Content) -> str:
     """這件買了拿到什麼（照允許表的寫法，例「回體丹 5 顆」「月卡 30 天（每天多服 1 顆回體丹，每天領 60 元寶與 1 顆回體丹）」）。"""
     cfg = content.config
     ingots, pills = daily_amounts(content)
-    daily = DAILY_PART.format(ingots=ingots, pills=pills, pill=cfg.stamina_pill_name) if ingots or pills else ""
+    coin = gift_word(content)  # 拆兩種開著時月卡回的、每天領的都是五銖；關著照舊寫元寶
+    daily = DAILY_PART.format(ingots=ingots, pills=pills, pill=cfg.stamina_pill_name, coin=coin) if ingots or pills else ""
     return "、".join(
-        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily, legend=cfg.legend_item_name)
+        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily, legend=cfg.legend_item_name, coin=coin)
         for key, n in item.effects.items() if key in EFFECTS
     )
 
@@ -284,8 +316,11 @@ def limit_left(item: MallItem, wallet: Wallet, owner: str, day: int, season: int
     return max(0, min(left)) if left else None
 
 
-def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int, moment: Moment = MOMENT) -> str | None:
+def buy_problem(
+    item: MallItem, wallet: Wallet, owner: str, day: int, season: int, moment: Moment = MOMENT, *, paid: bool = False,
+) -> str | None:
     """買不了的那一句（限購、這個人這一季用不上、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。
+    paid：這件只收元寶（paid_only；元寶拆成兩種）。
     限購排在「用不上」前面（FB-845：季中買了一張、休季才知道用不上，再按說的是限購）。"""
     problem = limit_problem(item, wallet, owner, day, season)
     if problem:
@@ -295,8 +330,23 @@ def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: in
     unfit = moment.blocked.get(item.id)
     if unfit:
         return unfit
+    return short_text(item, wallet, owner, 1, paid=paid)
+
+
+def short_text(item: MallItem, wallet: Wallet, owner: str, n: int, *, paid: bool = False) -> str | None:
+    """付不起 n 件的那一句；付得起是 None。paid 是這件只收元寶（呼叫端照 paid_only 給）。"""
+    price = item.price * n
+    if paid:
+        have = wallet.balance(owner, PAID)
+        if have >= price:
+            return None
+        return (PAID_SHORT_MANY.format(name=item.name, n=n, price=price, paid=have) if n > 1
+                else PAID_SHORT.format(name=item.name, price=price, paid=have))
     balance = wallet.balance(owner)
-    return SHORT.format(name=item.name, price=item.price, balance=balance) if balance < item.price else None
+    if balance >= price:
+        return None
+    return (SHORT_MANY.format(name=item.name, n=n, price=price, balance=balance) if n > 1
+            else SHORT.format(name=item.name, price=price, balance=balance))
 
 
 def buy_ref(owner: str, ref: str) -> str:
@@ -323,33 +373,39 @@ def buy(
         item = content.mall.get(item_id)
         if item is None or not on_sale(item, day, season, moment) or any(item.effects.get(k) for k in ORDERED):
             return NO_ITEM  # 自建形象只從形象包下單那一條買（looks.orders.place 帶名字與樣子），一般的購買不賣它
-        problem = buy_problem(item, wallet, owner, day, season, moment)
+        paid = paid_only(content, item.id)
+        problem = buy_problem(item, wallet, owner, day, season, moment, paid=paid)
         if problem:
             return problem
         want = max(1, min(MAX_QTY, int(qty)))
         room = limit_left(item, wallet, owner, day, season)
         n = want if room is None else min(want, room)
-        balance = wallet.balance(owner)
-        if balance < item.price * n:
-            return (SHORT_MANY.format(name=item.name, n=n, price=item.price * n, balance=balance) if n > 1
-                    else SHORT.format(name=item.name, price=item.price, balance=balance))
+        short = short_text(item, wallet, owner, n, paid=paid)
+        if short:
+            return short
         changes: list[str] = []
+        spent = {GIFT: 0, PAID: 0}
         for k in range(1, n + 1):
             unit = full if k == 1 else f"{full}#{k}"
             data = dict(item.effects) | ({"look_id": item.look} if item.look else {})  # 形象：那一列記是哪一套（商品下架了也認得）
             pid = wallet.add_purchase(owner, unit, item.id, item.price, time=now, day=day, season=season, data=data)
-            if not wallet.post(owner, -item.price, "buy", unit, time=now, purchase_id=pid):
+            coins = wallet.spend(owner, item.price, "buy", unit, time=now, purchase_id=pid, paid_only=paid)
+            if coins is None:
                 raise RuntimeError(f"購買編號 {unit} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
+            if coins[PAID]:  # 動到元寶才記各扣了幾個（沒記的照 coins_of 全算五銖）：退款照它退回原來的那一種
+                wallet.update_data(pid, coins=coins)
+            spent = {c: spent[c] + coins[c] for c in spent}
             changes += _deliver(state, content, wallet, owner, item, day, pid, now)
-        left = wallet.balance(owner)
+        left = left_text(content, wallet, owner)
     effects = effects_text(item, content)
+    price = "、".join(coins_text(content, spent)) if two(content) else f"元寶 -{item.price * n}"
     if n == 1:
-        line = BOUGHT.format(name=item.name, effects=effects, price=item.price, left=left)
+        line = BOUGHT.format(name=item.name, effects=effects, price=price, left=left)
     else:
-        line = BOUGHT_MANY.format(name=item.name, n=n, effects=effects, price=item.price * n, left=left)
+        line = BOUGHT_MANY.format(name=item.name, n=n, effects=effects, price=price, left=left)
     if n < want:
         line += CLAMPED.format(n=n)
-    return Bought(item=item, lines=[line], changes=[f"元寶 -{item.price * n}", *_merge(changes)])
+    return Bought(item=item, lines=[line], changes=[*coins_text(content, spent), *_merge(changes)])
 
 
 def _merge(changes: list[str]) -> list[str]:
@@ -391,7 +447,7 @@ def _deliver(
     rebate = item.effects.get("card_rebate", 0)
     if rebate:
         wallet.post(owner, rebate, "grant", f"card:rebate:{pid}", time=now, purchase_id=pid, note=CARD_REFS["card:rebate:"])
-        changes.append(f"元寶 +{rebate}（{CARD_REFS['card:rebate:']}）")
+        changes.append(f"{gift_word(content)} +{rebate}（{CARD_REFS['card:rebate:']}）")
     if item.effects.get("zhuan_rewrite", 0):
         changes.append(f"列傳重寫 +{item.effects['zhuan_rewrite']}")
     if item.effects.get("rename", 0):
@@ -470,11 +526,12 @@ def claim_daily(state: GameState, content: Content, wallet: Wallet, *, now: floa
             return CLAIMED_BEFORE
         # 元寶 0 也記一筆 0 的帳：編號就是「今天領過了」的記號
         wallet.post(owner, ingots, "grant", ref, time=now, note=CARD_REFS["card:daily:"])
-        left = wallet.balance(owner)
+        left = wallet.balance(owner, GIFT) if two(content) else wallet.balance(owner)
     state.player.stamina_pills += pills
     pill = content.config.stamina_pill_name
-    changes = ([f"元寶 +{ingots}"] if ingots else []) + ([f"{pill} +{pills}"] if pills else [])
-    return Claimed(lines=[CLAIMED.format(ingots=ingots, pills=pills, pill=pill, left=left)], changes=changes)
+    coin = gift_word(content)
+    changes = ([f"{coin} +{ingots}"] if ingots else []) + ([f"{pill} +{pills}"] if pills else [])
+    return Claimed(lines=[CLAIMED.format(coin=coin, ingots=ingots, pills=pills, pill=pill, left=left)], changes=changes)
 
 
 def rewrite_tokens(wallet: Wallet, owner: str) -> list[int]:
@@ -500,12 +557,13 @@ def perks(item: MallItem, content: Content) -> list[str]:
     cfg = content.config
     pill = cfg.stamina_pill_name
     out = []
+    coin = gift_word(content)
     rebate = item.effects.get("card_rebate", 0)
     if rebate:
-        out.append(f"買下當場拿回 {rebate} 元寶")
+        out.append(f"買下當場拿回 {rebate} {coin}")
     ingots, pills = daily_amounts(content)
     if ingots or pills:
-        out.append("每天上線領 " + "＋".join(([f"{ingots} 元寶"] if ingots else []) + ([f"{pill} {pills} 顆"] if pills else [])) + "（沒上線那天不補）")
+        out.append("每天上線領 " + "＋".join(([f"{ingots} {coin}"] if ingots else []) + ([f"{pill} {pills} 顆"] if pills else [])) + "（沒上線那天不補）")
     if cfg.mall.card_pill_bonus:
         out.append(f"每天能多服 {cfg.mall.card_pill_bonus} 顆{pill}")
     out.append(f"{item.effects.get('card_days', 0)} 天；再買從到期日往後接")
@@ -534,12 +592,17 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
     for item in content.mall.values():
         if not on_sale(item, day, season, moment) or any(item.effects.get(k) for k in ORDERED):
             continue  # 自建形象不上貨架（在「形象」那一頁下單）
-        why = buy_problem(item, wallet, owner, day, season, moment)
+        paid = paid_only(content, item.id)
+        why = buy_problem(item, wallet, owner, day, season, moment, paid=paid)
         days = item.effects.get("card_days", 0)
         room = limit_left(item, wallet, owner, day, season)
         # 一次最多買幾件（網頁的數量框，Joy 2026-10-22）：限購剩的、元寶買得起的、MAX_QTY 取最少；月卡一次一張（確認那一行寫用到哪一天）
-        most = 0 if why else 1 if days else min(MAX_QTY, balance // max(1, item.price), MAX_QTY if room is None else room)
-        items.append({
+        payable = wallet.payable(owner, paid_only=paid)
+        most = 0 if why else 1 if days else min(MAX_QTY, payable // max(1, item.price), MAX_QTY if room is None else room)
+        extra = {}
+        if two(content):  # 元寶拆成兩種：這件只收元寶嗎、買一件各扣幾個（購買確認那一列）；開關關著不多這兩個鍵
+            extra = {"paid": paid, "split": wallet.split(owner, item.price, paid_only=paid)}
+        items.append(extra | {
             "id": item.id, "name": item.name, "note": note_text(item, content, moment), "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
             "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price + item.effects.get("card_rebate", 0),
@@ -551,8 +614,17 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
         })
     ingots, pills = daily_amounts(content)
     daily = {"ingots": ingots, "pills": pills} if ingots or pills else None  # 月卡每天領的份（購買確認那一列）
-    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily,
-            "looks": bool(content.looks)}  # 有擂台形象（功能包 looks）：萬寶閣多一頁「形象」
+    out = {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily,
+           "looks": bool(content.looks)}  # 有擂台形象（功能包 looks）：萬寶閣多一頁「形象」
+    if two(content):
+        out["coins"] = coins_view(content, wallet, owner)
+    return out
+
+
+def coins_view(content: Content, wallet: Wallet, owner: str) -> dict:
+    """元寶拆成兩種時畫面要的：兩種各剩多少與送的那一種叫什麼（貨架、錠子鈕、紀錄、查帳都讀它）。"""
+    b = wallet.balances(owner)
+    return {"paid": b[PAID], "gift": b[GIFT], "gift_name": content.config.mall.gift_name}
 
 
 def records(
@@ -564,29 +636,49 @@ def records(
     shown = content.config.mall.records_shown
     balance = wallet.balance(owner)
     after, ledger = balance, []
-    for row in wallet.ledger(owner, shown):
+    split = two(content)
+    rows = wallet.ledger(owner, shown)
+    held = None  # 元寶拆成兩種：一筆兩種都動到時元寶那一列（編號接 ":paid"）併進原編號那一列，寫成一列兩個數
+    for row in rows:
+        if split and row.ref.endswith(PAID_SUFFIX) and any(r.ref == row.ref[: -len(PAID_SUFFIX)] for r in rows):
+            held = row
+            continue
+        partner, held = (held if held is not None and held.ref == row.ref + PAID_SUFFIX else None), None
+        delta = row.delta + (partner.delta if partner else 0)
         bought = wallet.purchase(row.purchase_id) if row.purchase_id is not None else None
         known = content.mall.get(bought.item) if bought is not None else None
-        line = {"time": real_text(row.time, content), "season_time": season_time(row.time) if season_time else None, "delta": row.delta, "reason": reason_text(row.reason, row.ref),
+        line = {"time": real_text(row.time, content), "season_time": season_time(row.time) if season_time else None, "delta": delta, "reason": reason_text(row.reason, row.ref),
                 "note": row.note, "balance": after, "item": (known.name if known else bought.item) if bought is not None else None,
                 "refunded": bought is not None and bought.refunded is not None}
+        if split:
+            coins = {PAID: 0, GIFT: 0}
+            for r in (row, partner):
+                if r is not None:
+                    coins[r.coin] += r.delta
+            line["coins"] = coins
         if admin:
             line.update(ref=row.ref, admin=row.admin, purchase=row.purchase_id)
         ledger.append(line)
-        after -= row.delta
+        after -= delta
     purchases = []
     for bought in wallet.purchases(owner, shown):
         known = content.mall.get(bought.item)
         purchases.append({"id": bought.id, "time": real_text(bought.time, content), "item": known.name if known else bought.item,
                           "price": bought.price, "refunded": bought.refunded is not None})
-    return {"balance": balance, "ledger": ledger, "purchases": purchases}
+    out = {"balance": balance, "ledger": ledger, "purchases": purchases}
+    if split:
+        out["coins"] = coins_view(content, wallet, owner)
+    return out
 
 
 def adjust(
     wallet: Wallet, owner: str, shown: str, amount: int, reason: str, ref: str, *, now: float, admin: str, note: str,
+    coin: str = GIFT, content: Content | None = None,
 ) -> str:
     """管理者補發（reissue）或扣回（revoke）元寶（4.7）：原因必填、元寶是正整數、扣回不能扣到負的；回那一句（成了或不成）。
-    ref 是這一筆的編號（伺服器產），同一個編號重送不會記兩次。"""
+    ref 是這一筆的編號（伺服器產），同一個編號重送不會記兩次。coin 是哪一種（元寶拆成兩種；預設送的那一種，補償儲值沒入帳才選
+    paid），扣回只看那一種夠不夠。content 給了而且開關開著，那一句照種類寫名字。"""
+    coin = coin if coin in (GIFT, PAID) else GIFT
     note = (note or "").strip()
     if not note:
         return NEED_NOTE
@@ -594,15 +686,18 @@ def adjust(
         return BAD_AMOUNT
     if not ref:
         return NEED_REF
+    split = content is not None and two(content)
+    word = ("元寶" if coin == PAID else gift_word(content)) if split else "元寶"
     with wallet.db.transaction():
         if reason == "revoke":
-            balance = wallet.balance(owner)
-            if balance < amount:
-                return REVOKE_SHORT.format(name=shown, balance=balance, n=amount)
-        if not wallet.post(owner, amount if reason == "reissue" else -amount, reason, f"admin:{ref}", time=now, admin=admin, note=note):
+            balance = wallet.balance(owner, coin) if split else wallet.balance(owner)
+            if balance < amount or (not split and wallet.balance(owner, coin) < amount):
+                return REVOKE_SHORT.format(name=shown, balance=balance, n=amount, coin=word)
+        if not wallet.post(owner, amount if reason == "reissue" else -amount, reason, f"admin:{ref}", time=now, admin=admin, note=note,
+                           coin=coin):
             return DONE_BEFORE
-        left = wallet.balance(owner)
-    return (REISSUED if reason == "reissue" else REVOKED).format(name=shown, n=amount, left=left)
+        left = wallet.balance(owner, coin) if split else wallet.balance(owner)
+    return (REISSUED if reason == "reissue" else REVOKED).format(name=shown, n=amount, left=left, coin=word)
 
 
 def refund(
@@ -623,9 +718,10 @@ def refund(
     if bought.refunded is not None:
         return REFUNDED_BEFORE
     took: list[str] = []
+    paid_back = coins_of(bought.data, bought.price)  # 當初各扣了幾個就退回那一種（拆開以前買的全退成五銖）
     with wallet.db.transaction():
-        if not wallet.post(owner, bought.price, "refund", f"refund:{bought.id}", time=now, admin=admin, note=note,
-                           purchase_id=bought.id):
+        if not wallet.credit(owner, paid_back, "refund", f"refund:{bought.id}", time=now, admin=admin, note=note,
+                             purchase_id=bought.id):
             return REFUNDED_BEFORE
         wallet.mark_refunded(bought.id, now)
         days = int(bought.data.get("card_days", 0))
@@ -635,9 +731,11 @@ def refund(
             took.append(CARD_BACK.format(n=days))
         rebate = int(bought.data.get("card_rebate", 0))
         if rebate and wallet.has_ref(f"card:rebate:{bought.id}"):  # 當場回的那一份扣回（退了全價，餘額一定夠：回饋比價錢少）
-            wallet.post(owner, -rebate, "revoke", f"refund:rebate:{bought.id}", time=now, admin=admin,
+            # 回饋是五銖：先扣五銖，已經花掉不夠扣的從剛退回來的元寶裡抵（元寶拆成兩種，設計稿「花錢、退款與市集」）
+            gift = min(rebate, max(0, wallet.balance(owner, GIFT)))
+            wallet.take(owner, {GIFT: gift, PAID: rebate - gift}, "revoke", f"refund:rebate:{bought.id}", time=now, admin=admin,
                         note=CARD_REFS["refund:rebate:"], purchase_id=bought.id)
-            took.append(REBATE_BACK.format(n=rebate))
+            took.append(REBATE_BACK.format(n=rebate, coin=gift_word(content)))
         holding = int(bought.data.get("holding", 0))
         if holding and (season is None or bought.season == season):  # 上一季買的擴充換季時已經跟著歸零了，不動這一季的
             back = min(holding, state.player.holding_bonus)
@@ -676,9 +774,10 @@ def refund(
             took.append(LOOK_BACK.format(name=look.name if look else bought.data.get("name") or bought.data["look_id"]))
         if bought.data.get("move_id"):  # 招式動畫：退了就不算（擂台上不再疊那一張）
             took.append(MOVE_BACK.format(name=bought.data.get("art_name") or bought.data["move_id"]))
-        left = wallet.balance(owner)
+        left = left_text(content, wallet, owner)
     known = content.mall.get(bought.item)
-    return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))
+    price = "、".join(coins_text(content, paid_back, "+")) if two(content) else f"元寶 +{bought.price}"
+    return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=price, left=left, took="".join(took))
 
 
 def item_problems(item: MallItem, content: Content) -> list[str]:

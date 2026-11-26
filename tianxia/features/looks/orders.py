@@ -24,7 +24,8 @@ from pathlib import Path
 from tianxia import naming
 from tianxia import speech  # 共用規則層（玩家寫的字過字表；名帖、挑釁同一道）
 from tianxia.models import Content, MallItem
-from tianxia.wallet import Purchase, Wallet
+from tianxia.core.services import paid_only  # 元寶拆成兩種：這件只收元寶嗎
+from tianxia.wallet import PAID, Purchase, Wallet, coins_of
 
 EFFECT = "look_order"
 PREFIX = "u"  # 自建形象的 id：u<購買 id>（官方的寫在 content/looks.json，只有小寫英數；不會撞）
@@ -50,6 +51,7 @@ NAME_TAKEN = "已經有一套叫「{name}」的形象了，換個名字。"
 NO_PROMPT = "寫一句這一套長什麼樣子。"
 OPEN_ORDER = "你還有一張自建形象在做：等它好了、或按「撤回」退掉，再下一張。"
 SHORT = "元寶不夠：自建形象要 {price}，你有 {balance}。"
+PAID_SHORT = "要用元寶（儲值得來的）付：要 {price}，你的元寶有 {paid}。"  # 元寶拆成兩種；待 joy 潤
 PLACED = "下單了「{name}」：元寶 -{price}（還剩 {left}）。圖做好、審核過了，就會出現在「形象」這一頁。"
 DUPLICATE = "這一張已經下過單了。"
 NOT_SOLD = "自建形象還沒開賣。"
@@ -140,15 +142,33 @@ def place(
             return None, problem
         if any(o.status in (PENDING, REVIEW) for o in mine(wallet, owner)):
             return None, OPEN_ORDER
-        balance = wallet.balance(owner)
-        if balance < item.price:
-            return None, SHORT.format(price=item.price, balance=balance)
+        short = short_problem(content, wallet, owner, item, SHORT)
+        if short:
+            return None, short
         data = {EFFECT: 1, "name": name, "prompt": prompt, "status": PENDING}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
-        if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
-            raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
+        pay(content, wallet, owner, item, full, pid, now)
         left = wallet.balance(owner)
     return pid, PLACED.format(name=name, price=item.price, left=left)
+
+
+def short_problem(content: Content, wallet: Wallet, owner: str, item: MallItem, short: str) -> str | None:
+    """付不起這件的那一句（元寶拆成兩種開著、這件只收元寶時只算元寶）；付得起是 None。絕招也照它。"""
+    if paid_only(content, item.id):
+        have = wallet.balance(owner, PAID)
+        return None if have >= item.price else PAID_SHORT.format(price=item.price, paid=have)
+    balance = wallet.balance(owner)
+    return None if balance >= item.price else short.format(price=item.price, balance=balance)
+
+
+def pay(content: Content, wallet: Wallet, owner: str, item: MallItem, full: str, pid: int, now: float) -> dict[str, int]:
+    """扣這件的錢（先扣五銖；只收元寶的只扣元寶），動到元寶就記進那一列的 data["coins"]（退款退回原來的那一種）。"""
+    coins = wallet.spend(owner, item.price, "buy", full, time=now, purchase_id=pid, paid_only=paid_only(content, item.id))
+    if coins is None:
+        raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
+    if coins[PAID]:
+        wallet.update_data(pid, coins=coins)
+    return coins
 
 
 # ── 圖 ──────────────────────────────────────
@@ -301,8 +321,8 @@ def reject(wallet: Wallet, order: Order, *, now: float, admin: str, note: str) -
         return f"（「{order.name}」{STATUS_TEXT[order.status]}了，不在這裡退。）"
     bought = wallet.purchase(order.pid)
     with wallet.db.transaction():
-        if not wallet.post(order.owner, bought.price, "refund", f"refund:{order.pid}", time=now, admin=admin, note=note,
-                           purchase_id=order.pid):
+        if not wallet.credit(order.owner, coins_of(bought.data, bought.price), "refund", f"refund:{order.pid}", time=now,
+                             admin=admin, note=note, purchase_id=order.pid):
             return "（這一筆已經退過了。）"
         wallet.mark_refunded(order.pid, now)
         wallet.update_data(order.pid, status=REJECTED, reason=note)
@@ -322,8 +342,8 @@ def withdraw(wallet: Wallet, order: Order, *, now: float) -> str:
         if now_status not in CAN_WITHDRAW:
             return f"（「{order.name}」{STATUS_TEXT.get(now_status, now_status)}了，撤不回來。）"
         bought = wallet.purchase(order.pid)
-        if not wallet.post(order.owner, bought.price, "refund", f"refund:{order.pid}", time=now, note=WITHDRAWN,
-                           purchase_id=order.pid):
+        if not wallet.credit(order.owner, coins_of(bought.data, bought.price), "refund", f"refund:{order.pid}", time=now,
+                             note=WITHDRAWN, purchase_id=order.pid):
             return "（這一筆已經退過了。）"
         wallet.mark_refunded(order.pid, now)
         wallet.update_data(order.pid, status=REJECTED, reason=WITHDRAWN)

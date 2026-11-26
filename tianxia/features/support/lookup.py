@@ -47,7 +47,9 @@ def card(db: Database, account_id: int, *, ledger_rows: int, created_must: float
     wallet = Wallet(db)
     owner = name_key(character) if character else None
     ledger = [] if owner is None else [
-        {"time": e.time, "delta": e.delta, "reason": rules.LEDGER_REASONS.get(e.reason, e.reason), "note": e.note}
+        {"time": e.time, "delta": e.delta, "reason": rules.LEDGER_REASONS.get(e.reason, e.reason), "note": e.note, "coin": e.coin}
         for e in wallet.ledger(owner, limit=ledger_rows)]
     return {"id": int(a["id"]), "login": login, "character": character, "created": float(a["created"]), "binds": binds,
-            "balance": 0 if owner is None else wallet.balance(owner), "ledger": ledger}
+            "balance": 0 if owner is None else wallet.balance(owner), "ledger": ledger,
+            # 元寶拆成兩種（資料庫第 10 版）：兩種各剩多少，客服回儲值問題時看元寶那一個數
+            "coins": {"paid": 0, "gift": 0} if owner is None else wallet.balances(owner)}
