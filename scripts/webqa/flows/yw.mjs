@@ -3,14 +3,14 @@
 // the academy put an event or an insight first; the wilds do not). The model is the dead port: the storyteller fails twice and the stand-in
 // lines are stored, so the pages are fixed. What the walk shoots, in order:
 //   yw_out    the meeting card open; put away over the trip's card, on the 江湖 page and the hero page (the strip); back from the
-//             strip and from the menu; the rules open;
+//             strip (batch 272: no longer from the menu and the rules: see the end of yw_out);
 //   yw_walk   自己說 with words typed and not sent, one the word list refuses, the 等說書人 page (held, see below), the first act,
 //             自己說 held again and 停 on its waiting page, the second act it wrote, the line serve.py screens bad (once, then until
 //             the box is spent), the third act with the closing card, back to the game;
 //   yw_trail  the second account meets the same tale (a walked one: replayed, its 自己說 box greyed), its first act, put away.
 // The waiting page is gone in an instant on the dead port: serve.py holds writer.write_scene while the walk has hold['armed'], and the walk
 // releases it when the picture is taken (finally: a flow that throws must not leave a request hanging).
-import { CH, ACT, place, ACCOUNTS, accounts, DUTY, stepVia } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS, accounts } from "./common.mjs";
 
 export { ACCOUNTS };
 const BAD = "瞎說一通"; // serve.py YW_BAD_WORDS: the one line its fake screen calls bad
@@ -69,9 +69,10 @@ export const flows = [
     await c.step(ACT("yw-show"), "yw_shown", { who: "p1" });
     await c.step(ACT("yw-hide"), "", {});
     await c.tab("jianghu");
-    // batch 272: on the new 江湖頁 an option that is neither a place nor a duty is a row of the 軍務 list's 此地還能 (web/jianghu.js jhKinds)
-    await stepVia(c, CH("yiwen:open"), DUTY, "yw_reopen", { who: "p1" });
-    await c.step(ACT("yw-help"), "yw_help", { who: "p1" });
+    // batch 272: yw_reopen (yiwen:open on the 江湖 page) and yw_help after it are not walked any more. On the new 江湖頁 an option that
+    // is neither a place nor a duty is a row of the 軍務 list's 此地還能 (web/jianghu.js jhKinds), and 沈浪 here is a 散人: his third cell
+    // is 投靠 (jhDutyCell -> jhJoinCell), so no cell pulls that list up. The strip on the hero page (yw_shown) is the way back here.
+    // If the page gets a way to it for a 散人, walk it again with stepVia(c, CH("yiwen:open"), DUTY, ...) and yw-help after it.
   }],
   ["yw_walk", async (c) => {
     await c.load("/");
