@@ -113,14 +113,12 @@ main:mingtie_box
 main:mt_edit
 main:mt_shuffle
 main:mt_close
-main:call_list
 main:call_zhujun
 main:call_log
 main:call_talk
 main:call_close
 main:call_act
 main:letter_open
-main:guide_next
 main:ex_wilds
 main:ex_open
 main:ex_go
@@ -202,7 +200,6 @@ main:terr_more_huangjin_camp
 main:map_travel
 main:map_after_travel
 main:tr_wheel
-main:tr_mode
 main:tr_on_road_map
 main:tr_arrived
 main:so_here
@@ -253,10 +250,7 @@ main:next_j
 main:next_practice
 main:next_news
 x:x_j
-x:x_guide_more
-x:x_guide_next
 x:x_guide_shut
-x:x_guide_open
 x:x_news
 x:x_news_xingshi
 x:x_self_news
@@ -406,8 +400,6 @@ v:v_melt_go
 v:v_melt_yes
 v:v_melt_after
 v:v_wheel
-v:v_mode_dash
-v:v_mode_walk
 v:v_leave
 v:v_on_road
 v:v_on_road_act
@@ -547,7 +539,6 @@ extra:mvp_replay
 extra:mvp_again
 extra:x_j
 extra:wk_clean
-extra:wk_hide_strip
 extra:ring_joined
 extra:ring_fight
 extra:ring_round
@@ -556,8 +547,6 @@ yw:yw_hidden_trip
 yw:yw_hidden
 yw:yw_track_hero
 yw:yw_shown
-yw:yw_reopen
-yw:yw_help
 yw:yw_typed_draft
 yw:yw_typed_refused
 yw:yw_wait

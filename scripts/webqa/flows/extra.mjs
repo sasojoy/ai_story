@@ -361,27 +361,8 @@ export const flows = [
     await c.step('[data-act="wk-hide"][data-id="strip"]', "wk_hide_strip", { who });
     await c.load("/");
   }],
-  ["ring", async (c) => {
-    await c.leave();
-    await place(c, "白飛", "wan_city");
-    await c.api("p2", "/api/main");
-    await c.api("p2", "/api/choose", { id: "act:arena" });
-    await c.api("p2", "/api/choose", { id: "arena:join" });
-    await c.api("p2", "/api/choose", { id: "arena:back" });
-    await place(c, "沈浪", "wan_city");
-    await enterShop(c, "p1", "act:arena");
-    await c.step(CH("arena:join"), "ring_joined", { who: "p1" });
-    const opts = await c.api("p1", "/api/main");
-    c.log("arena options", JSON.stringify((opts.json.options || []).map((o) => o.id + (o.enabled ? "" : "!"))).slice(0, 300));
-    await c.step('[data-act="choose"][data-id^="arena:fight"]:not([disabled])', "ring_fight", { who: "p1" });
-    // the canvas does not compare by pixels: the DOM, and whether it drew anything (facts.canvas on each scene)
-    const drew = await c.ev(`(() => { const e = document.getElementById("ring-stage"); return e ? [e.width, e.height] : null; })()`);
-    c.report.facts.ring_stage = drew;
-    await c.step(CH("arena:強攻"), "ring_round", { who: "p1", wait: 900 });
-    await c.load("/");
-  }],
   // Batch 272: the new 江湖頁's own buttons (web/jianghu.js registerClicks) that the rounds' clicks do not reach on their way.
-  // Last, because 行路's far road (jh-go) sets out.
+  // Before ring (it leaves 沈浪 in the arena's fight); the far road (jh-go) sets out last, and 沈浪 is put back after it.
   ["jh_page", async (c) => {
     await c.leave();
     await c.asPlayer("p1"); // week_card may have left the browser on another account
@@ -403,13 +384,33 @@ export const flows = [
     await c.click(SHEET("road"));
     await c.step(ACT("jh-map"), "jh_map", {});
     await c.load("/");
-    await c.py("st = chars.load('沈浪'); st.player.stamina = 0; chars.save(st); out = 1");
+    await c.py("import builtins; st = chars.load('沈浪'); builtins._qa_stamina = st.player.stamina; st.player.stamina = 0; chars.save(st); out = 1");
     await c.load("/");
     await c.step('[data-act="jh-stam"]', "jh_stam", {});
-    await c.py("st = chars.load('沈浪'); st.player.stamina = 240; chars.save(st); out = 1");
+    await c.py("import builtins; st = chars.load('沈浪'); st.player.stamina = builtins._qa_stamina; chars.save(st); out = 1");
     await c.load("/");
     await c.click(SHEET("road"));
     await c.step(ACT("jh-go"), "jh_go", { who: "p1", wait: 800 });
+    await place(c, "沈浪", "wan_city");
+    await c.load("/");
+  }],
+  ["ring", async (c) => {
+    await c.leave();
+    await place(c, "白飛", "wan_city");
+    await c.api("p2", "/api/main");
+    await c.api("p2", "/api/choose", { id: "act:arena" });
+    await c.api("p2", "/api/choose", { id: "arena:join" });
+    await c.api("p2", "/api/choose", { id: "arena:back" });
+    await place(c, "沈浪", "wan_city");
+    await enterShop(c, "p1", "act:arena");
+    await c.step(CH("arena:join"), "ring_joined", { who: "p1" });
+    const opts = await c.api("p1", "/api/main");
+    c.log("arena options", JSON.stringify((opts.json.options || []).map((o) => o.id + (o.enabled ? "" : "!"))).slice(0, 300));
+    await c.step('[data-act="choose"][data-id^="arena:fight"]:not([disabled])', "ring_fight", { who: "p1" });
+    // the canvas does not compare by pixels: the DOM, and whether it drew anything (facts.canvas on each scene)
+    const drew = await c.ev(`(() => { const e = document.getElementById("ring-stage"); return e ? [e.width, e.height] : null; })()`);
+    c.report.facts.ring_stage = drew;
+    await c.step(CH("arena:強攻"), "ring_round", { who: "p1", wait: 900 });
     await c.load("/");
   }],
 ];
