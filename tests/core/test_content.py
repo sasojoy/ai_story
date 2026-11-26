@@ -1345,13 +1345,17 @@ def test_push_is_off_by_default():
 
 def test_online_profiles_open_only_the_human_half_of_support():
     """客服只開真人那一半（企劃者 2026-11-19「這一波落地後先開真人客服」，第 228 批）：week7、season21 的 support.enabled 打開，
-    客服官的 bot_account 空著、帳號綁定 identity 關著；content/config.json 那一層照舊關。客服官 token 那條路一律 404 就靠
-    bot_account 空著（routes._desk_who 讀不到客服官就不認 Bearer）。之後要開客服官或帳號綁定的那一批改這一條。"""
+    客服官的 bot_account 空著；content/config.json 那一層照舊關。客服官 token 那條路一律 404 就靠
+    bot_account 空著（routes._desk_who 讀不到客服官就不認 Bearer）。之後要開客服官的那一批改這一條。
+    帳號綁定 2026-11-26 打開、只開 Google（Joy「Google 金鑰好了」）：ways 只有 google，回呼寫死正式網域，假的寄送一定關。"""
     for name in ONLINE_PROFILES:
         cfg = real_content(name).config
         assert cfg.support.enabled is True, name
         assert cfg.support.bot_account == "", name
-        assert cfg.identity.enabled is False, name
+        assert cfg.identity.enabled is True, name
+        assert cfg.identity.ways == ["google"], name
+        assert cfg.identity.redirect_base == "https://tianxiadashi.com", name
+        assert cfg.identity.fake_services is False, name
     assert real_content().config.support.enabled is False
 
 
