@@ -429,6 +429,15 @@ class UnfoldBook(BaseModel):
     lead: str = Field("", json_schema_extra=QUIET)
     later: list[str] = Field(default_factory=list, json_schema_extra=QUIET)
 
+    @model_serializer(mode="wrap")
+    def _drop_quiet(self, handler):
+        """標 QUIET 的三格是空的、False 的時候不寫鍵（巢狀模型 PlayerState 那一層管不到）：沒帶過的角色存檔一個字都不多。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in _quiet_fields(UnfoldBook):
+                if key in data and not data[key]:
+                    del data[key]
+        return data
 
 class GuardBook(BaseModel):
     """親衛隊長（features/guard；設計稿 https://claude.ai/artifact/7Sra7sBo7njyH34B2Nr7Su，Joy 2026-11-09「其他都按照建議」）：
