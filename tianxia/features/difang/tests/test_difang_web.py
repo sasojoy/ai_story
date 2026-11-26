@@ -49,3 +49,11 @@ def test_act_three_strike_and_the_done_stamp():
     assert 'data-id="difang:strike"' in html and "上前對付翻江鰍" in html
     done = _run(_card(status="done", acts=[{**a, "state": "done"} for a in ACTS], result="堤保住了。", last="柳如煙", options=[]), "return H.difangSheetHtml(m);")
     assert "湊滿" in done and "堤保住了。" in done and "柳如煙" in done and "df-way" not in done
+
+
+def test_the_act_shows_who_else_is_pitching_in_and_done_acts_list_names():
+    acts = [{**ACTS[0], "who": ["柳如煙", "陸三刀"], "more": 0}, {**ACTS[1], "who": ["陸三刀", "柳如煙", "韓七"], "more": 4}, ACTS[2]]
+    m = {**_card(acts=acts), "status": {"name": "陸三刀"}}
+    html = _run(m, "return H.difangSheetHtml(m);")
+    assert "也在出力" in html and html.count('<span class="df-pc') == 4 and 'class="df-pc me"' in html and "等 7 位" in html
+    assert '<small class="df-names">柳如煙、陸三刀</small>' in html  # 湊齊的那一幕：齊字印旁一行名字

@@ -164,6 +164,10 @@ def _credit(ctx, a: DifangAffair, n: int) -> list[str]:
     a.shares[key] = a.shares.get(key, 0) + n
     a.names[key] = ctx.state.player.name
     a.got += n
+    while len(a.by_act) < a.act:
+        a.by_act.append([])
+    if key not in a.by_act[a.act - 1]:
+        a.by_act[a.act - 1].append(key)
     if a.got < a.need[a.act - 1]:
         return []
     d = _def(a) or {}
@@ -329,6 +333,16 @@ def status(ctx) -> dict:
     return {"difang": {"card": card(ctx, a)}} if a is not None else {}
 
 
+WHO_MAX = 6  # 一幕最多畫幾枚名號印（390 寬一排），其餘寫「等 N 位」
+
+
+def _who(a: DifangAffair, act: int, me: str) -> dict:
+    """這一幕出過力的人：自己排第一，其餘新來的在前；不給份數、不排名次。"""
+    keys = a.by_act[act - 1] if len(a.by_act) >= act else []
+    order = ([me] if me in keys else []) + [k for k in reversed(keys) if k != me]
+    return {"who": [a.names.get(k, k) for k in order[:WHO_MAX]], "more": max(0, len(order) - WHO_MAX)}
+
+
 def card(ctx, a: DifangAffair) -> dict | None:
     d = _def(a)
     if d is None:
@@ -337,7 +351,7 @@ def card(ctx, a: DifangAffair) -> dict | None:
     acts = []
     for i, x in enumerate(d["acts"][: rules.ACTS], 1):
         state = "done" if a.status == rules.DONE or i < a.act else ("now" if i == a.act and a.status == rules.OPEN else "later")
-        acts.append({"name": x["name"], "line": x["line"], "state": state})
+        acts.append({"name": x["name"], "line": x["line"], "state": state, **_who(a, i, key)})
     need = a.need[a.act - 1] if a.need else 1
     opts = [o.model_dump() for o in options(ctx)]
     return {

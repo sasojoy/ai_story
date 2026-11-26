@@ -103,3 +103,19 @@ def test_the_real_content_passes_its_checks():
     game = season21_game()
     assert checks.problems(game.content, rules.affairs()) == []
     assert {r for a in rules.affairs().values() for r in a["regions"]} == {r.id for r in game.content.map.regions}
+
+
+def test_each_act_lists_who_pitched_in_me_first_and_caps_the_row():
+    game = season21_game(need_min=[99, 99, 99], per_head=[0, 0, 0])
+    a = _open(game)
+    for i in range(8):  # 別人先出了力（直接記帳：同一區八位俠客）
+        a.by_act.append([]) if not a.by_act else None
+        a.by_act[0].append(f"k{i}")
+        a.names[f"k{i}"] = f"俠客{i}"
+        a.shares[f"k{i}"] = 1
+    actions.on_outing(game, "yingshui")
+    act1 = actions.card(game, affair_here(game))["acts"][0]
+    assert act1["who"][0] == game.state.player.name  # 自己排第一
+    assert act1["who"][1] == "俠客7" and len(act1["who"]) == actions.WHO_MAX and act1["more"] == 9 - actions.WHO_MAX
+    assert all(not isinstance(x, int) for x in act1["who"])  # 只給名號，不給份數
+    assert actions.card(game, affair_here(game))["acts"][1]["who"] == []

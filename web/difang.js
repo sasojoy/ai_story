@@ -23,6 +23,9 @@
   const DF_FAILED = "未成"; // 待 joy 潤
   const DF_LAST = "最後一下：{who}"; // 待 joy 潤
   const DF_HELP = "地方大事的規矩"; // 待 joy 潤
+  const DF_WHO = "也在出力"; // 待 joy 潤：這一幕那一排名號印上面的小字
+  const DF_MORE = "等 {n} 位"; // 待 joy 潤：n 是這一幕出過力的總人數（寫在列出來的名字後面）
+  const DF_ME = "你"; // 待 joy 潤：自己那一枚印上寫的字
   const DF_RULES = [ // 待 joy 潤
     "一個地方一週一件，這一區的人一起湊；不分官軍、黃巾、散人。",
     "三幕照順序來，前一幕湊齊了才換下一幕；這一週過完沒湊滿，地方就會出事。",
@@ -43,6 +46,21 @@
   function dfInk(fill) { // 一條墨痕：照這一幕湊了多少往右暈開，不寫數字
     const w = Math.max(0, Math.min(1, Number(fill) || 0));
     return `<div class="df-ink" role="img" aria-label="進度"><i style="--w:${Math.round(w * 100)}%"></i></div>`;
+  }
+
+  function dfMe(m) { return String((m && m.status && m.status.name) || ""); }
+  function dfWhoRow(m, a) { // 這一幕誰也在出力：名號墨印一小排（同江湖頁「這裡的人」），放不下寫「等 N 位」；不寫份數、不排名次
+    const who = a.who || [];
+    if (!who.length) return "";
+    const me = dfMe(m);
+    const seals = who.map((n) => `<span class="df-pc${n === me ? " me" : ""}"><i>${esc(n === me ? DF_ME : n.slice(0, 1))}</i>${esc(n)}</span>`);
+    if (a.more) seals.push(`<span class="df-pc all"><i>＋${a.more}</i>${esc(DF_MORE.replace("{n}", who.length + a.more))}</span>`);
+    return `<div class="df-who"><small>${DF_WHO}</small><div class="df-pcs">${seals.join("")}</div></div>`;
+  }
+  function dfWhoLine(a) { // 湊齊的那一幕：齊字印旁一行名字
+    const who = a.who || [];
+    if (!who.length) return "";
+    return `<small class="df-names">${esc(who.join("、"))}${a.more ? ` <span>${esc(DF_MORE.replace("{n}", who.length + a.more))}</span>` : ""}</small>`;
   }
 
   function dfDoHtml(m, c) { // 這一幕能做的
@@ -70,7 +88,7 @@
     const end = c.status === "done" ? DF_DONE : c.status === "failed" ? DF_FAILED : "";
     const acts = (c.acts || []).map((a, i) => `<li class="df-act ${esc(a.state)}">
         <span class="df-num">${DF_NUM[i] || ""}</span>
-        <div class="df-act-b"><b>${esc(a.name)}</b>${a.state === "now" ? `<p>${esc(a.line)}</p>${dfInk(c.fill)}${dfDoHtml(m, c)}` : ""}</div>
+        <div class="df-act-b"><b>${esc(a.name)}</b>${a.state === "now" ? `<p>${esc(a.line)}</p>${dfInk(c.fill)}${dfWhoRow(m, a)}${dfDoHtml(m, c)}` : a.state === "done" ? dfWhoLine(a) : ""}</div>
         ${a.state === "done" ? '<span class="df-tick" aria-label="湊齊了">齊</span>' : ""}
       </li>`).join("");
     const heads = c.heads ? DF_HEADS.replace("{n}", c.heads) : DF_NOBODY;

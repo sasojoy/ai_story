@@ -538,6 +538,7 @@ class DifangAffair(BaseModel):
     struck: dict[str, int] = Field(default_factory=dict)  # 第三幕：帳號鍵 → 最後一次上去是台灣第幾天（一天一次）
     last: str = ""  # 第三幕最後一下的名號
     paid: list[str] = Field(default_factory=list)  # 收場那一份已經給過的帳號鍵
+    by_act: list[list[str]] = Field(default_factory=list)  # 每一幕出過力的帳號鍵（照先後；畫面列「誰也在出力」，PM 2026-11-26）
 
 
 class DifangWorld(BaseModel):
