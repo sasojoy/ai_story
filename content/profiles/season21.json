@@ -23,4 +23,5 @@
  "intro": {"enabled": true},
  "jianghu": {"enabled": true},
  "xiake": {"enabled": true},
+ "difang": {"enabled": true},
  "unfold": {"enabled": true}}
