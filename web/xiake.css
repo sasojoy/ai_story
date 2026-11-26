@@ -71,10 +71,12 @@
 .xk-hero.mini::after { height: calc(121px + var(--top)); }
 .xk-dim { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; background: rgba(15, 10, 5, 0.45); cursor: pointer; }
 .xk-hero.mini .jh-st { z-index: 3; }
-.xk-sheet { position: relative; z-index: 4; margin: -6px -16px 0; padding: 8px 16px 20px; min-height: 70vh; background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.22); }
+.xk-sheet { position: relative; z-index: 4; margin: -6px -16px 0; padding: 8px 16px 20px; min-height: calc(100vh - 120px); background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.22); }
 .xk-grip { width: 44px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--line); }
 .xk-sh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .xk-sh h2 { margin: 0; font: 700 26px var(--kai); letter-spacing: 0.12em; }
+.xk-sh-sub { margin-left: 4px; padding-top: 6px; font: 400 13px var(--sans); color: var(--ink-2); }
+.xk-sh .xk-x { margin-left: auto; }
 .xk-x { margin-left: auto; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; font-size: 20px; color: var(--ink-2); cursor: pointer; }
 .xk-sheet > .msg:empty { display: none; }
 .xk-sheet .hero-tabs { display: none; }
@@ -131,3 +133,27 @@
 .xk-card-in .lessons { margin-top: 8px; }
 .xk-release { display: block; margin: 12px auto 0; min-height: 40px; font: 400 13px var(--sans); color: var(--ink-2); }
 .xk-card-x { width: 100%; margin-top: 8px; min-height: 44px; }
+
+/* ── 第二批：拉起那一塊裡面照示意稿排 ── */
+.xk-sb { display: flex; flex-direction: column; }
+.xk-sb > * { order: 3; }
+/* 武學：身上兩門擺最上面，煉製、自創兩面牌接著，功法庫、規矩在後面；定名那一張（有事要做）最先 */
+.sec-arts .xk-sb > .naming { order: 0; }
+.sec-arts .xk-sb > section[aria-label="武學"] { order: 1; }
+.sec-arts .xk-sb > section[aria-label="去做"] { order: 2; margin-top: 4px; }
+.sec-arts section[aria-label="武學"] > .self-hd, .sec-arts section[aria-label="去做"] > .self-hd { display: none; }
+.sec-arts .self-goes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sec-arts .self-goes > :only-child { grid-column: 1 / -1; }
+.sec-arts .self-go { position: relative; overflow: hidden; height: 76px; padding: 12px 12px 9px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+  text-align: left; border-radius: 10px; background: linear-gradient(180deg, #30251a, #1d160f); border: 1px solid #4a3a26; box-shadow: inset 0 0 0 2px rgba(214, 165, 72, 0.18);
+  font: 700 19px var(--kai); letter-spacing: 0.18em; color: #f6ead2; }
+.sec-arts .self-go small { font: 400 11.5px var(--sans); letter-spacing: 0; color: #cdb995; }
+.sec-arts .self-go::before { position: absolute; right: -4px; top: -12px; font: 700 70px/1 var(--kai); color: rgba(214, 165, 72, 0.22); pointer-events: none; }
+.sec-arts .self-go[data-tab="craft"]::before { content: "爐"; }
+.sec-arts .self-go[data-act="create-open"]::before { content: "創"; }
+.sec-arts .self-go[disabled] { opacity: 0.55; }
+.sec-arts .self-go .dot { position: absolute; top: 7px; right: 7px; }
+/* 屬性：有點可配時，可配那一行是一張朱邊小卡 */
+.sec-attrs .self-hd:has(.pts) { justify-content: space-between; padding: 6px 8px 6px 14px; margin-bottom: 8px; border: 1px solid var(--accent); border-left-width: 4px; border-radius: 4px 10px 10px 4px; background: var(--card); }
+.sec-attrs .self-hd:has(.pts) .pts { margin: 0; font: 700 17px var(--kai); letter-spacing: 0.06em; }
+.sec-arts .lib-sec > .self-hd small { display: none; } /* 功法庫用了幾格寫在標題旁，一樣東西只寫一次 */

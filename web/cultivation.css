@@ -70,6 +70,13 @@
 /* 十成畫成十點墨（同抽屜裡的 .ten）：練到第幾成亮到第幾點，絕學的點是朱色 */
 .sa-ten { display: block; }
 .sa-ten .sa-ink { display: block; width: 100%; height: auto; max-height: 36px; }
+.sa-ink .sa-st:not(.q4) { stroke: var(--sa-ink, #2a241d); }
+.sa-ink .sa-st2:not(.q4) { stroke: var(--sa-ink2, #3a3128); }
+.sa-ink .sa-bed { stroke: var(--sa-bed, #d9ccb2); }
+.sa-ink .sa-tick { fill: var(--sa-tick, #b8a888); }
+/* 深色模式：黑墨在深紙上看不見（舊畫面就這樣，俠客頁第二批修），換成淡墨、底槽壓暗 */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --sa-ink: #e6dac2; --sa-ink2: #bfae8e; --sa-bed: #3b342b; --sa-tick: #6e6252; } }
+:root[data-theme="dark"] { --sa-ink: #e6dac2; --sa-ink2: #bfae8e; --sa-bed: #3b342b; --sa-tick: #6e6252; }
 .sa-ink text { font-family: var(--kai); }
 /* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
    段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */

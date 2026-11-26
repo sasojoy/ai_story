@@ -252,14 +252,14 @@
     const ticks = Array.from({ length: 9 }, (_, k) => { const x = (SA_X0 + ((SA_X1 - SA_X0) * (k + 1)) / 10).toFixed(1); return k === 4 ? `<rect x="${x}" y="24" width="1.8" height="7"/>` : `<rect x="${x}" y="25" width="1.4" height="5"/>`; }).join("");
     const ink = top ? "#8a611a" : "#2a241d", ink2 = top ? "#c9952f" : "#3a3128", seal = top ? "#b7862b" : "#a8322a";
     const d = `M${SA_X0} 18.5 Q${((SA_X0 + end) / 2).toFixed(1)} 15.5 ${end.toFixed(1)} 17.6`;
-    const stroke = lv > 0 ? `<path d="${d}" stroke="${ink}" stroke-width="10" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${ink2}" stroke-width="4" stroke-linecap="round" fill="none" opacity=".55"/>`
+    const stroke = lv > 0 ? `<path class="sa-st${top ? " q4" : ""}" d="${d}" stroke="${ink}" stroke-width="10" stroke-linecap="round" fill="none"/><path class="sa-st2${top ? " q4" : ""}" d="${d}" stroke="${ink2}" stroke-width="4" stroke-linecap="round" fill="none" opacity=".55"/>`
       + `<path d="${d}" stroke="#fbf7ef" stroke-width="1.2" stroke-dasharray="14 9 30 6 22 11" fill="none" opacity=".5" transform="translate(0 -2)"/>`
       + `<path d="${d}" stroke="#fbf7ef" stroke-width=".9" stroke-dasharray="9 13 24 7" fill="none" opacity=".4" transform="translate(0 2.6)"/>` : "";
     const word = lv >= 10 && top ? "大成" : `${CN_TENTHS[lv]}成`;
     const stamp = lv > 0 ? `<g transform="translate(${Math.min(288, end + 3).toFixed(1)} 4)"><rect width="30" height="22" rx="3" fill="${seal}"/><rect x="2" y="2" width="26" height="18" rx="2" fill="none" stroke="#f6e3cc" stroke-width="1"/>`
       + `<text x="15" y="15.2" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fdf3e4">${word}</text></g>` : "";
-    return `<svg class="sa-ink" viewBox="0 0 320 34" aria-hidden="true"><path d="M4 18 Q160 15 316 18" stroke="#d9ccb2" stroke-width="7" stroke-linecap="round" fill="none" opacity=".75"/>`
-      + `<g fill="#b8a888">${ticks}</g>${stroke}${stamp}</svg>`;
+    return `<svg class="sa-ink" viewBox="0 0 320 34" aria-hidden="true"><path class="sa-bed" d="M4 18 Q160 15 316 18" stroke="#d9ccb2" stroke-width="7" stroke-linecap="round" fill="none" opacity=".75"/>`
+      + `<g class="sa-tick" fill="#b8a888">${ticks}</g>${stroke}${stamp}</svg>`; // 深色模式的墨色在 cultivation.css 用 class 蓋過（CSS 勝過 SVG 屬性）
   }
   // 「武學」那一段（俠客頁重排，Joy 2026-10-24）：小標題右邊一顆「功法庫 N/M・意境 K ›」（攤開底下的功法庫摺疊、捲過去），
   // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
