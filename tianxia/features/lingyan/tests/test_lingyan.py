@@ -43,7 +43,7 @@ def test_an_ended_season_puts_its_people_on_the_hall_one_cell_each(game):
     assert [h.label for h in shen.honors] == ["天下第一", "論功第一", hall.BOARD_HONOR["武學"]]
     assert shen.honors[2].deed == "【沈家劍】"
     li = s.cells[1]
-    assert [(h.label, h.deed) for h in li.honors] == [(hall.BOARD_HONOR["名人"], "名望 320"), ("絕學首成", "【小李飛刀】")]
+    assert [(h.label, h.deed) for h in li.honors] == [(hall.BOARD_HONOR["名人"], ""), ("絕學首成", "【小李飛刀】")]
     assert "別人" not in names  # 論功只掛第一名
 
 

@@ -104,7 +104,7 @@ HELP = (  # 待 joy 潤
 
 def cell_html(c: Cell) -> str:
     times = f'<span class="ly-times">{escape(times_text(c.times))}</span>' if c.times >= 2 else ""
-    honors = "".join(f"<li><b>{escape(h.label)}</b><span>{escape(h.deed)}</span></li>" for h in c.honors)
+    honors = "".join(f"<li><b>{escape(h.label)}</b>{f'<span>{escape(h.deed)}</span>' if h.deed else ''}</li>" for h in c.honors)
     ping = (f'<div class="ly-ping"><span class="chop" aria-hidden="true">評</span><p>{escape(c.verdict)}</p></div>' if c.verdict else "")
     read = f'<a class="ly-read" href="/zhuan/{escape(c.code)}">讀{escape(c.name)}的列傳 ›</a>' if c.code else ""  # 待 joy 潤
     return (f'<article class="ly-cell">{seal(c.name)}<div><p class="ly-name"><b>{escape(c.name)}</b>{times}</p>'

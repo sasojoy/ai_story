@@ -149,8 +149,9 @@ def _boards(lines: list[str], cells: dict[str, Cell]) -> None:
     for kind in BOARD_KINDS:
         if kind in found:
             who, rest = found[kind]
-            deed = re.sub(r"（.*$", "", rest) if kind == "武學" else rest
-            _cell(cells, who).honors.append(Honor(BOARD, BOARD_HONOR[kind], deed or f"{kind}榜第一"))  # 待 joy 潤
+            # 只有天下武學榜寫那一門武學的名字；名望、善惡名、絕學門數這種點數不寫給玩家看（PM 2026-11-26 照 Joy 字少的常規），只留印
+            deed = re.sub(r"（.*$", "", rest) if kind == "武學" else ""
+            _cell(cells, who).honors.append(Honor(BOARD, BOARD_HONOR[kind], deed))
 
 
 def _master(lines: list[str], cells: dict[str, Cell]) -> None:
