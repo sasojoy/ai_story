@@ -521,6 +521,32 @@ class YiwenWorld(BaseModel):
     settled: dict[str, YiwenSettled] = Field(default_factory=dict)  # 則 id（字串）→ 定論的記號（異聞四）
 
 
+class DifangAffair(BaseModel):
+    """地方大事（features/difang）：一個大區這一週的那一件。三幕：一（平常的探索、打贏都算一份力）、二（此地挑一個做法）、三（每天上一次，大家共扣一個池子）。
+    鍵是帳號鍵（ctx._mall_owner）；名號另記，江湖史具名用。"""
+
+    region: str  # 大區 id（content.map.regions）
+    affair: str  # 內容 id（features/difang/content/difang.json）
+    week: int  # 季曆第幾週（7 天季是第幾段）
+    act: int = 1  # 走到第幾幕（1～3）
+    status: str = "open"  # open（還在湊）、done（湊滿了）、failed（這一週過完沒湊滿）
+    got: int = 0  # 這一幕湊了多少
+    need: list[int] = Field(default_factory=list)  # 三幕各要多少（開那一刻定）
+    shares: dict[str, int] = Field(default_factory=dict)  # 帳號鍵 → 出了幾份力（三幕加總）
+    names: dict[str, str] = Field(default_factory=dict)  # 帳號鍵 → 名號（出力那一刻的）
+    act2: list[str] = Field(default_factory=list)  # 第二幕已經出過手的帳號鍵（一人一次）
+    struck: dict[str, int] = Field(default_factory=dict)  # 第三幕：帳號鍵 → 最後一次上去是台灣第幾天（一天一次）
+    last: str = ""  # 第三幕最後一下的名號
+    paid: list[str] = Field(default_factory=list)  # 收場那一份已經給過的帳號鍵
+
+
+class DifangWorld(BaseModel):
+    """地方大事的全服那一份（WorldState.difang）：None 起家、第一次要開才建；換季整個重來。"""
+
+    week: int = 0  # 開到第幾週了
+    affairs: list[DifangAffair] = Field(default_factory=list)  # 這一季開過的（本週的與結了的；一週一個大區一件）
+
+
 class LegacyBook(BaseModel):
     """傳承（tianxia/features/legacy）：正氣、邪氣、機緣只在換季那一刻結算一次（季中不動）、跨季帶著走；識海選了哪一份、封著的那一份。"""
 
@@ -2266,6 +2292,8 @@ class WorldState(BaseModel):
     yiwen_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時異聞（Config.yiwen）是不是開著（features/yiwen rules.on）；舊季讀檔是 False，False 不寫進存檔
     # 異聞的全服名額與定論記號（features/yiwen）：None 起家、第一次要寫才建（不用 default_factory：_drop_empty_marks_fired 只刪 falsy，空的子模型照樣寫鍵）
     yiwen: YiwenWorld | None = Field(None, json_schema_extra=QUIET)
+    # 地方大事（features/difang）：None 起家、第一次要開才建（同 yiwen 不用 default_factory）；開關 Config.difang.enabled，不蓋開季章（季中打開，下一週起有）
+    difang: DifangWorld | None = Field(None, json_schema_extra=QUIET)
     guard_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時親衛隊長（Config.guard）是不是開著：開著的季酒肆不再招同伴（hire.on；Joy 2026-11-10「全部做完一起上」、設計稿第四批「下一季關酒肆招募」）；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False

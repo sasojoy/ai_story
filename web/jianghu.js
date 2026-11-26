@@ -237,6 +237,7 @@
       const x = m.letter;
       on.push({ key: `l:${x.id}`, seal: x.kind || "來信", title: `${x.sender}來信`, sub: x.task ? x.task.how : x.errand ? x.errand.text : x.text, btn: JH_READ, attrs: 'data-act="jh-sheet" data-sheet="letter"' });
     }
+    if (typeof difangEyeItem === "function") { const df = difangEyeItem(m); if (df) on.push(df); } // 地方大事（web/difang.js）：此地這一週那一件，主鈕拉起它那一層
     if (p.daily) { // 月卡今天的份：主鈕直接領
       const today = m.mall && m.mall.daily;
       on.push({ key: "daily", seal: "月卡", title: JH_DAILY, sub: today && typeof dailyWhat === "function" ? dailyWhat(today) : "", btn: "領取", attrs: 'data-act="mall-claim"' });
@@ -324,7 +325,7 @@
   // 選項只認前綴（伺服器沒有「這一顆是哪一類」的欄位）；兩類都不是的（義聚、探望……）排在軍務清單的「此地還能」。
   const JH_PLACE = /^(act:(bounties|smith|tavern|arena|heal|market|dadian|feast|donate|silver_donate)$|feast:join:|learn:|sect:)/;
   const JH_DUTY = /^(act:duty$|act:convoy$|act:works|fs:|ambush:|opp:|plan:(help|block):|battle:|defect:|works:|seal:)/;
-  const JH_SKIP = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:(?:yes|no):|hire:|invite:|faction:|act:call$|call:|act:socialize$)/; // 人物卡、眼下、投靠卡已經有的
+  const JH_SKIP = /^(aid:guard:|aid:rally:|act:challenge:|jieyi:(?:yes|no):|hire:|invite:|faction:|act:call$|call:|act:socialize$|difang:)/; // 人物卡、眼下、投靠卡、地方大事那一層已經有的
   const JH_SIGN_GROUP = [[/^learn:/, "學藝"], [/^feast:join:/, "赴宴"], [/^sect:/, "拜師"]]; // 待 joy 潤：同類一塊牌子
   const JH_PLACES_HEAD = "這裡的去處"; // 待 joy 潤
   const JH_NO_SHOP = "荒郊野外，沒有店家。"; // 待 joy 潤
@@ -714,6 +715,11 @@
       const html = typeof factionJoinHtml === "function" ? factionJoinHtml(m) : "";
       if (!html) { S.jhSheet = null; return ""; }
       return wrap(JH_JOIN_NAME, html);
+    }
+    if (which === "difang") { // 地方大事那一層（web/difang.js）
+      const html = typeof difangSheetHtml === "function" ? difangSheetHtml(m) : "";
+      if (!html) { S.jhSheet = null; return ""; }
+      return wrap(m.difang.card.title, html);
     }
     if (which === "sides") {
       const html = typeof sidesFirstHtml === "function" ? sidesFirstHtml(m) : "";

@@ -1,0 +1,51 @@
+"""地方大事的畫面（web/difang.js）：眼下那一件、點開的那一層（三幕、墨痕不寫數字、這一幕能做的、收場）。假瀏覽器跑整支 app.js。"""
+from __future__ import annotations
+
+import pytest
+from test_prologue_web import DRIVER as PROLOGUE_DRIVER
+
+import webharness
+
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")]
+DRIVER = PROLOGUE_DRIVER.replace('wholeApp(["S", ', 'wholeApp(["S", "difangEyeItem", "difangSheetHtml", ', 1)
+ACTS = [{"name": "搬沙石", "line": "堤上缺沙包。", "state": "done"}, {"name": "擋亂民", "line": "你怎麼處置？", "state": "now"},
+        {"name": "堤頂一戰", "line": "大家輪流上堤。", "state": "later"}]
+WAYS = [{"id": f"difang:way:{i}", "label": f"潁水決堤・做法{i}", "enabled": True} for i in range(3)]
+
+
+def _card(**kw):
+    c = {"affair": "yingshui_dike", "title": "潁水決堤", "hook": "潁水漲到堤腳。", "region": "潁川汝南", "place": "潁水河畔", "art": "river",
+         "status": "open", "act": 2, "acts": ACTS, "fill": 0.4, "foe": "翻江鰍", "heads": 17, "mine": True, "options": WAYS, "result": "", "last": ""}
+    c.update(kw)
+    return {"difang": {"card": c}, "options": []}
+
+
+def _run(m, script):
+    return webharness.run(DRIVER, {"m": m, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+
+
+def test_the_eye_item_opens_the_sheet_and_names_the_act():
+    it = _run(_card(), "return H.difangEyeItem(m);")
+    assert it["title"] == "潁水決堤" and it["sub"] == "第二幕・擋亂民" and 'data-sheet="difang"' in it["attrs"]
+    assert _run(_card(status="done"), "return H.difangEyeItem(m);") is None
+
+
+def test_act_two_draws_three_ways_and_no_number_for_progress():
+    html = _run(_card(), "return H.difangSheetHtml(m);")
+    assert html.count('class="df-way"') == 3 and 'data-id="difang:way:0"' in html and "做法0" in html and "潁水決堤・" not in html
+    assert "--w:40%" in html and "40" not in html.replace("--w:40%", "")
+    assert "已有 17 人出力" in html and "你也在其中" in html
+
+
+def test_a_used_way_says_so_instead_of_buttons():
+    html = _run(_card(options=[{**w, "enabled": False} for w in WAYS]), "return H.difangSheetHtml(m);")
+    assert "df-way" not in html and "出過手" in html
+
+
+def test_act_three_strike_and_the_done_stamp():
+    strike = [{"id": "difang:strike", "label": "潁水決堤・上前對付翻江鰍", "enabled": True}]
+    acts = [{**a, "state": "done"} for a in ACTS[:2]] + [{**ACTS[2], "state": "now"}]
+    html = _run(_card(act=3, acts=acts, options=strike), "return H.difangSheetHtml(m);")
+    assert 'data-id="difang:strike"' in html and "上前對付翻江鰍" in html
+    done = _run(_card(status="done", acts=[{**a, "state": "done"} for a in ACTS], result="堤保住了。", last="柳如煙", options=[]), "return H.difangSheetHtml(m);")
+    assert "湊滿" in done and "堤保住了。" in done and "柳如煙" in done and "df-way" not in done

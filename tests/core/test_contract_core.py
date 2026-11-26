@@ -923,8 +923,8 @@ def test_the_bus_order_is_the_table_in_the_plan():
     """順序就是行為：每一種事件的格照換成事件之前一行裡的呼叫先後（計畫 1.2），一格不挪——同一下兩個訂閱者的先後就是回話與存檔寫入的先後
     （outing：打探懸賞→撿玉璽碎片；arrive：交糧車→護送懸賞；計畫 1.9 調了就抓得到）。改這張表先過 PM。"""
     assert features_core.BUS_ORDER == {
-        "win": ("bounties", "horses"),  # 馬的來路（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
-        "outing": ("bounties", "seal", "guard", "yiwen"),  # 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）；異聞：探索撞見一則怪事（企劃者 2026-11-21「五處都可以」）
+        "win": ("bounties", "horses", "difang"),  # 地方大事第一幕：打贏一場算一份力（Joy 2026-11-26「做」）；馬的來路（Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
+        "outing": ("bounties", "seal", "guard", "yiwen", "difang"),  # 地方大事第一幕（同上）； 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）；異聞：探索撞見一則怪事（企劃者 2026-11-21「五處都可以」）
         "explore": ("bounties", "guard"),
         "arrive": ("convoy", "bounties"),
         "raid_win": ("bounties", "zongmen"),
@@ -1040,7 +1040,7 @@ def test_the_core_publish_points_ask_the_bus(game, monkeypatch):
         game._squad_encounter("thug", wild=True)
         assert calls == []
         game._squad_encounter("thug")
-    assert calls == [("win", "bounties", (game, "lake", "thug")), ("win", "horses", (game, "lake", "thug"))]
+    assert calls == [("win", "bounties", (game, "lake", "thug")), ("win", "horses", (game, "lake", "thug")), ("win", "difang", (game, "lake", "thug"))]
     calls.clear()
     assert game._raid_bounty("某人") == ["raid_win/bounties", "raid_win/zongmen"]
     assert calls == [("raid_win", "bounties", (game, "某人")), ("raid_win", "zongmen", (game, "某人"))]
@@ -1077,11 +1077,11 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
     with mock.patch.object(explore_one, "draw", return_value="encounter"), _won():
         got = explore_actions.explore_one(game)
     here = ("yingchuan_wilds",)
-    assert calls == [("win", "bounties", (game, *here, plan.foe.id)), ("win", "horses", (game, *here, plan.foe.id)),
+    assert calls == [("win", "bounties", (game, *here, plan.foe.id)), ("win", "horses", (game, *here, plan.foe.id)), ("win", "difang", (game, *here, plan.foe.id)),
                      ("outing", "bounties", (game, *here)), ("outing", "seal", (game, *here)), ("outing", "guard", (game, *here)),
-                     ("outing", "yiwen", (game, *here))]
-    lines = [line for line in got if line in ("outing/bounties", "outing/seal", "outing/guard", "outing/yiwen")]
-    assert lines == ["outing/bounties", "outing/seal", "outing/guard", "outing/yiwen"]
+                     ("outing", "yiwen", (game, *here)), ("outing", "difang", (game, *here))]
+    lines = [line for line in got if line in ("outing/bounties", "outing/seal", "outing/guard", "outing/yiwen", "outing/difang")]
+    assert lines == ["outing/bounties", "outing/seal", "outing/guard", "outing/yiwen", "outing/difang"]
 
 
 def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
@@ -1106,7 +1106,9 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
         # 親衛隊長：探索時撞見那個孩子（Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）
         "guard": [("outing", "guard"), ("explore", "guard")],
         # 異聞：探索撞見一則怪事（企劃者 2026-11-21「五處都可以」）
-        "yiwen": [("outing", "yiwen")]}
+        "yiwen": [("outing", "yiwen")],
+        # 地方大事第一幕：探索一顆、打贏一場都算一份力（Joy 2026-11-26「做」）
+        "difang": [("outing", "difang"), ("win", "difang")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):

@@ -1107,8 +1107,8 @@ class BusHook:
 # battle_end  決戰包 progress.settle_showdown（時刻表決戰收場，讀回季之前）                         (ctx, battle, definition, result)  不接（None）
 # showdown_pay 決戰包 view.showdown_pay（收場的決戰補到自己手上、軍餉發完；攻城也走這裡）             (ctx, battle, me, lines)           接 list[str]（得失那一格）
 BUS_ORDER: dict[str, tuple[str, ...]] = {
-    "win": ("bounties", "horses"),  # horses（馬的來路：打贏騎馬的那幾路奪馬；Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）
-    "outing": ("bounties", "seal", "guard", "yiwen"),  # guard（親衛隊長：探索時撞見那個孩子；Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）；yiwen（異聞：探索撞見一則怪事；企劃者 2026-11-21「五處都可以」）
+    "win": ("bounties", "horses", "difang"),  # horses（馬的來路：打贏騎馬的那幾路奪馬；Joy 2026-11-10 選擇卡選「奪馬+馴野馬+論功賜馬」）；difang（地方大事第一幕：打贏一場算一份力；Joy 2026-11-26「做」）
+    "outing": ("bounties", "seal", "guard", "yiwen", "difang"),  # guard（親衛隊長：探索時撞見那個孩子；Joy 2026-11-10「發現他的那段應該是探索中才會觸發」）；yiwen（異聞：探索撞見一則怪事；企劃者 2026-11-21「五處都可以」）
     "explore": ("bounties", "guard"),
     "arrive": ("convoy", "bounties"),
     "raid_win": ("bounties", "zongmen"),  # zongmen（門派第三批：截殺打贏親傳撿殘頁；Joy 2026-11-08「不錯，按照設計稿動工」，設計稿 v6 卷二）
