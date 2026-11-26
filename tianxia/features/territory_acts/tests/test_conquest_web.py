@@ -459,13 +459,13 @@ MARKS = "return H.marksHtml(H.S.mapBase, H.S.mapState, { z: 1, x: 0, y: 0 }, { v
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_web_map_draws_unheld_neutral_without_a_side_seal_but_with_the_treasure():
     """還沒人佔的中立地：地圖上名字旁沒有哪一方的小印、只有朱印「寶」；被佔下照佔領方的小印、寶照樣在（開季中立的，不管此刻誰佔著）。
-    卡上那一句寫「中立・高級資源領地，還沒有人佔」。"""
+    卡上那一句寫「產得多的寶地，還沒有人佔」（全站總檢查第二批改的字）。"""
     game = _game()
     ink = {s["id"]: s for s in game.map_base()["world"]["sides"]}
     lab = test_map_web._lab(test_map_web.run(game, MARKS), "nanyang_wilds")
     assert 'class="mv-side"' not in lab and '<span class="mv-rich">寶</span>' in lab
     card = test_map_web.run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "nanyang_wilds");')
-    assert "中立・高級資源領地，還沒有人佔" in card
+    assert "產得多的寶地，還沒有人佔" in card
     conquest.set_control(game.state.world, game.content, "nanyang_wilds", "huang")
     held = test_map_web._lab(test_map_web.run(game, MARKS), "nanyang_wilds")
     assert f'<span class="mv-side" style="background:{ink["huang"]["color"]}">' in held and '<span class="mv-rich">寶</span>' in held
