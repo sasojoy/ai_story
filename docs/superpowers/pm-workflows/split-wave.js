@@ -235,7 +235,7 @@ ${COMMON}
 每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反規矩；should；nit）、在哪裡、證據。沒有就回空陣列，不要湊。`, { label: `review:${l.line}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })  // 企劃者 11/08：測試與審查派 Sonnet
 const lensOf = (x) => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推），**專門挑錯**：預設這一波在你這個鏡頭下有問題，你的工作是找出來或親手證明沒有。審第 ${WAVE} 波合好的結果 \`${WAVE_BRANCH}\` ${gateHead}，對 base ${MERGE_BASE}（明確 fetch）。
 ${COMMON}
-**這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完刪。
+**這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完**只刪這一個夾**（\`${SP}\\wave${WAVE}\\\` 裡別的東西是閘門與 PM 的，一個檔都不准動；AO 波有審查員把整個夾刪了）。
 **你的鏡頭**：${x.text}
 每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })
 const checkPromise = !A.web_check ? null : agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${gateHead} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**

@@ -1037,7 +1037,7 @@ def test_create_short_of_xinde_greys_the_entry_and_the_button_and_says_how_much_
     c = m["status"]["create"]
     need = c["price"] - 24
     assert c["on"] and c["problem"] is None and need > 0
-    hero = run(m, "return H.pagePractice();", menxia=x)
+    hero = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "arts"})  # 俠客頁重排（xiake 包）：入口在拉起的武學那一塊
     entry = re.search(r'<button class="btn self-go" data-act="create-open"[^>]*>自創武學<small>([^<]*)</small>', hero)
     assert entry and " disabled" in entry.group(0) and entry.group(1) == f"還差 {need} 心得"
     page = run(m, "return H.pagePractice();", menxia=x, S={"createOpen": True, "createPick": {"kind": "武學", "form": "拳腳"}})
