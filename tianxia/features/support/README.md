@@ -18,7 +18,7 @@
 
 ## 數字（`Config.support`）
 
-`body_max` 1000、`open_max` 3、`daily_max` 5、`mailbox`；第 212 批加 `lookup_hourly` 20（每位客服每小時查帳號幾次）、`ledger_rows` 50（帳號卡的帳本列幾筆）；第 215 批加 `files_max` 3（一張單最多幾張截圖，0＝主機把截圖關掉）、`file_bytes_max` 3,000,000（一張最多幾個位元組）；第 216 批加 `bot_account`（客服官用哪一個帳號：`accounts.id` 的數字或登入名，空的＝token 路一律 404）、`auto_close_days` 3（已回覆幾天沒動就自動結單）。
+`body_max` 1000、`open_max` 3、`daily_max` 5、`mailbox`；第 212 批加 `lookup_hourly` 20（每位客服每小時查帳號幾次）、`ledger_rows` 50（帳號卡的帳本列幾筆）；第 215 批加 `files_max` 3（一張單最多幾張截圖，0＝主機把截圖關掉）、`file_bytes_max` 3,000,000（一張最多幾個位元組）；第 216 批加 `bot_account`（客服官用哪一個帳號：`accounts.id` 的數字或登入名，空的＝token 路一律 404）、`auto_close_days` 3（已回覆幾天沒動就自動結單）；2026-11-25 加 `purge_days` 365（結案後幾天整張單刪掉，見「到期刪除」）。
 
 ## 旁檔
 
@@ -26,7 +26,7 @@
 
 - `tickets`：一張單。帳號 id、建帳號的時間（`accounts.created`）、登入名、名號、版本（`content/patch_notes.json` 最新一筆的日期）由伺服器填，不收客戶端的。看單、回單一律同時比單號、帳號 id、建帳號的時間（主檔退回舊時間點後 id 會被新帳號拿到）。
 - `replies`：單上的每一則；`internal` 是「請管理者處理」的內部註記（玩家看不到、不推播），`seen` 是玩家看過了沒（紅點），`journaled` 是「客服」紀錄確定存進存檔了沒。
-- `lookups`（第 212 批）：查帳號與看單帶出帳號卡，每一次一列：客服的帳號 id、單號、種類（`login`、`email`、`phone`、`card`）、`shown`（帳號存正規化後的，Email、手機只存 `mask_*` 遮好的字，不存明碼、不存雜湊）、查到的帳號 id、結果（`found`、`none`、`limit`、`card`、`gone`）、`counted`、時間。**只有 INSERT**（`store._log` 一處），沒有任何路由改或刪（客服改不到）。
+- `lookups`（第 212 批）：查帳號與看單帶出帳號卡，每一次一列：客服的帳號 id、單號、種類（`login`、`email`、`phone`、`card`）、`shown`（帳號存正規化後的，Email、手機只存 `mask_*` 遮好的字，不存明碼、不存雜湊）、查到的帳號 id、結果（`found`、`none`、`limit`、`card`、`gone`）、`counted`、時間。**只有 INSERT**（`store._log` 一處），沒有任何路由改或刪（客服改不到）；結案一年的單到期刪除時跟著刪（見「到期刪除」）。
 - `pending_notes`（第 212 批）：寫進存檔、還沒確定存成的「客服」紀錄（`reply_id`、`ticket_id`、`at`＝寫進去那一下的遊戲時間）。
 - `files`（第 215 批）：單上的截圖，一張一列（`seq` 從 1 起、`kind`＝副檔名 `png`／`jpg`／`webp`、`bytes`、`sha256`、時間；`UNIQUE (ticket_id, seq)`）。第 214 批的舊檔打開時補上這張表，舊的四張不 ALTER。
 - `flags`（第 216 批）：單上的記號，`kind='human'`（玩家按了找真人，`ref` NULL，一張單最多一列）、`kind='relay'`（客服官轉達真人的那一則，`ref`＝`replies.id`）。第 215 批的舊檔打開時補上，舊的五張不 ALTER。
@@ -56,6 +56,12 @@
 - `GET /api/support/file/{tid}/{seq}`：沒登入 401；單的主人給，不是主人再看是不是客服（照 `_staff` 的兩個條件：名單上、這次是密碼登入且 6 小時內）；其他人、單或序號不存在、不是數字、列在而檔不見了一律 404「找不到這張單。」。`Content-Type` 照存的種類、`Content-Disposition: inline`，第 219 批起路由自己也帶 `X-Content-Type-Options: nosniff`（全站 middleware 本來就加，這裡不靠它；`test_file_response_says_nosniff`）。第 216 批起也認客服官的 Bearer。
 - 看單（玩家 `mine`、客服 `ticket/{tid}`、`answer`、`close` 的回應）每張單多 `files: [{seq, kind, bytes}]`；`queue` 每一列多 `file_count`（`store.queue_extras` 一次查齊）。
 - 畫面（A 版）：寫單多一格「附截圖」（`web/support.js` 的 `supportPickHtml`；挑的檔記在 `S.supportPicks`，重畫會清掉 file input；第 4 張起不收、單張超過 3 MB 當場擋），單送出之後逐張上傳，一張失敗就停、單留著、寫「單送出了，第 N 張圖沒傳上，可以在單上補。」；看單在內文下面一列縮圖（新分頁、`rel="noopener"`、`loading="lazy"`），沒結又不滿 3 張多一個「補一張圖」表單（一次一張）；客服頁的單同一列縮圖。第 226 批起前端的張數與大小照 `GET /api/support/mine`（送單、再回一句回的 `mine` 也是）多帶的 `files_max`、`file_bytes_max`（連 `open_max`、`daily_max`，接在 `body_max` 後面，旁檔不在也帶；`routes._limits`）：三句截圖提示與兩處「同時最多 N 張沒結的單，一天最多送 M 張。」照數字組（MB 照 `routes._mb` 的寫法），缺鍵（舊回應、讀取失敗）退回 3 張、3 MB、3、5，預設值下逐字跟以前一樣；`files_max` 0 時寫單頁整塊不畫挑圖、送單不走上傳（`POST /api/support/file` 在 0 時照舊由伺服器擋「一張單最多附 0 張圖。」，不提早拒）。伺服器照設定另外再擋。
+
+## 到期刪除（隱私權條款第二條「客服單……結案後 1 年」；2026-11-25）
+
+- `Config.support.purge_days` 365：結了的單（`status = closed`）、最後一筆動靜（單的 `updated` 與它所有回覆的 `created`，取晚的；結案後客服補一則註記就從那一則起算）早於這麼多天的，**整張刪掉**：`tickets` 那一列、`replies`（含內部註記）、`files`、`flags`、`pending_notes`、`lookups`（查帳號的稽核紀錄也刪：裡面有遮過的 Email、手機，跟著那張單到期），在 `store.purge` 的同一筆 `BEGIN IMMEDIATE` 裡；交易之後再刪截圖資料夾 `<db stem>-support-files/<單號>/`（`purge.purge_once`）。沒結的單不管多久都不刪。
+- **誰叫**：伺服器啟動時經 `Feature.threads` 開一條 daemon（`purge.start`，先刪一次、之後每 6 小時一次，一輪出錯印一行不停；刪到東西印「客服單到期刪除：N 張」）；客服按 `sweep` 時也順手刪（回的字照舊只有 `closed`）。**不看 `support.enabled`**：關掉客服也要守條款；旁檔不在什麼都不做、不建檔。時鐘是殼的 `time.time`（`routes.start_purge`）。
+- **程式管不到的**：已經貼到 Discord #客服 的訊息（橋不記訊息 id，到期要人工清頻道）、`scripts/backup_db.py` 的舊備份（備份要自己輪替掉一年以前的）。
 
 ## 客服官、找真人、自動結單（客服自動受理第 216 批；設計 5.2～5.4、第八節）
 
@@ -100,7 +106,7 @@
 
 ## 退版
 
-資料庫第 9 版不動；沒有存檔欄位。旁檔多 `lookups`、`pending_notes` 兩張表（舊程式不讀，檔留著）；第 215 批再多 `files` 表與 `<db stem>-support-files/` 資料夾。換回第 214 批：`files` 表沒人讀、截圖的資料夾留著沒人看、兩條新路由不在（看單的回應少 `files`）；只停截圖不停客服：`files_max` 設 0。換回第 211 批：還在 pending 的回覆舊程式當沒寫過，最多各補寫一則「客服」紀錄；查帳紀錄留著沒人讀；`id:<n>` 的帳號又送不了單（401）；易名帖不再擋客服。季中能換、不必休季。緊急開關 `Config.support.enabled`。
+資料庫第 9 版不動；沒有存檔欄位。旁檔多 `lookups`、`pending_notes` 兩張表（舊程式不讀，檔留著）；第 215 批再多 `files` 表與 `<db stem>-support-files/` 資料夾。換回第 214 批：`files` 表沒人讀、截圖的資料夾留著沒人看、兩條新路由不在（看單的回應少 `files`）；只停截圖不停客服：`files_max` 設 0。換回第 211 批：還在 pending 的回覆舊程式當沒寫過，最多各補寫一則「客服」紀錄；查帳紀錄留著沒人讀；`id:<n>` 的帳號又送不了單（401）；易名帖不再擋客服。季中能換、不必休季。緊急開關 `Config.support.enabled`。到期刪除（2026-11-25）：換回之前的程式就不再刪，已經刪掉的回不來（只能從備份撈）；不想刪就把 `purge_days` 調大。
 第 216 批：旁檔多 `flags` 表（換回第 215 批沒人讀，單與回覆照讀）；換回後 token 路 404、`auto` 看不出來（自動回覆與系統回覆都顯示成「客服・回覆」）、`admin_flag` 又只設不清、兩條新路由不在。季中能換、不必休季。只停客服官：拿掉 `.local/support.json` 的 `bot_token`（或清 `bot_account`），再不行關 `Config.support.enabled`。
 第 217 批：只多兩支主機腳本（`scripts/support_bridge.py`、`scripts/support_cli.py`）與主機上的 `.local/support_bridge.json`（橋的進度）、`.local/support-inbox/`（CLI 存的截圖）；資料庫、存檔、旁檔都不動，刪掉兩支腳本就沒了，季中能換、不必休季。只停貼 Discord：停橋（`taskkill /PID <pid> /T /F`）或拿掉 `discord_webhook`（只記不貼）；只停 CLI：拿掉 `bot_token`（全部 404）。
 第 226 批：`/mine` 多四個鍵、`web/support.js` 讀它；沒有新欄位、新表、新資料夾。換回第 225 批：`_mine` 與 `web/support.js` 兩處退回就是寫死的 3 張、3 MB、3、5；舊前端不認新鍵、新前端缺鍵退回預設，混著跑也對。季中能換、不必休季。

@@ -408,6 +408,22 @@ def test_a_reply_with_made_up_numbers_is_thrown_away():
     assert tavern.ask_clean("字" * 200, req) is None
 
 
+def test_fixed_chatter_goes_round_the_whole_set_before_repeating():
+    """固定句的鄰桌閒談（PM 2026-11-25「酒肆事件會重複」）：同一間酒肆整組輪完才再聽到同一句、相鄰兩個時辰不重複，
+    同一個時辰怎麼看都一樣，不同酒肆輪的次序不同；正式內容的固定句夠多（一副牌撐得過大半天）。"""
+    pool = list(real_content().shop_lines["tavern"]["chatter"])
+    assert len(pool) >= 40 and len(set(pool)) == len(pool)
+    hours = len(pool) // 2
+    seen = [line for h in range(100, 100 + hours) for line in tavern.chatter_rotation(pool, "wan_city", h)]
+    assert len(seen) == len(set(seen)) == hours * 2
+    for h in range(0, 300):
+        now, nxt = tavern.chatter_rotation(pool, "wan_city", h), tavern.chatter_rotation(pool, "wan_city", h + 1)
+        assert len(now) == 2 and not set(now) & set(nxt)
+    assert tavern.chatter_rotation(pool, "wan_city", 7) == tavern.chatter_rotation(pool, "wan_city", 7)
+    assert [tavern.chatter_rotation(pool, loc, 7) for loc in ("wan_city", "yingchuan")] != [tavern.chatter_rotation(pool, "wan_city", 7)] * 2
+    assert tavern.chatter_rotation([], "wan_city", 7) == [] and tavern.chatter_rotation(["甲：「乙」"], "wan_city", 7) == ["甲：「乙」"]
+
+
 def test_neighbours_chatter_is_written_once_per_while_and_falls_back():
     """酒客閒談：開著的酒肆該換一段時開單（A）、寫好的記進這一季（C），這一陣子都用它；寫不出來記空的、照固定句、不再開單。"""
     game = _game()
