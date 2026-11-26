@@ -218,3 +218,18 @@ def test_old_sidecar_without_flags_opens(monkeypatch):
     assert s.get(f"/api/support/ticket/{tid}").json()["human"] is False
     with contextlib.closing(sqlite3.connect(sidecar(), isolation_level=None)) as conn:
         assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'flags'").fetchone() is not None
+
+
+def test_sweep_also_purges_closed_tickets_past_a_year(monkeypatch):
+    """到期刪除（隱私權條款「結案後 1 年」）：客服按 sweep 時順手刪結案超過 purge_days 天的單；回的字照舊只有 closed。"""
+    c = player()
+    s = staffer(monkeypatch)
+    old, fresh = ticket(c).json()["id"], ticket(c).json()["id"]
+    for tid in (old, fresh):
+        s.post("/api/support/close", json={"id": tid})
+    _age(old, 366)
+    _age(fresh, 364)
+    assert s.post("/api/support/sweep", json={}).json() == {"closed": []}
+    sc = _sc()
+    assert sc.ticket(old) is None and sc.replies(old, internal=True) == []
+    assert sc.ticket(fresh)["status"] == "closed"

@@ -805,13 +805,24 @@
     const { fig, peer } = jhMarks(m);
     const order = { 邀戰: 0, 論武: 0, 結伴: 0, 結義: 0, 邀約: 0, [JH_BROTHER]: 1, [JH_KIN]: 1, [JH_FOE]: 2 };
     const near = peers.filter((x) => peer[x.name]).sort((a, b) => order[peer[a.name]] - order[peer[b.name]]);
+    // 人物之後還放得下全部俠客就一個一個畫（Joy 11/25：「+1 俠客」不如直接畫那一位）；放不下才留最後一格「＋N」
+    const fits = figs.length > 0 && figs.length + peers.length <= JH_ROW_MAX;
     const room = Math.max(0, JH_ROW_MAX - figs.length - (peers.length ? 1 : 0));
-    const shown = near.slice(0, room), rest = peers.length - shown.length;
+    const shown = fits ? near.concat(peers.filter((x) => !peer[x.name])) : near.slice(0, room), rest = peers.length - shown.length;
     const tiles = figs.map((f) => `<button class="jh-ic fig" data-act="fig-open" data-id="${esc(f.id)}"><span${f.face ? ` style="background-image:url('${esc(f.face)}')"` : ""}>${f.face ? "" : esc(f.name.slice(0, 1))}</span>${esc(f.name)}${jhMk(fig[f.id])}</button>`)
       .concat(shown.map((x) => `<button class="jh-ic pc${peer[x.name] === JH_FOE ? " foe" : ""}" data-act="peer" data-name="${esc(x.name)}"><span>${esc(x.name.slice(0, 1))}</span>${esc(x.name)}${jhMk(peer[x.name] === JH_FOE ? "" : peer[x.name])}</button>`))
-      .concat(rest > 0 ? [`<button class="jh-ic all" data-act="jh-sheet" data-sheet="people"><span>＋${rest}</span>${JH_PEERS_ALL}</button>`] : []);
+      .concat(rest > 0 && (figs.length || shown.length) ? [`<button class="jh-ic all" data-act="jh-sheet" data-sheet="people"><span aria-hidden="true">${peers.filter((x) => !shown.includes(x)).slice(0, 2).map((x) => `<em>${esc(x.name.slice(0, 1))}</em>`).join("")}</span>＋${rest} ${JH_PEERS_ALL}</button>`] : [])
+      .concat(rest > 0 && !figs.length && !shown.length ? [jhCrowdHtml(peers)] : []);
     const n = [figs.length ? JH_PEOPLE_F.replace("{n}", figs.length) : "", peers.length ? JH_PEOPLE_P.replace("{n}", peers.length) : ""].filter(Boolean).join("・");
     return `<section class="jh-blk jh-people"${peers.length ? ' data-uf="jh:peers"' : ""}><h3>${JH_PEOPLE}${peers.length ? jhUfDot("jh:peers") : ""}<small>${esc(n)}</small></h3><div class="jh-ppl">${tiles.join("")}</div></section>`;
+  }
+  // 此地只有俠客、前面一個人都沒畫：不畫「＋N」（Joy 2026-11-25「那個+2好醜」），畫一張橫的俠客卡：幾枚墨印疊著（名號第一個字）＋「兩位俠客在此」，點了照舊拉起名單
+  const JH_CROWD = "{n}位俠客在此"; // 待 joy 潤
+  const JH_CN = "零一兩三四五六七八九十";
+  const jhCnNum = (n) => (n <= 10 ? JH_CN[n] : String(n) + " ");
+  function jhCrowdHtml(peers) {
+    const faces = peers.slice(0, 3).map((x) => `<span>${esc(x.name.slice(0, 1))}</span>`).join("");
+    return `<button class="jh-crowd" data-act="jh-sheet" data-sheet="people"><span class="jh-crowd-f" aria-hidden="true">${faces}</span><b>${esc(JH_CROWD.replace("{n}", jhCnNum(peers.length)))}</b><i aria-hidden="true">›</i></button>`;
   }
   // 「＋N 俠客」拉起來那一層：此地全部的俠客，跟你有關的排前面
   function jhPeersSheetBody(m) {

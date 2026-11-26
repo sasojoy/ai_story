@@ -315,3 +315,22 @@ def test_free_agent_third_plaque_is_join(wan):  # noqa: F811
     m["status"] = {**m["status"], "affiliation": "官軍"}
     m["sides_card"] = {**m["sides_card"], "joined": True}
     assert "軍務" in cell(run(m, "return H.pageJianghu();"))
+
+
+def test_only_peers_here_draw_a_crowd_card_not_plus_n(wan):  # noqa: F811
+    """Joy 2026-11-25「那個+2好醜」：此地沒有人物、俠客也都跟你無關時，不畫「＋N」方格，畫一張俠客卡（墨印＋「兩位俠客在此」），點了照舊拉起名單；
+    前面畫了人才有「＋N」。"""
+    wan.content.config.jianghu.enabled = True
+    m = server.main_view(wan)
+    m["figures_here"] = []
+    m["here"] = [{"name": "柳七", "side": ""}, {"name": "白無垢", "side": ""}]
+    people = run(m, "return H.pageJianghu();").split('class="jh-blk jh-people"')[1].split("</section>")[0]
+    assert 'class="jh-crowd" data-act="jh-sheet" data-sheet="people"' in people and "兩位俠客在此" in people
+    assert "jh-ic all" not in people and "＋2" not in people and "<span>柳</span><span>白</span>" in people
+    m["figures_here"] = server.main_view(wan)["figures_here"][:2]
+    assert m["figures_here"]
+    people = run(m, "return H.pageJianghu();").split('class="jh-blk jh-people"')[1].split("</section>")[0]
+    assert "jh-crowd" not in people and "jh-ic all" not in people and 'data-name="柳七"' in people and 'data-name="白無垢"' in people  # 放得下就一位一位畫
+    m["here"] = [{"name": f"俠{i}", "side": ""} for i in range(9)]
+    people = run(m, "return H.pageJianghu();").split('class="jh-blk jh-people"')[1].split("</section>")[0]
+    assert "jh-crowd" not in people and '<button class="jh-ic all" data-act="jh-sheet" data-sheet="people">' in people and "＋9 俠客" in people

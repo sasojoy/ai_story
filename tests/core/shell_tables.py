@@ -254,6 +254,7 @@ NO_LOGIN_ROUTES = {
     ("POST", "/api/logout"): "沒登入登出也是 200",
     ("GET", "/zhuan/{code}"): "公開的傳：分享代碼，唯讀",
     ("GET", "/zhanji/{code}"): "公開的戰記：分享代碼，唯讀",
+    ("GET", "/lingyan"): "lingyan：凌煙閣，歷代收季的名號與事蹟，唯讀；Joy 2026-11-26 決定卡選「沒登入也看得到」；Config.lingyan.enabled 關著 404（gate 先於一切）",
     # terms（條款包；Joy 2026-11-07 要的使用條款與隱私權條款，2026-11-08「趕快合一合」）
     ("GET", "/terms"): "使用條款全文：法律文件要讓還沒註冊的人看得到，唯讀、只回靜態頁",
     ("GET", "/privacy"): "隱私權條款全文：同上",
