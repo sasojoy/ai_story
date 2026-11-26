@@ -17,4 +17,5 @@
 **認領的欄位**：`PlayerState.unfold`（`UnfoldBook`：grown、fresh），標 QUIET，None 不寫進存檔；跟著帳號走、換季照帶。
 **商城**：一開始就在（Joy 11/25「能越快出來越好」），不在 `KEYS`。
 **江湖頁上的區塊**歸「重排江湖頁」那一條：讀同一本，要加的鍵另外列給這一包。
+**帶著做一次**（Joy 11/26）：`cards.py` 的 `STEPS`、`WEB_STEPS`、`start`／`report`／`stop`／`lead_view`；`routes.py` 多 `POST /api/unfold/lead`；舊角色那一本 `old: true`（`cards.old_book`，季在跑才開；`Config.unfold.old_chars` 關掉就不開）；`UnfoldBook.old/lead/later` 標 QUIET，空的不寫鍵（書自己的序列化）。測試 `test_unfold_lead.py`。
 **緊急關**：`Config.unfold.enabled` 關掉：`main.unfold` 沒了、全部攤開；存檔那一格照留。

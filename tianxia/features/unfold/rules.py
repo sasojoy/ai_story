@@ -95,7 +95,7 @@ def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = fro
          sign_silver: tuple[int, int] = (0, 0)) -> list[str]:
     """看一次：用得到而還沒長出來的寫進 grown 與 fresh。回這一次長出來的鍵。沒有這一本的角色不動。"""
     book = state.player.unfold
-    if book is None:
+    if book is None or book.old:
         return []
     new = [k for k in KEYS if k not in book.grown and reached(state, k, opening_pending=opening_pending, ready=ready, create_price=create_price,
                                                       sign_silver=sign_silver)]
@@ -106,7 +106,7 @@ def grow(state: GameState, *, opening_pending: bool, ready: frozenset[str] = fro
 
 def hidden(book: UnfoldBook | None) -> list[str]:
     """網頁要藏的鍵（沒有這一本是空的：全部照舊）。"""
-    return [] if book is None else [k for k in KEYS if k not in book.grown]
+    return [] if book is None or book.old else [k for k in KEYS if k not in book.grown]  # 舊角色那一本（old）也是全部照舊
 
 
 def seen(book: UnfoldBook | None, keys: list[str]) -> None:

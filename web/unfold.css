@@ -9,3 +9,38 @@
 .uf-dos { display: flex; gap: 8px; }
 .uf-dos .btn { flex: 1; min-height: 44px; font: 700 16px var(--kai); letter-spacing: .1em; }
 @media (prefers-color-scheme: dark) { .uf-pic { filter: brightness(.82); } }
+
+/* 帶著做一次（Joy 2026-11-26）：要按的那一顆一圈墨暈、底下一條帶路的話、做成了那一張。只用色票 */
+.uf-lead { position: relative; z-index: 1; box-shadow: 0 0 0 2.5px var(--accent), 0 0 0 6px var(--accent-soft) !important; animation: uf-breathe 1.8s ease-in-out infinite; }
+@keyframes uf-breathe { 50% { box-shadow: 0 0 0 2.5px var(--accent), 0 0 0 11px transparent; } }
+/* 畫在 SVG 裡的（太極火爐）：沒有 box-shadow，用描邊的暈 */
+g.uf-lead { box-shadow: none !important; filter: drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 8px var(--accent)); animation: uf-breathe-svg 1.8s ease-in-out infinite; }
+@keyframes uf-breathe-svg { 50% { filter: drop-shadow(0 0 1px var(--accent)); } }
+@media (prefers-reduced-motion: reduce) { .uf-lead, g.uf-lead { animation: none; } }
+.uf-bar { position: fixed; left: 0; right: 0; bottom: calc(58px + var(--bottom)); z-index: 19; padding: 0 10px 8px; pointer-events: none; }
+.uf-bar-in { pointer-events: auto; max-width: 620px; margin: 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 14px;
+  background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px 12px 12px 4px; box-shadow: var(--shadow); }
+.uf-bar-in p { flex: 1; min-width: 0; margin: 0; font: 400 15px/1.5 var(--kai); color: var(--ink); }
+.uf-bar-in p b { display: block; font: 400 12px var(--sans); color: var(--ink-2); letter-spacing: .04em; }
+.uf-bar-go { flex: none; width: auto; min-height: 44px; padding: 0 12px; font: 700 15px var(--kai); }
+.uf-bar-in > p { flex: 1 1 auto; }
+.uf-bar-stop { flex: none; min-height: 44px; min-width: 44px; border: 0; background: none; color: var(--ink-2); font: 13px var(--sans); cursor: pointer; }
+.uf-done { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 0 10px calc(10px + var(--bottom)); }
+.uf-done-in { max-width: 620px; margin: 0 auto; padding: 16px 16px 14px; background: var(--card); border-radius: var(--radius) var(--radius) 10px 10px;
+  border-top: 4px solid var(--accent); box-shadow: 0 -6px 24px rgba(0, 0, 0, .18); display: grid; gap: 8px; animation: uf-rise .35s ease-out both; }
+@keyframes uf-rise { from { transform: translateY(24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .uf-done-in { animation: none; } }
+.uf-done .uf-say { margin: 2px 0 4px; display: flex; align-items: center; gap: 12px; }
+.uf-done .btn { min-height: 48px; font: 700 17px var(--kai); letter-spacing: .2em; }
+.uf-stamp { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; border: 2.5px solid var(--accent); color: var(--accent);
+  font: 700 18px var(--kai); transform: rotate(-12deg); background: var(--accent-soft); animation: uf-land .5s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes uf-land { from { transform: scale(1.8) rotate(-12deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .uf-stamp, .uf-mt-seal { animation: none; } }
+/* 稱號：自己的名帖（帖面是一件東西，兩種模式都同一色）＋那一枚印蓋下去 */
+.uf-mt { position: relative; height: 150px; border-radius: 10px; background: linear-gradient(160deg, #9c2b22, #7b1f19); border: 2px solid #c9a24a; outline: 1px solid #5b1612; outline-offset: -6px; }
+.uf-mt-name { position: absolute; right: 22px; top: 16px; writing-mode: vertical-rl; font: 700 26px/1.1 var(--kai); letter-spacing: .2em; color: #f6e2b8; }
+.uf-mt-seal { position: absolute; left: 20px; top: 18px; writing-mode: vertical-rl; padding: 6px; border: 2px solid #f6e2b8; border-radius: 5px; color: #f6e2b8;
+  font: 700 15px/1.15 var(--kai); background: rgba(246, 226, 184, .1); transform: rotate(-6deg); animation: uf-land .6s .15s cubic-bezier(.2, 1.6, .4, 1) both; }
+/* 寫第一封信：三句開頭 */
+.uf-starters { display: grid; gap: 6px; margin: 8px 0 2px; }
+.uf-starter { min-height: 44px; text-align: left; padding: 0 12px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font: 400 15px var(--kai); cursor: pointer; }

@@ -276,7 +276,7 @@
       S.adminPage = false;
       try { history.replaceState(null, "", "/"); } catch (e) { /* 換不了網址也照常畫江湖 */ }
     }
-    if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
+    if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`) && !(S.tab === "news" && selfNews(S.news))) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁；俠客頁進去的那幾頁（行狀、名帖匣、信匣）見聞還沒長出來也進得去（慢慢長出來）
     legacyOfferOpen();
     S.prologueKey = prologueKey();
     const top = topHtml();
