@@ -837,12 +837,15 @@
       const heroTabs = heroTabs1.filter(([k]) => ufShown(`hero:${k}`)); // 慢慢長出來（web/unfold.js）：新角色還用不到的子分頁先不畫
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
       const tabs = heroTabs.length < 2 ? "" : `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
-      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
-        : tab === "gear" ? `${gearBlock}${keeps}`
-        : tab === "mates" ? `${gdBlock}${rosterBlock}`
-        : tab === "sect" ? zmBlock
-        : tab === "codex" ? codexHtml(S.main)
-        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
+      const pageOf = (t) => (t === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
+        : t === "gear" ? `${gearBlock}${keeps}`
+        : t === "mates" ? `${gdBlock}${rosterBlock}`
+        : t === "sect" ? zmBlock
+        : t === "codex" ? codexHtml(S.main)
+        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`);
+      // 俠客頁重排（功能包 xiake，web/xiake.js；Joy 2026-11-26「好 很棒」）：開著就換排法——人像、眼下一張卡、六面牌，點一面拉起那一塊（裡面還是 pageOf 那一頁）
+      if (typeof xkOn === "function" && xkOn(S.main)) return xkPageHtml(S.main, { x, s, tabs: heroTabs, pageOf, fig: heroFigure(s).src, annals: heroAnnalsHtml(), guide: proGuide(), meltGo, drawer: meltOn ? "" : drawerHtml, naming: !!x.naming });
+      const page = pageOf(tab);
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
     return `
