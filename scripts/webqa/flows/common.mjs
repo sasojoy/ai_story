@@ -3,7 +3,30 @@ export const CH = (id) => `[data-act="choose"][data-id="${id}"]`;
 export const CHP = (pre) => `[data-act="choose"][data-id^="${pre}"]:not([disabled])`;
 export const ACT = (a) => `[data-act="${a}"]:not([disabled])`;
 export const place = (c, name, loc) => c.py(`out = stage.place(chars, '${name}', '${loc}')`);
-export const UI = ["hero-tab", "hero-jump", "hero-node", "news", "board", "board-card", "report-list", "report", "sheet", "fronts-help", "front-more", "stam-help", "howto",
+// Batch 272: the new 江湖頁 (web/jianghu.js, on in week7 and season21 since 2026-11-25) keeps things in layers it pulls up (jh-sheet):
+// the 眼下 list (another N ›), a letter, the 行路 list, the 軍務 list. A button the old page drew on the page is in one of them now.
+export const SHEET = (s) => `[data-act="jh-sheet"][data-sheet="${s}"]`;
+export const EYE = `.jh-more${SHEET("eye")}`;
+export const LETTER = SHEET("letter");
+export const DUTY = SHEET("duty");
+// click sel and shoot; when it is not on the page, first open the layer it is in (opener), like a player would
+export async function stepVia(c, sel, opener, name, opts = {}) {
+  if (!(await c.ev(`!!document.querySelector(${JSON.stringify(sel)})`))) await c.click(opener);
+  return c.step(sel, name, opts);
+}
+// the letter: its 眼下 card's button when it is the first thing, else its row in the 眼下 list
+export const openLetter = (c, name, opts = {}) => stepVia(c, LETTER, EYE, name, opts);
+// Batch 273: the new 俠客頁 (web/xiake.js, on in week7 and season21 since 2026-11-26) has no row of sub tabs. Shut, it is the portrait, the
+// 眼下 card and six plaques (xk-open, same keys as the old hero-tab); a plaque pulls its part up (.xk-sheet.sec-K) with the old page in it
+// (pageOf). What sat on the old page with no tab clicked (the 武學 page: craft's entry, create-open, self-sec, art, ins, lib, melt) is in arts.
+export const XK = (sec) => `[data-act="xk-open"][data-sec="${sec}"]`;
+export async function hero(c, sec = "arts") {
+  await c.tab("practice");
+  if (await c.ev(`!!document.querySelector(".xk-sheet.sec-${sec}")`)) return "ok";
+  if (await c.ev(`!!document.querySelector(".xk-sheet")`)) await c.click('.xk-sheet [data-act="xk-close"]');
+  return c.click(XK(sec));
+}
+export const UI = ["hero-tab", "xk-open", "xk-close", "xk-eye-all", "xk-later", "xk-teach", "xk-guard-all", "xk-guard-back", "hero-jump", "hero-node", "news", "board", "board-card", "report-list", "report", "sheet", "fronts-help", "front-more", "stam-help", "howto",
   "renown-toggle", "renown-dot", "renown-sanren", "renown-peer", "toggle-more", "line-more", "own-more", "hear-more", "scene-more", "now-more", "rounds-more", "here-more", "here-all",
   "opt-why", "calls-more", "guide-more", "guide-open", "guide-shut", "guide-below", "fig-open", "fig-log", "fig-log-more", "fig-log-season", "peer", "art", "art-info", "attr-help", "xinde-more",
   "ins-open", "ins-filter", "lib-all", "lib-filter", "melt-open", "melt-mode", "melt-view", "melt-shown", "mx", "person", "rack-all", "self-sec", "slot-pick", "art-filter", "book-open", "craft-view",

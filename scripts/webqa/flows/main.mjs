@@ -1,5 +1,5 @@
 // The main walk: the gate, the opening, week 1 and 2, every shop, the fight, the season's end. Wave B's first round.
-import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, SHEET, EYE, DUTY, stepVia, openLetter, XK, hero } from "./common.mjs";
 
 export { ACCOUNTS };
 async function enterShop(c, pre, loc, act) {
@@ -73,8 +73,10 @@ export const flows = [
     await c.shoot("j_week1", { who: "p1" });
     await c.crawl("j1", () => c.load("/"), UI, { total: 30, cap: 3 });
     await c.load("/");
-    await c.step('[data-act="letter-open"]', "j1_letter_toggle", { light: true });
-    await c.step('[data-act="letter-read"]', "j1_letter_read", { who: "p1" });
+    // batch 272: the new 江湖頁 pulls the whole letter up (jh-sheet letter, web/jianghu.js jhSheetHtml) and asks about phone
+    // notices only there, under the letter. 收起 (letter-read) is not pressed here: on the old page this click only folded the letter
+    // that comes open (letter-read was never there), so the letter stayed for call's letter_open and notify's ask; it still has to
+    await openLetter(c, "j1_letter_toggle", { light: true });
     await c.step('[data-act="push-no"]', "j1_push_no", { who: "p1" });
     await c.load("/");
     await c.shoot("j1_clean", { who: "p1" });
@@ -82,7 +84,7 @@ export const flows = [
     await prac();
     await c.shoot("practice", { who: "p1" });
     await c.crawl("pr", prac, UI, { depth: 2, total: 60, cap: 3 });
-    const craft = async () => { await prac(); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await prac(); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     await craft();
     await c.shoot("craft", { who: "p1" });
     await c.crawl("cr", craft, UI, { depth: 2, total: 30, cap: 3 });
@@ -94,6 +96,15 @@ export const flows = [
     await news();
     await c.shoot("news", { who: "p1" });
     await c.crawl("news", news, UI, { depth: 2, total: 40, cap: 3 });
+    // batch 273: 凌煙閣 (lingyan, on in week7 and season21 since 11/26): its entry tops 江湖史 (web/lingyan.js lingyanEntryHtml, a plain
+    // <a href="/lingyan">); the hall itself is a whole page the server writes, no #app, no S, so it is shot like the public chronicle
+    await news();
+    await c.step('[data-act="news"][data-news="chronicle"]', "news_lingyan_entry", { who: "p1" });
+    if (await c.ev(`!!document.querySelector('a.ly-entry[href="/lingyan"]')`)) {
+      await c.loadRaw("/lingyan");
+      await c.shootRaw("lingyan_page");
+      await c.load("/");
+    }
   }],
     ["battle", async (c) => {
       await place(c, "沈浪", "wan_city");
@@ -391,9 +402,20 @@ export const flows = [
       await c.load("/");
       await c.click(ACT("peer"));
       await c.step(ACT("peer-act"), "peer_act", { who: "p1" });
+      // batch 272: on the new 江湖頁 the 俠客's card groups what you can do (web/jianghu.js jhPeerHtml): pick a kind, a choice, back.
+      // 去 (jh-peer-go) is not walked: it sends the act and changes 沈浪 and 白飛 for the flows after (peer_act above already sends one)
+      await c.load("/");
+      await c.click(ACT("peer"));
+      await c.step(ACT("jh-peer-pick"), "jh_peer_pick", { who: "p1" });
+      await c.step(ACT("jh-peer-choice"), "jh_peer_choice", { light: true });
+      await c.step(ACT("jh-peer-back"), "jh_peer_back", { light: true });
+      // batch 272: the new 江湖頁 has no 全部 N › line; here-all is a sign that gathers two places of one kind or more (學藝, 赴宴,
+      // 拜師: web/jianghu.js jhSignsHtml JH_SIGN_GROUP). 宛城 teaches 沈浪 nothing he lacks; the deep mountains teach two arts (learn.at)
+      await place(c, "沈浪", "deep_mountain");
       await c.load("/");
       await c.step(ACT("here-all"), "here_all");
       await c.step(ACT("here-all-close"), "here_all_close");
+      await place(c, "沈浪", "wan_city");
       // the mingtie editor (名帖)
       // batch 233: with the titles package on (#243) the pool only has 官職 from rank 2, 親傳, 本命兵器, 神器 and the title book
       // (features/peers mingtie._earned_titles), too few for 刷新頭銜 (pool > 3); stage last seasons' book like a player who has played some
@@ -413,18 +435,21 @@ export const flows = [
       await place(c, "沈浪", "wan_city");
       // batch 111: 宛城 has four figures, so 交友 picks the person first (web/main.js socialPick): the cell opens a list (call_list) and
       // 朱儁's line talks to him straight away (fig-talk, his talk.via is act:call, call:zhujun). The old one-tap 交友 only when the list has it
+      // batch 272: the new 江湖頁 has no 交友 cell (its third cell is 軍務: web/jianghu.js jhActs, "點人就是交友"), so no call_list;
+      // a player taps 朱儁 in 這裡的人 (.jh-ic.fig, fig-open) and talks to him from his card (.jh-fig, fig-talk)
+      const FIG = '.jh-ic.fig[data-act="fig-open"][data-id="zhujun"]';
       await c.load("/");
-      await c.step('[data-act="wheel"][data-key="social"]', "call_list", {});
-      if (await c.click(`.act-move ${CH("act:call")}`) === "ok") await c.step(CH("call:zhujun"), "call_zhujun", { who: "p1" });
-      else await c.step('.act-move [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
+      await c.click(FIG);
+      await c.step('.jh-fig [data-act="fig-talk"][data-id="zhujun"]', "call_zhujun", { who: "p1", wait: 1800 });
       await c.crawl("cl", () => c.load("/"), [...UI, "fig-close", "fig-log-close", "letter-read"], { total: 10, cap: 2 });
       // batch 112: 往來紀錄, 交談, 護衛 and × are on the figure's own layer (web/companions.js figPickHtml, .vn-layer.pick), which the 此地人物
       // chip opens (fig-open); a reload closes it, so open it again before each. fig-act closes the layer itself, so × comes before it.
       // batch 112 stopped walking × (call_close) and 護衛 (call_act): base = head came out different in two of four main rounds
       // (BODY.layer-open 1280px vs 1265px). The lock that was left on was the 改版資訊 sheet's (still open here then); batch 113 closes
       // that sheet in "prep", so after × or 護衛 no layer is left and the page has its scrollbar like any other
-      const PICK = ".vn-layer.pick";
-      const pick = async () => { await c.load("/"); await c.click('.people-row [data-act="fig-open"][data-id="zhujun"]'); };
+      // batch 272: on the new 江湖頁 that layer is the figure's card (.jh-fig, web/jianghu.js jhFigHtml), opened from his tile
+      const PICK = ".jh-fig";
+      const pick = async () => { await c.load("/"); await c.click(FIG); };
       await pick();
       await c.step(`${PICK} ${ACT("fig-log")}`, "call_log");
       await pick();
@@ -435,9 +460,8 @@ export const flows = [
       await c.step(`${PICK} ${ACT("fig-act")}`, "call_act", { who: "p1" });
       await c.api("p1", "/api/choose", { id: "call:back" });
       await c.load("/");
-      await c.step(ACT("letter-open"), "letter_open", {});
-      await c.step(ACT("letter-read"), "letter_read", { who: "p1" });
-      await c.step(ACT("letter-decline"), "letter_decline", { who: "p1" });
+      // batch 272: open only; reading or declining it here would take the letter away from notify's ask (they moved to notify's end)
+      await openLetter(c, "letter_open", {});
       await c.load("/");
       await c.step(ACT("checkin"), "checkin", { who: "p1" });
       await c.step(ACT("story-ok"), "story_ok", { who: "p1" });
@@ -545,14 +569,29 @@ out = 1`);
       await c.py("def fn(shared):\n    shared.seal_duels = []\nworld.mutate(fn)\nout = 1");
       await c.api("p1", "/api/main");
       await c.load("/");
-      await c.tab("practice");
-      await c.click('[data-act="hero-tab"][data-tab="gear"]');
+      await hero(c, "gear");
       await c.shoot("seal_hero_gear", { light: true });
       await c.load("/");
     }],
     ["practice2", async (c) => {
       await place(c, "沈浪", "wan_city");
-      const prac = async (tab) => { await c.load("/"); await c.tab("practice"); if (tab) await c.click(`[data-act="hero-tab"][data-tab="${tab}"]`); };
+      // batch 273: a tab is a plaque of the new 俠客頁 now; no tab was the 武學 page, which is the arts part
+      const prac = async (tab) => { await c.load("/"); await hero(c, tab || "arts"); };
+      // batch 273: the new 俠客頁's own buttons (web/xiake.js registerClicks): the 眼下 card's 另有 N 件 and 知道了, each plaque pulled up
+      // once (xk-open) and put back (xk-close: the ✕ on the part's head, and the strip of portrait above it, xk-dim)
+      await c.load("/");
+      await c.tab("practice");
+      await c.step(ACT("xk-eye-all"), "xk_eye_all", { light: true });
+      await c.step(ACT("xk-eye-all"), "xk_eye_fold", { light: true });
+      await c.step(ACT("xk-later"), "xk_later", { light: true });
+      for (const k of ["arts", "gear", "mates", "sect", "attrs", "codex"]) {
+        await c.load("/");
+        await c.tab("practice");
+        if ((await c.step(XK(k), `xk_${k}`, { light: true })) !== "ok") continue;
+        if (k === "arts") await c.step('.xk-sheet [data-act="xk-close"]', "xk_close", { light: true });
+        else if (k === "gear") await c.step('.xk-dim[data-act="xk-close"]', "xk_dim_close", { light: true });
+        else await c.click('.xk-sheet [data-act="xk-close"]');
+      }
       await prac("attrs");
       await c.shoot("pr_attrs", { who: "p1" });
       await c.step(ACT("attr-help"), "pr_attr_help", { light: true });
@@ -615,6 +654,18 @@ out = 1`);
       await prac("mates");
       await c.shoot("pr_mates", { who: "p1" });
       await c.crawl("prm", async () => { await prac("mates"); }, [...UI, "drawer-close"], { depth: 2, total: 8, cap: 2 });
+      // batch 273: the mates part is drawn anew (web/xiake.js xkMatesHtml): 親衛's card (他的事 › opens his whole page, 收起 folds it),
+      // the mates as a grid of faces; one face pulls up that mate's card (xkPersonCard) with 傳功 (xk-teach) when there are lessons
+      await prac("mates");
+      await c.step(ACT("xk-guard"), "xk_guard", { who: "p1" });
+      await prac("mates");
+      await c.step(ACT("xk-guard-all"), "xk_guard_all", { light: true });
+      await c.step(ACT("xk-guard-back"), "xk_guard_back", { light: true });
+      await prac("mates");
+      await c.step('.xk-mt[data-act="person"]', "xk_person", { who: "p1" });
+      await c.step(ACT("xk-teach"), "xk_teach", { light: true });
+      await c.step(ACT("xk-teach"), "xk_teach_fold", { light: true });
+      await c.step(".xk-card-x", "xk_person_close", { light: true });
       await prac("mates");
       await c.click(ACT("person"));
       await c.step(ACT("release-mate"), "pr_release", { who: "p1" });
@@ -626,13 +677,14 @@ out = 1`);
       await prac("attrs");
       await c.step(ACT("xinde-more"), "pr_xinde", { light: true });
       // batch 233: 江湖錄 (codex, on in week7 and season21 since 11/13) is the 俠客 page's last tab: 奇遇 first, then 圖鑑
-      await prac();
-      await c.step('[data-act="hero-tab"][data-tab="codex"]', "pr_codex", { who: "p1", wait: 800 });
+      await c.load("/");
+      await c.tab("practice");
+      await c.step(XK("codex"), "pr_codex", { who: "p1", wait: 800 });
       await c.step('[data-act="cx-seg"][data-seg="tj"]:not(.on)', "pr_codex_seg", { who: "p1", wait: 800 });
       await c.load("/");
     }],
     ["craft2", async (c) => {
-      const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+      const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); };
       await craft();
       await c.shoot("cr_main", { who: "p1" });
       await c.crawl("cr2", craft, [...UI, "pick", "pot-close", "book-close", "secret-close", "unslot"], { depth: 2, total: 16, cap: 2 });
@@ -652,7 +704,7 @@ out = 1`);
       await c.step(ACT("secret-close"), "cr_secret_close", { light: true });
       // 自創
       await c.load("/");
-      await c.tab("practice");
+      await hero(c, "arts");
       await c.step(ACT("create-open"), "cr_create_open", { who: "p1" });
       await c.crawl("crc", async () => { await c.load("/"); }, ["create-kind", "create-preset", "create-pose", "create-intent", "create-pick"], { total: 10, cap: 2 });
       await c.load("/");
@@ -707,7 +759,9 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
     ["travel", async (c) => {
       await place(c, "沈浪", "wan_city");
       await c.load("/");
-      await c.step('[data-act="wheel"][data-key="move"]', "tr_wheel", { who: "p1" });
+      // batch 272: 行路 pulls up the road list (jh-sheet road, web/jianghu.js jhActs, jhRoadBody); the list has no 步行/疾行 switch
+      // (疾行 is only on the road page), so no tr_mode: the step stays for a page that draws move-mode again
+      await c.step(SHEET("road"), "tr_wheel", { who: "p1" });
       await c.step(ACT("move-mode"), "tr_mode", {});
       await c.step(CH("move:xinye"), "tr_leave", { who: "p1" });
       await c.crawl("tr", () => c.load("/"), UI, { total: 6, cap: 2 });
@@ -749,20 +803,24 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.api("p1", "/api/main");
       await c.load("/");
       await c.shoot("so_result", { who: "p1" });
-      await c.step(ACT("rounds-more"), "so_rounds", {});
+      await stepVia(c, ACT("rounds-more"), SHEET("fight"), "so_rounds", {}); // batch 272: in 全部戰報 on the new page's fight page
       await c.load("/");
       await c.step(ACT("drill-full"), "so_drill", {});
-      await c.step(CH("act:duty"), "so_duty", { who: "p1" });
+      // batch 272: 巡哨 (act:duty) is a row of the 軍務 list on the new 江湖頁 (web/jianghu.js jhKinds JH_DUTY, jh-sheet duty)
+      await stepVia(c, CH("act:duty"), DUTY, "so_duty", { who: "p1" });
       await c.load("/");
       await place(c, "沈浪", "wan_city");
       await c.load("/");
       // batch 233: with 江湖錄's 進行中 on (#267) the 要事 card is not drawn; a player opens the 事 seal of the 進行中 line (web/codex.js codexTrackHtml)
-      await c.step('button.cx-tk-all[data-act="cx-tk"]', "so_tk_open", {});
+      // batch 272: the new 江湖頁 draws no 進行中 line; the same list (tkItems) is the 眼下 card's 另有 N 件 (jh-sheet eye)
+      await c.step(EYE, "so_tk_open", {});
     }],
     ["notify", async (c) => {
       await c.load("/");
       await c.ev(`localStorage.removeItem("tianxia-push-asked"); 0`);
       await c.load("/");
+      // batch 272: the new 江湖頁 asks only under the letter it pulls up (web/jianghu.js jhSheetHtml, p.pushAsk)
+      await openLetter(c, "", {});
       await c.shoot("nf_prompt", { who: "p1" });
       await c.step(ACT("push-yes"), "nf_prompt_yes", { who: "p1", wait: 1500 });
       await c.load("/");
@@ -778,6 +836,12 @@ st = chars.load('沈浪'); st.player.rank = 4; chars.save(st); out = 1`);
       await c.load("/");
       await c.click(ACT("sheet"));
       await c.crawl("sh", async () => { await c.load("/"); await c.click(ACT("sheet")); }, [...UI, "recap", "howto"], { total: 8, cap: 2 });
+      await c.load("/");
+      // batch 272 (from call): the letter read and, when it is a task, declined, on the new 江湖頁's letter layer
+      await openLetter(c, "", {});
+      await c.step(ACT("letter-read"), "letter_read", { who: "p1" });
+      await openLetter(c, "", {});
+      await c.step(ACT("letter-decline"), "letter_decline", { who: "p1" });
       await c.load("/");
     }],
     // batch 236: support is on in week7 and season21. A player opens 客服 › in the sheet, writes a text ticket (no picture);

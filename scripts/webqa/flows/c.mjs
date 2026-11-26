@@ -1,4 +1,5 @@
 // Wave C's walk: the battle panel, the craft preview with two copies, one smoke each for 江湖 and 修練.
+import { hero } from "./common.mjs";
 const CH = (id) => `[data-act="choose"][data-id="${id}"]`;
 const ACT = (a) => `[data-act="${a}"]:not([disabled])`;
 const place = (c, name, loc) => c.py(`out = stage.place(chars, '${name}', '${loc}')`);
@@ -73,7 +74,7 @@ const ALL = [
   }],
   ["craft", async (c) => {
     c.log("two", JSON.stringify(await c.py("out = stage.two_copies(chars, content, world, '沈浪')")));
-    const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     const lv = async (name) => {
       const r = await c.ev(`(() => { const out = []; for (const i of document.querySelectorAll(".lv i")) { const s = getComputedStyle(i); const tag = i.closest(".mc-tags") ? "card" : "other"; out.push([tag, i.className, s.backgroundColor, s.borderRadius, s.width, s.height, s.paddingLeft, s.borderTopWidth, s.boxShadow]); } return { n: out.length, cells: out.slice(0, 14), tags: [...document.querySelectorAll(".made-card.preview .mc-tags i.tr")].map((e) => e.innerText.trim()) }; })()`);
       c.report.facts[name] = r;
@@ -371,6 +372,11 @@ const ALL = [
     }
     await c.api("p1", "/api/main");
     c.log("brief end", JSON.stringify(await brief(c)));
+    // batch 272: under load (four rounds at once, or two walks) bt_end_first and bt_end_closed came out red at 1280 on A against A:
+    // the status line over the picture (name, level, 體/血, the time) LCD-antialiased on one side and grayscale on the other, under
+    // the cards' layer: the compositor's choice when the page loads, which no repaint changes (main prep, batch 260). Load once more,
+    // from cache, before the first picture, as main prep does before the 江湖新事 invite
+    await c.load("/", { keepCards: true });
     await c.load("/", { keepCards: true });
     await shot(c, "bt_end_first");
     c.log("closed", await closeOv(c));

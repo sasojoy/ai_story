@@ -37,6 +37,21 @@ so --new yiwen does not list it), detail names what the head lacks, and the roun
 --new yiwen (ROUND_PACKAGE) lists that round's differences as NEW (summary.new_rows) instead of red, except STAY_RED (the head's console,
 exceptions and failed requests, who-is-who words, stylesheet rules); a flow that throws or a scene in must_reach not reached is still exit 2.
 Without --new yiwen a difference there is REAL like any other round's.
+Batch 272: the new 江湖頁 (jianghu package, Joy 2026-11-25) is on in week7 and season21, and every round walks it: it is the page players
+see. The old 江湖頁 (tests/conftest.py old_page) is not walked any more. The unfolding book (unfold package, also on) is turned off in
+memory by serve.py in every round but uf: every walk account is new, and with the book open the tabs it has not grown would not be drawn,
+and a grow is written by a sync, so when one appears depended on when each side synced. Old characters have no book: everything laid out,
+which is what the other rounds walk. The uf round walks the book: each picture waits until what it shows is true in S.main.unfold.
+--mutate jh-padding (selftest) changes .jh-page in web/jianghu.css: the page is looked at.
+Batch 273: the new 俠客頁 (xiake package, Joy 2026-11-26) is on in week7 and season21 and every round walks it; the old one with its row of
+sub tabs (hero-tab) is not walked any more. Its six plaques (xk-open) pull up the part a tab used to show (flows/common.mjs hero, XK).
+--mutate xk-padding (selftest) changes .xk-page in web/xiake.css.
+When a page is laid out anew (Joy did 江湖頁 and 俠客頁 in three days): walk A against A once (--base X --head X --jobs 4) and read the
+must_reach scenes not reached and report.steps' "-> missing"; a click that finds nothing leaves the page where it was, so the next segment
+starts there too. Find things the way a player would: flows/common.mjs stepVia (open the layer it is in first), hero (a 俠客 plaque),
+SHEET/EYE/DUTY (the 江湖頁's layers); keep the scene names. A scene the new page has no thing for leaves must_reach.txt by hand, with a reason
+in the batch's plan. Then one whole walk with --write-must-reach rebuilds must_reach.txt and coverage.json (coverage.py check must pass);
+diff must_reach.txt before and after: only additions, besides the ones the plan names. A NOT_ON_TABLE line goes when coverage.json lists the file.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);
@@ -58,16 +73,19 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 REPO = os.path.dirname(os.path.dirname(HERE))
-ROUNDS = ("main", "x", "y", "z", "v", "c", "cs", "extra", "yw")
+ROUNDS = ("main", "x", "y", "z", "v", "c", "cs", "extra", "yw", "uf")
 # Batch 256: a round that stands on a package the older commit may not have. Each (file, text) has to be in a copy for the round to walk there;
 # a side without one is not red and not the tool broken: the round is left out, summary.skipped says why (round_cannot_walk).
 ROUND_NEEDS = {
     "yw": (("tianxia/features/yiwen/writer.py", "def write_scene"),  # serve.py holds it
            ("tianxia/features/yiwen/routes.py", '"yiwen_step"'),  # the storyteller's three-stage route (AI wave, batch 252)
            ("tianxia/core/tuning/yiwen.py", "discover_chance")),  # serve.py turns it to always
+    # batch 272: the unfolding book (Joy 2026-11-25), which serve.py leaves on only in this round, and the route that puts a dot out
+    "uf": (("tianxia/features/unfold/__init__.py", "class UnfoldFeature"),
+           ("tianxia/features/unfold/routes.py", '"/api/unfold/seen"')),
 }
 # Batch 256: --new <pkg> with the package a round is about: that round's differences are listed (summary.new_rows), not red, except these
-ROUND_PACKAGE = {"yw": "yiwen"}
+ROUND_PACKAGE = {"yw": "yiwen", "uf": "unfold"}
 STAY_RED = {"console-head-only", "exceptions-head-only", "http-head-only", "failed-head-only", "words", "css-rules", "round-lost"}
 ROUND_LOST = "round-lost"  # batch 262: the base walks the round, the head lost what it stands on: REAL, not skipped (split_unwalkable)
 MUST_REACH = os.path.join(HERE, "must_reach.txt")
@@ -77,6 +95,8 @@ STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff",
 STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
 YW_PADDING = "yw-padding"  # batch 256, selftest only: the meeting card's padding in web/yiwen.css: the yw round must go red, and with --new yiwen be listed
+JH_PADDING = "jh-padding"  # batch 272, selftest only: the new 江湖頁's own padding in web/jianghu.css (.jh-page): a round that draws the page must go red
+XK_PADDING = "xk-padding"  # batch 273, selftest only: the new 俠客頁's own padding in web/xiake.css (.xk-page): a round that draws the page must go red
 PKG_CSS = "pkg-css"  # batch 110: one rule more in web/identity.css: red without --new, NEW (not red) with --new identity; not a selftest control
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
@@ -101,14 +121,14 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
     "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
     "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
-    "web/jianghu.js": "the 江湖頁重排 package (Joy 2026-11-25) is off in every profile until Joy OKs the real page; rounds only call jhOn, which answers false. Rebuild coverage.json on the host when it turns on",
     # batch 233: titles, terms, jieyi, mail, zongmen, guard and codex left this list: week7 and season21 turn them on (#243, codex 11/13)
     # and every round's walk calls into their page files, so coverage.json has them. web/intro.js left too: serve.py still turns the
     # intro package off for the walk (the 開場 layer would cover the clicks), but every round's page calls into the file all the same
     # web/yiwen.js left in batch 256: the yw round turns the strange tales on (serve.py) and walks them
-    "web/xiake.js": "the 俠客頁重排 package (Joy 2026-11-26) turned on in week7 and season21 on 2026-11-26 (Joy「好了就可以上正式」); no round walks it yet: rebuild coverage.json on the host and drop this line",
-    "web/unfold.js": "the unfold package (Joy 2026-11-25) is off in week7 and season21: no round reaches it until a profile turns it on",
-    "web/lingyan.js": "the lingyan package (Joy 2026-11-26) is off in every profile: lingyanEntryHtml answers empty until a profile turns it on",
+    # batch 272: web/jianghu.js and web/unfold.js left: week7 and season21 turn both on (Joy 2026-11-25); every round walks the new 江湖頁,
+    # and the uf round walks the unfolding book (serve.py turns it off in the others)
+    # batch 273: web/xiake.js and web/lingyan.js left: both on in week7 and season21 (2026-11-26); every round walks the new 俠客頁, and
+    # main walks 江湖史 with 凌煙閣's entry on top
 }
 
 
@@ -372,6 +392,30 @@ def mutate(copy: str, which: str) -> None:
         i = t.find("\n.yw-card {")
         if i < 0:
             raise ToolBroke("mutate yw-padding: no .yw-card rule in web/yiwen.css")
+        j = t.index("}", i)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(t[:j] + " padding: 31px 23px; " + t[j:])
+    elif which == JH_PADDING:  # batch 272: the new 江湖頁 (.jh-page, web/jianghu.js jhPage; on in week7 and season21)
+        p = os.path.join(copy, "web", "jianghu.css")
+        t = ""
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", newline="") as f:
+                t = f.read()
+        i = t.find("\n.jh-page {")
+        if i < 0:
+            raise ToolBroke("mutate jh-padding: no .jh-page rule in web/jianghu.css")
+        j = t.index("}", i)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(t[:j] + " padding: 31px 23px; " + t[j:])
+    elif which == XK_PADDING:  # batch 273: the new 俠客頁 (.xk-page, web/xiake.js xkPage; on in week7 and season21)
+        p = os.path.join(copy, "web", "xiake.css")
+        t = ""
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", newline="") as f:
+                t = f.read()
+        i = t.find("\n.xk-page {")
+        if i < 0:
+            raise ToolBroke("mutate xk-padding: no .xk-page rule in web/xiake.css")
         j = t.index("}", i)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(t[:j] + " padding: 31px 23px; " + t[j:])
@@ -859,7 +903,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, JH_PADDING, XK_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")

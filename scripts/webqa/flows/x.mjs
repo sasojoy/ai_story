@@ -1,5 +1,5 @@
 // What the main walk did not reach: seals, gear, sorties, crafting from the panel, the push prompts. Wave B's round 3.
-import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, EYE, DUTY, SHEET, stepVia, hero } from "./common.mjs";
 
 export { ACCOUNTS };
 export const x_week2 = ["x_week2", async (c) => {
@@ -99,7 +99,7 @@ out = 1`);
     await c.api("p1", "/api/main");
   }],
   ["x_gear", async (c) => {
-    const gear = async (key) => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="hero-tab"][data-tab="gear"]'); await c.click(`[data-act="hero-node"][data-kind="gear"][data-key="${key}"]`); };
+    const gear = async (key) => { await c.load("/"); await hero(c, "gear"); await c.click(`[data-act="hero-node"][data-kind="gear"][data-key="${key}"]`); };
     for (const key of ["weapon", "armor", "mount", "treasure"]) {
       await gear(key);
       await c.shoot(`x_gear_${key}`, { who: "p1" });
@@ -147,19 +147,21 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.api("p1", "/api/main");
     await c.load("/");
     await c.shoot("x_so_result", { who: "p1" });
-    await c.step(ACT("rounds-more"), "x_so_rounds", {});
+    await stepVia(c, ACT("rounds-more"), SHEET("fight"), "x_so_rounds", {}); // batch 272: in 全部戰報 on the new page's fight page
     await c.load("/");
     await c.step(ACT("sortie-far"), "x_so_far", { who: "p1" });
     await place(c, "沈浪", "yingchuan_wilds");
     await c.load("/");
-    await c.step(CH("act:duty"), "x_so_duty", { who: "p1" });
+    // batch 272: 巡哨 (act:duty) is a row of the new 江湖頁's 軍務 list (web/jianghu.js jhKinds, jh-sheet duty)
+    await stepVia(c, CH("act:duty"), DUTY, "x_so_duty", { who: "p1" });
     await c.load("/");
     // batch 233: with 江湖錄's 進行中 on (#267) the 要事 card is not drawn; a player opens the 事 seal of the 進行中 line (web/codex.js codexTrackHtml)
-    await c.step('button.cx-tk-all[data-act="cx-tk"]', "x_so_tk_open", {});
+    // batch 272: the new 江湖頁 draws no 進行中 line; the same list (tkItems) is the 眼下 card's 另有 N 件 (jh-sheet eye)
+    await c.step(EYE, "x_so_tk_open", {});
     await place(c, "沈浪", "wan_city");
   }],
   ["x_craft", async (c) => {
-    const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     await craft();
     await c.step(ACT("pot-open"), "x_cr_pot", {});
     await c.step('[data-act="pick"][data-id="feng"]', "x_cr_pick1", {});
@@ -173,7 +175,7 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.step(ACT("secret-book"), "x_cr_secret", {});
     await c.step(ACT("secret-close"), "x_cr_secret_close", { light: true });
     await c.load("/");
-    await c.tab("practice");
+    await hero(c, "arts");
     await c.step(ACT("create-open"), "x_ct_open", { who: "p1" });
     await c.step('[data-act="create-kind"]:not(.on)', "x_ct_kind", {});
     await c.step(ACT("create-pick"), "x_ct_pick", {});

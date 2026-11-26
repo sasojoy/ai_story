@@ -3,7 +3,7 @@
 // the academy put an event or an insight first; the wilds do not). The model is the dead port: the storyteller fails twice and the stand-in
 // lines are stored, so the pages are fixed. What the walk shoots, in order:
 //   yw_out    the meeting card open; put away over the trip's card, on the 江湖 page and the hero page (the strip); back from the
-//             strip and from the menu; the rules open;
+//             strip (batch 272: no longer from the menu and the rules: see the end of yw_out);
 //   yw_walk   自己說 with words typed and not sent, one the word list refuses, the 等說書人 page (held, see below), the first act,
 //             自己說 held again and 停 on its waiting page, the second act it wrote, the line serve.py screens bad (once, then until
 //             the box is spent), the third act with the closing card, back to the game;
@@ -59,6 +59,10 @@ export const flows = [
     await tripOut(c);
     await c.shoot("yw_meet", { who: "p1" });
     // put away over the trip: the trip's card offers the tale (yiwen:open) and 放下 as its menu
+    // batch 273: now and then (3 of 10 yw rounds A against A, batch 273) this scene goes red at 1280: 7724 px, 38 levels, box
+    // [332,64,939,418], the same each time: the words over the place's picture behind the trip's card are drawn with LCD antialiasing
+    // on one side, grey on the other. Same DOM, no animation running, every <img> loaded, body.layer-open at top 0 and scrollY 0 on
+    // both sides; waiting for the pictures to decode first did not change it. Not fixed: left to a later batch
     await c.step(ACT("yw-hide"), "yw_hidden_trip", { who: "p1" });
     await c.load("/");
     // put away on the 江湖 page: the strip at the top. There is no explore wheel while a tale waits (the menu is yiwen:open and yiwen:drop
@@ -69,8 +73,15 @@ export const flows = [
     await c.step(ACT("yw-show"), "yw_shown", { who: "p1" });
     await c.step(ACT("yw-hide"), "", {});
     await c.tab("jianghu");
-    await c.step(CH("yiwen:open"), "yw_reopen", { who: "p1" });
-    await c.step(ACT("yw-help"), "yw_help", { who: "p1" });
+    // batch 272: yw_reopen (yiwen:open on the 江湖 page) and yw_help after it are not walked any more. On the new 江湖頁 an option that
+    // is neither a place nor a duty is a row of the 軍務 list's 此地還能 (web/jianghu.js jhKinds), and 沈浪 here is a 散人: his third cell
+    // is 投靠 (jhDutyCell -> jhJoinCell), so no cell pulls that list up. The strip on the hero page (yw_shown) is the way back here.
+    // If the page gets a way to it for a 散人, walk it again with stepVia(c, CH("yiwen:open"), DUTY, ...) and yw-help after it.
+    // batch 273: the options this 散人 has here, as a log line (nothing shot): what no cell of the new page pulls up
+    for (const w of ["p1", "p2"]) {
+      const opts = await c.api(w, "/api/main");
+      c.log("sanren options", w, JSON.stringify((opts.json && opts.json.status && opts.json.status.location) || ""), JSON.stringify(((opts.json && opts.json.options) || []).map((o) => o.id)));
+    }
   }],
   ["yw_walk", async (c) => {
     await c.load("/");

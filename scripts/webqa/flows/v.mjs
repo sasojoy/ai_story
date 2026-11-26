@@ -1,5 +1,5 @@
 // Melting for real, walking for real. Wave B's round 6.
-import { CH, ACT, place, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS, accounts, rich, hero } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export { ACCOUNTS };
@@ -9,7 +9,7 @@ export const flows = [
   x_week2,
   ["v_melt", async (c) => {
     await place(c, "沈浪", "wan_city");
-    const prac = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="hero-tab"][data-tab="arts"]'); };
+    const prac = async () => { await c.load("/"); await hero(c, "arts"); }; // batch 273: the arts plaque of the new 俠客頁
     await prac();
     await c.step('[data-act="mx"][data-op="practice"]:not([disabled])', "v_practice_go", { who: "p1", wait: 800 });
     await prac();
@@ -26,7 +26,9 @@ export const flows = [
   ["v_move", async (c) => {
     await place(c, "沈浪", "wan_city");
     await c.load("/");
-    await c.step('[data-act="wheel"][data-key="move"]', "v_wheel", { who: "p1" });
+    // batch 272: 行路 pulls up the new 江湖頁's road list (jh-sheet road); it has no 步行/疾行 switch (web/jianghu.js jhRoadBody), so the
+    // two move-mode steps find nothing there; they stay for a page that draws the switch again
+    await c.step('[data-act="jh-sheet"][data-sheet="road"]', "v_wheel", { who: "p1" });
     await c.step('[data-act="move-mode"][data-mode="dash"]', "v_mode_dash", { who: "p1" });
     await c.step('[data-act="move-mode"][data-mode="walk"]', "v_mode_walk", { who: "p1" });
     await c.step(CH("move:yu_river"), "v_leave", { who: "p1", wait: 700 });

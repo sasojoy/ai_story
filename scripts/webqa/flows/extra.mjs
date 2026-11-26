@@ -1,6 +1,6 @@
 // What waves B and C did not reach: the prologue (staged), the map's away state, the divine form, the brew, figure talk and the persuade form,
 // the MVP overlay, the ring, buying and selling in the mall, the admin buttons behind a held press or a picked player, the week card, the folded battlefield.
-import { CH, ACT, place, ACCOUNTS as COMMON, accounts, rich } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS as COMMON, accounts, rich, SHEET, EYE, DUTY, stepVia } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export const ACCOUNTS = COMMON;
@@ -115,7 +115,8 @@ export const flows = [
     await c.load("/");
     await c.shoot("fg_at_target", { who: "p1" });
     if (given) {
-      const r = await c.step(CH(`errand:persuade:${given.id}`), "fg_persuade_form", {});
+      // batch 272: an errand: option is neither a place nor a duty: the new 江湖頁 lists it in the 軍務 list's 此地還能 (jhKinds)
+      const r = await stepVia(c, CH(`errand:persuade:${given.id}`), DUTY, "fg_persuade_form", {});
       c.report.facts.persuade_button = r;
       if (await c.ev(`!!document.querySelector("#persuade-form")`)) {
         c.log("persuade", await c.fillAndSend("#persuade-form input[name=text]", "放下刀槍回家吧"));
@@ -358,6 +359,39 @@ export const flows = [
     c.report.facts.wk_hide_card = hide;
     await c.load("/");
     await c.step('[data-act="wk-hide"][data-id="strip"]', "wk_hide_strip", { who });
+    await c.load("/");
+  }],
+  // Batch 272: the new 江湖頁's own buttons (web/jianghu.js registerClicks) that the rounds' clicks do not reach on their way.
+  // Before ring (it leaves 沈浪 in the arena's fight); the far road (jh-go) sets out last, and 沈浪 is put back after it.
+  ["jh_page", async (c) => {
+    await c.leave();
+    await c.asPlayer("p1"); // week_card may have left the browser on another account
+    await place(c, "白飛", "yingchuan_wilds");
+    await place(c, "沈浪", "yingchuan_wilds");
+    await c.api("p2", "/api/main");
+    await c.load("/");
+    // no figure here and a 俠客: the crowd card pulls up the people list
+    await c.step(SHEET("people"), "jh_people", { who: "p1" });
+    await c.step('.jh-sheet .top-row [data-act="jh-sheet"]', "jh_sheet_close", { light: true });
+    await place(c, "沈浪", "wan_city");
+    await c.load("/");
+    await c.step(SHEET("stam"), "jh_stam_sheet", {});
+    await c.load("/");
+    await c.step('.jh-eye [data-act="jh-later"]', "jh_later", { light: true });
+    await c.step(EYE, "jh_eye", {});
+    await c.step(ACT("jh-wait"), "jh_wait", { light: true });
+    await c.load("/");
+    await c.click(SHEET("road"));
+    await c.step(ACT("jh-map"), "jh_map", {});
+    await c.load("/");
+    await c.py("import builtins; st = chars.load('沈浪'); builtins._qa_stamina = st.player.stamina; st.player.stamina = 0; chars.save(st); out = 1");
+    await c.load("/");
+    await c.step('[data-act="jh-stam"]', "jh_stam", {});
+    await c.py("import builtins; st = chars.load('沈浪'); st.player.stamina = builtins._qa_stamina; chars.save(st); out = 1");
+    await c.load("/");
+    await c.click(SHEET("road"));
+    await c.step(ACT("jh-go"), "jh_go", { who: "p1", wait: 800 });
+    await place(c, "沈浪", "wan_city");
     await c.load("/");
   }],
   ["ring", async (c) => {

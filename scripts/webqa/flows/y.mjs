@@ -1,5 +1,5 @@
 // The last gaps of wave B: the duel, the sortie, the craft and smith corners, figures. Round 4.
-import { CH, CHP, ACT, place, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, CHP, ACT, place, ACCOUNTS, accounts, rich, SHEET, stepVia, hero } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export { ACCOUNTS };
@@ -66,7 +66,10 @@ out = 1`);
     await c.api("p1", "/api/main");
     await c.load("/");
     await c.shoot("y_so_result", { who: "p1" });
-    await c.step(ACT("rounds-more"), "y_so_rounds", {});
+    // batch 272: the new 江湖頁 shows a fight as its own page (web/jianghu.js jhCardPage); the battle card with 回合 is in 全部戰報 (jh-sheet fight)
+    await stepVia(c, ACT("rounds-more"), SHEET("fight"), "y_so_rounds", {});
+    await c.load("/");
+    await c.step(ACT("jh-card-on"), "y_card_on", { who: "p1" });
     await c.load("/");
     await c.tab("news");
     await c.shoot("y_so_news", { who: "p1" });
@@ -75,7 +78,7 @@ out = 1`);
     await c.api("p2", "/api/main");
   }],
   ["y_craft", async (c) => {
-    const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     await craft();
     await c.step(ACT("pot-open"), "y_cr_pot", {});
     await c.step('[data-act="pick"][data-id="feng"]', "y_cr_pick1", {});
@@ -84,7 +87,7 @@ out = 1`);
     await c.step(ACT("craft-ok"), "y_cr_ok", { who: "p1" });
     await c.step(ACT("switch"), "y_cr_switch", { who: "p1" });
     await c.load("/");
-    await c.tab("practice");
+    await hero(c, "arts");
     await c.step(ACT("create-open"), "y_ct_open", { who: "p1" });
     await c.step('[data-act="create-kind"]:not(.on)', "y_ct_kind", {});
     await c.step(ACT("create-pick"), "y_ct_pick", {});
