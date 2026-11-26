@@ -10,12 +10,15 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 DRIVER = PROLOGUE_DRIVER.replace('wholeApp(["S", ', 'wholeApp(["S", "difangEyeItem", "difangSheetHtml", ', 1)
 ACTS = [{"name": "搬沙石", "line": "堤上缺沙包。", "state": "done"}, {"name": "擋亂民", "line": "你怎麼處置？", "state": "now"},
         {"name": "堤頂一戰", "line": "大家輪流上堤。", "state": "later"}]
-WAYS = [{"id": f"difang:way:{i}", "label": f"潁水決堤・做法{i}", "enabled": True} for i in range(3)]
+GO = [{"id": "difang:go", "label": "潁水決堤・赴大事（體力 15）", "enabled": True}]
+WAYS = [{"id": f"difang:pick:{i}", "label": f"潁水決堤・做法{i}", "enabled": True} for i in range(3)]
+EVENT = {"title": "官倉門口", "scene": "一群饑民圍住官倉。"}
 
 
 def _card(**kw):
     c = {"affair": "yingshui_dike", "title": "潁水決堤", "hook": "潁水漲到堤腳。", "region": "潁川汝南", "place": "潁水河畔", "art": "river",
-         "status": "open", "act": 2, "acts": ACTS, "fill": 0.4, "foe": "翻江鰍", "heads": 17, "mine": True, "options": WAYS, "result": "", "last": ""}
+         "status": "open", "act": 2, "acts": ACTS, "fill": 0.4, "foe": "翻江鰍", "heads": 17, "mine": True, "options": GO, "result": "", "last": "",
+         "event": None, "fight": {"title": "今夜的船影", "scene": "河面上三條黑船。"}, "told": [], "left": 3, "daily": 3}
     c.update(kw)
     return {"difang": {"card": c}, "options": []}
 
@@ -30,23 +33,34 @@ def test_the_eye_item_opens_the_sheet_and_names_the_act():
     assert _run(_card(status="done"), "return H.difangEyeItem(m);") is None
 
 
-def test_act_two_draws_three_ways_and_no_number_for_progress():
-    html = _run(_card(), "return H.difangSheetHtml(m);")
-    assert html.count('class="df-way"') == 3 and 'data-id="difang:way:0"' in html and "做法0" in html and "潁水決堤・" not in html
+def test_go_button_says_cost_and_times_left_and_no_number_for_progress():
+    html = _run(_card(left=2), "return H.difangSheetHtml(m);")
+    assert 'data-id="difang:go"' in html and "赴大事" in html and "體力 15・今天還能去 2 次" in html and "df-way" not in html
     assert "--w:40%" in html and "40" not in html.replace("--w:40%", "")
     assert "已有 17 人出力" in html and "你也在其中" in html
 
 
-def test_a_used_way_says_so_instead_of_buttons():
-    html = _run(_card(options=[{**w, "enabled": False} for w in WAYS]), "return H.difangSheetHtml(m);")
-    assert "df-way" not in html and "出過手" in html
+def test_a_drawn_event_shows_its_scene_and_three_ways():
+    html = _run(_card(event=EVENT, options=WAYS), "return H.difangSheetHtml(m);")
+    assert "官倉門口" in html and "一群饑民圍住官倉。" in html and "df-go" not in html
+    assert html.count('class="df-way"') == 3 and 'data-id="difang:pick:0"' in html and "做法0" in html and "潁水決堤・" not in html
+
+
+def test_used_up_for_today_and_the_last_result():
+    html = _run(_card(options=[{**GO[0], "enabled": False}], left=0, told=["成了。", "心得 +5"]), "return H.difangSheetHtml(m);")
+    assert "今天出過 3 次力了，明天再來" in html and 'data-id="difang:go"' not in html
+    assert '<div class="df-told"><p>成了。</p><p>心得 +5</p></div>' in html
+    tired = _run(_card(options=[{**GO[0], "enabled": False}], left=2), "return H.difangSheetHtml(m);")
+    assert "體力不夠了" in tired
 
 
 def test_act_three_strike_and_the_done_stamp():
-    strike = [{"id": "difang:strike", "label": "潁水決堤・上前對付翻江鰍", "enabled": True}]
+    strike = [{"id": f"difang:strike:{i}", "label": f"潁水決堤・打法{i}", "enabled": True} for i in range(3)]
     acts = [{**a, "state": "done"} for a in ACTS[:2]] + [{**ACTS[2], "state": "now"}]
     html = _run(_card(act=3, acts=acts, options=strike), "return H.difangSheetHtml(m);")
-    assert 'data-id="difang:strike"' in html and "上前對付翻江鰍" in html
+    assert 'data-id="difang:strike:0"' in html and "上前對付翻江鰍" in html and "今夜的船影" in html and html.count('class="df-way"') == 3
+    used = _run(_card(act=3, acts=acts, options=[{**o, "enabled": False} for o in strike]), "return H.difangSheetHtml(m);")
+    assert "今天上去過了" in used and "df-way" not in used
     done = _run(_card(status="done", acts=[{**a, "state": "done"} for a in ACTS], result="堤保住了。", last="柳如煙", options=[]), "return H.difangSheetHtml(m);")
     assert "湊滿" in done and "堤保住了。" in done and "柳如煙" in done and "df-way" not in done
 

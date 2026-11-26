@@ -522,7 +522,8 @@ class YiwenWorld(BaseModel):
 
 
 class DifangAffair(BaseModel):
-    """地方大事（features/difang）：一個大區這一週的那一件。三幕：一（平常的探索、打贏都算一份力）、二（此地挑一個做法）、三（每天上一次，大家共扣一個池子）。
+    """地方大事（features/difang）：全服這一週的那一件（輪到哪個大區）。特別活動：只有按「赴大事」才算出力（Joy 2026-11-26「改成特別活動」）；
+    一、二幕抽這一幕自己的事件、一天最多幾次，三幕每天上前一次，大家共扣一個池子。
     鍵是帳號鍵（ctx._mall_owner）；名號另記，江湖史具名用。"""
 
     region: str  # 大區 id（content.map.regions）
@@ -534,7 +535,10 @@ class DifangAffair(BaseModel):
     need: list[int] = Field(default_factory=list)  # 三幕各要多少（開那一刻定）
     shares: dict[str, int] = Field(default_factory=dict)  # 帳號鍵 → 出了幾份力（三幕加總）
     names: dict[str, str] = Field(default_factory=dict)  # 帳號鍵 → 名號（出力那一刻的）
-    act2: list[str] = Field(default_factory=list)  # 第二幕已經出過手的帳號鍵（一人一次）
+    seen: dict[str, list[str]] = Field(default_factory=dict)  # 帳號鍵 → 這一件碰過的事件 id（一幕的碰過一輪才重複）
+    drawn: dict[str, str] = Field(default_factory=dict)  # 帳號鍵 → 赴了、還沒挑做法的那一則事件 id
+    goes: dict[str, list[int]] = Field(default_factory=dict)  # 帳號鍵 → [台灣第幾天, 那一天赴了幾次]（一天最多 daily_goes）
+    told: dict[str, list[str]] = Field(default_factory=dict)  # 帳號鍵 → 上一次挑了做法、上前之後那幾句（畫在大事那一層，赴下一次就換掉）
     struck: dict[str, int] = Field(default_factory=dict)  # 第三幕：帳號鍵 → 最後一次上去是台灣第幾天（一天一次）
     last: str = ""  # 第三幕最後一下的名號
     paid: list[str] = Field(default_factory=list)  # 收場那一份已經給過的帳號鍵

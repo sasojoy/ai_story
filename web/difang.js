@@ -3,8 +3,9 @@
  * 伺服器送 main.difang.card（全服這一週的那一件；人不在那一區 away、看得到出不上力；湊滿了還沒領謝禮的先送那一件）。畫兩樣：
  *   1. 江湖頁眼下的一件（difangEyeItem，web/jianghu.js 的 jhEyeItems 問）：「大事」小印、標題、這一幕、鈕「去看」
  *   2. 點開的那一層（difangSheetHtml，jianghu.js 的 jhSheetHtml 問 sheet "difang"）：頁首圖、懸念一句、三幕直條、
- *      這一幕的墨痕（不寫數字）、這一幕能做的（第二幕三張做法卡、第三幕一顆上前）、出過力的人數、收起來的規矩
- * 按鈕全走殼的 choose（difang:way:<i>、difang:strike、difang:claim:<素材>；第一幕的「去探索」是 act:explore）；這一包只登記「？ 規矩」那一顆（df-help）。
+ *      這一幕的墨痕（不寫數字）、這一幕能做的（第一二幕：赴大事一顆，赴了是那一則事件與做法卡；第三幕：那一場與三張打法卡）、
+ *      上一次那幾句、出過力的人數、收起來的規矩
+ * 按鈕全走殼的 choose（difang:go、difang:pick:<i>、difang:strike:<i>、difang:claim:<素材>）；這一包只登記「？ 規矩」那一顆（df-help）。
  */
 "use strict";
 
@@ -12,9 +13,11 @@
   const DF_GO = "去看"; // 待 joy 潤
   const DF_NUM = ["第一幕", "第二幕", "第三幕"]; // 待 joy 潤
   const DF_KIND = "地方大事"; // 待 joy 潤：頁首的朱印
-  const DF_EXPLORE = "去探索"; // 待 joy 潤
-  const DF_WAY_DONE = "這一幕你已經出過手了，等大家湊齊。"; // 待 joy 潤
-  const DF_STRIKE = "上前對付{foe}"; // 待 joy 潤
+  const DF_GO_BTN = "赴大事"; // 待 joy 潤
+  const DF_GO_SUB = "體力 {cost}・今天還能去 {n} 次"; // 待 joy 潤
+  const DF_GO_FULL = "今天出過 {n} 次力了，明天再來"; // 待 joy 潤
+  const DF_GO_TIRED = "體力不夠了"; // 待 joy 潤
+  const DF_STRIKE_HEAD = "上前對付{foe}"; // 待 joy 潤：第三幕那一場上面的小字
   const DF_STRIKE_DONE = "今天上去過了，明天再來"; // 待 joy 潤
   const DF_HEADS = "已有 {n} 人出力"; // 待 joy 潤
   const DF_NOBODY = "還沒有人出力"; // 待 joy 潤
@@ -33,6 +36,7 @@
   const DF_CLAIMED = "謝禮領過了"; // 待 joy 潤
   const DF_RULES = [ // 待 joy 潤
     "全天下一週一件，輪著換地方；誰都看得到，人到了那一帶才出得上力。不分官軍、黃巾、散人。",
+    "按「赴大事」碰上一件事、挑一個做法，一天三次；平常的探索不算。最後一幕一天上前一次。",
     "三幕照順序來，前一幕湊齊了才換下一幕；這一週過完沒湊滿，地方就會出事。",
     "湊滿了，出過力的人各挑一份上等素材，還有名聲與心得；出力最多的十位多一份、戴「義士」，最後一下戴「中流砥柱」。",
   ];
@@ -69,23 +73,31 @@
     return `<small class="df-names">${esc(who.join("、"))}${a.more ? ` <span>${esc(DF_MORE.replace("{n}", who.length + a.more))}</span>` : ""}</small>`;
   }
 
+  const dfWayBtns = (opts) => `<div class="df-ways">${opts.map((o) => `<button class="df-way" data-act="choose" data-id="${esc(o.id)}"${o.enabled ? "" : " disabled"}>${esc(String(o.label).split("・").slice(1).join("・") || o.label)}</button>`).join("")}</div>`;
+  function dfTold(c) { // 上一次挑了做法、上前之後那幾句
+    const t = c.told || [];
+    return t.length ? `<div class="df-told">${t.map((x) => `<p>${esc(x)}</p>`).join("")}</div>` : "";
+  }
+
   function dfDoHtml(m, c) { // 這一幕能做的
     if (c.status !== "open") return "";
     if (c.away) return `<p class="df-how">${esc(DF_AWAY.replace("{region}", c.region))}</p>`;
-    if (c.act === 1) {
-      const o = dfOpt(m, "act:explore");
-      return o && o.enabled ? `<button class="btn df-go" data-act="choose" data-id="act:explore">${DF_EXPLORE}</button>` : ""; // 怎麼出力寫在這一幕那一句（內容檔），不另寫一次
-    }
     const opts = c.options || [];
-    if (c.act === 2) {
-      if (opts.length && opts.every((o) => !o.enabled)) return `<p class="df-how">${DF_WAY_DONE}</p>`;
-      return `<div class="df-ways">${opts.map((o) => `<button class="df-way" data-act="choose" data-id="${esc(o.id)}"${o.enabled ? "" : " disabled"}>${esc(String(o.label).split("・").slice(1).join("・") || o.label)}</button>`).join("")}</div>`;
+    if (c.act < 3) {
+      if (c.event) return `<div class="df-ev"><b>${esc(c.event.title)}</b><p>${esc(c.event.scene)}</p>${dfWayBtns(opts.filter((o) => o.id.startsWith("difang:pick:")))}</div>`;
+      const o = opts.find((x) => x.id === "difang:go");
+      if (!o) return dfTold(c);
+      const cost = (String(o.label).match(/體力 (\d+)/) || [])[1] || "";
+      const btn = o.enabled
+        ? `<button class="btn df-go" data-act="choose" data-id="difang:go">${DF_GO_BTN}<small>${esc(DF_GO_SUB.replace("{cost}", cost).replace("{n}", c.left))}</small></button>`
+        : `<button class="btn df-go" disabled>${esc(c.left ? DF_GO_TIRED : DF_GO_FULL.replace("{n}", c.daily))}</button>`;
+      return dfTold(c) + btn;
     }
-    const o = opts.find((x) => x.id === "difang:strike");
-    if (!o) return "";
-    return o.enabled
-      ? `<button class="btn df-go" data-act="choose" data-id="difang:strike">${esc(DF_STRIKE.replace("{foe}", c.foe))}</button>`
-      : `<button class="btn df-go" disabled>${DF_STRIKE_DONE}</button>`;
+    const ways = opts.filter((x) => x.id.startsWith("difang:strike:"));
+    if (!ways.length) return "";
+    const f = c.fight || {};
+    if (ways.every((o) => !o.enabled)) return `${dfTold(c)}<button class="btn df-go" disabled>${DF_STRIKE_DONE}</button>`;
+    return `${dfTold(c)}<div class="df-ev"><small>${esc(DF_STRIKE_HEAD.replace("{foe}", c.foe))}</small><b>${esc(f.title || "")}</b><p>${esc(f.scene || "")}</p>${dfWayBtns(ways)}</div>`;
   }
 
   function difangSheetHtml(m) {

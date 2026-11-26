@@ -45,6 +45,17 @@
 .df-way { min-height: 48px; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--ink); border-radius: 8px; background: var(--paper); color: var(--ink); font: 700 15px/1.45 var(--kai); letter-spacing: .03em; cursor: pointer; }
 .df-way:active { background: var(--card-2); }
 .df-way:disabled { opacity: .55; border-left-color: var(--line); }
+.df .btn.df-go { flex-direction: column; gap: 2px; }
+.df .btn.df-go small { font: 400 12px var(--sans); letter-spacing: 0; opacity: .8; }
+/* 赴了的那一則（第三幕那一場也是）：標題、一段場景、做法卡 */
+.df-ev { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--paper); border: 1px solid var(--line); }
+.df-ev > small { font: 400 12px var(--sans); color: var(--accent); letter-spacing: .08em; }
+.df-ev > b { font: 700 17px/1.3 var(--kai); letter-spacing: .06em; color: var(--ink); }
+.df-ev > p { font: 400 15px/1.75 var(--kai); color: var(--ink); }
+/* 上一次那幾句：淡墨底，左邊一道墨 */
+.df-told { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-left: 3px solid var(--ink-2); background: var(--card-2); border-radius: 0 8px 8px 0; }
+.df-told p { font: 400 14px/1.65 var(--kai); color: var(--ink); }
+.df-told p + p { color: var(--ink-2); font-size: 13px; }
 
 /* 收場：大印與那一句 */
 .df-end { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--card-2); text-align: center; }

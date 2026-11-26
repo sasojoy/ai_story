@@ -10,6 +10,14 @@ def _open(game):
     return open_here(game)
 
 
+def _pitch(game, way: int = 0):
+    """赴一次大事、挑第 way 個做法（不擲的那一個在最後；第 0 個都寫了屬性）。"""
+    game.state.player.stamina = 100
+    out = actions.act(game, "go")
+    assert out[0] == actions.GO_LINE.format(place="潁水河畔") or out[0].startswith("你趕到"), out
+    return actions.act(game, f"pick:{way}")
+
+
 def test_one_affair_for_the_whole_server_a_week_and_the_region_rotates(monkeypatch):
     game = season21_game()
     actions.on_sync(game)
@@ -31,31 +39,101 @@ def test_away_from_the_region_the_card_shows_but_nothing_counts():
     assert not [o for o in game.options() if o.id.startswith("difang:")]
     card = actions.status(game)["difang"]["card"]
     assert card["away"] is True and card["options"] == []
-    assert actions.on_outing(game, "wan_city") == []
+    assert actions.act(game, "go") == [actions.GONE]
     assert actions.current(game).shares == {}
 
 
-def test_act_one_fills_then_act_two_ways_then_act_three():
-    game = season21_game(need_min=[2, 2, 2], per_head=[0, 0, 0])
+def test_go_draws_an_event_of_this_act_then_a_way_counts():
+    game = season21_game(need_min=[99, 99, 99], per_head=[0, 0, 0])
+    _open(game)
+    go = [o for o in game.options() if o.id.startswith("difang:")]
+    assert [o.id for o in go] == ["difang:go"] and go[0].enabled and "體力" in go[0].label
+    stamina = game.state.player.stamina = 100
+    out = actions.act(game, "go")
+    a = affair_here(game)
+    e = actions.event_of(rules.affairs()["yingshui_dike"], a.drawn[game._mall_owner()])
+    assert e in rules.affairs()["yingshui_dike"]["acts"][0]["events"] and out[-1] == e["scene"]
+    assert game.state.player.stamina == stamina - game.content.config.jianfa.explore_stamina
+    picks = [o for o in game.options() if o.id.startswith("difang:")]
+    assert [o.id for o in picks] == [f"difang:pick:{i}" for i in range(len(e["ways"]))]  # 赴了就只剩挑做法
+    assert actions.act(game, "go") == [actions.GONE]
+    xinde = game.state.player.stats.get("xinde", 0)
+    out = actions.act(game, "pick:0")
+    w = e["ways"][0]
+    assert out[0] in (w["hit"], w["miss"])
+    t = game.content.config.difang
+    hit = out[0] == w["hit"]
+    assert a.got == (t.way_hit if hit else t.way_miss) and a.shares[game._mall_owner()] == a.got
+    assert game.state.player.stats["xinde"] == xinde + (t.xinde_hit if hit else t.xinde_miss)
+    assert a.told[game._mall_owner()] == out and actions.card(game, a)["told"] == out
+
+
+def test_an_unrolled_way_is_one_steady_share():
+    game = season21_game(need_min=[99, 99, 99], per_head=[0, 0, 0])
     a = _open(game)
-    assert actions.on_outing(game, "yingshui")
-    assert actions.on_win(game, "yingshui", "x") == [] or True
+    game.state.player.stamina = 100
+    actions.act(game, "go")
+    e = actions.event_of(rules.affairs()["yingshui_dike"], a.drawn[game._mall_owner()])
+    i = next(i for i, w in enumerate(e["ways"]) if not w.get("stat")) if any(not w.get("stat") for w in e["ways"]) else None
+    if i is None:
+        return
+    assert actions.act(game, f"pick:{i}")[0] == e["ways"][i]["line"] and a.got == game.content.config.difang.way_miss
+
+
+def test_three_goes_a_day_and_no_repeat_until_the_act_is_used_up():
+    game = season21_game(need_min=[99, 99, 99], per_head=[0, 0, 0])
+    a = _open(game)
+    t = game.content.config.difang
+    for _ in range(t.daily_goes):
+        _pitch(game)
+    go = [o for o in game.options() if o.id == "difang:go"][0]
+    assert not go.enabled and actions.card(game, a)["left"] == 0
+    assert actions.act(game, "go") == [actions.GO_FULL.format(n=t.daily_goes)]
+    pool = [e["id"] for e in rules.affairs()["yingshui_dike"]["acts"][0]["events"]]
+    seen = a.seen[game._mall_owner()]
+    assert len(set(seen)) == len(seen) == t.daily_goes
+    a.goes.clear()  # 當成隔天
+    _pitch(game)
+    assert sorted(seen) == sorted(pool)  # 四則都碰過一輪
+    a.goes.clear()
+    _pitch(game)
+    assert len(seen) == 1 and seen[0] in pool  # 下一輪重來
+
+
+def test_not_enough_stamina_cannot_go():
+    game = season21_game()
+    _open(game)
+    game.state.player.stamina = 0
+    assert not [o for o in game.options() if o.id == "difang:go"][0].enabled
+    assert actions.act(game, "go") == [actions.GO_TIRED]
+
+
+def test_act_one_fills_then_act_two_draws_its_own_events():
+    game = season21_game(need_min=[1, 99, 99], per_head=[0, 0, 0])
+    _open(game)
+    _pitch(game)
     a = affair_here(game)
     assert a.act == 2 and a.got == 0
-    ways = [o for o in game.options() if o.id.startswith("difang:way:")]
-    assert len(ways) == 3 and all(o.enabled for o in ways)
-    out = actions.act(game, "way:0")
-    assert out[0] in (actions.WAY_HIT, actions.WAY_MISS)
-    assert actions.act(game, "way:1") == [actions.WAY_DONE] or affair_here(game).act == 3
+    _pitch(game)
+    act2 = {e["id"] for e in rules.affairs()["yingshui_dike"]["acts"][1]["events"]}
+    assert a.seen[game._mall_owner()][-1] in act2
+
+
+def test_explore_no_longer_counts():
+    from tianxia.core import features as features_core
+
+    assert "difang" not in features_core.BUS_ORDER["outing"] and "difang" not in features_core.BUS_ORDER["win"]
 
 
 def test_act_three_once_a_day_and_the_last_blow_finishes():
     game = season21_game(need_min=[1, 1, 3], per_head=[0, 0, 0], blow_max=1)
     a = _open(game)
     a.act, a.got = 3, 2
-    strike = [o for o in game.options() if o.id == "difang:strike"]
-    assert strike and strike[0].enabled
-    assert actions.act(game, "strike") == [actions.STRIKE_LAST.format(foe="翻江鰍")]
+    strike = [o for o in game.options() if o.id.startswith("difang:strike:")]
+    assert len(strike) == 3 and all(o.enabled for o in strike)
+    out = actions.act(game, "strike:0")
+    w = rules.affairs()["yingshui_dike"]["acts"][2]["ways"][0]
+    assert out[0] in (w["hit"], w["miss"]) and out[1] == actions.STRIKE_LAST.format(foe="翻江鰍")
     a = affair_here(game)
     assert a.status == rules.DONE and a.last == game.state.player.name
     assert any("潁水堤" in r.text and game.state.player.name in r.text for r in game.state.world.chronicle)
@@ -66,16 +144,16 @@ def test_strike_twice_the_same_day_is_refused():
     game = season21_game(need_min=[1, 1, 50], per_head=[0, 0, 0])
     a = _open(game)
     a.act = 3
-    actions.act(game, "strike")
-    assert actions.act(game, "strike") == [actions.STRIKE_DONE]
-    assert not [o for o in game.options() if o.id == "difang:strike"][0].enabled
+    actions.act(game, "strike:1")
+    assert actions.act(game, "strike:2") == [actions.STRIKE_DONE]
+    assert not any(o.enabled for o in game.options() if o.id.startswith("difang:strike:"))
 
 
 def test_done_contributors_pick_a_top_tier_material_once_anywhere():
     game = season21_game(need_min=[1, 1, 1], per_head=[0, 0, 0])
     a = _open(game)
     a.act = 3
-    actions.act(game, "strike")
+    actions.act(game, "strike:0")
     t, p = game.content.config.difang, game.state.player
     game.state.player.location = "wan_city"  # 走遠了也領得到
     claims = [o for o in game.options() if o.id.startswith("difang:claim:")]
@@ -100,7 +178,7 @@ def test_outside_the_top_ten_one_piece():
     a = _open(game)
     a.shares.update({"k0": 9})
     a.act = 3
-    actions.act(game, "strike")
+    actions.act(game, "strike:0")
     mid = actions.claim_mats(game.content)[1]
     actions.act(game, f"claim:{mid}")
     assert game.state.player.materials.get(mid) == 1
@@ -109,7 +187,7 @@ def test_outside_the_top_ten_one_piece():
 def test_failed_contributors_get_a_little_fame_on_sync():
     game = season21_game()
     _open(game)
-    actions.on_outing(game, "yingshui")
+    _pitch(game)
     dw = game.state.world.difang
     dw.week = 0
     for x in dw.affairs:
@@ -124,7 +202,7 @@ def test_failed_contributors_get_a_little_fame_on_sync():
 def test_a_new_week_fails_the_old_one_and_opens_the_next():
     game = season21_game()
     a = _open(game)
-    actions.on_outing(game, "yingshui")
+    _pitch(game)
     game.state.world.difang.week = 0  # 當成換週了
     for x in game.state.world.difang.affairs:
         x.week = 0
@@ -158,7 +236,7 @@ def test_each_act_lists_who_pitched_in_me_first_and_caps_the_row():
         a.by_act[0].append(f"k{i}")
         a.names[f"k{i}"] = f"俠客{i}"
         a.shares[f"k{i}"] = 1
-    actions.on_outing(game, "yingshui")
+    _pitch(game)
     act1 = actions.card(game, affair_here(game))["acts"][0]
     assert act1["who"][0] == game.state.player.name  # 自己排第一
     assert act1["who"][1] == "俠客7" and len(act1["who"]) == actions.WHO_MAX and act1["more"] == 9 - actions.WHO_MAX

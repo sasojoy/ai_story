@@ -1,9 +1,12 @@
-"""地方大事的動作（設計：玩家一起玩設計稿第一節；Joy 2026-11-26「做」，同一天改「全服一件、一週換一個大區」、獎勵往上調一級）。
+"""地方大事的動作（設計：玩家一起玩設計稿第一節；Joy 2026-11-26「做」，同一天改「全服一件、一週換一個大區」、獎勵往上調一級，
+再改成「特別活動」：平常的探索、打贏不算，只有按「赴大事」才出力；事件與領獎都有上限）。
 
 全服一週一件、輪著換大區（每個人都看得到；人要在那一區才出得上力），三幕：
-- 第一幕：在這個大區探索一顆（事件 outing）、打贏一場（事件 win）都算一份力，不另外按鈕。
-- 第二幕：人在這個大區，挑一個做法（difang:way:<i>），照那一項屬性擲；成了兩份、沒成一份；一人一次。
-- 第三幕：人在這個大區，一天上去一次（difang:strike），一下的份量照戰力；最後一下的名號記下來。
+- 第一、二幕：人在這個大區按「赴大事」（difang:go；體力跟探索一次一樣、一天最多 daily_goes 次），抽一則這一幕自己的事件
+  （同一件裡這一幕的事件碰過一輪才重複），再挑一個做法（difang:pick:<i>）：寫了屬性的照那一項擲，成了兩份、沒成一份；
+  不擲的穩穩一份。每赴一次給一點心得（成了 xinde_hit、其餘 xinde_miss）。
+- 第三幕：人在這個大區，一天上前一次（difang:strike:<i>，不占赴大事的次數），挑一個打法照那一項擲；一下的份量照戰力，成了多一份；
+  最後一下的名號記下來。
 三幕湊滿＝湊滿了；這一週過完沒湊滿＝沒湊滿（此地鬧饑荒）。兩種都寫一行江湖史。
 湊滿了：出過力的人在那一層自己挑一份四階素材（difang:claim:<素材 id>，在哪裡都領得到），連名聲、心得；出力前十多一份同類的。
 沒湊滿：出過力的人下一次同步記一點名聲。
@@ -26,14 +29,13 @@ from . import rules
 
 # 給玩家看的字（待 joy 潤）
 TITLE = "地方大事・{title}"  # 待 joy 潤（江湖紀錄的標題）
-CREDIT = "{title}：{what}也算一份力。"  # 待 joy 潤（第一幕：探索、打贏之後那一行）
-CREDIT_WHAT = {"outing": "你這一趟帶回來的", "win": "你這一仗"}  # 待 joy 潤
 ACT_UP = "{title}：{name}湊齊了，接著是「{next}」。"  # 待 joy 潤（換幕那一刻的地方傳聞）
-WAY_LABEL = "{title}・{label}"  # 待 joy 潤（第二幕的選項）
-WAY_HIT = "成了。這一手算兩份力。"  # 待 joy 潤
-WAY_MISS = "沒有全成，不過也幫上了一點。"  # 待 joy 潤
-WAY_DONE = "這一幕你已經出過手了。"  # 待 joy 潤
-STRIKE_LABEL = "{title}・上前對付{foe}"  # 待 joy 潤（第三幕的選項）
+GO_LABEL = "{title}・赴大事"  # 待 joy 潤（第一、二幕的鈕；後面接體力）
+GO_FULL = "今天出過{n}次力了，明天再來。"  # 待 joy 潤
+GO_TIRED = "體力不夠了。"  # 待 joy 潤
+GO_LINE = "你趕到{place}。"  # 待 joy 潤（赴大事那一下；接著是那一則事件，畫在大事那一層）
+WAY_LABEL = "{title}・{label}"  # 待 joy 潤（事件的做法、第三幕的打法）
+XINDE = "心得 +{n}"  # 待 joy 潤
 STRIKE_LINE = "你和{foe}的人交了手，替大家壓下一截。"  # 待 joy 潤
 STRIKE_LAST = "你補上了最後一下，{foe}撐不住了。"  # 待 joy 潤
 STRIKE_DONE = "今天你已經上去過了，明天再來。"  # 待 joy 潤
@@ -218,30 +220,6 @@ def _credit(ctx, a: DifangAffair, n: int) -> list[str]:
     return []
 
 
-def _act_one(ctx, what: str) -> list[str]:
-    """事件 outing、win：第一幕的一份力（假人一樣算：照公開行動出力）。包的 bus 格核心不看 enabled：第一行自己問。"""
-    if not _running(ctx):
-        return []
-    changed = roll_week(ctx)
-    a = here(ctx)
-    if a is None or a.status != rules.OPEN or a.act != 1:
-        if changed:
-            ctx._save_season()
-        return []
-    d = _def(a) or {}
-    _credit(ctx, a, 1)
-    ctx._save_season()
-    return [CREDIT.format(title=d.get("title", ""), what=CREDIT_WHAT[what])]
-
-
-def on_outing(ctx, loc_id: str) -> list[str]:
-    return _act_one(ctx, "outing")
-
-
-def on_win(ctx, loc_id: str, squad_id: str) -> list[str]:
-    return _act_one(ctx, "win")
-
-
 # ── 選項：第二幕的做法、第三幕上前 ──
 
 
@@ -260,26 +238,76 @@ def options(ctx) -> list[Option]:
     return _claim_options(ctx) + _act_options(ctx)
 
 
+def _day(ctx) -> int:
+    return int(ctx._pill_day())
+
+
+def goes_today(ctx, a: DifangAffair) -> int:
+    g = a.goes.get(_key(ctx))
+    return int(g[1]) if g and int(g[0]) == _day(ctx) else 0
+
+
+def _cost(ctx) -> int:
+    return int(ctx.content.config.jianfa.explore_stamina)
+
+
+def event_of(d: dict, eid: str) -> dict | None:
+    """第一、二幕裡 id 是 eid 的那一則（赴了還沒挑、幕已經換了也找得到：照樣算在現在這一幕）。"""
+    return next((e for x in d.get("acts", [])[:2] for e in x.get("events", []) if e.get("id") == eid), None)
+
+
+def _draw(ctx, a: DifangAffair, d: dict) -> dict | None:
+    """抽這一幕的一則：這一幕還沒碰過的先抽；碰過一輪了這一幕重來一輪。"""
+    pool = d["acts"][a.act - 1].get("events", [])
+    if not pool:
+        return None
+    key = _key(ctx)
+    seen = a.seen.setdefault(key, [])
+    ids = {e["id"] for e in pool}
+    fresh = [e for e in pool if e["id"] not in seen]
+    if not fresh:
+        seen[:] = [x for x in seen if x not in ids]
+        fresh = list(pool)
+    e = fresh[rules.roll("地方大事事", _season(ctx), a.week, a.region, key, len(seen)).randrange(len(fresh))]
+    seen.append(e["id"])
+    return e
+
+
 def _act_options(ctx) -> list[Option]:
     a = here(ctx)
-    if a is None or a.status != rules.OPEN or a.act == 1:
+    if a is None or a.status != rules.OPEN:
         return []
     d = _def(a)
     if d is None:
         return []
     key, title = _key(ctx), d["title"]
-    if a.act == 2:
-        done = key in a.act2
-        return [Option(id=f"difang:way:{i}", label=WAY_LABEL.format(title=title, label=w["label"]), enabled=not done)
-                for i, w in enumerate(d["acts"][1].get("ways", []))]
-    foe = d["acts"][2].get("foe", "")
-    return [Option(id="difang:strike", label=STRIKE_LABEL.format(title=title, foe=foe), enabled=a.struck.get(key) != ctx._pill_day())]
+    if a.act < rules.ACTS:
+        e = event_of(d, a.drawn.get(key, ""))
+        if e is not None:
+            return [Option(id=f"difang:pick:{i}", label=WAY_LABEL.format(title=title, label=w["label"])) for i, w in enumerate(e.get("ways", []))]
+        o = ctx._cost_option("difang:go", GO_LABEL.format(title=title), _cost(ctx))
+        if goes_today(ctx, a) >= int(_t(ctx).daily_goes):
+            o = o.model_copy(update={"enabled": False})
+        return [o]
+    done = a.struck.get(key) == _day(ctx)
+    return [Option(id=f"difang:strike:{i}", label=WAY_LABEL.format(title=title, label=w["label"]), enabled=not done)
+            for i, w in enumerate(d["acts"][2].get("ways", []))]
 
 
 def title(ctx) -> str:
     a = here(ctx) or unclaimed(ctx) or current(ctx)
     d = _def(a) if a is not None else None
     return TITLE.format(title=d["title"] if d else "")
+
+
+def _way(ctx, a: DifangAffair, way: dict, *salt) -> tuple[bool | None, str]:
+    """擲一個做法：(成了沒；不擲是 None, 那一句)。"""
+    stat = way.get("stat")
+    if not stat:
+        return None, way.get("line", "")
+    chance = rules.way_chance(_t(ctx), ctx.state.player.stats.get(stat, 0))
+    hit = rules.roll("地方大事", _season(ctx), a.week, a.region, _key(ctx), *salt).random() < chance
+    return hit, way["hit"] if hit else way["miss"]
 
 
 def act(ctx, arg: str) -> list[str]:
@@ -291,36 +319,61 @@ def act(ctx, arg: str) -> list[str]:
     d = _def(a) if a is not None else None
     if a is None or d is None or a.status != rules.OPEN:
         return [GONE]
-    key = _key(ctx)
-    if verb == "way":
-        if a.act != 2:
+    key, t = _key(ctx), _t(ctx)
+    if verb == "go":
+        if a.act >= rules.ACTS or key in a.drawn:
             return [GONE]
-        if key in a.act2:
-            return [WAY_DONE]
-        ways = d["acts"][1].get("ways", [])
+        n = goes_today(ctx, a)
+        if n >= int(t.daily_goes):
+            return [GO_FULL.format(n=n)]
+        if ctx.state.player.stamina < _cost(ctx):
+            return [GO_TIRED]
+        e = _draw(ctx, a, d)
+        if e is None:
+            return [GONE]
+        ctx.state.player.stamina -= _cost(ctx)
+        a.goes[key] = [_day(ctx), n + 1]
+        a.drawn[key] = e["id"]
+        a.told.pop(key, None)
+        ctx._save_season()
+        return [GO_LINE.format(place=_place_name(ctx, d["place"])), e["scene"]]
+    if verb == "pick":
+        e = event_of(d, a.drawn.get(key, ""))
+        if e is None:
+            return [GONE]
         try:
-            way = ways[int(rest)]
+            way = e["ways"][int(rest)]
         except (ValueError, IndexError):
             return [GONE]
-        t = _t(ctx)
-        chance = rules.way_chance(t, ctx.state.player.stats.get(way.get("stat", ""), 0))
-        hit = rules.roll("地方大事", _season(ctx), a.week, a.region, key, "way").random() < chance
-        a.act2.append(key)
-        out = [WAY_HIT if hit else WAY_MISS]
+        hit, line = _way(ctx, a, way, "pick", e["id"], len(a.seen.get(key, [])), goes_today(ctx, a), _day(ctx))
+        del a.drawn[key]
+        xinde = int(t.xinde_hit if hit else t.xinde_miss)
+        out = [line]
+        if xinde:
+            ctx.state.player.stats["xinde"] = ctx.state.player.stats.get("xinde", 0) + xinde
+            out.append(XINDE.format(n=xinde))
         _credit(ctx, a, t.way_hit if hit else t.way_miss)
+        a.told[key] = out
         ctx._save_season()
         return out
     if verb == "strike":
-        if a.act != 3:
+        if a.act != rules.ACTS:
             return [GONE]
-        today = ctx._pill_day()
+        today = _day(ctx)
         if a.struck.get(key) == today:
             return [STRIKE_DONE]
+        try:
+            way = d["acts"][2]["ways"][int(rest)]
+        except (ValueError, IndexError, KeyError):
+            return [GONE]
         a.struck[key] = today
+        hit, line = _way(ctx, a, way, "strike", today)
         foe = d["acts"][2].get("foe", "")
-        _credit(ctx, a, rules.blow(_t(ctx), ctx._battle_power(seal=False)))
+        _credit(ctx, a, rules.blow(t, ctx._battle_power(seal=False)) + (1 if hit else 0))
+        out = [line, (STRIKE_LAST if a.status == rules.DONE else STRIKE_LINE).format(foe=foe)]
+        a.told[key] = out
         ctx._save_season()
-        return [(STRIKE_LAST if a.status == rules.DONE else STRIKE_LINE).format(foe=foe)]
+        return out
     return [GONE]
 
 
@@ -411,6 +464,9 @@ def card(ctx, a: DifangAffair) -> dict | None:
         acts.append({"name": x["name"], "line": x["line"], "state": state, **_who(a, i, key)})
     need = a.need[a.act - 1] if a.need else 1
     opts = [o.model_dump() for o in _act_options(ctx)] if a.status == rules.OPEN else []
+    e = event_of(d, a.drawn.get(key, "")) if a.status == rules.OPEN and here(ctx) is a else None
+    fight = d["acts"][2]
+    t0 = _t(ctx)
     claim = [{"id": o.id, "name": ctx.content.materials[o.id.split(":", 2)[2]].name} for o in _claim_options(ctx)] if a is unclaimed(ctx) else []
     t = _t(ctx)
     marks = ([YISHI] if a.status == rules.DONE and key in _top(a, t.top_more) else []) + ([PILLAR] if a.status == rules.DONE and a.last and a.last == ctx.state.player.name and key in a.shares else [])
@@ -429,6 +485,11 @@ def card(ctx, a: DifangAffair) -> dict | None:
         "heads": len(a.shares),
         "mine": a.shares.get(key, 0) > 0,
         "options": opts,
+        "event": {"title": e["title"], "scene": e["scene"]} if e is not None else None,  # 赴了、還沒挑做法的那一則（做法在 options）
+        "fight": {"title": fight.get("title", ""), "scene": fight.get("scene", "")},  # 第三幕那一場
+        "told": list(a.told.get(key, [])) if a.status == rules.OPEN and here(ctx) is a else [],  # 上一次那幾句
+        "left": max(0, int(t0.daily_goes) - goes_today(ctx, a)),  # 今天還能赴幾次
+        "daily": int(t0.daily_goes),
         "away": a.status == rules.OPEN and here(ctx) is not a,  # 人不在那一區：看得到、出不上力
         "claim": claim,  # 湊滿了、還沒領：挑一份（素材 id 與名字）
         "claimed": a.status == rules.DONE and key in a.paid,
