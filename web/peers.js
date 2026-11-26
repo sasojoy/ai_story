@@ -300,7 +300,7 @@
     const done = new Set();
     const answer = (b) => (/^yes(:|$)/.test(b.arg || "") ? ` data-answer="${esc(b.action)}"` : "");
     // 名字包一格不折行（.pa-name）；說明放得下就跟名字並排，放不下自己換到下一行再折（style.css 的 .peer-acts，FB-220）
-    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}"${answer(b)} ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
+    const one = (b, i) => `<button class="btn" data-act="peer-act" data-i="${i}" data-action="${esc(b.action || "")}"${answer(b)} ${b.enabled ? "" : "disabled"}><span class="pa-name">${esc(b.label)}</span>${b.note ? `<small>${esc(b.note)}</small>` : ""}</button>`;
     const html = actions.map((b, i) => {
       const members = b.group ? groups[`${b.action}|${b.group}`] : null;
       if (!members || members.length < 2) return one(b, i);

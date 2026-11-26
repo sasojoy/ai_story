@@ -70,7 +70,7 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
     """這一條此刻由誰說、說什麼；說不了（散人碰到沒有散人版的陣營提示、內容沒有這一條）是 None。
     拿到慢慢長出來那一本的新角色改說 short.SHORT 的一兩句（說話的人照舊；說不說得了照舊由原本那幾句決定）。"""
     note = _note_for(state, content, hint_id)
-    if note is not None and state.player.unfold is not None and hint_id in SHORT:
+    if note is not None and state.player.unfold is not None and not state.player.unfold.old and hint_id in SHORT:
         note.text = SHORT[hint_id]
     return note
 
