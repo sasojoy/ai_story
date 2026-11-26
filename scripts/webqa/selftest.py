@@ -61,7 +61,9 @@ def _replay_controls(a, rows: list) -> None:
     r = replay.replay(dom, web, web, os.path.join(work, "same"), cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
     rows.append(("replay same against same", not r["real"] and not r["tool"], f"snapshots {r['snapshots']} (with #map-host {r['with_map_host']}) real {len(r['real'])} noise {r['noise']} {r['seconds']}s"))
     r = replay.replay(dom, web, web, os.path.join(work, "anim"), frozen=False, shoot=False, cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
-    rows.append(("replay animation pass, same against same", not r["real"] and not r["tool"], f"real {len(r['real'])} {r['seconds']}s"))
+    # batch 274: red once under load in batch 273 and the work folder was gone: when this row is red the folder stays, named in the row
+    anim_red = bool(r["real"] or r["tool"])
+    rows.append(("replay animation pass, same against same", not anim_red, f"real {len(r['real'])} {r['seconds']}s" + (anim_kept(r, work) if anim_red else "")))
     for which in gate.MUTATIONS:
         other = os.path.join(work, which)
         shutil.copytree(web, os.path.join(other, "web"))
@@ -75,7 +77,15 @@ def _replay_controls(a, rows: list) -> None:
     r = replay.replay(dom, web, os.path.join(other, "web"), os.path.join(work, "out_" + gate.IMG_INVERT), cdp_ports=a.cdp_ports, chrome=a.chrome, node=a.node)
     rows.append((f"replay --mutate {gate.IMG_INVERT} goes red", any(x["class"] == "pixel" for x in r["real"]),
                  f"real {len(r['real'])}: {sorted({x['class'] for x in r['real']})} noise {r['noise']} settle {r['settle']}"))
-    shutil.rmtree(work, ignore_errors=True)
+    if not anim_red:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def anim_kept(r: dict, work: str) -> str:
+    """The animation pass went red: the first row's scene, class and file, and where the work folder is kept."""
+    first = r["real"][0] if r["real"] else {}
+    detail = first.get("detail") if isinstance(first.get("detail"), dict) else {}
+    return f"; first {first.get('scene', '-')} {first.get('class', 'tool')} {detail.get('file', '')}".rstrip() + f"; kept {work}"
 
 
 def _yw_controls(a, rows: list) -> None:

@@ -73,11 +73,14 @@ export const flows = [
     await c.step(ACT("yw-show"), "yw_shown", { who: "p1" });
     await c.step(ACT("yw-hide"), "", {});
     await c.tab("jianghu");
-    // batch 272: yw_reopen (yiwen:open on the 江湖 page) and yw_help after it are not walked any more. On the new 江湖頁 an option that
-    // is neither a place nor a duty is a row of the 軍務 list's 此地還能 (web/jianghu.js jhKinds), and 沈浪 here is a 散人: his third cell
-    // is 投靠 (jhDutyCell -> jhJoinCell), so no cell pulls that list up. The strip on the hero page (yw_shown) is the way back here.
-    // If the page gets a way to it for a 散人, walk it again with stepVia(c, CH("yiwen:open"), DUTY, ...) and yw-help after it.
-    // batch 273: the options this 散人 has here, as a log line (nothing shot): what no cell of the new page pulls up
+    // batch 274: batches 272 and 273 measured this on the wrong page. Put away, main.jianghu.take is the tale's menu (slot menu, pack
+    // yiwen), but the page first shows the trip's fight report not yet read (web/jianghu.js jhMomentHtml -> jhCardOn -> jhCardPage);
+    // reading on (jh-card-on, not shot) brings the whole-page menu the tale took over (jhTakePage), where yiwen:open and yiwen:drop are
+    // buttons. Not through the 軍務 list's 此地還能: that is only for options with no pack taking the menu
+    await c.click(ACT("jh-card-on"));
+    await c.step(CH("yiwen:open"), "yw_reopen", { who: "p1" });
+    await c.step(ACT("yw-help"), "yw_help", { who: "p1" });
+    // batch 273: the options this 散人 has here, as a log line (nothing shot)
     for (const w of ["p1", "p2"]) {
       const opts = await c.api(w, "/api/main");
       c.log("sanren options", w, JSON.stringify((opts.json && opts.json.status && opts.json.status.location) || ""), JSON.stringify(((opts.json && opts.json.options) || []).map((o) => o.id)));

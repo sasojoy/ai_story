@@ -673,7 +673,9 @@ out = 1`);
       await prac();
       await c.step(ACT("hero-move-go"), "pr_move_go", {});
       await prac();
-      await c.step(ACT("self-sec"), "pr_self_sec", {});
+      // batch 274: pr_self_sec is gone. The 俠客 page's second batch (29252b344, PR #319) hides the 武學 head row that held the
+      // 功法庫 N／M・意境 K › button (web/xiake.css .sec-arts ... > .self-hd), and the arts face draws the library as a flat open
+      // section, with no fold for it to open (web/cultivation.js pageOf("arts")). Nothing on the new page to walk
       await prac("attrs");
       await c.step(ACT("xinde-more"), "pr_xinde", { light: true });
       // batch 233: 江湖錄 (codex, on in week7 and season21 since 11/13) is the 俠客 page's last tab: 奇遇 first, then 圖鑑

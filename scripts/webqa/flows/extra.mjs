@@ -45,7 +45,12 @@ export const flows = [
         const glow = [...document.querySelectorAll(".glow")].find((e) => vis(e) && !e.disabled && !(e.dataset.act === "tab" && e.dataset.tab === S.tab));
         const slotIn = [...document.querySelectorAll('[data-act="slot-in"]')].find(vis);
         const hub = [...document.querySelectorAll('[data-act="forge-hub"]:not([disabled]), [data-act="forge"]:not([disabled])')].find(vis);
-        const pick = slotIn || glow || hub || document.querySelector('[data-act="ask-yes"]') || [...document.querySelectorAll('[data-act="choose"]:not([disabled])')].find(vis);
+        // batch 274: the pill step (glow "pill") since 9541f36e9 (PR #310): the pill button is drawn only in the fold the stamina bar
+        // opens (web/app.js stam-help), and nothing glows while it is shut, so open it first; the next round the pill glows
+        const pro = (S.main && S.main.prologue) || {};
+        const pillShut = (pro.glow || []).includes("pill") && ![...document.querySelectorAll('[data-act="pill"]')].find(vis);
+        const stam = pillShut ? [...document.querySelectorAll('.bar.stam[data-act="stam-help"]')].find(vis) : null;
+        const pick = stam || slotIn || glow || hub || document.querySelector('[data-act="ask-yes"]') || [...document.querySelectorAll('[data-act="choose"]:not([disabled])')].find(vis);
         if (!pick) return ""; if (window.__qaReseed) window.__qaReseed(); if (pick.click) pick.click(); else pick.dispatchEvent(new MouseEvent("click", { bubbles: true })); return (pick.dataset.act || "") + ":" + (pick.dataset.id || pick.dataset.tab || pick.dataset.op || ""); })()`);
       walked.push(pressed);
       if (!pressed || (walked.length >= 3 && walked.slice(-3).every((x) => x === pressed))) break;  // stuck: how far it got is in the facts

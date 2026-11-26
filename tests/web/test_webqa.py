@@ -1080,3 +1080,34 @@ def test_a_fixed_layer_outside_the_app_that_scrolls_is_what_the_pictures_scroll(
 
 
 H_812 = 812
+
+
+# ── 第 274 批：selftest 的 animation pass 紅了，replay_work 留著 ──
+
+@pytest.mark.parametrize("anim_real", [False, True])
+def test_selftest_keeps_the_replay_work_only_when_the_animation_pass_is_red(tmp_path, monkeypatch, anim_real):
+    sys.path.insert(0, str(TOOL))
+    selftest = _load("selftest")
+    work = tmp_path / "replay_work"
+
+    def fake_replay(dom, base_web, head_web, out, frozen=True, shoot=True, **kw):
+        Path(out).mkdir(parents=True, exist_ok=True)
+        real = [{"scene": "pg_007", "class": "style", "detail": {"file": "pg_007.json", "props": ["animation-name"]}}] if not frozen and anim_real else []
+        return {"real": real, "tool": [], "snapshots": 1, "with_map_host": 0, "noise": {}, "seconds": 0, "settle": {}}
+
+    def fake_unpack(repo, sha, dest):
+        Path(dest, "web").mkdir(parents=True, exist_ok=True)
+        return dest
+
+    monkeypatch.setattr(selftest.replay, "replay", fake_replay)
+    monkeypatch.setattr(selftest.unpack, "unpack", fake_unpack)
+    monkeypatch.setattr(selftest.gate, "MUTATIONS", ())
+    monkeypatch.setattr(selftest.gate, "mutate", lambda other, which: None)
+    a = type("A", (), {"out": str(tmp_path), "repo": "", "sha": "x", "rounds": "c", "cdp_ports": None, "chrome": None, "node": None})()
+    rows = []
+    selftest._replay_controls(a, rows)
+    anim = [r for r in rows if r[0] == "replay animation pass, same against same"][0]
+    assert anim[1] is (not anim_real)
+    assert work.exists() is anim_real, "紅了才留，綠的照舊清掉"
+    if anim_real:
+        assert "first pg_007 style pg_007.json" in anim[2] and str(work) in anim[2], "那一列寫第一筆與留下來的夾"

@@ -193,7 +193,6 @@ main:xk_guard
 main:xk_guard_all
 main:xk_guard_back
 main:pr_move_go
-main:pr_self_sec
 main:pr_xinde
 main:pr_codex
 main:pr_codex_seg
@@ -579,6 +578,8 @@ yw:yw_hidden_trip
 yw:yw_hidden
 yw:yw_track_hero
 yw:yw_shown
+yw:yw_reopen
+yw:yw_help
 yw:yw_typed_draft
 yw:yw_typed_refused
 yw:yw_wait
