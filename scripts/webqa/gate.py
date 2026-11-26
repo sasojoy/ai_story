@@ -111,12 +111,12 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/state.js": "top-level state only, no named function to count (every page loads it); not a package file, so a change walks every round",
     "web/tale_page.js": "its own page (/zhanji/<code>, tale_html.py), not loaded by /; no round calls its toast; not a package file, so a change walks every round",
     "web/zhuan_page.js": "its own page (zhuan_html.py), not loaded by /; no round calls its set or toast; not a package file, so a change walks every round",
-    "web/jianghu.js": "the 江湖頁重排 package (Joy 2026-11-25) is off in every profile until Joy OKs the real page; rounds only call jhOn, which answers false. Rebuild coverage.json on the host when it turns on",
     # batch 233: titles, terms, jieyi, mail, zongmen, guard and codex left this list: week7 and season21 turn them on (#243, codex 11/13)
     # and every round's walk calls into their page files, so coverage.json has them. web/intro.js left too: serve.py still turns the
     # intro package off for the walk (the 開場 layer would cover the clicks), but every round's page calls into the file all the same
     # web/yiwen.js left in batch 256: the yw round turns the strange tales on (serve.py) and walks them
-    "web/unfold.js": "the unfold package (Joy 2026-11-25) is off in week7 and season21: no round reaches it until a profile turns it on",
+    # batch 272: web/jianghu.js and web/unfold.js left: week7 and season21 turn both on (Joy 2026-11-25); every round walks the new 江湖頁,
+    # and the uf round walks the unfolding book (serve.py turns it off in the others)
     "web/lingyan.js": "the lingyan package (Joy 2026-11-26) is off in every profile: lingyanEntryHtml answers empty until a profile turns it on",
 }
 
