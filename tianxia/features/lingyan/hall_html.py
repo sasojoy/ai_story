@@ -147,12 +147,3 @@ def page(scrolls: list[Scroll], live: bool, logged_in: bool = True) -> str:
 <details class="ly-help"><summary>？ 誰上得了閣</summary><ul>{helps}</ul></details>
 </div></body></html>"""
 
-
-def missing() -> str:
-    """沒登入時那一頁（回 401）：請他先登入。"""
-    return """<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>凌煙閣・天下大勢</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/static/style.css">
-<style>body{background:var(--paper);color:var(--ink)}main{max-width:480px;margin:20vh auto 0;padding:0 16px;text-align:center;font:16px/1.8 var(--kai)}
-a{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);font-weight:700}</style></head>
-<body><main><p>登入之後才看得到凌煙閣。</p><a href="/">去登入 ›</a></main></body></html>"""  # 待 joy 潤

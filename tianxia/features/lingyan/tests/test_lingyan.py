@@ -1,4 +1,4 @@
-"""凌煙閣：從已經跨季存著的紀錄排出每一季上閣的人（hall）、整頁的樣子（hall_html）、路由（關著 404、沒登入 401）。"""
+"""凌煙閣：從已經跨季存著的紀錄排出每一季上閣的人（hall）、整頁的樣子（hall_html）、路由（關著 404、開著沒登入也看得到）。"""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -95,14 +95,14 @@ def test_cn_number_and_html_escapes_names():
     assert "&lt;b&gt;" in hall_html.cell_html(cell) and "<b><b>" not in hall_html.cell_html(cell)
 
 
-def test_the_page_asks_to_log_in_and_is_404_while_off(monkeypatch):
+def test_the_page_is_public_and_404_while_off(monkeypatch):
     import server
 
     client = TestClient(server.app, raise_server_exceptions=False)
-    got = client.get("/lingyan")
-    assert got.status_code == 401 and "登入之後" in got.text
-    monkeypatch.setattr(server, "_account", lambda request: "k")
     assert client.get("/lingyan").status_code == 404
     monkeypatch.setattr(server.CONTENT.config.lingyan, "enabled", True)
+    got = client.get("/lingyan")  # 沒登入（Joy 2026-11-26 選「沒登入也看得到」）
+    assert got.status_code == 200 and "凌煙閣" in got.text and "也去江湖走一遭" in got.text
+    monkeypatch.setattr(server, "_account", lambda request: "k")
     got = client.get("/lingyan")
-    assert got.status_code == 200 and "凌煙閣" in got.text
+    assert got.status_code == 200 and "回江湖" in got.text

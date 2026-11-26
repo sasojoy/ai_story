@@ -1,7 +1,7 @@
 """凌煙閣的路由（殼掛的；只在殼掛的時候才 import，engine 與假人不載入 fastapi）。開關關著回 404。
 
-/lingyan：整頁 HTML（hall_html.page）。現在要登入（沒登入回 401 的一頁，請他去登入）；設計稿寫「沒登入也看得到」，
-要不要拿掉登入等 Joy 點頭（拿掉時要加進 tests/core/shell_tables.py 的 NO_LOGIN_ROUTES、PR 寫原話）。
+/lingyan：整頁 HTML（hall_html.page），沒登入也看得到（Joy 2026-11-26 在決定卡上選「沒登入也看得到」），
+可以直接貼網址給朋友；只寫名號與事蹟，登入的人多一顆「回江湖」，沒登入的是「也去江湖走一遭」。
 """
 from __future__ import annotations
 
@@ -16,16 +16,17 @@ def router(shell) -> APIRouter:
 
     @r.get("/lingyan")
     def lingyan_page(request: Request):
-        """凌煙閣：收了季的每一季一卷（新的在前），只讀。"""
+        """凌煙閣：收了季的每一季一卷（新的在前），只讀、不用登入。"""
+        if not shell.CONTENT.config.lingyan.enabled:
+            raise HTTPException(404)
         try:
-            shell._account(request)  # 沒登入 401（先於開關，同稱號包：關著也不讓沒登入的人試出有沒有這一頁）
+            shell._account(request)
+            logged_in = True
         except HTTPException as exc:
             if exc.status_code != 401:
                 raise
-            return HTMLResponse(hall_html.missing(), status_code=401)
-        if not shell.CONTENT.config.lingyan.enabled:
-            raise HTTPException(404)
+            logged_in = False
         scrolls, live = hall.hall(shell.open_world(), shell.CONTENT)
-        return HTMLResponse(hall_html.page(scrolls, live))
+        return HTMLResponse(hall_html.page(scrolls, live, logged_in=logged_in))
 
     return r

@@ -21,7 +21,7 @@
 
 ## 畫面
 
-- `/lingyan`：整頁 HTML（`hall_html.py`，同列傳公開頁的做法，讀 `/static/style.css` 的色票，深色自動跟）。**現在要登入**：沒登入回 401 的一頁（先問登入、再問開關，關著 404）。設計稿寫「沒登入也看得到」，要不要拿掉登入等 Joy 點頭；拿掉時加進 `tests/core/shell_tables.py` 的 `NO_LOGIN_ROUTES`、PR 寫原話。
+- `/lingyan`：整頁 HTML（`hall_html.py`，同列傳公開頁的做法，讀 `/static/style.css` 的色票，深色自動跟）。**沒登入也看得到**（Joy 2026-11-26 在決定卡上選「沒登入也看得到」，可以直接貼網址給朋友）：開關先問，關著 404；登入的人頂上是「‹ 回江湖」，沒登入的是「也去江湖走一遭 ›」。登記在 `tests/core/shell_tables.py` 的 `NO_LOGIN_ROUTES`。頁上只有名號與事蹟，不寫任何看得出是誰在玩的東西。
 - 入口：見聞「江湖史」最上面一張（`web/lingyan.js` 的 `lingyanEntryHtml`，`web/app.js` 江湖史那一支照 `typeof` 叫；`web/lingyan.css`）。江湖畫面開著時多一格 `lingyan: true`（`Feature.status`），關著一個鍵都不多。
 - 頁首圖暫用 `web/img/events/academy.webp`，之後要一張凌煙閣本身的圖（`hall_html.HERO`）。
 
