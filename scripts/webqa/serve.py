@@ -110,6 +110,12 @@ assert server.CONTENT.config.ollama_url == "http://127.0.0.1:9", server.CONTENT.
 # account is new: it would sit over the clicks. The walk is about the game under it, so the layer stays off here.
 if getattr(server.CONTENT.config, "intro", None) is not None:
     server.CONTENT.config.intro.enabled = False
+# Batch 272: the unfolding book (unfold package, on in week7 and season21) is off too, except in the uf round. Every walk account
+# is new, so with it on each one would open a book at the 城門口 and the tabs and cards it has not grown yet would not be drawn; and a
+# grow is written by a sync, so when a tab appears depends on when each side syncs (a REAL on a copy against itself). Old characters
+# have no book and see everything laid out: that is the page the other rounds walk. The uf round walks the book itself.
+if os.environ.get("QA_ROUND") != "uf" and getattr(server.CONTENT.config, "unfold", None) is not None:
+    server.CONTENT.config.unfold.enabled = False
 # Batch 256, the yw round only (gate.py passes QA_ROUND to the server): the strange tales (yiwen package) are off in every profile, so no
 # other round meets one. Here they are turned on in memory before the season opens (the flow's open_season stamps WorldState.yiwen_on),
 # and both rolls, a new tale and a tale already walked, always hit: the walk meets one on its first trip out, the real way.

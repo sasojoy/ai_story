@@ -10,7 +10,7 @@
 //   yw_trail  the second account meets the same tale (a walked one: replayed, its 自己說 box greyed), its first act, put away.
 // The waiting page is gone in an instant on the dead port: serve.py holds writer.write_scene while the walk has hold['armed'], and the walk
 // releases it when the picture is taken (finally: a flow that throws must not leave a request hanging).
-import { CH, ACT, place, ACCOUNTS, accounts } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS, accounts, DUTY, stepVia } from "./common.mjs";
 
 export { ACCOUNTS };
 const BAD = "瞎說一通"; // serve.py YW_BAD_WORDS: the one line its fake screen calls bad
@@ -69,7 +69,8 @@ export const flows = [
     await c.step(ACT("yw-show"), "yw_shown", { who: "p1" });
     await c.step(ACT("yw-hide"), "", {});
     await c.tab("jianghu");
-    await c.step(CH("yiwen:open"), "yw_reopen", { who: "p1" });
+    // batch 272: on the new 江湖頁 an option that is neither a place nor a duty is a row of the 軍務 list's 此地還能 (web/jianghu.js jhKinds)
+    await stepVia(c, CH("yiwen:open"), DUTY, "yw_reopen", { who: "p1" });
     await c.step(ACT("yw-help"), "yw_help", { who: "p1" });
   }],
   ["yw_walk", async (c) => {
