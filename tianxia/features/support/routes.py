@@ -302,7 +302,7 @@ def _view_ticket(shell, request: Request, text: str) -> dict:
         raise HTTPException(404, rules.NOT_FOUND)
     out = _staff_view(shell, sidecar, t)
     out["card"] = lookup.card(open_database(), t["account_id"], ledger_rows=shell.CONTENT.config.support.ledger_rows,
-                              created_must=t["account_created"])
+                              created_must=t["account_created"], two=shell.CONTENT.config.mall.two_coins)
     found = None if out["card"].get("gone") else t["account_id"]
     sidecar.log_card(staff_account_id=who.id, ticket_id=tid, shown=t["login"] or f"id:{t['account_id']}", found=found, now=shell.time.time())
     return out
@@ -329,7 +329,7 @@ def _lookup(shell, request: Request, body: dict) -> dict:
                                           find=lambda: lookup.find(db, shell.CONTENT, kind, value))
     if outcome == "limit":
         raise shell.GameError(rules.LOOKUP_LIMIT.format(n=cfg.lookup_hourly))
-    card = None if found is None else lookup.card(db, found, ledger_rows=cfg.ledger_rows)
+    card = None if found is None else lookup.card(db, found, ledger_rows=cfg.ledger_rows, two=shell.CONTENT.config.mall.two_coins)
     return {"found": found is not None, "card": card, "left": left, "message": "" if found is not None else rules.LOOKUP_NONE}
 
 
