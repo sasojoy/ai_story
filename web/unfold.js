@@ -132,6 +132,7 @@
   function unfoldNowHtml(m) {
     if (!m || !m.unfold) return null;
     if (m.unfold.card) return ufOwnHtml(m.unfold.card);
+    if (m.unfold.old) return null; // 舊角色那一本（帶著做一次）：提示照舊畫師父的框
     return m.guide && m.guide.hint ? unfoldCardHtml(m.guide) : "";
   }
   async function unfoldGo(go) { // 帶過去：go 是「種類:對象」
@@ -151,15 +152,111 @@
     else if (kind === "moves" && typeof openMallMoves === "function") await openMallMoves("");
     else if (kind === "forge") { S.forgeSel = arg.split("+").map((id) => ({ type: "ins", id })); await goTab("craft"); } // 兩個已經放進爐裡
   }
-  async function unfoldCardDone() {
-    const r = await api("/api/unfold/card", {});
+  async function unfoldCardDone(go) { // go：按了卡上的鈕（有帶法的開始帶著做）；沒有＝改天
+    const r = await api("/api/unfold/card", go ? { go: true } : {});
     if (r && r.main) setMain(r.main);
   }
   async function unfoldClick(act, el, ev) {
     switch (act) {
         case "unfold-go": await doMain("guide_ack"); await unfoldGo(el.dataset.go || ""); break; // 提示那一種：先按掉，再帶過去
-        case "unfold-card-go": await unfoldCardDone(); await unfoldGo(el.dataset.go || ""); break; // 自己那六張：收起，再帶過去
-        case "unfold-card-later": await unfoldCardDone(); renderPage(); break;
+        case "unfold-card-go": await unfoldCardDone(true); await unfoldGo(el.dataset.go || ""); ufLeadPaint(); break; // 自己那幾張：收起、開始帶，再帶過去
+        case "unfold-card-later": await unfoldCardDone(false); renderPage(); break;
+        case "uf-lead-go": { const l = ufLead(), st = l && ufStep(l); if (st && st.go) await unfoldGo(st.go(l)); ufLeadPaint(); break; }
+        case "uf-lead-stop": await ufLeadPost({ stop: true }); break;
+        case "uf-lead-end": { const l = ufLead(); if (l) await ufLeadPost({ kind: l.kind, step: "end" }); break; }
+        case "uf-starter": ufStarterPick(el.dataset.text || ""); break;
     } // unfoldClick
   } // unfoldClick
-  registerClicks(unfoldClick, ["unfold-go", "unfold-card-go", "unfold-card-later"]);
+  registerClicks(unfoldClick, ["unfold-go", "unfold-card-go", "unfold-card-later", "uf-lead-go", "uf-lead-stop", "uf-lead-end", "uf-starter"]);
+
+  // ── 帶著做一次（Joy 2026-11-26「照建議」；設計稿 https://claude.ai/artifact/JGmeBcjLtjU1HWPYjhfwkD）──
+  // 伺服器給 main.unfold.lead = {kind, arg, step, who, say, end, learn?, seal?}：這一步要按的那一顆亮一圈墨暈（.uf-lead），畫面底下一條
+  // 「說話的人＋一句＋改天」（.uf-bar，那一顆不在這一頁時多一顆「帶我去」）；走到 end 拉起「做成了」那一張（.uf-done），按「好」收。
+  // 哪一顆：UF_STEPS[種類][這一步].sel；不在眼前時帶去哪：.go（寫法同 unfoldGo）。存檔看不出來的那幾步（.web）在按下那一顆之後回報。
+  const ufLead = () => (S.main && S.main.unfold && S.main.unfold.lead) || null;
+  const UF_STEPS = {
+    sect: {
+      join: { sel: (l) => `.ask-layer [data-act="ask-yes"], [data-act="choose"][data-id="zongmen:join:${CSS.escape(l.arg)}"]`, go: (l) => `opt:zongmen:join:${l.arg}` },
+      learn: { sel: (l) => (l.learn ? `[data-act="choose"][data-id="${CSS.escape(l.learn)}"], [data-act="here-all"][data-ids~="${CSS.escape(l.learn)}"]` : ""), go: () => "tab:jianghu" }, // 學藝那塊牌子（同類收一塊，點了拉起清單）
+    },
+    mail: { write: { sel: () => (ufDraft() ? '[data-act="mail-send"]' : ".uf-starter"), go: (l) => `mail:${l.arg}` } },
+    jieyi: { invite: { sel: () => '[data-act="peer-act"][data-action="jieyi"]', go: (l) => `peer:${l.arg}` } },
+    guard: { pick: { sel: () => '[data-act="choose"][data-id="guard:open"], [data-act="choose"][data-id^="guard:pick:"]', go: () => "hero:mates" } },
+    codex: {
+      read: { sel: () => '[data-act="cx-end"]', go: (l) => `codex:${l.arg}`, web: true },
+      gallery: { sel: () => '[data-act="cx-seg"][data-seg="tj"]', go: () => "hero:codex", web: true },
+    },
+    fuse: { fire: { sel: () => '[data-act="forge"], .w-furnace.ready[data-act="forge-hub"]', go: (l) => `forge:${l.arg}` } }, // 開爐鈕，或太極火爐（點爐開火）
+  };
+  // 做成了那一張的印（待 joy 潤）
+  const UF_STAMP = { sect: "已學", mail: "已寄", jieyi: "已遞", title: "", guard: "記下", codex: "記下", fuse: "合成" };
+  const ufStep = (l) => (UF_STEPS[l.kind] || {})[l.step] || null;
+  // 寫信那一步：信紙底下三句開頭，點了填進去（可以改）。待 joy 潤
+  const UF_STARTERS = ["前日一別，近來可好？", "那一場打得痛快，改日再來。", "路過此地，想起你，寫幾個字。"];
+  const ufDraft = () => { const box = typeof document !== "undefined" && document.getElementById ? document.getElementById("mail-text") : null; return !!(box && box.value.trim()); };
+  function ufMailStarters(name) { // mail.js 的信紙底下叫（typeof 擋）：正在帶寫第一封給這個人、信紙還空著才畫
+    const l = ufLead();
+    if (!l || l.kind !== "mail" || l.step !== "write" || l.arg !== name || ufDraft()) return "";
+    return `<div class="uf-starters">${UF_STARTERS.map((t) => `<button class="uf-starter" data-act="uf-starter" data-text="${esc(t)}">${esc(t)}</button>`).join("")}</div>`;
+  }
+  function ufStarterPick(text) {
+    const box = document.getElementById("mail-text");
+    if (!box) return;
+    box.value = text;
+    if (S.mailWith) S.mailDraft = { name: S.mailWith, text };
+    renderPage();
+  }
+  function ufLeadDone(kind) { // mail.js 寄出成功那一下叫（typeof 擋）
+    const l = ufLead();
+    if (l && l.kind === kind && ufStep(l)) ufLeadPost({ kind, step: l.step });
+  }
+  async function ufLeadPost(body) {
+    try {
+      const r = await api("/api/unfold/lead", body);
+      if (r && r.main) setMain(r.main);
+    } catch (e) { /* 下一次輪詢再說 */ }
+    if (typeof renderPage === "function") renderPage();
+    ufLeadPaint();
+  }
+  function ufDoneHtml(l) {
+    const stamp = UF_STAMP[l.kind] ? `<span class="uf-stamp" aria-hidden="true">${esc(UF_STAMP[l.kind])}</span>` : "";
+    const seal = l.kind === "title" && l.seal ? `<div class="uf-mt"><span class="uf-mt-seal">${esc(l.seal)}</span><span class="uf-mt-name">${esc((S.main && S.main.status && S.main.status.name) || "")}</span></div>` : "";
+    return `<div class="uf-done-in"><b class="uf-who">${esc(l.who)}</b>${seal}<p class="uf-say">${stamp}${esc(l.say)}</p>
+      <button class="btn primary" data-act="uf-lead-end">好</button></div>`;
+  }
+  let ufPainted = "";
+  function ufLeadPaint() { // 每次畫面變了照 main.unfold.lead 畫：墨暈、底下那一條、做成了那一張（只在有變時才動 DOM）
+    if (typeof document === "undefined" || !document.body || typeof document.querySelectorAll !== "function") return;
+    const l = S.stage === "game" ? ufLead() : null, st = l && !l.end ? ufStep(l) : null;
+    const sel = st ? st.sel(l) : "";
+    const want = new Set(sel ? Array.from(document.querySelectorAll(sel)).filter((x) => !x.disabled && (!x.getClientRects || x.getClientRects().length > 0)) : []); // 藏著的（收在牌子裡的清單）不算
+    for (const x of document.querySelectorAll(".uf-lead")) if (!want.has(x)) x.classList.remove("uf-lead");
+    for (const x of want) if (!x.classList.contains("uf-lead")) x.classList.add("uf-lead");
+    const key = l ? `${l.kind}|${l.step}|${want.size ? 1 : 0}|${l.say}` : "";
+    if (key === ufPainted) return;
+    if (want.size && !ufPainted.startsWith(`${l.kind}|${l.step}|1`)) { // 這一步第一次看到要按的那一顆：捲到畫面中間（不被底下那一條蓋住），一步只捲一次
+      const first = want.values().next().value;
+      if (first && first.scrollIntoView) first.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    ufPainted = key;
+    for (const x of document.querySelectorAll(".uf-bar, .uf-done")) x.remove();
+    if (!l) return;
+    if (l.end) { document.body.insertAdjacentHTML("beforeend", `<section class="uf-done" role="dialog" aria-label="${esc(l.who)}">${ufDoneHtml(l)}</section>`); return; }
+    const goBtn = !want.size && st && st.go ? '<button class="btn primary uf-bar-go" data-act="uf-lead-go">帶我去</button>' : "";
+    document.body.insertAdjacentHTML("beforeend", `<aside class="uf-bar" aria-label="${esc(l.who)}"><div class="uf-bar-in"><p><b>${esc(l.who)}</b>${esc(l.say)}</p>${goBtn}
+      <button class="uf-bar-stop" data-act="uf-lead-stop">改天</button></div></aside>`);
+  }
+  if (typeof document !== "undefined" && document.addEventListener && typeof MutationObserver === "function") {
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; ufLeadPaint(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    // 存檔看不出來的那幾步（讀了結局、翻到圖鑑）：按下亮著的那一顆，那一下的事做完之後回報
+    document.addEventListener("click", (ev) => {
+      const l = ufLead(), st = l && ufStep(l);
+      if (!st || !st.web || !ev.target || !ev.target.closest) return;
+      if (ev.target.closest(".uf-lead")) setTimeout(() => ufLeadPost({ kind: l.kind, step: l.step }), 400);
+    }, true);
+  }

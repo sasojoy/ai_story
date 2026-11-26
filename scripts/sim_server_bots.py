@@ -230,8 +230,8 @@ def run_season(
     real_take, real_complete = bounties.take, bounties._complete
     real_record = Game._raid_record
 
-    def counted_take(state, content_, bounty_id):
-        msgs = real_take(state, content_, bounty_id)
+    def counted_take(state, content_, bounty_id, *args, **kwargs):
+        msgs = real_take(state, content_, bounty_id, *args, **kwargs)
         b = next((x for x in state.world.bounties if x.id == bounty_id), None)
         if b is not None and msgs[0].startswith("你揭下了"):
             bounty_tally.taken[b.kind] += 1
@@ -241,12 +241,12 @@ def run_season(
         bounty_tally.done[b.kind] += 1
         return real_complete(state, content_, world_, b, *args, **kwargs)
 
-    def counted_record(self, result, rival, rival_power, rival_game, spoils, *, attacker):
+    def counted_record(self, result, rival, rival_power, rival_game, spoils, *, attacker, **kwargs):
         if attacker:
             bounty_tally.raids += 1
         else:
             bounty_tally.defended(self.state.player.name, spoils)  # 守方那一側：被截一次，輸了才記丟了多少
-        return real_record(self, result, rival, rival_power, rival_game, spoils, attacker=attacker)
+        return real_record(self, result, rival, rival_power, rival_game, spoils, attacker=attacker, **kwargs)
     battle_hour = None  # 第一場決戰開集結是開季後第幾個現實鐘頭（暫停之後決戰要照原本的現實時間開）
     # 季末結算榜單時沒指定資料庫就開預設的那個；用環境變數指到這次的暫存檔，不碰真資料。
     # 引擎已經不讀電腦時鐘（假人程式用 clock，「真人」sync 時傳 now），不用再 mock time.time。

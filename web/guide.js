@@ -262,7 +262,7 @@
     if (!onRoad && !quiet && !muster) S.guideRoad = null; // 沒有框、也不是這三種預設收著的時候要清（FB-055）
     if (!g) return "";
     // 慢慢長出來（web/unfold.js，Joy 2026-11-25「一起換」）：拿到那一本的新角色，碰到才說的提示一律畫成一張小事卡（圖、一句話、去做）
-    if (g.hint && S.main && S.main.unfold && typeof unfoldCardHtml === "function") return unfoldCardHtml(g);
+    if (g.hint && S.main && S.main.unfold && !S.main.unfold.old && typeof unfoldCardHtml === "function") return unfoldCardHtml(g);
     const folded = muster || ((onRoad || quiet) && !g.end); // 預設收著（點開的記在 S.guideRoad）
     if ((!g.end && guideShut() === guideKey(g)) || (folded && S.guideRoad !== g.text)) {
       // 收起來那一行：序章的步驟自己寫了短的一行（g.line，例：「回『江湖』按『探索』」，說話的人由這裡寫在前面、line 不重複）就用它，

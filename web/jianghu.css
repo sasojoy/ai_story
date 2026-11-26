@@ -87,7 +87,7 @@ html.jh2 .tab.on .ico { background: var(--accent); color: #fff3e8; transform: ro
 
 /* 剛發生的事收成一行，不寫時刻（PM 2026-11-25：兩行灰字有網頁味）；拿到的東西（小籤）排在字的下一行、多了就換行，不跟字搶同一行、不切在螢幕邊（Joy 2026-11-25「貢獻+1這邊畫面沒做好」） */
 .jh-now .now.one { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
-.jh-now .now.one .now-one { flex: 1 1 100%; min-width: 0; display: block; min-height: 32px; text-align: left; }
+.jh-now .now.one .now-one { flex: 1 1 100%; min-width: 0; display: block; min-height: 44px; margin: -6px 0 0; text-align: left; }
 .jh-now .tx-when { display: none; }
 .jh-now .now.one .now-line { display: flex; min-width: 0; }
 .jh-now .now.one .now-text-one { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -324,3 +324,9 @@ html.jh2 .peer-card .peer-acts > button[data-answer]:not(:disabled) { background
 
 /* 大標題後面的地形：小一號的灰字，貼在大字後面 */
 .jh-pl h1 .jh-ground { display: inline-block; margin-left: 8px; padding: 0 6px; vertical-align: middle; border: 1px solid var(--line); border-radius: 4px; font: 400 14px/22px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+/* 全站總檢查（2026-11-25）：點得到的都至少 44px 高（介面設計規範第六節）。外觀不想變大的用透明的 ::after 把點的範圍撐開 */
+.jh-more { position: relative; }
+.jh-more::after { content: ""; position: absolute; inset: -6px 0; }
+.jh-desc.clamp.one[data-act] { border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin: -8px 0; } /* 收一行的字：overflow 切在 padding 外緣，透明邊框才點得到又不露出第二行 */
+.tx-chg[data-act] { position: relative; }
+.tx-chg[data-act]::after { content: ""; position: absolute; inset: -12px -4px; } /* 紀錄裡「名號傳開 ›」那一顆字籤：點的範圍撐到 44 */

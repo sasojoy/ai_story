@@ -54,10 +54,15 @@ def test_grown_blocks_never_fold_back(on):
     assert "hero:attrs" not in g.feature_status()["unfold"]["hide"]
 
 
-def test_old_characters_and_the_switch_off_keep_no_key(on):
+def test_old_characters_get_an_open_book_and_the_switch_off_keeps_no_key(on):
+    """舊角色（Joy 2026-11-26「照建議」：還沒碰過的也帶）：拿到 old 那一本，什麼都不藏；開關關著一個鍵都不多。"""
     g = _new(on)
     g.choose("choice:0")
     g.state.player.unfold = None  # 舊角色：走過城門口才打開開關
+    g.sync(g.now + 1)
+    assert g.state.player.unfold.old and g.feature_status()["unfold"]["hide"] == []
+    on.config.unfold.old_chars = False
+    g.state.player.unfold = None
     g.sync(g.now + 1)
     assert g.state.player.unfold is None and "unfold" not in g.feature_status()
     on.config.unfold.enabled = False
@@ -117,14 +122,23 @@ def test_one_card_at_a_time_mail_then_jieyi_after_a_fight_together(on):
     assert k["kind"] == "jieyi" and k["arg"] == "王越"
 
 
-def test_an_old_player_never_gets_a_card(on):
-    on.config.mail.enabled = True
+def test_an_old_player_skips_what_he_already_touched_but_gets_what_comes_later(on):
+    """舊角色開本那一刻已經有帖友的，書信那一張記成出過；之後第一次走到山門，門派那一張照出。見面禮不給舊角色。"""
+    on.config.mail.enabled = on.config.zongmen.enabled = True
     g = _new(on)
     g.choose("choice:0")
     g.state.player.unfold = None
     g.state.player.mingtie_box.append(_card())
     g.sync(g.now + 1)
-    assert "unfold" not in g.feature_status()
+    book = g.state.player.unfold
+    assert book.old and "mail" in book.done and "gift" in book.done
+    assert g.feature_status()["unfold"]["card"] is None
+    sect = next(s for s in on.sects.values() if s.switch == "zongmen" and on.sect_open(s.id))
+    g.state.player.location = sect.location
+    assert _card_now(g)["kind"] == "sect"
+    from tianxia.features.guide import hints, short
+
+    assert hints.note_for(g.state, on, "h_tavern").text != short.SHORT["h_tavern"]  # 提示照舊那一句
 
 
 def test_a_new_player_no_longer_hears_the_three_replaced_hints(on):
@@ -257,8 +271,8 @@ def test_the_book_rides_into_the_next_season(on):
     assert set(before.grown) <= set(g.state.player.unfold.grown)
 
 
-def test_an_old_account_gets_no_book_in_the_next_season(on):
-    """開關打開之前就在玩的人沒有本子；換季之後也不會長出一本（新的一季照樣站在城門口也一樣）。"""
+def test_an_old_account_gets_an_open_book_in_the_next_season(on):
+    """開關打開之前就在玩的人：換季之後拿到的是攤開的那一本（old），不會變成新角色那樣收起來。"""
     from conftest import next_season  # noqa: PLC0415
 
     g, world = _season_game(on)
@@ -266,5 +280,5 @@ def test_an_old_account_gets_no_book_in_the_next_season(on):
     g.state.player.unfold = None
     next_season(on, world, g)
     g.sync(g.now + 1)
-    assert g.state.player.unfold is None
-    assert "unfold" not in g.feature_status()
+    assert g.state.player.unfold is not None and g.state.player.unfold.old
+    assert g.feature_status()["unfold"]["hide"] == []

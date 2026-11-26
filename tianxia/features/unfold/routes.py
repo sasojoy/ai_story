@@ -24,10 +24,36 @@ def router(shell) -> APIRouter:
         return {"main": shell.look(game, shell.main_view)}
 
     @r.post("/api/unfold/card")
-    def api_card(request: Request):
-        """小事卡按了鈕或「改天」：收起這一張（每一種只出一次，收了就不再出；見面禮這一下入帳）。回 {main}。"""
+    def api_card(request: Request, body: dict | None = Body(None)):
+        """小事卡按了鈕（{go: true}：收起，有帶法的開始帶著做）或「改天」（收起；隔一陣子再碰到還會出一次，第二次就不出；
+        見面禮兩顆都入帳）。回 {main}。"""
         game = gate(request)
-        shell.act(game, lambda g: cards.close(g, g.state.player.unfold), paused_ok=True)
+        go = bool((body or {}).get("go"))
+
+        def _do(g):
+            book = g.state.player.unfold
+            if book is None:
+                return
+            if go:
+                cards.start(g, book)
+            else:
+                cards.close(g, book)
+        shell.act(game, _do, paused_ok=True)
+        return {"main": shell.look(game, shell.main_view)}
+
+    @r.post("/api/unfold/lead")
+    def api_lead(request: Request, body: dict = Body(...)):
+        """帶著做一次：{kind, step} 網頁回報這一步做完了（寄出了、讀了結局、翻到圖鑑；end 是按了「好」）；{stop: true} 帶到一半不帶了。回 {main}。"""
+        game = gate(request)
+        kind, stp, halt = str(body.get("kind") or "")[:20], str(body.get("step") or "")[:20], bool(body.get("stop"))
+
+        def _do(g):
+            book = g.state.player.unfold
+            if halt:
+                cards.stop(book)
+            else:
+                cards.report(g, book, kind, stp)
+        shell.act(game, _do, paused_ok=True)
         return {"main": shell.look(game, shell.main_view)}
 
     return r
