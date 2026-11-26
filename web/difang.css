@@ -1,0 +1,81 @@
+/* 地方大事（tianxia/features/difang）：江湖頁「眼下」點開的那一層。頁首圖、懸念一句、三幕直條（照武譜的譜頁）、這一幕的墨痕。只用 style.css 的色票。 */
+.df { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.df p { margin: 0; }
+
+/* 頁首圖：此地的圖往下淡進卡色，右上一枚朱印，左下寫在哪裡 */
+.df-hero { position: relative; height: 150px; margin: 0 -2px; border-radius: 10px; overflow: hidden; background: var(--card-2); }
+.df-hero img { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent); mask-image: linear-gradient(to bottom, #000 50%, transparent); }
+.df-seal { position: absolute; top: 10px; right: 10px; padding: 3px 8px; border: 2px solid var(--accent); border-radius: 4px; background: var(--card); color: var(--accent); font: 700 14px/1.2 var(--kai); letter-spacing: .2em; transform: rotate(-4deg); }
+.df-where { position: absolute; left: 12px; bottom: 8px; font: 700 15px/1.3 var(--kai); letter-spacing: .08em; color: var(--ink); }
+.df-hook { font: 700 18px/1.7 var(--kai); letter-spacing: .04em; color: var(--ink); }
+
+/* 三幕：左邊朱紅直條直書第幾幕，右邊名字；這一幕攤開（一句、墨痕、能做的），其餘一行 */
+.df-acts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.df-act { position: relative; display: flex; border-radius: 10px; overflow: hidden; background: var(--card); border: 1px solid var(--line); }
+.df-num { flex: none; width: 30px; display: flex; align-items: center; justify-content: center; padding: 8px 0; writing-mode: vertical-rl; font: 700 14px/1 var(--kai); letter-spacing: .2em; color: var(--accent-ink); background: var(--accent); }
+.df-act.done .df-num { background: color-mix(in srgb, var(--accent) 50%, var(--card)); }
+.df-act.later .df-num { background: var(--card-2); color: var(--ink-2); }
+.df-act-b { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.df-act-b > b { font: 700 18px/1.3 var(--kai); letter-spacing: .06em; color: var(--ink); }
+.df-act.later .df-act-b > b { color: var(--ink-2); font-weight: 400; }
+.df-act-b > p { font: 400 14px/1.6 var(--sans); color: var(--ink-2); }
+.df-act.now { box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.df-tick { position: absolute; right: 10px; top: 50%; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%; border: 2px solid var(--accent); color: var(--accent); font: 700 14px var(--kai); transform: rotate(-12deg); opacity: .85; }
+
+/* 墨痕：一條往右暈開的墨，不寫數字 */
+.df-ink { position: relative; height: 12px; border-radius: 6px; background: var(--card-2); overflow: hidden; }
+.df-ink i { position: absolute; inset: 0 auto 0 0; width: var(--w); min-width: 10px; border-radius: 6px 40% 40% 6px / 6px 60% 60% 6px;
+  background: linear-gradient(90deg, var(--ink) 0, color-mix(in srgb, var(--ink) 82%, transparent) 75%, color-mix(in srgb, var(--ink) 30%, transparent)); transition: width .4s ease; }
+/* 誰也在出力：名號墨印一小排（同江湖頁「這裡的人」，小一號，不能按） */
+.df-who { display: flex; flex-direction: column; gap: 4px; }
+.df-who > small { font: 400 12px var(--sans); color: var(--ink-2); }
+.df-pcs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.df-pc { min-width: 0; text-align: center; font: 400 11px/1.3 var(--kai); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.df-pc > i { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto 2px; border: 1.5px solid var(--ink-2); border-radius: 8px; background: var(--card); color: var(--ink); font: 700 16px var(--kai); font-style: normal; }
+.df-pc.me > i { border-color: var(--gold); color: var(--gold); }
+.df-pc.all > i { background: var(--ink); border-color: var(--ink); color: var(--paper); font-size: 13px; }
+.df-names { padding-right: 44px; font: 400 12.5px/1.5 var(--kai); color: var(--ink-2); }
+.df-names > span { white-space: nowrap; }
+.df-how { font: 400 14px/1.6 var(--kai); color: var(--ink-2); }
+
+/* 這一幕能做的：一顆主鈕，或三張做法卡（每張自己一顆） */
+.df .btn.df-go { min-height: 48px; margin: 0; justify-content: center; background: var(--ink); color: var(--paper); border: 0; font: 700 16px var(--kai); letter-spacing: .12em; }
+.df .btn.df-go:disabled { background: var(--card-2); color: var(--ink-2); }
+.df-ways { display: flex; flex-direction: column; gap: 8px; }
+.df-way { min-height: 48px; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--ink); border-radius: 8px; background: var(--paper); color: var(--ink); font: 700 15px/1.45 var(--kai); letter-spacing: .03em; cursor: pointer; }
+.df-way:active { background: var(--card-2); }
+.df-way:disabled { opacity: .55; border-left-color: var(--line); }
+.df .btn.df-go { flex-direction: column; gap: 2px; }
+.df .btn.df-go small { font: 400 12px var(--sans); letter-spacing: 0; opacity: .8; }
+/* 赴了的那一則（第三幕那一場也是）：標題、一段場景、做法卡 */
+.df-ev { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--paper); border: 1px solid var(--line); }
+.df-ev > small { font: 400 12px var(--sans); color: var(--accent); letter-spacing: .08em; }
+.df-ev > b { font: 700 17px/1.3 var(--kai); letter-spacing: .06em; color: var(--ink); }
+.df-ev > p { font: 400 15px/1.75 var(--kai); color: var(--ink); }
+/* 上一次那幾句：淡墨底，左邊一道墨 */
+.df-told { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-left: 3px solid var(--ink-2); background: var(--card-2); border-radius: 0 8px 8px 0; }
+.df-told p { font: 400 14px/1.65 var(--kai); color: var(--ink); }
+.df-told p + p { color: var(--ink-2); font-size: 13px; }
+
+/* 收場：大印與那一句 */
+.df-end { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--card-2); text-align: center; }
+.df-end p { font: 400 15px/1.6 var(--kai); color: var(--ink); }
+.df-end small { font: 400 13px var(--sans); color: var(--ink-2); }
+.df-stamp { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; border: 3px solid var(--accent); color: var(--accent); font: 700 18px var(--kai); letter-spacing: .1em; transform: rotate(-10deg); }
+.df-marks { display: flex; gap: 8px; justify-content: center; }
+.df-mark { padding: 2px 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); font: 700 14px/1.3 var(--kai); letter-spacing: .12em; transform: rotate(-3deg); }
+.df-claim { align-self: stretch; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; text-align: left; }
+.df-claim > b { font: 700 15px var(--kai); letter-spacing: .08em; color: var(--ink); }
+.df-claim .df-ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.df-claim .df-way { text-align: center; }
+.df-claimed { color: var(--ink-2); }
+.df-failed .df-stamp { border-color: var(--ink-2); color: var(--ink-2); }
+
+.df-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 8px; border-top: 1px dashed var(--line); font: 400 13px var(--sans); color: var(--ink-2); }
+.df-mine { padding: 2px 8px; border: 1.5px solid var(--gold); border-radius: 4px; color: var(--gold); font: 700 13px var(--kai); letter-spacing: .1em; }
+.df-help { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--ink-2); font: 600 13px var(--sans); cursor: pointer; }
+.df-rules { margin: -6px 0 0; padding: 10px 14px 10px 28px; border-radius: 10px; background: var(--card-2); font: 400 13px/1.7 var(--sans); color: var(--ink-2); }
+
+@media (prefers-color-scheme: dark) {
+  .df-hero img { filter: brightness(.78) saturate(.85); }
+}
