@@ -16,7 +16,8 @@ def outlock(shell) -> Outlock:
 def feast_text(shell, game, text: str) -> list[str]:
     """自己寫的敬酒詞（宴客，大勢人物擴充第三批），三段：A Game.feast_text_request（只讀）→ B 鎖外請模型評一個分數
     （feasts.score，預算 Config.figure_life.feast_score_budget_seconds；評不到照 feasts.DEFAULT_SCORE）→ C Game.feast_toast
-    重驗同一場、同一句才記。"""
+    重驗同一場、同一句才記。C 的回話（含重驗擋下的那一句）經 g._log，跟固定敬酒走 choose 一樣：情誼跨段的行狀這一下就寫
+    （第 271 批；企劃者 2026-11-26「兩處都修 (Recommended)」）。features_core.after_action 刻意不叫（第 271 批計畫第二節）。"""
     started, request = shell._open_request(game, lambda: game.feast_text_request(text))
     if isinstance(request, list):
         return request
@@ -26,4 +27,4 @@ def feast_text(shell, game, text: str) -> list[str]:
         return feasts.score(shell.within_budget(game.client, total - (shell._monotonic() - started)), request)
 
     rate = shell.model_call(game, ask, fallback=feasts.DEFAULT_SCORE, left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT)
-    return shell.act(game, lambda g: g.feast_toast(request.text, rate, request))
+    return shell.act(game, lambda g: g._log(g.feast_toast(request.text, rate, request)))
