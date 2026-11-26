@@ -163,13 +163,19 @@
         <button class="btn ghost xk-card-x" data-act="person" data-key="${esc(c.key)}">${XK_CLOSE}</button></div></div>`;
   }
 
+  // 拉起那一塊的標題旁一行小字（第二批）：武學寫功法庫用了幾格（裡面那一顆「功法庫 N/M ›」就不畫了）
+  function xkSheetSub(k, p) {
+    const h = p.x && p.x.holdings;
+    return k === "arts" && h ? `<small class="xk-sh-sub">功法 ${h.count | 0}／${h.cap | 0}</small>` : ""; // 待 joy 潤
+  }
+
   // 拉起的那一塊：頂上一條小小的圖與狀態（點了收起），底下那一塊的名字、關閉、內容
   function xkSheetHtml(m, p, k) {
     const name = (p.tabs.find(([t]) => t === k) || [k, k])[1];
     const body = (k === "mates" ? xkMatesHtml(m, p) : p.pageOf(k)).replace(`<h3>${name}</h3>`, ""); // 那一頁自己的小標題跟拉起的這一塊同名：不寫第二次
     return `<section class="xk-sheet sec-${esc(k)}" aria-label="${esc(name)}"><div class="xk-grip" aria-hidden="true"></div>
-      <div class="xk-sh"><h2>${esc(name)}</h2>${dotHtml(dotAt("practice", k))}<button class="xk-x" data-act="xk-close" aria-label="${XK_CLOSE}">✕</button></div>
-      <div class="msg" id="mx-msg">${S.message}</div>${body}</section>`;
+      <div class="xk-sh"><h2>${esc(name)}</h2>${dotHtml(dotAt("practice", k))}${xkSheetSub(k, p)}<button class="xk-x" data-act="xk-close" aria-label="${XK_CLOSE}">✕</button></div>
+      <div class="msg" id="mx-msg">${S.message}</div><div class="xk-sb">${body}</div></section>`;
   }
 
   function xkPageHtml(m, p) {

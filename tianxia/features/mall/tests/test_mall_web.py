@@ -266,7 +266,7 @@ def test_buying_posts_a_ref_then_updates_the_balance_and_the_pill_button(m_on):
     post = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
     assert len(post) == 1 and post[0][1]["item"] == "pills_5" and REF.match(post[0][1]["ref"])
     assert out["main"]["mall"]["balance"] == 4900
-    assert "4900" in out["top"] and "丹33" in out["top"]  # 狀態列的錠子鈕與丹鈕當場換
+    assert "4900" in out["top"]  # 狀態列的錠子鈕當場換（丹鈕 2026-11-26 起收進體力條的說明裡）
     assert "元寶 4900" in out["app"] and "買下「回體丹五顆」：回體丹 5 顆。元寶 -100（還剩 4900）。" in _text(out["app"])
     assert 'class="shop-line said ok"' in out["app"]
     assert "回體丹 33 顆" in out["app"]
@@ -513,8 +513,8 @@ def test_fb493_the_time_has_its_own_span_and_top_html_never_folds(m_on):
     m["status"]["calendar"] = {"week": 12, "weekday": 6, "clock": "23:59", "weeks": 12, "text": "第 12 週・週日 23:59"}
     cls, inner = _where(run(m, "return H.topHtml();"))
     assert cls == "where"  # 量了才折：畫出來一律是一行
-    assert inner == '<span class="where-loc">📍 潁川郡（陽翟）</span><span class="where-gap">　</span><span class="where-at">第 12 週・週日 23:59</span>'
-    assert _text(inner) == "📍 潁川郡（陽翟）　第 12 週・週日 23:59"  # 字跟以前一個不差
+    assert inner == '<span class="where-loc">潁川郡（陽翟）</span><span class="where-gap">　</span><span class="where-at">第 12 週・週日 23:59</span>'
+    assert _text(inner) == "潁川郡（陽翟）　第 12 週・週日 23:59"  # 字跟以前一個不差
     expanded = run(m, "H.S.showMore = true; return H.topHtml();")  # 點名號展開也是同一行
     assert _where(expanded) == (cls, inner)
 
@@ -525,14 +525,14 @@ def test_fb493_the_day_clock_folds_the_same_way(m_on):
     s = m_on["status"]
     cls, inner = _where(run(m_on, "return H.topHtml();"))
     assert cls == "where"
-    assert inner.startswith(f'<span class="where-loc">📍 {s["location"]}</span><span class="where-gap">　</span><span class="where-at">第 {s["day"]} 天 ')
+    assert inner.startswith(f'<span class="where-loc">{s["location"]}</span><span class="where-gap">　</span><span class="where-at">第 {s["day"]} 天 ')
     assert inner.endswith("天</small></span>") and inner.count("<small>") == 1
 
 
 def test_fb493_the_prologue_writes_only_the_place(m_on):
     m = with_reveal(m_on, ["stamina", "hp", "silver", "xinde", "stats"])
     cls, inner = _where(run(m, "return H.topHtml();"))
-    assert (cls, inner) == ("where", f"📍 {m_on['status']['location']}")  # 序章只寫地名：沒有時刻可折
+    assert (cls, inner) == ("where", f"{m_on['status']['location']}")  # 序章只寫地名：沒有時刻可折
 
 
 _FOLD_DRIVER = r"""

@@ -51,7 +51,7 @@ def test_a_fresh_rotation_season_draws_only_question_marks_and_no_lineup_name():
     total = m["shop"]["divine"]["collected"]["total"]
     page, shelf = _layer(_page(m)), _layer(_page(m, "shelf"))
     assert "江湖已見" in page and "這一季江湖上還沒有人打出神器的原品。" in page
-    assert page.count('<span class="dv-cell unknown">？</span>') == total == 21 and f"收藏 0／{total}" in page
+    assert page.count('<span class="dv-cell unknown">未鑄</span>') == total == 21 and f"收藏 0／{total}" in page
     assert f'data-act="shop-tab" data-tab="divine">神器 收藏 0／{total} ›</button>' in shelf  # K 是 0：只寫收藏
     for html in (page, shelf):
         for rid in lineup:

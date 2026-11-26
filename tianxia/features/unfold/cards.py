@@ -5,14 +5,17 @@
 這裡只看狀態、挑下一張、寫卡上的字；卡怎麼畫、鈕怎麼帶過去在 web/unfold.js。只讀核心與共用層（fusion 是共用層）。"""
 from __future__ import annotations
 
-from tianxia import fusion
+from tianxia import fusion, library
+from tianxia.core import jieyi_base
 from tianxia.state import UnfoldBook
 
-ORDER = ("gift", "buy", "sect", "mail", "jieyi", "title", "codex", "fuse")  # 同時成立時先出哪一張
+ORDER = ("gift", "buy", "sect", "mail", "jieyi", "jieyi_ok", "title", "guard", "codex", "fuse")  # 同時成立時先出哪一張
+NEW_ONLY = ("gift", "buy")  # 只給新角色的（舊角色那一本不出：見面禮、買了之後教一次）
 
 # 待 joy 潤：卡上的字（{x} 是對象的名字）；圖在 web/unfold.js
 WHO = {
     "gift": "萬寶閣掌櫃", "sect": "{x}山門口", "mail": "{x}的名帖", "jieyi": "{x}", "title": "一枚剛蓋下的印", "codex": "江湖錄", "fuse": "夜裡",
+    "guard": "{x}", "jieyi_ok": "金蘭帖",
 }
 SAY = {
     "gift": "「聽說你替{x}把事辦成了。這 {n} 元寶是見面禮，進來挑一件吧。」",
@@ -22,8 +25,11 @@ SAY = {
     "title": "江湖上開始這樣叫你了：{x}。",
     "codex": "這件事，你記下了。",
     "fuse": "兩股意在身上互相頂著，睡不安穩。",
+    "guard": "「你回來啦。」他站在門邊，像是有話要說。",
+    "jieyi_ok": "{x}答應了。往後你們以兄弟相稱。",
 }
-GO = {"gift": "收下，進去看看", "sect": "進去看看", "mail": "寫一封", "jieyi": "邀他結義", "title": "戴上", "codex": "翻開", "fuse": "去煉製"}
+GO = {"gift": "收下，進去看看", "sect": "進去看看", "mail": "寫一封", "jieyi": "邀他結義", "title": "戴上", "codex": "翻開", "fuse": "去煉製",
+      "guard": "回去看他", "jieyi_ok": "看金蘭帖"}
 LATER = "改天"
 
 # 買了之後教一次怎麼用（Joy 2026-11-25「很多商城裡面的東西也要教學」）：照商品的效果分種類，每一種第一次買到才出。待 joy 潤
@@ -138,22 +144,90 @@ def _bought(ctx, done: list[str]) -> tuple[str, str] | None:
     return None
 
 
-FIND = {"gift": _gift, "sect": _sect, "mail": _mail, "jieyi": _jieyi, "title": _title, "codex": _codex, "fuse": _fuse}
+def _guard(ctx) -> tuple[str, str] | None:
+    """收養之後家裡第一件事攤在眼前（紀事還沒有一筆是你待他的）。"""
+    kid = ctx.state.player.guard
+    if not ctx.content.config.guard.enabled or kid is None or kid.stage != "grow" or kid.event is None or kid.event.kind != "home":
+        return None
+    return (str(kid.event.seq), kid.name) if len(kid.log) <= 1 else None
+
+
+def _jieyi_ok(ctx) -> tuple[str, str] | None:
+    """邀過人結義（出過結義那一張）之後，第一次真的結成了。"""
+    if not ctx.content.config.jieyi.enabled:
+        return None
+    bros = jieyi_base.brothers(ctx.content, ctx.world, ctx.state.player.name)
+    bk = jieyi_base.book(ctx.world)
+    bond = jieyi_base.bond_of(bk, ctx.state.player.name) if bk is not None and bros else None
+    if bond is None:
+        return None
+    other = next((m for m in bond.members if m != ctx.state.player.name), "")
+    return other, other
+
+
+FIND = {"gift": _gift, "sect": _sect, "mail": _mail, "jieyi": _jieyi, "title": _title, "codex": _codex, "fuse": _fuse,
+        "guard": _guard, "jieyi_ok": _jieyi_ok}
+
+
+def touched(ctx, kind: str) -> bool:
+    """舊角色開本那一刻：這個系統碰過了（碰過的不帶）。此刻已經成立的也算碰過（不是「第一次碰到」那一下）。"""
+    p = ctx.state.player
+    if kind in NEW_ONLY:
+        return True
+    if kind == "sect" and (p.sect is not None or any(f.startswith("叛出:") for f in p.flags)):
+        return True
+    if kind == "title" and (p.title_book or (p.titles_worn or {}).get("id")):
+        return True
+    if kind == "codex" and p.codex is not None and p.codex.ended:
+        return True
+    if kind == "fuse" and p.fusion_book:
+        return True
+    if kind == "guard" and p.guard is not None and (len(p.guard.log) > 1 or p.guard.stage != "grow"):
+        return True
+    if kind == "jieyi_ok" and jieyi_base.brothers(ctx.content, ctx.world, p.name):
+        return True
+    finder = FIND.get(kind)
+    return finder is not None and finder(ctx) is not None
+
+
+def old_book(ctx) -> UnfoldBook:
+    """舊角色那一本：碰過的記成出過，往後只出還沒碰過的。"""
+    book = UnfoldBook(old=True)
+    book.done = [k for k in ORDER if touched(ctx, k)]
+    return book
+
+
+def _later_until(ctx, book: UnfoldBook, kind: str) -> float | None:
+    for x in book.later:
+        k, _, t = x.partition("@")
+        if k == kind:
+            try:
+                return float(t) + ctx.content.config.unfold.later_hours * 3600
+            except ValueError:
+                return None
+    return None
 
 
 def look(ctx, book: UnfoldBook) -> None:
-    """沒有攤著的卡時，挑下一張成立、還沒出過的攤上去（記成出過）。"""
-    if book.card:
+    """沒有攤著的卡、也沒在帶的時候，挑下一張成立、還沒出過的攤上去（記成出過）。帶著的那一件照身上的東西往下走一步。"""
+    if book.lead:
+        step(ctx, book)
+    if book.card or book.lead:
         return
     for kind in ORDER:
         if kind == "buy":
-            hit = _bought(ctx, book.done)
+            hit = _bought(ctx, book.done) if not book.old else None
             if hit is not None:
                 book.done.append(f"buy:{hit[0]}")
                 book.card = f"buy|{hit[0]}|{hit[1]}"
                 return
             continue
-        if kind in book.done:
+        if kind in book.done or (book.old and kind in NEW_ONLY):
+            continue
+        if kind == "jieyi_ok" and "jieyi" not in book.done:  # 邀過人才有這一張（舊角色開本時就結義了的記成出過）
+            continue
+        until = _later_until(ctx, book, kind)
+        if until is not None and ctx.now < until:  # 按過一次改天：隔一陣子再碰到才再出
             continue
         hit = FIND[kind](ctx)
         if hit is not None:
@@ -163,11 +237,146 @@ def look(ctx, book: UnfoldBook) -> None:
 
 
 def close(ctx, book: UnfoldBook | None) -> None:
-    """按了鈕或「改天」：收起這一張；見面禮那一張這一下入帳。"""
+    """按了「改天」：收起這一張；見面禮那一張這一下入帳。第一次改天的隔 later_hours 再碰到還會出一次，第二次就不出了。"""
+    if book is None or not book.card:
+        return
+    kind = book.card.split("|", 1)[0]
+    if kind == "gift":
+        give_gift(ctx)
+    elif kind in FIND and kind not in NEW_ONLY and not any(x.partition("@")[0] == kind for x in book.later):
+        book.later.append(f"{kind}@{int(ctx.now)}")
+        if kind in book.done:
+            book.done.remove(kind)
+    book.card = ""
+
+
+# ── 帶著做一次（Joy 2026-11-26「照建議」；設計稿 https://claude.ai/artifact/JGmeBcjLtjU1HWPYjhfwkD）──────────────
+# 卡上的鈕按下去不再只帶過去就放手：照這張表一步一步走，畫面上下一步要按的那一顆亮一圈墨暈（web/unfold.js 的 UF_STEPS 認是哪一顆），
+# 底下一條「說話的人＋一句＋改天」，走到 end 落一個印、按「好」才收。哪一步做完了：身上看得出來的由這裡照存檔判（STATE_STEPS），
+# 看不出來的（寄出一封信、讀了結局、翻到圖鑑）由網頁做完那一下回報（/api/unfold/lead）。
+# 待 joy 潤：每一步的一句話（end 那一句是做成了的那一刻）
+STEPS: dict[str, tuple[tuple[str, str], ...]] = {
+    "sect": (("join", "「想留下，就在這兒拜一拜。」"), ("learn", "「入了門，先學這一式。」"), ("end", "「往後師兄弟寫的招，都在這本譜裡。」")),
+    "mail": (("write", "挑一句開頭，寄出去。"), ("end", "信寄出去了。他回了，信匣會亮。")),
+    "jieyi": (("invite", "在他的名帖上，邀他結義。"), ("end", "帖子遞出去了，等他回話。")),
+    "title": (("end", "往後有人翻你的名帖，就看得到這一枚。"),),
+    "guard": (("pick", "他在等你開口。"), ("end", "他記住了。")),
+    "codex": (("read", "翻到結局那一頁。"), ("gallery", "這一路見過的人，也記下了。"), ("end", "往後走過的，都記在這本錄裡。")),
+    "fuse": (("fire", "兩股意都在爐裡了。開爐看看。"), ("end", "合出來的，往後也能再拿去合。")),
+}
+WEB_STEPS = frozenset({("mail", "write"), ("codex", "read"), ("codex", "gallery")})  # 存檔看不出來、由網頁回報的
+LEAD_WHO = {"sect": "{x}的門人", "mail": "{x}的名帖", "jieyi": "{x}", "title": "一枚剛蓋下的印", "guard": "{x}", "codex": "江湖錄", "fuse": "爐火"}
+
+
+def _parse(lead: str) -> tuple[str, str, str, str]:
+    kind, arg, stp, base = (lead.split("|", 3) + ["", "", "", ""])[:4]
+    return kind, arg, stp, base
+
+
+def _next(kind: str, stp: str) -> str:
+    names = [n for n, _ in STEPS.get(kind, ())]
+    return names[names.index(stp) + 1] if stp in names and names.index(stp) + 1 < len(names) else "end"
+
+
+def _first_art(ctx, sect_id: str) -> str | None:
+    return next((k for k, s in ctx.content.skills.items() if s.learn is not None and s.learn.sect == sect_id), None)  # 同 zongmen.rules.first_art
+
+
+def _step_done(ctx, kind: str, arg: str, stp: str, base: str) -> bool:
+    """存檔看得出來的那幾步：做完了沒。"""
+    p = ctx.state.player
+    if kind == "sect" and stp == "join":
+        return p.sect == arg
+    if kind == "sect" and stp == "learn":
+        art = _first_art(ctx, arg)
+        return art is None or art in library.owned_arts(ctx.state)
+    if kind == "jieyi" and stp == "invite":
+        bk = jieyi_base.book(ctx.world)
+        return bk is not None and any(o.sender == p.name and o.target == arg for o in bk.offers) or bool(
+            jieyi_base.brothers(ctx.content, ctx.world, p.name))
+    if kind == "guard" and stp == "pick":
+        kid = p.guard
+        return kid is None or kid.event is None or str(kid.event.seq) != base
+    if kind == "fuse" and stp == "fire":
+        return bool(p.fusion_book) or str(len(p.insights)) != base
+    return False
+
+
+def start(ctx, book: UnfoldBook) -> None:
+    """卡上的鈕按下去：收起卡，有帶法的開始帶（第一步）。"""
+    if not book.card:
+        return
+    kind, arg, _name = (book.card.split("|", 2) + ["", ""])[:3]
+    book.card = ""
+    if kind == "gift":
+        give_gift(ctx)
+    if kind not in STEPS:
+        return
+    base = ""
+    if kind == "guard":
+        base = arg
+    elif kind == "fuse":
+        base = str(len(ctx.state.player.insights))
+    book.lead = f"{kind}|{arg}|{STEPS[kind][0][0]}|{base}"
+    step(ctx, book)
+
+
+def _advanced(ctx, lead: str) -> str:
+    """存檔看得出來的那一步做完了，往下一步（可能一次走好幾步）；回走完之後的那一串。"""
+    for _ in range(4):
+        kind, arg, stp, base = _parse(lead)
+        if kind not in STEPS or stp == "end" or (kind, stp) in WEB_STEPS or not _step_done(ctx, kind, arg, stp, base):
+            break
+        lead = f"{kind}|{arg}|{_next(kind, stp)}|{base}"
+    return lead
+
+
+def step(ctx, book: UnfoldBook) -> None:
+    book.lead = _advanced(ctx, book.lead)
+
+
+def report(ctx, book: UnfoldBook | None, kind: str, stp: str) -> None:
+    """網頁回報「這一步做完了」：只認此刻正帶到的那一步、而且是網頁回報的那幾步；end 是按了「好」，收起。"""
+    if book is None or not book.lead:
+        return
+    book.lead = _advanced(ctx, book.lead)  # 存檔看得出來的先走到（畫面上看到的那一步）
+    k, arg, now_step, base = _parse(book.lead)
+    if k != kind or now_step != stp:
+        return
+    if stp == "end":
+        book.lead = ""
+    elif (k, stp) in WEB_STEPS:
+        book.lead = f"{k}|{arg}|{_next(k, stp)}|{base}"
+
+
+def stop(book: UnfoldBook | None) -> None:
+    """帶到一半按「改天」：不帶了（那一件已經出過，不再出）。"""
     if book is not None:
-        if book.card.startswith("gift|"):
-            give_gift(ctx)
-        book.card = ""
+        book.lead = ""
+
+
+def lead_view(ctx, book: UnfoldBook) -> dict | None:
+    if not book.lead:
+        return None
+    kind, arg, stp, _base = _parse(_advanced(ctx, book.lead))  # 不經同步的動作（煉製頁開爐）回來的畫面也照身上的東西算到哪一步；下一次同步才寫回本子
+    if kind not in STEPS:
+        return None
+    say = dict(STEPS[kind]).get(stp, "")
+    x = arg
+    if kind == "sect":
+        x = ctx.content.sects[arg].name if arg in ctx.content.sects else arg
+    elif kind == "guard":
+        kid = ctx.state.player.guard
+        x = kid.name if kid is not None else ""
+    out = {"kind": kind, "arg": arg, "step": stp, "who": LEAD_WHO[kind].format(x=x), "say": say, "end": stp == "end"}
+    if kind == "sect":
+        art = _first_art(ctx, arg)
+        out["learn"] = f"learn:{art}" if art else ""
+    if kind == "title":
+        out["seal"] = (ctx.state.player.titles_worn or {}).get("name", "")
+    return out
+
+
 
 
 def view(book: UnfoldBook, gift: int = 0) -> dict | None:

@@ -80,7 +80,7 @@
     const draft = S.mailDraft && S.mailDraft.name === name ? S.mailDraft.text : "";
     const compose = t.problem
       ? `<p class="muted mail-cant">${esc(t.problem)}</p>`
-      : `<div class="mail-compose"><textarea class="input mail-paper" id="mail-text" maxlength="${t.max_chars | 0}" rows="4" placeholder="寫信給${esc(name)}……" aria-label="寫信給${esc(name)}">${esc(draft)}</textarea>
+      : `<div class="mail-compose"><textarea class="input mail-paper" id="mail-text" maxlength="${t.max_chars | 0}" rows="4" placeholder="寫信給${esc(name)}……" aria-label="寫信給${esc(name)}">${esc(draft)}</textarea>${typeof ufMailStarters === "function" ? ufMailStarters(name) : ""}
         <div class="row mail-send-row"><span class="muted">${draft.length}／${t.max_chars | 0} 字・今天還能寄 ${t.left | 0} 封</span><button class="btn primary" data-act="mail-send">寄出</button></div>
         <p class="form-msg" id="mail-note" role="alert">${esc(S.mailNote || "")}</p></div>`;
     return `${head}${menu}<div class="mail-thread">${older}${letters || '<p class="muted">還沒有往來。寫第一封吧。</p>'}</div>${compose}`;
@@ -95,7 +95,7 @@
       const r = await api("/api/mail/send", { name, text });
       mailTake(r);
       const line = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (r.ok) { S.mailDraft = null; S.mailNote = ""; toast(line || "寄出去了。"); } else S.mailNote = line;
+      if (r.ok) { S.mailDraft = null; S.mailNote = ""; toast(line || "寄出去了。"); if (typeof ufLeadDone === "function") ufLeadDone("mail"); } else S.mailNote = line; // 帶著做一次（web/unfold.js）：第一封寄出去了
       renderPage();
     });
   }
