@@ -2694,6 +2694,57 @@ WAVES["AQ"] = dict(
 WAVES["AP"]["extra_lenses"].append(AQ_WALK_LENS)  # 合併與閘門一次：finish 用 AP，built 是 AP、AQ 兩邊接起來
 
 
+# ── AR 波：走查第三次跟上（Joy 11/26 傍晚 #310、#318、#319）與場景圖上的字那一類像素偶發（PM 2026-11-26 排；工具批，不用點頭）──
+# 起因：第 273 批回來那一刻 Joy 又合了全站總檢查、帶著做一次、俠客頁第二批（develop `24537d7c7`）。PM 把 develop 與 `dev/tools-walk-273` 合成一筆（乾淨，沒有衝突）
+# `551b7ade2`，自己對自己完整走了一次（不花 token）：exit 2——必到的景 4 個沒到、y 回合 2 個 REAL（場景圖上的字那一類）。三波分開開發，合併與閘門一次：finish 用 AP。
+AR_BASE = "551b7ade2355de12ecfa3bdd3f4003847d965e19"
+AR_PROBE = r"C:\Ray\aq_pm\p1\out"
+
+
+def b274():
+    plan = "docs/superpowers/plans/2026-11-26-工具批-第274批.md"
+    return batch(274, "工具批第 274 批：網頁走查第三次跟上（俠客頁第二批、序章少三步）、場景圖上的字那一類像素偶發找到原因、覆蓋表重建", "core_shared", "dev/tools-walk-274", plan, "8629～8636", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/`、`docs/superpowers/pm-workflows/` 一個字不動。",
+        "- **你接的是第 272、273 批**：你的基準 `" + AR_BASE[:9] + "` 是 PM 把 develop `24537d7c7` 與第 273 批的最後一筆 `6988c926d` 合起來的那一筆（分支 `dev/tools-walk-274` 已經在 origin 上、就停在這一筆）。先讀兩份計畫（`docs/superpowers/plans/2026-11-26-工具批-第272批.md`、`…第273批.md`，後者第七節是「有人重排一頁時怎麼跟」、第八節是驗證紀錄）與 `gate.py` 檔頭。那兩批做的都留著，不要重做。",
+        "- **PM 在你的基準上自己對自己完整走了一次**（`gate.py --base X --head X --jobs 4`，十回合、season21，41.2 分），結果（**只讀，不要改、不要刪**）在 `" + AR_PROBE + r"\`（`summary.json`、`report.txt`、`red\`）：exit 2。"
+        "①**必到的景 4 個沒到**：`main:pr_self_sec`（`flows/main.mjs` 約 676 行 `c.step(ACT(\"self-sec\"), \"pr_self_sec\")`：Joy 俠客頁第二批 #319 把武學那一塊重排了——身上兩門在上、煉製自創換成牌、拉起的那一塊多包一層 `div.xk-sb`；「功法庫 N／M・意境 K ›」那顆 `data-act=\"self-sec\"` 還在 `web/cultivation.js` 約 268 行，但 `prac()` 不帶參數那一頁上大概已經看不到它，要先拉起武學那一面）；"
+        "`extra:pro_21`、`pro_22`、`pro_23`（`flows/extra.mjs` 的 prologue：序章一步拍一張、最多 24 步，現在 21 步就走完或卡住——查是 Joy #310／#318 讓序章真的少了三步〔那就從 `must_reach.txt` 拿掉這三景，計畫裡寫是哪一筆提交讓它變短〕，還是那個找「亮著的東西」的迴圈點錯了、卡在原地〔那就修迴圈〕）。"
+        "②**y 回合 2 個 REAL**：`017_y_so_result`、`018_y_so_rounds`，都是 1280 那一窗，10216／8944 px、76／50 級，框 332,12～939,286（戰報卡頂上那張場景圖），兩邊 DOM 與樣式指紋一樣；紅圖與兩邊的原圖在 `" + AR_PROBE + r"\red\`。"
+        "這跟第 273 批留下的 `yw:002_yw_hidden_trip`（10 次紅 3 次）、`cs:001_sg_muster`（完整走查 4 次紅 1 次）、第 272 批的 c 回合 `051`／`052` 是**同一類**：場景圖上（或旁邊）的字一邊是 LCD 反鋸齒、一邊是灰階。現在完整走查大約每兩三趟就有一趟因為它紅，閘門不能這樣用。",
+        "- **①先修 4 個景**（小的先做，提交一次）。順手對一件事：第 272 批拿掉了 `yw_reopen`、`yw_help` 兩景，理由是「散人收起異聞之後 `yiwen:open` 沒有一格點得到」；PM 另派人查證，說異聞撞見時選單被接管、新頁走 `jhMomentHtml` → `jhTakePage` → `jhStagePage`（`web/jianghu.js` 約 470～546 行）把 `yiwen:open`、`yiwen:drop` 畫成按鈕，點得到。兩邊量到的相反：在 yw 回合裡實看一次「收起之後」那一刻頁上到底有什麼（`S.main.jianghu.take`、頁上有沒有 `[data-act=\"choose\"][data-id^=\"yiwen:\"]`、`yw-show` 那一條），把對的寫進計畫；點得到就把那兩景走回來、放回 `must_reach.txt`。",
+        "- **②場景圖上的字：找到原因**（這一批的主菜；先在負載下把它重現出來：只跑 y 或 yw 回合、同時另開一條別的回合當負載，量紅的比例）。已知：`driver.mjs` 啟動 chrome 已經帶 `--disable-gpu`、`--headless=new`；第 272 批試過 `--disable-lcd-text`，z 回合反而每次紅（管理頁 1280 卡片陰影邊 131 px、2 級），退掉了；第 273 批試過「等 `<img>` 解碼完再拍」，照樣紅。"
+        "PM 的猜測（**沒驗過，自己驗**）：Chromium 只在那一層「確定不透明」而且沒有被合成器另外提成一層時才用 LCD 反鋸齒；場景圖解碼、蓋在上面的漸層、或某個剛結束的過場（凍結動畫的那一下）讓這一層的判斷在兩邊落在不同的時刻，之後那一塊沒有重新點陣化。可以量的：紅的那一趟兩邊用 CDP `LayerTree.enable`／`LayerTree.compositingReasons` 比那張卡在哪一層、為什麼被提層；`document.getAnimations()` 拍照那一刻兩邊各有什麼；圖的 `complete`、`naturalWidth`。"
+        "**准做的修法**（都在拍的那一側）：拍之前等到一個說得出來的條件成立再拍（層穩了、過場清了）；翻 dpr 那一下重畫的時機與次數；重新評估 `--disable-lcd-text`（先查 z 回合陰影邊那 131 px 是哪裡來的：是不是本來就在動、只是原本落在 aa 門檻內）；別的 chrome 啟動旗標只要兩邊一樣、能讓點陣化確定下來（寫明試了哪幾個、各自 A 對 A 幾次裡紅幾次）。"
+        "**不准做的**照第 254、272、273 批：不放寬 aa 門檻（100 px、12 級）、不把景名或檔名列成白名單、不把有樣式或 DOM 差的差歸成雜訊、不讓真的像素變化變成不紅。**也不准自己在 `noise.py` 開新的雜訊類**：拍的那一側修不了，就把證據交給 PM（兩邊原圖、差異像素逐點的 RGB 是不是一邊帶彩邊一邊沒有、換成亮度之後還差多少 px 多少級、紅的比例），PM 再定。",
+        "- **③selftest 的「replay animation pass, same against same」**（第 273 批在負載下紅一次、工作夾被清掉看不到是哪一張）：讓 selftest 在這一條紅的時候留下 `replay_work`（只在紅的時候留），不用為它重跑完整 selftest。",
+        "- **④重建**：穩了之後一次完整的 `gate.py --base X --head X --out <夾> --jobs 4 --write-must-reach` 重建 `coverage.json` 與 `must_reach.txt`，`coverage.py check` 要過；`must_reach.txt` 前後 diff，除了計畫裡寫了理由的只能有新增。",
+        "- **⑤驗**：(a) A 對 A 完整走查**連續三次**都 exit 0、REAL 0、必到全到（那一類偶發原本兩三趟一次，三次才看得出來）；紅了幾次照實寫。(b) 動了 `driver.mjs` 的拍法或 chrome 旗標：完整 `selftest.py` 跑一次（約 1.5～2 小時，分離啟動、輸出導到檔；**不要跟完整走查同時跑**，第 273 批同時跑、animation pass 紅過一次），每一種突變該紅的照紅；沒動就只跑 `--xk-only`、`--jh-only`、`--yw-only`。最後一行原樣貼進回報。"
+        "(c) `tests/web/test_webqa.py` 綠；`scripts/test_for.py` 挑的跑過。(d) 整趟走查的時間改前（41.2 分）改後各多少。",
+        "- **做事的順序與提交**：這台今天可能會重開機，**每做完一段就提交並推上 `dev/tools-walk-274`**（①一次、②找到原因一次、修好一次、重建一次），提交訊息寫做到哪（英文、不帶 BOM）。Joy 可能又合新的東西進 develop：**不要再合 develop**，照這個基準做完，後面的 PM 收。"
+        "時間上限兩段合計 6 小時（完整的十回合走查不要超過 5 次，完整 selftest 最多 1 次）；到了就把做好的推上去、交，沒做完的寫 leftovers。暫存的大檔做完刪掉，**只刪你自己開的夾**（`" + AR_PROBE + r"` 是 PM 的，不要動）。",
+    ] + AK_ENV, custom=True)
+
+
+AR_WALK_LENS = dict(key="walk3", text=(
+    "**第 274 批：走查第三次跟上與場景圖上的字那一類像素偶發**（工具批，只該動 `scripts/webqa/` 與它的測試；基準是 PM 合的 `" + AR_BASE[:9] + "`）。親自驗（解一份 head 到你的暫存夾；模型網址 127.0.0.1:9，**絕不連 11434**；只用派工單給你的埠）："
+    "①對基準的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔；別的動了就是 blocker。"
+    "②**有沒有偷放寬**（這一批最要緊）：`noise.py`、`compare.py`、`gate.py`、`driver.mjs` 的差逐行看——aa 門檻（100 px、12 級）有沒有動、`noise.py` 有沒有多出新的雜訊類或新的景名、檔名白名單（有就是 blocker：PM 明寫不准自己開）、拍照前新加的等待是不是「等一個說得出來的條件」而不是固定睡幾秒、新加的 chrome 旗標是不是兩邊都帶。修法是讓畫面確定下來，還是讓差異不被看見。"
+    "③計畫裡寫的原因站不站得住：照它寫的重現方法自己跑一次含那幾景的最小一段（y 回合的 `y_so_*`、yw 的 `yw_hidden_trip`）A 對 A 三次，改之後 0 REAL；再用它的 `--mutate`（img-battle、xk-padding 各一）走一次，要紅。"
+    "④`must_reach.txt` 這一批拿掉或放回的景（`pro_21`～`pro_23`、`yw_reopen`、`yw_help`）：理由自己對一次（序章是不是真的變短：到 `tianxia/prologue.py`、`web/` 找是哪一筆提交）。"
+    "⑤報告與輸出：有沒有任何一處分得出誰是假人；計畫檔有沒有本機使用者資料夾的路徑（有就列出來）。用完**只刪你自己開的那一個夾**。"
+))
+
+WAVES["AR"] = dict(
+    round2=True,
+    extra_lenses=[AR_WALK_LENS],
+    lines=[
+        dict(name="走查第三次跟上", batches=[b274]),
+    ],
+    merge_port=8637, fix_port=8638,
+)
+WAVES["AP"]["extra_lenses"].append(AR_WALK_LENS)  # 合併與閘門一次：finish 用 AP，built 是 AP、AQ、AR 三邊接起來
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
