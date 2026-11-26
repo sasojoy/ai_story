@@ -108,6 +108,7 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     # web/yiwen.js left in batch 256: the yw round turns the strange tales on (serve.py) and walks them
     "web/xiake.js": "the 俠客頁重排 package (Joy 2026-11-26) is off in every profile until Joy OKs the real page; rounds only call xkOn, which answers false. Rebuild coverage.json on the host when it turns on",
     "web/unfold.js": "the unfold package (Joy 2026-11-25) is off in week7 and season21: no round reaches it until a profile turns it on",
+    "web/lingyan.js": "the lingyan package (Joy 2026-11-26) is off in every profile: lingyanEntryHtml answers empty until a profile turns it on",
 }
 
 

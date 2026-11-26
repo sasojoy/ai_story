@@ -18,6 +18,7 @@
  "terms": {"enabled": true},
  "support": {"enabled": true},
  "codex": {"enabled": true, "tracker": true},
+ "lingyan": {"enabled": true},
  "economy": {"donate": false, "upgrade_batch": true, "leftover_silver": {"1": 2, "2": 6, "3": 18, "4": 54}, "leftover_cap": 300},
  "intro": {"enabled": true},
  "jianghu": {"enabled": true},

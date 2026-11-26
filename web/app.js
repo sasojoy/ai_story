@@ -1184,7 +1184,7 @@
     else if (S.news === "chronicle") {
       // 江湖史（見聞改版）：點得開的戰記與玉璽排最上面，下面照日子分段（天下大事併進來了，伺服器 chronicle_text）
       const c = newsChronicleHtml(m.chronicle);
-      body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}${c.seal ? `<div class="card nw-card">${c.seal}</div>` : ""}${c.body}`;
+      body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${typeof lingyanEntryHtml === "function" ? lingyanEntryHtml(m) : ""}${taleIndexHtml(m.tales)}${c.seal ? `<div class="card nw-card">${c.seal}</div>` : ""}${c.body}`;
     }
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);

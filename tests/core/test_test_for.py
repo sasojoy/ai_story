@@ -1156,6 +1156,7 @@ STAGE_PACKAGES += ["codex"]  # 江湖錄（scripts/new_feature.py 生的 codex_s
 STAGE_PACKAGES += ["yiwen"]  # 異聞（scripts/new_feature.py 生的 yiwen_stage.py）
 STAGE_PACKAGES += ["unfold"]  # 慢慢長出來（scripts/new_feature.py 生的 unfold_stage.py）
 STAGE_PACKAGES += ["jianghu"]  # 江湖頁重排（scripts/new_feature.py 生的 jianghu_stage.py）
+STAGE_PACKAGES += ["lingyan"]  # 凌煙閣（scripts/new_feature.py 生的 lingyan_stage.py）
 STAGE_PACKAGES += ["xiake"]  # 俠客頁重排（scripts/new_feature.py 生的 xiake_stage.py）
 
 

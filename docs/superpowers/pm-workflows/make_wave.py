@@ -2581,6 +2581,62 @@ WAVES["AO"] = dict(
 )
 
 
+# ── AP 波：網頁走查跟上新江湖頁與慢慢長出來（PM 2026-11-26 排；工具批，不用點頭）──
+# 起因：Joy 2026-11-25 在 week7、season21 打開新江湖頁（包 jianghu）與新角色慢慢長出來（包 unfold）。PM 11/26 對 develop `077af0a0a` 自己對自己跑了一次
+# `wave_gate.py --full --no-suite`：全軌比對全部一樣，網頁走查 exit 2（20 個必到的景到不了、同一筆程式兩邊走出 6 個 REAL）。
+AP_SELF = r"C:\Ray\專案\天下大勢\.local\wave_gate\077af0a0"
+
+
+def b272():
+    plan = "docs/superpowers/plans/2026-11-26-工具批-第272批.md"
+    return batch(272, "工具批第 272 批：網頁走查跟上新江湖頁與慢慢長出來——必到的景走得到、同一筆程式自己對自己 0 個真差異、覆蓋表重建", "core_shared", "dev/tools-walk-272", plan, "8607～8614", [
+        "- **只動** `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔；`docs/superpowers/pm-workflows/wave_gate.py` 只有在它自己寫死了回合名單、不改就走不到新回合時才動最少的幾行（寫進 decided）。`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔、`scripts/sb/` 一個字不動（走查是工具，不准為了走得到去改畫面）。",
+        "- **起因（PM 查證過的事實）**：Joy 2026-11-25 在 week7、season21 打開兩包：新江湖頁（`tianxia/features/jianghu/`、`web/jianghu.js`、`web/jianghu.css`，殼 `web/main.js` 有掛鉤；舊頁只剩測試用的 `tests/conftest.py::old_page`）與新角色慢慢長出來（`tianxia/features/unfold/`、`web/unfold.js`：站在城門口還沒選路的**新**真人角色開一本，還用不到的分頁先不畫、玩到才長出來並亮紅點；舊角色沒有這一本＝全部攤開）。"
+        "走查沒跟上：`scripts/webqa/gate.py` 的 `NOT_ON_TABLE` 還寫這兩個檔「關著、走不到」，`coverage.json`、`must_reach.txt` 是 11/23 的，`flows/` 點的是舊江湖頁的 `data-act`。"
+        "PM 11/26 對 develop `077af0a0aa32ed5e530a363f5383ab153937214a` 自己對自己（base、head 同一筆）走了每一回合，結果（**只讀，不要改、不要刪**）在 `" + AP_SELF + r"\web\`（`summary.json`、`report.txt`、`red\`）與 `" + AP_SELF + r"\web.txt`：exit 2。"
+        "①**必到的景 20 個沒到**：main 回合 `j1_letter_toggle`、`j1_push_no`、`here_all`、`here_all_close`、`mt_edit`、`mt_shuffle`、`mt_close`、`call_list`、`call_zhujun`、`call_log`、`call_talk`、`call_close`、`call_act`、`letter_open`、`guide_next`、`tr_wheel`、`tr_mode`、`so_tk_open`、`nf_prompt_yes`，x 回合 `x_guide_more`。"
+        "②**同一筆程式兩邊走出 6 個 REAL**：`x:045_x_peer` 375 淺色的樣式指紋多一個 `I.jh-uf`；`yw:014_yw_close` 375 淺色與 1280 多三個 `BUTTON.tab`（PM 的判斷、沒驗過：分頁長出來是同步那一下寫的，兩邊同步的時機不同，拍照那一刻一邊長出來了、一邊還沒）；"
+        "c 回合 `029_bt_watch_shut` 375 淺色（4448 px、3 級，框 30,255～345,427）、`051_bt_end_first` 與 `052_bt_end_closed` 1280（2066／3310 px、到 76 級，框 381,12～939,57：頁面最上面那一條），三張兩邊的 DOM 與樣式指紋都一樣。`029` 是記了很久的偶發（第 254 批修過一輪：那時是 713 px）；`051`、`052` 是新的。",
+        "- **①先查清楚**（每一項寫進計畫，附證據；讀 `web/jianghu.js`、`web/unfold.js`、`web/main.js` 的掛鉤、`web/app.js` 的 `shown()`、兩包的 README 與 `rules.py`）：20 個沒到的景，各自是**被慢慢長出來藏住**（走查的帳號都是新角色）、**新江湖頁上那顆鈕換了名字或搬了位置**、還是**新江湖頁上已經沒有這個東西**？"
+        "6 個 REAL 各自的原因（用 `gate.py --base X --head X --rounds <回合> --only <含那一景的 flow> --no-replay --keep` A 對 A 重現幾次；`051`、`052` 那一條是什麼在動——新江湖頁頂上的「進行中」那一條？倒數？）。找不到原因就照實寫試了什麼。",
+        "- **②PM 定的方向**（照做；查到的事實跟它衝突就停下、把證據寫進 stopped 交 PM）："
+        "(a) **新江湖頁在每一回合都開著**（玩家看到的就是它；不准為了讓舊流程走得到在走查的伺服器把 jianghu 關掉）。舊江湖頁不再走查（玩家看不到），在 `gate.py` 檔頭寫明。"
+        "(b) **慢慢長出來：現有的回合在走查的伺服器把它關掉**（照 `serve.py` 對開場前導 intro 的做法：解出來的那份程式載入內容之後在記憶體裡改 `Config.unfold.enabled`，不改檔）——理由：舊角色本來就全部攤開，現有回合要走的是攤開的畫面；長出來的時機跟同步綁在一起、兩邊不會一樣。"
+        "**另開一個小回合**（名字你取，短的，例 `uf`；加進 `gate.ROUNDS`）只把慢慢長出來打開，走一個新角色：城門口選路之後第一屏（藏著的分頁沒畫）、玩到長出一塊（紅點亮：底部分頁、俠客頁子分頁、人像卡上那一顆）、點開之後紅點滅（`/api/unfold/seen`）。"
+        "這一回合的畫面要**確定**：拍之前等到「該長的長出來了」這個條件成立再拍（讀 `main.unfold` 的 `hide`、`fresh`，或等 DOM），不是等固定幾秒；A 對 A 跑 3 次 0 REAL 才算數。做不到確定就不加這個回合、`web/unfold.js` 留在 `NOT_ON_TABLE`、理由改成真的（「每一回合都把它關掉，因為…」），把試了什麼寫 leftovers 交 PM。"
+        "(c) **20 個景逐個處理**：新江湖頁上有對應的鈕 → 改 `flows/` 的選擇器走新的（景名能留就留，`must_reach.txt` 才對得上）；新江湖頁上已經沒有這個東西 → 從 `must_reach.txt` 拿掉，**計畫裡一景一行寫為什麼**（引 `web/jianghu.js` 的行或 Joy 的提交）；拿不準的不拿掉、寫 leftovers。"
+        "(d) **新江湖頁自己的鈕要走到**：讀 `web/jianghu.js` 的 `registerClicks`／`registerForms`／`registerChanges` 列出它登記的每一個動作，現有回合走不到的補景（放在 main 或 extra 回合最合適的那一段的**後面**，不要插在中間讓後面的景編號全變——編號變了也沒關係但差異要看得懂）；真的走不到的（要特定季況）一個一行寫原因。"
+        "(e) **c 回合那三張**：能在拍的那一側讓畫面確定下來的就修拍法（第 254 批的做法：`driver.mjs` 拍之前的等待、翻 dpr 逼整頁重畫）。**不准做的**照第 254 批：不放寬 aa 門檻（100 px、12 級）、不把景名或檔名列成白名單、不把有樣式或 DOM 差的差歸成雜訊、不讓真的像素變化變成不紅。修不了就照實寫 A 對 A 幾次裡紅幾次，交 PM。",
+        "- **③重建**：走查穩了之後，照 `coverage.py` 檔頭的做法用一次完整的 `gate.py --base X --head X --out <夾> --jobs 4 --write-must-reach`（X＝你的最後一筆；每一回合、season21）重建 `coverage.json` 與 `must_reach.txt`；`NOT_ON_TABLE` 的 `web/jianghu.js` 那一行拿掉（`web/unfold.js` 那一行看 (b) 的結果）；`coverage.py check` 要過。"
+        "`gate.py`、`serve.py`、`coverage.py` 檔頭的說明照改到的補（英文，照檔裡的口氣）。",
+        "- **④驗**：(a) A 對 A（base、head 都給你的最後一筆）每一回合完整走一次：exit 0、REAL 0、必到的景全到；c 回合與新回合另外各再跑 2 次（共 3 次）都 0 REAL，紅了幾次照實寫。"
+        "(b) **靈敏度不能掉**：`selftest.py` 現有的每一種突變改前改後結果一樣，該紅的照紅；另外做一個「只改 `web/jianghu.css` 一條規則」的突變驗一次，要判 REAL（證明新江湖頁現在真的有人在看）。"
+        "(c) `tests/web/test_webqa.py` 綠（它查 `coverage.py check`；跟著改到的補純函式那一層的測試）。`scripts/test_for.py` 挑的跑過。"
+        "(d) 整趟走查的時間改前（PM 這次：九回合 `--web-jobs 4` 37.6 分）改後各多少。這台同時可能有另一波的閘門在跑（pytest `-n 8` 加全軌比對）：碰到像素偶發先重跑一次再追，逾時也是。",
+        "- **做事的順序與提交**：這台今天可能會重開機（企劃者要重開讓顯卡驅動恢復），**每做完一段就提交並推上 `dev/tools-walk-272`**（①的查證寫進計畫就先提交一次；(b)、(c)、(d)、(e) 各一次；重建一次），提交訊息寫做到哪。被中斷之後接手的人從分支的最後一筆與計畫檔接著做。"
+        "時間上限兩段合計 6 小時（完整的九回合走查不要超過 3 次）；到了就把做好的推上去、交，沒做完的寫 leftovers。",
+    ] + AK_ENV, custom=True)
+
+
+AP_WALK_LENS = dict(key="walk", text=(
+    "**第 272 批：網頁走查跟上新江湖頁與慢慢長出來**（工具批，只該動 `scripts/webqa/` 與它的測試）。親自驗（解一份 head 到你的暫存夾；模型網址 127.0.0.1:9，**絕不連 11434**；只用派工單給你的埠）："
+    "①對 base 的 `git diff --stat`：只動 `scripts/webqa/`、`tests/web/test_webqa.py`、計畫檔（`wave_gate.py` 有動的話看 decided 的理由）；`tianxia/`、`web/`、`content/`、`server.py`、設定覆寫檔動了就是 blocker。"
+    "②有沒有偷放寬：`noise.py`、`compare.py`、`gate.py` 的差逐行看——aa 門檻（100 px、12 級）有沒有動、有沒有新的景名或檔名白名單、有沒有把樣式或 DOM 有差的差歸成雜訊（有就是 blocker）。走查的伺服器有沒有把新江湖頁關掉（關了就是 blocker：PM 定每一回合都開著）。"
+    "③`must_reach.txt` 拿掉的每一景：計畫裡有沒有一景一行的理由，自己到 `web/jianghu.js`／`web/main.js` 對兩三景看理由站不站得住（新頁上明明還有那顆鈕卻被拿掉的就是 should）。新江湖頁登記的動作（`registerClicks` 等）自己列一次，對 `coverage.json`／`summary.round_files` 看 `web/jianghu.js` 是不是真的被走到、哪幾個動作沒走到而計畫沒寫原因。"
+    "④自己跑：挑最小的兩個回合（含新開的那個回合，如果有）A 對 A 各走一次，exit 0、REAL 0；再做一個只改 `web/jianghu.css` 一條規則的突變走含江湖頁的最小一段，要紅。開發說的時間對不對（完整九回合不用你重跑，閘門會跑）。"
+    "⑤報告與輸出：`report.txt`、`summary.json`、截圖檔名與計畫檔裡有沒有任何一處分得出誰是假人；計畫檔有沒有本機使用者資料夾的路徑（有就列出來，PM 落地時拿掉）。"
+))
+
+WAVES["AP"] = dict(
+    round2=True,
+    extra_lenses=[AP_WALK_LENS],
+    lines=[
+        dict(name="走查跟上新頁", batches=[b272]),
+    ],
+    merge_port=8615, fix_port=8616,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
