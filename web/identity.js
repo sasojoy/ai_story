@@ -69,7 +69,7 @@
   const IDP_NEW_TAG = "新綁"; // 待 joy 潤
   const IDP_UNBIND = "解綁"; // 待 joy 潤
   const IDP_UNBIND_ASK = (name) => `確定要解綁${name}嗎？之後 30 天內不能把它綁到別的帳號。`; // 待 joy 潤
-  const IDP_BIND = (name) => `綁${name}`; // 待 joy 潤
+  const IDP_BIND = (name) => `綁定 ${name}`; // 待 joy 潤
   const IDP_RECENT_NEED = "綁定、解綁、設密碼之前要先重新驗證一次。"; // 待 joy 潤
   const IDP_RECENT_LEFT = (m) => `已驗證，${m} 分鐘內可以改。`; // 待 joy 潤
   const IDP_REAUTH_PW = "打一次密碼"; // 待 joy 潤
