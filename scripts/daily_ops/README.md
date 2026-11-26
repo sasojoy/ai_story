@@ -14,6 +14,7 @@
 - 驗：每一份先驗 integrity_check、結構版本、列數才換上正式檔名；`--drill` 再把它複製到暫存資料夾，用這版程式真的打開、每個角色的存檔讀一次，做完刪掉複本。
 - 短報：只有數字與鈕的名稱，不印名號、帳號、IP；假人只給總數。備份失敗或超過 36 小時沒成功，短報第一行就是「⚠ 備份失敗」。
 - `.local/` 不進版控：`backup_status.json`、`daily_report.json`（轉送設定）、`daily_report\<日期>.txt` 都在這裡。
+- **每日備份不帶 `.local/`**：裡面的金鑰（帳號綁定的金鑰、手機通知的 `webpush_vapid.pem`、客服 token、管理者名單）要另外找安全的地方保管一份。主機壞掉時資料庫救得回，金鑰沒了的話，Email、手機的雜湊對不上，通知也要大家重開。
 
 ## 安裝（PM 遙控主機做；在跑正式站的那份 clone 裡）
 
@@ -45,22 +46,18 @@
    再跑一次 `daily_report.py`（不加 `--no-post`），結束碼要是 0、頻道裡看得到一則短報。
    - 短報超過 2,000 字會截短並寫「全文在主機」，所以一定是一則；失敗會再試一次，兩次都失敗結束碼 1，全文照樣存在 `.local\daily_report\`。
    - 舊的寫法 `{"discord_webhook": "<網址>"}` 還認得；兩個都寫時走 relay。
-5. **排兩個工作**：
+5. **排兩個工作**：用 `Register-ScheduledTask`，不用 `schtasks /Create`。`schtasks` 的 `/TR` 最多 261 字，備份那一行塞滿完整路徑一定超過，工作會建不起來（2026-11-26 在主機上遇到）。
    ```powershell
-   $bk = "`"$repo\scripts\backup_db.py`" --db `"$db`" --dest `"$dest`" --tag daily --prune --drill --status `"$repo\.local\backup_status.json`""
-   schtasks /Create /TN "天下大勢每日備份" /SC DAILY /ST 05:00 /TR "`"$py`" $bk" /F
-   $rp = "`"$repo\scripts\daily_report.py`" --db `"$db`""
-   schtasks /Create /TN "天下大勢每日數字" /SC DAILY /ST 08:00 /TR "`"$py`" $rp" /F
+   $bkArgs = "`"$repo\scripts\backup_db.py`" --db `"$db`" --dest `"$dest`" --tag daily --prune --drill --status `"$repo\.local\backup_status.json`""
+   $rpArgs = "`"$repo\scripts\daily_report.py`" --db `"$db`""
+   $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+   $bk = New-ScheduledTaskAction -Execute $py -Argument $bkArgs -WorkingDirectory $repo
+   Register-ScheduledTask -TaskName "天下大勢每日備份" -Action $bk -Trigger (New-ScheduledTaskTrigger -Daily -At 05:00) -Settings $set -Force
+   $rp = New-ScheduledTaskAction -Execute $py -Argument $rpArgs -WorkingDirectory $repo
+   Register-ScheduledTask -TaskName "天下大勢每日數字" -Action $rp -Trigger (New-ScheduledTaskTrigger -Daily -At 08:00) -Settings $set -Force
    ```
-   路徑有空白時 `/TR` 的引號容易被吃掉：建好之後用 `schtasks /Query /TN "天下大勢每日備份" /V /FO LIST` 看「要執行的工作」那一行完整不完整。
-6. **兩個工作都改兩個設定**（工作排程器 → 內容；或 PowerShell）：
-   ```powershell
-   foreach ($t in "天下大勢每日備份", "天下大勢每日數字") {
-     $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-     Set-ScheduledTask -TaskName $t -Settings $s
-   }
-   ```
-   錯過時間（關機、睡著）開機後補跑；筆電沒插電也照跑。
+   `WorkingDirectory` 設成 repo 根目錄。設定 `$set` 讓錯過時間（關機、睡著）的開機後補跑，筆電沒插電也照跑。建好之後用 `Get-ScheduledTask "天下大勢每日備份" | Select-Object -ExpandProperty Actions` 看參數完整不完整。
+6. （第 5 步的 `$set` 已經包含原本這一步的兩個設定，不用另外改。）
 7. **試跑**：`schtasks /Run /TN "天下大勢每日備份"`，等一分鐘，再 `schtasks /Run /TN "天下大勢每日數字"`。`.local\backup_status.json` 的 `ok` 要是 `true`，Discord 要收到短報，`.local\daily_report\latest.txt` 有今天的全文。
 8. 回報：兩個工作的「上次執行結果」（要是 `0x0`）、備份檔名與大小、短報全文（只有數字，可以直接貼）。
 
