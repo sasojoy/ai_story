@@ -179,20 +179,6 @@ async function grab(file) {
 // once a hair narrower (padding-right 0.5px) and once again as they are, so every box under them is laid out anew, then read. Nothing is
 // changed for what is read: both style attributes are put back as they were, before the dump.
 const RELAYOUT = `(() => { const els = [document.documentElement, document.body].filter(Boolean); const had = els.map((e) => e.getAttribute("style")); for (const e of els) e.style.paddingRight = "0.5px"; void document.documentElement.offsetWidth; els.forEach((e, k) => { if (had[k] === null) e.removeAttribute("style"); else e.setAttribute("style", had[k]); }); void document.documentElement.offsetWidth; return 1; })()`;
-// Batch 274: the words over a picture (the battle report's scene picture, y so_result/so_rounds; yw hidden_trip; cs muster; main
-// nx_invite) came out LCD on one side and grey on the other at 1280, now and then. CDP LayerTree on a red run: the grey side had those
-// words in layers of their own (reason Overlap), the LCD side had them in the BODY layer; DOM, styles and animations the same. At dpr 1
-// Chrome keeps LCD text, so words go into the opaque layer only when what is under them is known to be opaque, and whether the picture
-// counts as opaque is fixed by the first paint after it loads (decoded by then or not) and kept: a dpr flip, a new src with decode() and
-// a will-change toggle did not change it. Drawing each loaded <img> once on the main thread and repainting it did, every time (plan of
-// batch 274, section 7). So before the first 1280 picture: every <img> that has loaded and was not drawn yet on this page is drawn once
-// on a canvas, every <img> is repainted (opacity a hair under 1 for two frames, then its style attribute put back as it was), and two
-// more frames pass. Nothing read or shot is changed: the style attributes are as before.
-const PAINT_IMAGES = `(() => { const done = window.__qaDrawn || (window.__qaDrawn = new Set()); const imgs = [...document.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth);
-  for (const i of imgs) { const src = i.currentSrc || i.src; if (done.has(src)) continue; done.add(src); try { const c = document.createElement("canvas"); c.width = i.naturalWidth; c.height = i.naturalHeight; const x = c.getContext("2d"); x.drawImage(i, 0, 0); x.getImageData(0, 0, 1, 1); } catch (e) { /* a picture from elsewhere: left as it is */ } }
-  const had = imgs.map((i) => i.getAttribute("style")); for (const i of imgs) i.style.opacity = "0.999"; void document.documentElement.offsetWidth;
-  const frames = (n, f) => requestAnimationFrame(() => n > 1 ? frames(n - 1, f) : f());
-  return new Promise((ok) => frames(2, () => { imgs.forEach((i, k) => { if (had[k] === null) i.removeAttribute("style"); else i.setAttribute("style", had[k]); }); frames(2, () => ok(imgs.length)); })); })()`;
 async function dumpStyles(id, view, facts) {
   await ev(RELAYOUT);
   const d = await ev(WALK_STYLE_DUMP);
@@ -223,7 +209,6 @@ async function shootWindow(id, v, d, light, facts) {
   await setView(v, d);
   if (!(await stable(v[1]))) facts.unstable = true;
   if (v[1] === 1280) await fixGutter(v, d, facts);
-  if (v[1] === 1280) await ev(PAINT_IMAGES);
   const first = facts.layout[v[0]] = await ev(LAYOUT);
   const sc = await ev(SCROLLER);
   const maxScreens = v[1] > 1000 ? (light ? 2 : 3) : (light ? 3 : 6);
