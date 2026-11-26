@@ -2519,6 +2519,68 @@ WAVES["AN"] = dict(
 )
 
 
+# ── AO 波：決戰與宴席兩處回話經紀錄（PM 2026-11-26 排）──
+# 企劃者 2026-11-26 在選單上選「兩處都修 (Recommended)」（PM 的題目：決戰裡自己寫的那一搏剛好收掉決戰時「名望 +32」後面少了差距那半句、升段的話隔 30 秒另起一則；
+# 宴席敬酒時情誼跨段的那一筆行狀晚一步才寫——兩處都是線上正在跑的行為，要他或 Joy 點頭才排）。依據是 AM 波第 266 批的清查表。
+AO_SWEEP = "docs/superpowers/plans/2026-11-24-回話沒經紀錄-第266批.md"
+AO_NOD = (
+    "**誰點頭**：企劃者 2026-11-26，PM 用選單問「決戰與宴席兩處的回話要不要修」，他選的原話是「兩處都修 (Recommended)」。這兩處改的是線上正在跑的包的行為（決戰、宴席都在 week7、season21 開著），"
+    "計畫檔與回報的 core_changes／decided 都要抄這一句（哪天、原話）。**只准修派工單點名的這一處**：別的沒經 `_log` 的動作（親衛隊長 `guard_say`、回絕書信、新手散人禮……共 19 個）企劃者沒有點頭，不准順手改。"
+)
+
+
+def b270():
+    plan = "docs/superpowers/plans/2026-11-26-決戰回話經紀錄-第270批.md"
+    return batch(270, "決戰第 270 批：自己寫的那一搏（放手一搏）C 段的回話經 `Game._log`——收掉決戰時名望的差距那半句與升段接在同一則", "battle", "dev/log-fix-270", plan, "8601、8602", [
+        "- **先讀** `" + AO_SWEEP + "`（第七～十節：少了什麼、試改量到的、建議）與 `docs/superpowers/plans/2026-11-23-異聞-第261批.md`（異聞同一種毛病怎麼修的）。" + AO_NOD,
+        "- **毛病**：`tianxia/features/battle/routes.py` 的 `battle_text`（決戰的放手一搏，鎖外三段式）C 段是 `shell.act(game, lambda g: g.submit_battle_custom_action(request.text, rate))`，回話沒經 `Game._log`。"
+        "按鈕出招走 `choose`、會 `_log`；自己寫的這一條不會。自己這一搏剛好湊滿回合、收掉決戰時：決戰那一則「名望 +N」後面少了「（離「…」還差 M）」（只接時間等於此刻的那一則，之後永遠補不上），升段的那幾句與金色籤延到下一次同步另起一則「名聲」，行狀晚一個請求才寫。沒收場的回合只差 `GameState.log`。",
+        "- **修法**：C 段包一層 `g._log(...)`（照第 261 批異聞 `yiwen_step` 的寫法；`_log` 收的是訊息的 list、回的也是——先讀 `tianxia/engine.py` 的 `_log` 與 `submit_battle_custom_action` 回什麼，被擋下的拒絕句也經 `_log` 會不會多寫東西，照按鈕那條路的行為對齊）。"
+        "**另外查一件、照查到的做**：按鈕出招的 `choose` 一般那條路在 `_log` 之外還叫 `features_core.after_action`（`engine.py` 裡；酒肆殺手、親衛隊長、江湖錄的掛鉤）。自己寫的這一條少叫它，玩家會少什麼（讀那幾個掛鉤在決戰回合裡做不做事）？"
+        "少的東西玩家看得出來、而且補上只是多叫一次同一個核心函式（不改核心），就一起補、寫進計畫；要改核心或拿不準，就不補、把證據寫進 leftovers（開頭寫「交 PM：」）。",
+        "- **新江湖頁**（Joy 2026-11-25 上線：`tianxia/features/jianghu/`、`web/jianghu.js`，week7、season21 開著）接管了戰報那一頁：讀它畫決戰收場那一則時名望那一行、升段的金色籤從哪裡讀（`/api/main` 的哪一格），確認這一批修的那半句在新頁與舊頁（`tests/conftest.py::old_page`）都畫得出來；畫不出來就照實寫進回報（不改 jianghu 包、不改 `web/`）。",
+        "- **只准動**：`tianxia/features/battle/routes.py`（C 段那一行上下）、`tianxia/features/battle/tests/`、`scripts/sb/tracks/battle.py`（見下一條）、包的 README 路由那一段、計畫檔。`tianxia/core/`、`engine.py`、`server.py`、`web/`、別的包、資料庫第 9 版與存檔欄位一個字不動。",
+        "- **測試**（包的 `tests/`，走真路由 `/api/do/…` 那一條，照 `test_battle…shell` 現有的做法；模型用假的 client 或 `client=None` 的保底值）：(a) 自己這一搏收掉決戰（照第 266 批計畫第八節的量法：測試內容開 `renown`、`biography`，一幕的放手一搏成功率 100% 收掉決戰）→ 決戰那一則的「名望 +N」後面有「（離「…」還差 M）」、升段的句子在**同一則**裡、不必等下一次同步；"
+        "(b) 沒收場的回合：回話一字不變、只多寫進 `GameState.log`；(c) 被擋下（送不出去、同一句還在評）：回的那一句照舊、不多寫行狀。把 `g._log` 拿掉，(a) 要紅（自己試、寫進計畫）。",
+        "- **比對軌**：`battle` 軌現在只走到「沒收場的回合」。在 `scripts/sb/tracks/battle.py` **最後新開一段**（不准在前面的段多打請求：這些軌每個請求讓步數加一、每一行印步數，前面多打一個後面每一行都變——手冊 AN 波第 2 條）走一次「自己一搏收掉決戰」，輸出看得到那半句。"
+        "軌檔裡排不出這個局面（要動到別的段或要改程式）就不加軌、把原因寫進回報，靠 (a) 守（手冊 AM 波第 1 條：寫明哪一處沒有軌走得到、靠哪條測試守）。",
+        "- **驗**：包的 `tests/`、README 列的 slow、`scripts/test_for.py` 挑的跑過；`scripts/same_behavior.py selftest --tracks battle` 最後一行原樣貼；`compare --covers battle`（season21 與 test；不帶 `--new`）的差逐行歸類——預期只有 battle 軌（與走到放手一搏的別的軌）的段落雜湊變（回話進了 `GameState.log`）與新開那一段，畫面的行一字不變；有「其他」就查清楚、寫進回報。"
+        "有動軌檔時照手冊 AN 波第 1 條另跑三份 `run`（old、mid、new）分開軌檔的差與程式的差。任何輸出不能分得出誰是假人。時間上限兩段合計 3 小時。",
+    ] + AK_ENV, custom=True)
+
+
+def b271():
+    plan = "docs/superpowers/plans/2026-11-26-宴席回話經紀錄-第271批.md"
+    return batch(271, "宴席第 271 批：自己寫的敬酒詞 C 段的回話經 `Game._log`——情誼跨段的那一筆行狀當下就寫", "feast", "dev/log-fix-270", plan, "8605、8606", [
+        "- **先讀** `" + AO_SWEEP + "`（第八、九節 feast 那一列）與上一批（第 270 批）的計畫。" + AO_NOD,
+        "- **毛病**：`tianxia/features/feast/routes.py` 的 `feast_text`（宴客時自己寫的敬酒詞，鎖外三段式）C 段是 `shell.act(game, lambda g: g.feast_toast(request.text, rate, request))`，回話沒經 `Game._log`。固定敬酒那一條走 `choose`、會 `_log`。"
+        "差別：情誼照分數動、跨過 `affinity_marks` 那一下的行狀延到下一個請求才寫；沒跨段時只差 `GameState.log` 與 `annals_mark.aff` 早記一次（內部欄位）。",
+        "- **修法**：C 段包一層 `g._log(...)`，讓自己寫的與固定敬酒兩條路一樣（先讀 `feast_toast` 回什麼、拒絕句經 `_log` 會不會多寫東西）。`features_core.after_action` 那一件照第 270 批查到的結論對宴席再看一次（固定敬酒那條路叫不叫、少叫了玩家少什麼），同樣的規矩：不改核心才補，拿不準寫 leftovers。",
+        "- **只准動**：`tianxia/features/feast/routes.py`（C 段那一行上下）、`tianxia/features/feast/tests/`、包的 README、計畫檔。軌檔這一批不動（`relay` 軌已經走得到自己寫的敬酒詞：第 266 批試改時量到 relay 的 log 多「你舉杯：…」「許劭情誼 +4」、`annals_mark.aff.xushao` 早記）。其餘同第 270 批：核心、殼、`web/`、別的包、資料庫與欄位不動。",
+        "- **測試**（包的 `tests/`，走真路由）：(a) 自己寫的敬酒詞讓情誼跨過一段 → 那一筆行狀在這個請求當下就寫了（不必再打一個請求）；(b) 沒跨段：回話一字不變；(c) 被擋下：照舊。把 `g._log` 拿掉 (a) 要紅。",
+        "- **驗**：包的 `tests/`、`scripts/test_for.py` 挑的跑過；`selftest --tracks relay` 最後一行原樣貼；`compare --covers feast`（season21 與 test；不帶 `--new`）的差逐行歸類——預期 relay 軌從 feast 那幾段起段落雜湊變（log 多兩句、`annals_mark` 早記）、畫面的行一字不變；跟第 266 批計畫第九節量到的對一次，對不上寫明差在哪。任何輸出不能分得出誰是假人。時間上限兩段合計 2 小時。",
+    ] + AK_ENV, custom=True)
+
+
+AO_LOG_LENS = dict(key="log", text=(
+    "**第 270、271 批：決戰與宴席兩處 C 段回話經 `Game._log`**（企劃者 2026-11-26 選單「兩處都修」）。親自驗（解一份 head 到暫存夾，`TIANXIA_DB` 指暫存檔，模型網址 127.0.0.1:9，**絕不連 11434**）："
+    "①對 base 的 `git diff --stat`：只動 `tianxia/features/battle/routes.py`、`tianxia/features/feast/routes.py`、兩包的測試與 README、`scripts/sb/tracks/battle.py`（有加軌的話）、計畫檔；核心、`engine.py`、殼、`web/`、別的包沒動（動了就是 blocker）。**別的沒經 `_log` 的動作有沒有被順手改**（`guard/routes.py`、`companions/routes.py`、`guide/routes.py`：動了就是 blocker，企劃者沒點頭）。"
+    "②自己走一次：照開發的測試 (a) 在暫存世界打真路由——自己一搏收掉決戰，決戰那一則裡有沒有差距那半句與升段；把 `g._log` 拿掉再走一次，確認少了。宴席同樣走一次跨段的。"
+    "③會不會寫兩次：`submit_battle_custom_action`、`feast_toast` 裡面如果本來就有哪一支自己 `_log` 過，外面再包一層會不會讓行狀、名聲、`GameState.log` 重複（讀程式＋看暫存世界的行狀與江湖紀錄有沒有同一句出現兩次）。被擋下的拒絕句經 `_log` 之後有沒有多出不該有的東西（名聲檢查、行狀）。"
+    "④`features_core.after_action`：開發補了的話，同一個請求裡會不會叫兩次（酒肆殺手、親衛隊長、江湖錄的掛鉤各看一眼會不會重複給東西）；沒補的話 leftovers 的理由站不站得住。"
+    "⑤比對：開發列的每一行差自己對一次；畫面的行有沒有任何一行變（有就是 blocker，除非是那半句本身而且開發寫明了）。計畫與回報有沒有抄企劃者的原話與日期。"
+))
+
+WAVES["AO"] = dict(
+    round2=True,
+    extra_lenses=[AO_LOG_LENS],
+    lines=[
+        dict(name="回話經紀錄", batches=[b270, b271]),
+    ],
+    merge_port=8603, fix_port=8604,
+)
+
+
 def leftovers_for(path):
     """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
     out = {}
