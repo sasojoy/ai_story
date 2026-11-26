@@ -1,5 +1,5 @@
 // The main walk: the gate, the opening, week 1 and 2, every shop, the fight, the season's end. Wave B's first round.
-import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, SHEET, EYE, DUTY, stepVia, openLetter } from "./common.mjs";
+import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, SHEET, EYE, DUTY, stepVia, openLetter, XK, hero } from "./common.mjs";
 
 export { ACCOUNTS };
 async function enterShop(c, pre, loc, act) {
@@ -84,7 +84,7 @@ export const flows = [
     await prac();
     await c.shoot("practice", { who: "p1" });
     await c.crawl("pr", prac, UI, { depth: 2, total: 60, cap: 3 });
-    const craft = async () => { await prac(); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await prac(); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     await craft();
     await c.shoot("craft", { who: "p1" });
     await c.crawl("cr", craft, UI, { depth: 2, total: 30, cap: 3 });
@@ -96,6 +96,15 @@ export const flows = [
     await news();
     await c.shoot("news", { who: "p1" });
     await c.crawl("news", news, UI, { depth: 2, total: 40, cap: 3 });
+    // batch 273: 凌煙閣 (lingyan, on in week7 and season21 since 11/26): its entry tops 江湖史 (web/lingyan.js lingyanEntryHtml, a plain
+    // <a href="/lingyan">); the hall itself is a whole page the server writes, no #app, no S, so it is shot like the public chronicle
+    await news();
+    await c.step('[data-act="news"][data-news="chronicle"]', "news_lingyan_entry", { who: "p1" });
+    if (await c.ev(`!!document.querySelector('a.ly-entry[href="/lingyan"]')`)) {
+      await c.loadRaw("/lingyan");
+      await c.shootRaw("lingyan_page");
+      await c.load("/");
+    }
   }],
     ["battle", async (c) => {
       await place(c, "沈浪", "wan_city");
@@ -560,14 +569,29 @@ out = 1`);
       await c.py("def fn(shared):\n    shared.seal_duels = []\nworld.mutate(fn)\nout = 1");
       await c.api("p1", "/api/main");
       await c.load("/");
-      await c.tab("practice");
-      await c.click('[data-act="hero-tab"][data-tab="gear"]');
+      await hero(c, "gear");
       await c.shoot("seal_hero_gear", { light: true });
       await c.load("/");
     }],
     ["practice2", async (c) => {
       await place(c, "沈浪", "wan_city");
-      const prac = async (tab) => { await c.load("/"); await c.tab("practice"); if (tab) await c.click(`[data-act="hero-tab"][data-tab="${tab}"]`); };
+      // batch 273: a tab is a plaque of the new 俠客頁 now; no tab was the 武學 page, which is the arts part
+      const prac = async (tab) => { await c.load("/"); await hero(c, tab || "arts"); };
+      // batch 273: the new 俠客頁's own buttons (web/xiake.js registerClicks): the 眼下 card's 另有 N 件 and 知道了, each plaque pulled up
+      // once (xk-open) and put back (xk-close: the ✕ on the part's head, and the strip of portrait above it, xk-dim)
+      await c.load("/");
+      await c.tab("practice");
+      await c.step(ACT("xk-eye-all"), "xk_eye_all", { light: true });
+      await c.step(ACT("xk-eye-all"), "xk_eye_fold", { light: true });
+      await c.step(ACT("xk-later"), "xk_later", { light: true });
+      for (const k of ["arts", "gear", "mates", "sect", "attrs", "codex"]) {
+        await c.load("/");
+        await c.tab("practice");
+        if ((await c.step(XK(k), `xk_${k}`, { light: true })) !== "ok") continue;
+        if (k === "arts") await c.step('.xk-sheet [data-act="xk-close"]', "xk_close", { light: true });
+        else if (k === "gear") await c.step('.xk-dim[data-act="xk-close"]', "xk_dim_close", { light: true });
+        else await c.click('.xk-sheet [data-act="xk-close"]');
+      }
       await prac("attrs");
       await c.shoot("pr_attrs", { who: "p1" });
       await c.step(ACT("attr-help"), "pr_attr_help", { light: true });
@@ -630,6 +654,18 @@ out = 1`);
       await prac("mates");
       await c.shoot("pr_mates", { who: "p1" });
       await c.crawl("prm", async () => { await prac("mates"); }, [...UI, "drawer-close"], { depth: 2, total: 8, cap: 2 });
+      // batch 273: the mates part is drawn anew (web/xiake.js xkMatesHtml): 親衛's card (他的事 › opens his whole page, 收起 folds it),
+      // the mates as a grid of faces; one face pulls up that mate's card (xkPersonCard) with 傳功 (xk-teach) when there are lessons
+      await prac("mates");
+      await c.step(ACT("xk-guard"), "xk_guard", { who: "p1" });
+      await prac("mates");
+      await c.step(ACT("xk-guard-all"), "xk_guard_all", { light: true });
+      await c.step(ACT("xk-guard-back"), "xk_guard_back", { light: true });
+      await prac("mates");
+      await c.step('.xk-mt[data-act="person"]', "xk_person", { who: "p1" });
+      await c.step(ACT("xk-teach"), "xk_teach", { light: true });
+      await c.step(ACT("xk-teach"), "xk_teach_fold", { light: true });
+      await c.step(".xk-card-x", "xk_person_close", { light: true });
       await prac("mates");
       await c.click(ACT("person"));
       await c.step(ACT("release-mate"), "pr_release", { who: "p1" });
@@ -641,13 +677,14 @@ out = 1`);
       await prac("attrs");
       await c.step(ACT("xinde-more"), "pr_xinde", { light: true });
       // batch 233: 江湖錄 (codex, on in week7 and season21 since 11/13) is the 俠客 page's last tab: 奇遇 first, then 圖鑑
-      await prac();
-      await c.step('[data-act="hero-tab"][data-tab="codex"]', "pr_codex", { who: "p1", wait: 800 });
+      await c.load("/");
+      await c.tab("practice");
+      await c.step(XK("codex"), "pr_codex", { who: "p1", wait: 800 });
       await c.step('[data-act="cx-seg"][data-seg="tj"]:not(.on)', "pr_codex_seg", { who: "p1", wait: 800 });
       await c.load("/");
     }],
     ["craft2", async (c) => {
-      const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+      const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); };
       await craft();
       await c.shoot("cr_main", { who: "p1" });
       await c.crawl("cr2", craft, [...UI, "pick", "pot-close", "book-close", "secret-close", "unslot"], { depth: 2, total: 16, cap: 2 });
@@ -667,7 +704,7 @@ out = 1`);
       await c.step(ACT("secret-close"), "cr_secret_close", { light: true });
       // 自創
       await c.load("/");
-      await c.tab("practice");
+      await hero(c, "arts");
       await c.step(ACT("create-open"), "cr_create_open", { who: "p1" });
       await c.crawl("crc", async () => { await c.load("/"); }, ["create-kind", "create-preset", "create-pose", "create-intent", "create-pick"], { total: 10, cap: 2 });
       await c.load("/");

@@ -12,6 +12,7 @@
      (summary.new_rows, exit 0) with it. --yw-only runs just those two.
      The yw round again with the new 江湖頁's .jh-page padding changed in web/jianghu.css (jh-padding, batch 272): red, so the page the
      players see (on in season21) is really looked at. --jh-only runs just that one.
+     The v round with the new 俠客頁's .xk-page padding changed in web/xiake.css (xk-padding, batch 273): red. --xk-only runs just that one.
   4. A comment added to a stylesheet: the replay runs from the gate and stays green.
   5. Hostile pages: one stuck in a loop stops the walk with exit 2 instead of hanging, an alert on the head alone goes red and the walk goes on.
 
@@ -104,6 +105,18 @@ def _jh_control(a, rows: list) -> None:
         a.only = only
 
 
+def _xk_control(a, rows: list) -> None:
+    """Batch 273: the new 俠客頁's padding changed in web/xiake.css (xk-padding). The page is on in season21; the v round (about 2 minutes,
+    whole round) pulls up its arts part first thing, so it goes red as REAL."""
+    only, a.only = a.only, None
+    try:
+        s = _gate(a, "mut_" + gate.XK_PADDING, "--mutate", gate.XK_PADDING, rounds="v")
+        rows.append((f"v round --mutate {gate.XK_PADDING} goes red", s["code"] == 1 and bool(s["real"]),
+                     f"exit {s['code']} real {len(s['real'])}: {sorted({x['class'] for x in s['real']})} {s['took']}s"))
+    finally:
+        a.only = only
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -120,6 +133,7 @@ def main(argv=None) -> int:
     ap.add_argument("--only", help="flows of the c round, for a shorter walk (accounts,smoke,craft is about 2.5 minutes a time, the whole round about 8)")
     ap.add_argument("--yw-only", action="store_true", help="only the yw round's two controls (batch 256)")
     ap.add_argument("--jh-only", action="store_true", help="only the new 江湖頁's control, jh-padding on the yw round (batch 272)")
+    ap.add_argument("--xk-only", action="store_true", help="only the new 俠客頁's control, xk-padding on the v round (batch 273)")
     a = ap.parse_args(argv)
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
@@ -129,7 +143,9 @@ def main(argv=None) -> int:
         _yw_controls(a, rows)
     if a.jh_only:
         _jh_control(a, rows)
-    a.yw_only = a.yw_only or a.jh_only
+    if a.xk_only:
+        _xk_control(a, rows)
+    a.yw_only = a.yw_only or a.jh_only or a.xk_only
     if not a.replay_only and not a.yw_only:
         s1 = _gate(a, "same1", "--keep-corpus", corpus, rounds=a.rounds)
         rows.append(("base against base is green", s1["code"] == 0, f"exit {s1['code']} real {len(s1['real'])} noise {s1['noise']} {s1['took']}s"))
@@ -156,6 +172,7 @@ def main(argv=None) -> int:
                      f"exit {s['code']} pixel rows {len(walk)}: {sorted(x['scene'] for x in walk)[:8]} repaint-variants on bt_watch {taken[:4]}"[:300]))
         _yw_controls(a, rows)
         _jh_control(a, rows)
+        _xk_control(a, rows)
         s = _gate(a, "quiet", "--mutate", gate.QUIET)
         rows.append(("a comment in a stylesheet runs the replay and stays green", s["code"] == 0 and s["replay"]["ran"], f"exit {s['code']} real {[x['class'] for x in s['real']][:6]} {s['replay']}"[:300]))
         a.only = a.only or "accounts,smoke"

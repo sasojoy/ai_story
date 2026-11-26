@@ -1,5 +1,5 @@
 // What the main walk did not reach: seals, gear, sorties, crafting from the panel, the push prompts. Wave B's round 3.
-import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, EYE, DUTY, SHEET, stepVia } from "./common.mjs";
+import { CH, CHP, ACT, place, UI, ACCOUNTS, accounts, rich, EYE, DUTY, SHEET, stepVia, hero } from "./common.mjs";
 
 export { ACCOUNTS };
 export const x_week2 = ["x_week2", async (c) => {
@@ -99,7 +99,7 @@ out = 1`);
     await c.api("p1", "/api/main");
   }],
   ["x_gear", async (c) => {
-    const gear = async (key) => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="hero-tab"][data-tab="gear"]'); await c.click(`[data-act="hero-node"][data-kind="gear"][data-key="${key}"]`); };
+    const gear = async (key) => { await c.load("/"); await hero(c, "gear"); await c.click(`[data-act="hero-node"][data-kind="gear"][data-key="${key}"]`); };
     for (const key of ["weapon", "armor", "mount", "treasure"]) {
       await gear(key);
       await c.shoot(`x_gear_${key}`, { who: "p1" });
@@ -161,7 +161,7 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await place(c, "沈浪", "wan_city");
   }],
   ["x_craft", async (c) => {
-    const craft = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="tab"][data-tab="craft"]'); };
+    const craft = async () => { await c.load("/"); await hero(c, "arts"); await c.click('[data-act="tab"][data-tab="craft"]'); }; // batch 273: craft's entry is in the arts part
     await craft();
     await c.step(ACT("pot-open"), "x_cr_pot", {});
     await c.step('[data-act="pick"][data-id="feng"]', "x_cr_pick1", {});
@@ -175,7 +175,7 @@ st = chars.load('沈浪'); st.player.stamina = 240; st.player.sortie_cooldown_un
     await c.step(ACT("secret-book"), "x_cr_secret", {});
     await c.step(ACT("secret-close"), "x_cr_secret_close", { light: true });
     await c.load("/");
-    await c.tab("practice");
+    await hero(c, "arts");
     await c.step(ACT("create-open"), "x_ct_open", { who: "p1" });
     await c.step('[data-act="create-kind"]:not(.on)', "x_ct_kind", {});
     await c.step(ACT("create-pick"), "x_ct_pick", {});

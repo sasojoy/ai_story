@@ -1,5 +1,5 @@
 // Melting for real, walking for real. Wave B's round 6.
-import { CH, ACT, place, ACCOUNTS, accounts, rich } from "./common.mjs";
+import { CH, ACT, place, ACCOUNTS, accounts, rich, hero } from "./common.mjs";
 import { x_week2 } from "./x.mjs";
 
 export { ACCOUNTS };
@@ -9,7 +9,7 @@ export const flows = [
   x_week2,
   ["v_melt", async (c) => {
     await place(c, "沈浪", "wan_city");
-    const prac = async () => { await c.load("/"); await c.tab("practice"); await c.click('[data-act="hero-tab"][data-tab="arts"]'); };
+    const prac = async () => { await c.load("/"); await hero(c, "arts"); }; // batch 273: the arts plaque of the new 俠客頁
     await prac();
     await c.step('[data-act="mx"][data-op="practice"]:not([disabled])', "v_practice_go", { who: "p1", wait: 800 });
     await prac();

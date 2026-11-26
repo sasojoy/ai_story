@@ -43,6 +43,15 @@ memory by serve.py in every round but uf: every walk account is new, and with th
 and a grow is written by a sync, so when one appears depended on when each side synced. Old characters have no book: everything laid out,
 which is what the other rounds walk. The uf round walks the book: each picture waits until what it shows is true in S.main.unfold.
 --mutate jh-padding (selftest) changes .jh-page in web/jianghu.css: the page is looked at.
+Batch 273: the new 俠客頁 (xiake package, Joy 2026-11-26) is on in week7 and season21 and every round walks it; the old one with its row of
+sub tabs (hero-tab) is not walked any more. Its six plaques (xk-open) pull up the part a tab used to show (flows/common.mjs hero, XK).
+--mutate xk-padding (selftest) changes .xk-page in web/xiake.css.
+When a page is laid out anew (Joy did 江湖頁 and 俠客頁 in three days): walk A against A once (--base X --head X --jobs 4) and read the
+must_reach scenes not reached and report.steps' "-> missing"; a click that finds nothing leaves the page where it was, so the next segment
+starts there too. Find things the way a player would: flows/common.mjs stepVia (open the layer it is in first), hero (a 俠客 plaque),
+SHEET/EYE/DUTY (the 江湖頁's layers); keep the scene names. A scene the new page has no thing for leaves must_reach.txt by hand, with a reason
+in the batch's plan. Then one whole walk with --write-must-reach rebuilds must_reach.txt and coverage.json (coverage.py check must pass);
+diff must_reach.txt before and after: only additions, besides the ones the plan names. A NOT_ON_TABLE line goes when coverage.json lists the file.
 What the replay cannot see: its corpus is the base side's DOM, so an element only the head draws (wave AA: .sup-admin-entry) is not in it,
 and the rules written for that element are not seen there; the walk is what shows it.
 A red pixel row keeps the side-by-side and both full-size pictures (<file>__A.png, <file>__B.png) under red/ (the replay's under replay/red/);
@@ -87,6 +96,7 @@ STYLE_EXT = (".css", ".html")
 MUTATIONS = ("card-padding", "css-last")
 YW_PADDING = "yw-padding"  # batch 256, selftest only: the meeting card's padding in web/yiwen.css: the yw round must go red, and with --new yiwen be listed
 JH_PADDING = "jh-padding"  # batch 272, selftest only: the new 江湖頁's own padding in web/jianghu.css (.jh-page): a round that draws the page must go red
+XK_PADDING = "xk-padding"  # batch 273, selftest only: the new 俠客頁's own padding in web/xiake.css (.xk-page): a round that draws the page must go red
 PKG_CSS = "pkg-css"  # batch 110: one rule more in web/identity.css: red without --new, NEW (not red) with --new identity; not a selftest control
 HOSTILE = {  # selftest only: a page that does what the walk must survive
     "page-hang": 'document.addEventListener("click", () => { for (;;) {} }, true);',
@@ -394,6 +404,18 @@ def mutate(copy: str, which: str) -> None:
         i = t.find("\n.jh-page {")
         if i < 0:
             raise ToolBroke("mutate jh-padding: no .jh-page rule in web/jianghu.css")
+        j = t.index("}", i)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(t[:j] + " padding: 31px 23px; " + t[j:])
+    elif which == XK_PADDING:  # batch 273: the new 俠客頁 (.xk-page, web/xiake.js xkPage; on in week7 and season21)
+        p = os.path.join(copy, "web", "xiake.css")
+        t = ""
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", newline="") as f:
+                t = f.read()
+        i = t.find("\n.xk-page {")
+        if i < 0:
+            raise ToolBroke("mutate xk-padding: no .xk-page rule in web/xiake.css")
         j = t.index("}", i)
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(t[:j] + " padding: 31px 23px; " + t[j:])
@@ -881,7 +903,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
     ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
     ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
-    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, JH_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
+    ap.add_argument("--mutate", choices=(*MUTATIONS, PKG_CSS, QUIET, IMG_BATTLE, IMG_BATTLE_SPOT, YW_PADDING, JH_PADDING, XK_PADDING, *HOSTILE), help="selftest only: break the head on purpose")
     ap.add_argument("--round-seconds", type=int, help=f"a round still walking after this is the tool broken, exit 2; default {ROUND_SECONDS}")
     ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
     ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")

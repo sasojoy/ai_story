@@ -8,7 +8,7 @@
 //   uf_attrs_seen the 屬性 sub-tab open: its dot is gone
 // A grow is written by a sync and a dot goes out when the page sends seen, so no picture waits a fixed time: each waits until what it
 // shows is true in S.main.unfold (and no seen is on its way), and a wait that gives up is in the steps, the same on both sides.
-import { CH, ACCOUNTS, accounts } from "./common.mjs";
+import { CH, ACCOUNTS, accounts, XK } from "./common.mjs";
 
 export { ACCOUNTS };
 async function until(c, expr, ms = 20000) {
@@ -64,8 +64,10 @@ export const flows = [
     await shootWhen(c, fresh("hero:attrs"), "uf_attrs");
     await c.tab("practice");
     await until(c, quiet);
-    await shootWhen(c, `${quiet} && !!document.querySelector('[data-act="hero-tab"][data-tab="attrs"]')`, "uf_hero");
-    await c.click('[data-act="hero-tab"][data-tab="attrs"]');
+    // batch 273: the new 俠客頁 (web/xiake.js) draws the dot on the 屬性 plaque (xkPlaques: dotAt("practice", "attrs")) and on the head of
+    // the part it pulls up (xkSheetHtml); pulling it up sets S.heroTab, which is what web/unfold.js counts as seen
+    await shootWhen(c, `${quiet} && !!document.querySelector('${XK("attrs")} .dot')`, "uf_hero");
+    await c.click(XK("attrs"));
     await shootWhen(c, `${quiet} && !${BOOK}.fresh.includes("hero:attrs")`, "uf_attrs_seen");
   }],
 ];

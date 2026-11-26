@@ -966,6 +966,33 @@ def test_the_jh_padding_mutation_touches_the_new_jianghu_page_only(tmp_path):
         gate.mutate(str(tmp_path), gate.JH_PADDING)
 
 
+def test_the_xk_padding_mutation_touches_the_new_xiake_page_only(tmp_path):
+    """Batch 273: the control that proves the new 俠客頁 is looked at changes one rule of web/xiake.css, .xk-page."""
+    gate = _load("gate")
+    web = tmp_path / "web"
+    web.mkdir()
+    css = "/* a */\n.xk-page { --xk-fade: 1; position: relative; }\n.xk-page .x { margin: 0; }\n"
+    (web / "xiake.css").write_text(css, encoding="utf-8", newline="")
+    gate.mutate(str(tmp_path), gate.XK_PADDING)
+    got = (web / "xiake.css").read_text(encoding="utf-8")
+    assert got == css.replace("position: relative; }", "position: relative;  padding: 31px 23px; }", 1)
+    assert "\n.xk-page {" in (ROOT / "web" / "xiake.css").read_text(encoding="utf-8"), "俠客頁的規則換了寫法，突變要跟著換"
+    (web / "xiake.css").write_text("/* nothing */\n", encoding="utf-8")
+    with pytest.raises(gate.ToolBroke):
+        gate.mutate(str(tmp_path), gate.XK_PADDING)
+
+
+def test_the_flows_find_the_hero_page_by_its_plaques():
+    """Batch 273: the old 俠客頁's sub tabs (hero-tab) are not on the page any more; the flows pull a plaque up (common.mjs hero, XK)."""
+    flows = TOOL / "flows"
+    for f in flows.glob("*.mjs"):
+        text = f.read_text(encoding="utf-8")
+        assert '[data-act="hero-tab"]' not in text, f.name
+    common = (flows / "common.mjs").read_text(encoding="utf-8")
+    assert 'export const XK = (sec) => `[data-act="xk-open"][data-sec="${sec}"]`;' in common
+    assert 'data-act="xk-open" data-sec="${esc(k)}"' in (ROOT / "web" / "xiake.js").read_text(encoding="utf-8"), "牌子的寫法換了，XK 要跟著換"
+
+
 def test_only_the_uf_round_leaves_the_unfolding_book_on():
     """Batch 272: serve.py turns unfold off for every round but uf (every walk account is new; old characters see the page laid out)."""
     text = (TOOL / "serve.py").read_text(encoding="utf-8")
