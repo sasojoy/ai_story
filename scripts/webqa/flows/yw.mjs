@@ -59,14 +59,11 @@ export const flows = [
     await tripOut(c);
     await c.shoot("yw_meet", { who: "p1" });
     // put away over the trip: the trip's card offers the tale (yiwen:open) and 放下 as its menu
-    // batch 273: hiding redraws the 江湖頁 under the trip's card with a new <img decoding="async"> for the place; wait until every picture
-    // on the page is loaded and decoded before the scene (batch 272 f2 and batch 273 w1: 7724 px, 38 levels on the words over that picture)
-    if ((await c.click(ACT("yw-hide"))) === "ok") {
-      const IMGS = `[...document.querySelectorAll("img")]`;
-      for (let i = 0; i < 50 && !(await c.ev(`${IMGS}.every((i) => i.complete)`)); i++) await c.sleep(100);
-      await c.ev(`Promise.all(${IMGS}.filter((i) => i.naturalWidth > 0).map((i) => i.decode().catch(() => 0))).then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(1)))))`);
-      await c.shoot("yw_hidden_trip", { who: "p1" });
-    }
+    // batch 273: now and then (3 of 10 yw rounds A against A, batch 273) this scene goes red at 1280: 7724 px, 38 levels, box
+    // [332,64,939,418], the same each time: the words over the place's picture behind the trip's card are drawn with LCD antialiasing
+    // on one side, grey on the other. Same DOM, no animation running, every <img> loaded, body.layer-open at top 0 and scrollY 0 on
+    // both sides; waiting for the pictures to decode first did not change it. Not fixed: left to a later batch
+    await c.step(ACT("yw-hide"), "yw_hidden_trip", { who: "p1" });
     await c.load("/");
     // put away on the 江湖 page: the strip at the top. There is no explore wheel while a tale waits (the menu is yiwen:open and yiwen:drop
     // only), so the strip is shot on the 江湖 page and on the hero page
@@ -81,8 +78,10 @@ export const flows = [
     // is 投靠 (jhDutyCell -> jhJoinCell), so no cell pulls that list up. The strip on the hero page (yw_shown) is the way back here.
     // If the page gets a way to it for a 散人, walk it again with stepVia(c, CH("yiwen:open"), DUTY, ...) and yw-help after it.
     // batch 273: the options this 散人 has here, as a log line (nothing shot): what no cell of the new page pulls up
-    const opts = await c.api("p1", "/api/main");
-    c.log("sanren options", JSON.stringify(((opts.json && opts.json.options) || []).map((o) => o.id)));
+    for (const w of ["p1", "p2"]) {
+      const opts = await c.api(w, "/api/main");
+      c.log("sanren options", w, JSON.stringify((opts.json && opts.json.status && opts.json.status.location) || ""), JSON.stringify(((opts.json && opts.json.options) || []).map((o) => o.id)));
+    }
   }],
   ["yw_walk", async (c) => {
     await c.load("/");
