@@ -172,7 +172,15 @@ async function grab(file) {
   hashes[file] = sha(buf);
   writeFileSync(join(SHOTS, file), buf);
 }
+// Batch 273: Chrome can answer getComputedStyle's margin-left/right: auto with a stale used value. main:zh_share/zh_send at 1280 (and
+// any scene with a layer open: body.layer-open is position: fixed): the shell sat at 312.5 px by getBoundingClientRect on both sides while
+// getComputedStyle said 0px, the margin of an earlier 375 layout, on about four scenes in ten at random, and a forced layout did not
+// change it. Measured on --only accounts,rich,seasonend, three walks each: 0px on 16 of the 36 zh_ windows before, on none of 78 windows after. Lay html and body out
+// once a hair narrower (padding-right 0.5px) and once again as they are, so every box under them is laid out anew, then read. Nothing is
+// changed for what is read: both style attributes are put back as they were, before the dump.
+const RELAYOUT = `(() => { const els = [document.documentElement, document.body].filter(Boolean); const had = els.map((e) => e.getAttribute("style")); for (const e of els) e.style.paddingRight = "0.5px"; void document.documentElement.offsetWidth; els.forEach((e, k) => { if (had[k] === null) e.removeAttribute("style"); else e.setAttribute("style", had[k]); }); void document.documentElement.offsetWidth; return 1; })()`;
 async function dumpStyles(id, view, facts) {
+  await ev(RELAYOUT);
   const d = await ev(WALK_STYLE_DUMP);
   facts.sty[view] = sha(d.els.map((r) => r.join(" ")).join("\n"));
   writeFileSync(join(STY, `${id}__${view}.json.gz`), gzipSync(JSON.stringify(d)));
