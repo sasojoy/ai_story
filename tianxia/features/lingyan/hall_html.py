@@ -91,14 +91,14 @@ details.ly-old .ly-scroll{margin:6px 8px 18px;box-shadow:none}
 """
 
 HERO = "/static/img/events/academy.webp"  # 待畫：凌煙閣本身的一張（之後換）
-LEAD = "一座不會清的閣。每一季收季那一刻，這一季最出眾的人掛上來，往後每一季都看得到。"  # 待 joy 潤
-LIVE = "這一季還在打。收季那一刻，這一季的人掛上閣。"  # 待 joy 潤
-EMPTY = "閣裡還空著。<br>這一季收季那一刻，第一卷就掛上來。"  # 待 joy 潤
+LEAD = "凌煙高閣，不隨季改。一季風雲落定，冠絕當世者繪像於此，千秋之下，猶可仰望。"  # 待 joy 潤
+LIVE = "此季兵戈未息，誰人登閣，尚未可知。"  # 待 joy 潤
+EMPTY = "閣中尚虛，丹青未著。<br>第一季風雲落定之日，便是第一卷懸起之時。"  # 待 joy 潤
 HELP = (  # 待 joy 潤
-    "擂台季末守在第一的、各陣營論功第一的、決戰首功最多的、名人宗師武學善惡五張榜的第一名、這一季第一個練成絕學的，收季時掛上閣。",
-    "同一個人一季只佔一格，幾樣事蹟寫在同一格裡；第二次上閣起，名號旁邊多一道朱絲。",
-    "列傳公開分享了的，格子裡掛一句評曰，點了讀全篇。",
-    "閣裡只寫名號與事蹟，不寫等級與身家。",
+    "擂台季末居首、各陣營論功第一、決戰首功最多、名人宗師武學善惡五榜之首、一季之中首成絕學者，收季之時，皆登此閣。",
+    "一人一季只佔一席，數樁事蹟同書一格；再度登閣者，名號旁添一道朱絲。",
+    "列傳公開於世者，格中懸一句評曰，點之可讀全篇。",
+    "閣中只書名號與事蹟，不論等級身家。",
 )
 
 
@@ -121,7 +121,7 @@ OPEN = 2  # 最新的幾卷攤開
 
 
 def page(scrolls: list[Scroll], live: bool, logged_in: bool = True) -> str:
-    live_html = f'<div class="ly-live"><b>未掛</b><span>{LIVE}</span></div>' if live and scrolls else ""  # 閣還空著時空框那一句就說了，不寫兩次
+    live_html = f'<div class="ly-live"><b>未懸</b><span>{LIVE}</span></div>' if live and scrolls else ""  # 閣還空著時空框那一句就說了，不寫兩次
     if scrolls:
         shown = "".join(scroll_html(s) for s in scrolls[:OPEN])
         old = "".join(
@@ -132,7 +132,7 @@ def page(scrolls: list[Scroll], live: bool, logged_in: bool = True) -> str:
     else:
         body = f'<div class="ly-empty">{EMPTY}</div>'
     helps = "".join(f"<li>{escape(x)}</li>" for x in HELP)
-    back = '<a href="/">‹ 回江湖</a>' if logged_in else '<a href="/">也去江湖走一遭 ›</a>'  # 待 joy 潤
+    back = '<a href="/">‹ 回江湖</a>' if logged_in else '<a href="/">入江湖，爭此一席 ›</a>'  # 待 joy 潤
     return f"""<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>凌煙閣・天下大勢</title><meta name="robots" content="noindex">
@@ -144,6 +144,6 @@ def page(scrolls: list[Scroll], live: bool, logged_in: bool = True) -> str:
 <header class="ly-hero"><img src="{HERO}" alt=""><div class="ly-plaque">凌煙閣</div></header>
 <p class="ly-lead">{LEAD}</p>
 {live_html}{body}
-<details class="ly-help"><summary>？ 誰上得了閣</summary><ul>{helps}</ul></details>
+<details class="ly-help"><summary>？ 何人可登此閣</summary><ul>{helps}</ul></details>
 </div></body></html>"""
 

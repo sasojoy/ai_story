@@ -102,7 +102,7 @@ def test_the_page_is_public_and_404_while_off(monkeypatch):
     assert client.get("/lingyan").status_code == 404
     monkeypatch.setattr(server.CONTENT.config.lingyan, "enabled", True)
     got = client.get("/lingyan")  # 沒登入（Joy 2026-11-26 選「沒登入也看得到」）
-    assert got.status_code == 200 and "凌煙閣" in got.text and "也去江湖走一遭" in got.text
+    assert got.status_code == 200 and "凌煙閣" in got.text and "入江湖，爭此一席" in got.text
     monkeypatch.setattr(server, "_account", lambda request: "k")
     got = client.get("/lingyan")
     assert got.status_code == 200 and "回江湖" in got.text

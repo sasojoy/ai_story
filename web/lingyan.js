@@ -5,7 +5,7 @@
  */
 "use strict";
 
-  const LY_SUB = "歷代收季時最出眾的人，都掛在這裡"; // 待 joy 潤
+  const LY_SUB = "一季一卷，冠絕當世者名垂於此"; // 待 joy 潤
   function lingyanEntryHtml(m) {
     if (!m || !m.lingyan) return "";
     return `<a class="ly-entry" href="/lingyan"><span class="ly-entry-plaque" aria-hidden="true">凌煙閣</span>`
