@@ -359,7 +359,7 @@ def _more_triggers(ctx: Game, want) -> list[str]:
     if want("h_checkin") and services.checkin_on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
         on.append("h_checkin")
     # 慢慢長出來的新角色（Joy 2026-11-25「商城當然是能越快出來越好」）：城門口選了路、輿圖長出來那一刻就說，不等升到 SETTLED_LEVEL
-    early = p.unfold is not None and "tab:map" in p.unfold.grown
+    early = p.unfold is not None and not p.unfold.old and "tab:map" in p.unfold.grown
     if want("h_mall") and c.config.mall.enabled and (p.member.level >= SETTLED_LEVEL or early):
         on.append("h_mall")
     # 形象：上過一次擂台（看過自己那副模樣）；形象開著＝商城開著而且有形象可賣（looks.rules.on 同一條；包不能 import 包）
@@ -395,7 +395,7 @@ def _unfold_triggers(ctx: Game, want) -> list[str]:
     """慢慢長出來（Joy 2026-11-25）只對拿到那一本（PlayerState.unfold）的新角色說的：體力見底、身上沒有回體丹。舊角色照舊不說。
     門派、結義、書信、稱號、江湖錄、合成的小事卡在 unfold 包（要帶著對象：哪一門、哪一個人、哪一件），不在提示表。"""
     c, p = ctx.content, ctx.state.player
-    if p.unfold is None:
+    if p.unfold is None or p.unfold.old:  # 舊角色那一本（帶著做一次）照舊不說
         return []
     on: list[str] = []
     cfg = c.config

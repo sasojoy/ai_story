@@ -9,6 +9,13 @@ from __future__ import annotations
 from tianxia.core.features import Feature
 
 
+def _running(ctx) -> bool:
+    try:
+        return ctx.world.season_phase() == "running"
+    except (AttributeError, NotImplementedError):  # 記憶體裡沒有全服狀態的（某些測試）：當作在跑
+        return True
+
+
 class UnfoldFeature(Feature):
     name = "unfold"
     prefix = "unfold"  # 沒有選項：紅點滅走 /api/unfold/seen
@@ -28,12 +35,24 @@ class UnfoldFeature(Feature):
         if p.bot:  # 假人沒有人看，也不能因為少一本被看出來：不開本
             return
         pending = ctx._opening_pending()  # noqa: SLF001  核心服務（services_list.md）：城門口三選一還沒選
-        if p.unfold is None:
-            if not (self.enabled(ctx) and pending):  # 只有開關開著時新建、還站在城門口的角色才開本；舊角色全部攤開
-                return
-            p.unfold = rules.new_book()
-            p.hints_seen.update(rules.REPLACED_HINTS)
         from . import cards  # noqa: PLC0415
+
+        if p.unfold is None:
+            if not self.enabled(ctx):
+                return
+            if pending:  # 開關開著時新建、還站在城門口的角色開新的一本
+                p.unfold = rules.new_book()
+                p.hints_seen.update(rules.REPLACED_HINTS)
+            elif ctx.content.config.unfold.old_chars and _running(ctx):  # 舊角色：全部照舊攤開，只出還沒碰過的小事卡與帶著做（Joy 2026-11-26「照建議」）；
+                # 季在跑才開：籌備中、休季新建的角色還沒走到城門口，等開季站上城門口拿新角色那一本
+                p.unfold = cards.old_book(ctx)
+                return
+            else:
+                return
+        if p.unfold.old:
+            if self.enabled(ctx):
+                cards.look(ctx, p.unfold)
+            return
 
         a = ctx.content.config.arts
         ready = frozenset({"tab:craft"}) if "tab:craft" not in p.unfold.grown and cards.fuse_pair(ctx) else frozenset()
@@ -61,7 +80,10 @@ class UnfoldFeature(Feature):
             return {}
         from . import cards  # noqa: PLC0415
 
-        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh), "card": cards.view(book, ctx.content.config.unfold.gift)}}
+        if book.old:  # 舊角色：不藏、不亮長出來的紅點，只有小事卡與帶著做
+            return {"unfold": {"hide": [], "fresh": [], "old": True, "card": cards.view(book), "lead": cards.lead_view(ctx, book)}}
+        return {"unfold": {"hide": rules.hidden(book), "fresh": list(book.fresh), "card": cards.view(book, ctx.content.config.unfold.gift),
+                           "lead": cards.lead_view(ctx, book)}}
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
