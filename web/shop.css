@@ -9,7 +9,7 @@
 /* 店面開著時底下那一頁（舊的編號選單、場景）不畫（UI 手感乙批 5-1）：整層蓋住本來就看不到，留著等於同一組鈕兩份；版面照留、量寬度的照量 */
 .shell:has(~ .shop-layer) > #page { visibility: hidden; }
 .shop-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 8px 12px 4px; }
-.shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
+.shop-back { min-height: 44px; border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
 .shop-sign { justify-self: center; padding: 4px 14px; border: 2px solid #b7862b; border-radius: 4px; background: #2b1a10; color: #f2c46a; font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
 .shop-silver { font: 600 13px var(--sans); color: #f2c46a; }
 .shop-line.rule { border: 1px solid #f2c46a; border-left-width: 3px; border-radius: 2px; background: rgba(242, 196, 106, 0.1); } /* 鐵匠講神器的規矩：金框（設計 9.1 第 2 批甲） */
@@ -19,7 +19,7 @@
 .shop-page.on { background: #b7862b; color: #1e1510; border-color: #b7862b; opacity: 1; }
 .shop-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 12px 12px; }
 .shop-tabs { display: flex; border-top: 1px solid #5a4030; padding-bottom: var(--bottom); background: rgba(0, 0, 0, 0.25); }
-.shop-tab { flex: 1; border: 0; background: transparent; color: #c9b28a; padding: 11px 0; font: 13px var(--sans); }
+.shop-tab { flex: 1; min-height: 44px; border: 0; background: transparent; color: #c9b28a; padding: 11px 0; font: 13px var(--sans); }
 .shop-tab.on { color: #f2c46a; box-shadow: inset 0 2px 0 #f2c46a; background: rgba(242, 196, 106, 0.08); }
 .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 /* 架上那一頁最上面的爐火與鐵砧（企劃者 2026-10-14，照草圖 container.html 的 A）：一大團發亮的橘色圓頂爐口，火光往外暈，底下鐵砧；

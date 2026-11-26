@@ -1665,6 +1665,7 @@ SPECIAL_OPS = {"battle_text", "seal_text", "duel_text", "tavern_ask", "feast_tex
 def conquest_server(monkeypatch):
     content = conquest_rules(real_content("season21"))
     content.config.auto_open_first_season = True
+    content.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     content.config.admins = [ADMIN]
     monkeypatch.setattr(server, "CONTENT", content)
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})  # 這裡測的不是密碼

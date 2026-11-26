@@ -62,6 +62,8 @@ def test_the_scan_finds_the_call_sites():
     names = {(f, m) for f, _, m, *_ in _calls()}
     # companions（全部拆包第 19 批：letters.py 搬進功能包，檔名記相對 tianxia/ 的路徑；改路徑字串的例外照批次表第二節）
     assert ("features/companions/companion_agent.py", "CompanionTurn") in names and ("features/companions/letters.py", "LetterText") in names
+    # 異聞的說書人（第 252 批）：寫幕兩個呼叫點都開了 require_in_schema（不進 KNOWN）
+    assert ("features/yiwen/writer.py", "SceneReply") in names and ("features/yiwen/writer.py", "EndReply") in names
 
 
 def test_required_fields_are_written_into_the_schema_or_known():

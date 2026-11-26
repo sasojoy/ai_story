@@ -124,6 +124,30 @@ def real_content(profile=None) -> Content:
     return cached_content(REAL_CONTENT, profile)
 
 
+def old_packs(content: Content, *names: str) -> Content:
+    """2026-11-12 打開的五包（門派、結義、帖友書信、稱號官職、條款；Joy「全部新功能都要打開」）關掉，回傳同一份內容。
+    測的是這幾包打開以前的規矩（拜入門派連帶投靠、論功的稱號寫在名號後面、註冊不用勾條款）的舊測試叫它；names 給了只關那幾包。"""
+    for name in names or ("zongmen", "jieyi", "mail", "titles", "terms"):
+        getattr(content.config, name).enabled = False
+    return content
+
+
+def old_page(content: Content) -> Content:
+    """新江湖頁（jianghu 包，Joy 2026-11-25「上線」：week7、season21 打開）關掉，回傳同一份內容。
+    測的是舊江湖頁版面（場景卡、本週卡、此地可為一排、行動列底下的師父的話……）的舊測試叫它；同一件玩家該有的事在新頁上的測試在
+    tianxia/features/jianghu/tests/test_jianghu_parity_web.py。"""
+    content.config.jianghu.enabled = False
+    return content
+
+
+def donate_content(profile=None) -> Content:
+    """正式內容、捐軍備打開：week7、season21 的正式設定 2026-11-12 起關掉（Joy「捐軍備功能先拿掉」），
+    測捐軍備、捐銀兩本身的舊測試用它取代 real_content（`from conftest import donate_content as real_content`）。"""
+    content = real_content(profile)
+    content.config.economy.donate = True
+    return content
+
+
 def old_explore(cfg, setter=setattr) -> None:
     """三選一的開關以前關著時連帶關掉的三樣：一類一顆、可重複事件推大勢的五折、觀山石的加成（第 13 批拿掉那個開關）。
     `monkeypatch` 的地方 `old_explore(cfg, monkeypatch.setattr)`。"""
@@ -488,13 +512,26 @@ def game(content):
 # 其他檔有自己的 real／on（設定各不相同），在那些檔裡蓋過這兩個：pytest 用離測試最近的定義。
 
 
-@pytest.fixture
-def real():
-    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+def make_real() -> Content:
+    """fixture real 的建法（純函式）：module 範圍的 fixture 拿不到 function 範圍的 real，要同一份就叫這個。"""
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
+
+
+def make_on(real: Content) -> Content:
+    """fixture on 的建法（純函式）：把傳進來的那一份就地打開、拿掉地盤，回傳同一份。"""
+    real.config.season_one = True
+    real.config.season_days = 2.5
+    real.config.server_max_players = 2
+    return no_territory(real)
+
+
+@pytest.fixture
+def real():
+    """真實內容，開關關著（beta 那一季的樣子）；季自己開、遊歷打完不接戰後事件。"""
+    return make_real()
 
 
 @pytest.fixture
@@ -502,10 +539,7 @@ def on(real):
     """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。豪強分屬兩軍（第一季規則的季一律如此；
     豪強第三方 2026-10-31 拿掉）。不畫地盤（劇本的 territory 拿掉）：以前這一份沒開 haoqiang_allied，地盤（領地爭奪）本來就不開；
     測領地爭奪的用 conquest_kit 或 week7、season21 設定。"""
-    real.config.season_one = True
-    real.config.season_days = 2.5
-    real.config.server_max_players = 2
-    return no_territory(real)
+    return make_on(real)
 
 
 def no_territory(content: Content) -> Content:
@@ -756,7 +790,8 @@ def install_foreshadows(content):
 # 背著九百多條，別人早就閒著（10/31 實測）。所以平行跑時（workerinput 的 workercount）把長的照蛇形（0、1、2、2、1、0…）
 # 分到每一段的最前面：每個 worker 一開始各拿一份差不多長的，其餘照 load 動態發。不要用 --dist worksteal（它的段是
 # 條數 ÷ worker 數，長的又會擠在同一段）。不跑 slow 時這幾條本來就被 -m 濾掉（trylast：排在 -m 濾掉之後），順序沒有差別。
-# 這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+# 這張表是排程用的提示：少寫不會紅，但表上每一筆的檔與測試名都要存在（改名、刪掉、名字寫錯，
+# tests/core/test_test_for.py::test_the_long_tests_listed_first_still_exist_and_rank_in_order 會紅），改名要一起改這張表。
 LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",

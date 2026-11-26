@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender, insights, naming
 from tianxia import fusion  # 共用規則層（合成與揣摩）
+from tianxia.core import guard_base  # 親衛隊長收尾（Joy 2026-11-25）：對方的親衛在一旁的那一句（核心唯讀）
 from tianxia.core import identity_base  # 綁手機才能論武（帳號與客服第 205 批；核心，phone_gate 預設關）
 from tianxia.core import presence
 from tianxia.rules import season_one
@@ -198,6 +199,9 @@ def discuss(ctx, inv, other: Game, item: str, proposed) -> list[str]:
     ctx.peer_brief = social.DISCUSS_BRIEF.format(thing=social.thing_label(made))
     # 配方剛登記：他照查表合出同一門，不取名；這一爐首創了的話，他那一句寫跟你一起首創（FB-243）
     _, their_msgs = forge(other, theirs, item, me.name, (None, ""), fresh=fusion.made_first(msgs))
+    # 親衛隊長收尾（Joy 2026-11-25）：對方帶著的親衛在一旁的那一句（兩邊各看到對方的）
+    msgs = msgs + [g for g in (guard_base.discuss_line(other.state, ctx.content),) if g]
+    their_msgs = their_msgs + [g for g in (guard_base.discuss_line(ctx.state, other.content),) if g]
     pair_actions.pair_tick(ctx, ctx.state.world.discuss_tally, them.name)
     ctx._save_season()
     other._write(f"論武・{me.name}", their_msgs)

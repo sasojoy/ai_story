@@ -238,8 +238,7 @@ class GearScenario(Scenario):
         for who in self.PLAYERS:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
         who = self.PREP  # 籌備中：只證到批量拆解擋（@not_while_preparing）；馬市、買、換上、餵、拆解也按，但沒走到（審查實測，照實記）
         self.choose(who, "act:market")
@@ -704,7 +703,7 @@ class GearScenario(Scenario):
 # 第 1 項是搬進包的檔、第 2 項是舊名的檔，搬的人照實際的檔名改）。抓到的地方：贈丑的本命兵器（他不在身邊，託人送來）
 register_track("gear", GearScenario, (("tianxia/features/gear/signature_arms.py",),
                                       ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "jieyi", "legacy", "looks", "mall", "map", "military",
-                       "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
-                       "tavern", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "map", "military", "outlets", "peers", "seal", "seclusion", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tavern", "territory_acts", "travel", "zhuan", "zongmen"))

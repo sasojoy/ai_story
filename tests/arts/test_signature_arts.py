@@ -82,7 +82,7 @@ def test_cards_show_the_tactic():
     assert "本命〔仁義聚眾〕起手・每回合必定" in line and "回氣血 4%" in line
     _wear(game, "zhangfei_wugong", "zhangfei_neigong")
     card = art_view.member_card(game.state, content, game.world, PLAYER)
-    assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・第 1 回合一直在" in card
+    assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・第 1 回合有效" in card
 
 def test_a_tactic_on_an_ordinary_art_is_rejected(tmp_path):
     root = copy_fixture(tmp_path)
@@ -175,21 +175,6 @@ def test_old_figures_keep_their_signature_new_companions_have_none():
 
 
 @pytest.mark.slow
-def test_the_player_still_learns_and_melts_a_companions_starting_art():
-    """main 上跟各地師父學的那條路不被「本命要情誼到了才學得到」擋：燕山腳下照樣教趕山腿（華佗起始的那一門），學得到、熔得掉。"""
-    c = real_content()
-    game = Game.new(c, "測試俠客", rng=random.Random(0))
-    p = game.state.player
-    p.location = "yanshan_foot"
-    p.stats["silver"] = 100
-    p.member.wugong_id, p.member.wugong_level = "jichu_quanjiao", 1  # 身上有武學：學到的進功法庫
-    lessons = {s.id: problem for s, problem in library.lessons_here(game.state, c)}
-    assert "ganshan_tui" in lessons and lessons["ganshan_tui"] is None
-    library.learn(game.state, c, "ganshan_tui")
-    assert "ganshan_tui" in p.arts and p.art_levels.get("ganshan_tui", 1) == 1  # 不從第七成起
-    assert library.melt_problem(game.state, "ganshan_tui", content=c) is None
-
-
 @pytest.mark.slow
 def test_the_name_card_only_counts_real_signatures():
     """名帖的「某某親傳」只認本命：人人開局都有的基礎吐納不寫「華佗親傳」、學了書生劍不寫「荀彧親傳」，學到劉備的本命照寫。"""

@@ -118,3 +118,21 @@ def test_a_backdrop_click_still_closes_the_sheet():
       return H.S.sheet;
     })();""", S={"sheet": True})
     assert out is False
+
+
+# 不在江湖頁按的選項（俠客頁同伴每天的選擇、教他……都走 choose）：重畫完留在原地，不跳回頂
+# （Joy 2026-11-13「同伴那邊每次選完選項又都給我強制畫面跳到置頂」）；江湖頁照舊回頂（結果在頁首）
+CHOOSE = """return (async () => {
+  const went = [];
+  T.ctx.window.scrollY = 640;
+  T.ctx.window.scrollTo = (...a) => went.push(a);
+  const click = (act, id) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act, id }, classList: { contains: () => false, add() {}, remove() {} } }) } });
+  await click("choose", "guard:pick:0");
+  return went;
+})();"""
+
+
+def test_choosing_outside_the_jianghu_page_stays_where_it_was_scrolled():
+    main = _main(admin=False)
+    assert run(main, CHOOSE, S={"tab": "practice"}, responses={"/api/choose": {"main": main}}) == [[0, 640]]
+    assert run(main, CHOOSE, S={"tab": "jianghu"}, responses={"/api/choose": {"main": main}}) == [[{"top": 0, "behavior": "smooth"}]]

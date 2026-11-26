@@ -44,7 +44,7 @@
           // 戰報頁的「戰記 ›」、江湖史的目錄：打開那一篇（還在寫、沒有的不畫成鈕，這裡不必再擋）
           const id = Number(el.dataset.id);
           S.taleOpen = id;
-          if (S.tab !== "news") { S.tab = "news"; S.unseen = false; render(); } else renderPage();
+          if (S.tab !== "news") { S.tab = "news"; render(); } else renderPage();
           window.scrollTo(0, 0);
           await loadTale(id);
           break;

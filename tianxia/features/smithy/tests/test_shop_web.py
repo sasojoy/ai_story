@@ -385,7 +385,6 @@ def test_tier_one_in_the_bag_makes_tier_two_brewable(content, world):
     assert "手上 0／10" in _cell_of(html, "剛", 3)
 
 
-@pytest.mark.slow  # 提示泡泡的 3.2 秒計時器把 node 留到時間到（同 test_a_blocked_cell_only_says_why）
 def test_a_brew_cell_that_cannot_brew_only_says_why(content, world):
     game = _brewing(content, world, {"gang_2": 1})
     m = server.main_view(game)
@@ -568,7 +567,6 @@ def test_a_furnace_used_today_is_grey_until_tomorrow():
     assert 'aria-label="今天看過了，明日再來。" aria-disabled="true"' in _fire(html)
 
 
-@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_a_furnace_you_cannot_afford_is_grey_and_says_why_when_tapped():
     """錢不夠（序章也是）：小籤照舊寫價錢、灰掉；點那一團火只說整句原因（小籤放不下長原因，同打造頁的灰格），什麼都不送。"""
     _game, m = _fired(silver=10)
@@ -919,8 +917,8 @@ def _qualities(content, world):
 def test_rack_lines_write_each_items_cap_and_slow_wear(content, world):
     html = _rack_page(server.main_view(_qualities(content, world)))
     top, low = _text(_row_of(html, "兵:1")), _text(_row_of(html, "兵:2"))
-    assert "一階上品・淬煉 0/7・鋒利度 100・磨得慢" in top  # 裝備庫就是淬煉的地方：0 次也寫，看得出還能淬幾次
-    assert "淬煉 0/5" in low and "磨得慢" not in low
+    assert "一階上品・淬煉 0／7・鋒利度 100・磨得慢" in top  # 裝備庫就是淬煉的地方：0 次也寫，看得出還能淬幾次
+    assert "淬煉 0／5" in low and "磨得慢" not in low
 
 
 def test_armor_rack_lines_write_each_items_cap_and_slow_wear(content, world):
@@ -938,8 +936,8 @@ def test_armor_rack_lines_write_each_items_cap_and_slow_wear(content, world):
     html = _rack_page(m)
     rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}
     top, low = _text(_row_of(html, "甲:1")), _text(_row_of(html, "甲:2"))
-    assert f"屬柔・一階上品・淬煉 0/7・{rows['甲:1']['wear_word']} 60・磨得慢・少扣 {rows['甲:1']['cut']}" in top
-    assert "淬煉 0/5" in low and "磨得慢" not in low
+    assert f"屬柔・一階上品・淬煉 0／7・{rows['甲:1']['wear_word']} 60・磨得慢・少扣 {rows['甲:1']['cut']}" in top
+    assert "淬煉 0／5" in low and "磨得慢" not in low
 
 
 def test_the_worn_card_draws_this_items_cap_in_pips(content, world):
@@ -947,13 +945,13 @@ def test_the_worn_card_draws_this_items_cap_in_pips(content, world):
     worn = html[html.index('class="shop-worn"'):html.index('class="shop-bigs"')]
     tempers = worn[worn.index('class="tempers"'):]
     assert tempers.count('<i class="on"></i>') == 2 and tempers.count('<i class=""></i>') == 5  # 上品七格
-    assert "淬煉 2/7" in worn and "磨得慢" in worn
+    assert "淬煉 2／7" in worn and "磨得慢" in worn
 
 
 def test_the_forged_card_writes_the_cap_and_slow_wear_from_its_row(content, world):
     m = server.main_view(_qualities(content, world))
     script = "H.S.shopReveal = H.S.next; H.S.shopOpened = true; H.render(); return T.els.app.innerHTML;"
     top = run(m, script, S={"next": {**FORGED, "id": "兵:1", "where": "rack"}})
-    assert '<p class="meta">淬煉 0/7・磨得慢</p>' in top[top.index('class="forge-card'):]
+    assert '<p class="meta">淬煉 0／7・磨得慢</p>' in top[top.index('class="forge-card'):]
     low = run(m, script, S={"next": {**FORGED, "id": "兵:2", "where": "rack"}})
-    assert '<p class="meta">淬煉 0/5</p>' in low and "磨得慢" not in low[low.index('class="forge-card'):]
+    assert '<p class="meta">淬煉 0／5</p>' in low and "磨得慢" not in low[low.index('class="forge-card'):]

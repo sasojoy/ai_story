@@ -13,17 +13,20 @@
 刻意不用 tianxia.database.open_database 打開來源：它會照 MIGRATIONS 升級結構，不能替線上那個檔升級。
 
 手動：.venv/Scripts/python.exe scripts/backup_db.py --dest <資料夾>          （資料庫照 TIANXIA_DB，沒設是 saves/tianxia.db）
-每天：.venv/Scripts/python.exe scripts/backup_db.py --dest <本機資料夾> --tag daily --prune
+每天：.venv/Scripts/python.exe scripts/backup_db.py --dest <本機資料夾> --tag daily --prune --drill --status .local/backup_status.json
+（--drill 另開一份真的讀一次；--status 給每日報表 scripts/daily_report.py 讀；裝排程看 scripts/daily_ops/README.md）
 （現在備份放本機資料夾；之後要上雲，--dest 改成雲端硬碟的同步資料夾就好，腳本不用動）
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import shutil
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -93,7 +96,11 @@ def backup(src: Path, dest_dir: Path, *, tag: str, now: dt.datetime) -> Path:
 # identity（帳號與客服第 201 批；設計 4.1、第七節）：主檔旁邊的小檔 <主檔名去掉副檔名>-<side>.sqlite 跟主檔同一個時間戳備份與還原。
 # 不存在就跳過；驗只看 integrity_check（沒有結構版本）；壞了改 .bad、印警告，主檔照留
 # terms（第 206 批）：條款旁檔 <db>-terms.sqlite 從 Joy 的條款包就有，206 起註冊也寫它
-SIDE_FILES = ("identity", "support", "terms")
+# yiwen（異聞第 247 批）：異聞的旁檔 <db>-yiwen.sqlite（開關開著、這一季有章時，第一次有人撞見、發掘者說了第一步才建〔第 251 批〕；沒人撞見過就沒有這個檔；開關關著不建）
+# 每日備份（2026-11-25）：其餘的小檔也帶上，丟了雖然遊戲照玩，但玩家看得到的東西會不見：
+# mail、mail-archive（帖友書信）、talk、talk-archive（跟人物的往來紀錄）、archive（上上季的傳聞與決戰回合，log_archive）、
+# push（手機通知的訂閱）、tale（寫好的戰記）。narration（改寫的旁白）不帶：丟了背景再寫一次。
+SIDE_FILES = ("identity", "support", "terms", "yiwen", "mail", "mail-archive", "talk", "talk-archive", "archive", "push", "tale")
 
 
 def side_of(db: Path, side: str) -> Path:
@@ -284,6 +291,50 @@ def prune(dest_dir: Path, now: dt.datetime, *, keep_daily: int = KEEP_DAILY, kee
     return removed
 
 
+def drill(final: Path) -> int:
+    """還原演練（每日備份 2026-11-25）：把這份備份與旁檔複製到暫存資料夾，用這版程式的 Database 真的打開一次（照 MIGRATIONS 升級的是複本），
+    每個角色的存檔都要讀得成 JSON；回讀得回來的角色數。暫存的複本做完就刪，正式的備份不動。讀不回來丟 BackupError。"""
+    from tianxia.database import Database  # 只在演練時才要：一般備份不載入遊戲的資料庫層
+
+    final = Path(final)
+    with tempfile.TemporaryDirectory(prefix="tianxia-drill-") as tmp:
+        copy = Path(tmp) / final.name
+        shutil.copyfile(final, copy)
+        for side in SIDE_FILES:
+            if side_of(final, side).is_file():
+                shutil.copyfile(side_of(final, side), side_of(copy, side))
+                verify_side(side_of(copy, side))
+        db = Database(copy)
+        try:
+            with db.snapshot() as conn:
+                rows = conn.execute("SELECT key, data FROM characters").fetchall()
+            for row in rows:
+                try:
+                    json.loads(row["data"])
+                except (TypeError, ValueError) as e:
+                    raise BackupError(f"還原演練：有一個角色的存檔讀不回來（{e}）：{final}") from e
+        except sqlite3.Error as e:
+            raise BackupError(f"還原演練：這版程式打不開這份備份（{e}）：{final}") from e
+        finally:
+            db.close()
+    return len(rows)
+
+
+def write_status(path: Path, *, ok: bool, now: dt.datetime, file: Path | None = None, error: str = "",
+                 characters: int | None = None) -> None:
+    """每日報表讀的那一筆（scripts/daily_report.py）：這次備份成功沒有、哪一份、多大。寫不進去只印警告，不改備份的結果。"""
+    sizes = 0
+    if file is not None and file.is_file():
+        sizes = file.stat().st_size + sum(side_of(file, s).stat().st_size for s in SIDE_FILES if side_of(file, s).is_file())
+    data = {"time": now.isoformat(timespec="seconds"), "ok": ok, "file": str(file) if file else "", "bytes": sizes,
+            "characters": characters, "error": error}
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError as e:
+        print(f"備份的狀態寫不進去（備份本身照樣算數）：{path}（{e}）", file=sys.stderr)
+
+
 def describe(report: dict[str, int]) -> str:
     names = {"accounts": "帳號", "characters": "角色", "seasons": "季", "chronicle": "江湖史"}
     parts = [f"結構第 {report['version']} 版"] + [f"{names[t]} {report[t]}" for t in COUNTED if t in report]
@@ -296,16 +347,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dest", required=True, help="備份放哪個資料夾（本機的資料夾；之後要上雲就填雲端硬碟的同步資料夾）")
     parser.add_argument("--tag", choices=TAGS, default="manual", help="manual（預設，永遠留著）或 daily（照保留規則刪舊）")
     parser.add_argument("--prune", action="store_true", help="做完之後照保留規則刪掉舊的每日備份（只能搭 --tag daily）")
+    parser.add_argument("--drill", action="store_true", help="做完之後把備份複製到暫存資料夾真的打開一次，確定讀得回來（每日備份用）")
+    parser.add_argument("--status", default=None, help="把這次成功沒有寫成一個小 JSON（每日報表 scripts/daily_report.py 讀；例 .local/backup_status.json）")
     args = parser.parse_args(argv)
     if args.prune and args.tag != "daily":
         parser.error("--prune 只能搭 --tag daily：手動備份永遠留著")
     src = Path(args.db) if args.db else default_path()
+    now = dt.datetime.now()
     try:
-        out = backup(src, Path(args.dest), tag=args.tag, now=dt.datetime.now())
+        out = backup(src, Path(args.dest), tag=args.tag, now=now)
     except BackupError as e:
         print(f"備份失敗：{e}", file=sys.stderr)
+        if args.status:
+            write_status(Path(args.status), ok=False, now=now, error=str(e))
         return 1
     print(f"已備份：{out}（{describe(verify(out))}）")
+    characters = None
+    if args.drill:
+        try:
+            characters = drill(out)
+        except BackupError as e:
+            print(f"備份失敗：{e}", file=sys.stderr)
+            if args.status:
+                write_status(Path(args.status), ok=False, now=now, file=out, error=str(e))
+            return 1
+        print(f"還原演練：另開一份讀得回來，角色 {characters} 個")
+    if args.status:
+        write_status(Path(args.status), ok=True, now=now, file=out, characters=characters)
     for side in SIDE_FILES:  # identity：做成了的旁檔一個一行
         if side_of(out, side).is_file():
             print(f"已備份旁檔：{side_of(out, side)}")

@@ -1,6 +1,8 @@
 // Replay DOM snapshots against one candidate's stylesheets: no game server, no page scripts, six windows.
-// usage: node replay.mjs <label> <origin> <outDir> <chromePort> <pages.json> [--no-freeze] [--styles-only]
+// usage: node replay.mjs <label> <origin> <outDir> <chromePort> <pages.json> [--no-freeze] [--styles-only] [--recheck <recheck.json> <times>]
 // env: TIANXIA_WEBQA_CHROME. The output has the shape of a walk (report.json, style/, shots/), so compare.py reads it the same way.
+// --recheck (batch 237): only the [[id, window], ...] listed, each page loaded again <times> times and walked through the windows
+// in the same order as the first pass; the listed windows' pictures go to recheck/<id>__<window>__<n>.png, the list of them to recheck.json.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -8,12 +10,15 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { freeze, landed, ALL_VIEWS, SHOT_VIEWS, STABLE_SIG, STYLE_DUMP, LAYOUT, CSS_RULES } from "./snippets.mjs";
 
-const args = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const at = argv.indexOf("--recheck");
+const RECHECK = at >= 0 ? { file: argv[at + 1], times: Number(argv[at + 2]) } : null;
+const args = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 3)] : argv;
 const flags = new Set(args.filter((a) => a.startsWith("--")));
 const [label, ORIGIN, OUT, CHROME_PORT, PAGES] = args.filter((a) => !a.startsWith("--"));
 const FROZEN = !flags.has("--no-freeze");
 const SHOOT = !flags.has("--styles-only");
-const SHOTS = join(OUT, "shots"), STY = join(OUT, "style");
+const SHOTS = join(OUT, RECHECK ? "recheck" : "shots"), STY = join(OUT, "style");
 for (const d of [SHOTS, STY]) mkdirSync(d, { recursive: true });
 const PROFILE = join(OUT, "chrome-profile");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -80,55 +85,83 @@ async function stable(width) {
   }
   return false;
 }
+async function load(id, url) {
+  await cdp("Page.navigate", { url });
+  for (let i = 0; i < 100; i++) {
+    await sleep(50);
+    if (await ev(`document.readyState === "complete" && location.pathname.endsWith(${JSON.stringify(id)})`).catch(() => false)) break;
+  }
+  await ev(`document.fonts ? document.fonts.ready.then(() => 1) : 1`).catch(() => 0);
+  // Images decode off the main thread, the lazy portraits load late: a shot right after load shows them at a lower quality, on one side only (014_bt_muster, 936 px at 24 levels, one run in four).
+  // A loading="lazy" image off the screen never loads and its decode() never answers (the mall pages), so the wait has a ceiling.
+  await ev(`Promise.race([Promise.all([...document.images].map((i) => i.decode().catch(() => 0))), new Promise((r) => setTimeout(r, 1500))]).then(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(1))); setTimeout(() => r(1), 400); }))`).catch(() => 0);
+}
+async function capture() {
+  // The same picture twice in a row: a background image still being decoded or rescaled shows up here, not between the two sides (y_fig_log, 16 px at 20 levels, one shot in 2,706).
+  let buf, seen = null;
+  for (let i = 0; i < 5; i++) {
+    const r = await cdp("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
+    buf = Buffer.from(r.data, "base64");
+    const h = sha(buf);
+    if (h === seen) break;
+    seen = h;
+    await sleep(50);
+  }
+  return buf;
+}
+// One page through the windows, the first pass and every re-render alike: the same waits, the same readings, in the same order.
+async function visit(id, url, keep) {
+  await load(id, url);
+  const facts = { layout: {}, shots: [], sty: {}, vol: {}, unstable: false };
+  const views = SHOOT ? ALL_VIEWS : ALL_VIEWS.filter((v) => v[0] !== "375-dark");
+  for (const v of views) {
+    await setView(v, 1);
+    if (!(await stable(v[1]))) facts.unstable = true;
+    facts.layout[v[0]] = await ev(LAYOUT);
+    const d = await ev(STYLE_DUMP);
+    facts.sty[v[0]] = sha(d.els.map((r) => r.join(" ")).join("\n"));
+    writeFileSync(join(STY, `${id}__${v[0]}.json.gz`), gzipSync(JSON.stringify(d)));
+    if (SHOOT) keep(v[0], await capture(), facts);
+  }
+  await setView(SHOT_VIEWS[0], 1);
+  return facts;
+}
 let fatal = null;
 try {
   await connect();
   for (const d of ["Page", "Runtime"]) await cdp(`${d}.enable`);
   await cdp("Fetch.enable", { patterns: [{ urlPattern: "*fonts.googleapis.com*" }, { urlPattern: "*fonts.gstatic.com*" }] });
   await cdp("Page.addScriptToEvaluateOnNewDocument", { source: freeze({ mask: FROZEN, still: FROZEN }) });
-  const pages = JSON.parse(readFileSync(PAGES, "utf-8"));
   await setView(SHOT_VIEWS[0], 1);
-  for (const id of pages) {
-    sceneNow = id;
-    await cdp("Page.navigate", { url: `${ORIGIN}/__page/${id}` });
-    for (let i = 0; i < 100; i++) {
-      await sleep(50);
-      if (await ev(`document.readyState === "complete" && location.pathname.endsWith(${JSON.stringify(id)})`).catch(() => false)) break;
+  if (RECHECK) {
+    const want = new Map();
+    for (const [id, view] of JSON.parse(readFileSync(RECHECK.file, "utf-8"))) want.set(id, [...(want.get(id) || []), view]);
+    const made = {};
+    for (const [id, views] of want) {
+      sceneNow = id;
+      for (let n = 0; n < RECHECK.times; n++) {
+        await visit(id, `${ORIGIN}/__page/${id}?r=${n}`, (view, buf) => {
+          if (!views.includes(view)) return;
+          const f = `${id}__${view}.png`, g = `${id}__${view}__${n}.png`;
+          writeFileSync(join(SHOTS, g), buf);
+          (made[f] = made[f] || []).push(g);
+        });
+      }
     }
-    await ev(`document.fonts ? document.fonts.ready.then(() => 1) : 1`).catch(() => 0);
-    // Images decode off the main thread, the lazy portraits load late: a shot right after load shows them at a lower quality, on one side only (014_bt_muster, 936 px at 24 levels, one run in four).
-    // A loading="lazy" image off the screen never loads and its decode() never answers (the mall pages), so the wait has a ceiling.
-    await ev(`Promise.race([Promise.all([...document.images].map((i) => i.decode().catch(() => 0))), new Promise((r) => setTimeout(r, 1500))]).then(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(1))); setTimeout(() => r(1), 400); }))`).catch(() => 0);
-    const facts = { layout: {}, shots: [], sty: {}, vol: {}, unstable: false };
-    const views = SHOOT ? ALL_VIEWS : ALL_VIEWS.filter((v) => v[0] !== "375-dark");
-    for (const v of views) {
-      await setView(v, 1);
-      if (!(await stable(v[1]))) facts.unstable = true;
-      facts.layout[v[0]] = await ev(LAYOUT);
-      const d = await ev(STYLE_DUMP);
-      facts.sty[v[0]] = sha(d.els.map((r) => r.join(" ")).join("\n"));
-      writeFileSync(join(STY, `${id}__${v[0]}.json.gz`), gzipSync(JSON.stringify(d)));
-      if (SHOOT) {
-        // The same picture twice in a row: a background image still being decoded or rescaled shows up here, not between the two sides (y_fig_log, 16 px at 20 levels, one shot in 2,706).
-        let buf, seen = null;
-        for (let i = 0; i < 5; i++) {
-          const r = await cdp("Page.captureScreenshot", { format: "png", optimizeForSpeed: true });
-          buf = Buffer.from(r.data, "base64");
-          const h = sha(buf);
-          if (h === seen) break;
-          seen = h;
-          await sleep(50);
-        }
-        const f = `${id}__${v[0]}.png`;
+    writeFileSync(join(OUT, "recheck.json"), JSON.stringify(made));
+  } else {
+    const pages = JSON.parse(readFileSync(PAGES, "utf-8"));
+    for (const id of pages) {
+      sceneNow = id;
+      report.scenes[id] = await visit(id, `${ORIGIN}/__page/${id}`, (view, buf, facts) => {
+        const f = `${id}__${view}.png`;
         report.hashes[f] = sha(buf);
         writeFileSync(join(SHOTS, f), buf);
         facts.shots.push(f);
-      }
+      });
     }
-    await setView(SHOT_VIEWS[0], 1);
-    report.scenes[id] = facts;
+    writeFileSync(join(OUT, "cssrules.json"), JSON.stringify(await ev(CSS_RULES)));
   }
-  writeFileSync(join(OUT, "cssrules.json"), JSON.stringify(await ev(CSS_RULES)));
 } catch (e) {
   fatal = String(e && e.stack || e);
   report.fatal = `${sceneNow}: ${fatal}`;

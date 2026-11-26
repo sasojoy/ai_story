@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from tianxia.core import identity_base
 from tianxia.database import default_path, open_database
 
-from . import FEATURE, accounts_view, lookup, rules, staff, store
+from . import FEATURE, accounts_view, lookup, purge, rules, staff, store
 from .store import Refused
 
 # 推播的內文（標題照殼的 NOTICE_TITLE）；notify 包的「客服」種類關掉就不送
@@ -166,12 +166,19 @@ def _player_view(sidecar: store.SupportStore, t: dict, bot_id: int | None) -> di
                           human=sidecar.has_human(tid))
 
 
+def _limits(shell) -> dict:
+    """/mine 帶的上限（第 226 批）：網頁照它寫提示、挑圖，不再寫死。"""
+    cfg = shell.CONTENT.config.support
+    return {"body_max": cfg.body_max, "files_max": cfg.files_max, "file_bytes_max": cfg.file_bytes_max,
+            "open_max": cfg.open_max, "daily_max": cfg.daily_max}
+
+
 def _mine(shell, who: accounts_view.Who, sidecar: store.SupportStore | None) -> dict:
     if sidecar is None:
-        return {"tickets": [], "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
+        return {"tickets": [], "categories": rules.CATEGORIES, **_limits(shell)}
     bot_id = _bot_id(shell)
     tickets = [_player_view(sidecar, t, bot_id) for t in sidecar.mine(who.id, who.created)]
-    return {"tickets": tickets, "categories": rules.CATEGORIES, "body_max": shell.CONTENT.config.support.body_max}
+    return {"tickets": tickets, "categories": rules.CATEGORIES, **_limits(shell)}
 
 
 def _staff_ticket(t: dict, replies: list[dict], files: list[dict], *, bot_id: int | None = None,
@@ -387,6 +394,11 @@ def _human(shell, request: Request, body: dict) -> dict:
     return _player_view(sidecar, t, _bot_id(shell))
 
 
+def start_purge(shell):
+    """到期刪除的看守（purge.py）：伺服器啟動時經 Feature.threads 叫一次。時鐘是殼的 time.time。"""
+    return purge.start(default_path, shell.time.time, shell.CONTENT.config.support.purge_days)
+
+
 def _sweep(shell, request: Request) -> dict:
     """自動結單（第 216 批；設計 5.4）：客服（cookie 或客服官的 token）叫；玩家 404 同一句。旁檔不在回空的、不建檔；不推播。回 {closed: [單號]}。"""
     _staff(shell, request)
@@ -394,6 +406,7 @@ def _sweep(shell, request: Request) -> dict:
     if sidecar is None:
         return {"closed": []}
     days = shell.CONTENT.config.support.auto_close_days
+    purge.purge_once(default_path(), shell.time.time(), shell.CONTENT.config.support.purge_days)  # 順手刪到期的單（看守之外多一道；回的字照舊）
     return {"closed": sidecar.sweep(shell.time.time(), days * rules.DAY_SECONDS, rules.AUTO_CLOSED.format(days=days))}
 
 
@@ -402,6 +415,23 @@ def _sweep(shell, request: Request) -> dict:
 def _mb(n: int) -> str:
     """位元組 → 拒絕那一句的 MB（3,000,000 → 「3」）。"""
     return f"{n / 1_000_000:g}"
+
+
+def _upload_check(shell, request: Request, text_id: str) -> None:
+    """讀本體之前的便宜預檢（第 228 批）：單號 → 登入 → 旁檔與單在、是自己的 → 沒結 → 張數沒滿；回的句子與狀態碼跟 _upload、add_file
+    一樣（別人的單、不存在的單、旁檔不在、單號不是數字 404 同一句；files_max 0 走「滿了」那一句）。只讀、不建旁檔、不建資料夾。
+    過了才讀本體；_upload 與 add_file 交易裡的檢查原樣留著（兩個請求同時來時靠它）。"""
+    tid = _tid(text_id)
+    who = _me(shell, _gate(shell, request))
+    files_max = shell.CONTENT.config.support.files_max
+    sidecar = store.open_store(sidecar_path(), create=False)
+    t = sidecar.ticket(tid) if sidecar is not None else None
+    if t is None or not rules.owns(t, who.id, who.created):
+        raise HTTPException(404, rules.NOT_FOUND)
+    if t["status"] == rules.CLOSED:
+        raise shell.GameError(rules.CLOSED_ALREADY)
+    if len(sidecar.files(tid)) >= files_max:
+        raise shell.GameError(rules.FILES_FULL.format(n=files_max))
 
 
 def _upload(shell, request: Request, text_id: str, raw: bytes) -> dict:
@@ -526,13 +556,15 @@ def router(shell) -> APIRouter:
     @r.post("/api/support/file")
     async def api_support_file(request: Request):
         """截圖（第 215 批）：內文就是圖的位元組（不解 JSON）。gate → 認登入（只查記憶體的 SESSIONS，在讀內文之前）→ Content-Length 說超過的
-        提早拒（說不超過的不信）→ 串流累計、超過 file_bytes_max 立刻停止讀、拒絕 → 同步的本體丟執行緒池。"""
+        提早拒（說不超過的不信）→ 預檢（第 228 批：單在、是自己的、沒結、沒滿，sqlite 丟執行緒池；不過就不讀本體）→ 串流累計、
+        超過 file_bytes_max 立刻停止讀、拒絕 → 同步的本體丟執行緒池。"""
         _gate_off(shell)
         shell._account(request)
         cap = shell.CONTENT.config.support.file_bytes_max
         told = request.headers.get("content-length", "")
         if told.isascii() and told.isdigit() and int(told) > cap:
             raise shell.GameError(rules.FILE_TOO_BIG.format(mb=_mb(cap)))
+        await run_in_threadpool(_upload_check, shell, request, request.query_params.get("id", ""))
         raw = bytearray()
         async for chunk in request.stream():
             raw += chunk

@@ -1,0 +1,205 @@
+"""江湖錄的網頁（web/codex.js）：假瀏覽器跑整支 app.js（test_prologue_web 那一套）。俠客頁多一顆「江湖錄」分頁（開關關著沒有）；
+奇遇列表、點進去的下一步與走過的幕、重讀一幕、圖鑑四類；紅點三層（俠客分頁、江湖錄分頁、那一段那一格）。"""
+from __future__ import annotations
+
+import json
+
+import pytest
+from jianfa_kit import jianfa_game, ready
+from test_codex import FORD, _start
+from test_prologue_web import DRIVER as PROLOGUE_DRIVER
+
+import server
+import webharness
+from tianxia.features.codex import view
+
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
+NAMES_START = 'wholeApp(["S", '
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "codexHtml", "codexTrackHtml", "codexWhyHtml", "wkTugHtml", "dotAt", "pagePractice", ')
+
+
+def run(m, script, S=None):
+    return webharness.run(DRIVER, {"m": m, "script": script, "S": S or {}, "menxia": None, "stored": {}, "responses": {}})
+
+
+@pytest.fixture
+def walked():
+    game = ready(jianfa_game(), side="guan", loc=FORD)
+    game.content.config.codex.enabled = True
+    game.sync(game.now)
+    _start(game)
+    game.choose("choice:0")
+    return game
+
+
+def test_the_tab_is_there_only_with_the_switch(walked):
+    m = server.main_view(walked)
+    assert m["codex"]["q"] is True
+    out = run(m, "return [H.dotAt('practice'), H.dotAt('practice', 'codex')];")
+    assert out == [True, True]
+    m.pop("codex")
+    out = run(m, "return H.dotAt('practice', 'codex');")
+    assert out is False
+
+
+def test_the_list_the_quest_and_the_reread(walked):
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15})
+    assert 'data-act="cx-open"' in html and "渡口帳" in html and 'class="dot"' in html and "cx-ghost" in html
+    key = next(q["key"] for q in page["quests"]["on"] if q["line"] == "yesanniang")
+    html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxOpen": key, "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15})
+    assert "下一步" in html and 'data-act="cx-read"' in html and "第一幕" in html and "結局" in html
+    text = json.loads(json.dumps(view.scene(walked, 0)))
+    html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxRead": "i=0", "cxText": text})
+    assert "cx-pick" in html and text["pick"] in html and text["after"][0] in html
+
+
+def test_the_codex_book_four_kinds(walked):
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    base = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15}
+    for cat, word in (("people", "位見過"), ("things", "寶物"), ("gods", "種神品"), ("ends", "種結局")):
+        html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
+        assert word in html and 'data-act="cx-cat"' in html, cat
+        assert "？" not in html, cat  # 沒解鎖的格不放「？」（Joy 11/22）：暈墨加兩個字
+
+
+def test_each_book_page_shows_the_title_it_gives(walked):
+    """收滿一頁給一個頭銜：數字那一行右邊一顆印，還沒拿到寫「收滿得」、拿到了寫「已得」；稱號關著不畫。"""
+    walked.content.config.titles.enabled = True
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    base = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15, "main": m}
+    for cat, name in (("people", "閱盡群英"), ("things", "百寶盈囊"), ("gods", "萬象在胸"), ("ends", "看盡悲歡")):
+        html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": cat})
+        assert 'class="cx-ttl"' in html and name in html and "收滿得" in html, cat
+    for row in m["titles"]["rows"]:
+        if row["id"] == "codex_people":
+            row["mine"] = True
+    html = run(m, "return H.codexHtml(m);", S={**base, "cxCat": "people"})
+    assert 'class="cx-ttl got"' in html and "已得" in html
+    m.pop("titles")
+    html = run(m, "return H.codexHtml(m);", S={**base, "main": m, "cxCat": "people"})
+    assert "cx-ttl" not in html
+
+
+def test_the_tracker_line_and_its_drawer(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    assert m["codex"]["track"]
+    parts = [{"key": "orders", "name": "軍令", "seal": "令", "n": 1, "html": "<section>令</section>", "line": "守住長社", "now": 1, "i": 0}]
+    html = run(m, "return H.codexTrackHtml(m, parts);".replace("parts", json.dumps(parts)))
+    n = len(m["codex"]["track"]) + 1  # 奇事、主線＋那一道軍令
+    assert 'class="cx-track"' in html and f">{n}</em>" in html and "class=\"new\"" in html and "cx-tk-sheet" not in html
+    html = run(m, "return H.codexTrackHtml(m, parts);".replace("parts", json.dumps(parts)), S={"cxTk": True})
+    assert "cx-tk-sheet" in html and html.count('class="cx-tk-go"') == n and "守住長社" in html and 'data-duty="1"' in html
+    m["codex"].pop("track")
+    assert run(m, "return H.codexTrackHtml(m, []);") == ""
+
+
+def test_things_still_waiting_fold_under_one_line_and_have_no_go(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    active = [t for t in m["codex"]["track"] if not t["wait"]]
+    m["codex"]["track"].append({"key": "1:ch_x", "line": "ch_x", "kind": "主線", "title": "長社火攻", "what": "這一回做完了，等「長社火攻」",
+                                "until": "第 2 週・週三 20:00", "wait": True, "ready": True, "loc": None})
+    parts = [{"key": "plan", "name": "盤算", "seal": "謀", "n": "", "html": "<section>謀</section>", "line": "波才要圍長社", "now": 0, "i": 0}]
+    html = run(m, f"return H.codexTrackHtml(m, {json.dumps(parts)});", S={"cxTk": True})
+    assert f">{len(active)}</em>" in html  # 在等的不算進印上的數字
+    assert html.count('class="cx-tk-go"') == len(active) and "在等的 2 件" in html and "長社火攻" not in html
+    html = run(m, f"return H.codexTrackHtml(m, {json.dumps(parts)});", S={"cxTk": True, "cxTkWait": True})
+    waits = html.split('class="cx-tk-waits"')[1]
+    assert "長社火攻" in waits and "第 2 週・週三 20:00" in waits and "波才要圍長社" in waits and "cx-tk-go" not in waits
+
+
+def test_the_page_top_keeps_only_the_tracker_line(walked):
+    """舊江湖頁的頂上（old_page）；新頁換成眼下一張卡，進行中的事收在「另有 N 件」裡（jianghu 包 test_jianghu_parity_web.py）。"""
+    from conftest import old_page  # noqa: PLC0415
+
+    old_page(walked.content)
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    if not m.get("week_card"):
+        pytest.skip("這一局沒有本週卡")
+    key = m["week_card"]["label"] + m["week_card"]["when"]
+    fresh = run(m, "return H.pageJianghu();")
+    assert 'class="cx-track"' in fresh and 'class="card wk-box' in fresh  # 這一週還沒看過：本週卡露一次
+    seen = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
+    assert 'class="cx-track"' in seen and "wk-box" not in seen and "jh-hints" not in seen and "ch-card" not in seen
+    assert ('class="cx-tug"' in seen) == bool(m["week_card"].get("sides"))  # 收起來還有一條細的兩軍態勢
+    assert 'class="cx-tug"' not in fresh  # 本週卡露著就不重複
+    if m["week_card"].get("sides"):
+        sd = m["week_card"]["sides"]
+        assert f"官 {sd['guan']}" in seen and f"{sd['huang']} 黃" in seen  # 兩頭寫數字
+    m["codex"].pop("track")  # 「進行中」關著：照舊
+    old = run(m, "return H.pageJianghu();", S={"cxTkMemo": {"seen": [], "week": key}})
+    assert "cx-track" not in old and "cx-tug" not in old and "wk-box" in old
+
+
+def test_the_sides_tug_is_still_one_tap_away_when_the_week_card_folds(walked):
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    if not (m.get("week_card") and m["week_card"].get("sides")):
+        pytest.skip("這一局沒有兩軍態勢")
+    tug = run(m, "return H.wkTugHtml(m, m.week_card);")
+    assert tug
+    sheet = run(m, "return H.codexWhyHtml(m);", S={"cxWhy": True})
+    assert tug in sheet  # 本週卡收起來了，清單最底下那一顆拉起來的那一層最上面就是兩軍態勢
+
+
+def test_scenes_walked_before_the_book_opened_show_their_names(walked):
+    b = walked.state.player.codex
+    b.scenes.clear()  # 當作開關打開之前就走過第一幕
+    q = next(x for x in view.quests(walked)["on"] if x["line"] == "yesanniang")
+    first = q["scenes"][0]
+    assert first["i"] is None and first["title"] == walked.content.events["yesanniang_1"].title and first["lost"] == view.LOST
+    page = json.loads(json.dumps(view.page(walked)))
+    m = server.main_view(walked)
+    html = run(m, "return H.codexHtml(m);", S={"heroTab": "codex", "cx": page, "cxOpen": q["key"], "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15})
+    assert "cx-act lost" in html and view.LOST in html and first["title"] in html
+    assert "？" not in html and html.count("未至") == 1  # 只有還沒到的那一幕寫「未至」（不放「？」，Joy 11/22）
+
+
+def test_quest_rows_are_not_listed_twice(walked):
+    from conftest import old_page  # noqa: PLC0415
+
+    old_page(walked.content)  # 舊江湖頁；新頁上的同一件事在 jianghu 包 test_jianghu_parity_web.py
+    walked.content.config.codex.tracker = True
+    m = server.main_view(walked)
+    m["week_card"] = None
+    m["options"] = list(m["options"]) + [{"id": "story:yesanniang", "label": "渡口帳（未了之事：到北邙山）", "enabled": False, "note": ""}]
+    on = run(m, "return H.pageJianghu();")
+    m["codex"].pop("track")
+    off = run(m, "return H.pageJianghu();")
+    assert "quest-row" not in on and "quest-row" in off
+
+
+def test_opening_a_things_group_clears_only_that_group_and_redraws_the_cells(walked):
+    """Joy 2026-11-14「素材的紅點怎麼消掉」：攤開器物只滅眼前那一組的格，滅完整本重拿（格上的點跟外層一起滅），別組的點留著。"""
+    m = server.main_view(walked)
+    page = json.loads(json.dumps(view.page(walked)))
+    here, other = page["things"]["groups"][-1], page["things"]["groups"][0]
+    here["cells"][0].update(got=True, dot=True, name="柳絲綿")
+    other["cells"][0].update(got=True, dot=True, name="別的")
+    k_here, k_other = f"t:{here['cells'][0]['key']}", f"t:{other['cells'][0]['key']}"
+    m["codex"].update(fresh=[k_here, k_other], t=True)
+    S = {"heroTab": "codex", "cx": page, "cxSeg": "tj", "cxCat": "things", "cxThing": here["id"],
+         "cxSig": json.dumps(m["codex"]["fresh"]), "cxAt": 9e15, "main": m}
+    after = json.loads(json.dumps(m))
+    after["codex"].update(fresh=[k_other])
+    # 攤開時排的 1200 ms（cxSeen）在 harness 算長計時器、不會等：畫這一次的當下把頁面那一份（T.ctx）的長延遲縮成 0（畫完就換回來，別的計時器照舊），
+    # 再一輪一輪讓出去，看到 seen 之後又重抓 /api/codex 就停（最多 50 輪），不真等四百毫秒四次
+    script = ("return (async () => { const st = T.ctx.setTimeout;"
+              " T.ctx.setTimeout = (f, ms, ...a) => st(f, Number(ms) >= 1000 ? 0 : ms, ...a);"
+              " try { H.codexHtml(m); } finally { T.ctx.setTimeout = st; }"
+              " const done = () => { const u = T.calls.map((c) => c[0]); const i = u.indexOf('/api/codex/seen');"
+              " return i >= 0 && u.indexOf('/api/codex', i + 1) > i; };"
+              " for (let i = 0; i < 50 && !done(); i++) await new Promise((r) => st(r, 0));"
+              " return T.calls; })();")
+    out = webharness.run(DRIVER, {"m": m, "script": script, "S": S, "menxia": None, "stored": {},
+                                  "responses": {"/api/codex/seen": {"main": after}}})
+    seen = [c for c in out if c[0] == "/api/codex/seen"]
+    assert seen and all(c[1] == {"keys": [k_here]} for c in seen), out
+    urls = [c[0] for c in out]
+    assert "/api/codex" in urls[urls.index("/api/codex/seen") + 1:], urls

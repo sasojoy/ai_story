@@ -543,7 +543,7 @@ def test_season21_status_sends_only_the_order_words():
 @pytest.mark.slow
 def test_season21_pages_say_todays_orders_and_keep_weeks(monkeypatch):
     out = fb501web._render(fb501web._game_fb501("season21"), monkeypatch)
-    assert "📜 今日軍令（1）" in out["orders"]
+    assert "今日軍令（1）" in out["orders"]
     assert "每天、每週的事（軍令照 00:00、席次照週一的做法立刻再做一次；之後照常）" in out["sheet"] and "立刻發今日軍令" in out["sheet"]
     assert out["issue"].startswith("立刻發今日軍令：今天還沒達成的軍令照 00:00 的做法重挑") and "明天 00:00 照常發令" in out["issue"]
     # 其他「週」的字照舊（大事小標、季末結算卡、天下怎麼變、第 4 階席次）

@@ -424,8 +424,11 @@
   }
 
   // ⚙（data-act="sheet"）的紅點照 S.main.identity.phone_missing：該有沒有就補、不該有有就拿掉
+  // 11/12 起走殼的紅點表（web/shell.js registerDot）：⚙ 一層、設定抽屜裡「帳號綁定」那一摺一層（idp-dot）
+  if (typeof registerDot === "function") registerDot({ id: "identity", at: "sheet", on: () => !!(S.main && S.main.identity && S.main.identity.phone_missing) });
   function identitySyncDot() {
-    const info = S.main && S.main.identity;
+    if (typeof paintDots === "function") { paintDots(); return; }
+    const info = S.main && S.main.identity; // 沒有殼的紅點表（只載這一支的測試）：照舊自己補 ⚙ 那一顆
     if (!info || typeof document === "undefined") return;
     for (const b of document.querySelectorAll('[data-act="sheet"]')) {
       const dot = b.querySelector(".idp-dot");

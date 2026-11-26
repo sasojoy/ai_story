@@ -135,7 +135,7 @@
     const lines = [];
     if (it.t === "arts") {
       const j = it.j, a = it.a;
-      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${a.affinity ? `・收${esc(a.affinity)}` : ""}${scoreText(a)}`);
+      lines.push(`第 ${a.level} 成${it.power !== null ? `，威力 ${it.power}` : ""}${!a.affinity ? "" : a.affinity === "兼容並蓄" ? "・什麼意境都能裝" : `・能裝${esc(a.affinity)}的意境`}${scoreText(a)}`);
       if ((a.slots || []).length) lines.push(`意境槽 ${a.slots.length} 格：${a.slots.map((t) => (t ? `「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}` : "空")).join("、")}`);
       if ((j.traits || []).length) lines.push(`功效：${j.traits.map((t) => `〔${esc(t.name)}〕${t.layers > 1 ? `${t.layers} 層` : ""}`).join("")}`);
       if (j.special) lines.push(`特別功效〔${esc(j.special)}〕`);
@@ -174,7 +174,7 @@
         // 序章指路：卡裡的鈕收進抽屜了，光點自己也帶那幾個鍵（練成看那一欄按不按得下去；applyGlow 只亮這一步的）
         label: `${a.name}${move ? `〔${move}〕` : ""}`, name: a.name, move, lit: true, glow: [...["switch", "cultivate", "melt", "slot"].filter((k) => (a.glow || []).includes(k)), ...(practiceOk(x, n.key) ? ["practice"] : [])],
         title: `${esc(a.name)}<small>${esc(a.quality)}</small>`,
-        desc: `${n.key}・屬${a.attribute}・第${a.level | 0}成${a.insight ? `・意境「${a.insight}」` : ""}`,
+        desc: `${n.key}・屬${a.attribute}・第 ${a.level | 0} 成${a.insight ? `・意境「${a.insight}」` : ""}`,
         button: `<button class="btn small" data-act="hero-jump" data-to="worn" data-kind="${esc(n.key)}">看這一門</button>`,
       };
     }
@@ -265,7 +265,7 @@
   // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
   function selfArtsHtml(x) {
     const worn = KINDS.map((k) => x.owned_arts.find((a) => a.worn && a.kind === k)).filter(Boolean);
-    const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}/${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
+    const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}／${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
     const head = `<div class="self-hd"><h3>武學</h3>${lib}</div>`;
     if (!worn.length) return `<section class="self-sec" aria-label="武學">${head}<p class="muted">你身上還沒有武學。</p></section>`;
     const hm = S.main && S.main.hero_move;
@@ -274,7 +274,7 @@
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
       const card = `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
-        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${saInk(lv, top)}</i></span></button>`;
+        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第 ${lv} 成">${saInk(lv, top)}</i></span></button>`;
       // 絕招掛在「武學」那一門底下（跟著手上的打法走；內功不掛）
       return a.kind === "武學" && hm ? `<div class="self-art-wrap${top ? " q4" : ""}">${card}${heroMoveHtml(hm, a)}</div>` : card;
     }).join("")}</div></section>`;
@@ -348,14 +348,16 @@
   // 入口就是江湖頁「此地還能做」的「醫館療傷」（act:heal），這裡再放一顆多半是灰的；閉關現在的玩法用不到。兩個都沒有時整段不畫
   function selfEntriesHtml(x) {
     const c = S.main && S.main.status && S.main.status.create;
-    const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
+    const ufDot = (k) => (typeof unfoldDot === "function" ? dotHtml(unfoldDot(k)) : ""); // 慢慢長出來（web/unfold.js）：剛長出來的那一顆亮紅點
+    const craft = shown("tab:craft") ? `<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small>${ufDot("tab:craft")}</button>` : "";
     // 心得不夠開始自創（還沒起意）：入口灰掉、小字寫還差多少（手機介面自檢 U-04），不讓人進去挑了才在下一步被踢回來
-    const create = c && c.on ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
+    const create = c && c.on && ufShown("self:create") ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small>${ufDot("self:create")}</button>` : "";
     if (!craft && !create) return "";
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
   // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
-  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.filter((n) => !n.when || n.when(S.main)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
+  const ufShown = (k) => typeof shown !== "function" || shown(k); // 慢慢長出來：只載一部分檔的頁（測試）照舊全畫
+  const heroAnnalsHtml = () => (shown("tab:news") || (S.main && S.main.unfold) ? SELF_NEWS.filter((n) => (!n.when || n.when(S.main)) && ufShown(`self:${n.id}`)).map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name}${typeof unfoldDot === "function" ? dotHtml(unfoldDot(`self:${n.id}`)) : ""}${n.id === "mail" && typeof mailUnread === "function" && mailUnread() > 0 ? ` <i class="mail-dot">${mailUnread()}</i>` : ""} ›</button>`).join("") : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
@@ -384,7 +386,7 @@
   const qMark = (q) => (Q_SHORT[q] ? `<em class="iq q-${Q_SHORT[q] === "上" ? 3 : Q_SHORT[q] === "中" ? 2 : 1}" title="${esc(q)}">${Q_SHORT[q]}</em>` : "");
   const FX_LAYERS = ["", "一重", "二重", "三重"];
   // 評分（第三批）：「・評 87」；上品還沒成絕學的寫門檻「・評 87／100」
-  const scoreText = (a) => (typeof a.score === "number" ? `・評 ${a.score}` : ""); // 評分沒有上限、不是門檻（Joy 2026-10-20）
+  const scoreText = (a) => (typeof a.score === "number" && a.score > 0 ? `・意境評分 ${a.score}` : ""); // 總檢查 11/26：「評 0」看不懂，寫全、0 不寫 // 評分沒有上限、不是門檻（Joy 2026-10-20）
 
   const fxOne = (e) => e.grand ? `<i class="fx grand${e.maybe ? " maybe" : ""}">${esc(e.name)}</i>`
     : e.special ? `<i class="fx sp${e.idle ? " idle" : ""}"${e.idle ? ' title="不發動"' : ""}>${e.idle ? `<s>${esc(e.name)}</s><small>不發動</small>` : esc(e.name)}</i>`
@@ -543,16 +545,17 @@
       const has = (key) => (a.glow || []).includes(key);
       // 練成（Joy 2026-10-20「練成第x成這邊介面按鈕超醜」）：十成的格子旁邊一顆朱印「練」，下一格會亮；按不下去時印是灰的、原因寫在底下一行
       let train = "", why = "";
-      if (slot) {
+      const fightOnly = !!slot && !!slot.progress && slot.price == null && !slot.maxed && !slot.blocked; // 這一季成數只靠戰鬥：沒有「練」這顆印
+      if (slot && !fightOnly) {
         why = slot.blocked || "";
         const off = !!slot.blocked || slot.maxed;
-        const label = slot.maxed ? "已到第十成" : `練成第${level + 1}成（心得 ${slot.price}）`;
+        const label = slot.maxed ? "已到第十成" : `練成第 ${level + 1} 成（心得 ${slot.price}）`;
         train = `<button class="train-go${off ? "" : " hot"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" aria-label="${esc(slot.blocked || label)}" title="${esc(slot.blocked || label)}" ${off ? "disabled" : ""}><b>${slot.maxed ? "滿" : "練"}</b><small>${slot.maxed ? "十成" : `心得 ${slot.price}`}</small></button>`;
       }
-      // 武學打了才升的季（slot.progress，別的季沒有）：這一成的熟練與今天還能長多少；打仗長、也能按「練」用心得補滿這一成  // 待 joy 潤
+      // 武學打了才升的季（slot.progress，別的季沒有）：這一成的熟練與今天還能長多少；只有打仗會長
       const pg = slot && slot.progress;
       const prog = !pg ? "" : `<p class="train-why train-prog">${slot.maxed ? "已到第十成" : `熟練 ${pg.exp}/${pg.need}・今天打仗還能長 ${pg.today_left}`}</p>`;
-      const next = slot && !slot.blocked && !slot.maxed ? level : -1; // 練下去會亮的那一格
+      const next = slot && !slot.blocked && !slot.maxed && !fightOnly ? level : -1; // 練下去會亮的那一格
       const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
       const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
       // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）
@@ -566,12 +569,12 @@
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
       const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
       return `<div class="train">
-          <div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${scoreHtml(a)}</div>${pips}</div>
+          <div class="tr-meter"><div class="tr-lv"><b>第 ${level} 成</b>${scoreHtml(a)}</div>${pips}</div>
           ${train}
         </div>
         ${why ? `<p class="train-why">${esc(why)}</p>` : ""}
         ${prog}
-        <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
+        <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}${!a.affinity ? "" : a.affinity === "兼容並蓄" ? "・什麼意境都能裝" : `・能裝${esc(a.affinity)}的意境`}</span></div>
         ${slotsHtml(a, x)}
         ${a.tactic && !info ? `<p class="art-tactic">${tacticHtml(a.tactic)}</p>` : ""}
         ${compare}
@@ -688,13 +691,13 @@
     // 待 joy 潤：「淬煉 N/M」「配方 …」「磨得慢」這幾段字
     const slowNote = (w) => (w.wear_note ? `・${esc(w.wear_note)}` : "");
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
-        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.noun || w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${slowNote(w)}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}${(w.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${w.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(w.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(w)}</div>
+        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.noun || w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}／${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${slowNote(w)}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}${(w.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${w.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(w.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(w)}</div>
         ${wornNow ? "" : rowButtons(w)}
       </div>${w.divine ? divineForm(w) : ""}${bindForm(w)}`;
     // 防具：不分種類、沒有「配不上」；寫耐久度與這件一場少扣幾成氣血、對不對得上你的內功（裝備四欄設計 4.1、4.2）。
     // 磨損的叫法照伺服器給的 wear_word（equipment.WEAR_WORDS，2.5、3.1），不寫死。這一行的寫法待 joy 潤；淬過的寫「淬煉 N/M」、自己打的寫配方（防具打造，同武器列）
     const armorRow = (a, wornNow) => `<div class="wrow">
-        <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}/${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}${slowNote(a)}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}${(a.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${a.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(a.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(a)}</div>
+        <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}／${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}${slowNote(a)}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}${(a.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${a.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(a.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(a)}</div>
         ${wornNow ? "" : rowButtons(a)}
       </div>${a.divine ? divineForm(a) : ""}${bindForm(a)}`;
     // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、疾行省幾成體力、路上快幾成、
@@ -803,7 +806,7 @@
       const on = x.person === c.key;
       const hp = c.hp_max ? `<span class="mate-hp" role="meter" aria-valuemin="0" aria-valuemax="${c.hp_max}" aria-valuenow="${c.hp}" aria-label="氣血"><i style="width:${Math.max(0, Math.min(100, Math.round((c.hp / c.hp_max) * 100)))}%"></i></span><small class="mate-hpn">氣血 ${c.hp}／${c.hp_max}</small>` : "";
       const arts = c.arts.map((a) => `<span class="mate-art"><em>${esc(a.kind)}</em>${a.name ? `<b>${esc(a.name)}</b><small>${esc(a.quality)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}</small>`
-        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${saInk(Math.max(0, Math.min(10, a.level | 0)), a.quality === "絕學")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
+        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第 ${a.level | 0} 成">${saInk(Math.max(0, Math.min(10, a.level | 0)), a.quality === "絕學")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
       const detail = on && x.person_card ? `<div class="mate-detail">${mateExtra(x.person_card)}${noteAt("person")}
         ${x.person === "player" || x.person.startsWith("follower:") ? ""
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
@@ -829,14 +832,20 @@
     // 介面重整（2026-11-05，Joy「點了看武學或是裝備，卻不能馬上換…自創武學甚至要滑很下面才能看到」）：序章以外分四頁——
     // 武學（自創、煉製排第一屏，身上兩門，功法庫攤開）、裝備、門下、屬性（以前狀態列點名號攤開的那一大串也在這裡）。記在 S.heroTab
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
-      const heroTabs = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
+      const heroTabs0 = zmBlock ? [...HERO_TABS.slice(0, 3), HERO_SECT, ...HERO_TABS.slice(3)] : HERO_TABS; // 師門：是哪一門的人（或有殘頁）才有這一頁
+      const heroTabs1 = S.main && S.main.codex && typeof codexHtml === "function" ? [...heroTabs0, HERO_CODEX] : heroTabs0; // 江湖錄（web/codex.js；開關開著才有）：排最後
+      const heroTabs = heroTabs1.filter(([k]) => ufShown(`hero:${k}`)); // 慢慢長出來（web/unfold.js）：新角色還用不到的子分頁先不畫
       const tab = heroTabs.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
-      const tabs = `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
-      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
-        : tab === "gear" ? `${gearBlock}${keeps}`
-        : tab === "mates" ? `${gdBlock}${rosterBlock}`
-        : tab === "sect" ? zmBlock
-        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
+      const tabs = heroTabs.length < 2 ? "" : `<div class="hero-tabs" role="tablist">${heroTabs.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}${dotHtml(dotAt("practice", k))}</button>`).join("")}</div>`;
+      const pageOf = (t) => (t === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
+        : t === "gear" ? `${gearBlock}${keeps}`
+        : t === "mates" ? `${gdBlock}${rosterBlock}`
+        : t === "sect" ? zmBlock
+        : t === "codex" ? codexHtml(S.main)
+        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`);
+      // 俠客頁重排（功能包 xiake，web/xiake.js；Joy 2026-11-26「好 很棒」）：開著就換排法——人像、眼下一張卡、六面牌，點一面拉起那一塊（裡面還是 pageOf 那一頁）
+      if (typeof xkOn === "function" && xkOn(S.main)) return xkPageHtml(S.main, { x, s, tabs: heroTabs, pageOf, fig: heroFigure(s).src, annals: heroAnnalsHtml(), guide: proGuide(), meltGo, drawer: meltOn ? "" : drawerHtml, naming: !!x.naming });
+      const page = pageOf(tab);
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
     return `
@@ -860,6 +869,7 @@
   }
 
   const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "同伴"], ["attrs", "屬性"]]; // 待 joy 潤（Joy 2026-11-09：門下跟門派放一起怪，改名）
+  const HERO_CODEX = ["codex", "江湖錄"]; // 待 joy 潤：江湖錄包開著才排在最後（web/codex.js）
   const HERO_SECT = ["sect", "師門"]; // 待 joy 潤：門派包開著、是哪一門的人才插在同伴後面（web/zongmen.js）
   // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
   // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行。
@@ -869,7 +879,7 @@
   const meterHtml = (cls, label, have, need) => `<div class="hm-meter ${cls}"><span>${label}</span><i style="--w:${need ? Math.min(100, Math.round((have / need) * 100)) : 100}%"></i></div>`;
   function heroMoreHtml(s) {
     const exp = s.exp === undefined ? "" : !s.exp ? `<div class="hm-meter who-exp full"><span>經驗已到頂</span><i style="--w:100%"></i></div>`
-      : meterHtml("who-exp", `經驗 ${s.exp.have}／${s.exp.need}<small>升第 ${(s.level | 0) + 1} 級</small>`, s.exp.have, s.exp.need);
+      : meterHtml("who-exp", `經驗 ${s.exp.have}／${s.exp.need}<small> 升第 ${(s.level | 0) + 1} 級</small>`, s.exp.have, s.exp.need);
     const meters = exp || s.lilian ? `<div class="hm-meters">${exp}${s.lilian ? lilianHtml(s.lilian) : ""}</div>` : "";
     const r = s.renown;
     const nums = (s.minor || []).map(([k, v]) => `<span><em>${esc(k)}</em><b>${v}</b></span>`).join("");
@@ -887,7 +897,7 @@
     if (!same.length) return `<p class="muted swap-none">功法庫裡沒有別的${esc(kind)}。</p>`;
     return `<div class="swap-list"><div class="label">換一門${esc(kind)}</div>${same.map((a) => {
       const diff = typeof a.might === "number" && typeof x.might === "number" ? a.might - x.might : 0;
-      return `<div class="swap-row"><span class="txt"><b>${esc(a.name)}</b><small>${esc([a.quality, a.tier, `第${a.level | 0}成`].filter(Boolean).join("・"))}</small></span>${typeof a.might === "number" ? `<span class="lib-might${diff > 0 ? " up" : diff < 0 ? " down" : ""}">戰力 ${x.might | 0} → ${a.might | 0}</span>` : ""}<button class="btn small primary" data-act="switch" data-id="${esc(a.id)}">換上</button></div>`;
+      return `<div class="swap-row"><span class="txt"><b>${esc(a.name)}</b><small>${esc([a.quality, a.tier, `第 ${a.level | 0} 成`].filter(Boolean).join("・"))}</small></span>${typeof a.might === "number" ? `<span class="lib-might${diff > 0 ? " up" : diff < 0 ? " down" : ""}">戰力 ${x.might | 0} → ${a.might | 0}</span>` : ""}<button class="btn small primary" data-act="switch" data-id="${esc(a.id)}">換上</button></div>`;
     }).join("")}</div>`;
   }
 

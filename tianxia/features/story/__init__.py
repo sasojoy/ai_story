@@ -49,6 +49,13 @@ class StoryFeature(Feature):
 
         return Outcome(title=actions.story_title(ctx, arg), run=lambda: actions.story_act(ctx, arg))
 
+    def status(self, ctx) -> dict:
+        """江湖頁「剛剛」那一則是一條線的事件剛選完的後續時給 story_now（Joy 2026-11-13 杜若的奇事「選完只有圖跟一行字」）：
+        網頁照它把那一則整段攤開，結局卡等讀完後續才跳。不是的時候什麼都不給。"""
+        from . import actions  # noqa: PLC0415
+
+        return actions.now_status(ctx)
+
     def bot_idle(self, ctx, option) -> bool:
         """答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，整季機器人不按、答題照隨機答完（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
         return option.id.endswith(":later")

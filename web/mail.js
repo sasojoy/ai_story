@@ -8,7 +8,8 @@
 "use strict";
 
   const mailUnread = () => (S.main && S.main.mail ? S.main.mail.unread | 0 : 0);
-  const mailDot = () => S.news !== "mail" && mailUnread() > 0; // 信匣在俠客頁：沒看的信亮「俠客」那一顆分頁（app.js tabsHtml、paintNewsDot）
+  const mailDot = () => mailUnread() > 0; // 信匣在俠客頁：沒看的信亮「俠客」分頁、俠客頁上「信匣」那一顆（帶數字）、信匣裡那一封（11/12 起三層，看了才滅）
+  if (typeof registerDot === "function") registerDot({ id: "mail", at: "practice", on: mailDot }); // 信匣那一顆在俠客頁頂上（每個子分頁都看得到），沒有子分頁那一層
   const mailShown = () => !!(S.main && S.main.mail);
 
   function mailTake(r) { // 伺服器回的 {inbox, thread?, mail}：記下來、紅點跟著改

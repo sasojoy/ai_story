@@ -110,6 +110,49 @@ assert server.CONTENT.config.ollama_url == "http://127.0.0.1:9", server.CONTENT.
 # account is new: it would sit over the clicks. The walk is about the game under it, so the layer stays off here.
 if getattr(server.CONTENT.config, "intro", None) is not None:
     server.CONTENT.config.intro.enabled = False
+# Batch 256, the yw round only (gate.py passes QA_ROUND to the server): the strange tales (yiwen package) are off in every profile, so no
+# other round meets one. Here they are turned on in memory before the season opens (the flow's open_season stamps WorldState.yiwen_on),
+# and both rolls, a new tale and a tale already walked, always hit: the walk meets one on its first trip out, the real way.
+# Two more things only here, both reached through the module attributes the package reads at call time:
+# - HOLD: writer.write_scene waits while the walk has it armed (c.py("hold['armed']=True ...")), so the 等說書人 page, gone in an
+#   instant on the dead port, stays up to be shot; released, or after HOLD_SECONDS on the wall clock, it goes on as before.
+# - a fake screen: server.screen_text says "bad" for YW_BAD_WORDS and nothing else, as if the model had judged that one line improper
+#   (the dead port never does), so the 自己說 box can be refused until it is spent. Every other text goes to the real screen_text.
+YW = os.environ.get("QA_ROUND") == "yw"
+YW_BAD_WORDS = "瞎說一通"
+HOLD_SECONDS = 60
+HOLD = {"armed": False, "event": threading.Event(), "in": False}
+if YW:
+    try:
+        from tianxia.features.yiwen import writer as _yw_writer
+    except ImportError:
+        _yw_writer = None
+    _yw_gone = [what for what, ok in (("Config.yiwen", getattr(server.CONTENT.config, "yiwen", None) is not None),
+                                      ("tianxia.features.yiwen.writer.write_scene", callable(getattr(_yw_writer, "write_scene", None))),
+                                      ("server.screen_text", callable(getattr(server, "screen_text", None)))) if not ok]
+    if _yw_gone:
+        print("webqa: patch targets gone:", ", ".join(_yw_gone), flush=True)
+        sys.exit(3)
+    _yw = server.CONTENT.config.yiwen
+    _yw.enabled, _yw.discover_chance, _yw.rewalk_chance = True, 1.0, 1.0
+    _write_scene = _yw_writer.write_scene
+
+    def _held_write_scene(*a, **k):
+        if HOLD["armed"]:
+            HOLD["in"] = True
+            if not HOLD["event"].wait(HOLD_SECONDS):
+                print(f"webqa: yw hold not released in {HOLD_SECONDS}s, going on", flush=True)
+            HOLD["in"] = False
+        return _write_scene(*a, **k)
+
+    _yw_writer.write_scene = _held_write_scene
+    _screen_text = server.screen_text
+
+    def _yw_screen_text(game, text, kind):
+        return "bad" if text == YW_BAD_WORDS else _screen_text(game, text, kind)
+
+    server.screen_text = _yw_screen_text
+    print("webqa: yw round: yiwen on, both rolls always hit, write_scene held on the walk's word, one line screened bad", flush=True)
 server._monotonic = lambda: CLOCK["now"]
 server.narration_round = lambda *a, **k: None
 # The world only moves on requests. The scheduler ticks on the wall clock, so whether a tick lands before or after the walk's next
@@ -167,6 +210,8 @@ server.world_step = _seeded_world_step
 @server.app.post("/__qa/py")
 def qa_py(body: dict = Body(...)):
     g = {"server": server, "content": server.CONTENT, "chars": server.open_characters(), "world": open_world(DB), "CLOCK": CLOCK, "out": None}
+    if YW:
+        g["hold"] = HOLD
     try:
         import stage_lib
 

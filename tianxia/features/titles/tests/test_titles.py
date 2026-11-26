@@ -154,6 +154,7 @@ def test_switch_off_adds_nothing():
     from tianxia.core import combat, presence
 
     c = real_content("season21")
+    c.config.titles.enabled = False  # 正式設定 2026-11-12 起打開
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, MON + 10 * HOUR)
@@ -176,3 +177,39 @@ def test_wear_route_needs_login_and_is_404_while_off(monkeypatch):
     assert client.post("/api/titles/wear", json={"id": ""}).status_code == 401
     monkeypatch.setattr(server, "_account", lambda request: "k")
     assert client.post("/api/titles/wear", json={"id": ""}).status_code == 404
+
+
+def test_a_full_codex_page_gives_a_title_once_and_it_stays(monkeypatch):
+    """江湖錄收滿一頁給一個頭銜（Joy 11/13 設計稿決定三）：拿到記進名號簿一次、說一次；往後一直戴得到，不再記第二筆。"""
+    game = _game()
+    game.content.config.codex.enabled = True
+    from tianxia.features.codex import view  # noqa: PLC0415  測試可以跨包；包本身經 ctx._codex_full 問
+
+    assert "codex_people" not in {t["id"] for t in actions.choices(game)}
+    full = ["people"]
+    monkeypatch.setattr(view, "full_pages", lambda ctx: list(full))
+    lines = actions.wear(game)
+    p = game.state.player
+    assert rules.GOT_LINE.format(title="閱盡群英") in lines
+    assert sum(e.endswith(" 閱盡群英") for e in p.title_book) == 1
+    assert "codex_people" in {t["id"] for t in actions.choices(game)}
+    p.season_number += 1  # 換了一季：照樣戴得到，名號簿不再多一筆、也不再說一次
+    assert rules.GOT_LINE.format(title="閱盡群英") not in actions.wear(game)
+    assert sum(e.endswith(" 閱盡群英") for e in p.title_book) == 1
+    assert actions.set_pin(game, "codex_people") == [rules.PIN_OK.format(title="閱盡群英")]
+
+
+def test_codex_full_pages_counts_every_cell():
+    """江湖錄那一頁每一格都亮了才算收滿；關著是空的。"""
+    game = _game()
+    from tianxia.features.codex import rules as codex_rules, view  # noqa: PLC0415
+
+    assert view.full_pages(game) == []
+    game.content.config.codex.enabled = True
+    codex_rules.scan(game.state, game.content)
+    assert "people" not in view.full_pages(game)
+    b = codex_rules.book(game.state)
+    rows = view.people(game)["rows"]
+    b.people = [r["id"] for r in rows]
+    assert "people" in view.full_pages(game)
+    assert view.people(game)["got"] == view.people(game)["all"]

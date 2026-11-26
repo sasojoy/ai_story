@@ -126,7 +126,7 @@ class BattleScenario(Scenario):
     PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster_seat", "muster", "muster_pick",
                     "muster_more", "siege_muster", "siege_cancel", "siege_start", "start", "late", "gamble"]
     PHASES_SECOND = ["narrate", "wander", "fight", "siege_end", "deliver", "muster_deliver", "reports", "restore", "admin_trial", "siege_after",
-                     "bots", "siege_bots", "siege_shelve", "season"]
+                     "bots", "siege_bots", "siege_shelve", "season", "last_gamble"]  # 第 270 批：最後新開一段（前面的段一個請求都不多打）
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -716,8 +716,7 @@ class BattleScenario(Scenario):
         else:
             self.clients[who] = self.TestClient(self.server.app)
             self.passwords[who] = "pw-" + self.login_of(who)
-            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
-                                                    "again": self.passwords[who]})
+            self.sign_up(who)
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
             self.do(who, "skip_tutorial")
             self.settle_choices(who)
@@ -967,6 +966,7 @@ class BattleScenario(Scenario):
         """一位新人直接建進資料庫（同假人那一段：Game.new graduated、開局待選的事件選掉、過了新手期；兩軍的人直接記陣營）、綁一個帳號，
         再照 API 登入——一位只花兩步，集結那 30 分鐘才放得下第 7 批的幾段（照 API 註冊、略過引導、投靠一位要十來步）。"""
         from tianxia.accounts import AccountStore
+        from tianxia.core import terms_base
         from tianxia.engine import Game
 
         self.begin()
@@ -989,6 +989,9 @@ class BattleScenario(Scenario):
             self.chars.save(g.state)
             store.register(self.login_of(who), self.passwords[who])
             store.bind_character(self.login_of(who), who)
+        # 條款第 249 批：直接建的一般玩家帳號照註冊頁補記一筆同意（不然 season21、week7 會被伺服器擋）；條款關著 record 什麼都不做
+        if terms_base._HOOK is not None:
+            terms_base.record(self.c, self.login_of(who), terms_base._HOOK.version(), "register")
         emit(f"{who} 建進資料庫", {"faction": p.faction, "location": p.location})
         self.clients[who] = self.TestClient(self.server.app)
         self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
@@ -1268,6 +1271,67 @@ class BattleScenario(Scenario):
         emit(f"{name} 站在大區外", loc)
         self.give_mate(name, side)
         return {seed}
+
+    # ── 第 270 批：自己這一搏收掉決戰（PHASES_SECOND 最後一段；計畫 docs/superpowers/plans/2026-11-26-決戰回話經紀錄-第270批.md）──
+
+    def last_gamble(self) -> None:
+        """換季之後再開一場（target），只有秦朗月一位加入：每一回合他放手一搏（/api/do/battle_text；搏之前氣血補滿，不讓他中途倒下），這一搏是這一回合唯一的招，
+        送出就湊滿、結算——收場的那一回合也是他還站著時這一搏收的（expect 驗）。收場之後他輪詢一次，寫出最新三則紀錄
+        （標題、時間、得失那一排：決戰那一則的名望後面接不接差距、升段的句子在不在同一則）。測試內容沒有決戰：略過。"""
+        if not self.c.battles:
+            emit("這份內容沒有決戰：自己一搏收場那一段略過", None)
+            return
+        self.login_all()  # 登入狀態認 SESSION_SECONDS（同 progress 一軌 quiet_open）：換季之後再登入一次
+        for who in self.PLAYERS:
+            self.settle_choices(who)
+        self.join()
+        op, battle_id = self.target()
+        if not self.live_showdown():
+            self.do(ADMIN, op, {"id": battle_id})
+        b = self.world.get_battle()
+        if b is None or b.phase == "ended":
+            emit("自己一搏收場的那一場沒開成", None)
+            return
+        duo = (self.GAMBLER,)  # 只有他一位：這一搏一定是這一回合最後一個收的招（兩軍各一位時他第 8 回合被集火倒下，收場那一下是對面按鈕收的）
+        for who in duo:
+            self.place(who, self.spot(b.battle_id))
+            pick = self.join_pick(who, self.ids(self.main(who)))
+            if pick is not None:
+                self.choose(who, pick)
+                self.no_escort(who)
+        b = self.world.get_battle()
+        if b is not None and b.phase == "muster":
+            self.skip_past(b.muster_deadline_real)
+            self.main(self.GAMBLER)
+        closed = False
+        for _ in range(40):
+            b = self.world.get_battle()
+            if b is None or b.phase != "active":
+                break
+            n = b.round_number
+            # 第 270 批第二段：每一搏之前把他這一場的氣血補滿（排局面）——第一段的跑法他第 8 回合自己搏輸倒下，
+            # 第 9 回合是同一個請求回頁面時的同步收的（synced），走不到 C 段收場
+            self.world.mutate_battle(self._refill_gambler)
+            me = self.world.get_battle().participants.get(self.GAMBLER)
+            up = me is not None and not me.eliminated
+            self.do(self.GAMBLER, "battle_text", {"text": "孤身闖陣，奪旗而還"})
+            after = self.world.get_battle()
+            closed = up and (after is None or after.phase == "ended")
+            if not closed and after.round_number == n:  # 這一搏沒送出去（倒下了）：推過期限、輪詢一次
+                self.skip_past(after.round.opened_real + self.c.battles[after.battle_id].round_seconds)
+                self.main(self.GAMBLER)
+        self.battle_row("自己一搏之後")
+        self.expect(closed, "收場的那一回合是秦朗月自己這一搏收的")
+        for who in duo:
+            self.main(who)
+            state = self.chars.load(who)
+            emit(f"{who} 自己一搏收場之後的紀錄", [[e.title, e.time, e.lines, e.changes] for e in state.journal[:3]])
+            self.me(who, "自己一搏收場之後")
+
+    def _refill_gambler(self, b) -> None:
+        p = b.participants.get(self.GAMBLER)
+        if p is not None and not p.eliminated:
+            p.neili = p.neili_cap
 
 
 class MusterScenario(BattleScenario):
@@ -1779,21 +1843,23 @@ class ProgressScenario(BattleScenario):
 # 的單點突變裡照樣驗
 _BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), ("你趕到了戰場，這一回合就能出手。", "你趕到了戰場，這一回合就能出手！"))
 register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail", "mall",
-                       "map", "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie",
-                       "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "identity", "intro", "jieyi",
+                       "legacy", "looks", "mail", "mall", "map", "military", "outlets", "peers", "persona", "seal",
+                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts",
+                       "titles", "travel", "zhuan", "zongmen"))
 register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7", full_same_as="battle",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "identity", "jieyi", "legacy", "looks", "mail", "mall",
-                       "map", "military", "outlets", "peers", "persona", "seal", "sense", "smithy", "socialize", "sortie",
-                       "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts", "travel", "zhuan", "zongmen"))  # 第 7 批：同一套段落，切在集結中
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "identity", "intro", "jieyi",
+                       "legacy", "looks", "mail", "mall", "map", "military", "outlets", "peers", "persona", "seal",
+                       "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern", "terms", "territory_acts",
+                       "titles", "travel", "zhuan", "zongmen"))  # 第 7 批：同一套段落，切在集結中
 # 第 8 批：推進一軌（ProgressScenario），改一個字是論功那一則（搬之前在 engine.py 的 _merit_line、之後在 features/battle/progress.py）——
 # 後半 A 收場那一下寫進天下大事（season_row 寫出來）。找的那一句要連 f-string 的尾巴（`name}論功：" + `）：progress.py 的模組說明也有
 # 「收場與論功：」，只寫「論功：」在搬完的檔裡有兩處、_mutant 找不到剛好一處就停（第 8 批審查）
 _PROGRESS_MUTATION = (("tianxia/features/battle/progress.py", "tianxia/engine.py"), ('name}論功：" + ', 'name}論功！" + '))
 register_track("progress", ProgressScenario, _PROGRESS_MUTATION, "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "guide", "heroines", "identity", "legacy", "looks", "mail", "mall", "military",
-                       "outlets", "peers", "seal", "sense", "socialize", "sortie", "stamina_plays", "story", "tale", "tavern",
-                       "territory_acts", "travel", "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "guard", "guide", "heroines", "horses", "identity", "legacy", "looks",
+                       "mail", "mall", "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie",
+                       "stamina_plays", "story", "tale", "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

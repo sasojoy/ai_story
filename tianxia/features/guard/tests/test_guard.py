@@ -133,6 +133,23 @@ def test_with_a_model_the_event_waits_for_the_background_writer(on):
     assert not actions.apply_event(on, req, event)  # 同一張單子不收第二次
 
 
+def test_english_slipped_into_the_event_is_thrown_away(on):
+    b = _adopt(on)
+    b.home_day = 0
+    on.client = FakeClient({"text": "小禾站在一間 dimly lit 的酒肆前，回頭看你。", "choices": [
+        {"label": "牽她進去", "reaction": "她跟著你。", "memo": "你牽我進去。", "qing": 1, "tags": ["俠"]},
+        {"label": "叫她走開", "reaction": "她退了一步。", "memo": "你叫我走開。", "qing": 0, "tags": ["謀"]},
+        {"label": "推她一把", "reaction": "她跌倒了。", "memo": "你推了我。", "qing": -1, "tags": ["市"]}]})
+    on.sync(on.now)
+    req = actions.event_request(on)
+    assert rules.write_event(on.client, req, on.content.config.guard) is None  # 換固定的
+    on.client = FakeClient({"text": "小禾站在酒肆前，回頭看你。", "choices": [
+        {"label": "牽她進去", "reaction": "她跟著你。", "memo": "你牽我 OK。", "qing": 1, "tags": ["俠"]},
+        {"label": "叫她走開", "reaction": "她退了一步。", "memo": "你叫我走開。", "qing": 0, "tags": ["謀"]},
+        {"label": "推她一把", "reaction": "她跌倒了。", "memo": "你推了我。", "qing": -1, "tags": ["市"]}]})
+    assert rules.write_event(on.client, req, on.content.config.guard) is None  # 做法裡夾的也算
+
+
 def test_waiting_too_long_falls_back_to_a_fixed_event(on):
     b = _adopt(on)
     b.home_day = 0

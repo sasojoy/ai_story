@@ -7,7 +7,7 @@ import random
 
 import pytest
 
-from conftest import real_content
+from conftest import donate_content as real_content
 from tianxia import bot, economy
 from tianxia.engine import Game
 from tianxia.equipment import NOT_NOW
@@ -157,3 +157,18 @@ def test_leaving_closes_the_menu_and_bots_never_press_it():
     assert not game.state.player.picking_donate and "act:donate" in _ids(game)
     options = [o for o in game.options() if o.id == "act:donate"]
     assert bot.pick(game, options, random.Random(0)) is None
+
+
+@pytest.mark.parametrize("profile", ["week7", "season21"])
+def test_the_serving_profiles_have_no_donating(profile):
+    """Joy 2026-11-12「捐軍備功能先拿掉」：兩個正式設定關著，大本營沒有那一顆、江湖頁沒有軍備存量、打點帳簿不列捐銀兩。"""
+    import conftest
+    from tianxia.features.outlets import shop_view
+
+    c = conftest.real_content(profile)
+    assert c.config.economy.donate is False
+    assert c.config.economy.upgrade_batch is True  # 設定覆寫檔整格蓋掉 economy：別的鍵要照抄
+    game = _game(bag={"rou_1": 20}, profile=profile, donate=False)
+    assert not any(o.id in ("act:donate", "act:silver_donate") for o in game.options())
+    assert game.status_data()["armament"] is None
+    assert "捐銀兩" not in str(shop_view.dadian_view(game.state, game.content, day=game._pill_day(), room=0, base=True, clinic=False, smith=False, bribe=[], prologue=False))

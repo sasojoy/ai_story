@@ -752,14 +752,26 @@ def fight_practice_on(state: GameState, content: Content) -> bool:
     return content.config.arts.fight_practice.enabled and bool(getattr(state.world, "fight_practice", False))
 
 
+def xinde_practice_off(state: GameState, content: Content) -> bool:
+    """打了才升的季，成數只靠戰鬥、心得練不了（Joy 2026-11-13「為什麼還可以用心得練武學的成數」「拿掉，成數只靠戰鬥」）。
+    序章例外：草廬裡不打仗（序章不長熟練），師父教的那一步照舊花心得練。"""
+    if not fight_practice_on(state, content):
+        return False
+    t = content.tutorial
+    in_prologue = t.location is not None and state.player.location == t.location and state.player.tutorial_step < t.prologue_steps
+    return not in_prologue
+
+
 def practice_need(content: Content, level: int) -> int:
     """第 level 成升 level+1 成要的熟練。"""
     return content.config.arts.fight_practice.per_level * level
 
 
 def practice_cost(state: GameState, content: Content, kind: str) -> int | None:
-    """修練頁「練成」這一下要的心得：還沒學、已經第十成是 None。打了才升的季照這一成還差的熟練 × xinde_per_point（雲篆照打折）；
-    別的季照舊 practice_price。"""
+    """修練頁「練成」這一下要的心得：還沒學、已經第十成是 None。打了才升的季心得練不了，也是 None
+    （只有序章照這一成還差的熟練 × xinde_per_point）；別的季照舊 practice_price。"""
+    if xinde_practice_off(state, content):
+        return None
     member = state.player.member
     slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
     skill_id, level = getattr(member, slot), getattr(member, level_slot)
@@ -853,6 +865,8 @@ def can_practise(state: GameState, content: Content, kind: str) -> bool:
     member = state.player.member
     slot, level_slot = ("neigong_id", "neigong_level") if kind == "內功" else ("wugong_id", "wugong_level")
     level = getattr(member, level_slot)
+    if xinde_practice_off(state, content):  # 打了才升的季：成數只靠戰鬥
+        return False
     return (
         getattr(member, slot) is not None and level < MAX_LEVEL
         and state.player.stats.get("xinde", 0) >= (practice_cost(state, content, kind) or 0)
@@ -875,7 +889,9 @@ def practice(
     name = art.name if art else skill_id
     if level >= MAX_LEVEL:
         return [f"【{name}】已經練到第十成，練無可練。"]
-    price = practice_cost(state, content, kind) or 0  # 打了才升的季：這一成還差的熟練換心得（Joy 2026-11-09「手動用心得解」）
+    if xinde_practice_off(state, content):  # 打了才升的季：成數只靠戰鬥（Joy 2026-11-13）
+        return [f"【{name}】要帶在身上去打，才會精進。"]
+    price = practice_cost(state, content, kind) or 0  # 序章裡打了才升的季：這一成還差的熟練換心得
     xinde = state.player.stats.get("xinde", 0)
     if xinde < price:
         return [

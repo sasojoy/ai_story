@@ -18,6 +18,12 @@ from .core.tuning.craft import CraftTuning  # 意境合成改版
 from .core.tuning.guard import GuardTuning  # 親衛隊長
 from .core.tuning.horses import HorsesTuning  # 馬的來路
 from .core.tuning.intro import IntroTuning  # 開局前導
+from .core.tuning.codex import CodexTuning  # 江湖錄
+from .core.tuning.yiwen import YiwenTuning  # 異聞
+from .core.tuning.unfold import UnfoldTuning  # 慢慢長出來
+from .core.tuning.jianghu import JianghuTuning  # 江湖頁重排
+from .core.tuning.lingyan import LingyanTuning  # 凌煙閣
+from .core.tuning.xiake import XiakeTuning  # 俠客頁重排
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -3000,7 +3006,7 @@ class ChuangongTuning(_Strict):
 class FightPractice(_Strict):
     """武學打了才升（Joy 2026-11-09「甲方案」「369成不卡手動用心得解 可以一路到10成」「悟性不加熟練」；設計稿 https://claude.ai/artifact/8H3CEY6TQCYy7jLQ4sW5t6）：
     身上的內功、武學每打一場（core/combat.file_battle 歸檔的那一場）各長熟練，第 N 成升 N+1 成要 N × per_level；
-    也可以照舊在修練頁按練成，花「這一成還差的熟練 × xinde_per_point」點心得直接升（雲篆照打折），一路到第十成都行，沒有瓶頸。
+    成數只靠戰鬥，心得練不了（Joy 2026-11-13；team.xinde_practice_off）；只有序章照舊花「這一成還差的熟練 × xinde_per_point」點心得。
     一場給 win／draw／lose，再乘對手強弱：難度比（對手難度 ÷ 我方威力）低於 weak_ratio 不給、到 hard_ratio 以上 ×hard_scale；
     kind 在 double_kinds 的（頭目、擂台、截殺、切磋……）再 ×double_scale。每門每個遊戲日最多長 daily_cap。
     開關照開季蓋章（WorldState.fight_practice），正在跑的季一個字不變。數字全是【草】。"""
@@ -4496,6 +4502,12 @@ class Config(_Strict):
     guard: GuardTuning = Field(default_factory=GuardTuning)  # 親衛隊長（tianxia/core/tuning/guard.py）
     horses: HorsesTuning = Field(default_factory=HorsesTuning)  # 馬的來路（tianxia/core/tuning/horses.py）
     intro: IntroTuning = Field(default_factory=IntroTuning)  # 開局前導（tianxia/core/tuning/intro.py）
+    codex: CodexTuning = Field(default_factory=CodexTuning)  # 江湖錄（tianxia/core/tuning/codex.py）
+    yiwen: YiwenTuning = Field(default_factory=YiwenTuning)  # 異聞（tianxia/core/tuning/yiwen.py）
+    unfold: UnfoldTuning = Field(default_factory=UnfoldTuning)  # 慢慢長出來（tianxia/core/tuning/unfold.py）
+    jianghu: JianghuTuning = Field(default_factory=JianghuTuning)  # 江湖頁重排（tianxia/core/tuning/jianghu.py）
+    lingyan: LingyanTuning = Field(default_factory=LingyanTuning)  # 凌煙閣（tianxia/core/tuning/lingyan.py）
+    xiake: XiakeTuning = Field(default_factory=XiakeTuning)  # 俠客頁重排（tianxia/core/tuning/xiake.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
@@ -4841,6 +4853,9 @@ class Config(_Strict):
     # 專有名詞禁用名單（content/banned_names.json）擋不擋（Joy 2026-10-31：「關閉禁用名單，上面的內容可以留著，但是現階段不卡」）：
     # 關著時取名、潤色、題壁都不看這份名單（Content.banned_name_list 回空的），名單照樣載入、照樣驗；髒話字表照舊擋
     banned_names_on: bool = False
+    # 冒充官方的名號（含客服、官方、管理員、GM 這類字，core/name_base.staff_like）擋不擋（第 240 批，企劃者 2026-11-20「現在就擋」）：
+    # 取名與易名帖都擋、不看帳號綁定；主機緊急時在設定覆寫檔關掉、重開生效
+    staff_names_on: bool = True
     # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
     party_wait_seconds: float = 600
     # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把

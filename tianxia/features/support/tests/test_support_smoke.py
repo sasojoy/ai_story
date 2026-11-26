@@ -1,4 +1,4 @@
-"""客服的煙霧測試（開發規範手冊 4.1 第三級：一包一條，走一次最常見的路）：真實內容關著、不給選項；旁檔送一張單、客服回一則、玩家有一則未讀。"""
+"""客服的煙霧測試（開發規範手冊 4.1 第三級：一包一條，走一次最常見的路）：測試內容關著、不給選項，線上兩份設定（week7、season21）開著真人那一半；旁檔送一張單、客服回一則、玩家有一則未讀。"""
 import pytest
 from conftest import real_content
 
@@ -16,7 +16,9 @@ def test_support_is_registered_and_quiet_while_closed(game):
 @pytest.mark.smoke
 def test_support_files_and_answers_a_ticket(tmp_path):
     cfg = real_content("week7").config.support
-    assert cfg.enabled is False and (cfg.body_max, cfg.open_max, cfg.daily_max) == (1000, 3, 5)
+    assert cfg.enabled is True and (cfg.body_max, cfg.open_max, cfg.daily_max) == (1000, 3, 5)
+    assert real_content("season21").config.support.enabled is True
+    assert real_content().config.support.enabled is False  # config.json 那一層照舊關著
     s = store.SupportStore(store.store_path(tmp_path / "x.db"))
     assert s.path.name == "x-support.sqlite"
     tid = s.add_ticket(account_id=1, account_created=1.0, login="shen_01", character="沈青衫", version="", category="account", body="登不進去",

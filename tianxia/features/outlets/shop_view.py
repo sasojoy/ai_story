@@ -62,8 +62,9 @@ def dadian_view(state: GameState, content: Content, *, day: int, room: int, base
     problem = silver.donate_problem(state, content, day, room, content.config.economy.donate_daily_cap) if base else None
     if base and problem is None:
         tick = f"{silver.DONATE_NOW.format(silver=silver.donate_amount(state, content, day, room))}・{tick}"
-    right.append(entry("act:silver_donate", "捐銀兩", f"每 {cfg.donate_per_point} 兩", silver.DONATE_DESC.format(per=cfg.donate_per_point),
-                       tick, base, problem, silver.WHERE["donate" if p.faction else "donate_ranger"]))
+    if content.config.economy.donate:  # 捐軍備關著（Joy 2026-11-12「捐軍備功能先拿掉」）：捐銀兩那一格也不列
+        right.append(entry("act:silver_donate", "捐銀兩", f"每 {cfg.donate_per_point} 兩", silver.DONATE_DESC.format(per=cfg.donate_per_point),
+                           tick, base, problem, silver.WHERE["donate" if p.faction else "donate_ranger"]))
     hang = [line for ready, line in ((p.mentor_ready, silver.HANG_MENTOR), (p.furnace_ready, silver.HANG_FURNACE)) if ready]
     return {
         "shop": "dadian", "sign": silver.SHOP, "silver": p.stats.get("silver", 0), "line": line_text(state, content, "dadian"),

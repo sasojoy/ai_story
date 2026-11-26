@@ -358,6 +358,10 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
     c.config.legacy.enabled = False
     # 親衛隊長（week7 2026-11-10 起打開）：還沒救下、還沒收養的那一段換季重新遇見（features/guard actions.on_season_start，設計稿照推薦）；這裡只驗「帶不帶」，清掉那一段在 features/guard/tests
     c.config.guard.enabled = False
+    # 江湖錄（week7、season21 2026-11-13 起打開）：整本在包的 on_season_start 照帶、不走 carried；這裡只驗「帶不帶」，照帶在 features/codex/tests
+    c.config.codex.enabled = False
+    # 慢慢長出來（week7、season21 2026-11-25 起打開）：本子跟著帳號走、在包的 on_season_start 照帶、不走 carried；照帶與舊角色不開本在 features/unfold/tests
+    c.config.unfold.enabled = False
     world = open_world()
     game = Game.new(c, "換季客", rng=random.Random(0), world=world)
     game.skip_tutorial()

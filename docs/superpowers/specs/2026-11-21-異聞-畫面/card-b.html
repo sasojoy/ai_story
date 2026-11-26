@@ -1,0 +1,318 @@
+<style>
+/* 異聞・撞見卡與每一幕 對比稿（card）。色票照 web/style.css 的 :root（淺）與 prefers-color-scheme: dark（深）抄過來，
+   定義在最外層的 .yw-light / .yw-dark 上；選擇器一律 .yw-card 開頭。字是示意，待 joy 潤。 */
+.yw-card.yw-light {
+  --paper: #f4ede0; --card: #fbf7ef; --card-2: #efe6d5; --ink: #2a241d; --ink-2: #6b6155; --line: #ddd1bc;
+  --accent: #a8322a; --accent-ink: #fff; --accent-soft: rgba(168, 50, 42, 0.10); --gold: #b7862b; --ok: #2f7d4f; --bad: #b23a2b;
+  --shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06);
+  --art-filter: none;
+  color-scheme: light;
+}
+.yw-card.yw-dark {
+  --paper: #16130f; --card: #211c17; --card-2: #2b251e; --ink: #ece3d3; --ink-2: #a89b88; --line: #3a3229;
+  --accent: #d2574a; --accent-ink: #fff; --accent-soft: rgba(210, 87, 74, 0.16); --gold: #d6a548; --ok: #5cb67f; --bad: #e06a5c;
+  --shadow: none;
+  --art-filter: brightness(.78) saturate(.85);
+  color-scheme: dark;
+}
+.yw-card {
+  --radius: 14px;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif;
+  --kai: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "DFKai-SB", var(--serif);
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px 24px; padding: 20px;
+  background: var(--card-2); color: var(--ink); font: 15px/1.65 var(--sans);
+}
+.yw-card *, .yw-card *::before, .yw-card *::after { box-sizing: border-box; }
+.yw-card p { margin: 0; }
+
+/* ── 一個畫面：上面一行小標，下面一支 390 寬的手機 ── */
+.yw-card .shot { flex: none; width: 390px; display: flex; flex-direction: column; gap: 8px; }
+.yw-card .cap { margin: 0 6px; font: 600 13px/1.5 var(--sans); color: var(--ink-2); letter-spacing: .04em; }
+.yw-card .cap b { margin-right: 6px; color: var(--accent); font-family: var(--kai); font-size: 15px; }
+.yw-card .vhead { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; }
+.yw-card .vhead p { margin: 0 6px; font: 400 14px/1.6 var(--sans); color: var(--ink-2); max-width: 780px; }
+.yw-card .vname { display: block; margin: 0 6px 2px; font: 700 20px/1.3 var(--kai); color: var(--ink); letter-spacing: .1em; }
+.yw-card .vname small { margin-left: 8px; font: 400 13px var(--sans); color: var(--ink-2); letter-spacing: 0; }
+.yw-card .phone { width: 390px; background: var(--paper); border: 1px solid var(--line); border-radius: 26px; overflow: hidden; box-shadow: 0 6px 24px rgba(30, 18, 8, .18); }
+.yw-card .sbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px 8px; background: var(--card); border-bottom: 1px solid var(--line); font: 500 12px/1.4 var(--sans); color: var(--ink-2); }
+.yw-card .sbar b { font: 700 15px var(--serif); color: var(--ink); }
+.yw-card .scr { padding: 12px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ── 卡 ── */
+.yw-card .cd { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.yw-card .cd.flush { padding: 0; overflow: hidden; gap: 0; }
+
+/* 頁首圖：此地插畫的佔位（斜紋＋墨暈），往下淡進卡色 */
+.yw-card .art {
+  position: relative; height: 168px; display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse 60% 45% at 28% 72%, color-mix(in srgb, var(--ink) 26%, transparent), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 78% 38%, color-mix(in srgb, var(--ink) 16%, transparent), transparent 70%),
+    repeating-linear-gradient(135deg, var(--card-2) 0 9px, color-mix(in srgb, var(--card-2) 60%, var(--line)) 9px 18px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  filter: var(--art-filter);
+}
+.yw-card .art span { margin-top: -30px; padding: 2px 10px; border: 1px dashed var(--ink-2); border-radius: 4px; font: 500 12px var(--sans); color: var(--ink-2); background: color-mix(in srgb, var(--card) 70%, transparent); }
+
+/* 朱印（規範：2px 朱框、楷書、轉 −4°；實心的是重要的） */
+.yw-card .seal { display: inline-block; padding: 3px 8px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); background: var(--card); font: 700 15px/1.2 var(--kai); letter-spacing: .2em; transform: rotate(-4deg); }
+.yw-card .seal.solid { background: var(--accent); color: var(--accent-ink); }
+/* 順逆圓章（規範的朱印，轉 −10°） */
+.yw-card .luck { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--accent); color: var(--accent); font: 700 18px/1 var(--kai); transform: rotate(-10deg); opacity: .9; }
+.yw-card .luck.solid { background: var(--accent); color: var(--accent-ink); }
+.yw-card .luck.sm { width: 32px; height: 32px; font-size: 14px; }
+
+/* 地點、框、懸念 */
+.yw-card .place { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.yw-card .place b { font: 700 19px/1.3 var(--kai); letter-spacing: .08em; color: var(--ink); }
+.yw-card .place small { font: 500 12px var(--sans); color: var(--ink-2); }
+.yw-card .frame { font: 400 14px/1.7 var(--kai); color: var(--ink-2); }
+.yw-card .hook { font: 700 19px/1.75 var(--kai); color: var(--ink); letter-spacing: .04em; }
+
+/* 段標（楷書、左邊一筆墨） */
+.yw-card .hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.yw-card .hd h4 { margin: 0; padding-left: 8px; border-left: 3px solid var(--ink); font: 700 17px/1.3 var(--kai); letter-spacing: .12em; color: var(--ink); }
+.yw-card .hd small { font: 400 12px var(--sans); color: var(--ink-2); }
+
+/* 鈕（照 style.css 的 .btn） */
+.yw-card .btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 48px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 15px/1.35 var(--sans); text-align: center; cursor: pointer; }
+.yw-card .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.yw-card .btn.ghost { background: transparent; }
+.yw-card .btn.auto { width: auto; }
+.yw-card .row { display: flex; gap: 8px; align-items: center; }
+.yw-card .row > .btn { flex: 1; }
+
+/* 自己說：一格（假的輸入框）＋字數 */
+.yw-card .say { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font: 16px/1.4 var(--sans); color: var(--ink-2); }
+.yw-card .say em { font-style: normal; font-size: 12px; }
+.yw-card .say.off { opacity: .5; border-style: dashed; }
+
+/* 「？」摺疊 */
+.yw-card .help { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--ink-2); font: 600 13px var(--sans); cursor: pointer; }
+.yw-card .q { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 12px; }
+.yw-card .rules { margin: -6px 0 0; padding: 10px 14px 10px 28px; border-radius: 10px; background: var(--card-2); font: 400 13px/1.7 var(--sans); color: var(--ink-2); }
+
+/* 引擎的回聲（虛線左線、sans） */
+.yw-card .echo { padding: 2px 0 2px 10px; border-left: 2px dashed var(--line); font: 400 14px/1.6 var(--sans); color: var(--ink-2); }
+/* 正文（楷書） */
+.yw-card .txt { display: flex; flex-direction: column; gap: 8px; font: 400 16px/1.85 var(--kai); color: var(--ink); }
+
+/* 讀不通（文字鈕，44px，不搶眼）與「⋯」 */
+.yw-card .unread { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; border: 0; background: none; font: 400 13px var(--sans); color: var(--ink-2); text-decoration: underline dotted; text-underline-offset: 4px; cursor: pointer; }
+.yw-card .more { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border: 0; background: none; color: var(--ink-2); font: 700 18px var(--sans); letter-spacing: 1px; cursor: pointer; border-radius: 10px; }
+
+/* 說書人正接著往下寫…（墨點三顆輪流亮） */
+.yw-card .wait { display: flex; align-items: center; gap: 10px; font: 400 15px/1.6 var(--kai); color: var(--ink-2); }
+.yw-card .dots { display: inline-flex; gap: 5px; }
+.yw-card .dots i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink-2); animation: yw-card-dot 1.2s infinite; }
+.yw-card .dots i:nth-child(2) { animation-delay: .2s; }
+.yw-card .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes yw-card-dot { 0%, 60%, 100% { background: transparent; } 20%, 40% { background: var(--ink); border-color: var(--ink); } }
+@media (prefers-reduced-motion: reduce) { .yw-card .dots i { animation: none; } .yw-card .dots i:first-child { background: var(--ink); } }
+
+/* 得失一行 */
+.yw-card .gain { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 600 14px/1.5 var(--sans); color: var(--ink); }
+.yw-card .gain span::before { content: "・"; color: var(--gold); }
+.yw-card .gain .mat { color: var(--ok); }
+.yw-card .note { font: 400 13px/1.6 var(--sans); color: var(--ink-2); }
+.yw-card .close { padding: 2px 0 2px 10px; border-left: 2px dashed var(--line); font: 400 15px/1.8 var(--kai); color: var(--ink-2); }
+.yw-card .mine { color: var(--accent); }
+.yw-card .grey { font: 400 13px/1.6 var(--sans); color: var(--ink-2); }
+.yw-card .annex-hd { font: 600 12px var(--sans); color: var(--ink-2); padding: 0 2px; }
+
+/* ── 乙・頁邊朱批：一幕是一頁話本，朱批直書在右邊頁邊，順逆章蓋在正文末尾；做法是路牌，小字靠右成一欄 ── */
+.yw-card.yw-card-b .hero { position: relative; }
+.yw-card.yw-card-b .hero .seal { position: absolute; top: 12px; right: 14px; }
+.yw-card.yw-card-b .hero-tx { position: relative; margin-top: -52px; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.yw-card.yw-card-b .hero-tx .hook { font-size: 20px; }
+.yw-card.yw-card-b .meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+
+/* 路牌：左邊做法（楷書），右邊一欄狀態 */
+.yw-card.yw-card-b .signs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.yw-card.yw-card-b .sign { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 6px 12px 6px 14px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); text-align: left; cursor: pointer; width: 100%; }
+.yw-card.yw-card-b .sign:first-child { border-top: 0; }
+.yw-card.yw-card-b .sign > b { flex: 1; min-width: 0; font: 700 16px/1.4 var(--kai); }
+.yw-card.yw-card-b .sign > b small { display: block; font: 400 12px/1.4 var(--sans); color: var(--ink-2); }
+.yw-card.yw-card-b .sign.zp > b { color: var(--accent); }
+.yw-card.yw-card-b .st { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 76px; font: 400 11px/1.35 var(--sans); color: var(--ink-2); text-align: right; }
+.yw-card.yw-card-b .st strong { font: 700 17px/1.1 var(--serif); color: var(--ink); }
+.yw-card.yw-card-b .st strong small { font: 500 11px var(--sans); color: var(--ink-2); margin-left: 2px; }
+.yw-card.yw-card-b .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font: 600 12px/1.5 var(--sans); }
+.yw-card.yw-card-b .chip.free { border: 1px solid var(--accent); color: var(--accent); }
+.yw-card.yw-card-b .chip.paid { border: 1px solid var(--gold); color: var(--gold); }
+.yw-card.yw-card-b .chip.off { border: 1px dashed var(--line); color: var(--ink-2); }
+.yw-card.yw-card-b .sign.locked { cursor: default; background: var(--card-2); }
+.yw-card.yw-card-b .sign.locked > b { color: var(--ink-2); font-weight: 400; }
+.yw-card.yw-card-b .sign.self > b { font: 400 15px/1.4 var(--sans); color: var(--ink-2); }
+.yw-card.yw-card-b .legend { font: 400 12px/1.5 var(--sans); color: var(--ink-2); padding: 0 2px; }
+
+/* 一頁話本：左直條、中正文、右頁邊直書朱批 */
+.yw-card.yw-card-b .book { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.yw-card.yw-card-b .num { flex: none; width: 30px; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; font: 700 14px/1 var(--kai); letter-spacing: .2em; color: var(--accent-ink); background: var(--accent); }
+.yw-card.yw-card-b .leaf { position: relative; flex: 1; min-width: 0; padding: 4px 10px 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.yw-card.yw-card-b .leaf-hd { display: flex; align-items: center; justify-content: space-between; margin-right: -6px; }
+.yw-card.yw-card-b .leaf .txt p { text-indent: 2em; }
+.yw-card.yw-card-b .leaf .luck { position: absolute; right: 8px; bottom: 10px; opacity: .78; }
+.yw-card.yw-card-b .margin { flex: none; width: 58px; padding: 12px 4px 12px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; border-left: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
+.yw-card.yw-card-b .margin p { writing-mode: vertical-rl; font: 700 17px/1.5 var(--kai); color: var(--accent); letter-spacing: .08em; }
+.yw-card.yw-card-b .margin p small { font: 400 12px var(--kai); letter-spacing: .04em; }
+.yw-card.yw-card-b .namestamp { writing-mode: vertical-rl; padding: 4px 2px; border: 1.5px solid var(--accent); border-radius: 2px; font: 700 12px/1 var(--kai); letter-spacing: .1em; color: var(--accent); }
+.yw-card.yw-card-b .namestamp.solid { background: var(--accent); color: var(--accent-ink); }
+.yw-card.yw-card-b .foot { display: flex; justify-content: flex-start; padding: 0 2px; margin-top: -8px; }
+.yw-card.yw-card-b .foot .unread::before { content: "註："; text-decoration: none; }
+
+/* 等寫：空白格線頁 */
+.yw-card.yw-card-b .ruled { min-height: 150px; border-radius: 6px; background: repeating-linear-gradient(to bottom, transparent 0 29px, var(--line) 29px 30px); display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 4px; }
+.yw-card.yw-card-b .ruled .wait { background: var(--card); align-self: flex-start; padding: 0 6px; }
+.yw-card.yw-card-b .wait-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.yw-card.yw-card-b .prev { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; font: 400 14px/1.4 var(--kai); color: var(--ink-2); }
+.yw-card.yw-card-b .prev span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yw-card.yw-card-b .fin { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0 2px; }
+.yw-card.yw-card-b .fin .seal { font-size: 20px; padding: 4px 12px; }
+.yw-card.yw-card-b .trail3 { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 10px; background: var(--card-2); font: 400 14px/1.6 var(--kai); color: var(--ink-2); }
+.yw-card.yw-card-b .trail3 b { color: var(--accent); font-weight: 700; }
+</style>
+<div class="yw-card yw-card-b yw-light">
+<div class="vhead">
+  <span class="vname">乙・頁邊朱批<small>card-b</small></span>
+  <p>一幕畫成一頁話本：朱批直書在右邊頁邊、底下蓋名號小印，像古書的眉批；順逆章蓋在正文末尾。做法排成一塊路牌，左邊做法、右邊一欄狀態（足跡數字大、誰走過小；沒人走過是一顆「免費」或「問路香」的籤）。「讀不通」是頁下的一行註，檢舉在頁頂「⋯」。</p>
+</div>
+
+<!-- ① 後來的人撞見 -->
+<div class="shot">
+  <p class="cap"><b>①</b>後來的人撞見（舊腳印）</p>
+  <div class="phone">
+    <div class="sbar"><b>江湖</b><span>第 2 週・週三 14:05</span></div>
+    <div class="scr">
+      <div class="cd flush hero">
+        <div class="art"><span>此地插畫・荒野山道</span></div>
+        <span class="seal">舊腳印</span>
+        <div class="hero-tx">
+          <p class="hook">前面濃霧瀰漫，隱約看到一個身影⋯</p>
+          <p class="frame">這條山道有人走過，地上的舊腳印還在。你踩了上去。</p>
+          <div class="meta place"><b>荒野山道</b><small>已有 57 人走過</small></div>
+        </div>
+      </div>
+      <div class="hd"><h4>你看那是什麼</h4><small>點一塊路牌就走</small></div>
+      <div class="signs">
+        <button class="sign zp"><b>「一隻會背兵法的鵝」<small>陸三刀親筆</small></b><span class="st"><strong>57<small>足跡</small></strong>陸三刀走過</span></button>
+        <button class="sign"><b>官軍</b><span class="st"><span class="chip free">免費開</span>沒人走過</span></button>
+        <button class="sign"><b>黃巾</b><span class="st"><span class="chip paid">問路香 1</span>沒人走過</span></button>
+        <button class="sign"><b>迷路的老人</b><span class="st"><span class="chip paid">問路香 1</span>沒人走過</span></button>
+      </div>
+      <div class="cd">
+        <div class="say"><span>自己說⋯開一條新路，記在你名下</span><em>0／30</em></div>
+        <p class="legend">自己說也是開一條路・要一支問路香</p>
+        <button class="btn primary">就是這個</button>
+        <button class="help"><span class="q">？</span>異聞的規矩 ▾</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ①′ 開滿 -->
+<div class="shot">
+  <p class="cap"><b>①′</b>同一張卡，這一則的岔路開滿時（只換下半）</p>
+  <div class="phone">
+    <div class="scr">
+      <div class="hd"><h4>你看那是什麼</h4><small>點一塊路牌就走</small></div>
+      <div class="signs">
+        <button class="sign zp"><b>「一隻會背兵法的鵝」<small>陸三刀親筆</small></b><span class="st"><strong>57<small>足跡</small></strong>陸三刀走過</span></button>
+        <div class="sign locked"><b>官軍・黃巾・迷路的老人</b><span class="st"><span class="chip off">開完了</span></span></div>
+      </div>
+      <p class="legend">這一則的岔路都開完了，只能走有人走過的路。</p>
+      <div class="cd">
+        <div class="say off"><span>自己說⋯</span><em>0／30</em></div>
+        <button class="help"><span class="q">？</span>異聞的規矩 ▾</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 重放 -->
+<div class="shot">
+  <p class="cap"><b>②</b>按了「鵝」：重放存下來的第一幕</p>
+  <div class="phone">
+    <div class="sbar"><b>江湖</b><span>荒野山道・異聞</span></div>
+    <div class="scr">
+      <p class="echo">你以為是一隻會背兵法的鵝。</p>
+      <div class="book">
+        <div class="num">第一幕</div>
+        <div class="leaf">
+          <div class="leaf-hd"><span class="frame">前人走過的路</span><button class="more" aria-label="更多">⋯</button></div>
+          <div class="txt">
+            <p>霧裡走出來的，原來是一隻鵝。牠脖上掛著木牌，搖頭晃腦衝著你嘎嘎背：「兵貴⋯⋯兵貴⋯⋯」背到一半卡住了。</p>
+            <p>牠斜眼瞪你，像在等你接下一句。牠腳邊壓著半卷泡糊的竹簡，霧深處隱約有火把在晃。</p>
+          </div>
+          <span class="luck">順</span>
+        </div>
+        <div class="margin">
+          <p><small>當初一口咬定，那是</small>「一隻會背兵法的鵝」</p>
+          <span class="namestamp">陸三刀</span>
+        </div>
+      </div>
+      <div class="foot"><button class="unread">這一段讀不通</button></div>
+      <div class="hd"><h4>接著怎麼做</h4></div>
+      <div class="signs">
+        <button class="sign"><b>請牠背完整本兵書</b><span class="st"><strong>49<small>足跡</small></strong>陸三刀走過</span></button>
+        <button class="sign zp"><b>「順著鵝眼望進霧裡」<small>陸小滿說的</small></b><span class="st"><strong>8<small>足跡</small></strong>陸小滿開的路</span></button>
+        <button class="sign"><b>問牠霧裡是什麼</b><span class="st"><span class="chip free">免費開</span>沒人走過</span></button>
+        <button class="sign"><b>拔一根鵝毛當信物</b><span class="st"><span class="chip paid">問路香 1</span>沒人走過</span></button>
+      </div>
+      <div class="cd">
+        <div class="say"><span>自己說⋯開一條新路，記在你名下</span><em>0／30</em></div>
+        <p class="legend">自己說也是開一條路・要一支問路香</p>
+        <button class="btn primary">就是這個</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ③ 等 -->
+<div class="shot">
+  <p class="cap"><b>③</b>按了沒人走過的「問牠霧裡是什麼」：等說書人寫</p>
+  <div class="phone">
+    <div class="sbar"><b>江湖</b><span>荒野山道・異聞</span></div>
+    <div class="scr">
+      <div class="prev"><span>第一幕・霧裡走出來的，原來是一隻鵝⋯</span>看 ▸</div>
+      <div class="book">
+        <div class="num">第二幕</div>
+        <div class="leaf">
+          <div class="leaf-hd"><span class="frame">新的路・這條路從此記在你名下</span></div>
+          <div class="ruled">
+            <p class="wait"><span class="dots"><i></i><i></i><i></i></span>說書人正接著往下寫⋯</p>
+          </div>
+          <div class="wait-row"><span class="note">可能要等半分鐘，寫不成什麼都不扣。</span><button class="btn ghost auto stop">停</button></div>
+        </div>
+        <div class="margin">
+          <p><small>你說</small>「問牠霧裡是什麼」</p>
+          <span class="namestamp solid">開路</span>
+          <span class="luck sm">逆</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ 收尾 -->
+<div class="shot">
+  <p class="cap"><b>④</b>第三幕寫完：收尾卡</p>
+  <div class="phone">
+    <div class="sbar"><b>江湖</b><span>荒野山道・異聞</span></div>
+    <div class="scr">
+      <div class="cd">
+        <p class="close">說書的講到這裡，把醒木一拍：後來如何，沒人說得準。</p>
+        <div class="fin"><span class="seal solid">完</span><span class="place"><b>霧裡的身影</b></span></div>
+        <div class="trail3">
+          <span>一隻會背兵法的鵝 ／ <b>問牠霧裡是什麼</b> ／ <b>跟著牠的腳印走</b></span>
+          <span class="grey">朱字是你開的路，記進異聞錄，往後撞見的人都踩得到你的腳印。</span>
+        </div>
+        <div class="gain"><span>銀兩 +240</span><span>心得 +60</span><span class="mat">山嵐石（一階）×1</span></div>
+        <div class="row"><p class="note">三天後，足跡最多的那條路成為此地的定論。</p><button class="help"><span class="q">？</span></button></div>
+        <div class="row"><button class="btn ghost">看這一則的全圖 ›</button><button class="btn primary">回江湖</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>

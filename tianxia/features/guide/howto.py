@@ -77,7 +77,7 @@ def pill_line(content: Content, count: int | None = None, today: int | None = No
     if count is not None and count <= 0:
         return ""
     have = "" if count is None else f"（還有 {count} 顆）"
-    line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
+    line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，點體力條就能服下。"
     if cfg.stamina_pills_per_day > 0:
         left = "" if today is None else f"（今天還能服 {today} 顆）"
         parts = [f"新手期 {cfg.newbie_pills_per_day + card} 顆"] * (cfg.newbie_pills_per_day > 0)
@@ -109,14 +109,14 @@ def gift_line(content: Content) -> str:
     if cfg.beta_free_refill:
         return (f"新手福利：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
                 f"測試期間按體力條上的「{cfg.beta_free_refill_label}」就能免費補滿，不花丹。")
-    return f"新手福利：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
+    return f"新手福利：{name} {n} 顆，一顆回 {restore} 點體力，點體力條就能服下。"
 
 
 def top_up_line(content: Content, added: int) -> str:
     """拿掉一鍵補滿之後，舊角色補回體丹的那一行（Game._top_up_pills）。"""
     cfg = content.config
     return (f"體力條上的「{cfg.beta_free_refill_label}」收起來了；補給你{cfg.stamina_pill_name} {added} 顆，"
-            f"手上一共 {cfg.beta_gift_stamina_pills} 顆，一顆回 {cfg.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。")
+            f"手上一共 {cfg.beta_gift_stamina_pills} 顆，一顆回 {cfg.stamina_pill_restore} 點體力，點體力條就能服下。")
 
 
 # ── 江湖頁的戰況、態勢、大事、主線點開的說明（explain-2 第一項，FB-100）──────────────────────

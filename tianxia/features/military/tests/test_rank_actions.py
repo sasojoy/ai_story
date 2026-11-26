@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-from conftest import real_content
+from conftest import make_real
 from tianxia import calendar, events, models
 from tianxia.features.military import opp_rules as opportunities, rank_rules as rank_actions
 from tianxia import rules, seats
@@ -100,14 +100,6 @@ _BROKEN_ROWS = {
 }
 
 
-def _real():
-    """跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）。"""
-    c = real_content()
-    c.config.auto_open_first_season = True
-    c.config.train_event_chance = 0.0
-    return c
-
-
 @pytest.fixture(scope="module")
 def broken_row():
     """組名 → 那一組整組套上後 validate 丟出的訊息（懶算：用到那一組才建內容，一組只 validate 一次）。"""
@@ -115,7 +107,7 @@ def broken_row():
 
     def text(row):
         if row not in cache:
-            c = _real()
+            c = make_real()  # 跟 tests/conftest.py 的 real 同一份（module 範圍的 fixture 拿不到 function 範圍的 real）
             for break_it in _BROKEN_ROWS[row]:
                 break_it(c)
             try:

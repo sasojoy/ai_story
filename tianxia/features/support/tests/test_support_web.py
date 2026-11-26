@@ -18,7 +18,7 @@ from tianxia.engine import Game
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 NAMES = '"bookHtml", "peerHtml"]'
-SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate", "supportChange", "supportDeskReload"]')
+SUPPORT_DRIVER = DRIVER.replace(NAMES, '"bookHtml", "peerHtml", "supportRow", "supportPageHtml", "supportDeskHtml", "supportDeskLink", "supportForm", "supportClick", "supportCardHtml", "renderGate", "supportChange", "supportDeskReload", "renderAdmin", "supportAdminLink", "supportDeskAsked"]')
 assert SUPPORT_DRIVER != DRIVER
 
 XSS = ('<img src=x onerror="globalThis.__pwned=1">', "<script>globalThis.__pwned=1</script>", '"><svg onload=alert(1)>')
@@ -421,6 +421,55 @@ def test_second_shot_fails_stops_and_keeps_the_ticket(main):
     assert 'id="support-file-form"' in out["page"]
 
 
+def test_no_picker_when_files_max_is_zero(main):
+    """第 226 批：主機把截圖關掉（files_max 0）時寫單頁不畫挑圖那一塊，送單只打 /api/support/ticket。"""
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 0, "file_bytes_max": 3000000, "open_max": 3, "daily_max": 5}
+    replies = {"/api/support/ticket": {"id": 7, "mine": {**mine, "tickets": [_ticket(status="open", replies=[], files=[])]}}}
+    out = _shots("""
+        const form = H.sheetHtml();
+        H.S.supportPicks = [{ file: file("a.png", "image/png"), url: "" }];
+        await H.supportForm({ id: "support-new-form", dataset: {} }, { category: "game", body: "卡住了" });
+        return { form, sent: sent.map((s) => s[0]), picks: H.S.supportPicks.length, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, replies=replies, m=m)
+    assert "support-new-files" not in out["form"] and "sup-pick" not in out["form"] and "sup-slot" not in out["form"]
+    assert "附截圖" not in out["form"] and "PNG、JPEG、WebP" not in out["form"] and 'id="support-new-form"' in out["form"]
+    assert out["sent"] == ["/api/support/ticket"] and out["picks"] == 0
+    assert "support-file-form" not in out["page"]
+
+
+def test_picker_follows_the_server_limits(main):
+    m = {**main, "support_unread": 0}
+    mine = {"tickets": [], "files_max": 5, "file_bytes_max": 1000000, "open_max": 3, "daily_max": 5}
+    out = _shots("""
+        const form = H.sheetHtml();
+        await H.supportChange({ target: { id: "support-new-files", files: [file("big.png", "image/png", 1000001), file("ok.png", "image/png", 1000000)], value: "x" } });
+        const big = [H.S.supportPicks.map((p) => p.file.name), H.S.supportPickMsg];
+        await H.supportChange({ target: { id: "support-new-files", files: [1, 2, 3, 4, 5].map((i) => file(i + ".png", "image/png")), value: "x" } });
+        return { form, big, names: H.S.supportPicks.map((p) => p.file.name), msg: H.S.supportPickMsg, page: H.sheetHtml() };""",
+                 S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine}, m=m)
+    assert "最多 5 張、每張 1 MB 以內（PNG、JPEG、WebP）" in out["form"] and out["form"].count("sup-slot") == 5
+    assert out["big"] == [["ok.png"], "圖太大了：一張最多 1 MB。"]
+    assert out["names"] == ["ok.png", "1.png", "2.png", "3.png", "4.png"]  # 第 6 張不收
+    assert out["msg"] == "一張單最多附 5 張圖。"
+    assert out["page"].count('class="sup-shot"') == 5 and out["page"].count("sup-slot") == 0
+    half = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new",
+                                              "supportMine": {**mine, "file_bytes_max": 2500000}})
+    assert "每張 2.5 MB 以內" in half
+
+
+def test_note_follows_open_and_daily_max(main):
+    m = {**main, "support_unread": 0}
+    t = _ticket(status="open")
+    for extra, line in (({"open_max": 4, "daily_max": 7}, "同時最多 4 張沒結的單，一天最多送 7 張。"),
+                        ({}, "同時最多 3 張沒結的單，一天最多送 5 張。")):
+        mine = {"tickets": [t], **extra}
+        new = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportTab": "new", "supportMine": mine})
+        lst = run(m, "return H.sheetHtml();", S={"sheet": True, "supportPage": True, "supportMine": mine})
+        assert line + "帳號、名號、時間、版本會自動附上。" in new
+        assert f'<p class="muted sup-fine">{line}</p>' in lst
+
+
 def test_ticket_shows_shots_and_closed_has_no_add_form(main):
     m = {**main, "support_unread": 0}
     two = _ticket(status="answered", files=_files(2))
@@ -525,6 +574,159 @@ def test_desk_sweeps_before_the_queue_and_a_failed_sweep_does_not_block(main):
         return { calls: T.calls.map((c) => c[0]), tickets: H.S.supportDesk.tickets.length };
       })();""", S={"adminPage": True}, responses={"/api/support/queue": q})
     assert failed == {"calls": ["/api/support/queue"], "tickets": 1}
+
+
+# ── 第 228 批：管理者也列在客服名單上時進得了客服頁 ──
+TICK = "const tick = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };"
+# /api/admin 這一份不回（畫面停在「正在讀……」）：fetch 的假貨對沒列的網址回 {}，S.admin 變成 {} 會畫壞，這裡只看有沒有打、落在哪一頁
+HOLD_ADMIN = """const real = T.ctx.fetch;
+  T.ctx.fetch = (url, opts) => url.startsWith("/api/admin") ? (T.calls.push([url, null]), new Promise(() => {})) : real(url, opts);"""
+DESK_HEAD = ('<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>客服</h2>'
+             '<button class="btn small" data-act="support-desk-refresh">重新整理</button></header>')  # 改之前的客服頁頂上一列（不是管理者的照這一列）
+ADMIN_STAFF = {"support_unread": 0, "support_staff": True, "admin": True}
+
+
+def _admin_before(tmp_path):
+    """admin.js 那兩處換回改之前的字面（其餘檔照現在）：管理者不在名單上時管理頁要跟這一份逐字一樣。"""
+    parts = []
+    for name in webharness.APP_FILES:
+        text = (webharness.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+        if name == "admin.js":
+            for new, old in (
+                ('    if (S.main.admin && S.main.support_staff && typeof supportDeskAsked === "function" && supportDeskAsked()) return renderSupportDesk();'
+                 ' // 管理者也列在客服名單上、點了「客服單 ›」或網址是 /admin#support（第 228 批，support.js）\n', ""),
+                ('<h2>管理者工具</h2>${typeof supportAdminLink === "function" ? supportAdminLink() : ""}<button', "<h2>管理者工具</h2><button")):
+                assert text.count(new) == 1, new
+                text = text.replace(new, old)
+        parts.append(text)
+    path = tmp_path / "app_admin_before.js"
+    path.write_text("(() => {\n" + "".join(parts) + "})();\n", encoding="utf-8")
+    return path
+
+
+def test_admin_on_the_staff_list_reaches_the_desk(main):
+    m = {**main, **ADMIN_STAFF}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, TICK + HOLD_ADMIN + """return (async () => {
+        const admin = H.adminHtml();
+        const before = T.calls.length;
+        await H.supportClick("support-desk-enter", { dataset: {} });
+        await tick();
+        const desk = T.els.app.innerHTML, deskCalls = T.calls.slice(before).map((c) => c[0]);
+        const mid = T.calls.length;
+        await H.supportClick("support-desk-leave", { dataset: {} });
+        await tick();
+        return { admin, desk, deskCalls, back: T.els.app.innerHTML, backCalls: T.calls.slice(mid).map((c) => c[0]) };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert 'data-act="support-desk-enter">客服單 ›</button>' in out["admin"] and 'data-act="ad-refresh"' in out["admin"]
+    assert "sup-wide" in out["desk"] and "月卡沒到" in out["desk"] and 'data-act="support-desk-leave">‹ 管理者工具</button>' in out["desk"]
+    assert "/api/support/queue" in out["deskCalls"] and not [c for c in out["deskCalls"] if c.startswith("/api/admin")]
+    assert "sup-wide" not in out["back"] and "管理者工具" in out["back"] and "正在讀……" in out["back"] and "support-desk-enter" in out["back"]
+    assert out["backCalls"] == ["/api/admin"]
+
+
+def test_desk_stays_the_desk_for_an_admin_after_refresh_and_actions(main):
+    m = {**main, **ADMIN_STAFF}
+    st = _desk_state(None, adminPage=True, supportDeskAdmin=True)
+    q = st["supportDesk"]
+    t = st["supportDeskTicket"]
+    out = run(m, TICK + HOLD_ADMIN + """return (async () => {
+        const seen = [];
+        const look = () => seen.push(T.els.app.innerHTML.includes("sup-wide") && T.els.app.innerHTML.includes("support-desk-leave"));
+        H.render(); await tick(); look();
+        await H.supportClick("support-desk-refresh", { dataset: {} }); await tick(); look();
+        await H.supportClick("support-desk-pick", { dataset: { id: "3" } }); await tick(); look();
+        await H.supportClick("support-answer", { dataset: { id: "3", then: "wait" } }); await tick(); look();
+        await H.supportForm({ id: "support-lookup-form", dataset: {} }, { kind: "login", text: "shen_01", ticket: "3" }); await tick(); look();
+        return { seen, calls: T.calls.map((c) => c[0]) };
+      })();""", S=st, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}, "/api/support/ticket/3": t,
+                                  "/api/support/answer": t, "/api/support/lookup": {"found": False, "message": "查無。", "left": 17}})
+    assert out["seen"] == [True] * 5
+    assert not [c for c in out["calls"] if c.startswith("/api/admin")]
+    # 瀏覽器重新整理：記憶體的旗標沒了，網址還是 /admin#support
+    again = run(m, TICK + HOLD_ADMIN + """return (async () => {
+        T.ctx.location = { pathname: "/admin", hash: "#support", search: "" };
+        H.render(); await tick();
+        return { html: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert "sup-wide" in again["html"] and "/api/support/queue" in again["calls"]
+    assert not [c for c in again["calls"] if c.startswith("/api/admin")]
+
+
+def test_admin_not_on_the_list_sees_the_same_admin_page(main, tmp_path):
+    before_app = _admin_before(tmp_path)
+    script = """return (async () => {
+        if (H.S.__hash) T.ctx.location = { pathname: "/admin", hash: "#support", search: "" };
+        const html = H.adminHtml();
+        H.render();
+        return { html, page: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) };
+      })();"""
+    for extra in ({"admin": True}, {"admin": True, "support_staff": False, "support_unread": 0}):
+        m = {**main, **extra}
+        for S in ({"adminPage": True, "adLoading": True}, {"adminPage": True, "adLoading": True, "adFailed": True},
+                  {"adminPage": True, "adLoading": True, "__hash": True}, {"adminPage": True, "adLoading": True, "supportDeskAdmin": True}):
+            now = run(m, script, S=S)
+            before = run(m, script, S=S, app=before_app)
+            assert now == before, (extra, S)
+            assert "sup-wide" not in now["page"] and "support-desk-enter" not in now["page"] and "管理者工具" in now["page"]
+
+
+def test_staff_who_is_not_admin_still_lands_on_the_desk(main):
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, TICK + HOLD_ADMIN + """return (async () => {
+        H.render(); await tick();
+        return { html: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]), link: H.supportAdminLink() };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert "sup-wide" in out["html"] and DESK_HEAD in out["html"] and "support-desk-leave" not in out["html"]
+    assert not [c for c in out["calls"] if c.startswith("/api/admin")] and out["link"] == ""
+    failed = run(m, "return H.supportDeskHtml();", S={"supportDeskFailed": True})
+    assert failed.startswith(DESK_HEAD)
+
+
+DESK_FAILED = "讀不到客服單，請按重新整理；還是讀不到，請登出再用帳號密碼登入一次（客服的登入每隔幾小時要重來）。"
+
+
+def test_desk_says_so_when_the_queue_cannot_be_read(main):
+    """第 226 批：客服單讀不到時不畫四個 0 的磚，說一句；之後重畫不自己再讀（不然讀不到就一直打）。"""
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    out = run(m, """return (async () => {
+        let fails = 0;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => { if (url === "/api/support/queue") { fails++; return Promise.reject(new Error("down")); } return real(url, opts); };
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const first = T.els.app.innerHTML;
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { first, again: T.els.app.innerHTML, fails, desk: H.S.supportDesk || null, html: H.supportDeskHtml() };
+      })();""", S={"adminPage": True})
+    assert out["fails"] == 1
+    assert out["desk"] is None
+    for html in (out["first"], out["again"], out["html"]):
+        assert DESK_FAILED in html and "sup-tile" not in html and "讀取中…" not in html
+        assert 'data-act="support-desk-refresh"' in html and f'<p class="muted">{DESK_FAILED}</p>' in html
+
+
+def test_desk_refresh_recovers_after_a_failed_read(main):
+    m = {**main, "support_unread": 0, "support_staff": True, "admin": False}
+    q = _desk_state(None)["supportDesk"]
+    out = run(m, """return (async () => {
+        let down = true;
+        const real = T.ctx.fetch;
+        T.ctx.fetch = (url, opts) => down && url === "/api/support/queue" ? Promise.reject(new Error("down")) : real(url, opts);
+        H.render();
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        const failed = T.els.app.innerHTML;
+        down = false;
+        const before = T.calls.length;
+        await H.supportClick("support-desk-refresh", { dataset: {} });
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        return { failed, calls: T.calls.slice(before).map((c) => c[0]), html: T.els.app.innerHTML, flag: !!H.S.supportDeskFailed };
+      })();""", S={"adminPage": True}, responses={"/api/support/queue": q, "/api/support/sweep": {"closed": []}})
+    assert DESK_FAILED in out["failed"]
+    assert out["calls"] == ["/api/support/sweep", "/api/support/queue"]
+    assert out["flag"] is False and DESK_FAILED not in out["html"] and out["html"].count('class="sup-tile"') == 4 and "月卡沒到" in out["html"]
 
 
 def test_desk_labels_system_auto_and_human(main):

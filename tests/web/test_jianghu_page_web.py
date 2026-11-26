@@ -1667,7 +1667,6 @@ def test_every_grey_cell_sub_fits_the_cell():
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
     """伺服器沒給這一格的說明（舊版、序章裡是空的）：底下那一行照舊不畫（tianxia/features/guide/tests/test_explain_web.py::test_no_notes_without_server_notes 的約定），
     有沒有那一行由伺服器說了算，網頁只換句子；格子照樣寫短的。"""
@@ -1679,7 +1678,6 @@ def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_the_other_grey_reasons_keep_their_cells_and_notes():
     """名望還差：四格時放得下、格子照寫。FB-670（練功多一格，五格每格約 62 px、320 寬約 51 px，灰格小字最多四個字）起，
     「名望還差 15」在 320 寬會被切，改照這一張的做法：格子寫「名望不夠」，還差多少帶句號寫在底下那一行。
@@ -1780,7 +1778,6 @@ def test_every_grey_cell_says_at_most_four_characters(profile):
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_the_long_reasons_go_to_the_tap():
     """散人站在戰線上：格子「未投靠」，「散人不能出陣」整句是伺服器寫的出陣那一句；名望不夠：格子「名望不夠」，還差多少在點了浮出的那一句。"""
     game = _game_fb670("changshe")
@@ -1798,7 +1795,6 @@ def test_the_long_reasons_go_to_the_tap():
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_an_old_season_without_practice_keeps_four_cells():
     game = _game_fb670("yingshui")
     game.state.world.precise_actions = False  # 一類一顆沒蓋章：沒有練功
@@ -1807,7 +1803,6 @@ def test_an_old_season_without_practice_keeps_four_cells():
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_the_hut_never_has_a_practice_option():
     """草廬裡（序章）沒有練功：格子不會在序章冒出來。"""
     c = _content("week7")

@@ -386,7 +386,7 @@ endings = [
         ],
     },
     {
-        "id": "silk", "title": "絹成灰", "text": SILK, "annal": ANNAL_SILK,
+        "id": "silk", "title": "一絹成灰", "text": SILK, "annal": ANNAL_SILK,
         "effect": {"stats": {**REWARD, "fame": 1, "good": 2}},
         "after": [
             {"days": 3, "where": ACADEMY, "title": "三天後・潁川書院",
@@ -401,7 +401,7 @@ endings = [
         ],
     },
     {
-        "id": "langguan", "title": "郎官", "text": LANGGUAN, "annal": ANNAL_LANG,
+        "id": "langguan", "title": "入洛為郎", "text": LANGGUAN, "annal": ANNAL_LANG,
         "effect": {"stats": {**REWARD}},
         "after": [
             {"days": 3, "where": RIVER, "title": "三天後・潁水邊", "image": "stories/wolong_dates", "text": P(
@@ -416,7 +416,7 @@ endings = [
         ],
     },
     {
-        "id": "late", "title": "來不及", "failed": True, "weight": 3, "text": LATE, "annal": ANNAL_LATE,
+        "id": "late", "title": "人去書留", "failed": True, "weight": 3, "text": LATE, "annal": ANNAL_LATE,
         "effect": {"stats": {**REWARD}},
         "after": [
             {"days": 7, "where": LUOYANG, "title": "一週後・洛陽的傳聞",

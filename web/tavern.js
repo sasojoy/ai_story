@@ -83,7 +83,7 @@
     const names = [...shop.guests, ...shop.known.filter((n) => !shop.guests.includes(n))].slice(0, 10); // 座上客在前、問過的在後，同一個名字只寫一次
     let box, rules;
     if (mode === "q") {
-      const left = shop.asks_left == null ? "" : `<p class="tv-left">今天還能問<span class="tv-dots">${"<i></i>".repeat(Math.max(0, shop.asks_left | 0))}</span>${shop.asks_left ? "" : "（明天再來）"}</p>`; // 待 joy 潤
+      const left = shop.asks_left == null ? "" : `<p class="tv-left">${shop.asks_left ? `今天還能問 <b>${shop.asks_left | 0}</b> 次` : "今天問夠了，明天再來。"}</p>`; // 待 joy 潤
       box = `<form class="tav-form" id="tav-q"><input class="input" name="text" data-keep="q" maxlength="${shop.ask_chars | 0}" placeholder="例：最近哪裡最亂？" autocomplete="off"><button class="btn primary" type="submit">問</button></form>${left}`;
       rules = [`隨口問一句（${shop.ask_chars | 0} 字內），酒家照他聽來的說。`, "他答不上來不收錢。"];
     } else {
@@ -127,7 +127,7 @@
       : '<p class="tv-empty">最近沒聽說有人打聽你。</p>';
     const h = shop.hits;
     const tier = h.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
-    const tiers = h.tiers.map((t, i) => `<button type="button" class="tav-tier${t.tier === tier ? " on" : ""}" data-act="tav-tier" data-tier="${t.tier}" aria-pressed="${t.tier === tier}"><b>${esc(t.name)}</b><span class="tv-dots red">${h.tiers.map((_, j) => `<i class="${j <= i ? "f" : ""}"></i>`).join("")}</span><small>${t.price | 0} 兩</small></button>`).join("");
+    const tiers = h.tiers.map((t, i) => `<button type="button" class="tav-tier${t.tier === tier ? " on" : ""}" data-act="tav-tier" data-tier="${t.tier}" aria-pressed="${t.tier === tier}"><b>${esc(t.name)}</b><span class="tv-lv" aria-hidden="true">${h.tiers.map((_, j) => `<i class="${j <= i ? "f" : ""}"></i>`).join("")}</span><small>${t.price | 0} 兩</small></button>`).join("");
     const mine = h.mine.length ? `${tavSec("我下的單")}<ul class="tav-whispers">${h.mine.map((m) => `<li class="named">${esc(m)}</li>`).join("")}</ul>` : "";
     const streaks = (h.streaks || []).length ? `<ul class="tav-whispers">${h.streaks.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>` : "";
     const hire = h.ended ? "" : `${tavSec("買殺手", "找上門的事，不說是誰")}

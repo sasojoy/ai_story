@@ -166,4 +166,7 @@ class GuardScenario(PeersScenario):
 
 # 改一個字（selftest）：投效之後名帖那一行的開關判斷反過來，開著的季寫不出那一行，season21 seen 那一段抓到
 register_track("guard", GuardScenario, (("tianxia/core/guard_base.py",), ('if b is not None and b.name else ""', 'if b is not None and not b.name else ""')), "season21",
-               covers=("guard", "explore", "hire", "peers", "zhuan"))
+               covers=("admin", "battle", "bounties", "bout", "codex", "companions", "cultivation", "explore", "faction", "figure_acts",
+                       "gear", "guard", "guide", "heroines", "horses", "jieyi", "legacy", "mall", "military", "outlets",
+                       "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel",
+                       "zhuan", "zongmen"))

@@ -266,7 +266,7 @@ class CompassScenario(Scenario):
 
 # 改一個字（selftest）：「換一件事」一下記一次（step.skip；核心的 tianxia/step.py，第 36 批之後照舊在那裡）
 register_track("compass", CompassScenario, (("tianxia/step.py",), ("else 0) + 1\n", "else 0) + 2\n")), "week7",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "figure_acts", "gear", "guide", "heroines", "legacy", "looks", "mall", "military", "outlets", "peers",
-                       "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "territory_acts", "travel",
-                       "zhuan", "zongmen"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "figure_acts", "gear", "guard", "guide", "heroines", "horses", "legacy", "looks", "mall",
+                       "military", "outlets", "peers", "seal", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story",
+                       "tavern", "territory_acts", "titles", "travel", "zhuan", "zongmen"))

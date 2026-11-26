@@ -305,7 +305,7 @@ def test_a_server_bot_with_no_pills_stays_dry(game):
 def test_the_page_shows_the_refill_button_with_no_pills(game):
     refill_on(game)
     game.state.player.stamina, game.state.player.stamina_pills = 40.0, 0
-    top = run(server.main_view(game), "return H.topHtml();")
+    top = run(server.main_view(game), "return H.topHtml();", S={"stamOpen": True})
     assert 'data-act="pill"' in top and f">{LABEL}</button>" in top
     assert "丹0" not in top and "disabled" not in top.split('data-act="pill"')[1].split(">")[0]
     # 給輔助科技讀的那句也走補滿的那一支：寫補滿、寫免費，不是 joy 的「服下回體丹（剩 N 顆…）」
@@ -316,20 +316,20 @@ def test_the_page_shows_the_refill_button_with_no_pills(game):
 def test_the_button_is_grey_when_stamina_is_full_and_says_refill_not_a_count(game):
     refill_on(game)
     game.state.player.stamina = float(cap(game))
-    top = run(server.main_view(game), "return H.topHtml();")
-    button = top[top.index('<button class="pill-btn"'):top.index("</button>", top.index('<button class="pill-btn"'))]
+    top = run(server.main_view(game), "return H.topHtml();", S={"stamOpen": True})
+    button = top[top.index('<button class="btn pill-btn"'):top.index("</button>", top.index('<button class="btn pill-btn"'))]
     assert "disabled" in button and f">{LABEL}" in button and "丹20" not in button
 
 
 @needs_node
 def test_with_the_switch_off_the_button_is_joys_pill_button_and_vanishes_at_zero(game):
     game.state.player.stamina = 40.0
-    top = run(server.main_view(game), "return H.topHtml();")
-    assert 'data-act="pill"' in top and ">丹20</button>" in top and LABEL not in top
+    top = run(server.main_view(game), "return H.topHtml();", S={"stamOpen": True})
+    assert 'data-act="pill"' in top and "服一顆回體丹<small>還有 20 顆</small></button>" in top and LABEL not in top
     restore = game.content.config.stamina_pill_restore
     assert f'aria-label="服下回體丹（剩 20 顆，回 {restore} 點體力）"' in top  # joy 的那一句，一個字不差
     game.state.player.stamina_pills = 0
-    top = run(server.main_view(game), "return H.topHtml();")
+    top = run(server.main_view(game), "return H.topHtml();", S={"stamOpen": True})
     assert "pill-btn" not in top and 'data-act="pill"' not in top
 
 
@@ -357,6 +357,7 @@ def test_the_pill_route_refills_to_the_top_under_the_weekend_profile(monkeypatch
 
     weekend = real_content("week7")
     weekend.config.auto_open_first_season = True
+    weekend.config.terms.enabled = False  # 這裡測的不是條款：註冊不帶兩個勾選（條款 2026-11-12 起在正式設定打開）
     weekend.config.beta_free_refill = True  # 週末設定不再開它（2026-10-12）；開關照舊管用
     monkeypatch.setattr(server, "CONTENT", weekend)
     client = TestClient(server.app)

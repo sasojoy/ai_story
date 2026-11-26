@@ -1,0 +1,236 @@
+<style>
+/* 異聞・全圖（岔路的樹）對比稿（map）。色票照 web/style.css 的 :root（淺）與 prefers-color-scheme: dark（深）抄過來，
+   定義在最外層的 .yw-light / .yw-dark 上；選擇器一律 .yw-map 開頭。字是示意，待 joy 潤。 */
+.yw-map.yw-light {
+  --paper: #f4ede0; --card: #fbf7ef; --card-2: #efe6d5; --ink: #2a241d; --ink-2: #6b6155; --line: #ddd1bc;
+  --accent: #a8322a; --accent-ink: #fff; --accent-soft: rgba(168, 50, 42, 0.10); --gold: #b7862b; --kuai: #2f5d8a;
+  --shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06); --art-filter: none;
+  color-scheme: light;
+}
+.yw-map.yw-dark {
+  --paper: #16130f; --card: #211c17; --card-2: #2b251e; --ink: #ece3d3; --ink-2: #a89b88; --line: #3a3229;
+  --accent: #d2574a; --accent-ink: #fff; --accent-soft: rgba(210, 87, 74, 0.16); --gold: #d6a548; --kuai: #4a7cae;
+  --shadow: none; --art-filter: brightness(.78) saturate(.85);
+  color-scheme: dark;
+}
+.yw-map {
+  --radius: 14px;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif;
+  --kai: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "DFKai-SB", var(--serif);
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: var(--paper); color: var(--ink); font: 15px/1.65 var(--sans);
+  padding: 16px 12px 24px; display: flex; flex-direction: column; align-items: center; gap: 22px;
+}
+.yw-map *, .yw-map *::before, .yw-map *::after { box-sizing: border-box; }
+.yw-map .shot { width: 390px; max-width: 100%; }
+.yw-map .shot.w360 { width: 360px; }
+.yw-map .shot-cap { margin: 0 2px 6px; font: 600 12px/1.4 var(--sans); color: var(--ink-2); letter-spacing: .06em; }
+.yw-map .phone { width: 100%; min-height: 640px; overflow: hidden; background: var(--paper); border: 1px solid var(--line); border-radius: 26px;
+  padding: 10px 12px 18px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
+.yw-map p { margin: 0; }
+.yw-map button { font: inherit; color: inherit; -webkit-appearance: none; appearance: none; }
+
+/* 頂上一列：回去 */
+.yw-map .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+.yw-map .back { min-height: 44px; padding: 0 4px; border: 0; background: none; font: 700 15px var(--kai); color: var(--ink-2); letter-spacing: .06em; cursor: pointer; }
+.yw-map .bar small { font: 400 12px var(--sans); color: var(--ink-2); }
+
+/* 頁首圖（佔位：斜紋＋水墨漸層） */
+.yw-map .hero { position: relative; height: 130px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--card-2); }
+.yw-map .hero .art { position: absolute; inset: 0; filter: var(--art-filter);
+  background:
+    radial-gradient(ellipse 60% 70% at 26% 34%, color-mix(in srgb, var(--ink) 22%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 78% 58%, color-mix(in srgb, var(--ink) 14%, transparent), transparent 70%),
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--line) 80%, transparent) 0 2px, transparent 2px 11px),
+    var(--card-2);
+  -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent); }
+.yw-map .hero .ph { position: absolute; top: 40px; left: 0; right: 0; text-align: center; font: 400 12px var(--sans); color: var(--ink-2); letter-spacing: .2em; }
+.yw-map .plaque { position: absolute; top: 10px; right: 10px; writing-mode: vertical-rl; padding: 10px 6px; border: 2px solid #b7862b; border-radius: 4px;
+  background: #5a3b22; color: #f1d9a4; font: 700 16px/1 var(--kai); letter-spacing: .2em; }
+.yw-map .hero-l { position: absolute; left: 12px; right: 60px; bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.yw-map .hero-l b { font: 700 19px/1.3 var(--kai); letter-spacing: .08em; }
+
+/* 朱印 */
+.yw-map .seal { display: inline-grid; place-items: center; padding: 2px 6px; border: 2px solid var(--accent); border-radius: 4px; transform: rotate(-4deg);
+  font: 700 12px/1.2 var(--kai); color: var(--accent); background: var(--card); white-space: nowrap; }
+.yw-map .seal.solid { background: var(--accent); color: var(--accent-ink); }
+.yw-map .seal.big { font-size: 15px; padding: 4px 8px; }
+
+/* 開場與朱批 */
+.yw-map .open { margin: 0 0 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.yw-map .open .ti { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 4px; }
+.yw-map .open .ti b { font: 700 18px/1.3 var(--kai); letter-spacing: .1em; }
+.yw-map .open .ti small { font: 400 12px var(--sans); color: var(--ink-2); white-space: nowrap; }
+.yw-map .hook { margin: 2px 0 10px; font: 400 17px/1.6 var(--kai); }
+.yw-map .zhupi { position: relative; padding: 4px 0 4px 12px; border-left: 3px solid var(--accent); color: var(--accent); font: 400 15px/1.55 var(--kai); }
+.yw-map .zhupi b { font-weight: 700; }
+.yw-map .zhupi q { quotes: "「" "」"; font: 700 17px/1.5 var(--kai); }
+.yw-map .zhupi small { margin-left: 6px; font: 400 11px var(--sans); color: var(--ink-2); letter-spacing: .08em; }
+
+/* 段標題 */
+.yw-map .sec { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 16px 0 8px; padding-left: 8px; border-left: 3px solid var(--ink);
+  font: 700 17px/1.3 var(--kai); letter-spacing: .12em; }
+.yw-map .sec small { font: 400 12px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+
+/* 底下：眾說一句、還能開幾條路、？ */
+.yw-map .pend { margin: 12px 0 0; padding: 8px 0 8px 10px; border-left: 2px dashed var(--line); font: 400 15px/1.6 var(--kai); color: var(--ink); }
+.yw-map .pend em { font-style: normal; color: var(--accent); font-weight: 700; }
+.yw-map .left { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 10px 12px; background: var(--card-2); border-radius: 12px; }
+.yw-map .left .n { flex: none; min-width: 44px; text-align: center; font: 700 24px/1 var(--serif); color: var(--ink); }
+.yw-map .left .n small { display: block; margin-top: 4px; font: 400 11px var(--sans); color: var(--ink-2); }
+.yw-map .left .t { min-width: 0; font-size: 14px; line-height: 1.45; }
+.yw-map .left .t b { font-weight: 600; }
+.yw-map .left .t small { display: block; font-size: 12px; color: var(--ink-2); }
+.yw-map .help { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin: 8px 0 0; padding: 0 2px; border: 0; border-top: 1px dashed var(--line);
+  background: none; text-align: left; font: 400 14px var(--sans); color: var(--ink-2); cursor: pointer; }
+.yw-map .help i { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--ink-2); border-radius: 50%; font: 700 13px/1 var(--sans); font-style: normal; }
+.yw-map .help span { flex: 1; }
+
+/* 定論框 */
+.yw-map .verdict { position: relative; margin: 14px 0 14px; padding: 22px 14px 12px; border: 3px double var(--ink); border-radius: 6px; background: var(--card); }
+.yw-map .verdict > .seal { position: absolute; top: -13px; left: 10px; }
+.yw-map .verdict p { font: 400 16px/1.75 var(--kai); }
+.yw-map .verdict p q { quotes: "「" "」"; color: var(--accent); font-weight: 700; }
+.yw-map .verdict .omen { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font: 400 14px/1.6 var(--kai); color: var(--ink-2); }
+
+/* 你走的 */
+.yw-map .mine { flex: none; font: 700 12px var(--sans); color: var(--accent); white-space: nowrap; }
+
+/* 丙：一條路一張卡（走到底的路各一張，照足跡排；沒人走過的岔路收在最後一張虛線卡） */
+.yw-map-c .path { position: relative; margin: 0 0 10px; padding: 10px 12px 8px 12px; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--ink-2);
+  border-radius: var(--radius); box-shadow: var(--shadow); }
+.yw-map-c .path.me { border-left-color: var(--accent); }
+.yw-map-c .path .hd { display: flex; align-items: flex-start; gap: 10px; }
+.yw-map-c .path .hd .x { flex: 1; min-width: 0; }
+.yw-map-c .path .hd .x b { display: block; font: 700 18px/1.35 var(--kai); letter-spacing: .04em; }
+.yw-map-c .path .hd .x small { display: block; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+.yw-map-c .path .fp { flex: none; min-width: 46px; text-align: right; font: 700 26px/1 var(--serif); }
+.yw-map-c .path .fp small { display: block; margin-top: 3px; font: 400 11px var(--sans); color: var(--ink-2); }
+.yw-map-c .rail { height: 4px; margin: 8px 0 6px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
+.yw-map-c .rail i { display: block; height: 100%; background: var(--ink-2); border-radius: 2px; }
+.yw-map-c .path.me .rail i { background: var(--accent); }
+.yw-map-c .chain { position: relative; margin: 2px 0 0; padding-left: 16px; }
+.yw-map-c .chain::before { content: ""; position: absolute; left: 5px; top: 10px; bottom: 10px; border-left: 2px dotted var(--line); }
+.yw-map-c .stp { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 3px 0; }
+.yw-map-c .stp::before { content: ""; position: absolute; left: -15px; top: 11px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); }
+.yw-map-c .path.me .stp::before { background: var(--accent); }
+.yw-map-c .stp .k { flex: none; width: 42px; white-space: nowrap; font: 700 12px var(--kai); color: var(--ink-2); }
+.yw-map-c .stp .t { flex: 1; min-width: 0; font: 400 15px/1.45 var(--kai); }
+.yw-map-c .stp .t small { margin-left: 4px; font: 400 12px var(--sans); color: var(--ink-2); }
+.yw-map-c .stp.zp .t { color: var(--accent); font-weight: 700; }
+.yw-map-c .stp.same .t { color: var(--ink-2); font-size: 14px; }
+.yw-map-c .path .tag { position: absolute; top: -10px; right: 70px; }
+.yw-map-c .path .tag.mine { padding: 1px 8px; border-radius: 10px; background: var(--card); border: 1px solid var(--accent); }
+.yw-map-c .reread { display: flex; align-items: center; justify-content: flex-end; width: 100%; min-height: 44px; margin: 2px 0 -6px; padding: 0; border: 0; border-top: 1px dashed var(--line);
+  background: none; font: 700 14px var(--kai); color: var(--ink-2); letter-spacing: .06em; cursor: pointer; }
+.yw-map-c .path.dim { opacity: .82; }
+.yw-map-c .unw { margin: 4px 0 0; padding: 8px 12px 4px; border: 1px dashed var(--line); border-radius: var(--radius); }
+.yw-map-c .unw .h { font: 700 15px var(--kai); color: var(--ink-2); letter-spacing: .1em; }
+.yw-map-c .unw .r { display: flex; flex-direction: column; justify-content: center; min-height: 48px; padding: 4px 0; border-top: 1px dashed var(--line); }
+.yw-map-c .unw .h + .r { border-top: 0; }
+.yw-map-c .unw .r b { font: 400 15px/1.4 var(--kai); color: var(--ink-2); }
+.yw-map-c .unw .r small { font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+.yw-map-c .verdict .cap { margin: 0 0 6px; font: 400 14px/1.55 var(--kai); color: var(--ink-2); }
+.yw-map-c .verdict .cap q { quotes: "「" "」"; color: var(--ink-2); font-weight: 400; }
+</style>
+<div class="yw-map yw-map-c yw-light">
+<section class="shot">
+<p class="shot-cap">丙・一條路一張卡 ①　走完之後的全圖（眾說，還沒定論）</p>
+<div class="phone">
+  <div class="bar"><button class="back" type="button">‹ 回去</button><small>這一則的全圖</small></div>
+  <div class="hero"><div class="art"></div><div class="ph">此地插畫</div><div class="plaque">異聞</div>
+    <div class="hero-l"><b>荒野山道</b><span class="seal">眾說・還有兩天</span></div></div>
+  <div class="open">
+    <div class="ti"><b>霧裡的身影</b><small>已有五十七人走過</small></div>
+    <p class="hook">前面濃霧瀰漫，隱約看到一個身影⋯</p>
+    <div class="zhupi"><b>陸三刀</b>說那是<q>一隻會背兵法的鵝</q><small>親筆</small></div>
+  </div>
+  <div class="sec">走到底的路・三條<small>照足跡排</small></div>
+  <div class="path me"><span class="tag mine">你走的</span>
+    <div class="hd"><div class="x"><b>跟牠拜把子</b><small>陸三刀走出來的路</small></div><div class="fp">44<small>足跡</small></div></div>
+    <div class="rail"><i style="width:100%"></i></div>
+    <div class="chain">
+      <div class="stp zp"><span class="k">第一步</span><span class="t">一隻會背兵法的鵝<small>陸三刀・57</small></span></div>
+      <div class="stp"><span class="k">第二步</span><span class="t">請牠背完整本兵書<small>陸三刀・49</small></span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">跟牠拜把子<small>陸三刀・44</small></span></div>
+    </div>
+    <button class="reread" type="button">重讀這三幕 ›</button>
+  </div>
+  <div class="path">
+    <div class="hd"><div class="x"><b>順著鵝眼望進霧裡</b><small>陸小滿 開的路</small></div><div class="fp">8<small>足跡</small></div></div>
+    <div class="rail"><i style="width:18%"></i></div>
+    <div class="chain">
+      <div class="stp same"><span class="k">第一步</span><span class="t">同上・一隻會背兵法的鵝</span></div>
+      <div class="stp"><span class="k">第二步</span><span class="t">順著鵝眼望進霧裡<small>陸小滿・8</small></span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">等霧散了再上路<small>陸小滿・8</small></span></div>
+    </div>
+  </div>
+  <div class="path">
+    <div class="hd"><div class="x"><b>追問夜半三更的事</b><small>韓十一 開的路</small></div><div class="fp">5<small>足跡</small></div></div>
+    <div class="rail"><i style="width:11%"></i></div>
+    <div class="chain">
+      <div class="stp same"><span class="k">一、二</span><span class="t">同你走的・鵝 › 背兵書</span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">追問夜半三更的事<small>韓十一・5</small></span></div>
+    </div>
+  </div>
+  <div class="unw">
+    <p class="h">還沒人走過的岔路</p>
+    <div class="r"><b>問牠霧裡是什麼</b><small>第二步・接在「一隻會背兵法的鵝」之後</small></div>
+    <div class="r"><b>回他：鵝是我的兵</b><small>第三步・接在「請牠背完整本兵書」之後</small></div>
+    <div class="r"><b>官軍・黃巾・迷路的老人</b><small>第一步・另外三個猜法</small></div>
+  </div>
+  <p class="pend">此地眾說紛紜。再過兩天，足跡最多的那條路成為定論。你這一趟算在<em>「跟牠拜把子」</em>這條路上。</p>
+  <div class="left"><div class="n">3<small>條</small></div><div class="t"><b>還能開 3 條路・頭兩條不用問路香</b><small>這一則不用香的兩條已經有人開走，再開要一支問路香</small></div></div>
+  <button class="help" type="button"><i>?</i><span>足跡與定論的規矩</span>▾</button>
+</div>
+</section>
+
+<section class="shot">
+<p class="shot-cap">丙・一條路一張卡 ②　同一則，三天到了（定論之後）</p>
+<div class="phone">
+  <div class="bar"><button class="back" type="button">‹ 回去</button><small>這一則的全圖</small></div>
+  <div class="hero"><div class="art"></div><div class="ph">此地插畫</div><div class="plaque">異聞</div>
+    <div class="hero-l"><b>荒野山道</b><span class="seal solid">定論</span></div></div>
+  <div class="verdict"><span class="seal solid big">定論</span>
+    <p class="cap">霧裡的身影・<q>前面濃霧瀰漫，隱約看到一個身影⋯</q></p>
+    <p>山道霧裡的身影，原是<q>一隻會背兵法的鵝</q>。——陸三刀說的，此地從此這麼傳。四十四人走過這條路。</p>
+    <p class="omen">這一帶的人都說，這是個好兆頭。</p></div>
+  <div class="sec">走到底的路・三條<small>照足跡排</small></div>
+  <div class="path me"><span class="tag seal solid">定論・你走的</span>
+    <div class="hd"><div class="x"><b>跟牠拜把子</b><small>陸三刀走出來的路</small></div><div class="fp">44<small>足跡</small></div></div>
+    <div class="rail"><i style="width:100%"></i></div>
+    <div class="chain">
+      <div class="stp zp"><span class="k">第一步</span><span class="t">一隻會背兵法的鵝<small>陸三刀・57</small></span></div>
+      <div class="stp"><span class="k">第二步</span><span class="t">請牠背完整本兵書<small>陸三刀・49</small></span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">跟牠拜把子<small>陸三刀・44</small></span></div>
+    </div>
+    <button class="reread" type="button">重讀這三幕 ›</button>
+  </div>
+  <div class="path dim">
+    <div class="hd"><div class="x"><b>順著鵝眼望進霧裡</b><small>陸小滿 開的路</small></div><div class="fp">8<small>足跡</small></div></div>
+    <div class="rail"><i style="width:18%"></i></div>
+    <div class="chain">
+      <div class="stp same"><span class="k">第一步</span><span class="t">同上・一隻會背兵法的鵝</span></div>
+      <div class="stp"><span class="k">第二步</span><span class="t">順著鵝眼望進霧裡<small>陸小滿・8</small></span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">等霧散了再上路<small>陸小滿・8</small></span></div>
+    </div>
+  </div>
+  <div class="path dim">
+    <div class="hd"><div class="x"><b>追問夜半三更的事</b><small>韓十一 開的路</small></div><div class="fp">5<small>足跡</small></div></div>
+    <div class="rail"><i style="width:11%"></i></div>
+    <div class="chain">
+      <div class="stp same"><span class="k">一、二</span><span class="t">同定論那條・鵝 › 背兵書</span></div>
+      <div class="stp"><span class="k">第三步</span><span class="t">追問夜半三更的事<small>韓十一・5</small></span></div>
+    </div>
+  </div>
+  <div class="unw">
+    <p class="h">還沒人走過的岔路</p>
+    <div class="r"><b>問牠霧裡是什麼</b><small>第二步・接在「一隻會背兵法的鵝」之後</small></div>
+    <div class="r"><b>回他：鵝是我的兵</b><small>第三步・接在「請牠背完整本兵書」之後</small></div>
+    <div class="r"><b>官軍・黃巾・迷路的老人</b><small>第一步・另外三個猜法</small></div>
+  </div>
+  <div class="left"><div class="n">3<small>條</small></div><div class="t"><b>還能開 3 條路・頭兩條不用問路香</b><small>定論不會再變；新開的路照樣走得到、有獎勵</small></div></div>
+  <button class="help" type="button"><i>?</i><span>足跡與定論的規矩</span>▾</button>
+</div>
+</section>
+</div>

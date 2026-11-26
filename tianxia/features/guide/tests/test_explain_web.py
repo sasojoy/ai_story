@@ -84,9 +84,9 @@ def test_tapping_the_stamina_bar_opens_the_help_and_the_pill_keeps_its_own_targe
     closed = run(m, "return H.topHtml();")
     bar = re.search(r'<div class="bar stam"[^>]*>', closed).group(0)
     assert 'data-act="stam-help"' in bar and 'aria-expanded="false"' in bar
-    # 丹的鈕在體力條裡面、自己帶 data-act="pill"：點它時 closest("[data-act]") 先碰到它，不會走到攤開說明
+    # 2026-11-26 全站總檢查 B：體力條上不再擠「丹30今2」，丹的鈕在攤開的說明裡（點體力條就看得到）
     inside = closed[closed.index(bar):closed.index("</div>", closed.index(bar))]
-    assert 'class="pill-btn" data-act="pill"' in inside
+    assert 'data-act="pill"' not in inside
     assert 'class="more-stats stam-help"' not in closed
     out = run(m, """return (async () => {
       const el = { dataset: { act: "stam-help" }, classList: { contains: () => false } };
@@ -100,6 +100,7 @@ def test_tapping_the_stamina_bar_opens_the_help_and_the_pill_keeps_its_own_targe
     block = re.search(r'<div class="more-stats stam-help" id="stam-help">(.*?)</div>', out["opened"]).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == help_lines  # 伺服器寫好的幾行，一行一段
     assert 'aria-expanded="true"' in out["opened"]
+    assert 'class="btn pill-btn" data-act="pill"' in out["opened"]
 
 
 def test_the_pill_click_still_takes_a_pill():
@@ -115,6 +116,7 @@ def test_the_pill_click_still_takes_a_pill():
 def test_no_help_from_an_old_server_means_a_plain_bar():
     m = _main()
     m["status"].pop("stamina_help")
+    m["status"]["pills"] = 0  # 有丹時點體力條攤開的是服丹那一顆（全站總檢查 B）
     bar = re.search(r'<div class="bar stam"[^>]*>', run(m, "return H.topHtml();")).group(0)
     assert "data-act" not in bar
 

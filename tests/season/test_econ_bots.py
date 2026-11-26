@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from conftest import no_week_unlock, real_content
+from conftest import no_week_unlock, donate_content as real_content
 from tianxia import bot, bot_policy
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world

@@ -6,6 +6,9 @@ No game server and no page scripts: each snapshot's body under the candidate's <
 Snapshots with the same normalized DOM play once. --no-freeze --styles-only is the animation pass: nothing frozen, motion allowed,
 only animation-* and transition-* are compared (what frozen walks cannot see is the declaration, not the frames); @keyframes come with the rules.
 The corpus is a product of a walk and never goes into git (gate.py --keep-corpus).
+A picture that differs with the DOM and every computed style the same (noise.recheck_candidate) is drawn again, RERENDER_TIMES
+reloads a side; one picture in common between the two sides is the page's own variants (noise class render-variants), none is real
+(batch 237, settle). Real pixel rows keep the side-by-side and both full-size pictures under red/.
 
 Exit 0 same, 1 differs, 2 the tool broke.
 """
@@ -37,6 +40,9 @@ SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
 HEAD = re.compile(r"<head\b[^>]*>(.*?)</head>", re.S | re.I)
 ANIMATION_PROPS = ("animation-", "transition-")
 REPLAY_SECONDS = 3600  # about 1.3 seconds a snapshot
+RERENDER_TIMES = 4  # batch 237: reloads a side for a picture that only differs in pixels (wave AA's forge scenes drew two or three pictures a window)
+RERENDER_SECONDS = 900
+RERENDER_MAX_PAGES = 40  # past this many pages the rest are not drawn again and stay real: a change every page shows is not the page's own variants
 TYPES = {".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".gif": "image/gif", ".ico": "image/x-icon", ".woff2": "font/woff2", ".woff": "font/woff"}
 
 
@@ -131,6 +137,86 @@ def filter_props(out: dict) -> dict:
     return out
 
 
+def picture_hash(path: str) -> str:
+    """The decoded pixels, not the PNG bytes: the same picture encoded twice is one picture."""
+    with compare.Image.open(path) as im:
+        return hashlib.sha256(im.convert("RGB").tobytes()).hexdigest()[:16]
+
+
+def run_sides(work: str, pages: dict, webs, cdps, node: str, env: dict, extra, seconds: float, what: str) -> tuple[list, list, list]:
+    """One replay.mjs a side, each with its own http server; (walk folders, processes, servers), the servers already shut down."""
+    servers, procs, walks = [], [], []
+    try:
+        for label, web, cdp in zip(("a", "b"), webs, cdps):
+            srv, origin = serve(web, pages)
+            servers.append(srv)
+            walk = os.path.join(work, label)
+            os.makedirs(walk)
+            walks.append(walk)
+            procs.append(subprocess.Popen([node, "--no-warnings", os.path.join(HERE, "replay.mjs"), label, origin, walk, str(cdp), os.path.join(work, "pages.json"), *extra],
+                                          stdout=open(os.path.join(work, f"{label}.out"), "wb"), stderr=open(os.path.join(work, f"{label}.err"), "wb"), env=env, cwd=work, creationflags=gate.DETACHED))
+        gate.wait_all(procs, seconds, what)
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                gate.kill_tree(p.pid)
+        for s in servers:
+            s.shutdown()
+    return walks, procs, servers
+
+
+def rerender(walks, work: str, pages: dict, webs, cdps, node: str, env: dict, flags, candidates, times: int = RERENDER_TIMES) -> tuple[dict, list]:
+    """Each candidate's page loaded again on both sides. file -> ([hashes side A], [hashes side B]), the first pass's picture first; and tool lines."""
+    os.makedirs(work)
+    with open(os.path.join(work, "pages.json"), "w", encoding="utf-8") as f:
+        json.dump([], f)
+    want = []
+    for c in candidates:
+        if [c["scene"], c["view"]] not in want:
+            want.append([c["scene"], c["view"]])
+    listed = os.path.join(work, "recheck.json")
+    with open(listed, "w", encoding="utf-8") as f:
+        json.dump(want, f, ensure_ascii=False)
+    sides, procs, _ = run_sides(work, pages, webs, cdps, node, env, [*flags, "--recheck", listed, str(times)], RERENDER_SECONDS, "replay recheck")
+    seen, tool = {}, []
+    for i, (side, p) in enumerate(zip(sides, procs)):
+        made = os.path.join(side, "recheck.json")
+        if not os.path.exists(made):
+            fatal = ""
+            if os.path.exists(os.path.join(side, "report.json")):
+                fatal = compare.load_report(side).get("fatal", "")
+            tool.append(f"recheck {'ab'[i]} left no pictures (exit {p.returncode}) {fatal[:300]}")
+            continue
+        with open(made, encoding="utf-8") as f:
+            shots = json.load(f)
+        for c in candidates:
+            first = [picture_hash(os.path.join(walks[i], "shots", c["file"]))]
+            seen.setdefault(c["file"], ([], []))[i][:] = first + [picture_hash(os.path.join(side, "recheck", g)) for g in shots.get(c["file"], [])]
+    return seen, tool
+
+
+def settle(res: dict, walks, red_dir: str | None, red_budget: int, seen: dict) -> dict:
+    """The rows compare.compare put aside (out["recheck"]): a picture in common between the two sides' renders is render-variants noise,
+    none is a real pixel row, put back where it would have been among the real rows, with its pictures under red/ while the budget lasts."""
+    kept = []
+    for c in res.pop("recheck", []):
+        a, b = seen.get(c["file"], ([], []))
+        renders = [len(set(a)), len(set(b))]
+        d = c["detail"]
+        if noise.render_variants(a, b):
+            res["noise"]["render-variants"] = res["noise"].get("render-variants", 0) + 1
+            res["noise_rows"].append({"file": c["file"], "class": "render-variants", "pixels": d["pixels"], "levels": d["levels"], "box": d["box"], "renders": renders})
+        else:
+            kept.append((c, {"scene": c["scene"], "class": "pixel", "detail": {**d, "renders": renders}}))
+    for c, row in reversed(kept):
+        res["real"].insert(c["at"], row)
+    for c, row in kept:
+        if red_dir and res["red_images"] < red_budget:
+            row["red"] = compare.save_red(os.path.join(walks[0], "shots", c["file"]), os.path.join(walks[1], "shots", c["file"]), red_dir, c["file"])
+            res["red_images"] += 1
+    return res
+
+
 def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, shoot=True, chrome=None, node=None, cdp_ports=None, red_budget=40, new_sheets=None) -> dict:
     chrome, node = gate.find_chrome(chrome), gate.find_node(node)
     cdps = gate.pick_ports(cdp_ports, "cdp-ports")
@@ -146,34 +232,30 @@ def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, sh
     t0 = time.monotonic()
     env = dict(gate.clean_env(), TIANXIA_WEBQA_CHROME=chrome)
     flags = ([] if frozen else ["--no-freeze"]) + ([] if shoot else ["--styles-only"])
-    servers, procs, walks = [], [], []
-    try:
-        for label, web, cdp in (("a", a_web, cdps[0]), ("b", b_web, cdps[1])):
-            srv, origin = serve(web, pages)
-            servers.append(srv)
-            walk = os.path.join(work, label)
-            os.makedirs(walk)
-            walks.append(walk)
-            procs.append(subprocess.Popen([node, "--no-warnings", os.path.join(HERE, "replay.mjs"), label, origin, walk, str(cdp), list_file, *flags],
-                                          stdout=open(os.path.join(work, f"{label}.out"), "wb"), stderr=open(os.path.join(work, f"{label}.err"), "wb"), env=env, cwd=work, creationflags=gate.DETACHED))
-        gate.wait_all(procs, REPLAY_SECONDS, "replay")
-    finally:
-        for p in procs:
-            if p.poll() is None:
-                gate.kill_tree(p.pid)
-        for s in servers:
-            s.shutdown()
+    walks, procs, servers = run_sides(work, pages, (a_web, b_web), cdps, node, env, flags, REPLAY_SECONDS, "replay")
     seconds = round(time.monotonic() - t0)
     for walk, p in zip(walks, procs):
         if not os.path.exists(os.path.join(walk, "report.json")):
             raise gate.ToolBroke(f"replay left no report (exit {p.returncode})")
     # the two ports differ and the snapshots carry no host; the stylesheet rules can, so both hosts go through the same mask
     origins = [f"127.0.0.1:{s.server_address[1]}" for s in servers]
-    res = compare.compare(walks[0], walks[1], origins, os.path.join(out_dir, "red"), red_budget=red_budget, want_fingerprint=False, new_sheets=new_sheets)
+    red_dir = os.path.join(out_dir, "red")
+    res = compare.compare(walks[0], walks[1], origins, red_dir, red_budget=red_budget, want_fingerprint=False, new_sheets=new_sheets, recheck=shoot)
     if not frozen:
         res = filter_props(res)
+    t1 = time.monotonic()
+    candidates = res.get("recheck", [])
+    scenes = list(dict.fromkeys(c["scene"] for c in candidates))[:RERENDER_MAX_PAGES]
+    drawn = [c for c in candidates if c["scene"] in scenes]
+    seen = {}
+    if drawn:
+        seen, tool = rerender(walks, os.path.join(work, "recheck"), pages, (a_web, b_web), cdps, node, env, flags, drawn)
+        res["tool"] += tool
+    real_before = len(res["real"])
+    res = settle(res, walks, red_dir, red_budget, seen)
     with_map = sum(1 for _, body in pages.values() if 'id="map-host"' in body)
-    res.update({"snapshots": len(pages), "with_map_host": with_map, "seconds": seconds})
+    res.update({"snapshots": len(pages), "with_map_host": with_map, "seconds": seconds,
+                "settle": {"pictures": len(candidates), "not_drawn": len(candidates) - len(drawn), "real": len(res["real"]) - real_before, "seconds": round(time.monotonic() - t1)}})
     shutil.rmtree(work, ignore_errors=True)
     return res
 
@@ -201,7 +283,7 @@ def main(argv=None) -> int:
     res["exit"] = code
     with open(os.path.join(a.out, "replay.json"), "w", encoding="utf-8") as f:
         json.dump({k: v for k, v in res.items() if k != "scene_names"}, f, ensure_ascii=False, indent=1)
-    print(f"replay exit {code}: snapshots {res['snapshots']} (with #map-host {res['with_map_host']}) real {len(res['real'])} noise {res['noise']} seconds {res['seconds']}")
+    print(f"replay exit {code}: snapshots {res['snapshots']} (with #map-host {res['with_map_host']}) real {len(res['real'])} noise {res['noise']} seconds {res['seconds']} settle {res['settle']}")
     for row in res["real"][:20]:
         print("REAL", row["scene"], row["class"], json.dumps(row["detail"], ensure_ascii=False)[:300])
     return code

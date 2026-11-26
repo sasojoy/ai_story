@@ -1,7 +1,7 @@
 """素材與經濟計畫 B7：玩法說明跟著新規則寫（收購、升階、捐軍備、找素材一階七成、出陣攻打贏給銀兩三成）；開關關著不寫。"""
 from __future__ import annotations
 
-from conftest import real_content
+from conftest import donate_content as real_content
 from tianxia.features.guide import howto as guide_howto
 from tianxia.features.sortie import howto as sortie_howto
 from tianxia.features.outlets import howto as outlets_howto

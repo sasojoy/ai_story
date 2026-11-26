@@ -7,7 +7,7 @@ import random
 import re
 
 import pytest
-from conftest import classic_rules, real_content
+from conftest import classic_rules, old_page, real_content
 from test_prologue_web import run
 
 import server
@@ -166,11 +166,11 @@ def test_the_newbie_entry_opens_the_drawer_on_the_howto_page():
 
 
 def _feeling_view():
-    """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。"""
+    """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。舊江湖頁（old_page）；新頁上的同一件事在 jianghu 包的 test_jianghu_parity_web.py。"""
     from tianxia import insights
     from tianxia.features.sense import sensing
 
-    content = real_content("week7")
+    content = old_page(real_content("week7"))
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None
@@ -214,7 +214,7 @@ def test_without_the_server_help_the_methods_keep_their_numbers():
 
 def test_the_xinde_hint_left_the_status_bar():
     """減法季批 1（整合設計 6.2）：狀態列剩三行，心得那一句提示搬到「自己」頁（心得底下）；閒著、選項、在路上都不在狀態列。"""
-    hint = "💡 你已攢下 20 點心得。點上面身上的武學練成內功、武學。"
+    hint = "你已攢下 20 點心得。點上面身上的武學練成內功、武學。"
     for over in ({}, {"journey": "往潁川郊野，還要 3 分鐘"}):
         m = _season_one()
         m["status"].update(hint=hint, **over)

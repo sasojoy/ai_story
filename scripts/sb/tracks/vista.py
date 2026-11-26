@@ -211,6 +211,7 @@ class VistaScenario(StackScenario):
 # 正式內容才有像，測試內容的人物沒有像、走不到這一句。
 register_track("vista", VistaScenario, (("tianxia/engine.py", "tianxia/features/companions/talk_actions.py"),
                                         ('"kind": "figure"', '"kind": "figurf"')), "season21",
-               covers=("admin", "battle", "bounties", "bout", "checkin", "companions", "craft", "cultivation", "explore", "faction",
-                       "feast", "figure_acts", "gear", "looks", "map", "military", "outlets", "peers", "sense", "smithy",
-                       "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan"))
+               covers=("admin", "battle", "bounties", "bout", "checkin", "codex", "companions", "craft", "cultivation", "explore",
+                       "faction", "feast", "figure_acts", "gear", "guard", "jieyi", "looks", "map", "military", "outlets",
+                       "peers", "sense", "smithy", "socialize", "sortie", "stamina_plays", "story", "tavern", "travel", "zhuan",
+                       "zongmen"))

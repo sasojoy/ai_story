@@ -306,3 +306,18 @@ def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
         assert (web / f"{img}.webp").is_file(), img
     for key in ("enter", "demon", "done", "fail"):  # 特殊頓悟那條線（武學合成優化）開線時填這四張
         assert (web / "stories" / f"dunwu_{key}.webp").is_file(), key
+
+
+def test_the_page_is_told_when_the_latest_entry_is_a_line_event_just_chosen():
+    """「剛剛」那一則是一條線的事件剛選完的後續時 feature_status 給 story_now（網頁照它整段攤開、結局卡等讀完才跳；Joy 2026-11-13 杜若的奇事）；
+    做了別的事、換成別的一則就不給。"""
+    game = ready(jianfa_game(), side="guan", loc=HERE)
+    _herbs(game)
+    _explore(game)
+    assert "story_now" not in game.feature_status()  # 端出第一段：剛剛是探索那一則
+    game.choose("choice:0")
+    game.choose("choice:0")
+    assert game.state.journal[0].title.startswith("段落t_shrine・")
+    assert game.feature_status()["story_now"] is True and [c.kind for c in game.story_cards()] == ["start", "end"]
+    _explore(game)
+    assert "story_now" not in game.feature_status()

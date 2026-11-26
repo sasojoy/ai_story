@@ -21,3 +21,5 @@ class SupportTuning(BaseModel):
     # 客服自動受理第 216 批（設計第八節）：客服官用哪一個帳號回（accounts.id 的數字或登入名；空＝token 路一律 404）、answered 幾天沒動就自動結單
     bot_account: str = ""
     auto_close_days: int = Field(default=3, ge=1)
+    # 結案後幾天刪掉整張單（隱私權條款第二條「客服單……結案後 1 年」；單、往來、註記、截圖、記號、查帳號的紀錄一起刪）。關著開關也照刪（features/support/purge.py）
+    purge_days: int = Field(default=365, ge=1)

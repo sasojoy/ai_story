@@ -25,8 +25,9 @@
   const GD_LOG = "紀事";
   const GD_LOG_SUB = "{pron}記得的事";
   const GD_LOG_EMPTY = "還沒有。";
-  const GD_ALONG_ON = "出門帶著{pron}";
-  const GD_ALONG_OFF = "出門讓{pron}留下";
+  const GD_ALONG = "出門時";
+  const GD_ALONG_ON = "帶著{pron}";
+  const GD_ALONG_OFF = "留在家";
   const GD_RENAME = "替{pron}改名";
   const GD_RENAME_GO = "就叫這個";
   const GD_RENAME_NOTE = "名字只能改一次。";
@@ -48,10 +49,12 @@
   const GD_GROWN = "{name}長大了，說想出去學本事。";
 
   // 俠客分頁的紅點（app.js tabsHtml、paintNewsDot 問；Joy 2026-11-10「要加」）：他有一件事還沒攤開、或等你挑去處；人在俠客頁時不亮
+  // 11/12 起三層：俠客分頁、「同伴」子分頁、「眼前這件事」那一格（web/shell.js registerDot；Joy「進去後 對應有紅點的事件應該也要標吧」）；攤開或挑了才滅
   const guardDot = () => {
     const g = S.main && S.main.guard;
-    return !!g && S.tab !== "practice" && ((!!g.event && !g.event.shown) || (!!g.schools && g.schools.length > 0));
+    return !!g && ((!!g.event && !g.event.shown) || (!!g.schools && g.schools.length > 0));
   };
+  if (typeof registerDot === "function") registerDot({ id: "guard", at: "practice", sub: "mates", on: guardDot });
   const gdFill = (s, g) => s.replace(/\{name\}/g, g.name).replace(/\{pron\}/g, g.pron)
     .replace(/\{school\}/g, g.school || "").replace(/\{until\}/g, g.study_until || "");
 
@@ -92,7 +95,7 @@
         <button class="btn primary" data-act="gd-say">${GD_SAY}</button></div>
         <button class="btn ghost gd-later" data-act="choose" data-id="guard:later">${GD_LATER}</button>`;
     }
-    const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}</h4>${kind}</div>${now}</section>`;
+    const nowSec = `<section class="gd-sec" aria-label="${GD_NOW}"><div class="gd-sec-hd"><h4>${GD_NOW}${dotHtml(guardDot())}</h4>${kind}</div>${now}</section>`;
     const teachSec = g.lessons && g.lessons.length ? `<section class="gd-sec" aria-label="${esc(gdFill(GD_TEACH, g))}"><div class="gd-sec-hd"><h4>${esc(gdFill(GD_TEACH, g))}</h4><small>${GD_TEACH_SUB}</small></div>
       <div class="gd-teach">${g.lessons.map((c) => `<button class="gd-lesson" data-act="choose" data-id="${esc(c.id)}">${esc(c.label)}</button>`).join("")}</div></section>` : "";
     const bioSec = g.bio ? `<section class="gd-sec" aria-label="${GD_BIO}"><div class="gd-sec-hd"><h4>${GD_BIO}</h4><small>${GD_BIO_SUB}</small></div>
@@ -101,7 +104,9 @@
       ? `<div class="gd-log">${g.log.map((e) => `<p class="gd-scrap tone${e.tone}"><small>${esc(e.stamp)}</small>${esc(e.text)}</p>`).join("")}</div>`
       : `<p class="gd-quiet">${GD_LOG_EMPTY}</p>`;
     const logSec = `<section class="gd-sec" aria-label="${GD_LOG}"><div class="gd-sec-hd"><h4>${GD_LOG}</h4><small>${esc(gdFill(GD_LOG_SUB, g))}</small></div>${log}</section>`;
-    const along = g.stage !== "grow" && g.stage !== "sworn" ? "" : `<button class="btn ghost gd-along" data-act="gd-along" data-on="${g.along ? 0 : 1}" aria-pressed="${!!g.along}">${esc(gdFill(g.along ? GD_ALONG_ON : GD_ALONG_OFF, g))}</button>`;
+    // 出門帶不帶他（Joy 2026-11-13「出門帶著他 是指現在就是已經帶著他？點這個鈕又說把它留在家裡」）：一排兩格，亮著的那格是現在的選擇，點另一格才換
+    const alongSeg = (on, text) => `<button class="gd-seg${!!g.along === on ? " on" : ""}" data-act="gd-along" data-on="${on ? 1 : 0}" aria-pressed="${!!g.along === on}"${!!g.along === on ? " disabled" : ""}>${esc(gdFill(text, g))}</button>`;
+    const along = g.stage !== "grow" && g.stage !== "sworn" ? "" : `<div class="gd-along" role="group" aria-label="${GD_ALONG}"><span class="gd-along-hd">${GD_ALONG}</span>${alongSeg(true, GD_ALONG_ON)}${alongSeg(false, GD_ALONG_OFF)}</div>`;
     const rename = !g.can_rename ? "" : S.gdRename
       ? `<div class="gd-own"><input class="input" id="gd-name" maxlength="6" value="${esc(g.name)}" aria-label="${esc(gdFill(GD_RENAME, g))}"><button class="btn primary" data-act="gd-rename-go">${GD_RENAME_GO}</button></div><p class="gd-note">${GD_RENAME_NOTE}</p>`
       : `<button class="btn ghost" data-act="gd-rename">${esc(gdFill(GD_RENAME, g))}</button>`;

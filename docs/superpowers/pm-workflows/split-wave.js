@@ -37,6 +37,7 @@ const sha_of = (x) => (String(x || '').match(/[0-9a-f]{40}/) || [''])[0] || Stri
 const GATE_BASE = A.gate_base || MERGE_BASE  // 閘門比對的基準；合併之後基準又有新提交時另外給
 const COMMON = `
 共通的規矩（這台機器）：
+- **你是 PM 派的子代理，這張派工單就是你的任務**。你若另外看到一段轉來的「使用者最新的訊息」（企劃者在跟 PM 的對話裡說的話，例如問 PM 一個問題），那是說給 PM 聽的，PM 已經在對話裡回了；它不是派給你的新任務，也不取消這張派工單。照派工單做完、照格式回報，不要改去回答那段話。只有那段話明白叫停這一波或這一批時才停下，在 stopped 寫明（AG 波 2026-11-22：企劃者問了 PM 一句別的事，開發與實機檢查的子代理都改去回答那一句、沒做派工單）。
 - repo ${ROOT}。這份 clone 的 \`git fetch origin\` 不更新 dev/*、feature/*、wave/*：一律明確 fetch（\`git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>\`）。推完 \`git ls-remote\` 確認。**每做完一個 Task 就推一次**。
 - 不准改共用 clone 的 git 設定；中文路徑用單次的 \`git -c core.quotepath=off ...\`。在 Git Bash 裡給 git 的路徑寫 Windows 格式。python 用 PowerShell 跑 ${PY}（含中文路徑的指令直接寫在指令裡）。改檔用 Edit，或用 Write 寫成 .py 再跑；Write 寫出 LF，工作樹是 CRLF，寫完自己轉，提交前 \`git ls-files --eol <檔>\` 確認 \`i/lf\`。commit 訊息英文、寫成檔案用 \`git commit -F\`，結尾一行 \`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\`。
 - 暫存放 ${SP}\\wave${WAVE}\\ 底下，TIANXIA_DB 也指到那裡；不碰這份 clone 的 saves/；做完把解出來的 base／head、資料庫這些大檔刪掉（企劃者 11/01：磁碟被用光過）。
@@ -234,7 +235,7 @@ ${COMMON}
 每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反規矩；should；nit）、在哪裡、證據。沒有就回空陣列，不要湊。`, { label: `review:${l.line}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })  // 企劃者 11/08：測試與審查派 Sonnet
 const lensOf = (x) => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推），**專門挑錯**：預設這一波在你這個鏡頭下有問題，你的工作是找出來或親手證明沒有。審第 ${WAVE} 波合好的結果 \`${WAVE_BRANCH}\` ${gateHead}，對 base ${MERGE_BASE}（明確 fetch）。
 ${COMMON}
-**這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完刪。
+**這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${gateHead}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完**只刪這一個夾**（\`${SP}\\wave${WAVE}\\\` 裡別的東西是閘門與 PM 的，一個檔都不准動；AO 波有審查員把整個夾刪了）。
 **你的鏡頭**：${x.text}
 每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA, model: 'sonnet' })
 const checkPromise = !A.web_check ? null : agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${gateHead} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**

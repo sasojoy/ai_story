@@ -4,6 +4,7 @@ import sqlite3
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -53,16 +54,21 @@ def test_backup_while_someone_keeps_writing(tmp_path):
     """伺服器開著、一直在寫：線上備份照樣拿到一份一致、驗得過的檔（Review Focus 1）。"""
     src = _live_db(tmp_path)
     stop = threading.Event()
+    errors = []
 
     def writer():
         conn = sqlite3.connect(src, timeout=5)
-        conn.execute("PRAGMA journal_mode = WAL")
-        i = 0
-        while not stop.is_set():
-            conn.execute("INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)", (i, f"第{i}筆"))
-            conn.commit()
-            i += 1
-        conn.close()
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+            i = 0
+            while not stop.is_set():
+                conn.execute("INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)", (i, f"第{i}筆"))
+                conn.commit()
+                i += 1
+        except Exception as e:  # 收起來給主執行緒斷：寫入被鎖死跟備份做壞分得出來
+            errors.append(e)
+        finally:
+            conn.close()
 
     thread = threading.Thread(target=writer)
     thread.start()
@@ -71,45 +77,101 @@ def test_backup_while_someone_keeps_writing(tmp_path):
     finally:
         stop.set()
         thread.join()
+    assert not errors, f"寫入的那一邊被鎖死：{errors!r}"
     assert backup_db.verify(out)["characters"] == 2
 
 
+class _Guarded(sqlite3.Connection):
+    """結構護欄：備份改回分步複製（backup 給了 pages）就當場丟，不必等寫入的保險期限。"""
+    calls = 0
+
+    def backup(self, target, *, pages=-1, **kw):
+        type(self).calls += 1
+        if pages > 0:
+            raise AssertionError(f"護欄：備份改回分步複製（pages={pages}），一直有人寫的時候會永遠做不完；要一步複製完")
+        return super().backup(target, pages=pages, **kw)
+
+
+def _guarded_sqlite3():
+    """只給 backup_db 用的 sqlite3：別的名字都轉給真的 sqlite3，只有 connect 換成會用 _Guarded 的連線。"""
+    shim = types.ModuleType("sqlite3")
+    shim.__getattr__ = lambda name: getattr(sqlite3, name)
+    shim.connect = lambda *a, **kw: sqlite3.connect(*a, factory=_Guarded, **kw)
+    return shim
+
+
 @pytest.mark.slow
-def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path):
+def test_backup_of_a_big_database_finishes_while_writes_never_stop(tmp_path, monkeypatch):
     """資料庫長大（好幾步才複製得完）、寫入又一直不停：一步一步複製的線上備份每次被寫入打斷就從頭來，
-    永遠做不完（量過：41MB、每秒三百多筆寫入，十二秒內沒做完）。要一口氣讀完同一個時間點的快照，不被寫入打斷。"""
+    永遠做不完（量過：41MB、每秒三百多筆寫入，十二秒內沒做完）。要一口氣讀完同一個時間點的快照，不被寫入打斷。
+    判準不看牆鐘：寫入只等測試叫它停；備份回來之後寫入還活著、而且之後還會再寫，才算沒被寫入擋住。
+    改回分步複製時護欄當場紅，不必等。"""
+    monkeypatch.setattr(_Guarded, "calls", 0)
+    monkeypatch.setattr(backup_db, "sqlite3", _guarded_sqlite3())
     src = _live_db(tmp_path)
     conn = sqlite3.connect(src)
+    before = conn.execute("SELECT COUNT(*) FROM chronicle").fetchone()[0]
     conn.executemany(
         "INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)",
         [(i, "字" * 1000) for i in range(20000)],  # 約 20MB，比一步複製的量大很多
     )
     conn.commit()
     conn.close()
-    deadline = time.monotonic() + 20  # 備份做不完時，寫入自己在二十秒後停，測試才不會永遠掛著
+    guard = time.monotonic() + 120  # 只防測試自己卡死（寫入永遠不停），不是判準
     stop = threading.Event()
+    committed = threading.Event()
+    commits = [0]
+    errors = []
 
     def writer():
         w = sqlite3.connect(src, timeout=5)
-        w.execute("PRAGMA journal_mode = WAL")
-        i = 0
-        while not stop.is_set() and time.monotonic() < deadline:
-            w.execute("INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)", (i, f"第{i}筆"))
-            w.commit()
-            i += 1
-        w.close()
+        try:
+            w.execute("PRAGMA journal_mode = WAL")
+            i = 0
+            while not stop.is_set() and time.monotonic() < guard:
+                w.execute("INSERT INTO chronicle (season, time, location, text) VALUES (1, ?, NULL, ?)", (i, f"第{i}筆"))
+                w.commit()
+                commits[0] += 1
+                committed.set()
+                i += 1
+        except Exception as e:  # 收起來給主執行緒斷：寫入被鎖死跟備份被擋分得出來
+            errors.append(e)
+        finally:
+            w.close()
 
     thread = threading.Thread(target=writer)
     thread.start()
+    backup_error = None
+    out = None
     try:
-        time.sleep(0.2)  # 讓寫入先跑起來
-        out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
-        writer_still_running = thread.is_alive()  # 不看備份花了幾秒（機器慢也不會誤報），只看備份做完時寫入還在不在跑
+        committed.wait(10)  # 讓寫入先跑起來
+        try:
+            out = backup_db.backup(src, tmp_path / "backups", tag="manual", now=NOW)
+        except AssertionError:
+            raise  # 護欄：照原句紅，不吞成「備份被擋」
+        except Exception as e:
+            backup_error = e
+        n = commits[0]
+        alive = thread.is_alive()  # 不比備份期間寫了幾筆（快機器上備份幾十毫秒就做完），只看備份回來之後寫入還在不在走
+        committed.clear()
+        until = time.monotonic() + 10
+        while commits[0] <= n and time.monotonic() < until:
+            committed.wait(max(0.0, until - time.monotonic()))
+            committed.clear()
+        kept_writing = commits[0] > n
     finally:
         stop.set()
         thread.join()
-    assert writer_still_running, "備份是等寫入自己停了才做完的：寫入一直打斷它"
+    assert not errors, f"寫入的那一邊被鎖死：{errors!r}"
+    assert backup_error is None, f"備份被擋：{backup_error!r}"
+    assert alive and kept_writing, "備份被擋：備份是等寫入停了才做完的，寫入一直打斷它"
+    assert _Guarded.calls >= 1, "護欄沒有攔到備份那一下"
     assert backup_db.verify(out)["characters"] == 2
+    copy = sqlite3.connect(out)
+    try:
+        assert copy.execute("SELECT COUNT(*) FROM chronicle").fetchone()[0] >= before + 20000
+    finally:
+        copy.close()
 
 
 def test_backup_into_a_folder_that_cannot_be_written(tmp_path):
@@ -481,12 +543,13 @@ def test_backup_and_restore_carry_side_files(tmp_path, capsys):
     _side(src, "identity", ("甲",))
     _side(src, "support", ("單一",))
     _side(src, "terms", ("同意一",))  # 條款旁檔（第 206 批起註冊也寫）
+    _side(src, "yiwen", ("則一",))  # 異聞的旁檔（第 247 批）
     assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
     out = capsys.readouterr().out
     main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
-    sides = {s: main.with_name(f"{main.stem}-{s}.sqlite") for s in ("identity", "support", "terms")}
+    sides = {s: main.with_name(f"{main.stem}-{s}.sqlite") for s in ("identity", "support", "terms", "yiwen")}
     assert all(p.is_file() for p in sides.values()) and _rows(sides["identity"]) == ["甲"]
-    assert _rows(sides["terms"]) == ["同意一"]
+    assert _rows(sides["terms"]) == ["同意一"] and _rows(sides["yiwen"]) == ["則一"]
     assert f"已備份旁檔：{sides['identity']}" in out and f"已備份旁檔：{sides['support']}" in out
     assert f"已備份旁檔：{sides['terms']}" in out
     for p in sides.values():
@@ -497,10 +560,12 @@ def test_backup_and_restore_carry_side_files(tmp_path, capsys):
     _side(src, "identity", ("乙",))  # 備份之後又動了
     _side(src, "support", ("單二",))
     _side(src, "terms", ("同意二",))
+    _side(src, "yiwen", ("則二",))
     assert restore_db.main([str(main), "--db", str(src)]) == 0
     said = capsys.readouterr().out
     assert _rows(src.with_name("tianxia-identity.sqlite")) == ["甲"] and _rows(src.with_name("tianxia-support.sqlite")) == ["單一"]
     assert _rows(src.with_name("tianxia-terms.sqlite")) == ["同意一"]
+    assert _rows(src.with_name("tianxia-yiwen.sqlite")) == ["則一"]
     olds = sorted(p.name for p in src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
     assert len(olds) == 1 and _rows(src.parent / olds[0]) == ["乙"]  # 還原前的旁檔留著
     assert "還原了旁檔" in said
@@ -587,3 +652,48 @@ def test_restore_without_matching_side_file_sets_the_current_one_aside(tmp_path,
     olds = list(src.parent.glob("tianxia-identity.sqlite.pre-restore-*"))
     assert len(olds) == 1 and _rows(olds[0]) == ["後來的"]
     assert "identity" in err and "改名留著" in err
+
+
+# ── 每日備份（2026-11-25）：其餘的小檔也帶、另開一份讀得回來、狀態寫給每日報表 ────────
+
+
+def test_daily_backup_carries_the_rest_of_the_small_files(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    news = ("mail", "mail-archive", "talk", "talk-archive", "archive", "push", "tale")
+    for side in news:
+        _side(src, side, (side,))
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups")]) == 0
+    main = next((tmp_path / "backups").glob("tianxia-manual-*.db"))
+    for side in news:
+        assert _rows(main.with_name(f"{main.stem}-{side}.sqlite")) == [side]
+    assert not main.with_name(f"{main.stem}-narration.sqlite").exists()  # 改寫的旁白不帶：丟了背景再寫
+
+
+def test_drill_and_status(tmp_path, capsys):
+    import json
+
+    src = _live_db(tmp_path)
+    _side(src, "talk", ("一句",))
+    status = tmp_path / "local" / "backup_status.json"
+    args = ["--db", str(src), "--dest", str(tmp_path / "backups"), "--tag", "daily", "--prune", "--drill", "--status", str(status)]
+    assert backup_db.main(args) == 0
+    assert "還原演練：另開一份讀得回來，角色 2 個" in capsys.readouterr().out
+    got = json.loads(status.read_text(encoding="utf-8"))
+    assert got["ok"] is True and got["characters"] == 2 and got["bytes"] > 0 and "tianxia-daily-" in got["file"]
+    assert not list(Path(tmp_path / "backups").glob("*drill*"))  # 演練的複本不留在備份資料夾
+    assert backup_db.main(["--db", str(tmp_path / "nope.db"), "--dest", str(tmp_path / "backups"), "--status", str(status)]) == 1
+    got = json.loads(status.read_text(encoding="utf-8"))
+    assert got["ok"] is False and "找不到資料庫" in got["error"]
+
+
+def test_drill_fails_when_a_save_does_not_read_back(tmp_path, capsys):
+    src = _live_db(tmp_path)
+    close_all()
+    conn = sqlite3.connect(src)
+    conn.execute("UPDATE characters SET data = '{broken' WHERE name = '甲'")
+    conn.commit()
+    conn.close()
+    status = tmp_path / "status.json"
+    assert backup_db.main(["--db", str(src), "--dest", str(tmp_path / "backups"), "--drill", "--status", str(status)]) == 1
+    assert "還原演練" in capsys.readouterr().err
+    assert '"ok": false' in status.read_text(encoding="utf-8")

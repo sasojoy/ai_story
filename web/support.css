@@ -47,6 +47,9 @@
   .sup-lookup { grid-template-columns: minmax(0, 1fr) 5em auto; }
   .sup-lookup select { min-width: 0; }
   .sup-lookup [name="text"] { grid-column: 1 / -1; grid-row: 2; }
+  /* 第 228 批：名單上的管理者頂上多一顆「客服單 ›」，標題「管理者工具」在 375 會折成兩行：只在有這顆鈕時讓標題不折、小一號 */
+  .ad-head:has(.sup-admin-entry) { gap: 6px; }
+  .ad-head:has(.sup-admin-entry) h2 { min-width: 0; font-size: 16px; white-space: nowrap; }
 }
 /* 寬版（只給客服頁）：桌面左清單、右單＋帳號卡；手機照清單頁 */
 .ad-shell.sup-wide { max-width: 1024px; }

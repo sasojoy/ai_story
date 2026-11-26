@@ -137,6 +137,15 @@ def test_a_good_title_from_the_model_is_kept(grown):
     assert (b.path, b.title) == ("醫者", "杏林客")
 
 
+def test_an_oath_with_english_falls_back_to_the_fixed_settle(grown):
+    b, t = grown.state.player.guard, grown.content.config.guard
+    b.stage, b.tags = "settle", {"仁": 5}
+    grown.client = FakeClient({"path": "醫者", "title": "杏林客", "bio": "她在醫館學了三年。", "oath": "我 swore，此生永不背叛。"})
+    actions._ask(grown, b, "settle")
+    req = actions.event_request(grown)
+    assert rules.settle(grown.client, req, t) is None
+
+
 def test_settling_too_long_falls_back_to_the_fixed_settle(grown):
     b, t = grown.state.player.guard, grown.content.config.guard
     b.stage = "settle"

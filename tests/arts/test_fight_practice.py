@@ -58,18 +58,18 @@ def test_the_daily_cap_stops_the_farming_until_the_next_day(game):
     assert game.state.player.art_exp_today[m.wugong_id] == 5
 
 
-def test_xinde_pays_what_is_left_of_this_level_with_no_bottleneck(game):
+def test_xinde_no_longer_buys_levels_in_a_fight_practice_season(game):
+    """Joy 2026-11-13「為什麼還可以用心得練武學的成數」「拿掉，成數只靠戰鬥」。"""
     m = _on(game)
     _fight(game)  # 5/10
     p = game.state.player
     p.stats["xinde"] = 10_000
-    assert team.practice_cost(game.state, game.content, "武學") == 5
-    team.practice(game.state, game.content, game.world, "武學", random.Random(0), safe=True)
-    assert m.wugong_level == 2 and m.wugong_id not in p.art_exp
-    for _ in range(8):  # 第三、六、九成都不卡，一路到第十成
-        team.practice(game.state, game.content, game.world, "武學", random.Random(0), safe=True)
-    assert m.wugong_level == team.MAX_LEVEL
+    assert team.xinde_practice_off(game.state, game.content)
     assert team.practice_cost(game.state, game.content, "武學") is None
+    assert not team.can_practise(game.state, game.content, "武學")
+    msgs = team.practice(game.state, game.content, game.world, "武學", random.Random(0))
+    assert m.wugong_level == 1 and p.stats["xinde"] == 10_000 and p.art_exp[m.wugong_id] == 5
+    assert "去打" in msgs[0]
 
 
 def test_a_season_without_the_stamp_keeps_the_old_rules(game):

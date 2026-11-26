@@ -268,6 +268,108 @@ def test_upload_needs_owner_and_open_ticket(support_on, monkeypatch):
     assert not _folder().exists()
 
 
+# ── 第 228 批：上傳在讀本體之前先擋（_upload_check）──
+# 打 ASGI、receive 記被拉了幾次：拒絕的六種一次都不拉（本體一個位元組都沒讀）。字面寫死、不經 rules 常數：要跟改之前逐字一樣。
+BEFORE = {
+    "missing": (404, {"detail": "找不到這張單。"}),
+    "closed": (400, {"error": "這張單已經結了。"}),
+    "full": (400, {"error": "一張單最多附 3 張圖。"}),
+    "off": (400, {"error": "一張單最多附 0 張圖。"}),
+}
+
+
+def _raw_upload(c, query: str, data: bytes = PNG + b"x" * 20):
+    """直接打 ASGI 傳一張圖：回 (狀態碼, json, 本體被拉了幾次)。"""
+    cookie = c.cookies.get(server.COOKIE)
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http", "path": "/api/support/file",
+             "raw_path": b"/api/support/file", "root_path": "", "query_string": query.encode(), "server": ("testserver", 80),
+             "client": ("testclient", 50000),
+             "headers": [(b"host", b"testserver"), (b"content-type", b"image/png"), (b"cookie", f"{server.COOKIE}={cookie}".encode())]}
+    pulls, sent = [], []
+
+    async def receive():
+        pulls.append(1)
+        return {"type": "http.request", "body": data, "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(server.app(scope, receive, send))
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    return start["status"], json.loads(body), len(pulls)
+
+
+def _refusal(case: str, monkeypatch):
+    """六種拒絕各自擺好、打一次，回 (狀態碼, json, 本體被拉了幾次)；「別人的單」回兩個（別人的、不存在的）。"""
+    if case == "sidecar":
+        return _raw_upload(player(), "id=1")  # 還沒有人寫過單：旁檔不在
+    c = player()
+    tid = ticket(c).json()["id"]
+    if case == "bad_id":
+        return _raw_upload(c, "id=abc")
+    if case == "someone_else":
+        other = player("li_02", "李白衣")
+        return _raw_upload(other, f"id={tid}"), _raw_upload(other, f"id={tid + 50}")
+    if case == "closed":
+        assert staffer(monkeypatch).post("/api/support/close", json={"id": tid}).status_code == 200
+    if case == "full":
+        for _ in range(3):
+            assert _up(c, tid, PNG + os.urandom(8)).status_code == 200
+    if case == "files_off":
+        monkeypatch.setattr(server.CONTENT.config.support, "files_max", 0)
+    return _raw_upload(c, f"id={tid}")
+
+
+def test_upload_refuses_files_off_before_reading_the_body(support_on, monkeypatch):
+    assert _refusal("files_off", monkeypatch) == (*BEFORE["off"], 0)
+    assert not _folder().exists()
+
+
+def test_upload_refuses_bad_id_before_reading_the_body(support_on, monkeypatch):
+    assert _refusal("bad_id", monkeypatch) == (*BEFORE["missing"], 0)
+
+
+def test_upload_refuses_missing_sidecar_before_reading_the_body(support_on, monkeypatch):
+    assert _refusal("sidecar", monkeypatch) == (*BEFORE["missing"], 0)
+    assert not sidecar().exists()  # 預檢不建旁檔
+
+
+def test_upload_refuses_someone_elses_ticket_before_reading_the_body(support_on, monkeypatch):
+    stranger, missing = _refusal("someone_else", monkeypatch)
+    assert stranger == missing == (*BEFORE["missing"], 0)
+
+
+def test_upload_refuses_closed_ticket_before_reading_the_body(support_on, monkeypatch):
+    assert _refusal("closed", monkeypatch) == (*BEFORE["closed"], 0)
+
+
+def test_upload_refuses_full_ticket_before_reading_the_body(support_on, monkeypatch):
+    assert _refusal("full", monkeypatch) == (*BEFORE["full"], 0)
+
+
+def test_upload_replies_are_the_same_sentences_as_before(support_on, monkeypatch):
+    """六種拒絕回的狀態碼與內文，跟改之前（讀完本體才在 _upload、add_file 擋）逐字一樣：TestClient 一般的打法，字面寫死。"""
+    c = player()
+    tid = ticket(c).json()["id"]
+    other = player("li_02", "李白衣")
+    got = {
+        "bad_id": _up(c, "abc", PNG), "someone_else": _up(other, tid, PNG), "missing_ticket": _up(other, tid + 50, PNG),
+    }
+    for _ in range(3):
+        assert _up(c, tid, PNG + os.urandom(8)).status_code == 200
+    got["full"] = _up(c, tid, PNG)
+    monkeypatch.setattr(server.CONTENT.config.support, "files_max", 0)
+    got["files_off"] = _up(c, tid, PNG)
+    monkeypatch.setattr(server.CONTENT.config.support, "files_max", 3)
+    assert staffer(monkeypatch).post("/api/support/close", json={"id": tid}).status_code == 200
+    got["closed"] = _up(c, tid, PNG)
+    want = {"bad_id": BEFORE["missing"], "someone_else": BEFORE["missing"], "missing_ticket": BEFORE["missing"],
+            "full": BEFORE["full"], "files_off": BEFORE["off"], "closed": BEFORE["closed"]}
+    assert {k: (r.status_code, r.json()) for k, r in got.items()} == want
+    assert _up(player("wu_03", "吳無單"), 1, PNG).json() == BEFORE["missing"][1]  # 旁檔在、這個人沒單（旁檔不在的那一種見上）
+
+
 def test_off_file_routes_404_before_login(monkeypatch):
     """關著：兩條都跟沒有這條路逐位元組一樣（沒登入、壞單號、超大 Content-Length 都一樣），不建資料夾、不建旁檔。"""
     anon = TestClient(server.app, raise_server_exceptions=False)

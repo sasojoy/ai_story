@@ -1035,11 +1035,6 @@
     "kind": "武學",
     "attribute": "慢",
     "quality": "下品",
-    "learn": {
-      "at": "loushang_village",
-      "fame": 0,
-      "silver": 10
-    },
     "desc": "鄉勇在大桑樹下操練的棍法，一招一式穩紮穩打。",
     "weapon": "棍",
     "tactic": {
@@ -1060,11 +1055,6 @@
     "kind": "武學",
     "attribute": "快",
     "quality": "下品",
-    "learn": {
-      "at": "yanshan_foot",
-      "fame": 0,
-      "silver": 10
-    },
     "desc": "獵戶翻山追獸練出來的腿腳，又快又遠。",
     "weapon": "拳腳",
     "tactic": {
@@ -1085,11 +1075,6 @@
     "kind": "武學",
     "attribute": "柔",
     "quality": "下品",
-    "learn": {
-      "at": "yingshui",
-      "fame": 0,
-      "silver": 10
-    },
     "desc": "潁水漁家在船頭隨浪起伏練出的拳路，順勢卸力。",
     "weapon": "拳腳",
     "tactic": {
@@ -1111,11 +1096,6 @@
     "kind": "武學",
     "attribute": "虛",
     "quality": "下品",
-    "learn": {
-      "at": "yu_river",
-      "fame": 5,
-      "silver": 20
-    },
     "desc": "運糧船上的船伕腳夫在擠滿人的船上纏鬥的貼身功夫，虛實難測。",
     "weapon": "拳腳",
     "tactic": {
@@ -1135,11 +1115,6 @@
     "kind": "武學",
     "attribute": "陽",
     "quality": "下品",
-    "learn": {
-      "at": "zhuo_militia_hall",
-      "fame": 5,
-      "silver": 20
-    },
     "desc": "涿郡遊俠兒的劍法，大開大合，意氣風發。",
     "weapon": "劍",
     "tactic": {
@@ -1161,11 +1136,6 @@
     "kind": "內功",
     "attribute": "陰",
     "quality": "下品",
-    "learn": {
-      "at": "beimang_hill",
-      "fame": 5,
-      "silver": 20
-    },
     "desc": "守陵人在王侯陵墓間獨坐練成的靜功，氣息幽冷。",
     "tactic": {
       "name": "萬籟俱寂",
@@ -1187,11 +1157,6 @@
     "kind": "內功",
     "attribute": "慢",
     "quality": "下品",
-    "learn": {
-      "at": "baima_temple",
-      "fame": 10,
-      "silver": 30
-    },
     "desc": "寺中僧人靜坐調息的法門，氣息悠長。",
     "tactic": {
       "name": "明心見性",
@@ -1212,10 +1177,6 @@
     "kind": "武學",
     "attribute": "剛",
     "quality": "下品",
-    "learn": {
-      "at": "luzhi_camp",
-      "faction": "guan"
-    },
     "desc": "官軍營中操練的制式刀法，劈砍直截了當。",
     "weapon": "刀",
     "tactic": {
@@ -1237,10 +1198,6 @@
     "kind": "內功",
     "attribute": "陽",
     "quality": "下品",
-    "learn": {
-      "at": "wan_city",
-      "faction": "guan"
-    },
     "desc": "軍中壯氣的法子，呼喝之間氣血翻湧。",
     "tactic": {
       "name": "同袍一心",
@@ -1260,10 +1217,6 @@
     "kind": "武學",
     "attribute": "剛",
     "quality": "下品",
-    "learn": {
-      "at": "nanyang_huangjin_camp",
-      "faction": "huang"
-    },
     "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。",
     "weapon": "刀",
     "tactic": {
@@ -1285,10 +1238,6 @@
     "kind": "武學",
     "attribute": "陰",
     "quality": "下品",
-    "learn": {
-      "at": "huangjin_camp",
-      "faction": "huang"
-    },
     "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。",
     "weapon": "拳腳",
     "tactic": {
@@ -1310,10 +1259,6 @@
     "kind": "內功",
     "attribute": "虛",
     "quality": "下品",
-    "learn": {
-      "at": "julu_altar",
-      "faction": "huang"
-    },
     "desc": "太平道的導引術，氣走經絡，飄忽難捉摸。",
     "tactic": {
       "name": "雲氣迷濛",
@@ -1336,10 +1281,6 @@
     "kind": "內功",
     "attribute": "實",
     "quality": "下品",
-    "learn": {
-      "at": "haozu_fort",
-      "faction": "haoqiang"
-    },
     "desc": "部曲站樁練出的根基，雙腳如生了根。",
     "tactic": {
       "name": "築壘自守",

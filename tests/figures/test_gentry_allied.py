@@ -7,7 +7,7 @@ import random
 
 import pytest
 
-from conftest import real_content
+from conftest import donate_content as real_content
 from tianxia import allied, calendar, rules
 from tianxia.engine import Game
 from tianxia.state import PlayerState, WorldState

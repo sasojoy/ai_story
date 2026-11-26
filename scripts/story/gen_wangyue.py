@@ -643,7 +643,7 @@ ANNAL_WAN = OPEN_ANNAL + "{name}不及至。范公以夜卒，越名聞京師。
 XINDE = 40
 endings = [
     {
-        "id": "zi", "title": "字", "text": ZI, "annal": ANNAL_ZI, "image": "stories/wangyue_end_sheath",
+        "id": "zi", "title": "還你四字", "text": ZI, "annal": ANNAL_ZI, "image": "stories/wangyue_end_sheath",
         "effect": {"stats": {"xinde": XINDE, "fame": 3, "good": 3}}, "keepsakes": ["單刃"],
         "after": [
             {"days": 3, "where": ROAD, "title": "三天後・洛陽官道", "image": "stories/wangyue_oil", "text": P(
@@ -665,7 +665,7 @@ endings = [
         ],
     },
     {
-        "id": "yuan", "title": "遠", "text": YUAN, "annal": ANNAL_YUAN, "image": "stories/wangyue_door",
+        "id": "yuan", "title": "劍落石階", "text": YUAN, "annal": ANNAL_YUAN, "image": "stories/wangyue_door",
         "effect": {"stats": {"xinde": XINDE, "fame": 2, "good": 2}}, "keepsakes": ["阿蘅的油布"],
         "after": [
             {"days": 3, "where": ROAD, "title": "三天後・洛陽官道", "image": "stories/wangyue_oil", "text": P(
@@ -687,7 +687,7 @@ endings = [
         ],
     },
     {
-        "id": "ming", "title": "名", "text": MING, "annal": ANNAL_MING, "image": "stories/wangyue_door",
+        "id": "ming", "title": "燈滅門開", "text": MING, "annal": ANNAL_MING, "image": "stories/wangyue_door",
         "effect": {"stats": {"xinde": XINDE, "fame": 1}}, "keepsakes": ["牆上的釘子"],
         "after": [
             {"days": 3, "where": PALACE, "title": "三天後・洛陽宮城", "text": P(
@@ -708,7 +708,7 @@ endings = [
         ],
     },
     {
-        "id": "wan", "title": "晚", "failed": True, "weight": 3, "text": WAN, "annal": ANNAL_WAN, "image": "stories/wangyue_oil",
+        "id": "wan", "title": "那一夜你不在", "failed": True, "weight": 3, "text": WAN, "annal": ANNAL_WAN, "image": "stories/wangyue_oil",
         "effect": {"stats": {"xinde": XINDE, "fame": 1}},
         "after": [
             {"days": 3, "where": PALACE, "title": "三天後・洛陽宮城", "text": P(

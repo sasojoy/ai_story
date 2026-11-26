@@ -3,6 +3,7 @@
  * 跟 app.js 一樣是一般的 <script>：頂層的名字同在一個全域裡。/ 的 script 標籤由伺服器照 FEATURES 生成、排在 app.js 前面。
  * 不改 app.js：看 #app 畫了什麼（MutationObserver）——登入頁、設定頁底下補兩個連結；進了遊戲問一次 /api/terms，
  * 要按同意就疊一層在最上面（沒同意過任何一版：按了同意才關得掉；改版的考慮期內：可以先關掉）。字待 joy 潤
+ * 換版後同意過舊版的預設是考慮期（ask）；Config.terms.update_must 開著（第 243 批的開關，第 246 批預設關）才是按了同意才關得掉（must 帶 update：開頭換改版那一句、同意記 update）。
  */
 "use strict";
 
@@ -10,6 +11,7 @@
   const TERMS_SAY = {
     must: "開始之前，請先看過並同意天下大勢的使用條款與隱私權條款。",
     ask: "使用條款與隱私權條款有新版。{deadline} 以前沒有表示反對，就視為接受新版。",
+    update: "使用條款與隱私權條款有新版，請看過這次改了什麼，同意後繼續。", // 待 joy 潤（第 243 批：同意過舊版、換版後要按同意的 must）
     points: "重點：",
     agree: "我已滿 18 歲或已得到法定代理人同意，並同意以上條款",
     later: "稍後再看",
@@ -24,12 +26,18 @@
   };
   let termsAsked = false; // 這一次登入問過 /api/terms 了（登出、回到登入頁就重來）
   let termsBusy = false;
+  // 第 255 批：分頁開著的時候才變成「必須同意」的人（新版條款部署時沒關分頁、update_must 被打開、同意紀錄不見），伺服器擋下的那一句
+  // （terms_base.GATE_NEED）殼 api() 跳成吐司；看 #toast，字裡有「條款」、人在遊戲裡、同意層沒開，就重問一次 /api/terms。
+  // 連著跳的吐司隔 5 秒才再問（不連打）；斷線照 termsCheck 舊寫法下一次再問。靠「條款」兩個字認，包的測試守 GATE_NEED 留著這兩個字
+  const TERMS_REASK_GAP_MS = 5000;
+  let termsReaskAt = 0; // 上一次因吐司重問的時刻
 
   // ── 第 206 批：註冊的兩個勾選 ──
   // 插在註冊模式的 #gate-form（有「再輸入一次密碼」那一格才是註冊）與 identity 建角色那一張（#idp-create-form）的 .form-msg 前面；
   // 殼自己的 #create-form（密碼帳號註冊完才建角色，帳號已經開了）不插。版號問 /api/terms/version：非 200（關著 404、伺服器沒這一包）
   // 這一頁不再問、不插；斷線下一次重畫再問。送出時（capture，先於 app.js 那一支）沒全勾就擋下、寫那一句。畫法集中在 termsChecksHtml。
   let termsVersionAsk = null; // Promise：版號字串，或 null（不問）
+  let termsRatingMark = null; // 遊戲分級標識（/api/terms/version 同一趟帶回來的 rating：short、age、lines），登入頁畫在條款連結上面
 
   function termsChecksHtml(version) {
     const read = termsEsc(TERMS_SAY.read)
@@ -49,7 +57,7 @@
   function termsVersion() {
     if (!termsVersionAsk) {
       termsVersionAsk = fetch("/api/terms/version", { credentials: "same-origin" })
-        .then((res) => (res.ok ? res.json().then((d) => (d && d.version) || null) : null))
+        .then((res) => (res.ok ? res.json().then((d) => { termsRatingMark = (d && d.rating) || null; return (d && d.version) || null; }) : null))
         .catch(() => { termsVersionAsk = null; return null; }); // 斷線：下一次再問
     }
     return termsVersionAsk;
@@ -115,11 +123,27 @@
     for (const box of document.querySelectorAll('.gate, .sheet[aria-label="設定"]')) {
       if (!box.querySelector(".terms-links")) box.insertAdjacentHTML("beforeend", TERMS_LINKS);
     }
+    termsAddRating();
+  }
+
+  // 遊戲分級標識（遊戲軟體分級管理辦法第 11～13 條：起始網頁旁明顯標示分級、不小於 45×45 像素，加上情節與付費、避免沉迷的警語）。
+  // 只畫在登入頁（.gate 有 #gate-form 的那一頁）登入表單的正下方；版號那一趟同時帶回來，問不到（關著 404、斷線）就不畫
+  function termsRatingHtml(m) {
+    const lines = [m.age, ...(m.lines || [])].map((x) => `<li>${termsEsc(x)}</li>`).join("");
+    return `<div class="terms-rating" role="note" aria-label="遊戲分級"><b>${termsEsc(m.short)}</b><ul>${lines}</ul></div>`;
+  }
+  async function termsAddRating() {
+    const gate = document.querySelector("#gate-form") && document.querySelector(".gate");
+    if (!gate || gate.querySelector(".terms-rating")) return;
+    await termsVersion();
+    const form = gate.querySelector("#gate-form");
+    if (!termsRatingMark || !form || gate.querySelector(".terms-rating")) return;
+    form.insertAdjacentHTML("afterend", termsRatingHtml(termsRatingMark)); // 緊接在登入表單底下：一進來就看得到
   }
 
   function termsLayerHtml(t) {
     const must = t.need === "must";
-    const lead = must ? TERMS_SAY.must : TERMS_SAY.ask.replace("{deadline}", termsEsc(t.deadline || ""));
+    const lead = must ? (t.update ? TERMS_SAY.update : TERMS_SAY.must) : TERMS_SAY.ask.replace("{deadline}", termsEsc(t.deadline || ""));
     const points = (t.summary || []).map((line) => `<li>${termsEsc(line)}</li>`).join("");
     return `<div class="terms-layer" role="dialog" aria-modal="true" aria-label="使用條款與隱私權條款">
       <div class="terms-card card">
@@ -136,6 +160,11 @@
         <p class="terms-no muted" hidden>${(must ? TERMS_SAY.noMust : TERMS_SAY.noAsk).replace("{email}", termsEsc(t.email))}</p>
         ${must ? `<button class="btn ghost terms-out" data-act="logout" hidden>${TERMS_SAY.logout}</button>` : ""}
       </div></div>`;
+  }
+
+  // 同意記哪一種（稽核分得出改版時同意的）：第一次是 gate；換版後的 must（帶 update）與考慮期的 ask 是 update（第 243 批）
+  function termsSource(t) {
+    return t.need === "must" && !t.update ? "gate" : "update";
   }
 
   function termsClose() {
@@ -165,7 +194,7 @@
       try {
         const res = await fetch("/api/terms/agree", {
           method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-          body: JSON.stringify({ version: t.version, source: t.need === "must" ? "gate" : "update" }),
+          body: JSON.stringify({ version: t.version, source: termsSource(t) }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { layer.querySelector(".form-msg").textContent = data.detail || data.error || "沒送出去，請再按一次。"; return; }
@@ -193,12 +222,36 @@
     if (!termsAsked) termsCheck();
   }
 
+  function termsShouldReask({ text, inGame, layerOpen, now, last }) {
+    return String(text ?? "").includes("條款") && !!inGame && !layerOpen && now - last >= TERMS_REASK_GAP_MS;
+  }
+
+  function termsOnToast() {
+    const el = document.getElementById("toast");
+    const now = Date.now();
+    const inGame = typeof S !== "undefined" && S.stage === "game";
+    const layerOpen = !!document.querySelector(".terms-layer");
+    if (!termsShouldReask({ text: el && el.textContent, inGame, layerOpen, now, last: termsReaskAt })) return;
+    termsReaskAt = now;
+    termsAsked = false;
+    termsCheck();
+  }
+
   let termsQueued = false;
+  let termsToastQueued = false;
   if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") { // 網頁測試的 node 沒有 DOM：不看
     new MutationObserver(() => {
       if (termsQueued) return;
       termsQueued = true;
       queueMicrotask(() => { termsQueued = false; termsWatch(); });
     }).observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
+    const termsToastEl = document.getElementById("toast"); // 第 255 批：殼的吐司（index.html 固定的元素，在 #app 外面）
+    if (termsToastEl) {
+      new MutationObserver(() => {
+        if (termsToastQueued) return;
+        termsToastQueued = true;
+        queueMicrotask(() => { termsToastQueued = false; termsOnToast(); });
+      }).observe(termsToastEl, { childList: true, characterData: true, subtree: true });
+    }
     document.addEventListener("submit", termsBlockSubmit, true); // 第 206 批：capture，先於 app.js 的 submit 鏈
   }

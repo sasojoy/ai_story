@@ -12,7 +12,7 @@ import server
 import webharness
 from tianxia.features.companions import errands, letters
 
-pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow, pytest.mark.whole_content]
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 DRIVER = BASE_DRIVER.replace('"bookHtml", "peerHtml"]', '"bookHtml", "peerHtml", "persuadeSay", "letterHtml", "choose"]')
 assert DRIVER != BASE_DRIVER
@@ -32,6 +32,7 @@ def _persuade_game(at_spot=True):
     return g, e
 
 
+@pytest.mark.slow  # 單一條超過 0.5 秒（第 230 批量的）
 def test_pressing_persuade_opens_a_box_instead_of_sending():
     g, e = _persuade_game()
     m = server.main_view(g)
