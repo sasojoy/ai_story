@@ -57,3 +57,19 @@ def test_the_act_shows_who_else_is_pitching_in_and_done_acts_list_names():
     html = _run(m, "return H.difangSheetHtml(m);")
     assert "也在出力" in html and html.count('<span class="df-pc') == 4 and 'class="df-pc me"' in html and "等 7 位" in html
     assert '<small class="df-names">柳如煙、陸三刀</small>' in html  # 湊齊的那一幕：齊字印旁一行名字
+
+
+def test_away_shows_where_and_no_buttons():
+    html = _run(_card(away=True), "return H.difangSheetHtml(m);")
+    assert "這件事在潁川汝南" in html and "df-way" not in html and "df-go" not in html
+
+
+def test_done_with_a_claim_draws_four_picks_and_the_eye_says_go_claim():
+    claim = [{"id": f"difang:claim:m{i}", "name": n} for i, n in enumerate(["熔星髓", "天池露", "奔雷角", "歸墟壤"])]
+    m = _card(status="done", acts=[{**a, "state": "done"} for a in ACTS], result="堤保住了。", options=[], claim=claim, marks=["義士"])
+    html = _run(m, "return H.difangSheetHtml(m);")
+    assert html.count('data-id="difang:claim:') == 4 and "挑一份謝禮" in html and '<span class="df-mark">義士</span>' in html
+    it = _run(m, "return H.difangEyeItem(m);")
+    assert it["btn"] == "去領" and it["sub"] == "湊滿了，挑一份謝禮"
+    done = _run(_card(status="done", acts=[{**a, "state": "done"} for a in ACTS], options=[], claimed=True), "return H.difangSheetHtml(m);")
+    assert "謝禮領過了" in done and "difang:claim" not in done

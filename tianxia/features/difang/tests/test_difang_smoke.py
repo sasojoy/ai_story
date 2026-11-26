@@ -13,9 +13,10 @@ def test_difang_is_registered_and_quiet_while_closed(game):
 
 
 def test_an_outing_in_the_region_counts_for_act_one():
-    from difang_kit import affair_here, season21_game
+    from difang_kit import affair_here, open_here, season21_game
 
     game = season21_game()
+    open_here(game)
     game.state.pending_event = None
     game.outing_go(1)
     a = affair_here(game)

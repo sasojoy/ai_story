@@ -33,3 +33,15 @@ def affair_here(game):
     from tianxia.features.difang import actions
 
     return actions.here(game)
+
+
+def open_here(game, affair_id: str = "yingshui_dike"):
+    """開這一週全服那一件，換成指定的那一件（測試照潁水決堤寫；輪到哪一區照季與週的種子，這裡不管）。"""
+    from tianxia.features.difang import actions, rules
+
+    actions.on_sync(game)
+    a = actions.current(game)
+    d = rules.affairs()[affair_id]
+    a.affair, a.region = affair_id, d["regions"][0]
+    game._save_season()
+    return actions.here(game)

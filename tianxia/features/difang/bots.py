@@ -6,10 +6,13 @@ from tianxia.core.option import Option
 
 WAY_SCORE = 12.0  # 路過這一區就出個手（低過軍令與懸賞）
 STRIKE_SCORE = 12.0
+CLAIM_SCORE = 30.0  # 謝禮：有就領（挑哪一份照選項先後，分數一樣取第一顆）
 
 
 def score(option: Option) -> float | None:
     if not option.enabled:
         return None
     arg = option.id.partition(":")[2]
+    if arg.startswith("claim:"):
+        return CLAIM_SCORE
     return WAY_SCORE if arg.startswith("way:") else STRIKE_SCORE if arg == "strike" else None
