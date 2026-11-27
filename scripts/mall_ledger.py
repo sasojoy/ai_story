@@ -28,7 +28,8 @@ from tianxia.database import default_path  # noqa: E402
 from tianxia.features.mall.rules import reason_text  # noqa: E402  商城的規則（功能包 tianxia/features/mall/）
 from tianxia.wallet import Wallet  # noqa: E402
 
-HEADER = ["編號", "時間（台灣）", "名號", "錢包", "增減", "原因", "單號", "購買", "經手", "說明", "之後的餘額"]
+HEADER = ["編號", "時間（台灣）", "名號", "錢包", "增減", "原因", "單號", "購買", "經手", "說明", "之後的餘額", "種類"]
+COIN_NAMES = {"paid": "元寶", "gift": "五銖"}  # 元寶拆成兩種（資料庫第 10 版）：每一筆是哪一種
 MALL_SCHEMA = 6  # 商城的三張表是第 6 版加的（database.SCHEMA_V6_TABLES）；之後結構再升版，第 6 版以後的檔照樣讀
 
 
@@ -55,7 +56,7 @@ def rows(wallet: Wallet, offset_hours: float) -> tuple[list[list[str]], dict[str
         out.append([
             str(row.id), datetime.fromtimestamp(row.time, tz=tz).strftime("%Y-%m-%d %H:%M:%S"), shown or "", row.owner,
             str(row.delta), reason_text(row.reason, row.ref), row.ref, "" if row.purchase_id is None else str(row.purchase_id),
-            row.admin or "", row.note, str(balances[row.owner]),
+            row.admin or "", row.note, str(balances[row.owner]), COIN_NAMES.get(row.coin, row.coin),
         ])
     return out, balances
 

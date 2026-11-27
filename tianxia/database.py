@@ -315,15 +315,23 @@ SCHEMA_V9_TABLES: tuple[str, ...] = (
     "CREATE INDEX sessions_by_created ON sessions (created)",
 )
 
+# 第 10 版（元寶拆成兩種，Joy 2026-11-26「第二種元寶參考中國歷史中有名有價值的貨幣名稱、其他都照建議」；設計稿
+# https://claude.ai/artifact/1wAUChQ7ZhkCXBMqZLJGYd）：帳本每一筆多記是哪一種元寶。paid＝元寶（只能儲值取得）、gift＝送的那一種
+# （封測發放、見面禮、月卡回饋、管理者補發……）。舊的帳全算 gift（線上到這一版為止沒有任何一筆儲值），儲值 topup 那幾筆改成 paid。
+SCHEMA_V10_CHANGES: tuple[str, ...] = (
+    "ALTER TABLE mall_ledger ADD COLUMN coin TEXT NOT NULL DEFAULT 'gift' CHECK (coin IN ('gift', 'paid'))",
+    "UPDATE mall_ledger SET coin = 'paid' WHERE reason = 'topup'",
+)
+
 SCHEMA: tuple[str, ...] = (  # 新檔一次建好（第 1 版建的 rumor_heard 由第 8 版那一句拿掉）
     SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES + SCHEMA_V7_TABLES
-    + SCHEMA_V8_CHANGES + SCHEMA_V9_TABLES
+    + SCHEMA_V8_CHANGES + SCHEMA_V9_TABLES + SCHEMA_V10_CHANGES
 )
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
     1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES, 6: SCHEMA_V7_TABLES,
-    7: SCHEMA_V8_CHANGES, 8: SCHEMA_V9_TABLES,
+    7: SCHEMA_V8_CHANGES, 8: SCHEMA_V9_TABLES, 9: SCHEMA_V10_CHANGES,
 }
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def default_path() -> Path:

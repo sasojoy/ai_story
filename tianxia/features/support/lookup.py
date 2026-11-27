@@ -29,7 +29,7 @@ def find(db: Database, content, kind: str, value: str) -> int | None:
     return None if account_key is None else AccountStore(db).account_id(account_key)
 
 
-def card(db: Database, account_id: int, *, ledger_rows: int, created_must: float | None = None) -> dict:
+def card(db: Database, account_id: int, *, ledger_rows: int, created_must: float | None = None, two: bool = False) -> dict:
     """帳號卡；帳號不在、或 created_must 給了而建帳號的時間對不上（主檔退回舊時間點之後 id 被新帳號拿到）回 {"gone": True}。"""
     with db.snapshot() as conn:
         a = conn.execute("SELECT id, created, character FROM accounts WHERE id = ?", (account_id,)).fetchone()
@@ -47,7 +47,10 @@ def card(db: Database, account_id: int, *, ledger_rows: int, created_must: float
     wallet = Wallet(db)
     owner = name_key(character) if character else None
     ledger = [] if owner is None else [
-        {"time": e.time, "delta": e.delta, "reason": rules.LEDGER_REASONS.get(e.reason, e.reason), "note": e.note}
+        {"time": e.time, "delta": e.delta, "reason": rules.LEDGER_REASONS.get(e.reason, e.reason), "note": e.note, **({"coin": e.coin} if two else {})}
         for e in wallet.ledger(owner, limit=ledger_rows)]
-    return {"id": int(a["id"]), "login": login, "character": character, "created": float(a["created"]), "binds": binds,
-            "balance": 0 if owner is None else wallet.balance(owner), "ledger": ledger}
+    out = {"id": int(a["id"]), "login": login, "character": character, "created": float(a["created"]), "binds": binds,
+           "balance": 0 if owner is None else wallet.balance(owner), "ledger": ledger}
+    if two:  # 元寶拆成兩種開著（Config.mall.two_coins）：兩種各剩多少，客服回儲值問題時看元寶那一個數；關著一個鍵都不多
+        out["coins"] = {"paid": 0, "gift": 0} if owner is None else wallet.balances(owner)
+    return out

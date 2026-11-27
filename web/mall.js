@@ -37,10 +37,26 @@
   // 元寶的錠子圖示（草圖 mall-mock 的 #ingot）：狀態列的鈕、商城招牌旁的元寶、貨架上的價錢共用；顏色照外面的 class（style.css）
   function ingotSvg() { return '<svg class="ingot" viewBox="0 0 24 16" aria-hidden="true"><path d="M1.5 6.2c1 5.4 5 7.6 10.5 7.6s9.5-2.2 10.5-7.6c-2.2 1.3-4.3 1.6-6 1.1C16 4 14.3 2.2 12 2.2S8 4 7.5 7.3c-1.7.5-3.8.2-6-1.1z"/><path class="shine" d="M8.6 8.4c.6-3.3 1.8-4.8 3.4-4.8s2.8 1.5 3.4 4.8c-2.2.6-4.6.6-6.8 0z"/></svg>'; }
 
-  // 入口乙（企劃者 2026-10-20 挑的）：齒輪左邊一顆錠子鈕寫元寶餘額（main.mall.balance），點了打開商城那一層
+  // 元寶拆成兩種（Joy 2026-11-26「其他都照建議」、卡上挑了「五銖」；Config.mall.two_coins）：伺服器開著才送 coins
+  // {paid: 元寶, gift: 五銖, gift_name}；沒送就跟以前一模一樣，一個字都不變。元寶是金錠、五銖是銀錠（.ingot.gift）
+  const coinsOf = (d) => (d && d.coins) || null;
+  const giftName = (c) => (c && c.gift_name) || "五銖";
+  function giftSvg() { return ingotSvg().replace('class="ingot"', 'class="ingot gift"'); }
+
+  // 入口乙（企劃者 2026-10-20 挑的）：齒輪左邊一顆錠子鈕寫元寶餘額（main.mall.balance），點了打開商城那一層。
+  // 拆成兩種時鈕上照舊寫加起來的數（375 寬名號那一欄放不下兩個數），念給讀屏的人聽的分開寫
   function mallBtnHtml(mall) {
-    const n = mall.balance | 0;
-    return `<button class="mall-btn" data-act="mall-open" aria-label="商城，元寶 ${n}">${ingotSvg()}<span>${n}</span></button>`;
+    const n = mall.balance | 0, c = coinsOf(mall);
+    const label = c ? `商城，元寶 ${c.paid | 0}，${giftName(c)} ${c.gift | 0}` : `商城，元寶 ${n}`;
+    return `<button class="mall-btn" data-act="mall-open" aria-label="${esc(label)}">${ingotSvg()}<span>${n}</span></button>`;
+  }
+
+  // 萬寶閣招牌右邊的錢袋：拆成兩種時金錠寫元寶、銀錠寫五銖，點一下到紀錄；沒拆照舊一個數（店面的框 shopHtml 叫）
+  function mallPurse(shop) {
+    const c = shop.coins;
+    if (!c) return `${ingotSvg()}元寶 ${shop.balance | 0}`;
+    return `<button class="mall-purse" data-act="mall-tab" data-tab="log" aria-label="元寶 ${c.paid | 0}，${esc(giftName(c))} ${c.gift | 0}，看紀錄">`
+      + `<span>${ingotSvg()}<b>${c.paid | 0}</b></span><span>${giftSvg()}<b>${c.gift | 0}</b></span></button>`;
   }
 
   // 換了帳號、登出：那一層收起、抓過的帳丟掉（另一個錢包）
@@ -58,6 +74,7 @@
     const balance = d && d.balance != null ? d.balance : S.mallData ? S.mallData.balance : ((S.main && S.main.mall) || {}).balance; // 形象那一頁沒有餘額：照貨架
     return {
       shop: "mall", sign: MALL_SIGN, tab, balance,
+      coins: coinsOf(d) || coinsOf(S.mallData) || coinsOf((S.main && S.main.mall) || null), // 元寶拆成兩種才有
       line: say ? say.text : !d && !S.mallFail ? MALL_SAY.loading : MALL_SAY[tab],
       said: say ? (say.ok ? "said ok" : "said no") : "",
     };
@@ -146,8 +163,11 @@
     return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
         ${mallPicHtml(it)}<span class="mi"><b>${esc(it.name)}</b>${it.effects ? `<span class="gain">${nbHtml(it.effects, MALL_NB)}</span>` : ""}
         ${it.limit ? `<small>${nbHtml(it.limit, MALL_NB)}</small>` : ""}</span>
-        <span class="price">${ingotSvg()}${it.price | 0}</span></button>`;
+        <span class="price">${ingotSvg()}${it.price | 0}${paidSeal(it)}</span></button>`;
   }
+
+  // 只收元寶的那幾件（形象、絕招、月卡；元寶拆成兩種開著才有 it.paid）：價錢旁蓋一方小朱印「儲」，不寫規則，買不了掌櫃會說
+  function paidSeal(it) { return it.paid ? '<span class="mall-seal" aria-label="只收元寶">儲</span>' : ""; }
 
   // 月卡：一張金框大卡，圖、名字、限購，好處一條一格（兩欄），最底一條價錢
   function mallCardHtml(it) {
@@ -155,7 +175,7 @@
     return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
         <span class="mc-head">${mallPicHtml(it)}<span class="mt"><b>${esc(it.name)}</b>${it.limit ? `<span>${nbHtml(it.limit, MALL_NB)}</span>` : ""}</span></span>
         ${perks(it)}${!(it.perks || []).length && it.note ? `<span class="mc-note">${nbHtml(it.note, MALL_NB)}</span>` : ""}
-        <span class="price">${ingotSvg()}${it.price | 0}　買下${esc(it.name)}</span></button>`;
+        <span class="price">${ingotSvg()}${it.price | 0}　買下${esc(it.name)}${paidSeal(it)}</span></button>`;
   }
 
   // 月卡的好處（萬寶閣販賣清單定案，Joy 2026-10-21；字是伺服器 mall.perks 寫的），一條一格。卡本身是一顆鈕，裡面不能再放鈕：用 span
@@ -174,7 +194,8 @@
 
   function dailyWhat(today) {
     const pill = (S.mallData && S.mallData.pills && S.mallData.pills.name) || "回體丹";
-    return [today.ingots ? `${today.ingots | 0} 元寶` : "", today.pills ? `${pill} ${today.pills | 0} 顆` : ""].filter(Boolean).join("＋");
+    const c = coinsOf(S.mallData) || coinsOf((S.main && S.main.mall) || null); // 拆成兩種：每天的份是五銖
+    return [today.ingots ? `${today.ingots | 0} ${c ? giftName(c) : "元寶"}` : "", today.pills ? `${pill} ${today.pills | 0} 顆` : ""].filter(Boolean).join("＋");
   }
 
   // 江湖頁「月卡・今日份」小卡（定案：月卡生效、今天還沒領時，「剛剛」上面一張；領完收起）。資料是狀態列那一份 main.mall.daily
@@ -204,11 +225,25 @@
     if (!r) return mallFailHtml();
     // （這一段在修練頁到輿圖之間：不用單字母 x，tests/server/test_server.py 會把 x 讀的欄位當成 menxia_view 的欄位查）
     const row = (line) => `<div class="mall-log-row"><b>${esc(line.item || line.reason)}${line.refunded ? '<span class="mall-tag">已退</span>' : ""}</b>
-        <span class="amt${line.delta > 0 ? " in" : ""}">${line.delta > 0 ? "+" : "−"}${Math.abs(line.delta | 0)}</span>
+        <span class="amt${line.delta > 0 ? " in" : ""}">${line.delta > 0 ? "+" : "−"}${Math.abs(line.delta | 0)}${coinWord(line)}</span>
         <span>${esc(line.time)}${line.season_time ? `（${esc(line.season_time)}）` : ""}${line.item ? `・${esc(line.reason)}` : ""}${line.note ? `・${esc(line.note)}` : ""}</span><span class="bal">餘 ${line.balance | 0}</span></div>`;
     const rows = r.ledger.map(row).join("");
+    const c = coinsOf(r);
+    if (c) {
+      return `<div class="mall-log-head two"><span>${ingotSvg()}元寶<b>${c.paid | 0}</b></span><span>${giftSvg()}${esc(giftName(c))}<b>${c.gift | 0}</b></span></div>
+      ${rows ? `<div class="mall-log">${rows}</div>` : `<p class="shop-empty">${esc(MALL_SAY.nolog)}</p>`}<p class="mall-note">${esc(MALL_LOG_NOTE)}</p>`;
+    }
     return `<div class="mall-log-head"><span>元寶餘額</span><b>${r.balance | 0}</b></div>
       ${rows ? `<div class="mall-log">${rows}</div>` : `<p class="shop-empty">${esc(MALL_SAY.nolog)}</p>`}<p class="mall-note">${esc(MALL_LOG_NOTE)}</p>`;
+  }
+
+  // 紀錄那一列是哪一種（拆成兩種才有 line.coins）：只動一種寫那一種的名字，兩種都動到寫「元寶 50＋五銖 50」
+  function coinWord(line) {
+    const k = line.coins;
+    if (!k) return "";
+    const name = giftName(coinsOf(S.mallLog) || coinsOf(S.mallData));
+    const parts = [k.paid ? `元寶${k.gift ? ` ${Math.abs(k.paid | 0)}` : ""}` : "", k.gift ? `${name}${k.paid ? ` ${Math.abs(k.gift | 0)}` : ""}` : ""].filter(Boolean);
+    return parts.length ? `<small class="coin">${esc(parts.join("＋"))}</small>` : "";
   }
 
   // 只重畫商城那一層（換頁、點一件、買完、輪詢重抓）；畫面上還沒有那一層就整個重畫。捲到哪裡照放回去，換頁（keep 為假）從頂上開始
@@ -307,12 +342,18 @@
     const again = !!(S.mallPending && S.mallPending.id === it.id);
     const n = Math.max(1, Math.min(most, qty == null ? (again ? S.mallPending.qty || 1 : 1) : qty | 0));
     const cost = (it.price | 0) * n, after = (d.balance | 0) - ((d.balance | 0) - (it.after | 0)) * n;
-    const rows = [["花", `<b>${cost} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${after}</b>`]];
+    const c = coinsOf(d), rebate = (g.card_rebate | 0) * n;
+    // 拆成兩種：先扣五銖、不夠再扣元寶（只收元寶的只扣元寶），月卡當場回的算五銖；兩種各寫一列「現在 → 買完」
+    const gift = c ? (it.paid ? 0 : Math.min(cost, c.gift | 0)) : 0, paid = cost - gift;
+    const rows = c ? [["花", `<b>${[paid ? `${paid} 元寶` : "", gift ? `${gift} ${esc(giftName(c))}` : ""].filter(Boolean).join("＋") || "0 元寶"}</b>`],
+        ["元寶", `<s>${c.paid | 0} →</s> <b>${(c.paid | 0) - paid}</b>`],
+        [esc(giftName(c)), `<s>${c.gift | 0} →</s> <b>${(c.gift | 0) - gift + rebate}</b>`]]
+      : [["花", `<b>${cost} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${after}</b>`]];
     if (g.pills) rows.push([esc(p.name), `<s>${p.count | 0} →</s> <b>${(p.count | 0) + (g.pills | 0) * n} 顆</b>`]);
     if (g.card_days) {
       rows.push(["月卡", `<s>${d.card ? `到 ${esc(d.card.until)}` : "還沒開"} →</s> <b>到 ${esc(it.card_to || "")}</b>`]);
       if (!d.card && p.cap > 0) rows.push(["每天最多服", `<s>${p.cap | 0} →</s> <b>${(p.cap | 0) + (p.bonus | 0)} 顆</b>`]);
-      if (g.card_rebate) rows.push(["當場回", `<b>${g.card_rebate | 0} 元寶</b>（已算進上面的元寶）`]);
+      if (g.card_rebate) rows.push(["當場回", c ? `<b>${g.card_rebate | 0} ${esc(giftName(c))}</b>（已算進上面的${esc(giftName(c))}）` : `<b>${g.card_rebate | 0} 元寶</b>（已算進上面的元寶）`]);
       const daily = d.daily;
       if (daily) rows.push(["每天領", `<b>${esc(dailyWhat(daily))}</b>（沒上線那天不補）`]);
     }
@@ -407,9 +448,16 @@
     const r = S.adMall;
     return `<p class="muted">商城（元寶的帳；補發、扣回、退一筆都要寫原因，每一筆都記進帳）</p>
       <form id="ad-mall-form"><div class="row"><input class="input" id="ad-mall-name" name="name" placeholder="名號或帳號" aria-label="商城查帳的名號或帳號" value="${esc(S.adMallName || "")}"><button class="btn small" type="submit">查帳</button></div><p class="form-msg${S.adMallMsg && S.adMallOk ? " ok" : ""}" role="alert">${esc(S.adMallMsg || (r && r.refusal) || "")}</p></form>
-      <div class="row ad-row"><span class="ad-tag">元寶</span><input class="input" id="ad-mall-amount" type="number" min="1" step="1" value="100" aria-label="元寶數" style="max-width:96px"><input class="input" id="ad-mall-note" placeholder="原因（必填）" aria-label="原因" maxlength="100" value="${esc(S.adMallNote || "")}"></div>
+      <div class="row ad-row">${adCoinHtml()}<input class="input" id="ad-mall-amount" type="number" min="1" step="1" value="100" aria-label="元寶數" style="max-width:96px"><input class="input" id="ad-mall-note" placeholder="原因（必填）" aria-label="原因" maxlength="100" value="${esc(S.adMallNote || "")}"></div>
       <div class="row wrap"><button class="btn small" data-act="mall-admin" data-op="mall_reissue">補發</button><button class="btn warn small" data-act="mall-admin" data-op="mall_revoke">扣回</button></div>
       ${r && !r.refusal ? mallBookHtml(r) : ""}`;
+  }
+
+  // 補發、扣回哪一種（元寶拆成兩種開著才有：預設五銖，補償儲值沒入帳才選元寶）；沒拆照舊一個「元寶」的標籤
+  function adCoinHtml() {
+    const c = coinsOf((S.main && S.main.mall) || null) || coinsOf(S.adMall);
+    if (!c) return '<span class="ad-tag">元寶</span>';
+    return `<select class="input" id="ad-mall-coin" aria-label="哪一種" style="max-width:96px"><option value="gift">${esc(giftName(c))}</option><option value="paid">元寶</option></select>`;
   }
 
   // 查到的那個人的帳：餘額與月卡、購買（沒退的一筆一顆「退這一筆」）、帳（新的在前；寫原因與經手的管理者）
@@ -418,7 +466,9 @@
       ? '<span class="muted">已退</span>' : `<button class="btn small" data-act="mall-admin" data-op="mall_refund" data-id="${x.id | 0}">退這一筆</button>`}</div>`;
     const line = (x) => `<li>${esc(x.time)} ${esc(x.reason)}${x.item ? `「${esc(x.item)}」` : ""} <b>${x.delta > 0 ? "+" : "−"}${Math.abs(x.delta | 0)}</b>（餘 ${x.balance | 0}）${
       x.note ? `・${esc(x.note)}` : ""}${x.admin ? `・經手 ${esc(x.admin)}` : ""}</li>`;
-    return `<div class="mall-ad"><p><b>${esc(r.name)}</b>：元寶 ${r.balance | 0}${r.card ? `・月卡到 ${esc(r.card.until)}` : ""}</p>
+    const c = coinsOf(r);
+    const money = c ? `元寶 ${c.paid | 0}・${esc(giftName(c))} ${c.gift | 0}` : `元寶 ${r.balance | 0}`;
+    return `<div class="mall-ad"><p><b>${esc(r.name)}</b>：${money}${r.card ? `・月卡到 ${esc(r.card.until)}` : ""}</p>
       ${r.purchases.length ? `<p class="muted">購買（新的在前）</p>${r.purchases.map(buy).join("")}` : ""}
       ${r.ledger.length ? `<p class="muted">帳（新的在前）</p><ol class="mall-ad-log">${r.ledger.map(line).join("")}</ol>` : ""}</div>`;
   }
@@ -446,9 +496,12 @@
     if (!name) { say("先填名號或帳號。"); return; }
     if (!(amount >= 1)) { say("元寶要寫正整數。"); return; }
     if (!note) { say(MALL_NEED_NOTE); return; }
-    const body = { name, amount, note, ref: mallRef() };
+    const coinEl = document.getElementById("ad-mall-coin");
+    const coin = coinEl ? coinEl.value : null; // 元寶拆成兩種才有這一格
+    const body = Object.assign({ name, amount, note, ref: mallRef() }, coin ? { coin } : {});
+    const word = coin === "gift" ? giftName(coinsOf((S.main && S.main.mall) || null) || coinsOf(S.adMall)) : "元寶";
     const reissue = op === "mall_reissue";
-    ask(reissue ? `替${name}補發 ${amount} 元寶（原因：${note}），寫進帳，確定？` : `從${name}扣回 ${amount} 元寶（原因：${note}；餘額不能扣成負的），寫進帳，確定？`,
+    ask(reissue ? `替${name}補發 ${amount} ${word}（原因：${note}），寫進帳，確定？` : `從${name}扣回 ${amount} ${word}（原因：${note}；餘額不能扣成負的），寫進帳，確定？`,
       reissue ? "確定補發" : "確定扣回", () => mallAdminDo(op, body));
   }
 

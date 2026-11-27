@@ -119,7 +119,9 @@ def entry(ctx: Game) -> dict | None:
     # 月卡今天的份（定案甲）：卡有效、有每天領的份才有這個鍵；江湖頁照它畫「月卡・今日份」小卡（領過了收起）
     daily = card["daily"] if card is not None else None
     names = len(mall.rename_tokens(wallet, owner))  # 手上的易名帖：設定頁照它畫改名那一格（沒有不送這個鍵）
-    return {"balance": wallet.balance(owner), **({"daily": daily} if daily is not None else {}), **({"rename": names} if names else {})}
+    coins = {"coins": mall.coins_view(ctx.content, wallet, owner)} if mall.two(ctx.content) else {}  # 元寶拆成兩種：錠子鈕旁分兩個數
+    return {"balance": wallet.balance(owner), **({"daily": daily} if daily is not None else {}), **({"rename": names} if names else {}),
+            **coins}
 
 
 def rename_left(ctx: Game) -> int:
@@ -255,7 +257,7 @@ def _target(ctx: Game, wallet: Wallet, text: str) -> tuple[str, str] | None:
     return None if shown is None else (name_key(account.character), shown)
 
 
-def _adjust(ctx: Game, name: str, amount: int, note: str, ref: str, reason: str) -> list[str]:
+def _adjust(ctx: Game, name: str, amount: int, note: str, ref: str, reason: str, coin: str = "gift") -> list[str]:
     wallet, refusal = _admin(ctx, "補發元寶" if reason == "reissue" else "扣回元寶")
     if refusal:
         return ctx._log([refusal])
@@ -263,20 +265,22 @@ def _adjust(ctx: Game, name: str, amount: int, note: str, ref: str, reason: str)
     if target is None:
         return ctx._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
     owner, shown = target
-    msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=ctx.now, admin=ctx.state.player.name, note=note)
+    msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=ctx.now, admin=ctx.state.player.name, note=note,
+                      coin=coin if mall.two(ctx.content) else "gift", content=ctx.content)
     if not msg.startswith("（"):
         ctx._write("商城", [msg], tag="管理者")
     return ctx._log([msg])
 
 
-def admin_reissue(ctx: Game, name: str, amount: int, note: str, ref: str) -> list[str]:
-    """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。"""
-    return _adjust(ctx, name, amount, note, ref, "reissue")
+def admin_reissue(ctx: Game, name: str, amount: int, note: str, ref: str, coin: str = "gift") -> list[str]:
+    """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。
+    coin：哪一種（元寶拆成兩種開著才看；預設五銖，補償儲值沒入帳才選 paid 元寶）。"""
+    return _adjust(ctx, name, amount, note, ref, "reissue", coin)
 
 
-def admin_revoke(ctx: Game, name: str, amount: int, note: str, ref: str) -> list[str]:
-    """管理者從某個名號（或帳號）扣回元寶（4.7）：餘額不能是負的。"""
-    return _adjust(ctx, name, amount, note, ref, "revoke")
+def admin_revoke(ctx: Game, name: str, amount: int, note: str, ref: str, coin: str = "gift") -> list[str]:
+    """管理者從某個名號（或帳號）扣回元寶（4.7）：那一種的餘額不能是負的。"""
+    return _adjust(ctx, name, amount, note, ref, "revoke", coin)
 
 
 def admin_refund(ctx: Game, name: str, purchase_id: int, note: str) -> list[str]:
@@ -309,5 +313,8 @@ def admin_ledger(ctx: Game, name: str) -> dict:
         return {"refusal": NO_SUCH_PLAYER.format(name=(name or "").strip())}
     owner, shown = target
     data = mall.records(ctx.content, wallet, owner, admin=True)
-    return {"name": shown, "balance": data["balance"], "card": mall.card_view(ctx.content, wallet, owner, ctx._pill_day()),
-            "ledger": data["ledger"], "purchases": data["purchases"]}
+    out = {"name": shown, "balance": data["balance"], "card": mall.card_view(ctx.content, wallet, owner, ctx._pill_day()),
+           "ledger": data["ledger"], "purchases": data["purchases"]}
+    if "coins" in data:
+        out["coins"] = data["coins"]
+    return out
