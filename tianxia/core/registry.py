@@ -95,6 +95,7 @@ from ..features import unfold  # 慢慢長出來
 from ..features import jianghu  # 江湖頁重排
 from ..features import lingyan  # 凌煙閣
 from ..features import xiake  # 俠客頁重排
+from ..features import difang  # 地方大事
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -188,6 +189,7 @@ FEATURES: list[Feature] = [
     jianghu.FEATURE,
     lingyan.FEATURE,
     xiake.FEATURE,
+    difang.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

@@ -25,7 +25,7 @@
   const IDENTITY_FAIL = "登入沒有完成，請再試一次"; // 待 joy 潤
   const IDP_SWITCH_YES = "換這個帳號"; // 待 joy 潤
   const IDENTITY_CANCEL = "已取消登入"; // 待 joy 潤
-  const IDENTITY_PRIVACY = "只拿 LINE、Google 給的使用者編號，不拿 Email 與個人資料。"; // 待 joy 潤
+  const IDENTITY_PRIVACY = "只拿登入服務給的使用者編號，不拿 Email 與個人資料。"; // 待 joy 潤
   const IDENTITY_PRIVACY_LINK = "隱私權說明"; // 待 joy 潤
   const IDENTITY_INAPP = "在 LINE 或其他 App 裡開的網頁不能用 Google 登入：請從右上角選「用瀏覽器開啟」。"; // 待 joy 潤
   const IDENTITY_STANDALONE = "從主畫面開的遊戲用 LINE、Google 登入時可能會跳到瀏覽器；回不來的話，直接在瀏覽器登入。"; // 待 joy 潤
@@ -69,7 +69,7 @@
   const IDP_NEW_TAG = "新綁"; // 待 joy 潤
   const IDP_UNBIND = "解綁"; // 待 joy 潤
   const IDP_UNBIND_ASK = (name) => `確定要解綁${name}嗎？之後 30 天內不能把它綁到別的帳號。`; // 待 joy 潤
-  const IDP_BIND = (name) => `綁${name}`; // 待 joy 潤
+  const IDP_BIND = (name) => `綁定 ${name}`; // 待 joy 潤
   const IDP_RECENT_NEED = "綁定、解綁、設密碼之前要先重新驗證一次。"; // 待 joy 潤
   const IDP_RECENT_LEFT = (m) => `已驗證，${m} 分鐘內可以改。`; // 待 joy 潤
   const IDP_REAUTH_PW = "打一次密碼"; // 待 joy 潤
