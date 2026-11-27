@@ -1,0 +1,190 @@
+/* 見聞頁重排（功能包 jianwen；web/jianwen.js）。只在 main.jianwen 開著時畫出 .jw-page；其餘一字不變。
+   色票照 style.css 的 :root（介面設計規範第二節）；寫死的顏色只用在圖上的字（疊在畫上）與牌子本身（墨底金字，同江湖頁的行動牌與俠客頁的六面牌）。 */
+
+/* 舊的狀態列：圖上已經有狀態那一行（江湖頁那一條），這一頁不畫舊的 */
+.shell:has(.jw-hero.st) > header.top { display: none; }
+.page:has(> .jw-page) { padding-top: 0; }
+.jw-page { --jw-fade: 244, 237, 224; position: relative; }
+@media (prefers-color-scheme: dark) { .jw-page { --jw-fade: 22, 19, 15; } }
+
+/* 1. 頁首：天下的圖滿版、往下暈進紙色；「見聞」楷書大字、一方「邸報」印 */
+.jw-hero { position: relative; margin: 0 -16px; min-height: calc(236px + var(--top)); padding-top: var(--top); overflow: hidden; }
+.jw-art { position: absolute; inset: 0 0 auto 0; width: 100%; height: calc(240px + var(--top)); object-fit: cover; object-position: center 45%; display: block; }
+.jw-hero::after { content: ""; position: absolute; inset: 0 0 auto 0; height: calc(241px + var(--top)); pointer-events: none; z-index: 1;
+  background: linear-gradient(180deg, rgba(20, 14, 8, 0.55) 0, rgba(20, 14, 8, 0.05) 24%, rgba(var(--jw-fade), 0.4) 52%, rgba(var(--jw-fade), 0.92) 82%, rgb(var(--jw-fade)) 100%); }
+@media (prefers-color-scheme: dark) { .jw-art { filter: brightness(0.74) saturate(0.85); } }
+.jw-hero .jh-st { position: relative; z-index: 3; }
+.jw-pl-hd { position: absolute; z-index: 2; left: 20px; right: 16px; bottom: 2px; display: flex; align-items: flex-end; gap: 10px; }
+.jw-pl-hd h1 { margin: 0; font: 700 44px/1.05 var(--kai); letter-spacing: 0.12em; color: var(--ink); }
+.jw-seal { flex: none; margin-bottom: 8px; display: grid; place-items: center; width: 30px; padding: 5px 0; border: 2px solid var(--accent); border-radius: 4px;
+  color: var(--accent); font: 700 15px/1.15 var(--kai); text-align: center; transform: rotate(-4deg); background: color-mix(in srgb, var(--paper) 70%, transparent); }
+
+/* 2. 圖下一句 */
+.jw-prose { margin: 4px 2px 12px; }
+.jw-prose p { margin: 0; font: 400 15.5px/1.55 var(--kai); color: var(--ink); }
+.jw-prose small { display: block; margin-top: 2px; font: 400 12.5px var(--sans); color: var(--ink-2); }
+
+/* 3. 眼下一張卡（江湖頁 .jh-eye 同一個樣子） */
+.jw-eye { position: relative; z-index: 2; margin: 0 0 12px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--accent);
+  border-radius: 4px 14px 14px 4px; box-shadow: var(--shadow); }
+.jw-eye-hd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jw-eye-hd > b { flex: 1; min-width: 0; font: 700 19px/1.3 var(--kai); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-k { flex: none; display: inline-grid; place-items: center; padding: 2px 5px; border: 1.5px solid var(--accent); border-radius: 4px; color: var(--accent);
+  font: 700 12px/1.15 var(--kai); background: var(--card); transform: rotate(-4deg); white-space: nowrap; }
+.jw-more { position: relative; flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 10px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--accent); color: #fff3e8; font: 700 12.5px var(--sans); }
+.jw-more::after { content: ""; position: absolute; inset: -6px 0; }
+.jw-more i { font-style: normal; font-size: 14px; }
+.jw-eye-sub { margin: 4px 0 10px; font: 400 15px/1.5 var(--kai); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.5em; }
+.jw-eye-row { display: flex; gap: 10px; }
+.jw-eye-row .btn { min-height: 44px; width: auto; margin: 0; white-space: nowrap; }
+.jw-eye-go { flex: 1 1 auto; justify-content: center; background: var(--ink); color: var(--paper); border: 0; font: 700 17px var(--kai); letter-spacing: 0.2em; }
+.jw-eye-later { flex: 0 0 auto; justify-content: center; padding: 0 18px; background: transparent; color: var(--ink-2); border: 1px solid var(--line); font: 400 15px var(--kai); letter-spacing: 0.1em; }
+.jw-eye.idle { padding: 10px 14px; border-left-color: var(--line); }
+.jw-eye.idle .jw-k { border-color: var(--ink-2); color: var(--ink-2); }
+.jw-eye.idle .jw-eye-hd > b { font-weight: 400; font-size: 16px; color: var(--ink-2); }
+.jw-eye.idle .jw-eye-sub { margin-bottom: 0; white-space: normal; }
+.jw-row { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.jw-row b { flex: 1; min-width: 0; font: 700 15px var(--kai); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-row .btn { min-height: 44px; width: auto; margin: 0; }
+
+/* 4. 五面牌：墨底金字（俠客頁的六面牌同一個樣子）；戰況那一面橫跨兩格、畫三條墨痕 */
+.jw-pls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 14px; }
+.jw-pl { position: relative; height: 84px; padding: 0; overflow: hidden; text-align: left; cursor: pointer; border-radius: 10px;
+  background: linear-gradient(180deg, #30251a, #1d160f); border: 1px solid #4a3a26; box-shadow: inset 0 0 0 2px rgba(214, 165, 72, 0.18); }
+.jw-pl > i[aria-hidden] { position: absolute; right: -4px; top: -12px; font: 700 70px/1 var(--kai); font-style: normal; color: rgba(214, 165, 72, 0.22); pointer-events: none; }
+.jw-pl > b { position: absolute; left: 12px; top: 12px; font: 700 19px var(--kai); letter-spacing: 0.18em; color: #f6ead2; }
+.jw-pl > small { position: absolute; left: 12px; right: 8px; bottom: 9px; font: 400 11.5px var(--sans); color: #cdb995; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-pl.quiet > small { color: #a8977a; }
+.jw-pl .dot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; background: #e0574a; border: 1.5px solid #1d160f; }
+.jw-pl:active { transform: translateY(1px); }
+.jw-pl.wide { grid-column: 1 / -1; height: 132px; }
+.jw-pl.wide > b { top: 10px; }
+.jw-tugs { position: absolute; left: 12px; right: 12px; bottom: 12px; display: grid; gap: 8px; }
+.jw-tug { display: grid; grid-template-columns: 70px 1fr 74px; align-items: center; gap: 8px; }
+.jw-tug > span { font: 700 13px var(--kai); letter-spacing: 0.06em; color: #f6ead2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-tug em { font: 400 12px var(--sans); font-style: normal; text-align: right; color: #cdb995; white-space: nowrap; }
+.jw-tug em.hot { color: #f08a74; }
+/* 墨痕：左邊金（黃巾）、右邊藍（官軍），中間一道分界 */
+.jw-bar { position: relative; display: block; height: 6px; border-radius: 1px 4px 4px 1px; background: #3f6fa8; overflow: hidden; }
+.jw-bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--h); background: #c79a3a; border-radius: inherit; }
+.jw-bar::after { content: ""; position: absolute; top: -3px; bottom: -3px; left: calc(var(--h) - 1px); width: 2px; background: #f6ead2; }
+
+/* 拉起的那一塊：頂上留一條暗下去的圖與狀態（點了收起），底下圓角的紙 */
+.jw-hero.mini { min-height: calc(70px + var(--top)); }
+.jw-hero.mini .jw-art { height: calc(120px + var(--top)); }
+.jw-hero.mini::after { height: calc(121px + var(--top)); }
+.jw-dim { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; background: rgba(15, 10, 5, 0.45); cursor: pointer; }
+.jw-sheet { position: relative; z-index: 4; margin: -6px -16px 0; padding: 8px 16px 20px; min-height: calc(100vh - 120px); background: var(--paper); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.22); }
+.jw-grip { width: 44px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--line); }
+.jw-sh { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.jw-sh h2 { margin: 0; font: 700 26px var(--kai); letter-spacing: 0.12em; }
+.jw-sh-sub { margin-left: 4px; padding-top: 6px; font: 400 13px var(--sans); color: var(--ink-2); }
+.jw-x { margin-left: auto; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; font-size: 20px; color: var(--ink-2); cursor: pointer; }
+.jw-sb > .report-top, .jw-sb > .card { margin-top: 6px; }
+.jw-sec { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 8px; }
+.jw-sec h3 { margin: 0; padding-left: 9px; border-left: 3px solid var(--ink); font: 700 18px var(--kai); letter-spacing: 0.12em; }
+.jw-sec small { font: 400 12.5px var(--sans); color: var(--ink-2); }
+.jw-muted { color: var(--ink-2); font: 400 14px var(--sans); }
+.jw-card { padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.jw-note { margin: 8px 2px 0; font: 400 13px var(--sans); color: var(--ink-2); }
+.jw-fold { display: flex; align-items: center; width: 100%; min-height: 44px; margin: 6px 0; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px;
+  background: none; color: var(--ink-2); font: 400 14px var(--kai); letter-spacing: 0.06em; cursor: pointer; text-align: left; }
+.jw-fold::after { content: "▾"; margin-left: auto; }
+.jw-fold[aria-expanded="true"]::after { content: "▴"; }
+.jw-rules { padding: 10px 12px; margin: 0 0 8px; background: var(--card-2); border-radius: 10px; font: 400 13.5px/1.6 var(--sans); color: var(--ink); }
+.jw-rules p { margin: 4px 0; }
+.jw-rules code { display: none; } /* 舊說明裡的字元長條：這一頁有墨痕了 */
+.jw-empty { padding: 18px 14px; border: 1.5px dashed var(--line); border-radius: 12px; font: 400 15px/1.6 var(--kai); color: var(--ink-2); text-align: center; }
+.jw-empty b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 16px; }
+.jw-empty-go { margin: 10px auto 0; width: auto; min-height: 44px; padding: 0 22px; }
+
+/* 戰況：大戰一張有圖的卡、蓋大印；其餘一場一行、一方小印 */
+.jw-big { position: relative; margin: 4px 0 6px; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); background: var(--card); }
+.jw-big img { display: block; width: 100%; height: 132px; object-fit: cover; object-position: center 40%; }
+@media (prefers-color-scheme: dark) { .jw-big img, .jw-hall img { filter: brightness(0.78) saturate(0.85); } }
+.jw-big .bd { padding: 10px 14px 12px; }
+.jw-big h4 { margin: 0 0 2px; font: 700 19px/1.3 var(--kai); letter-spacing: 0.04em; }
+.jw-big p { margin: 0 0 10px; font: 400 13.5px/1.5 var(--sans); color: var(--ink-2); }
+.jw-big .btn { min-height: 44px; margin: 0; }
+.jw-stamp { position: absolute; top: 10px; right: 12px; min-width: 52px; height: 52px; padding: 0 6px; display: grid; place-items: center; border-radius: 6px; transform: rotate(-6deg);
+  background: var(--accent); color: #fff3e8; font: 700 19px/1 var(--kai); letter-spacing: 0.05em; border: 2px solid #f0d9a8; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+.jw-stamp.lose { background: #3a332b; }
+.jw-stamp.even { background: #6b6155; }
+.jw-day { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; font: 700 14px var(--kai); letter-spacing: 0.1em; color: var(--ink-2); }
+.jw-day::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+.jw-rep { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 10px; width: 100%; min-height: 56px; margin: 0 0 6px; padding: 6px 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; text-align: left; color: var(--ink); cursor: pointer; }
+.jw-rep-t { min-width: 0; }
+.jw-rep-t b { display: block; font: 700 16px/1.3 var(--kai); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-rep-t b .dot { display: inline-block; position: static; margin-left: 6px; vertical-align: middle; }
+.jw-rep-t small { display: block; font: 400 12px var(--sans); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-rep > i { font-style: normal; font-size: 18px; color: var(--ink-2); }
+.jw-rs { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 5px; transform: rotate(-5deg); font: 700 17px var(--kai); border: 1.5px solid var(--accent); color: var(--accent); }
+.jw-rs.win { background: var(--accent); color: #fff3e8; }
+.jw-rs.lose { border-color: var(--ink-2); color: var(--ink-2); }
+.jw-front { margin: 0 0 8px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.jw-front .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.jw-front .hd b { font: 700 17px var(--kai); letter-spacing: 0.08em; }
+.jw-front .hd > span:last-child { margin-left: auto; font: 400 13px var(--kai); color: var(--ink-2); }
+.jw-front .jw-bar { height: 8px; }
+.jw-front .jw-bar::after { background: var(--ink); }
+.jw-front .ends { display: flex; justify-content: space-between; margin-top: 5px; font: 400 11.5px var(--sans); color: var(--ink-2); }
+.jw-ev { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--line); font: 400 14.5px/1.55 var(--sans); }
+.jw-ev time { font: 400 12.5px/1.9 var(--sans); color: var(--ink-2); }
+.jw-ev.big { grid-template-columns: 1fr; font: 400 15px/1.6 var(--kai); }
+.jw-ev b { font-family: var(--kai); }
+.jw-tag { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1.2px solid var(--accent); border-radius: 3px; color: var(--accent); font: 700 11.5px/1.5 var(--kai); transform: rotate(-3deg); }
+.jw-xs { padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font: 400 14.5px/1.65 var(--kai); }
+.jw-xs:not(.open) p { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.jw-xs.open + .jw-xs.open { margin-top: 8px; }
+.jw-xs-t { margin: 0 0 4px; font-weight: 700; }
+.jw-xs-t small { margin-left: 8px; font: 400 12px var(--sans); color: var(--ink-2); }
+
+/* 江湖史：凌煙閣（與之後的論劍壁）兩塊匾並排；玉璽七片；照日子一條一條 */
+.jw-halls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.jw-halls.one { grid-template-columns: 1fr; }
+.jw-hall { position: relative; display: block; height: 120px; border-radius: 10px; overflow: hidden; border: 1px solid #4a3a26; box-shadow: var(--shadow); color: #f6ead2; text-align: left; padding: 0; background: #1d160f; text-decoration: none; }
+.jw-hall img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.62; }
+.jw-hall::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20, 14, 8, 0) 30%, rgba(20, 14, 8, 0.85)); }
+.jw-hall .plq { position: absolute; z-index: 1; top: 10px; left: 50%; transform: translateX(-50%); padding: 3px 12px; border: 1.5px solid #c79a3a; border-radius: 3px;
+  background: linear-gradient(180deg, #3a2a19, #21170e); font: 700 17px var(--kai); letter-spacing: 0.25em; color: #f2d48a; white-space: nowrap; }
+.jw-hall .bd { position: absolute; z-index: 1; left: 12px; right: 12px; bottom: 10px; }
+.jw-hall small { display: block; font: 400 12.5px/1.45 var(--sans); color: #e3d2b0; }
+.jw-seal7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; width: 100%; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.jw-shard { aspect-ratio: 1 / 1.15; display: grid; place-items: center; clip-path: polygon(8% 4%, 96% 0, 100% 62%, 84% 100%, 4% 94%, 0 40%); background: var(--card-2);
+  font: 700 12.5px/1.1 var(--kai); color: var(--ink-2); text-align: center; }
+.jw-shard.got { background: var(--accent); color: #fff3e8; }
+.jw-tales { margin-top: 10px; }
+.jw-past h3 { font: 700 17px var(--kai); }
+
+/* 榜單：八張榜做成墨底小牌、前三名站成台子、最底下釘著你那一行 */
+.jw-boards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.jw-bd { min-height: 44px; padding: 0 2px; border-radius: 8px; border: 1px solid #4a3a26; background: linear-gradient(180deg, #30251a, #1d160f); color: #cdb995;
+  font: 700 14px var(--kai); letter-spacing: 0.06em; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-bd.on { color: #f2d48a; box-shadow: inset 0 0 0 2px #c79a3a; }
+.jw-pod { display: grid; grid-template-columns: 1fr 1.15fr 1fr; align-items: end; gap: 8px; margin: 14px 0 10px; }
+.jw-pod.n1 { grid-template-columns: 1fr; }
+.jw-pod.n2 { grid-template-columns: 1fr 1fr; }
+.jw-p { min-width: 0; padding: 10px 6px; border-radius: 10px 10px 4px 4px; background: var(--card); border: 1px solid var(--line); text-align: center; color: var(--ink); font: inherit; }
+button.jw-p { cursor: pointer; }
+.jw-p .rk { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-bottom: 6px; border-radius: 4px; background: none; color: var(--accent); border: 1.5px solid var(--accent);
+  font: 700 16px var(--kai); transform: rotate(-5deg); }
+.jw-p.r1 { padding-top: 18px; border-top: 3px solid var(--gold); }
+.jw-p.r1 .rk { background: var(--accent); color: #fff3e8; }
+.jw-p b { display: block; font: 700 16px/1.25 var(--kai); overflow-wrap: anywhere; }
+.jw-p small { display: block; margin-top: 3px; font: 400 12px/1.4 var(--sans); color: var(--ink-2); overflow-wrap: anywhere; }
+.jw-p.you { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent); }
+.jw-brow { display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; width: 100%; min-height: 44px; padding: 0 10px; border: 0; border-bottom: 1px dashed var(--line);
+  background: none; color: var(--ink); text-align: left; font: inherit; }
+button.jw-brow { cursor: pointer; }
+.jw-brow i { font: 400 14px var(--serif); font-style: normal; color: var(--ink-2); text-align: center; }
+.jw-brow b { min-width: 0; font: 700 15.5px var(--kai); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-brow span { font: 400 13px var(--sans); color: var(--ink-2); }
+.jw-brow.you b { color: var(--accent); }
+.jw-brow.me { margin-top: 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+
+/* 紀錄：「剛剛」那一則在最上面，底下照日子（web/news.js 的 newsJournalHtml 同一份） */
+.jw-just { margin: 4px 0 8px; } /* 「剛剛」那一則自己就是一張卡（style.css .tx-now）：不再包一層框 */
+.jw-journal .nw-day { margin: 14px 0 4px; font: 700 14px var(--kai); letter-spacing: 0.1em; color: var(--ink-2); }
+.jw-journal .nw-more > summary { min-height: 44px; display: flex; align-items: center; font: 400 14px var(--kai); color: var(--ink-2); }

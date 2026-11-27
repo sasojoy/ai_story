@@ -1199,6 +1199,8 @@
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
     else if (S.news === "mail") body = mailBoxHtml();
     else body = `${m.latest ? `<div class="nw-just">${m.latest}</div>` : ""}<div class="card nw-card">${newsJournalHtml((m.journal || "") + (m.older || ""))}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
+    // 見聞頁重排（功能包 jianwen，web/jianwen.js；Joy 2026-11-27 說「好」）：開著就換排法——天下的圖、眼下一張卡、五面牌，點一面拉起那一塊（點開一場戰報、戰記時裡面是 body）
+    if (typeof jwOn === "function" && jwOn(m) && !selfNews(S.news)) return jwPageHtml(m, { seg, old: body });
     return seg + body;
   }
 
