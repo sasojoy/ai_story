@@ -15,7 +15,7 @@
   const TP_SEAL = "鐵匠"; // 待 joy 潤：大字旁的朱印（直排兩字）
   const TP_SAYER = "老鐵匠"; // 待 joy 潤：那一句底下的落款
   const TP_LATER = "知道了"; // 待 joy 潤
-  const TP_NAMES = { shelf: "架上", forge: "打造", rack: "裝備庫", trade: "素材", divine: "神器" }; // 待 joy 潤
+  const TP_NAMES = { shelf: "架上", forge: "打造", rack: "裝備庫", trade: "素材", divine: "神器譜" }; // 待 joy 潤
   const TP_GLYPH = { shelf: "架", forge: "爐", rack: "庫", trade: "熬", divine: "神" }; // 牌上墨色大字
   const TP_CN = "〇一二三四五六七八九十";
 
