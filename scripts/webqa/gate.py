@@ -109,6 +109,8 @@ NOT_ON_TABLE = {  # batch 110: page files no round reaches, and why; coverage.py
     "web/xiake.js": "the 俠客頁重排 package (Joy 2026-11-26) turned on in week7 and season21 on 2026-11-26 (Joy「好了就可以上正式」); no round walks it yet: rebuild coverage.json on the host and drop this line",
     "web/difang.js": "the 地方大事 package (Joy 2026-11-26「做」) turned on in week7 and season21 on 2026-11-26 (Joy「跑完沒問題可以合進去主幹然後開關打開」); no round walks it yet: rebuild coverage.json on the host and drop this line",
     "web/jianwen.js": "the 見聞頁重排 package (Joy 2026-11-27) is off in every profile until Joy OKs the real page; rounds only call jwOn, which answers false. Rebuild coverage.json on the host when it turns on",
+    "web/tiepu.js": "the 鐵匠鋪重排 package (Joy 2026-11-28) is off in every profile until Joy OKs the real page; rounds only call tpOn, which answers false. Rebuild coverage.json on the host when it turns on",
+    "web/wanbao.js": "the 萬寶閣重排 package (Joy 2026-11-28) is off in every profile until Joy OKs the real page; rounds only call wbOn, which answers false. Rebuild coverage.json on the host when it turns on",
     "web/unfold.js": "the unfold package (Joy 2026-11-25) is off in week7 and season21: no round reaches it until a profile turns it on",
     "web/lingyan.js": "the lingyan package (Joy 2026-11-26) is off in every profile: lingyanEntryHtml answers empty until a profile turns it on",
 }

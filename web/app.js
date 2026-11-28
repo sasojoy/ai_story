@@ -932,6 +932,8 @@
   // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（shop.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
     const kind = shop.shop || "smith";
+    if (kind === "smith" && typeof tpOn === "function" && tpOn()) return tpShopHtml(shop); // 鐵匠鋪重排（tiepu 包，開關關著不走）
+    if (kind === "mall" && typeof wbOn === "function" && wbOn()) return wbShopHtml(shop); // 萬寶閣重排（wanbao 包，開關關著不走）
     // 商城（商城第二批）：網頁自己開的那一層（mallShop），出店只是收起來、不送伺服器
     const back = kind === "mall" ? '<button class="shop-back" data-act="mall-close">‹ 出店</button>'
       : shop.picked ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'

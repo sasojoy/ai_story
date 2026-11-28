@@ -97,6 +97,8 @@ from ..features import lingyan  # 凌煙閣
 from ..features import xiake  # 俠客頁重排
 from ..features import difang  # 地方大事
 from ..features import jianwen  # 見聞頁重排
+from ..features import tiepu  # 鐵匠鋪重排
+from ..features import wanbao  # 萬寶閣重排
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -192,6 +194,8 @@ FEATURES: list[Feature] = [
     xiake.FEATURE,
     difang.FEATURE,
     jianwen.FEATURE,
+    tiepu.FEATURE,
+    wanbao.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

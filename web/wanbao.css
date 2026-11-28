@@ -1,0 +1,150 @@
+/* 萬寶閣重排（功能包 wanbao；web/wanbao.js）。只在 main.wanbao 開著時畫出 .shop-layer.wb；其餘一字不變。
+   店本來就是一間漆黑描金的鋪子（mall.css 寫死的那一套），淺色深色都是這個樣子；元件照江湖頁那一套（圖頭、眼下卡、牌、拉起的那一塊）。 */
+.shop-layer.shop-mall.wb { padding-top: var(--top); background: #140a0d; }
+.shop-layer.shop-mall.wb .wb-body { padding: 0 16px calc(16px + var(--bottom)); }
+.shop-layer.shop-mall.wb .mb { max-width: 640px; margin: 0 auto; min-height: 100%; }
+/* 拉起那一塊上面那一條：點了收起 */
+.mb-mini .mb-dim { position: absolute; inset: 0; z-index: 1; border: 0; padding: 0; background: transparent; cursor: pointer; }
+.mb-mini .mb-top { position: relative; z-index: 2; }
+.mb-said { margin: 0 0 12px; padding: 8px 10px; border-left: 3px solid var(--gold-2); border-radius: 0 8px 8px 0; background: rgba(0,0,0,.25); font: 400 14px/1.6 var(--kai); color: var(--cream); }
+.mb-said.no { border-left-color: #e0574a; }
+.mb-say.said.no { color: #ffb9a6; }
+.mb-pls { margin-bottom: 12px; }
+.mb-pl { cursor: pointer; font: inherit; }
+.mb-days span b { display: inline-flex; align-items: center; gap: 4px; }
+/* 貨：整張是一顆鈕 */
+.mb-ware { width: 100%; text-align: left; color: var(--cream); font: inherit; cursor: pointer; }
+.mb-ware .mb-art { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 8px; background: rgba(0,0,0,.3); }
+.mb-ware .mb-art svg { width: 76px; height: 76px; }
+.mb-ware.big .mb-art { width: 100%; height: 150px; }
+.mb-wt { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.mb-wt > b { display: flex; align-items: center; gap: 6px; margin-top: 2px; font: 700 18px var(--kai); color: var(--gold-1); }
+.mb-sub { font: 400 12.5px/1.5 var(--sans); color: var(--cream-2); }
+.mb-wt .mb-btn { width: 100%; min-height: 44px; margin-top: 4px; }
+.mb-ware.off { opacity: .6; }
+.mb-ware.on { box-shadow: 0 0 0 2px var(--gold-1), 0 6px 14px rgba(0,0,0,.35); }
+.mb-perks > span { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--rim); background: rgba(0,0,0,.2); font: 400 13px/1.45 var(--kai); color: var(--cream); }
+.mb-ware .mall-seal { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 4px; border-radius: 3px; background: #a8322a; color: #ffe4d6; font: 700 12px var(--kai); transform: rotate(-4deg); }
+.mb-note .mall-daily { margin-left: 6px; }
+.mb .mall-body { padding: 0; }
+
+/* ── 照示意稿（萬寶閣重排 mall.css） ── */
+
+.shop-layer.shop-mall.wb .mb { --lac: #24141a; --lac-2: #3a2219; --gold-1: #f0cf7a; --gold-2: #d9a441; --cream: #f2e5c6; --cream-2: #cdb58c; --rim: #6b4a2e;
+  position: relative; color: var(--cream); min-height: 100vh; margin: 0 -16px; padding: 0 16px 24px;
+  background: radial-gradient(ellipse at 50% 0%, #3d2326 0%, #24141a 45%, #140a0d 100%); }
+.ingot { width: 18px; height: 12px; flex: none; fill: #f2c46a; vertical-align: -1px; }
+.ingot .shine { fill: #fff; opacity: .35; }
+.ingot.gift { fill: #c9ccd2; }
+/* 頂上：出店、兩個錢包 */
+.mb-top { position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 10px 0 0; }
+.mb-out { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--rim); background: rgba(0,0,0,.35); color: var(--cream); font: 700 15px var(--kai); letter-spacing: .08em; }
+.mb-purse { margin-left: auto; min-height: 40px; display: inline-flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--rim); background: rgba(0,0,0,.35); color: var(--cream); font: 700 15px var(--sans); }
+.mb-purse span { display: inline-flex; align-items: center; gap: 4px; }
+.mb-purse small { font: 400 11px var(--kai); color: var(--cream-2); }
+/* 圖頭：櫃上三件鎮店之寶、兩盞燈籠、大招牌 */
+.mb-hero { position: relative; margin: 6px -16px 0; height: 236px; overflow: hidden; }
+.mb-hero .shelf { position: absolute; inset: 18px 0 auto; display: grid; grid-template-columns: 1fr 1.25fr 1fr; align-items: end; gap: 0; padding: 0 18px; }
+.mb-hero .shelf img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 50%; filter: saturate(1.05);
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 52%, transparent 70%); mask: radial-gradient(circle at 50% 50%, #000 52%, transparent 70%); }
+.mb-hero .shelf img:nth-child(2) { margin-bottom: -10px; }
+.mb-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,10,13,0) 45%, rgba(20,10,13,.35) 100%); }
+.mb-hero .lantern { position: absolute; z-index: 2; top: 2px; width: 26px; height: 38px; border-radius: 50% / 46%; background: radial-gradient(circle at 42% 38%, #f07a4a, #b8261a 62%, #7a140c); box-shadow: 0 0 18px rgba(232,85,58,.5); }
+.mb-hero .lantern.l { left: 16px; } .mb-hero .lantern.r { right: 16px; }
+.mb-name { position: absolute; z-index: 2; left: 18px; right: 16px; bottom: 6px; display: flex; align-items: flex-end; gap: 10px; }
+.mb-name h1 { margin: 0; font: 700 44px/1.05 var(--kai); letter-spacing: .14em; color: var(--gold-1); text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.mb-name .seal { display: inline-grid; place-items: center; width: 34px; padding: 6px 0; margin-bottom: 6px; border: 2px solid #e0574a; border-radius: 4px; color: #ffd9c8; background: #a8322a;
+  font: 700 15px/1.15 var(--kai); transform: rotate(-5deg); }
+.mb-name small { margin-left: auto; padding-bottom: 8px; font: 400 12.5px var(--kai); color: var(--gold-2); letter-spacing: .3em; }
+.mb-say { margin: 8px 2px 12px; font: 400 15.5px/1.6 var(--kai); color: var(--cream); }
+.mb-say small { display: block; font: 400 12px var(--sans); color: var(--cream-2); }
+/* 眼下卡：漆底描金 */
+.mb-eye { margin: 0 0 12px; padding: 12px 14px; border-radius: 4px 14px 14px 4px; border: 1px solid var(--rim); border-left: 5px solid var(--gold-2);
+  background: linear-gradient(180deg, #3a2219, #24140f); box-shadow: inset 0 1px 0 rgba(240,207,122,.18), 0 6px 14px rgba(0,0,0,.35); }
+.mb-eye-hd { display: flex; align-items: center; gap: 8px; }
+.mb-eye-hd h2 { flex: 1; min-width: 0; margin: 0; font: 700 19px/1.3 var(--kai); color: var(--gold-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mb-k { flex: none; padding: 2px 6px; border: 1.5px solid #e0574a; border-radius: 4px; color: #ffb9a6; font: 700 12px/1.2 var(--kai); transform: rotate(-3deg); }
+.mb-more { flex: none; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 999px; background: #a8322a; color: #fff3e8; font: 700 12.5px var(--sans); }
+.mb-eye p { margin: 4px 0 0; font: 400 14.5px/1.55 var(--kai); color: var(--cream-2); }
+.mb-eye-obj { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+.mb-eye-obj img { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; border: 1px solid var(--rim); }
+.mb-go { display: flex; gap: 10px; margin-top: 10px; }
+.mb-btn { min-height: 46px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--rim); background: rgba(0,0,0,.25); color: var(--cream); font: 700 16px var(--kai); letter-spacing: .1em; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.mb-btn.gold { flex: 1; border: 0; color: #3a1d08; background: linear-gradient(180deg, #f6d98a, #e0b452); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 3px 8px rgba(0,0,0,.35); }
+.mb-btn.gold .ingot { fill: #7a4a0c; }
+.mb-btn.gold .ingot.gift { fill: #5b5f66; }
+.mb-btn small { font: 400 11.5px var(--sans); letter-spacing: 0; opacity: .8; }
+.mb-ru { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 3px; background: #a8322a; color: #ffe4d6; font: 700 12px var(--kai); transform: rotate(-4deg); }
+/* 牌：同江湖頁的墨牌，換成漆底描金 */
+.mb-pls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mb-pl { position: relative; height: 86px; padding: 0; overflow: hidden; text-align: left; border-radius: 10px; border: 1px solid var(--rim);
+  background: linear-gradient(180deg, #3a2219, #1f110d); box-shadow: inset 0 1px 0 rgba(240,207,122,.18), 0 4px 10px rgba(0,0,0,.35); color: var(--cream); }
+.mb-pl > img { position: absolute; right: -8px; top: -6px; width: 92px; height: 92px; object-fit: cover; opacity: .55;
+  -webkit-mask: radial-gradient(circle, #000 40%, transparent 70%); mask: radial-gradient(circle, #000 40%, transparent 70%); }
+.mb-pl > b { position: absolute; left: 12px; top: 12px; font: 700 19px var(--kai); letter-spacing: .18em; color: var(--gold-1); }
+.mb-pl small { position: absolute; left: 12px; right: 8px; bottom: 9px; font: 400 11.5px var(--sans); color: var(--cream-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mb-pl .dot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; background: #e0574a; border: 1.5px solid #1d160f; }
+.mb-pl.wide { grid-column: 1 / -1; height: 118px; }
+.mb-pl.wide > img { width: 128px; height: 128px; right: -4px; top: -6px; opacity: .7; }
+.mb-days { position: absolute; left: 12px; right: 120px; bottom: 12px; }
+.mb-days span { display: flex; justify-content: space-between; font: 400 12px var(--sans); color: var(--cream-2); }
+.mb-days span b { color: var(--cream); }
+.mb-days i { display: block; height: 7px; margin-top: 5px; border-radius: 4px; background: rgba(0,0,0,.4); border: 1px solid var(--rim); overflow: hidden; }
+.mb-days i::before { content: ""; display: block; width: var(--w); height: 100%; background: linear-gradient(90deg, #d9a441, #f0cf7a); }
+/* 拉起的那一塊 */
+.mb-mini { position: relative; height: 58px; margin: 0 -16px; padding: 0 16px; }
+.mb-mini .mb-top { padding-top: 10px; }
+.mb-sheet { position: relative; margin: 4px -16px 0; padding: 8px 16px 20px; min-height: calc(100vh - 70px); border-radius: 18px 18px 0 0; background: #1d1014; border-top: 1px solid var(--rim); box-shadow: 0 -8px 24px rgba(0,0,0,.4); }
+.mb-grip { width: 44px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--rim); }
+.mb-sh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mb-sh h2 { margin: 0; font: 700 26px var(--kai); letter-spacing: .12em; color: var(--gold-1); }
+.mb-sh span { padding-top: 6px; font: 400 13px var(--sans); color: var(--cream-2); }
+.mb-x { margin-left: auto; width: 44px; height: 44px; border: 0; background: none; color: var(--cream-2); font-size: 20px; }
+.mb-note { margin: 0 0 12px; font: 400 13.5px/1.55 var(--kai); color: var(--cream-2); }
+/* 貨：一件一張大卡，圖當主角 */
+.mb-ware { display: grid; grid-template-columns: 112px 1fr; gap: 12px; padding: 10px; margin-bottom: 10px; border-radius: 12px; border: 1px solid var(--rim);
+  background: linear-gradient(180deg, #3a2219, #24140f); box-shadow: inset 0 1px 0 rgba(240,207,122,.18), 0 6px 14px rgba(0,0,0,.35); }
+.mb-ware img { width: 112px; height: 112px; border-radius: 8px; object-fit: cover; }
+.mb-ware h4 { margin: 2px 0 2px; display: flex; align-items: center; gap: 6px; font: 700 18px var(--kai); color: var(--gold-1); }
+.mb-ware p { margin: 0 0 6px; font: 400 12.5px/1.5 var(--sans); color: var(--cream-2); }
+.mb-ware .mb-btn { width: 100%; min-height: 44px; }
+.mb-ware.big { grid-template-columns: 1fr; }
+.mb-ware.big img { width: 100%; height: 150px; }
+.mb-perks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; }
+.mb-perks div { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--rim); background: rgba(0,0,0,.2); font: 400 13px/1.45 var(--kai); color: var(--cream); }
+.mb-perks div b { display: block; font: 700 15px var(--sans); color: var(--gold-1); }
+/* 紀錄 */
+.mb-bal { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.mb-bal div { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rim); background: rgba(0,0,0,.25); }
+.mb-bal small { display: flex; align-items: center; gap: 5px; font: 400 12.5px var(--kai); color: var(--cream-2); }
+.mb-bal b { display: block; font: 700 26px var(--sans); color: var(--gold-1); }
+.mb-bal div:nth-child(2) b { color: #dfe2e8; }
+.mb-bal p { margin: 2px 0 0; font: 400 11.5px/1.4 var(--sans); color: var(--cream-2); }
+.mb-log { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; min-height: 56px; padding: 6px 4px; border-bottom: 1px dashed var(--rim); }
+.mb-log .k { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; font: 700 13px var(--kai); transform: rotate(-4deg); }
+.mb-log .k.paid { background: #a8322a; color: #ffe4d6; }
+.mb-log .k.gift { border: 1.5px solid #9aa0a8; color: #dfe2e8; }
+.mb-log b { display: block; font: 700 15px var(--kai); color: var(--cream); }
+.mb-log small { display: block; font: 400 11.5px var(--sans); color: var(--cream-2); }
+.mb-log em { font-style: normal; text-align: right; font: 700 15px var(--sans); }
+.mb-log em.up { color: #9fd49a; } .mb-log em.dn { color: #f0a08a; }
+.mb-log em small { font-weight: 400; }
+/* 形象 */
+.mb-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mb-look { position: relative; display: grid; justify-items: center; padding: 6px 4px 8px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(180deg, #efe2c6, #d9c7a2); color: #3a1d08; }
+.mb-look img { width: 100%; height: 104px; object-fit: cover; object-position: 0% 60%; }
+.mb-look b { font: 700 13.5px var(--kai); }
+.mb-look small { display: inline-flex; align-items: center; gap: 3px; font: 700 12px var(--sans); color: #7a4a0c; }
+.mb-look .mb-ru { position: absolute; top: 6px; left: 6px; }
+.mb-look.on { box-shadow: 0 0 0 2px var(--gold-1); }
+.mb-look.on::after { content: "穿著"; position: absolute; top: 6px; right: 6px; padding: 1px 5px; border-radius: 4px; background: #3a1d08; color: var(--gold-1); font: 700 11px var(--kai); }
+.mb-segs { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 0 12px; border-radius: 10px; overflow: hidden; border: 1px solid var(--rim); }
+.mb-segs button { min-height: 44px; border: 0; background: rgba(0,0,0,.25); color: var(--cream-2); font: 700 15px var(--kai); }
+.mb-segs button.on { background: var(--gold-1); color: #3a1d08; }
+.mb-sec { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 10px; }
+.mb-sec h3 { margin: 0; font: 700 16px var(--kai); letter-spacing: .24em; color: var(--gold-2); }
+.mb-sec small { margin-left: auto; font: 400 12px var(--sans); color: var(--cream-2); }
+.mb-pl > img.sprite { object-fit: cover; object-position: 0% 50%; border-radius: 0; opacity: .85; -webkit-mask: none; mask: none; width: 70px; right: 6px; top: 4px; height: 80px; }
+.mb-pl small, .mb-pl > b { text-shadow: 0 1px 3px rgba(0,0,0,.8); z-index: 1; }
+.mb-sh h2 { flex: none; }
+.mb-sh > span { min-width: 0; }
