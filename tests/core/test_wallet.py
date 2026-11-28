@@ -79,3 +79,48 @@ def test_export_pairs_rows_with_names(wallet):
     wallet.post("nobody", 10, "reissue", "g2", time=2.0, admin="Rayal", note="測試")
     rows = wallet.export()
     assert [(r.ref, name) for r, name in rows] == [("g1", "Rayal"), ("g2", None)]
+
+
+# ── 元寶拆成兩種（資料庫第 10 版；Joy 2026-11-26） ──────────────
+
+
+def test_two_coins_are_kept_apart_and_each_never_goes_negative(wallet):
+    """帳本每一筆記是哪一種：儲值是元寶（paid），其餘預設是送的那一種（gift）；兩種各自不能扣到負的。"""
+    wallet.post("沈青衫", 500, "grant", "grant:beta:沈青衫", time=1.0)
+    wallet.post("沈青衫", 300, "topup", "topup:1", time=2.0)
+    assert wallet.balances("沈青衫") == {"paid": 300, "gift": 500} and wallet.balance("沈青衫") == 800
+    assert [r.coin for r in wallet.ledger("沈青衫")] == ["paid", "gift"]
+    with pytest.raises(ValueError):
+        wallet.post("沈青衫", -400, "revoke", "admin:1", time=3.0, coin="paid")  # 總數夠，元寶不夠
+    assert wallet.balances("沈青衫") == {"paid": 300, "gift": 500}
+
+
+def test_spend_takes_the_gift_first_then_paid(wallet):
+    wallet.post("沈青衫", 100, "grant", "g", time=1.0)
+    wallet.post("沈青衫", 300, "topup", "t", time=2.0)
+    assert wallet.spend("沈青衫", 250, "buy", "buy:沈青衫:a", time=3.0) == {"gift": 100, "paid": 150}
+    assert wallet.balances("沈青衫") == {"paid": 150, "gift": 0}
+    assert {r.ref: r.coin for r in wallet.ledger("沈青衫")}["buy:沈青衫:a:paid"] == "paid"  # 元寶那一列接 ":paid"
+    assert wallet.spend("沈青衫", 50, "buy", "buy:沈青衫:a", time=4.0) is None  # 同一個編號只算一次
+    assert wallet.balance("沈青衫") == 150
+
+
+def test_paid_only_ignores_the_gift(wallet):
+    wallet.post("沈青衫", 5000, "grant", "g", time=1.0)
+    assert wallet.split("沈青衫", 600, paid_only=True) is None
+    with pytest.raises(ValueError):
+        wallet.spend("沈青衫", 600, "buy", "buy:沈青衫:b", time=2.0, paid_only=True)
+    assert wallet.balance("沈青衫") == 5000 and len(wallet.ledger("沈青衫")) == 1
+    wallet.post("沈青衫", 600, "topup", "t", time=3.0)
+    assert wallet.spend("沈青衫", 600, "buy", "buy:沈青衫:b", time=4.0, paid_only=True) == {"gift": 0, "paid": 600}
+    assert wallet.balances("沈青衫") == {"paid": 0, "gift": 5000}
+
+
+def test_credit_returns_each_kind_and_old_purchases_count_as_gift(wallet):
+    from tianxia.wallet import coins_of
+
+    assert coins_of({"pills": 5}, 100) == {"gift": 100, "paid": 0}  # 拆開以前買的沒有 coins：全算送的
+    assert coins_of({"coins": {"gift": 40, "paid": 60}}, 100) == {"gift": 40, "paid": 60}
+    assert wallet.credit("沈青衫", {"gift": 40, "paid": 60}, "refund", "refund:1", time=1.0)
+    assert not wallet.credit("沈青衫", {"gift": 40, "paid": 60}, "refund", "refund:1", time=2.0)
+    assert wallet.balances("沈青衫") == {"paid": 60, "gift": 40}

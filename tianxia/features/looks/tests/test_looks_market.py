@@ -93,13 +93,33 @@ def test_a_refund_while_held_cancels_the_share(on, world):
 
 
 def test_paid_only_needs_topped_up_ingots(on, world):
-    on.config.mall.market_paid_only = True
+    """元寶拆成兩種（Joy 2026-11-26 照建議）：開關開著時市集只收元寶（儲值得來的），五銖再多也不能抵；
+    買家付的是元寶，做的人分到的分成也是元寶。"""
+    on.config.mall.two_coins = True
+    on.mall["look_market"] = on.mall["look_market"].model_copy(update={"coin": "paid"})
     maker, look = _made(on, world)
     actions.market_list(maker, look, 600)
     buyer = _game(on, name="楚留香", world=world)
     assert actions.market_buy(buyer, look, "mkt-ref-007")[-1] == market.PAID_ONLY.format(price=600, paid=0)
-    Wallet(world.db).post("楚留香", 600, "topup", "topup:test-1", time=T0)
+    w = Wallet(world.db)
+    w.post("楚留香", 600, "topup", "topup:test-1", time=T0)
     assert "買下了" in actions.market_buy(buyer, look, "mkt-ref-008")[-1]
+    assert w.balances("楚留香") == {"paid": 0, "gift": 5000}  # 五銖一個都沒動
+    before = w.balances("沈浪")
+    assert market.settle(w, "look_market", "沈浪", T0 + 30 * DAY) == 300
+    assert w.balances("沈浪") == {"paid": before["paid"] + 300, "gift": before["gift"]}
+
+
+def test_with_the_switch_off_the_share_stays_a_gift(on, world):
+    """開關關著（現在線上）：市集照舊兩種都收、先扣五銖，分成照買家付的那一種給（全是五銖）。"""
+    maker, look = _made(on, world)
+    actions.market_list(maker, look, 600)
+    buyer = _game(on, name="楚留香", world=world)
+    actions.market_buy(buyer, look, "mkt-ref-010")
+    w = Wallet(world.db)
+    before = w.balances("沈浪")
+    assert market.settle(w, "look_market", "沈浪", T0 + 30 * DAY) == 300
+    assert w.balances("沈浪") == {"paid": before["paid"], "gift": before["gift"] + 300}
 
 
 def test_bots_and_the_shelf_never_buy_it(on, world):

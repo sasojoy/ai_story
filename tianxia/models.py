@@ -25,6 +25,10 @@ from .core.tuning.jianghu import JianghuTuning  # 江湖頁重排
 from .core.tuning.lingyan import LingyanTuning  # 凌煙閣
 from .core.tuning.xiake import XiakeTuning  # 俠客頁重排
 from .core.tuning.difang import DifangTuning  # 地方大事
+from .core.tuning.jianwen import JianwenTuning  # 見聞頁重排
+from .core.tuning.tiepu import TiepuTuning  # 鐵匠鋪重排
+from .core.tuning.wanbao import WanbaoTuning  # 萬寶閣重排
+from .core.tuning.lunjian import LunjianTuning  # 門派論劍
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4086,9 +4090,12 @@ class MallTuning(_Strict):
     card_daily_ingots: int = Field(default=0, ge=0)
     card_daily_pills: int = Field(default=0, ge=0)
     records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
-    # 形象市集（功能包 looks 第四批）：只准用儲值的元寶買別人的形象（設計 v3：封測、月卡送的元寶不能變成別人的收入）。
-    # Joy 已同意只准儲值元寶買；還沒有金流、沒有儲值，所以先關著（封測元寶也買得了）。接上金流的那一刻一定要打開【預設】
-    market_paid_only: bool = False
+    # 元寶拆成兩種（Joy 2026-11-26「第二種元寶參考中國歷史中有名有價值的貨幣名稱、其他都照建議」，卡上挑了「五銖」；資料庫第 10 版）：
+    # 元寶只能儲值取得、五銖是遊戲裡送的（封測發放、見面禮、月卡回饋、管理者補發）。帳本照樣一直分兩種記；這個開關打開時，商品寫了
+    # coin "paid" 的（形象、自建形象、絕招、市集、月卡）只收元寶，其餘先扣五銖、不夠再扣元寶，畫面分兩個數寫。
+    # 取代原本的 market_paid_only。Joy 照建議：跟金流同一天打開（先開的話沒有人有元寶，形象與絕招沒人買得了）【預設關】
+    two_coins: bool = False
+    gift_name: str = "五銖"  # 送的那一種寫給玩家看的名字（Joy 2026-11-26 在卡上挑的）
 
 
 class MallLimit(_Strict):
@@ -4139,6 +4146,8 @@ class MallItem(_Strict):
     on_sale: MallWindow = Field(default_factory=MallWindow)
     draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
     look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
+    # 收哪一種元寶（Joy 2026-11-26 照建議）：any 兩種都收（先扣五銖）、paid 只收元寶（儲值得來的）。Config.mall.two_coins 關著時都當 any
+    coin: Literal["any", "paid"] = "any"
 
 
 # ── 屬性與跨季架構 v2（docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md；第十節 ① 骨架）──────────────
@@ -4510,6 +4519,10 @@ class Config(_Strict):
     lingyan: LingyanTuning = Field(default_factory=LingyanTuning)  # 凌煙閣（tianxia/core/tuning/lingyan.py）
     xiake: XiakeTuning = Field(default_factory=XiakeTuning)  # 俠客頁重排（tianxia/core/tuning/xiake.py）
     difang: DifangTuning = Field(default_factory=DifangTuning)  # 地方大事（tianxia/core/tuning/difang.py）
+    jianwen: JianwenTuning = Field(default_factory=JianwenTuning)  # 見聞頁重排（tianxia/core/tuning/jianwen.py）
+    tiepu: TiepuTuning = Field(default_factory=TiepuTuning)  # 鐵匠鋪重排（tianxia/core/tuning/tiepu.py）
+    wanbao: WanbaoTuning = Field(default_factory=WanbaoTuning)  # 萬寶閣重排（tianxia/core/tuning/wanbao.py）
+    lunjian: LunjianTuning = Field(default_factory=LunjianTuning)  # 門派論劍（tianxia/core/tuning/lunjian.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")

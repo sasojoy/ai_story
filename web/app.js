@@ -932,6 +932,8 @@
   // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（shop.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
     const kind = shop.shop || "smith";
+    if (kind === "smith" && typeof tpOn === "function" && tpOn()) return tpShopHtml(shop); // 鐵匠鋪重排（tiepu 包，開關關著不走）
+    if (kind === "mall" && typeof wbOn === "function" && wbOn()) return wbShopHtml(shop); // 萬寶閣重排（wanbao 包，開關關著不走）
     // 商城（商城第二批）：網頁自己開的那一層（mallShop），出店只是收起來、不送伺服器
     const back = kind === "mall" ? '<button class="shop-back" data-act="mall-close">‹ 出店</button>'
       : shop.picked ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
@@ -951,7 +953,7 @@
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
       : kind === "arena" ? back.replace("‹ 出店", "‹ 離開") : back;
-    const purse = kind === "mall" ? `${ingotSvg()}元寶 ${shop.balance | 0}` : shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`;
+    const purse = kind === "mall" ? mallPurse(shop) : shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`;
     return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
       <header class="shop-bar">${leave}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">${purse}</span></header>
       ${underForge ? "" : line}
@@ -1199,6 +1201,8 @@
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
     else if (S.news === "mail") body = mailBoxHtml();
     else body = `${m.latest ? `<div class="nw-just">${m.latest}</div>` : ""}<div class="card nw-card">${newsJournalHtml((m.journal || "") + (m.older || ""))}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
+    // 見聞頁重排（功能包 jianwen，web/jianwen.js；Joy 2026-11-27 說「好」）：開著就換排法——天下的圖、眼下一張卡、五面牌，點一面拉起那一塊（點開一場戰報、戰記時裡面是 body）
+    if (typeof jwOn === "function" && jwOn(m) && !selfNews(S.news)) return jwPageHtml(m, { seg, old: body });
     return seg + body;
   }
 
