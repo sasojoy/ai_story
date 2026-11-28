@@ -1159,6 +1159,9 @@ STAGE_PACKAGES += ["jianghu"]  # 江湖頁重排（scripts/new_feature.py 生的
 STAGE_PACKAGES += ["lingyan"]  # 凌煙閣（scripts/new_feature.py 生的 lingyan_stage.py）
 STAGE_PACKAGES += ["xiake"]  # 俠客頁重排（scripts/new_feature.py 生的 xiake_stage.py）
 STAGE_PACKAGES += ["difang"]  # 地方大事（scripts/new_feature.py 生的 difang_stage.py）
+STAGE_PACKAGES += ["jianwen"]  # 見聞頁重排（scripts/new_feature.py 生的 jianwen_stage.py）
+STAGE_PACKAGES += ["tiepu"]  # 鐵匠鋪重排（scripts/new_feature.py 生的 tiepu_stage.py）
+STAGE_PACKAGES += ["wanbao"]  # 萬寶閣重排（scripts/new_feature.py 生的 wanbao_stage.py）
 STAGE_PACKAGES += ["lunjian"]  # 門派論劍（scripts/new_feature.py 生的 lunjian_stage.py）
 
 
