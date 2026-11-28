@@ -10,7 +10,8 @@
 
   const LJ_SEAL = "論劍"; // 待 joy 潤：眼下那一件的小印
   const LJ_GO = "去看"; // 待 joy 潤
-  const LJ_KIND = "門派論劍"; // 待 joy 潤：頁首的朱印
+  const LJ_KIND = "門派論劍"; // 待 joy 潤：眼下那一件的標題
+  const LJ_STAMP = "論劍"; // 待 joy 潤：頁首的朱印
   const LJ_WEEK = "第 {n} 週"; // 待 joy 潤
   const LJ_SUB_SIGN = "{draw} 截止報名"; // 待 joy 潤
   const LJ_SUB_SIGNED = "你報了名，{draw}抽籤"; // 待 joy 潤
@@ -20,9 +21,10 @@
   const LJ_SUB_TIE = "{us}與{them}打成平手"; // 待 joy 潤
   const LJ_SUB_LOOT = "有賞還沒拿"; // 待 joy 潤
   const LJ_STEPS = ["報名", "抽籤", "開打"]; // 待 joy 潤
-  const LJ_UNTIL = "到 {draw}"; // 待 joy 潤：報名那一格的小字
+  const LJ_UNTIL = "{draw} 前"; // 待 joy 潤：報名那一格的小字
   const LJ_SIGN = "替本門報名"; // 待 joy 潤
   const LJ_RESIGN = "換成此刻的身手"; // 待 joy 潤
+  const LJ_SIGNED = "你已經替本門報了名。"; // 待 joy 潤
   const LJ_SIGN_SUB = "分身照你此刻的身手；截止前隨時能換"; // 待 joy 潤
   const LJ_COUNT = "本門已有 {n} 人報名，取身手最高的 {seats} 位上台"; // 待 joy 潤
   const LJ_NOBODY = "本門還沒有人報名；沒人報名這一週就不出場"; // 待 joy 潤
@@ -69,15 +71,16 @@
   }
 
   function ljSteps(c) { // 三個時刻：報名、抽籤、開打（直接寫字，不畫小圓點）
-    const at = [c.draw, c.draw, c.fight];
+    const day = (t) => String(t || "").replace(/^第\s*\d+\s*週・/, ""); // 頁首已經寫了第幾週：格子裡只寫星期幾幾點
+    const at = [c.draw, c.draw, c.fight].map(day);
     const now = c.phase === "fought" ? 3 : c.phase === "drawn" ? 2 : 0;
-    return `<ol class="lj-steps">${LJ_STEPS.map((s, i) => `<li class="${i < now ? "done" : i === now ? "now" : ""}"><b>${s}</b><small>${esc(i === 0 ? ljFill(LJ_UNTIL, c) : at[i])}</small></li>`).join("")}</ol>`;
+    return `<ol class="lj-steps">${LJ_STEPS.map((s, i) => `<li class="${i < now ? "done" : i === now ? "now" : ""}"><b>${s}</b><small>${esc(i === 0 ? ljFill(LJ_UNTIL, { draw: at[0] }) : at[i])}</small></li>`).join("")}</ol>`;
   }
 
   function ljSignHtml(m, c) {
     if (c.phase !== "sign") return "";
     const o = ((m && m.options) || []).find((x) => x.id === "lunjian:sign");
-    const count = c.count ? ljFill(LJ_COUNT, { n: c.count, seats: c.seats }) : LJ_NOBODY;
+    const count = (c.signed ? LJ_SIGNED : "") + (c.count ? ljFill(LJ_COUNT, { n: c.count, seats: c.seats }) : LJ_NOBODY);
     const btn = o
       ? `<button class="btn lj-go" data-act="choose" data-id="lunjian:sign">${c.signed ? LJ_RESIGN : LJ_SIGN}<small>${LJ_SIGN_SUB}</small></button>`
       : `<button class="btn lj-go" disabled>${LJ_CLOSED}</button>`;
@@ -121,7 +124,7 @@
     if (!c) return "";
     const head = c.sect ? `${esc(c.sect)}・${esc(ljFill(LJ_WEEK, { n: c.week }))}` : esc(ljFill(LJ_WEEK, { n: c.week }));
     return `<div class="lj">
-        <div class="lj-hero"><span class="lj-seal">${LJ_KIND}</span><p class="lj-where">${head}</p></div>
+        <div class="lj-hero"><span class="lj-seal">${LJ_STAMP}</span><p class="lj-where">${head}</p></div>
         ${c.sect ? ljSteps(c) : ""}
         ${ljSignHtml(m, c)}
         ${ljBoard(c)}

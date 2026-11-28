@@ -38,7 +38,7 @@ def test_the_eye_item_follows_the_week():
 def test_the_sheet_writes_the_times_and_the_sign_button():
     html = _run(_lj(), "return H.lunjianSheetHtml(m);")
     assert "報名" in html and "抽籤" in html and "開打" in html and 'data-id="lunjian:sign"' in html
-    assert "第 2 週・週日 21:00" in html and "本門已有 1 人報名" in html
+    assert "週日 21:00" in html and "第 2 週・週日" not in html and "本門已有 1 人報名" in html
     assert "○" not in html and "●" not in html
 
 
