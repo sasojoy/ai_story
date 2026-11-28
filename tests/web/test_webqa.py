@@ -670,7 +670,8 @@ def test_the_model_queue_is_off_in_the_wrapper():
 
 def test_every_named_thread_is_a_writer_or_a_loop():
     # 名單用完全相等比，zhuan-<季> 永遠對不上、tavern-chatter 沒列：列傳寫好的畫面走不到（第 77 批審查）。新開的背景執行緒也要在這裡表態
-    loops = {"world-scheduler", "push-watch", "narration", "notice-watch", "tales", "support-purge"}  # support-purge：只刪結案一年的客服單，不寫畫面
+    loops = {"world-scheduler", "push-watch", "narration", "notice-watch", "tales", "support-purge",
+             "lunjian-judge"}  # support-purge：只刪結案一年的客服單，不寫畫面；lunjian-judge：判讀寫進還沒開打的那一對，畫面要等下一個同步開打才變
     tree = ast.parse((TOOL / "serve.py").read_text(encoding="utf-8"))
     values = {n.targets[0].id: ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in ("WRITERS", "WRITER_PREFIXES")}
     found = set()

@@ -21,3 +21,12 @@ class LunjianTuning(BaseModel):
     box: list[list] = Field(default_factory=lambda: [["mat", 1, 40], ["legend", 1, 25], ["coin", 100, 20], ["coin", 300, 10], ["move", 1, 5]])
     top_box: list[list] = Field(default_factory=lambda: [["mat", 2, 30], ["legend", 1, 25], ["coin", 300, 25], ["move", 1, 20]])
     bot_sign_share: float = 0.6  # 拜了門的那幾位，照名號雜湊有這麼多會報名（每週重擲）
+    # 打法第四版（Joy 2026-11-28「可以」：底子照擂台、戰策由模型判、引擎再夾；身手差兩成的人有三四成勝算）
+    plan_chars: int = 30  # 戰策最多幾個字
+    plan_cap: float = 5.0  # 戰策全佔上風（判讀 ±10）時推的起手氣勢，悟性在基準（5）時
+    plan_cap_wis: float = 0.4  # 悟性每高過基準一點，上限多推這麼多（悟性 15 是 9）
+    plan_tilt: float = 1.5  # 戰策寫了哪一路（強攻、固守、奇襲），分身出那一招的份量乘它
+    judge_wait_hours: float = 0.25  # 開打之後等模型判讀最多幾個曆時，過了沒判到的照關鍵字判
+    judge_round_seconds: float = 30.0  # 背景那一條多久看一次（現實秒）
+    judge_budget_seconds: float = 60.0  # 一場單挑的判讀最多花多久（現實秒）
+    crowd_chance: float = 0.3  # 一場單挑碰上場邊事件的機率（內容檔 crowd：一句話、推誰幾點氣勢）

@@ -52,3 +52,22 @@ def test_the_board_shows_three_rows_and_elders_are_marked():
     opened = _run(_lj(phase="fought", can_sign=False, match=match), "return H.lunjianSheetHtml(m);", S={"ljBout": 0})
     assert "一句。" in opened
 
+
+def test_before_the_fight_a_seated_player_sees_the_plan_box_and_the_foes():
+    them = [dict(s, arts=["流雲劍"], lean="奇襲") for s in SEATS_THEM]
+    match = {"us": "白馬寺", "them": "嵩陽劍廬", "seats_us": SEATS_US, "seats_them": them, "bouts": [], "won": "", "score": [0, 0], "hidden": True, "leader": True}
+    plan = {"text": "", "seat": "先鋒", "chars": 30, "until": "第 2 週・週日 21:00",
+            "presets": [{"id": "lunjian:preset:0", "text": "開場就搶攻。"}], "swaps": [{"id": "lunjian:swap:0", "a": "陸三刀", "b": "丁"}]}
+    m = _lj(phase="drawn", can_sign=False, match=match, plan=plan)
+    assert "定戰策" in _run(m, "return H.lunjianEyeItem(m);")["sub"]
+    html = _run(m, "return H.lunjianSheetHtml(m);")
+    assert 'id="lj-plan"' in html and 'maxlength="30"' in html and 'data-id="lunjian:preset:0"' in html and 'data-id="lunjian:swap:0"' in html
+    assert "開打才知道" in html and "流雲劍" in html and "長於奇襲" in html and "lj-vs solo" in html
+
+
+def test_after_the_fight_the_bout_quotes_both_plans_and_the_story():
+    bouts = [dict(b, plans=["以靜制動", ""], story="陸三刀守得滴水不漏。", crowd="台下有人喝了一聲彩。") for b in BOUTS]
+    match = {"us": "白馬寺", "them": "嵩陽劍廬", "seats_us": SEATS_US, "seats_them": SEATS_THEM, "bouts": bouts, "won": "us", "score": [2, 1]}
+    html = _run(_lj(phase="fought", can_sign=False, match=match), "return H.lunjianSheetHtml(m);", S={"ljBout": 0})
+    assert "陸三刀的戰策：以靜制動" in html and "沈石師兄沒定戰策" in html and "滴水不漏" in html and "喝了一聲彩" in html
+    assert "一句。" not in html  # 有模型的過程就不寫引擎的回合

@@ -22,6 +22,7 @@ def season21_game(name: str = "陸三刀", sect: str = "baima", world=None, cont
         c.config.guard.enabled = False  # 親衛隊長撞見會接管選單
         c.config.yiwen.enabled = False
         c.config.difang.enabled = False
+        c.config.lunjian.judge_wait_hours = 0.0  # 不等模型：到了開打就照關鍵字判（等的那一段另外測）
         for k, v in tuning.items():
             setattr(c.config.lunjian, k, v)
     if world is None:

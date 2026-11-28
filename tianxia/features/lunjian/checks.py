@@ -22,6 +22,19 @@ def problems(content, table: dict) -> list[str]:
             if name in names:
                 out.append(f"lunjian.json {where}[{i}] 名字「{name}」重複")
             names.add(name)
+    from tianxia.models import MOVES  # noqa: PLC0415
+
+    plans = table.get("plans", [])
+    if not plans:
+        out.append("lunjian.json plans 是空的（師兄、試劍客要配戰策）")
+    for i, r in enumerate(plans):
+        if not r.get("text") or r.get("move") not in MOVES:
+            out.append(f"lunjian.json plans[{i}] 要有 text 與 move（{'、'.join(MOVES)}）")
+        elif rules.plan_move(r["text"]) != r["move"]:
+            out.append(f"lunjian.json plans[{i}]「{r['text']}」照關鍵字讀起來不是{r['move']}")
+    for i, r in enumerate(table.get("crowd", [])):
+        if "{who}" not in str(r.get("line", "")) or not 0 < float(r.get("edge", 0)) <= 5:
+            out.append(f"lunjian.json crowd[{i}] 要有 {{who}} 與 0～5 的 edge")
     for k in ("box", "top_box"):
         for i, row in enumerate(getattr(content.config.lunjian, k)):
             if len(row) != 3 or row[0] not in KINDS or int(row[1]) <= 0 or float(row[2]) < 0:

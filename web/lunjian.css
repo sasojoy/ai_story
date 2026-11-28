@@ -61,3 +61,24 @@
 .lj-help { align-self: flex-start; min-height: 44px; border: 0; background: none; color: var(--ink-2); font: 400 13px var(--sans); cursor: pointer; }
 .lj-help i { margin-left: 4px; font-style: normal; }
 .lj-rules { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font: 400 13.5px/1.65 var(--kai); color: var(--ink-2); }
+
+/* 打法第四版：開打之前的對面（照名號排、不對位）、定戰策那一塊、戰報裡兩邊的戰策 */
+.lj-vs.solo { grid-template-columns: minmax(0, 1fr); }
+.lj-vs.solo .lj-tier { display: none; }
+.lj-foes { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.lj-foes .lj-seat.them { justify-content: flex-start; flex-wrap: wrap; }
+.lj-kit { flex-basis: 100%; font: 400 12.5px/1.5 var(--sans); color: var(--ink-2); }
+.lj-sub { font: 400 12.5px/1.5 var(--sans); color: var(--ink-2); }
+.lj-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--card); }
+.lj-plan h4, .lj-order > b { margin: 0; font: 700 15px var(--kai); letter-spacing: .12em; color: var(--ink); }
+.lj-now { font: 700 15px/1.6 var(--kai); color: var(--ink); }
+.lj-now.none { font-weight: 400; color: var(--ink-2); }
+.lj-form { display: flex; gap: 8px; }
+.lj-form input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font: 400 15px var(--kai); }
+.lj-form .btn { flex: none; min-height: 44px; margin: 0; padding: 0 16px; background: var(--ink); color: var(--paper); border: 0; font: 700 15px var(--kai); letter-spacing: .1em; }
+.lj-plan .lj-ways { grid-template-columns: minmax(0, 1fr); }
+.lj-way.on { border-left-color: var(--accent); background: var(--card-2); }
+.lj-order { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.lj-order .lj-ways { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lj-lines p.lj-said { font: 400 13px/1.6 var(--sans); color: var(--ink-2); }
+.lj-lines p.lj-crowd { color: var(--ink-2); }

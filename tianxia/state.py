@@ -543,6 +543,19 @@ class LunjianSeat(BaseModel):
     name: str  # 名號（師兄寫「慧明師兄」）
     sect: str = ""  # 門派 id；試劍客是空字串
     kit: ArenaEntry  # 分身
+    wis: float = Field(0.0, json_schema_extra=QUIET)  # 報名那一刻的悟性（team.v1_stat 的 wis）：戰策佔了上風時推得動多少（打法第四版）；師兄 0＝照基準
+    plan: str = Field("", json_schema_extra=QUIET)  # 戰策：抽籤之後、開打之前自己寫的一句，或挑的門派老法子（師兄、試劍客開打時照內容檔的配一句）
+
+
+class LunjianCall(BaseModel):
+    """一場單挑開打前的判讀（打法第四版）：兩邊的戰策誰對路。adv 是 a 那一邊的，−10～10（引擎照悟性換成起手氣勢再夾一次）；
+    win_a、win_b 是 a 佔上風、b 佔上風兩版過程（模型寫的；照關鍵字判的是空字串，戰報照引擎的回合）。"""
+
+    seat: int
+    adv: int = 0
+    win_a: str = Field("", json_schema_extra=QUIET)
+    win_b: str = Field("", json_schema_extra=QUIET)
+    model: bool = Field(False, json_schema_extra=QUIET)  # 模型判的（False＝模型不在、照關鍵字判）
 
 
 class LunjianBout(BaseModel):
@@ -554,6 +567,10 @@ class LunjianBout(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報）
     picks: list[list[str]] = Field(default_factory=list)  # 每回合 [a 出的, b 出的]（擂台動畫用）
     hp: list[list[int]] = Field(default_factory=list)  # 每回合收尾 [a 的氣血, b 的氣血]
+    swing: float = Field(0.0, json_schema_extra=QUIET)  # 戰策推的起手氣勢（a 那一邊；打法第四版）
+    crowd: str = Field("", json_schema_extra=QUIET)  # 場邊事件那一句（沒有是空的）
+    story: str = Field("", json_schema_extra=QUIET)  # 戰報：模型照兩邊戰策寫的那一版（照勝負挑；空的照 lines）
+    plans: list[str] = Field(default_factory=list, json_schema_extra=QUIET)  # 開打那一刻兩邊的戰策 [a, b]（戰報引用）
 
 
 class LunjianMatch(BaseModel):
@@ -565,6 +582,7 @@ class LunjianMatch(BaseModel):
     seats_b: list[LunjianSeat] = Field(default_factory=list)
     bouts: list[LunjianBout] = Field(default_factory=list)
     winner: str = ""  # "a"、"b"；和局是空字串（開打之後才有）
+    calls: list[LunjianCall] = Field(default_factory=list, json_schema_extra=QUIET)  # 開打之前的判讀（背景問模型寫進來；沒寫的開打時照關鍵字判）
 
 
 class LunjianWeek(BaseModel):

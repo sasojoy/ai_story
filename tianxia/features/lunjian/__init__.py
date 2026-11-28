@@ -3,7 +3,8 @@
 - rules.py：純規則（內容檔、幾點抽籤開打、誰上台、師兄補位、抽籤配對、分身對分身打一場、三場算輸贏、禮匣開出什麼）。
 - actions.py：報名（lunjian:sign）、時刻到了誰先同步誰抽籤開打、各自同步補賞、挑素材（lunjian:claim:<素材>）、開禮匣（lunjian:open、
   lunjian:open_top）、畫面那一份（main.lunjian）。
-- bots.py：假人照公開行動報名、開匣。checks.py：內容檔的驗證。
+- judge.py：開打前請模型判兩邊的戰策（鎖外；打法第四版）。routes.py：POST /api/lunjian/plan（自己寫的戰策）與背景那一條（判讀寫回）。
+- bots.py：假人照公開行動報名、挑老法子、開匣。checks.py：內容檔的驗證。
 新寫給玩家看的字標「待 joy 潤」。
 """
 from __future__ import annotations
@@ -60,6 +61,17 @@ class LunjianFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.idle(ctx, option)
+
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415
+
+        return routes.router(shell)
+
+    def threads(self, shell) -> None:
+        """伺服器啟動時開判讀那一條（routes.start；開關關著不開）。"""
+        from . import routes  # noqa: PLC0415
+
+        routes.start(shell)
 
     def check_content(self, content, need) -> None:
         from . import checks  # noqa: PLC0415
