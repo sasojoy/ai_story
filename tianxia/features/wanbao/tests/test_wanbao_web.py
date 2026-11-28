@@ -90,3 +90,12 @@ def test_out_closes_the_layer_and_forgets_the_sheet(content):
     out = run(_m(content), _async(_click('{ act: "mall-open" }') + _click('{ act: "wb-cat", cat: "dan" }') + _click('{ act: "wb-out" }')
                                    + " return { open: H.S.mallOpen, cat: H.S.wbCat || null };"), responses={"/api/mall": _view()})
     assert out == {"open": False, "cat": None}
+
+
+def test_one_coin_never_shows_the_second_coin(content):
+    """元寶沒拆（mall.two_coins 關著，現在的正式設定）：錢袋只有元寶、價錢一律金錠，哪一面拉起來都看不到「五銖」。"""
+    m = _m(content)
+    for cat in ("", "card", "dan", "tie", "zhuan"):
+        extra = _click(f'{{ act: "wb-cat", cat: "{cat}" }}') if cat else ""
+        html = _open(m, _view(), extra)
+        assert "五銖" not in html and 'class="ingot gift"' not in html, cat
