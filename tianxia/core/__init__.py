@@ -14,6 +14,8 @@
 - pills.py（core_pushing：第二輪第 80 批）：回體丹——服一顆、一天的上限、測試期間的一鍵補滿、讀檔補丹與那幾句字；本體從 Game 搬來，Game 留一行委派（engine 照名字 import 回那幾句字）。同 event_check 不進 MODULES、不進 FEATURES。
 - duel_base.py（bout：全部拆包第 12 批）：單挑底層——剋、推力、挨打、防具、放手一搏擲一次、勝負、架勢、氣勢的字、選單上的一招、Scene；
   頭目戰、擂台（單挑包）與奪璽單挑（已進玉璽包 features/seal/duel_rules.py）共用，單挑包的 duel_rules re-export 同一批函式物件。同 event_check 不進 MODULES。
+- arena_bout.py（lunjian：門派論劍，Joy 2026-11-28「機制這樣可以 開始做」）：擂台分身對打的一回合與勝負（exchange_full、Exchange、verdict、faced 與
+  _weight、_clamp、_pool）——從單挑包的 arena_rules、arena_actions 一個字沒改搬來；單挑包 re-export 同一批函式物件，門派論劍兩邊都是分身也走它。同 event_check 不進 MODULES。
 - arena_ranks.py（bout：全部拆包第 12 批）：擂台的名次與稱號（on、entry_of、ladder、title_of、title_for、record_text、board、歷屆擂主）
   ——查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史讀它；單挑包的 arena_rules re-export 同一批。同 event_check 不進 MODULES。
 - annal_base.py（zhuan：全部拆包第 29 批之二）：行狀「記一筆」的那一半——note、entry、trim、kept_names、clip、first_sentence、figure_name、on、heard、

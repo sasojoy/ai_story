@@ -30,5 +30,6 @@
  "jianghu": {"enabled": true},
  "xiake": {"enabled": true},
  "difang": {"enabled": true},
+ "lunjian": {"enabled": true},
  "unfold": {"enabled": true},
  "identity": {"enabled": true, "ways": ["google"], "redirect_base": "https://tianxiadashi.com"}}

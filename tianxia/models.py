@@ -25,6 +25,7 @@ from .core.tuning.jianghu import JianghuTuning  # 江湖頁重排
 from .core.tuning.lingyan import LingyanTuning  # 凌煙閣
 from .core.tuning.xiake import XiakeTuning  # 俠客頁重排
 from .core.tuning.difang import DifangTuning  # 地方大事
+from .core.tuning.lunjian import LunjianTuning  # 門派論劍
 # ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -4515,6 +4516,7 @@ class Config(_Strict):
     lingyan: LingyanTuning = Field(default_factory=LingyanTuning)  # 凌煙閣（tianxia/core/tuning/lingyan.py）
     xiake: XiakeTuning = Field(default_factory=XiakeTuning)  # 俠客頁重排（tianxia/core/tuning/xiake.py）
     difang: DifangTuning = Field(default_factory=DifangTuning)  # 地方大事（tianxia/core/tuning/difang.py）
+    lunjian: LunjianTuning = Field(default_factory=LunjianTuning)  # 門派論劍（tianxia/core/tuning/lunjian.py）
     # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
