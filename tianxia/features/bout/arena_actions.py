@@ -22,6 +22,7 @@ from tianxia.core import battle_base as battle_instance
 from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
+from tianxia.core.arena_bout import faced  # noqa: F401  五項屬性的季開打時重算兩邊（搬進核心，門派論劍也用）
 from tianxia.core.option import Option, Refused
 from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.models import MOVES, Squad
@@ -42,18 +43,6 @@ def arena_side(ctx) -> ArenaSide:
         cut=duel_actions.duel_cut(ctx),  # 防具減損（鐵匠鋪與合成流程 3.9）：開打、報名這一刻身上那件的
         card=team.pvp_card(ctx.state, ctx.content, ctx.world),  # 五項屬性的季：開打時照對手重算（faced）
     )
-
-
-def faced(content, me: ArenaSide, foe: ArenaSide) -> None:
-    """五項屬性的季：兩邊的威力與份量照對手真正的五項重算（我的武力對他的統御；企劃者 2026-11-04）。舊的季、舊的分身不動。"""
-    if me.card is None or foe.card is None:
-        return
-    mine, theirs = me.card, foe.card
-    me.power, me.scores, me.bare = team.pvp_faced(content, me.power, me.scores, mine, theirs, me.bare)
-    foe.power, foe.scores, foe.bare = team.pvp_faced(content, foe.power, foe.scores, theirs, mine, foe.bare)
-    me.dodge, foe.dodge = team.pvp_dodge(content, mine, theirs), team.pvp_dodge(content, theirs, mine)
-    me.role, me.scores = team.pvp_unrole(content, me.role, me.scores)
-    foe.role, foe.scores = team.pvp_unrole(content, foe.role, foe.scores)
 
 
 def arena_bare(ctx) -> float | None:

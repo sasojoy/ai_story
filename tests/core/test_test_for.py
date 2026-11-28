@@ -1162,6 +1162,7 @@ STAGE_PACKAGES += ["difang"]  # 地方大事（scripts/new_feature.py 生的 dif
 STAGE_PACKAGES += ["jianwen"]  # 見聞頁重排（scripts/new_feature.py 生的 jianwen_stage.py）
 STAGE_PACKAGES += ["tiepu"]  # 鐵匠鋪重排（scripts/new_feature.py 生的 tiepu_stage.py）
 STAGE_PACKAGES += ["wanbao"]  # 萬寶閣重排（scripts/new_feature.py 生的 wanbao_stage.py）
+STAGE_PACKAGES += ["lunjian"]  # 門派論劍（scripts/new_feature.py 生的 lunjian_stage.py）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():
