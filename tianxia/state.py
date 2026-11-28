@@ -535,6 +535,68 @@ class YiwenWorld(BaseModel):
     settled: dict[str, YiwenSettled] = Field(default_factory=dict)  # 則 id（字串）→ 定論的記號（異聞四）
 
 
+class LunjianSeat(BaseModel):
+    """門派論劍（features/lunjian）一門上台的一個位子：本人（key 是帳號鍵）或補位的師兄（key 空的）。分身是報名或更新那一刻抄的
+    （ArenaEntry 同擂台的分身那一份：威力、三招份量、氣血上限、戰法、防具、五項屬性的卡、兵器與形象）。"""
+
+    key: str = ""  # 帳號鍵（ctx._mall_owner）；師兄、試劍客是空字串
+    name: str  # 名號（師兄寫「慧明師兄」）
+    sect: str = ""  # 門派 id；試劍客是空字串
+    kit: ArenaEntry  # 分身
+
+
+class LunjianBout(BaseModel):
+    """一場單挑（先鋒、中堅、大將三場之一）的結果：tier 是 a 那一邊的（大勝、險勝、僵持、落敗）。"""
+
+    seat: int  # 0 先鋒、1 中堅、2 大將
+    tier: str
+    edge: float = 50.0  # 收場的氣勢（a 那一邊越高越好）
+    lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報）
+    picks: list[list[str]] = Field(default_factory=list)  # 每回合 [a 出的, b 出的]（擂台動畫用）
+    hp: list[list[int]] = Field(default_factory=list)  # 每回合收尾 [a 的氣血, b 的氣血]
+
+
+class LunjianMatch(BaseModel):
+    """一週的一對：a 對 b（b 空的是江湖試劍客）。a、b 是門派 id。開打之前 bouts 是空的。"""
+
+    a: str
+    b: str = ""
+    seats_a: list[LunjianSeat] = Field(default_factory=list)  # 先鋒、中堅、大將
+    seats_b: list[LunjianSeat] = Field(default_factory=list)
+    bouts: list[LunjianBout] = Field(default_factory=list)
+    winner: str = ""  # "a"、"b"；和局是空字串（開打之後才有）
+
+
+class LunjianWeek(BaseModel):
+    """一週的論劍：報名、抽籤、開打。鍵是帳號鍵。"""
+
+    week: int  # 季曆第幾週（7 天季是第幾段）
+    entries: dict[str, LunjianSeat] = Field(default_factory=dict)  # 帳號鍵 → 報了名的那一份（最後一次更新的分身）
+    drawn: bool = False  # 抽過籤了
+    fought: bool = False  # 打過了
+    matches: list[LunjianMatch] = Field(default_factory=list)
+    paid: list[str] = Field(default_factory=list)  # 這一週的賞已經補給的帳號鍵（各自同步時補）
+
+
+class LunjianWorld(BaseModel):
+    """門派論劍的全服那一份（WorldState.lunjian）：None 起家、第一次要開才建；換季整個重來（跨季的論劍壁在第二批）。"""
+
+    weeks: list[LunjianWeek] = Field(default_factory=list)
+
+
+class LunjianBag(BaseModel):
+    """門派論劍（features/lunjian）贏來、還沒用的東西：跟著帳號走、換季照帶（PlayerState.lunjian）。"""
+
+    picks: int = 0  # 還能挑幾份四階素材（贏一場單挑一份；禮匣也可能開出）
+    boxes: int = 0  # 還沒開的論劍禮匣
+    top_boxes: int = 0  # 還沒開的上等論劍禮匣（三場全勝）
+    seal_until: float = 0.0  # 朱印「論劍三傑」戴到這一刻（世界秒；下一場開打）；季的世界秒換季重來，換季時清
+    seal_season: int = 0  # 朱印是哪一季的
+    opened: list[str] = Field(default_factory=list)  # 最近開出的幾樣（畫面那一行；最多留 5 筆）
+    moves: int = 0  # 禮匣開出、還沒用的「免費製作一次絕招動畫」（畫坊那一頭第二批接上）
+    count: int = 0  # 一共開過幾個禮匣（元寶入帳的編號用，不重複）
+
+
 class DifangAffair(BaseModel):
     """地方大事（features/difang）：全服這一週的那一件（輪到哪個大區）。特別活動：只有按「赴大事」才算出力（Joy 2026-11-26「改成特別活動」）；
     一、二幕抽這一幕自己的事件、一天最多幾次，三幕每天上前一次，大家共扣一個池子。
@@ -1401,6 +1463,8 @@ class PlayerState(BaseModel):
     codex: CodexBook | None = Field(None, json_schema_extra=QUIET)
     # 慢慢長出來（tianxia/features/unfold）：新角色長出了哪幾塊。跟著帳號走、換季照帶（包的 on_season_start）；None 是舊角色，全部攤開，不寫進存檔（QUIET_DEFAULTS）
     unfold: UnfoldBook | None = Field(None, json_schema_extra=QUIET)
+    # 門派論劍（tianxia/features/lunjian）：贏來還沒用的四階、禮匣與朱印。跟著帳號走、換季照帶；None 的時候不寫進存檔（QUIET_DEFAULTS）
+    lunjian: LunjianBag | None = Field(None, json_schema_extra=QUIET)
     # 稱號與官職（tianxia/features/titles）：自己挑的那一個（名號 id；""＝自動戴最高檔）、此刻戴著的（{"id", "name", "grade"}，
     # 包在同步時寫；名帖、玩家卡、決戰快照、榜單只讀這一格）。都在 QUIET_DEFAULTS：開關關著存檔一個鍵都不多；角色每季重來
     titles_pin: str = Field("", json_schema_extra=QUIET)
@@ -2313,6 +2377,8 @@ class WorldState(BaseModel):
     yiwen: YiwenWorld | None = Field(None, json_schema_extra=QUIET)
     # 地方大事（features/difang）：None 起家、第一次要開才建（同 yiwen 不用 default_factory）；開關 Config.difang.enabled，不蓋開季章（季中打開，下一週起有）
     difang: DifangWorld | None = Field(None, json_schema_extra=QUIET)
+    # 門派論劍（features/lunjian）：None 起家、第一次要開才建；開關 Config.lunjian.enabled，不蓋開季章（季中打開，那一週起就能報名）
+    lunjian: LunjianWorld | None = Field(None, json_schema_extra=QUIET)
     guard_on: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時親衛隊長（Config.guard）是不是開著：開著的季酒肆不再招同伴（hire.on；Joy 2026-11-10「全部做完一起上」、設計稿第四批「下一季關酒肆招募」）；舊季讀檔是 False
     attrs_v2: bool = Field(False, json_schema_extra=QUIET)  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
