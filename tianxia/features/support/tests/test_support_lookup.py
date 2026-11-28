@@ -95,6 +95,11 @@ def test_lookup_by_full_login_brings_card(monkeypatch):
     assert card["login"] == "shen_01" and card["character"] == "沈青衫" and card["balance"] == 2700
     assert [(b["provider"], b["name"], b["shown"]) for b in card["binds"]] == [("password", "密碼", "")]
     assert [(e["delta"], e["reason"], e["note"]) for e in card["ledger"]] == [(-300, "購買", ""), (3000, "封測發放", "封測")]
+    assert "coins" not in card and "coin" not in card["ledger"][0]  # 元寶拆兩種關著：一個鍵都不多
+    monkeypatch.setattr(server.CONTENT.config.mall, "two_coins", True)
+    w.post(owner, 600, "topup", "topup:test:1", time=1_762_200_000.0)
+    card = _look(s, tid, "login", "shen_01").json()["card"]
+    assert card["coins"] == {"paid": 600, "gift": 2700} and [e["coin"] for e in card["ledger"]] == ["paid", "gift", "gift"]
 
 
 def test_card_without_character_has_empty_ledger(monkeypatch):

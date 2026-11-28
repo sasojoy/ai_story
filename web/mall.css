@@ -139,6 +139,18 @@
 .shop-layer.shop-mall .mall-log-row .amt.in { color: #9fd0a8; }
 .shop-layer.shop-mall .mall-log-row .bal { text-align: right; font-variant-numeric: tabular-nums; }
 .shop-layer.shop-mall .mall-tag { margin-left: 6px; padding: 0 6px; border: 1px solid #6b4a2e; border-radius: 8px; font: 400 11px var(--sans); color: #c9b28a; }
+/* 元寶拆成兩種（Joy 2026-11-26，Config.mall.two_coins 開著才畫）：元寶金錠、五銖銀錠；招牌右邊的錢袋兩個數（點一下到紀錄）；
+   只收元寶的那幾件價錢旁一方朱印「儲」；紀錄頂上兩個數、每一列寫是哪一種 */
+.shop-layer.shop-mall .ingot.gift { fill: #d9dde2; }
+.shop-layer.shop-mall .price .ingot.gift { fill: #5b5f66; }
+.shop-layer.shop-mall .mall-purse { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; border: 0; background: none;
+  color: inherit; font: 600 14px var(--sans); font-variant-numeric: tabular-nums; cursor: pointer; }
+.shop-layer.shop-mall .mall-purse span { display: inline-flex; align-items: center; gap: 4px; }
+.shop-layer.shop-mall .mall-seal { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; margin-left: 4px; border-radius: 3px;
+  font: 700 11px/1 var(--serif); color: #fff3e4; background: #b3341f; transform: rotate(-4deg); }
+.shop-layer.shop-mall .mall-log-head.two { justify-content: flex-start; gap: 18px; }
+.shop-layer.shop-mall .mall-log-head.two span { display: inline-flex; align-items: center; gap: 5px; }
+.shop-layer.shop-mall .mall-log-row .amt .coin { display: block; font: 400 11px var(--sans); color: #c9b28a; }
 
 /* 商城那一層在電腦寬（原本在 style.css「電腦上的店面」那一段裡）*/
 @media (min-width: 641px) {
@@ -197,6 +209,9 @@
   .shop-layer.shop-mall .mall-log-row b { font: 600 18px var(--serif); }
   .shop-layer.shop-mall .mall-log-row .amt { font: 600 18px var(--sans); }
   .shop-layer.shop-mall .mall-tag { font: 400 14.5px var(--sans); }
+  .shop-layer.shop-mall .mall-purse { font: 600 18px var(--sans); }
+  .shop-layer.shop-mall .mall-seal { font: 700 14.5px/1 var(--serif); }
+  .shop-layer.shop-mall .mall-log-row .amt .coin { font: 400 14.5px var(--sans); }
   .shop-layer.shop-mall .ingot { width: 23px; height: 15.5px; } /* 圖示跟著字放大 */
   .shop-layer.shop-mall .price .ingot { width: 21px; height: 14.5px; }
   .shop-layer.shop-mall .mall-pic { height: 140px; }
