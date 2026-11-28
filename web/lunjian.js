@@ -47,10 +47,10 @@
   const LJ_SEALED = "你戴著朱印「{t}」"; // 待 joy 潤
   const LJ_SUB_PLAN = "抽好籤了，{fight}前定戰策"; // 待 joy 潤
   const LJ_PLAN = "你的戰策"; // 待 joy 潤
-  const LJ_PLAN_SEAT = "你這一週當{seat}，{until}前定好；對面看不到"; // 待 joy 潤
+  const LJ_PLAN_SEAT = "你這一週當{seat}，{until} 前定好；對面看不到"; // 待 joy 潤
   const LJ_PLAN_NOW = "此刻定的是：{text}"; // 待 joy 潤
   const LJ_PLAN_NONE = "還沒定。不定也打，只是不佔這個便宜"; // 待 joy 潤
-  const LJ_PLAN_PH = "一句話，例如：以靜制動，等他先出手"; // 待 joy 潤
+  const LJ_PLAN_PH = "寫一句，例如：以靜制動"; // 待 joy 潤
   const LJ_PLAN_GO = "定下"; // 待 joy 潤
   const LJ_PRESET = "或照門派的老法子"; // 待 joy 潤
   const LJ_ORDER = "排陣（你帶隊）"; // 待 joy 潤
@@ -125,7 +125,7 @@
       ? `<div class="lj-order"><b>${LJ_ORDER}</b><div class="lj-ways">${p.swaps.map((o) => `<button class="lj-way" data-act="choose" data-id="${esc(o.id)}">${esc(ljFill(LJ_SWAP, o))}</button>`).join("")}</div></div>`
       : "";
     return `<section class="lj-plan"><h4>${LJ_PLAN}</h4>
-        <p class="lj-how">${esc(ljFill(LJ_PLAN_SEAT, p))}</p>
+        <p class="lj-how">${esc(ljFill(LJ_PLAN_SEAT, { ...p, until: String(p.until || "").replace(/^第\s*\d+\s*週・/, "") }))}</p>
         <p class="lj-now${p.text ? "" : " none"}">${esc(now)}</p>
         <form id="lj-plan" class="lj-form"><input name="text" maxlength="${p.chars}" placeholder="${esc(LJ_PLAN_PH)}" autocomplete="off"><button class="btn" type="submit">${LJ_PLAN_GO}</button></form>
         <p class="lj-sub">${LJ_PRESET}</p><div class="lj-ways">${presets}</div>
