@@ -152,6 +152,13 @@ def look_ids(wallet: Wallet, owner: str) -> list[str]:
     return seen
 
 
+def paid_only(content: Content, item_id: str) -> bool:
+    """這件商品這一刻只收元寶嗎（元寶拆成兩種，Joy 2026-11-26）：Config.mall.two_coins 開著、商品寫了 coin "paid" 才是。
+    商城包（貨架、購買）與形象包（自建形象、絕招、市集）都照它。"""
+    item = content.mall.get(item_id)
+    return bool(content.config.mall.two_coins and item is not None and item.coin == "paid")
+
+
 def card_bonus(content: Content, wallet: Wallet, owner: str, day: int) -> int:
     """月卡（商城架構設計 4.5）：day 這一天在卡的期間裡（開始日～到期日，不含到期日）就回 Config.mall.card_pill_bonus，其餘 0。"""
     if not wallet_on(content):

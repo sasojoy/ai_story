@@ -74,6 +74,10 @@ def test_the_rule_takes_the_smiths_usual_line_in_a_gold_frame():
     game = _smithy({"gang_4": 1})
     rule = smithy_shop.smith_view(game.state, game.content, game.world)["rule"]
     assert rule
+    game.content.config.tiepu.enabled = True  # 新鐵匠鋪（tiepu 包，Joy 2026-11-28「合 打開」）：規矩畫在鐵匠那一句的金框
+    html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
+    assert f'<p class="tp-say rule">{rule}<small>' in html
+    game.content.config.tiepu.enabled = False  # 底下是舊鐵匠鋪的排法
     html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
     assert f'<p class="shop-line rule">{rule}</p>' in html
     game.state.player.shop_clue = "鐵匠順口說了一句"  # 順口講配方線索那一下照舊蓋過規矩

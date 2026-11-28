@@ -40,12 +40,19 @@ def admin_tools(shell) -> dict[str, AdminTool]:
     gate = _gate(shell)
     return {
         "mall_reissue": AdminTool(gate, lambda g, b: actions.admin_reissue(
-            g, str(b.get("name", ""))[:40], shell._int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref")))),
+            g, str(b.get("name", ""))[:40], shell._int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref")),
+            _coin(b.get("coin")))),
         "mall_revoke": AdminTool(gate, lambda g, b: actions.admin_revoke(
-            g, str(b.get("name", ""))[:40], shell._int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref")))),
+            g, str(b.get("name", ""))[:40], shell._int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref")),
+            _coin(b.get("coin")))),
         "mall_refund": AdminTool(gate, lambda g, b: actions.admin_refund(
             g, str(b.get("name", ""))[:40], shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
     }
+
+
+def _coin(value) -> str:
+    """管理者補發、扣回選的是哪一種元寶（元寶拆成兩種）：只認 paid，其餘都是送的那一種。"""
+    return "paid" if value == "paid" else "gift"
 
 
 def router(shell) -> APIRouter:

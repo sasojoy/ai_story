@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from tianxia import journal  # 核心（江湖紀錄）
 from tianxia.characters import name_key
 from tianxia.core import identity_base  # 綁手機才能上架與買市集形象（帳號與客服第 205 批；核心，phone_gate 預設關）
+from tianxia.core.services import paid_only  # 元寶拆成兩種：市集只收元寶嗎
 from tianxia.state import JournalEntry
 
 from . import market, moves, mvp, orders, rules, scenes, studio
@@ -485,7 +486,7 @@ def market_view(ctx: Game) -> dict | None:
     mine = [{"look": look, "name": name, "price": listed[look]["price"] if look in listed else None}
             for look, name in market.made_by(wallet, owner).items()]
     return {"shelf": shelf, "mine": mine, "min": market.PRICE_MIN, "max": market.PRICE_MAX, "default": market.PRICE_DEFAULT,
-            "share": market.SHARE, "hold_days": market.HOLD_DAYS, "paid_only": ctx.content.config.mall.market_paid_only,
+            "share": market.SHARE, "hold_days": market.HOLD_DAYS, "paid_only": paid_only(ctx.content, item.id),
             **market.earnings(wallet, item.id, owner)}
 
 

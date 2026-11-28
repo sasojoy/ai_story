@@ -154,9 +154,9 @@ def place(
         # 身上空著，做好的那一招自己會穿上（worn 的規則：沒自己動過就是最早做好的那一招）；
         # 已經穿著別的，新的先進招式庫（獨門還要等畫好審過才上得了身，當場把能用的那一招脫掉，等圖那幾天就沒招可演）。
         taken = bool(worn(wallet, owner))
-        balance = wallet.balance(owner)
-        if balance < item.price:
-            return None, SHORT.format(price=item.price, balance=balance)
+        short = orders.short_problem(content, wallet, owner, item, SHORT)
+        if short:
+            return None, short
         scene = scenes.direct(prompt, move_name or art_name, draft)
         if basic:  # 通用：要畫的那幾樣拿掉，只留現成的光效
             scene = scenes.plain(scene)
@@ -167,8 +167,7 @@ def place(
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
                 "scene": scene, "basic": basic}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
-        if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
-            raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
+        orders.pay(content, wallet, owner, item, full, pid, now)
         if not arts:  # 不用畫：當場學成
             wallet.update_data(pid, status=orders.MADE, move_id=move_id(pid))
         left = wallet.balance(owner)

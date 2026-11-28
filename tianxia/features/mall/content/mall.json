@@ -5,6 +5,7 @@
     "note": "買下先還你三百元寶；三十天內每天上線領六十元寶與一顆回體丹，每天也能多服一顆。再買一張接著往後算。",
     "price": 600,
     "kind": "card",
+    "coin": "paid",
     "effects": {
       "card_days": 30,
       "card_rebate": 300
@@ -183,6 +184,7 @@
     "note": "擂台上的你換成一身墨色。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "moying",
     "effects": {
       "look": 1
@@ -195,6 +197,7 @@
     "note": "擂台上的你換成通體鎏金。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "jinshen",
     "effects": {
       "look": 1
@@ -207,6 +210,7 @@
     "note": "擂台上的你換成「俠女」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "xianv",
     "effects": {
       "look": 1
@@ -219,6 +223,7 @@
     "note": "擂台上的你換成「力士」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "lishi",
     "effects": {
       "look": 1
@@ -231,6 +236,7 @@
     "note": "擂台上的你換成「書生」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "shusheng",
     "effects": {
       "look": 1
@@ -243,6 +249,7 @@
     "note": "擂台上的你換成「苗女」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "miaonv",
     "effects": {
       "look": 1
@@ -255,6 +262,7 @@
     "note": "擂台上的你換成「女斗笠客」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "doulinv",
     "effects": {
       "look": 1
@@ -267,6 +275,7 @@
     "note": "擂台上的你換成「功夫貓」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "gongfumao",
     "effects": {
       "look": 1
@@ -279,6 +288,7 @@
     "note": "擂台上的你換成「滑雪客」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "huaxueke",
     "effects": {
       "look": 1
@@ -291,6 +301,7 @@
     "note": "擂台上的你換成「美髯刀客」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "meiran",
     "effects": {
       "look": 1
@@ -303,6 +314,7 @@
     "note": "擂台上的你換成「錦袍槍客」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "jinpao",
     "effects": {
       "look": 1
@@ -315,6 +327,7 @@
     "note": "擂台上的你換成「白袍銀槍」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "baipao",
     "effects": {
       "look": 1
@@ -327,6 +340,7 @@
     "note": "擂台上的你換成「閉月舞姬」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "biyue",
     "effects": {
       "look": 1
@@ -339,6 +353,7 @@
     "note": "擂台上的你換成「聖誕老人」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "shengdan",
     "effects": {
       "look": 1
@@ -351,6 +366,7 @@
     "note": "擂台上的你換成「金髮機關客」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "jiguan",
     "effects": {
       "look": 1
@@ -363,6 +379,7 @@
     "note": "擂台上的你換成「水手服少女」。買了就是你的，換季也帶著走；到萬寶閣的「形象」換上。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "look": "shuishou",
     "effects": {
       "look": 1
@@ -375,6 +392,7 @@
     "note": "寫一句樣子，替你畫一套擂台形象；審核過了就是你的，換季也帶著走。沒通過元寶全退。",
     "price": 900,
     "kind": "look",
+    "coin": "paid",
     "effects": {
       "look_order": 1
     },
@@ -386,6 +404,7 @@
     "note": "市集上別的玩家做的擂台形象；價錢照他上架的那一份，買了就是你的，換季也帶著走。",
     "price": 600,
     "kind": "look",
+    "coin": "paid",
     "effects": {
       "look_market": 1
     },
@@ -397,6 +416,7 @@
     "note": "替自己合成或自創的武功寫一句樣子，用現成的光效演出來；當場學成，不必等審核。學成了放進招式庫，想換哪一招就換，換季也帶著走。",
     "price": 60,
     "kind": "look",
+    "coin": "paid",
     "effects": {
       "move_basic": 1
     },
@@ -408,6 +428,7 @@
     "note": "替自己合成或自創的武功寫一句樣子，照你寫的東西（法相、巨掌、你想得到的任何一樣）另外畫一張圖；送出之後可以先去忙，畫好審過放進招式庫，想換哪一招就換，換季也帶著走。沒通過元寶全退。",
     "price": 300,
     "kind": "look",
+    "coin": "paid",
     "effects": {
       "move_order": 1
     },

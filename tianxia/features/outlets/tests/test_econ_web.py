@@ -221,6 +221,7 @@ def test_the_trends_page_has_one_line_of_stores_under_the_fronts():
     """減法季批 1：戰況圖卡與軍備那一行從江湖頁搬到見聞・大事・大勢的最上面。"""
     game = _game(at="changshe", bag={"man_1": 3})
     game.donate("man_1", 3)
+    game.content.config.jianwen.enabled = False  # 舊見聞頁的排法；新見聞頁（jianwen）在下面
     m = server.main_view(game)
     html = run(m, 'H.S.tab = "news"; H.S.news = "trends"; H.render(); return T.els.page.innerHTML;')
     line = re.search(r'<p class="arms-line">.*?</p>', html)
@@ -229,6 +230,12 @@ def test_the_trends_page_has_one_line_of_stores_under_the_fronts():
     assert "arms-line" not in run(m, 'H.S.tab = "jianghu"; H.render(); return T.els.page.innerHTML;')
     ranger = _game(faction=None)
     assert "arms-line" not in run(server.main_view(ranger), 'H.S.tab = "news"; H.S.news = "trends"; H.render(); return T.els.page.innerHTML;')
+    # 新見聞頁（jianwen 包，Joy 2026-11-28「合 打開」）：軍備那一行在戰況那一塊、三路戰況底下
+    game.content.config.jianwen.enabled = True
+    sheet = run(server.main_view(game), 'H.S.tab = "news"; H.S.news = "trends"; H.S.jwSec = "reports"; H.render(); return T.els.page.innerHTML;')
+    line = re.search(r'<p class="arms-line">.*?</p>', sheet)
+    assert "jw-sheet" in sheet and line and "糧秣 <b>3</b>" in line.group(0)
+    assert sheet.index('class="jw-front"') < sheet.index('class="arms-line"')
 
 
 # ── 375 寬：不撐開、不折行（CSS 照原字查）──

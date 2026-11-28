@@ -4017,7 +4017,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "event_once",  # 親衛隊長的背景生事件（features/guard），同 chatter_once 當假人排
-                                         "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
+                                         "tale_round",  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
+                                         "judge_round"}  # 門派論劍判戰策（features/lunjian routes）：開打之後在背景一對一對判，當假人排，名號 QUEUE_KEY
     importers = [  # 核心本體 tianxia/core/ 也掃（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
         p.name for p in [*(server.ROOT / "tianxia").glob("*.py"), *(server.ROOT / "tianxia" / "core").glob("*.py")]
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -4878,6 +4879,7 @@ NOT_IN_THE_FINGERPRINT = {
         "guard_on": "開季時蓋的章（親衛隊長取代酒肆招募），開季之後不變",
         "yiwen_on": "開季時蓋的章（異聞），開季之後不變",
         "yiwen": "異聞的名額與每天的數：撞見那一下另寫一則地方傳聞（傳聞流水號已在指紋裡）；撞見卡只畫自己眼前那一則，別人的畫面不讀它",
+        "lunjian": "門派論劍：報名換分身、抽籤、開打都是自己那一份或另寫一則傳聞與江湖史（流水號已在指紋裡）；別人報了名，本門人數多一位，等下一次輪詢就好",
         "difang": "地方大事的進度：換週、換幕、收場都另寫一則地方傳聞或江湖史（流水號已在指紋裡）；同一幕裡別人出一份力，墨痕多一點，等下一次輪詢就好",
         "no_gentry": "開季時蓋的章（拿掉地方豪強），開季之後不變",
         "titles_week": "名號結算到第幾週的記號，跟 titles_holders 一起寫",

@@ -143,7 +143,7 @@ def test_export_script_writes_every_row(tmp_path):
     )
     rows = list(csv.reader(io.StringIO(out.read_text(encoding="utf-8-sig"))))
     assert rows[0][0] == "編號" and len(rows) == 3
-    assert [row[4] for row in rows[1:]] == ["5000", "-100"] and rows[2][-1] == "4900"
+    assert [row[4] for row in rows[1:]] == ["5000", "-100"] and rows[2][-2:] == ["4900", "五銖"]
     assert "負的餘額：沒有" in run.stderr
 
 

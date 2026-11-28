@@ -619,6 +619,8 @@ def test_looking_at_the_fire_puts_the_smith_line_back_after_a_brew():
     """熬完的結果句蓋著鐵匠那一句（3.3）；同一頁點爐火看火候，回話是提示泡泡、鐵匠那一句伺服器換了新的：結果句收起，換回鐵匠那一句。"""
     game, m = _fired()
     game.smith_furnace()
+    game.content.config.tiepu.enabled = False  # 舊鐵匠鋪的排法（新鐵匠鋪 tiepu 那一塊只寫跟進門不一樣的那一句）
+    m.pop("tiepu", None)
     after = server.main_view(game)
     line = after["shop"]["line"]
     out = _forge_page(m, """return (async () => {

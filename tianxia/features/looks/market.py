@@ -3,7 +3,8 @@
 - 上架：自己下單做好的自建形象（u<購買 id>，orders.MADE）可以掛到市集，自己定價（PRICE_MIN～PRICE_MAX）；隨時下架。
   上架記在 mall_entitlements（kind 'look'、key 'market:<形象 id>'、data {"price"}），不改資料表。下架了，買過的人照樣留著（花錢買的不能不見）。
 - 購買：別人花元寶買一份（購買那一列 data 記 look_market、look_id、name、seller、share），買到的跟官方形象一樣是帳號的、換季也在。
-  自己的不能買、同一套買過了不再賣。假人不買。Config.mall.market_paid_only 開著時只准用儲值的元寶（儲值進來的減掉已經花在市集的）。
+  自己的不能買、同一套買過了不再賣。假人不買。元寶拆成兩種（Config.mall.two_coins）開著時只收元寶（商品寫 coin "paid"，取代原本的
+  market_paid_only）；分成照買家付的：付了元寶的那一部分給元寶，其餘給五銖（關著時一律是五銖，跟以前一樣是送的）。
 - 分成：賣出的一半（SHARE，無條件捨去）給創作者，但先押 HOLD_DAYS 天（退款期）；過了才入帳（編號 sale:<購買 id>，原因 grant、
   帳上寫「市集分成」）。入帳是懶的：創作者看「形象」那一頁、或上架、下架時結一次（settle）。押著的時候退了款，分成就不給；
   已經入帳的再退款，分成不追回（官方吸收，這一版）。
@@ -13,7 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from tianxia.models import Content, MallItem
-from tianxia.wallet import Purchase, Wallet
+from tianxia.core.services import paid_only  # 元寶拆成兩種
+from tianxia.wallet import GIFT, PAID, Purchase, Wallet, coins_of
 
 from . import orders
 
@@ -111,12 +113,6 @@ def unlist_look(wallet: Wallet, owner: str, look: str) -> tuple[bool, str]:
     return True, UNLISTED.format(name=mine[look])
 
 
-def paid_left(wallet: Wallet, owner: str, item: str) -> int:
-    """儲值的元寶還剩多少能用在市集：儲值進來的，減掉已經花在市集（沒退）的，不超過餘額。"""
-    spent = sum(s.price for s in sales(wallet, item) if s.buyer == owner and not s.refunded)
-    return max(0, min(wallet.balance(owner), wallet.reason_total(owner, "topup") - spent))
-
-
 def buy(
     content: Content, wallet: Wallet, owner: str, look: str, ref: str, *, names: dict[str, str], seller_name: str,
     now: float, day: int, season: int,
@@ -137,17 +133,22 @@ def buy(
         if look in bought(wallet, owner):
             return None, HAVE
         price = found["price"]
-        balance = wallet.balance(owner)
-        if balance < price:
-            return None, SHORT.format(price=price, balance=balance)
-        if content.config.mall.market_paid_only:
-            paid = paid_left(wallet, owner, item.id)
-            if paid < price:
-                return None, PAID_ONLY.format(price=price, paid=paid)
+        paid = paid_only(content, item.id)
+        if paid:
+            have = wallet.balance(owner, PAID)
+            if have < price:
+                return None, PAID_ONLY.format(price=price, paid=have)
+        else:
+            balance = wallet.balance(owner)
+            if balance < price:
+                return None, SHORT.format(price=price, balance=balance)
         data = {EFFECT: 1, "look_id": look, "name": names[look], "seller": found["seller"], "share": share_of(price)}
         pid = wallet.add_purchase(owner, full, item.id, price, time=now, day=day, season=season, data=data)
-        if not wallet.post(owner, -price, "buy", full, time=now, purchase_id=pid):
+        coins = wallet.spend(owner, price, "buy", full, time=now, purchase_id=pid, paid_only=paid)
+        if coins is None:
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
+        if coins[PAID]:
+            wallet.update_data(pid, coins=coins)
         left = wallet.balance(owner)
     return pid, BOUGHT.format(name=names[look], seller=seller_name, price=price, left=left)
 
@@ -157,9 +158,17 @@ def settle(wallet: Wallet, item: str, seller: str, now: float) -> int:
     total = 0
     for s in sales(wallet, item):
         if s.seller == seller and not s.refunded and s.share > 0 and now >= s.time + HOLD_DAYS * DAY:
-            if wallet.post(seller, s.share, "grant", f"sale:{s.pid}", time=now, purchase_id=s.pid, note=f"市集分成：{s.name}"):
+            if wallet.credit(seller, share_coins(wallet, s), "grant", f"sale:{s.pid}", time=now, purchase_id=s.pid,
+                             note=f"市集分成：{s.name}"):
                 total += s.share
     return total
+
+
+def share_coins(wallet: Wallet, s: Sale) -> dict[str, int]:
+    """分成入哪一種（Joy 2026-11-26 照建議：買家付元寶，做的人拿元寶）：買家付了元寶的那一部分給元寶，其餘給五銖。"""
+    b = wallet.purchase(s.pid)
+    paid = min(s.share, coins_of(b.data if b else {}, s.price)[PAID])
+    return {PAID: paid, GIFT: s.share - paid}
 
 
 def earnings(wallet: Wallet, item: str, seller: str) -> dict:

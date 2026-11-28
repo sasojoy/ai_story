@@ -138,7 +138,7 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
 
     assert _dump(path, KEPT_V1) == before  # 舊表原封不動（含 rowid 順序、流水號）；rumor_heard 第 8 版拿掉了
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 10
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
     assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V9_TABLES)
@@ -656,9 +656,33 @@ def test_a_version_seven_file_gains_the_sessions_table(tmp_path):
     conn.close()
     db = open_database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 10
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert "sessions" in names and "rumor_heard" not in names
     sessions = SessionStore(db, clock=lambda: 100.0)
     token = sessions.create("shenlang")
     assert sessions.get(token) == "shenlang"
+
+
+def test_a_version_nine_file_marks_every_old_row_as_gift_and_topups_as_paid(tmp_path):
+    """第 10 版（元寶拆成兩種，Joy 2026-11-26）：舊的帳全算送的那一種（gift），儲值 topup 那幾筆算元寶（paid）；筆數與餘額不變。"""
+    import sqlite3
+
+    from tianxia.wallet import Wallet
+
+    path = tmp_path / "v9.db"
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA[: len(database.SCHEMA) - len(database.SCHEMA_V10_CHANGES)]:
+        conn.execute(statement)
+    conn.execute("INSERT INTO mall_ledger (owner, time, delta, reason, ref) VALUES ('沈浪', 1, 5000, 'grant', 'grant:beta:沈浪')")
+    conn.execute("INSERT INTO mall_ledger (owner, time, delta, reason, ref) VALUES ('沈浪', 2, -600, 'buy', 'buy:沈浪:a')")
+    conn.execute("INSERT INTO mall_ledger (owner, time, delta, reason, ref) VALUES ('沈浪', 3, 300, 'topup', 'topup:1')")
+    conn.execute("PRAGMA user_version = 9")
+    conn.commit()
+    conn.close()
+    db = open_database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 10
+    w = Wallet(db)
+    assert [r.coin for r in w.ledger("沈浪")] == ["paid", "gift", "gift"]
+    assert w.balances("沈浪") == {"paid": 300, "gift": 4400} and w.balance("沈浪") == 4700
